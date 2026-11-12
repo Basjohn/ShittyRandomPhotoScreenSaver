@@ -20,6 +20,8 @@ import pytest
 from tools import native_sdk_fetch as sdk
 
 ROOT = Path(__file__).resolve().parents[1]
+QT = sdk.pinned_qt_version()
+ARCHIVES = sdk.archives_for(QT)
 
 
 def _sha(data: bytes) -> str:
@@ -40,13 +42,13 @@ def _vulkan_zip(extra: dict[str, bytes] | None = None) -> bytes:
 class Fixture:
     """Fake archives for the real pin table's shape: two Qt 7z archives (pinned + published sha) and a zip."""
 
-    def __init__(self, *, qt_version: str = sdk.QT_VERSION, zip_bytes: bytes | None = None):
+    def __init__(self, *, qt_version: str = QT, zip_bytes: bytes | None = None):
         self.qt_version = qt_version
         self.blobs: dict[str, bytes] = {}
         self.calls: list[str] = []
         self.extracted: list[str] = []
         archives = []
-        for item in sdk.ARCHIVES:
+        for item in ARCHIVES:
             data = zip_bytes if item.kind == "zip" and zip_bytes is not None else (
                 _vulkan_zip() if item.kind == "zip" else f"7z:{item.name}".encode())
             self.blobs[item.url] = data
@@ -74,21 +76,21 @@ class Fixture:
             (cmake / "Qt6Quick" / "Qt6QuickConfig.cmake").write_text("# quick\n", encoding="utf-8")
 
     def fetch(self, prefix: Path, **kwargs):
-        return sdk.fetch_sdk(prefix, archives=self.archives, transport=self.transport, extract_7z=self.extract_7z,
-                             log=lambda _line: None, **kwargs)
+        return sdk.fetch_sdk(prefix, qt_version=QT, archives=self.archives, transport=self.transport,
+                             extract_7z=self.extract_7z, log=lambda _line: None, **kwargs)
 
 
 def test_a_verified_sdk_is_extracted_into_the_build_layout_and_stamped(tmp_path):
     fixture = Fixture()
     layout = fixture.fetch(tmp_path / "sdk")
     prefix = (tmp_path / "sdk").resolve()
-    assert layout.fetched and layout.qt_version == sdk.QT_VERSION
+    assert layout.fetched and layout.qt_version == QT
     assert Path(layout.qt_prefix) == prefix / sdk.QT_DIR
     assert (Path(layout.vulkan_include) / "vulkan" / "vulkan.h").is_file()
     assert not (prefix / sdk.VULKAN_DIR / f"Vulkan-Headers-{sdk.VULKAN_HEADERS_VERSION}" / "README.md").exists()
-    assert sdk.layout_problem(prefix) is None
+    assert sdk.layout_problem(prefix, QT) is None
     stamp = json.loads((prefix / sdk.STAMP_NAME).read_text(encoding="utf-8"))
-    assert stamp["pins"] == sdk.pins_fingerprint(fixture.archives) and set(stamp["sha256"]) == {
+    assert stamp["pins"] == sdk.pins_fingerprint(fixture.archives, QT) and set(stamp["sha256"]) == {
         item.name for item in fixture.archives}
     assert not (prefix / sdk.DOWNLOADS_DIR).exists()                    # archives removed after extraction
 
@@ -191,20 +193,46 @@ def test_the_cli_reports_a_refusal_with_a_nonzero_exit(tmp_path, monkeypatch, ca
 # ------------------------------------------------------------------------------------- the real pins and consumers
 
 
-def test_every_real_pin_has_a_checksum_and_qt_archives_have_qts_published_one():
-    for item in sdk.ARCHIVES:
+@pytest.mark.parametrize("version", sorted(sdk.QT_SDKS))
+def test_every_pinned_qt_version_has_checksummed_archives(version):
+    archives = sdk.archives_for(version)
+    for item in archives:
         assert item.sha256 is not None or item.published_sha256_url is not None, item.name
         assert item.sha256 is None or re.fullmatch(r"[0-9a-f]{64}", item.sha256), item.name
         assert item.url.startswith("https://"), item.name
         if item.kind == "7z":
             assert item.published_sha256_url == f"{item.url}.sha256" and item.destination == sdk.QT_DIR
-    assert {item.name for item in sdk.ARCHIVES} >= {"qtbase", "qtdeclarative", "vulkan_headers"}
+            assert version in item.url
+    assert {item.name for item in archives} == {"qtbase", "qtdeclarative", "vulkan_headers"}
 
 
-def test_the_pins_agree_with_the_build_script_cmake_and_pyside6():
-    build_cmd = (ROOT / "native" / "spike_p1" / "build.cmd").read_text(encoding="utf-8")
-    assert sdk.VULKAN_INCLUDE_RELATIVE in build_cmd and f"%SPIKE%\\{sdk.QT_DIR}" in build_cmd
-    cmake = (ROOT / "native" / "spike_p1" / "CMakeLists.txt").read_text(encoding="utf-8")
-    assert re.search(r'set\(SPIKE_QT_VERSION "([^"]+)"', cmake).group(1) == sdk.QT_VERSION
+def test_the_qt_version_is_the_pyside6_pin_and_has_an_sdk_entry():
     requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
-    assert re.search(r"^PySide6==(\S+)", requirements, re.MULTILINE).group(1).startswith(sdk.QT_VERSION)
+    pin = re.search(r"^PySide6==(\S+)", requirements, re.MULTILINE).group(1)
+    assert pin.split(".")[:3] == QT.split(".") and QT in sdk.QT_SDKS
+    assert sdk.qt_version_from_requirements("shiboken6==1.0\nPySide6==7.8.9.1  # build release\n") == "7.8.9"
+    for text in ("PySide6_Addons==6.11.2\n", "PySide6>=6.11\n", ""):
+        with pytest.raises(sdk.SdkFetchError):
+            sdk.qt_version_from_requirements(text)
+    with pytest.raises(sdk.SdkFetchError, match="no SDK is pinned for Qt 0.0.1"):
+        sdk.archives_for("0.0.1")
+
+
+def test_the_cli_prints_the_pinned_qt_version(capsys):
+    assert sdk.main(["--print-qt-version"]) == 0
+    assert capsys.readouterr().out.strip() == QT
+
+
+def test_no_consumer_restates_the_qt_version():
+    # One value: the CMake guard reads the pin itself; the workflow takes it from the fetch script.
+    cmake = (ROOT / "native" / "spike_p1" / "CMakeLists.txt").read_text(encoding="utf-8")
+    assert "requirements.txt" in cmake and 'REGEX "^PySide6=="' in cmake
+    assert not re.search(r"\b6\.\d+\.\d+\b", cmake)
+    workflow = (ROOT / ".github" / "workflows" / "native-module.yml").read_text(encoding="utf-8")
+    assert "tools\\native_sdk_fetch.py --print-qt-version" in workflow and "QT_VERSION=$qt" in workflow
+    assert not re.search(r"\b6\.\d+\.\d+\b", workflow)
+    build_cmd = (ROOT / "native" / "spike_p1" / "build.cmd").read_text(encoding="utf-8")
+    assert not re.search(r"\b6\.\d+\.\d+\b", build_cmd)
+    assert sdk.VULKAN_INCLUDE_RELATIVE in build_cmd and f"%SPIKE%\\{sdk.QT_DIR}" in build_cmd
+    source = Path(sdk.__file__).read_text(encoding="utf-8")
+    assert not re.search(r"^QT_VERSION\s*=", source, re.MULTILINE)          # versions only as QT_SDKS keys

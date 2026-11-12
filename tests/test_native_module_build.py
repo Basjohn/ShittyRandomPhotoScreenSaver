@@ -31,6 +31,8 @@ from tools import native_sdk_fetch as sdk
 ROOT = Path(__file__).resolve().parents[1]
 TOKEN = "20261112_120000_000001"
 NATIVE = remote.MODULE_TARGETS["native_module"]
+QT = sdk.pinned_qt_version()          # the repository's pin (the import check's stand-ins)
+FIXTURE_QT = "7.8.9"                  # the fixture repository's pin: the value flows from requirements.txt
 
 
 # ------------------------------------------------------------------------------------------------- the workflow
@@ -61,7 +63,7 @@ def test_the_workflow_never_interpolates_inputs_into_scripts():
 
 def test_the_workflow_fetches_the_checked_sdk_and_compiles_with_the_one_cmake_invocation():
     text = _workflow()
-    assert re.search(r'QT_VERSION: "([^"]+)"', text).group(1) == sdk.QT_VERSION == NATIVE.module_qt
+    assert "native_sdk_fetch.py --print-qt-version" in text and "--expect-qt $env:QT_VERSION" in text
     assert "tools\\native_sdk_fetch.py --prefix" in text and "-r native\\tool_requirements.txt" in text
     assert "hashFiles('tools/native_sdk_fetch.py')" in text and "${{ env.QT_VERSION }}" in text
     assert f"call {remote.NATIVE_SOURCE.replace('/', chr(92))}\\build.cmd" in text and "cmake " not in text
@@ -99,13 +101,14 @@ def _repo(tmp_path: Path) -> Path:
     _git(root, "config", "user.email", "t@example.invalid")
     _git(root, "config", "user.name", "t")
     (root / "versioning.py").write_text('APP_VERSION: str = "9.8.7"\n', encoding="utf-8")
+    (root / "requirements.txt").write_text(f"PySide6=={FIXTURE_QT}\nshiboken6=={FIXTURE_QT}\n", encoding="utf-8")
     (root / ".gitignore").write_text("release/\nlogs/\nbuild/\n", encoding="utf-8")
     _git(root, "add", "-A")
     _git(root, "commit", "-q", "-m", "fixture")
     return root
 
 
-def runtime_info(qt: str = sdk.QT_VERSION, **overrides) -> dict:
+def runtime_info(qt: str = FIXTURE_QT, **overrides) -> dict:
     info = {"qt_compiled": qt, "qt_runtime": qt, "msc_full_ver": 194435227, "with_quick": True,
             "loaded_modules": {}}
     info.update(overrides)
@@ -139,9 +142,9 @@ def test_the_runner_stages_the_module_and_records_what_it_was_built_with(tmp_pat
         f"release/{NATIVE.primary}", f"{payload}/{remote.SHADERS_DIR}/quadfield.vert.qsb",
         f"{payload}/{remote.SHADERS_DIR}/quadfield.frag.qsb"}
     commit = _git(root, "rev-parse", "HEAD")
-    manifest = remote.build_manifest(root, "native_module", commit, TOKEN, pyside6_version=sdk.QT_VERSION)
+    manifest = remote.build_manifest(root, "native_module", commit, TOKEN, pyside6_version=FIXTURE_QT)
     assert (manifest["target"], manifest["commit"], manifest["token"]) == ("native_module", commit, TOKEN)
-    assert manifest["qt_version"] == sdk.QT_VERSION and manifest["pyside6_version"] == sdk.QT_VERSION
+    assert manifest["qt_version"] == FIXTURE_QT and manifest["pyside6_version"] == FIXTURE_QT
     assert manifest["msvc_version"] == "19.44.35227" and manifest["with_quick"] is True
     assert set(manifest["files"]) == {
         *(path.relative_to(root).as_posix() for path in placed),
@@ -160,7 +163,7 @@ def test_the_runner_refuses_to_describe_an_unchecked_or_mismatched_module(tmp_pa
         (root / "logs" / remote.NATIVE_IMPORT_REPORT.format(token=TOKEN)).unlink()
     remote.stage_native_module(root, build)
     with pytest.raises(remote.RemoteBuildError):
-        remote.build_manifest(root, "native_module", _git(root, "rev-parse", "HEAD"), TOKEN, pyside6_version="6.11.2")
+        remote.build_manifest(root, "native_module", _git(root, "rev-parse", "HEAD"), TOKEN, pyside6_version=FIXTURE_QT)
 
 
 @pytest.mark.parametrize("missing", ["pyd", "shaders"])
@@ -191,7 +194,7 @@ def import_check(monkeypatch):
     sys.modules.pop(remote.NATIVE_MODULE, None)
 
 
-def _stand_in_module(folder: Path, *, qt: str = sdk.QT_VERSION, dll_dir: str | None = None,
+def _stand_in_module(folder: Path, *, qt: str = QT, dll_dir: str | None = None,
                      broken: bool = False) -> Path:
     """A Python stand-in for the compiled module: the same name and ``runtime_info()`` shape."""
     folder.mkdir(parents=True, exist_ok=True)
@@ -207,24 +210,24 @@ def _stand_in_module(folder: Path, *, qt: str = sdk.QT_VERSION, dll_dir: str | N
 
 
 def test_the_import_check_passes_a_module_bound_to_pysides_qt(tmp_path, import_check):
-    report = import_check.check(_stand_in_module(tmp_path / "ok"), sdk.QT_VERSION)
-    assert report["ok"] and report["runtime_info"]["qt_runtime"] == sdk.QT_VERSION
+    report = import_check.check(_stand_in_module(tmp_path / "ok"), QT)
+    assert report["ok"] and report["runtime_info"]["qt_runtime"] == QT
 
 
 @pytest.mark.parametrize("case", ["refused-import", "other-qt", "foreign-dlls"])
 def test_the_import_check_fails_a_module_that_is_not(tmp_path, import_check, case):
     folder = _stand_in_module(tmp_path / case, broken=case == "refused-import",
-                              qt="6.11.1" if case == "other-qt" else sdk.QT_VERSION,
+                              qt="6.11.1" if case == "other-qt" else QT,
                               dll_dir=str(tmp_path / "elsewhere") if case == "foreign-dlls" else None)
-    report = import_check.check(folder, sdk.QT_VERSION)
+    report = import_check.check(folder, QT)
     assert report["ok"] is False
-    assert import_check.main(["--module-dir", str(folder), "--expect-qt", sdk.QT_VERSION]) == 1
+    assert import_check.main(["--module-dir", str(folder), "--expect-qt", QT]) == 1
 
 
 # ------------------------------------------------------------------------------- the download, validated (local)
 
 
-def _artifact(root: Path, into: Path, *, pyside6: str = sdk.QT_VERSION) -> Path:
+def _artifact(root: Path, into: Path, *, pyside6: str = FIXTURE_QT) -> Path:
     """The runner side end to end (stage, manifest), then the upload layout the workflow produces."""
     remote.stage_native_module(root, runner_build(root))
     manifest = remote.build_manifest(root, "native_module", _git(root, "rev-parse", "HEAD"), TOKEN,
@@ -237,7 +240,8 @@ def _artifact(root: Path, into: Path, *, pyside6: str = sdk.QT_VERSION) -> Path:
 
 
 def _validate(staging: Path, root: Path, **overrides):
-    expected = {"commit": _git(root, "rev-parse", "HEAD"), "version": "9.8.7", "token": TOKEN, **overrides}
+    expected = {"commit": _git(root, "rev-parse", "HEAD"), "version": "9.8.7", "token": TOKEN,
+                "qt_version": FIXTURE_QT, **overrides}
     return remote.validate_staging(staging, "native_module", **expected)
 
 
@@ -245,7 +249,9 @@ def test_a_whole_module_build_of_the_requested_commit_validates(tmp_path):
     root = _repo(tmp_path)
     staging = _artifact(root, tmp_path / "staging")
     manifest = _validate(staging, root)
-    assert f"release/{NATIVE.primary}" in manifest["files"] and manifest["qt_version"] == NATIVE.module_qt
+    assert f"release/{NATIVE.primary}" in manifest["files"] and manifest["qt_version"] == FIXTURE_QT
+    with pytest.raises(remote.RemoteBuildError, match="pinned Qt"):            # a module needs the commit's pin
+        _validate(staging, root, qt_version=None)
 
 
 def _edit_manifest(staging: Path, change) -> None:
@@ -357,7 +363,7 @@ def test_a_validated_module_is_published_into_release_with_its_manifest(tmp_path
         "quadfield.frag.qsb", "quadfield.vert.qsb"]
     assert not (published / "previous.pyd").exists()
     kept = json.loads((published / remote.MANIFEST_NAME).read_text(encoding="utf-8"))
-    assert kept["commit"] == _git(root, "rev-parse", "HEAD") and kept["qt_version"] == NATIVE.module_qt
+    assert kept["commit"] == _git(root, "rev-parse", "HEAD") and kept["qt_version"] == FIXTURE_QT
     assert (release / "screensaver" / "SRPSS.scr").read_bytes() == b"product"     # the products are untouched
     assert result.output_path == published
     for name in NATIVE.report_names(TOKEN):
@@ -375,6 +381,19 @@ def test_an_invalid_module_download_keeps_the_previous_module(tmp_path, monkeypa
     result, release = _orchestrate(tmp_path, monkeypatch, cli, release=release)
     assert not result.ok and "qt_version" in result.detail
     assert sorted(path.name for path in (release / "native_module").iterdir()) == ["previous.pyd"]
+
+
+def test_the_expected_qt_is_the_built_commits_pin_not_the_working_trees(tmp_path, monkeypatch):
+    root = _repo(tmp_path)
+    artifact = _artifact(root, tmp_path / "artifact")
+    built = _git(root, "rev-parse", "HEAD")
+    (root / "requirements.txt").write_text("PySide6==9.9.9\n", encoding="utf-8")       # uncommitted edit
+    cli = FakeCli({"native_module": artifact}, {"native_module": [SUCCESS]})
+    result, _release = _orchestrate(tmp_path, monkeypatch, cli)
+    assert result.ok, result.detail
+    _git(root, "commit", "-q", "-am", "the Qt bump")
+    assert remote.qt_version_at_commit(root, built) == FIXTURE_QT
+    assert remote.qt_version_at_commit(root, _git(root, "rev-parse", "HEAD")) == "9.9.9"
 
 
 def test_an_unpushed_commit_is_never_built(tmp_path, monkeypatch):

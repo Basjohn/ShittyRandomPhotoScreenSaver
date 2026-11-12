@@ -46,7 +46,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools.build_evidence import RUN_TOKEN, evidence_files, sha256_file, write_build_evidence  # noqa: E402
-from tools.native_sdk_fetch import QT_VERSION  # noqa: E402
+from tools.native_sdk_fetch import SdkFetchError, pinned_qt_version, qt_version_from_requirements  # noqa: E402
 
 WORKFLOW_FILE = "windows-build.yml"
 WORKFLOW_PATH = Path(".github") / "workflows" / WORKFLOW_FILE
@@ -81,8 +81,9 @@ class RemoteTarget:
     primary: str
     companions: tuple[str, ...] = ()
     workflow: str = WORKFLOW_FILE
-    # A native module: the Qt (and so the PySide6) it must be compiled against; its manifest records both.
-    module_qt: str | None = None
+    # A native module: compiled against PySide6's exact Qt (requirements.txt's pin at the built commit), which its
+    # manifest records with the PySide6 and MSVC versions.
+    module: bool = False
     # Report names (``{token}`` filled in) the runner must upload beside the payload, beyond build_evidence's.
     reports: tuple[str, ...] = ()
 
@@ -115,7 +116,7 @@ TARGETS: dict[str, RemoteTarget] = {
 MODULE_TARGETS: dict[str, RemoteTarget] = {
     "native_module": RemoteTarget(
         "native_module", ("native_module",), f"native_module/{NATIVE_MODULE}.pyd", workflow=NATIVE_WORKFLOW_FILE,
-        module_qt=QT_VERSION, reports=(NATIVE_BUILD_LOG, NATIVE_IMPORT_REPORT),
+        module=True, reports=(NATIVE_BUILD_LOG, NATIVE_IMPORT_REPORT),
     ),
 }
 ALL_TARGETS: dict[str, RemoteTarget] = {**TARGETS, **MODULE_TARGETS}
@@ -163,6 +164,14 @@ def parse_app_version(text: str) -> str:
 
 def version_at_commit(repo_root: Path, sha: str) -> str:
     return parse_app_version(_git(repo_root, "show", f"{sha}:versioning.py"))
+
+
+def qt_version_at_commit(repo_root: Path, sha: str) -> str:
+    """The Qt a commit's native module must be built against: its requirements.txt's PySide6 pin."""
+    try:
+        return qt_version_from_requirements(_git(repo_root, "show", f"{sha}:requirements.txt"))
+    except SdkFetchError as exc:
+        raise RemoteBuildError(str(exc)) from exc
 
 
 @dataclass(frozen=True)
@@ -248,11 +257,15 @@ def _module_fields(root: Path, target: RemoteTarget, token: str, pyside6_version
         raise RemoteBuildError(f"no readable import check {report_path.name}: {exc}") from exc
     if not report.get("ok"):
         raise RemoteBuildError(f"the module failed its import check: {report.get('checks')}")
+    try:
+        pinned = pinned_qt_version(root / "requirements.txt")        # the checkout is the built commit
+    except SdkFetchError as exc:
+        raise RemoteBuildError(str(exc)) from exc
     runtime = report.get("runtime_info") or {}
     compiled, running = runtime.get("qt_compiled"), runtime.get("qt_runtime")
-    if compiled != target.module_qt or running != target.module_qt:
+    if compiled != pinned or running != pinned:
         raise RemoteBuildError(f"the module was built for Qt {compiled} and runs on {running}; "
-                               f"Qt {target.module_qt} is pinned")
+                               f"requirements.txt pins Qt {pinned}")
     if pyside6_version is None:
         from importlib.metadata import version as distribution_version
 
@@ -295,7 +308,7 @@ def build_manifest(
         report = root / REPORTS_DIR / name
         if report.is_file():
             files[REPORTS_PREFIX + name] = _file_entry(report)
-        elif target.module_qt:
+        elif target.module:
             raise RemoteBuildError(f"the runner wrote no {REPORTS_PREFIX}{name}")
     manifest = {
         "schema": MANIFEST_SCHEMA,
@@ -307,7 +320,7 @@ def build_manifest(
         "github_run_attempt": run_attempt,
         "files": files,
     }
-    if target.module_qt:
+    if target.module:
         manifest.update(_module_fields(root, target, token, pyside6_version))
     return manifest
 
@@ -355,11 +368,16 @@ def _safe_relative(relative: str, target: RemoteTarget) -> None:
         raise RemoteBuildError(f"the manifest names a file outside the product: {relative}")
 
 
-def validate_staging(staging: Path, target_key: str, *, commit: str, version: str, token: str) -> dict[str, Any]:
+def validate_staging(
+    staging: Path, target_key: str, *, commit: str, version: str, token: str, qt_version: str | None = None,
+) -> dict[str, Any]:
     """Refuse a downloaded artifact unless it is exactly the requested commit's build, whole and unaltered (and, for
-    a native module, built against the pinned Qt and the PySide6 that ships it, with its baked shaders)."""
+    a native module, built against ``qt_version``, the commit's pinned Qt, and the PySide6 that ships it, with its
+    baked shaders)."""
 
     target = ALL_TARGETS[target_key]
+    if target.module and not qt_version:
+        raise RemoteBuildError(f"{target.key} is validated against the built commit's pinned Qt; none was given")
     manifest_path = staging / MANIFEST_NAME
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -395,23 +413,23 @@ def validate_staging(staging: Path, target_key: str, *, commit: str, version: st
         for companion in target.companions:
             if files[f"release/{companion}"]["sha256"] != primary_hash:
                 raise RemoteBuildError(f"release/{companion} is not the same binary as release/{target.primary}")
-    if target.module_qt:
-        _validate_module(manifest, target)
+    if target.module:
+        _validate_module(manifest, target, str(qt_version))
     pe_version = pe_product_version(staging / "release" / target.primary)
     if pe_version is not None and not _same_version(pe_version, version):
         raise RemoteBuildError(f"{target.primary} carries product version {pe_version}, expected {version}")
     return manifest
 
 
-def _validate_module(manifest: dict[str, Any], target: RemoteTarget) -> None:
+def _validate_module(manifest: dict[str, Any], target: RemoteTarget, qt_version: str) -> None:
     """A module binds to PySide6's own Qt DLLs and refuses any other Qt: built against anything but the pinned Qt
     (and the PySide6 release that ships it) it would never load."""
 
-    if manifest.get("qt_version") != target.module_qt:
-        raise RemoteBuildError(f"manifest qt_version is {manifest.get('qt_version')!r}, expected {target.module_qt!r}")
+    if manifest.get("qt_version") != qt_version:
+        raise RemoteBuildError(f"manifest qt_version is {manifest.get('qt_version')!r}, expected {qt_version!r}")
     pyside6 = str(manifest.get("pyside6_version") or "")
-    if pyside6.split(".")[:3] != str(target.module_qt).split("."):
-        raise RemoteBuildError(f"manifest pyside6_version is {pyside6!r}, expected PySide6 {target.module_qt}")
+    if pyside6.split(".")[:3] != qt_version.split("."):
+        raise RemoteBuildError(f"manifest pyside6_version is {pyside6!r}, expected PySide6 {qt_version}")
     if not re.fullmatch(r"\d+\.\d+\.\d+", str(manifest.get("msvc_version") or "")):
         raise RemoteBuildError(f"manifest msvc_version is {manifest.get('msvc_version')!r}")
     shaders = f"release/{target.payload_dirs[0]}/{SHADERS_DIR}/"
@@ -711,7 +729,7 @@ def run_remote_builds(
         if cancelled():
             finish(key, 130, "Aborted by operator before dispatch", aborted=True)
             continue
-        if ALL_TARGETS[key].module_qt and not current.matches_local_head:
+        if ALL_TARGETS[key].module and not current.matches_local_head:
             # A module is built for the work it is tested with: never the pushed tip in place of a local commit.
             finish(key, 1, f"Local HEAD {current.local_head[:8]} is not origin/{current.branch} ({current.short}): "
                            "push it first; GitHub builds only pushed commits")
@@ -830,9 +848,11 @@ def _retrieve(repo_root, cli, key, run_id, url, commit, version, token, log_dir,
         cli.download(run_id, target.artifact, staging)
         log.write(f"Downloaded {target.artifact} to staging {staging}")
         emit("status", key, "Validating")
-        manifest = validate_staging(staging, key, commit=commit.sha, version=version, token=token)
+        qt_version = qt_version_at_commit(repo_root, commit.sha) if target.module else None
+        manifest = validate_staging(staging, key, commit=commit.sha, version=version, token=token,
+                                    qt_version=qt_version)
         log.write(f"Validated {len(manifest['files'])} files against the manifest (commit {commit.sha}, {version})")
-        if target.module_qt:
+        if target.module:
             # A module keeps its validated manifest beside it: what it was built from and against (Qt, MSVC).
             shutil.copy2(staging / MANIFEST_NAME, staging / "release" / target.payload_dirs[0] / MANIFEST_NAME)
             log.write(f"Built against Qt {manifest['qt_version']}, PySide6 {manifest['pyside6_version']}, "

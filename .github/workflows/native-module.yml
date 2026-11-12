@@ -4,7 +4,7 @@
 # (native/spike_p1 today, the native core later) for exactly inputs.commit (a full SHA, verified after checkout):
 # MSVC from the runner's Visual Studio (found with vswhere by build.cmd), the pinned Qt SDK and Vulkan-Headers fetched
 # and sha256-checked by tools/native_sdk_fetch.py (cached per Qt version and script), PySide6's qsb from the repo
-# venv. native/spike_p1/build.cmd is the one CMake invocation. The runner has no GPU, so after the compile it runs
+# venv. The Qt version is requirements.txt's PySide6 pin, read once by the fetch script. native/spike_p1/build.cmd is the one CMake invocation. The runner has no GPU, so after the compile it runs
 # only the module's GPU-free import check (native/spike_p1/python/import_check.py); every rendering part of the
 # spike needs a device and runs on the lead's machine.
 #
@@ -58,7 +58,6 @@ jobs:
     env:
       COMMIT: ${{ inputs.commit }}
       RUN_TOKEN: ${{ inputs.token }}
-      QT_VERSION: "6.11.2"
       NATIVE_SOURCE: native/spike_p1
       BUILD_DIR: build\native_module
     steps:
@@ -83,6 +82,15 @@ jobs:
         with:
           python-version: "3.14"
           architecture: x64
+
+      # The one Qt version: requirements.txt's PySide6==x.y.z, read by the fetch script (the CMake guard reads the same
+      # pin, the manifest is checked against it).
+      - name: Read the pinned Qt version
+        run: |
+          $qt = (python tools\native_sdk_fetch.py --print-qt-version | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $qt -notmatch '^\d+\.\d+\.\d+$') { throw "requirements.txt pins no PySide6 version: $qt" }
+          Write-Host "Qt $qt (PySide6's, from requirements.txt)"
+          "QT_VERSION=$qt" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       # The repo venv: PySide6 (qsb.exe, the Qt DLLs the module binds to) exactly as requirements.txt pins it.
       - name: Create the repo-root venv
