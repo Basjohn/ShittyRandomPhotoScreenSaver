@@ -241,27 +241,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 
 **N0. Decisions, contracts and proofs (design and harness only; can start now)**
 
-- The N0 contracts are decided (12 Nov; `Native_Core_P3_Decisions.md`, "Lead decisions on the N0 drafts"): D1 to
-  D3 and the transport rule, the rest of D5 (ownership, admission, device loss, what a mode may not do), N0.3's
-  conventions and N0.4's camera. Each contract's tests (negative controls named in the document) are built with the
-  code that implements it: D1, D2 and the transport rule with N2's reader, D3 with the Extruded Bubble port, D5's
-  ownership-table, dormancy and device-loss tests with N2, N0.3's three scenes in the harness (their own box below:
-  N0.6's rounds landed without them).
-- D3's defects in the OpenGL solver landed 12 Nov (R-195): allocate before release at every edge, release on every
-  path, a failed key logged once and not retried, the carryover's failure paths released exactly once, a failed
-  drift program compile cached once at `MeshResources` (`ProgramUnavailable`) and the mode drawn without drift. Revision
-  aliasing is impossible: each worker session numbers revisions in its own namespace (`engine_worker.py:171-175`),
-  guarded by a two-session upload-hash test.
-- The three drift follow-ups landed 12 Nov (277ac6a2): the host releases a history its renderer does not adopt, a
-  failed capacity growth keeps its held rows drawn where the draws read them, a carried history fades out over 0.9 s
-  (the bubble fade length, counted in logical steps) when the drift programs fail.
-- N0.4 in the worker landed 12 Nov: `VIS_SET_VIEW` v2 carries the drawn card's pixel aspect and both aperture scales
-  (`core/framed_view.py`), resolved by the renderers' own functions and sent only when the drawn record's geometry
-  changes; the worker's Waveform Ribbon and Extruded Bubble cameras equal the renderer's bit for bit at three DPRs
-  (`tests/test_framed_view_camera.py`); `card_span`'s approximation ended; Expanded Waveform's pulse span fixed
-  (R-196). Worker tick camera cost: 1.8 us median per tick, 110 us after a view change, the whole Waveform camera
-  34.6 us, Extruded Bubble's 11.1 us (`.artifacts/evidence/performance/n04_worker_camera/`). Not checked on a real
-  display; the open R-192 axis case could move the renderer's pixel rect by one pixel.
 - [ ] N0.4's remainder (D5.5 points 2 and 5), built with the first framed port (N5.4, then N5.6): the worker's tick
   calls `widgets/spotify_visualizer/framed_view_camera.py` (today only its test calls it) and publishes the
   finished camera in the mode's native schema; the renderer stops building one.
@@ -279,17 +258,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [ ] One helper beside `configure_offline_controller` sets the framed view of the card a host models
     (`resolve_framed_view`); each host above calls it (the worker gates send it as `VIS_SET_VIEW`).
   - [ ] Guard: a Waveform tick in each of those hosts has a view span (negative control: today's hosts have none).
-- N0.2 decided 12 Nov (`Native_Core_P3_Decisions.md` D5.6 and the lead's answers): eighteen dependencies to
-  their routes, no service outside D5.3; the unused `glMultiDrawArraysIndirect` start-up requirement removed.
-- N0.9 done 12 Nov: the native module compiles on GitHub's Windows runner (`.github/workflows/native-module.yml`,
-  dispatch-only and callable by the product workflows; SDK fetched and sha256-checked by `tools/native_sdk_fetch.py`;
-  the Qt version is the PySide6 pin in `requirements.txt`) as Build Runner's `native_module` target, published into
-  `release/native_module/` with its manifest. Lead's end-to-end proof on 994099fc: dispatch to validated download
-  3 min 34 s (09:44:15 to 09:47:49, SDK cache cold); the downloaded module on Qt 6.12.0 runs the P1 spike green on
-  D3D11, D3D12, Vulkan and OpenGL (RHI, hybrid and Qt Quick parts; the native render thread called 240 times with
-  no Python thread state), backends within 3/255 (`.artifacts/evidence/architecture/native_core_p1/20261112_n09/`).
-  A C++ slice iterates: the agent commits, the lead pushes its branch and runs
-  `tools/build_runner.py --mode github --run --select native_module` from that worktree.
 - [ ] N0.6 D6's proof (harness rounds 1 to 6 merged 12 Nov; the record is D6's "As proved" in the decisions document;
   evidence `.artifacts/evidence/native_core/n06/`): our instance and device (Qt's feature set, API 1.2) host Qt Quick
   pixel-identical to Qt's own device; teardown order, resize and the second queue in Qt's family proved over cycles;
@@ -332,26 +300,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 - [ ] N0.7 D9's proof, in the same harness: the job thread, its queue and the latch; the six measurements of D9
   ("How it is proved"), with system conditions recorded. The verdict (jobs for compute on this vendor, or
   uploads only) is written into D9.
-  - Done 12 Nov (rounds 1 to 4; `native/spike_p1` `src/vk_n07.*`, `python/run_n07.py`; evidence
-    `.artifacts/evidence/native_core/n07/`): a job thread with its own QRhi on our VkDevice and the second queue of
-    Qt's family (family 0, index 1), three slots per job kind published by one atomic generation, Qt's QRhi importing
-    each slot (`createFrom`, layouts handed over with `setNativeLayout`); (ii) outputs hash-identical in-frame and as
-    jobs; (iii) no Python thread state on the job thread or the frame driver; (iv) validation clean but for Qt's A;
-    (i) the 4K edge field x4 per job at 164.8 Hz: in-frame 40 of 1,200 frames late, as a job 0 (completion p99 2.1 to
-    2.9 ms against 2.2 to 3.8 with no job); (v) 12 cycles retired with the job's GPU work in flight, handles back to
-    the driver's 3 per device; (vi) 60 s at rest, 0 wake-ups. QPainter's large antialiased fills start Qt's GUI thread
-    pool (`QT_THREAD_PARALLEL_FILLS`), so the job thread writes pixels itself. D9's verdict accepted by the lead (12
-    Nov): jobs for compute on this vendor as well as uploads, with the rules written there (no QPainter or QImage
-    conversion on job or render threads; targets keep contents and are primed at creation and after readback; never
-    grab the swapchain).
   - [ ] AMD and Intel unmeasured: the same measure round on another vendor before a mode moves compute to a job by
     default there (GitHub runners have no GPU; a Watchlist entry until a machine is available).
   - [ ] The timer's form (D5.6 answer 4) settled from where the core records a pass.
-- N0.8 done 12 Nov: PySide6/Qt 6.12.0 (655b04bf; focused Qt Quick, shader and render set 372 of 373 green; the one
-  red was Qt's own sync resetting the array-buffer binding, which the handoff probe had attributed to our code:
-  the probe now measures around our adopting code and the background node's setup restores inherited bindings,
-  ccc19ef0). What 6.12 gives the core is written where it is used: QRhi's indirect draws at N4.c, shader draw
-  parameters in the modes track's rule, `VK_EXT_device_fault` at N3.6. Owed from the bump itself:
   - [ ] The first frozen GitHub build on Qt 6.12 (D11's checkpoint named it; the bump was taken as a plain bump on
     the operator's word and no frozen product has been built since): 1B.14's frozen build box run on a commit after
     655b04bf, with the frozen QML package contract and the Studio opening. Then D11 in the decisions document says
@@ -388,23 +339,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   near layer's defocus before the bound is quoted as visible error.
 - [ ] Verify the drift programs on a non-NVIDIA driver and through fxc/dxc and the Vulkan backend when the native
   core first runs them (D4.7's self-check reports a compiler that breaks the pairs; Watchlist until then).
-- N1.2 landed 12 Nov (e8a5694b): every module-level compute source bakes through `qsb` for every target and the
-  exception list is gone (six composed compute programs, which N1.3 then found, do not bake yet and are on the
-  ratchet: the fog inject with its medium, the population count and scatter of both transitions, the propagation
-  seed); dispatch values are std140 blocks at one binding
-  (`SCENE3D_COMPUTE_BLOCK_BINDING`, `DispatchBlocks` in `scene3d/compute.py`); each pass bit-identical in OpenGL on
-  Qt 6.12 through `tools/compute_pass_identity.py` (the propagation relaxation within its own documented race
-  spread); GL calls per run fell for the edge field, propagation, Waveform's fields and fog (motion and population
-  +1 and +2, a bind replacing a uniform). Evidence `.artifacts/evidence/architecture/native_core_n1_2/`.
-- N1.3 and N1.4 landed 12 Nov (974ab910): the readiness check discovers all 218 shader sources (files, module
-  strings, program attributes, runtime compositions at their call sites) and bakes each for the four targets; 197
-  failures ratcheted in N5's order (substrate 30, Waveform Ribbon 20, Extruded Bubble 24, Neon Lake 9, Extruded
-  Spectrum 2, Sphere 3, 2D modes 13, transitions 89, Quick hosts 7; causes: in/out without location 185 sources,
-  loose uniforms 155, missing binding 128, OpenGL-only built-ins 33). The conventions include
-  (`rendering/gl_programs/conventions.py`, block binding 17, one buffer per context) applied across the scene
-  substrate, Waveform and Extruded Bubble, every frame and shader pair bit-identical in OpenGL, GL calls per frame
-  unchanged; Sphere's winding from `front_face_clockwise`. Broad run on the merge: 2542 of 2543 (the one red fixed
-  since). Evidence `.artifacts/evidence/native_core/n1_3_readiness/`, `n1_4_conventions/`.
 - [ ] **Defect (High, audit of 12 Nov evening): the conventions buffer is keyed by a wrapper that does not live.**
   `rendering/quick/render/gl_resources.py:133-190` keys its registry by `id(QOpenGLContext.currentContext())`; for
   a context Qt owns (Qt Quick's render thread) PySide makes a new wrapper per call unless Python holds one
@@ -469,12 +403,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [ ] The rest of the shared scene substrate (targets' resolves, post, environment, resources).
   - [ ] Waveform Ribbon; then Extruded Bubble; Neon Lake; Extruded Spectrum and Sphere; the other transitions by
     N5.2's groups.
-- N1.7 landed 12 Nov (merge of af9986e8): bake targets are the shipped backends' (SPIR-V, GLSL 430, HLSL 5.0, MSL
-  1.2; GLSL ES is no longer baked); the ES-only widenings back to R16F, identical; every RG16F, RG32F and R11G11B10F
-  target widened to RGBA16F/RGBA32F, identical in OpenGL (Waveform's slope map: 4 of 460,800 anisotropic samples one
-  half-float step off; Bubble's light one 8-bit code more accurate in its halos, signed off by the lead on the stills).
-  `tests/test_qrhi_texture_formats.py` forbids the formats outside one listed use. GPU times are paired medians
-  (`tools/compute_pass_identity.py paired --ref`). Evidence `.artifacts/evidence/native_core/n1_formats/`.
 - [ ] D5.3's formats service, its one listed use: the scene target's multisampled velocity attachment
   (`scene3d/target.py`, RG16F kept; RGBA16F would add 127.5 MiB per 4K display at 4x, 255 MiB at 8x). Built with the
   substrate when the scene target ports (N3), or reconsidered if N1.8's resolve-first rule removes the multisampled
@@ -499,12 +427,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 
 - [ ] N2.1 The product module's build (waits for neither N0.6 nor N0.7; the SDK fetch per Qt version and the
   workflow itself are N0.9's and done; the spike already refuses another Qt, `native/spike_p1/src/module.cpp:652`):
-  - Decided 12 Nov (lead, at the operator's question "what is the cleanest and following repo convention"): the
-    product module lives in `native/core/` (beside `native/spike_p1/`; `native/` is the repository's home for C++ and
-    CMake), with its own `CMakeLists.txt`, `src/` and `shaders/`, and builds `_srpss_native_core.pyd`. Its Python side
-    is one package, `rendering/native/`, the only code that imports the module: it checks the module's Qt version and
-    ABI and exposes the host adapter (D5.1), so a missing or wrong module fails in one place with one reason. The spike
-    stays the harness and evidence (the N0.6 and N0.7 rounds keep running there). Tests: `tests/test_native_core_*.py`.
   - [ ] The product module's tree with the spike's CMake guard (the PySide6 pin), the exact-Qt import guard and
     the MSVC runtime's origin check (`msvcp140`, `vcruntime140`) carried over, each with its failing test.
   - [ ] `native-module.yml` takes the source folder as an input (today `NATIVE_SOURCE: native/spike_p1`, line 61),
@@ -810,8 +732,6 @@ runs from 3-10 a frame to 0, light themes and Normal unchanged, no shader change
 and fixed (the solver added the Glass sheen after the legibility limit; a hidden crossfade copy held a plate).
 58 dark themes change; the table is `changed_table.md` in the evidence folder.
 
-- Landed 12 Nov: the Studio chrome's `accentText` is corrected on its accent fill by the M2b rule (Matte Graphite
-  [Single] only; 99 themes byte-identical); a Studio lifecycle test leaked a theme listener (fixed in the test).
 - [ ] Watch: the "three failures in one long run" were not reproduced in any order of that run's 21 files; the
   long run's other two failures may have been the engine worker gate (red since 438790f7, fixed 4a805fe6).
 
@@ -1026,11 +946,6 @@ arrangement change, a display added or removed, the owning display lost, Setting
   wallpaper). Evidence `.artifacts/evidence/display/d1_run/20261112_1c2_move_hidden/` and `20261112_1c2_move_visible/`.
   The recipe needs a profile whose `monitor_bindings.spotify_visualizer.screen` names the MSI (an identity binding
   outranks `monitor`; `d1_run.py --setting` cannot set it): the lead's copy is `D:/Temp/Scratch/SRPSS/profile_move/`.
-- Landed 12 Nov (R-199): the 7 s move was `d1_run.py` encoding 4K PNGs on the saver's GUI thread (no window renders
-  meanwhile); it now encodes on a writer thread and arms steps on precise timers. Extruded Bubble resolves its uniform
-  locations during preparation (first visible frame 864 lookups -> 0) and the defocus layer warms one program per
-  unit (largest unit 12.3 -> 8.6 ms). Hidden real saver, press to landing 7.4-7.7 s -> 1.8-2.1 s; first content
-  frame 119.6 -> 20-23 ms. Evidence `display/move_timing/20261112_root_cause/` (`timeline.txt`).
 - [ ] Defect: the hop's cross-display Save stalls the GUI thread 102-132 ms at the fade's midpoint (no window renders;
   the fade-in waits): `custom_layout_owner.py:954` -> `SettingsManager.set_widgets_map` ->
   `core/settings/settings_manager.py:542-552`, which re-normalises the whole Visualizer section on every widgets write
@@ -1042,10 +957,6 @@ arrangement change, a display added or removed, the owning display lost, Setting
 - Visible move confirmed by the operator's own two-display logs, 12 Nov (after R-199). A lead rerun with Display 0
   hidden cannot prove it: the card's starting display must be visible too.
 - [ ] The 1.5 s preparation bound on a cold shader cache (34 units land at 1.22-1.28 s warm, close to the bound).
-- Landed 12 Nov: the neighbouring display prepares on the transfer arrows' hover (Edit's and the hover glyph's) and
-  on a Visualizer drag within one card width of the seam, released on leave, turn-back, drag end, Edit end or
-  retirement (edges only); a preparing card takes no input (`prepareOnly`, the scene's hit test refuses it) and
-  0.002 opacity was measured invisible on white, black and grey (0 levels; 0.004 shows 1 to 2).
 - [ ] A prepared neighbour redraws for as long as the pointer rests on an arrow: every published frame calls
   `feed_visualizer_prewarm` (`quick_display_visualizer_owner.py:585-588`), and `feed_prewarm` calls `update()`
   (`rendering/quick/visualizer/item.py:344-354`), also after the renderer reported prepared, so a display at rest
@@ -1054,9 +965,6 @@ arrangement change, a display added or removed, the owning display lost, Setting
     before and after its renderer is prepared.
   - [ ] Stop feeding at the "prepared" edge (the renderer is kept, nothing is redrawn until the hop or the release);
     guard: zero updates of the prepared item across steady frames once prepared (negative control: today's feed).
-- Landed 12 Nov (visible-window audit): every test window goes through `tests/_invisible_windows.py`; 7 test sites and
-  two smoke tools converted; `tests/test_no_visible_test_windows.py` forbids any other route; the hop-renders-prepared
-  test and Fullscreen Edit under pixel shift landed with it.
 - [ ] Side defect: `tests/test_visualizer_hover_transfer_native.py:61` pins UI wording (`activeTip == "MOVE TO NEXT
   DISPLAY"`): assert the tip's structure (non-empty, from the glyph's own source), never the wording.
 - [ ] Side defect: `tests/test_settings_undo.py:63` and `:132`: four tests skip ("no steppable NoWheelSlider on the
@@ -1082,10 +990,6 @@ solid border pixels with nothing blended, in the saver's frame and in the DWM co
 `.artifacts/evidence/display/d1_run/20261112_devcurve_card_edge/` before,
 `20261112_devcurve_card_edge_whole_logical/` after; `20261112_devcurve_card_edge_after/before_after_crops_x4.png`).
 
-- Landed 12 Nov: R-192's second axis (an exterior overscan on the other axis when it is not a whole logical size; the
-  MSI display at 150 % was stretched horizontally by 0.9998 and now overscans 2 px on its outer left edge) and the
-  Visualizer's Edit outline and handles on the drawn card (`drawnCardRect`, one owner with the card's placement).
-  Neither seen on a real display yet.
 - The second-axis fix seen on the MSI, 12 Nov (one bounded Display 0 run by the lead, the operator's leave; evidence
   `.artifacts/evidence/display/d1_run/20261112_msi_second_axis_edges/`): window `(-2,-3)` 2562 x 1443 device pixels, every
   card edge 8 solid border pixels with nothing blended, in the saver's frame and the DWM composite.
@@ -1093,8 +997,6 @@ solid border pixels with nothing blended, in the saver's frame and in the DWM co
   three in a row; a display enclosed on all sides, which also takes R-63's top fallback into its neighbour) keeps
   Qt Quick's stretch when its extent is not whole at its DPR. Decide: Watchlist with the layouts named, or the
   scene laid out on a whole-logical sub-rectangle of the window on that axis.
-- Landed 12 Nov: the overlay re-reads the Visualizer's envelope whichever is created first; Edit suspends pixel shift
-  while its chrome is open (Arrange never shifts; Edit snaps and saves the unshifted layout).
 - [ ] The tests that open windows were not run on the merge (`test_qtquick_visualizer_clip_smoke.py`, Neon Lake's
   `actual_neon_qsg_pixels`): run them hidden at the next milestone run.
 
