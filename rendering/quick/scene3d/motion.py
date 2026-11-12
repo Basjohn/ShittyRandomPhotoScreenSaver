@@ -296,23 +296,36 @@ def motion_uniform_names(time_uniform: str = "uProgress") -> tuple[str, str]:
     return f"{time_uniform}Before", "uViewport"
 
 
-def motion_program(resources, key: str, sources: tuple[str, str], motion_sources: tuple[str, str],
-                   names: tuple[str, ...], motion: bool, time_uniform: str = "uProgress") -> tuple[int, dict[str, int]]:
+def motion_program(resources, key: str, sources: tuple, motion_sources: tuple,
+                   names: tuple[str, ...], motion: bool, time_uniform: str = "uProgress") -> tuple:
     """An effect's program and uniforms: its own, or (with motion blur) the variant that writes motion.
 
     Without motion blur the effect draws with exactly its own program, so its pixels
     cannot change.
+
+    A program whose values are one std140 pass block (N1.6) gives (vertex, fragment, block) for each variant: ``names``
+    are then its samplers, and the result is (program, their uniforms, the program's values, its block): the draw
+    sets the values (``set_motion_values`` for the motion inputs) and binds ``pack_block(block, values)``.
     """
     if motion:
-        key = key + "_motion"
-        return resources.program(key, *motion_sources), resources.uniforms(key, names + motion_uniform_names(time_uniform))
-    return resources.program(key, *sources), resources.uniforms(key, names)
+        key, sources = key + "_motion", motion_sources
+    program = resources.program(key, *sources[:2])
+    if len(sources) == 3:
+        return program, resources.uniforms(key, names), resources.values(key), sources[2]
+    return program, resources.uniforms(key, names + motion_uniform_names(time_uniform) if motion else names)
 
 
 def set_motion_uniforms(uniforms: dict[str, int], frame, before: float, time_uniform: str = "uProgress") -> None:
     """The time input one shutter ago, and the viewport the motion is measured in."""
     gl.glUniform1f(uniforms[f"{time_uniform}Before"], float(before))
     gl.glUniform2f(uniforms["uViewport"], float(frame.viewport[2]), float(frame.viewport[3]))
+
+
+def set_motion_values(values: dict, frame, before: float, time_uniform: str = "uProgress") -> None:
+    """``set_motion_uniforms`` for a program whose values are one pass block (N1.6): the time input one shutter ago and
+    the viewport the motion is measured in, into the program's ``values`` (``MeshResources.values``)."""
+    values[f"{time_uniform}Before"] = float(before)
+    values["uViewport"] = (float(frame.viewport[2]), float(frame.viewport[3]))
 
 # (key, vertex, fragment) or (key, compute) of the programs ``MotionBlur.apply`` uses (for a gradual warm-up).
 MOTION_BLUR_PROGRAMS = (

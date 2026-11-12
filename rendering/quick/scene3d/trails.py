@@ -15,11 +15,12 @@ is sized from its allocation and dropped with the run.
 from __future__ import annotations
 
 import ctypes
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Mapping
 
 from OpenGL import GL as gl
 
 from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
+from rendering.gl_programs.portable import pack_block
 from rendering.quick import gl_query
 
 from .passes import blend_scope
@@ -64,10 +65,37 @@ def trail_line(height: float) -> float:
 def trail_program(resources, key: str, vertex: str, ghost_fragment: str,
                   names: tuple[str, ...]) -> tuple[int, dict[str, int]]:
     """An effect's ghost variant and its uniforms (``uGhostFade`` added). Its driver may drop
-    uniforms the flat output no longer reads; setting those is a harmless no-op."""
+    uniforms the flat output no longer reads; setting those is a harmless no-op.
+
+    A ghost variant whose values are one std140 pass block (N1.6) passes its samplers as ``names`` (``uGhostFade``
+    looked up as well finds nothing, which is allowed here); its values are ``resources.values(key + "_ghost")``
+    and its ghosts are drawn by ``draw_ghosts``."""
     key = key + "_ghost"
     return (resources.program(key, vertex, ghost_fragment),
             resources.uniforms(key, names + ("uGhostFade",), required=False))
+
+
+def draw_ghosts(pass_blocks, block, values: dict, ghosts: Iterable[tuple[float, float]],
+                at: Callable[[float], Mapping[str, object]], draw: Callable[[], None]) -> None:
+    """One prepared ghost pass of a program whose values are one std140 pass block (N1.6): each ghost draws with its
+    own copy of ``block`` packed from ``values`` (the pass's invariant values, set once), the members ``at(time)``
+    gives to place it at its moment, and its ``uGhostFade``. One bound scope (``pass_blocks``: its owner holds a copy
+    per ghost, ``SCENE3D_TRAIL_GHOSTS``); a draw already submitted keeps the copy it was given. No ghost: nothing is
+    bound or drawn."""
+    ghosts = tuple(ghosts)
+    if not ghosts:
+        return
+
+    def place(time: float, fade: float) -> bytes:
+        values.update(at(time))
+        values["uGhostFade"] = fade
+        return pack_block(block, values)
+
+    with pass_blocks.bound(place(*ghosts[0])) as rebind:
+        for index, (time, fade) in enumerate(ghosts):
+            if index:
+                rebind(place(time, fade))
+            draw()
 
 
 class MotionTrails:
