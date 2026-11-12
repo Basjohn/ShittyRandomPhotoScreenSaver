@@ -311,13 +311,16 @@ classification is written at each item.
 
 *N0. Inventory and contract (design; no C++; can start now)*
 
-- [ ] N0.1 The capability matrix (Sonnet): every mode and every 3D transition against every substrate
+- N0.1 done 12 Nov: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matrix.md` (Sonnet; every
+  mode and transition against every capability, with use sites). Its corrections are applied to N1 to N5 below.
+- [ ] N0.1 (historical wording, kept for the list of capabilities): every mode and every 3D transition against every substrate
   capability it uses today (targets and formats, depth, multisampling, order-independent transparency, the
   HDR intermediate and bloom, defocus, the scene probe, planar reflections, the fog volume, heightfields,
   populations and indirect draws, the stream ring and storage buffers, compute passes, edge and propagation
   fields, sphere impostors, optics, the framed camera, the card clip), with the owning file for each, so the
   port order below is checked against real use and nothing is ported that nobody uses.
-- [ ] N0.2 What OpenGL gives that QRhi does not, item by item, with the chosen replacement: GPU timer queries,
+- [ ] N0.2 (also: `rendering/quick/bootstrap.py:66` requires `glMultiDrawArraysIndirect`, which nothing calls;
+  drop the requirement or use it) What OpenGL gives that QRhi does not, item by item, with the chosen replacement: GPU timer queries,
   explicit state restoration against Qt's scene graph (the protected clip and inherited-state work), direct
   state access and immutable storage, the program binary cache, per-draw image bindings, multisample resolve
   control, stencil use for the card clip, persistent mapped buffers; and what QRhi requires that we do not do
@@ -340,24 +343,30 @@ classification is written at each item.
   field passes and header, motion tile max, population scan, the propagation field's three) compile through
   `qsb`: loose uniforms into blocks, nothing OpenGL-only; each stays pixel-identical in OpenGL (its own
   harness before and after) and leaves the list. The list ends empty and the test then forbids it.
-- [ ] N1.3 The readiness check covers vertex and fragment shaders too (today only compute sources are scanned,
-  from a fixed module list): discover every shader source in `rendering/`, compile each through `qsb`, and
+- [ ] N1.3 The readiness check covers vertex and fragment shaders and function-built sources too (today only
+  module-level compute strings in eight modules are scanned; the population count and scatter sources and the
+  composed fog medium program are never checked): discover every shader source in `rendering/`, compile each through `qsb`, and
   ratchet the failures down the same way, mode by mode in the order of N5.
 - [ ] N1.4 Shaders stop assuming OpenGL's conventions: the items of N0.3 come from shared includes or uniforms.
 - [ ] N1.5 No new 3D primitive is built in the Python OpenGL renderer from here on unless an open defect needs
   it (nothing is built twice); section 6's unbuilt primitives are native-only (N6).
 
 *N2. The native substrate's 2D half (P3.1 and P3.2 above): the device, the packet reader, the card clip as the
-substrate's guarantee (plan 1C.4's contract: no pass of any mode writes outside the card), Spectrum at parity.*
+substrate's guarantee (plan 1C.4's contract: no pass of any mode writes outside the card, nor under the border's
+anti-aliased edge; Sphere's and Extruded Spectrum's deliberate overflow setting is the one admitted exception and
+stays explicit), Spectrum at parity.*
 
 *N3. The native 3D substrate core (C++/QRhi; proved on harness scenes, no mode yet)*
 
 - [ ] N3.1 Scene targets: colour, depth and the HDR intermediate with fixed allocations per size, resize and
-  retirement, the composite into the card with the card's alpha, single-sampled first (the parity gate), then
-  the product's sampling policy through one owner (Waveform's hard-coded 4 samples goes through it).
+  retirement, a sampled depth texture and the background capture (Extruded Bubble), a small extra offscreen
+  target with a second light attachment (Bubble), the composite into the card with the card's alpha,
+  single-sampled first (the parity gate), then one sampling-policy owner covering all three sources today: the 3D
+  Detail tier, a transition's own request (2x to 8x), and two literals (Waveform 4, Oscilloscope 1).
 - [ ] N3.2 Mesh and buffer resources: static meshes built once and kept, dynamic buffers, instancing, indirect
-  draws, the per-frame ring for uniform and storage data (the stream ring's contract), with no allocation per
-  frame.
+  draws, point sprites (Bubble, Neon Lake's marks, Waveform's sparks use `gl_PointSize`; QRhi needs a defined
+  replacement such as instanced quads), the per-frame ring for uniform and storage data (the stream ring's
+  contract), with no allocation per frame.
 - [ ] N3.3 Compute passes: the seam the Python renderer has (dispatch only when there is new work, storage
   buffers shared with draws, no readback in the product).
 - [ ] N3.4 Transparency and post-processing as shared stages: depth-aware order-independent transparency, bloom
@@ -375,17 +384,34 @@ substrate's guarantee (plan 1C.4's contract: no pass of any mode writes outside 
 - [ ] N4.a Fullscreen pass and image sampling (transitions; the presenter's background).
 - [ ] N4.b Ribbon and strip (S3D-1: the bounded history buffer, centripetal placement by continuous index, the
   camera-facing width variant, multi-ribbon): Waveform Ribbon.
-- [ ] N4.c Populations (S3D-2: compacted populations, sprites and streaks, bounded lifetimes and emitters,
-  indirect draws, compute-driven arrangement): Waveform sparks and bursts, Extruded Bubble's snow and specks,
-  the Particle and Crumble transitions.
-- [ ] N4.d Planar reflections and rough receivers, the scene probe, wet-surface masks (S3D-5): Waveform's floor,
-  Neon Lake's water.
+- [ ] N4.c Compacted populations (S3D-2: compacted populations, sprites and streaks, bounded lifetimes and
+  emitters, indirect draws, compute-driven arrangement). Used today only by the Disintegrate and Volumetric
+  Dissolve transitions (Waveform's sparks and bursts are a stream ring with instanced draws; Extruded Bubble's
+  snow and specks are its drift compute with instanced draws). **High potential: built without waiting for a
+  mode.**
+- [ ] N4.d Planar reflections and rough receivers (Waveform's floor), the scene probe (Extruded Bubble),
+  wet-surface masks (S3D-5; high potential). Neon Lake's water reflection is analytic in its own basin shader and
+  needs none of this.
 - [ ] N4.e Heightfields and refined terrain meshes (the authored heightfield resource; Neon Lake's tile-refined
   basin; the grid a dynamic surface field will share).
-- [ ] N4.f Reduced-resolution volumes (S3D-7 and P4): the fog volume and its detail march, mixed-resolution soft
-  layers composited under full-resolution lines, dots and rims.
-- [ ] N4.g Edge and propagation fields, sphere impostors, shared optics and underwater light: Extruded Bubble
-  and the transitions that use them.
+- [ ] N4.f Reduced-resolution volumes (S3D-7 and P4): the fog volume (Waveform), and the fog detail march, which
+  exists with tests but runs nowhere in production (too costly at full screen in the Python path): port it as the
+  base of N6.3 and P4's mixed-resolution soft layers.
+- [ ] N4.g Edge and propagation fields (the Edge Bloom and Capillary Bloom transitions only); sphere impostors,
+  shared optics and underwater light (Extruded Bubble).
+- [ ] N4.i Motion blur and trails (a velocity attachment, the tile-max compute, trails and motion uniforms): five
+  transitions, 3D Block Spins and Crumble among them, so before N5.2's Scene3D transitions.
+- [ ] N4.j Photo and backdrop environments (`PhotoEnvironment`: ten transitions; `BackdropEnvironment`: Extruded
+  Spectrum and Sphere's wallpaper reflection).
+- [ ] N4.k Light shafts: the shared owner (Neon Lake today) and Extruded Bubble's own second implementation
+  merged onto it, one owner (high potential).
+- [ ] N4.l Silhouette shadows (Extruded Spectrum's directional silhouette and Sphere's own pass), ported as one
+  shared silhouette primitive, distinct from N4.h's depth-map shadows; the bendable grid (Membrane, Page Curl);
+  Exploding Tiles' planar shadows and particles.
+- [ ] N4.m The soft-light array (up to 96 soft lights, `rendering/gl_programs/lighting.py`): written, tested,
+  used by a lab only. **High potential** (many coloured lights change what any 3D scene can look like): port it
+  in its place here, without waiting for a mode.
+
 - [ ] N4.h Shared shadows (S3D-6: one fitted directional depth map, bounded soft filtering, caster and receiver
   admission, measured tiers). **High potential: built without a consumer** (every lit 3D scene gains depth
   from it), proved on a harness scene; this is the shared primitive, not a revival of the rejected Extruded
@@ -393,17 +419,27 @@ substrate's guarantee (plan 1C.4's contract: no pass of any mode writes outside 
 
 *N5. Modes and transitions onto the substrate, simplest first, each retiring its Python renderer at parity*
 
-- [ ] N5.1 Spectrum (P3.2), then the other flat modes: Oscilloscope, Bubble, Spline Curve.
-- [ ] N5.2 The transitions' shared fullscreen pass, then the Scene3D transitions (3D Block Spins first, then
-  Crumble and Particle, which need N4.c).
-- [ ] N5.3 Extruded Spectrum and Sphere (meshes, lighting, bloom; no compute).
-- [ ] N5.4 Waveform Ribbon (N4.b, N4.c, N4.d, N4.f): the first mode that needs most of the substrate, and the
-  one over its render budget under load, so its port is measured against the 11 Nov load session.
-- [ ] N5.5 Neon Lake (N4.d, N4.e; its reaction textures and growth).
-- [ ] N5.6 Extruded Bubble last (compute drift from N1.1, populations, transparency, optics, glints): the most
-  demanding consumer, ported when every primitive it needs is already proved.
-- [ ] N5.7 The image presenter and background, the Studio's preview host and the release-media and capture tools
-  render through the same core; then P3.5 switches the window's backend.
+- [ ] N5.1 Spectrum (P3.2), then Spline Curve (a fullscreen strip only, the simplest), then Oscilloscope (a
+  single-sampled overlay target, bloom, a ring, instanced quads), then Bubble (its extra offscreen target with a
+  light attachment and point sprites, N3.1 and N3.2).
+- [ ] N5.2 Transitions: first the shared fullscreen pass (seven transitions) and the eight with their own item
+  quad programs; then the Scene3D transitions grouped by what they need: 3D Block Spins and Crumble (N4.i, N4.j);
+  Disintegrate and Volumetric Dissolve (N4.c); Edge Bloom and Capillary Bloom (N4.g); Membrane, Page Curl and
+  Exploding Tiles (N4.l); then the rest. The full list of 28 with each one's needs is in the N0.1 matrix
+  (section 2); the agent porting them writes the order into this box before starting.
+- [ ] N5.3 Extruded Spectrum and Sphere (meshes, lighting, the backdrop environment N4.j, silhouette shadows
+  N4.l; neither uses bloom; no compute).
+- [ ] N5.4 Waveform Ribbon (N4.b ribbon, N4.d planar reflection, N4.f fog volume, its five compute passes and
+  three rings, floor and pulse-rim textures, point sprites; not populations): the mode over its render budget
+  under load, measured against the 11 Nov load session.
+- [ ] N5.5 Neon Lake (N4.e heightfields and the refined basin, N4.k light shafts, point sprites, its own analytic
+  water reflection; its reaction and growth are uniform arrays, no textures).
+- [ ] N5.6 Extruded Bubble last (the drift compute of N1.1, OIT, HDR, the depth texture and background capture,
+  the probe and defocus, light shafts on N4.k, impostors and optics N4.g; not populations): the most demanding
+  consumer, ported when every primitive it needs is proved.
+
+- [ ] N5.7 The image presenter and background (with the window-material backdrop pyramid, the blur mips the card
+  materials read), the Studio's preview host and the release-media and capture tools render through the same core; then P3.5 switches the window's backend.
 - [ ] Each port: pixel parity on single-sampled targets, the frame trace and CPU/GIL figures beside the Python
   path's, Settings/Studio and engine-worker parity, GPU time per pass, no cost at rest, the mode's own tests
   green, then the Python renderer and its shaders deleted in the same change (never two permanent renderers).
@@ -713,8 +749,6 @@ closed and always tears down. Queued for the next free Opus High slot.
 - [ ] Expanded Visualizer on D1: expand, collapse, the fullscreen arrows offered for the real arrangement, the
   move toward D1 from a hidden D0-side owner where that can be driven without showing anything on D0; frames
   grabbed and reviewed by the lead. What truly needs both displays visible is listed in the report, not assumed.
-- [ ] Now Playing on D1: Fullscreen Edit handles and the seek bar against a real player session (fill follows
-  the timeline, a seek lands).
 - [ ] Settings and Studio windows on D1: corner drag and resize from each corner by messages (the alpha-1 corner
   pixels keep input); the Studio's corners captured natively; the theme list and autocomplete scrollbars
   captured (theme them through `shared_styles` if they are native bars there).
@@ -789,35 +823,23 @@ absolutely needed. They are a last resort." This is a standing rule, not only fo
   transfer arrows, a display arrangement change): each either retargets or names why it cannot.
 - [ ] `Docs/Guardrails/` gets the rule ("retarget before rebuild") where presentation changes are preflighted.
 
-### 1C.3 Fullscreen Now Playing: artwork no longer follows the block's size, no side flip, no text group (Opus High)
+### 1C.3 Fullscreen Now Playing: one Edit contract with the Media widget (merged 12 Nov, 426ec4aa; R-189)
 
-Operator: the album artwork's size and shape no longer adjust as dimensions are given to or taken from the
-overlay ("X/Y artwork should adjust, media does this well"); moving the block to the other sides of the display
-"did not flip orientation/alignment at all"; and the text metadata needs one group box with an easy-to-reach
-handle so all text moves and adjusts at once. Two of these are behaviours accepted on 10 Nov that the lead's
-1B.7 slice d changed (side handles were made to reflow the text; the flip was moved from screen side to anchor
-corner). Those changes are withdrawn: the Media widget's behaviour is the contract, as the operator first asked.
+The artwork follows the block on X and Y through the Media widget's own rule (`MediaArtworkRule.js`, a widest
+shape per widget spec: the Media card never wider than tall and unchanged, Now Playing up to 16:9); the block
+flips with the half of the display its centre lies on (the text group's flip glyph overrides); title, artist and
+album are one text group with one handle; the seek bar follows the group; the block's size is captured as a base
+at its first edit (`now_playing.base_width`), so the first touch moves nothing and the artwork never depends on
+the current track's text; Restore Size clears it; Edit/Arrange parity; old profiles through a bridge with fixtures.
+Evidence `.artifacts/evidence/visualizers/shared/expanded_now_playing/20261112_1c3_after/` (`resize_sheet.png`,
+`sides_sheet.png`). The 11 Nov behaviour changes of 1B.7 for side handles and the flip are withdrawn.
 
-- [ ] Root cause, on the real product path (off-screen Fullscreen Edit harness and a D1 run): what the Media
-  widget's Edit does to its artwork for an X-only, a Y-only and a corner resize, and what Now Playing does today
-  for the same three gestures; a side-by-side sheet (this is also 1B.7's open evidence gap).
-- [ ] Artwork follows the block: giving or taking width or height changes the artwork's size and shape exactly as
-  the Media widget's artwork does (same owner, same rule, no overlay-only factor); Rounded Artwork and the
-  Media artwork border settings still apply.
-- [ ] Side flip restored: moving the block to the other side of the display flips its orientation and text
-  alignment (left side: artwork left, text left-aligned; right side: mirrored), as accepted on 10 Nov; the
-  title's flip glyph stays as the explicit override, and the rule for top/bottom is stated.
-- [ ] Text group: title, artist, album and the status line sit in one group box that moves and resizes as one,
-  with one handle that is easy to reach (large enough, never under the artwork or off-screen at any anchor);
-  the group's alignment follows the side flip; individual lines keep no separate handles unless Media has them.
-- [ ] The seek bar option keeps its place and width rule with the new group (it follows the group's width).
-- [ ] Persistence: the group's geometry and the artwork's are stored through the existing Now Playing record;
-  old profiles (including today's 1B.7 shape) load through a bridge with a fixture file
-  (`Persisted_Input_Compatibility.md`).
-- [ ] Edit/Arrange parity: the same gestures through Fullscreen Edit and through the ordinary owner give the
-  same stored record (the parity harness pattern).
-- [ ] Proof: before/after sheets for the three gestures and the four sides; a D1 run with a real player session;
-  section 2's "Changed on 11 Nov" entry for Now Playing corrected to what ships.
+- [ ] D1 run (lead, `tools/d1_run.py` with a real player session): side handles in and out, corner and wheel,
+  the block dragged across the midpoint and up and down, the text group's flip glyph and undo, the child lock
+  (move and scale the group, move the artist, the artwork's side strip), Seek Bar on and a click-seek, save,
+  collapse, re-expand, a profile saved before 12 Nov; DPR 1.5.
+- [ ] Side defect: `tests/test_visualizers_fullscreen_mode_pill.py` crashed once with an access violation when run
+  after overlay_settings, fullscreen_edit and overlays in one process (not reproduced with two files); watch.
 
 ### 1C.4 Spline Curve's white lines show about one pixel into the card border (cause found on Display 1, 12 Nov; fix in flight, Opus High)
 
@@ -907,8 +929,6 @@ significant work". Opus and Sonnet agents resume as the lead sees fit.
   a Medium slot is free after 1C.1 and 1C.4.
 - [ ] Native core D4 (`worktree-agent-a2e34d3d2dc0079ee`, stopped by the usage limit 12 Nov; its uncommitted
   work saved as a "WIP (handover)" commit; journal in its worktree): resumed by the same agent (same session).
-- [ ] Now Playing 1C.3 (`worktree-agent-a4fad866a60eddb36`, twelve commits, stopped mid first-touch fix, saved
-  as a handover commit): resumed by the same agent; merge after the lead's review, then 1C.2.
 
 ### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely (operator, 11 Nov; step b of round 3, 1C.10)
 
@@ -1221,11 +1241,11 @@ Watchlist entry (operator, 11 Nov).
   restore the quiet-to-hot arc?
 
 - **Changed on 11 Nov (no action needed; say only if one should go back):**
-  - Now Playing follows the Media widget's Edit rules: its side handles reflow the text box (they resized the
-    artwork border, accepted 10 Nov); the block's orientation follows its anchor corner, set by the title's flip
-    glyph or by ending a move in a corner (it flipped by screen side, accepted 10 Nov); a corner drag grows about
-    the top centre and Restore Size keeps the top left; its artwork border takes the Media widget's artwork
-    colour, stroke and Rounded Artwork option; the safe-area edge guides are not drawn.
+  - Now Playing (corrected 12 Nov): side handles give or take the block's size and the artwork follows on X and
+    Y, as accepted on 10 Nov and as the Media widget does; the block flips with the half of the display it lies
+    on, as accepted on 10 Nov; title, artist and album move as one text group with one handle; a corner drag
+    grows about the top centre and Restore Size keeps the top left; its artwork border takes the Media widget's
+    artwork colour, stroke and Rounded Artwork option; the safe-area edge guides are not drawn.
   - Fullscreen glyphs: a single display shows the Up arrow (it showed up-right); tooltips are relative and
     ALL CAPS like the rest of the glyph row.
   - All three pans (Alt+right, held-right, the Studios) share the Studio's rule: a right drag moves the scene
