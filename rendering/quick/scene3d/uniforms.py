@@ -30,14 +30,10 @@ from rendering.quick.scene3d.stream import StreamRing
 SCENE3D_UNIFORM_BINDING = 15
 # A pass block's binding (``SCENE3D_PASS_BLOCK_BINDING``): its program's sources state it, the pass binds it.
 PASS_BLOCK_BINDING = SCENE3D_PASS_BLOCK_BINDING
-# One bound scope (a pass's draws, each with its own copy at the uniform offset alignment, at most 256) holds at most
-# this many bytes; a slot holds four scopes' worth, so a fence falls every few dozen passes.
-_PASS_HOLD = 4096
-
-
-def declares_pass_block(source: str) -> bool:
-    """Whether a shader source declares a pass block (``Scene3DBlockLayout.glsl(PASS_BLOCK_BINDING)``)."""
-    return f"binding = {PASS_BLOCK_BINDING}) uniform" in source
+# Every copy of a pass block is written at the uniform-buffer offset alignment (at most 256 bytes), and every pass
+# block fits in it. A ring's slot holds 64 copies, so a fence falls every dozen frames or more, never every frame.
+_PASS_COPY = 256
+_PASS_SLOT = 64 * _PASS_COPY
 
 
 class PassBlocks:
@@ -47,10 +43,13 @@ class PassBlocks:
     one write into a small fenced stream ring (``stream.py``) and one bind, instead of a call per uniform. ``rebind``
     gives a later draw of the scope other values (each draw already submitted keeps its own copy). The point is left
     unbound afterwards: nothing is read back and nothing inherits it. Nothing is allocated until ``warm`` or the first
-    ``bound``; ``release`` returns it to zero."""
+    ``bound``; ``release`` returns it to zero. ``copies`` is the most draws one ``bound`` scope gives values to (64 KiB
+    a ring)."""
 
-    def __init__(self, label: str) -> None:
-        self._ring = StreamRing(f"{label} pass blocks", slots=4, slot_bytes=4 * _PASS_HOLD, hold_bytes=_PASS_HOLD)
+    def __init__(self, label: str, *, copies: int = 1) -> None:
+        # One more copy's room: a scope's first copy starts at the next aligned offset after the last scope's end.
+        self._ring = StreamRing(f"{label} pass blocks", slots=4, slot_bytes=_PASS_SLOT,
+                                hold_bytes=_PASS_COPY * (int(copies) + 1))
 
     @property
     def has_resources(self) -> bool:

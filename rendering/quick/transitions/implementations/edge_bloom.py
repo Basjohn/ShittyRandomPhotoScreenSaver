@@ -15,7 +15,7 @@ from rendering.gl_programs.edge_bloom_program import (
 from rendering.gl_programs.photo_colour import photo_accent_colour, photo_glow_colour
 from rendering.quick.scene3d.edge_field import EdgeField, edge_field_size, edge_field_warm_entries
 from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from ..render_contract import QuickTransitionRenderFrame
 
 # Texture units 0-1 hold the photographs (bind_frame); the host fence restores units 0-2, so the
@@ -86,7 +86,7 @@ class QuickEdgeBloomRenderer:
         if not warm_programs(entries):
             return False
         if size and size[0] > 0 and size[1] > 0:
-            if not self._new_field.warm(size):
+            if not warm_pass_blocks(r, size) or not self._new_field.warm(size):
                 return False
             return self._old_field.warm(size)
         return True

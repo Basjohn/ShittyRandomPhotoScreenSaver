@@ -23,7 +23,7 @@ from rendering.gl_programs.conventions import SRPSS_VERTEX_INDEX_GLSL
 from rendering.gl_programs.scene3d import Scene3DBlockLayout
 
 from .passes import blend_scope
-from .uniforms import PASS_BLOCK_BINDING
+from .uniforms import PASS_BLOCK_BINDING, PassBlocks
 
 BLOOM_LEVELS = 4
 
@@ -86,10 +86,12 @@ class BloomChain:
         self.label = label
         self._levels: list[tuple[int, int, int, int]] = []   # (texture, fbo, width, height)
         self._key: tuple[int, int] | None = None
+        # The passes' blocks: one copy per draw of the chain (2 * BLOOM_LEVELS - 1) in one scope.
+        self._blocks = PassBlocks(f"{label} bloom", copies=2 * BLOOM_LEVELS)
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._levels)
+        return bool(self._levels) or self._blocks.has_resources
 
     def apply(self, source_texture: int, allocation: tuple[int, int], resources, vao: int) -> int:
         """Blur the emissive light of ``source_texture``; returns the half-size glow texture.
@@ -99,41 +101,42 @@ class BloomChain:
         """
         self.warm(allocation)
         down = resources.program("bloom_down", FULLSCREEN_VERTEX_SOURCE, _DOWNSAMPLE_FRAGMENT)
-        down_uniforms = resources.uniforms("bloom_down", ("uSource", "uTexel", "uFirst"))
         up = resources.program("bloom_up", FULLSCREEN_VERTEX_SOURCE, _UPSAMPLE_FRAGMENT)
-        up_uniforms = resources.uniforms("bloom_up", ("uSource", "uTexel"))
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         gl.glBindVertexArray(vao)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glUseProgram(down)
-        gl.glUniform1i(down_uniforms["uSource"], 0)
         source, source_size = source_texture, allocation
-        for index, (texture, fbo, width, height) in enumerate(self._levels):
-            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
-            gl.glViewport(0, 0, width, height)
-            gl.glBindTexture(gl.GL_TEXTURE_2D, source)
-            gl.glUniform2f(down_uniforms["uTexel"], 1.0 / source_size[0], 1.0 / source_size[1])
-            gl.glUniform1i(down_uniforms["uFirst"], 1 if index == 0 else 0)
-            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
-            source, source_size = texture, (width, height)
-        gl.glUseProgram(up)
-        gl.glUniform1i(up_uniforms["uSource"], 0)
-        with blend_scope(gl.GL_FUNC_ADD):
-            for index in range(len(self._levels) - 1, 0, -1):
-                small = self._levels[index]
-                large = self._levels[index - 1]
-                gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, large[1])
-                gl.glViewport(0, 0, large[2], large[3])
-                gl.glBindTexture(gl.GL_TEXTURE_2D, small[0])
-                gl.glUniform2f(up_uniforms["uTexel"], 1.0 / small[2], 1.0 / small[3])
+        pack = BLOOM_BLOCK.pack
+        # One pass-block scope for the chain: each draw reads its own copy of the values it used to set.
+        with self._blocks.bound(pack({"uTexel": (1.0 / allocation[0], 1.0 / allocation[1]),
+                                               "uFirst": 1})) as rebind:
+            for index, (texture, fbo, width, height) in enumerate(self._levels):
+                gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
+                gl.glViewport(0, 0, width, height)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, source)
+                if index:
+                    rebind(pack({"uTexel": (1.0 / source_size[0], 1.0 / source_size[1]), "uFirst": 0}))
                 gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+                source, source_size = texture, (width, height)
+            gl.glUseProgram(up)
+            with blend_scope(gl.GL_FUNC_ADD):
+                for index in range(len(self._levels) - 1, 0, -1):
+                    small = self._levels[index]
+                    large = self._levels[index - 1]
+                    gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, large[1])
+                    gl.glViewport(0, 0, large[2], large[3])
+                    gl.glBindTexture(gl.GL_TEXTURE_2D, small[0])
+                    rebind(pack({"uTexel": (1.0 / small[2], 1.0 / small[3]), "uFirst": 0}))
+                    gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         return self._levels[0][0]
 
     def warm(self, allocation: tuple[int, int]) -> bool:
-        """Allocate for ``allocation`` if not yet (ahead of a run, or at first use); True if it was."""
+        """Allocate for ``allocation`` if not yet (ahead of a run, or at first use), one unit per call: the levels, then
+        the passes' blocks; True once both are."""
         if self._key == allocation:
-            return True
+            return self._blocks.warm()
         self.release()
         self._allocate(*allocation)
         self._key = allocation
@@ -164,6 +167,10 @@ class BloomChain:
 
     def release(self) -> None:
         errors: list[str] = []
+        try:
+            self._blocks.release()
+        except Exception as exc:
+            errors.append(str(exc))
         kept: list[tuple[int, int, int, int]] = []
         for texture, fbo, width, height in self._levels:
             try:

@@ -22,7 +22,7 @@ from rendering.gl_programs.jigsaw_program import (
 from rendering.gl_programs.scene3d import scene3d_detail, scene3d_request_samples
 from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
 from rendering.quick.scene3d.passes import blend_scope
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from ..piece_layout import PIECE_VERTEX_ATTRIBUTES
 from ..render_contract import QuickTransitionRenderFrame
@@ -114,6 +114,8 @@ class QuickJigsawRenderer:
             key = jigsaw_geometry_key(parameters, size[0] / size[1])
             if key != self._geometry_key and self._upload(key, build=False):
                 return False
+        if not warm_pass_blocks(self._resources, size):
+            return False
         return warm_run_resources(self._target, None, size, samples)
 
     def park(self) -> None:

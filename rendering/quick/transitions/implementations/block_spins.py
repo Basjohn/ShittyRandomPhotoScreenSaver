@@ -23,7 +23,7 @@ from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutt
 from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
 from rendering.quick.scene3d.motion import motion_uniform_names, set_motion_uniforms
 from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, trail_program
-from rendering.quick.scene3d.resources import MeshResources, warm_programs
+from rendering.quick.scene3d.resources import MeshResources, warm_pass_blocks, warm_programs
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from ..render_contract import (
     QUICK_TRANSITION_VERTEX_SOURCE,
@@ -124,11 +124,15 @@ class QuickBlockSpinsRenderer:
         if trails:
             entries += [(r, "slab_ghost", BLOCK_SPIN_MOTION_VERTEX_SOURCE, BLOCK_SPIN_GHOST_FRAGMENT_SOURCE),
                         (r, *TRAIL_EDGES_PROGRAM)]
-        if block_spin_edge_glass_mode(parameters.get("edge_glass", "Off")) in (1, 3):
+        reflections = block_spin_edge_glass_mode(parameters.get("edge_glass", "Off")) in (1, 3)
+        if reflections:
             entries.append((r, *PHOTO_ENVIRONMENT_PROGRAM))
         if samples:
             entries += [(r, *program) for program in scene_target_programs(samples, False, motion)]
         if not warm_programs(entries):
+            return False
+        # The photo environment's copy draws through these resources' pass blocks.
+        if reflections and not warm_pass_blocks(r, size):
             return False
         return warm_run_resources(self._target, self._trails, size, samples, motion_blur=motion,
                                   bloom=False, with_trails=trails)

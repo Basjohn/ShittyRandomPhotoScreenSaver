@@ -11,10 +11,11 @@ from array import array
 from OpenGL import GL as gl
 
 from core.logging.logger import get_logger
-from rendering.gl_programs.scene3d import SCENE3D_GLSL
+from rendering.gl_programs.scene3d import SCENE3D_GLSL, Scene3DBlockLayout
 from rendering.quick import gl_query as _query
 from rendering.quick.render.gl_resources import compile_compute_program, compile_program, delete_program
-from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame
+from .frame import SceneFrame, item_quad_vertex_source
+from .uniforms import PASS_BLOCK_BINDING, PassBlocks
 
 logger = get_logger(__name__)
 
@@ -24,19 +25,25 @@ class ProgramUnavailable(RuntimeError):
     (``MeshResources``) and raised again at once, never recompiled, until the resources are released."""
 
 
+# The image underlay's values (binding plan: uImage 0, the block PASS_BLOCK_BINDING).
+UNDERLAY_BLOCK = Scene3DBlockLayout.of("SceneUnderlay", (("uMatrix", "mat4"), ("uItemSize", "vec2")))
+_UNDERLAY_VERTEX = item_quad_vertex_source(UNDERLAY_BLOCK.glsl(PASS_BLOCK_BINDING))
 _IMAGE_FRAGMENT = """#version 460 core
-in vec2 vUv;
-out vec4 FragColor;
-uniform sampler2D uImage;
+layout(location = 0) in vec2 vUv;
+layout(location = 0) out vec4 FragColor;
+layout(binding = 0) uniform sampler2D uImage;
 void main() { FragColor = texture(uImage, vec2(vUv.x, 1.0-vUv.y)); }
 """
 
-# The photograph plane (z = 0) through a moving camera; texture v runs down the item.
+# The photograph plane (z = 0) through a moving camera; texture v runs down the item (binding plan: uImage 0, the
+# block PASS_BLOCK_BINDING).
+CAMERA_PLANE_BLOCK = Scene3DBlockLayout.of("SceneCameraPlane", (
+    ("uMatrix", "mat4"), ("uItemSize", "vec2"), ("uCameraA", "vec4"), ("uCameraB", "vec4")))
 _CAMERA_PLANE_VERTEX = (
     "#version 460 core\n"
     "layout(location = 0) in vec2 aPosition;\n"
-    "uniform mat4 uMatrix; uniform vec2 uItemSize; uniform vec4 uCameraA; uniform vec4 uCameraB;\n"
-    "out vec2 vUv;\n"
+    + CAMERA_PLANE_BLOCK.glsl(PASS_BLOCK_BINDING)
+    + "layout(location = 0) out vec2 vUv;\n"
     + SCENE3D_GLSL
     + """
 void main() {
@@ -48,9 +55,9 @@ void main() {
 """
 )
 _CAMERA_PLANE_FRAGMENT = """#version 460 core
-in vec2 vUv;
-out vec4 FragColor;
-uniform sampler2D uImage;
+layout(location = 0) in vec2 vUv;
+layout(location = 0) out vec4 FragColor;
+layout(binding = 0) uniform sampler2D uImage;
 void main() { FragColor = texture(uImage, vUv); }
 """
 
@@ -69,7 +76,7 @@ def pack_floats(values) -> bytes:
 
 
 # (key, vertex, fragment) of the image underlay ``draw_image`` uses (for a gradual warm-up).
-UNDERLAY_PROGRAM = ("underlay", ITEM_QUAD_VERTEX_SOURCE, _IMAGE_FRAGMENT)
+UNDERLAY_PROGRAM = ("underlay", _UNDERLAY_VERTEX, _IMAGE_FRAGMENT)
 
 
 def _create_one(create) -> int:
@@ -100,6 +107,13 @@ def warm_programs(entries) -> bool:
             pass                # this step's unit was the failed compile
         return False
     return True
+
+
+def warm_pass_blocks(resources: "MeshResources", size: tuple[int, int] | None) -> bool:
+    """One warm-up step for the pass blocks of the resources' own draws (the underlay, the camera plane, the photo
+    environment's copy; N1.6): with a render size, allocate their ring if it is not yet; True once it is. Without a size
+    the warm-up compiles only, so nothing is allocated. The ring is kept until ``release_resources``."""
+    return size is None or resources.pass_blocks.warm()
 
 
 class _UniformLocations(dict[str, int]):
@@ -160,10 +174,13 @@ class MeshResources:
         self._uniforms: dict[str, _UniformLocations] = {}
         self._meshes: dict[str, tuple[int, int, int]] = {}
         self._instance_buffers: dict[str, int] = {}
+        # The pass blocks of the draws made here and with these resources' photo environment copies (N1.6); nothing is
+        # allocated until ``warm_pass_blocks`` or the first draw. A scene target's passes have their own.
+        self.pass_blocks = PassBlocks(label)
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._programs or self._meshes)
+        return bool(self._programs or self._meshes) or self.pass_blocks.has_resources
 
     def _compiled(self, key: str, compile_) -> int:
         failed = self._failed_programs.get(key)
@@ -308,16 +325,16 @@ class MeshResources:
         del self._meshes[key]
 
     def draw_image(self, frame: SceneFrame, texture_id: int) -> None:
-        program = self.program("underlay", ITEM_QUAD_VERTEX_SOURCE, _IMAGE_FRAGMENT)
-        uniforms = self.uniforms("underlay", ("uMatrix", "uItemSize", "uImage"))
+        program = self.program(*UNDERLAY_PROGRAM)
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame)
+        gl.glUseProgram(program)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
-        gl.glUniform1i(uniforms["uImage"], 0)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        with self.pass_blocks.bound(UNDERLAY_BLOCK.pack({"uMatrix": frame.matrix_values,
+                                                         "uItemSize": frame.logical_size})):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
     def draw_camera_plane(
         self,
@@ -332,17 +349,16 @@ class MeshResources:
         its zoom must come from ``scene3d_camera_overscan`` so no frame edge shows.
         """
         program = self.program("camera_plane", _CAMERA_PLANE_VERTEX, _CAMERA_PLANE_FRAGMENT)
-        uniforms = self.uniforms("camera_plane", ("uMatrix", "uItemSize", "uImage", "uCameraA", "uCameraB"))
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame)
-        gl.glUniform4f(uniforms["uCameraA"], *camera_a)
-        gl.glUniform4f(uniforms["uCameraB"], *camera_b)
+        gl.glUseProgram(program)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
-        gl.glUniform1i(uniforms["uImage"], 0)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        with self.pass_blocks.bound(CAMERA_PLANE_BLOCK.pack({
+                "uMatrix": frame.matrix_values, "uItemSize": frame.logical_size,
+                "uCameraA": camera_a, "uCameraB": camera_b})):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
     @staticmethod
     def begin_depth(frame: SceneFrame) -> None:
@@ -371,6 +387,10 @@ class MeshResources:
     def release_resources(self) -> None:
         self._failed_programs.clear()          # a new context compiles again
         errors: list[str] = []
+        try:
+            self.pass_blocks.release()
+        except Exception as exc:
+            errors.append(f"pass blocks: {exc}")
         for key in tuple(self._meshes):
             try:
                 self.drop_mesh(key)

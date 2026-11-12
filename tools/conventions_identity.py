@@ -224,7 +224,8 @@ def record(out: Path, part: str, only) -> int:
 # by recorded frames; nor can programs no product path draws in these runs (the fog march, a tools-only owner).
 # ``pairs`` proves every changed fragment source directly: the revision's text and the working tree's, each compiled
 # through the production compile path, drawn over the same generated inputs (interpolated varyings, random textures
-# of every sampler kind the pair reads, multisampled ones with a distinct value per sample, fixed uniform values),
+# of every sampler kind the pair reads, multisampled ones with a distinct value per sample, fixed uniform values: a
+# uniform-block member gets the value its loose form got, by name, so N1.6's loose-to-block moves pair up),
 # into float targets, compared bit for bit. Control: the working tree's program drawn again with the conventions
 # block's flip on must change its output wherever it reads ``gl_FragCoord`` through the include (the block is live).
 
@@ -480,6 +481,91 @@ def _set_uniforms(program: int, inputs: _PairInputs, integer: int = 1) -> str | 
     return None
 
 
+def _pair_value(label: str, kind: int, integer: int):
+    """The value ``_set_uniforms`` gives a non-sampler uniform named ``label``, as (struct format, numbers); None for
+    a type it has no value for. A block member gets the value its loose form got, so a program whose loose uniforms
+    moved into a block (N1.6) draws over the same inputs as before."""
+    from OpenGL import GL as gl
+
+    h = _seed(label)
+    value = [0.25 + 4.0 * (((h >> (8 * k)) & 0xFF) / 255.0) for k in range(16)]
+    base = label.split("[")[0]
+    floats = {gl.GL_FLOAT: 1, gl.GL_FLOAT_VEC2: 2, gl.GL_FLOAT_VEC3: 3, gl.GL_FLOAT_VEC4: 4}
+    if kind in floats:
+        return "f", value[:floats[kind]]
+    if kind == gl.GL_FLOAT_MAT4:
+        return "f", value[:16]
+    if kind == gl.GL_FLOAT_MAT3:
+        return "f", value[:9]
+    if kind in (gl.GL_INT, gl.GL_BOOL, gl.GL_UNSIGNED_INT):
+        return ("I" if kind == gl.GL_UNSIGNED_INT else "i"), [PAIR_SAMPLES if base.endswith("Samples") else integer]
+    if kind in (gl.GL_INT_VEC2, gl.GL_UNSIGNED_INT_VEC2):
+        size2 = PAIR_SIZE if "Size" in base or "Extent" in base else (1, 1)
+        return ("I" if kind == gl.GL_UNSIGNED_INT_VEC2 else "i"), list(size2)
+    if kind == gl.GL_INT_VEC4:
+        return "i", [0, 0, *PAIR_SIZE]
+    return None
+
+
+def _set_blocks(program: int, integer: int, buffers: list) -> str | None:
+    """Every uniform block of ``program`` but the conventions block filled with ``_pair_value`` per member (at the
+    member's reflected offset, array and matrix strides) and bound at the block's own binding; a reason when a member
+    has no generated value. The buffers go into ``buffers`` for the caller to delete."""
+    import ctypes
+    import struct
+
+    from OpenGL import GL as gl
+    from rendering.gl_programs.conventions import CONVENTIONS_BLOCK_NAME
+
+    count = int(gl.glGetProgramiv(program, gl.GL_ACTIVE_UNIFORM_BLOCKS))
+    members: dict[int, list[int]] = {}
+    for index in range(int(gl.glGetProgramiv(program, gl.GL_ACTIVE_UNIFORMS))):
+        block = (ctypes.c_int * 1)()
+        gl.glGetActiveUniformsiv(program, 1, (ctypes.c_uint * 1)(index), gl.GL_UNIFORM_BLOCK_INDEX, block)
+        if block[0] >= 0:
+            members.setdefault(int(block[0]), []).append(index)
+    for block in range(count):
+        length = (ctypes.c_int * 1)()
+        name = (ctypes.c_char * 256)()
+        gl.glGetActiveUniformBlockName(program, block, 256, length, name)
+        if name.value.decode() == CONVENTIONS_BLOCK_NAME:
+            continue
+        value = (ctypes.c_int * 1)()
+        gl.glGetActiveUniformBlockiv(program, block, gl.GL_UNIFORM_BLOCK_DATA_SIZE, value)
+        data = bytearray(int(value[0]))
+        gl.glGetActiveUniformBlockiv(program, block, gl.GL_UNIFORM_BLOCK_BINDING, value)
+        binding = int(value[0])
+        for index in members.get(block, ()):
+            member, size, kind = gl.glGetActiveUniform(program, index)
+            member = member.decode() if isinstance(member, bytes) else str(member)
+            fields = {}
+            for parameter in (gl.GL_UNIFORM_OFFSET, gl.GL_UNIFORM_ARRAY_STRIDE, gl.GL_UNIFORM_MATRIX_STRIDE):
+                gl.glGetActiveUniformsiv(program, 1, (ctypes.c_uint * 1)(index), parameter, value)
+                fields[parameter] = int(value[0])
+            base = member.split("[")[0]
+            for element in range(int(size)):
+                label = f"{base}[{element}]" if int(size) > 1 else base
+                generated = _pair_value(label, int(kind), integer)
+                if generated is None:
+                    return f"block member {member} of type {kind} has no generated value"
+                fmt, numbers = generated
+                offset = fields[gl.GL_UNIFORM_OFFSET] + element * fields[gl.GL_UNIFORM_ARRAY_STRIDE]
+                columns = {gl.GL_FLOAT_MAT4: 4, gl.GL_FLOAT_MAT3: 3}.get(int(kind))
+                if columns:
+                    for column in range(columns):
+                        part = numbers[column * columns:(column + 1) * columns]
+                        struct.pack_into(f"<{columns}f", data, offset + column * fields[gl.GL_UNIFORM_MATRIX_STRIDE],
+                                         *part)
+                else:
+                    struct.pack_into(f"<{len(numbers)}{fmt}", data, offset, *numbers)
+        handle = (ctypes.c_uint * 1)()
+        gl.glCreateBuffers(1, handle)
+        buffers.append(int(handle[0]))
+        gl.glNamedBufferStorage(int(handle[0]), len(data), bytes(data), 0)
+        gl.glBindBufferBase(gl.GL_UNIFORM_BUFFER, binding, int(handle[0]))
+    return None
+
+
 def _draw_pair_program(vertex: str, fragment: str, inputs: _PairInputs, vao: int, *, flip: bool = False,
                        integer: int = 1):
     """The program's outputs (every colour location it writes) over the generated inputs, as float32 arrays."""
@@ -515,6 +601,7 @@ def _draw_pair_program(vertex: str, fragment: str, inputs: _PairInputs, vao: int
     gl.glNamedFramebufferDrawBuffers(fbo, len(textures), [gl.GL_COLOR_ATTACHMENT0 + i for i in range(len(textures))])
     previous_block = (ctypes.c_int * 1)()
     flipped = 0
+    block_buffers: list[int] = []
     try:
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, fbo)
         gl.glViewport(0, 0, width, height)
@@ -523,7 +610,7 @@ def _draw_pair_program(vertex: str, fragment: str, inputs: _PairInputs, vao: int
         gl.glDisable(gl.GL_BLEND)
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glUseProgram(program)
-        reason = _set_uniforms(program, inputs, integer)
+        reason = _set_uniforms(program, inputs, integer) or _set_blocks(program, integer, block_buffers)
         if reason:
             return None, reason
         if flip:
@@ -547,6 +634,8 @@ def _draw_pair_program(vertex: str, fragment: str, inputs: _PairInputs, vao: int
         if flipped:
             gl.glBindBufferBase(gl.GL_UNIFORM_BUFFER, SCENE3D_CONVENTIONS_BLOCK_BINDING, int(previous_block[0]))
             gl.glDeleteBuffers(1, [flipped])
+        if block_buffers:
+            gl.glDeleteBuffers(len(block_buffers), block_buffers)
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, 0)
         gl.glDeleteFramebuffers(1, [fbo])
         gl.glDeleteTextures(len(textures), textures)

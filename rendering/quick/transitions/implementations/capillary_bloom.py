@@ -17,7 +17,7 @@ from rendering.gl_programs.capillary_field import CAPILLARY_COST
 from rendering.quick import gl_query
 from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
 from rendering.quick.scene3d.propagation_field import PropagationField
-from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
+from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from ..render_contract import QuickTransitionRenderFrame
 
 
@@ -77,6 +77,8 @@ class QuickCapillaryBloomRenderer:
             return False
         if not size or size[0] <= 0 or size[1] <= 0:
             return True
+        if not warm_pass_blocks(r, size):
+            return False
         return self._field.build_step(r, size, *self._field_inputs(count, fibres, seed, size))
 
     def park(self) -> None:
