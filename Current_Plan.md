@@ -150,9 +150,8 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 - [ ] The AC-13 remainder (`Docs/Reference/Architecture_Checklist.md`).
 - [ ] AC-14, AC-15 and AC-16 (same checklist).
 - [ ] The rest of the plan staleness audit of 12 Nov
-  (`D:\Temp\Scratch\SRPSS\research\20261112\plan_staleness_audit.md`; the milestone audit applied its deletions,
-  the roster, the preset names, item 8b and the `[~]` marks; line numbers in that file are from before those
-  edits), Sonnet drafts and the lead decides:
+  (`D:\Temp\Scratch\SRPSS\research\20261112\plan_staleness_audit.md`; its line numbers predate the edits), Sonnet
+  drafts and the lead decides:
   - [ ] One owner for the border material (1.7b, 1B.8's M3 and M4, 1B.9's last box) and for 1.9 against 1B.9.
   - [ ] One root-cause box for the state that leaks between test files in one process (item 3's side defect,
     section 3's "Isolate active Widget Theme state", the M3c context-menu and gesture reds, 1C.3's crash).
@@ -160,7 +159,6 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
     `Future_Work.md`.
   - [ ] Findings written as boxes (the R-175 block, 7.1's "Open:" lines, 1B.8's theme-authoring numbers): one
     step each, the figures to their evidence document.
-  - [ ] Landed narratives in sections 1A, 1B, 7.1 and 9: at most two context lines each.
   - [ ] "Learned levels still in other modes" (section 3): per mode, the root-cause, contract, fix, guard and
     evidence steps.
   - [ ] 1.7a's first two boxes against M1, M2 and M2b: delete what those landed (1.7b's `plateInset` box went
@@ -1218,10 +1216,8 @@ The enabled-row regression is green; other families' extent floors are static.
 ### 1.7 Material density (separate reversible slice)
 
 Contracts and evidence: `Docs/Architecture/Card_Surface_Materials.md`,
-`Docs/Architecture/Settings_Theme_Architecture.md`, `Docs/Reference/Visualizer_Studio.md`. Final native Settings
-checks use both exact operator wallpapers under `C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET`; final
-Studio renders are never-shown alpha compositions, without native DWM proof. Native rounded corners remain open at
-1.9; material transmission is not a clipping fix.
+`Docs/Architecture/Settings_Theme_Architecture.md`, `Docs/Reference/Visualizer_Studio.md`. Final native checks use both
+operator wallpapers under `C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET`; Studio renders have no DWM proof.
 
 - [~] Lead review of side-by-side renders (the supplied widget material screenshots beside current cards, both
   operator wallpapers): especially the good Glass/Frosted volume surfaces, Glass inset/distortion, and Studio
@@ -1269,10 +1265,8 @@ slots and fresh-profile hydration.
 
 ### 1.9 Settings native corner clipping (next step is 1B.9: the operator's +2 px border allowance)
 
-Reproducer and evidence: `tools/settings_native_corners.py`; `Docs/Architecture/Settings_Theme_Architecture.md`. Both
-Qt and post-Accent native regions were rejected and reverted: all four native dark/light theme/background
-combinations retain outside-radius material pixels at 150% DPI, on both operator wallpapers. An inset native-child
-blur candidate was rejected by Windows before pixels; no candidate product edge/child code ships.
+Reproducer: `tools/settings_native_corners.py`; evidence and the rejected candidates (Qt and post-Accent regions, an
+inset native-child blur): `Docs/Architecture/Settings_Theme_Architecture.md`. No candidate code ships.
 
 - [ ] Find a composition treatment that actually clips Accent material at the rounded silhouette: a viable rounded
   composition host, with input, resize/DPI, activation and lifetime proof (material transparency alone cannot
@@ -1413,8 +1407,7 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
   authoring-mirror failures separate from runtime material guards; contract:
   `Docs/Architecture/Card_Surface_Materials.md`.
 - Waveform Ribbon, 7 Nov follow-ups: the Preset 4 and 640x560 card sign-offs are decisions in section 2 (evidence
-  `.artifacts/evidence/visualizers/waveform_ribbon/followups/20261107_followups/`; raw captures not kept); the
-  game60 check of the tick cut is superseded (Watchlist, "Load runs the 11 Nov session did not cover").
+  `.artifacts/evidence/visualizers/waveform_ribbon/followups/20261107_followups/`; raw captures not kept).
 - [ ] **AC-02 remainder:** what stays in `DisplayManager` until a second host needs it: the request and gesture
   routing that acts on the owner (mode/preset requests, view orbit, camera reset, Edit move/scale gestures,
   transfer glyphs) and the committed-CUSTOM profile resolver `_resolve_quick_visualizer_layout_profile`. Move any of
@@ -1468,8 +1461,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
     canonical game60 outlier (48.6 fps, never repeated). Reference: only the display-sized view moves; under game60
     its render mode is 8.2 ms against 4.4 at the card (over §0.7's 8 ms) and fps 64 against 73; tick (5.1 ms game60,
     2.7 idle) and GIL do not depend on size.
-  - The tick-cut and GC-freeze rounds of that session are superseded or carried elsewhere (the GC block above;
-    the Watchlist's "Load runs the 11 Nov session did not cover"); their receipts stay in the evidence folder.
 
 **Found while landing AC-01 (7 Nov; record, not yet admitted):**
 
@@ -1940,8 +1931,7 @@ review)**
 
 Complaints: no decay/breathing in soft passages, sustained passages with changes read almost flat, a swell to full
 power as the song got QUIETER. Preset 7 is Group Wave (song 31-123 s in the log; the recorded clip is song 70-130 s).
-Evidence `reactivity_preset7/20261107_reactivity_preset7/`. The pulse-visibility WIP was dropped with its branch
-(11 Nov): the operator accepted the pulse as is.
+Evidence `reactivity_preset7/20261107_reactivity_preset7/`.
 
 - [~] Lead review on a rendered showcase WebP and the music-response trace of Preset 7 (bodies are smaller in loud
   passages now that the uniform inflation is gone: sustained-loud visible amplitude 6.4 -> 5.4).
@@ -1958,9 +1948,8 @@ Evidence `.artifacts/evidence/visualizers/waveform_ribbon/breathing/20261105_bre
 
 **Four-ribbon maximum and Preset 3 (Awaiting Validation)**
 
-The candidate admits FOUR cards across authoring/runtime/clearance/accent/range paths, preserving Presets 1/2's three
-active identities and old three-card state's values and count. The explicit operator maximum overrides the first
-board's decorative count label; use four for Preset 3's paired target.
+The operator's maximum is four ribbons (it overrides the first board's decorative count label); Preset 3's paired
+target uses four.
 
 - [~] Lead review on mock | ours sheets (full resolution plus crops): validate Preset 3 against
   `references/Preset3Goal1.png` and `references/Preset3ReactivityGoalExample.png`:
@@ -2037,9 +2026,8 @@ Range audit: `.artifacts/evidence/visualizers/waveform_ribbon/reactivity_preset7
 
 **Floor Give (operator, 5 Nov: "the floor can deform inwards, allowing crests"; awaiting the lead's review)**
 
-Opt-in Floor slider (default 0 = the rigid floor, pixel-identical); P2 authored 1.0. Perspective only. Evidence
-`.artifacts/evidence/visualizers/waveform_ribbon/floor_deform/20261107_floor_deform/`; design in the Migration Plan's
-Floor bucket.
+Evidence `.artifacts/evidence/visualizers/waveform_ribbon/floor_deform/20261107_floor_deform/`; design in the
+Migration Plan's Floor bucket.
 
 - [~] Lead review on rendered stills and a WebP: where a lower edge comes down onto the floor the wet floor yields in
   a soft dent, so troughs stay round and dip in instead of flattening: in the visible frame P2 reaches the floor
@@ -2048,18 +2036,16 @@ Floor bucket.
 **Pulse Rim (operator, 5 Nov: "where the pulse is that section of the ribbon's rim can be even brighter with
 falloff"; awaiting the lead's review)**
 
-Reaction-bucket slider (0 = today's rims, pixel-identical). Evidence
-`.artifacts/evidence/visualizers/waveform_ribbon/pulse_rim/20261107_pulse_rim/`; design in the Migration Plan's
-Reaction bucket.
+Evidence `.artifacts/evidence/visualizers/waveform_ribbon/pulse_rim/20261107_pulse_rim/`; design in the Migration
+Plan's Reaction bucket.
 
 - [~] Lead review on rendered strips: the rims (line and rim glow) brighten on the pulse with the field's own smooth
   falloff, in every Reaction Mode and both Travel Directions.
 
 **Swells reach the Preset camera already faded (Presets 1-3; awaiting the lead's review)**
 
-Swells now born just beyond the camera's visible span and ageing only once seen; Preset 4 and Presets 5-7 byte-
-identical. Evidence `reactivity_preset7/20261107_reactivity_preset7/` (`visibility_tag_vs_final.txt`,
-`kicks4_table.txt`, `sheets/*_p1..3_*`).
+Evidence `reactivity_preset7/20261107_reactivity_preset7/` (`visibility_tag_vs_final.txt`, `kicks4_table.txt`,
+`sheets/*_p1..3_*`); design in the Migration Plan.
 
 - [~] Lead review on the rendered sheets of Presets 1-3: edge swells arrive in view at strength.
 - [ ] Open: on Presets 1/3 the rim's swell-to-elsewhere contrast (1.11/1.17) is still below Preset 4's (1.27).
@@ -2069,11 +2055,8 @@ identical. Evidence `reactivity_preset7/20261107_reactivity_preset7/` (`visibili
 **Travel Direction (operator, 5 Nov: "Travel Direction ... chosen in the studio ... an important basic need";
 awaiting the lead's review)**
 
-Flow-bucket Choice, Right To Left (default, unchanged) or Left To Right (the mirror image: history enters at the left;
-pulses, held swells, Tilt Shift, sparks, strands and floor give follow; the world colour grade stays put). Leads the
-Studio's Composition / Flow group. Evidence
-`.artifacts/evidence/visualizers/waveform_ribbon/travel_direction/20261107_travel_direction/`; design in the Migration
-Plan's Flow bucket.
+Evidence `.artifacts/evidence/visualizers/waveform_ribbon/travel_direction/20261107_travel_direction/`; design in the
+Migration Plan's Flow bucket.
 
 - [~] Lead review on a rendered WebP of a live change: it fades out, swaps while hidden and fades back (0.6 s each
   way).
@@ -2181,17 +2164,12 @@ clears and softly lights the mist.
 
 **WR-07/08 production candidate: finish admission**
 
-The reaction is the travelling energy pulse with selectable modes (the C elastic body remains only for depth
-sway/torsion); A's accumulated twist and the reactive axial roll stay, with musical vertical response applied after
-the roll (roll-invariant).
+Reaction design: Migration Plan "Current reaction model".
 
 - [~] Lead review on rendered strips and a WebP: preserve constant history flow, no time-varying axial scaling,
   smooth curves, particles/free strands and fog clearance by the actual body.
 
 **Full controls/editors, four-ribbon capacity and three presets: finish admission**
-
-Candidate Preset 1/2 with the selected hybrid, shared framed 3D camera/navigation, technical profile, preset/Custom
-and Edit/Arrange feature set exist.
 
 - [~] Lead review of rendered Studio frames: expose bend/torsion/stretch/twist/rotation and accent ranges,
   source/curve visual tuning, ribbon/gradient editors, and floor reflectivity/tint/brightness.
@@ -2375,10 +2353,7 @@ Audio Analysis controls per mode).
 
 **Edit Preset deleted (6 Nov)**
 
-Every visualizer mode now has a Studio, so the preset row's Edit Preset button, `_open_preset_json` and its pop-up are
-gone (`ui/tabs/media/preset_slider.py`); curated presets are authored with Open Studio and the Studio's confirmed Save
-To <Preset> (`Docs/Reference/Visualizer_Studio.md` section 4). `tools/flicker_test.py` keeps its own historical mock of
-the old row.
+Contract: `Docs/Reference/Visualizer_Studio.md` section 4 (Open Studio and the confirmed Save To <Preset>).
 
 - [~] Lead review on a render of the real SettingsDialog (off-screen): Open Studio's place in the preset row.
 - [~] Lead review on a render of the real SettingsDialog with its popup patched: the Save To flow.
@@ -2423,12 +2398,8 @@ batched"); evidence `.artifacts/evidence/studio/drag/20261106_drag/` (per move 5
 **UI frozen after closing a Studio, recovered by itself (operator 6 Nov 21:56, Extruded Bubble, Wine Ice Acrylic):
 owner found in source, awaiting a field log**
 
-The close was clean (Settings revealed `visible enabled exposed`, native `(True, True)`, window destroyed after 77 ms),
-then the GUI thread logged nothing for 18 s with the process idle (CPU 4.7 %, GPU 0.1 %) while the event-loop recorder
-still delivered its 15 s summary on time at 21:56:48 (not a stall; its `period_samples=0` only means the lifecycle
-window was open, as for all of Settings). Not reproducible offscreen. The cause and the 7 Nov remedy
-(`WindowPresence.repaint_revealed`, the watch's `qt_exposed`) are recorded in `Docs/Reference/Visualizer_Studio.md`
-section 4 ("Repaint at the reveal"). This is the third round of this defect.
+Not reproducible offscreen. The incident, its cause and the 7 Nov remedy are in `Docs/Reference/Visualizer_Studio.md`
+section 4 ("Repaint at the reveal").
 
 - [ ] Open until a field log shows a paint right after the reveal and `first Paint after the first input` within a
   frame or two (the `[STUDIO] after reveal` lines, `presence.RevealWatch`, one-shot, removed at the first input to
@@ -2439,10 +2410,7 @@ section 4 ("Repaint at the reveal"). This is the third round of this defect.
 
 **Camera reset on every edit and the exit double flicker fixed (operator 8 Nov), awaiting the lead's D1 run**
 
-On a curated preset (Include current camera view on, the default) each commit used to re-hydrate the framed camera
-editor and drop the orbit committed into the draft (Neon Lake, Extruded Bubble, Waveform Ribbon); Settings now appears
-beneath the Studio and comes forward once it is gone (`Docs/Reference/Visualizer_Studio.md` section 4 "One transition
-out").
+Contract: `Docs/Reference/Visualizer_Studio.md` section 4 ("One transition out" and the camera round trip).
 
 - [~] Studio run on D1 (1B.14 harness), lead review of grabbed frames: orbit, then drag sliders (the view stays).
 - [~] Same run: close the Studio by every path (one clean change to Settings, no swap).
@@ -2463,18 +2431,15 @@ driver heaps), not Python.
 
 **Slider drags no longer let go mid-motion (operator 6 Nov), awaiting the lead's drag check**
 
-The cause was the inspector's ScrollView stealing the press on a vertical wobble; every drag instrument in a scrolling
-panel now sets `preventStealing: true` (`Docs/Reference/Visualizer_Studio.md` "Drags are batched";
-`tests/test_studio_drag_coalescing.py`, with a negative control).
+Contract: `Docs/Reference/Visualizer_Studio.md` "Drags are batched"; guard `tests/test_studio_drag_coalescing.py`.
 
 - [~] Studio run on D1 (1B.14 harness), a drag with a vertical wobble posted by messages: a slider drag holds
   through a wobble on every mode.
 
 **No automatic switch to Custom (operator 6 Nov), awaiting the lead's review**
 
-A Studio edit on a curated preset is held, with nothing saved and the preset still selected; closing, switching preset
-or switching mode asks *Unsaved Preset Changes* (spec: `Docs/Reference/Visualizer_Studio.md` section 4 "Canonical
-save"; tests `tests/test_studio_preset_row_and_save_to_preset.py`).
+Spec: `Docs/Reference/Visualizer_Studio.md` section 4 "Canonical save"; tests
+`tests/test_studio_preset_row_and_save_to_preset.py`.
 
 - [~] Lead review of a grabbed frame (D1 run, 1B.14 harness): the prompt's wording and buttons over a real Studio.
 
