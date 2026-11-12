@@ -504,9 +504,337 @@ through a scripted step: fetch the matching SDK, rebuild, both backends' parity 
 
 ## D1, D2, D3 and the transport rule
 
-Not yet written. Their one-line statements are in `Current_Plan.md` (item 8b, stage N0) and their inputs in the
-closeout document's section 3. Order: D1 and D2 with the drop edge, then D3. D9's job thread uses D1's quiescence
-barrier, so D1 is written with both readers in mind.
+*Proposed (draft for the lead), 12 Nov 2026. Nothing in this section is decided. Drafted by a Sonnet agent from
+current source; every "today" claim carries a file:line and was read on 12 Nov 2026 at commit `7ac980d7`. The
+statements are in `Current_Plan.md` (item 8b, N0, box P3.0) and the inputs in the closeout document's section 3.
+D9's job thread uses D1's barrier, so D1 is written with both readers in mind.*
+
+### What exists today (the ground the three contracts stand on)
+
+The shared-memory stream is one object per Visualizer session, `PacketMailbox`
+(`core/visualizer_engine/packet_mailbox.py:101`) over the frame packet ABI (`core/visualizer_engine/packet_abi.py`,
+ABI 2: a 64-byte header, three slots, a seqlock per slot, `consumed_sequence` written by the reader,
+`packet_abi.py:8-58`).
+
+- **Owner of the mapping:** the main process. `PacketMailbox(role="reader")` creates it (`packet_mailbox.py:135`,
+  `packet_abi.py:325-334`), the worker attaches by name (`packet_mailbox.py:140`), and only the owner closes and
+  unlinks it (`close`, `packet_mailbox.py:459-482`). A capacity growth creates a second mapping (`stage_capacity`,
+  `:398-412`) and swaps on the writer's acknowledgement (`commit_capacity`, `:423-436`; the writer's side
+  `attach_capacity`, `:438-453`); the link drives it (`engine_worker_link.py:664-701`).
+- **The only reader is Python, on the GUI thread.** `take()` and `peek()` run under the mailbox lock
+  (`packet_mailbox.py:297-310`), which `close()` and `commit_capacity()` also take. `FramePacketReader.read_latest`
+  copies the payload into a `bytes` (`packet_abi.py:303`) and the mailbox decodes it (`packet_mailbox.py:246`). The
+  render thread never touches the mapping: it receives an immutable snapshot published through the render bridge
+  (`quick_presentation_sync.py:204-211`). That is why no close/unmap hazard exists today: Python holds a
+  `memoryview`, so `SharedMemory.close()` raises `BufferError` rather than unmapping under a live view, and the
+  mailbox releases its views before closing (`packet_mailbox.py:477-480`). A native reader holds a raw pointer, which
+  Python's export count cannot see.
+- **Three readers of different strength already call the mailbox**, and D2 has to separate them:
+  1. *Consuming take*: `quick_presentation_sync.py:207` and `:312` (the per-wake sync) and
+     `quick_display_visualizer_owner.py:2421` (recovery pacing). `_consume` acknowledges at once, right after decode
+     (`packet_mailbox.py:259-263`).
+  2. *Peek*: `quick_display_visualizer_owner.py:646` ("is anything unread", to re-arm the wake after a display
+     transfer) and `:2017` (`_worker_waiting_for_fresh_frame`: reads `present_frame`, `engine_generation`,
+     `activation_id` and `mode_id` of the newest frame). `peek` is not as light as its name: it decodes the whole
+     payload (`_read`, `packet_mailbox.py:238-257`) and `read_latest` already advances `accepted`
+     (`packet_abi.py:307`), so a later `read_latest` of the same frame returns nothing; only the `_peeked` cache lets
+     `take` hand it out.
+  3. *Held frame*: `last_taken` (`packet_mailbox.py:290-295`), read by the recovery hold
+     (`quick_display_visualizer_owner.py:2247-2256`, dropped at `:2258-2267`) and by
+     `rendering/quick/visualizer/edit_content_envelope.py:399`. It is a decoded Python object, so it survives the
+     mapping being closed; `commit_capacity` clears it (`packet_mailbox.py:434`).
+- **Liveness today** is two things: the supervisor's per-process heartbeat (3 s; it only retires a dead or hung
+  worker, `engine_worker_link.py:28-35`), and a per-session cadence watch run from the worker's heartbeat handler
+  (`engine_worker.py:1064-1075` calling `watch_cadence_liveness`, `:587-618`): the session fails closed when its
+  runtime's step count does not move across two heartbeats at least a second apart
+  (`STALLED_HEARTBEATS_BEFORE_CLOSE = 2`, `STALL_OBSERVATION_MIN_S = 1.0`, `:92-93`), and a failed-closed session ends
+  the wake pipe (`_fail_closed`, `:620-632`), which the owner's listener reports as the session's end
+  (`packet_mailbox.py:324-352`, `engine_worker_link.py:815-825`). This is the L4 fix and it is per stream already
+  on the writer side; nothing exists on the reader side.
+- **The retained-frame drop edge exists once, in Python:** R-184
+  (`Docs/Historical_Bugs/R-184_Engine_Worker_Mode_Switch_Kept_Drawing_The_Outgoing_Frame_After_Its_Fade_Out.md`):
+  `VisualizerItem.drop_retained_frame` (`rendering/quick/visualizer/item.py:294`) marks the item; its next
+  `updatePaintNode` passes `clear_snapshot` once (`item.py:381,578`; `node.py:113,127`); reached through
+  `scene_controller.drop_visualizer_retained_frame` (`scene_controller.py:2829-2839`) from
+  `_activate_pending_mode_on_worker` (`quick_display_visualizer_owner.py:2062`).
+- **Slot identity is already in the slot** (ABI 2: runtime generation, engine generation, activation id, mode code,
+  flags, `publish_ns`, all under the slot's seqlock, `packet_abi.py:40-47`), so a head read needs no payload.
+  `payload_schema` is written (`packet_mailbox.py:172`) but **read by nobody**; the only schema check is the codec's
+  own two-byte prefix inside `decode` (`frame_codec.py:153-154`).
+
+### D1. The native reader against the GUI thread closing the mapping (proposed)
+
+**The hazard (new with the native reader).** The render thread would read slots through a raw pointer while the GUI
+thread runs `close`/`commit_capacity`/retire/recovery, which close the Python `SharedMemory`, unmap it and (POSIX)
+unlink the name. Python's `BufferError` guard (above) does not exist for a C++ pointer. Five edges close or replace
+a mapping: owner `close` (`packet_mailbox.py:459`), `commit_capacity` (`:423`, a remap to a larger mapping),
+`link.retire` (`engine_worker_link.py:746-780`) and `link.close` (`:782-811`), and worker replacement
+(`quick_display_visualizer_owner.py:2279-2351`, `_bind_replacement` `:2396-2406`).
+
+**Proposal, three rules.**
+
+1. **The core maps its own view; it never uses Python's pointer.** At activation the core opens the mapping *by
+   name* (`OpenFileMapping`/`MapViewOfFile` on Windows, `shm_open`/`mmap` on POSIX), validates magic, ABI and
+   shape exactly as `_validate` does (`packet_abi.py:169-182`), and owns that view until its own release edge. The
+   name is plain data carried by the activation (the mapping name the link already holds, `mapping_name`,
+   `packet_mailbox.py:455`). On both platforms a mapped view keeps the section alive after the owner closes or
+   unlinks the name (Windows removes a named mapping when its last handle closes, as
+   `shared_memory_transport.py:1-7` already relies on), so the owner's close can never unmap memory the reader is
+   copying. A name that no longer opens means the stream is retired: the reader enters the retired state, never an
+   error loop. This is the "pin the mapping" branch of the plan's wording, chosen because it removes the
+   GUI-waits-for-render-thread dependency (which can deadlock against Qt's synchronisation of the two threads).
+2. **The reader has three states, changed by one atomic: `open`, `retiring`, `retired`.** The GUI side's retire
+   edge (the same edge as `link.retire()`, `engine_worker_link.py:746`, which already never waits) posts a *retire
+   request* to the core: it sets `retiring` (release store) and schedules the reader's release on the render thread
+   (`QQuickWindow::scheduleRenderJob`, run at a render-thread stage, or `sceneGraphInvalidated` at window
+   destruction; Qt documentation, to be confirmed in the N0.6 harness). The render thread, at its next frame edge
+   or job, finishes or abandons any copy, unmaps its view and any held frame, and stores `retired`. A frame never
+   starts a copy once `retiring` is set. The GUI never waits for `retired`: nothing it does afterwards (close,
+   unlink, replacement) depends on it, because of rule 1. This is the *render admission closure plus quiescence
+   barrier* of the plan's wording, made asynchronous and used for the *semantic* part only: no frame of a retired
+   stream is presented, and the reader's held resources (a copied frame, uploaded geometry, D9's job slots) are
+   released on the render thread that owns them.
+3. **A remap is a new stream, not a new pointer.** `commit_capacity` (a larger mapping) and worker replacement hand
+   the core a new `(mapping name, engine generation, activation)` key; the core opens the new view, validates it,
+   and only then retires the old reader state (the old view is released by the rule-2 job). Between the two, frames
+   from the old stream are not presented after the new stream's first frame is accepted. The old mapping's name may
+   already be unlinked; nothing depends on it.
+
+**D9's job thread uses the same barrier.** A job holds a reference on the reader state it was built from (a
+generation counter, not a pointer into the mapping); a retire request marks the device's jobs for that stream
+abandoned; the job thread checks the stream state before it publishes its completion edge, and the device is not
+destroyed until the render-thread retire job and the job thread have both reached their quiescent point (a join in
+the device's destruction, never in the GUI thread's close). This is D9 point 6 made concrete.
+
+**Liveness is per stream.** A stream is `(mapping name, engine generation, activation)`. Writer-side liveness is
+what `watch_cadence_liveness` already is (`engine_worker.py:587-618`) and is kept. Reader-side liveness is new and
+separate from "the render thread answered a heartbeat": the core keeps, per stream, in a small block the GUI can
+read without a lock, `last_accepted_sequence`, `copies_started` and `copies_finished` (two monotonic counters).
+`copies_started != copies_finished` across two observations a second apart is a reader stalled inside a copy, and is
+reported as that stream's failure (the owner's existing failure edge, `_on_engine_worker_failed`), not as a worker
+failure. This answers the closeout's "the render thread answered is not the reader finished its copy"
+(closeout section 3, inputs, L4). The GUI reads these counters only on the heartbeat edge and on edges it already
+has; no timer, thread or poll is added.
+
+**Today vs new.** Already today: the owner is the only closer and unlinker (`packet_mailbox.py:459-482`); a retiring
+link never waits (`engine_worker_link.py:746-749`); a retired generation's frame is never handed to a replacement
+(`packet_mailbox.py:10`, test `test_a_retired_generation_never_reaches_its_replacement`,
+`tests/test_visualizer_engine_packet_mailbox.py:113`); per-session writer liveness (`engine_worker.py:587`). New:
+the core's own view, the three states, the retire job, the reader counters. The owner of all of them is the
+module's reader class (one small C++ type, the packet reader), with the GUI side a single "retire stream" call.
+
+**The test that fails without the contract** (harness C++ test in `native/spike_p1`'s successor, after N0.9, plus a
+Python driver):
+- *close during copy:* a test hook (compiled into the harness only, never the product) pauses the reader inside a
+  copy of a slot; the GUI side then closes and unlinks the mapping and (second case) commits a capacity remap; the
+  hook resumes. Pass: no fault, the copy completes against the pinned view, the frame is discarded because the stream
+  is `retiring`, the next stream's first frame is accepted. *Negative control:* the same test with the reader
+  built to borrow Python's pointer (the thing the contract forbids; a harness variant, seen to fault or to trip the
+  reader's deliberate "view unmapped" assertion on the pause-close-resume order).
+- *resize and remap:* a capacity commit with frames in flight: no frame of the old stream presented after the new
+  stream's first; both views released exactly once (the reader counts opens and releases).
+- *retire:* retire with the render thread parked in a copy and with it idle; the release job runs; the GUI call
+  returns without waiting (measured: the call's duration does not depend on the pause).
+- *worker replacement:* kill the worker mid-publish (the harness writer stops with `sequence_begin` odd, the torn
+  state the ABI defines), replace it; the core never accepts the torn slot (`torn_reads` counter,
+  `packet_abi.py:310`), never presents the old stream after the replacement's first frame
+  (`_bind_replacement`, `quick_display_visualizer_owner.py:2396`), and releases the old view.
+- *per-stream liveness:* a reader paused inside a copy is reported for its stream while the worker's own
+  heartbeats keep answering; negative control: remove the counters, the test sees no failure.
+
+### D2. One consuming reader, a non-consuming head read, and the drop edge (proposed)
+
+**Rule.** Once a stream is native, the core is the only reader that consumes: only it writes `consumed_sequence`
+(`packet_abi.py:317-319`), and only it decodes payloads. The Python owner reads the slot **head** only.
+
+**The consuming reader's acknowledgement edge.** Today the acknowledgement happens at the end of `take`, right
+after decode and before the frame is presented (`packet_mailbox.py:259-263`), and the closeout asks that the edge be
+defined exactly. Proposed, to keep parity with today: the core acknowledges a sequence at its **accept edge**:
+after the whole frame is copied and validated (both seqlock reads, identity equal to the expected stream, schema
+known) and after the frame's protected-edge mask has been handed to the frame driver's edge handler, and before the
+frame is recorded for presentation. It does not wait for the swap. Reason: edges are "short-lived" and a writer
+carries them into every later slot until acknowledged (`packet_abi.py:28-31`, `FramePacketWriter.publish`
+`:218-223`); acknowledging at the swap would carry an edge across several frames the core had already read, a
+behaviour change from Python. If the lead prefers the swap edge, it is one flag in the reader and the parity
+gate shows the difference. A frame the core rejects (torn, wrong identity, unknown schema) is not acknowledged.
+
+**The head read (new).** A function on the reader, `read_head()`, that returns, from the newest *whole* slot, only
+the 64-byte head: sequence, flags, protected-edge mask, runtime/engine generation, activation id, mode code,
+logical timestamp. It performs the seqlock check on the head and reads no payload, copies nothing, **does not move
+`accepted` and does not write `consumed_sequence`**. It is what every Python read that is not the consumer needs:
+`_worker_waiting_for_fresh_frame` needs `present_frame` (the `FLAG_PRESENT_FRAME` bit), `engine_generation`,
+`activation_id`, and the mode (`mode_code`, `packet_abi.py:80-97`; the owner compares `mode_id` strings, so it maps
+the code through the table that already exists); "anything unread" (`quick_display_visualizer_owner.py:646`) is
+`latest_sequence > consumed_sequence`, which `has_unread` already is (`packet_abi.py:313-315`). Owner today:
+`FramePacketReader` in Python; the native head read is the same function in the module, exposed as plain data. The
+Python `PacketMailbox` keeps `peek`/`take` for the in-process and offline paths; on a native stream the owner calls
+only `read_head`. The three call sites of the consuming take (`quick_presentation_sync.py:207,312`,
+`quick_display_visualizer_owner.py:2421`) are retired with the Python renderer; until then a native stream has no
+Python consumer (the stream is either Python-consumed or native-consumed, chosen at activation, never both).
+
+**The drop edge (R-184), written as a contract.** Every frame a native reader retains (a copied payload, geometry
+uploaded from it, a texture rendered from it) is tagged with `(stream key, sequence)`. The core exposes one
+`drop_retained_frame()` edge, posted from the GUI thread and applied by the core at its next frame edge exactly as
+`item.py:294,381,578` does today (a flag read, not a per-frame check). It is raised by the same owner call sites
+that raise it now: a hidden activation commit that discards the pending snapshot
+(`quick_display_visualizer_owner.py:2062`, R-184's cause), a recovery hold's drop (`:2258-2267`), display power off,
+and retire (rule 2 of D1). The drop clears the retained frame and keeps the stream bound and the geometry resident
+(D3), as R-184's fix keeps the source bound. **The head read cannot resurrect a dropped frame** because it returns
+only metadata and the core's accepted-sequence watermark: after a drop the core sets `dropped_through =
+the sequence it held`, and any frame with `sequence <= dropped_through` is never re-presented, whatever a head read
+or a late wake says; only a frame with a larger sequence and a matching identity is. (Today `read_latest` has the
+same property through `accepted`, `packet_abi.py:290-291`; the contract makes it hold across the drop.)
+
+**Today vs new.** Today: acknowledgement at take; `peek` decodes and advances `accepted`; one drop edge for the
+Python node. New: a head read that decodes nothing and moves nothing; the native accept-edge acknowledgement; the
+drop edge and watermark in the core.
+
+**Test that fails without it.**
+- *one consumer:* run a native stream with the Python owner's calls active; assert `consumed_sequence` is written
+  only by the core (a counter on the Python reader's `acknowledge`, `packet_abi.py:317`, stays zero) and that a
+  protected edge published while the owner polls the head is still delivered to the core exactly once. Negative
+  control: let the owner call `take()` on the same stream (the forbidden second consumer); the edge is stolen and
+  the test fails.
+- *head read is non-consuming:* `read_head()` ten times between two publishes; `accepted` and `consumed_sequence`
+  unchanged; the core still receives the frame and its edges.
+- *drop edge, the R-184 shape:* publish a frame, take it, raise a profile-change discard and the drop in one GUI
+  turn; render; the card is empty at the next render (the existing parity bar,
+  `tests/test_visualizer_owner_render_parity.py::test_the_worker_path_draws_the_in_process_pixels_at_non_default_settings`,
+  must pass on the native item). Negative control: remove the drop call (the pre-fix owner); the outgoing frame
+  stays, as R-184 recorded.
+- *no resurrection:* drop at sequence S, then a head read and a replayed wake for S; the frame is not presented;
+  publish S+2: presented. Negative control: reset the watermark on the head read.
+
+### D3. Extruded Bubble geometry once per revision (proposed)
+
+**Today.** The drift families' geometry (`DriftFamily.geometry`, packed rows, `extruded_bubble_drift_log.py:46-72,
+102-115`) travels **inside every frame**: the frame carries `drift_families`
+(`logical_frame_capture.py:455`), the codec writes the dataclass with its `bytes` field each time
+(`frame_codec.py:34,115-120`), and the slot is sized to hold the maximum geometry beside the base envelope
+(`frame_capacity.py:35-42`: chains `CHAIN_GEOMETRY_BYTES + STEP_HISTORY * KNOT_DECISION_BYTES` per chain, snow and
+specks `CLOUD_GEOMETRY_BYTES` per row, at `SPECKS_FULL = 216000` and `SNOW_FULL = 2500`,
+`core/constants/extruded_bubble_world.py:11-12`). Three slots of that size are mapped.
+`DriftLog.admit` (`:147-170`) mints the key: a different `key` is a new revision continuing from the old one
+(`rebase_from`, `first_serial`), a larger capacity with the same key extends rows and keeps the revision
+(`:159-165`). `_REVISIONS` is `itertools.count(1)` (`:43`): unique inside one process only, **so a replacement
+worker's revision 1 is not distinguishable from the first worker's revision 1 by revision alone**. The render
+side keys its state on the revision alone: `state.revision == family.revision` (`extruded_bubble_drift_solver.py:476,
+539`). Whether a replacement worker could alias there is not proved today; the first test below is that proof.
+Today's release edges: `release()` (`:380-389`), family left the list (`:464-467`), geometry edit (`:523-537`: old
+buffers deleted after the dispatch), revision change (`:539-542`), capacity change (`:545-549`). **Two failure edges
+are not covered:** at `:539-542` and `:545-549` the old buffers are deleted *before* `_allocate` runs, and
+`_allocate` can raise (`ValueError` at `:563`, or a GL error), leaving `self._families[name]` holding names that
+were deleted; at `:529-536` a raise inside `_dispatch` skips `_delete(state.geometry ...)` at `:536` and leaks the
+old rows. The CPU oracle data is already off the wire: `render_descriptor` strips `source`
+(`extruded_bubble_drift_log.py:63-72`, used at `logical_frame_capture.py:455`), and the codec's array tag
+(`frame_codec.py:127-137`) exists only for offline captures.
+
+**Proposal.**
+
+1. **Identity.** A geometry resource is keyed by `(worker namespace, engine generation, activation id, family,
+   geometry revision, capacity)`. The *worker namespace* is the stream's mapping token (the `srpss_viz_<token>_<n>`
+   name, `packet_abi.py:73,330`), unique per process run and per mapping, so a replacement worker or a remap is a
+   different namespace. Bare revision is never an identity. The solver's compare at `:476,539` becomes the whole key.
+2. **Geometry is not in the frame.** The frame carries only the key of each live family and the small per-frame
+   state (steps, knots, counts, controls). The geometry bytes travel once per key in a *geometry arena*: a second
+   mapping, created and owned by the main process like the frame mapping (so the owner model of
+   `packet_mailbox.py:104-105` is unchanged), with two banks per family. The worker writes the back bank
+   completely **before** it publishes a frame that names its key; the reader uploads when it first sees a key it
+   does not hold. A bank is rewritten only after the core has acknowledged a frame that names a different key for
+   that family (so a reader copying a bank is never overwritten). The arena's size is part of admission
+   (`required_slot_bytes`'s geometry term, `frame_capacity.py:35-42`, moves from the slot to the arena; the slot
+   shrinks to the base envelope). D3 sizes nothing against the worker's +34 MB at the first Waveform Ribbon
+   (OpenBLAS's reserve, per the plan).
+3. **Residency and release, one rule per edge.** A per-key residency in the core: `requested`, `uploading`,
+   `resident`, `failed`, `retiring`.
+   - *Geometry change (new key, same activation):* the old key stays `resident` until the new key is `resident`
+     and one frame using it has been recorded; then the old is released (matches the CPU rebase and the
+     two-buffer overlap of `:523-537`). Never an empty frame in between.
+   - *Failed swap / upload failure:* the new key goes `failed` (one logged error, no retry on the next frame; a
+     retry only for a *new* key), the old key stays resident and in use, and nothing is deleted before the
+     replacement exists. This fixes the `:539-549` ordering for the native path; the OpenGL solver gets the same
+     ordering as an N1 box if the lead wants it now.
+   - *Capacity growth, same key:* a new key (capacity is in the key), with the history rows copied from the old
+     residency before it is released (the `_allocate(family, state)` copy, `:559-576`).
+   - *Mode or activation change, drop edge, retire, device loss, window destruction:* all residencies of the stream
+     are released on the render thread by the D1 retire job; device loss releases without reading back (nothing
+     is read back, solver docstring `:11-12` of the drift log).
+   - *Counting:* the residency table counts live keys per family; steady state is one, transient two, after
+     teardown zero (`DriftSolver.has_resources`, `:376-378`, is today's equivalent for the Python path).
+4. **Oracle data stays off the wire.** The native frame schema has no array and no `source` field. The worker keeps
+   `source` (the float64 arrays) for `MaterialDriftReference` (`extruded_bubble_drift_log.py:238`) only. A frame
+   built with a non-empty `source` is refused at encode, not silently stripped.
+5. **Per-frame state is separate and small:** the step record (`STEP_FIELDS`, `:29-34`, 30 fields), the knot
+   decisions and the counts: what changes every tick.
+
+**Tests that fail without it.**
+- *identity:* two streams (a worker and its replacement, or two mappings) both publish "revision 1" with different
+  geometry; the renderer must upload the second. *Negative control:* key on revision alone (today's compare,
+  `:476,539`): the stale geometry is drawn; assert on the uploaded bytes' hash.
+- *once per key:* N frames under one key upload the geometry once (an upload counter), and the frame bytes on the
+  wire contain no geometry (frame size is independent of `capacity`). Negative control: today's per-frame
+  descriptor (`frame_codec.py:115-120`), where frame size scales with capacity.
+- *geometry change, failed swap, upload failure:* inject an allocation failure at the new key; the old key's
+  buffers still exist, are still drawn, the failure is logged once and not retried per frame; assert residency
+  counts after each edge. Negative control: the delete-before-allocate order (`:539-542`), where the old names are
+  gone and the next frame uses them.
+- *release:* after teardown, drop edge, mode switch and window destruction the residency count is zero and the
+  allocator's live-buffer count returns to its baseline. Negative control: skip the retire job.
+- *oracle off the wire:* encode a frame whose descriptor still has `source`; refused. Negative control: the
+  Python codec's `_ARRAY` tag would carry it.
+
+### The transport rule (proposed)
+
+1. **Nothing crosses through the stdlib resource sharer.** An ordered control refuses a sharer-backed `Connection`
+   or socket on every platform (`core/process/control_messages.py:28-36,71-74`) because the sharer keeps a
+   sender-side duplicate that a worker dying before decoding never collects
+   (`core/process/control_messages.py:7-14`, `core/visualizer_engine/wake_channel.py:10-15`). The core adds no
+   descriptor of its own through any queue.
+2. **How a handle or mapping reaches a process.** POSIX: a *name* in the control message (plain data), opened by the
+   receiver (`wake_channel.py:10-11`, `packet_mailbox.py:140`). Windows: either a name (named mappings, as the frame
+   mapping already does) or a handle **duplicated into the exact target process** by the supervisor under its
+   lock (`control_messages.py:39-58,75-84`: the duplicate belongs to the child even if never decoded; its exit
+   reclaims it). The native core follows the same two forms; a new native object that needs to reach the worker
+   (the geometry arena of D3, a job-thread signal) is a mapping name or an exact-process duplicate, never a
+   pickled handle.
+3. **Fixed-layout per-mode native schemas.** Each mode that crosses to the core has a fixed-layout record
+   (explicit offsets, little-endian, 16-byte aligned, a version), so a native reader validates by size and offsets
+   and does not decode a tagged stream. The slot's `payload_schema` field (`packet_abi.py:19,230`) selects it. It is
+   **written today but read by nobody** (`packet_mailbox.py:172`; no reader reads `payload_schema`): the native
+   reader and the Python reader both start validating it.
+4. **The tagged Python codec namespace is reserved.** `CODEC_SCHEMA = 1` (`frame_codec.py:21`) keeps meaning "tagged
+   Python codec" and is never used by a native schema. Proposed numbering: `payload_schema` 1 is the Python codec;
+   native schemas are `0x100 | mode_code` in the low byte for the mode and the version in bits 16-23 (mode codes are
+   append-only, `packet_abi.py:80-90`); values 2 to 0xFF are reserved. (The lead may prefer another scheme; the
+   rule is that the namespaces cannot collide and a mode's schema is derivable from its mode code and version.)
+5. **An unsupported payload fails explicitly.** A reader that does not know a slot's `payload_schema`, mode code
+   or schema version refuses the frame: the stream is reported failed (the owner's failure edge), a counter and one
+   logged error are recorded, and the frame is not acknowledged and not presented. It does not guess, skip silently,
+   or fall back to the Python decode. The Python reader's equivalent today is the `FrameCodecError` raised by
+   `decode` (`frame_codec.py:153-154,199,225,232`), which surfaces from `take()` to its caller; the contract adds
+   the check at the slot head, before any payload copy.
+
+**Tests.** (a) A native reader given a slot with an unknown `payload_schema`, an unknown mode code, a schema version
+newer than it knows, and a size that disagrees with the fixed layout: each is refused, counted, not acknowledged
+(`consumed_sequence` unchanged), stream reported failed. Negative control: a reader that falls through to a
+generic decode accepts the frame. (b) A control message carrying a sharer-backed `Connection` is refused
+(`SharerBackedTransferRefused`; the existing guard's test), and a native object's transfer in the harness uses a
+name or a target-process duplicate and leaves no handle behind after the target dies before decoding (handle count
+before and after). Negative control: send it through a queue with the sharer. (c) The codec namespace: assert no
+native schema id equals `frame_codec.CODEC_SCHEMA` and that the Python decoder refuses a native schema's payload.
+
+### Questions for the lead (D1 to D3 and the transport rule)
+
+1. D1 chooses *pin by the core's own view* plus an asynchronous retire job, never a GUI-side wait. Is that the
+   branch you want, or the barrier with a bounded GUI wait? (The wait risks a deadlock against Qt's sync of the GUI
+   and render threads; the draft avoids it.)
+2. D2's acknowledgement edge is the *accept* edge (parity with `packet_mailbox.py:259-263`), not the swap. Confirm.
+3. D3 moves geometry out of the slot into a parent-owned arena with two banks per family. The alternative is to
+   keep geometry in the frame and key only the retention; it costs the 216,000-row bytes per frame (about 6.9 MB
+   of specks geometry at `SPECKS_FULL`, `frame_capacity.py:35-42`) and is what the plan's "once per" is meant to
+   remove. Confirm the arena, and whether the OpenGL solver's delete-before-allocate failure order
+   (`extruded_bubble_drift_solver.py:539-549`) is fixed now in N1 or only in the native path.
+4. The `payload_schema` numbering in transport rule 4 is a proposal.
 
 ## Long-term risks of this direction, and what holds each (audit, 12 Nov 2026)
 
