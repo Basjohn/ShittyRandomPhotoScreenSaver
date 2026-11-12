@@ -243,6 +243,15 @@ the same rounded, concentric rule. It evaluates the identical surface, so where 
 floor for its colours it draws nothing: no double darkening. Bars: `tests/test_surface_material_style.py`,
 `tests/test_card_surface_panels.py`.
 
+*A run on such a fill is judged where it sits (12 Nov, 1B.8 follow-up).* The fill names its row to the runs on it
+(`readonly property Item textLegibilityRow: <row>` on the fill or the item that holds fill and runs); `ShadowedText`
+finds it on its ancestor chain and its ink is solved over the card's poles seen through that fill and then through the
+row's lift (`SurfaceContrast.underlaidPoles`: the fill composited over each pole, then the row's overlay for its
+three colours at the floor plus 10 %, side chosen as `text_legibility.vert` chooses it). A run the row holds keeps its
+authored colour; before, every run was judged on the bare card panel, so Midnight Cobalt's System Stats labels
+(#668cff on their dark metric panel, 4.95:1 where they sit) were lightened to #7e9eff, and runs on a light tile fill
+could pass on the panel while the tile itself was the harder surface. The run's ink plate takes the same fill.
+
 **Historical faint-run measurement (7 Nov, encoded-RGB floor; superseded by the actual-ink guard above).** Runs drawn at 55-76 % of their colour (Gmail's dates and menu glyph,
 Media's PLAYING, Feed sources and ages, System Stats' notes) have no plate of their own, so the panel's floor must
 carry them. Measured on Glass (Default Dark [Single], PERSONALSET 859804, 656207 and 670483; the run's colour
@@ -320,8 +329,9 @@ wallpaper pole on 46 of the 98 material mirrors, all dark (worst Royal Orchard 1
 material mirror is under 4.5:1 (58 dark mirrors' accent changes; light mirrors unchanged). In rendered pixels (six worst
 dark mirrors plus Default Dark and Midnight Cobalt, main and list cards, both wallpapers) small runs under 4.5:1 on the
 material go from 3-10 per frame to 0, and no pixel changes outside the changed runs. Runs between 4.5 and the solver's
-4.8 headroom get a few percent more alpha; System Stats labels on their own metric fill are judged against the card
-panel, not the fill (Midnight Cobalt's move lighter although they read at 4.95 on the fill). The accents of Royal
+4.8 headroom get a few percent more alpha; System Stats labels on their own metric fill were judged against the card
+panel, not the fill (Midnight Cobalt's moved lighter although they read at 4.95 on the fill; since the 12 Nov
+follow-up above a run on a fill is judged on that fill and its row). The accents of Royal
 Orchard and Smoke Quartz lose most of their hue toward the card text (Royal Orchard keeps 48 % of its chroma).
 Evidence `.artifacts/evidence/materials/20261111_m2b/ink_rule/` (`OPEN_FIRST_*`, `accent_collapse_candidates_3x.png`,
 `tables/`). Default Dark [Single] on Normal keeps its 8-10 faint small runs at 3.89-4.27 on the bright wallpaper:

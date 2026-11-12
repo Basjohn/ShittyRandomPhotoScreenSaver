@@ -499,6 +499,8 @@ OverlayWidget {
             height: friendRoot.rowFrameHeight
             radius: 9.0
             color: friendRoot.friendPulseModel.rowSurfaceColor
+            // The row's runs sit on this fill: their ink is judged on it with its row (ShadowedText).
+            readonly property Item textLegibilityRow: activityRowLegibility
             border.color: friendRoot.friendPulseModel.rowBorderColor
             border.width: friendRoot.friendStrokeWidth(1.0)
             antialiasing: true
@@ -525,6 +527,7 @@ OverlayWidget {
             // fill (its own fill is the underlay), concentric with
             // its corners. Inactive on Normal.
             LegibilityRow {
+                id: activityRowLegibility
                 objectName: "friendPulseRowLegibilityRow_" + index
                 readonly property real inset: activityRow.border.width + 2.0
                 x: inset
@@ -842,6 +845,8 @@ OverlayWidget {
                 height: friendRoot.gridTileHeight
                 property real eventGlowLevel: 0.0
                 radius: 11.0; color: friendRoot.friendPulseModel.rowSurfaceColor
+                // The tile's runs sit on this fill: their ink is judged on it with its row (ShadowedText).
+                readonly property Item textLegibilityRow: gridTileLegibility
                 border.color: friendRoot.friendPulseModel.rowBorderColor
                 border.width: friendRoot.friendStrokeWidth(1.0)
                 antialiasing: true
@@ -866,6 +871,7 @@ OverlayWidget {
                 // fill (its own fill is the underlay), concentric with
                 // its corners. Inactive on Normal.
                 LegibilityRow {
+                    id: gridTileLegibility
                     objectName: "friendPulseTileLegibilityRow_" + index
                     readonly property real inset: gridTile.border.width + 2.0
                     x: inset

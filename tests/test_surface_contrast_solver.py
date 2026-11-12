@@ -166,6 +166,31 @@ def test_light_ink_white_pole_is_bounded_as_the_shader_bounds_it(solver, materia
     assert _luminance(poles[1]) > _luminance(poles[0])
 
 
+def test_a_run_on_a_fill_is_judged_through_the_fill_and_its_rows_lift(solver) -> None:
+    # A run on a further fill (a tile, a metric panel) sees the card's poles through that fill,
+    # then through the LegibilityRow on it, which lifts the surface until each of its colours
+    # holds its floor (10 % margin, as text_legibility does).
+    poles = [[0.30, 0.30, 0.34], [0.62, 0.62, 0.66]]
+    fill = {"r": 0.9, "g": 0.9, "b": 0.95, "a": 0.25}                     # a faint light tile
+    seen = solver(f"underlaidPoles({poles}, {_colour((230, 230, 242, 0.25))})")
+    for pole, under in zip(poles, seen):
+        assert under == pytest.approx([p + (c - p) * fill["a"] for p, c in zip(pole, (0.9, 0.9, 0.95))], abs=0.01)
+    accent = (102, 140, 255, 1.0)
+    row = f"{{color: {_colour((230, 230, 242, 0.25))}, rowColors: [{_colour(accent)}], rowFloor: 4.5}}"
+    lifted = solver(f"underlaidPoles({poles}, {row})")
+    run = [c / 255 for c in accent[:3]]
+    for pole in lifted:
+        composed = [p + (c - p) * accent[3] for p, c in zip(pole, run)]
+        assert _contrast(composed, pole) >= 4.5 * 1.10 - 0.02
+    # So the run that the row holds keeps its authored colour; without the row it is corrected.
+    kept = solver(f"legibleInk({_colour(accent)}, 1.0, {poles}, true, true, {row})")
+    moved = solver(f"legibleInk({_colour(accent)}, 1.0, {poles}, true, true, {_colour((230, 230, 242, 0.25))})")
+    assert kept[:4] == pytest.approx([c / 255 for c in accent[:3]] + [accent[3]])
+    assert moved[:4] != pytest.approx(kept[:4])
+    # No underlay: the card's own poles.
+    assert solver(f"underlaidPoles({poles}, null)") == poles
+
+
 @pytest.mark.parametrize("small", (True, False))
 def test_light_ink_on_a_dark_panel_is_corrected_toward_white_and_a_reading_ink_is_kept(solver, small) -> None:
     # The same rule on every theme: a dark (light-ink) card's run that misses its ratio

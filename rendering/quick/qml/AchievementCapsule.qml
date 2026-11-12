@@ -44,6 +44,8 @@ Item {
         id: primaryShell
         objectName: "achievementCapsulePrimary_" + capsule.fieldId
         visible: !capsule.shelfStyle
+        // The run below sits on the capsule fill: its ink is judged on it with its row (ShadowedText).
+        readonly property Item textLegibilityRow: primaryLegibility
         width: parent.width
         height: capsule.capsuleHeight
 
@@ -68,6 +70,7 @@ Item {
         // On a surface material: one pill filling the capsule (its fill is the underlay),
         // concentric with the capsule. Inactive on Normal.
         LegibilityRow {
+            id: primaryLegibility
             readonly property real inset: capsule.strokeWidth + 2.0
             x: inset
             y: inset
@@ -106,6 +109,7 @@ Item {
         id: detailShell
         objectName: "achievementCapsuleDetail_" + capsule.fieldId
         visible: capsule.doubled && !capsule.shelfStyle
+        readonly property Item textLegibilityRow: detailLegibility
         y: capsule.capsuleHeight + capsule.capsuleGap
         width: parent.width
         height: capsule.capsuleHeight
@@ -131,6 +135,7 @@ Item {
         // On a surface material: one pill filling the capsule (its fill is the underlay),
         // concentric with the capsule. Inactive on Normal.
         LegibilityRow {
+            id: detailLegibility
             readonly property real inset: capsule.strokeWidth + 2.0
             x: inset
             y: inset

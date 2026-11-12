@@ -288,6 +288,8 @@ OverlayWidget {
                     anchors.fill: parent
                     radius: 7.0
                     color: followedModel.tileColor
+                    // The story's runs are parented here: their ink is judged on this fill with its row.
+                    readonly property Item textLegibilityRow: storyLegibility
                     // The accepted Steam artwork interaction contract: the
                     // whole story is the link target, not just its image.
                     border.color: followedModel.accentColor
@@ -297,6 +299,7 @@ OverlayWidget {
                     // On a surface material: one rounded box filling the story tile
                     // (its fill is the underlay), concentric with its corners. Inactive on Normal.
                     LegibilityRow {
+                        id: storyLegibility
                         objectName: "followedStoryLegibilityRow" + storySlot
                         readonly property real inset: tileFrame.border.width + 2.0
                         x: inset

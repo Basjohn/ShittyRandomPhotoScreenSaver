@@ -644,6 +644,8 @@ OverlayWidget {
                     radius: 5.0
                     color: Qt.rgba(feedRoot.feedModel.textColor.r, feedRoot.feedModel.textColor.g,
                                    feedRoot.feedModel.textColor.b, 0.055)
+                    // The tile's runs sit on this fill: their ink is judged on it with its row (ShadowedText).
+                    readonly property Item textLegibilityRow: gridLegibility
                     border.color: gridHover.hovered && canActivate
                         ? "white" : feedRoot.feedModel.headerBorderColor
                     border.width: gridHover.hovered && canActivate
@@ -892,6 +894,7 @@ OverlayWidget {
                     // (its own fill is the underlay),
                     // concentric with the tile's corners. Inactive on Normal.
                     LegibilityRow {
+                        id: gridLegibility
                         objectName: "feedGridLegibilityRow" + index
                         readonly property real inset: gridCard.border.width + 2.0
                         x: inset

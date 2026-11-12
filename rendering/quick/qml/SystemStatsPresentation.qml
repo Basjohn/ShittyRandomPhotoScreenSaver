@@ -255,6 +255,8 @@ OverlayWidget {
         height: statsRoot.metricPanelHeight
         radius: 10.0
         color: statsRoot.systemStatsModel.metricSurfaceColor
+        // The runs below sit on this fill: their ink is judged on it with its row (ShadowedText).
+        readonly property Item textLegibilityRow: panelLegibilityRow
         border.color: Qt.rgba(
             accentColor.r, accentColor.g, accentColor.b, 0.55
         )
@@ -274,6 +276,7 @@ OverlayWidget {
         // underlay), drawn over the panel fill and under the
         // text, concentric with the panel's corners. Inactive on Normal.
         LegibilityRow {
+            id: panelLegibilityRow
             objectName: panel.objectPrefix + "LegibilityRow"
             readonly property real inset: panel.border.width + 2.0
             x: inset

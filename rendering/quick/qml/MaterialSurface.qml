@@ -59,8 +59,9 @@ ShaderEffect {
                                                                       tintColor, contrastLimits, opacityAdjust)
     readonly property var inkPoles: SurfaceContrast.inkPoles(resolvedParameters, tintColor, contrastLimits,
                                                             panelCeiling, opacityAdjust)
-    function legibleInk(color, opacity, small) {
-        return SurfaceContrast.legibleInk(color, opacity, inkPoles, small, panelLimits.y > 0.5)
+    // underlay: the fill the run sits on inside the card (transparent: the panel itself).
+    function legibleInk(color, opacity, small, underlay) {
+        return SurfaceContrast.legibleInk(color, opacity, inkPoles, small, panelLimits.y > 0.5, underlay)
     }
 
     // Shader inputs (names match surface_material.frag's uniform block).

@@ -38,13 +38,15 @@ Item {
         ? surfaceMaterialLoader.item.panelCeiling : 1.0
     // A text run's ink on this card (ShadowedText): null (the authored colour stands, byte for
     // byte) when the material is inactive or the run already reads; otherwise the run's own
-    // ink corrected against the composed panel over black and white backdrops, on every theme:
-    // [r, g, b, a, reachable] (SurfaceContrast.legibleInk). Style edges only.
-    function surfaceInkSolution(color, opacity, small) {
+    // ink corrected against the composed panel over black and white backdrops, on every theme,
+    // seen through `underlay` (the further fill the run sits on: a metric panel, a tile, a
+    // capsule; transparent on the card itself): [r, g, b, a, reachable]
+    // (SurfaceContrast.legibleInk). Style edges only.
+    function surfaceInkSolution(color, opacity, small, underlay) {
         var surface = surfaceMaterialLoader.item
         if (!card.surfaceMaterialActive || !surface || surface.glassLegibility.w <= 1.0)
             return null
-        var ink = surface.legibleInk(color, opacity, small)
+        var ink = surface.legibleInk(color, opacity, small, underlay)
         return ink[4] && ink[0] === color.r && ink[1] === color.g && ink[2] === color.b
             && ink[3] === color.a ? null : ink
     }
