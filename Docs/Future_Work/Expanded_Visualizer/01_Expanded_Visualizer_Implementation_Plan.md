@@ -1376,7 +1376,7 @@ can most geometry normally."
   its return is the operator's call, §3). The rotate glyph itself is Edit's and now on the expanded card in Fullscreen
   Edit ("Rotate Widget Content" above).
 
-**Display styles of the expanded card (design note for `Current_Plan.md` 1D.2; PROPOSED, FOR THE LEAD'S APPROVAL; written 12 Nov, no code until approved)**
+**Display styles of the expanded card (design note for `Current_Plan.md` 1D.2; approved by the lead 12 Nov with the decisions at its end)**
 
 Operator request (12 Nov): the Fullscreen Visualizer gets three display styles, one setting per profile, beside
 `expanded_display_requested`: **Default** (today, unchanged pixel for pixel), **Borders To Edge** (the card's frame
@@ -1486,6 +1486,19 @@ applies at the next expansion; the collapsed card is untouched (the ordinary rec
 the spec system. A profile saved before it loads as Default with no bridge, and the canonical-default guard covers it.
 The lead decides member versus a sibling key beside `expanded_display_requested`; the proposal is the member, because
 the record already holds every fullscreen option and Settings' Fullscreen Mode page already edits it.
+
+*Lead's decisions (12 Nov).*
+1. **Corners.** Borders To Edge draws square outer corners. Rounded corners at the display's corners would leave
+   four wallpaper wedges and a half-off-monitor ramp. The border's inner arc follows `inner_corner_radius`. The
+   operator may still ask for rounded; that is a one-value change.
+2. **Persistence.** `display_style` is a member of `fullscreen_overlays`.
+3. **Overflow in Hide Borders.** Sphere's and Extruded Spectrum's overflow is held to the display rect. No style
+   draws past the visible rect.
+4. **R-192's enclosed axis.** This does not block Borders To Edge. On a monitor with no exterior edge on an axis
+   whose extent is not whole at its DPR, Qt Quick's stretch already softens every edge on that display (R-192
+   "Still open"), and the frame adds no new defect there. It is a Watchlist entry with the layouts named (the
+   middle of three in a row, the centre of a 3 × 3 grid). The test sweep includes one such layout and records
+   the stretch, never hiding it.
 
 *Proof (as the 1D.2 boxes state).* Per style, at 100 %, 125 % and 150 % on both axes: geometry against the display
 (whole logical), the clip contract, the neighbour guard on the hidden second host, the style round-trip through the real

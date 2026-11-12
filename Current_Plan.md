@@ -43,7 +43,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
 **Next, by slot (lead, 12 Nov night audit, `Docs/Future_Work/Audit_2026-11-12_Night.md`):**
 - High:
   1. N0.3's three convention scenes (the native core's critical path; N2.2 and N2.4 wait on it).
-  2. 1D.2, once its design note is approved.
+  2. 1D.2 (design note approved 12 Nov: plan 01, "Display styles of the expanded card").
   3. 1C.10.
   4. The 1C.2 Save stall.
 - Medium:
