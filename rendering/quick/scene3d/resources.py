@@ -134,24 +134,20 @@ class _UniformLocations(dict[str, int]):
         self.image_sampler_units_initialized = False
 
 
-def bind_frame(program: int, uniforms: _UniformLocations, frame: SceneFrame, values: dict | None = None) -> None:
+def bind_frame(program: int, uniforms: _UniformLocations, frame: SceneFrame, values: dict) -> None:
     """Use the program with the frame's matrix and item size; a transition frame's
     source/destination textures bind to units 0/1 when the program declares them.
 
-    A program whose values are one pass block (N1.6) passes its ``values`` (``MeshResources.values``): the matrix
-    and item size go there, for the block its draw binds; a program still on loose uniforms gets them as uniforms.
+    The program's values are one std140 pass block (N1.6): the matrix and item size go into its ``values``
+    (``MeshResources.values``), for the block its draw binds.
 
     ``QuickTransitionRenderFrame`` guarantees both image names are live.  Bind
     only the units the program declares: unlike ``glBindTexture``, a zero name
     given to ``glBindTextures`` unbinds every texture target on that unit.
     """
     gl.glUseProgram(program)
-    if values is not None:
-        values["uMatrix"] = frame.matrix_values
-        values["uItemSize"] = frame.logical_size
-    else:
-        gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
-        gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
+    values["uMatrix"] = frame.matrix_values
+    values["uItemSize"] = frame.logical_size
     samplers = uniforms.image_samplers
     if not samplers:
         return

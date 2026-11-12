@@ -10,8 +10,8 @@ propagation seed). Nothing is listed by hand except today's failures.
 The ratchet: the sources that did not bake when the check was widened to every stage (12 Nov 2026) are listed below,
 grouped in N5's porting order. The list only shrinks: a listed source that bakes fails the test until it is removed,
 and a source that is not listed and does not bake fails the test (convert it, never list it). The module-level compute
-sources that D4 and N1.2 converted stay outside the list (no exceptions there): only the composed compute programs that
-were never checked before are on it."""
+sources that D4 and N1.2 converted stay outside the list (no exceptions there), and since N1.6 converted the last
+composed one (the Capillary propagation seed) no compute source is on it."""
 import ast
 import subprocess
 
@@ -87,11 +87,13 @@ def test_the_ratchet_is_grouped_by_mode_in_n5_order():
             assert group_of(owners[key]) == group, f"{key} belongs to {group_of(owners[key])}, not {group}"
 
 
-def test_no_module_level_compute_source_is_on_the_ratchet():
-    # D4 and N1.2 converted every module-level compute source; only the composed ones N1.3 found are listed.
+def test_no_compute_source_is_on_the_ratchet():
+    # D4 and N1.2 converted every module-level compute source, and N1.6 the last composed one N1.3 found (the
+    # Capillary propagation seed): every compute source the scan discovers bakes, and none is listed.
     stages = {source.key: source.stage for source in discover()[0]}
+    assert any(stage == "comp" and "(" in key for key, stage in stages.items())   # composed ones are discovered
     listed_compute = [key for values in _RATCHET.values() for key in values if stages.get(key) == "comp"]
-    assert listed_compute and all("(" in key for key in listed_compute)
+    assert not listed_compute
 
 
 def test_every_stage_and_every_kind_of_source_is_discovered():
@@ -227,11 +229,6 @@ def test_every_target_is_checked_not_only_spirv(tmp_path):
 
 # The sources that did not bake on 12 Nov 2026 (N1.3), in N5's order. Only ever shrinks.
 _RATCHET = {
-    "Waveform Ribbon": (
-        "rendering.gl_programs.fog_volume.FOG_COMPOSITE_FRAGMENT",
-        "rendering.gl_programs.fog_volume.FOG_FULLSCREEN_VERTEX",
-        "rendering.gl_programs.fog_volume.fog_march_source(coverage_glsl)",
-    ),
     "Extruded Bubble": (
         "rendering.gl_programs.extruded_bubble_program.BACKDROP_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.BEAD_VERTEX",
@@ -293,49 +290,6 @@ _RATCHET = {
         "widgets/spotify_visualizer/shaders/bubble.frag",
         "widgets/spotify_visualizer/shaders/devcurve.frag",
         "widgets/spotify_visualizer/shaders/oscilloscope.frag",
-    ),
-    "Transitions": (
-        "rendering.gl_programs.blockspin_program.BLOCK_SPIN_FRAGMENT_SOURCE",
-        "rendering.gl_programs.blockspin_program.BLOCK_SPIN_GHOST_FRAGMENT_SOURCE",
-        "rendering.gl_programs.blockspin_program.BLOCK_SPIN_MOTION_FRAGMENT_SOURCE",
-        "rendering.gl_programs.blockspin_program.BLOCK_SPIN_MOTION_VERTEX_SOURCE",
-        "rendering.gl_programs.blockspin_program.BLOCK_SPIN_QUICK_VERTEX_SOURCE",
-        "rendering.gl_programs.crumble_program.CRUMBLE_FRAGMENT",
-        "rendering.gl_programs.crumble_program.CRUMBLE_GHOST_FRAGMENT",
-        "rendering.gl_programs.crumble_program.CRUMBLE_MOTION_FRAGMENT",
-        "rendering.gl_programs.crumble_program.CRUMBLE_MOTION_VERTEX",
-        "rendering.gl_programs.crumble_program.CRUMBLE_VERTEX",
-        "rendering.gl_programs.crumble_program.DEBRIS_FRAGMENT",
-        "rendering.gl_programs.crumble_program.DEBRIS_GHOST_FRAGMENT",
-        "rendering.gl_programs.crumble_program.DEBRIS_MOTION_FRAGMENT",
-        "rendering.gl_programs.crumble_program.DEBRIS_MOTION_VERTEX",
-        "rendering.gl_programs.crumble_program.DEBRIS_VERTEX",
-        "rendering.gl_programs.depth_cascade_program.CASCADE_FRAGMENT_SOURCE",
-        "rendering.gl_programs.depth_cascade_program.CASCADE_SHADOW_FRAGMENT_SOURCE",
-        "rendering.gl_programs.depth_cascade_program.CASCADE_SHADOW_VERTEX_SOURCE",
-        "rendering.gl_programs.depth_cascade_program.CASCADE_VERTEX_SOURCE",
-        "rendering.gl_programs.glass_shatter_program.GLASS_FRAGMENT",
-        "rendering.gl_programs.glass_shatter_program.GLASS_GHOST_FRAGMENT",
-        "rendering.gl_programs.glass_shatter_program.GLASS_MOTION_FRAGMENT",
-        "rendering.gl_programs.glass_shatter_program.GLASS_MOTION_VERTEX",
-        "rendering.gl_programs.glass_shatter_program.GLASS_VERTEX",
-        "rendering.gl_programs.jigsaw_program.JIGSAW_FLAT_FRAGMENT_SOURCE",
-        "rendering.gl_programs.jigsaw_program.JIGSAW_FLAT_VERTEX_SOURCE",
-        "rendering.gl_programs.jigsaw_program.JIGSAW_FLIGHT_FRAGMENT_SOURCE",
-        "rendering.gl_programs.jigsaw_program.JIGSAW_FLIGHT_VERTEX_SOURCE",
-        "rendering.gl_programs.jigsaw_program.JIGSAW_SHADOW_FRAGMENT_SOURCE",
-        "rendering.gl_programs.jigsaw_program.JIGSAW_SHADOW_VERTEX_SOURCE",
-        "rendering.gl_programs.membrane_program.MEMBRANE_FRAGMENT_SOURCE",
-        "rendering.gl_programs.membrane_program.MEMBRANE_VERTEX_SOURCE",
-        "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_FRAGMENT_SOURCE",
-        "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE",
-        "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE",
-        "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_MOTION_VERTEX_SOURCE",
-        "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_VERTEX_SOURCE",
-        "rendering.quick.scene3d.motion._GATHER_FRAGMENT",
-        "rendering.quick.scene3d.propagation_field.PropagationField('Quick Capillary Bloom', 'capillary', "
-        "CAPILLARY_COST_GLSL)[propagation_seed_capillary]",
-        "rendering.quick.scene3d.trails._EDGE_FRAGMENT",
     ),
     "Quick hosts and materials": (
         "rendering.quick.visualizer.clip_host._FRAGMENT_SOURCE",

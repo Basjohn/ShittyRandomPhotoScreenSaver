@@ -49,15 +49,13 @@ def _read(texture: int, size) -> np.ndarray:
 
 
 def _build(resources, channel: float) -> tuple[PropagationField, np.ndarray, float]:
-    from OpenGL import GL as gl
-
     field = PropagationField("test", "test", _COST_GLSL)
     steps = 0
-    while not field.build_step(resources, _SIZE, ("k", channel), _SOURCES, 2.0,
-                               lambda locate: gl.glUniform1f(locate("uChannel"), channel)):
+    # The cost's uniform is a member of the seed's pass block (N1.6), given by name.
+    while not field.build_step(resources, _SIZE, ("k", channel), _SOURCES, 2.0, {"uChannel": channel}):
         steps += 1
         assert steps <= 1 + PROPAGATION_PASSES // PROPAGATION_PASSES_PER_STEP + 1
-    arrival, extent = field.textures(resources, _SIZE, ("k", channel), _SOURCES, 2.0, lambda locate: None)
+    arrival, extent = field.textures(resources, _SIZE, ("k", channel), _SOURCES, 2.0, {})
     return field, _read(arrival, propagation_size(_SIZE)), float(_read(extent, (1, 1))[0, 0])
 
 

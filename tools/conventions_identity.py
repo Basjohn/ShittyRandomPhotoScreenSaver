@@ -272,9 +272,12 @@ _OUT = re.compile(r"^\s*(?:layout\s*\(\s*location\s*=\s*(\d+)\s*\)\s*)?out\s+(\w
 
 
 def pair_vertex_source(fragment: str) -> str:
-    """A fullscreen triangle writing every varying ``fragment`` reads, each a different smooth function of position."""
+    """A fullscreen triangle writing every varying ``fragment`` reads, each a different smooth function of position
+    (a declaration of several names, ``in vec2 vUv,vCrack;``, read as one per name)."""
+    from rendering.gl_programs.portable import split_declaration_lists
+
     lines, assigns = [], []
-    for index, match in enumerate(_IN.finditer(re.sub(r"//[^\n]*", "", fragment))):
+    for index, match in enumerate(_IN.finditer(split_declaration_lists(re.sub(r"//[^\n]*", "", fragment)))):
         layout, qualifiers, kind, name = match.group(1) or "", match.group(2) or "", match.group(3), match.group(4)
         count = int(match.group(5)) if match.group(5) else 0
         integer = kind.startswith(("i", "u")) and not kind.startswith("int") or kind in ("int", "uint")

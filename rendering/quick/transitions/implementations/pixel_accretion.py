@@ -5,8 +5,10 @@ from __future__ import annotations
 from OpenGL import GL as gl
 
 from rendering.gl_programs.pixel_accretion_program import (
+    PIXEL_ACCRETION_BLOCK,
     PIXEL_ACCRETION_FRAGMENT_SOURCE,
     PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE,
+    PIXEL_ACCRETION_MOTION_BLOCK,
     PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE,
     PIXEL_ACCRETION_MOTION_VERTEX_SOURCE,
     PIXEL_ACCRETION_QUAD_VERTICES,
@@ -14,9 +16,15 @@ from rendering.gl_programs.pixel_accretion_program import (
     pixel_accretion_grid,
     pixel_accretion_parameters,
 )
-from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress, scene3d_trail_ghosts
-from rendering.quick.scene3d.motion import motion_program, motion_uniform_names, set_motion_uniforms
-from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, trail_program
+from rendering.gl_programs.portable import pack_block
+from rendering.gl_programs.scene3d import (
+    SCENE3D_TRAIL_GHOSTS,
+    scene3d_request_samples,
+    scene3d_shutter_progress,
+    scene3d_trail_ghosts,
+)
+from rendering.quick.scene3d.motion import motion_program, set_motion_values
+from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, draw_ghosts, trail_program
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from ..directions import direction_vector
@@ -27,7 +35,8 @@ class QuickPixelAccretionRenderer:
     transition_id = "pixel_accretion"
 
     def __init__(self) -> None:
-        self._resources = MeshResources("Quick Directional Pixel Accretion")
+        # A ghost pass gives each of its draws its own pass block copy.
+        self._resources = MeshResources("Quick Directional Pixel Accretion", copies=SCENE3D_TRAIL_GHOSTS)
         self._target = SceneTarget("Quick Directional Pixel Accretion")
         self._trails = MotionTrails("Quick Directional Pixel Accretion")
 
@@ -95,29 +104,35 @@ class QuickPixelAccretionRenderer:
         self._resources.begin_depth(frame)
         self._draw_tiles(frame, progress, seed, tile_size, travel, motion)
 
-    _TILE_UNIFORMS = ("uMatrix", "uItemSize", "uNewTex", "uGrid", "uDirection", "uProgress", "uTravel", "uSeed")
+    # The photograph bind_frame binds (unit 1); every other value is in the program's pass block.
+    _TILE_SAMPLERS = ("uNewTex",)
+
+    @staticmethod
+    def _tile_values(values: dict, frame, columns: int, rows: int, seed: int, travel: float) -> None:
+        values["uGrid"] = (float(columns), float(rows))
+        values["uDirection"] = direction_vector(frame.run.request.direction)
+        values["uTravel"] = travel
+        values["uSeed"] = float(seed)
 
     def _draw_tiles(self, frame, progress: float, seed: int, tile_size: int, travel: float, motion: bool) -> None:
         columns, rows, _actual_size = pixel_accretion_grid(
             frame.viewport[2], frame.viewport[3], tile_size
         )
-        program, uniforms = motion_program(
-            self._resources, "microquads", (PIXEL_ACCRETION_VERTEX_SOURCE, PIXEL_ACCRETION_FRAGMENT_SOURCE),
-            (PIXEL_ACCRETION_MOTION_VERTEX_SOURCE, PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE),
-            self._TILE_UNIFORMS, motion,
+        program, uniforms, values, block = motion_program(
+            self._resources, "microquads",
+            (PIXEL_ACCRETION_VERTEX_SOURCE, PIXEL_ACCRETION_FRAGMENT_SOURCE, PIXEL_ACCRETION_BLOCK),
+            (PIXEL_ACCRETION_MOTION_VERTEX_SOURCE, PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE, PIXEL_ACCRETION_MOTION_BLOCK),
+            self._TILE_SAMPLERS, motion,
         )
-        bind_frame(program, uniforms, frame)
-        gl.glUniform2f(uniforms["uGrid"], float(columns), float(rows))
-        gl.glUniform2f(uniforms["uDirection"], *direction_vector(frame.run.request.direction))
-        gl.glUniform1f(uniforms["uProgress"], progress)
-        gl.glUniform1f(uniforms["uTravel"], travel)
-        gl.glUniform1f(uniforms["uSeed"], float(seed))
+        bind_frame(program, uniforms, frame, values)
+        self._tile_values(values, frame, columns, rows, seed, travel)
+        values["uProgress"] = progress
         if motion:
-            set_motion_uniforms(uniforms, frame,
-                                max(progress - scene3d_shutter_progress(frame.run.request.duration_ms), 0.0))
+            set_motion_values(values, frame,
+                              max(progress - scene3d_shutter_progress(frame.run.request.duration_ms), 0.0))
         vao, count = self._resources.mesh("microquad", PIXEL_ACCRETION_QUAD_VERTICES, (2, 2))
         gl.glBindVertexArray(vao)
-        with self._target.velocity_writes():
+        with self._target.velocity_writes(), self._resources.pass_blocks.bound(pack_block(block, values)):
             gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, columns * rows)
 
     def _draw_tile_ghosts(self, frame, ghosts, seed: int, tile_size: int, travel: float, now: float) -> None:
@@ -125,21 +140,18 @@ class QuickPixelAccretionRenderer:
         columns, rows, _actual_size = pixel_accretion_grid(frame.viewport[2], frame.viewport[3], tile_size)
         program, uniforms = trail_program(
             self._resources, "microquads", PIXEL_ACCRETION_MOTION_VERTEX_SOURCE,
-            PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE, self._TILE_UNIFORMS + motion_uniform_names(),
+            PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE, self._TILE_SAMPLERS,
         )
-        bind_frame(program, uniforms, frame)
-        gl.glUniform2f(uniforms["uGrid"], float(columns), float(rows))
-        gl.glUniform2f(uniforms["uDirection"], *direction_vector(frame.run.request.direction))
-        gl.glUniform1f(uniforms["uTravel"], travel)
-        gl.glUniform1f(uniforms["uSeed"], float(seed))
-        set_motion_uniforms(uniforms, frame, now)
+        values = self._resources.values("microquads_ghost")
+        bind_frame(program, uniforms, frame, values)
+        self._tile_values(values, frame, columns, rows, seed, travel)
+        set_motion_values(values, frame, now)
         vao, count = self._resources.mesh("microquad", PIXEL_ACCRETION_QUAD_VERTICES, (2, 2))
         gl.glBindVertexArray(vao)
         with self._target.velocity_writes():
-            for time, fade in ghosts:
-                gl.glUniform1f(uniforms["uProgress"], time)
-                gl.glUniform1f(uniforms["uGhostFade"], fade)
-                gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, columns * rows)
+            draw_ghosts(self._resources.pass_blocks, PIXEL_ACCRETION_MOTION_BLOCK, values, ghosts,
+                        lambda time: {"uProgress": time},
+                        lambda: gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, columns * rows))
 
     def park(self) -> None:
         """Drop the per-run scene target and trails; the program and mesh stay warm."""

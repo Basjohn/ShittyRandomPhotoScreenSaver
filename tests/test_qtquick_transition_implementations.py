@@ -421,7 +421,7 @@ def test_block_spins_opposite_directions_move_side_highlight_opposite_ways():
         / "implementations"
         / "block_spins.py"
     ).read_text(encoding="utf-8")
-    assert 'uniforms["uSpecDirection"], spin_direction' in renderer_source
+    assert 'values["uSpecDirection"] = spin_direction' in renderer_source
 
 
 def test_block_spins_shader_uses_quick_geometry_depth_and_authored_face_uvs():

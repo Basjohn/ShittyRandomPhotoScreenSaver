@@ -27,10 +27,12 @@ import ctypes
 from OpenGL import GL as gl
 
 from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import Scene3DBlockLayout
 
 from .compute import COMPUTE_BLOCK_BINDING, DispatchBlocks, bound_image, dispatch
 from .post import FULLSCREEN_VERTEX_SOURCE
+from .uniforms import PassBlocks
 
 MOTION_BLUR_TAPS = 16
 # Rows one tile-max workgroup can hold: K <= 256 covers targets up to ~10,000 px high.
@@ -160,6 +162,10 @@ void main() {{
     FragColor = sum / total;
 }}
 """
+# N1.6: the gather's values in one std140 pass block (``portable_program``): the scene, the velocity and the tiles at
+# units 0-2, the tile size, the target's size and the longest blur in the block.
+_, (_GATHER_FRAGMENT,), _GATHER_BLOCK = portable_program(
+    None, (_GATHER_FRAGMENT,), block="MotionGather", samplers={"uScene": 0, "uVelocity": 1, "uTiles": 2})
 
 
 def motion_blur_tile(height: int) -> int:
@@ -177,10 +183,11 @@ class MotionBlur:
         # (texture, fbo, width, height): the tile max (a compute-written image, no framebuffer), blurred scene.
         self._passes: list[tuple[int, int, int, int]] = []
         self._blocks = DispatchBlocks(f"{label} motion blur")
+        self._gather_blocks = PassBlocks(f"{label} motion gather")
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._passes) or self._blocks.has_resources
+        return bool(self._passes) or self._blocks.has_resources or self._gather_blocks.has_resources
 
     def apply(self, scene_texture: int, velocity_texture: int, allocation: tuple[int, int], resources,
               vao: int) -> int:
@@ -207,31 +214,25 @@ class MotionBlur:
         gl.glBindVertexArray(vao)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         program = resources.program("motion_gather", FULLSCREEN_VERTEX_SOURCE, _GATHER_FRAGMENT)
-        uniforms = resources.uniforms("motion_gather", ("uScene", "uVelocity", "uTiles", "uTile", "uSize",
-                                                        "uLongest"))
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, blurred_fbo)
         gl.glViewport(0, 0, width, height)
         gl.glUseProgram(program)
         gl.glBindTexture(gl.GL_TEXTURE_2D, scene_texture)
-        gl.glUniform1i(uniforms["uScene"], 0)
         gl.glActiveTexture(gl.GL_TEXTURE1)
         gl.glBindTexture(gl.GL_TEXTURE_2D, velocity_texture)
-        gl.glUniform1i(uniforms["uVelocity"], 1)
         gl.glActiveTexture(gl.GL_TEXTURE2)
         gl.glBindTexture(gl.GL_TEXTURE_2D, tiles)
-        gl.glUniform1i(uniforms["uTiles"], 2)
-        gl.glUniform1i(uniforms["uTile"], tile)
-        gl.glUniform2i(uniforms["uSize"], width, height)
-        gl.glUniform1f(uniforms["uLongest"], 2.0 * tile)
-        gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+        with self._gather_blocks.bound(_GATHER_BLOCK.pack({"uTile": tile, "uSize": (width, height),
+                                                           "uLongest": 2.0 * tile})):
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         return blurred
 
     def warm(self, allocation: tuple[int, int]) -> bool:
         """Allocate for ``allocation`` if not yet (ahead of a run, or at first use), one unit per call (the textures,
-        then the dispatch blocks); True if all of it was."""
+        the dispatch blocks, then the gather's pass blocks); True if all of it was."""
         if self._key == allocation:
-            return self._blocks.warm()
+            return self._blocks.warm() and self._gather_blocks.warm()
         self.release()
         self._allocate(*allocation)
         self._key = allocation
@@ -283,36 +284,38 @@ class MotionBlur:
                 kept.append((texture, fbo, width, height))
         self._passes = kept
         self._key = None
-        try:
-            self._blocks.release()
-        except Exception as exc:
-            errors.append(str(exc))
+        for blocks in (self._blocks, self._gather_blocks):
+            try:
+                blocks.release()
+            except Exception as exc:
+                errors.append(str(exc))
         if errors:
             raise RuntimeError(f"{self.label} motion blur cleanup incomplete: {' | '.join(errors)}")
 
 
-def motion_uniform_names(time_uniform: str = "uProgress") -> tuple[str, str]:
-    """The uniforms a ``scene3d_motion_vertex`` / ``scene3d_motion_fragment`` variant adds."""
-    return f"{time_uniform}Before", "uViewport"
-
-
-def motion_program(resources, key: str, sources: tuple[str, str], motion_sources: tuple[str, str],
-                   names: tuple[str, ...], motion: bool, time_uniform: str = "uProgress") -> tuple[int, dict[str, int]]:
-    """An effect's program and uniforms: its own, or (with motion blur) the variant that writes motion.
+def motion_program(resources, key: str, sources: tuple, motion_sources: tuple,
+                   samplers: tuple[str, ...], motion: bool) -> tuple:
+    """An effect's program: its own, or (with motion blur) the variant that writes motion.
 
     Without motion blur the effect draws with exactly its own program, so its pixels
     cannot change.
+
+    Each variant is (vertex, fragment, block): its values are one std140 pass block (N1.6). The result is (program,
+    the uniforms of its ``samplers`` (for ``bind_frame``), the program's values, its block): the draw sets the values
+    (``set_motion_values`` for the motion inputs) and binds ``pack_block(block, values)``.
     """
     if motion:
-        key = key + "_motion"
-        return resources.program(key, *motion_sources), resources.uniforms(key, names + motion_uniform_names(time_uniform))
-    return resources.program(key, *sources), resources.uniforms(key, names)
+        key, sources = key + "_motion", motion_sources
+    vertex, fragment, block = sources
+    return resources.program(key, vertex, fragment), resources.uniforms(key, samplers), resources.values(key), block
 
 
-def set_motion_uniforms(uniforms: dict[str, int], frame, before: float, time_uniform: str = "uProgress") -> None:
-    """The time input one shutter ago, and the viewport the motion is measured in."""
-    gl.glUniform1f(uniforms[f"{time_uniform}Before"], float(before))
-    gl.glUniform2f(uniforms["uViewport"], float(frame.viewport[2]), float(frame.viewport[3]))
+def set_motion_values(values: dict, frame, before: float, time_uniform: str = "uProgress") -> None:
+    """A motion-writing variant's own inputs (``scene3d_motion_vertex`` / ``scene3d_motion_fragment``) into its pass
+    block's ``values`` (``MeshResources.values``): the time input one shutter ago (``<time_uniform>Before``) and the
+    viewport the motion is measured in."""
+    values[f"{time_uniform}Before"] = float(before)
+    values["uViewport"] = (float(frame.viewport[2]), float(frame.viewport[3]))
 
 # (key, vertex, fragment) or (key, compute) of the programs ``MotionBlur.apply`` uses (for a gradual warm-up).
 MOTION_BLUR_PROGRAMS = (

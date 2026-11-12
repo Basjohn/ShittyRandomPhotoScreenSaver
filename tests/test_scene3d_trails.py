@@ -57,6 +57,38 @@ def test_the_ghost_transform_keeps_the_shader_and_writes_only_the_fade_of_moving
         lib.scene3d_ghost_fragment("#version 460 core\nout vec4 Colour;\nvoid main() {}\n")
 
 
+def test_each_ghost_draws_with_its_own_copy_of_its_pass_block():
+    # N1.6: a ghost pass binds one scope; every ghost's draw reads the pass's values, its own moment and its own fade.
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+
+    from rendering.quick.scene3d.motion import set_motion_values
+    from rendering.quick.scene3d.trails import draw_ghosts
+
+    block = lib.Scene3DBlockLayout.of("Ghosts", (("uProgress", "float"), ("uProgressBefore", "float"),
+                                                 ("uViewport", "vec2"), ("uGhostFade", "float"), ("uDepth", "float")))
+    events = []
+
+    class Blocks:
+        @contextmanager
+        def bound(self, data):
+            events.append(("bind", data))
+            yield lambda again: events.append(("rebind", again))
+
+    values = {"uDepth": 0.5}
+    set_motion_values(values, SimpleNamespace(viewport=(0, 0, 640, 360)), 0.4)
+    ghosts = ((0.1, 0.2), (0.2, 0.4), (0.3, 0.6))
+    drawn = []
+    draw_ghosts(Blocks(), block, values, iter(ghosts), lambda time: {"uProgress": time},
+                lambda: drawn.append(events[-1][1]))
+    assert [kind for kind, _data in events] == ["bind", "rebind", "rebind"]
+    assert drawn == [block.pack({"uProgress": time, "uProgressBefore": 0.4, "uViewport": (640.0, 360.0),
+                                 "uGhostFade": fade, "uDepth": 0.5}) for time, fade in ghosts]
+    events.clear()
+    draw_ghosts(Blocks(), block, values, (), lambda time: {"uProgress": time}, lambda: drawn.append(None))
+    assert not events and len(drawn) == len(ghosts)
+
+
 @pytest.mark.qt
 @pytest.mark.parametrize("effect,direction,section,progress", _TRAILED)
 def test_trails_are_light_lines_where_pieces_moved_and_nothing_on_still_ones(qt_app, effect, direction, section,

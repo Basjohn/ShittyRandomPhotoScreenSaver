@@ -8,21 +8,30 @@ import math
 from OpenGL import GL as gl
 
 from rendering.gl_programs.blockspin_program import (
+    BLOCK_SPIN_BLOCK,
     BLOCK_SPIN_BOX_VERTEX_COUNT,
     BLOCK_SPIN_BOX_VERTICES,
     BLOCK_SPIN_FRAGMENT_SOURCE,
     BLOCK_SPIN_GHOST_FRAGMENT_SOURCE,
+    BLOCK_SPIN_MOTION_BLOCK,
     BLOCK_SPIN_MOTION_FRAGMENT_SOURCE,
     BLOCK_SPIN_MOTION_VERTEX_SOURCE,
     BLOCK_SPIN_QUICK_VERTEX_SOURCE,
+    BLOCK_SPIN_SAMPLERS,
     BLOCK_SPIN_VERTEX_STRIDE_FLOATS,
     block_spin_edge_glass_mode,
     block_spin_progress,
 )
-from rendering.gl_programs.scene3d import scene3d_request_samples, scene3d_shutter_progress, scene3d_trail_ghosts
+from rendering.gl_programs.portable import pack_block
+from rendering.gl_programs.scene3d import (
+    SCENE3D_TRAIL_GHOSTS,
+    scene3d_request_samples,
+    scene3d_shutter_progress,
+    scene3d_trail_ghosts,
+)
 from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
-from rendering.quick.scene3d.motion import motion_uniform_names, set_motion_uniforms
-from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, trail_program
+from rendering.quick.scene3d.motion import motion_program, set_motion_values
+from rendering.quick.scene3d.trails import TRAIL_EDGES_PROGRAM, MotionTrails, draw_ghosts, trail_program
 from rendering.quick.scene3d.resources import MeshResources, warm_pass_blocks, warm_programs
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from rendering.gl_programs.item_quad import item_quad_program
@@ -67,11 +76,10 @@ class QuickBlockSpinsRenderer:
         self._slab_program = 0
         self._box_vao = 0
         self._box_vbo = 0
-        self._slab_uniforms: dict[str, int] = {}
         # The scene target (anti-aliasing, motion blur), its composite and the slab's
-        # motion-writing variant.
+        # motion-writing variant. A ghost pass gives each of its draws its own pass block copy.
         self._target = SceneTarget("Quick 3D Block Spins")
-        self._target_resources = MeshResources("Quick 3D Block Spins")
+        self._target_resources = MeshResources("Quick 3D Block Spins", copies=SCENE3D_TRAIL_GHOSTS)
         # Edge Glass reflections: the next image as a per-run blurred environment.
         self._environment = PhotoEnvironment("Quick 3D Block Spins")
         self._trails = MotionTrails("Quick 3D Block Spins")
@@ -171,83 +179,63 @@ class QuickBlockSpinsRenderer:
         gl.glDepthFunc(gl.GL_LESS)
         self._draw_slab(frame, frame.sample.eased_progress, edge_glass, motion, environment)
 
+    @staticmethod
+    def _slab_values(values: dict, frame: QuickTransitionRenderFrame, edge_glass: int) -> float:
+        """The slab's invariant values into its pass-block ``values``; returns its spin direction."""
+        axis_mode, spin_direction = _block_spin_direction_state(frame.run.request.direction)
+        values["uMatrix"] = frame.matrix_values
+        values["uItemSize"] = frame.logical_size
+        values["uSpecDirection"] = spin_direction
+        values["uAxisMode"] = axis_mode
+        values["uEdgeGlass"] = edge_glass
+        return spin_direction
+
+    @staticmethod
+    def _bind_textures(frame: QuickTransitionRenderFrame, environment: int) -> None:
+        """The photographs and the environment on the units the slab's sources bind (0, 1, 2)."""
+        gl.glActiveTexture(gl.GL_TEXTURE0)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, frame.source_texture_id)
+        gl.glActiveTexture(gl.GL_TEXTURE1)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, frame.destination_texture_id)
+        gl.glActiveTexture(gl.GL_TEXTURE2)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
+        gl.glActiveTexture(gl.GL_TEXTURE0)
+
     def _draw_slab(self, frame: QuickTransitionRenderFrame, progress: float, edge_glass: int, motion: bool,
                    environment: int) -> None:
-        axis_mode, spin_direction = _block_spin_direction_state(
-            frame.run.request.direction
-        )
-        spin = block_spin_progress(progress)
-        uniforms = self._slab_uniforms
-        program = self._slab_program
-        if motion:
-            program = self._target_resources.program("slab_motion", BLOCK_SPIN_MOTION_VERTEX_SOURCE,
-                                                     BLOCK_SPIN_MOTION_FRAGMENT_SOURCE)
-            uniforms = self._target_resources.uniforms("slab_motion", tuple(self._slab_uniforms)
-                                                       + motion_uniform_names("uAngle"))
+        r = self._target_resources
+        program, _samplers, values, block = motion_program(
+            r, "slab", (BLOCK_SPIN_QUICK_VERTEX_SOURCE, BLOCK_SPIN_FRAGMENT_SOURCE, BLOCK_SPIN_BLOCK),
+            (BLOCK_SPIN_MOTION_VERTEX_SOURCE, BLOCK_SPIN_MOTION_FRAGMENT_SOURCE, BLOCK_SPIN_MOTION_BLOCK),
+            tuple(BLOCK_SPIN_SAMPLERS), motion)
         gl.glUseProgram(program)
-        gl.glUniformMatrix4fv(
-            uniforms["uMatrix"],
-            1,
-            gl.GL_FALSE,
-            frame.matrix_values,
-        )
-        gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
-        gl.glUniform1f(
-            uniforms["uAngle"],
-            math.pi * spin * spin_direction,
-        )
-        gl.glUniform1f(uniforms["uSpecDirection"], spin_direction)
-        gl.glUniform1i(uniforms["uAxisMode"], axis_mode)
-        gl.glUniform1i(uniforms["uEdgeGlass"], edge_glass)
+        spin_direction = self._slab_values(values, frame, edge_glass)
+        values["uAngle"] = math.pi * block_spin_progress(progress) * spin_direction
         if motion:
             # The slab's angle one shutter ago.
             before = max(progress - scene3d_shutter_progress(frame.run.request.duration_ms), 0.0)
-            set_motion_uniforms(uniforms, frame, math.pi * block_spin_progress(before) * spin_direction, "uAngle")
-        gl.glActiveTexture(gl.GL_TEXTURE0)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, frame.source_texture_id)
-        gl.glUniform1i(uniforms["uOldTexture"], 0)
-        gl.glActiveTexture(gl.GL_TEXTURE1)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, frame.destination_texture_id)
-        gl.glUniform1i(uniforms["uNewTexture"], 1)
-        gl.glActiveTexture(gl.GL_TEXTURE2)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
-        gl.glUniform1i(uniforms["uEnvironment"], 2)
-        gl.glActiveTexture(gl.GL_TEXTURE0)
+            set_motion_values(values, frame, math.pi * block_spin_progress(before) * spin_direction, "uAngle")
+        self._bind_textures(frame, environment)
         gl.glBindVertexArray(self._box_vao)
-        with self._target.velocity_writes():
+        with self._target.velocity_writes(), r.pass_blocks.bound(pack_block(block, values)):
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, BLOCK_SPIN_BOX_VERTEX_COUNT)
 
     def _draw_slab_ghosts(self, frame: QuickTransitionRenderFrame, ghosts, edge_glass: int, environment: int,
                           now: float) -> None:
         """One ghost pass: static slab state once, then each ghost's angle and fade."""
-        axis_mode, spin_direction = _block_spin_direction_state(frame.run.request.direction)
-        program, uniforms = trail_program(
-            self._target_resources, "slab", BLOCK_SPIN_MOTION_VERTEX_SOURCE, BLOCK_SPIN_GHOST_FRAGMENT_SOURCE,
-            tuple(self._slab_uniforms) + motion_uniform_names("uAngle"),
-        )
+        r = self._target_resources
+        program, _samplers = trail_program(
+            r, "slab", BLOCK_SPIN_MOTION_VERTEX_SOURCE, BLOCK_SPIN_GHOST_FRAGMENT_SOURCE, tuple(BLOCK_SPIN_SAMPLERS))
         gl.glUseProgram(program)
-        gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
-        gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
-        gl.glUniform1f(uniforms["uSpecDirection"], spin_direction)
-        gl.glUniform1i(uniforms["uAxisMode"], axis_mode)
-        gl.glUniform1i(uniforms["uEdgeGlass"], edge_glass)
-        set_motion_uniforms(uniforms, frame, math.pi * block_spin_progress(now) * spin_direction, "uAngle")
-        gl.glActiveTexture(gl.GL_TEXTURE0)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, frame.source_texture_id)
-        gl.glUniform1i(uniforms["uOldTexture"], 0)
-        gl.glActiveTexture(gl.GL_TEXTURE1)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, frame.destination_texture_id)
-        gl.glUniform1i(uniforms["uNewTexture"], 1)
-        gl.glActiveTexture(gl.GL_TEXTURE2)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
-        gl.glUniform1i(uniforms["uEnvironment"], 2)
-        gl.glActiveTexture(gl.GL_TEXTURE0)
+        values = r.values("slab_ghost")
+        spin_direction = self._slab_values(values, frame, edge_glass)
+        set_motion_values(values, frame, math.pi * block_spin_progress(now) * spin_direction, "uAngle")
+        self._bind_textures(frame, environment)
         gl.glBindVertexArray(self._box_vao)
         with self._target.velocity_writes():
-            for time, fade in ghosts:
-                gl.glUniform1f(uniforms["uAngle"], math.pi * block_spin_progress(time) * spin_direction)
-                gl.glUniform1f(uniforms["uGhostFade"], fade)
-                gl.glDrawArrays(gl.GL_TRIANGLES, 0, BLOCK_SPIN_BOX_VERTEX_COUNT)
+            draw_ghosts(r.pass_blocks, BLOCK_SPIN_MOTION_BLOCK, values, ghosts,
+                        lambda time: {"uAngle": math.pi * block_spin_progress(time) * spin_direction},
+                        lambda: gl.glDrawArrays(gl.GL_TRIANGLES, 0, BLOCK_SPIN_BOX_VERTEX_COUNT))
 
     def release_resources(self) -> None:
         errors: list[str] = []
@@ -275,8 +263,6 @@ class QuickBlockSpinsRenderer:
                 errors.append(f"{attribute}:{type(exc).__name__}:{exc}")
             else:
                 setattr(self, attribute, 0)
-        if not self._slab_program:
-            self._slab_uniforms.clear()
         if errors:
             raise RuntimeError(
                 "Quick 3D Block Spins cleanup incomplete: " + " | ".join(errors)
@@ -286,21 +272,7 @@ class QuickBlockSpinsRenderer:
         try:
             (void_resources, *void), (slab_resources, *slab) = self._base_programs()
             self._void_program = void_resources.program(*void)   # its values: _VOID_BLOCK
-            self._slab_program = slab_resources.program(*slab)
-            self._slab_uniforms = self._uniform_locations(
-                self._slab_program,
-                (
-                    "uMatrix",
-                    "uItemSize",
-                    "uAngle",
-                    "uSpecDirection",
-                    "uAxisMode",
-                    "uEdgeGlass",
-                    "uOldTexture",
-                    "uNewTexture",
-                    "uEnvironment",
-                ),
-            )
+            self._slab_program = slab_resources.program(*slab)   # its values: BLOCK_SPIN_BLOCK
 
             vertex_data = (ctypes.c_float * len(BLOCK_SPIN_BOX_VERTICES))(
                 *BLOCK_SPIN_BOX_VERTICES
@@ -339,22 +311,6 @@ class QuickBlockSpinsRenderer:
         except Exception:
             self.release_resources()
             raise
-
-    @staticmethod
-    def _uniform_locations(
-        program: int,
-        names: tuple[str, ...],
-    ) -> dict[str, int]:
-        uniforms = {
-            name: int(gl.glGetUniformLocation(program, name)) for name in names
-        }
-        missing = [name for name, location in uniforms.items() if location < 0]
-        if missing:
-            raise RuntimeError(
-                "Quick 3D Block Spins uniforms are incomplete: "
-                + ", ".join(missing)
-            )
-        return uniforms
 
 
 def create_transition_renderer() -> QuickBlockSpinsRenderer:

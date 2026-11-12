@@ -10,6 +10,7 @@ there (lighting and albedo folded in). It is evaluated once per cell per update;
 exactly per slice (radiance x (1 - exp(-extinction x length))), into the texture ``MIST_GLSL`` samples.
 """
 from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_GLSL
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import SCENE3D_COMPUTE_BLOCK_BINDING, Scene3DBlockLayout
 
 FOG_DEPTH_MAPPING_GLSL = """
@@ -95,15 +96,16 @@ void main() {
 """
 
 
-# Fullscreen triangle for the detail march and composite (needs a bound VAO, no attributes).
-FOG_FULLSCREEN_VERTEX = """#version 460 core
+# Fullscreen triangle for the detail march and composite (needs a bound VAO, no attributes). N1.6: its output located
+# and the vertex index read through the macro (``portable_program``; it has no values of its own).
+FOG_FULLSCREEN_VERTEX, (), _ = portable_program("""#version 460 core
 out vec2 vNdc;
 void main() {
     vec2 corner=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));
     vNdc=corner*2.0-1.0;
     gl_Position=vec4(vNdc,0.0,1.0);
 }
-"""
+""", (), block="FogFullscreen", samplers={})
 
 
 # Detail march: the coarse volume holds the medium's light and coverage (extinction over its maximum); a per-pixel
@@ -227,17 +229,28 @@ vec3 fogLightDirection(vec3 p) {
 """
 
 
+# The detail march's samplers (their texture units, ``FogMarch``'s) and its pass block's name (N1.6).
+FOG_MARCH_SAMPLERS = {"uFogDetail": 9, "uFogMedium": 10, "uFogSteady": 12}
+FOG_MARCH_BLOCK_NAME = "FogMarchPass"
+
+
 def fog_march_source(coverage_glsl: str | None = None) -> str:
     """The detail march; ``coverage_glsl`` may define ``float fogCoverage(vec3 world, float coarse)`` returning the
     erodible coverage (0..1) from the consumer's own fine shape (a coarse grid stair-steps shapes that change within
     a cell), and ``vec3 fogLightDirection(vec3 world)``, the unit direction toward its light for self-shadowing
-    (default: toward clearer air). The coarse grid still supplies the light and the steady share."""
+    (default: toward clearer air). The coarse grid still supplies the light and the steady share.
+
+    N1.6: the march's values, a coverage's own uniforms among them, are one std140 pass block named
+    ``FOG_MARCH_BLOCK_NAME`` (``portable_program``; its layout is ``block_layout_from_glsl(block_declaration(source,
+    FOG_MARCH_BLOCK_NAME))``), the samplers at ``FOG_MARCH_SAMPLERS``."""
     coverage = _FOG_COARSE_COVERAGE if coverage_glsl is None else coverage_glsl
     if 'fogCoverage' not in coverage:
         raise ValueError('A coverage source must define float fogCoverage(vec3 world, float coarse)')
     if 'fogLightDirection' not in coverage:
         coverage += _FOG_GRADIENT_DIRECTION
-    return _FOG_MARCH_HEAD + coverage + _FOG_MARCH_MAIN
+    _, (source,), _layout = portable_program(None, (_FOG_MARCH_HEAD + coverage + _FOG_MARCH_MAIN,),
+                                             block=FOG_MARCH_BLOCK_NAME, samplers=FOG_MARCH_SAMPLERS)
+    return source
 
 
 FOG_COMPOSITE_FRAGMENT = """#version 460 core
@@ -319,6 +332,10 @@ void main() {
     Emission=vec4(glow,dot(glow,vec3(0.2126,0.7152,0.0722)));
 }
 """
+# N1.6: the composite's values in one std140 pass block (``portable_program``), the march and the edge limit at
+# ``FogMarch``'s units.
+_, (FOG_COMPOSITE_FRAGMENT,), FOG_COMPOSITE_BLOCK = portable_program(
+    None, (FOG_COMPOSITE_FRAGMENT,), block="FogComposite", samplers={"uFogMarch": 11, "uFogCrackleLimit": 15})
 
 
 def fog_detail_noise(size: int = 64, seed: int = 7):

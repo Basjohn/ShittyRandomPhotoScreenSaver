@@ -15,15 +15,17 @@ is sized from its allocation and dropped with the run.
 from __future__ import annotations
 
 import ctypes
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Mapping
 
 from OpenGL import GL as gl
 
 from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
+from rendering.gl_programs.portable import pack_block, portable_program
 from rendering.quick import gl_query
 
 from .passes import blend_scope
 from .post import FULLSCREEN_VERTEX_SOURCE
+from .uniforms import PassBlocks
 
 # Edges between a ghost and what lies around it, as a soft line (``scene3d_trail_line``
 # either side): bright white, as strong as the step in ghost value (the newest ghost's
@@ -51,6 +53,9 @@ void main() {
     FragColor = vec4(vec3(0.94, 0.97, 1.0), edge * uStrength);
 }
 """
+# N1.6: the edge pass's values in one std140 pass block (``portable_program``), the ghosts at unit 0.
+_, (_EDGE_FRAGMENT,), _EDGE_BLOCK = portable_program(None, (_EDGE_FRAGMENT,), block="TrailEdges",
+                                                     samplers={"uGhosts": 0})
 
 TRAIL_STRENGTH = 0.6
 
@@ -62,12 +67,38 @@ def trail_line(height: float) -> float:
 
 
 def trail_program(resources, key: str, vertex: str, ghost_fragment: str,
-                  names: tuple[str, ...]) -> tuple[int, dict[str, int]]:
-    """An effect's ghost variant and its uniforms (``uGhostFade`` added). Its driver may drop
-    uniforms the flat output no longer reads; setting those is a harmless no-op."""
+                  samplers: tuple[str, ...]) -> tuple[int, dict[str, int]]:
+    """An effect's ghost variant and the uniforms of its ``samplers`` (for ``bind_frame``). Its driver may drop a
+    sampler the flat output no longer reads; binding that one is a harmless no-op.
+
+    Its values are one std140 pass block (N1.6), shared with the effect's motion-writing variant:
+    ``resources.values(key + "_ghost")``, and its ghosts are drawn by ``draw_ghosts``."""
     key = key + "_ghost"
     return (resources.program(key, vertex, ghost_fragment),
-            resources.uniforms(key, names + ("uGhostFade",), required=False))
+            resources.uniforms(key, samplers, required=False))
+
+
+def draw_ghosts(pass_blocks, block, values: dict, ghosts: Iterable[tuple[float, float]],
+                at: Callable[[float], Mapping[str, object]], draw: Callable[[], None]) -> None:
+    """One prepared ghost pass of a program whose values are one std140 pass block (N1.6): each ghost draws with its
+    own copy of ``block`` packed from ``values`` (the pass's invariant values, set once), the members ``at(time)``
+    gives to place it at its moment, and its ``uGhostFade``. One bound scope (``pass_blocks``: its owner holds a copy
+    per ghost, ``SCENE3D_TRAIL_GHOSTS``); a draw already submitted keeps the copy it was given. No ghost: nothing is
+    bound or drawn."""
+    ghosts = tuple(ghosts)
+    if not ghosts:
+        return
+
+    def place(time: float, fade: float) -> bytes:
+        values.update(at(time))
+        values["uGhostFade"] = fade
+        return pack_block(block, values)
+
+    with pass_blocks.bound(place(*ghosts[0])) as rebind:
+        for index, (time, fade) in enumerate(ghosts):
+            if index:
+                rebind(place(time, fade))
+            draw()
 
 
 class MotionTrails:
@@ -76,10 +107,11 @@ class MotionTrails:
         self._texture = 0
         self._fbo = 0
         self._size: tuple[int, int] | None = None
+        self._blocks = PassBlocks(f"{label} trail edges")   # the edge pass's block
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._texture or self._fbo)
+        return bool(self._texture or self._fbo) or self._blocks.has_resources
 
     def draw(self, target, frame, resources, ghosts: Iterable[tuple[float, float]],
              draw_ghosts: Callable[[Iterable[tuple[float, float]]], None]) -> None:
@@ -105,25 +137,22 @@ class MotionTrails:
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, scene)
         gl.glViewport(0, 0, width, height)
         program = resources.program("trail_edges", FULLSCREEN_VERTEX_SOURCE, _EDGE_FRAGMENT)
-        uniforms = resources.uniforms("trail_edges", ("uGhosts", "uSize", "uRadius", "uStrength"))
         gl.glUseProgram(program)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, self._texture)
-        gl.glUniform1i(uniforms["uGhosts"], 0)
-        gl.glUniform2i(uniforms["uSize"], width, height)
-        gl.glUniform1f(uniforms["uRadius"], trail_line(height))
-        gl.glUniform1f(uniforms["uStrength"], TRAIL_STRENGTH)
         gl.glBindVertexArray(frame.quad_vao)
-        with blend_scope(gl.GL_FUNC_ADD, gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA):
+        with blend_scope(gl.GL_FUNC_ADD, gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA), \
+                self._blocks.bound(_EDGE_BLOCK.pack({"uSize": (width, height), "uRadius": trail_line(height),
+                                                     "uStrength": TRAIL_STRENGTH})):
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         gl.glViewport(*viewport)
 
     def warm(self, target) -> bool:
-        """Allocate for ``target``'s allocation if not yet (ahead of a run, or at first use);
-        True if it was."""
+        """Allocate for ``target``'s allocation if not yet (ahead of a run, or at first use), one unit per call (the
+        ghost buffer, then the edge pass's block); True if all of it was."""
         width, height, _samples = target.allocation
         if self._size == (width, height):
-            return True
+            return self._blocks.warm()
         self.release()
         self._allocate(width, height)
         return False
@@ -161,6 +190,10 @@ class MotionTrails:
             except Exception as exc:
                 errors.append(str(exc))
         self._size = None
+        try:
+            self._blocks.release()
+        except Exception as exc:
+            errors.append(str(exc))
         if errors:
             raise RuntimeError(f"{self.label} motion trails cleanup incomplete: {' | '.join(errors)}")
 

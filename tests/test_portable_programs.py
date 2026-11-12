@@ -77,6 +77,28 @@ def test_declarations_sharing_a_line_are_each_rewritten(tmp_path):
     assert compile_source(_qsb(), fragment, tmp_path / "f.frag")[0]
 
 
+def test_declarations_of_several_names_are_split_and_each_rewritten(tmp_path):
+    # Crumble declares ``uniform float uProgress,uDepth;`` and ``out vec2 vUv,vCrack;``: each name is one declaration
+    # (control: a rewrite that read only single names left them loose and unlocated, which does not bake).
+    _require_qsb()
+    vertex = ("#version 460 core\nlayout(location=0) in vec2 aUv;\n"
+              "uniform mat4 uMatrix; uniform float uProgress,uDepth; uniform sampler2D uMotion;\n"
+              "out vec2 vUv,vCrack; flat out float vPhase,vSide;\n"
+              "vec3 turn(vec3 p,vec3 a,float t){float c=cos(t),s=sin(t);return p*c+cross(a,p)*s;}\n"
+              "void main(){vUv=aUv;vCrack=aUv*uDepth;vPhase=uProgress;vSide=texelFetch(uMotion,ivec2(0),0).x;"
+              "gl_Position=uMatrix*vec4(turn(vec3(aUv,0.),vec3(0.,0.,1.),uProgress),1.);}\n")
+    fragment = ("#version 460 core\nin vec2 vUv,vCrack;\nflat in float vPhase,vSide;\nout vec4 FragColor;\n"
+                "uniform float uProgress,uSeed;\n"
+                "void main(){FragColor=vec4(vUv+vCrack,vPhase*vSide,uProgress+uSeed);}\n")
+    vertex, (fragment,), layout = portable_program(vertex, (fragment,), block="Lists", samplers={"uMotion": 1})
+    assert [name for name, _ in layout.fields] == ["uMatrix", "uProgress", "uDepth", "uSeed"]
+    assert "layout(location = 1) out vec2 vCrack" in vertex and "layout(location = 3) flat out float vSide" in vertex
+    assert "layout(location = 1) in vec2 vCrack" in fragment and "layout(location = 3) flat in float vSide" in fragment
+    assert "float c=cos(t),s=sin(t);" in vertex           # a local list is not a declaration
+    assert compile_source(_qsb(), vertex, tmp_path / "v.vert")[0]
+    assert compile_source(_qsb(), fragment, tmp_path / "f.frag")[0]
+
+
 def test_a_sampler_without_a_binding_in_the_plan_is_refused():
     with pytest.raises(ValueError, match="uImage"):
         portable_program(_VERTEX, (_FRAGMENT,), block="Probe", samplers={})
@@ -90,6 +112,12 @@ def test_the_block_packs_the_values_a_program_set_and_zero_for_the_rest():
     assert struct.unpack_from("<f", flat, 0)[0] == 2.0
     assert struct.unpack_from("<4f", flat, layout.offsets[1] + 16) == (5.0, 6.0, 7.0, 8.0)
     assert struct.unpack_from("<i", pack_block(layout, {}), layout.offsets[2])[0] == 0
+    # An array already in std140 form (Jigsaw's pieces: float32 vec4s) packs as given, every element; a short one is
+    # refused rather than packed partly.
+    stops = struct.pack("<8f", 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0)
+    assert pack_block(layout, {"uGain": 2.0, "uStops": stops}) == flat
+    with pytest.raises(ValueError, match="vec4"):
+        pack_block(layout, {"uStops": stops[:16]})
 
 
 def test_spectrum_draws_one_block_declared_once_in_its_shader():

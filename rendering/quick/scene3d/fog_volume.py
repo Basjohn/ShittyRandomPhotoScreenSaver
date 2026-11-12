@@ -20,12 +20,15 @@ import numpy as np
 from OpenGL import GL as gl
 from PySide6.QtGui import QOpenGLContext
 
-from rendering.gl_programs.fog_volume import (FOG_COMPOSITE_FRAGMENT, FOG_FULLSCREEN_VERTEX, FOG_INTEGRATE_COMPUTE,
-                                              FOG_VOLUME_BLOCK, fog_detail_noise, fog_march_source)
+from rendering.gl_programs.fog_volume import (FOG_COMPOSITE_BLOCK, FOG_COMPOSITE_FRAGMENT, FOG_FULLSCREEN_VERTEX,
+                                              FOG_INTEGRATE_COMPUTE, FOG_MARCH_BLOCK_NAME, FOG_VOLUME_BLOCK,
+                                              fog_detail_noise, fog_march_source)
 from rendering.gl_programs.mist import FOG_TEXTURE_UNIT
+from rendering.gl_programs.portable import block_declaration, block_layout_from_glsl, pack_block
 from rendering.quick import gl_query
 from rendering.quick.render.gl_resources import compile_compute_program, delete_program
 from .compute import DispatchBlocks, bound_image, dispatch
+from .uniforms import PassBlocks
 
 MAX_FOG_CELLS = 256*256*128
 
@@ -219,15 +222,19 @@ class FogMarch:
     def __init__(self, label: str, coverage_glsl: str | None = None) -> None:
         self.label = label
         self._source = fog_march_source(coverage_glsl)
+        # N1.6: the march's values (a coverage's own among them) are one std140 pass block, as its source declares it.
+        self._march_block = block_layout_from_glsl(block_declaration(self._source, FOG_MARCH_BLOCK_NAME))
         self._size = (0, 0)
         self._colour = self._fbo = self._detail = self._vao = 0
         self._limit, self._limit_size = 0, 0
         self._programs = {}
         self._context_ref = None
+        self._blocks = PassBlocks(f"{label} fog march")   # the march's and the composite's pass blocks
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._colour or self._fbo or self._detail or self._vao or self._programs)
+        return bool(self._colour or self._fbo or self._detail or self._vao or self._programs
+                    or self._blocks.has_resources)
 
     @property
     def texture(self) -> int:
@@ -249,13 +256,13 @@ class FogMarch:
         return self._programs[key]
 
     def prepare_programs(self) -> bool:
-        """At most one compile per caller-owned hidden preparation step."""
+        """At most one compile per caller-owned hidden preparation step (then the pass blocks, one more unit)."""
         self._check_context()
         for key,source in (('march',self._source),('composite',FOG_COMPOSITE_FRAGMENT)):
             if key not in self._programs:
                 self._program(key,source)
                 return False
-        return True
+        return self._blocks.warm()
 
     def _allocate(self, width, height) -> None:
         name = (ctypes.c_uint*1)()
@@ -290,9 +297,10 @@ class FogMarch:
             self._vao = int(name[0])
 
     def march(self, volume: FogVolume, *, size, steps=96, max_extinction=1., erosion=.6, detail_frequency=1.,
-              shadow=(.5, 1.), ground=None, step=(.2, 1.), medium=None, shadow_floor=0., edge_glow=0., base=(0., 0., 0.)) -> None:
+              shadow=(.5, 1.), ground=None, step=(.2, 1.), coverage_values=None, shadow_floor=0., edge_glow=0.,
+              base=(0., 0., 0.)) -> None:
         """Integrate the eroded medium per pixel of ``size`` along ``volume``'s camera rays (its last update).
-        ``medium(program)`` sets a consumer coverage's own uniforms."""
+        ``coverage_values``: a consumer coverage's own uniforms by name (members of the march's pass block)."""
         self._check_context()
         width, height = max(1, int(size[0])), max(1, int(size[1]))
         if (width, height) != self._size or not self._fbo:
@@ -308,27 +316,24 @@ class FogMarch:
             gl.glDisable(gl.GL_DEPTH_TEST)
             gl.glDisablei(gl.GL_BLEND, 0)
             gl.glUseProgram(program)
-            location = lambda name: gl.glGetUniformLocation(program, name)
+            # The samplers' units are the source's bindings (FOG_MARCH_SAMPLERS).
             gl.glBindTextureUnit(self.MEDIUM_UNIT, volume.medium_texture)
             gl.glBindTextureUnit(self.DETAIL_UNIT, self._detail)
-            gl.glUniform1i(location('uFogMedium'), self.MEDIUM_UNIT)
-            gl.glUniform1i(location('uFogDetail'), self.DETAIL_UNIT)
             gl.glBindTextureUnit(self.STEADY_UNIT, volume.steady_texture)
-            gl.glUniform1i(location('uFogSteady'), self.STEADY_UNIT)
             view = np.asarray(fog['uFogView'], np.float32).reshape(4, 4, order='F')
-            gl.glUniformMatrix4fv(location('uFogView'), 1, gl.GL_FALSE, np.asarray(fog['uFogView'], np.float32))
-            gl.glUniformMatrix4fv(location('uFogInvView'), 1, gl.GL_TRUE, np.linalg.inv(view).astype(np.float32))
-            gl.glUniform4f(location('uFogLens'), *fog['uFogLens'])
-            gl.glUniform4f(location('uFogRange'), *fog['uFogRange'])
-            gl.glUniform4f(location('uMarch'), float(steps), max_extinction, erosion, detail_frequency)
-            gl.glUniform3f(location('uMarchStep'), *step, shadow_floor)
-            gl.glUniform4f(location('uMarchEdge'), edge_glow, *base)
-            gl.glUniform4f(location('uMarchShade'), *shadow, 0. if ground is None else float(ground),
-                           0. if ground is None else 1.)
-            if medium is not None:
-                medium(program)
+            # std140 mat4 is column-major: the view as given (column-major), the inverse's columns (as
+            # glUniformMatrix4fv with transpose took its rows).
+            values = {
+                "uFogView": tuple(np.asarray(fog['uFogView'], np.float32).tolist()),
+                "uFogInvView": tuple(np.linalg.inv(view).astype(np.float32).flatten(order='F').tolist()),
+                "uFogLens": fog['uFogLens'], "uFogRange": fog['uFogRange'],
+                "uMarch": (float(steps), max_extinction, erosion, detail_frequency),
+                "uMarchStep": (*step, shadow_floor), "uMarchEdge": (edge_glow, *base),
+                "uMarchShade": (*shadow, 0. if ground is None else float(ground), 0. if ground is None else 1.),
+                **(coverage_values or {})}
             gl.glBindVertexArray(self._vao)
-            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            with self._blocks.bound(pack_block(self._march_block, values)):
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         finally:
             framebuffer, viewport, program_before, vao_before, depth_test, blend = saved
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffer)
@@ -359,20 +364,16 @@ class FogMarch:
         depth_mask = gl_query.get_bool(gl.GL_DEPTH_WRITEMASK)
         try:
             gl.glUseProgram(program)
+            # The samplers' units are the source's bindings (the march on MARCH_UNIT, the limit on LIMIT_UNIT).
             gl.glBindTextureUnit(self.MARCH_UNIT, self._colour)
-            gl.glUniform1i(gl.glGetUniformLocation(program, 'uFogMarch'), self.MARCH_UNIT)
-            gl.glUniform1f(gl.glGetUniformLocation(program, 'uFogGlow'), glow)
-            gl.glUniform1f(gl.glGetUniformLocation(program, 'uFogScale'), scale)
-            gl.glUniform1f(gl.glGetUniformLocation(program, 'uFogFringeSmoothing'), fringe_smoothing)
-            gl.glUniform4f(gl.glGetUniformLocation(program, 'uFogCrackle'), *crackle)
-            gl.glUniform2f(gl.glGetUniformLocation(program, 'uFogCrackleSeed'), crackle_glow, 0.)
             # Optional per-column limit (float32 array over screen x, values in screen v): the consumer's own geometry.
             limited=crackle_limit is not None or crackle_limit_texture is not None
-            gl.glUniform1i(gl.glGetUniformLocation(program, 'uFogCrackleLimited'), int(limited))
+            block = pack_block(FOG_COMPOSITE_BLOCK, {
+                "uFogGlow": glow, "uFogScale": scale, "uFogFringeSmoothing": fringe_smoothing, "uFogCrackle": crackle,
+                "uFogCrackleSeed": (crackle_glow, 0.), "uFogCrackleLimited": int(limited)})
             if limited:
                 if crackle_limit is not None:self._upload_limit(np.ascontiguousarray(crackle_limit, np.float32))
                 gl.glBindTextureUnit(self.LIMIT_UNIT,self._limit if crackle_limit_texture is None else crackle_limit_texture)
-                gl.glUniform1i(gl.glGetUniformLocation(program, 'uFogCrackleLimit'), self.LIMIT_UNIT)
             gl.glDisable(gl.GL_DEPTH_TEST)
             gl.glDepthMask(gl.GL_FALSE)
             gl.glEnablei(gl.GL_BLEND, 0)
@@ -385,7 +386,8 @@ class FogMarch:
             gl.glBlendEquationSeparatei(1, gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
             gl.glBlendFuncSeparatei(1, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE)
             gl.glBindVertexArray(self._vao)
-            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            with self._blocks.bound(block):
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         finally:
             gl.glUseProgram(program_before)
             gl.glBindVertexArray(vao_before)
@@ -423,6 +425,7 @@ class FogMarch:
         for program in self._programs.values():
             delete_program(program)
         self._programs = {}
+        self._blocks.release()
         self._colour = self._fbo = self._detail = self._vao = 0
         self._size = (0, 0)
         self._context_ref = None

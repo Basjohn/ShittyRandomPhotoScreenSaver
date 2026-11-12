@@ -375,7 +375,7 @@ def pass_propagation_field(target):
     from rendering.quick.scene3d.resources import MeshResources
     outputs, calls = {}, {}
     sources = [(-0.7, 0.0, 0.0), (0.5, 0.3, 0.2), (0.1, -0.35, 0.05)]
-    set_cost = lambda locate: gl.glUniform1f(locate("uChannel"), 0.3)
+    set_cost = {"uChannel": 0.3}     # the cost's values (the seed's pass block since N1.6)
     for size in ((1920, 1080), (300, 700)):
         resources = MeshResources("identity")
         field = PropagationField("identity", "identity", _PROPAGATION_COST)
@@ -480,7 +480,7 @@ def pass_fog_volume(target):
     samples the medium, the steady share and the camera mapping."""
     from OpenGL import GL as gl
     from rendering.gl_programs.fog_volume import fog_inject_source
-    from rendering.quick.render.gl_resources import compile_compute_program
+    from rendering.quick.render.gl_resources import compile_compute_program, delete_program
     from rendering.quick.scene3d.fog_volume import FogMarch, FogVolume
     outputs, calls = {}, {}
     program = compile_compute_program(fog_inject_source(_FOG_MEDIUM), label="identity fog medium")
@@ -514,7 +514,7 @@ def pass_fog_volume(target):
                 volume.release()
                 march.release()
     finally:
-        gl.glDeleteProgram(program)
+        delete_program(program)
     return outputs, calls
 
 

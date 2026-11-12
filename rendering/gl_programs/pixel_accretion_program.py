@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_ghost_fragment, scene3d_motion_fragment, scene3d_motion_vertex
 
 
@@ -112,3 +113,13 @@ PIXEL_ACCRETION_MOTION_VERTEX_SOURCE = scene3d_motion_vertex(PIXEL_ACCRETION_VER
 PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE = scene3d_motion_fragment(PIXEL_ACCRETION_FRAGMENT_SOURCE)
 # With motion trails: the same tiles as flat ghost silhouettes.
 PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE = scene3d_ghost_fragment(PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE)
+
+# N1.6: each program's values in one std140 pass block (``portable_program``; the motion-writing tiles and their
+# ghosts share one), the photographs at their units.
+_SAMPLERS = {"uOldTex": 0, "uNewTex": 1}
+PIXEL_ACCRETION_VERTEX_SOURCE, (PIXEL_ACCRETION_FRAGMENT_SOURCE,), PIXEL_ACCRETION_BLOCK = portable_program(
+    PIXEL_ACCRETION_VERTEX_SOURCE, (PIXEL_ACCRETION_FRAGMENT_SOURCE,), block="PixelAccretion", samplers=_SAMPLERS)
+(PIXEL_ACCRETION_MOTION_VERTEX_SOURCE, (PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE, PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE),
+ PIXEL_ACCRETION_MOTION_BLOCK) = portable_program(
+    PIXEL_ACCRETION_MOTION_VERTEX_SOURCE, (PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE, PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE),
+    block="PixelAccretionMotion", samplers=_SAMPLERS)
