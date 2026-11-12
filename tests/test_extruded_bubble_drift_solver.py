@@ -45,7 +45,7 @@ def run_solvers(log, every, solvers):
     from tools.labs.render_target import OffscreenRenderTarget
     target, resources = OffscreenRenderTarget(16, 16), MeshResources('drift solver test')
     reference, frames, moved = MaterialDriftReference(), 0, [0, 0]
-    results = {label: {'worst': {}, 'channel': {}, 'wraps': 0} for label in solvers}
+    results = {label: {'worst': {}, 'absolute': {}, 'channel': {}, 'wraps': 0} for label in solvers}
     try:
         for index, (families, steps, knots) in enumerate(log):
             if index % every or not families:
@@ -68,9 +68,12 @@ def run_solvers(log, every, solvers):
                     got = data[offsets[family.family]:offsets[family.family] + len(expected)]
                     scale = max(1.0, float(np.abs(expected[:, :3]).max(initial=0.)))
                     name = family.family
+                    channel = np.abs(got[:, 3] - expected[:, 3])
+                    # Motes a whole wrap away (recycled on another tick) are counted below, not measured here.
+                    absolute = float(np.abs(got[:, :3] - expected[:, :3])[channel <= .5].max(initial=0.))
+                    result['absolute'][name] = max(result['absolute'].get(name, 0.), absolute)
                     result['worst'][name] = max(result['worst'].get(name, 0.),
                                                 float(np.abs(got[:, :3] - expected[:, :3]).max(initial=0.)) / scale)
-                    channel = np.abs(got[:, 3] - expected[:, 3])
                     result['channel'][name] = max(result['channel'].get(name, 0.), float(channel.max(initial=0.)))
                     result['wraps'] += int((channel > .5).sum())
             frames += 1
