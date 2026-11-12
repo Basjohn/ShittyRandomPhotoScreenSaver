@@ -1087,7 +1087,9 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   when that mode is unticked.
   - [ ] Test through the real wizard: exactly one default; it follows a change; unticking the default mode moves
     it to an enabled mode (rule stated in the test); Finish saves it, Cancel does not; negative controls.
-- [ ] Image time, once the operator chooses its home (section 2).
+- [ ] Image time on the Transitions page (operator, 12 Nov: "Row on Transitions"): one compact row under the
+  heading ("Change Every" and the 	iming.interval control Settings uses, same range and steps, read from its
+  owner), editing the draft; a test through the real wizard (Finish saves, Cancel does not) with a negative control.
 
 ### 1D.2 Fullscreen Visualizer: three display styles (one Opus High; the lead runs the D1 proof)
 
@@ -1302,11 +1304,6 @@ Watchlist entry (operator, 11 Nov).
     and icons in the accent colour are unchanged.
   - Settings lists (12 Nov): the Themes, Folders and online lists share one style (12 pt, 32 px rows); the
     Sources list's heading reads "Pools and Custom Feeds"; the window's resize grip is three solid lines.
-- **Guided Setup, image time (operator, 12 Nov):** wanted, but "I don't think it fits a card yet": either a new
-  page holding it with other useful quick settings, or an existing page it fits thematically without clutter.
-  The lead's proposal is waiting for the operator's choice. A preset choice was rejected: presets are mutable,
-  authored content, and no feature is built around them.
-
 ## 3. Lead and agents: active, paused and queued work
 
 **Agents and slots:** `Docs/Guides/Orchestrator_Handbook.md` section 1 is the one source (the lead is Opus 5.5
