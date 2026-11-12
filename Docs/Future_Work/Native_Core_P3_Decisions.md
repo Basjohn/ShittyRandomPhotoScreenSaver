@@ -504,9 +504,771 @@ through a scripted step: fetch the matching SDK, rebuild, both backends' parity 
 
 ## D1, D2, D3 and the transport rule
 
-Not yet written. Their one-line statements are in `Current_Plan.md` (item 8b, stage N0) and their inputs in the
-closeout document's section 3. Order: D1 and D2 with the drop edge, then D3. D9's job thread uses D1's quiescence
-barrier, so D1 is written with both readers in mind.
+*Proposed (draft for the lead), 12 Nov 2026. Nothing in this section is decided. Drafted by a Sonnet agent from
+current source; every "today" claim carries a file:line and was read on 12 Nov 2026 at commit `7ac980d7`. The
+statements are in `Current_Plan.md` (item 8b, N0, box P3.0) and the inputs in the closeout document's section 3.
+D9's job thread uses D1's barrier, so D1 is written with both readers in mind.*
+
+### What exists today (the ground the three contracts stand on)
+
+The shared-memory stream is one object per Visualizer session, `PacketMailbox`
+(`core/visualizer_engine/packet_mailbox.py:101`) over the frame packet ABI (`core/visualizer_engine/packet_abi.py`,
+ABI 2: a 64-byte header, three slots, a seqlock per slot, `consumed_sequence` written by the reader,
+`packet_abi.py:8-58`).
+
+- **Owner of the mapping:** the main process. `PacketMailbox(role="reader")` creates it (`packet_mailbox.py:135`,
+  `packet_abi.py:325-334`), the worker attaches by name (`packet_mailbox.py:140`), and only the owner closes and
+  unlinks it (`close`, `packet_mailbox.py:459-482`). A capacity growth creates a second mapping (`stage_capacity`,
+  `:398-412`) and swaps on the writer's acknowledgement (`commit_capacity`, `:423-436`; the writer's side
+  `attach_capacity`, `:438-453`); the link drives it (`engine_worker_link.py:664-701`).
+- **The only reader is Python, on the GUI thread.** `take()` and `peek()` run under the mailbox lock
+  (`packet_mailbox.py:297-310`), which `close()` and `commit_capacity()` also take. `FramePacketReader.read_latest`
+  copies the payload into a `bytes` (`packet_abi.py:303`) and the mailbox decodes it (`packet_mailbox.py:246`). The
+  render thread never touches the mapping: it receives an immutable snapshot published through the render bridge
+  (`quick_presentation_sync.py:204-211`). That is why no close/unmap hazard exists today: Python holds a
+  `memoryview`, so `SharedMemory.close()` raises `BufferError` rather than unmapping under a live view, and the
+  mailbox releases its views before closing (`packet_mailbox.py:477-480`). A native reader holds a raw pointer, which
+  Python's export count cannot see.
+- **Three readers of different strength already call the mailbox**, and D2 has to separate them:
+  1. *Consuming take*: `quick_presentation_sync.py:207` and `:312` (the per-wake sync) and
+     `quick_display_visualizer_owner.py:2421` (recovery pacing). `_consume` acknowledges at once, right after decode
+     (`packet_mailbox.py:259-263`).
+  2. *Peek*: `quick_display_visualizer_owner.py:646` ("is anything unread", to re-arm the wake after a display
+     transfer) and `:2017` (`_worker_waiting_for_fresh_frame`: reads `present_frame`, `engine_generation`,
+     `activation_id` and `mode_id` of the newest frame). `peek` is not as light as its name: it decodes the whole
+     payload (`_read`, `packet_mailbox.py:238-257`) and `read_latest` already advances `accepted`
+     (`packet_abi.py:307`), so a later `read_latest` of the same frame returns nothing; only the `_peeked` cache lets
+     `take` hand it out.
+  3. *Held frame*: `last_taken` (`packet_mailbox.py:290-295`), read by the recovery hold
+     (`quick_display_visualizer_owner.py:2247-2256`, dropped at `:2258-2267`) and by
+     `rendering/quick/visualizer/edit_content_envelope.py:399`. It is a decoded Python object, so it survives the
+     mapping being closed; `commit_capacity` clears it (`packet_mailbox.py:434`).
+- **Liveness today** is two things: the supervisor's per-process heartbeat (3 s; it only retires a dead or hung
+  worker, `engine_worker_link.py:28-35`), and a per-session cadence watch run from the worker's heartbeat handler
+  (`engine_worker.py:1064-1075` calling `watch_cadence_liveness`, `:587-618`): the session fails closed when its
+  runtime's step count does not move across two heartbeats at least a second apart
+  (`STALLED_HEARTBEATS_BEFORE_CLOSE = 2`, `STALL_OBSERVATION_MIN_S = 1.0`, `:92-93`), and a failed-closed session ends
+  the wake pipe (`_fail_closed`, `:620-632`), which the owner's listener reports as the session's end
+  (`packet_mailbox.py:324-352`, `engine_worker_link.py:815-825`). This is the L4 fix and it is per stream already
+  on the writer side; nothing exists on the reader side.
+- **The retained-frame drop edge exists once, in Python:** R-184
+  (`Docs/Historical_Bugs/R-184_Engine_Worker_Mode_Switch_Kept_Drawing_The_Outgoing_Frame_After_Its_Fade_Out.md`):
+  `VisualizerItem.drop_retained_frame` (`rendering/quick/visualizer/item.py:294`) marks the item; its next
+  `updatePaintNode` passes `clear_snapshot` once (`item.py:381,578`; `node.py:113,127`); reached through
+  `scene_controller.drop_visualizer_retained_frame` (`scene_controller.py:2829-2839`) from
+  `_activate_pending_mode_on_worker` (`quick_display_visualizer_owner.py:2062`).
+- **Slot identity is already in the slot** (ABI 2: runtime generation, engine generation, activation id, mode code,
+  flags, `publish_ns`, all under the slot's seqlock, `packet_abi.py:40-47`), so a head read needs no payload.
+  `payload_schema` is written (`packet_mailbox.py:172`) but **read by nobody**; the only schema check is the codec's
+  own two-byte prefix inside `decode` (`frame_codec.py:153-154`).
+
+### D1. The native reader against the GUI thread closing the mapping (proposed)
+
+**The hazard (new with the native reader).** The render thread would read slots through a raw pointer while the GUI
+thread runs `close`/`commit_capacity`/retire/recovery, which close the Python `SharedMemory`, unmap it and (POSIX)
+unlink the name. Python's `BufferError` guard (above) does not exist for a C++ pointer. Five edges close or replace
+a mapping: owner `close` (`packet_mailbox.py:459`), `commit_capacity` (`:423`, a remap to a larger mapping),
+`link.retire` (`engine_worker_link.py:746-780`) and `link.close` (`:782-811`), and worker replacement
+(`quick_display_visualizer_owner.py:2279-2351`, `_bind_replacement` `:2396-2406`).
+
+**Proposal, three rules.**
+
+1. **The core maps its own view; it never uses Python's pointer.** At activation the core opens the mapping *by
+   name* (`OpenFileMapping`/`MapViewOfFile` on Windows, `shm_open`/`mmap` on POSIX), validates magic, ABI and
+   shape exactly as `_validate` does (`packet_abi.py:169-182`), and owns that view until its own release edge. The
+   name is plain data carried by the activation (the mapping name the link already holds, `mapping_name`,
+   `packet_mailbox.py:455`). On both platforms a mapped view keeps the section alive after the owner closes or
+   unlinks the name (Windows removes a named mapping when its last handle closes, as
+   `shared_memory_transport.py:1-7` already relies on), so the owner's close can never unmap memory the reader is
+   copying. A name that no longer opens means the stream is retired: the reader enters the retired state, never an
+   error loop. This is the "pin the mapping" branch of the plan's wording, chosen because it removes the
+   GUI-waits-for-render-thread dependency (which can deadlock against Qt's synchronisation of the two threads).
+2. **The reader has three states, changed by one atomic: `open`, `retiring`, `retired`.** The GUI side's retire
+   edge (the same edge as `link.retire()`, `engine_worker_link.py:746`, which already never waits) posts a *retire
+   request* to the core: it sets `retiring` (release store) and schedules the reader's release on the render thread
+   (`QQuickWindow::scheduleRenderJob`, run at a render-thread stage, or `sceneGraphInvalidated` at window
+   destruction; Qt documentation, to be confirmed in the N0.6 harness). The render thread, at its next frame edge
+   or job, finishes or abandons any copy, unmaps its view and any held frame, and stores `retired`. A frame never
+   starts a copy once `retiring` is set. The GUI never waits for `retired`: nothing it does afterwards (close,
+   unlink, replacement) depends on it, because of rule 1. This is the *render admission closure plus quiescence
+   barrier* of the plan's wording, made asynchronous and used for the *semantic* part only: no frame of a retired
+   stream is presented, and the reader's held resources (a copied frame, uploaded geometry, D9's job slots) are
+   released on the render thread that owns them.
+3. **A remap is a new stream, not a new pointer.** `commit_capacity` (a larger mapping) and worker replacement hand
+   the core a new `(mapping name, engine generation, activation)` key; the core opens the new view, validates it,
+   and only then retires the old reader state (the old view is released by the rule-2 job). Between the two, frames
+   from the old stream are not presented after the new stream's first frame is accepted. The old mapping's name may
+   already be unlinked; nothing depends on it.
+
+**D9's job thread uses the same barrier.** A job holds a reference on the reader state it was built from (a
+generation counter, not a pointer into the mapping); a retire request marks the device's jobs for that stream
+abandoned; the job thread checks the stream state before it publishes its completion edge, and the device is not
+destroyed until the render-thread retire job and the job thread have both reached their quiescent point (a join in
+the device's destruction, never in the GUI thread's close). This is D9 point 6 made concrete.
+
+**Liveness is per stream.** A stream is `(mapping name, engine generation, activation)`. Writer-side liveness is
+what `watch_cadence_liveness` already is (`engine_worker.py:587-618`) and is kept. Reader-side liveness is new and
+separate from "the render thread answered a heartbeat": the core keeps, per stream, in a small block the GUI can
+read without a lock, `last_accepted_sequence`, `copies_started` and `copies_finished` (two monotonic counters).
+`copies_started != copies_finished` across two observations a second apart is a reader stalled inside a copy, and is
+reported as that stream's failure (the owner's existing failure edge, `_on_engine_worker_failed`), not as a worker
+failure. This answers the closeout's "the render thread answered is not the reader finished its copy"
+(closeout section 3, inputs, L4). The GUI reads these counters only on the heartbeat edge and on edges it already
+has; no timer, thread or poll is added.
+
+**Today vs new.** Already today: the owner is the only closer and unlinker (`packet_mailbox.py:459-482`); a retiring
+link never waits (`engine_worker_link.py:746-749`); a retired generation's frame is never handed to a replacement
+(`packet_mailbox.py:10`, test `test_a_retired_generation_never_reaches_its_replacement`,
+`tests/test_visualizer_engine_packet_mailbox.py:113`); per-session writer liveness (`engine_worker.py:587`). New:
+the core's own view, the three states, the retire job, the reader counters. The owner of all of them is the
+module's reader class (one small C++ type, the packet reader), with the GUI side a single "retire stream" call.
+
+**The test that fails without the contract** (harness C++ test in `native/spike_p1`'s successor, after N0.9, plus a
+Python driver):
+- *close during copy:* a test hook (compiled into the harness only, never the product) pauses the reader inside a
+  copy of a slot; the GUI side then closes and unlinks the mapping and (second case) commits a capacity remap; the
+  hook resumes. Pass: no fault, the copy completes against the pinned view, the frame is discarded because the stream
+  is `retiring`, the next stream's first frame is accepted. *Negative control:* the same test with the reader
+  built to borrow Python's pointer (the thing the contract forbids; a harness variant, seen to fault or to trip the
+  reader's deliberate "view unmapped" assertion on the pause-close-resume order).
+- *resize and remap:* a capacity commit with frames in flight: no frame of the old stream presented after the new
+  stream's first; both views released exactly once (the reader counts opens and releases).
+- *retire:* retire with the render thread parked in a copy and with it idle; the release job runs; the GUI call
+  returns without waiting (measured: the call's duration does not depend on the pause).
+- *worker replacement:* kill the worker mid-publish (the harness writer stops with `sequence_begin` odd, the torn
+  state the ABI defines), replace it; the core never accepts the torn slot (`torn_reads` counter,
+  `packet_abi.py:310`), never presents the old stream after the replacement's first frame
+  (`_bind_replacement`, `quick_display_visualizer_owner.py:2396`), and releases the old view.
+- *per-stream liveness:* a reader paused inside a copy is reported for its stream while the worker's own
+  heartbeats keep answering; negative control: remove the counters, the test sees no failure.
+
+### D2. One consuming reader, a non-consuming head read, and the drop edge (proposed)
+
+**Rule.** Once a stream is native, the core is the only reader that consumes: only it writes `consumed_sequence`
+(`packet_abi.py:317-319`), and only it decodes payloads. The Python owner reads the slot **head** only.
+
+**The consuming reader's acknowledgement edge.** Today the acknowledgement happens at the end of `take`, right
+after decode and before the frame is presented (`packet_mailbox.py:259-263`), and the closeout asks that the edge be
+defined exactly. Proposed, to keep parity with today: the core acknowledges a sequence at its **accept edge**:
+after the whole frame is copied and validated (both seqlock reads, identity equal to the expected stream, schema
+known) and after the frame's protected-edge mask has been handed to the frame driver's edge handler, and before the
+frame is recorded for presentation. It does not wait for the swap. Reason: edges are "short-lived" and a writer
+carries them into every later slot until acknowledged (`packet_abi.py:28-31`, `FramePacketWriter.publish`
+`:218-223`); acknowledging at the swap would carry an edge across several frames the core had already read, a
+behaviour change from Python. If the lead prefers the swap edge, it is one flag in the reader and the parity
+gate shows the difference. A frame the core rejects (torn, wrong identity, unknown schema) is not acknowledged.
+
+**The head read (new).** A function on the reader, `read_head()`, that returns, from the newest *whole* slot, only
+the 64-byte head: sequence, flags, protected-edge mask, runtime/engine generation, activation id, mode code,
+logical timestamp. It performs the seqlock check on the head and reads no payload, copies nothing, **does not move
+`accepted` and does not write `consumed_sequence`**. It is what every Python read that is not the consumer needs:
+`_worker_waiting_for_fresh_frame` needs `present_frame` (the `FLAG_PRESENT_FRAME` bit), `engine_generation`,
+`activation_id`, and the mode (`mode_code`, `packet_abi.py:80-97`; the owner compares `mode_id` strings, so it maps
+the code through the table that already exists); "anything unread" (`quick_display_visualizer_owner.py:646`) is
+`latest_sequence > consumed_sequence`, which `has_unread` already is (`packet_abi.py:313-315`). Owner today:
+`FramePacketReader` in Python; the native head read is the same function in the module, exposed as plain data. The
+Python `PacketMailbox` keeps `peek`/`take` for the in-process and offline paths; on a native stream the owner calls
+only `read_head`. The three call sites of the consuming take (`quick_presentation_sync.py:207,312`,
+`quick_display_visualizer_owner.py:2421`) are retired with the Python renderer; until then a native stream has no
+Python consumer (the stream is either Python-consumed or native-consumed, chosen at activation, never both).
+
+**The drop edge (R-184), written as a contract.** Every frame a native reader retains (a copied payload, geometry
+uploaded from it, a texture rendered from it) is tagged with `(stream key, sequence)`. The core exposes one
+`drop_retained_frame()` edge, posted from the GUI thread and applied by the core at its next frame edge exactly as
+`item.py:294,381,578` does today (a flag read, not a per-frame check). It is raised by the same owner call sites
+that raise it now: a hidden activation commit that discards the pending snapshot
+(`quick_display_visualizer_owner.py:2062`, R-184's cause), a recovery hold's drop (`:2258-2267`), display power off,
+and retire (rule 2 of D1). The drop clears the retained frame and keeps the stream bound and the geometry resident
+(D3), as R-184's fix keeps the source bound. **The head read cannot resurrect a dropped frame** because it returns
+only metadata and the core's accepted-sequence watermark: after a drop the core sets `dropped_through =
+the sequence it held`, and any frame with `sequence <= dropped_through` is never re-presented, whatever a head read
+or a late wake says; only a frame with a larger sequence and a matching identity is. (Today `read_latest` has the
+same property through `accepted`, `packet_abi.py:290-291`; the contract makes it hold across the drop.)
+
+**Today vs new.** Today: acknowledgement at take; `peek` decodes and advances `accepted`; one drop edge for the
+Python node. New: a head read that decodes nothing and moves nothing; the native accept-edge acknowledgement; the
+drop edge and watermark in the core.
+
+**Test that fails without it.**
+- *one consumer:* run a native stream with the Python owner's calls active; assert `consumed_sequence` is written
+  only by the core (a counter on the Python reader's `acknowledge`, `packet_abi.py:317`, stays zero) and that a
+  protected edge published while the owner polls the head is still delivered to the core exactly once. Negative
+  control: let the owner call `take()` on the same stream (the forbidden second consumer); the edge is stolen and
+  the test fails.
+- *head read is non-consuming:* `read_head()` ten times between two publishes; `accepted` and `consumed_sequence`
+  unchanged; the core still receives the frame and its edges.
+- *drop edge, the R-184 shape:* publish a frame, take it, raise a profile-change discard and the drop in one GUI
+  turn; render; the card is empty at the next render (the existing parity bar,
+  `tests/test_visualizer_owner_render_parity.py::test_the_worker_path_draws_the_in_process_pixels_at_non_default_settings`,
+  must pass on the native item). Negative control: remove the drop call (the pre-fix owner); the outgoing frame
+  stays, as R-184 recorded.
+- *no resurrection:* drop at sequence S, then a head read and a replayed wake for S; the frame is not presented;
+  publish S+2: presented. Negative control: reset the watermark on the head read.
+
+### D3. Extruded Bubble geometry once per revision (proposed)
+
+**Today.** The drift families' geometry (`DriftFamily.geometry`, packed rows, `extruded_bubble_drift_log.py:46-72,
+102-115`) travels **inside every frame**: the frame carries `drift_families`
+(`logical_frame_capture.py:455`), the codec writes the dataclass with its `bytes` field each time
+(`frame_codec.py:34,115-120`), and the slot is sized to hold the maximum geometry beside the base envelope
+(`frame_capacity.py:35-42`: chains `CHAIN_GEOMETRY_BYTES + STEP_HISTORY * KNOT_DECISION_BYTES` per chain, snow and
+specks `CLOUD_GEOMETRY_BYTES` per row, at `SPECKS_FULL = 216000` and `SNOW_FULL = 2500`,
+`core/constants/extruded_bubble_world.py:11-12`). Three slots of that size are mapped.
+`DriftLog.admit` (`:147-170`) mints the key: a different `key` is a new revision continuing from the old one
+(`rebase_from`, `first_serial`), a larger capacity with the same key extends rows and keeps the revision
+(`:159-165`). `_REVISIONS` is `itertools.count(1)` (`:43`): unique inside one process only, **so a replacement
+worker's revision 1 is not distinguishable from the first worker's revision 1 by revision alone**. The render
+side keys its state on the revision alone: `state.revision == family.revision` (`extruded_bubble_drift_solver.py:476,
+539`). Whether a replacement worker could alias there is not proved today; the first test below is that proof.
+Today's release edges: `release()` (`:380-389`), family left the list (`:464-467`), geometry edit (`:523-537`: old
+buffers deleted after the dispatch), revision change (`:539-542`), capacity change (`:545-549`). **Two failure edges
+are not covered:** at `:539-542` and `:545-549` the old buffers are deleted *before* `_allocate` runs, and
+`_allocate` can raise (`ValueError` at `:563`, or a GL error), leaving `self._families[name]` holding names that
+were deleted; at `:529-536` a raise inside `_dispatch` skips `_delete(state.geometry ...)` at `:536` and leaks the
+old rows. The CPU oracle data is already off the wire: `render_descriptor` strips `source`
+(`extruded_bubble_drift_log.py:63-72`, used at `logical_frame_capture.py:455`), and the codec's array tag
+(`frame_codec.py:127-137`) exists only for offline captures.
+
+**Proposal.**
+
+1. **Identity.** A geometry resource is keyed by `(worker namespace, engine generation, activation id, family,
+   geometry revision, capacity)`. The *worker namespace* is the stream's mapping token (the `srpss_viz_<token>_<n>`
+   name, `packet_abi.py:73,330`), unique per process run and per mapping, so a replacement worker or a remap is a
+   different namespace. Bare revision is never an identity. The solver's compare at `:476,539` becomes the whole key.
+2. **Geometry is not in the frame.** The frame carries only the key of each live family and the small per-frame
+   state (steps, knots, counts, controls). The geometry bytes travel once per key in a *geometry arena*: a second
+   mapping, created and owned by the main process like the frame mapping (so the owner model of
+   `packet_mailbox.py:104-105` is unchanged), with two banks per family. The worker writes the back bank
+   completely **before** it publishes a frame that names its key; the reader uploads when it first sees a key it
+   does not hold. A bank is rewritten only after the core has acknowledged a frame that names a different key for
+   that family (so a reader copying a bank is never overwritten). The arena's size is part of admission
+   (`required_slot_bytes`'s geometry term, `frame_capacity.py:35-42`, moves from the slot to the arena; the slot
+   shrinks to the base envelope). D3 sizes nothing against the worker's +34 MB at the first Waveform Ribbon
+   (OpenBLAS's reserve, per the plan).
+3. **Residency and release, one rule per edge.** A per-key residency in the core: `requested`, `uploading`,
+   `resident`, `failed`, `retiring`.
+   - *Geometry change (new key, same activation):* the old key stays `resident` until the new key is `resident`
+     and one frame using it has been recorded; then the old is released (matches the CPU rebase and the
+     two-buffer overlap of `:523-537`). Never an empty frame in between.
+   - *Failed swap / upload failure:* the new key goes `failed` (one logged error, no retry on the next frame; a
+     retry only for a *new* key), the old key stays resident and in use, and nothing is deleted before the
+     replacement exists. This fixes the `:539-549` ordering for the native path; the OpenGL solver gets the same
+     ordering as an N1 box if the lead wants it now.
+   - *Capacity growth, same key:* a new key (capacity is in the key), with the history rows copied from the old
+     residency before it is released (the `_allocate(family, state)` copy, `:559-576`).
+   - *Mode or activation change, drop edge, retire, device loss, window destruction:* all residencies of the stream
+     are released on the render thread by the D1 retire job; device loss releases without reading back (nothing
+     is read back, solver docstring `:11-12` of the drift log).
+   - *Counting:* the residency table counts live keys per family; steady state is one, transient two, after
+     teardown zero (`DriftSolver.has_resources`, `:376-378`, is today's equivalent for the Python path).
+4. **Oracle data stays off the wire.** The native frame schema has no array and no `source` field. The worker keeps
+   `source` (the float64 arrays) for `MaterialDriftReference` (`extruded_bubble_drift_log.py:238`) only. A frame
+   built with a non-empty `source` is refused at encode, not silently stripped.
+5. **Per-frame state is separate and small:** the step record (`STEP_FIELDS`, `:29-34`, 30 fields), the knot
+   decisions and the counts: what changes every tick.
+
+**Tests that fail without it.**
+- *identity:* two streams (a worker and its replacement, or two mappings) both publish "revision 1" with different
+  geometry; the renderer must upload the second. *Negative control:* key on revision alone (today's compare,
+  `:476,539`): the stale geometry is drawn; assert on the uploaded bytes' hash.
+- *once per key:* N frames under one key upload the geometry once (an upload counter), and the frame bytes on the
+  wire contain no geometry (frame size is independent of `capacity`). Negative control: today's per-frame
+  descriptor (`frame_codec.py:115-120`), where frame size scales with capacity.
+- *geometry change, failed swap, upload failure:* inject an allocation failure at the new key; the old key's
+  buffers still exist, are still drawn, the failure is logged once and not retried per frame; assert residency
+  counts after each edge. Negative control: the delete-before-allocate order (`:539-542`), where the old names are
+  gone and the next frame uses them.
+- *release:* after teardown, drop edge, mode switch and window destruction the residency count is zero and the
+  allocator's live-buffer count returns to its baseline. Negative control: skip the retire job.
+- *oracle off the wire:* encode a frame whose descriptor still has `source`; refused. Negative control: the
+  Python codec's `_ARRAY` tag would carry it.
+
+### The transport rule (proposed)
+
+1. **Nothing crosses through the stdlib resource sharer.** An ordered control refuses a sharer-backed `Connection`
+   or socket on every platform (`core/process/control_messages.py:28-36,71-74`) because the sharer keeps a
+   sender-side duplicate that a worker dying before decoding never collects
+   (`core/process/control_messages.py:7-14`, `core/visualizer_engine/wake_channel.py:10-15`). The core adds no
+   descriptor of its own through any queue.
+2. **How a handle or mapping reaches a process.** POSIX: a *name* in the control message (plain data), opened by the
+   receiver (`wake_channel.py:10-11`, `packet_mailbox.py:140`). Windows: either a name (named mappings, as the frame
+   mapping already does) or a handle **duplicated into the exact target process** by the supervisor under its
+   lock (`control_messages.py:39-58,75-84`: the duplicate belongs to the child even if never decoded; its exit
+   reclaims it). The native core follows the same two forms; a new native object that needs to reach the worker
+   (the geometry arena of D3, a job-thread signal) is a mapping name or an exact-process duplicate, never a
+   pickled handle.
+3. **Fixed-layout per-mode native schemas.** Each mode that crosses to the core has a fixed-layout record
+   (explicit offsets, little-endian, 16-byte aligned, a version), so a native reader validates by size and offsets
+   and does not decode a tagged stream. The slot's `payload_schema` field (`packet_abi.py:19,230`) selects it. It is
+   **written today but read by nobody** (`packet_mailbox.py:172`; no reader reads `payload_schema`): the native
+   reader and the Python reader both start validating it.
+4. **The tagged Python codec namespace is reserved.** `CODEC_SCHEMA = 1` (`frame_codec.py:21`) keeps meaning "tagged
+   Python codec" and is never used by a native schema. Proposed numbering: `payload_schema` 1 is the Python codec;
+   native schemas are `0x100 | mode_code` in the low byte for the mode and the version in bits 16-23 (mode codes are
+   append-only, `packet_abi.py:80-90`); values 2 to 0xFF are reserved. (The lead may prefer another scheme; the
+   rule is that the namespaces cannot collide and a mode's schema is derivable from its mode code and version.)
+5. **An unsupported payload fails explicitly.** A reader that does not know a slot's `payload_schema`, mode code
+   or schema version refuses the frame: the stream is reported failed (the owner's failure edge), a counter and one
+   logged error are recorded, and the frame is not acknowledged and not presented. It does not guess, skip silently,
+   or fall back to the Python decode. The Python reader's equivalent today is the `FrameCodecError` raised by
+   `decode` (`frame_codec.py:153-154,199,225,232`), which surfaces from `take()` to its caller; the contract adds
+   the check at the slot head, before any payload copy.
+
+**Tests.** (a) A native reader given a slot with an unknown `payload_schema`, an unknown mode code, a schema version
+newer than it knows, and a size that disagrees with the fixed layout: each is refused, counted, not acknowledged
+(`consumed_sequence` unchanged), stream reported failed. Negative control: a reader that falls through to a
+generic decode accepts the frame. (b) A control message carrying a sharer-backed `Connection` is refused
+(`SharerBackedTransferRefused`; the existing guard's test), and a native object's transfer in the harness uses a
+name or a target-process duplicate and leaves no handle behind after the target dies before decoding (handle count
+before and after). Negative control: send it through a queue with the sharer. (c) The codec namespace: assert no
+native schema id equals `frame_codec.CODEC_SCHEMA` and that the Python decoder refuses a native schema's payload.
+
+### Questions for the lead (D1 to D3 and the transport rule)
+
+1. D1 chooses *pin by the core's own view* plus an asynchronous retire job, never a GUI-side wait. Is that the
+   branch you want, or the barrier with a bounded GUI wait? (The wait risks a deadlock against Qt's sync of the GUI
+   and render threads; the draft avoids it.)
+2. D2's acknowledgement edge is the *accept* edge (parity with `packet_mailbox.py:259-263`), not the swap. Confirm.
+3. D3 moves geometry out of the slot into a parent-owned arena with two banks per family. The alternative is to
+   keep geometry in the frame and key only the retention; it costs the 216,000-row bytes per frame (about 6.9 MB
+   of specks geometry at `SPECKS_FULL`, `frame_capacity.py:35-42`) and is what the plan's "once per" is meant to
+   remove. Confirm the arena, and whether the OpenGL solver's delete-before-allocate failure order
+   (`extruded_bubble_drift_solver.py:539-549`) is fixed now in N1 or only in the native path.
+4. The `payload_schema` numbering in transport rule 4 is a proposal.
+
+## D5, the rest: resources, lifetime, admission, device loss, and what a mode may not do (N0.5)
+
+*Proposed (draft for the lead), 12 Nov 2026. This completes D5 (N0.5); it does not change D5.1 to D5.4, D6, D7, D9
+or D10, and nothing here is decided. Every "today" claim was read in source at commit `7ac980d7`.*
+
+### Today, in source
+
+- **A mode renderer is a small Protocol** (`rendering/quick/visualizer/render_contract.py:175-188`): `mode_id`,
+  `has_resources`, `render(frame)`, `release_resources()`, and for a renderer with `prepared_reveal` an optional
+  `prepare_step(frame) -> bool`. It receives a frame object that carries Quick's own state (the item matrix
+  `matrix_values`, a shared `quad_vao`, a viewport; `render_host.py:206-213`).
+- **One host per window owns the mode renderers** (`QuickVisualizerRenderHost`,
+  `rendering/quick/visualizer/render_host.py`): it creates a renderer on the mode's first frame
+  (`:200-203`), sets blend, cull, depth and viewport itself before the mode runs (`:229-241`), and releases the
+  inactive modes **once, after the active mode has drawn**, at the mode boundary (`_retire_inactive_at_boundary`,
+  `:285-301`; `release_inactive_implementations`, `:303-357`): render-thread only, a failed release stays cached and
+  accounted and is retried only at the next boundary or at teardown, never per frame. `release_resources` at
+  teardown (`:359-388`) refuses to run without a current context. The node's `releaseResources`
+  (`rendering/quick/visualizer/node.py:415-444`) runs on Qt's render owner; `sceneGraphInvalidated` reaches the item's
+  retirement (`item.py:182-191,351-357`).
+- **Warm-up is gradual and host-owned**: a hidden mode (content fade 0) is prepared one unit at a time, spaced by
+  `PREPARE_SPACING_S` using the host's clock (`render_host.py:252-262`).
+- **Accounting exists and is passive**: `has_resources` on every renderer, `_record_ownership` in the host
+  (`render_host.py:205,352,388`), and `ResourceAccountingRecord` / `ResourceAccountingSnapshot` (owner, generation,
+  bytes, lease count; `core/performance/resource_metrics.py:41-88`).
+- **Per display, one render thread and one context** (`rendering/quick/gl_query.py:6-7`, per the research file);
+  a display transfer rebuilds on the target (plan 1C.2; D6 point 4).
+- **No mode implementation reads a clock** (a grep of `rendering/quick/visualizer` finds clocks only in the item
+  and host, `item.py:371,439,481`, `render_host.py:257`, and trace sampling, `render_contract.py:73,107`;
+  `rendering/quick/scene3d` has none). Time is in the frame (`ExtrudedBubbleFrame.time`,
+  `logical_frame_capture.py:446-450`).
+- **No device-loss handling exists** in the Python renderer: a grep for graphics reset status, context lost or
+  device lost in `rendering/`, `engine/`, `core/` and `ui/` finds nothing.
+- **Modes set GL state today**: 97 `glEnable`/`glDisable`/`glBlendFunc`/`glDepthFunc`/`glDepthMask`/`glCullFace`/
+  `glFrontFace`/`glViewport`/`glScissor` sites in six implementation files
+  (`rendering/quick/visualizer/implementations/`: `shockwave_grid.py` 31, `sphere_voxel.py` 21, `extruded_bubble.py`
+  19, `bubble_ambient_gl.py` 17, `extruded_spectrum.py` 5, `oscilloscope.py` 4). That is the count the port removes.
+
+### Resource ownership and lifetime (proposed)
+
+**Scopes, outermost first.** Each resource has exactly one owner, in one scope, and is created and destroyed on one
+thread.
+
+| Scope | Created | Owns | Destroyed |
+|---|---|---|---|
+| Process | at module load, before any window (D6.1) | the instance (Vulkan), the shader bake tables (read-only), the pipeline-cache policy | at process exit, after every device |
+| Device (one per window, D6.4) | with the window's scene graph, on that window's render thread | samplers, shader-resource-binding layouts, the pipeline cache for that device, static meshes, the D9 job thread and its queue, staging | on `sceneGraphInvalidated` or device loss, after every window-scope resource; before the device itself (D6: windows, then devices, then the instance) |
+| Window | the frame driver (D5.2), lazily per layer | the background layer target, the backdrop pyramid (D7), per-surface scene targets, the composite's texture providers | with the window's scene graph; the pyramid also when demand reaches zero (D7 point 2) |
+| Surface (a Visualizer card, a transition) | when it is first admitted | its output texture, its mode's resources | when the surface goes away |
+| Mode renderer | at the mode's first activation on the window (as `render_host.py:200-203`) | its pass graph, pipelines it alone uses, buffers, textures, geometry residencies (D3) | at the mode boundary after the active mode drew (as `:285-357`), or at teardown |
+| Job | by the job thread (D9) | its inputs, its back slot | published, then retired by the frame driver |
+
+**Rules.**
+1. Resources are never shared across devices. A display transfer is: the target device's mode renderer is built and
+   warmed, its first frame is presented, then the source device's renderer is released (the logical session
+   stays; D6 point 4). Nothing vanishes between the two (fade-in on the target, fade-out on the source).
+2. Creation and destruction of a device-scope or window-scope resource happens on that device's render thread,
+   never on the GUI thread and never from a Python callback (D5.4). Job-scope resources are created on the job
+   thread and **released on the render thread** after the completion edge or the D1 retire job.
+3. Destruction order is the reverse of creation: mode, surface, window, device, process. A release that fails is
+   recorded once and retried at the next boundary or at teardown, never per frame (the host's rule above).
+4. Every resource registers itself in the device's ownership table (kind, owner, generation, bytes). The table is
+   plain data reported to the existing accounting snapshot (`resource_metrics.py:41-88`); it is incremented at
+   create and destroy only, so it costs nothing at rest. `has_resources` stays the per-owner question.
+5. Pipelines are keyed by (shader hash, fixed pipeline state, render-pass compatibility) at the device and are
+   created only in warm-up units (one per spaced already-rendered frame, next-likely first), never inside a frame
+   that draws. The device cache is bounded by the finite set of modes, transitions and primitives; a mode release
+   does not destroy pipelines other modes share.
+6. Frames in flight: a resource a recorded frame still refers to is never freed while Qt's frames in flight use
+   it; release is deferred to the frame edge (QRhi's own `releaseLater` discipline for QRhi objects; the core's raw
+   objects follow the same two-frame rule).
+
+**Test that fails without it.** Create and destroy cycles of a mode on a hidden host: the ownership table returns
+to its baseline after each cycle and after teardown, for the same mode, for two modes alternating, for a failed
+release (injected), and for a display transfer (the source device's table is zero after the target presents).
+*Negative control:* skip the deferred release (free a resource a frame in flight still uses) and run under
+validation layers: they report it. The ownership table has a second negative control: delete the registration of one
+resource kind; the baseline test fails.
+
+### Admission and dormancy (proposed)
+
+- **Admission is lazy and edge-driven.** A window gets a device, a frame driver and layer targets when something
+  needs them; a mode renderer exists only after its first activation; the backdrop pyramid exists only while the
+  demand count is above zero (D7 point 2); the job thread exists once per device and is parked (D9 point 1).
+  Admission of capacity-bound inputs stays what it is today for the frame stream (the activation-time capacity
+  envelope, `core/visualizer_engine/frame_capacity.py:12-42`); D3 adds the geometry arena to it.
+- **Dormancy is a state with a definition:** a surface that is off, a display that is powered off, a mode that is
+  not the active one, a transition that is not running. For each: no pass is recorded, no upload is issued, no
+  wake-up is requested, no timer runs, no job is queued. The resources of an inactive *mode* are released at the
+  next boundary (as today, `render_host.py:285-357`); the resources of a surface that is merely paused (display power
+  off) are kept until the display's power edge says otherwise, and the frame driver records nothing for it.
+- **The frame driver at rest records nothing** (D5.2's driver is woken by Qt's `beforeRendering`; with no surface
+  dirty and nothing animating it records zero passes: the retained background and the retained card textures are
+  simply composited by Qt).
+- **Warm-up is the only way a pipeline or a large resource is created while hidden**: one unit per spaced rendered
+  frame, next-likely first (the existing host does this, `render_host.py:252-262`). No burst at start-up, no
+  polling, no driver thread.
+
+**Test that fails without it.** A hidden host at rest for a minute: zero recorded passes, zero uploads, zero
+job-thread wake-ups, ownership table unchanged (it is the per-frame cost test of the performance contract applied to
+the core). *Negative control:* a mode that requests a repaint at rest fails the zero-pass count. A mode switch
+releases the outgoing mode exactly once (a counter on `release`).
+
+### Device loss (proposed)
+
+Today nothing handles it (above). QRhi reports it (the end-of-frame result is `FrameOpDeviceLost`; `QRhi::isDeviceLost()`
+answers afterwards; the research file, addendum B, records it as Qt's), and Qt Quick then invalidates and
+re-initialises the scene graph.
+
+1. **Detect once, at the frame edge**, from QRhi's result. The core marks the device lost with one atomic and stops
+   recording for that device immediately (a lost device records nothing, even if the frame driver is called again).
+2. **Release without touching the device**: every window-scope, surface-scope and mode-scope resource is
+   dropped by the ownership table walk; destroy calls on a lost device are allowed to fail and their failures are not
+   errors. Nothing is read back (nothing is read back from the GPU in production anyway, `extruded_bubble_drift_log.py:11-12`).
+3. **The D9 job thread is quiesced by the D1 retire job** and its in-flight jobs are abandoned (D9 point 6).
+4. **Rebuild from the last packet, through the ordinary admission path**: after Qt re-initialises the scene graph,
+   the frame driver is `Absent`, the next frame's admission creates the targets and the mode renderer, warm-up runs,
+   and the mode is revealed as an activation is (hidden, then faded in; never a vanish, never an abrupt pop: the
+   card fades out before the rebuild if the loss is observed while visible, and in after). The logical side keeps its
+   state; state that exists only in GPU memory (the drift solver's per-mote state) restarts as the solver already
+   does when the render falls behind its history (`extruded_bubble_drift_solver.py:554-556`, "a lifecycle event").
+5. **Bounded.** A window that loses its device twice within a bounded count of frames is treated as a backend
+   failure, not retried: the Visualizer on that window is parked (fade out), the failure is logged and remembered
+   by D6 point 5's state file so the next start uses OpenGL; there is never a teardown from Vulkan to OpenGL in a
+   running process (D6 point 5).
+6. **The OpenGL fallback** does the same on a reset status from the context (`GL_GUILTY_CONTEXT_RESET` and the
+   other reset codes, where the context was created with robustness; else Qt's own context-lost handling).
+
+**Test that fails without it.** A harness-only hook marks the device lost at a chosen point (mid-frame, mid-job,
+during a display transfer, during warm-up): no crash, the ownership table is empty afterwards, validation layers
+are clean, a rebuilt frame is presented and equals the pre-loss frame (a fixed packet; single-sampled), the mode is
+revealed by fade, and the second loss within the bound parks the Visualizer. *Negative control:* a core that keeps
+recording after the lost mark (the pre-contract behaviour) trips the validation layers or the "record after loss"
+assertion. The hook is compiled into the harness only.
+
+### What a mode's native renderer may not do (proposed)
+
+A mode renderer is a pure function of its inputs: the decoded frame (from the packet), the resolved parameters the
+packet carries, the targets and extents the frame driver gives it, and the core's matrices. Each rule is enforced
+where it can be enforced mechanically, and each states what today's Python renderers do.
+
+| May not | Why | Enforced by | Today |
+|---|---|---|---|
+| Read a clock (any `now`) | time is a logical input; D1's packets carry it; the same packet draws the same pixels | the mode API offers no clock; a mode translation unit that includes `<chrono>`/the platform timer fails a CI include check | holds already for modes (above); the host and item keep the only clocks |
+| Compute or own a camera | one camera owner (N0.4); the core receives finished matrices and rays | the mode API has no projection builder; matrices arrive as plain data | `core/settings/framed_camera.py` is the owner; `perspective_matrix` at `:286-289` |
+| Allocate per frame (heap, GPU buffers, pipelines, descriptor sets, textures) | no allocation per frame; warm-up units create things | debug build: a counting allocator and the ownership table; both must read zero growth over a steady frame; `prepare_step` is the only creating entry | not enforced; `StreamRing` slots and the drift solver's ring (`:441-449`) are the allocation edges |
+| Set render state (blend, depth, cull, front face, viewport, scissor, stencil) | state belongs to pipelines; the pass graph declares it; QRhi has no state setters | the mode API has no such call: it declares passes and pipelines as data | 97 call sites in six implementation files (above); the host sets baseline state (`render_host.py:229-241`) |
+| Name Qt Quick (`QQuickWindow`, `QSG*`, Quick's render target, the item matrix) | D5.1: only the host adapter touches Qt | a CI include check: no `QtQuick`/`qsg` header in a mode or primitive translation unit | the Python renderer's frame carries `matrix_values` and a Quick-owned VAO (`render_host.py:206-213`) |
+| Hold or call Python (a thread state, a callback, an attribute lookup) | D5.4 | the P1 probe: calls made with a Python thread state, zero, rerun at every port | n/a; today's renderers are Python |
+| Call the graphics API directly (GL or Vulkan) except through a D5.3 service | the service list is closed | include check on `<vulkan/…>` and GL headers outside the service sources | the six files above call GL directly |
+| Read back from the GPU, wait on a fence, or block the render thread | a frame is never held; D9 publishes by latch | the mode API offers no readback or wait; harness-only readbacks live in tools | some readbacks exist in tools only; the product's drift path reads nothing back |
+| Create threads, do file, network or environment access, or read settings | modes are pure; settings arrive resolved in the packet; no environment flags | include check; the mode API takes no path or handle | n/a |
+| Write outside its own targets (the card, other surfaces, Quick's target) | the composite owns the card edge (D5.2) | the mode has no handle to any target but its own | the clip host and fence exist to protect this (`clip_host.py`, per the research file, N0.2 item 3) |
+| Keep state across activations that the ownership table cannot see | a mode must release to zero | the table baseline test (above) | accounted by `has_resources` per renderer |
+| Build or compile a pipeline while a visible frame is recording | no hitch | a trace assertion: no pipeline creation inside a `render` call | `prepare_step` exists; not enforced |
+
+**Test that fails without it.** For each row a compile-or-run check with a negative control: (a) a mode snippet that
+includes the clock header, a Quick header, or a graphics API header fails the include check (the harness carries
+three must-fail snippets); (b) a mode that allocates inside `render` trips the debug counting allocator; (c) a mode
+that tries to set blend state does not compile because the API has no such function; (d) the P1 probe on a mode with
+a Python callback reports a Python thread state.
+
+### Questions for the lead (N0.5)
+
+1. The drift solver's GPU-only per-mote state restarts after device loss (a visible reset of snow and specks,
+   hidden by the mode's reveal fade). Is that acceptable, or must it be reconstructed from the worker's log? (The
+   log keeps only `STEP_HISTORY` = 128 steps, `extruded_bubble_drift_log.py:37`, so a full rebuild is not possible
+   from the log alone.)
+2. The bound in "device loss, rule 5" (how many losses, in how many frames) is a number to choose.
+3. Is a per-window GPU-memory budget part of admission (refuse or degrade a surface that would exceed it), or is
+   accounting (the table) enough, as today? The draft proposes accounting only.
+4. Pipelines are device-scoped and survive a mode release (rule 5). The alternative, releasing a mode's private
+   pipelines with it, saves a little memory and costs a warm-up on every return to the mode.
+
+## N0.3. Conventions, written once and tested per backend
+
+*Proposed (draft for the lead), 12 Nov 2026. Nothing here is decided. Inputs: the lead's research file (outside the
+repository, `D:\Temp\Scratch\SRPSS\research\20261112\native_core_qrhi_gaps_and_conventions.md`, section N0.3, read
+only; its file:line citations were taken at `a5ee7189`, and the ones restated below were re-read at `7ac980d7`
+unless marked "research"), the Qt 6.11.2 QRhi documentation (doc.qt.io/qt-6/qrhi.html: `clipSpaceCorrMatrix()` "can
+be used to allow applications keep using OpenGL-targeted vertex data and perspective projection matrices ...
+regardless of the active QRhi backend", vertex data "Y up" and viewports "with depth range 0 - 1"; the example
+flips a readback with `if (rhi->isYUpInFramebuffer())`), and the sentences the research file quotes for
+`isYUpInNDC()` (false in practice for Vulkan only), `isYUpInFramebuffer()` (true in practice for OpenGL only) and
+`isClipDepthZeroToOne()` (false in practice for OpenGL only). Items marked *unverified* are proved by the harness
+scenes below before anything is built on them. The page was only partly readable in the fetch used for this draft
+(its first 100,000 of 151,680 characters), so the three `is*` sentences rest on the research file.*
+
+### The conventions, per backend
+
+| Convention | OpenGL | Vulkan | D3D11 / D3D12 | Metal |
+|---|---|---|---|---|
+| Clip-space Y (`isYUpInNDC()`) | up | **down** | up (QRhi's rule: false for Vulkan only) | up |
+| Framebuffer / render-target origin (`isYUpInFramebuffer()`) | bottom-left (true) | top-left | top-left | top-left |
+| Clip depth range (`isClipDepthZeroToOne()`) | -1..1 | 0..1 | 0..1 | 0..1 |
+| `gl_FragCoord` origin in the shader | bottom-left | top-left (SPIR-V `FragCoord`) | top-left | top-left |
+| `QRhiCommandBuffer` viewport and scissor origin | bottom-left on every backend (QRhi's rule; research, QRhiCommandBuffer page) | same | same | same |
+| Texture row order on upload | first uploaded row is texel row 0; QRhi's GL backend hides the API's own bottom-up order (*unverified here*) | same | same | same |
+| Front-face winding | QRhi defines CCW-front on the pre-correction, Y-up output for every backend, and the Vulkan backend compensates for the Y flip (research, *unverified*; one-triangle test below) | | | |
+| Uniform and storage layout | std140 and std430, identical across backends after SPIRV-Cross; use reflected offsets | | | |
+| sRGB | `QRhiTexture::sRGB` flag, not a format; non-sRGB targets in the product | same | same | same |
+| HDR intermediates | RGBA16F/RGBA32F/R16F/R32F; `RGB10A2` is unorm; no RG16F, RG32F, R11G11B10F (N0.2 item 13) | same | same | same |
+
+Metal is listed as QRhi reports it; it cannot be run on this project's machine (Windows only), so it is a Watchlist
+entry and never a claim. D3D11 and D3D12 are run through QRhi's backends in the hidden harness where Qt provides
+them (the P1 spike already creates a D3D pipeline, `Native_Core_P1_Spike.md:103-106`).
+
+### The rules (proposed)
+
+1. **CPU matrices stay in OpenGL form, from one owner, and are corrected once, at upload.**
+   `core/settings/framed_camera.py:286-289` (`perspective_matrix`) builds the OpenGL form (`(far + near) /
+   (near - far)` and `2 far near / (near - far)`, NDC z in [-1, 1], the docstring of `view_matrices` at `:294` says
+   "GL mat4 projection"); the substrate multiplies `clipSpaceCorrMatrix()` on the left exactly once, when the scene's
+   uniform block is written, never in a shader and never twice. Matrices that arrive from Quick
+   (`QSGRenderNode::projectionMatrix()`) are already corrected by Qt for Quick's own pass and are **not** corrected
+   again (the P1 spike's use: `native/spike_p1/src/quick_item.cpp:40`, `quadfield.cpp:184-190`, per the research
+   file); the composite uses Quick's matrices, the scenes the core renders itself use the corrected camera matrix.
+   One flag in the matrix object records "corrected", and writing a corrected matrix through the correcting path
+   fails an assertion.
+2. **Offscreen targets the core owns have one defined origin: texel (0,0) is top-left, window Y points down, on every
+   backend.** The include provides the translation from whatever the backend's `gl_FragCoord` is, so a texture
+   written by one pass and sampled by the next never needs a per-pass flip. Item-pixel arithmetic that is Y-up today
+   (`rendering/quick/scene3d/frame.py:19-34` keeps "the bottom-up convention the transition fragments were authored
+   in": `vUv = vec2(aPosition.x, 1.0 - aPosition.y)`, `:31`) gets one flip at the substrate boundary.
+3. **One include, `srpss_conventions.glsl`, is the only place a shader learns a backend convention.** It provides:
+   - `ivec2 fragTexel()`: the fragment's pixel in the top-left, Y-down convention (flips `gl_FragCoord.y` against
+     the target height when the backend's framebuffer is Y-up);
+   - `vec2 fragUv(vec2 targetSize)`: `(fragTexel() + 0.5) / targetSize`;
+   - `vec2 ndcToUv(vec2 ndc)` and `vec2 uvToNdc(vec2 uv)`: the clip-to-texture mapping for the backend's NDC Y
+     direction (after rule 1 this is the same expression on every backend; the include exists so no shader writes
+     `ndc * 0.5 + 0.5` by hand, the form at `rendering/gl_programs/waveform_ribbon.py:159` and
+     `rendering/quick/qml/shaders/surface_material.vert:30` per the research);
+   - `float viewDepthFromDepthTexture(float d)`: sampled depth is window depth in [0, 1] on every backend once
+     rule 1 has run, so this is one function and the only place a reverse-Z or range change would ever go.
+   The backend values arrive in a small std140 block (two or three floats and ints) at one reserved binding. It is
+   written once per device at creation (the values never change for a device), so it adds no per-frame upload. (SPIR-V is
+   shared by Vulkan, D3D and Metal after translation, so a compile-time branch per backend is not available; a
+   uniform is.)
+4. **Front face is one function of (the item matrix's handedness, `isYUpInNDC()`)**, evaluated when pipelines are
+   created, giving two pre-built pipeline variants (CW and CCW) for every culling pass. Today
+   `sphere_voxel.py:988-992` and `:1072-1076` choose `GL_CW` or `GL_CCW` each frame from the sign of
+   `matrix_values[0] * matrix_values[5]` (Quick's item matrix is Y-down) and restore the state after
+   (`:1025-1026`); modes that cull are few (the rest draw with culling off; research). `gl_FrontFacing` users
+   (`rendering/gl_programs/ribbon.py:658`, the back-side normal) are covered by the third test scene.
+5. **Uniform blocks are std140, storage blocks std430, and C++ packs from reflected offsets, never hand-computed
+   ones.** Rules the packer and the shaders follow: `vec3` aligns to 16; arrays of scalars, `vec2` or `vec3` in a
+   std140 block have a 16-byte stride (so padded float arrays become `vec4`-packed arrays); `mat3` is three `vec4`;
+   structs round to 16; a following scalar may fill a preceding `vec3`'s padding; storage blocks keep natural
+   array strides but `vec3` stays 16-aligned; dynamic uniform offsets are aligned to `QRhi::ubufAlignment()`.
+   Today: 838 `glUniform*`/`glProgramUniform*` call sites with loose uniforms (research count), 33 block
+   declarations in 13 files; N1.2 and N1.3 move every program to blocks (`Current_Plan.md`, N1). The Python packer
+   `Scene3DBlockLayout` (`rendering/gl_programs/scene3d.py:1070`) is the oracle the C++ packer is first tested against.
+6. **sRGB and HDR: keep the product's rule.** Targets are plain unorm or float and shaders do the math, so a backend
+   change moves no pixel; the single sRGB asset (the floor albedo, `GL_SRGB8_ALPHA8`,
+   `rendering/quick/scene3d/waveform.py:114`) uses the `sRGB` texture flag on every backend, and the harness checks
+   the sampled value against the OpenGL decode. No `GL_FRAMEBUFFER_SRGB` is enabled anywhere in `rendering/` (grep:
+   none). An HDR swapchain is not admitted (D8 plus 9).
+
+### What today assumes OpenGL conventions (inventory, `rendering/` and `core/settings/`, at `7ac980d7`)
+
+- **`gl_FragCoord` as texel or uv: 51 occurrences in 14 files.** Texel addressing into offscreen targets:
+  `rendering/quick/scene3d/target.py:112,130,142,180,193,228,235,272,279,289,304,317,334,343` (for example
+  `ivec2 texel = ivec2(gl_FragCoord.xy) - uOrigin` at `:130,142,228,235,272,279`), `defocus.py:93,150-153`,
+  `motion.py:115`, `trails.py:40`, `shafts.py:56`, `rendering/gl_programs/fog_volume.py:160,283`,
+  `reflection.py:84`. Uv from fragment position over a target size:
+  `rendering/gl_programs/extruded_bubble_program.py:194,196,584-587,896,1010,1058,1940`, `waveform_ribbon.py:159,189,
+  204`, `extruded_spectrum_program.py:415`, `rendering/quick/visualizer/implementations/sphere_voxel.py:651`,
+  `defocus.py:106,119`. NDC from fragment position: `extruded_bubble_program.py:980,1164`
+  (`gl_FragCoord.xy / uFrameSize * 2.0 - 1.0 - uLensShift`). The Quick material shaders use it for a noise seed only
+  (`surface_material.frag:178`), which no convention can change visibly.
+- **Front-face and culling:** `sphere_voxel.py:988-992,1025-1026,1072-1076`; `ribbon.py:658` (`gl_FrontFacing`).
+- **The perspective matrix and depth:** `core/settings/framed_camera.py:286-289` (OpenGL form, rule 1);
+  `glClearDepth(1.0)` with the OpenGL depth test at `scene3d/target.py:845,885`, `scene3d/resources.py:324`,
+  `transitions/render_host.py:139`, `transitions/implementations/block_spins.py:172`; depth read back as a sampled
+  texture in `scene3d/target.py:306` (the nearest depth, `texelFetch(uDepth).r`; research).
+- **Texture and readback origin:** `rendering/quick/offscreen_target.py:179` and
+  `rendering/quick/render/background_node.py:686` (`glReadPixels`, bottom-up rows); `frame.py:31` above.
+- **sRGB:** `scene3d/waveform.py:114` only.
+- **Not re-read for this draft (research file, `a5ee7189`):** the transition fragments' own flips
+  (`gl_programs/blinds_program.py:60-61`, `beam_program.py:136`, `blockspin_program.py:281-290`,
+  `capillary_bloom_program.py:92`, `blinds_slats_program.py:141`), `visualizer` depth-func flips in
+  `shockwave_grid.py:473-581`, and the Quick `.qsb` shaders baked `--glsl 460` only (`surface_material.vert:2`).
+
+N1.4 applies the include to every existing shader in the OpenGL renderer, where each stays pixel-identical on
+OpenGL (the include's OpenGL values make it an identity there) before any C++ exists; the include is therefore
+proved against the Python path first.
+
+### The three test scenes (hidden host, run on OpenGL, Vulkan, D3D11 and D3D12 where available; Metal Watchlist)
+
+Each scene renders a fixed, single-sampled frame to an offscreen target, reads it back (flipped by
+`isYUpInFramebuffer()` only in the harness's own readback), and is compared with **both** the analytical expected
+image and the OpenGL result. They are the proof for rules 1 to 6; they live in the P1 harness (after N0.9).
+
+1. **Checkerboard with a gradient.** A target of non-square size (so a width/height mix-up shows) with a checker
+   whose four corner cells have four distinct colours, a horizontal red gradient and a vertical green gradient, drawn
+   by a first pass and then sampled by a second pass that writes its own `fragUv()` and `fragTexel()` as colour.
+   Checks: texel (0,0) is top-left on every backend; `fragUv`, `fragTexel` and `ndcToUv` agree with the pass
+   that wrote the texture; the upload row order; the harness readback flip; the sRGB strip (a small sRGB-flagged
+   gradient texture) equals the OpenGL decode; a std140 block with a `vec3`, a `vec3` array, a `mat3` and a trailing
+   scalar is packed from reflected offsets and its values read back through colour. *Negative controls:* drop
+   the Y correction in the include (the corner colours swap on Vulkan); drop `clipSpaceCorrMatrix()` from rule 1
+   (the image is upside down on Vulkan); pack the block with hand-computed offsets that ignore the `vec3` rule (the
+   block test fails).
+2. **A known-depth plane.** A plane facing the camera at a chosen view depth (and a second nearer one that
+   overlaps it), rendered through the project's camera matrix (`framed_camera.perspective_matrix` with the corrected
+   upload) into a `D32F` target, then sampled by a pass that writes `viewDepthFromDepthTexture()`. Checks: the stored
+   value equals the analytical window depth (the same number on every backend, within a stated float tolerance); the
+   nearer plane wins the depth test; clear value and `GL_LESS`-style compare agree; the near and far clip planes
+   cull at the same depths. *Negative controls:* skip the depth part of the correction (the value is wrong on
+   Vulkan, D3D and Metal); upload an uncorrected matrix.
+3. **One culled triangle.** Two triangles, one counter-clockwise and one clockwise as authored in OpenGL form, drawn
+   with back-face culling and the front face from rule 4, once with Quick's Y-down item matrix and once with an
+   up-facing one; each triangle has a distinct colour, and a second pass colours by `gl_FrontFacing`. Checks: the
+   same triangle is culled on every backend; the matrix-handedness switch of `sphere_voxel.py:988-992` gives the same
+   image; `gl_FrontFacing` agrees. *Negative control:* fix the front face to CCW regardless of handedness (the
+   wrong triangle is culled on Vulkan or with the Y-down matrix).
+
+**Pass condition per scene:** the harness image equals the analytical image within its stated tolerance on each
+available backend and the backends equal each other within the P1 spike's measured backend difference (0 to 3 of
+255 on trivial content, D8 point 1). A new backend or a Qt upgrade (D11) reruns the three scenes first.
+
+### Questions for the lead (N0.3)
+
+1. Rule 2 chooses **top-left, Y-down** for core-owned offscreen targets (the research file's choice), not OpenGL's
+   bottom-up. The alternative keeps OpenGL's bottom-up and flips on Vulkan, D3D and Metal; it leaves the existing
+   shaders untouched on OpenGL but makes every other backend the odd one. The draft prefers the former because
+   Vulkan is to be the front face.
+2. Reverse-Z (`D32F`, near at 1) is not proposed; it is a separate decision if depth precision at EB's near plane
+   (N1, "the beads at the near plane") calls for it.
+3. The conventions block is one binding reserved in every shader. Is a fixed binding index acceptable, or should it
+   be allocated by the pass-graph builder?
+
+## N0.4. The camera (proposed D5.5)
+
+*Proposed (draft for the lead), 12 Nov 2026. Nothing here is decided. Read at `7ac980d7`. One finding differs from
+the plan's wording ("the core receives finished matrices and rays from the worker"): today no finished matrix
+travels from the worker to the renderer at all, so "keeps receiving" is not available and the contract below says
+what has to be added.*
+
+### What is true in source
+
+- **One owner of the camera's math.** `core/settings/framed_camera.py` ("the standard physical camera for framed
+  3D Visualizer modes", header `:1-14`; "pure and Qt-free: admission, flight on the capture clock, Settings editors
+  and renderers all call it"): `FramedCameraSpec` per mode (`spec_for_mode`, `:94`; declared through the mode
+  descriptor's `framed_camera`, `core/settings/visualizer_mode_registry.py:163,400,441,473`), `camera_axes` (`:116`),
+  `camera_baseline` (`:174`), `bound_eye` (`:201`), `resolve_camera_position` (`:214`), `resolve_camera_frame`
+  (`:247`), `viewport_tangents` (`:259`), `effective_aperture_scale` (`:275`), `perspective_matrix` (`:286`),
+  `view_matrices` (`:292`), `project_point` (`:302`). The per-mode modules are thin (`extruded_bubble_camera.py:33-34`
+  forwards `camera_axes` with its `SPEC`; Neon Lake and Waveform Ribbon declare specs the same way).
+- **Three consumers build matrices from it, in three places, none of them the worker's tick:**
+  1. Extruded Bubble: `rendering/gl_programs/extruded_bubble_scene.py:233-268` (`camera`, `physical_camera`), called
+     once per rendered frame by the render thread (`rendering/quick/visualizer/implementations/extruded_bubble.py:427-433`)
+     with the parameters from the frame, `width / height` from the card's pixel rect and `aperture_scale` from the
+     presentation.
+  2. Waveform Ribbon: `core/waveform_ribbon_view.py:16-27` (`physical_view`, "the renderer draws with `physical_view`"),
+     called per frame by the render thread (`implementations/waveform_ribbon.py:64-65`) with
+     `framed_aperture_scale(presentation, content=True)` and the per-frame `state.zoom`; **and** by the logical side
+     (`card_span`, `waveform_ribbon_view.py:56-72`, "within a few percent of the renderer's": it uses the extent
+     without the shell inset).
+  3. Neon Lake: `rendering/gl_programs/neon_lake_basin_program.py:81,99` takes `camera_axes` in its program builders.
+- **What reaches a renderer today is parameters, not matrices:** the frame's `parameters` (turn, tilt, scene scale,
+  pan, camera position, fov) cross the mapping as plain values (the Extruded Bubble frame,
+  `logical_frame_capture.py:457`); the renderer asks `framed_camera` for the matrices each frame, with two inputs that
+  only the GUI side knows exactly: the card's pixel size and `framed_aperture_scale`
+  (`widgets/spotify_visualizer/presentation_geometry.py:456-468`, driven by edge resizing and CUSTOM stages).
+- **Rays are not arrays.** The shaders rebuild a view ray from the tangent pair: `framedRayDirection(ndc, span) =
+  normalize(vec3(ndc * span, -1.0))` (`rendering/gl_programs/framed_camera.py:14-16`; "the CPU projection matrix and
+  these ray uniforms are resolved from the same camera", `:3-4`). So "matrices and rays" is: the view (axes and eye),
+  the projection, and the tangent pair `tan` (two floats).
+- **The worker already receives the GUI's view inputs** at edges: `VIS_SET_VIEW` carries the layout metrics and the
+  presentation inputs that changed (`widgets/spotify_visualizer/engine_worker_link.py:579-620`; the owner's
+  `set_view_source`). It is latest-wins and one send per GUI turn at most; it is what lets the worker size
+  Waveform's travelling pulse.
+
+### Per-frame cost today (evidence)
+
+A pure-Python timing of the camera build, 2,000 laps in one process, no GL, no window (script
+`.artifacts/scratch/n04_camera/time_camera.py`, deleted afterwards; development machine at `7ac980d7`):
+`physical_camera` (Extruded Bubble, the whole per-frame build) median 6.6 us, p99 8.3 us; `view_matrices` median
+1.9 us; `project_point` median 3.8 us. **Cost per frame argues against nothing: no per-frame cost was found that
+justifies a second camera.** Waveform Ribbon's `physical_view` (which also admits the full parameter set through
+`resolve_camera_frame`) was not timed: it needs the mode's complete parameter record. The reason the build must
+still leave the render thread is not its cost but D5.4: a Python call there puts the GIL back on the render thread.
+
+### Proposed D5.5
+
+1. `core/settings/framed_camera.py` stays the **only** implementation of camera math. The core contains no
+   `perspective_matrix`, no `viewport_tangents`, no axes and no eye resolution; there is no second camera to keep in
+   step, in C++ or elsewhere.
+2. **Finished camera data is built on the Python side by that module and published per frame in the packet**, in the
+   fixed per-mode native schema (transport rule 3): the view (`view_to_world` and `world_to_view` as float32, the
+   eye as float32), the projection (a 4 by 4, in OpenGL form, corrected once at upload, N0.3 rule 1), and the tangent
+   pair `tan`. That is about 40 floats, 160 bytes a frame. The core does not derive any of it.
+3. **The builder runs where the inputs are exact.** The worker's tick builds the camera; this needs two numbers the
+   worker only has approximately today: the card's exact pixel aspect and the exact `framed_aperture_scale`
+   (`content=True`). They are added to the `VIS_SET_VIEW` record as two plain floats, resolved by the same GUI-side
+   functions the renderer calls now (`item_pixel_rect`, `framed_aperture_scale`), and sent at the edges where they
+   change (resize, CUSTOM edge resize, DPI), never per frame. The approximation of `card_span`
+   (`waveform_ribbon_view.py:59-60`) then ends: logical and render use the same record.
+4. Per-frame inputs that change with the music (Waveform's `state.zoom`, Dynamic Zoom) are inputs to the worker's
+   build, not to the core.
+5. **A framed mode's pixels are a function of the packet alone:** same packet, same camera.
+
+*Alternative, if the lead rejects 3:* the core receives the parameters and the two exact numbers and builds the
+matrices itself. That is a C++ port of about 30 lines of `framed_camera` arithmetic and a second owner to keep equal
+to the Python one (the thing the plan forbids), so the draft does not propose it; it is the fallback only if the
+worker's build proves to cost the tick.
+
+### Tests that fail without it
+
+- *Equality to today's renderer:* for a recorded parameter set and a range of card sizes and apertures (resized,
+  CUSTOM edge-resized, DPI changed), the matrices, eye and `tan` in the packet equal bit for bit (after the float32
+  narrowing the schema defines) what `physical_camera` and `physical_view` return for the same inputs. The oracle is
+  the existing renderer code. *Negative control:* build the packet camera with the approximate extent
+  (`card_span`'s extent without the shell inset); the test fails on a CUSTOM stage.
+- *One owner:* a test that greps the native sources and the schemas for a perspective or tangent construction fails
+  if one exists (negative control: add `tan(fov / 2)` to a core file).
+- *Resize edge:* an edge resize reaches the packet within the next worker tick (`VIS_SET_VIEW` latest-wins), and a
+  frame between the resize and the tick is drawn with the old camera and the old target size together, never a
+  mixed pair (the packet carries the extent it was built for; the core compares it with the target it draws into and,
+  on a mismatch, holds the previous frame, the existing latest-wins behaviour). *Negative control:* ignore the
+  stamp; a stretched frame appears.
+
+### Questions for the lead (N0.4)
+
+1. Confirm that the camera is built in the worker's tick (proposed) rather than in the Python presentation sync on
+   the GUI thread. The GUI route needs no change to `VIS_SET_VIEW` but puts about 7 us of Python on the GUI turn per
+   frame per window and leaves the packet camera-less (the core would wait for the GUI's snapshot, which is the
+   hybrid the plan wants to avoid).
+2. The exact aspect and aperture are two new floats in the view record. They change the stored shape of the
+   worker's view message (an internal protocol, not a persisted one); confirm no bridge is needed.
+3. Neon Lake builds its axes inside program builders (`neon_lake_basin_program.py:81,99`); under the proposal that
+   moves to the packet like the others. Confirm it is in scope of the Neon Lake port (N5.5), not of N0.
 
 ## Long-term risks of this direction, and what holds each (audit, 12 Nov 2026)
 

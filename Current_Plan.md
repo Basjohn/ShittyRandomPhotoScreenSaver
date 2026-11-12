@@ -238,19 +238,24 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     render admission and pass a render-thread quiescence barrier before close, recover or unlink); liveness is per
     stream, not per process; D9's job thread uses the same barrier. The test crashes or trips an assertion
     without the contract (close during copy, resize and remap, retire, worker replacement).
+    - Draft in the decisions document (lead to decide).
   - [ ] D2: one consuming reader (the core acknowledges presented frames and edges) and a non-consuming head read
     for the Python owner; a reader that retains a frame has an explicit drop edge (R-184), and the head read
     cannot resurrect a dropped frame.
+    - Draft in the decisions document (lead to decide).
   - [ ] D3: Extruded Bubble geometry once per (worker namespace, engine generation, activation, geometry
     revision, capacity), small per-frame state separately; retention and release on geometry changes, failed
     swaps, upload failures and teardown; CPU-only oracle data stays off the wire. (The worker's +34 MB at the
     first Waveform Ribbon is OpenBLAS's reserve, not geometry: D3 sizes nothing against it.)
+    - Draft in the decisions document (lead to decide).
   - [ ] The transport rule: nothing through the resource sharer; a name on POSIX, an exact-process handle on
     Windows. Fixed-layout per-mode native schemas; the tagged Python codec namespace reserved; an unsupported
     payload fails explicitly.
+    - Draft in the decisions document (lead to decide).
 - [ ] N0.5 The rest of D5 written (D5.1 to D5.4 are decided): resource ownership and lifetime per window and per
   device, admission and dormancy, device loss, and what a mode's native renderer may not do (no clock, no camera,
   no allocation per frame, no state setters, nothing that names Qt Quick).
+  - Draft in the decisions document (lead to decide).
 - [ ] N0.2 The dependency table accepted into D5: for each of the eighteen OpenGL dependencies of the research
   file, the QRhi route, the native pair if a D5.3 service applies, and the one chosen (the research's table A.2 as
   amended by D5.2 for the clip and D5.3 for the services).
@@ -260,9 +265,11 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   origin, front-face winding, std140 and std430 layout, sRGB and HDR formats. Every shader and matrix reads them
   from one place (one include with `fragUv`, `fragTexel`, `ndcToUv`; matrices corrected once at upload); the test
   scenes are a checkerboard with a gradient, a known-depth plane and one culled triangle.
+  - Draft in the decisions document (lead to decide).
 - [ ] N0.4 The camera: `core/settings/framed_camera.py` stays the one owner; the core receives finished matrices
   and rays from the worker (no second camera to keep in step) unless a per-frame cost shows otherwise. Written
   into D5.
+  - Draft in the decisions document (lead to decide).
 - [ ] N0.9 The module compile on GitHub (operator, 12 Nov: builds only through GitHub workflows; handbook
   section 8). No product C++; the two harness proofs below wait on it.
   - [ ] A dispatch-only workflow that compiles `native/spike_p1` (later the core) for a pushed ref on GitHub's
