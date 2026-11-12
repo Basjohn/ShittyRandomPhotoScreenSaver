@@ -698,6 +698,31 @@ def test_a_strength_diamond_exactly_under_a_node_and_the_node_both_take_a_press(
     surface.pump()
 
 
+@pytest.mark.parametrize("mode,prop_id", INSTRUMENTS)
+def test_hovering_onto_a_lane_tag_from_nothing_reads_no_missing_lane(studio, mode, prop_id):
+    """Operator log, 12 Nov: "Cannot read property 'pinned' of undefined" at the lane hint and cursor bindings. The
+    pointer's hover writes the part, then the index: arriving on a lane tag from empty space, the bindings saw part
+    "lane" with the previous index -1, which the guard ``hoverIndex < lanes.length`` let through to ``lanes[-1]``.
+    Real hover events from empty space onto every tag; no QML warning may name a TypeError."""
+    from tools.studio_shape_capture import Pointer, settle
+    controller, surface, _store = studio(mode)
+    row, well = _row(surface, controller, prop_id)
+    seen = []
+    surface.host.engine.warnings.connect(lambda errors: seen.extend(e.toString() for e in errors))
+    lanes, tags = row.property("lanes"), row.property("tagX").toVariant()
+    assert lanes and len(tags) == len(lanes)
+    y = float(row.property("tagT")) + float(row.property("tagH")) / 2.0
+    pointer = Pointer(surface, well)
+    for index in range(len(lanes)):
+        pointer.hover(1.0, y)                                   # empty space beside the tags: no part, index -1
+        assert (row.property("hoverPart"), row.property("hoverIndex")) == ("", -1)
+        pointer.hover(float(tags[index]) + 4.0, y)              # onto the tag
+        assert (row.property("hoverPart"), row.property("hoverIndex")) == ("lane", index)
+        surface.pump()
+    settle(surface, 0.05)
+    assert [text for text in seen if "TypeError" in text] == []
+
+
 def test_nothing_pops_a_layout_change_fades_through_and_nodes_fade_in_and_out(studio):
     """Fade, never vanish: on the frame after a layout change the canvas is not yet showing the new layout at full
     strength; a node added by the button eases in and a removed one leaves a fading mark where it was."""

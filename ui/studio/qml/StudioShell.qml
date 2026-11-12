@@ -849,6 +849,10 @@ Rectangle {
         property int hoverIndex: -1
         property real hoverX: 0
         property real hoverY: 0
+        // The hovered lane tag is pinned. One guarded read for every binding: the hover writes its part before its
+        // index, so a binding can see part "lane" with the previous index (-1, or past a shorter lane list).
+        readonly property bool hoverPinned: hoverPart === "lane" && hoverIndex >= 0 && hoverIndex < lanes.length
+                                            && lanes[hoverIndex].pinned === true
         property string dragPart: ""           // the part the pointer holds
         property var lastNodes: []
         property string stripPart: "node"      // the strip's last element (kept while the strip fades out)
@@ -867,8 +871,7 @@ Rectangle {
             if (hoverPart === "node") return shown.canRemove === true ? "Drag To Move  ·  Right-Click To Remove" : "Drag To Move"
             if (hoverPart === "strength") return "Drag To Set Its Strength"
             if (hoverPart === "lane")
-                return hoverIndex < lanes.length && lanes[hoverIndex].pinned === true ? "This Lane Stays Here"
-                                                                                       : "Drag To Move The Lane"
+                return hoverPinned ? "This Lane Stays Here" : "Drag To Move The Lane"
             return ""
         }
         property string lastHint: ""
@@ -1395,8 +1398,7 @@ Rectangle {
                     if (shp.hoverPart === "node") return Qt.OpenHandCursor
                     if (shp.hoverPart === "strength") return Qt.SizeVerCursor
                     if (shp.hoverPart === "lane")
-                        return shp.hoverIndex < shp.lanes.length && shp.lanes[shp.hoverIndex].pinned === true
-                               ? Qt.ArrowCursor : Qt.SizeHorCursor
+                        return shp.hoverPinned ? Qt.ArrowCursor : Qt.SizeHorCursor
                     return shp.hoverPart === "add" && shp.shown.canAdd === true ? Qt.CrossCursor : Qt.ArrowCursor
                 }
                 // The press goes to the nearer of the nearest node and the nearest strength marker. Where the two
