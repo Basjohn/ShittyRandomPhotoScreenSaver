@@ -273,6 +273,18 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     SDK here (the spike used the driver's loader and Vulkan-Headers only). Its download and install is the
     operator's approval (a download); without it N0.6 and N0.7 run their functional parts and record validation as
     owed. Then: validation clean through every N0.6 round (`run_n06.py --round device|lifecycle|translucent`).
+    - State 12 Nov (layer installed by the lead outside the registry, `--layer-path`; N0.7 build rounds 2 and 3,
+      71cac383 and 3bd851cd; whose each finding is: `Native_Core_N06_N07_Qt_Facts.md` section I): lifecycle and
+      translucent validated PASS apart from the recorded Qt 6.12.0 findings, each excused only by its id, text and
+      Qt caller (`run_n06.py` `QT_DEFECTS`): A (`QVkTexture::create` PREINITIALIZED with optimal tiling, every QRhi
+      texture) and D (Qt Quick's `grabWindow` on Vulkan, grab phases only). Device round: B (`createOffscreenRenderPass`
+      without an external dependency) reproduced on Qt's own device and ours, only with non-preserving targets; C
+      (`toVkAccess(TexColorOutput)` write-only) fixed in the harness by priming the target; one C left on the frame
+      after a readback, fixed by priming after every readback (build round 4, rerun owed:
+      `run_n06.py --round device --layer-path <L>`).
+    - The A excuse is removed when the project takes the next Qt 6.12 patch release (the 6.12 branch head already
+      creates textures with `UNDEFINED`): D11's upgrade rerun deletes A from `QT_DEFECTS` and every round must then be
+      clean without it.
   - [ ] Lead, Display 1 visible and bounded, when two displays are connected: a real translucent window on the
     module's device: see-through to the desktop (D7 point 8's first route; the hidden runs cannot read the composed
     alpha), with the DWM system backdrop and the project's glass, then the swapchain under resize, DPI change and
@@ -280,6 +292,27 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 - [ ] N0.7 D9's proof, in the same harness: the job thread, its queue and the latch; the six measurements of D9
   ("How it is proved"), with system conditions recorded. The verdict (jobs for compute on this vendor, or
   uploads only) is written into D9.
+  - Built (`native/spike_p1`: `src/vk_n07.*`, `shaders/n07_edge_*.comp`, `python/run_n07.py`, `python/n07_census.py`;
+    rounds jobs, measure, retire, rest, owners): one job thread with its own QRhi on our VkDevice and the second
+    queue (family 0, index 1), three slots per job kind published by one atomic generation, Qt's QRhi importing
+    the slot (`createFrom`, layouts handed over with `setNativeLayout`), the edge field's five compute stages ported
+    at 3840x2160 as the heavy job, the same bodies in-frame, a paced hidden host at the display's 164.8 Hz.
+  - Round 1 (5475b04d, no layer): jobs, measure, rest PASS; second QRhi works (created, own queue, readback exact);
+    upload and edge-field outputs hash-identical in-frame and as jobs, negative controls differ; 0 Python thread
+    states on the job thread and frame driver; 60 s at rest 0 wake-ups and 0 cycles (9,890 latch reads); measure:
+    in-frame 40 of 1200 frames late (completion p99 34.0 ms), job 0 late (p99 2.94 ms), none 0 late (p99 3.78 ms).
+    Retire FAIL on handles (+19 for +15).
+  - Round 2 (71cac383): the retire step was Qt's GUI thread pool ("Thread (pooled)") started by QPainter's large
+    antialiased fills on the job thread (`qdrawhelper.cpp` `QT_THREAD_PARALLEL_FILLS`; reproduced in a plain
+    process, `.artifacts/evidence/native_core/n07/20261112_n07_qt_pool_probe/`), plus the round's baseline read before
+    the warm-up finished; validation attributed (facts section I: A to D are Qt 6.12.0's).
+  - Round 3 (3bd851cd): photo written pixel by pixel, baseline after two warm-up cycles, targets primed: owners PASS
+    (host 3.0 handles per cycle, job service, jobs and both abandon routes 0.0, no pooled threads), retire PASS (12
+    cycles retired with the job's GPU work in flight, handles +30 for +30, threads 0, GPU heaps 0, private plateau),
+    validated jobs, retire and rest PASS (only A), measure PASS (in-frame 40 late, completion p99 32.2 ms; job 0 late,
+    p99 2.06 ms; none 0 late, p99 2.20 ms). Verdict drafted at the end of D9 ("Proposed (draft for the lead)").
+  - Owed: build round 4 (prime after readback, `quick_offscreen.cpp`) and the validated N0.6 device rerun (N0.6's
+    validation box); the lead's decision on the D9 draft.
 - N0.8 done 12 Nov: PySide6/Qt 6.12.0 (655b04bf; focused Qt Quick, shader and render set 372 of 373 green; the one
   red was Qt's own sync resetting the array-buffer binding, which the handoff probe had attributed to our code:
   the probe now measures around our adopting code and the background node's setup restores inherited bindings,

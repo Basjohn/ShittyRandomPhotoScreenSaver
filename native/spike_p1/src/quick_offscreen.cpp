@@ -83,9 +83,12 @@ namespace {
 // whose render pass loads its contents (PreserveColorContents, loadOp LOAD) is moved to
 // COLOR_ATTACHMENT_OPTIMAL by QRhi's resource tracker with dstAccessMask COLOR_ATTACHMENT_WRITE only (the
 // TexColorOutput access), so the pass's load reads after that layout transition without a dependency
-// (SYNC-HAZARD-READ-AFTER-WRITE, the first frame). The harness records that first transition itself, with READ and
-// WRITE in the second scope, in an offscreen frame of the same QRhi before Qt Quick renders, and tells QRhi the
-// layout (setNativeLayout); from then on the layout never changes. Vulkan only; returns what was done.
+// (SYNC-HAZARD-READ-AFTER-WRITE). That happens on the first frame and again on the first frame after any other use
+// of the target (build round 3: a readback moved it to TRANSFER_SRC_OPTIMAL and the next frame's transition back
+// raised the same hazard). So the harness records the transition to COLOR_ATTACHMENT_OPTIMAL itself, with READ and
+// WRITE in the second scope and every earlier command and write in the first (ALL_COMMANDS, MEMORY_WRITE: after a
+// transfer read or a store), in an offscreen frame of the same QRhi, at creation and after every readback of the
+// target, and tells QRhi the layout (setNativeLayout). Vulkan only; returns what was done.
 QString primeColorTargetForLoad(QRhi *rhi, QRhiTexture *texture)
 {
     if (!rhi || !texture || rhi->backend() != QRhi::Vulkan)
@@ -102,7 +105,7 @@ QString primeColorTargetForLoad(QRhi *rhi, QRhiTexture *texture)
     const auto *cbHandles = static_cast<const QRhiVulkanCommandBufferNativeHandles *>(cb->nativeHandles());
     VkImageMemoryBarrier barrier = {};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.srcAccessMask = 0;
+    barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
     barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     barrier.oldLayout = VkImageLayout(native.layout); // PREINITIALIZED on Qt 6.12.0 (finding A), else UNDEFINED
     barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -113,7 +116,7 @@ QString primeColorTargetForLoad(QRhi *rhi, QRhiTexture *texture)
     barrier.subresourceRange.levelCount = 1;
     barrier.subresourceRange.layerCount = 1;
     if (cbHandles && cbHandles->commandBuffer) {
-        df->vkCmdPipelineBarrier(cbHandles->commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        df->vkCmdPipelineBarrier(cbHandles->commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                                  VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1,
                                  &barrier);
     }
@@ -207,6 +210,10 @@ QuickFramesResult QuickOffscreenSession::frames(QObject *animated, int count, co
             m_control->endFrame(); // offscreen frame: completes synchronously
         });
         res.frameMs << double(timer.nsecsElapsed()) / 1.0e6;
+    }
+    if (!pngPath.isEmpty() && m_preserveColor) {
+        // The readback left the target in TRANSFER_SRC_OPTIMAL: prime it again before any later frame loads it.
+        m_host->runBlocking([&]() { m_primeNote = primeColorTargetForLoad(m_control->rhi(), m_target.texture); });
     }
     if (!pngPath.isEmpty()) {
         const QImage image = imageFromReadback(readback.data, readback.pixelSize, yUp);

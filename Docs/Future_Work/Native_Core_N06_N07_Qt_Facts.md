@@ -503,11 +503,16 @@ exists in the native surfaces. Worth a Qt bug report with the one-line fix (an e
 **C. `SYNC-HAZARD-READ-AFTER-WRITE` at `vkCmdBeginRenderPass` with `loadOp LOAD` (the first frame of a preserving
 target): Qt's QRhi.** On both devices, once per target. [SRC] `v6.12.0` `toVkAccess(TexColorOutput)` returns
 `VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT` only, and `recordTransitionPassResources` sets `barrier.dstAccessMask` from it,
-so the first transition to `COLOR_ATTACHMENT_OPTIMAL` does not make the image visible to the pass's load (a read).
-Harness fix (ours, `quick_offscreen.cpp` `primeColorTargetForLoad`): once per target, in an offscreen frame of the
-same QRhi before Qt Quick renders, the harness records that transition itself (`beginExternal`, a barrier to
-`COLOR_ATTACHMENT_OPTIMAL` with `COLOR_ATTACHMENT_READ | WRITE`), then `setNativeLayout`; the layout never changes
-again. Never excused. The native core's route is the same priming for each of its render targets at creation.
+so any transition to `COLOR_ATTACHMENT_OPTIMAL` does not make the image visible to the pass's load (a read). It
+happens on a target's first frame and again on the first frame after any other use of it: build round 3's device
+round showed it once more on our device's host, on the frame after the negative control's readback (the readback
+had moved the target to `TRANSFER_SRC_OPTIMAL`; the host on Qt's own device, which reads back only on its last
+frame, stayed clean). Harness fix (ours, `quick_offscreen.cpp` `primeColorTargetForLoad`): at creation and after
+every readback of the target, in an offscreen frame of the same QRhi, the harness records the transition itself
+(`beginExternal`, a barrier to `COLOR_ATTACHMENT_OPTIMAL`, first scope `ALL_COMMANDS`/`MEMORY_WRITE`, second scope
+`COLOR_ATTACHMENT_READ | WRITE`), then `setNativeLayout`. Never excused. The native core's route: each of its render
+targets is primed at creation, and a target read back or sampled is primed again before its next loading pass (or
+the readback reads a copy).
 
 **D. `SYNC-HAZARD-WRITE-AFTER-PRESENT`, `SYNC-HAZARD-WRITE-AFTER-READ` and `UNASSIGNED-non-acquired-swapchain-image-used`
 (real windows): Qt Quick's `grabWindow` on Vulkan, with Qt's QRhi.** Only in the translucent round's grab phases, on
@@ -532,9 +537,13 @@ no QPainter and no QImage conversion on the job thread or the render thread.
 
 **Conditions seen.** A third-party graphics hook, `we-graphics-hook64.dll`, is injected into the Python process and
 sits in the call chain of `vkCmdBeginRenderPass` (it shows above `Qt6Gui.dll` in finding C's stacks); it owns none
-of the findings, but it is part of every measurement on this machine and is recorded as such.
+of the findings, but it is part of every measurement on this machine and is recorded as such. `windhawk.dll` is
+injected too (one thread). The one-time thread step in the first cycles of the owners and retire rounds (+23
+threads) is numpy's OpenBLAS pool (`libscipy_openblas64_*.dll`), started by the harness's own census on its first
+numpy use, plus one `WINMM.dll` timer thread; both before the baseline, neither ours in the product sense.
 
 **U1 and U3 under validation.** No message names the second QRhi, the job queue or the latch path in the validated
 jobs, rest, measure and retire rounds: a second QRhi on our VkDevice on the second queue is clean (U1), and the job's
 writes followed by its host-side completion edge and Qt's queue reading the slot (copy and readback) raise no
-synchronisation hazard (U3). Confirmed again once the rerun with C fixed is clean.
+synchronisation hazard (U3). Build round 3 (`3bd851cd`, C primed): the validated jobs, retire and rest rounds have
+no message but A (10, 60 and 10, all QRhi texture creations).
