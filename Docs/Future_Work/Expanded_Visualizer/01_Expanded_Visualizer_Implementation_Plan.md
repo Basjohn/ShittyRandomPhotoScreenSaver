@@ -1189,8 +1189,8 @@ can most geometry normally."
   the left end; 100% and 150%; frames and 2x row crops; the first form's are `20261111_two_glyphs/`). Owed: the
   operator's physical check on two or more monitors (the arrows from each display, a move between monitors of
   different size or DPR and its fades).
-- *Display moves retarget the live owner, never rebuild it (Current_Plan 1C.2; decided 12 Nov, awaiting the lead's
-  confirmation; supersedes the move's "collapse, transfer, expand" form above and in D4).* Operator, 11 Nov: "we do
+- *Display moves retarget the live owner, never rebuild it (Current_Plan 1C.2; decided 12 Nov, confirmed by the
+  lead the same day; supersedes the move's "collapse, transfer, expand" form above and in D4).* Operator, 11 Nov: "we do
   not want teardowns and rebuilds unless absolutely needed. They are a last resort." It binds every path that moves
   the Visualizer between displays: the full-display glyphs, Edit's display hop, the hover transfer arrows, and (box 6
   of 1C.2) a display arrangement change.
@@ -1261,6 +1261,30 @@ can most geometry normally."
        Reducer: `BeginTransfer` says whether the target ends expanded; the user's "full display there" persists the
        intent at the transfer's commit (as the glyph's enter does at its commit) instead of a second enter; a refused
        move fades the view back in on the source in its own route.
+  - **Built (12 Nov, 1C.2 boxes 3-4):** as decided above; `move_visualizer_to_display` binds the source and target
+    scenes as a direct gesture does and returns False when Save still ends in a reload; `QuickDisplayVisualizerOwner.
+    move_display` (warm, out, hop at zero, hold until the history landed, in; each step at a publication edge, the
+    warm and the hold bounded by the prepared reveal's 1.5 s); `ExpandedDisplayCoordinator._run_display_move`;
+    `BeginTransfer.end_expanded` (the user's "full display there" persists at the transfer's commit);
+    `QuickSceneController.begin_visualizer_prewarm` (the target card at 0.002 opacity, content at zero, the render
+    host's own preparation units); `VisualizerRenderCarryover` and `DriftSolver.export` / `adopt`. Tests
+    `tests/test_visualizer_display_move_retarget.py`, `tests/test_visualizer_display_move_gpu.py`; R-NEW.
+  - **The other paths that move or re-admit the Visualizer (1C.2 box 6, audited 12 Nov):**
+    - *Edit's display hop* (the arrows and a drag across the seam): retargets. Same owner, controller, session and
+      render identity (Edit's hop + Save requested nothing even before 1C.2), and the scene transfer now carries
+      Extruded Bubble's drift history. Not prewarmed and not faded: the target is known only when the gesture
+      crosses, and inside Edit the card is the working card that follows the gesture at full opacity, so its first
+      frame on the target still builds the renderer there (about 70-105 ms measured, warm program cache). Follow-up
+      (wording for the lead): prewarm the adjacent display when a drag nears the seam.
+    - *The hover transfer arrows* (`_route_hover_edit_glyph` "transfer_left/right"): enter the one Edit session and run
+      Edit's hop (`transferItem`), so exactly as above; the target is known at the hover, so a prewarm there is
+      possible (same follow-up).
+    - *A display arrangement change, a display added or removed, the owning display lost*: rebuild, by design. The
+      monitor reconcile replaces the generation whenever the screen signature (identity and geometry) changes: every
+      display window is replaced, and the Visualizer owner is generation-owned work behind the hard retirement
+      barrier (Visualizer_Presentation §14B, §15), so it cannot outlive its windows; the intent is restored at the new
+      generation's readiness. Retargeting across a topology change would need an owner that outlives its generation
+      (an SMP-readiness item, not this one).
   - **Native core (a contract it keeps):** the cross-window move of a mode's GPU-held history survives the native
     core: with one device per window (D6) the handoff there is a copy through the job thread (D9), not a shared
     name (Current_Plan item 8b, N3.9).

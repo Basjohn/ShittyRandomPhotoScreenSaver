@@ -87,6 +87,28 @@ windows on an SMP profile build that has no compositor. A change to presentation
 4. Custom drawing (the native core included) renders into whatever surface its host provides, with no dependency
    on the image compositor being present.
 
+## Retarget before rebuild (operator, 11 Nov 2026; Current_Plan 1C.2, R-NEW)
+
+"We do not want teardowns and rebuilds unless absolutely needed. They are a last resort." A change that moves or
+re-admits something live (the Visualizer between displays, a widget between hosts, a later SMP surface) answers, before
+any code:
+
+1. **Which owner survives?** The logical owner and its state (controller, session, simulation, history, adaptive
+   levels, revision counter) are retargeted, never retired and reconstructed. A test pins their identity across the
+   move, in both directions.
+2. **Which GPU resources really cannot cross?** The display windows share one GL share group (`AA_ShareOpenGLContexts`):
+   buffers, textures and programs are valid in every window; VAOs and framebuffers are not. History held on the GPU is
+   handed over (fenced), never restarted; per-context objects are rebuilt in the target, prepared before the swap
+   (`begin_visualizer_prewarm`), never on its first visible frame.
+3. **How does it look?** One fade-through whose midpoint is the move: out where it is, the move at zero opacity, in where
+   it lands. No intermediate state shown, nothing vanishes or pops, no empty card.
+4. **Can it still end in a rebuild?** A seam that may fall back to a reload or a reconstruction says so in its result
+   and is never counted as success; its caller does not report a move that was a rebuild. Never stub the commit a move
+   test is about (R-NEW hid behind a stubbed `commit_live_custom_layout`).
+
+A teardown remains only where the owning context itself is replaced (a topology change, Settings, classified
+corruption), and the change names that case and why.
+
 ## Acceptance
 
 Use the relevant subset:
