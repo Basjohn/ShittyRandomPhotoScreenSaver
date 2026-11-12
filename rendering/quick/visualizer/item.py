@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from dataclasses import replace
 
 from PySide6.QtCore import Slot, Qt
 from PySide6.QtQuick import QQuickItem, QQuickWindow, QSGNode
@@ -79,6 +80,7 @@ class _RenderNodeRetirement:
         self._window: QQuickWindow | None = None
         self._latest_mode_id: str | None = None
         self._pending_event: _RetirementEvent | None = None
+        self._carryover = None
 
     def set_window(self, window: QQuickWindow | None) -> None:
         with self._lock:
@@ -156,9 +158,16 @@ class _RenderNodeRetirement:
             self._latest_mode_id = mode_id
 
     def request_inactive_release(self, *, window: QQuickWindow | None,
-                                 active_mode_id: str | None) -> None:
+                                 active_mode_id: str | None, carryover=None) -> None:
+        """``carryover`` (a display move's source, 1C.2): the release hands a moved mode's history to it, whichever
+        pending release runs; with no node to release it closes empty at once."""
         with self._lock:
             self._latest_mode_id = active_mode_id
+            if carryover is not None:
+                if self._node is None or window is None:
+                    carryover.close()
+                else:
+                    self._carryover = carryover
             if window is None or self._node is None or self._pending_event is not None:
                 return
             if window is not self._window:
@@ -172,12 +181,15 @@ class _RenderNodeRetirement:
                 return
             self._pending_event = None
             node, mode_id = self._node, self._latest_mode_id
+            carryover, self._carryover = self._carryover, None
         if node is not None:
             try:
-                node.release_inactive_implementations(mode_id)
+                node.release_inactive_implementations(mode_id, carryover)
             except Exception as exc:
                 self._telemetry.note_error(f"visualizer inactive retirement failed: {exc}")
                 logger.exception("[QUICK] Visualizer inactive retirement failed")
+        elif carryover is not None:
+            carryover.close()
 
     def invalidate(self) -> None:
         self._telemetry.note_invalidation()
@@ -185,8 +197,11 @@ class _RenderNodeRetirement:
             node, self._node = self._node, None
             pending, self._pending_event = self._pending_event, None
             self._latest_mode_id = None
+            carryover, self._carryover = self._carryover, None
         if pending is not None:
             pending.cancel()
+        if carryover is not None:
+            carryover.close()        # the context is going: whatever history it held goes with it
         if node is not None:
             node.releaseResources()
 
@@ -212,6 +227,12 @@ class VisualizerRenderItem(QQuickItem):
         self._presentation: ResolvedVisualizerPresentation | None = None
         self._custom_layout_presentation_authority = False
         self._drop_retained = False
+        # A display move's target before its swap (1C.2): the identity it will be given and the latest snapshot the
+        # owner handed over, drawn only at zero content opacity so the render host prepares; never a render source.
+        self._prewarm_identity: VisualizerRenderIdentity | None = None
+        self._prewarm_snapshot: VisualizerRenderSnapshot | None = None
+        # A display move's history box, handed to the node's render host at the next sync.
+        self._expected_carryover = None
         self._bound_window: QQuickWindow | None = None
         self._diag_last_render_playing: bool | None = None
         self._diag_spectrum_handoff_remaining = 0
@@ -274,22 +295,74 @@ class VisualizerRenderItem(QQuickItem):
             return
         self._bridge = bridge
         self._identity = identity
+        # A prewarmed target (1C.2) keeps what it prepared: the same identity reaches the node unchanged.
+        self._prewarm_identity = None
+        self._prewarm_snapshot = None
         self._retirement.request_inactive_release(
             window=self._bound_window,
             active_mode_id=identity.mode_id,
         )
         self.update()
 
-    def clear_render_source(self) -> None:
+    def clear_render_source(self, carryover=None) -> None:
+        """``carryover``: the source moved to another display (1C.2); its release hands a mode's history there."""
         if self._bridge is None and self._identity is None:
+            if carryover is not None:
+                carryover.close()
             return
         self._bridge = None
         self._identity = None
         self._retirement.request_inactive_release(
             window=self._bound_window,
             active_mode_id=None,
+            carryover=carryover,
         )
         self.update()
+
+    def expect_carryover(self, carryover) -> None:
+        """GUI thread: this item is a display move's target; its render host takes the source's history when it lands."""
+        self._expected_carryover = carryover
+        self.update()
+
+    def begin_prewarm(self, identity: VisualizerRenderIdentity) -> None:
+        """GUI thread: prepare ``identity``'s renderer here, on this window's render thread, before the swap (1C.2).
+
+        Nothing is admitted: the item draws handed-over snapshots at zero content opacity only, so the render host's
+        preparation units run (``prepared_reveal``'s path); ``bind_render_source`` with the same identity keeps them.
+        """
+        if self._identity is not None:
+            raise RuntimeError("a visualizer item with a render source cannot be prewarmed")
+        if not isinstance(identity, VisualizerRenderIdentity):
+            raise TypeError("visualizer prewarm requires a VisualizerRenderIdentity")
+        self._prewarm_identity = identity
+        self._prewarm_snapshot = None
+        self.update()
+
+    def feed_prewarm(self, snapshot: VisualizerRenderSnapshot | None) -> None:
+        """GUI thread: the newest published snapshot, while prewarming (one is enough; later ones keep it fresh)."""
+        identity = self._prewarm_identity
+        if identity is None or snapshot is None:
+            return
+        logical = snapshot.logical
+        if (logical.runtime_generation, logical.engine_generation, logical.activation_id, logical.mode_id) != (
+                identity.runtime_generation, identity.engine_generation, identity.activation_id, identity.mode_id):
+            return
+        self._prewarm_snapshot = snapshot
+        self.update()
+
+    def end_prewarm(self) -> None:
+        """GUI thread: the move did not reach this display; what was prepared is released (an edge)."""
+        if self._prewarm_identity is None:
+            return
+        self._prewarm_identity = None
+        self._prewarm_snapshot = None
+        if self._identity is None:
+            self._retirement.request_inactive_release(window=self._bound_window, active_mode_id=None)
+        self.update()
+
+    @property
+    def prewarming(self) -> bool:
+        return self._prewarm_identity is not None
 
     def drop_retained_frame(self) -> None:
         """GUI thread: the node stops drawing the snapshot it retains, at the next sync; the source stays bound.
@@ -378,6 +451,17 @@ class VisualizerRenderItem(QQuickItem):
         bridge = self._bridge
         identity = self._identity
         snapshot = None
+        expected_carryover = self._expected_carryover
+        if expected_carryover is not None:
+            self._expected_carryover = None
+            node.render_host.expect_carryover(expected_carryover)
+        if identity is None and self._prewarm_identity is not None:
+            # A display move's target before its swap (1C.2): draw only at zero content opacity, so the render host
+            # prepares this activation's renderer on this window's own render thread and context.
+            identity = self._prewarm_identity
+            pending, self._prewarm_snapshot = self._prewarm_snapshot, None
+            if pending is not None and presentation is not None:
+                snapshot = replace(pending, presentation=replace(presentation, content_fade=0.0))
         clear_snapshot = presentation is None or identity is None
         if bridge is not None and identity is not None and presentation is not None:
             if not self._custom_layout_presentation_authority:

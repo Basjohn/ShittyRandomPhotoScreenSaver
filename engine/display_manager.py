@@ -3529,6 +3529,7 @@ class DisplayManager(QObject):
             cover_widgets=_cover_ordinary_widgets,
             end_fullscreen_edit=lambda: _call("_end_fullscreen_overlay_edit"),
             move_to_display=lambda display: bool(_call("_move_quick_visualizer_to_display", display, default=False)),
+            display_unit=lambda display: _call("_quick_unit_for_display", display, default=None),
         ))
         self._expanded_display_coordinator = coordinator
         # The full-display overlays' inputs exist only where a takeover can draw them (M3b).
@@ -3617,11 +3618,15 @@ class DisplayManager(QObject):
             return False
         return coordinator.expand_on_display(unit, target)
 
-    def _move_quick_visualizer_to_display(self, display: str) -> bool:
-        """The takeover's display move (plan 1B.12): the Edit owner's chrome-less hop and Save onto that display."""
+    def _quick_unit_for_display(self, display: str) -> QuickDisplayUnit | None:
+        """The live unit a takeover event's display key names (the move's target, 1C.2)."""
         from widgets.spotify_visualizer.expanded_display_coordinator import display_key
 
-        target = next((live for live in self._live_quick_units() if display_key(live) == display), None)
+        return next((live for live in self._live_quick_units() if display_key(live) == display), None)
+
+    def _move_quick_visualizer_to_display(self, display: str) -> bool:
+        """The takeover's display move (plan 1B.12): the Edit owner's chrome-less hop and Save onto that display."""
+        target = self._quick_unit_for_display(display)
         if target is None:
             return False
         moved = self._quick_custom_layout_owner.move_visualizer_to_display(target)

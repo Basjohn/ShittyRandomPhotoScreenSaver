@@ -56,6 +56,70 @@ def create_lifecycle_telemetry_if_admitted() -> (
 
 
 
+class VisualizerRenderCarryover:
+    """A mode's render-thread history carried across a display move (1C.2): one box per move, made by the scene
+    transfer, filled once on the source window's render thread and emptied once on the target's.
+
+    Only history goes in (Extruded Bubble's drift state: storage buffers integrated on the GPU); everything else a
+    renderer owns is rebuilt in the target's context. The display windows' contexts share one share group
+    (``AA_ShareOpenGLContexts``, set before Qt starts), so a buffer named in one is valid in the other; the depositor
+    fences its last use and the taker waits on the fence. ``take`` refuses (and logs) a payload from a context that
+    does not share with the taker's: the history then restarts there, as a lifecycle event. Thread-safe; no GL here.
+    """
+
+    def __init__(self) -> None:
+        import threading
+
+        self._lock = threading.Lock()
+        self._payloads: dict[str, object] = {}
+        self._context = None
+        self._closed = False
+
+    @property
+    def closed(self) -> bool:
+        """The source has deposited whatever it had (or had nothing): the target may take it now."""
+        with self._lock:
+            return self._closed
+
+    def deposit(self, mode_id: str, payload: object) -> None:
+        """Source render thread, its context current: one mode's history."""
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("visualizer render carryover already closed")
+            self._payloads[str(mode_id)] = payload
+            self._context = QOpenGLContext.currentContext()
+
+    def close(self) -> None:
+        with self._lock:
+            self._closed = True
+
+    def take(self, mode_id: str) -> object | None:
+        """Target render thread, its context current: the history for ``mode_id`` (once), or None."""
+        with self._lock:
+            if not self._closed:
+                return None
+            payload = self._payloads.pop(str(mode_id), None)
+            source = self._context
+        if payload is None:
+            return None
+        current = QOpenGLContext.currentContext()
+        if source is None or current is None or not QOpenGLContext.areSharing(source, current):
+            logger.error("[QUICK] Visualizer %s history crossed to a window whose context does not share with its "
+                         "source; the history restarts there", mode_id)
+            return None
+        return payload
+
+    def take_all(self) -> dict[str, object]:
+        """Whatever was never taken (a move abandoned after the deposit), for discarding in a sharing context."""
+        with self._lock:
+            payloads, self._payloads = self._payloads, {}
+            source = self._context
+        current = QOpenGLContext.currentContext()
+        if not payloads or source is None or current is None or not QOpenGLContext.areSharing(source, current):
+            return {}
+        return payloads
+
+
 # Hidden frames (content fade 0, as during a mode or preset reveal's waiting phase) let a renderer
 # that offers ``prepare_step`` compile or allocate one unit, at least this far apart, so no two
 # nearby frames of the window both carry a compile. Measured at the first visible frame before
@@ -89,6 +153,8 @@ class QuickVisualizerRenderHost:
         # Written only on preparation edges (never per steady frame), read by the GUI (one reference, no lock).
         self._preparation: tuple[tuple[str, int], int] | None = None
         self._next_prepare_at = 0.0
+        # A display move's carried history, expected by this (target) host until its source has deposited it (1C.2).
+        self._carryover: VisualizerRenderCarryover | None = None
         # Opt-in only: injected telemetry (tests/tools) wins; otherwise consult
         # the process experiment admission. ``None`` == disabled == no new
         # allocation/lock/bookkeeping for ordinary Standard/MC runtime.
@@ -201,6 +267,14 @@ class QuickVisualizerRenderHost:
             if self._lifecycle is not None:
                 self._lifecycle.note_resolve(mode_id)
         self._ensure_quad()
+        carryover = self._carryover
+        if carryover is not None and carryover.closed:
+            # A display move's history (1C.2), taken once its source deposited it, before this mode draws again.
+            self._carryover = None
+            payload = carryover.take(mode_id)
+            adopt = getattr(implementation, "adopt_carryover", None)
+            if payload is not None and callable(adopt):
+                adopt(payload)
         if mode_changed:
             self._record_ownership()
         frame = QuickVisualizerRenderFrame(
@@ -300,7 +374,15 @@ class QuickVisualizerRenderHost:
                 active_mode_id,
             )
 
-    def release_inactive_implementations(self, active_mode_id: str | None) -> None:
+    def expect_carryover(self, carryover: VisualizerRenderCarryover | None) -> None:
+        """Render thread (at sync): this host is a display move's target; take the source's history when it lands."""
+        self._carryover = carryover
+
+    def release_inactive_implementations(
+        self,
+        active_mode_id: str | None,
+        carryover: VisualizerRenderCarryover | None = None,
+    ) -> None:
         """Release cached renderers that cannot draw the current snapshot.
 
         This method is intentionally render-thread-only.  A failed renderer
@@ -309,8 +391,18 @@ class QuickVisualizerRenderHost:
         implementations are removed immediately.
         The shared quad belongs to the host and remains available for the active
         mode.
+
+        ``carryover``: this host's display just moved away (1C.2). A renderer that keeps history
+        (``export_carryover``) hands it over before it releases the rest; the box closes either way.
         """
 
+        try:
+            self._release_inactive(active_mode_id, carryover)
+        finally:
+            if carryover is not None:
+                carryover.close()
+
+    def _release_inactive(self, active_mode_id: str | None, carryover: VisualizerRenderCarryover | None) -> None:
         active = (
             None
             if active_mode_id is None
@@ -331,6 +423,11 @@ class QuickVisualizerRenderHost:
         successes = 0
         for mode_id, implementation in inactive:
             try:
+                export = getattr(implementation, "export_carryover", None)
+                if carryover is not None and callable(export):
+                    payload = export()
+                    if payload is not None:
+                        carryover.deposit(mode_id, payload)
                 implementation.release_resources()
             except Exception as exc:
                 errors.append(f"{mode_id}:{type(exc).__name__}:{exc}")
@@ -357,6 +454,13 @@ class QuickVisualizerRenderHost:
             )
 
     def release_resources(self) -> None:
+        carryover, self._carryover = self._carryover, None
+        if carryover is not None and carryover.closed and QOpenGLContext.currentContext() is not None:
+            # A move's history that never reached a frame here: its names are shared, so they die in this context.
+            for payload in carryover.take_all().values():
+                discard = getattr(payload, "discard", None)
+                if callable(discard):
+                    discard()
         if not self.has_resources:
             return
         if QOpenGLContext.currentContext() is None:

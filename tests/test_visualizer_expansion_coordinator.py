@@ -76,7 +76,28 @@ class _Owner:
                 on_complete()
         return True
 
+    def move_display(self, runtime, *, end_expanded, hop, on_fade_out=None, on_fade_in=None, on_complete=None):
+        """One display move as one fade-through (1C.2): recorded as ("move", end_expanded); ``finish`` runs it."""
+        if self.is_retired:
+            return False
+        self.calls.append(("move", bool(end_expanded)))
+        self.pending = ("move", runtime, bool(end_expanded), hop, on_fade_out, on_fade_in, on_complete)
+        return True
+
     def finish(self) -> None:
+        if self.pending[0] == "move":
+            _kind, _runtime, end_expanded, hop, on_fade_out, on_fade_in, on_complete = self.pending
+            self.pending = None
+            source = self.expanded_display
+            if on_fade_out is not None:
+                on_fade_out()
+            moved = bool(hop())                         # at zero opacity, on the ordinary card
+            self.expanded_display = end_expanded if moved else source
+            if on_fade_in is not None:
+                on_fade_in(moved)
+            if on_complete is not None:
+                on_complete(moved)
+            return
         expanded, on_complete = self.pending
         self.pending = None
         self.expanded_display = expanded
@@ -458,7 +479,8 @@ class _TwoDisplays(_Host):
         self.units = (self.unit, _unit(1, "second"))
         services = self.coordinator._services
         from dataclasses import replace
-        self.coordinator._services = replace(services, move_to_display=self._move)
+        self.coordinator._services = replace(services, move_to_display=self._move, display_unit=lambda key: next(
+            (unit for unit in self.units if display_key(unit) == key), None))
 
     def _move(self, display: str) -> bool:
         self.moves.append(display)
@@ -482,15 +504,19 @@ def test_a_display_glyph_on_the_cards_own_display_is_its_plain_expand_and_collap
 
 
 def test_a_display_glyph_for_the_other_display_moves_then_expands_there_as_one_user_action():
+    """1C.2: one fade-through across the displays ends display-wide on the target: no ordinary card in between and
+    no second enter; the commit persists the intent as the glyph's own enter does."""
     host = _TwoDisplays()
     host.coordinator.generation_ready()
     source, target = host.units
     assert host.coordinator.expand_on_display(source, target)
-    assert host.moves == [display_key(target)] and host.unit is target
-    assert host.coordinator.phase is Phase.ENTERING                       # the enter runs on the target
-    assert host.covers[-1] == (display_key(target), True, HALF)
+    assert host.coordinator.phase is Phase.TRANSFER_PENDING and host.owner.calls == [("move", True)]
+    assert host.moves == []                                               # nothing moves before the fade's midpoint
     host.owner.finish()
+    assert host.moves == [display_key(target)] and host.unit is target
+    assert host.covers[-1] == (display_key(target), True, HALF)            # its widgets leave with the arrival
     assert host.coordinator.phase is Phase.EXPANDED and host.writes == [True]   # persisted as the glyph's own
+    assert host.owner.calls == [("move", True)]                            # one transaction, never a second enter
     assert host.glyphs[-1] == (display_key(target), True, True)
 
 
@@ -499,30 +525,32 @@ def test_a_refused_move_stays_collapsed_on_the_source():
     host.coordinator.generation_ready()
     source, target = host.units
     host.coordinator.expand_on_display(source, target)
+    host.owner.finish()
     assert host.moves == [display_key(target)] and host.unit is source
-    assert host.coordinator.phase is Phase.ORDINARY and host.owner.calls == [] and host.writes == []
+    assert host.coordinator.phase is Phase.ORDINARY and host.owner.calls == [("move", True)] and host.writes == []
+    assert not host.owner.expanded_display and host.covers == []           # it faded back in where it was
     assert host.glyphs[-1] == (display_key(source), True, False)
 
 
 @pytest.mark.parametrize("accept", [True, False])
 def test_the_other_displays_glyph_moves_an_expanded_view_expanded(accept):
-    """While expanded the card's own display glyph collapses; the other moves the view there expanded: collapse on
-    the source (its widgets fade back), the move, expand on the target (its widgets fade out). A refused move
-    re-expands on the source, so the rollback finds it exactly as it was; the intent is never written."""
+    """While expanded the card's own display glyph collapses; the other moves the view there expanded, as one
+    fade-through (1C.2): it fades out display-wide on the source (its widgets fade back), moves at zero opacity, and
+    fades in display-wide on the target (its widgets fade out). A refused move fades it back in display-wide on the
+    source, so the rollback finds it exactly as it was; the intent is never written by the move."""
     host = _TwoDisplays(accept=accept)
     host.coordinator.generation_ready()
     source, target = host.units
     assert host.press(True)
     host.owner.finish()
     assert host.coordinator.expand_on_display(source, target)
-    assert host.coordinator.phase is Phase.TRANSFER_PENDING and host.owner.calls[-1] == (False, True)
-    assert host.covers[-1] == (display_key(source), False, HALF)
+    assert host.coordinator.phase is Phase.TRANSFER_PENDING and host.owner.calls[-1] == ("move", True)
     assert host.glyphs[-1][1] is False                                  # withdrawn while it moves
-    host.owner.finish()                                                 # the collapse committed: move, then expand
-    landed = target if accept else source
-    assert host.unit is landed and host.owner.calls[-1] == (True, True)
-    assert host.covers[-1] == (display_key(landed), True, HALF)
     host.owner.finish()
+    landed = target if accept else source
+    assert host.unit is landed
+    assert host.covers[-2:] == [(display_key(source), False, HALF), (display_key(landed), True, HALF)]
+    assert [call for call in host.owner.calls if call[0] != "move"] == [(True, True)]   # only the first enter
     assert host.coordinator.phase is Phase.EXPANDED and host.owner.expanded_display
     assert host.writes == [True]
     assert host.glyphs[-1] == (display_key(landed), True, True)
@@ -646,13 +674,14 @@ def test_an_offset_arrangement_follows_the_documented_rule():
 @pytest.mark.parametrize("on,side", [(0, RIGHT), (1, LEFT), (1, RIGHT), (2, LEFT)])
 def test_a_side_press_moves_to_that_neighbour_and_expands_there(on, side):
     """Three in a row: each offered side glyph is full display on the display placed on that side (resolved at the
-    press, through the owner's "expand on display N"), one user action: move, then the enter there."""
+    press, through the owner's "expand on display N"), one user action: one fade-through that moves at its midpoint
+    and arrives display-wide (1C.2)."""
     manager, owner, units, moves = _arranged(_row_rects(3), on=on)
     target = units[on + side]
     assert manager._route_quick_visualizer_expand_to_side(units[on], side)
-    assert moves == [target] and manager._quick_visualizer_unit is target
-    assert owner.calls == [(True, True)]
+    assert owner.calls == [("move", True)] and moves == []
     owner.finish()
+    assert moves == [target] and manager._quick_visualizer_unit is target
     coordinator = manager._expanded_display_coordinator
     assert coordinator.phase is Phase.EXPANDED and manager._expanded_display_requested() is True
     # The row on the new display shows that display's own neighbours, its glyph the collapse.
@@ -696,17 +725,17 @@ def test_expanded_on_the_middle_display_offers_the_collapse_and_both_moves():
 @pytest.mark.parametrize("side", [LEFT, RIGHT])
 @pytest.mark.parametrize("accept", [True, False])
 def test_a_diagonal_moves_the_expanded_view_to_that_neighbour(side, accept):
-    """While expanded a diagonal is the expanded-to-expanded move: collapse on the source, the move, expand on the
-    neighbour; a refused move re-expands on the source. The intent is never written by the move."""
+    """While expanded a diagonal is the expanded-to-expanded move, one fade-through (1C.2): out display-wide on the
+    source, the move at zero opacity, in display-wide on the neighbour; a refused move fades back in on the source.
+    The intent is never written by the move."""
     manager, owner, units, moves = _expanded_on_the_middle(accept=accept)
     writes = manager._expanded_display_requested()
     assert manager._route_quick_visualizer_expand_to_side(units[1], side)
-    assert owner.calls[-1] == (False, True)                # the source collapses first
+    assert owner.calls[-1] == ("move", True)               # never a collapse on the source first
     owner.finish()
     landed = units[1 + side] if accept else units[1]
     assert moves == [units[1 + side]] and manager._quick_visualizer_unit is landed
-    assert owner.calls[-1] == (True, True)                 # ...then expands where it landed
-    owner.finish()
+    assert owner.calls[-1] == ("move", True) and owner.expanded_display
     assert manager._expanded_display_coordinator.phase is Phase.EXPANDED
     assert manager._expanded_display_requested() is writes
     assert landed.runtime.scene_controller.glyph == (True, True)
@@ -802,7 +831,8 @@ _MANAGER_METHODS = ("_expanded_display", "_visualizer_section", "_expanded_displ
                     # Plan 1B.12: the glyph publication asks which sides have a display; a side press resolves
                     # there; the takeover's move and the glyph's own routes.
                     "_expand_glyph_neighbours", "_expand_glyph_sides", "_route_quick_visualizer_expand_to_side",
-                    "_move_quick_visualizer_to_display", "_route_quick_visualizer_expand_glyph",
+                    "_move_quick_visualizer_to_display", "_quick_unit_for_display",
+                    "_route_quick_visualizer_expand_glyph",
                     "_toggle_quick_visualizer_expansion_from_key")
 
 

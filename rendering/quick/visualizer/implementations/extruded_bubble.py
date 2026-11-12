@@ -735,6 +735,15 @@ class QuickExtrudedBubbleRenderer:
             gl.glDeleteVertexArrays(1, [self._empty_vao])
         self._empty_vao = 0
 
+    def export_carryover(self):
+        """A display move (1C.2): the drift history leaves with the view (the source's render thread); everything
+        else here is rebuilt in the target's context."""
+        return self._drift.export()
+
+    def adopt_carryover(self, carryover) -> None:
+        """The target's render thread, before this renderer integrates again: continue the source's drift history."""
+        self._drift.adopt(carryover)
+
     def release_resources(self) -> None:
         errors: list[str] = []
         releases = [self._target.release, self._near.release, self._shafts.release, self._resources.release_resources,

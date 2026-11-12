@@ -231,7 +231,9 @@ class QuickCustomLayoutOwner:
         self._settings_manager = settings_manager
         self._participants_provider = participants_provider
         self._visualizer_provider = visualizer_provider
-        self._reload_request = reload_request
+        self._reload_sink = reload_request
+        #: The runtime reload the latest Save (or Cancel) asked for, if any: a move that ends in one is not a move.
+        self._requested_reload: str | None = None
         self._visualizer_unit_transfer = visualizer_unit_transfer
         self._live_config_commit = live_config_commit
         self._visualizer_presence_commit = visualizer_presence_commit
@@ -286,6 +288,11 @@ class QuickCustomLayoutOwner:
             self._settings_change_signal, "connect"
         ):
             self._settings_change_signal.connect(self._on_settings_changed)
+
+    def _reload_request(self, kind: str) -> None:
+        """Ask the caller for one runtime reload, and remember that this transaction ended in one."""
+        self._requested_reload = str(kind)
+        self._reload_sink(kind)
 
     @property
     def is_editing(self) -> bool:
@@ -1463,10 +1470,13 @@ class QuickCustomLayoutOwner:
         The display-glyph route of the Expanded Visualizer's takeover: the same transaction as Edit's display hop
         followed by Save (one session holding only the Visualizer, its working rect projected onto the target as the
         hop projects it, the cross-display scene coordinator's retained transfer, then the ordinary Save: commit, live
-        promotion, release). Nothing of Edit shows: no scene is bound to the session (the live promotion places the
-        card at its committed rect on the target). Refused (False, nothing changed) while any session is open, or when
-        the Visualizer is not admitted or already on that display; a failed transfer leaves the source exactly as it
-        was (the coordinator's own rollback) and the session is cancelled.
+        promotion, release). Nothing of Edit shows: the source and target scenes are bound as a direct gesture binds
+        its display (``bind_direct_custom_layout_session``: no chrome, no input taken), so the projected rect reaches
+        the target's retained card and the working viewport reaches the controller exactly as in Edit, and Save
+        promotes live (1C.2: unbound, Save refused its own promotion and rebuilt the whole runtime on every move).
+        Refused (False, nothing changed) while any session is open, or when the Visualizer is not admitted or already
+        on that display; a failed transfer leaves the source exactly as it was (the coordinator's own rollback) and
+        the session is cancelled. False too when Save ended in a runtime reload: that is a rebuild, not a move.
         """
         if self._retired or self._settings_manager is None or self._active:
             return False
@@ -1497,6 +1507,9 @@ class QuickCustomLayoutOwner:
         self._direct_offset = QPoint()
         self._active = True
         try:
+            for binding in (source, target):
+                binding.unit.runtime.scene_controller.bind_direct_custom_layout_session(
+                    session, display_identity=binding.identity, display_origin=binding.geometry.topLeft())
             projected = self._project_onto_display(item, source, target)
             item.set_current_display(target.identity, monitor_route=target.monitor_route)
             item.set_geometry(projected)
@@ -1507,7 +1520,13 @@ class QuickCustomLayoutOwner:
             return False
         logger.info("[CUSTOM_LAYOUT] Visualizer display move source=%s target=%s rect=%s",
                     source.identity, target.identity, projected.getRect())
-        return self.save()
+        self._requested_reload = None
+        saved = self.save()
+        if self._requested_reload is not None:
+            logger.error("[CUSTOM_LAYOUT] Visualizer display move ended in a runtime reload (%s); not a move",
+                         self._requested_reload)
+            return False
+        return saved
 
     @staticmethod
     def _project_onto_display(
