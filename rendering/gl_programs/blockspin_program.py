@@ -8,6 +8,7 @@ resources itself.
 from __future__ import annotations
 
 from rendering.gl_programs.blockspin_options import BLOCK_SPIN_EDGE_GLASS_CHOICES
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_ghost_fragment, scene3d_motion_fragment, scene3d_motion_vertex
 
 
@@ -350,3 +351,14 @@ BLOCK_SPIN_MOTION_VERTEX_SOURCE = scene3d_motion_vertex(BLOCK_SPIN_QUICK_VERTEX_
 BLOCK_SPIN_MOTION_FRAGMENT_SOURCE = scene3d_motion_fragment(BLOCK_SPIN_FRAGMENT_SOURCE)
 # With motion trails: the same slab as a flat ghost silhouette.
 BLOCK_SPIN_GHOST_FRAGMENT_SOURCE = scene3d_ghost_fragment(BLOCK_SPIN_MOTION_FRAGMENT_SOURCE)
+
+# N1.6: each program's values in one std140 pass block (``portable_program``; the motion-writing slab and its ghost
+# share one), the photographs and the environment at their units.
+BLOCK_SPIN_SAMPLERS = {"uOldTexture": 0, "uNewTexture": 1, "uEnvironment": 2}
+BLOCK_SPIN_QUICK_VERTEX_SOURCE, (BLOCK_SPIN_FRAGMENT_SOURCE,), BLOCK_SPIN_BLOCK = portable_program(
+    BLOCK_SPIN_QUICK_VERTEX_SOURCE, (BLOCK_SPIN_FRAGMENT_SOURCE,), block="BlockSpinsSlab",
+    samplers=BLOCK_SPIN_SAMPLERS)
+(BLOCK_SPIN_MOTION_VERTEX_SOURCE, (BLOCK_SPIN_MOTION_FRAGMENT_SOURCE, BLOCK_SPIN_GHOST_FRAGMENT_SOURCE),
+ BLOCK_SPIN_MOTION_BLOCK) = portable_program(
+    BLOCK_SPIN_MOTION_VERTEX_SOURCE, (BLOCK_SPIN_MOTION_FRAGMENT_SOURCE, BLOCK_SPIN_GHOST_FRAGMENT_SOURCE),
+    block="BlockSpinsSlabMotion", samplers=BLOCK_SPIN_SAMPLERS)

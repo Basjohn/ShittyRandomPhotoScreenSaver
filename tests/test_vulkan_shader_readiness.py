@@ -295,11 +295,6 @@ _RATCHET = {
         "widgets/spotify_visualizer/shaders/oscilloscope.frag",
     ),
     "Transitions": (
-        "rendering.gl_programs.blockspin_program.BLOCK_SPIN_FRAGMENT_SOURCE",
-        "rendering.gl_programs.blockspin_program.BLOCK_SPIN_GHOST_FRAGMENT_SOURCE",
-        "rendering.gl_programs.blockspin_program.BLOCK_SPIN_MOTION_FRAGMENT_SOURCE",
-        "rendering.gl_programs.blockspin_program.BLOCK_SPIN_MOTION_VERTEX_SOURCE",
-        "rendering.gl_programs.blockspin_program.BLOCK_SPIN_QUICK_VERTEX_SOURCE",
         "rendering.gl_programs.crumble_program.CRUMBLE_FRAGMENT",
         "rendering.gl_programs.crumble_program.CRUMBLE_GHOST_FRAGMENT",
         "rendering.gl_programs.crumble_program.CRUMBLE_MOTION_FRAGMENT",
