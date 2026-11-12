@@ -646,8 +646,10 @@ control.
   - up to 12 native activation, button and key messages, with the window Windows sent each one to;
   - the first input Qt delivers to Settings, and how long after the reveal it arrived.
 
-  It removes its filters at that first input, when Settings is destroyed, or 60 s after the reveal, so nothing runs
-  at rest. Its Qt filter sits on Settings' own window, never the application. An application-wide Python filter is
+  It removes its filters at that first input (once Settings has painted after it), when Settings is hidden, closed or
+  destroyed, when Settings is concealed for the next Studio, or 60 s after the reveal, so nothing runs at rest; a
+  reveal of a Settings that is not shown arms none. (12 Nov, plan 1D.0: a record armed over a never-shown or closed
+  Settings lingered until its 60 s limit and logged its expiry in whatever ran next, a later test's drag included.) Its Qt filter sits on Settings' own window, never the application. An application-wide Python filter is
   handed every Qt Quick item an event visits, and wrapping items PySide had not wrapped yet deleted a live Studio
   item in a later test (7 Nov).
 - **Repaint at the reveal (7 Nov, moved from the plan).** The 6 Nov 21:56 freeze was the third round: 5 Nov (`da1b86fb`)

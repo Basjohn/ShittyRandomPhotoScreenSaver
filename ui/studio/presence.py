@@ -172,8 +172,10 @@ class RevealWatch:
     which recovered by itself after ~18 s while the process was idle).
 
     Armed on the reveal edge only and gone after the first input Qt delivers to Settings (or after ``limit_s``, checked
-    on the next event): nothing runs at rest. While armed, it logs the first native button/key/activation messages
-    (which window Windows sent them to, and Settings' native and Qt state at that moment) and the first input Qt
+    on the next event), when Settings is hidden or closed, or when Settings is concealed for the next Studio: nothing
+    runs at rest, and a Settings that can no longer receive input never leaves a watch behind to expire later in
+    unrelated work (12 Nov: each closed Studio left one, and its expiry line landed in a later session's drag). While
+    armed, it logs the first native button/key/activation messages (which window Windows sent them to, and Settings' native and Qt state at that moment) and the first input Qt
     delivers, with its delay since the reveal."""
 
     MAX_NATIVE_LINES = 12
@@ -197,6 +199,7 @@ class RevealWatch:
         inputs = (QEvent.Type.MouseButtonPress, QEvent.Type.KeyPress)
         surface_events = {QEvent.Type.Expose: "Expose", QEvent.Type.UpdateRequest: "UpdateRequest",
                           QEvent.Type.Paint: "Paint"}
+        endings = (QEvent.Type.Hide, QEvent.Type.Close)
 
         class _Qt(QObject):
             def eventFilter(self, obj, event):  # noqa: N802 - Qt override
@@ -206,6 +209,8 @@ class RevealWatch:
                         watch._guarded(watch._qt_input, obj, event)
                     elif kind in surface_events:
                         watch._guarded(watch._surface, surface_events[kind])
+                    elif kind in endings and obj is watch._widget:
+                        watch._guarded(watch._settings_left, event.type().name)
                 return False
 
         class _Native(QAbstractNativeEventFilter):
@@ -256,6 +261,14 @@ class RevealWatch:
                   else "watch expired: Settings never painted after the first input")
         self.disarm()
         return True
+
+    def _settings_left(self, how: str) -> None:
+        """Settings was hidden or closed: no input can reach it any more, so the record ends here."""
+        if self._expired():
+            return
+        self._log(f"record ended: Settings {how} before {'painting after ' if self._input_at_ms is not None else ''}"
+                  "the first input")
+        self.disarm()
 
     def _surface(self, name: str) -> None:
         if self._expired():
@@ -341,6 +354,9 @@ class WindowPresence:
     def conceal(self) -> None:
         if self.concealed:
             return
+        # The last reveal's input record ends here: a concealed Settings receives no input until the next reveal,
+        # which arms its own.
+        self._end_watch()
         widget = self._widget
         self._geometry = widget.geometry()
         self._view = self._capture_view() if self._capture_view is not None else None
@@ -410,11 +426,18 @@ class WindowPresence:
         logger.info("[STUDIO] Settings revealed (qt visible=%s enabled=%s exposed=%s native=%s %s)",
                     widget.isVisible(), widget.isEnabled(), window.isExposed() if window is not None else None, native,
                     "beneath the Studio window" if beneath is not None else "in front")
-        try:
-            self.watch = RevealWatch(widget)              # armed first, so it sees the reveal's own repaint
-        except Exception:
-            logger.exception("[STUDIO] Reveal input watch unavailable")
+        self._end_watch()
+        if widget.isVisible():                            # a Settings that is not shown can receive no input
+            try:
+                self.watch = RevealWatch(widget)          # armed first, so it sees the reveal's own repaint
+            except Exception:
+                logger.exception("[STUDIO] Reveal input watch unavailable")
         self.repaint_revealed()
+
+    def _end_watch(self) -> None:
+        watch, self.watch = self.watch, None
+        if watch is not None:
+            watch.disarm()
 
     def bring_forward(self) -> None:
         """The Studio window is gone: a Settings revealed beneath it comes to the front, active, and repaints once more
