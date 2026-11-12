@@ -1206,6 +1206,14 @@ High-value permanent guards include:
   the worker path's age chain (consumed age, newest age, publish -> swap, tick -> publish) equals the in-process one,
   and revisions/s is the worker's 90/s from the revision numbering although main took 45/s; negative controls: read as
   in process the rate halves, and without the stamps the chain is empty; the tick and GIL are labelled by process.
+  `tests/test_visualizer_engine_native_schema.py` (N2.3, the Python half of the transport rule): Spectrum's native
+  record round-trips the shipped clip's real frames (and variants moving every declared input) bit for bit against
+  the tagged codec's decode (control: a float32 reader differs); the record's field list is the renderer's own
+  input declaration and the renderer reads nothing outside it (control: the pre-N2.3 render shape); the layout is
+  aligned and pinned to its version (controls: a misaligned array, one more field); no native id equals
+  `CODEC_SCHEMA` and the codec refuses a native record; each slot-head refusal (reserved or malformed schema, unknown
+  or disagreeing mode code, a mode with no schema, a newer version, a short record, the other stream kind) is counted,
+  never acknowledged, fails the stream and reaches the owner once (control: the unchecked reader accepts each slot).
   The recorded-PCM check is path-aware (gate 3 record): the real Waveform body (`WaveformRibbonFrameRuntime.advance`)
   ticked on loud synthetic inputs, its frame built as the capture builds it and carried through the frame codec (the
   worker-to-main seam), is a receipt (`eb_live_phases.note_waveform_frame`: playing, its own source identity, passage
