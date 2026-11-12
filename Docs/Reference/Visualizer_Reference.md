@@ -175,8 +175,7 @@ Rules:
 - Curated ghosts (operator, 8 Nov 2026, twice: caps alone "only draw the line, not the ghost effect"; then flat
   ghosts under caps had "a solid top edge line" and "no blend"). Every curated preset ghosts the way Preset 1 does:
   a trail continuing the bar's own colours, fading out, with no cap line. Preset 1 does it with Rainbow Ghost over
-  its rainbow borders; of the 1B.10 presets (11 Nov 2026), Dot Matrix uses its teal Bar Colour, Voltage a Custom
-  magenta with a Ghost Gradient, and the rest Bar Fill. Peak Caps are off on every curated preset. Opacities sit
+  its rainbow borders; the presets authored in 1B.10 (11 Nov 2026) use a Bar Colour, a Custom colour with a Ghost Gradient, or Bar Fill, as the author chose. Peak Caps are off on every curated preset. Opacities sit
   near Preset 1's (about 0.6). This supersedes both the 7 Nov caps-only rule and the first 8 Nov flat light colours.
   Authoring notes from 1B.10: the operator rejected fat bars, glossy "object" surfaces (chrome, capsules, ice rods),
   a grid on blocks, dark fills under a coloured veil and ghosts that sit on the bar as a second block; the kept
