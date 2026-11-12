@@ -442,7 +442,8 @@ class QuickExtrudedBubbleRenderer:
         drift_counts = (np.frombuffer(state.drift_steps[-8 * STEP_FLOATS:], dtype=np.float64) if material else None)
         drift_uniforms={'uChainDriftEnabled':int(material and 'chains' in drift_layout),
             'uSnowDriftOffset':drift_layout['snow']+1 if material and 'snow' in drift_layout else 0,
-            'uSpeckDriftOffset':drift_layout['specks']+1 if material and 'specks' in drift_layout else 0}
+            'uSpeckDriftOffset':drift_layout['specks']+1 if material and 'specks' in drift_layout else 0,
+            'uDriftFadeOut':self._drift.fade_out}      # a layer that cannot advance here fades out, never vanishes
         self._uniforms.set(programs['beads'],drift_uniforms)
         self._uniforms.set(programs['specks'],drift_uniforms)
         cluster_count = self._clusters.upload(cluster_instances(state.bubbles, state.clusters))

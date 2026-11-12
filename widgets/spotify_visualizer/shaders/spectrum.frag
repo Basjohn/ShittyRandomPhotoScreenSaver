@@ -13,6 +13,13 @@ uniform vec2 u_viewport_origin_px;
 // Qt Quick uses interpolated item-local coordinates. The old compositor keeps
 // the framebuffer-coordinate branch until Phase-I deletion.
 uniform int u_quick_item_coords;
+// 1: item-local coordinates from gl_FragCoord through the item's affine map (rows x and y of a 2 x 3 matrix, resolved
+// by the renderer from its matrix, viewport and rotation). One continuous coordinate over the whole full-field quad:
+// the interpolated v_uv is rounded differently in its two triangles, so a bar edge on a pixel centre stepped by a
+// pixel along their shared diagonal. 0: the interpolated v_uv (an item whose matrix is not affine).
+uniform int u_item_from_frag;
+uniform vec3 u_item_from_frag_x;
+uniform vec3 u_item_from_frag_y;
 uniform vec4 u_content_rect;  // item-local x, y, width, height
 uniform float u_visual_scale;
 uniform int u_bar_count;
@@ -496,7 +503,10 @@ void main() {
     // map gl_FragCoord (physical) back into QWidget logical space using the
     // current device pixel ratio.
     vec2 fragCoord;
-    if (u_quick_item_coords == 1) {
+    if (u_quick_item_coords == 1 && u_item_from_frag == 1) {
+        vec3 window = vec3(gl_FragCoord.xy, 1.0);
+        fragCoord = vec2(dot(u_item_from_frag_x, window), dot(u_item_from_frag_y, window));
+    } else if (u_quick_item_coords == 1) {
         fragCoord = v_uv * u_resolution;
     } else {
         float dpr = (u_dpr <= 0.0) ? 1.0 : u_dpr;

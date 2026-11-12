@@ -272,9 +272,8 @@ class QuickVisualizerRenderHost:
             # A display move's history (1C.2), taken once its source deposited it, before this mode draws again.
             self._carryover = None
             payload = carryover.take(mode_id)
-            adopt = getattr(implementation, "adopt_carryover", None)
-            if payload is not None and callable(adopt):
-                adopt(payload)
+            if payload is not None:
+                self._adopt_carryover(mode_id, implementation, payload)
         if mode_changed:
             self._record_ownership()
         frame = QuickVisualizerRenderFrame(
@@ -373,6 +372,26 @@ class QuickVisualizerRenderHost:
                 "retrying at the next mode boundary or teardown",
                 active_mode_id,
             )
+
+    @staticmethod
+    def _adopt_carryover(mode_id: str, implementation, payload) -> None:
+        """Hand a taken history to the renderer that continues it. The host owns the payload from ``take`` until the
+        renderer has adopted it: a renderer that cannot adopt it, or whose adoption raises, never leaves it without
+        an owner; it is discarded here (in this context, which shares the source's), then the error is raised.
+        ``discard`` is idempotent, so a renderer that already discarded it costs nothing."""
+        adopt = getattr(implementation, "adopt_carryover", None)
+        discard = getattr(payload, "discard", None)
+        if not callable(adopt):
+            logger.error("[QUICK] Visualizer %s cannot adopt a carried history; it is released", mode_id)
+            if callable(discard):
+                discard()
+            return
+        try:
+            adopt(payload)
+        except BaseException:
+            if callable(discard):
+                discard()
+            raise
 
     def expect_carryover(self, carryover: VisualizerRenderCarryover | None) -> None:
         """Render thread (at sync): this host is a display move's target; take the source's history when it lands."""

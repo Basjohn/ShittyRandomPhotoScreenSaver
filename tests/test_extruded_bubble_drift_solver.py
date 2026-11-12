@@ -23,12 +23,14 @@ def _controls(kind, **extra):
                                   drift_direction=kind, stream_speed=(.05, .2), collision_scope='off', **extra)
 
 
-def _log(controls, ticks, seed=11, edit_at=None):
+def _log(controls, ticks, seed=11, edit_at=None, resize_at=None):
     sim = ExtrudedBubbleSimulation(seed)
     for tick in range(ticks):
         body = .8 if tick % 30 < 12 else .3
         if edit_at is not None and tick == edit_at:
             controls = replace(controls, stream_path=(.1, -1., .1, -.2, 1., .2), particle_spread=1.2)
+        if resize_at is not None and tick == resize_at:
+            controls = replace(controls, bead_chains=(3., 4.))       # more chain rows, the same revision
         state = sim.advance(MusicInput(1 / 60, True, body, (('kick', 1.),) if tick % 20 == 0 else (),
                                        (body, body * .8, .5)), controls)
         yield state.drift_families, state.drift_steps, state.drift_knots
@@ -259,6 +261,59 @@ def test_a_failed_allocation_keeps_the_current_state_drawn_logs_once_and_retries
         target.close()
 
 
+def test_a_capacity_growth_whose_allocation_fails_keeps_the_held_rows_drawn_where_the_draws_read_them(
+        qt_app, caplog):
+    """The chains grow (same revision, more rows) and their new state cannot be allocated: the chain rows the draws
+    read stay exactly the rows drawn before the growth (rows the growth adds read zero drift, never another family's),
+    frame after frame, while the other families advance exactly as in a solver whose growth succeeded."""
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as module
+    from tools.labs.render_target import OffscreenRenderTarget
+    log = [frame for frame in _log(_controls('wander'), 60, resize_at=30) if frame[0]]
+    capacity = [next(f.capacity for f in families if f.family == 'chains') for families, _s, _k in log]
+    grow = next(i for i in range(1, len(log)) if capacity[i] > capacity[i - 1])
+    revisions = [next(f.revision for f in log[i][0] if f.family == 'chains') for i in (grow - 1, grow)]
+    assert revisions[0] == revisions[1]                                   # a capacity growth, not a new revision
+    target_gl, resources = OffscreenRenderTarget(16, 16), MeshResources('drift growth test')
+    solver, reference = module.DriftSolver('growth'), module.DriftSolver('growth reference')
+    try:
+        for frame in log[:grow]:
+            offsets = solver.update(resources, *frame)
+            reference.update(resources, *frame)
+        held = capacity[grow - 1] * module.PATH_NODES
+        before = _read_output(solver, offsets['_total']).reshape(-1, 4)
+        before = before[offsets['chains']:offsets['chains'] + held]
+        original, refused = solver._allocate, []
+
+        def refuse(family, previous=None):
+            if previous is not None and family.family == 'chains':
+                refused.append(family.capacity)
+                raise RuntimeError('injected allocation failure')
+            return original(family, previous)
+        solver._allocate = refuse
+        with caplog.at_level('ERROR'):
+            for frame in log[grow:grow + 4]:
+                offsets = solver.update(resources, *frame)
+                expected = reference.update(resources, *frame)
+                assert offsets == expected                                # the layout the draws read
+                data = _read_output(solver, offsets['_total']).reshape(-1, 4)
+                wanted = _read_output(reference, expected['_total']).reshape(-1, 4)
+                chains = data[offsets['chains']:offsets['chains'] + capacity[grow] * module.PATH_NODES]
+                assert np.array_equal(chains[:held], before)              # drawn as before the failure
+                assert not chains[held:].any()                            # added rows: zero drift
+                for name in ('snow', 'specks'):
+                    rows = next(f.capacity for f in frame[0] if f.family == name)
+                    assert np.array_equal(data[offsets[name]:offsets[name] + rows],
+                                          wanted[expected[name]:expected[name] + rows]), name
+        assert refused == [capacity[grow]]                                # tried once, not per frame
+        assert solver._families['chains'].capacity == capacity[grow - 1]
+    finally:
+        solver.release()
+        reference.release()
+        resources.release_resources()
+        target_gl.close()
+
+
 def _counted_deletes(monkeypatch, module):
     deleted = []
     original = module._delete
@@ -345,6 +400,58 @@ def test_a_handoff_whose_wait_fails_releases_the_carried_history_once_and_keeps_
         monkeypatch.undo()
         source.release()
         target.release()
+        resources.release_resources()
+        target_gl.close()
+
+
+@pytest.mark.parametrize('renderer_kind', ('adoption raises', 'cannot adopt'))
+def test_the_render_host_releases_a_taken_history_that_its_renderer_does_not_adopt(qt_app, renderer_kind):
+    """The host owns a display move's history from ``take`` until a renderer has adopted it: a renderer whose
+    adoption raises (without discarding it itself) or that has no adoption leaves no carried buffer alive."""
+    from types import SimpleNamespace
+    from OpenGL import GL as gl
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as module
+    from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost, VisualizerRenderCarryover
+    from tools.labs.render_target import OffscreenRenderTarget
+    log = list(_log(_controls('wander'), 30))
+    target_gl, resources, source = OffscreenRenderTarget(16, 16), MeshResources('drift host test'), \
+        module.DriftSolver('source')
+    host = None
+    try:
+        source.update(resources, *log[-1])
+        payload = source.export()
+        carried = [name for state in payload.families.values() for name in (state.geometry, state.state, state.aux)]
+        carried.append(payload.output)
+        assert carried and all(gl.glIsBuffer(name) for name in carried)
+        box = VisualizerRenderCarryover()
+        box.deposit('extruded_bubble', payload)
+        box.close()
+        adoptions = []
+
+        def adopt(carryover):
+            adoptions.append(carryover)
+            raise RuntimeError('injected adoption failure')
+        renderer = SimpleNamespace(mode_id='extruded_bubble', has_resources=False, render=lambda _frame: None,
+                                   release_resources=lambda: None)
+        if renderer_kind == 'adoption raises':
+            renderer.adopt_carryover = adopt
+        host = QuickVisualizerRenderHost(renderer_factory=lambda _mode: renderer)
+        host.expect_carryover(box)
+        snapshot = SimpleNamespace(logical=SimpleNamespace(mode_id='extruded_bubble', activation_id=1))
+        try:
+            host.render(snapshot=snapshot, viewport=(0, 0, 16, 16), logical_size=(16., 16.),
+                        matrix_values=(1.,) * 16)
+        except RuntimeError as exc:
+            assert 'injected' in str(exc)
+        assert adoptions == ([payload] if renderer_kind == 'adoption raises' else [])
+        gl.glFinish()
+        assert [name for name in carried if gl.glIsBuffer(name)] == []      # no carried name left without an owner
+        assert not payload.families and not payload.output and payload.fence is None
+    finally:
+        if host is not None:
+            host.release_resources()
+        source.release()
         resources.release_resources()
         target_gl.close()
 

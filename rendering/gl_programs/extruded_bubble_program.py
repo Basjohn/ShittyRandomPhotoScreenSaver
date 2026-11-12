@@ -1440,18 +1440,29 @@ layout(std430, binding=6) readonly buffer EbMaterialDrift { vec4 ebMaterialDrift
 uniform int uChainDriftEnabled;
 uniform int uSnowDriftOffset;
 uniform int uSpeckDriftOffset;
+// 0: the drift layer as integrated. Above 0: how far a layer whose history cannot advance in this context has faded
+// out (fade, never vanish): its contribution scales by 1 - uDriftFadeOut and the clouds travel on the procedural
+// progress it converges to (the integrated one with no phase offset), not on the held one, which no longer moves.
+uniform float uDriftFadeOut;
 float chainMaterialPhase(int chain) {
-    return uChainDriftEnabled == 0 ? 0.0 : ebMaterialDrift[chain*PATH_NODE_COUNT+1].w;
+    return uChainDriftEnabled == 0 ? 0.0 : ebMaterialDrift[chain*PATH_NODE_COUNT+1].w * (1.0 - uDriftFadeOut);
 }
 vec3 chainDisplacement(int chain, float progress) {
     if(uChainDriftEnabled==0)return vec3(0.0);
     int base=chain*PATH_NODE_COUNT;
     float at=clamp((progress-ebMaterialDrift[base].w)*float(PATH_NODE_COUNT-3)+1.0,0.0,float(PATH_NODE_COUNT-1));
     int low=int(floor(at));
-    return mix(ebMaterialDrift[base+low].xyz,ebMaterialDrift[base+min(low+1,PATH_NODE_COUNT-1)].xyz,fract(at));
+    return (1.0 - uDriftFadeOut)
+         * mix(ebMaterialDrift[base+low].xyz,ebMaterialDrift[base+min(low+1,PATH_NODE_COUNT-1)].xyz,fract(at));
 }
 vec4 cloudMaterial(int encoded,int ident) {
-    return encoded==0 ? vec4(0.0) : ebMaterialDrift[encoded-1+ident];
+    if (encoded==0) return vec4(0.0);
+    vec4 material = ebMaterialDrift[encoded-1+ident];
+    return uDriftFadeOut > 0.0 ? vec4(material.xyz * (1.0 - uDriftFadeOut), 0.0) : material;
+}
+// A cloud mote's progress along its path: the integrated one, or ``procedural`` without drift or while it fades out.
+float cloudProgress(int encoded, vec4 material, float procedural) {
+    return encoded==0 || uDriftFadeOut > 0.0 ? procedural : fract(material.w);
 }
 """.replace('PATH_NODE_COUNT',str(PATH_NODES))
 _BEAD_GLSL = _DRIFT_PATH_GLSL + _WAKE_PATH_GLSL + f"const float CHAIN_FADE_BAND = {CHAIN_FADE_BAND:.1f};\n" + """// GPU procedural populations in the simulation's fixed physical world.
@@ -1668,14 +1679,14 @@ void beadInstance() {
     vec3 p;
     if (uSceneEmission == 1) {
         vec4 sceneEntry = sceneInlet(beadRandom(i, 34u), seed.xz, along, uWorldCenter, uWorldHalf, uSceneFaces);
-        float progress = uSnowDriftOffset==0 ? fract(seed.y+uSnowDrift/sceneEntry.w) : fract(material.w);
+        float progress = cloudProgress(uSnowDriftOffset, material, fract(seed.y+uSnowDrift/sceneEntry.w));
         p = sceneEntry.xyz + along * (progress * sceneEntry.w);
         vec3 undrifted = p;
         p += material.xyz;
         vOpacity *= scenePathFade(p, uWorldCenter, uWorldHalf, progress * sceneEntry.w, sceneEntry.w, 0.005)
                   * driftWallFade(p, undrifted, uWorldCenter, uWorldHalf);
     } else if (pathEnabled) {
-        float progress = uSnowDriftOffset==0 ? fract(seed.y+uSnowDrift/pathLength) : fract(material.w);
+        float progress = cloudProgress(uSnowDriftOffset, material, fract(seed.y+uSnowDrift/pathLength));
         float width = min(uWorldHalf.x, uWorldHalf.z) * 0.46 * uParticleSpread;
         p = mix(uStreamSource, uStreamEnd, progress)
           + across * (seed.x * 2.0 - 1.0) * width
@@ -1764,8 +1775,8 @@ void speckInstance() {
     vec4 sceneEntry = sceneInlet(speckRandom(i, 23u), seed.xz, pathDir,
                                   uWorldCenter, uWorldHalf, uSceneFaces);
     vec4 material=cloudMaterial(uSpeckDriftOffset,i);
-    float progress = uSpeckDriftOffset==0 ? fract(seed.y+uSpeckTravel/
-                           (uSceneEmission==1 ? sceneEntry.w : lengthPath)) : fract(material.w);
+    float progress = cloudProgress(uSpeckDriftOffset, material, fract(seed.y+uSpeckTravel/
+                                   (uSceneEmission==1 ? sceneEntry.w : lengthPath)));
     float sideWidth = min(uWorldHalf.x, uWorldHalf.z) * 0.52 * uParticleSpread;
     vec3 p = uSceneEmission == 1 ? sceneEntry.xyz + pathDir * (progress * sceneEntry.w)
              : mix(uSpeckSource, uSpeckEnd, progress)

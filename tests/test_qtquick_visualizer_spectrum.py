@@ -1020,3 +1020,81 @@ def test_real_gl_solid_bar_top_border_never_loses_pixel_coverage_during_motion(
         # not part of this regression contract.
         moving_top = pixels[covered[0], x, :3]
         assert int(moving_top.max()) >= 220, (level, moving_top)
+
+
+@pytest.mark.parametrize("quarters", (0, 1, 2, 3))
+def test_the_fragment_mapping_gives_the_quads_own_item_coordinate_at_every_rotation(quarters) -> None:
+    """``item_from_fragment`` inverts what the rasteriser does: a point of the quad (``aPosition``) placed by the item
+    matrix and the viewport maps back to the vertex shader's ``logicalUvFromPhysicalUv(aPosition) * u_resolution``."""
+    import numpy as np
+    from rendering.quick.visualizer.implementations.spectrum import item_from_fragment
+
+    item, viewport = (300.0, 180.0), (37.0, 21.0, 900.0, 500.0)
+    # A scaled, translated (and y-flipped, as Qt Quick's) item matrix, column-major.
+    matrix = (1.6 / 900.0, 0, 0, 0, 0, -1.4 / 500.0, 0, 0, 0, 0, 1, 0, -0.55, 0.62, 0, 1)
+    resolution = item if quarters % 2 == 0 else (item[1], item[0])
+    rows = item_from_fragment(matrix, viewport, item, quarters, resolution)
+    assert rows is not None
+    m = np.array(matrix).reshape(4, 4).T
+    for a in ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.31, 0.77)):
+        clip = m @ np.array((a[0] * item[0], a[1] * item[1], 0.0, 1.0))
+        window = (viewport[0] + (clip[0] + 1.0) * viewport[2] / 2.0, viewport[1] + (clip[1] + 1.0) * viewport[3] / 2.0)
+        uv = {0: (a[0], a[1]), 1: (a[1], 1 - a[0]), 2: (1 - a[0], 1 - a[1]), 3: (1 - a[1], a[0])}[quarters]
+        got = [row[0] * window[0] + row[1] * window[1] + row[2] for row in rows]
+        assert got == pytest.approx((uv[0] * resolution[0], uv[1] * resolution[1]), abs=1e-9)
+    assert item_from_fragment((*matrix[:3], 0.002, *matrix[4:]), viewport, item, quarters, resolution) is None
+
+
+@pytest.mark.qt
+def test_real_gl_bar_edges_keep_one_x_on_both_sides_of_the_quads_diagonal(qt_app) -> None:
+    """1B.10's side defect: the full-field quad's two triangles each interpolated the item coordinate with their own
+    rounding, so a bar edge lying on a pixel centre stepped sideways by a pixel along their shared diagonal. Coverage
+    now comes from one continuous coordinate: in the band every full-height bar covers, every row has the same bar
+    edges (the same scene as the round's stills: the card at 2x, 840 x 560, across many bar counts so edges land on
+    pixel centres)."""
+    import dataclasses
+    import numpy as np
+    from core.settings.models import SpotifyVisualizerSettings
+    from tests._visualizer_frozen_settings import frozen_visualizer_settings
+    from tools import spectrum_decor_evidence as sde
+    from widgets.spotify_visualizer.config_applier import (
+        _populate_shared_visualizer_extras, apply_presentation_vis_mode_kwargs,
+    )
+
+    resolved = asdict(SpotifyVisualizerSettings.from_mapping(
+        frozen_visualizer_settings("spectrum"), apply_preset_overlay=False,
+    ))
+    controller = VisualizerRuntimeController(runtime_generation=2, initial_mode="spectrum")
+    apply_presentation_vis_mode_kwargs(controller.presentation_state, resolved)
+    parameters: dict[str, object] = {}
+    _populate_shared_visualizer_extras(parameters, SimpleNamespace(
+        presentation_config_host=controller.presentation_state,
+        _spectrum_ghosting_enabled=False, _spectrum_ghost_decay=0.18,
+        _osc_ghosting_enabled=False, _osc_ghost_intensity=0.4, _osc_ghost_decay=0.4,
+    ))
+    parameters.update(_spectrum_capture_parameters(controller.presentation_state))
+    parameters.update(spectrum_ghosting_enabled=False)
+    target = sde.GLTarget()
+    stepped = {}
+    try:
+        for count in range(8, 65):
+            logical = _logical(playing=True, source_generation=5, source_activation_id=7,
+                               bars=(1.0,) * count, peaks=(1.0,) * count)
+            logical = dataclasses.replace(
+                logical,
+                common=dataclasses.replace(logical.common, style=freeze_render_fields({
+                    "fill_color": (10, 220, 80, 255), "border_color": (245, 245, 255, 255),
+                    "single_piece": True, "border_radius": 0.0,
+                })),
+                mode_state=dataclasses.replace(logical.mode_state, parameters=freeze_render_fields(parameters)),
+            )
+            pixels = target.render(logical, 2.0)
+            height = pixels.shape[0]
+            band = pixels[height // 4:3 * height // 4, :, 3] > 0        # rows every full-height bar covers
+            edges = [tuple(np.flatnonzero(np.diff(row.astype(np.int8)))) for row in band]
+            assert len(edges[0]) >= 2 * count - 1                         # the bars are there
+            if any(row != edges[0] for row in edges):
+                stepped[count] = sorted(set(edges[0]) ^ {x for row in edges for x in row})
+    finally:
+        target.release()
+    assert not stepped, stepped

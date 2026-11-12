@@ -120,6 +120,46 @@ def prepare_spectrum_shader_levels(
     return resolved_bars, resolved_peaks
 
 
+def item_from_fragment(
+    matrix_values: Sequence[float],
+    viewport: Sequence[float],
+    item_size: Sequence[float],
+    content_rotation_quarters: int,
+    resolution: Sequence[float],
+) -> tuple[tuple[float, float, float], tuple[float, float, float]] | None:
+    """The affine map from window pixels (``gl_FragCoord.xy``) to the item-local logical coordinates the quad's
+    interpolated ``v_uv * u_resolution`` stands for, as two rows (x, y) of a 2 x 3 matrix; None when the item's
+    matrix is not affine (a 3D transform) or degenerate.
+
+    It inverts exactly what the rasteriser does (viewport, the item matrix, the quad's ``aPosition * uItemSize``, the
+    content rotation of ``logicalUvFromPhysicalUv``), so every fragment of the full-field quad gets its coordinate from
+    one continuous function: the quad's two triangles, which each interpolate ``v_uv`` with their own rounding, no
+    longer disagree about which side of a bar edge lying on a pixel centre a column falls (1B.10's diagonal seam)."""
+    m = [float(value) for value in matrix_values]
+    # Column-major: m[col * 4 + row]. The w row must be (0, 0, *, 1) for the item plane (z = 0).
+    if abs(m[3]) > 1e-12 or abs(m[7]) > 1e-12 or abs(m[15] - 1.0) > 1e-12:
+        return None
+    a00, a01, a10, a11 = m[0], m[4], m[1], m[5]
+    det = a00 * a11 - a01 * a10
+    vx, vy, vw, vh = (float(value) for value in viewport)
+    width, height = (float(value) for value in item_size)
+    if abs(det) < 1e-18 or vw <= 0.0 or vh <= 0.0 or width <= 0.0 or height <= 0.0:
+        return None
+    i00, i01, i10, i11 = a11 / det, -a01 / det, -a10 / det, a00 / det
+    # ndc = (2 / vw, 2 / vh) * window + (-2 vx / vw - 1, -2 vy / vh - 1); position = A^-1 (ndc - translation).
+    ox, oy = -2.0 * vx / vw - 1.0 - m[12], -2.0 * vy / vh - 1.0 - m[13]
+    sx, sy = 2.0 / vw, 2.0 / vh
+    ux = (i00 * sx / width, i01 * sy / width, (i00 * ox + i01 * oy) / width)      # physical uv (aPosition)
+    uy = (i10 * sx / height, i11 * sy / height, (i10 * ox + i11 * oy) / height)
+
+    def one_minus(row):
+        return (-row[0], -row[1], 1.0 - row[2])
+    quarters = int(content_rotation_quarters) & 3
+    lx, ly = {0: (ux, uy), 1: (uy, one_minus(ux)), 2: (one_minus(ux), one_minus(uy)), 3: (one_minus(uy), ux)}[quarters]
+    rx, ry = (float(value) for value in resolution)
+    return (tuple(rx * value for value in lx), tuple(ry * value for value in ly))
+
+
 @dataclass(frozen=True, slots=True)
 class QuickSpectrumLayout:
     content_rect: tuple[float, float, float, float]
@@ -187,6 +227,7 @@ class QuickSpectrumRenderer:
         self._program = 0
         self._uniforms: dict[str, int] = {}
         self._last_content_rotation_quarters: int | None = None
+        self._last_placement: tuple | None = None
         self._last_decor: tuple | None = None
         self._last_decor_inputs: tuple | None = None
         self._last_decor_parameters: object | None = None
@@ -287,6 +328,17 @@ class QuickSpectrumRenderer:
         gl.glUniform1f(uniforms["u_dpr"], presentation.dpr)
         gl.glUniform2f(uniforms["u_viewport_origin_px"], 0.0, 0.0)
         gl.glUniform1i(uniforms["u_quick_item_coords"], 1)
+        # Coverage from one continuous coordinate (gl_FragCoord through the item's own affine map), resolved only when
+        # the item's placement changes.
+        placement = (frame.matrix_values, frame.viewport, frame.logical_size, content_rotation_quarters)
+        if placement != self._last_placement:
+            mapping = item_from_fragment(frame.matrix_values, frame.viewport, frame.logical_size,
+                                         content_rotation_quarters, frame.oriented_logical_size)
+            gl.glUniform1i(uniforms["u_item_from_frag"], 0 if mapping is None else 1)
+            if mapping is not None:
+                gl.glUniform3f(uniforms["u_item_from_frag_x"], *mapping[0])
+                gl.glUniform3f(uniforms["u_item_from_frag_y"], *mapping[1])
+            self._last_placement = placement
         gl.glUniform4f(uniforms["u_content_rect"], *layout.content_rect)
         gl.glUniform1f(
             uniforms["u_visual_scale"],
@@ -417,6 +469,7 @@ class QuickSpectrumRenderer:
         gl.glDeleteProgram(self._program)
         self._program = 0
         self._last_content_rotation_quarters = None
+        self._last_placement = None
         self._last_decor = None
         self._last_decor_inputs = None
         self._last_decor_parameters = None
@@ -442,6 +495,9 @@ class QuickSpectrumRenderer:
                 "u_dpr",
                 "u_viewport_origin_px",
                 "u_quick_item_coords",
+                "u_item_from_frag",
+                "u_item_from_frag_x",
+                "u_item_from_frag_y",
                 "u_content_rect",
                 "u_visual_scale",
                 "u_bar_count",
@@ -492,6 +548,7 @@ def create_visualizer_renderer() -> QuickSpectrumRenderer:
 
 
 __all__ = [
+    "item_from_fragment",
     "resolve_spectrum_decor_uniforms",
     "QuickSpectrumLayout",
     "QuickSpectrumRenderer",
