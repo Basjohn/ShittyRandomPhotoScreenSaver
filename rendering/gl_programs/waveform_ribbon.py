@@ -175,8 +175,10 @@ void main() {
     vec2 uv=materialXz/uFloor.x;
     // Mip-biased: at this grazing angle the colour scan aliases into horizontal bands once lit. The concrete's own
     // variation is restored around its exact mean (the 1x1 level), so legibility never changes the floor's level.
-    vec3 grain=mix(texture(uAlbedo,uv,uHot.w).rgb,texture(uAlbedo,turn*uv*1.37+vec2(.31,.47),uHot.w).rgb,.4);
-    vec3 mean=textureLod(uAlbedo,vec2(0.5),20.0).rgb;
+    // The albedo is stored sRGB-encoded in plain RGBA8 and decoded here (N0.3 decision F4).
+    vec3 grain=mix(srgbToLinear(texture(uAlbedo,uv,uHot.w).rgb),
+                   srgbToLinear(texture(uAlbedo,turn*uv*1.37+vec2(.31,.47),uHot.w).rgb),.4);
+    vec3 mean=srgbToLinear(textureLod(uAlbedo,vec2(0.5),20.0).rgb);
     vec3 albedo=max(mean+(grain-mean)*uMaterial.x,vec3(0.0))*uFloorTone.x;
     float surfaceRoughness=texture(uRoughness,uv,uHot.w).r;
     // Offsets and relief follow the viewed ground axes, so a turned camera streaks along its own view.
@@ -223,7 +225,8 @@ void main() {
     // and shimmers as the light under it moves, so both are opt-in (uHot.y, uColumn.z; 0 is a smooth column).
     float film=1.0;
     if(uHot.y>0.0 || uColumn.z>0.0)
-        film=texture(uAlbedo,uv*2.3+vec2(.17,.61)).r/max(texture(uAlbedo,uv*2.3+vec2(.17,.61),6.0).r,1e-3);
+        film=srgbToLinear(texture(uAlbedo,uv*2.3+vec2(.17,.61)).rgb).r
+             /max(srgbToLinear(texture(uAlbedo,uv*2.3+vec2(.17,.61),6.0).rgb).r,1e-3);
     if(uHot.y>0.0) reflected*=mix(1.0,smoothstep(0.6,1.25,film),uHot.y);
     // Relief breakup: facets tilted along the view send the column's light toward or away from the eye. Linear in
     // the zero-mean rise, so the column's mass is broken into the relief's long horizontal bands at any filtering
