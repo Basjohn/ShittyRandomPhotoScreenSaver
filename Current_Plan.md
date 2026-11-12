@@ -218,8 +218,8 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
 - The shared 3D architecture is inside this item, in order (operator, 12 Nov: "definitely put in the 3D work
   needed into the native work plan, in detail and order"): the port rewrites every renderer, so it is decided
   and built here, never afterwards and never twice. The old primitive ids: S3D-1 is N4.b, S3D-2 N4.c, S3D-3 N6.2
-  (photo shells N6.4), S3D-4 N6.1, S3D-5 N4.d, S3D-6 N4.h, S3D-7 N4.f with its smoke N6.3 and lightning N6.6.
-  The old stage names: P3.1 and P3.2 are N2; P3.3 is N5.2; P3.4 is N5; P3.5 is NF; P4 is N4.f. What exists in
+  (photo shells N6.4), S3D-4 N6.1, S3D-5 N4.d, S3D-6 N4.h, S3D-7 N4.f1 and N4.f2 with its smoke N6.3 and lightning N6.6.
+  The old stage names: P3.1 and P3.2 are N2; P3.3 is N5.2; P3.4 is N5; P3.5 is NF; P4 is N4.f2 (N4.f1 is the fog volume port). What exists in
   the Python substrate and is therefore a port is listed in `Docs/Reference/Scene3D_Resources.md` ("Shared
   Scene3D capability inventory").
 
@@ -553,11 +553,12 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   none of this.
 - [ ] N4.e Heightfields and refined terrain meshes (the authored heightfield resource; Neon Lake's tile-refined
   basin; the grid a dynamic surface field will share).
-- [ ] N4.f Reduced-resolution volumes and P4's mixed-resolution soft layers (D8 plus 4): the fog volume
-  (Waveform); the fog detail march (written and tested, runs nowhere in production: too costly at full size in
-  the Python path) as the base of N6.3; bloom, reflection blur and wide glows at reduced resolution with
-  depth-aware upsampling; lines, dots, rims, particles and UI stay at full resolution. After N5.6, before
-  Expanded Visualizer M6.
+- [ ] N4.f1 The fog volume port (Waveform draws it today, so N5.4 cannot reach parity without it): ported just
+  before its first consumer, N5.4, like every N4 item. The fog detail march (written and tested, runs nowhere in
+  production: too costly at full size in the Python path) is the base of N6.3 and stays with N4.f2's reduced path.
+- [ ] N4.f2 (placed after N5.6 and before Expanded Visualizer M6, see below) Reduced-resolution volumes and P4's
+  mixed-resolution soft layers (D8 plus 4): bloom, reflection blur and wide glows at reduced resolution with
+  depth-aware upsampling; lines, dots, rims, particles and UI stay at full resolution.
 - [ ] N4.g Edge and propagation fields (the Edge Bloom and Capillary Bloom transitions only); sphere impostors,
   shared optics and underwater light (Extruded Bubble).
 - [ ] N4.h Shared shadows (one fitted directional depth map, bounded soft filtering, caster and receiver
@@ -585,12 +586,13 @@ the feature (D3D11 is not stated).
 - [ ] N5.1 Spline Curve (a fullscreen strip only).
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
-- [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f's fog volume, its five compute passes and three
+- [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).
 - [ ] N5.6 Extruded Bubble (the drift compute of D4, transparency, HDR, the depth texture and background
   capture, the probe and defocus, N4.k, N4.g's impostors and optics; not populations).
-- [ ] N4.f for both, then Expanded Visualizer M6 (4K acceptance, plan 01) may run.
+- [ ] N4.f2 (the reduced-resolution layers; Waveform and Extruded Bubble are native), then Expanded Visualizer M6
+  (4K acceptance, plan 01) may run.
 - [ ] N5.5 Neon Lake (N4.e, N4.k, instanced quads for its marks, its own analytic water reflection; its reaction
   and growth are uniform arrays).
 - [ ] N5.3 Extruded Spectrum, then Sphere (meshes, lighting, N4.j's backdrop environment, N4.l's silhouette
@@ -635,7 +637,7 @@ section 2)**
   walls, wells, simple skyline and tunnel slices, with roughness, bevel and contact shading, built once and
   kept).
 - [ ] N6.3 Advected smoke and haze on the volume primitive. **High potential** (atmosphere for every 3D scene;
-  shares N4.f's reduced-resolution path).
+  shares N4.f2's reduced-resolution path).
 - [ ] N6.4 Photo-textured shells and planes with real depth. **Low potential until a consumer** (a transition
   or a mode built round the user's photos).
 - [ ] N6.5 The opt-in deformable sheet. **Low potential until a consumer.**
