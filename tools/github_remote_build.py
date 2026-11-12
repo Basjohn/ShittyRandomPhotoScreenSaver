@@ -40,9 +40,17 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools.build_evidence import RUN_TOKEN, evidence_files, sha256_file, write_build_evidence  # noqa: E402
+from tools.native_sdk_fetch import QT_VERSION  # noqa: E402
 
 WORKFLOW_FILE = "windows-build.yml"
 WORKFLOW_PATH = Path(".github") / "workflows" / WORKFLOW_FILE
+# The native module (Current_Plan.md item 8b, N0.9): compiled by its own reusable workflow, published like a product.
+NATIVE_WORKFLOW_FILE = "native-module.yml"
+NATIVE_WORKFLOW_PATH = Path(".github") / "workflows" / NATIVE_WORKFLOW_FILE
+NATIVE_SOURCE = "native/spike_p1"
+NATIVE_MODULE = "_srpss_native_spike"
+NATIVE_BUILD_LOG = "native_module_build_{token}.log"
+NATIVE_IMPORT_REPORT = "native_module_import_{token}.json"
 MANIFEST_NAME = "remote_build_manifest.json"
 MANIFEST_SCHEMA = 1
 POLL_SECONDS = 15.0
@@ -66,6 +74,11 @@ class RemoteTarget:
     payload_dirs: tuple[str, ...]
     primary: str
     companions: tuple[str, ...] = ()
+    workflow: str = WORKFLOW_FILE
+    # A native module: the Qt (and so the PySide6) it must be compiled against; its manifest records both.
+    module_qt: str | None = None
+    # Report names (``{token}`` filled in) the runner must upload beside the payload, beyond build_evidence's.
+    reports: tuple[str, ...] = ()
 
     @property
     def artifact(self) -> str:
@@ -75,6 +88,14 @@ class RemoteTarget:
     def artifacts(self) -> tuple[str, ...]:
         return (self.primary, *self.companions)
 
+    def report_names(self, token: str) -> tuple[str, ...]:
+        return (*evidence_files(self.key, token), *(name.format(token=token) for name in self.reports))
+
+    def dispatch_inputs(self, sha: str, token: str) -> tuple[str, ...]:
+        """The workflow inputs: the product workflow also takes the product (one workflow, two targets)."""
+        inputs = (f"commit={sha}", f"token={token}")
+        return (f"target={self.key}", *inputs) if self.workflow == WORKFLOW_FILE else inputs
+
 
 TARGETS: dict[str, RemoteTarget] = {
     # One compile publishes the screensaver and the same binary as the diagnostic flavour (core/build_profile.py).
@@ -83,6 +104,16 @@ TARGETS: dict[str, RemoteTarget] = {
     ),
     "media_center": RemoteTarget("media_center", ("media_center",), "media_center/SRPSS_Media_Center.exe"),
 }
+# Modules the products will load (N2.1 folds the native module into both product builds through the same reusable
+# workflow). Published into ``release/<payload dir>`` like a product, never selected by default, never packaged.
+MODULE_TARGETS: dict[str, RemoteTarget] = {
+    "native_module": RemoteTarget(
+        "native_module", ("native_module",), f"native_module/{NATIVE_MODULE}.pyd", workflow=NATIVE_WORKFLOW_FILE,
+        module_qt=QT_VERSION, reports=(NATIVE_BUILD_LOG, NATIVE_IMPORT_REPORT),
+    ),
+}
+ALL_TARGETS: dict[str, RemoteTarget] = {**TARGETS, **MODULE_TARGETS}
+SHADERS_DIR = "shaders"
 
 class RemoteBuildError(RuntimeError):
     """A remote build, its retrieval or its validation failed; the published payload is untouched."""
@@ -174,12 +205,68 @@ def _file_entry(path: Path) -> dict[str, Any]:
     return {"bytes": path.stat().st_size, "sha256": sha256_file(path)}
 
 
+def msvc_version(msc_full_ver: object) -> str:
+    """``_MSC_FULL_VER`` (194435227) as cl prints it (19.44.35227)."""
+    value = int(msc_full_ver)          # type: ignore[call-overload]
+    if value < 10_000_000:
+        raise RemoteBuildError(f"not an _MSC_FULL_VER: {msc_full_ver!r}")
+    return f"{value // 10_000_000}.{value // 100_000 % 100}.{value % 100_000}"
+
+
+def stage_native_module(root: Path, build_dir: Path, target_key: str = "native_module") -> tuple[Path, ...]:
+    """(Runner) Place the compiled module and its baked shaders where the target publishes them:
+    ``release/<payload dir>/<module>.pyd`` and ``release/<payload dir>/shaders/*.qsb``."""
+
+    target = MODULE_TARGETS[target_key]
+    module = build_dir / Path(target.primary).name
+    if not module.is_file():
+        raise RemoteBuildError(f"the build produced no {module.name} in {build_dir}")
+    shaders = sorted((build_dir / "generated").glob("*.qsb"))
+    if not shaders:
+        raise RemoteBuildError(f"the build baked no shaders (.qsb) in {build_dir / 'generated'}")
+    payload = root / "release" / target.payload_dirs[0]
+    shutil.rmtree(payload, ignore_errors=True)
+    (payload / SHADERS_DIR).mkdir(parents=True)
+    placed = [Path(shutil.copy2(module, payload / module.name))]
+    placed += [Path(shutil.copy2(shader, payload / SHADERS_DIR / shader.name)) for shader in shaders]
+    return tuple(placed)
+
+
+def _module_fields(root: Path, target: RemoteTarget, token: str, pyside6_version: str | None) -> dict[str, Any]:
+    """(Runner) What a module was built against, from the import check the runner ran on it."""
+
+    report_path = root / REPORTS_DIR / NATIVE_IMPORT_REPORT.format(token=token)
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise RemoteBuildError(f"no readable import check {report_path.name}: {exc}") from exc
+    if not report.get("ok"):
+        raise RemoteBuildError(f"the module failed its import check: {report.get('checks')}")
+    runtime = report.get("runtime_info") or {}
+    compiled, running = runtime.get("qt_compiled"), runtime.get("qt_runtime")
+    if compiled != target.module_qt or running != target.module_qt:
+        raise RemoteBuildError(f"the module was built for Qt {compiled} and runs on {running}; "
+                               f"Qt {target.module_qt} is pinned")
+    if pyside6_version is None:
+        from importlib.metadata import version as distribution_version
+
+        pyside6_version = distribution_version("PySide6")
+    return {
+        "qt_version": compiled,
+        "pyside6_version": pyside6_version,
+        "msvc_version": msvc_version(runtime.get("msc_full_ver")),
+        "with_quick": bool(runtime.get("with_quick")),
+    }
+
+
 def build_manifest(
     root: Path, target_key: str, commit: str, token: str, *, run_id: str = "", run_attempt: str = "",
+    pyside6_version: str | None = None,
 ) -> dict[str, Any]:
-    """What the runner built: every published payload file and the worker's reports, hashed."""
+    """What the runner built: every published payload file and the worker's reports, hashed (a module's manifest
+    also records the Qt, PySide6 and MSVC it was built with)."""
 
-    target = TARGETS[target_key]
+    target = ALL_TARGETS[target_key]
     if not _SHA.match(commit):
         raise RemoteBuildError(f"commit must be a full SHA, got {commit!r}")
     if not RUN_TOKEN.match(token):
@@ -198,11 +285,13 @@ def build_manifest(
     for relative in target.artifacts:
         if f"release/{relative}" not in files:
             raise RemoteBuildError(f"the worker published no release/{relative}")
-    for name in evidence_files(target.key, token):
+    for name in target.report_names(token):
         report = root / REPORTS_DIR / name
         if report.is_file():
             files[REPORTS_PREFIX + name] = _file_entry(report)
-    return {
+        elif target.module_qt:
+            raise RemoteBuildError(f"the runner wrote no {REPORTS_PREFIX}{name}")
+    manifest = {
         "schema": MANIFEST_SCHEMA,
         "target": target.key,
         "commit": commit,
@@ -212,6 +301,9 @@ def build_manifest(
         "github_run_attempt": run_attempt,
         "files": files,
     }
+    if target.module_qt:
+        manifest.update(_module_fields(root, target, token, pyside6_version))
+    return manifest
 
 
 # ------------------------------------------------------------------------------------------- validation (local)
@@ -775,22 +867,32 @@ def _run_command(args: argparse.Namespace) -> int:
     return 0 if results and all(result.ok for result in results.values()) else 1
 
 
+def _stage_native_command(args: argparse.Namespace) -> int:
+    placed = stage_native_module(REPO_ROOT, Path(args.build_dir).resolve(), args.target)
+    print(f"[REMOTE-BUILD] Staged {len(placed)} files into release/{MODULE_TARGETS[args.target].payload_dirs[0]}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
     manifest = sub.add_parser("manifest", help="(workflow step) record what the runner built")
-    manifest.add_argument("--target", choices=sorted(TARGETS), required=True)
+    manifest.add_argument("--target", choices=sorted(ALL_TARGETS), required=True)
     manifest.add_argument("--commit", required=True)
     manifest.add_argument("--token", required=True)
     manifest.add_argument("--run-id", default="")
     manifest.add_argument("--run-attempt", default="")
     manifest.add_argument("--out", required=True)
+    stage = sub.add_parser("stage-native", help="(workflow step) place a compiled module under release/")
+    stage.add_argument("--target", choices=sorted(MODULE_TARGETS), default="native_module")
+    stage.add_argument("--build-dir", required=True)
     run = sub.add_parser("run", help="build products on GitHub and publish them into release/")
     run.add_argument("--target", choices=sorted(TARGETS), action="append", required=True)
     run.add_argument("--branch", default=None)
     args = parser.parse_args(argv)
+    commands = {"manifest": _manifest_command, "stage-native": _stage_native_command, "run": _run_command}
     try:
-        return _manifest_command(args) if args.command == "manifest" else _run_command(args)
+        return commands[args.command](args)
     except RemoteBuildError as exc:
         print(f"[REMOTE-BUILD] {exc}", file=sys.stderr)
         return 1

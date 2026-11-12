@@ -1,0 +1,166 @@
+# SRPSS native module compile on a GitHub-hosted Windows runner (Current_Plan.md item 8b, N0.9).
+#
+# Builds happen only through GitHub workflows (operator, 12 Nov 2026). This compiles the native module
+# (native/spike_p1 today, the native core later) for exactly inputs.commit (a full SHA, verified after checkout):
+# MSVC from the runner's Visual Studio (found with vswhere by build.cmd), the pinned Qt SDK and Vulkan-Headers fetched
+# and sha256-checked by tools/native_sdk_fetch.py (cached per Qt version and script), PySide6's qsb from the repo
+# venv. native/spike_p1/build.cmd is the one CMake invocation. The runner has no GPU, so after the compile it runs
+# only the module's GPU-free import check (native/spike_p1/python/import_check.py); every rendering part of the
+# spike needs a device and runs on the lead's machine.
+#
+# The artifact (srpss-native_module) has the product layout: remote_build_manifest.json (commit, version, Qt, PySide6,
+# MSVC, sha256 per file), release/native_module/ (the .pyd and shaders/*.qsb), and logs/ (build log, import check).
+# tools/build_runner.py (GITHUB REMOTE, job "native_module") dispatches it through tools/github_remote_build.py,
+# validates the download against the manifest and swaps it into release/native_module/.
+#
+# Reusable: N2.1 folds the module into the Standard and Media Center builds by calling this workflow as a job
+# (`uses: ./.github/workflows/native-module.yml` with the same commit and token) and downloading its artifact into
+# the product build's release/ tree.
+#
+# Trigger: manual dispatch or a call from another workflow only. Ordinary pushes never start a run.
+name: Native module
+run-name: SRPSS native_module (native_module-${{ inputs.token }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full 40-character SHA of the pushed commit to build (never substituted)
+        type: string
+        required: true
+      token:
+        description: Build Runner run token (yyyyMMdd_HHmmss_ffffff); names the reports
+        type: string
+        required: true
+  workflow_call:
+    inputs:
+      commit:
+        type: string
+        required: true
+      token:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-module-${{ inputs.token }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      COMMIT: ${{ inputs.commit }}
+      RUN_TOKEN: ${{ inputs.token }}
+      QT_VERSION: "6.11.2"
+      NATIVE_SOURCE: native/spike_p1
+      BUILD_DIR: build\native_module
+    steps:
+      - name: Validate inputs
+        run: |
+          if ($env:COMMIT -notmatch '^[0-9a-f]{40}$') { throw "commit must be a full 40-character SHA: $env:COMMIT" }
+          if ($env:RUN_TOKEN -notmatch '^\d{8}_\d{6}_\d{6}$') { throw "token must be yyyyMMdd_HHmmss_ffffff" }
+          "SDK_ROOT=$env:RUNNER_TEMP\native_sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+
+      - name: Verify the checked-out commit
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:COMMIT) { throw "Checked out $head, but $env:COMMIT was requested" }
+          Write-Host "Building $env:NATIVE_SOURCE at $head"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          architecture: x64
+
+      # The repo venv: PySide6 (qsb.exe, the Qt DLLs the module binds to) exactly as requirements.txt pins it.
+      - name: Create the repo-root venv
+        run: |
+          python -m venv .venv
+          .venv\Scripts\python.exe -m pip install --disable-pip-version-check -r requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'requirements.txt failed to install' }
+
+      # The tool venv (never the repo venv): ninja for CMake, py7zr for the Qt archives.
+      - name: Create the tool venv
+        run: |
+          python -m venv "$env:SDK_ROOT\venv"
+          & "$env:SDK_ROOT\venv\Scripts\python.exe" -m pip install --disable-pip-version-check -r native\tool_requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'native\tool_requirements.txt failed to install' }
+
+      - name: Qt SDK cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.SDK_ROOT }}\qt
+            ${{ env.SDK_ROOT }}\vulkan_headers
+            ${{ env.SDK_ROOT }}\native_sdk.json
+          key: native-sdk-windows-qt${{ env.QT_VERSION }}-${{ hashFiles('tools/native_sdk_fetch.py') }}
+
+      # Verifies every archive against its sha256 before extracting any; a cached prefix whose stamp matches the
+      # pins is left as it is.
+      - name: Fetch the pinned SDK
+        run: |
+          & "$env:SDK_ROOT\venv\Scripts\python.exe" -I tools\native_sdk_fetch.py --prefix "$env:SDK_ROOT"
+          if ($LASTEXITCODE -ne 0) { throw 'The SDK fetch refused (see above)' }
+
+      # cmd, not pwsh: build.cmd is a batch file, and CMake's warnings on stderr must land in the log, not fail pwsh.
+      - name: Compile the module
+        shell: cmd
+        run: |
+          if not exist logs mkdir logs
+          call native\spike_p1\build.cmd "%GITHUB_WORKSPACE%\%BUILD_DIR%" ON "%GITHUB_WORKSPACE%\.venv" "%SDK_ROOT%" > "logs\native_module_build_%RUN_TOKEN%.log" 2>&1
+          set BUILD_EXIT=%ERRORLEVEL%
+          type "logs\native_module_build_%RUN_TOKEN%.log"
+          exit /b %BUILD_EXIT%
+
+      # GPU-free: the import (the module refuses any other Qt), runtime_info and the DLLs' origin. Its JSON feeds the
+      # manifest's Qt and MSVC fields.
+      - name: Import check
+        run: |
+          .venv\Scripts\python.exe native\spike_p1\python\import_check.py --module-dir $env:BUILD_DIR `
+            --expect-qt $env:QT_VERSION --json "logs\native_module_import_$env:RUN_TOKEN.json"
+          if ($LASTEXITCODE -ne 0) { throw 'The module failed its import check' }
+
+      - name: Stage and record the build manifest
+        run: |
+          .venv\Scripts\python.exe tools\github_remote_build.py stage-native --target native_module --build-dir $env:BUILD_DIR
+          if ($LASTEXITCODE -ne 0) { throw 'Staging the module failed' }
+          .venv\Scripts\python.exe tools\github_remote_build.py manifest --target native_module --commit $env:COMMIT `
+            --token $env:RUN_TOKEN --run-id $env:GITHUB_RUN_ID --run-attempt $env:GITHUB_RUN_ATTEMPT `
+            --out remote_build_manifest.json
+          if ($LASTEXITCODE -ne 0) { throw 'Build manifest failed' }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srpss-native_module
+          path: |
+            remote_build_manifest.json
+            release/
+            logs/*_${{ inputs.token }}.*
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Keep the logs of a failed build
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: srpss-native_module-failure-logs
+          path: |
+            logs/
+            build/native_module/CMakeCache.txt
+            build/native_module/CMakeFiles/CMakeConfigureLog.yaml
+            build/native_module/CMakeFiles/CMakeError.log
+            build/native_module/CMakeFiles/CMakeOutput.log
+          if-no-files-found: ignore
+          retention-days: 7
