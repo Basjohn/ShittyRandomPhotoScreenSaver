@@ -221,6 +221,26 @@ class _Uniforms:
     def __init__(self) -> None:
         self._locations: dict[tuple[int, str], int] = {}
         self._values: dict[tuple[int, str], object] = {}
+        self._resolved: set[int] = set()       # programs whose every active uniform location is known
+
+    def resolve(self, program: int) -> None:
+        """Every active uniform location of ``program`` at once: a preparation unit (1C.2). Without it the first
+        visible frame asked GL for each name it sets (864 queries over 11 programs, 480 of them inactive names;
+        with a second render thread holding the GIL that frame took 120 ms on the 4K display). A name the program
+        does not report is then known inactive with no query; an array is found by its base name too."""
+        count = int(gl.glGetProgramiv(program, gl.GL_ACTIVE_UNIFORMS))
+        longest = int(gl.glGetProgramiv(program, gl.GL_ACTIVE_UNIFORM_MAX_LENGTH))
+        for index in range(count):
+            raw, _size, _type = gl.glGetActiveUniform(program, index, longest)
+            name = raw.decode("ascii") if isinstance(raw, bytes) else str(raw)
+            location = int(gl.glGetUniformLocation(program, name))
+            self._locations.setdefault((program, name), location)
+            if name.endswith("[0]"):
+                self._locations.setdefault((program, name[:-3]), location)
+        self._resolved.add(program)
+
+    def resolved(self, program: int) -> bool:
+        return program in self._resolved
 
     def set(self, program: int, values: dict[str, object]) -> None:
         for name, value in values.items():
@@ -229,7 +249,10 @@ class _Uniforms:
                 continue
             location = self._locations.get(key)
             if location is None:
-                location = self._locations[key] = int(gl.glGetUniformLocation(program, name))
+                if program in self._resolved and "[" not in name:
+                    location = self._locations[key] = -1          # not an active uniform of this program
+                else:
+                    location = self._locations[key] = int(gl.glGetUniformLocation(program, name))
             if location < 0:
                 self._values[key] = value
                 continue                      # not read by this program (the driver dropped it)
@@ -254,6 +277,7 @@ class _Uniforms:
     def clear(self) -> None:
         self._locations.clear()
         self._values.clear()
+        self._resolved.clear()
 
 
 _UNSET = object()
@@ -360,15 +384,32 @@ class QuickExtrudedBubbleRenderer:
                 *((r, *program) for program in scene_target_programs(samples, True, False, overlay=True,
                                                                        background=True, oit=True, hdr=True, rotation=rotation))]
 
+    def _resolve_uniforms_step(self) -> bool:
+        """One unit: the uniform locations of the next drawing program not yet resolved; True once all are."""
+        r = self._resources
+        for key, _program in _PROGRAM_ROWS:
+            if not r.has_program(key):
+                continue                              # failed (logged once by its owner): nothing to resolve
+            linked = r.program(*_program)
+            if not self._uniforms.resolved(linked):
+                self._uniforms.resolve(linked)
+                return False
+        return True
+
     def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
-        """One unit of what a first visible frame would otherwise compile or allocate (a program, the drift solver's
-        pair check, the instance buffers, the shaft targets, the probe, the near layer, the scene target), on a
-        hidden reveal frame; True
-        once nothing is left."""
+        """One unit of what a first visible frame would otherwise compile, query or allocate (a program with the
+        previous program's uniform locations, the drift solver's pair check, the instance buffers, the shaft
+        targets, the probe, the near layer, the scene target), on a hidden reveal frame; True once nothing is
+        left."""
         frame = orient_visualizer_scene_frame(frame)
         parameters = frame.snapshot.logical.mode_state.parameters
         samples = _scene_samples(parameters)
+        # A compiled program's uniform locations ride along with the next unit (about 1 ms each), so the locations
+        # add no unit and the preparation keeps its length.
+        self._resolve_uniforms_step()
         if not warm_programs(self._programs(samples, frame.scene_output_rotation)):
+            return False
+        if not self._resolve_uniforms_step():
             return False
         if not self._drift.check(self._resources):      # the drift pair arithmetic, checked once on this device
             return False

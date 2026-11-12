@@ -247,6 +247,27 @@ class DefocusLayer:
         return texture
 
     def _allocate(self, width: int, height: int) -> None:
+        self._allocate_targets(width, height)
+        while not self._compile_next():
+            pass
+
+    def _compile_next(self) -> bool:
+        """Compile the next of the layer's three programs (the vertex array with the last); True once all exist."""
+        if not self._program:
+            self._program = compile_program(_VERTEX, _GATHER, label=f"{self.label} defocus")
+            return False
+        if not self._sprites:
+            self._sprites = compile_program(_SPRITE_VERTEX, _SPRITE_FRAGMENT, label=f"{self.label} bokeh")
+            return False
+        if not self._clip:
+            self._clip = compile_program(_VERTEX, _CLIP, label=f"{self.label} defocus clip")
+            name = (ctypes.c_uint * 1)()
+            gl.glCreateVertexArrays(1, name)
+            self._vao = int(name[0])
+            return False
+        return True
+
+    def _allocate_targets(self, width: int, height: int) -> None:
         self._drop_targets()
         self._colour = self._texture(gl.GL_RGBA16F, width, height)
         self._circle = self._texture(gl.GL_RGBA16F, width, height)   # .rg used (N1.7: QRhi has no RG16F)
@@ -259,19 +280,17 @@ class DefocusLayer:
         if gl.glCheckNamedFramebufferStatus(self._fbo, gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
             raise RuntimeError(f"{self.label}: defocus layer incomplete at {width}x{height}")
         self._size = (width, height)
-        if not self._program:
-            self._program = compile_program(_VERTEX, _GATHER, label=f"{self.label} defocus")
-            self._sprites = compile_program(_SPRITE_VERTEX, _SPRITE_FRAGMENT, label=f"{self.label} bokeh")
-            self._clip = compile_program(_VERTEX, _CLIP, label=f"{self.label} defocus clip")
-            gl.glCreateVertexArrays(1, name)
-            self._vao = int(name[0])
 
     def warm(self, width: int, height: int, max_radius: float) -> bool:
         """One warm-up step: True when the layer is allocated at this size (programs compiled) with the read level
         ``composite(max_radius)`` clips into, else allocate the next of them now (on a hidden frame) instead of at
-        the first ``begin`` / ``composite``."""
+        the first ``begin`` / ``composite``. The targets and each program are a unit of their own (1C.2: together
+        they were one 12-13 ms render-thread unit at 3840x2160, over a 90 Hz frame; the targets alone are about
+        8 ms there, nearly all of it the framebuffer check committing both mip chains, which no split shortens)."""
         if self._size != (int(width), int(height)) or not self._fbo:
-            self._allocate(int(width), int(height))
+            self._allocate_targets(int(width), int(height))
+            return False
+        if not self._compile_next():
             return False
         size = self._read_size(max_radius)[1:]
         if self._below_size != size or not self._below:
@@ -288,6 +307,8 @@ class DefocusLayer:
     def begin(self, width: int, height: int) -> None:
         if self._size != (int(width), int(height)) or not self._fbo:
             self._allocate(int(width), int(height))
+        while not self._compile_next():           # a warm-up cut short: whatever it had not compiled yet
+            pass
         self._saved = (gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING), gl_query.get_ints(gl.GL_VIEWPORT, 4),
                        [(bool(gl.glIsEnabledi(gl.GL_BLEND, i)),
                          gl_query.get_indexed_int(gl.GL_BLEND_SRC_RGB, i), gl_query.get_indexed_int(gl.GL_BLEND_DST_RGB, i),

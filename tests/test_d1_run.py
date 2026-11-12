@@ -235,6 +235,71 @@ def test_a_zoomed_crop_is_the_source_pixels_in_exact_blocks(qt_app):
             assert zoomed.pixelColor(zx, zy) == image.pixelColor(x0 + zx // 4, y0 + zy // 4), (zx, zy)
 
 
+def test_a_grabbed_frame_is_encoded_off_the_gui_thread_and_recorded_on_it(qt_app, tmp_path):
+    """A grab's PNG encode never runs on the saver's GUI thread (1C.2: a 4K encode there took 2.0-2.3 s, no window
+    rendered meanwhile, and a 1.85 s display move took 7 s). The grab returns at once with its record still open; the
+    encode runs on another thread; the record is completed on the GUI thread; an exit drain writes what is pending.
+    Control: on the pre-fix harness the record was complete, and the file written by the GUI thread, on return."""
+    import threading
+    import time
+
+    from PySide6.QtGui import QColor, QImage
+
+    driver = d1_run.D1Driver([], display=1, out=tmp_path)
+    encoded_on, completed_on = [], []
+    save_frame, complete = driver._save_frame, driver._complete
+
+    def recording_save(*args):
+        encoded_on.append(threading.current_thread())
+        return save_frame(*args)
+
+    def recording_complete(record):
+        completed_on.append(threading.current_thread())
+        complete(record)
+    driver._save_frame, driver._complete = recording_save, recording_complete
+    image = QImage(64, 48, QImage.Format.Format_RGBX8888)
+    image.fill(QColor(10, 20, 30))
+    records = []
+    for name in ("a", "b"):
+        record = {"index": len(records), "step": f"1:grab:{name}"}
+        records.append(record)
+        driver._grabbed(None, d1_run.Step(1.0, "grab", name), record, image)
+        assert driver.results == [] and "ok" not in record          # nothing written or recorded on the GUI thread
+    deadline = time.monotonic() + 10.0
+    while len(driver.results) < 1 and time.monotonic() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.005)
+    driver.finish()                                                  # the exit drain: whatever is still pending
+    assert [r["frame"] for r in driver.results] == ["a.png", "b.png"]
+    assert all(r["ok"] for r in driver.results)
+    assert all((tmp_path / "frames" / r["frame"]).is_file() for r in driver.results)
+    assert encoded_on and all(t is not threading.main_thread() for t in encoded_on)
+    assert completed_on == [threading.main_thread()] * 2
+
+
+def test_steps_are_armed_on_precise_timers_and_fire_in_order(qt_app, tmp_path):
+    """Qt's default single-shot is coarse (5 %: about 1 s at 22 s) and reordered steps planned 0.1 s apart (12 Nov: a
+    grab fired before the press it was meant to follow). Every step is armed precise and fires in plan order.
+    Control: the pre-fix harness armed coarse timers."""
+    import time
+
+    from PySide6.QtCore import QObject, Qt, QTimer
+
+    steps = [d1_run.Step(0.05, "key", "esc"), d1_run.Step(0.06, "key", "esc"), d1_run.Step(0.08, "key", "esc")]
+    driver = d1_run.D1Driver(steps, display=1, out=tmp_path)
+    fired = []
+    driver.fire = lambda index: fired.append(index)
+    engine = QObject()
+    driver._on_reveal(engine)
+    armed = [timer for timer in engine.findChildren(QTimer) if timer.isActive()]
+    assert len(armed) == 3 and all(timer.timerType() == Qt.TimerType.PreciseTimer for timer in armed)
+    deadline = time.monotonic() + 5.0
+    while len(fired) < 3 and time.monotonic() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.002)
+    assert fired == [0, 1, 2]
+
+
 # -- teardown ---------------------------------------------------------------------------------------------------------
 
 def _child(tmp_path, body: str) -> list[str]:

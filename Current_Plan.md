@@ -1028,10 +1028,22 @@ arrangement change, a display added or removed, the owning display lost, Setting
   wallpaper). Evidence `.artifacts/evidence/display/d1_run/20261112_1c2_move_hidden/` and `20261112_1c2_move_visible/`.
   The recipe needs a profile whose `monitor_bindings.spotify_visualizer.screen` names the MSI (an identity binding
   outranks `monitor`; `d1_run.py --setting` cannot set it): the lead's copy is `D:/Temp/Scratch/SRPSS/profile_move/`.
-- [ ] Defect (in flight, Opus Medium): the move takes about 7 s from press to landing (design: 0.5 s fade, target
-  prepared within 1.5 s) and the render threads stall during it (grabs asked 0.7 s apart came back 4.5 s apart): root
-  cause with numbers, fix at the owners (preparation in small units over already-rendered frames), measure on hidden
-  hosts, then the lead's visible rerun.
+- Landed 12 Nov (R-199): the 7 s move was `d1_run.py` encoding 4K PNGs on the saver's GUI thread (no window renders
+  meanwhile); it now encodes on a writer thread and arms steps on precise timers. Extruded Bubble resolves its uniform
+  locations during preparation (first visible frame 864 lookups -> 0) and the defocus layer warms one program per
+  unit (largest unit 12.3 -> 8.6 ms). Hidden real saver, press to landing 7.4-7.7 s -> 1.8-2.1 s; first content
+  frame 119.6 -> 20-23 ms. Evidence `display/move_timing/20261112_root_cause/` (`timeline.txt`).
+- [ ] Defect: the hop's cross-display Save stalls the GUI thread 102-132 ms at the fade's midpoint (no window renders;
+  the fade-in waits): `custom_layout_owner.py:954` -> `SettingsManager.set_widgets_map` ->
+  `core/settings/settings_manager.py:542-552`, which re-normalises the whole Visualizer section on every widgets write
+  (15-27 ms alone). Reproduce: hidden run plus `--diag gui-stall-stacks` (`20261112_1c2_move_hidden_stalls`).
+  - [ ] Root cause with each part timed; the Save off the fade's critical path or made cheap at its owner (no timer
+    deferral); before/after on the hidden run.
+- [ ] Defect (tool): `d1_run.py:440-475` reads 4K frames back and copies them on the render thread, costing the other
+  display one 57-92 ms frame per 4K grab; move the copies off the render thread (the read-back itself stays).
+- [ ] Lead: visible rerun on Display 1 with the recipe in R-199 (profile `D:/Temp/Scratch/SRPSS/profile_move/`),
+  frames across the fade reviewed (no blank card, no pop, music continuous); then Spectrum, both directions.
+- [ ] The 1.5 s preparation bound on a cold shader cache (34 units land at 1.22-1.28 s warm, close to the bound).
 - Landed 12 Nov: the neighbouring display prepares on the transfer arrows' hover (Edit's and the hover glyph's) and
   on a Visualizer drag within one card width of the seam, released on leave, turn-back, drag end, Edit end or
   retirement (edges only); a preparing card takes no input (`prepareOnly`, the scene's hit test refuses it) and

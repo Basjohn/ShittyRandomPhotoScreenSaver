@@ -49,6 +49,42 @@ def _float_target():
     return texture, fbo
 
 
+def test_warming_compiles_at_most_one_program_a_step_and_a_cut_short_warm_still_draws(capture, monkeypatch):
+    """The layer's warm-up is spread over frames: its targets in one step, then each of its programs in a step of its
+    own (1C.2: the targets and three programs were one 12-13 ms render-thread unit at 3840x2160). A warm-up cut
+    short (a reveal at its deadline) leaves ``begin`` to finish it. Control: the pre-fix warm compiled all three
+    programs in its first step."""
+    from rendering.quick.scene3d import defocus
+
+    compiled = []
+    real = defocus.compile_program
+
+    def counting(*args, **kwargs):
+        compiled.append(kwargs.get("label"))
+        return real(*args, **kwargs)
+    monkeypatch.setattr(defocus, "compile_program", counting)
+    layer = DefocusLayer("warm test")
+    try:
+        per_step = []
+        for _ in range(20):
+            before = len(compiled)
+            done = layer.warm(SIZE, SIZE, 4.0)
+            per_step.append(len(compiled) - before)
+            if done:
+                break
+        assert done and max(per_step) == 1 and sum(per_step) == 3 and per_step[0] == 0
+        cut = DefocusLayer("cut short")
+        try:
+            assert not cut.warm(SIZE, SIZE, 4.0) and not cut.warm(SIZE, SIZE, 4.0)     # targets, one program
+            cut.begin(SIZE, SIZE)                                                      # the other two, here
+            cut.end()
+            assert len([label for label in compiled if label.startswith("cut short")]) == 3
+        finally:
+            cut.release()
+    finally:
+        layer.release()
+
+
 def test_a_point_spreads_over_its_circle_keeping_its_light_and_sharp_pixels_stay(capture):
     layer = DefocusLayer("defocus test")
     texture, fbo = _float_target()
