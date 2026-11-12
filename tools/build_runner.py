@@ -5,7 +5,8 @@ Usage:
     python tools/build_runner.py --mode venv
     python tools/build_runner.py --mode github
     python tools/build_runner.py --mode github --run [--select standard media_center ...]
-    python tools/build_runner.py --mode github --run --select native_module
+    python tools/build_runner.py --mode github --run --select native_module     (the product's native core)
+    python tools/build_runner.py --mode github --run --select native_spike      (the P1 harness, native/spike_p1)
     python tools/build_runner.py --smoke-test --mode normal
 
 The GUI intentionally uses only the Python standard library. Build workers keep
@@ -815,15 +816,27 @@ def _github_jobs(repo_root: Path) -> tuple[Job, ...]:
     GitHub-only Linux Media Center jobs each use the same ``scripts/linux/build_from_windows.ps1`` with a separate
     profile, artifact and GitHub run, on the pre-flight's pinned commit (``_job_arguments``).
 
-    The native module (``native_module``, Current_Plan.md item 8b) compiles on GitHub through its own workflow and is
-    validated and published into ``release/native_module`` like a product; it is never pre-selected and no installer
-    packages it (until N2.1 folds it into the product builds)."""
+    The native modules compile on GitHub through their one workflow (``native-module.yml``, Current_Plan.md item 8b)
+    and are validated and published into ``release/<key>`` like a product: ``native_module`` is the product's native
+    core (``native/core``), ``native_spike`` the P1 harness (``native/spike_p1``). Neither is pre-selected and no
+    installer packages either."""
     from tools import github_remote_build as remote
 
     by_key = {job.key: job for job in jobs_for_mode("venv", repo_root)}
     workflow = repo_root / ".github" / "workflows" / "windows-build.yml"
-    native = remote.MODULE_TARGETS["native_module"]
-    native_dir = repo_root / "release" / native.payload_dirs[0]
+    names = {"native_module": "Native Core Module (GitHub)", "native_spike": "Native Spike Harness (GitHub)"}
+    native_jobs = tuple(
+        Job(
+            target.key,
+            names[target.key],
+            "github",
+            repo_root / remote.NATIVE_WORKFLOW_PATH,
+            repo_root / "release" / target.payload_dirs[0],
+            repo_root / "release" / target.primary,
+            default_selected=False,
+        )
+        for target in remote.MODULE_TARGETS.values()
+    )
     return (
         replace(by_key["standard"], name="Standard + Diagnostic (GitHub)", kind="github", script=workflow),
         replace(by_key["media_center"], name="Media Center (GitHub)", kind="github", script=workflow),
@@ -840,15 +853,7 @@ def _github_jobs(repo_root: Path) -> tuple[Job, ...]:
             repo_root / "release" / "linux" / f"SRPSS-{APP_VERSION}-linux-mc-x86_64.tar.gz",
             default_selected=False,
         ),
-        Job(
-            native.key,
-            "Native Module (GitHub)",
-            "github",
-            repo_root / remote.NATIVE_WORKFLOW_PATH,
-            native_dir,
-            repo_root / "release" / native.primary,
-            default_selected=False,
-        ),
+        *native_jobs,
     )
 
 
@@ -3343,7 +3348,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         nargs="+",
         metavar="JOB",
         help="with --run: job keys (standard media_center reddit_helper standard_installer media_center_installer "
-             "linux linux_mc native_module)",
+             "linux linux_mc native_module native_spike)",
     )
     parser.add_argument(
         "--iscc",

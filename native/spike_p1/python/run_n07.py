@@ -45,11 +45,11 @@ With the Khronos validation layer installed outside the registry, add --layer-pa
 VkLayer_khronos_validation.json> (VK_ADD_LAYER_PATH for this process only, reported as allowed): D9 (iv) is then
 checked in every round, each error grouped by id, phase, instance, thread and caller modules ("attribution").
 
-Usage (repository venv, the module built on GitHub):
-  python native/spike_p1/python/run_n07.py --module-dir release/native_module --round jobs --label n07_jobs
-  python native/spike_p1/python/run_n07.py --module-dir release/native_module --round measure --label n07_measure
-  python native/spike_p1/python/run_n07.py --module-dir release/native_module --round retire --label n07_retire
-  python native/spike_p1/python/run_n07.py --module-dir release/native_module --round rest --label n07_rest
+Usage (repository venv, the module built on GitHub: tools/build_runner.py --mode github --run --select native_spike):
+  python native/spike_p1/python/run_n07.py --module-dir release/native_spike --round jobs --label n07_jobs
+  python native/spike_p1/python/run_n07.py --module-dir release/native_spike --round measure --label n07_measure
+  python native/spike_p1/python/run_n07.py --module-dir release/native_spike --round retire --label n07_retire
+  python native/spike_p1/python/run_n07.py --module-dir release/native_spike --round rest --label n07_rest
 Evidence: .artifacts/evidence/native_core/n07/<date>_<label>/summary.json. Exit 0 whenever the probe ran; the
 verdict is in the JSON and the last printed line ("N07 VERDICT ...").
 """

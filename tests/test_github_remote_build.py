@@ -398,9 +398,10 @@ def test_the_github_tab_offers_the_remote_products_and_local_steps(tmp_path):
     venv = {job.key: job for job in build_runner.jobs_for_mode("venv", tmp_path)}
     # The remote products and local steps, then the optional Linux jobs: the other tabs' own Linux job, and Linux
     # Media Center, which only this tab offers (its own contract: tests/test_linux_mc_build_contract.py); last the
-    # optional native module (its own contract: tests/test_native_module_build.py).
+    # optional native modules, the product's core and the P1 harness (their own contract:
+    # tests/test_native_module_build.py).
     assert list(github) == ["standard", "media_center", "reddit_helper", "standard_installer", "media_center_installer",
-                            "linux", "linux_mc", "native_module"]
+                            "linux", "linux_mc", "native_module", "native_spike"]
     assert github["linux"] == venv["linux"] and not github["linux"].default_selected     # the other tabs' own job
     assert "linux_mc" not in venv and not github["linux_mc"].default_selected
     assert github["linux_mc"].kind == github["linux"].kind and github["linux_mc"].script == github["linux"].script

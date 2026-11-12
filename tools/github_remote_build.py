@@ -12,11 +12,14 @@ exactly one pushed commit. This module owns the remote contract on both sides:
   manifest, the requested commit and its version, and only then replaces the published release directories. Any
   failure leaves the previous payload exactly where it was.
 
-The native module (``native_module``, ``.github/workflows/native-module.yml``) is a target of the same contract: its
-own workflow compiles it, ``stage-native`` places it under ``release/native_module`` on the runner, its manifest also
-records the Qt, PySide6 and MSVC it was built with, and locally it is validated against the pinned Qt
-(``tools/native_sdk_fetch.py``) and published into ``release/native_module`` with that manifest beside it. It is
-built only when the local HEAD is the pushed commit.
+The native modules are targets of the same contract, both compiled by one workflow
+(``.github/workflows/native-module.yml``, whose ``source`` input names the folder): ``native_module`` is the product's
+native core (``native/core``, ``_srpss_native_core``; Current_Plan.md item 8b, N2.1) and ``native_spike`` the P1 harness
+(``native/spike_p1``, ``_srpss_native_spike``). ``stage-native`` places a module and one baked shader per shader
+source under ``release/<target>`` on the runner, its manifest also records the source, Qt, PySide6 and MSVC it was
+built with, and locally it is validated against the built commit's pinned Qt (``tools/native_sdk_fetch.py``) and
+shader sources and published into ``release/<target>`` with that manifest beside it. A module is built only when the
+local HEAD is the pushed commit.
 
 Nothing here compiles anything locally. Docs/Guides/GitHub_Remote_Build.md is the operator guide.
 
@@ -50,13 +53,15 @@ from tools.native_sdk_fetch import SdkFetchError, pinned_qt_version, qt_version_
 
 WORKFLOW_FILE = "windows-build.yml"
 WORKFLOW_PATH = Path(".github") / "workflows" / WORKFLOW_FILE
-# The native module (Current_Plan.md item 8b, N0.9): compiled by its own reusable workflow, published like a product.
+# The native modules (Current_Plan.md item 8b, N0.9 and N2.1): compiled by one reusable workflow, published like a
+# product. The workflow's ``source`` input names the folder; its default is the product's native core.
 NATIVE_WORKFLOW_FILE = "native-module.yml"
 NATIVE_WORKFLOW_PATH = Path(".github") / "workflows" / NATIVE_WORKFLOW_FILE
-NATIVE_SOURCE = "native/spike_p1"
-NATIVE_MODULE = "_srpss_native_spike"
-NATIVE_BUILD_LOG = "native_module_build_{token}.log"
-NATIVE_IMPORT_REPORT = "native_module_import_{token}.json"
+# The runner's reports per module target (``{key}`` the target, ``{token}`` the run token).
+NATIVE_BUILD_LOG = "{key}_build_{{token}}.log"
+NATIVE_IMPORT_REPORT = "{key}_import_{{token}}.json"
+# A native source's shaders: every file of these kinds in ``<source>/shaders/`` is baked to ``<file>.qsb``.
+SHADER_SUFFIXES = (".vert", ".frag", ".comp")
 MANIFEST_NAME = "remote_build_manifest.json"
 MANIFEST_SCHEMA = 1
 POLL_SECONDS = 15.0
@@ -86,6 +91,8 @@ class RemoteTarget:
     module: bool = False
     # Report names (``{token}`` filled in) the runner must upload beside the payload, beyond build_evidence's.
     reports: tuple[str, ...] = ()
+    # A native module's source folder in the repository (the native workflow's ``source`` input).
+    source: str = ""
 
     @property
     def artifact(self) -> str:
@@ -95,13 +102,36 @@ class RemoteTarget:
     def artifacts(self) -> tuple[str, ...]:
         return (self.primary, *self.companions)
 
+    @property
+    def module_name(self) -> str:
+        """A native module's import name (the ``.pyd``'s stem)."""
+        return Path(self.primary).stem
+
+    @property
+    def import_report(self) -> str:
+        return NATIVE_IMPORT_REPORT.format(key=self.key)
+
+    @property
+    def build_log(self) -> str:
+        return NATIVE_BUILD_LOG.format(key=self.key)
+
     def report_names(self, token: str) -> tuple[str, ...]:
         return (*evidence_files(self.key, token), *(name.format(token=token) for name in self.reports))
 
     def dispatch_inputs(self, sha: str, token: str) -> tuple[str, ...]:
-        """The workflow inputs: the product workflow also takes the product (one workflow, two targets)."""
+        """The workflow inputs: the product workflow also takes the product (one workflow, two targets), the native
+        workflow the source folder (one workflow, every native module)."""
         inputs = (f"commit={sha}", f"token={token}")
-        return (f"target={self.key}", *inputs) if self.workflow == WORKFLOW_FILE else inputs
+        if self.workflow == WORKFLOW_FILE:
+            return (f"target={self.key}", *inputs)
+        return (*inputs, f"source={self.source}") if self.module else inputs
+
+
+def _module_target(key: str, payload: str, module: str, source: str) -> RemoteTarget:
+    return RemoteTarget(
+        key, (payload,), f"{payload}/{module}.pyd", workflow=NATIVE_WORKFLOW_FILE, module=True, source=source,
+        reports=(NATIVE_BUILD_LOG.format(key=key), NATIVE_IMPORT_REPORT.format(key=key)),
+    )
 
 
 TARGETS: dict[str, RemoteTarget] = {
@@ -111,14 +141,14 @@ TARGETS: dict[str, RemoteTarget] = {
     ),
     "media_center": RemoteTarget("media_center", ("media_center",), "media_center/SRPSS_Media_Center.exe"),
 }
-# Modules the products will load (N2.1 folds the native module into both product builds through the same reusable
-# workflow). Published into ``release/<payload dir>`` like a product, never selected by default, never packaged.
+# Native modules, both built by the one native workflow and published into ``release/<payload dir>`` like a product,
+# never selected by default. ``native_module`` is the product's native core (D5.7; the workflow's default source);
+# ``native_spike`` the P1 harness, which never ships.
 MODULE_TARGETS: dict[str, RemoteTarget] = {
-    "native_module": RemoteTarget(
-        "native_module", ("native_module",), f"native_module/{NATIVE_MODULE}.pyd", workflow=NATIVE_WORKFLOW_FILE,
-        module=True, reports=(NATIVE_BUILD_LOG, NATIVE_IMPORT_REPORT),
-    ),
+    "native_module": _module_target("native_module", "native_module", "_srpss_native_core", "native/core"),
+    "native_spike": _module_target("native_spike", "native_spike", "_srpss_native_spike", "native/spike_p1"),
 }
+DEFAULT_NATIVE_TARGET = "native_module"
 ALL_TARGETS: dict[str, RemoteTarget] = {**TARGETS, **MODULE_TARGETS}
 SHADERS_DIR = "shaders"
 
@@ -172,6 +202,29 @@ def qt_version_at_commit(repo_root: Path, sha: str) -> str:
         return qt_version_from_requirements(_git(repo_root, "show", f"{sha}:requirements.txt"))
     except SdkFetchError as exc:
         raise RemoteBuildError(str(exc)) from exc
+
+
+def module_target_for_source(source: str) -> RemoteTarget:
+    """The module target the native workflow builds from ``source`` (refused when no target has that folder)."""
+    normalized = source.replace("\\", "/").strip("/")
+    for target in MODULE_TARGETS.values():
+        if target.source == normalized:
+            return target
+    known = ", ".join(target.source for target in MODULE_TARGETS.values())
+    raise RemoteBuildError(f"no native module is built from {source!r} (the sources are {known})")
+
+
+def expected_shaders(names: Sequence[str]) -> tuple[str, ...]:
+    """The baked shaders a native source must produce: ``<file>.qsb`` for every shader source file in its
+    ``shaders/`` folder (``.vert``, ``.frag``, ``.comp``)."""
+    return tuple(sorted(f"{name}.qsb" for name in (Path(item).name for item in names)
+                        if Path(name).suffix in SHADER_SUFFIXES and not name.startswith(".")))
+
+
+def shaders_at_commit(repo_root: Path, sha: str, source: str) -> tuple[str, ...]:
+    """``expected_shaders`` of ``source`` as the commit ``sha`` has it (not the working tree)."""
+    listed = _git(repo_root, "ls-tree", "--name-only", sha, f"{source}/shaders/").splitlines()
+    return expected_shaders(listed)
 
 
 @dataclass(frozen=True)
@@ -228,17 +281,21 @@ def msvc_version(msc_full_ver: object) -> str:
     return f"{value // 10_000_000}.{value // 100_000 % 100}.{value % 100_000}"
 
 
-def stage_native_module(root: Path, build_dir: Path, target_key: str = "native_module") -> tuple[Path, ...]:
+def stage_native_module(root: Path, build_dir: Path, target_key: str = DEFAULT_NATIVE_TARGET) -> tuple[Path, ...]:
     """(Runner) Place the compiled module and its baked shaders where the target publishes them:
-    ``release/<payload dir>/<module>.pyd`` and ``release/<payload dir>/shaders/*.qsb``."""
+    ``release/<payload dir>/<module>.pyd`` and ``release/<payload dir>/shaders/<file>.qsb``, one per shader source
+    in ``<source>/shaders/``. A build without its module, or without a shader its source has, stages nothing."""
 
     target = MODULE_TARGETS[target_key]
     module = build_dir / Path(target.primary).name
     if not module.is_file():
         raise RemoteBuildError(f"the build produced no {module.name} in {build_dir}")
-    shaders = sorted((build_dir / "generated").glob("*.qsb"))
-    if not shaders:
-        raise RemoteBuildError(f"the build baked no shaders (.qsb) in {build_dir / 'generated'}")
+    sources = root / target.source / "shaders"
+    expected = expected_shaders([path.name for path in sources.iterdir()] if sources.is_dir() else [])
+    shaders = [build_dir / "generated" / name for name in expected]
+    missing = [path.name for path in shaders if not path.is_file()]
+    if missing:
+        raise RemoteBuildError(f"the build baked no {', '.join(missing)} in {build_dir / 'generated'}")
     payload = root / "release" / target.payload_dirs[0]
     shutil.rmtree(payload, ignore_errors=True)
     (payload / SHADERS_DIR).mkdir(parents=True)
@@ -250,7 +307,7 @@ def stage_native_module(root: Path, build_dir: Path, target_key: str = "native_m
 def _module_fields(root: Path, target: RemoteTarget, token: str, pyside6_version: str | None) -> dict[str, Any]:
     """(Runner) What a module was built against, from the import check the runner ran on it."""
 
-    report_path = root / REPORTS_DIR / NATIVE_IMPORT_REPORT.format(token=token)
+    report_path = root / REPORTS_DIR / target.import_report.format(token=token)
     try:
         report = json.loads(report_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -271,6 +328,7 @@ def _module_fields(root: Path, target: RemoteTarget, token: str, pyside6_version
 
         pyside6_version = distribution_version("PySide6")
     return {
+        "native_source": target.source,
         "qt_version": compiled,
         "pyside6_version": pyside6_version,
         "msvc_version": msvc_version(runtime.get("msc_full_ver")),
@@ -370,14 +428,17 @@ def _safe_relative(relative: str, target: RemoteTarget) -> None:
 
 def validate_staging(
     staging: Path, target_key: str, *, commit: str, version: str, token: str, qt_version: str | None = None,
+    shaders: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """Refuse a downloaded artifact unless it is exactly the requested commit's build, whole and unaltered (and, for
-    a native module, built against ``qt_version``, the commit's pinned Qt, and the PySide6 that ships it, with its
-    baked shaders)."""
+    a native module, built from its source against ``qt_version``, the commit's pinned Qt, and the PySide6 that ships
+    it, with exactly ``shaders``, the baked shaders the commit's shader sources make)."""
 
     target = ALL_TARGETS[target_key]
     if target.module and not qt_version:
         raise RemoteBuildError(f"{target.key} is validated against the built commit's pinned Qt; none was given")
+    if target.module and shaders is None:
+        raise RemoteBuildError(f"{target.key} is validated against the built commit's shader sources; none were given")
     manifest_path = staging / MANIFEST_NAME
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -414,17 +475,20 @@ def validate_staging(
             if files[f"release/{companion}"]["sha256"] != primary_hash:
                 raise RemoteBuildError(f"release/{companion} is not the same binary as release/{target.primary}")
     if target.module:
-        _validate_module(manifest, target, str(qt_version))
+        _validate_module(manifest, target, str(qt_version), tuple(shaders or ()))
     pe_version = pe_product_version(staging / "release" / target.primary)
     if pe_version is not None and not _same_version(pe_version, version):
         raise RemoteBuildError(f"{target.primary} carries product version {pe_version}, expected {version}")
     return manifest
 
 
-def _validate_module(manifest: dict[str, Any], target: RemoteTarget, qt_version: str) -> None:
+def _validate_module(manifest: dict[str, Any], target: RemoteTarget, qt_version: str, shaders: tuple[str, ...]) -> None:
     """A module binds to PySide6's own Qt DLLs and refuses any other Qt: built against anything but the pinned Qt
-    (and the PySide6 release that ships it) it would never load."""
+    (and the PySide6 release that ships it) it would never load. It carries one baked shader per shader source."""
 
+    if manifest.get("native_source") != target.source:
+        raise RemoteBuildError(f"manifest native_source is {manifest.get('native_source')!r}, expected "
+                               f"{target.source!r}")
     if manifest.get("qt_version") != qt_version:
         raise RemoteBuildError(f"manifest qt_version is {manifest.get('qt_version')!r}, expected {qt_version!r}")
     pyside6 = str(manifest.get("pyside6_version") or "")
@@ -432,9 +496,11 @@ def _validate_module(manifest: dict[str, Any], target: RemoteTarget, qt_version:
         raise RemoteBuildError(f"manifest pyside6_version is {pyside6!r}, expected PySide6 {qt_version}")
     if not re.fullmatch(r"\d+\.\d+\.\d+", str(manifest.get("msvc_version") or "")):
         raise RemoteBuildError(f"manifest msvc_version is {manifest.get('msvc_version')!r}")
-    shaders = f"release/{target.payload_dirs[0]}/{SHADERS_DIR}/"
-    if not any(name.startswith(shaders) and name.endswith(".qsb") for name in manifest["files"]):
-        raise RemoteBuildError(f"the build published no baked shaders under {shaders}")
+    folder = f"release/{target.payload_dirs[0]}/{SHADERS_DIR}/"
+    published = tuple(sorted(name[len(folder):] for name in manifest["files"] if name.startswith(folder)))
+    if published != tuple(sorted(shaders)):
+        raise RemoteBuildError(f"the build published the shaders {list(published)} under {folder}; its shader "
+                               f"sources make {sorted(shaders)}")
 
 
 # --------------------------------------------------------------------------------------------- publish (local)
@@ -849,14 +915,15 @@ def _retrieve(repo_root, cli, key, run_id, url, commit, version, token, log_dir,
         log.write(f"Downloaded {target.artifact} to staging {staging}")
         emit("status", key, "Validating")
         qt_version = qt_version_at_commit(repo_root, commit.sha) if target.module else None
+        shaders = shaders_at_commit(repo_root, commit.sha, target.source) if target.module else None
         manifest = validate_staging(staging, key, commit=commit.sha, version=version, token=token,
-                                    qt_version=qt_version)
+                                    qt_version=qt_version, shaders=shaders)
         log.write(f"Validated {len(manifest['files'])} files against the manifest (commit {commit.sha}, {version})")
         if target.module:
             # A module keeps its validated manifest beside it: what it was built from and against (Qt, MSVC).
             shutil.copy2(staging / MANIFEST_NAME, staging / "release" / target.payload_dirs[0] / MANIFEST_NAME)
-            log.write(f"Built against Qt {manifest['qt_version']}, PySide6 {manifest['pyside6_version']}, "
-                      f"MSVC {manifest['msvc_version']}")
+            log.write(f"Built from {manifest['native_source']} against Qt {manifest['qt_version']}, PySide6 "
+                      f"{manifest['pyside6_version']}, MSVC {manifest['msvc_version']}")
         emit("status", key, "Publishing")
         published = publish_payload(staging, release_dir, key)
         for relative in manifest["files"]:
@@ -937,6 +1004,11 @@ def _stage_native_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _native_target_command(args: argparse.Namespace) -> int:
+    print(module_target_for_source(args.source).key)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -948,13 +1020,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     manifest.add_argument("--run-attempt", default="")
     manifest.add_argument("--out", required=True)
     stage = sub.add_parser("stage-native", help="(workflow step) place a compiled module under release/")
-    stage.add_argument("--target", choices=sorted(MODULE_TARGETS), default="native_module")
+    stage.add_argument("--target", choices=sorted(MODULE_TARGETS), default=DEFAULT_NATIVE_TARGET)
     stage.add_argument("--build-dir", required=True)
+    native_target = sub.add_parser("native-target", help="(workflow step) print the module target a source builds")
+    native_target.add_argument("--source", required=True)
     run = sub.add_parser("run", help="build products on GitHub and publish them into release/")
     run.add_argument("--target", choices=sorted(ALL_TARGETS), action="append", required=True)
     run.add_argument("--branch", default=None)
     args = parser.parse_args(argv)
-    commands = {"manifest": _manifest_command, "stage-native": _stage_native_command, "run": _run_command}
+    commands = {"manifest": _manifest_command, "stage-native": _stage_native_command,
+                "native-target": _native_target_command, "run": _run_command}
     try:
         return commands[args.command](args)
     except RemoteBuildError as exc:

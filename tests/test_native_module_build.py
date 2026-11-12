@@ -1,15 +1,18 @@
-"""The native module's GitHub build (.github/workflows/native-module.yml, native/spike_p1/build.cmd, both sides of
-tools/github_remote_build.py's ``native_module`` target, its Build Runner job, native/spike_p1/python/import_check.py).
+"""The native modules' GitHub build (.github/workflows/native-module.yml, its two sources native/core and
+native/spike_p1, both sides of tools/github_remote_build.py's module targets, their Build Runner jobs,
+native/spike_p1/python/import_check.py).
 
-Nothing here compiles, dispatches or contacts GitHub: the workflow and build script are read as text, the runner's
+Nothing here compiles, dispatches or contacts GitHub: the workflow and build scripts are read as text, the runner's
 build tree is a temporary folder with stand-in files, git runs on a throwaway repository, the GitHub CLI is a recorded
-fake, and the module under import check is a stand-in Python module. The contracts proven: the workflow builds exactly
-the requested commit, only on dispatch or a call, with read-only permissions and no input interpolated into a script;
-the SDK comes from the checked fetch, the compile from build.cmd's one CMake invocation with vcvars found by vswhere;
-the runner's manifest records the Qt, PySide6 and MSVC a module was built with and refuses a module built for another
-Qt or not checked; locally a download is published into release/native_module only when it is the requested commit's
-whole, unaltered module for the pinned Qt; an unpushed commit is never built; the Build Runner job is never
-pre-selected and no installer depends on it."""
+fake, and the spike module under import check is a stand-in Python module. The contracts proven: one workflow builds
+every native source (its ``source`` input, by default the product's native core), exactly the requested commit, only
+on dispatch or a call, with read-only permissions and no input interpolated into a script, and names its run for the
+target that source builds; the SDK comes from the checked fetch, the compile from the source's build.cmd; staging
+refuses a build without its module or without a shader its source has; the runner's manifest records the source, Qt,
+PySide6 and MSVC a module was built with and refuses a module built for another Qt or not checked; locally a download
+is published into release/<target> only when it is the requested commit's whole, unaltered module for the pinned Qt
+with exactly its sources' shaders; an unpushed commit is never built; the Build Runner jobs are never pre-selected and
+no installer depends on them."""
 from __future__ import annotations
 
 import json
@@ -30,9 +33,18 @@ from tools import native_sdk_fetch as sdk
 
 ROOT = Path(__file__).resolve().parents[1]
 TOKEN = "20261112_120000_000001"
-NATIVE = remote.MODULE_TARGETS["native_module"]
+NATIVE = remote.MODULE_TARGETS["native_module"]           # the product's native core
+SPIKE = remote.MODULE_TARGETS["native_spike"]             # the P1 harness
 QT = sdk.pinned_qt_version()          # the repository's pin (the import check's stand-ins)
 FIXTURE_QT = "7.8.9"                  # the fixture repository's pin: the value flows from requirements.txt
+# The fixture repository's shader sources per target (anything else in shaders/ is not a shader source).
+FIXTURE_SHADERS = {"native_module": ("field.comp", ".gitkeep", "notes.md"),
+                   "native_spike": ("quadfield.vert", "quadfield.frag")}
+
+
+def _baked(key: str) -> list[str]:
+    return sorted(f"{name}.qsb" for name in FIXTURE_SHADERS[key] if not name.startswith(".") and
+                  not name.endswith(".md"))
 
 
 # ------------------------------------------------------------------------------------------------- the workflow
@@ -47,37 +59,59 @@ def test_the_workflow_builds_only_the_requested_commit_on_dispatch_or_a_call():
     triggers = text.split("\non:", 1)[1].split("\npermissions:", 1)[0]
     assert re.findall(r"^  (\w+):", triggers, re.MULTILINE) == ["workflow_dispatch", "workflow_call"]
     for trigger in triggers.split("\n  workflow_call:"):
-        assert re.findall(r"^      (\w+):\n", trigger, re.MULTILINE) == ["commit", "token"]
+        assert re.findall(r"^      (\w+):\n", trigger, re.MULTILINE) == ["commit", "token", "source"]
+        source = trigger.split("      source:\n", 1)[1]
+        assert re.search(r"^        default: (\S+)$", source, re.MULTILINE).group(1) == NATIVE.source
     assert "ref: ${{ inputs.commit }}" in text and "git rev-parse HEAD" in text     # checked out, then verified
     assert "permissions:\n  contents: read\n" in text and "secrets." not in text
     assert "runs-on: windows" in text and 'python-version: "3.14"' in text
-    # find_run matches "<key>-<token>" in the run's name.
-    assert f"{NATIVE.key}-${{{{ inputs.token }}}}" in text.split("run-name:", 1)[1].splitlines()[0]
-    assert f"name: {NATIVE.artifact}\n" in text and NATIVE.workflow == remote.NATIVE_WORKFLOW_FILE
+    assert "name: srpss-${{ steps.target.outputs.key }}\n" in text
+    assert remote.DEFAULT_NATIVE_TARGET == NATIVE.key and NATIVE.workflow == SPIKE.workflow == remote.NATIVE_WORKFLOW_FILE
+
+
+def test_the_run_is_named_for_the_target_its_source_builds():
+    """find_run matches ``<target>-<token>`` in the run's name; the workflow derives the target from the source with
+    an expression (a run name cannot use a step's output), checked against MODULE_TARGETS here and on the runner."""
+    text = _workflow()
+    run_name = text.split("run-name:", 1)[1].splitlines()[0]
+    mapping = re.search(r"inputs\.source == '([^']+)' && '(\w+)' \|\| '(\w+)'", run_name)
+    assert mapping and f"-${{{{ inputs.token }}}}" in run_name
+    source, named, otherwise = mapping.groups()
+    assert remote.module_target_for_source(source).key == named
+    assert remote.MODULE_TARGETS[otherwise].source == NATIVE.source and {named, otherwise} == set(remote.MODULE_TARGETS)
+    assert run_name.split("SRPSS native", 1)[1].count(mapping.group(0)) == 1
+    assert mapping.group(0) in text.split("RUN_NAME_TARGET:", 1)[1].splitlines()[0]       # the runner's own check
+    assert "native-target --source $env:NATIVE_SOURCE" in text and "$key -ne $env:RUN_NAME_TARGET" in text
 
 
 def test_the_workflow_never_interpolates_inputs_into_scripts():
     blocks = re.findall(r"run: \|\n((?:\s{10,}.*\n)+)", _workflow())
-    assert len(blocks) >= 8 and not any("${{" in block for block in blocks)
+    assert len(blocks) >= 9 and not any("${{" in block for block in blocks)
 
 
-def test_the_workflow_fetches_the_checked_sdk_and_compiles_with_the_one_cmake_invocation():
+def test_the_workflow_fetches_the_checked_sdk_and_compiles_with_the_sources_one_cmake_invocation():
     text = _workflow()
     assert "native_sdk_fetch.py --print-qt-version" in text and "--expect-qt $env:QT_VERSION" in text
     assert "tools\\native_sdk_fetch.py --prefix" in text and "-r native\\tool_requirements.txt" in text
     assert "hashFiles('tools/native_sdk_fetch.py')" in text and "${{ env.QT_VERSION }}" in text
-    assert f"call {remote.NATIVE_SOURCE.replace('/', chr(92))}\\build.cmd" in text and "cmake " not in text
+    assert 'call "%NATIVE_DIR%\\build.cmd" "%GITHUB_WORKSPACE%\\%BUILD_DIR%" ON "%GITHUB_WORKSPACE%\\.venv" ' \
+           '"%SDK_ROOT%"' in text and "cmake " not in text
+    assert '"$env:NATIVE_DIR\\python\\import_check.py" --module-dir $env:BUILD_DIR' in text
     assert "-r requirements.txt" in text                                            # PySide6's qsb and Qt DLLs
-    for step in ("import_check.py", "stage-native --target native_module", "manifest --target native_module",
-                 remote.MANIFEST_NAME, "if: failure()"):
+    for step in ("stage-native --target $env:NATIVE_KEY", "manifest --target $env:NATIVE_KEY", remote.MANIFEST_NAME,
+                 "if: failure()"):
         assert step in text, step
-    for report in NATIVE.reports:
-        assert report.replace("{token}", "%RUN_TOKEN%") in text or report.replace(
-            "{token}", "$env:RUN_TOKEN") in text, report
+    assert remote.NATIVE_BUILD_LOG.format(key="%NATIVE_KEY%").replace("{token}", "%RUN_TOKEN%") in text
+    assert remote.NATIVE_IMPORT_REPORT.format(key="$($env:NATIVE_KEY)").replace(
+        "{token}", "$($env:RUN_TOKEN)") in text
+    for target in remote.MODULE_TARGETS.values():                       # every source has what the workflow calls
+        for part in ("build.cmd", "CMakeLists.txt", "python/import_check.py"):
+            assert (ROOT / target.source / part).is_file(), (target.key, part)
+        assert target.reports == (target.build_log, target.import_report)
 
 
-def test_build_cmd_finds_msvc_with_vswhere_and_names_the_sdk_layout():
-    text = (ROOT / remote.NATIVE_SOURCE / "build.cmd").read_text(encoding="utf-8")
+def test_the_spikes_build_cmd_finds_msvc_with_vswhere_and_names_the_sdk_layout():
+    text = (ROOT / SPIKE.source / "build.cmd").read_text(encoding="utf-8")
     assert "vswhere.exe" in text and "Microsoft.VisualStudio.Component.VC.Tools.x86.x64" in text
     assert "\\Microsoft Visual Studio\\18\\" not in text and "BuildTools\\VC" not in text   # no fixed install path
     assert "VC\\Auxiliary\\Build\\vcvars64.bat" in text
@@ -85,6 +119,26 @@ def test_build_cmd_finds_msvc_with_vswhere_and_names_the_sdk_layout():
     for variable in ("CMAKE_PREFIX_PATH", "Python_EXECUTABLE", "SPIKE_QSB", "SPIKE_VULKAN_INCLUDE", "SPIKE_WITH_QUICK"):
         assert f"-D{variable}=" in text, variable
     assert len(re.findall(r"^cmake -S ", text, re.MULTILINE)) == 1
+
+
+def test_a_source_names_its_target_and_an_unknown_source_is_refused(capsys):
+    assert remote.module_target_for_source("native/core") is NATIVE
+    assert remote.module_target_for_source("native\\spike_p1\\") is SPIKE
+    with pytest.raises(remote.RemoteBuildError, match="no native module is built from"):
+        remote.module_target_for_source("native/other")
+    assert remote.main(["native-target", "--source", "native/spike_p1"]) == 0
+    assert capsys.readouterr().out.strip() == SPIKE.key
+    assert remote.main(["native-target", "--source", "tools"]) == 1
+
+
+def test_the_baked_shaders_are_one_per_shader_source():
+    assert remote.expected_shaders(["a.vert", "a.frag", "b.comp", ".gitkeep", "README.md", "x.glsl"]) == (
+        "a.frag.qsb", "a.vert.qsb", "b.comp.qsb")
+    assert remote.expected_shaders([]) == ()
+    for target in remote.MODULE_TARGETS.values():           # the real sources: exactly what CMake bakes
+        folder = ROOT / target.source / "shaders"
+        assert remote.expected_shaders([path.name for path in folder.iterdir()]) == tuple(sorted(
+            f"{path.name}.qsb" for path in folder.iterdir() if path.suffix in remote.SHADER_SUFFIXES))
 
 
 # ------------------------------------------------------------------------------------------- the runner's manifest
@@ -103,6 +157,11 @@ def _repo(tmp_path: Path) -> Path:
     (root / "versioning.py").write_text('APP_VERSION: str = "9.8.7"\n', encoding="utf-8")
     (root / "requirements.txt").write_text(f"PySide6=={FIXTURE_QT}\nshiboken6=={FIXTURE_QT}\n", encoding="utf-8")
     (root / ".gitignore").write_text("release/\nlogs/\nbuild/\n", encoding="utf-8")
+    for key, names in FIXTURE_SHADERS.items():
+        folder = root / remote.MODULE_TARGETS[key].source / "shaders"
+        folder.mkdir(parents=True)
+        for name in names:
+            (folder / name).write_text("// shader\n", encoding="utf-8")
     _git(root, "add", "-A")
     _git(root, "commit", "-q", "-m", "fixture")
     return root
@@ -115,42 +174,52 @@ def runtime_info(qt: str = FIXTURE_QT, **overrides) -> dict:
     return info
 
 
-def runner_build(root: Path, *, import_ok: bool = True, info: dict | None = None, pyd: bool = True,
+def runner_build(root: Path, target=NATIVE, *, import_ok: bool = True, info: dict | None = None, pyd: bool = True,
                  shaders: bool = True, log: bool = True) -> Path:
     """What the workflow leaves in the checkout before the manifest step: a build tree, its log and import check."""
     build = root / "build" / "native_module"
     (build / "generated").mkdir(parents=True)
     if pyd:
-        (build / f"{remote.NATIVE_MODULE}.pyd").write_bytes(b"MZ module")
+        (build / f"{target.module_name}.pyd").write_bytes(b"MZ module")
     if shaders:
-        for stage in ("vert", "frag"):
-            (build / "generated" / f"quadfield.{stage}.qsb").write_bytes(f"qsb {stage}".encode())
+        for name in _baked(target.key):
+            (build / "generated" / name).write_bytes(f"qsb {name}".encode())
+    (build / "generated" / "stale.vert.qsb").write_bytes(b"not a source of this build")     # never staged
     (root / "logs").mkdir(exist_ok=True)
     if log:
-        (root / "logs" / remote.NATIVE_BUILD_LOG.format(token=TOKEN)).write_text("[ok] linked", encoding="utf-8")
+        (root / "logs" / target.build_log.format(token=TOKEN)).write_text("[ok] linked", encoding="utf-8")
     report = {"ok": import_ok, "checks": {"import": "ok"}, "runtime_info": info or runtime_info()}
-    (root / "logs" / remote.NATIVE_IMPORT_REPORT.format(token=TOKEN)).write_text(json.dumps(report), encoding="utf-8")
+    (root / "logs" / target.import_report.format(token=TOKEN)).write_text(json.dumps(report), encoding="utf-8")
     return build
 
 
-def test_the_runner_stages_the_module_and_records_what_it_was_built_with(tmp_path):
+@pytest.mark.parametrize("target", [NATIVE, SPIKE], ids=lambda target: target.key)
+def test_the_runner_stages_the_module_and_records_what_it_was_built_with(tmp_path, target):
     root = _repo(tmp_path)
-    build = runner_build(root)
-    placed = remote.stage_native_module(root, build)
-    payload = f"release/{NATIVE.payload_dirs[0]}"
+    build = runner_build(root, target)
+    placed = remote.stage_native_module(root, build, target.key)
+    payload = f"release/{target.payload_dirs[0]}"
     assert {path.relative_to(root).as_posix() for path in placed} == {
-        f"release/{NATIVE.primary}", f"{payload}/{remote.SHADERS_DIR}/quadfield.vert.qsb",
-        f"{payload}/{remote.SHADERS_DIR}/quadfield.frag.qsb"}
+        f"release/{target.primary}", *(f"{payload}/{remote.SHADERS_DIR}/{name}" for name in _baked(target.key))}
     commit = _git(root, "rev-parse", "HEAD")
-    manifest = remote.build_manifest(root, "native_module", commit, TOKEN, pyside6_version=FIXTURE_QT)
-    assert (manifest["target"], manifest["commit"], manifest["token"]) == ("native_module", commit, TOKEN)
+    manifest = remote.build_manifest(root, target.key, commit, TOKEN, pyside6_version=FIXTURE_QT)
+    assert (manifest["target"], manifest["commit"], manifest["token"]) == (target.key, commit, TOKEN)
+    assert manifest["native_source"] == target.source
     assert manifest["qt_version"] == FIXTURE_QT and manifest["pyside6_version"] == FIXTURE_QT
     assert manifest["msvc_version"] == "19.44.35227" and manifest["with_quick"] is True
     assert set(manifest["files"]) == {
         *(path.relative_to(root).as_posix() for path in placed),
-        *(remote.REPORTS_PREFIX + name for name in NATIVE.report_names(TOKEN))}
-    entry = manifest["files"][f"release/{NATIVE.primary}"]
-    assert entry == {"bytes": len(b"MZ module"), "sha256": remote.sha256_file(root / "release" / NATIVE.primary)}
+        *(remote.REPORTS_PREFIX + name for name in target.report_names(TOKEN))}
+    entry = manifest["files"][f"release/{target.primary}"]
+    assert entry == {"bytes": len(b"MZ module"), "sha256": remote.sha256_file(root / "release" / target.primary)}
+
+
+def test_a_source_without_shaders_stages_its_module_alone(tmp_path):
+    root = _repo(tmp_path)
+    for path in (root / NATIVE.source / "shaders").iterdir():
+        path.unlink()
+    placed = remote.stage_native_module(root, runner_build(root, NATIVE, shaders=False), NATIVE.key)
+    assert [path.relative_to(root).as_posix() for path in placed] == [f"release/{NATIVE.primary}"]
 
 
 @pytest.mark.parametrize("case", ["import-failed", "other-qt-compiled", "other-qt-runtime", "no-log", "no-import"])
@@ -160,18 +229,19 @@ def test_the_runner_refuses_to_describe_an_unchecked_or_mismatched_module(tmp_pa
             "other-qt-runtime": runtime_info(qt_runtime="6.12.0")}.get(case)
     build = runner_build(root, import_ok=case != "import-failed", info=info, log=case != "no-log")
     if case == "no-import":
-        (root / "logs" / remote.NATIVE_IMPORT_REPORT.format(token=TOKEN)).unlink()
+        (root / "logs" / NATIVE.import_report.format(token=TOKEN)).unlink()
     remote.stage_native_module(root, build)
     with pytest.raises(remote.RemoteBuildError):
         remote.build_manifest(root, "native_module", _git(root, "rev-parse", "HEAD"), TOKEN, pyside6_version=FIXTURE_QT)
 
 
+@pytest.mark.parametrize("target", [NATIVE, SPIKE], ids=lambda target: target.key)
 @pytest.mark.parametrize("missing", ["pyd", "shaders"])
-def test_staging_refuses_a_build_without_its_module_or_shaders(tmp_path, missing):
+def test_staging_refuses_a_build_without_its_module_or_shaders(tmp_path, missing, target):
     root = _repo(tmp_path)
-    build = runner_build(root, pyd=missing != "pyd", shaders=missing != "shaders")
-    with pytest.raises(remote.RemoteBuildError):
-        remote.stage_native_module(root, build)
+    build = runner_build(root, target, pyd=missing != "pyd", shaders=missing != "shaders")
+    with pytest.raises(remote.RemoteBuildError, match="produced no" if missing == "pyd" else "baked no"):
+        remote.stage_native_module(root, build, target.key)
     assert not (root / "release").exists()
 
 
@@ -181,22 +251,24 @@ def test_the_msvc_version_reads_as_cl_prints_it():
         remote.msvc_version(1944)
 
 
-# ------------------------------------------------------------------------------------------ the GPU-free check
+# ------------------------------------------------------------------------------------- the spike's GPU-free check
 
 
 @pytest.fixture
 def import_check(monkeypatch):
-    monkeypatch.syspath_prepend(str(ROOT / remote.NATIVE_SOURCE / "python"))
-    monkeypatch.delitem(sys.modules, remote.NATIVE_MODULE, raising=False)
+    monkeypatch.syspath_prepend(str(ROOT / SPIKE.source / "python"))
+    monkeypatch.delitem(sys.modules, SPIKE.module_name, raising=False)
+    monkeypatch.delitem(sys.modules, "import_check", raising=False)
     import import_check as module
 
     yield module
-    sys.modules.pop(remote.NATIVE_MODULE, None)
+    sys.modules.pop(SPIKE.module_name, None)
+    sys.modules.pop("import_check", None)
 
 
 def _stand_in_module(folder: Path, *, qt: str = QT, dll_dir: str | None = None,
                      broken: bool = False) -> Path:
-    """A Python stand-in for the compiled module: the same name and ``runtime_info()`` shape."""
+    """A Python stand-in for the compiled spike: the same name and ``runtime_info()`` shape."""
     folder.mkdir(parents=True, exist_ok=True)
     body = "raise ImportError('built for Qt 6.11.1 but the process runs Qt 6.11.2')\n" if broken else (
         "from pathlib import Path\nimport PySide6\n"
@@ -205,7 +277,7 @@ def _stand_in_module(folder: Path, *, qt: str = QT, dll_dir: str | None = None,
         f"    return {{'qt_compiled': {qt!r}, 'qt_runtime': {qt!r}, 'msc_full_ver': 194435227, 'with_quick': True,\n"
         "            'loaded_modules': {name: str(_DLLS / name) for name in\n"
         "                               ('Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Qml.dll', 'Qt6Quick.dll')}}\n")
-    (folder / f"{remote.NATIVE_MODULE}.py").write_text(body, encoding="utf-8")
+    (folder / f"{SPIKE.module_name}.py").write_text(body, encoding="utf-8")
     return folder
 
 
@@ -227,10 +299,10 @@ def test_the_import_check_fails_a_module_that_is_not(tmp_path, import_check, cas
 # ------------------------------------------------------------------------------- the download, validated (local)
 
 
-def _artifact(root: Path, into: Path, *, pyside6: str = FIXTURE_QT) -> Path:
+def _artifact(root: Path, into: Path, target=NATIVE, *, pyside6: str = FIXTURE_QT) -> Path:
     """The runner side end to end (stage, manifest), then the upload layout the workflow produces."""
-    remote.stage_native_module(root, runner_build(root))
-    manifest = remote.build_manifest(root, "native_module", _git(root, "rev-parse", "HEAD"), TOKEN,
+    remote.stage_native_module(root, runner_build(root, target), target.key)
+    manifest = remote.build_manifest(root, target.key, _git(root, "rev-parse", "HEAD"), TOKEN,
                                      run_id="7", run_attempt="1", pyside6_version=pyside6)
     into.mkdir(parents=True)
     (into / remote.MANIFEST_NAME).write_text(json.dumps(manifest), encoding="utf-8")
@@ -239,19 +311,24 @@ def _artifact(root: Path, into: Path, *, pyside6: str = FIXTURE_QT) -> Path:
     return into
 
 
-def _validate(staging: Path, root: Path, **overrides):
-    expected = {"commit": _git(root, "rev-parse", "HEAD"), "version": "9.8.7", "token": TOKEN,
-                "qt_version": FIXTURE_QT, **overrides}
-    return remote.validate_staging(staging, "native_module", **expected)
+def _validate(staging: Path, root: Path, target=NATIVE, **overrides):
+    sha = _git(root, "rev-parse", "HEAD")
+    expected = {"commit": sha, "version": "9.8.7", "token": TOKEN, "qt_version": FIXTURE_QT,
+                "shaders": remote.shaders_at_commit(root, sha, target.source), **overrides}
+    return remote.validate_staging(staging, target.key, **expected)
 
 
-def test_a_whole_module_build_of_the_requested_commit_validates(tmp_path):
+@pytest.mark.parametrize("target", [NATIVE, SPIKE], ids=lambda target: target.key)
+def test_a_whole_module_build_of_the_requested_commit_validates(tmp_path, target):
     root = _repo(tmp_path)
-    staging = _artifact(root, tmp_path / "staging")
-    manifest = _validate(staging, root)
-    assert f"release/{NATIVE.primary}" in manifest["files"] and manifest["qt_version"] == FIXTURE_QT
+    staging = _artifact(root, tmp_path / "staging", target)
+    manifest = _validate(staging, root, target)
+    assert f"release/{target.primary}" in manifest["files"] and manifest["qt_version"] == FIXTURE_QT
+    assert remote.shaders_at_commit(root, _git(root, "rev-parse", "HEAD"), target.source) == tuple(_baked(target.key))
     with pytest.raises(remote.RemoteBuildError, match="pinned Qt"):            # a module needs the commit's pin
-        _validate(staging, root, qt_version=None)
+        _validate(staging, root, target, qt_version=None)
+    with pytest.raises(remote.RemoteBuildError, match="shader sources"):       # and the commit's shader sources
+        _validate(staging, root, target, shaders=None)
 
 
 def _edit_manifest(staging: Path, change) -> None:
@@ -261,19 +338,24 @@ def _edit_manifest(staging: Path, change) -> None:
     path.write_text(json.dumps(manifest), encoding="utf-8")
 
 
-def _tamper(staging: Path, case: str) -> None:
-    payload = staging / "release" / NATIVE.payload_dirs[0]
-    module = staging / "release" / NATIVE.primary
+def _tamper(staging: Path, case: str, target=NATIVE) -> None:
+    payload = staging / "release" / target.payload_dirs[0]
+    module = staging / "release" / target.primary
     if case == "pyd-bytes":
         module.write_bytes(b"MZ modulf")                                       # same size, other bytes
     elif case == "missing-pyd":
         module.unlink()
     elif case == "unlisted-pyd":                                             # removed from the manifest as well
         module.unlink()
-        _edit_manifest(staging, lambda m: m["files"].pop(f"release/{NATIVE.primary}"))
+        _edit_manifest(staging, lambda m: m["files"].pop(f"release/{target.primary}"))
     elif case == "no-shaders":
         shutil.rmtree(payload / remote.SHADERS_DIR)
         _edit_manifest(staging, lambda m: [m["files"].pop(name) for name in list(m["files"]) if name.endswith(".qsb")])
+    elif case == "extra-shader":                                             # listed and hashed, but no source
+        extra = payload / remote.SHADERS_DIR / "planted.frag.qsb"
+        extra.write_bytes(b"qsb")
+        _edit_manifest(staging, lambda m: m["files"].update({
+            extra.relative_to(staging).as_posix(): {"bytes": 3, "sha256": remote.sha256_file(extra)}}))
     elif case == "planted-dll":
         (payload / "Qt6Gui.dll").write_bytes(b"x")
     elif case == "qt-version":
@@ -282,19 +364,22 @@ def _tamper(staging: Path, case: str) -> None:
         _edit_manifest(staging, lambda m: m.update(pyside6_version="6.12.0"))
     elif case == "no-msvc":
         _edit_manifest(staging, lambda m: m.pop("msvc_version"))
+    elif case == "other-source":
+        _edit_manifest(staging, lambda m: m.update(native_source=SPIKE.source if target is NATIVE else NATIVE.source))
     elif case == "escape":
         _edit_manifest(staging, lambda m: m["files"].update(
-            {"release/native_module/../screensaver/SRPSS.scr": {"bytes": 1, "sha256": "0"}}))
+            {f"release/{target.payload_dirs[0]}/../screensaver/SRPSS.scr": {"bytes": 1, "sha256": "0"}}))
 
 
-@pytest.mark.parametrize("case", ["pyd-bytes", "missing-pyd", "unlisted-pyd", "no-shaders", "planted-dll",
-                                  "qt-version", "pyside6-version", "no-msvc", "escape"])
-def test_an_altered_or_incomplete_module_download_is_refused(tmp_path, case):
+@pytest.mark.parametrize("target", [NATIVE, SPIKE], ids=lambda target: target.key)
+@pytest.mark.parametrize("case", ["pyd-bytes", "missing-pyd", "unlisted-pyd", "no-shaders", "extra-shader",
+                                  "planted-dll", "qt-version", "pyside6-version", "no-msvc", "other-source", "escape"])
+def test_an_altered_or_incomplete_module_download_is_refused(tmp_path, case, target):
     root = _repo(tmp_path)
-    staging = _artifact(root, tmp_path / "staging")
-    _tamper(staging, case)
+    staging = _artifact(root, tmp_path / "staging", target)
+    _tamper(staging, case, target)
     with pytest.raises(remote.RemoteBuildError):
-        _validate(staging, root)
+        _validate(staging, root, target)
 
 
 @pytest.mark.parametrize("field,value", [("commit", "f" * 40), ("version", "9.8.8"),
@@ -309,7 +394,7 @@ def test_a_module_of_another_commit_version_or_run_is_refused(tmp_path, field, v
 # ---------------------------------------------------------------------------- dispatch, follow, publish (local)
 
 
-def test_the_module_dispatches_its_own_workflow_with_only_its_inputs():
+def test_each_module_dispatches_the_one_native_workflow_with_its_source():
     calls = []
 
     def run(args, _timeout):
@@ -319,55 +404,64 @@ def test_the_module_dispatches_its_own_workflow_with_only_its_inputs():
     cli = remote.GitHubCli(run=run)
     sha = "c" * 40
     cli.dispatch("native_module", "work/branch", sha, TOKEN)
+    cli.dispatch("native_spike", "work/branch", sha, TOKEN)
     cli.dispatch("standard", "main", sha, TOKEN)
-    assert calls[0] == ["gh", "workflow", "run", remote.NATIVE_WORKFLOW_FILE, "--ref", "work/branch",
-                        "-f", f"commit={sha}", "-f", f"token={TOKEN}"]
-    assert calls[1] == ["gh", "workflow", "run", remote.WORKFLOW_FILE, "--ref", "main",
+    for call, target in zip(calls, (NATIVE, SPIKE)):
+        assert call == ["gh", "workflow", "run", remote.NATIVE_WORKFLOW_FILE, "--ref", "work/branch",
+                        "-f", f"commit={sha}", "-f", f"token={TOKEN}", "-f", f"source={target.source}"]
+    assert calls[2] == ["gh", "workflow", "run", remote.WORKFLOW_FILE, "--ref", "main",
                         "-f", "target=standard", "-f", f"commit={sha}", "-f", f"token={TOKEN}"]
     cli.find_run(f"native_module-{TOKEN}", workflow=NATIVE.workflow)
     cli.startup_failure(remote.datetime.now(remote.timezone.utc), sha, workflow=NATIVE.workflow)
-    assert all(call[call.index("--workflow") + 1] == remote.NATIVE_WORKFLOW_FILE for call in calls[2:])
+    assert all(call[call.index("--workflow") + 1] == remote.NATIVE_WORKFLOW_FILE for call in calls[3:])
 
 
-def _orchestrate(tmp_path, monkeypatch, cli, *, local_head: str | None = None, release: Path | None = None):
+def _orchestrate(tmp_path, monkeypatch, cli, *, keys=("native_module",), local_head: str | None = None,
+                 release: Path | None = None):
     root = tmp_path / "repo"
     sha = _git(root, "rev-parse", "HEAD")
     monkeypatch.setattr(remote, "resolve_pushed_commit", lambda *_a, **_k: remote.PushedCommit(
         "work", sha, "x", local_head or sha))
     release = release or tmp_path / "release"
     results = remote.run_remote_builds(
-        root, cli, ["native_module"], remote.PushedCommit("work", sha, "fixture", sha), TOKEN,
+        root, cli, list(keys), remote.PushedCommit("work", sha, "fixture", sha), TOKEN,
         log_dir=tmp_path / "logs", release_dir=release, cancelled=lambda: False,
         emit=lambda *_event: None, poll_seconds=0.0, sleep=lambda _s: None,
     )
-    return results["native_module"], release
+    return results, release
 
 
-def test_a_validated_module_is_published_into_release_with_its_manifest(tmp_path, monkeypatch):
+def test_validated_modules_are_published_into_release_with_their_manifests(tmp_path, monkeypatch):
     root = _repo(tmp_path)
-    artifact = _artifact(root, tmp_path / "artifact")
-    shutil.rmtree(root / "release")                         # the runner's staging; the local tree is separate
+    artifacts = {}
+    for target in (NATIVE, SPIKE):
+        artifacts[target.key] = _artifact(root, tmp_path / f"artifact_{target.key}", target)
+        shutil.rmtree(root / "release")                     # the runner's staging; the local tree is separate
+        shutil.rmtree(root / "logs")
+        shutil.rmtree(root / "build")
     release = tmp_path / "release"
     (release / "native_module").mkdir(parents=True)
     (release / "native_module" / "previous.pyd").write_bytes(b"old")
     (release / "screensaver").mkdir()
     (release / "screensaver" / "SRPSS.scr").write_bytes(b"product")
-    cli = FakeCli({"native_module": artifact}, {"native_module": [RUNNING, SUCCESS]})
-    result, release = _orchestrate(tmp_path, monkeypatch, cli, release=release)
-    assert result.ok, result.detail
-    assert [entry[0] for entry in cli.dispatched] == ["native_module"]
+    cli = FakeCli(artifacts, {"native_module": [RUNNING, SUCCESS], "native_spike": [SUCCESS]})
+    results, release = _orchestrate(tmp_path, monkeypatch, cli, keys=("native_module", "native_spike"),
+                                    release=release)
+    assert all(result.ok for result in results.values()), {key: r.detail for key, r in results.items()}
+    assert [entry[0] for entry in cli.dispatched] == ["native_module", "native_spike"]
     assert {workflow for _request, workflow in cli.lookups} == {remote.NATIVE_WORKFLOW_FILE}
-    published = release / "native_module"
-    assert (published / Path(NATIVE.primary).name).read_bytes() == b"MZ module"
-    assert sorted(path.name for path in (published / remote.SHADERS_DIR).iterdir()) == [
-        "quadfield.frag.qsb", "quadfield.vert.qsb"]
-    assert not (published / "previous.pyd").exists()
-    kept = json.loads((published / remote.MANIFEST_NAME).read_text(encoding="utf-8"))
-    assert kept["commit"] == _git(root, "rev-parse", "HEAD") and kept["qt_version"] == FIXTURE_QT
+    for target in (NATIVE, SPIKE):
+        published = release / target.payload_dirs[0]
+        assert (published / Path(target.primary).name).read_bytes() == b"MZ module"
+        shaders = published / remote.SHADERS_DIR
+        assert sorted(path.name for path in shaders.iterdir()) == _baked(target.key)
+        kept = json.loads((published / remote.MANIFEST_NAME).read_text(encoding="utf-8"))
+        assert kept["native_source"] == target.source and kept["qt_version"] == FIXTURE_QT
+        assert results[target.key].output_path == published
+        for name in target.report_names(TOKEN):
+            assert (tmp_path / "logs" / name).is_file()
+    assert not (release / "native_module" / "previous.pyd").exists()
     assert (release / "screensaver" / "SRPSS.scr").read_bytes() == b"product"     # the products are untouched
-    assert result.output_path == published
-    for name in NATIVE.report_names(TOKEN):
-        assert (tmp_path / "logs" / name).is_file()
 
 
 def test_an_invalid_module_download_keeps_the_previous_module(tmp_path, monkeypatch):
@@ -378,44 +472,51 @@ def test_an_invalid_module_download_keeps_the_previous_module(tmp_path, monkeypa
     (release / "native_module").mkdir(parents=True)
     (release / "native_module" / "previous.pyd").write_bytes(b"old")
     cli = FakeCli({"native_module": artifact}, {"native_module": [SUCCESS]})
-    result, release = _orchestrate(tmp_path, monkeypatch, cli, release=release)
-    assert not result.ok and "qt_version" in result.detail
+    results, release = _orchestrate(tmp_path, monkeypatch, cli, release=release)
+    assert not results["native_module"].ok and "qt_version" in results["native_module"].detail
     assert sorted(path.name for path in (release / "native_module").iterdir()) == ["previous.pyd"]
 
 
-def test_the_expected_qt_is_the_built_commits_pin_not_the_working_trees(tmp_path, monkeypatch):
+def test_the_expected_qt_and_shaders_are_the_built_commits_not_the_working_trees(tmp_path, monkeypatch):
     root = _repo(tmp_path)
     artifact = _artifact(root, tmp_path / "artifact")
     built = _git(root, "rev-parse", "HEAD")
-    (root / "requirements.txt").write_text("PySide6==9.9.9\n", encoding="utf-8")       # uncommitted edit
+    (root / "requirements.txt").write_text("PySide6==9.9.9\n", encoding="utf-8")       # uncommitted edits
+    (root / NATIVE.source / "shaders" / "later.frag").write_text("// later\n", encoding="utf-8")
     cli = FakeCli({"native_module": artifact}, {"native_module": [SUCCESS]})
-    result, _release = _orchestrate(tmp_path, monkeypatch, cli)
-    assert result.ok, result.detail
-    _git(root, "commit", "-q", "-am", "the Qt bump")
+    results, _release = _orchestrate(tmp_path, monkeypatch, cli)
+    assert results["native_module"].ok, results["native_module"].detail
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "the Qt bump and a shader")
+    head = _git(root, "rev-parse", "HEAD")
     assert remote.qt_version_at_commit(root, built) == FIXTURE_QT
-    assert remote.qt_version_at_commit(root, _git(root, "rev-parse", "HEAD")) == "9.9.9"
+    assert remote.qt_version_at_commit(root, head) == "9.9.9"
+    assert remote.shaders_at_commit(root, built, NATIVE.source) == tuple(_baked("native_module"))
+    assert "later.frag.qsb" in remote.shaders_at_commit(root, head, NATIVE.source)
 
 
 def test_an_unpushed_commit_is_never_built(tmp_path, monkeypatch):
     root = _repo(tmp_path)
     artifact = _artifact(root, tmp_path / "artifact")
     cli = FakeCli({"native_module": artifact}, {"native_module": [SUCCESS]})
-    result, release = _orchestrate(tmp_path, monkeypatch, cli, local_head="a" * 40)
-    assert not result.ok and "push it first" in result.detail
+    results, release = _orchestrate(tmp_path, monkeypatch, cli, local_head="a" * 40)
+    assert not results["native_module"].ok and "push it first" in results["native_module"].detail
     assert cli.dispatched == [] and not (release / "native_module").exists()
 
 
 # ------------------------------------------------------------------------------------------- Build Runner's tab
 
 
-def test_the_github_tab_offers_the_module_unselected_and_publishing_into_release(tmp_path):
+def test_the_github_tab_offers_both_modules_unselected_and_publishing_into_release(tmp_path):
     github = {job.key: job for job in build_runner.jobs_for_mode("github", tmp_path)}
     venv = {job.key for job in build_runner.jobs_for_mode("venv", tmp_path)}
-    job = github["native_module"]
-    assert job.kind == "github" and not job.default_selected and "native_module" not in venv
-    assert job.script == tmp_path / remote.NATIVE_WORKFLOW_PATH and (ROOT / remote.NATIVE_WORKFLOW_PATH).is_file()
-    assert job.output_dir == tmp_path / "release" / NATIVE.payload_dirs[0]
-    assert job.artifacts == (tmp_path / "release" / NATIVE.primary,)
+    for target in (NATIVE, SPIKE):
+        job = github[target.key]
+        assert job.kind == "github" and not job.default_selected and target.key not in venv
+        assert job.script == tmp_path / remote.NATIVE_WORKFLOW_PATH and (ROOT / remote.NATIVE_WORKFLOW_PATH).is_file()
+        assert job.output_dir == tmp_path / "release" / target.payload_dirs[0]
+        assert job.artifacts == (tmp_path / "release" / target.primary,)
+    assert github["native_module"].name != github["native_spike"].name
 
 
 def test_the_module_alone_dispatches_only_itself_and_runs_no_local_step(monkeypatch, tmp_path):
@@ -448,7 +549,7 @@ def test_the_module_alone_dispatches_only_itself_and_runs_no_local_step(monkeypa
     assert events[-1][:2] == ("pipeline_done", True)
 
 
-def test_the_headless_run_selects_the_module_only_when_asked(monkeypatch):
+def test_the_headless_run_selects_a_module_only_when_asked(monkeypatch):
     commit = remote.PushedCommit("work", "c" * 40, "x", "c" * 40)
     monkeypatch.setattr(build_runner, "run_preflight", lambda mode, **_kw: build_runner.PreflightResult(
         remote_commit=commit))
@@ -463,7 +564,9 @@ def test_the_headless_run_selects_the_module_only_when_asked(monkeypatch):
     monkeypatch.setattr(build_runner.BuildRunnerApp, "_github_pipeline_worker", pipeline)
     assert build_runner.run_headless(None, out=lambda _line: None) == 0
     assert build_runner.run_headless(["native_module"], out=lambda _line: None) == 0
-    assert "native_module" not in seen[0] and seen[1] == {"native_module"}
+    assert build_runner.run_headless(["native_spike"], out=lambda _line: None) == 0
+    assert not set(remote.MODULE_TARGETS) & seen[0]
+    assert seen[1:] == [{"native_module"}, {"native_spike"}]
 
 
 def _preflight_with(monkeypatch, commit, *, registered=True):
@@ -478,12 +581,12 @@ def _preflight_with(monkeypatch, commit, *, registered=True):
     return result
 
 
-def test_preflight_makes_only_the_module_unavailable_for_an_unpushed_head_or_an_unlisted_workflow(monkeypatch):
+def test_preflight_makes_only_the_modules_unavailable_for_an_unpushed_head_or_an_unlisted_workflow(monkeypatch):
     pushed = remote.PushedCommit("work", "d" * 40, "s", "d" * 40)
-    assert "native_module" not in _preflight_with(monkeypatch, pushed).unavailable_jobs
+    assert not set(remote.MODULE_TARGETS) & _preflight_with(monkeypatch, pushed).unavailable_jobs
     for result in (_preflight_with(monkeypatch, replace_head(pushed, "a" * 40)),
                    _preflight_with(monkeypatch, pushed, registered=False)):
-        assert "native_module" in result.unavailable_jobs and not result.errors
+        assert set(remote.MODULE_TARGETS) <= result.unavailable_jobs and not result.errors
         assert not {"standard", "media_center"} & result.unavailable_jobs
         assert any(warning.startswith("Native Module:") for warning in result.warnings)
 
