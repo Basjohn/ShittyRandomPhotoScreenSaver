@@ -24,12 +24,20 @@ Rounds (one per GitHub build of the module):
           without readback; the full cycle), --cycles each (the full kind --long-cycles, for plateau versus linear
           growth). After every teardown: gc, then handles, threads, private bytes, GPU heaps and the Python gc
           object count; the handle count after every create, host and teardown step attributes the growth.
+  translucent  round 6: real Qt Quick windows kept invisible by tests/_invisible_windows.py's pattern (opacity 0,
+          transparent for input, a tool window; frameless like the Studio): on our device translucent and opaque
+          (the negative control), translucent with the DWM system backdrop and with the project's AccentPolicy
+          glass, and translucent on Qt's own device; an OpenGL child process for comparison (D7 point 8's route 3).
+          Records supportedCompositeAlpha, Qt's swapchain flags and the compositeAlpha its rule picks, the
+          extended style, the backdrop HRESULTs, and the alpha in Qt's grabWindow and in PrintWindow
+          (PW_RENDERFULLCONTENT, DWM's copy of the window). See-through to the desktop is the lead's visible run.
 
 Usage (repository venv, the module built on GitHub):
   python native/spike_p1/python/run_n06.py --module-dir release/native_module --round facts --label n06_facts
   python native/spike_p1/python/run_n06.py --module-dir release/native_module --round device --label n06_device
   python native/spike_p1/python/run_n06.py --module-dir release/native_module --round lifecycle --label n06_lifecycle
   python native/spike_p1/python/run_n06.py --module-dir release/native_module --round owners --cycles 12 --label n06_owners
+  python native/spike_p1/python/run_n06.py --module-dir release/native_module --round translucent --label n06_translucent
 Evidence: .artifacts/evidence/native_core/n06/<date>_<label>/summary.json. Exit 0 whenever the probe ran; the
 verdict is in the JSON and the last printed lines ("N06 VERDICT ...").
 """
@@ -766,12 +774,279 @@ def round_owners(native, out: Path, cycles: int = 12, long_cycles: int = 40) -> 
     }
 
 
-ROUNDS = {"facts": round_facts, "device": round_device, "lifecycle": round_lifecycle, "owners": round_owners}
+# --------------------------------------------------------------------- round 6: a translucent Vulkan window
+
+WINDOW_SIZE = (640, 360)
+
+
+def _frame_counter():
+    from PySide6.QtCore import QObject, Slot
+
+    class FrameCounter(QObject):
+        """Counts frameSwapped on the GUI thread (queued from the render thread; no Python on Qt's thread)."""
+
+        def __init__(self):
+            super().__init__()
+            self.count = 0
+
+        @Slot()
+        def on_frame(self):
+            self.count += 1
+
+    return FrameCounter()
+
+
+def qt_composite_alpha(supported: list, flags: list) -> str:
+    """The compositeAlpha QRhiVulkan::recreateSwapChain picks (facts D1, read from the 6.12 source; derived here
+    because the swapchain's create info is not readable back)."""
+    chosen = "INHERIT" if "INHERIT" in supported else "OPAQUE"
+    if "SurfaceHasPreMulAlpha" in flags:
+        if "PRE_MULTIPLIED" in supported:
+            return "PRE_MULTIPLIED"
+        if "POST_MULTIPLIED" in supported:
+            return "POST_MULTIPLIED"
+    elif "SurfaceHasNonPreMulAlpha" in flags:
+        if "POST_MULTIPLIED" in supported:
+            return "POST_MULTIPLIED"
+    return chosen
+
+
+def _window_readings(window, hwnd: int, out: Path, tag: str) -> dict:
+    import n06_windows as nw
+
+    readings: dict = {}
+    grab = window.grabWindow()  # Qt renders the scene into an image: not the screen, so opacity does not matter
+    readings["grabwindow"] = {"size": [grab.width(), grab.height()],
+                              "regions": {k: nw.sample_qimage(grab, fx, fy) for k, (fx, fy) in nw.REGIONS.items()}}
+    grab.save(str(out / f"n06_window_{tag}_grabwindow.png"), "PNG")
+    del grab
+    pw = nw.print_window(hwnd)  # DWM's composed content of this window, not the screen
+    if pw.get("ok"):
+        readings["printwindow"] = {"ok": True, "size": [pw["width"], pw["height"]],
+                                   "regions": {k: nw.sample_bgra(pw["bgra"], pw["width"], pw["height"], fx, fy)
+                                               for k, (fx, fy) in nw.REGIONS.items()}}
+        nw.save_bgra_png(pw["bgra"], pw["width"], pw["height"], out / f"n06_window_{tag}_printwindow.png")
+    else:
+        readings["printwindow"] = {k: v for k, v in pw.items() if k != "bgra"}
+    return readings
+
+
+def _window_variant(native, out: Path, name: str, *, api: str, ours: bool | None, alpha: bool,
+                    backdrop: str | None = None) -> dict:
+    """One real QQuickWindow, shown but invisible (tests/_invisible_windows.py's pattern: opacity 0, transparent
+    for input, a tool window; frameless like the Studio), on our device, Qt's own device, or OpenGL."""
+    import shiboken6
+    from PySide6.QtCore import QCoreApplication, QEvent, QSizeF, Qt, QUrl
+    from PySide6.QtGui import QRhiSwapChain
+    from PySide6.QtQml import QQmlComponent, QQmlEngine
+    from PySide6.QtQuick import QQuickWindow
+
+    import n06_windows as nw
+
+    w, h = WINDOW_SIZE
+    result: dict = {"variant": name, "api": api, "alpha_requested": alpha, "ok": False}
+    window = QQuickWindow()
+    window.setFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
+                    | Qt.WindowType.WindowTransparentForInput)
+    window.setOpacity(0.0)
+    fmt = window.requestedFormat()
+    if alpha:
+        fmt.setAlphaBufferSize(8)
+    window.setFormat(fmt)
+    window.setColor(Qt.GlobalColor.transparent if alpha else Qt.GlobalColor.black)
+    engine = QQmlEngine()
+    component = QQmlComponent(engine)
+    counter = _frame_counter()
+    root = None
+    try:
+        if api == "vulkan":
+            native.n06_attach_window(_ptr(window), bool(ours))
+        component.setData(nw.SCENE_QML, QUrl())
+        root = component.create()
+        if root is None:
+            result["error"] = component.errorString()
+            return result
+        root.setParentItem(window.contentItem())
+        window.setGeometry(120, 120, w, h)
+        window.contentItem().setSize(QSizeF(w, h))
+        root.setSize(QSizeF(w, h))
+        window.frameSwapped.connect(counter.on_frame, Qt.ConnectionType.QueuedConnection)
+        window.show()
+        nw.pump(lambda: counter.count >= 30, 10.0)
+        result["frames_after_show"] = counter.count
+        hwnd = int(window.winId())
+        result["format"] = {"requested_alpha": window.requestedFormat().alphaBufferSize(),
+                            "actual_alpha": window.format().alphaBufferSize()}
+        result["opacity"] = window.opacity()
+        result["exstyle"] = nw.extended_style(hwnd)
+        rhi = window.rhi()
+        result["backend"] = rhi.backendName() if rhi else None
+        del rhi
+        sc = window.swapChain()
+        flags = [f.name for f in QRhiSwapChain.Flag if sc is not None and bool(sc.flags() & f)]
+        result["swapchain"] = ({"flags": flags, "format": sc.format().name,
+                                "pixel_size": [sc.currentPixelSize().width(), sc.currentPixelSize().height()]}
+                               if sc is not None else None)
+        del sc
+        if api == "vulkan":
+            surface = json.loads(native.n06_window_surface(_ptr(window)))
+            result["surface"] = surface
+            result["qt_composite_alpha_derived"] = qt_composite_alpha(surface.get("supported_composite_alpha", []),
+                                                                      flags)
+        result["readings"] = {"shown": _window_readings(window, hwnd, out, name)}
+        if backdrop:
+            before = counter.count
+            result["backdrop"] = {"kind": backdrop, **(nw.dwm_system_backdrop(hwnd) if backdrop == "dwm_system"
+                                                       else nw.accent_glass(hwnd, REPO_ROOT))}
+            nw.pump(lambda: counter.count >= before + 30, 5.0)
+            result["frames_after_backdrop"] = counter.count - before
+            result["exstyle_after_backdrop"] = nw.extended_style(hwnd)
+            result["readings"]["after_backdrop"] = _window_readings(window, hwnd, out, name + "_after_backdrop")
+        result["ok"] = result["frames_after_show"] >= 10  # a real swapchain presenting continuously
+        return result
+    finally:
+        window.hide()
+        nw.pump(lambda: False, 0.2)
+        if root is not None:
+            root.setParentItem(None)
+            root.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            root = None
+        shiboken6.delete(window)  # its scene graph, swapchain and QRhi go before our device (facts A7)
+        del component
+        del engine
+        shiboken6.delete(counter)
+        nw.pump(lambda: False, 0.2)
+
+
+def _region_alpha(variant: dict, source: str, region: str, stage: str = "shown") -> float | None:
+    return (variant.get("readings", {}).get(stage, {}).get(source, {}).get("regions", {})
+            .get(region, {}).get("rgba", [None] * 4)[3])
+
+
+def translucent_child(native, out: Path, api: str) -> dict:
+    """The OpenGL comparison (route 3 of D7 point 8), in a child process because the graphics API is process-wide."""
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtQuick import QQuickWindow, QSGRendererInterface
+
+    QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGL)
+    app = QGuiApplication([sys.argv[0]])
+    variants = {"opengl_translucent": _window_variant(native, out, "opengl_translucent", api=api, ours=None,
+                                                      alpha=True),
+                "opengl_opaque": _window_variant(native, out, "opengl_opaque", api=api, ours=None, alpha=False)}
+    del app
+    return variants
+
+
+def round_translucent(native, out: Path, module_dir: Path, label: str) -> dict:
+    import subprocess
+
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtQuick import QQuickWindow, QSGRendererInterface
+
+    QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.Vulkan)
+    app = QGuiApplication([sys.argv[0]])
+    ctx = json.loads(native.n06_context_create(True, "one", "full"))
+    variants: dict = {}
+    if ctx.get("ok"):
+        native.n06_set_phase("windows")
+        plan = (("ours_translucent", True, True, None), ("ours_opaque", True, False, None),
+                ("ours_translucent_dwm_system_backdrop", True, True, "dwm_system"),
+                ("ours_translucent_accent_glass", True, True, "accent_glass"),
+                ("qt_own_device_translucent", False, True, None))
+        for name, ours, alpha, backdrop in plan:
+            variants[name] = _window_variant(native, out, name, api="vulkan", ours=ours, alpha=alpha,
+                                             backdrop=backdrop)
+    teardown = json.loads(native.n06_context_destroy())
+    del app
+
+    child_json = out / "child_translucent_opengl.json"
+    proc = subprocess.run([sys.executable, __file__, "--module-dir", str(module_dir), "--round", "translucent",
+                           "--label", label, "--child-api", "opengl", "--child-json", str(child_json)],
+                          capture_output=True, text=True, timeout=300)
+    opengl = json.loads(child_json.read_text(encoding="utf-8")) if child_json.exists() else {}
+    child_json.unlink(missing_ok=True)
+    if proc.returncode != 0 or not opengl:
+        opengl["stderr_tail"] = proc.stderr[-2000:]
+        opengl["exit_code"] = proc.returncode
+
+    dev = ctx.get("device", {}).get("vk_device")
+    ours_names = [n for n in variants if n.startswith("ours_")]
+    translucent_names = [n for n in variants if "translucent" in n]
+    findings = {
+        name: {"supported_composite_alpha": v.get("surface", {}).get("supported_composite_alpha"),
+               "qt_composite_alpha_derived": v.get("qt_composite_alpha_derived"),
+               "swapchain_flags": (v.get("swapchain") or {}).get("flags"),
+               "exstyle_layered": v.get("exstyle", {}).get("WS_EX_LAYERED"),
+               "exstyle_noredirectionbitmap": v.get("exstyle", {}).get("WS_EX_NOREDIRECTIONBITMAP"),
+               "printwindow_alpha_empty_region": _region_alpha(v, "printwindow", "empty_top_left"),
+               "printwindow_alpha_half_red": _region_alpha(v, "printwindow", "half_red_right"),
+               "printwindow_alpha_empty_after_backdrop": _region_alpha(v, "printwindow", "empty_top_left",
+                                                                       "after_backdrop"),
+               "backdrop": v.get("backdrop"), "frames_after_backdrop": v.get("frames_after_backdrop")}
+        for name, v in {**variants, **{k: v for k, v in opengl.items() if isinstance(v, dict)}}.items()}
+
+    def distinguishes(translucent: str, opaque: str, source: str) -> bool | None:
+        a = _region_alpha(variants.get(translucent) or opengl.get(translucent, {}), source, "empty_top_left")
+        b = _region_alpha(variants.get(opaque) or opengl.get(opaque, {}), source, "empty_top_left")
+        return None if a is None or b is None else bool(b - a >= 64)
+
+    findings["alpha_reaches_printwindow"] = {
+        "vulkan_our_device": distinguishes("ours_translucent", "ours_opaque", "printwindow"),
+        "opengl": distinguishes("opengl_translucent", "opengl_opaque", "printwindow"),
+    }
+    checks = {
+        "context_created": bool(ctx.get("ok")),
+        "vulkan_windows_presented": bool(variants) and all(v.get("ok") for v in variants.values()),
+        "our_windows_on_our_device": all(variants[n].get("surface", {}).get("vk_device") == dev
+                                         and variants[n].get("surface", {}).get("instance_is_ours") is True
+                                         for n in ours_names),
+        "qt_window_on_its_own_device": bool(variants.get("qt_own_device_translucent", {}).get("surface", {})
+                                            .get("vk_device")) and variants["qt_own_device_translucent"]["surface"]
+        ["vk_device"] != dev,
+        "surface_capabilities_read": all(v.get("surface", {}).get("capabilities_result") == 0
+                                         and v.get("surface", {}).get("supported_composite_alpha")
+                                         for v in variants.values()),
+        "premultiplied_flag_follows_alpha": all(
+            ("SurfaceHasPreMulAlpha" in ((variants[n].get("swapchain") or {}).get("flags") or []))
+            == ("translucent" in n) for n in variants),
+        "qt_scene_alpha_translucent": all((_region_alpha(variants[n], "grabwindow", "empty_top_left") or 255) <= 2
+                                          for n in translucent_names),
+        "qt_scene_alpha_opaque_negative_control": (_region_alpha(variants.get("ours_opaque", {}), "grabwindow",
+                                                                 "empty_top_left") or 0) >= 253,
+        "teardown_ok": bool(teardown.get("ok")) and teardown.get("device_wait_idle_ok") is True,
+        "no_messenger_errors": teardown.get("messages", {}).get("errors", -1) == 0,
+        "opengl_comparison_ran": bool(opengl.get("opengl_translucent", {}).get("ok"))
+        and bool(opengl.get("opengl_opaque", {}).get("ok")),
+        "environment_clean": environment_record()["clean"],
+    }
+    layer = bool(ctx.get("instance", {}).get("validation_layer_loaded"))
+    return {
+        "round": "translucent",
+        "checks": checks,
+        "pass": all(checks.values()),
+        "owed": [] if layer else ["validation owed (layer not installed)",
+                                  "see-through to the desktop: the lead's visible run on Display 1"],
+        "findings": findings,
+        "hidden_window_caveat": "the invisible pattern's opacity 0 makes the window layered (WS_EX_LAYERED, "
+                                "alpha 0), which changes DWM's composition path; PrintWindow reads DWM's copy of "
+                                "the window, not the desktop behind it",
+        "variants": variants,
+        "opengl": opengl,
+        "context": {"device": ctx.get("device", {}).get("vk_device"), "ok": ctx.get("ok")},
+        "teardown": teardown,
+        "environment": environment_record(),
+    }
+
+
+ROUNDS = {"facts": round_facts, "device": round_device, "lifecycle": round_lifecycle, "owners": round_owners,
+          "translucent": round_translucent}
 REQUIRED = {"facts": ("n06_facts",), "device": ("n06_facts", "n06_context_create", "n06_attach_window"),
             "lifecycle": ("n06_facts", "n06_context_create", "n06_attach_window", "n06_process_counters",
                           "quick_session_resize"),
             "owners": ("n06_context_create", "n06_attach_window", "n06_process_counters", "quick_session_resize",
-                       "n06_handle_count")}
+                       "n06_handle_count"),
+            "translucent": ("n06_context_create", "n06_attach_window", "n06_window_surface")}
 
 
 def main() -> int:
@@ -786,16 +1061,26 @@ def main() -> int:
     parser.add_argument("--force-no-second-queue", action="store_true",
                         help="lifecycle: force the second queue's absence in every cycle (the negative control as "
                              "a switch; never an environment variable)")
+    parser.add_argument("--child-api", choices=("opengl",), help=argparse.SUPPRESS)
+    parser.add_argument("--child-json", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     native = _import_native(args.module_dir.resolve())
+    if args.child_api:  # translucent round's OpenGL comparison, in its own process
+        out = _evidence_dir(args.label)
+        result = translucent_child(native, out, args.child_api)
+        args.child_json.write_text(json.dumps(result, indent=2), encoding="utf-8")
+        return 0
     missing = [name for name in REQUIRED[args.round] if not hasattr(native, name)]
     if missing:
         print(f"N06 VERDICT FAIL: the module has no {', '.join(missing)} (an older build in --module-dir)")
         return 0
     out = _evidence_dir(args.label)
     summary = {"runtime": native.runtime_info(), "python": sys.version}
-    if args.round == "lifecycle":
+    if args.round == "translucent":
+        summary.update(round_translucent(native, out, args.module_dir, args.label))
+        print(json.dumps(summary["findings"], indent=2))
+    elif args.round == "lifecycle":
         summary.update(round_lifecycle(native, out, max(2, args.cycles), args.force_no_second_queue))
     elif args.round == "owners":
         summary.update(round_owners(native, out, max(4, args.cycles), max(4, args.long_cycles)))

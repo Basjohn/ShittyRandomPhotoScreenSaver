@@ -59,6 +59,11 @@ QByteArray n06ContextDestroyJson();
 // QVulkanInstance and setGraphicsDevice(QQuickGraphicsDevice::fromDeviceObjects(our device)); ours = false: the
 // reference QVulkanInstance only, so Qt creates its own device.
 bool n06AttachQuickWindow(QQuickWindow *window, bool ours, QString *error);
+// Round 6 (translucent window): for a shown Vulkan QQuickWindow (GUI thread, after its first frame), the window
+// surface's capabilities on the device its QRhi runs on: supportedCompositeAlpha (by name), image counts, extent,
+// usage, the surface formats and present modes, present support for the QRhi's queue family, and that QRhi's
+// VkDevice and family (to prove which device the swapchain belongs to).
+QByteArray n06WindowSurfaceJson(QQuickWindow *window);
 #endif
 
 } // namespace srpss_spike

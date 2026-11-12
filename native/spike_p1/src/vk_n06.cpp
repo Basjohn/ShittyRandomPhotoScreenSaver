@@ -1579,6 +1579,84 @@ bool n06AttachQuickWindow(QQuickWindow *window, bool ours, QString *error)
     }
     return true;
 }
+
+QByteArray n06WindowSurfaceJson(QQuickWindow *window)
+{
+    QJsonObject o;
+    QVulkanInstance *inst = window ? window->vulkanInstance() : nullptr;
+    QRhi *rhi = window ? window->rhi() : nullptr;
+    if (!inst || !rhi || rhi->backend() != QRhi::Vulkan) {
+        o.insert(QStringLiteral("error"), QStringLiteral("not a Vulkan window with a QRhi yet"));
+        return QJsonDocument(o).toJson(QJsonDocument::Compact);
+    }
+    const auto *handles = static_cast<const QRhiVulkanNativeHandles *>(rhi->nativeHandles());
+    const VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(window);
+    o.insert(QStringLiteral("vk_device"), qint64(reinterpret_cast<quintptr>(handles->dev)));
+    o.insert(QStringLiteral("queue_family_index"), qint64(handles->gfxQueueFamilyIdx));
+    o.insert(QStringLiteral("instance_is_ours"), g_context && inst == g_context->ours.get());
+    if (surface == VK_NULL_HANDLE) {
+        o.insert(QStringLiteral("error"), QStringLiteral("the window has no VkSurfaceKHR"));
+        return QJsonDocument(o).toJson(QJsonDocument::Compact);
+    }
+    auto getCaps = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR>(
+        inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceCapabilitiesKHR"));
+    auto getFormats = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceFormatsKHR>(
+        inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceFormatsKHR"));
+    auto getModes = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfacePresentModesKHR>(
+        inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfacePresentModesKHR"));
+    auto getSupport = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceSupportKHR>(
+        inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceSupportKHR"));
+    if (!getCaps || !getFormats || !getModes || !getSupport) {
+        o.insert(QStringLiteral("error"), QStringLiteral("a surface entry point is missing"));
+        return QJsonDocument(o).toJson(QJsonDocument::Compact);
+    }
+    VkSurfaceCapabilitiesKHR caps = {};
+    const VkResult capsResult = getCaps(handles->physDev, surface, &caps);
+    o.insert(QStringLiteral("capabilities_result"), int(capsResult));
+    QJsonArray alpha;
+    struct Bit { VkCompositeAlphaFlagsKHR bit; const char *name; };
+    const Bit bits[] = { { VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, "OPAQUE" },
+                         { VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR, "PRE_MULTIPLIED" },
+                         { VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR, "POST_MULTIPLIED" },
+                         { VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR, "INHERIT" } };
+    for (const Bit &b : bits) {
+        if (caps.supportedCompositeAlpha & b.bit)
+            alpha.append(QLatin1String(b.name));
+    }
+    o.insert(QStringLiteral("supported_composite_alpha"), alpha);
+    o.insert(QStringLiteral("supported_composite_alpha_raw"), qint64(caps.supportedCompositeAlpha));
+    o.insert(QStringLiteral("min_image_count"), qint64(caps.minImageCount));
+    o.insert(QStringLiteral("max_image_count"), qint64(caps.maxImageCount));
+    o.insert(QStringLiteral("current_extent"),
+             QJsonArray { qint64(caps.currentExtent.width), qint64(caps.currentExtent.height) });
+    o.insert(QStringLiteral("supported_usage_raw"), qint64(caps.supportedUsageFlags));
+    o.insert(QStringLiteral("current_transform_raw"), qint64(caps.currentTransform));
+
+    uint32_t formatCount = 0;
+    getFormats(handles->physDev, surface, &formatCount, nullptr);
+    std::vector<VkSurfaceFormatKHR> formats(formatCount);
+    if (formatCount)
+        getFormats(handles->physDev, surface, &formatCount, formats.data());
+    QJsonArray formatArray;
+    for (uint32_t i = 0; i < formatCount; ++i)
+        formatArray.append(QJsonArray { qint64(formats[i].format), qint64(formats[i].colorSpace) });
+    o.insert(QStringLiteral("formats_format_colorspace"), formatArray);
+
+    uint32_t modeCount = 0;
+    getModes(handles->physDev, surface, &modeCount, nullptr);
+    std::vector<VkPresentModeKHR> modes(modeCount);
+    if (modeCount)
+        getModes(handles->physDev, surface, &modeCount, modes.data());
+    QJsonArray modeArray;
+    for (uint32_t i = 0; i < modeCount; ++i)
+        modeArray.append(qint64(modes[i]));
+    o.insert(QStringLiteral("present_modes"), modeArray);
+
+    VkBool32 supported = VK_FALSE;
+    getSupport(handles->physDev, handles->gfxQueueFamilyIdx, surface, &supported);
+    o.insert(QStringLiteral("present_supported_on_qrhi_family"), supported == VK_TRUE);
+    return QJsonDocument(o).toJson(QJsonDocument::Compact);
+}
 #endif
 
 } // namespace srpss_spike

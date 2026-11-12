@@ -477,6 +477,14 @@ PyObject *n06_attach_window(PyObject *, PyObject *args)
     }
     Py_RETURN_NONE;
 }
+
+PyObject *n06_window_surface(PyObject *, PyObject *args)
+{
+    unsigned long long windowPtr = 0;
+    if (!PyArg_ParseTuple(args, "K", &windowPtr))
+        return nullptr;
+    return pyJson(n06WindowSurfaceJson(ptr<QQuickWindow>(windowPtr)));
+}
 #endif
 
 // ---------------------------------------------------------------- part B
@@ -617,6 +625,8 @@ PyMethodDef methods[] = {
 #ifdef SPIKE_WITH_QUICK
     { "n06_attach_window", n06_attach_window, METH_VARARGS,
       "(quick_window_ptr, ours) our instance + device, or the reference instance (Qt's own device)" },
+    { "n06_window_surface", n06_window_surface, METH_VARARGS,
+      "(quick_window_ptr) -> JSON str: the shown Vulkan window's surface capabilities (composite alpha, ...)" },
     { "quick_session_begin", quick_session_begin, METH_VARARGS,
       "(rc, window, w, h[, threaded]) -> dict with handle" },
     { "quick_session_frames", quick_session_frames, METH_VARARGS,

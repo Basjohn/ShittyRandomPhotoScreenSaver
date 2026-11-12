@@ -101,7 +101,12 @@ per module build, hidden only, never an environment variable (`--help` lists the
 .venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_module --round facts --label n06_facts
 .venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_module --round device --label n06_device
 .venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_module --round lifecycle --label n06_lifecycle
+.venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_module --round owners --cycles 12 --label n06_owners
+.venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_module --round translucent --label n06_translucent
 ```
+
+The translucent round shows real windows kept invisible by `tests/_invisible_windows.py`'s pattern; its Win32
+reads are in `python/n06_windows.py`.
 
 Evidence: `.artifacts/evidence/native_core/n06/<date>_<label>/summary.json`; the last line is `N06 VERDICT PASS` or
 `N06 VERDICT FAIL: <checks>`.
