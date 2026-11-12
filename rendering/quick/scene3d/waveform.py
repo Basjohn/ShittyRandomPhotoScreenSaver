@@ -12,9 +12,10 @@ from rendering.quick import gl_query
 from core.ribbon_packet import KNOT_ROWS
 from core.ribbon_continuation import continuation_bounds, frustum_axial_span
 from core.waveform_ribbon_scene import Floor, Recipe, SPEC, FLOOR_CONTACT
-from rendering.gl_programs.waveform_ribbon import (FLOOR_VERTEX, FLOOR_FRAGMENT, FLAT)
-from rendering.gl_programs.fog_volume import fog_inject_source
-from rendering.gl_programs.waveform_atmosphere import MEDIUM_GLSL,SKY_VERTEX,SKY_FRAGMENT
+from rendering.gl_programs.waveform_ribbon import (FLOOR_BLOCK, FLOOR_VERTEX, FLOOR_FRAGMENT, FLAT)
+from rendering.gl_programs.waveform_atmosphere import (BODY_FIELD_UNIT, MEDIUM_BLOCK, MEDIUM_INJECT_SOURCE, SKY_BLOCK,
+                                                       SKY_VERTEX, SKY_FRAGMENT)
+from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.mist import FOG_OFF
 from rendering.gl_programs.reflection import mirror_view
 from rendering.quick.scene3d.fog_volume import FogVolume
@@ -141,8 +142,12 @@ class WaveformScene:
     """Caller owns the current GL context, camera, output frame and explicit snapshot time."""
     def __init__(self):
         self._context = None
-        self.resources, self.scene, self.ribbons = MeshResources('waveform scene'), SceneTarget('waveform scene'), RibbonPrimitive()
-        self.fog_resources = MeshResources('waveform scene mist programs')
+        # The floor's pass block (N1.6) is the largest these resources' draws bind; its reflection pre-pass and the
+        # full pass take a copy each.
+        self.resources = MeshResources('waveform scene', block_bytes=FLOOR_BLOCK.size, copies=2)
+        self.scene, self.ribbons = SceneTarget('waveform scene'), RibbonPrimitive()
+        self.fog_resources = MeshResources('waveform scene mist programs',
+                                           block_bytes=max(SKY_BLOCK.size, MEDIUM_BLOCK.size))
         self.bursts = RibbonBurstRenderer()
         self.field = WaveformField()
         self.floor_give = FloorGiveField()  # the yielding floor's field: only while the recipe's floor gives
@@ -153,7 +158,6 @@ class WaveformScene:
         self.fog, self.reflected_fog = FogVolume('waveform scene mist'), FogVolume('waveform scene reflected mist')
         self._specular, self._specular_size = None, None
         self.textures = {}
-        self._locations = {}  # (program, uniform) -> location, for the programs set by name below
         # Studio preview-only layer omission (a Python attribute, never a setting): 'actors' skips the direct
         # ribbon/particle/strand draws, 'reflected_actors' their mirrored draws. The mist field, sky, floor and
         # everything else are unchanged. Production never sets it, so it stays empty there.
@@ -200,7 +204,6 @@ class WaveformScene:
             del self.textures[key]
 
     def _release_fog(self):
-        self._locations = {}  # program names may be reused once deleted
         self._retire((self.fog.release,self.reflected_fog.release,
                       self.fog_resources.release_resources,self.field.release))
 
@@ -213,15 +216,6 @@ class WaveformScene:
                       self.resources.release_resources, self.fog_resources.release_resources, self.bursts.release,
                       self.field.release, self.floor_give.release, self.pulse_rim.release))
         self._context = None
-        self._locations = {}
-
-    def _location(self, program, name):
-        """A uniform location, looked up once per program (each lookup is a driver round trip on the render thread)."""
-        key = (program, name)
-        location = self._locations.get(key)
-        if location is None:
-            location = self._locations[key] = int(gl.glGetUniformLocation(program, name))
-        return location
 
 
     def render(self,packet,**parameters):
@@ -335,46 +329,45 @@ class WaveformScene:
     def _update_fog(self,volume,view,camera_lens,size,cell,slices):
         fog=self.recipe.fog
         grid=(min(128,-(-size[0]//cell)),min(72,-(-size[1]//cell)),slices)
-        program=self.fog_resources.compute_program('fog medium',fog_inject_source(MEDIUM_GLSL))
-        volume.update(program,view=view,lens=camera_lens,depth_range=fog.depth_range,
-                      grid=grid,medium=self._fog_uniforms,
-                      focus_depth=-float((view@np.array((*SPEC.pivot,1.)))[2]),**OWNED)
+        program=self.fog_resources.compute_program('fog medium',MEDIUM_INJECT_SOURCE)
+        # The medium's values are its own pass block beside the volume's dispatch block (N1.6); the body field is on
+        # its unit for the dispatch.
+        values=self.fog_resources.values('fog medium')
+        self._fog_values(values)
+        with self.fog_resources.pass_blocks.bound(pack_block(MEDIUM_BLOCK,values)):
+            volume.update(program,view=view,lens=camera_lens,depth_range=fog.depth_range,grid=grid,
+                          focus_depth=-float((view@np.array((*SPEC.pivot,1.)))[2]),**OWNED)
 
-    def _field_uniforms(self,program):
+    def _field_values(self,values):
+        """The world body field's values (``WORLD_FIELD_GLSL``) into a program's pass block values; its texture bound
+        at its unit."""
         fog=self.recipe.fog;first,last,samples=fog.field_span;step=(last-first)/(samples-1)
-        location=lambda name:self._location(program,name)
-        gl.glBindTextureUnit(14,self.field.texture)
-        gl.glUniform1i(location('uBodyField'),14)
-        gl.glUniform4f(location('uFieldOrigin'),*self._continuation_origin,float(self._continuation_count))
-        gl.glUniform1f(location('uFieldSide'),1. if self._history_mirror is None else -1.)
+        gl.glBindTextureUnit(BODY_FIELD_UNIT,self.field.texture)
+        values['uFieldOrigin']=(*self._continuation_origin,float(self._continuation_count))
+        values['uFieldSide']=1. if self._history_mirror is None else -1.
         grade=self._field_grade
-        values=ribbon_grade(grade[0],grade[1],grade[3])
-        gl.glUniform4f(location('uGrade'),*values['uGrade'])
-        gl.glUniform4fv(location('uGradeStops'),6,np.asarray(values['uGradeStops'],np.float32))
-        gl.glUniform2f(location('uBodySpan'),first-step*.5,1./(last-first+step))
-        gl.glUniform4f(location('uBodyShape'),FLOOR_CONTACT[0]+FLOOR_CONTACT[1],FLOOR_CONTACT[2],
-                      self.recipe.material.cross_curve,fog.clearance)
+        values.update(ribbon_grade(grade[0],grade[1],grade[3]))
+        values['uBodySpan']=(first-step*.5,1./(last-first+step))
+        values['uBodyShape']=(FLOOR_CONTACT[0]+FLOOR_CONTACT[1],FLOOR_CONTACT[2],
+                              self.recipe.material.cross_curve,fog.clearance)
 
-    def _fog_uniforms(self,program):
-        fog=self.recipe.fog;self._field_uniforms(program)
-        location=lambda name:self._location(program,name)
-        gl.glUniform4f(location('uAtmosphere'),fog.density,fog.height,fog.softness,fog.light)
-        gl.glUniform4f(location('uAtmosphereMotion'),self._now,fog.drift,fog.noise,fog.noise_scale)
-        gl.glUniform3f(location('uAtmosphereAmbient'),*fog.ambient)
-        gl.glUniform2f(location('uAtmosphereLight'),fog.light_ceiling,fog.light_tint)
+    def _fog_values(self,values):
+        fog=self.recipe.fog;self._field_values(values)
+        values['uAtmosphere']=(fog.density,fog.height,fog.softness,fog.light)
+        values['uAtmosphereMotion']=(self._now,fog.drift,fog.noise,fog.noise_scale)
+        values['uAtmosphereAmbient']=tuple(fog.ambient)
+        values['uAtmosphereLight']=(fog.light_ceiling,fog.light_tint)
 
     def _sky(self,volume,*,reflection=False):
         program=self.fog_resources.program('sky',SKY_VERTEX,SKY_FRAGMENT)
         vao,_=self.fog_resources.mesh('sky',bytes(36),(3,))
         gl.glUseProgram(program)
-        location=lambda name:self._location(program,name)
-        for name,value in volume.uniforms.items():
-            if name=='uFogView':gl.glUniformMatrix4fv(location(name),1,gl.GL_FALSE,np.asarray(value,np.float32))
-            elif isinstance(value,int):gl.glUniform1i(location(name),value)
-            else:gl.glUniform4f(location(name),*value)
-        gl.glUniform3f(location('uBackdrop'),*self.recipe.environment.backdrop)
-        gl.glUniform1i(location('uSkyReflection'),int(reflection))
-        gl.glBindVertexArray(vao);gl.glDrawArrays(gl.GL_TRIANGLES,0,3)
+        values=self.fog_resources.values('sky')     # the volume at its unit; every value in the pass block (N1.6)
+        values.update(volume.uniforms)
+        values['uBackdrop']=tuple(self.recipe.environment.backdrop)
+        values['uSkyReflection']=int(reflection)
+        with self.fog_resources.pass_blocks.bound(pack_block(SKY_BLOCK,values)):
+            gl.glBindVertexArray(vao);gl.glDrawArrays(gl.GL_TRIANGLES,0,3)
 
     def _draw_scene(self, flat, packet, draw, mvp, eye, view, ribbon_mvp, card, now, fogged):
         recipe, (width, height) = self.recipe, self.size
@@ -475,66 +468,61 @@ class WaveformScene:
             self.textures.update(load_floor_textures(floor))
         vao, count = self.resources.mesh('floor', floor_vertices(), (3,))
         program = self.resources.program('floor', FLOOR_VERTEX, FLOOR_FRAGMENT)
-        names = ('uMvp', 'uFloorInverseMvp', 'uFlat', 'uAlbedo', 'uRoughness', 'uSlope', 'uFogLit', 'uReflection', 'uReflectionLook',
-                 'uViewport', 'uBackdrop', 'uAmbient', 'uFloor', 'uFloorTone', 'uRipple', 'uEye',
-                 'uForward', 'uMist', 'uMistShape', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange',
-                 'uStreak', 'uHot', 'uBodyField', 'uBodySpan', 'uBodyShape', 'uPool', 'uColumn', 'uSpecMode',
-                 'uSpecular', 'uFloorTint', 'uMaterial', 'uMaterialShape', 'uReflectionHue', 'uBound',
-                 'uFloorGive', 'uFloorGiveField', 'uFloorGiveLook')
-        u = self.resources.uniforms('floor', names, required=False)
+        # The floor's values as its uniforms held them, one pass block (N1.6); every sampler carries its unit.
+        u = self.resources.values('floor')
         gl.glUseProgram(program)
         inverse=np.linalg.inv(np.asarray(mvp,float).reshape(4,4,order='F'))
-        gl.glUniformMatrix4fv(u['uFloorInverseMvp'],1,gl.GL_FALSE,np.asarray(inverse.flatten(order='F'),np.float32))
-        gl.glUniform1i(u['uFlat'], int(flat))
-        gl.glUniformMatrix4fv(u['uMvp'], 1, gl.GL_FALSE, np.asarray(mvp, np.float32))
+        u['uFloorInverseMvp'] = tuple(np.asarray(inverse.flatten(order='F'),np.float32))
+        u['uFlat'] = int(flat)
+        u['uMvp'] = tuple(np.asarray(mvp, np.float32))
         lit = not flat and self.fog.has_resources and self.recipe.fog is not None
-        for unit,(name,texture) in enumerate((('uAlbedo',self.textures['albedo']),('uSlope',self.textures['slope']),
-                                              ('uReflection',self.reflection.texture),('uRoughness',self.textures['roughness']))):
-            gl.glBindTextureUnit(unit,texture);gl.glUniform1i(u[name],unit)
-        gl.glUniform1i(u['uFogLit'], int(lit))
-        gl.glUniform4f(u['uReflectionLook'], floor.streak[0], floor.lod[0], floor.lod[1], 0.)
-        gl.glUniform4f(u['uHot'], *floor.hot, floor.albedo_bias)
-        gl.glUniform1f(u['uPool'],floor.pool if lit else 0.)
-        gl.glUniform3f(u['uColumn'],*floor.column)
-        gl.glUniform1f(u['uReflectionHue'], floor.hue)
-        gl.glUniform3f(u['uBound'], floor.glow_limit, floor.light_reach, floor.light_far)
+        for unit,texture in enumerate((self.textures['albedo'],self.textures['slope'],self.reflection.texture,
+                                       self.textures['roughness'])):
+            gl.glBindTextureUnit(unit,texture)
+        u['uFogLit'] = int(lit)
+        u['uReflectionLook'] = (floor.streak[0], floor.lod[0], floor.lod[1], 0.)
+        u['uHot'] = (*floor.hot, floor.albedo_bias)
+        u['uPool'] = floor.pool if lit else 0.
+        u['uColumn'] = tuple(floor.column)
+        u['uReflectionHue'] = floor.hue
+        u['uBound'] = (floor.glow_limit, floor.light_reach, floor.light_far)
         give = None if flat else self._floor_give
         if give is None:
-            gl.glUniform4f(u['uFloorGive'], 0., 0., 1., 1.)
+            u['uFloorGive'] = (0., 0., 1., 1.)
         else:
-            gl.glBindTextureUnit(FLOOR_GIVE_UNIT, give[0]); gl.glUniform1i(u['uFloorGiveField'], FLOOR_GIVE_UNIT)
-            gl.glUniform4f(u['uFloorGive'], *give[1])
-            gl.glUniform2f(u['uFloorGiveLook'], floor.give_reach, floor.shading)
-        if lit:self._field_uniforms(program)
-        gl.glUniform4f(u['uStreak'], floor.streak_length, floor.streak[1], floor.streak[2], 8.)
-        gl.glUniform4f(u['uMaterial'], floor.contrast, floor.shading, floor.breakup, floor.pool_spread)
-        gl.glUniform3f(u['uMaterialShape'], floor.elongation, floor.relief_bias, floor.column_height)
-        gl.glUniform2f(u['uViewport'], *size)
-        gl.glUniform3f(u['uBackdrop'], *environment.backdrop)
-        gl.glUniform3f(u['uAmbient'], *floor.ambient)
-        gl.glUniform3f(u['uFloorTint'], *floor.tint)
-        gl.glUniform4f(u['uFloor'], floor.tile, floor.micro_tile, floor.reflection, floor.f0)
-        gl.glUniform3f(u['uFloorTone'], floor.albedo_gain, *floor.relief)
-        gl.glUniform3f(u['uRipple'], *floor.ripple)
-        gl.glUniform3f(u['uEye'], *eye)
-        gl.glUniform3f(u['uForward'], *(-view[2, :3]))
-        gl.glUniform4f(u['uMist'], *environment.mist['uMist'])
-        gl.glUniform4f(u['uMistShape'], *((0., 0., 0., 0.) if mist_off else environment.mist['uMistShape']))
-        gl.glUniform1i(u['uFogVolume'], FOG_OFF['uFogVolume'])
+            gl.glBindTextureUnit(FLOOR_GIVE_UNIT, give[0])
+            u['uFloorGive'] = tuple(give[1])
+            u['uFloorGiveLook'] = (floor.give_reach, floor.shading)
+        if lit:self._field_values(u)
+        u['uStreak'] = (floor.streak_length, floor.streak[1], floor.streak[2], 8.)
+        u['uMaterial'] = (floor.contrast, floor.shading, floor.breakup, floor.pool_spread)
+        u['uMaterialShape'] = (floor.elongation, floor.relief_bias, floor.column_height)
+        u['uViewport'] = tuple(size)
+        u['uBackdrop'] = tuple(environment.backdrop)
+        u['uAmbient'] = tuple(floor.ambient)
+        u['uFloorTint'] = tuple(floor.tint)
+        u['uFloor'] = (floor.tile, floor.micro_tile, floor.reflection, floor.f0)
+        u['uFloorTone'] = (floor.albedo_gain, *floor.relief)
+        u['uRipple'] = tuple(floor.ripple)
+        u['uEye'] = tuple(eye)
+        u['uForward'] = tuple(-view[2, :3])
+        u['uMist'] = environment.mist['uMist']
+        u['uMistShape'] = (0., 0., 0., 0.) if mist_off else environment.mist['uMistShape']
         if lit and not mist_off:  # one integrated medium, sampled to this exact world-floor hit
             fog = self.fog.uniforms
-            gl.glUniformMatrix4fv(u['uFogView'], 1, gl.GL_FALSE, np.asarray(fog['uFogView'], np.float32))
-            gl.glUniform4f(u['uFogLens'], *fog['uFogLens'])
-            gl.glUniform4f(u['uFogRange'], *fog['uFogRange'])
+            u['uFogView'] = fog['uFogView']
+            u['uFogLens'] = fog['uFogLens']
+            u['uFogRange'] = fog['uFogRange']
         else:
-            gl.glUniform4f(u['uFogRange'], *FOG_OFF['uFogRange'])
+            u['uFogRange'] = FOG_OFF['uFogRange']
         gl.glBindVertexArray(vao)
         # The reflection term (column taps) holds no detail finer than its reflection target, so on
         # large displays it is evaluated at a capped height and read back by the full-resolution pass.
         factor = min(1., floor.specular_max_height/max(size[1], 1))
         if flat or factor >= 1.:
-            gl.glUniform1i(u['uSpecMode'], 0)
-            gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
+            u['uSpecMode'] = 0
+            with self.resources.pass_blocks.bound(pack_block(FLOOR_BLOCK, u)):
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
         else:
             texture, target = self._specular_target((int(size[0]*factor), int(size[1]*factor)))
             if drawing_to is None:
@@ -547,18 +535,19 @@ class WaveformScene:
             gl.glViewport(0, 0, *self._specular_size)
             gl.glDisable(gl.GL_DEPTH_TEST)
             gl.glClearBufferfv(gl.GL_COLOR, 0, (0., 0., 0., 0.))
-            gl.glUniform1i(u['uSpecMode'], 1)
-            gl.glUniform2f(u['uViewport'], *self._specular_size)
-            gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
-            gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffer)
-            gl.glViewport(*viewport)
-            if depth_test:
-                gl.glEnable(gl.GL_DEPTH_TEST)
-            gl.glUniform1i(u['uSpecMode'], 2)
-            gl.glUniform2f(u['uViewport'], *size)
-            gl.glBindTextureUnit(4, texture)
-            gl.glUniform1i(u['uSpecular'], 4)
-            gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
+            u['uSpecMode'] = 1
+            u['uViewport'] = tuple(self._specular_size)
+            with self.resources.pass_blocks.bound(pack_block(FLOOR_BLOCK, u)) as rebind:
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
+                gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffer)
+                gl.glViewport(*viewport)
+                if depth_test:
+                    gl.glEnable(gl.GL_DEPTH_TEST)
+                u['uSpecMode'] = 2
+                u['uViewport'] = tuple(size)
+                rebind(pack_block(FLOOR_BLOCK, u))
+                gl.glBindTextureUnit(4, texture)
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
         for unit in (0, 1, 2, 3, 4, 14) if give is None else (0, 1, 2, 3, 4, 14, FLOOR_GIVE_UNIT):
             gl.glBindTextureUnit(unit, 0)
 

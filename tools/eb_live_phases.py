@@ -249,7 +249,7 @@ def _install_waveform() -> None:
     QuickWaveformRibbonRenderer.render=framed
     for owner,attr,label in ((waveform_field.WaveformField,'update','world_field_submit'),
         (waveform.WaveformScene,'_update_fog','fog_update'),
-        (waveform.WaveformScene,'_fog_uniforms','fog_uniforms'),(waveform.WaveformScene,'_reflect','reflection'),
+        (waveform.WaveformScene,'_fog_values','fog_uniforms'),(waveform.WaveformScene,'_reflect','reflection'),
         (waveform.WaveformScene,'_floor','floor'),(ribbon.RibbonPrimitive,'draw','ribbons'),
         (ribbon_bursts.RibbonBurstRenderer,'draw','bursts'),(waveform.WaveformScene,'_sky','atmosphere_sky')):
         _wrap(owner,attr,label)

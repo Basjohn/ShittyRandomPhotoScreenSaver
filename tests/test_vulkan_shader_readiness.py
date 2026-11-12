@@ -49,7 +49,6 @@ _CONVERTED_MODULES = frozenset({
 # The composers whose runtime sources N1.3 brought under the check (they must keep producing discovered sources).
 _RUNTIME_COMPOSERS = (
     "rendering.quick.scene3d.population.population_programs(",
-    "rendering.gl_programs.fog_volume.fog_inject_source(",
     "rendering.quick.scene3d.propagation_field.PropagationField(",
 )
 
@@ -106,6 +105,10 @@ def test_every_stage_and_every_kind_of_source_is_discovered():
     assert any(".fragment_source" in key for key in keys), "program classes' properties are read"
     for composer in _RUNTIME_COMPOSERS:
         assert any(key.startswith(composer) for key in keys), f"{composer} is not evaluated"
+    # The composed fog medium Waveform injects is composed once at module level since N1.6 (its portable form), and
+    # checked there as a compute source.
+    stage = {source.key: source.stage for source in sources}
+    assert stage.get("rendering.gl_programs.waveform_atmosphere.MEDIUM_INJECT_SOURCE") == "comp"
     # One identity per text: an imported or re-exported source is its owner's.
     assert len({source.text for source in sources}) == len(sources)
 
@@ -227,24 +230,7 @@ _RATCHET = {
     "Waveform Ribbon": (
         "rendering.gl_programs.fog_volume.FOG_COMPOSITE_FRAGMENT",
         "rendering.gl_programs.fog_volume.FOG_FULLSCREEN_VERTEX",
-        "rendering.gl_programs.fog_volume.fog_inject_source(MEDIUM_GLSL)",
         "rendering.gl_programs.fog_volume.fog_march_source(coverage_glsl)",
-        "rendering.gl_programs.ribbon.RIBBON_BODY_FRAGMENT",
-        "rendering.gl_programs.ribbon.RIBBON_COHORT_STRAY_FRAGMENT",
-        "rendering.gl_programs.ribbon.RIBBON_COHORT_STRAY_VERTEX",
-        "rendering.gl_programs.ribbon.RIBBON_CONTINUOUS_VERTEX",
-        "rendering.gl_programs.ribbon.RIBBON_FRAGMENT",
-        "rendering.gl_programs.ribbon.RIBBON_LIGHT_FRAGMENT",
-        "rendering.gl_programs.ribbon.RIBBON_SPARK_FRAGMENT",
-        "rendering.gl_programs.ribbon.RIBBON_SPARK_VERTEX",
-        "rendering.gl_programs.ribbon.RIBBON_STRAY_FRAGMENT",
-        "rendering.gl_programs.ribbon.RIBBON_STRAY_VERTEX",
-        "rendering.gl_programs.ribbon.RIBBON_VERTEX",
-        "rendering.gl_programs.ribbon_bursts.FRAGMENT",
-        "rendering.gl_programs.ribbon_bursts.VERTEX",
-        "rendering.gl_programs.waveform_atmosphere.SKY_FRAGMENT",
-        "rendering.gl_programs.waveform_ribbon.FLOOR_FRAGMENT",
-        "rendering.gl_programs.waveform_ribbon.FLOOR_VERTEX",
     ),
     "Extruded Bubble": (
         "rendering.gl_programs.extruded_bubble_program.BACKDROP_FRAGMENT",

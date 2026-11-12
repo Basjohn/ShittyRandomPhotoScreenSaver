@@ -124,7 +124,8 @@ def test_yielding_floor_hit_keeps_coverage_ray_and_depth(qt_app):
     from rendering.quick.offscreen_target import OffscreenRenderTarget
     from rendering.quick.scene3d.resources import MeshResources
     from rendering.quick.scene3d.waveform import floor_vertices
-    from rendering.gl_programs.waveform_ribbon import FLOOR_VERTEX, FLOOR_WORLD_GLSL
+    from rendering.gl_programs.waveform_ribbon import FLOOR_WORLD_GLSL
+    from tests.test_waveform_infinite_floor import probe_floor_vertex
     width, height = 160, 120
     target = OffscreenRenderTarget(width, height); resources = MeshResources('floor give ground probe')
     fragment = '#version 460 core\n' + FLOOR_WORLD_GLSL + '''
@@ -137,7 +138,7 @@ hits[int(gl_FragCoord.y)*int(uTestWidth)+int(gl_FragCoord.x)]=vec4(world,depth);
 '''
     try:
         with target.current():
-            program = resources.program('ground', FLOOR_VERTEX, fragment)
+            program = resources.program('ground', probe_floor_vertex(), fragment)
             vao, count = resources.mesh('coverage', floor_vertices(), (3,))
             texture, give = synthetic_field(gl)
         view, projection, eye, lens = physical_view(camera(tilt=-1.), width/height)

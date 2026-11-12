@@ -1,8 +1,10 @@
 """Analytic event-owned ribbon sparks; birth records are authored once on the logical clock."""
-from rendering.gl_programs.mist import MIST_GLSL
+from rendering.gl_programs.mist import FOG_TEXTURE_UNIT, MIST_GLSL
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.ribbon import RIBBON_GRADE_GLSL
 
-VERTEX="""#version 460 core
+# As authored for OpenGL; ``VERTEX`` and ``FRAGMENT`` below are their portable form (N1.6).
+_VERTEX="""
 layout(location=0) in vec2 aPosition;
 struct Burst { vec4 p; vec4 velocity; vec4 colour; vec4 look; };
 layout(std430,binding=1) readonly buffer Bursts { Burst particles[]; };
@@ -39,7 +41,7 @@ void main() {
 }
 """
 
-FRAGMENT="""#version 460 core
+_FRAGMENT="""
 in vec2 vUv;
 in vec3 vWorld;
 flat in vec3 vColour;
@@ -61,3 +63,8 @@ void main() {
     Emission=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722)));
 }
 """
+
+# Binding plan: the bursts' storage 1, the mist volume its unit (8), the pass block 18.
+VERTEX, (FRAGMENT,), BURSTS_BLOCK = portable_program("#version 460 core" + _VERTEX, ("#version 460 core" + _FRAGMENT,),
+                                                     block="RibbonBurstDraw",
+                                                     samplers={"uFogVolume": FOG_TEXTURE_UNIT})

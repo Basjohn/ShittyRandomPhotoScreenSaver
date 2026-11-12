@@ -235,9 +235,10 @@ def test_surface_glints_stay_round_when_sheet_coordinates_are_skewed(scene):
     # Feed the production fragment a sheared surface coordinate grid. Orthogonal per-coordinate fwidths
     # make its glint a diagonal dash; screen-space distance must recover a round point in the centre cell.
     vertex = '''#version 460 core
-out vec3 vWorld; out vec3 vNormal; out float vPhase; out float vAcross;
-out float vEmission; out float vLocal; out float vCoverage; out float vExpanded; out float vFaceScale;
-flat out vec4 vColour; flat out vec4 vColourB; out vec4 vTint;
+layout(location=0) out vec3 vWorld; layout(location=1) out vec3 vNormal; layout(location=2) out float vPhase;
+layout(location=3) out float vAcross; layout(location=4) out float vEmission; layout(location=5) out float vLocal;
+layout(location=6) out float vCoverage; layout(location=7) out float vExpanded; layout(location=8) out float vFaceScale;
+layout(location=9) flat out vec4 vColour; layout(location=10) flat out vec4 vColourB; layout(location=11) out vec4 vTint;
 void main() {
     vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2)*2.0-1.0;
     gl_Position=vec4(p,0,1);
@@ -253,14 +254,18 @@ void main() {
                             fill_light=0.,glint_density=1.,glint_chance=1.,glint_light=1.,
                             glint_radius=.03,glint_min_pixels=3.)
     scene.target.bind(clear=(0.,0.,0.,0.))
+    from rendering.gl_programs.portable import pack_block
+    from rendering.gl_programs.ribbon import RIBBON_BLOCK
+    from rendering.quick.scene3d.uniforms import PassBlocks
     program=scene.resources.program('skewed glint',vertex,RIBBON_LIGHT_FRAGMENT)
     gl.glUseProgram(program)
-    for name,value in material.uniforms().items():
-        {2:gl.glUniform2f,3:gl.glUniform3f,4:gl.glUniform4f}[len(value)](gl.glGetUniformLocation(program,name),*value)
     gl.glDisable(gl.GL_DEPTH_TEST)
     gl.glDisable(gl.GL_BLEND)
     gl.glBindVertexArray(scene.target.vao)
-    gl.glDrawArrays(gl.GL_TRIANGLES,0,3)
+    blocks=PassBlocks('skewed glint',block_bytes=RIBBON_BLOCK.size)
+    with blocks.bound(pack_block(RIBBON_BLOCK,material.uniforms())):
+        gl.glDrawArrays(gl.GL_TRIANGLES,0,3)
+    blocks.release()
     crop=scene.target.read_rgba()[H//2-15:H//2+15,W//2-15:W//2+15,0].astype(float)
     y,x=np.indices(crop.shape,dtype=float)
     assert crop.sum()>30

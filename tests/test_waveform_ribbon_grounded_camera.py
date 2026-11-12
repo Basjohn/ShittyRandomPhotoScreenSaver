@@ -106,7 +106,8 @@ def test_near_level_native_ground_coverage_and_approach_grows_real_geometry(qt_a
     from OpenGL import GL as gl
     from core.ribbon_geometry import PathSample
     from core.ribbon_packet import pack_ribbons
-    from rendering.gl_programs.waveform_ribbon import FLOOR_VERTEX,FLOOR_WORLD_GLSL
+    from rendering.gl_programs.waveform_ribbon import FLOOR_WORLD_GLSL
+    from tests.test_waveform_infinite_floor import probe_floor_vertex
     from rendering.quick.offscreen_target import OffscreenRenderTarget
     from rendering.quick.scene3d.waveform import floor_vertices
     from rendering.quick.scene3d.resources import MeshResources
@@ -118,7 +119,7 @@ gl_FragDepth=depth;FragColor=vec4(1,0,0,1);}
 '''
     packet=pack_ribbons([([PathSample(0.,(-2.,2.,0.),.4),PathSample(1.,(2.,2.,0.),.4)],[(1.,0.,0.)]*2,None)])
     try:
-        program=floor.program('floor',FLOOR_VERTEX,fragment)
+        program=floor.program('floor',probe_floor_vertex(),fragment)
         vao,count=floor.mesh('floor',floor_vertices(),(3,))
         def draw_floor(values):
             view,projection,eye,lens=physical_view(values,1.5)

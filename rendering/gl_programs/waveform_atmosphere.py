@@ -182,3 +182,17 @@ void main(){vec4 fog=texture(uFogVolume,vec3(ndcToUv(vNdc),1.0));
 FragColor=uSkyReflection==1?vec4(fog.rgb,0.0):vec4(uBackdrop*fog.a+fog.rgb,1.0);
 Emission=vec4(0.0);}
 '''
+
+# N1.6 (``portable_program``): the sky's values in one std140 pass block, the mist volume at its unit; the medium's own
+# values (the world field's and the atmosphere's) in one pass block beside the fog volume's dispatch block, the body
+# field at unit 14, so the composed inject program bakes. The owner (``rendering.quick.scene3d.waveform``) packs both.
+from rendering.gl_programs.fog_volume import fog_inject_source  # noqa: E402
+from rendering.gl_programs.mist import FOG_TEXTURE_UNIT as _FOG_UNIT  # noqa: E402
+from rendering.gl_programs.portable import portable_program  # noqa: E402
+
+SKY_VERTEX, (SKY_FRAGMENT,), SKY_BLOCK = portable_program(SKY_VERTEX, (SKY_FRAGMENT,), block="WaveformSky",
+                                                          samplers={"uFogVolume": _FOG_UNIT})
+BODY_FIELD_UNIT = 14
+_, (MEDIUM_INJECT_SOURCE,), MEDIUM_BLOCK = portable_program(None, (fog_inject_source(MEDIUM_GLSL),),
+                                                            block="WaveformMedium",
+                                                            samplers={"uBodyField": BODY_FIELD_UNIT})

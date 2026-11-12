@@ -8,8 +8,7 @@ from rendering.quick.scene3d.waveform import WaveformScene
 from rendering.quick.scene3d.resources import warm_programs
 from rendering.quick.scene3d.target import scene_target_programs
 from rendering.gl_programs.waveform_ribbon import FLOOR_VERTEX,FLOOR_FRAGMENT
-from rendering.gl_programs.waveform_atmosphere import MEDIUM_GLSL,SKY_VERTEX,SKY_FRAGMENT
-from rendering.gl_programs.fog_volume import fog_inject_source
+from rendering.gl_programs.waveform_atmosphere import MEDIUM_INJECT_SOURCE,SKY_VERTEX,SKY_FRAGMENT
 from rendering.gl_programs.ribbon import (RIBBON_VERTEX,RIBBON_BODY_FRAGMENT,RIBBON_LIGHT_FRAGMENT,
     RIBBON_SPARK_VERTEX,RIBBON_SPARK_FRAGMENT,RIBBON_STRAY_VERTEX,RIBBON_STRAY_FRAGMENT)
 
@@ -35,11 +34,14 @@ class QuickWaveformRibbonRenderer:
         if recipe.sparks is not None and not scene.bursts.prepare_step():return False
         programs=[(scene.resources,'floor',FLOOR_VERTEX,FLOOR_FRAGMENT)]
         if recipe.fog is not None:
-            programs.extend(((scene.fog_resources,'fog medium',fog_inject_source(MEDIUM_GLSL)),
+            programs.extend(((scene.fog_resources,'fog medium',MEDIUM_INJECT_SOURCE),
                              (scene.fog_resources,'sky',SKY_VERTEX,SKY_FRAGMENT)))
         programs.extend((scene.resources,*entry) for entry in scene_target_programs(4,recipe.bloom>0.,False,
             overlay=True,oit=True,hdr=recipe.bloom>0.,rotation=frame.scene_output_rotation))
         if not warm_programs(programs):return False
+        # The floor's, the sky's and the medium's pass block rings (N1.6), one allocation a step.
+        if not scene.resources.pass_blocks.warm():return False
+        if recipe.fog is not None and not scene.fog_resources.pass_blocks.warm():return False
         if recipe.fog is not None:
             if not scene.field.prepare_step():return False
             for volume in (scene.fog,scene.reflected_fog):

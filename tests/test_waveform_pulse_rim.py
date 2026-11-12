@@ -158,9 +158,15 @@ def _strip_pulse_rim(monkeypatch):
     import rendering.quick.scene3d.ribbon as ribbon_module
     import rendering.quick.visualizer.implementations.waveform_ribbon as implementation
     source = programs.RIBBON_LIGHT_FRAGMENT
-    assert source.count(programs.PULSE_RIM_GLSL) == 1 and source.count(programs.PULSE_RIM_LINE) == 1
-    stripped = source.replace(programs.PULSE_RIM_GLSL, '').replace(programs.PULSE_RIM_LINE, '')
-    assert 'PulseRim' not in stripped
+    # The portable source keeps the section's functions as written; its declarations became the field's bound
+    # sampler line and the RibbonDraw block's members (which stay: the owner packs the one block either way).
+    functions = programs.PULSE_RIM_GLSL[programs.PULSE_RIM_GLSL.index('float pulseRimField'):]
+    assert source.count(functions) == 1 and source.count(programs.PULSE_RIM_LINE) == 1
+    start = source.rindex('\n', 0, source.index('uPulseRimField;')) + 1
+    end = source.index(functions) + len(functions)
+    assert start < end
+    stripped = (source[:start] + source[end:]).replace(programs.PULSE_RIM_LINE, '')
+    assert 'pulseRim' not in stripped and 'uPulseRimField' not in stripped
     monkeypatch.setattr(ribbon_module, 'RIBBON_LIGHT_FRAGMENT', stripped)
     monkeypatch.setitem(ribbon_module._FRAGMENTS, 'light', stripped)
     monkeypatch.setattr(implementation, 'RIBBON_LIGHT_FRAGMENT', stripped)

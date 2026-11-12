@@ -269,3 +269,14 @@ void main() {
 }
 """
 FLAT = {'ribbon': (1., 0., 1.)}
+
+# N1.6: the floor's values in one std140 pass block (``portable_program``), each sampler at the unit its owner binds
+# (``rendering.quick.scene3d.waveform``): albedo 0, slope 1, reflection 2, roughness 3, the specular pre-pass 4, the
+# mist volume FOG_TEXTURE_UNIT, the yielding floor 13, the world body field 14.
+from rendering.gl_programs.mist import FOG_TEXTURE_UNIT as _FOG_UNIT  # noqa: E402
+from rendering.gl_programs.portable import portable_program  # noqa: E402
+
+FLOOR_SAMPLERS = {"uAlbedo": 0, "uSlope": 1, "uReflection": 2, "uRoughness": 3, "uSpecular": 4, "uFogVolume": _FOG_UNIT,
+                  "uFloorGiveField": 13, "uBodyField": 14}
+FLOOR_VERTEX, (FLOOR_FRAGMENT,), FLOOR_BLOCK = portable_program(FLOOR_VERTEX, (FLOOR_FRAGMENT,), block="WaveformFloor",
+                                                                samplers=FLOOR_SAMPLERS)
