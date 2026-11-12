@@ -725,8 +725,8 @@ class EngineSession:
         self._settle_capture()
         return True
 
-    def set_view(self, *, extent: Any, rotations: Any, override_extent: Any = None,
-                 override_rotations: Any = None, presentation: Any = None) -> None:
+    def set_view(self, *, version: Any, extent: Any, rotations: Any, override_extent: Any = None,
+                 override_rotations: Any = None, framed_view: Any = None, presentation: Any = None) -> None:
         """The framed view the tick reads (``VIS_SET_VIEW``, latest wins; work order 5 slice 5.2): the owner's
         controller's layout metrics (committed extent and per-mode rotations, the live CUSTOM override or None) onto
         this session's controller, which resolves them for its own mode as the owner's does. The tick reads them under
@@ -734,9 +734,15 @@ class EngineSession:
         5.4): the presentation inputs the main side changed since its last send (``logical_edges
         .presentation_inputs_snapshot``: the view records and the mode's presentation-only controls), set onto the
         session's presentation state between two steps (each attribute is one reference; a pose read mid-update sees
-        each record whole)."""
+        each record whole). ``framed_view`` (N0.4): the drawn card's exact camera inputs (``core.framed_view``), or None
+        before a card is drawn. ``version`` must be ``core.framed_view.VIEW_MESSAGE_VERSION``: any other is refused
+        before anything is applied."""
+        from core.framed_view import VIEW_MESSAGE_VERSION, admit_framed_view
         from widgets.spotify_visualizer.logical_edges import apply_presentation_inputs
 
+        if version != VIEW_MESSAGE_VERSION:
+            raise ValueError(f"VIS_SET_VIEW version {version!r} is not {VIEW_MESSAGE_VERSION}")
+        framed_view = admit_framed_view(framed_view)
         controller = self._controller
         if presentation:
             apply_presentation_inputs(controller.presentation_state, presentation)
@@ -744,6 +750,7 @@ class EngineSession:
         controller.set_custom_viewport_override(
             None if override_extent is None else tuple(override_extent),
             dict(override_rotations) if override_rotations is not None else 0)
+        controller.set_framed_view(framed_view)
 
     @property
     def bar_count(self) -> int:

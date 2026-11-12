@@ -477,6 +477,12 @@ class QuickSceneController(QObject):
         self._visualizer_viewport_config_sink: (
             Callable[[tuple[float, float] | None, object], None] | None
         ) = None
+        # The drawn card's framed view (``core.framed_view``, N0.4), resolved at each geometry edge of the record the
+        # Visualizer item draws, and its sink (bound with the viewport config sink: the runtime controller's
+        # ``set_framed_view``). Plain floats only cross it.
+        self._visualizer_framed_view_sink: Callable[[object], None] | None = None
+        self._visualizer_framed_view_key: tuple | None = None
+        self._visualizer_framed_view: object = None
         self._visualizer_loader: QQuickItem | None = None
         self._visualizer_root: QQuickItem | None = None
         self._visualizer_startup_reveal_opacity = 1.0
@@ -1789,6 +1795,8 @@ class QuickSceneController(QObject):
     def set_visualizer_viewport_config_sink(
         self,
         sink: Callable[[tuple[float, float] | None, object], None] | None,
+        *,
+        framed_view_sink: Callable[[object], None] | None = None,
     ) -> None:
         """Bind the CUSTOM viewport/orientation config seam.
 
@@ -1799,11 +1807,38 @@ class QuickSceneController(QObject):
         CUSTOM visualizer item) retires that override and the runtime falls back
         to committed layout truth. Binding immediately republishes the current
         pair so the sink starts from truth.
+
+        ``framed_view_sink`` (the runtime controller's ``set_framed_view``, N0.4)
+        receives the drawn card's framed view at every geometry edge of the
+        record the Visualizer item draws, and the current one at binding (when a
+        card is drawn). Unbinding (``sink`` None) unbinds it too.
         """
 
         self._visualizer_viewport_config_sink = sink
+        self._visualizer_framed_view_sink = framed_view_sink if sink is not None else None
         if sink is not None:
             self._publish_visualizer_viewport_config()
+            self._publish_visualizer_framed_view()
+
+    def _publish_visualizer_framed_view(self) -> None:
+        """Push the drawn card's framed view to its sink (nothing before a card is drawn)."""
+
+        sink = self._visualizer_framed_view_sink
+        view = self._visualizer_framed_view
+        if sink is not None and view is not None:
+            sink(view)
+
+    def _resolve_visualizer_framed_view(self, presentation: ResolvedVisualizerPresentation) -> None:
+        """At a record the item draws: a geometry edge (not a fade) resolves the framed view once and publishes it."""
+
+        from rendering.quick.visualizer.framed_view import framed_view_geometry_key, resolve_framed_view
+
+        key = framed_view_geometry_key(presentation)
+        if key == self._visualizer_framed_view_key:
+            return
+        self._visualizer_framed_view_key = key
+        self._visualizer_framed_view = resolve_framed_view(presentation)
+        self._publish_visualizer_framed_view()
 
     def _publish_visualizer_viewport_config(self) -> None:
         """Push the current CUSTOM physical extent + orientation to the sink."""
@@ -2376,6 +2411,7 @@ class QuickSceneController(QObject):
         self._visualizer_middle_click_admission = None
         self._visualizer_volume_wheel_handler = None
         self._visualizer_viewport_config_sink = None
+        self._visualizer_framed_view_sink = None
         self._custom_layout_visualizer_baseline = None
         return identity
 
@@ -2528,6 +2564,7 @@ class QuickSceneController(QObject):
         root.setWidth(outer_width)
         root.setHeight(outer_height)
         item.set_presentation(presentation)
+        self._resolve_visualizer_framed_view(presentation)
 
         style = presentation.shell_style
         root.setProperty("authoredSceneOpacity", presentation.scene_fade)

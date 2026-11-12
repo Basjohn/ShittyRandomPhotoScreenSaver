@@ -16,6 +16,7 @@ import threading
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from core.framed_view import FramedView, admit_framed_view
 from core.settings.visualizer_mode_registry import (
     VisualizerModePresentationPolicy,
     coerce_visualizer_mode_id,
@@ -134,6 +135,9 @@ class VisualizerRuntimeController:
         self._committed_content_rotations: dict[str, int] = {}
         self._custom_viewport_override: tuple[float, float] | None = None
         self._custom_content_rotation_override: dict[str, int] | None = None
+        # The drawn card's framed view (``core.framed_view``, N0.4): the exact camera inputs the scene publishes at
+        # its geometry edges (``set_framed_view``); None until a card is drawn.
+        self._framed_view: FramedView | None = None
         self._render_bridge = VisualizerSnapshotBridge()
         # The presentation-neutral destination owner for this generation's
         # authored per-tick logical state. The authored logical step advances
@@ -449,8 +453,9 @@ class VisualizerRuntimeController:
 
     @property
     def layout_metrics_snapshot(self) -> tuple:
-        """(committed extent, committed rotations, override extent or None, override rotations or None): the raw
-        layout metrics, mode-independent (each controller resolves them for its own mode)."""
+        """(committed extent, committed rotations, override extent or None, override rotations or None, framed view or
+        None): the raw layout metrics, mode-independent (each controller resolves them for its own mode), and the drawn
+        card's framed view (``set_framed_view``)."""
         with self._lock:
             return (
                 tuple(self._committed_viewport_extent),
@@ -458,7 +463,25 @@ class VisualizerRuntimeController:
                 None if self._custom_viewport_override is None else tuple(self._custom_viewport_override),
                 None if self._custom_content_rotation_override is None
                 else dict(self._custom_content_rotation_override),
+                self._framed_view,
             )
+
+    @property
+    def framed_view(self) -> FramedView | None:
+        """The drawn card's framed view (``core.framed_view``): the exact camera inputs the logical side builds a
+        framed camera from (``core.waveform_ribbon_view.card_span``); None until a card is drawn."""
+        return self._framed_view
+
+    def set_framed_view(self, view: Any) -> None:
+        """The scene's framed view of the card it draws (published at its geometry edges, N0.4), or the engine
+        worker's copy (``VIS_SET_VIEW``). A changed view is a layout-metrics write (the observer forwards it to the
+        worker); an equal one does nothing."""
+        admitted = admit_framed_view(view)
+        with self._lock:
+            if admitted == self._framed_view:
+                return
+            self._framed_view = admitted
+        self._layout_metrics_written()
 
     def _layout_metrics_written(self) -> None:
         observer = self._layout_metrics_observer

@@ -578,8 +578,10 @@ class EngineWorkerLink:
 
     def set_view_source(self, source: Callable[[], tuple] | None) -> None:
         """Where the view comes from: ``(layout_metrics_snapshot, presentation inputs)`` (the owner's controller's
-        layout metrics, and ``logical_edges.presentation_inputs_snapshot`` of its presentation state), read once per
-        send. The layout goes whole; the presentation inputs as the attributes changed since the last send."""
+        layout metrics with the drawn card's framed view, and ``logical_edges.presentation_inputs_snapshot`` of its
+        presentation state), read once per send. The layout goes whole (``VIS_SET_VIEW`` version
+        ``core.framed_view.VIEW_MESSAGE_VERSION``); the presentation inputs as the attributes changed since the last
+        send."""
         self._view_source = source
         self._view_sent = None
         self._presentation_sent = {}
@@ -626,12 +628,15 @@ class EngineWorkerLink:
         sent.update(refused)
         if snapshot == self._view_sent and not changed:
             return False
-        extent, rotations, override_extent, override_rotations = snapshot
+        from core.framed_view import VIEW_MESSAGE_VERSION
+
+        extent, rotations, override_extent, override_rotations, framed_view = snapshot
         self._view_sent = snapshot
         sent.update(changed)
         self._view_in_flight = True
-        payload = {"extent": extent, "rotations": rotations, "override_extent": override_extent,
-                   "override_rotations": override_rotations}
+        payload = {"version": VIEW_MESSAGE_VERSION, "extent": extent, "rotations": rotations,
+                   "override_extent": override_extent, "override_rotations": override_rotations,
+                   "framed_view": None if framed_view is None else tuple(float(v) for v in framed_view)}
         if changed:
             payload["presentation"] = changed
         self._send(MessageType.VIS_SET_VIEW, payload, on_reply=self._view_answered)
