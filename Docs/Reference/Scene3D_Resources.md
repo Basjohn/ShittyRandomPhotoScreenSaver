@@ -18,8 +18,9 @@ Early E8 receiver attempts produced triangular near-footprint casts or a corner-
 ## Shared framed-camera and transparent-scene admission contract
 
 The opt-in **framed 3D camera capability** is implemented in `core/settings/framed_camera.py` with the existing
-view-orbit/scene-transform declarations and shared physical projection/admission helpers. Neon Lake and Extruded Bubble
-are current consumers; future modes reuse this owner rather than repeating per-mode camera plumbing.
+view-orbit/scene-transform declarations and shared physical projection/admission helpers. Neon Lake, Extruded Bubble
+and Waveform Ribbon are current consumers (each declares `framed_camera` in `core/settings/visualizer_mode_registry.py`);
+future modes reuse this owner rather than repeating per-mode camera plumbing.
 The outer retained card and CUSTOM stage remain fixed, while its content orbits/pans/zooms inside
 CARD_INTERIOR. Mode declarations supply bounds, pivot, pan/zoom safety, fit and near-plane behavior; do **not**
 globalize landscape angles, wrap bounded modes, give future modes copied camera controllers or change unframed 3D

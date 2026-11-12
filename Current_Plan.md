@@ -189,7 +189,8 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
 - High-potential primitives are built without a consumer, low-potential ones only when a consumer is admitted
   (operator, 12 Nov: "High potential primitives should be built regardless, low potential only when a consumer.
   We can always improve."). The lead classifies; the class is written at each item. When one lands it gets one
-  showcase WebP and a "what this makes possible" note in `Docs/Reference/Scene3D_Resources.md`.
+  showcase WebP and a "what this makes possible" note in `Docs/Reference/Primitives.md` (resource detail stays in
+  `Docs/Reference/Scene3D_Resources.md`).
 - The protected clip and background commits (ce07b991, 07486d83, 985b9d53) are not retuned while the Python path
   lives; the native background must measure no worse than them before it replaces them.
 - The native module is compiled only by the GitHub workflow (operator, 12 Nov; handbook section 8; N0.9): an agent
@@ -203,9 +204,10 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
   the Python substrate and is therefore a port is listed in `Docs/Reference/Scene3D_Resources.md` ("Shared
   Scene3D capability inventory").
 
-**State, 12 Nov:** N0's contracts are decided, and N0.6 and N0.7 are proved (D6 and D9 accepted). The rest of N1
-is in flight. N2.1 (the product module's build) and the Python half of N2.3 (Spectrum's native schema, the
-`payload_schema` check) are in flight. N2.2 and N2.4 wait for N0.3's scenes.
+**State, 12 Nov (night audit):** N0's contracts are decided, and N0.6 and N0.7 are proved (D6 and D9 accepted). N1.6
+is merged to ratchet 95 (its remainder is open). N2.1 (the product module's build) is merged and its first product
+build round runs under the lead; the Python half of N2.3 (Spectrum's native schema, the `payload_schema` check) is
+merged and its C++ reader is open. N2.2 and N2.4 wait for N0.3's scenes.
 
 **Order.** N0 and N1 now. Then N2 (the substrate and Spectrum), N2b (the background layer and the first full
 rehearsal), N3 (the 3D substrate). From there two ordered tracks, one High slot each: the **modes track** (N5.1,
@@ -297,9 +299,8 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     depth part of the correction; upload an uncorrected matrix.
   - [ ] One culled triangle with `front_face_clockwise`'s rule, Quick's Y-down matrix and an up-facing one;
     `gl_FrontFacing` agrees. Negative control: front face fixed to counter-clockwise.
-- [ ] N0.7 D9's proof, in the same harness: the job thread, its queue and the latch; the six measurements of D9
-  ("How it is proved"), with system conditions recorded. The verdict (jobs for compute on this vendor, or
-  uploads only) is written into D9.
+- N0.7 D9's proof: proved in the harness and accepted 12 Nov (the verdict, jobs for compute on this vendor and
+  uploads, is D9's "Accepted by the lead"). Owed, with the Qt 6.12 checks filed here:
   - [ ] AMD and Intel unmeasured: the same measure round on another vendor before a mode moves compute to a job by
     default there (GitHub runners have no GPU; a Watchlist entry until a machine is available).
   - [ ] The timer's form (D5.6 answer 4) settled from where the core records a pass.
@@ -349,7 +350,8 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     `reflection.py:84`, `extruded_bubble_program.py:545`): through `fragPixel`, so the dither is the same texel on
     every backend and a port's Vulkan record is not compared across two noise patterns. Bit-identical in OpenGL.
   - [ ] Extruded Spectrum's and Sphere's backdrop uv (`extruded_spectrum_program.py:415`, `sphere_voxel.py:658`)
-    and the four 2D shaders (`gl_FragCoord.xy - u_viewport_origin_px`), each with its N1.6 group.
+    and the four 2D shaders (`gl_FragCoord.xy - u_viewport_origin_px`), each with its N1.6 group. Spectrum's group
+    merged without it (`spectrum.frag:521` still reads raw `gl_FragCoord`): Spectrum's is owed before N2.5.
   - [ ] Projection matrices (`framed_camera.py` perspective, depth -1..1) corrected once at upload, with the two
     depth side defects above; proved by N0.3's known-depth scene.
   - [ ] The winding rule on a backend other than OpenGL: N0.3's culled-triangle scene (today only the truth table
@@ -360,17 +362,13 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   group pixel-identical in OpenGL before and after and with GL calls per frame recorded before and after (fewer
   calls is a gain today); `.qsb` baked for every backend, not `--glsl 460` only; each group leaves the readiness
   ratchet in the same change. A group whose conversion is not pixel-identical inside one dispatch is converted at
-  its port instead. Order: by first consumer on the ladder, not N5's order (Spectrum ports first, N2.5; the seven
-  fullscreen transitions and the hosts next, N2b; the 3D substrate at N3; Waveform at N5.4):
-  - [ ] The substrate step in flight (pass blocks, the item quad, the bloom fragments): finish, merge.
-  - [ ] Spectrum and the Quick visualizer quad (`spectrum.frag`, `QUICK_VISUALIZER_VERTEX_SOURCE`).
-  - [ ] The seven fullscreen transitions of N5.2a (Crossfade, Burn, Particle, Ripple, Slide, Warp, Wipe) and
-    `BaseGLProgram.FULLSCREEN_VERTEX_SHADER`.
-  - [ ] The Quick hosts: the background node, the backdrop's down and up passes (the clip host goes with D5.2).
-  - [ ] Spline Curve, Oscilloscope, Bubble (N5.1).
+  its port instead. Order: by first consumer on the ladder, not N5's order. Merged 12 Nov (ratchet 197 to 95): the
+  substrate step, Spectrum, the seven fullscreen transitions, the item-quad transition families, the Quick hosts and
+  Waveform Ribbon (its fog composite, fullscreen vertex and march left: the N1.6 remainder box under N2b). Open:
+  - [ ] Spline Curve, Oscilloscope, Bubble (N5.1), with `QUICK_VISUALIZER_VERTEX_SOURCE`.
   - [ ] The rest of the shared scene substrate (targets' resolves, post, environment, resources).
-  - [ ] Waveform Ribbon; then Extruded Bubble; Neon Lake; Extruded Spectrum and Sphere; the other transitions by
-    N5.2's groups.
+  - [ ] Extruded Bubble; Neon Lake; Extruded Spectrum and Sphere; the remaining transitions (the N1.6 remainder box
+    under N2b).
 - [ ] D5.3's formats service, its one listed use: the scene target's multisampled velocity attachment
   (`scene3d/target.py`, RG16F kept; RGBA16F would add 127.5 MiB per 4K display at 4x, 255 MiB at 8x). Built with the
   substrate when the scene target ports (N3), or reconsidered if N1.8's resolve-first rule removes the multisampled
@@ -448,8 +446,8 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   pass writes outside the card nor under the border's anti-aliased edge; Sphere's and Extruded Spectrum's
   overflow setting is the one admitted exception and skips the coverage term). Proof: one-to-one texels under
   pixel shift and a uniform CUSTOM scale; the clip-contract test of 1C.4 run on the native item.
-- [ ] N2.5 Spectrum at parity on both backends (the port rule above), then its Python renderer retires. Needs
-  N1.6's Spectrum group first (its shader is on the readiness ratchet). Bar coverage keeps R-197's rule: one
+- [ ] N2.5 Spectrum at parity on both backends (the port rule above), then its Python renderer retires. N1.6's
+  Spectrum group is merged (`spectrum.frag` bakes); N1.4's raw `gl_FragCoord` in it is not. Bar coverage keeps R-197's rule: one
   continuous coordinate from the target's own pixel (`fragPixel`), and the diagonal-seam test runs on the native
   item. GPU time per pass (port rule e) needs N2.6: build the timer before this port, or record the whole-frame
   time and say so.
@@ -488,6 +486,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   a Settings round trip, exit, sleep and wake).
 
 **N3. The 3D substrate core (C++; harness scenes, no mode yet)**
+
+Numbering kept stable for the documents that cite it: N3.5 (per-pass GPU timing) moved to N2.6, and N3.8 (the job
+service) is built in N2b, where its first job (a photo's upload) is needed.
 
 - [ ] N3.1 Scene targets: colour, depth and the HDR intermediate with fixed allocations per size, resize and
   retirement; a sampled depth texture and the background capture (Extruded Bubble); a small extra target with a
@@ -891,7 +892,8 @@ Every `[~]` box in this plan that says "D1 run", "Studio run on D1" or "Frozen r
     first Neon Lake activation logs a cold link or a cache hit and never an activation-failure reload; the
     second run a cache hit.
   - [ ] In the same frozen run: saves work, and a Studio opens (the 6 Nov "QtQuick.Controls.Basic is not
-    installed" fix, section 4).
+    installed" fix; contract `Spec.md`, frozen QML package contract;
+    `test_every_shipped_qml_import_survives_the_frozen_prune`).
 - [ ] Real audio endpoints: a test that opens real WASAPI loopback in the engine worker and drives the product's
   own device-change path with real endpoint ids; it skips cleanly with a stated reason where the machine has no
   second endpoint.
@@ -1222,22 +1224,6 @@ spec system and never by hand.
 - [ ] Lead: D1 run per style (Display 1, the hidden second host), edges read at native pixels as in R-192, plus
   a style switch while expanded.
 
-### 1D.3 Document contradictions found by the primitives catalogue (12 Nov; for the audit slot)
-
-- [ ] `Current_Plan.md` §7.1 says Waveform Ribbon is the first consumer of S3D-1/S3D-2/S3D-5, but S3D-2 is N4.c
-  (populations) and Waveform uses none; correct it to S3D-1 and S3D-5.
-- [ ] D8 row 6 (`Native_Core_P3_Decisions.md`) omits N4.d from the high-potential list while the plan calls its
-  wet-surface masks high potential: one class, written in both.
-- [ ] D5.3 is called a "closed list of six services" but the indirect-draw service is retired: five.
-- [ ] `Scene3D_Resources.md` names Neon Lake and Extruded Bubble as the framed-camera consumers; the registry also
-  declares Waveform Ribbon (`core/settings/visualizer_mode_registry.py:473`).
-- [ ] Plan numbering: N3 has no N3.5; N3.8 sits under the N2b heading. Renumber or explain once.
-- [ ] `Index.md` cites `Current_Plan.md` §6 as a live checklist; §6 is a stub. Point it at item 8b.
-- [ ] R-94 (integer hash) is cited in `Transitions.md:142,205` with no entry file or index row: write it or
-  remove the citation.
-- [ ] The standing rule's "what this makes possible" note (item 8b rules) points at `Scene3D_Resources.md`; the
-  catalogue is now `Docs/Reference/Primitives.md`.
-
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
 These repairs run alongside the existing audit/native-worker work above; they do not replace or reorder it. Live
@@ -1433,13 +1419,14 @@ Watchlist entry (operator, 11 Nov).
 
 **Agents and slots:** `Docs/Guides/Orchestrator_Handbook.md` section 1 is the one source (the lead is Opus 5.5
 High; Fable 5.2 High only as a rare one-off audit at a major milestone, last used on 12 Nov for the native core's
-direction; two Opus 5.5 High, two Opus 5.5 Medium, one Sonnet 5.5 Medium for documents and research). The plan
+direction; since 12 Nov evening one Opus 5.5 High for complex work, one Opus 5.5 High for audits, one Opus 5.5
+Medium and one Sonnet 5.5 Medium for documents and research). The plan
 holds every task in detail before dispatch: a brief is its plan item, and a report is checked against the item's
 boxes (operator, 11 Nov evening). Closing before opening (operator, 12 Nov: "We do need to focus on closing tasks
 with real successes ... and thus opening work chances"; on the native core having no agent: "it is
 disappointing"): a slot takes no new work while its last report is unreviewed or unmerged, and a dispatch is
 sized to finish inside a usage window. Which item is in flight is written at the item, never here; the native
-core's slots are named in item 8b ("What can start now" and "Order").
+core's state and tracks are in item 8b ("State" and "Order").
 
 Live checklist: every open step is its own box, ticked boxes are deleted, and a landed item leaves only its `[~]`
 validation steps and open side defects. Landed slices live in `Docs/Reference/Architecture_Checklist.md` (AC-01
@@ -1706,12 +1693,6 @@ Lake runs 89 fps, Spectrum 90, Bubble 63, Extruded Bubble 5.9 ms / GIL 0.53 / 55
 - The game60 re-measure of the two tick cuts is superseded on the default path: the tick runs in the engine
   worker (P2), and the 11 Nov load session measured it there (item 7). The boxes above matter for
   `--viz-in-process` only; the lead decides whether they still pay.
-
-**Frozen builds could not open a Studio (operator 6 Nov: "module QtQuick.Controls.Basic is not installed"); fixed
-in source, confirm on the next build**
-
-Contract: `Spec.md` (frozen QML package contract); `test_every_shipped_qml_import_survives_the_frozen_prune`.
-
 
 **Widget/Settings material appearance: Awaiting Validation**
 
@@ -2256,7 +2237,7 @@ Offline GPU at the live card size: P2 7.2-7.6 ms with strands, 6.0-6.6 without (
   repeated submission/preparation and prove tails without weakening the approved strands.
 - [ ] GPU re-measure now that Floor Give has landed, then the game60 live check.
 
-**Chosen first: the smallest contained scene and the first consumer of S3D-1/S3D-2/S3D-5**
+**Chosen first: the smallest contained scene and the first consumer of S3D-1/S3D-5** (it uses no population, S3D-2)
 
 Brief and hard gates: `Docs/Future_Work/Waveform_Ribbon.md`. The detailed working checklist and visual target custody
 live in `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`; reference packages under `references/` are local/operator-owned

@@ -71,6 +71,7 @@ The September 10 Sphere acoustic-admission and cohort-motion incident merges fiv
 | [R-90 — Core Audio Endpoint Released Twice (ctypes.cast Shared A COM Pointer)](Historical_Bugs/R-90_Core_Audio_Endpoint_Double_Release.md) | Archived investigation | **STRONG** |
 | [R-91 — Worker Processes Outlived A Crashed UI Process](Historical_Bugs/R-91_Worker_Processes_Outlived_Crashed_UI.md) | Archived investigation | **STRONG** |
 | [R-93 — Media Commands And Refreshes Starved Behind Network IO](Historical_Bugs/R-93_Media_Commands_Starved_Behind_Network_IO.md) | Archived investigation | **STRONG** |
+| [R-94 — Melt's Float Noise Hash Cut The Photograph Into Rectangles](Historical_Bugs/R-94_Melt_Float_Hash_Cut_The_Photo_Into_Rectangles.md) | Source repair (the exact integer lattice hash every shader cites; restored 12 Nov from `d3353bd5^`) | Standard |
 | [R-95 — Prepared Transition Geometry Never Matched Under R-63 Overscan](Historical_Bugs/R-95_Prepared_Transition_Geometry_Never_Matched_Under_R63.md) | Archived investigation | **STRONG** |
 | [R-96 — Double Wake Froze The Replacement Runtime](Historical_Bugs/R-96_Double_Wake_Froze_The_Replacement_Runtime.md) | Archived investigation | **STRONG** |
 | [R-97 — Overnight Main-Process Private Commit Growth](Historical_Bugs/R-97_Overnight_Main_Process_Private_Commit_Growth.md) | Historical memory investigation / later single-display soak healthy | **STRONG** |

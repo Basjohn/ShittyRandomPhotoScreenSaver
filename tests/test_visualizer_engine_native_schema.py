@@ -311,6 +311,29 @@ def test_the_codec_reader_refuses_a_native_or_unknown_slot_at_its_head(case, cau
     _assert_refused("codec", schema, mode, payload, cause)
 
 
+@pytest.mark.parametrize("mode", [0, *sorted(MODE_CODES.values())])
+def test_the_codec_reader_admits_a_codec_slot_of_every_registered_mode(mode, monkeypatch):
+    # The product's stream is the codec stream and one refusal fails it for the whole session, so a false refusal is
+    # as costly as a missed one: a codec slot stamped with any mode code the writer can stamp (``MODE_CODES``, or 0
+    # for none) is admitted and taken. Negative control (audit, 12 Nov): with the code missing from the reader's
+    # known set, the same head is refused.
+    receiver, sender = Pipe(duplex=False)
+    mailbox = PacketMailbox(role="reader", slot_bytes=64 * 1024, payload="codec")
+    try:
+        mailbox.listen_for_wakes(receiver, on_closed=lambda: None)
+        _publish_raw(mailbox.mapping_name, frame_codec.CODEC_SCHEMA, mode, frame_codec.encode((3, 4, 1.0, None)))
+        publication = mailbox.take()
+        assert publication is not None and publication.generation == 3
+        assert mailbox.refused_payloads == 0 and mailbox.payload_failure is None
+    finally:
+        mailbox.close()
+        sender.close()
+    if mode:
+        monkeypatch.setattr(native_schema, "_KNOWN_MODE_CODES", frozenset(MODE_CODES.values()) - {mode})
+        with pytest.raises(native_schema.PayloadRefused):
+            native_schema.admit_slot_head(frame_codec.CODEC_SCHEMA, mode, 64, accept="codec")
+
+
 def test_the_head_check_runs_before_the_payload_is_copied():
     # The reader's admission sees the head of a slot whose payload length is beyond the slot (a copy would be cut
     # short and the old reader counts it torn); the head check refuses it by its size first.
