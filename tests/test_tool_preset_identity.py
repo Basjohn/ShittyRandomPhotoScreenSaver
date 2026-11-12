@@ -116,10 +116,40 @@ def test_bubble_preview_frame_is_seeded(monkeypatch):
     assert positions() != positions()
 
 
-def test_projection_gate_probe_reads_named_presets_against_current_source():
+def test_projection_gate_probe_names_no_preset_in_code(monkeypatch):
+    """The projection gate probe measures the presets a run asks for (``--visualizer-preset MODE=N``) through the
+    preset owner, and keeps no table of preset names (negative control: the removed ``PRESETS`` list)."""
+    import ast
+    import inspect as source
+    from types import SimpleNamespace
+
     from tools.visualizer_replay import extruded_bubble_projection_gate_probe as probe
 
-    result = probe.inspect()  # also checks its mirrored shader/renderer signatures are still current
-    assert set(result["near_layer_gate"]) == {probe.preset_path(name).stem for name in probe.PRESETS}
+    # No module-level collection of strings: the shape a named preset list takes.
+    for node in ast.parse(source.getsource(probe)).body:
+        if isinstance(node, (ast.Assign, ast.AnnAssign)) and isinstance(node.value, (ast.Tuple, ast.List, ast.Set)):
+            assert not any(isinstance(item, ast.Constant) and isinstance(item.value, str) for item in node.value.elts)
+
+    # A fake catalogue of three presets: what is measured is exactly what the run asked for, by number.
+    asked: list[tuple[str, int]] = []
+
+    def activation(config, *, mode):
+        index = config[f"preset_{mode}"]
+        asked.append((mode, index))
+        return SimpleNamespace(preset_name=f"fake {index}",
+                               resolved_config={f"{mode}_focus": 0.5 + 0.1 * index,
+                                                f"{mode}_aperture": 0.5 + 0.1 * index})
+
+    monkeypatch.setattr(vp, "get_custom_preset_index", lambda mode: 3)
+    monkeypatch.setattr(vp, "resolve_visualizer_activation_payload", activation)
+    selection = probe.parse_selection(["some_mode=3", "some_mode=1"])
+    result = probe.inspect(selection)  # also checks its mirrored shader/renderer signatures are still current
+    assert asked == [("some_mode", 2), ("some_mode", 0)]
+    assert list(result["near_layer_gate"]) == ["some_mode=3", "some_mode=1"]
+    assert result["near_layer_gate"]["some_mode=3"]["focus"] == pytest.approx(2.5 + 3 * 0.7, abs=1e-4)
+    # Without an option the default mode's default preset is measured; a number past the catalogue is loud.
+    assert probe.parse_selection(None) == [(probe.DEFAULT_MODE, 1)]
     with pytest.raises(LookupError):
-        probe.preset_path("a_preset_nobody_authored")
+        probe.inspect([("some_mode", 4)])
+    with pytest.raises(ValueError):
+        probe.parse_selection(["some_mode"])
