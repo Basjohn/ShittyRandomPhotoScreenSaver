@@ -63,7 +63,6 @@ _REQUIRED_GL_ENTRY_POINTS: dict[str, tuple[str, ...]] = {
         "glDeleteSync",
     ),
     "compute": ("glDispatchCompute", "glMemoryBarrier", "glBindImageTexture"),
-    "multi_draw_indirect": ("glMultiDrawArraysIndirect",),
 }
 _validated_contexts_lock = threading.Lock()
 _validated_contexts: dict[

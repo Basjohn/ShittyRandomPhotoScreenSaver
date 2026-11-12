@@ -194,12 +194,16 @@ def test_scene_projects_matching_auxiliary_state_without_item_recreation(qt_app)
         assert retained.item is retained_item
         assert root.property("dimmingEnabled") is True
         assert root.property("dimmingOpacity") == pytest.approx(0.35)
-        assert root.property("pixelShiftX") == pytest.approx(3.0)
-        assert root.property("pixelShiftY") == pytest.approx(-2.0)
+        # The shift moves the cards by whole device pixels (1C.4), within half a device pixel of the logical step.
+        dpr = float(window.effectiveDevicePixelRatio())
+        shift = (root.property("pixelShiftX"), root.property("pixelShiftY"))
+        for value, logical in zip(shift, (3.0, -2.0)):
+            assert value * dpr == pytest.approx(round(value * dpr))
+            assert abs(value - logical) * dpr <= 0.5 + 1e-9
         assert dimming.property("opacity") == pytest.approx(0.35)
         mapped_origin = layer.mapToScene(QPointF(0.0, 0.0))
-        assert mapped_origin.x() == pytest.approx(3.0)
-        assert mapped_origin.y() == pytest.approx(-2.0)
+        assert mapped_origin.x() == pytest.approx(shift[0])
+        assert mapped_origin.y() == pytest.approx(shift[1])
 
         assert controller.apply_auxiliary_state(
             QuickAuxiliaryState(screen_index=0, runtime_generation=44, admission_open=False)

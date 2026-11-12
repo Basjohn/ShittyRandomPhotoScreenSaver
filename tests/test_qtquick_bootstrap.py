@@ -318,7 +318,6 @@ def test_actual_context_validation_logs_capabilities_once_and_revalidates_after_
         "shader_storage_buffers": True,
         "persistent_streaming": True,
         "compute": True,
-        "multi_draw_indirect": True,
     }
     assert len(gl.calls) == 4  # one startup query, never a frame-time query
 

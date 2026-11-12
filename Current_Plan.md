@@ -233,36 +233,26 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 
 **N0. Decisions, contracts and proofs (design and harness only; can start now)**
 
-- [ ] P3.0 The reader contracts written into the decisions document before any product C++, seen by the lead:
-  - [ ] D1: the native reader against the GUI thread closing the mapping mid-copy (pin the mapping, or close
-    render admission and pass a render-thread quiescence barrier before close, recover or unlink); liveness is per
-    stream, not per process; D9's job thread uses the same barrier. The test crashes or trips an assertion
-    without the contract (close during copy, resize and remap, retire, worker replacement).
-  - [ ] D2: one consuming reader (the core acknowledges presented frames and edges) and a non-consuming head read
-    for the Python owner; a reader that retains a frame has an explicit drop edge (R-184), and the head read
-    cannot resurrect a dropped frame.
-  - [ ] D3: Extruded Bubble geometry once per (worker namespace, engine generation, activation, geometry
-    revision, capacity), small per-frame state separately; retention and release on geometry changes, failed
-    swaps, upload failures and teardown; CPU-only oracle data stays off the wire. (The worker's +34 MB at the
-    first Waveform Ribbon is OpenBLAS's reserve, not geometry: D3 sizes nothing against it.)
-  - [ ] The transport rule: nothing through the resource sharer; a name on POSIX, an exact-process handle on
-    Windows. Fixed-layout per-mode native schemas; the tagged Python codec namespace reserved; an unsupported
-    payload fails explicitly.
-- [ ] N0.5 The rest of D5 written (D5.1 to D5.4 are decided): resource ownership and lifetime per window and per
-  device, admission and dormancy, device loss, and what a mode's native renderer may not do (no clock, no camera,
-  no allocation per frame, no state setters, nothing that names Qt Quick).
-- [ ] N0.2 The dependency table accepted into D5: for each of the eighteen OpenGL dependencies of the research
-  file, the QRhi route, the native pair if a D5.3 service applies, and the one chosen (the research's table A.2 as
-  amended by D5.2 for the clip and D5.3 for the services).
-  - [ ] `rendering/quick/bootstrap.py:66` requires `glMultiDrawArraysIndirect`, which nothing calls: drop the
-    requirement (a small change in the OpenGL renderer, now).
-- [ ] N0.3 Conventions written once and tested per backend: clip-space Y, depth range, framebuffer and texture
-  origin, front-face winding, std140 and std430 layout, sRGB and HDR formats. Every shader and matrix reads them
-  from one place (one include with `fragUv`, `fragTexel`, `ndcToUv`; matrices corrected once at upload); the test
-  scenes are a checkerboard with a gradient, a known-depth plane and one culled triangle.
-- [ ] N0.4 The camera: `core/settings/framed_camera.py` stays the one owner; the core receives finished matrices
-  and rays from the worker (no second camera to keep in step) unless a per-frame cost shows otherwise. Written
-  into D5.
+- The N0 contracts are decided (12 Nov; `Native_Core_P3_Decisions.md`, "Lead decisions on the N0 drafts"): D1 to
+  D3 and the transport rule, the rest of D5 (ownership, admission, device loss, what a mode may not do), N0.3's
+  conventions and N0.4's camera. Each contract's tests (negative controls named in the document) are built with the
+  code that implements it: D1, D2 and the transport rule with N2's reader, D3 with the Extruded Bubble port, D5's
+  ownership-table, dormancy and device-loss tests with N2, N0.3's three scenes in the harness with N0.6.
+- [ ] D3 now, in the OpenGL renderer (today's defects, found in the draft):
+  - [ ] `extruded_bubble_drift_solver.py:539-549` deletes the old buffers before `_allocate`, which can raise:
+    allocate first, release the old only after the new exists; a test injects the allocation failure (negative
+    control: today's order leaves deleted names in `_families`).
+  - [ ] `:529-536`: a raise inside `_dispatch` skips the old rows' delete and leaks them: release on every path,
+    with a test counting live buffers.
+  - [ ] The solver keys its state on the revision alone (`:476,539`) while `_REVISIONS` is process-wide
+    (`extruded_bubble_drift_log.py:43`): prove whether a replacement worker's revision can alias (D3's identity
+    test against the Python solver); if it can, key on (stream, revision) now.
+- [ ] N0.4 in the worker: `VIS_SET_VIEW` carries the exact pixel aspect and aperture scale (resolved by the
+  GUI-side functions the renderer calls today, sent at their edges), and `card_span`'s approximation
+  (`core/waveform_ribbon_view.py:59-60`) ends. Python first, so the worker's camera equals the renderer's before
+  any packet carries it.
+- N0.2 decided 12 Nov (`Native_Core_P3_Decisions.md` D5.6 and the lead's answers): eighteen dependencies to
+  their routes, no service outside D5.3; the unused `glMultiDrawArraysIndirect` start-up requirement removed.
 - [ ] N0.9 The module compile on GitHub (operator, 12 Nov: builds only through GitHub workflows; handbook
   section 8). No product C++; the two harness proofs below wait on it.
   - [ ] A dispatch-only workflow that compiles `native/spike_p1` (later the core) for a pushed ref on GitHub's
@@ -270,9 +260,14 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     and the build log with a manifest (commit, Qt version, sha256 per file).
     Built (agent, 12 Nov, unproved): `.github/workflows/native-module.yml` (dispatch and reusable `workflow_call`;
     SDK by `tools/native_sdk_fetch.py`, sha256 before extraction, cached; `build.cmd` with vswhere is the one CMake
-    call; GPU-free `native/spike_p1/python/import_check.py` on the runner; manifest adds Qt, PySide6, MSVC).
-  - [ ] `tools/github_remote_build.py` (or a sibling sharing its source) gains a module target: push check,
-    dispatch, wait, download into a named worktree's build folder, manifest validated; refuses a ref that is not
+    call; GPU-free `native/spike_p1/python/import_check.py` on the runner; manifest adds Qt, PySide6, MSVC; the Qt
+    version is one value, requirements.txt's PySide6 pin, with archives per version in `QT_SDKS`).
+  - [ ] `tools/build_runner.py`'s GitHub mode (operator, 12 Nov: it has workflow builds and a usable CLI) gains the
+    native module as a selectable target, with `tools/github_remote_build.py` as the shared source beneath; never in
+    the default selection or the installer chain until N2.1. It publishes into `release/` (its own folder, with its
+    manifest) through the same validated swap (operator, 12 Nov: "This is the direction we are heading"), and its
+    module build is a stage N2.1 folds into the Standard and MC workflows. The target: push check,
+    dispatch, wait, download, manifest validated; refuses a ref that is not
     pushed. Run by the lead only; agents never start it.
     Built (agent, 12 Nov, unproved): target `native_module` in `tools/github_remote_build.py`, job "Native Module
     (GitHub)" in `tools/build_runner.py` (never pre-selected, no installer); published into the running checkout's
@@ -302,8 +297,11 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 - [ ] N0.7 D9's proof, in the same harness: the job thread, its queue and the latch; the six measurements of D9
   ("How it is proved"), with system conditions recorded. The verdict (jobs for compute on this vendor, or
   uploads only) is written into D9.
-- [ ] N0.8 D11: before N2.1, check whether a PySide6 newer than 6.11.2 with indirect draws in QRhi is released;
-  take it first (whole suite, a GitHub frozen build) or record that the core starts on 6.11.2.
+- [ ] N0.8 D11 decided 12 Nov: the core starts on PySide6/Qt 6.12 (QRhi gains `drawIndirect`/`drawIndexedIndirect`
+  and `ShaderDrawParameters`, retiring D5.3's indirect-draw row). Operator, 12 Nov: "just bump" (no checkpoint
+  ceremony). Bump `requirements.txt` and the venv to 6.12.0 as soon as nothing holds the venv's PySide6 DLLs (the
+  first try failed with WinError 5 while `tools/godzip_foundry.py` was open; the venv was restored to 6.11.2),
+  run the focused Qt Quick tests, push; N0.9's single Qt value follows.
 
 **N1. Every shader portable, in the existing OpenGL renderer (no C++; can start now)**
 
@@ -701,14 +699,17 @@ what we have now"; evidence `.artifacts/evidence/visualizers/spectrum/presets/20
 control (0 to 4 px, default 2, `tests/test_spectrum_bar_gap.py`). The 7 Nov features (flag sheets, hue-preserving
 gradients, the rim glow cap, Bar Fill ghosts; `Docs/Reference/Visualizer_Reference.md`) stay.
 
-- [ ] Spectrum, the two looks the lead's review of round 2 found weak (each is recognisable on the evidence
-  folder's sheets):
-  - [ ] The flat single-colour bars with a ghost in a second colour: no gradient, no bright tip, no structure, so
-    it reads as a default bar chart. Give it light: a core or tip that goes white-hot with level, or segment it
-    as a thin LED ladder; keep its two-colour idea.
-  - [ ] The one whose colour changes with level: each state is a plain flat fill on wide bars. Thinner bars and a
-    vertical gradient through the level colours, so the change is visible inside one frame; or drop it if it
-    cannot stand beside the ones that pass.
+- The two weak Spectrum looks were re-authored and merged 12 Nov (c86f36a6; evidence
+  `.artifacts/evidence/visualizers/spectrum/presets/20261112_flaws_7_8/`): fine borderless filaments with a field
+  gradient; the level-colour one is a vertical gradient through its colours. Fill Gradient spans the whole field,
+  not the bar, so a tip colour must be set past the colour wanted at a normal bar height.
+- [ ] The level-colour look stays teal to green in quiet and mid music; its warm end shows only on the biggest
+  peaks (taller bars pinned more than the default look). Lead judges it on the showcase WebP; drop it if it does
+  not hold up.
+- [ ] Side defect (renderer, not a preset): in every thin-bar still one bar edge steps sideways by 1 px along the
+  diagonal of the full-field quad (about (123,478), (325,345), (525,208) in the 840x560 stills), likely the seam
+  between the quad's two triangles in `spectrum.frag`'s bar coverage; reproduce with the round's
+  `render_spectrum_evidence.py stills`. Fix in the shader (coverage from one continuous coordinate), pixel-checked.
 - [ ] Round 2 was never reported: check the Bar Gap control end to end (Settings and Studio rows through the
   spec, authored into every Spectrum preset by the repair fill, the Visualizer Reference) and the whole-song
   reactivity table for the round's new presets (`response.json` in the evidence folder).
@@ -852,30 +853,24 @@ Contract: plan 01 M3c; evidence `.artifacts/evidence/visualizers/shared/expanded
 - [ ] Side defect (watch): `tests/test_visualizers_fullscreen_mode_pill.py` crashed once with an access violation
   when run after overlay_settings, fullscreen_edit and overlays in one process (not reproduced with two files).
 
-### 1C.4 Spline Curve's white lines show about one pixel into the card border (cause found on Display 1, 12 Nov; fix in flight, Opus High)
+### 1C.4 Spline Curve's white lines show about one pixel into the card border (fixed and proved on Display 1, 12 Nov; R-191, R-192)
 
-Merged: the transient case (R-188, the clip followed the retained snapshot's record after a resize or collapse).
+Merged: the transient case (R-188), then variant B (bf7add6a, R-191: the card drawn on whole device pixels, the clip
+ending exactly at the frame's inner edge; guard `tests/test_visualizer_card_clip_contract.py`). The lead's Display 1
+run then showed left and right exact but a blend on both sides of the bottom edge: the whole scene on that display
+was stretched vertically by an R-63 overscan of 2 device pixels (not a whole logical pixel at 150 %), fixed by a whole
+logical overscan (R-192, `rendering/quick/device_geometry.py`). After both, every edge of the card on Display 1 is 8
+solid border pixels with nothing blended, in the saver's frame and in the DWM composite (evidence
+`.artifacts/evidence/display/d1_run/20261112_devcurve_card_edge/` before,
+`20261112_devcurve_card_edge_whole_logical/` after; `20261112_devcurve_card_edge_after/before_after_crops_x4.png`).
 
-Found by the lead's Display 1 run (`tools/d1_run.py --display 1 --mode devcurve`, the operator's profile copy;
-evidence `.artifacts/evidence/display/d1_run/20261112_devcurve_card_edge/`): no content pixel lies inside the
-border band (1,947 rows, three frames, zero), but the border's inner edge pixel is anti-aliased and is an exact
-50/50 blend of the border colour and whatever content is under it: over dark content (50,50,50) it reads
-(130,114,153), over magenta fill it reads (191,132,218). Over Spline Curve's white lines it would read about
-(232,216,255): a near-white pixel that looks like the white line reaching one pixel into the border. Other modes
-leave the card's edges dark, so their blend pixel looks like part of the border. So the operator's "1px or so,
-the white lines" is the content showing through the border's anti-aliasing, for every mode, most visible with
-bright content at the edge.
-
-- [ ] Fix at the shared clip owner (`rendering/quick/visualizer/clip_host.py` and its SDF): the content's clip
-  ends far enough inside the border's inner edge that no content lies under the border's anti-aliased pixel
-  (about one device pixel at every DPR; derive it from the frame's own edge width, never a constant per mode);
-  the card's own background (Normal or the material) shows under that pixel, as on every other card. Rounded
-  corners follow the same inset. The protected clip commits (ce07b991, 07486d83, 985b9d53) are not retuned.
-- [ ] Guard in `tests/test_visualizer_card_clip_contract.py`: every mode with a full-brightness white line along
-  each edge; the border's inner edge pixels must equal the same frame with the Visualizer hidden (within the
-  run-to-run floor); negative control on the current clip.
-- [ ] Display 1 proof by the lead: the same `d1_run.py` recipe before and after, with a frame chosen while the
-  white lines touch the left edge (several grabs), 4x crops; the edge pixel no longer follows the content.
+- [ ] The Edit outline and handles follow the exact record, so they can sit up to half a device pixel from the
+  drawn card: draw them from `resolve_card_drawn_rect` too (one owner), with a test.
+- [ ] R-192 remainder: a monitor whose non-overscanned axis is not a whole number of logical pixels at its DPR (for
+  example 1366 px at 125 %) is still stretched on that axis; add a second exterior-edge overscan for that axis when
+  one exists (never on a shared edge), extend the durability sweep in `tests/test_qtquick_window.py`.
+- [ ] The tests that open windows were not run on the merge (`test_qtquick_visualizer_clip_smoke.py`, Neon Lake's
+  `actual_neon_qsg_pixels`): run them hidden at the next milestone run.
 
 ### 1C.5 Volume child control: its drop shadow was cut off sharply (fixed and merged 12 Nov, R-187; one check left)
 

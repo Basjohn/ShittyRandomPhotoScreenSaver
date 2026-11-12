@@ -47,7 +47,8 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
 4. **While it runs:** do not poll. If it seems stuck, `tools/agent_handover.py <worktree>` shows its journal,
    commits and live processes.
 5. **Report.** It answers box by box. Check it against the diff, never on trust (section 4).
-6. **Merge** (section 6), copy the "keep" evidence into the main checkout, delete the rest with the worktree,
+6. **Merge** (section 6), retire the worktree with `tools/agent_handover.py --retire` (it copies the evidence first),
+   trim the copied evidence to what the report cites,
    delete the landed boxes from the plan, write what the audit left open as new boxes, push.
 
 ## 4. Audit checklist (every merge)
@@ -91,11 +92,16 @@ From the main checkout, on `main`:
 
     git merge --no-ff worktree-agent-<id> -m "Merge <what landed>" -m "Co-authored by an incoming existential crisis."
     (run the item's tests on the merge)
-    git pull --rebase=merges origin main
+    git fetch origin; git log main..origin/main      (empty: just push; otherwise pull, then push)
     git push origin main
-    git worktree unlock .claude/worktrees/agent-<id>
-    git worktree remove --force .claude/worktrees/agent-<id>
-    git branch -D worktree-agent-<id>
+    .venv/Scripts/python tools/agent_handover.py --retire agent-<id>
+
+`--retire` copies the worktree's whole evidence tree into the main checkout (never overwriting), refuses an unmerged
+branch, uncommitted work or a live process, and only then removes the worktree and the branch. Never remove an agent
+worktree with a bare `git worktree remove --force`: its evidence is untracked and is deleted for good (the 1C.4
+comparison sheets were lost that way on 12 Nov). Trim the copied evidence to what the report cites afterwards.
+`git pull --rebase=merges` can fail on a long merge-commit subject ("Filename too long" on `refs/rewritten/...`):
+`git rebase --abort`, then fetch and push or merge origin instead.
 
 Commit messages end with the trailer above and carry no AI attribution. The operator's own edits (presets,
 defaults, the installer script) are committed and pushed at once, silently.

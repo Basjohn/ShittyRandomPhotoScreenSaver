@@ -837,6 +837,46 @@ Overhead baseline against 9897d4f8 (visualizers): only Neon Lake moves (+1 GL ca
 the drive); Extruded Bubble's +51 Python calls come from main's EB work, every other mode unchanged. Evidence
 `.artifacts/evidence/visualizers/shockwave_grid/fidelity/20261106_fidelity/pass7/`.
 
+## Water Lines (2026-11-12, plan 1C.8)
+
+Operator: the water's edge and face lines can be hidden completely. **Water Lines** (`shockwave_grid_water_lines`,
+Water bucket after Water Detail, 0..1, 1 = as authored; every preset authored at 1 by the repair fill) scales the
+fragment program's `uWaterLines` (vec2: face, edge; the one slider sets both).
+
+What it owns (inventory, `.artifacts/evidence/visualizers/shockwave_grid/water_lines/20261112_inventory/`):
+- **Face lines** (`line`, alpha `uLineColor.a`): the wave curves (resting and crest-lit,
+  `sceneHeightfieldWaterCurves`), the ripple network, the rings lapping from every shore and the sheen hairlines,
+  over the water and its wet fringe; their glow is Water Line Glow (`lineGlow * lineAlpha`). Before this, Water
+  Detail 0 removed the network, rings and sheen but not the wave curves; Ripple / Shore Colour alpha 0 removed them all.
+- **Edge line**: the shoreline (`basinShoreLight`, alpha `uCrestColor.a`) and its Shore Glow. Before this nothing
+  removed it alone: Wave / Ridge Glow alpha 0 also removes the land's ridge lines.
+- **The mirrored surface pass** (pass 0 triangles) draws only those lines' reflections (fringe lines, shoreline).
+- **Water Reaction's net**: its thin line cores (`la`, `lb`, with their whitening where they cross) and the soft
+  light either side of them (`ga`, `gb`) both draw the net's pattern, so both are face lines (lead decisions,
+  12 Nov: with either kept, a driven lake at 0 still read as a grid). Only the reaction's lift of the whole lake in the
+  net's colours stays. That lift carried the pattern only through `(1 - reactAlpha)` and reached only where the net
+  drew; as the amount falls it eases onto the rest of the water (`reactLift`, 1 where the net draws, `1 - amount`
+  elsewhere), so at 0 it is one flat lift over the lake.
+
+Fading: the face coverage, the whole net, the shoreline's alpha (after its clamp) and the Shore Glow's alpha
+and emission are multiplied by the amount, so glow fades with its line. At 0 the ripple field, the
+curves/network/rings/sheen block, the net, the shoreline contour and the Shore Glow are skipped by branches
+on the uniform, and the renderer does not issue
+the pass-0 triangle draw (reflected land marks still draw). At 1 the frame equals the earlier one (max 1/255 on
+Presets 1-3, rest and driven). A dead per-fragment `sceneHeightfieldCurveWire` call (its result was always
+overwritten or zeroed) was removed on the way.
+
+Stays at 0: the water's colour, reflection and mirrored land/skyline, shine and its glints, the Sun / Moon path,
+the crest wash on the body, Water Reaction's flat lift of the lake and its ridge breath, and every land line
+(ridges, Contour Lines, marks). Contracts: `tests/test_neon_water_lines.py` (driven: the reaction's addition minus
+its lake-wide mean falls below a tenth of its level at 1, while the mean lift remains).
+
+Cost (RTX 4090, 2560x1440, PairedBench, control-relative): at 1 the Guided Setup frame is unchanged (255.5 -> 255.0
+cf; +1 GL call, the uniform; +10 Python calls). At 0, driven, one session: Preset 1 281.0 -> 248.0 cf, Preset 2
+257.1 -> 225.6, Preset 3 522.6 -> 497.9, two GL calls fewer (the skipped mirrored-line draw); measured before the
+net joined, whose skip only removes work at 0. Evidence
+`.artifacts/evidence/visualizers/shockwave_grid/water_lines/20261112_{inventory,sheet,sheet_net,cost}/`.
+
 ## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
 
 These are three **new capabilities**, not permission to reopen the accepted Neon Lake graphics, change authored

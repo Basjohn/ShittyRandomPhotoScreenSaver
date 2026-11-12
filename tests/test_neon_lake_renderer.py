@@ -133,7 +133,8 @@ def test_the_camera_floor_is_evaluated_only_when_its_inputs_change(monkeypatch):
     field = (0., 0., 1600., 900.)
     built = []
     real = neon_lake_camera.terrain_floor
-    monkeypatch.setattr(neon_lake_camera, "terrain_floor", lambda *a, **k: built.append(1) or real(*a, **k))
+    # The basin program binds terrain_floor at import (per-frame imports hoisted, e16af05d): count it there.
+    monkeypatch.setattr(program, "terrain_floor", lambda *a, **k: built.append(1) or real(*a, **k))
     program._EYE_MEMO[:] = [None, None, None]
     first = program.basin_view(parameters, field).eye
     for _frame in range(5):
