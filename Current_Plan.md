@@ -268,8 +268,12 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [ ] A dispatch-only workflow that compiles `native/spike_p1` (later the core) for a pushed ref on GitHub's
     Windows runner (MSVC, the pinned Qt SDK fetched by script, `qsb`), and uploads the `.pyd`, the baked shaders
     and the build log with a manifest (commit, Qt version, sha256 per file).
-  - [ ] `tools/github_remote_build.py` (or a sibling sharing its source) gains a module target: push check,
-    dispatch, wait, download into a named worktree's build folder, manifest validated; refuses a ref that is not
+  - [ ] `tools/build_runner.py`'s GitHub mode (operator, 12 Nov: it has workflow builds and a usable CLI) gains the
+    native module as a selectable target, with `tools/github_remote_build.py` as the shared source beneath; never in
+    the default selection or the installer chain until N2.1. It publishes into `release/` (its own folder, with its
+    manifest) through the same validated swap (operator, 12 Nov: "This is the direction we are heading"), and its
+    module build is a stage N2.1 folds into the Standard and MC workflows. The target: push check,
+    dispatch, wait, download, manifest validated; refuses a ref that is not
     pushed. Run by the lead only; agents never start it.
   - [ ] Proved end to end by the lead on the current spike: the downloaded module imports in the venv and the
     spike's hidden-host test passes; the time from dispatch to download recorded (it sets how C++ slices iterate).
@@ -691,14 +695,17 @@ what we have now"; evidence `.artifacts/evidence/visualizers/spectrum/presets/20
 control (0 to 4 px, default 2, `tests/test_spectrum_bar_gap.py`). The 7 Nov features (flag sheets, hue-preserving
 gradients, the rim glow cap, Bar Fill ghosts; `Docs/Reference/Visualizer_Reference.md`) stay.
 
-- [ ] Spectrum, the two looks the lead's review of round 2 found weak (each is recognisable on the evidence
-  folder's sheets):
-  - [ ] The flat single-colour bars with a ghost in a second colour: no gradient, no bright tip, no structure, so
-    it reads as a default bar chart. Give it light: a core or tip that goes white-hot with level, or segment it
-    as a thin LED ladder; keep its two-colour idea.
-  - [ ] The one whose colour changes with level: each state is a plain flat fill on wide bars. Thinner bars and a
-    vertical gradient through the level colours, so the change is visible inside one frame; or drop it if it
-    cannot stand beside the ones that pass.
+- The two weak Spectrum looks were re-authored and merged 12 Nov (c86f36a6; evidence
+  `.artifacts/evidence/visualizers/spectrum/presets/20261112_flaws_7_8/`): fine borderless filaments with a field
+  gradient; the level-colour one is a vertical gradient through its colours. Fill Gradient spans the whole field,
+  not the bar, so a tip colour must be set past the colour wanted at a normal bar height.
+- [ ] The level-colour look stays teal to green in quiet and mid music; its warm end shows only on the biggest
+  peaks (taller bars pinned more than the default look). Lead judges it on the showcase WebP; drop it if it does
+  not hold up.
+- [ ] Side defect (renderer, not a preset): in every thin-bar still one bar edge steps sideways by 1 px along the
+  diagonal of the full-field quad (about (123,478), (325,345), (525,208) in the 840x560 stills), likely the seam
+  between the quad's two triangles in `spectrum.frag`'s bar coverage; reproduce with the round's
+  `render_spectrum_evidence.py stills`. Fix in the shader (coverage from one continuous coordinate), pixel-checked.
 - [ ] Round 2 was never reported: check the Bar Gap control end to end (Settings and Studio rows through the
   spec, authored into every Spectrum preset by the repair fill, the Visualizer Reference) and the whole-song
   reactivity table for the round's new presets (`response.json` in the evidence folder).
