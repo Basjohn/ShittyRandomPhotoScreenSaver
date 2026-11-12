@@ -373,10 +373,13 @@ def test_display_manager_applies_edges_in_generation_order_to_units_and_owner():
     unit = QuickDisplayUnit.__new__(QuickDisplayUnit)
     unit._retired, unit._screen_index = False, 1
     unit._runtime = SimpleNamespace(set_display_power=lambda on: calls.append(("runtime", on)) or True)
-    manager = DisplayManager.__new__(DisplayManager)
-    manager._retired, manager.displays = False, [unit, SimpleNamespace()]
-    manager._display_power_on, manager._display_power_generation = True, 0
-    manager._quick_visualizer_owner = SimpleNamespace(set_display_power=lambda on: calls.append(("owner", on)))
+    from tests._display_manager_doubles import bare_display_manager, visualizer_owner_double
+
+    # The bare SimpleNamespace() display is deliberate: a display entry that is not a unit must be skipped.
+    manager = bare_display_manager(
+        _retired=False, displays=[unit, SimpleNamespace()], _display_power_on=True, _display_power_generation=0,
+        _quick_visualizer_owner=visualizer_owner_double(
+            None, set_display_power=lambda on: calls.append(("owner", on))))
     assert DisplayManager.set_display_power(manager, False, generation=2) == 1
     assert calls == [("runtime", False), ("owner", False)] and manager.display_power_on is False
     assert DisplayManager.set_display_power(manager, True, generation=1) == 0   # stale edge
@@ -446,9 +449,10 @@ def test_one_power_edge_pauses_the_whole_chain_and_the_next_resumes_it(qt_app, m
     owner, controller = _owner(engine_source)
     steps = []
     logical = controller.start_logical_runtime(step=steps.append, interval_s=0.005)
-    manager = DisplayManager.__new__(DisplayManager)
-    manager._retired, manager.displays, manager._quick_visualizer_owner = False, [unit], owner
-    manager._display_power_on, manager._display_power_generation = True, 0
+    from tests._display_manager_doubles import bare_display_manager
+
+    manager = bare_display_manager(_retired=False, displays=[unit], _quick_visualizer_owner=owner,
+                                   _display_power_on=True, _display_power_generation=0)
     engine = ScreensaverEngine.__new__(ScreensaverEngine)
     engine._state, engine._rotation_timer, engine.display_manager = EngineState.RUNNING, None, manager
     engine._display_power = authority

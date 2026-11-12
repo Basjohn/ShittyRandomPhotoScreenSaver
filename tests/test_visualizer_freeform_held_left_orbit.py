@@ -15,11 +15,11 @@ from PySide6.QtGui import QKeyEvent, QMouseEvent
 
 from core.settings import SettingsManager
 from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
-from engine.display_manager import DisplayManager
 from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
 from rendering.quick.display_unit import create_quick_display_unit
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
+from tests._display_manager_doubles import bare_display_manager
 from tests.test_qtquick_custom_layout_owner import _configure_visualizer, _LiveCommitEngine
 from widgets.spotify_visualizer.quick_display_visualizer_owner import QuickDisplayVisualizerOwner
 from widgets.spotify_visualizer.view_orbit import OrbitInertia, view_orbit_values
@@ -55,17 +55,12 @@ def stage(qt_app, tmp_path, monkeypatch, request):
                             'shadow_extensions': (0., 0., 0., 0.)},
         engine_factory=lambda count: _LiveCommitEngine())
     unit.attach_visualizer_owner(visualizer)
-    manager = DisplayManager.__new__(DisplayManager)
-    manager._quick_visualizer_owner = visualizer
-    manager._quick_visualizer_unit = unit
-    manager._runtime_generation = 719
-    manager._quick_view_orbit_pending = None
-    manager._quick_view_pose_owner = None
-    manager._quick_scene_view_gesture = None
-    manager._widgets_config_snapshot = widgets
-    manager.settings_manager = settings
-    manager._refresh_all_quick_context_menus = lambda: None
-    manager._refresh_quick_visualizer_edit_content_envelope = lambda *a: None
+    manager = bare_display_manager(
+        _quick_visualizer_owner=visualizer, _quick_visualizer_unit=unit, _runtime_generation=719,
+        _quick_view_orbit_pending=None, _quick_view_pose_owner=None, _quick_scene_view_gesture=None,
+        _widgets_config_snapshot=widgets, settings_manager=settings,
+        _refresh_all_quick_context_menus=lambda: None,
+        _refresh_quick_visualizer_edit_content_envelope=lambda *a: None)
     _configure_visualizer(visualizer, playing=True)
     visualizer.configure_committed_layout(local_rect=(220., 180., 480., 210.), viewport_extent=(160., 90.))
     visualizer.bind(engine_generation=3, activation_id=5)
