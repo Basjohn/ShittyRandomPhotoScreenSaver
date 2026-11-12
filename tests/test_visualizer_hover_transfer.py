@@ -7,6 +7,7 @@ from PySide6.QtCore import QRect
 from engine.display_manager import DisplayManager
 from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner, _DisplayBinding
 from rendering.quick.scene_controller import QuickSceneController
+from tests._display_manager_doubles import bare_display_manager, display_runtime_double, display_unit_double
 
 
 def test_hover_and_edit_share_live_identity_topology_selection():
@@ -39,14 +40,16 @@ def _manager_for_click(*, options=(True, True), moved=True, existing_edit=False)
     model = SimpleNamespace(_items=[target], transferItem=transfer)
     state = SimpleNamespace(admission_open=True, exiting=False, context_menu_active=False,
                             interaction_mode_enabled=True, ctrl_held=False, always_show_glyphs=True)
-    source = SimpleNamespace(is_retired=False, runtime=SimpleNamespace(scene_controller=SimpleNamespace(
+    # The scene stays hand-built on purpose: it carries the scene's private admission state (_input_state), which
+    # DisplayManager's glyph route reads and the setter double refuses as an instance-only name.
+    source = display_unit_double(display_runtime_double(scene_controller=SimpleNamespace(
         _input_state=state, custom_layout_overlay=SimpleNamespace(model=model))))
     owner = SimpleNamespace(is_editing=existing_edit, session=session, _bindings={
         "source": SimpleNamespace(identity="source", unit=source)}, visualizer_display_transfer_options=lambda _: options)
-    manager = SimpleNamespace(_retired=False, displays=[source], _quick_visualizer_unit=source,
-                              _quick_custom_layout_owner=owner,
-                              _start_quick_custom_layout_session=lambda _entry: calls.append("start") or True,
-                              cancel_custom_layout_session=lambda: calls.append("cancel") or True)
+    manager = bare_display_manager(_retired=False, displays=[source], _quick_visualizer_unit=source,
+                                   _quick_custom_layout_owner=owner,
+                                   _start_quick_custom_layout_session=lambda _entry: calls.append("start") or True,
+                                   cancel_custom_layout_session=lambda: calls.append("cancel") or True)
     return manager, source, calls
 
 
@@ -98,9 +101,11 @@ def test_manager_projection_follows_current_owner_and_excludes_retired_units(mon
     monkeypatch.setattr(display_manager, "QuickDisplayUnit", Unit)
     source, target, retired = Unit("source"), Unit("target"), Unit("retired")
     retired.is_retired = True
-    manager = SimpleNamespace(displays=[source, target, retired], _quick_visualizer_unit=source,
-                              _quick_custom_layout_owner=SimpleNamespace(
-                                  visualizer_display_transfer_options=lambda unit: resolved.append(unit) or (False, True)))
+    # Unit stays a local class on purpose: the test patches it in as display_manager.QuickDisplayUnit so the
+    # isinstance filter admits it, and it records what each unit is told.
+    manager = bare_display_manager(displays=[source, target, retired], _quick_visualizer_unit=source,
+                                   _quick_custom_layout_owner=SimpleNamespace(
+                                       visualizer_display_transfer_options=lambda unit: resolved.append(unit) or (False, True)))
     DisplayManager._refresh_quick_visualizer_transfer_glyphs(manager)
     assert published == [("source", (False, True)), ("target", (False, False))]
     manager._quick_visualizer_unit = target

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from engine.display_manager import DisplayManager
+from tests._display_manager_doubles import bare_display_manager
 
 
 class _Owner:
@@ -64,29 +65,28 @@ class _Display:
         return True
 
 
-class _Manager:
-    def __init__(self, display: _Display, owner: _Owner) -> None:
-        self._retired = False
-        self._quick_visualizer_unit = display
-        self._quick_visualizer_owner = owner
-        self.disconnect_calls = 0
-        self.release_calls = 0
-        self._quick_scene_view_gesture = object()
-        self._quick_view_pose_owner = object()
+# _Owner, _Presenter, _Scene and _Display stay hand-built on purpose: they count retire/detach/discard calls and
+# model an owner whose retirement does not join, which the shared read-surface doubles do not.
+def _Manager(display: _Display, owner: _Owner):
+    manager = bare_display_manager(
+        _retired=False, _quick_visualizer_unit=display, _quick_visualizer_owner=owner,
+        _quick_scene_view_gesture=object(), _quick_view_pose_owner=object(),
+        disconnect_calls=0, release_calls=0,
+        _refresh_all_quick_context_menus=lambda: None,
+        _publish_quick_view_orbit_admission=lambda: None,
+    )
 
-    def _refresh_all_quick_context_menus(self) -> None:
-        pass
+    def _disconnect_quick_visualizer_media_route() -> None:
+        manager.disconnect_calls += 1
 
-    def _disconnect_quick_visualizer_media_route(self) -> None:
-        self.disconnect_calls += 1
-
-    def _persist_quick_visualizer_view(self) -> None:
+    def _persist_quick_visualizer_view() -> None:
         # Route release saves a held orbit exactly once, while still admitted.
-        assert self._quick_visualizer_owner is not None
-        self.release_calls += 1
+        assert manager._quick_visualizer_owner is not None
+        manager.release_calls += 1
 
-    def _publish_quick_view_orbit_admission(self) -> None:
-        pass
+    manager._disconnect_quick_visualizer_media_route = _disconnect_quick_visualizer_media_route
+    manager._persist_quick_visualizer_view = _persist_quick_visualizer_view
+    return manager
 
 
 def test_edit_disable_retires_and_detaches_both_owner_authorities():

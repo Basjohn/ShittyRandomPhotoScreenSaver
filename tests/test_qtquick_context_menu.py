@@ -424,13 +424,15 @@ def test_images_submenu_actions_use_the_same_admission_and_click_through_guard(q
     guards = []
     monkeypatch.setattr(runtime_input, "suppress_runtime_pointer_input",
                         lambda ms, reason: guards.append((ms, reason)))
+    from tests._display_manager_doubles import bare_display_manager, display_unit_double
+
     emitted = []
-    manager = SimpleNamespace(
+    manager = bare_display_manager(
         previous_requested=SimpleNamespace(emit=lambda: emitted.append("previous")),
         next_requested=SimpleNamespace(emit=lambda: emitted.append("next")),
         save_image_requested=SimpleNamespace(emit=lambda index: emitted.append(("save_image", index))),
     )
-    unit = SimpleNamespace(screen_index=1)
+    unit = display_unit_double(screen_index=1)
     owner = QObject()
     model = QuickContextMenuModel(screen_index=1, runtime_generation=1, parent=owner)
     model.replace_entries(_entries())
@@ -448,10 +450,12 @@ def test_double_right_edit_shortcut_dismisses_menu_before_starting_editor(monkey
     import rendering.runtime_input as runtime_input
     from engine.display_manager import DisplayManager
 
+    from tests._display_manager_doubles import bare_display_manager, display_runtime_double, display_unit_double
+
     order: list[object] = []
     model = SimpleNamespace(dismiss=lambda: order.append("dismiss") or True)
-    unit = SimpleNamespace(runtime=SimpleNamespace(context_menu_model=model))
-    manager = SimpleNamespace(
+    unit = display_unit_double(display_runtime_double(context_menu_model=model))
+    manager = bare_display_manager(
         # Edit is entered on the display the shortcut came from (plan 1B.1).
         _start_quick_custom_layout_session=lambda entry: order.append("start") or entry is unit
     )
