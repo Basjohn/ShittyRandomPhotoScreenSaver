@@ -1086,13 +1086,16 @@ class Scene3DBlockLayout:
             cursor += count * stride
         return cls(name, tuple(fields), tuple(offsets), -(-cursor // 16) * 16)
 
-    def glsl(self) -> str:
+    def glsl(self, binding: int | None = None) -> str:
+        """The block's declaration; ``binding`` states its binding point in the source (Vulkan GLSL needs it; the
+        draw blocks attach theirs with ``glUniformBlockBinding`` instead)."""
         members = ""
         for field, glsl_type in self.fields:
             element, count, _alignment, _stride = _std140_type(glsl_type)
             suffix = f"[{count}]" if "[" in glsl_type else ""
             members += f"    {element} {field}{suffix};\n"
-        return f"layout(std140) uniform {self.name} {{\n{members}}};\n"
+        qualifier = "std140" if binding is None else f"std140, binding = {int(binding)}"
+        return f"layout({qualifier}) uniform {self.name} {{\n{members}}};\n"
 
     def pack(self, values) -> bytes:
         data = bytearray(self.size)

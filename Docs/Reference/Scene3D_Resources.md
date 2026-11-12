@@ -286,6 +286,13 @@ previous binding back (name, level, layering, access, format), because the trans
 `MeshResources.compute_program` compiles through `compile_compute_program` (shared link/cleanup with graphics programs)
 and `warm_programs` accepts `(resources, key, compute_source)` entries, so compute programs are gradual warm-up steps.
 No queue, scheduler, worker, readback or polling exists: work runs on the owning render thread in the frame that uses it.
+A compute program has no loose uniforms (Vulkan GLSL, N1.2): its values are one std140 `Scene3DBlockLayout` declared
+with `layout.glsl(COMPUTE_BLOCK_BINDING)`, which the pass's owner binds through its own `DispatchBlocks` (a small
+stream ring, warmed as one step of the owner's `warm`, left unbound after each scope; `rebind` gives a later dispatch
+in the same scope its own values). Every resource in a compute source has its own binding number (samplers, images,
+storage and the block share one namespace on Vulkan); in OpenGL the texture or image unit is that number.
+`tools/compute_pass_identity.py` records each converted pass's outputs on fixed inputs and its GL calls, and compares
+two records bit by bit.
 
 **First consumer: motion blur's tile max.** The candidates were measured first (2560x1440 offscreen, RTX 4090):
 

@@ -166,18 +166,19 @@ def test_image_units_are_handed_back_even_after_a_failure(capture, inherited):
         gl.glDeleteTextures([sentinel, target])
 
 
-def test_a_motion_blurred_run_hands_back_image_unit_zero(qt_app):
+def test_a_motion_blurred_run_hands_back_the_tile_max_image_unit(qt_app):
     capture = TransitionCapture(256, 144)
     sentinel = _texture(8, 8, gl.GL_RGBA8)
+    unit = 1   # the tile max writes its tiles through image unit 1 (its binding in the source)
     try:
-        gl.glBindImageTexture(0, sentinel, 0, gl.GL_FALSE, 0, gl.GL_READ_WRITE, gl.GL_RGBA8)
+        gl.glBindImageTexture(unit, sentinel, 0, gl.GL_FALSE, 0, gl.GL_READ_WRITE, gl.GL_RGBA8)
         run = capture.run("exploding_tiles", parameters={"motion_blur": True}, duration_ms=3000)
         capture.render(run, 0.4)
         assert capture.host._implementations["exploding_tiles"]._target._motion.has_resources
-        assert gl_query.get_indexed_int(gl.GL_IMAGE_BINDING_NAME, 0) == sentinel
-        assert gl_query.get_indexed_int(gl.GL_IMAGE_BINDING_ACCESS, 0) == gl.GL_READ_WRITE
+        assert gl_query.get_indexed_int(gl.GL_IMAGE_BINDING_NAME, unit) == sentinel
+        assert gl_query.get_indexed_int(gl.GL_IMAGE_BINDING_ACCESS, unit) == gl.GL_READ_WRITE
     finally:
-        gl.glBindImageTexture(0, 0, 0, gl.GL_FALSE, 0, gl.GL_READ_ONLY, gl.GL_R8)
+        gl.glBindImageTexture(unit, 0, 0, gl.GL_FALSE, 0, gl.GL_READ_ONLY, gl.GL_R8)
         gl.glDeleteTextures([sentinel])
         capture.close()
 

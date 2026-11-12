@@ -9,15 +9,61 @@ buffer, ...) and issues it straight after the dispatch, so no reader has to know
 Image units are inherited context state the transition host does not fence; ``bound_image``
 hands the unit's previous binding back. There is no queue, scheduler or readback here: the
 work runs on the render thread that owns the context, in the frame that needs it.
+
+A dispatch's values travel in one std140 block (Vulkan GLSL has no loose uniforms): the program declares a
+``Scene3DBlockLayout`` with ``layout.glsl(COMPUTE_BLOCK_BINDING)`` and the pass's owner, which holds a
+``DispatchBlocks``, dispatches inside ``blocks.bound(layout.pack(values))``. Every resource a compute program declares
+has its own binding number (samplers, images, storage buffers and the block: one namespace on Vulkan), so a texture
+unit or image unit in OpenGL is the binding the source states.
 """
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Callable, Iterator
 
 from OpenGL import GL as gl
 
 from rendering.quick import gl_query
+
+from .stream import StreamRing
+
+# The uniform-buffer binding a compute pass reads its dispatch block from. Clear of every binding the compute programs
+# use for samplers, images and storage (Extruded Bubble's drift solver holds 8-14), and of the draws' scene block
+# (``SCENE3D_UNIFORM_BINDING``, 15) a pass may run inside; OpenGL 4.3 guarantees 36 points. The seam owns the point:
+# each pass binds its own block and leaves the point unbound, so nothing inherits it.
+COMPUTE_BLOCK_BINDING = 16
+# One bound scope (a build's dispatches, each with its own copy at the uniform offset alignment, at most 256) holds at
+# most this many bytes; a slot holds four scopes, so a fence falls every few frames at most.
+_BLOCK_HOLD = 8192
+
+
+class DispatchBlocks:
+    """A compute pass owner's dispatch blocks: a small fenced stream ring (``stream.py``) bound at
+    ``COMPUTE_BLOCK_BINDING``. Nothing is allocated until ``warm`` or the first ``bound``; ``release`` returns it to
+    zero."""
+
+    def __init__(self, label: str) -> None:
+        self._ring = StreamRing(f"{label} dispatch blocks", slots=4, slot_bytes=4 * _BLOCK_HOLD, hold_bytes=_BLOCK_HOLD)
+
+    @property
+    def has_resources(self) -> bool:
+        return self._ring.has_resources
+
+    def warm(self) -> bool:
+        """One warm-up step: True when the ring already exists, else allocate it."""
+        return self._ring.warm()
+
+    @contextmanager
+    def bound(self, data: bytes) -> Iterator[Callable[[bytes], None]]:
+        """Bind ``data`` (a packed std140 block) for the scope's dispatches; yields ``rebind(data)``, with which a
+        later dispatch in the scope reads other values (each dispatch already submitted keeps its own copy). The
+        point is left unbound afterwards: nothing is read back, and no later command can read the ring."""
+        ring = self._ring
+        with ring.bound(gl.GL_UNIFORM_BUFFER, COMPUTE_BLOCK_BINDING, data, restore=False):
+            yield lambda values: ring.rebind(gl.GL_UNIFORM_BUFFER, COMPUTE_BLOCK_BINDING, values)
+
+    def release(self) -> None:
+        self._ring.release()
 
 
 def dispatch(groups: tuple[int, int, int], barriers: int) -> None:
