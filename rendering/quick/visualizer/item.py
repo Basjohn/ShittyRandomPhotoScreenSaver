@@ -184,7 +184,10 @@ class _RenderNodeRetirement:
             carryover, self._carryover = self._carryover, None
         if node is not None:
             try:
-                node.release_inactive_implementations(mode_id, carryover)
+                if carryover is None:
+                    node.release_inactive_implementations(mode_id)
+                else:
+                    node.release_inactive_implementations(mode_id, carryover)
             except Exception as exc:
                 self._telemetry.note_error(f"visualizer inactive retirement failed: {exc}")
                 logger.exception("[QUICK] Visualizer inactive retirement failed")
