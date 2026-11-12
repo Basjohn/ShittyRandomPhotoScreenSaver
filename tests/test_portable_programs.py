@@ -90,6 +90,12 @@ def test_the_block_packs_the_values_a_program_set_and_zero_for_the_rest():
     assert struct.unpack_from("<f", flat, 0)[0] == 2.0
     assert struct.unpack_from("<4f", flat, layout.offsets[1] + 16) == (5.0, 6.0, 7.0, 8.0)
     assert struct.unpack_from("<i", pack_block(layout, {}), layout.offsets[2])[0] == 0
+    # An array already in std140 form (Jigsaw's pieces: float32 vec4s) packs as given, every element; a short one is
+    # refused rather than packed partly.
+    stops = struct.pack("<8f", 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0)
+    assert pack_block(layout, {"uGain": 2.0, "uStops": stops}) == flat
+    with pytest.raises(ValueError, match="vec4"):
+        pack_block(layout, {"uStops": stops[:16]})
 
 
 def test_spectrum_draws_one_block_declared_once_in_its_shader():

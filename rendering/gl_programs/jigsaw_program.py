@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import math
 
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import SCENE3D_GLSL
 from rendering.quick.transitions.piece_layout import JIGSAW_BEVEL
 
@@ -292,3 +293,14 @@ void main() {
 }
 """
 )
+
+# N1.6: each program's values in one std140 pass block (``portable_program``; ``uPieces`` packed whole, every one of
+# its JIGSAW_MAX_PIECES elements), the photographs and the environment at their units.
+JIGSAW_FLAT_VERTEX_SOURCE, (JIGSAW_FLAT_FRAGMENT_SOURCE,), JIGSAW_FLAT_BLOCK = portable_program(
+    JIGSAW_FLAT_VERTEX_SOURCE, (JIGSAW_FLAT_FRAGMENT_SOURCE,), block="JigsawFlat",
+    samplers={"uOldTex": 0, "uNewTex": 1})
+JIGSAW_FLIGHT_VERTEX_SOURCE, (JIGSAW_FLIGHT_FRAGMENT_SOURCE,), JIGSAW_FLIGHT_BLOCK = portable_program(
+    JIGSAW_FLIGHT_VERTEX_SOURCE, (JIGSAW_FLIGHT_FRAGMENT_SOURCE,), block="JigsawFlight",
+    samplers={"uOldTex": 0, "uNewTex": 1, "uEnvironment": 2})
+JIGSAW_SHADOW_VERTEX_SOURCE, (JIGSAW_SHADOW_FRAGMENT_SOURCE,), JIGSAW_SHADOW_BLOCK = portable_program(
+    JIGSAW_SHADOW_VERTEX_SOURCE, (JIGSAW_SHADOW_FRAGMENT_SOURCE,), block="JigsawShadows", samplers={})

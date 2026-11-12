@@ -5,20 +5,24 @@ from __future__ import annotations
 from collections.abc import Mapping
 import math
 
-import numpy as np
 from OpenGL import GL as gl
 
 from rendering.gl_programs.jigsaw_options import JIGSAW_ORDERS, JIGSAW_PIECES_RANGE
 from rendering.gl_programs.jigsaw_program import (
+    JIGSAW_FLAT_BLOCK,
     JIGSAW_FLAT_FRAGMENT_SOURCE,
     JIGSAW_FLAT_VERTEX_SOURCE,
+    JIGSAW_FLIGHT_BLOCK,
     JIGSAW_FLIGHT_FRAGMENT_SOURCE,
     JIGSAW_FLIGHT_VERTEX_SOURCE,
     JIGSAW_HOP,
+    JIGSAW_MAX_PIECES,
+    JIGSAW_SHADOW_BLOCK,
     JIGSAW_SHADOW_FRAGMENT_SOURCE,
     JIGSAW_SHADOW_VERTEX_SOURCE,
     JIGSAW_THICKNESS,
 )
+from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.scene3d import scene3d_detail, scene3d_request_samples
 from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
 from rendering.quick.scene3d.passes import blend_scope
@@ -29,6 +33,16 @@ from ..render_contract import QuickTransitionRenderFrame
 from ..run_geometry import PREPARED_GEOMETRY, build_jigsaw_geometry, jigsaw_geometry_key
 
 _ORDER_CODES = frozenset(JIGSAW_ORDERS.values())
+_PIECE_BYTES = 16                                  # one vec4 (centre uv, rank, axis angle), std140's array stride
+_NO_PIECES = bytes(JIGSAW_MAX_PIECES * _PIECE_BYTES)
+
+
+def _pieces_block(pieces: bytes) -> bytes:
+    """``uPieces`` as its pass block holds it: the run's pieces (float32 vec4s) and zero after them (never read: a
+    piece index is below the count)."""
+    if len(pieces) % _PIECE_BYTES or len(pieces) > len(_NO_PIECES):
+        raise ValueError(f"Jigsaw Piece Flip holds at most {JIGSAW_MAX_PIECES} pieces of {_PIECE_BYTES} bytes")
+    return bytes(pieces) + _NO_PIECES[len(pieces):]
 
 
 def jigsaw_parameters(parameters: Mapping[str, object]) -> tuple[int, int, str]:
@@ -51,18 +65,18 @@ def _shadows(parameters: Mapping[str, object]) -> bool:
 class QuickJigsawRenderer:
     transition_id = "jigsaw"
 
-    _FLAT_UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uNewTex", "uProgress", "uCount", "uPieces")
-    _MOTION_UNIFORMS = ("uProgress", "uCount", "uPieces", "uThick", "uRadius", "uHop")
-    _FLIGHT_UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uNewTex", "uEnvironment") + _MOTION_UNIFORMS
-    _SHADOW_UNIFORMS = ("uMatrix", "uItemSize", "uCell") + _MOTION_UNIFORMS
+    # The photographs bind_frame binds (units 0 and 1); every other value is in the programs' pass blocks.
+    _SAMPLERS = ("uOldTex", "uNewTex")
 
     def __init__(self) -> None:
-        self._resources = MeshResources("Quick Jigsaw Piece Flip")
+        # Its largest pass block holds every piece (JIGSAW_MAX_PIECES vec4s).
+        self._resources = MeshResources("Quick Jigsaw Piece Flip", block_bytes=max(
+            JIGSAW_FLAT_BLOCK.size, JIGSAW_FLIGHT_BLOCK.size, JIGSAW_SHADOW_BLOCK.size))
         self._target = SceneTarget("Quick Jigsaw Piece Flip")
         self._environment = PhotoEnvironment("Quick Jigsaw Piece Flip")
         self._geometry_key = None
         self._geometry = None
-        self._pieces = np.zeros(0, dtype=np.float32)
+        self._pieces = _NO_PIECES
         self._vao = self._count = 0
 
     @property
@@ -138,60 +152,67 @@ class QuickJigsawRenderer:
         self._drop_pieces()
         self._vao, self._count = self._resources.mesh("pieces", geometry.vertices, PIECE_VERTEX_ATTRIBUTES)
         self._geometry, self._geometry_key = geometry, key
-        self._pieces = np.frombuffer(geometry.pieces, dtype=np.float32)
+        self._pieces = _pieces_block(geometry.pieces)
         return True
 
     def _drop_pieces(self) -> None:
         self._resources.drop_mesh("pieces")
         self._geometry_key = self._geometry = None
-        self._pieces = np.zeros(0, dtype=np.float32)
+        self._pieces = _NO_PIECES
         self._vao = self._count = 0
 
-    def _motion_uniforms(self, uniforms, progress: float, aspect: float) -> None:
+    def _motion_values(self, values: dict, progress: float, aspect: float, *, cell: bool, card: bool) -> None:
+        """The schedule's values into a pass block's ``values``: the pieces (``uPieces`` packed whole), and the cell
+        (the shadow pass) and the card's size and hop (the flight and shadow passes)."""
         geometry = self._geometry
         cell_w, cell_h = aspect / geometry.cols, 1.0 / geometry.rows
         knob = min(cell_w, cell_h)
-        gl.glUniform1f(uniforms["uProgress"], progress)
-        gl.glUniform1i(uniforms["uCount"], geometry.count)
-        gl.glUniform4fv(uniforms["uPieces"], geometry.count, self._pieces)
-        if "uCell" in uniforms:
-            gl.glUniform2f(uniforms["uCell"], cell_w, cell_h)
-        if "uThick" in uniforms:
-            gl.glUniform1f(uniforms["uThick"], JIGSAW_THICKNESS * knob)
-            gl.glUniform1f(uniforms["uRadius"], 0.5 * math.hypot(cell_w, cell_h) + 0.3 * knob)
-            gl.glUniform1f(uniforms["uHop"], JIGSAW_HOP * knob)
+        values["uProgress"] = progress
+        values["uCount"] = geometry.count
+        values["uPieces"] = self._pieces
+        if cell:
+            values["uCell"] = (cell_w, cell_h)
+        if card:
+            values["uThick"] = JIGSAW_THICKNESS * knob
+            values["uRadius"] = 0.5 * math.hypot(cell_w, cell_h) + 0.3 * knob
+            values["uHop"] = JIGSAW_HOP * knob
 
     def _draw(self, frame, progress: float, aspect: float, environment: int, shadows: bool) -> None:
         r, geometry = self._resources, self._geometry
         # The pieces where they rest: old picture, board, or new picture, with the cut lines.
         program = r.program("flat", JIGSAW_FLAT_VERTEX_SOURCE, JIGSAW_FLAT_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("flat", self._FLAT_UNIFORMS)
+        uniforms = r.uniforms("flat", self._SAMPLERS)
+        values = r.values("flat")
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame)
-        self._motion_uniforms(uniforms, progress, aspect)
+        bind_frame(program, uniforms, frame, values)
+        self._motion_values(values, progress, aspect, cell=False, card=False)
         gl.glBindVertexArray(self._vao)
-        gl.glDrawArrays(gl.GL_TRIANGLES, 0, geometry.flat_vertices)
+        with r.pass_blocks.bound(pack_block(JIGSAW_FLAT_BLOCK, values)):
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, geometry.flat_vertices)
         if shadows:
             program = r.program("shadow", JIGSAW_SHADOW_VERTEX_SOURCE, JIGSAW_SHADOW_FRAGMENT_SOURCE)
-            uniforms = r.uniforms("shadow", self._SHADOW_UNIFORMS)
-            bind_frame(program, uniforms, frame)
-            self._motion_uniforms(uniforms, progress, aspect)
+            uniforms = r.uniforms("shadow", ())
+            values = r.values("shadow")
+            bind_frame(program, uniforms, frame, values)
+            self._motion_values(values, progress, aspect, cell=True, card=True)
             gl.glBindVertexArray(frame.quad_vao)
-            with blend_scope(gl.GL_FUNC_ADD, gl.GL_DST_COLOR, gl.GL_ZERO):
+            with blend_scope(gl.GL_FUNC_ADD, gl.GL_DST_COLOR, gl.GL_ZERO), \
+                    r.pass_blocks.bound(pack_block(JIGSAW_SHADOW_BLOCK, values)):
                 gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, geometry.count)
         # The pieces in the air.
         r.begin_depth(frame)
         program = r.program("flight", JIGSAW_FLIGHT_VERTEX_SOURCE, JIGSAW_FLIGHT_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("flight", self._FLIGHT_UNIFORMS)
-        bind_frame(program, uniforms, frame)
-        self._motion_uniforms(uniforms, progress, aspect)
+        uniforms = r.uniforms("flight", self._SAMPLERS)
+        values = r.values("flight")
+        bind_frame(program, uniforms, frame, values)
+        self._motion_values(values, progress, aspect, cell=False, card=True)
         gl.glActiveTexture(gl.GL_TEXTURE2)
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
-        gl.glUniform1i(uniforms["uEnvironment"], 2)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindVertexArray(self._vao)
-        gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._count)
+        with r.pass_blocks.bound(pack_block(JIGSAW_FLIGHT_BLOCK, values)):
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, self._count)
 
     def release_resources(self) -> None:
         errors: list[str] = []
@@ -201,7 +222,7 @@ class QuickJigsawRenderer:
             except Exception as exc:
                 errors.append(str(exc))
         self._geometry_key = self._geometry = None
-        self._pieces = np.zeros(0, dtype=np.float32)
+        self._pieces = _NO_PIECES
         self._vao = self._count = 0
         if errors:
             raise RuntimeError(" | ".join(errors))

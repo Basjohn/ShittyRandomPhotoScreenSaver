@@ -1075,6 +1075,11 @@ def _pack_std140_value(glsl_type: str, value) -> bytes:
     if "[" not in glsl_type:
         items = tuple(value) if isinstance(value, (tuple, list)) else (value,)
         return struct.pack(fmt, *items)
+    if isinstance(value, (bytes, bytearray)):
+        # An array already in std140 form (e.g. float32 vec4s, whose stride is their size): taken as it is.
+        if len(value) != count * stride:
+            raise ValueError(f"{glsl_type} requires exactly {count * stride} packed bytes")
+        return bytes(value)
     if len(value) != count:
         raise ValueError(f"{glsl_type} requires exactly {count} elements")
     data = bytearray(count * stride)

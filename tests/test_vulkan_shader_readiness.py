@@ -305,12 +305,6 @@ _RATCHET = {
         "rendering.gl_programs.crumble_program.DEBRIS_MOTION_FRAGMENT",
         "rendering.gl_programs.crumble_program.DEBRIS_MOTION_VERTEX",
         "rendering.gl_programs.crumble_program.DEBRIS_VERTEX",
-        "rendering.gl_programs.jigsaw_program.JIGSAW_FLAT_FRAGMENT_SOURCE",
-        "rendering.gl_programs.jigsaw_program.JIGSAW_FLAT_VERTEX_SOURCE",
-        "rendering.gl_programs.jigsaw_program.JIGSAW_FLIGHT_FRAGMENT_SOURCE",
-        "rendering.gl_programs.jigsaw_program.JIGSAW_FLIGHT_VERTEX_SOURCE",
-        "rendering.gl_programs.jigsaw_program.JIGSAW_SHADOW_FRAGMENT_SOURCE",
-        "rendering.gl_programs.jigsaw_program.JIGSAW_SHADOW_VERTEX_SOURCE",
         "rendering.quick.scene3d.motion._GATHER_FRAGMENT",
         "rendering.quick.scene3d.propagation_field.PropagationField('Quick Capillary Bloom', 'capillary', "
         "CAPILLARY_COST_GLSL)[propagation_seed_capillary]",

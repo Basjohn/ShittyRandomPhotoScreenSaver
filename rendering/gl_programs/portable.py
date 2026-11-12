@@ -200,7 +200,7 @@ def _element_components(element: str) -> int:
 def pack_block(layout: Scene3DBlockLayout, values: Mapping[str, object]) -> bytes:
     """``layout`` packed from the values an owner used to set with ``glUniform*``: by name, keys the block does not
     hold (sampler units) ignored, a member not given zero (as a never-set uniform reads), an array given flat (as
-    ``glUniform4fv`` took it) or as one item per element."""
+    ``glUniform4fv`` took it), as one item per element, or as bytes already in std140 form (every element)."""
     packed = {}
     for field, kind in layout.fields:
         value = values.get(field)
@@ -210,6 +210,8 @@ def pack_block(layout: Scene3DBlockLayout, values: Mapping[str, object]) -> byte
             zero = 0 if element in ("int", "uint") else 0.0
             item = zero if width == 1 else (zero,) * width
             value = (item,) * count if "[" in kind else item
+        elif isinstance(value, (bytes, bytearray)):
+            pass                       # an array already packed in std140 form (the layout checks its length)
         elif "[" in kind and len(value) == count * width and width > 1 and not isinstance(value[0], (tuple, list)):
             value = tuple(tuple(value[i * width:(i + 1) * width]) for i in range(count))
         packed[field] = value
