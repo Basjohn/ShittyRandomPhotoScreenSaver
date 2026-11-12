@@ -11,8 +11,7 @@ from typing import Any, Dict, Mapping, TYPE_CHECKING
 
 from core.media.provider_registry import preserve_provider_setting
 from core.settings.default_contract import require_canonical_default
-from core.settings.models._enums import WidgetPosition, parse_widget_position
-from core.settings.normalization import normalize_widget_position
+from core.settings.models._enums import WidgetPosition, normalize_widget_position, parse_widget_position
 from core.settings.widget_capacity_policy import clamp_list_capacity
 
 if TYPE_CHECKING:

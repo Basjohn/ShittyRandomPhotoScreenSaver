@@ -57,6 +57,22 @@ def _stand_in(mode, notes, *, save_camera=True):
     return stand_in
 
 
+def test_a_camera_less_mode_has_no_orbit_to_save_and_its_descriptor_is_never_consulted():
+    """The Studio hosts any adapter (the toy mode is no registered visualizer mode): a mode that declares no camera
+    has no orbit, so its route is the preview view, read from the controller's own navigation rule (1C.11)."""
+    from tests.test_waveform_studio_second_mode import ToyAdapter
+    adapter = ToyAdapter()
+    stand_in = SimpleNamespace(adapter=adapter, capabilities=adapter.capabilities(),
+                               store=SimpleNamespace(save_camera=lambda values: ""))
+    stand_in.navigation = lambda: StudioController.navigation(stand_in)
+    calls = ToyAdapter.navigation_calls
+    assert StudioController.orbit_save_route(stand_in) == framed.PREVIEW_ONLY
+    assert StudioController.orbit_save_hint(SimpleNamespace(
+        orbit_save_route=lambda: StudioController.orbit_save_route(stand_in))) == framed.orbit_save_hint(
+        framed.PREVIEW_ONLY)
+    assert ToyAdapter.navigation_calls == calls        # the careless 2D adapter's navigation is never asked
+
+
 @pytest.mark.parametrize("mode", MODES)
 @pytest.mark.parametrize("save_camera", [True, False])
 def test_the_orbit_and_keep_view_notices_name_the_modes_route(mode, save_camera):
