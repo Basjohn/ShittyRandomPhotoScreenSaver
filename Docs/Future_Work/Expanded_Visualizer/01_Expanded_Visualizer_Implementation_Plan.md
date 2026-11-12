@@ -882,6 +882,47 @@ can most geometry normally."
   - Storage (1B.7d): `now_playing.artwork_scale` / `artwork_width` / `artwork_height` are retired; a stored value
     with them loads through the one normaliser's bridge into the `artwork` record
     (`Docs/Architecture/Persisted_Input_Compatibility.md`).
+- **Superseded again by plan 1C.3 (operator's run, 11 Nov evening: "X/Y artwork should adjust, media does this
+  well"; moving the block to the other sides "did not flip orientation/alignment at all"; one group box for all the
+  text with one easy-to-reach handle). The 1B.7b and 1B.7c rules above are withdrawn; the Media widget's Edit is the
+  contract:**
+  - *Parent side handles* give or take the **block's** width and height (ordinary Edit's content box, as Media's
+    content extent), and the artwork and the text reflow inside it by the Media card's one artwork rule
+    (`rendering/quick/qml/MediaArtworkRule.js`, which `MediaPresentation.qml` now draws through too), each widget
+    supplying its own spec: the artwork is as tall as the block; its width is its natural width plus 0.35 of the width
+    given (or minus it, taken) beyond the widget's reference width, never under 0.4 of its natural size (the artwork
+    role's own minimum), always leaving the text its room, and at most the spec's widest shape (`maxAspect`: the Media
+    card 1, never wider than tall, its render unchanged; Now Playing 16:9, lead 12 Nov). Now Playing's reference is its
+    **base** (lead, 12 Nov): at the first size gesture on a never-edited block (a side handle, a corner, the wheel)
+    Fullscreen Edit stores the block as drawn (`text_width`, `text_height`) and its width as `base_width`, so that first
+    sample moves nothing; from then on the share is the width given or taken since the base, so the artwork follows
+    the stored geometry only and never the current track's text; the text group takes the rest of the width and elides.
+    A never-edited block is natural: it hugs the text beside a natural artwork. Restore Size returns all three to 0.
+    The album row is reserved in the artwork's height whenever the Media widget shows albums (its option, not the
+    track). A corner or the wheel scales the whole block. The artwork child record multiplies on top, as on Media.
+    Stored in the same members: `text_height` is the block's height and `text_width` its width beyond the natural
+    artwork column (the artwork's natural side and the gap), so a 1B.7 value (which set the text box beside a natural
+    artwork) draws the same block width; such a value has no base and loads one through the bridge (the reference the
+    first 1C.3 rule used), so it draws what that rule drew. Measured (off-screen sheets, default font, title "Midnight
+    City", from the natural block): natural 93 x 93; width given 160 px -> 149 x 93; width taken 50 px -> 76 x 93;
+    height given 90 px -> 93 x 183; height taken 24 px -> 93 x 69; corner 142 x 142.
+  - *Orientation* is the side of the display the block's centre lies on (left half: artwork left, text left-aligned;
+    right half: mirrored; exactly at the midpoint: left), as accepted on 10 Nov; top and bottom never change it (the
+    text sits beside the artwork, centred on it). The block's width does not depend on its side (no binding loop). The
+    text group's alignment record (its flip glyph) is the explicit override on top of the side; the artist line flips
+    its own alignment on top of that.
+  - *The text group* is the part `metadata` (the Media card's role and limits, 0.55-1.9, uniform scale, movable,
+    `alignment_flip`, `semantic_corner_anchor`): the title, artist and album lines in one box as wide as the widest line
+    (up to the column) on the block's side, so it can move across the column's free room; one move moves every line,
+    one corner scales every line. The artist line keeps its own part inside it (Media has an `artist` role); the
+    title and album have none (Media has none). Now Playing has no status line (Media's `playback_state`); none was
+    added. The Seek Bar follows the group's width and horizontal place, on its own row under the metadata.
+  - *Saved profiles:* a `title` record from before the group becomes the group's record (offset, scale, alignment,
+    anchor); an `album` record is dropped (its line moves with the group). Bridge and fixture:
+    `Docs/Architecture/Persisted_Input_Compatibility.md`.
+  - Evidence: `tools/now_playing_edit_sheet.py` (the Media card's Edit beside Fullscreen Edit, the three gestures both
+    ways, the four sides); `tests/test_visualizer_expansion_fullscreen_edit.py` (the rule, the side flip by placement and
+    by Edit's drag, the group, parity of the Edit layer and the owner's seams), `..._overlay_settings.py` (the bridge).
 - *What stays overlay-specific (plan 1B.7i audit, grep of `fullscreen_overlay_edit.py`, the owner's
   `_fullscreen` branches and the overlays' QML).* No parallel gesture solver remains (no corner, edge, wheel, Restore
   Size, artwork-factor or position-mirroring maths). Kept, each for its reason: (1) the storage adapter

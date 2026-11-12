@@ -260,7 +260,7 @@ def _gesture(edit: _Fullscreen) -> None:
     edit.side("now_playing", "right", 140)
     edit.side("now_playing", "top", -50)
     edit.open_children()
-    edit.child_move("title", 36, 24)
+    edit.child_move("metadata", 36, 24)
     edit.child_resize("artwork", "right", -30)
     edit.child_move("artist", -12, 18)
 
@@ -326,7 +326,7 @@ def test_parity_map_the_draft_cancels_exactly_and_save_commits_what_the_draft_sh
             assert all(draft_value[overlay][key] != seeded[overlay][key]
                        for key in ("text_width", "text_height"))
     # Now Playing's parts moved and sized through the child editor are records of its child_geometry.
-    assert set(draft_value["now_playing"]["child_geometry"]) == {"title", "artwork", "artist"}
+    assert set(draft_value["now_playing"]["child_geometry"]) == {"metadata", "artwork", "artist"}
     assert edit.owner.fullscreen_draft_pending and edit.flips == [True]
 
     assert edit.owner.cancel()
@@ -348,6 +348,92 @@ def test_parity_map_the_draft_cancels_exactly_and_save_commits_what_the_draft_sh
     assert display.scene._visualizer_overlay_config == draft_config
     assert edit.drawn() == draft_frames
     assert edit.reloads == []
+
+
+@pytest.mark.qt
+def test_the_same_gestures_through_the_edit_layer_and_the_owners_own_seams_store_the_same_record(display, tmp_path):
+    """Plan 1C.3 parity (the Edit/Arrange parity pattern): one gesture script (the block's width and height given, a
+    corner, the wheel, the text group moved and scaled, the artist line moved, the artwork resized on one axis) run once
+    through the Edit layer's model (what the pointer drives) and once through the ``QuickCustomLayoutOwner``'s own
+    handlers with the session's change publication (the seams the model forwards to), each from the same saved value
+    and saved: both store exactly the same Now Playing record, and both draw the same frames."""
+    seed ={"offset_x": 0.1, "offset_y": -0.3, "always_show": True}
+
+    def run(through_layer: bool) -> tuple[dict, dict]:
+        settings = _manager(tmp_path / ("layer" if through_layer else "owner"))
+        value = _seed(settings, now_playing=seed)
+        if through_layer:
+            _draw(display, media=_Media(), config=_projection(value))
+            _open(display)
+        else:
+            display.scene.set_visualizer_expanded_overlay_config(_projection(value))
+        _run(display, 120)
+        edit = _Fullscreen(display, settings)
+        assert edit.start()
+        _shown_and_settled(display)
+        owner, item = edit.owner, edit.item("now_playing")
+        origin = edit.model._display_origin
+
+        def side(handle: str, dx: int, dy: int) -> None:
+            if through_layer:
+                edit.side("now_playing", handle, dx or dy)
+                return
+            rect = QRect(item.current_global_rect)
+            x = rect.x() if handle.endswith("left") else (rect.x() + rect.width() if handle.endswith("right")
+                                                           else rect.center().x())
+            y = rect.y() if handle.startswith("top") else (rect.y() + rect.height() if handle.startswith("bottom")
+                                                            else rect.center().y())
+            assert owner.begin_resize(item, handle, QPoint(x, y))
+            owner.update_resize(item, handle, QPoint(round(x + dx / 2), round(y + dy / 2)), False)
+            owner.session.notify_item_changed(item)
+            owner.update_resize(item, handle, QPoint(x + dx, y + dy), True)
+            owner.session.notify_item_changed(item)
+
+        def child_move(role: str, dx: int, dy: int) -> None:
+            if through_layer:
+                edit.child_move(role, dx, dy)
+                return
+            frame = edit.child_frame(role)
+            point = edit._child_point(frame, 0.5, 0.5)
+            cursor = QPoint(round(point.x()), round(point.y())) + origin
+            assert owner.begin_child_move(item, role, cursor, float(frame.property("normalizationWidth")),
+                                          float(frame.property("normalizationHeight")))
+            owner.update_child_move(item, role, cursor + QPoint(dx // 2, dy // 2), False)
+            owner.session.notify_item_changed(item)
+            owner.update_child_move(item, role, cursor + QPoint(dx, dy), True)
+            owner.session.notify_item_changed(item)
+            _run(display, 30)
+
+        side("right", 120, 0)
+        side("top", 0, -50)
+        if through_layer:
+            edit.corner("now_playing", "bottom_right", 30, 20)
+            edit.wheel("now_playing", 1)
+        else:
+            rect = QRect(item.current_global_rect)
+            corner = rect.bottomRight() + QPoint(1, 1)
+            assert owner.begin_resize(item, "bottom_right", corner)
+            owner.update_resize(item, "bottom_right", corner + QPoint(15, 10), False)
+            owner.session.notify_item_changed(item)
+            owner.update_resize(item, "bottom_right", corner + QPoint(30, 20), True)
+            owner.session.notify_item_changed(item)
+            assert owner.resize_wheel(item, 120)
+            owner.session.notify_item_changed(item)
+        _run(display, 60)
+        edit.open_children()
+        child_move("metadata", 30, 12)
+        child_move("artist", -10, 8)
+        frames = edit.frames()
+        assert owner.save()
+        _run(display, 120)
+        return _value(settings)["now_playing"], frames
+
+    by_layer, layer_frames = run(True)
+    by_owner, owner_frames = run(False)
+    assert by_layer["text_width"] > 0.0 and by_layer["text_height"] > 0.0
+    assert {"metadata", "artist"} <= set(by_layer["child_geometry"])
+    assert by_owner == by_layer
+    assert owner_frames == layer_frames
 
 
 @pytest.mark.qt
@@ -380,13 +466,17 @@ def test_the_overlay_blocks_parent_gestures_are_the_ordinary_edit_handlers(displ
     assert abs((grown.x() + grown.width() / 2) - (before.x() + before.width() / 2)) <= 1
     assert draft["scale"] == pytest.approx(item.resize_scale) and draft["scale"] > seeded["now_playing"]["scale"]
     assert edit.drawn()["now_playing"] == grown.getRect()
+    # The corner was the block's first size gesture: it stored the block and its base (plan 1C.3).
+    assert draft["base_width"] > 0.0 and draft["text_width"] > 0.0 and draft["text_height"] > 0.0
+    scaled = dict(draft)
 
     edit.side("now_playing", "right", 120)
     _run(display, 60)
     draft = edit.owner._fullscreen.draft_value()["now_playing"]
     assert item.current_content_extent is not None
-    assert draft["text_width"] != seeded["now_playing"]["text_width"]
-    assert draft["text_height"] == seeded["now_playing"]["text_height"]            # the untouched axis
+    assert draft["text_width"] != scaled["text_width"]
+    assert draft["text_height"] == scaled["text_height"]                                # the untouched axis
+    assert draft["base_width"] == scaled["base_width"]                                  # stored once
     assert "artwork" not in draft["child_geometry"]          # the artwork's one carrier is untouched
 
     top_left = QRect(item.current_global_rect).topLeft()
@@ -394,7 +484,7 @@ def test_the_overlay_blocks_parent_gestures_are_the_ordinary_edit_handlers(displ
     _run(display, 60)
     draft = edit.owner._fullscreen.draft_value()["now_playing"]
     canonical = canonical_fullscreen_overlays()["now_playing"]
-    assert all(draft[key] == canonical[key] for key in ("scale", "text_width", "text_height"))
+    assert all(draft[key] == canonical[key] for key in ("scale", "text_width", "text_height", "base_width"))
     assert (item.current_global_rect.topLeft() - top_left).manhattanLength() <= 2
     assert edit.owner.cancel()
 
@@ -736,25 +826,61 @@ def test_a_side_handle_changes_only_its_own_axis(display, tmp_path, part, handle
     changed, untouched = EXTENT_KEYS[part] if horizontal else EXTENT_KEYS[part][::-1]
     now = edit.item(part).current_size_payload
     assert now[changed] != payload[changed]
-    assert now[untouched] == payload[untouched] and now[SCALE_KEY[part]] == payload[SCALE_KEY[part]]
+    assert now[SCALE_KEY[part]] == payload[SCALE_KEY[part]]
+    if part == "now_playing" and not payload["base_width"]:
+        # Plan 1C.3: the first size gesture stores the block as drawn and its width as the base; the untouched axis
+        # keeps its drawn size (asserted on the frame above) and now stores it.
+        assert now[untouched] > 0.0 and now["base_width"] > 0.0
+    else:
+        assert now[untouched] == payload[untouched]
     assert edit.frames() == edit.drawn()
     edit.owner.cancel()
 
 
+def _media_rule_artwork(slot) -> tuple[float, float]:
+    """The artwork size the Media card's one artwork rule (``MediaArtworkRule.js``, evaluated as written) gives Now
+    Playing's block as it is drawn now: (width, height)."""
+    from PySide6.QtQml import QJSEngine
+
+    engine = QJSEngine()
+    source = (Path(__file__).resolve().parents[1] / "rendering" / "quick" / "qml" / "MediaArtworkRule.js").read_text(
+        encoding="utf-8")
+    engine.evaluate(source.replace(".pragma library", ""))
+
+    def value(name: str) -> float:
+        return float(slot.property(name))
+
+    # Now Playing's spec: the share is measured against the block's stored base (the block at its first edit), the
+    # text's room no more than it had there, up to its widest shape (16:9).
+    box, base, room = value("boxWidth"), value("setBaseWidth"), value("artRoom")
+    extra = box - (base + value("artBase") + value("gap")) if box > 0.0 and base > 0.0 else 0.0
+    content = (box if box > 0.0 else value("artBase") + value("gap") + room) - value("gap")
+    width = engine.evaluate(
+        f"Math.round(authoredWidth(provisionalWidth({value('artBase')}, {extra}, {content}, "
+        f"{room}, {value('artFloor')}), {value('blockHeight')}, {value('artMaxAspect')}))").toNumber()
+    return float(width), float(round(value("blockHeight")))
+
+
 @pytest.mark.qt
-def test_parent_axes_reflow_the_text_box_and_the_artwork_keeps_its_child_size(display, tmp_path):
-    """Plan 1B.7d (d1; supersedes "parent axes resize the artwork border", 10 Nov): Now Playing's parent X/Y handles
-    are ordinary Edit's content box, as the Media card's: they reflow the text box (a set width elides, a set height
-    gives a wrapping title its lines) and never size the artwork, whose one size carrier is its ``artwork`` child
-    record. Its border and shape are the Media card's artwork look (colour, stroke, Rounded Artwork), not the card
-    chrome. The preset toast's extents keep their own text semantics."""
+def test_parent_axes_reflow_the_artwork_by_the_media_cards_rule(display, tmp_path):
+    """Plan 1C.3 (operator, 11 Nov: "X/Y artwork should adjust, media does this well"; withdraws 1B.7d's "the parent
+    axes never size the artwork"): Now Playing's parent X/Y handles give or take the block's width and height, and the
+    artwork reflows inside it by the Media card's one artwork rule with Now Playing's spec: as tall as the block, its
+    width its natural width plus a share of the width given or taken beyond a reference block (geometry only), up to
+    16:9 (the Media card's spec stays "never wider than tall"); the text group takes the rest of the width. Each of
+    the three gestures (width given, width taken, height given) changes the artwork's shape. The
+    artwork child record is untouched (it multiplies on top, as on Media). Its border and shape are the Media card's
+    artwork look (colour, stroke, Rounded Artwork), not the card chrome. The preset toast's extents keep their own text
+    semantics."""
     import json
 
     from PySide6.QtGui import QColor
 
     settings = _manager(tmp_path)
     media = _Media(title="A Considerably Longer Track Title That Wraps")
-    _draw(display, media=media, preset="A Longer Preset Name", config=_projection(_seed(settings)))
+    # A stored block width (test-owned), so every measured gesture below changes an already set box.
+    _draw(display, media=media, preset="A Longer Preset Name",
+          config=_projection(_seed(settings, now_playing={"text_width": 4.0})))
     _open(display)
     edit = _Fullscreen(display, settings)
     assert edit.start()
@@ -782,20 +908,44 @@ def test_parent_axes_reflow_the_text_box_and_the_artwork_keeps_its_child_size(di
     assert abs(float(border.property("radius")) - min(art_item.width(), art_item.height()) / 8.0) < 0.01
     assert QColor(art_item.property("strokeColor")) == QColor(look["borderColor"])
     assert float(art_item.property("strokeWidth")) == max(1.5, look["borderWidth"])
+    slot = _slot(display, "expandedOverlayNowPlaying")
     before_art = (art_item.width(), art_item.height())
-    before_text = (text_block.width(), text_block.height())
-    edit.side("now_playing", "right", -120)
+    assert before_art == _media_rule_artwork(slot)
+    before_text = text_block.width()
+
+    def follows_the_rule(label: str) -> None:
+        drawn = (art_item.width(), art_item.height())
+        assert drawn == _media_rule_artwork(slot), label
+        # The text group's column is the rest of the block's width.
+        gap = float(slot.property("gap"))
+        assert abs(text_block.width() - (float(slot.property("blockWidth")) - drawn[0] - gap)) < 1.0, label
+        assert edit.frames() == edit.drawn(), label
+
+    follows_the_rule("stored width")
+    # Width taken: the artwork narrows (the shape changes), the text column too; the height stays.
+    edit.side("now_playing", "right", -30)
     _run(display, 60)
-    assert text_block.width() < before_text[0] and (art_item.width(), art_item.height()) == before_art
+    follows_the_rule("width taken")
+    assert art_item.width() < before_art[0] and art_item.height() == before_art[1]
+    assert text_block.width() < before_text
     assert title.property("truncated") or int(title.property("lineCount")) >= 1
+    narrowed = (art_item.width(), art_item.height())
+    # Height given: the artwork grows taller (it is the block's height); its width is the width rule's.
     edit.side("now_playing", "bottom", 90)
     _run(display, 60)
-    assert text_block.height() > before_text[1] and (art_item.width(), art_item.height()) == before_art
-    # The box's extra room goes to the title's lines (it wraps or fits into them), never to gaps between rows.
+    follows_the_rule("height given")
+    assert art_item.height() > narrowed[1] and art_item.width() == narrowed[0]
+    # Width given: the artwork widens (landscape allowed, up to 16:9).
+    edit.side("now_playing", "right", 160)
+    _run(display, 60)
+    follows_the_rule("width given")
+    assert art_item.width() > before_art[0]
+    assert art_item.width() <= art_item.height() * 16.0 / 9.0 + 1.0
+    # The block's extra height goes to the title's lines (it wraps or fits into them), never to gaps between rows.
     assert int(layer.findChild(QQuickItem, "expandedOverlayTitle").property("maximumLineCount")) >= 2
     payload = edit.item("now_playing").current_size_payload
     assert payload["text_width"] > 0.0 and payload["text_height"] > 0.0
-    assert "artwork" not in (payload.get("child_geometry") or {})
+    assert "artwork" not in (payload.get("child_geometry") or {})        # the child record is untouched
 
     edit.open_children()
     child_before = art_item.width()
@@ -814,11 +964,103 @@ def test_parent_axes_reflow_the_text_box_and_the_artwork_keeps_its_child_size(di
 
 
 @pytest.mark.qt
+@pytest.mark.parametrize("handle", ["right", "left", "top", "bottom", "bottom_right", "content_bottom_right"])
+def test_the_first_sample_of_a_gesture_on_a_never_edited_block_moves_nothing(display, tmp_path, handle):
+    """Plan 1C.3 (lead, 12 Nov: "the first touch of any handle must change nothing by itself"): on a block never edited
+    (it hugs a long title), the first sample of a side handle, a corner or a two-axis diagonal stores the block and its
+    base and leaves the block's and the artwork's rectangles exactly where they were. Then taking width narrows the
+    artwork below its natural width and giving width widens it (the right handle; the Media rule on the base)."""
+    settings = _manager(tmp_path)
+    seeded = _seed(settings, now_playing={"offset_x": 0.05, "offset_y": -0.3})
+    media = _Media(title="A Considerably Longer Track Title For The Natural Block")
+    _draw(display, media=media, config=_projection(seeded))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    root = _root(display)
+    slot = _slot(display, "expandedOverlayNowPlaying")
+    art_item = root.findChild(QQuickItem, "expandedOverlayArtwork")
+
+    def rects() -> tuple[QRectF, QRectF]:
+        _run(display, 60)
+        return _rect(slot, root), _rect(art_item, root)
+
+    natural = rects()
+    row = edit.row("now_playing")
+    frame = edit._local(edit.item("now_playing").current_global_rect)
+    corner = handle.removeprefix("content_")
+    x = frame.x() if corner.endswith("left") else (frame.x() + frame.width() if corner.endswith("right")
+                                                    else frame.center().x())
+    y = frame.y() if corner.startswith("top") else (frame.y() + frame.height() if corner.startswith("bottom")
+                                                     else frame.center().y())
+    assert edit.model.beginResize(row, handle, x, y)
+    edit.model.resizeItem(row, handle, x, y, False)                       # the first sample: no motion yet
+    assert rects() == natural
+    payload = edit.item("now_playing").current_size_payload
+    if handle == "bottom_right":
+        # A corner is a uniform scale: its first moving sample stores the block (in ems, so it scales whole) and the
+        # artwork keeps its natural shape, scaled with the block.
+        edit.model.resizeItem(row, handle, x + 30, y + 10, False)
+        block, art = rects()
+        assert art.width() == art.height() and art.width() > natural[1].width()
+        payload = edit.item("now_playing").current_size_payload
+        assert payload.get("base_width", 0.0) > 0.0 and payload["text_width"] > 0.0 and payload["text_height"] > 0.0
+        assert block.width() / natural[0].width() == pytest.approx(block.height() / natural[0].height(), abs=0.02)
+        assert edit.owner.cancel()
+        return
+    if handle == "right":
+        edit.model.resizeItem(row, handle, x - 50, y, False)              # width taken
+        taken = rects()[1]
+        assert taken.width() < natural[1].width() and taken.height() == natural[1].height()
+        edit.model.resizeItem(row, handle, x + 50, y, True)               # width given
+        given = rects()[1]
+        assert given.width() > natural[1].width() and given.height() == natural[1].height()
+    else:
+        edit.model.resizeItem(row, handle, x, y, True)
+        assert rects() == natural
+    payload = edit.item("now_playing").current_size_payload
+    assert payload.get("base_width", 0.0) > 0.0 and payload["text_width"] > 0.0 and payload["text_height"] > 0.0
+    assert edit.owner.cancel()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("box", [{}, {"text_width": 5.0}, {"text_width": 9.0, "text_height": 5.5}],
+                         ids=["natural", "width", "width_and_height"])
+@pytest.mark.parametrize("corner", ["bottom_left", "top_right"])
+def test_the_artwork_is_the_same_for_a_short_and_a_very_long_track(display, corner, box):
+    """Plan 1C.3 (lead, 12 Nov: "the artwork must not change size from one track to the next"): the artwork's size
+    comes only from the stored block geometry and the rule, never from the current track's text. The same stored
+    record draws the same artwork rectangle for a short track and a very long one (title, artist and album), with the
+    Media widget showing albums, whether the track has an album or not; the text takes what is left and elides."""
+    from tests.test_visualizer_expansion_overlays import _config
+
+    media = _Media(title="Go", artist="X", album="", showAlbum=True)
+    _draw(display, media=media, config=_config(now_playing={"corner": corner, "always_show": True, **box}))
+    _open(display)
+    slot = _slot(display, "expandedOverlayNowPlaying")
+    root = _root(display)
+    art = root.findChild(QQuickItem, "expandedOverlayArtwork")
+    _settle(display, lambda: float(slot.property("presence")) >= 1.0 and slot.property("contentTitle") == "Go")
+    _run(display, 60)
+    short = _rect(art, root)
+    long_title = "An Extraordinarily Long Track Title That Runs On And On Well Past Any Reasonable Width " * 2
+    media.update(title=long_title, artist="A Very Long Artist Credit Featuring Many Others " * 2,
+                 album="A Long Album Name As Well " * 3)
+    _settle(display, lambda: slot.property("contentTitle") == long_title and float(slot.property("contentOpacity")) >= 1.0)
+    _run(display, 60)
+    long = _rect(art, root)
+    assert long == short, (short, long)
+    title = root.findChild(QQuickItem, "expandedOverlayTitle").findChild(QQuickItem, "shadowedTextMain")
+    assert title.property("truncated") or int(title.property("lineCount")) > 1      # the text takes what is left
+
+
+@pytest.mark.qt
 @pytest.mark.parametrize("controls", [False, True])
 def test_metadata_stays_compact_and_centred_as_the_parent_reflows_its_text_box(display, tmp_path, controls):
-    """Plan 1B.7d (d1): the parent's side handles reflow the text box, never manufacturing gaps between title,
-    artist and controls; the stack stays centred on the artwork and the artwork keeps its size; Save draws the
-    draft exactly."""
+    """Plan 1B.7d (d1) and 1C.3: the parent's side handles reflow the block, never manufacturing gaps between title,
+    artist and controls; the stack stays centred on the artwork, and the artwork follows the Media card's artwork rule
+    (1C.3; it had kept its size under 1B.7d); Save draws the draft exactly."""
     settings = _manager(tmp_path)
     _draw(display, media=_Media(title="A Considerably Longer Track Title", artist="Some Artist With A Long Name"),
           config=_projection(_seed(settings, now_playing={"media_controls": controls, "always_show": True})))
@@ -845,11 +1087,13 @@ def test_metadata_stays_compact_and_centred_as_the_parent_reflows_its_text_box(d
         assert abs(box.center().y() - artwork.center().y()) <= 1.0, label
         return drawn
 
-    original = check("original")
+    check("original")
+    slot = _slot(display, "expandedOverlayNowPlaying")
     for handle, delta in (("bottom", 60), ("right", 90), ("top", -35), ("right", -45), ("bottom", -20)):
         edit.side("now_playing", handle, delta)
         drawn = check(f"{handle} {delta}")
-        assert drawn["expandedOverlayArtwork"].size() == original["expandedOverlayArtwork"].size()
+        artwork = drawn["expandedOverlayArtwork"]
+        assert (artwork.width(), artwork.height()) == _media_rule_artwork(slot), (handle, delta)
     draft = check("draft")
     assert edit.owner.save()
     _run(display, 300)
@@ -1385,7 +1629,8 @@ def _real_click(display, point: QPointF) -> str:
     return _real_drag(display, point, 0.0, 0.0, steps=1)
 
 
-NP_PARTS = {"artwork": "expandedOverlayArtwork", "title": "expandedOverlayTitle", "artist": "expandedOverlayArtist",
+NP_PARTS = {"artwork": "expandedOverlayArtwork", "metadata": "expandedOverlayNowPlayingMetadata",
+            "artist": "expandedOverlayArtist",
             "controls": "expandedOverlayMediaControls"}
 
 
@@ -1426,8 +1671,8 @@ def _open_children_by_pointer(display, edit: _Fullscreen) -> None:
 def test_now_playings_parts_move_and_size_inside_the_block_through_the_child_editor(display, tmp_path, card):
     """Operator, 8 Nov: "allow movement within the block that is not drawn like we already do for child elements in
     normal geometry. I should be able to move every element around in that block and change it." With real pointer
-    events through the window: the block is selected and its child lock opened as on any widget; the title, the
-    artist line and the Media Controls bar move on their own and the artwork sizes on one axis, each through ordinary
+    events through the window: the block is selected and its child lock opened as on any widget; the text group (its
+    lines with it), the artist line and the Media Controls bar move and the artwork sizes on one axis, each through ordinary
     Edit's child editor (its move areas and side strips); the block's frame and the other parts stay put; a part
     cannot leave the block; each gesture is one undo step; Save commits what the draft showed and Cancel restores
     exactly. Decided: with a block surface (Card) the parts stay editable inside it, as a widget card's children."""
@@ -1452,17 +1697,23 @@ def test_now_playings_parts_move_and_size_inside_the_block_through_the_child_edi
         area = edit.layer_item(f"customLayoutChildMoveArea-{BLOCK}-{role}")
         before = _np_parts(display)
         # Pressed beside the frame's centre: a text role's centre holds its alignment flip glyph (plan 1B.7c), as the
-        # Media card's metadata roles do.
-        taker = _real_drag(display, _scene_point(area, min(0.5, 6.0 / max(1.0, area.width())), 0.5), dx, dy)
+        # Media card's metadata roles do. The text group is pressed on its first line (the title): the artist line's
+        # own part sits inside the group, its handles over the group's lower rows, as on the Media card.
+        row = 0.2 if role == "metadata" else 0.5
+        taker = _real_drag(display, _scene_point(area, min(0.5, 6.0 / max(1.0, area.width())), row), dx, dy)
         assert taker == f"customLayoutChildMoveArea-{BLOCK}-{role}", taker
         after = _np_parts(display)
         shift = after[role].topLeft() - before[role].topLeft()
         assert abs(shift.x() - dx) <= 12 and abs(shift.y() - dy) <= 12, (role, shift)  # followed (gentle snaps)
         assert after[role].size() == before[role].size()
-        assert all(after[other] == before[other] for other in NP_PARTS if other != role), role
+        # The text group carries its lines: the artist line (its own part inside the group) moves with it.
+        members = ("artist",) if role == "metadata" else ()
+        assert all(after[other] == before[other] for other in NP_PARTS if other != role and other not in members), role
+        for member in members:
+            assert after[member].topLeft() - before[member].topLeft() == shift, member
         assert edit.item("now_playing").current_global_rect == block                 # the block stays put
 
-    moved("title", 34, 18)
+    moved("metadata", 34, 18)
     moved("artist", 26, -10)
     moved("controls", 30, -8)
     # The artwork's right side strip: one axis, from its own place (the image crops into the frame).
@@ -1479,20 +1730,20 @@ def test_now_playings_parts_move_and_size_inside_the_block_through_the_child_edi
     assert set(records) == set(NP_PARTS)
     assert edit.owner.fullscreen_draft_pending and edit.flips[-1] is True
     # A part never leaves the block (ordinary Edit's containment), card padding included.
-    area = edit.layer_item(f"customLayoutChildMoveArea-{BLOCK}-title")
-    _real_drag(display, _scene_point(area, min(0.5, 6.0 / max(1.0, area.width())), 0.5), 3 * WIDTH, 3 * HEIGHT)
-    title = _np_parts(display)["title"]
+    area = edit.layer_item(f"customLayoutChildMoveArea-{BLOCK}-metadata")
+    _real_drag(display, _scene_point(area, min(0.5, 6.0 / max(1.0, area.width())), 0.2), 3 * WIDTH, 3 * HEIGHT)
+    group = _np_parts(display)["metadata"]
     slot = _rect(_slot(display, "expandedOverlayNowPlaying"), _root(display)).toRect()
-    assert slot.adjusted(-1, -1, 1, 1).contains(title), (slot, title)
+    assert slot.adjusted(-1, -1, 1, 1).contains(group), (slot, group)
     # One undo step per gesture: the containment drag comes back exactly. The drag ends in the block's corner, which
-    # pins the title there (its semantic corner anchor, plan 1B.7c, as the Media header's); the pin is part of the
-    # move, so the one step restores both (the shared owner once recorded the pin as a second step).
+    # pins the text group there (its semantic corner anchor, as the Media header's); the pin is part of the move, so
+    # the one step restores both (the shared owner once recorded the pin as a second step).
     contained = _np_parts(display)
-    assert edit.item("now_playing").current_size_payload["child_geometry"]["title"].get("anchor")
+    assert edit.item("now_playing").current_size_payload["child_geometry"]["metadata"].get("anchor")
     assert edit.owner.undo_last_change()
     _run(display, 60)
     undone = _np_parts(display)
-    assert undone != contained and undone["title"] != contained["title"]
+    assert undone != contained and undone["metadata"] != contained["metadata"]
     draft_parts, draft_value = _np_parts(display), edit.owner._fullscreen.draft_value()
 
     # Cancel: exactly the layout before Edit, nothing written.
@@ -1507,7 +1758,7 @@ def test_now_playings_parts_move_and_size_inside_the_block_through_the_child_edi
     _run(display, 60)
     _room(edit)
     _open_children_by_pointer(display, edit)
-    moved("title", 34, 18)
+    moved("metadata", 34, 18)
     moved("artist", 26, -10)
     moved("controls", 30, -8)
     _real_drag(display, _scene_point(edit.layer_item(f"customLayoutChildResizeEdge-{BLOCK}-artwork-right")), -24, 0)
@@ -1519,6 +1770,108 @@ def test_now_playings_parts_move_and_size_inside_the_block_through_the_child_edi
     display.scene.set_visualizer_expanded_overlay_config(_projection(saved))
     _run(display, 300)
     assert _np_parts(display) == draft_parts
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("corner", ("bottom_left", "bottom_right", "top_left", "top_right"))
+def test_the_text_group_moves_and_scales_every_line_as_one_with_a_reachable_handle(display, tmp_path, corner):
+    """Plan 1C.3 (operator, 11 Nov: "one group box for all the text metadata with one easy-to-reach handle so all
+    text moves and adjusts at once"): the title, artist and album lines are one part (the Media card's ``metadata``).
+    Its frame holds every line, is inside the block and the safe area and never under the artwork at every anchor, and
+    is larger than the editor's corner squares; one move moves every line by the same amount, one corner scales every
+    line by the same factor; the title and album have no part of their own; the group's lines align with the block's
+    side; the Seek Bar follows the group's width and horizontal place."""
+    settings = _manager(tmp_path)
+    seeded = _seed(settings, now_playing={"corner": corner, "always_show": True, "seek_bar": True})
+    media = _Media(title="A Track Title", artist="An Artist", album="An Album", showAlbum=True)
+    _draw(display, media=media, config=_projection(seeded))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    root = _root(display)
+    names = {"title": "expandedOverlayTitle", "artist": "expandedOverlayArtist", "album": "expandedOverlayAlbum",
+             "group": "expandedOverlayNowPlayingMetadata", "artwork": "expandedOverlayArtwork",
+             "seek": "expandedOverlaySeekBar"}
+
+    def drawn() -> dict[str, QRectF]:
+        _run(display, 60)
+        return {key: _rect(root.findChild(QQuickItem, name), root) for key, name in names.items()}
+
+    # Room in the block (its own side handles, inward from its corner), so the group has somewhere to go.
+    right, bottom = corner.endswith("right"), corner.startswith("bottom")
+    edit.side("now_playing", "left" if right else "right", -140 if right else 140)
+    edit.side("now_playing", "top" if bottom else "bottom", -60 if bottom else 60)
+    edit.open_children()
+    row = edit.row("now_playing")
+    roles = {str(role["roleId"]) for role in _slot(display, "expandedOverlayNowPlaying").property(
+        "customEditableChildRoles").toVariant()}
+    assert "metadata" in roles and not roles & {"title", "album"}
+    frame = edit.child_frame("metadata")
+    layer = display.scene.custom_layout_overlay.item
+    handle = frame.mapRectToItem(layer, QRectF(0.0, 0.0, frame.width(), frame.height()))
+    before = drawn()
+    block = _rect(_slot(display, "expandedOverlayNowPlaying"), root)
+    group = before["group"]
+    for line in ("title", "artist", "album"):
+        assert group.adjusted(-1, -1, 1, 1).contains(before[line]), line
+    assert block.adjusted(-1, -1, 1, 1).contains(group) and not group.intersects(before["artwork"])
+    assert handle.width() >= 40 and handle.height() >= 40                       # far larger than the 16 px corners
+    safe = QRectF(float(edit.owner._fullscreen.edit_frame(edit.item("now_playing")).x()),
+                  float(edit.owner._fullscreen.edit_frame(edit.item("now_playing")).y()),
+                  float(edit.owner._fullscreen.edit_frame(edit.item("now_playing")).width()),
+                  float(edit.owner._fullscreen.edit_frame(edit.item("now_playing")).height()))
+    assert safe.adjusted(-1, -1, 1, 1).contains(handle.translated(QPointF(edit.model._display_origin)))
+    # The lines align with the block's side (the artist line is narrower than the group, so it shows).
+    assert before["artist"].width() < group.width() - 4.0
+    assert (abs(before["artist"].right() - group.right()) <= 1.0) is right
+    assert (abs(before["artist"].left() - group.left()) <= 1.0) is not right
+    # The Seek Bar spans the group.
+    assert abs(before["seek"].width() - group.width()) <= 1.0 and abs(before["seek"].left() - group.left()) <= 1.0
+
+    toward = -40 if right else 40
+    edit.child_move("metadata", toward, -12 if bottom else 12)
+    moved = drawn()
+    shift = moved["title"].topLeft() - before["title"].topLeft()
+    assert abs(shift.x()) > 10 or abs(shift.y()) > 4
+    for line in ("artist", "album", "group"):
+        assert (moved[line].topLeft() - before[line].topLeft() - shift).manhattanLength() <= 1.0, line
+    assert abs(moved["seek"].left() - moved["group"].left()) <= 1.0              # it follows the group's place
+
+    edit.child_resize("metadata", "bottom_right" if not right else "bottom_left", 24)
+    scaled = drawn()
+    factor = scaled["title"].width() / moved["title"].width()
+    assert factor > 1.05
+    for line in ("artist", "album", "group"):
+        assert scaled[line].width() / moved[line].width() == pytest.approx(factor, rel=0.03), line
+    assert abs(scaled["seek"].width() - scaled["group"].width()) <= 1.0          # and its width
+    assert set(edit.item("now_playing").current_size_payload["child_geometry"]) == {"metadata"}
+    assert edit.owner.cancel()
+
+
+@pytest.mark.qt
+def test_a_part_flush_with_the_blocks_edge_still_resizes_by_its_strip(display, tmp_path):
+    """Shared child editor (plan 1C.3 side defect): the Edit frame is the parent's rectangle rounded to whole pixels,
+    so a part flush with the edge of a parent at a fractional place (Now Playing's artwork is as tall as its block)
+    reads up to half a pixel outside it; the containment check took that for an existing protrusion and froze the
+    resize at its start. With real pointer events, the artwork's side strip now shrinks it."""
+    settings = _manager(tmp_path)
+    seeded = _seed(settings, now_playing={"offset_x": 0.0731, "offset_y": -0.2917})
+    _draw(display, media=_Media(title="A Track Title", artist="An Artist"), config=_projection(seeded))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    block = _rect(_slot(display, "expandedOverlayNowPlaying"), _root(display))
+    art = _rect(_root(display).findChild(QQuickItem, "expandedOverlayArtwork"), _root(display))
+    assert abs(art.height() - block.height()) < 0.01 and block.y() != round(block.y())     # flush, fractional place
+    _open_children_by_pointer(display, edit)
+    strip = edit.layer_item(f"customLayoutChildResizeEdge-{BLOCK}-artwork-right")
+    before = _np_parts(display)["artwork"]
+    assert _real_drag(display, _scene_point(strip), -20, 0) == f"customLayoutChildResizeEdge-{BLOCK}-artwork-right"
+    after = _np_parts(display)["artwork"]
+    assert abs(after.width() - (before.width() - 20)) <= 3 and after.height() == before.height()
+    edit.owner.cancel()
 
 
 @pytest.mark.qt
@@ -1539,7 +1892,7 @@ def test_the_block_offers_no_child_editing_to_the_preset_toast_and_the_parts_fol
     assert not edit.layer_item("customLayoutChildEditLock-fullscreen_overlay.preset").isVisible()
     edit.open_children()
     assert edit.flips == [] and not edit.owner.fullscreen_draft_pending
-    edit.child_move("title", 40, 20)
+    edit.child_move("metadata", 40, 20)
     assert edit.flips == [True] and edit.owner.fullscreen_draft_pending
     edit.child_resize("artwork", "bottom_right", -16)
     moved = _np_parts(display)
@@ -1751,7 +2104,8 @@ def test_a_saved_profile_with_the_retired_artwork_factors_loads_to_the_same_geom
     assert {key: loaded[key] for key in ("offset_x", "offset_y", "scale", "text_width", "always_show")} == {
         key: raw[key] for key in ("offset_x", "offset_y", "scale", "text_width", "always_show")}
     records = loaded["child_geometry"]
-    assert records["title"] == raw["child_geometry"]["title"] | records["title"]
+    # (Plan 1C.3: the title's record from before the text group is the group's, through its own bridge.)
+    assert "title" not in records and records["metadata"] == raw["child_geometry"]["title"] | records["metadata"]
     assert records == {role: size.to_mapping() for role, size in
                        normalize_child_geometry(records, NOW_PLAYING_CHILD_ROLES).items()}
     _draw(display, media=_Media(), config=_projection(_value(reloaded)))
@@ -1761,8 +2115,13 @@ def test_a_saved_profile_with_the_retired_artwork_factors_loads_to_the_same_geom
     slot = stage.findChild(QQuickItem, "expandedOverlayNowPlaying")
     art = stage.findChild(QQuickItem, "expandedOverlayArtwork")
     base = float(slot.property("artBase"))
-    # What the factors drew: the block factors times the record's (rounded at each step then), within a pixel.
-    assert abs(art.width() - round(round(base * 1.5 * 1.2) * 1.1)) <= 1
+    # The factors live on in the artwork record, multiplying the size the block gives the artwork. Its height: the
+    # block's (natural here), so exactly what the factors drew. Its width: since plan 1C.3 the stored block width
+    # (``text_width``) also reshapes the artwork by the Media rule, so the record multiplies the rule's width.
+    rule_width, _rule_height = _media_rule_artwork(slot)
+    assert abs(art.width() - round(rule_width * records["artwork"]["width_scale"])) <= 1
+    # Its block width had no base: the bridge's base is the first 1C.3 rule's reference (the text's minimum room).
+    assert abs(float(slot.property("setBaseWidth")) - float(slot.property("textRoom"))) < 0.05
     assert abs(art.height() - round(base * 1.5 * 0.8)) <= 1
 
 
@@ -1796,7 +2155,7 @@ def test_the_draft_value_carries_exactly_the_placement_members():
 
     committed = canonical_fullscreen_overlays()
     # Now Playing's children: a test-owned record map in ordinary Edit's child_geometry form.
-    children = {"title": {"width_scale": 1.5, "height_scale": 1.5, "x_offset": 0.375}}
+    children = {"metadata": {"width_scale": 1.5, "height_scale": 1.5, "x_offset": 0.375}}
 
     def expected(key):
         return children if key == "child_geometry" else (0.375 if key.startswith("offset") else 1.5)
@@ -1878,13 +2237,14 @@ def test_parent_artwork_axes_do_not_overwrite_authored_child_geometry(display, t
     ("bottom_right", -0.70),
     ("top_right", -0.70),
 ])
-def test_now_playings_alignment_is_declared_and_stable_across_the_display_midpoint(
+def test_now_playings_orientation_follows_the_side_of_the_display_it_lies_on(
         display, tmp_path, corner, offset, flipped):
-    """Plan 1B.7c (the Media card's alignment contract): the block's one orientation is its corner's side, flipped
-    only by the title's alignment record (its flip glyph); where the block lies never mirrors it (the former
-    position-based mirroring flipped it past the display midpoint)."""
+    """Plan 1C.3 (restores the 10 Nov behaviour 1B.7c had replaced with the corner's side): the block's orientation is
+    the side of the display its centre lies on (left half: artwork left, text left-aligned; right half: mirrored),
+    wherever its anchor corner is; the text group's alignment record (its flip glyph) mirrors it on top. A block offset
+    across the midpoint from its corner takes the side it now lies on."""
     settings = _manager(tmp_path)
-    children = {"title": {"alignment": "right"}} if flipped else {}
+    children = {"metadata": {"alignment": "right"}} if flipped else {}
     config = _seed(settings, now_playing={"corner": corner, "offset_x": offset, "child_geometry": children,
                                           "always_show": True, "media_controls": True})
     _draw(display, media=_Media(), config=_projection(config))
@@ -1895,22 +2255,68 @@ def test_now_playings_alignment_is_declared_and_stable_across_the_display_midpoi
     art = _rect(root.findChild(QQuickItem, "expandedOverlayArtwork"), root)
     text = _rect(root.findChild(QQuickItem, "expandedOverlayNowPlayingText"), root)
     corner_right = corner.endswith("right")
-    expected_right = corner_right is not flipped
-    assert (slot.x() + slot.width() / 2.0 > WIDTH / 2.0) is not corner_right   # it lies across the midpoint
+    lies_right = slot.x() + slot.width() / 2.0 > WIDTH / 2.0
+    assert lies_right is not corner_right                                   # it lies across the midpoint
+    expected_right = lies_right is not flipped
     assert bool(slot.property("contentRightSide")) is expected_right
+    title = _rect(root.findChild(QQuickItem, "expandedOverlayTitle"), root)
     if expected_right:
         assert text.right() < art.left(), (art, text)
+        assert abs(title.right() - text.right()) <= 1.0                     # right-aligned against the artwork
     else:
         assert art.right() < text.left(), (art, text)
+        assert abs(title.left() - text.left()) <= 1.0
     assert abs(art.center().y() - text.center().y()) < 1.5
     assert _value(settings)["now_playing"]["corner"] == corner  # presentation never rewrites the anchor
 
 
 @pytest.mark.qt
-def test_the_title_flip_glyph_flips_now_playings_orientation_through_ordinary_edit(display, tmp_path):
-    """Plan 1B.7c: the title, artist and album declare ``alignment_flip`` (the title also ``semantic_corner_anchor``),
-    so Fullscreen Edit's child layer shows their flip glyphs and the owner's ordinary flip handler writes the title's
-    alignment record: the whole block mirrors, one undo step, Cancel restores. The artwork declares neither."""
+def test_moving_now_playing_to_the_other_side_in_fullscreen_edit_flips_it_and_top_or_bottom_does_not(
+        display, tmp_path):
+    """Plan 1C.3 (operator, 11 Nov: moving the block to the other sides "did not flip orientation/alignment at all"):
+    Fullscreen Edit's own drag across the display's midpoint mirrors the block as it crosses; moving it up or down
+    never does; Save keeps the corner and draws what the draft showed."""
+    settings = _manager(tmp_path)
+    seeded = _seed(settings, now_playing={"always_show": True})
+    _draw(display, media=_Media(), config=_projection(seeded))
+    _open(display)
+    edit = _Fullscreen(display, settings)
+    assert edit.start()
+    _shown_and_settled(display)
+    slot = _slot(display, "expandedOverlayNowPlaying")
+    root = _root(display)
+
+    def side() -> tuple[bool, bool]:
+        _run(display, 60)
+        art = _rect(root.findChild(QQuickItem, "expandedOverlayArtwork"), root)
+        text = _rect(root.findChild(QQuickItem, "expandedOverlayNowPlayingText"), root)
+        right = bool(slot.property("contentRightSide"))
+        assert (text.right() < art.left()) is right and (art.right() < text.left()) is not right
+        return right, slot.x() + slot.width() / 2.0 > WIDTH / 2.0
+
+    assert side() == (False, False)                                         # bottom left: artwork left
+    edit.drag("now_playing", 0, -round(HEIGHT * 0.6), steps=8)               # up to the top: unchanged
+    assert side() == (False, False)
+    edit.drag("now_playing", round(WIDTH * 0.7), 0, steps=12)                # across to the right: mirrored
+    assert side() == (True, True)
+    edit.drag("now_playing", 0, round(HEIGHT * 0.5), steps=8)                # down again: unchanged
+    assert side() == (True, True)
+    frames = edit.frames()
+    assert edit.owner.save()
+    _run(display, 120)
+    saved = _value(settings)
+    assert saved["now_playing"]["corner"] == seeded["now_playing"]["corner"]
+    display.scene.set_visualizer_expanded_overlay_config(_projection(saved))
+    _run(display, 200)
+    assert bool(slot.property("contentRightSide")) is True and edit.drawn() == frames
+
+
+@pytest.mark.qt
+def test_the_text_groups_flip_glyph_flips_now_playings_orientation_through_ordinary_edit(display, tmp_path):
+    """Plan 1B.7c, 1C.3: the text group and the artist line declare ``alignment_flip`` (the group also
+    ``semantic_corner_anchor``), so Fullscreen Edit's child layer shows their flip glyphs and the owner's ordinary flip
+    handler writes the group's alignment record: the whole block mirrors where it is, one undo step, Cancel restores.
+    The artwork and the controls declare neither; the title and album lines have no part of their own."""
     settings = _manager(tmp_path)
     seeded = _seed(settings, now_playing={"media_controls": True})
     _draw(display, media=_Media(), config=_projection(seeded))
@@ -1921,19 +2327,19 @@ def test_the_title_flip_glyph_flips_now_playings_orientation_through_ordinary_ed
     edit.open_children()
     row = edit.row("now_playing")
     flippable = {role: edit.model.childAlignmentFlippable(row, role) for role in NP_PARTS}
-    assert flippable["title"] and flippable["artist"] and not flippable["artwork"] and not flippable["controls"]
-    assert edit.model.childSemanticCornerAnchorCapable(row, "title")
+    assert flippable["metadata"] and flippable["artist"] and not flippable["artwork"] and not flippable["controls"]
+    assert edit.model.childSemanticCornerAnchorCapable(row, "metadata")
     slot = _slot(display, "expandedOverlayNowPlaying")
-    assert slot.property("contentRightSide") is False                     # bottom_left's authored side
-    assert edit.model.flipChildAlignment(row, "title")
+    assert slot.property("contentRightSide") is False                     # bottom left: the left half
+    assert edit.model.flipChildAlignment(row, "metadata")
     _run(display, 60)
     assert slot.property("contentRightSide") is True
-    assert edit.owner._fullscreen.draft_value()["now_playing"]["child_geometry"]["title"]["alignment"] == "right"
+    assert edit.owner._fullscreen.draft_value()["now_playing"]["child_geometry"]["metadata"]["alignment"] == "right"
     assert edit.frames() == edit.drawn()
     assert edit.owner.undo_last_change()
     _run(display, 60)
     assert slot.property("contentRightSide") is False
-    assert edit.model.flipChildAlignment(row, "title")
+    assert edit.model.flipChildAlignment(row, "metadata")
     assert edit.owner.cancel()
     _run(display, 60)
     assert slot.property("contentRightSide") is False and _value(settings) == seeded

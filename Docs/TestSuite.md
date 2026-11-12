@@ -1029,17 +1029,37 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   move ending in a corner pin (`test_now_playings_parts_move_and_size_inside_the_block_through_the_child_editor`; red
   on the shared owner's former second step). `tests/test_custom_layout_guides_contract.py`'s containment assertion
   follows the current two-line `containmentTarget` expression (the guarded rule is unchanged).
-- Plan 1B.7d (one artwork size carrier, Media's artwork look), same file:
-  `test_parent_axes_reflow_the_text_box_and_the_artwork_keeps_its_child_size` and
-  `test_metadata_stays_compact_and_centred_as_the_parent_reflows_its_text_box[False/True]` (the d1 rewrites of the
-  retired artwork-border tests: the side handles reflow the text box, the artwork keeps its size, its radius and
-  stroke follow the Media model's `artworkLook`, Rounded Artwork off squares it); the load bridge in
+- Plan 1C.3 (supersedes 1B.7b-d's "side handles reflow only the text box" and 1B.7c's corner-side orientation),
+  same file: `test_parent_axes_reflow_the_artwork_by_the_media_cards_rule` and
+  `test_metadata_stays_compact_and_centred_as_the_parent_reflows_its_text_box[False/True]` (the side handles give or
+  take the block, the artwork is what `MediaArtworkRule.js` gives it, evaluated as written; the text column is the
+  rest; Media's artwork look still applies; red with the artwork height held at its natural size);
+  `test_the_first_sample_of_a_gesture_on_a_never_edited_block_moves_nothing[handle]` (each side, a corner, a
+  two-axis diagonal: the first sample stores the block and its base and moves nothing; then width taken narrows and
+  width given widens the artwork from natural; red on the reference-without-base rule, taking 50 px widened it to
+  165 px);
+  `test_the_artwork_is_the_same_for_a_short_and_a_very_long_track[corner-box]` (one stored record, a short and a very
+  long track, album present or not: the same artwork rectangle, natural and with a stored box; red on the
+  text-relative share);
+  `test_now_playings_orientation_follows_the_side_of_the_display_it_lies_on[...]` and
+  `test_moving_now_playing_to_the_other_side_in_fullscreen_edit_flips_it_and_top_or_bottom_does_not` (red on the
+  corner-side rule); `test_the_text_group_moves_and_scales_every_line_as_one_with_a_reachable_handle[corner]` (one
+  `metadata` part, its handle inside the block and safe area and clear of the artwork at each corner, every line moves
+  and scales with it, the Seek Bar follows its width and place; red before the group);
+  `test_the_same_gestures_through_the_edit_layer_and_the_owners_own_seams_store_the_same_record` (parity);
+  `test_a_part_flush_with_the_blocks_edge_still_resizes_by_its_strip` (R-189, the shared child editor's containment
+  slack; red on the pre-fix QML); `test_media_content_extent_contract.py` pins that Media draws the one rule; the
+  text-group load bridge in
+  `test_visualizer_expansion_overlay_settings.py::test_a_raw_profile_file_with_the_text_line_parts_loads_them_into_the_text_group`
+  (fixture `tests/fixtures/fullscreen_overlays_now_playing_text_lines_profile.json`; red without the title mapping).
+  Off-screen sheets: `tools/now_playing_edit_sheet.py`.
+- Plan 1B.7d (one artwork size carrier, Media's artwork look): its artwork-look assertions live on in the 1C.3 test
+  above; the load bridge in
   `test_visualizer_expansion_overlay_settings.py::test_a_value_stored_with_the_retired_artwork_factors_loads_them_into_the_artwork_record`.
 - Plan 1B.7c (alignment as declared roles), same file:
-  `test_now_playings_alignment_is_declared_and_stable_across_the_display_midpoint` (corner side, flipped only by the
-  title's record; red on the former position-based mirroring) and
-  `test_the_title_flip_glyph_flips_now_playings_orientation_through_ordinary_edit` (flip/anchor capabilities, the
-  owner's flip handler, undo, Cancel; red without the declared roles and the bound handler).
+  `test_the_text_groups_flip_glyph_flips_now_playings_orientation_through_ordinary_edit` (flip/anchor capabilities on
+  the text group since 1C.3, the owner's flip handler, undo, Cancel; red without the declared roles and the bound
+  handler).
   `test_edit_geometry_reads_never_invalidate_another_holders_overlay_wrappers` (a held slot wrapper survives Edit's
   geometry reads; red on the Loader `item` lookup, the cause of the refade test's red on main).
 - `tests/test_visualizer_expansion_fullscreen_edit.py` — Expanded Visualizer Fullscreen Edit (plan 01 M3c) on the

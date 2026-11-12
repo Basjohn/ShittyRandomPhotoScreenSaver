@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import "MediaArtworkRule.js" as ArtworkRule
 
 // The Expanded Visualizer's full-display overlays (plan 01 §G, milestone M3b): the preset's name and Now Playing
 // (Artist, Song and Artwork), each fading in and out gently on its own event.
@@ -298,15 +299,22 @@ Item {
         swapOutMs: 700
         swapInMs: 900
         stackShift: overlays.stackShiftFor(nowPlayingSlot, presetSlot)
-        naturalWidth: artWidth + gap + textBlock.width
-        naturalHeight: Math.max(artHeight, textBlock.height)
+        // The block is its content box: the artwork beside the text group (plan 1C.3).
+        naturalWidth: blockWidth
+        naturalHeight: blockHeight
 
-        // Alignment as declared roles (plan 1B.7c, as the Media card's): the block has ONE orientation, chosen and
-        // stable. Its authored side is the anchor corner's (Settings' Corner: a right corner puts the artwork on the
-        // right and the text on its rails); the title's alignment record (its flip glyph in Fullscreen Edit, the
-        // ``alignment_flip`` role that, like Media's header, also carries ``semantic_corner_anchor``) flips it. The
-        // artist and album lines flip their own text alignment on top of it (Media's orientedChildAlignment). Where the
-        // block lies on the display never changes it.
+        // Orientation follows the side of the display the block lies on (accepted 10 Nov; restored by plan 1C.3 after
+        // 1B.7c had tied it to the anchor corner): on the left half the artwork is on the left and the text is
+        // left-aligned beside it; on the right half the block is mirrored. The block's centre decides (at the exact
+        // midpoint: the left), so a block moved across the midpoint flips. Top and bottom never change it: the text
+        // sits beside the artwork, centred on it, wherever the block is placed vertically. The block's width never
+        // depends on its side, so there is no placement/orientation loop. The text group's alignment record (its flip
+        // glyph in Fullscreen Edit, the ``metadata`` role's ``alignment_flip``; it also carries
+        // ``semantic_corner_anchor``, as Media's header) is the explicit override on top (it mirrors the block where it
+        // is); the artist line flips its own text alignment on top of that (Media's orientedChildAlignment). The Media
+        // card's app-volume rail follows its side of the display the same way.
+        readonly property bool positionRight: !!stage && stage.width > 0.0 ? x + width * 0.5 > stage.width * 0.5
+                                                                         : rightSide
         function childAlignment(roleId) {
             const record = childGeometry[roleId]
             return record && record.alignment !== undefined ? String(record.alignment) : "left"
@@ -315,9 +323,9 @@ Item {
             const record = childGeometry[roleId]
             return record && record.anchor !== undefined && record.anchor !== null ? String(record.anchor) : ""
         }
-        readonly property bool contentRightSide: rightSide !== (childAlignment("title") === "right")
+        readonly property bool contentRightSide: positionRight !== (childAlignment("metadata") === "right")
         function textRight(roleId) {
-            return roleId === "title" ? contentRightSide : (childAlignment(roleId) === "right") !== contentRightSide
+            return roleId === "metadata" ? contentRightSide : (childAlignment(roleId) === "right") !== contentRightSide
         }
         readonly property bool controlsShown: options.mediaControls === true
         // Media Controls: the Media card's transport bar, small. The card's bar is 2.15 x its font size tall under a
@@ -330,13 +338,17 @@ Item {
         // The bar's size against the Media card's own bar (its outline, radius and shadow scale by this).
         readonly property real controlsFactor: controlsHeight / Math.max(
             38.0, overlays.mediaLook("fontSize", 17.0) * 2.15)
-        // The artwork's size has one carrier, its ``artwork`` child record (plan 1B.7d, as the Media card's): the block's
-        // parent handles reflow the text box (ordinary Edit's content box), never the artwork.
-        // The one-line text stack supplies a stable artwork baseline independent of wrapping, track changes or
-        // authored text-box height. A parent's resize must not make its artwork jump as metadata reflows.
+        // The one-line text stack supplies a stable artwork baseline independent of wrapping and track changes.
         readonly property real titleLineHeight: Math.max(1.0, Math.ceil(titleMetrics.height))
         readonly property real naturalTextHeight: titleLineHeight + textColumn.spacing + Math.ceil(artistMetrics.height)
             + (albumShown ? textColumn.spacing + Math.ceil(albumMetrics.height) : 0.0)
+            + (seekShown ? 2.0 * textColumn.spacing + seekHeight : 0.0)
+            + (controlsShown ? 2.0 * textColumn.spacing + controlsSpacer.height + controlsHeight : 0.0)
+        // The same stack with the album row reserved whenever the Media widget shows albums (its option, never the
+        // current track's text): the artwork's and the block's geometry never change from one track to the next.
+        readonly property bool albumRowReserved: !!overlays.mediaModel && overlays.mediaModel.showAlbum === true
+        readonly property real stackHeight: titleLineHeight + textColumn.spacing + Math.ceil(artistMetrics.height)
+            + (albumRowReserved ? textColumn.spacing + Math.ceil(albumMetrics.height) : 0.0)
             + (seekShown ? 2.0 * textColumn.spacing + seekHeight : 0.0)
             + (controlsShown ? 2.0 * textColumn.spacing + controlsSpacer.height + controlsHeight : 0.0)
         // Seek Bar (plan 1B.7g, default off): the Media card's seek bar (MediaSeekBar.qml, its look from the Media
@@ -344,28 +356,64 @@ Item {
         readonly property bool seekShown: options.seekBar === true
         readonly property real seekHeight: Math.max(2.0, Math.round(Number(overlays.seekLook("height", 6.0))
                                                                      * controlsFactor))
-        readonly property real artBase: Math.max(Math.round(fontSize * 3.1), Math.ceil(naturalTextHeight))
-        readonly property real artWidth: Math.round(artBase)
-        readonly property real artHeight: Math.round(artBase)
+        // The natural artwork: a square as tall as the natural block (at least 3.1 ems, at least the text stack).
+        readonly property real artBase: Math.max(Math.round(fontSize * 3.1), Math.ceil(stackHeight))
         readonly property real gap: Math.round(fontSize * 0.55)
         // The natural metadata width: the half-screen cap applies to the unedited layout; the screen's capacity is the
         // final constraint, so long titles fit instead of crossing the edge.
-        readonly property real textWidthLimit: Math.max(48.0,
-            Math.min(maxBoxWidth - artWidth - gap, maxContentWidth - artWidth - gap))
-        // The parent's side handles set the text box (ordinary Edit's content box, as the Media card's). Extra box
-        // height never manufactures gaps between the metadata rows; it gives a genuinely wrapping title/artist more
-        // lines, otherwise the stack stays naturally grouped and centred.
+        // (Whole pixels, so a block stored at its first edit draws exactly the natural block it was.)
+        readonly property real textWidthLimit: Math.max(48.0, Math.floor(
+            Math.min(maxBoxWidth - artBase - gap, maxContentWidth - artBase - gap)))
         readonly property real naturalTextWidth: Math.min(textWidthLimit,
             Math.ceil(Math.max(titleText.implicitWidth, artistText.implicitWidth,
                               albumShown ? albumText.implicitWidth : 0.0, controlsShown ? controlsWidth : 0.0)))
+        // ---- The block's content box (plan 1C.3; the operator: "X/Y artwork should adjust, media does this well").
+        // Its side handles are ordinary Edit's content box, as the Media card's content extent: they give or take the
+        // block's width and height, and the artwork reflows inside it by the Media card's one artwork rule
+        // (MediaArtworkRule.js) with Now Playing's own spec: the artwork is as tall as the block; its width is its
+        // natural width plus the rule's share of the width given since the block's base (or minus it, taken), never
+        // under the artwork role's own minimum (0.4 of its natural size), leaving the text its room, and at most 16:9
+        // (Now Playing may go landscape; the Media card's spec keeps its artwork never wider than tall). The text group
+        // takes the rest of the width and elides in it. A corner or the wheel scales the whole block (``scale``). The
+        // artwork child record multiplies on top, as on Media.
+        // Stored in ems of the block's font (0 = natural): ``text_width`` is the block's width beyond its natural
+        // artwork column (the artwork's natural side and the gap), ``text_height`` its height (at least the text
+        // stack), and ``base_width`` the block's width (same unit) at the first edit gesture on it, stored once by
+        // Fullscreen Edit with the block's height at that instant (lead, 12 Nov). At that instant the share is zero,
+        // so the first sample of any gesture moves nothing; from then on the artwork follows the stored geometry only,
+        // never the current track's text. Never edited (no base): the natural block, hugging its text beside a natural
+        // artwork.
+        readonly property real artMaxAspect: 16.0 / 9.0
+        readonly property real artFloor: Math.round(artBase * 0.4)
+        readonly property real textRoom: Math.max(minimumTextWidth, controlsShown ? controlsWidth : 0.0)
+        readonly property real setBaseWidth: {
+            const value = Number(options.baseWidth)
+            return isFinite(value) && value > 0 ? value * fontSize : 0.0
+        }
+        // The text's room never exceeds the room it had at the base (so the first sample of a gesture changes nothing).
+        readonly property real artRoom: setBaseWidth > 0.0 ? Math.min(textRoom, setBaseWidth) : textRoom
         readonly property real boxWidth: setTextWidth > 0.0
-            ? Math.round(Math.min(Math.max(1.0, maxBoxWidth - artWidth - gap),
-                                  Math.max(minimumTextWidth, controlsShown ? controlsWidth : 0.0, setTextWidth)))
+            ? Math.round(Math.min(maxBoxWidth, Math.max(artFloor + gap + artRoom, setTextWidth + artBase + gap)))
             : 0.0
         readonly property real boxHeight: setTextHeight > 0.0
-            ? Math.round(Math.min(maxBoxHeight, Math.max(naturalTextHeight, setTextHeight))) : 0.0
+            ? Math.round(Math.min(maxBoxHeight, Math.max(stackHeight, setTextHeight))) : 0.0
+        readonly property real blockHeight: boxHeight > 0.0 ? boxHeight : artBase
+        // The width given since the base (none without a stored width and base).
+        readonly property real artExtraWidth: boxWidth > 0.0 && setBaseWidth > 0.0
+            ? boxWidth - (setBaseWidth + artBase + gap) : 0.0
+        readonly property real artWidth: Math.round(ArtworkRule.authoredWidth(
+            ArtworkRule.provisionalWidth(artBase, artExtraWidth,
+                                         (boxWidth > 0.0 ? boxWidth : artBase + gap + artRoom) - gap, artRoom, artFloor),
+            blockHeight, artMaxAspect))
+        readonly property real artHeight: Math.round(blockHeight)
+        readonly property real naturalBlockWidth: artWidth + gap + naturalTextWidth
+        readonly property real blockWidth: boxWidth > 0.0 ? boxWidth : naturalBlockWidth
+        // The text group's column: the block's width beside the artwork.
+        readonly property real textColumnWidth: Math.max(1.0, blockWidth - artWidth - gap)
+        // Extra block height never manufactures gaps between the metadata rows; it gives a genuinely wrapping
+        // title/artist more lines, otherwise the group stays naturally grouped and centred on the artwork.
         readonly property int metadataLines: boxHeight > 0.0
-            ? 1 + Math.max(0, Math.floor((boxHeight - naturalTextHeight + 0.5)
+            ? 1 + Math.max(0, Math.floor((boxHeight - stackHeight + 0.5)
                                        / (titleLineHeight + artistMetrics.height + (albumShown ? albumMetrics.height : 0)))) : 1
         readonly property int titleLines: metadataLines
         readonly property bool albumShown: !!overlays.mediaModel && overlays.mediaModel.showAlbum === true
@@ -407,16 +455,14 @@ Item {
         readonly property var customEditableChildRoles: [
             {"roleId": "artwork", "target": artFrame, "normalizationTarget": nowPlayingSlot,
              "geometryDependencies": [textBlock]},
-            {"roleId": "title", "target": titleText, "normalizationTarget": nowPlayingSlot,
+            {"roleId": "metadata", "target": textGroup, "normalizationTarget": nowPlayingSlot,
              "geometryDependencies": [textBlock, textColumn]},
             {"roleId": "artist", "target": artistText, "normalizationTarget": nowPlayingSlot,
-             "geometryDependencies": [textBlock, textColumn]},
-            {"roleId": "album", "target": albumText, "normalizationTarget": nowPlayingSlot,
-             "geometryDependencies": [textBlock, textColumn]},
+             "geometryDependencies": [textBlock, textColumn, textGroup]},
             {"roleId": "controls", "target": controls, "normalizationTarget": nowPlayingSlot,
              "geometryDependencies": [textBlock, textColumn]},
             {"roleId": "seek_bar", "target": seekBar, "normalizationTarget": nowPlayingSlot,
-             "geometryDependencies": [textBlock, textColumn]}
+             "geometryDependencies": [textBlock, textColumn, textGroup]}
         ]
         readonly property var customEditableChildRequirementTarget: null
 
@@ -558,8 +604,9 @@ Item {
             objectName: "expandedOverlayNowPlayingText"
             x: nowPlayingSlot.contentRightSide ? 0.0 : nowPlayingSlot.artWidth + nowPlayingSlot.gap
             y: (parent.height - height) / 2.0
-            width: nowPlayingSlot.boxWidth > 0.0 ? nowPlayingSlot.boxWidth : nowPlayingSlot.naturalTextWidth
-            height: nowPlayingSlot.boxHeight > 0.0 ? nowPlayingSlot.boxHeight : textColumn.height
+            // The block's width beside the artwork (the Media rule's rest); as tall as its stack, centred on the artwork.
+            width: nowPlayingSlot.textColumnWidth
+            height: textColumn.height
             onXChanged: overlays.noteEditGeometry()
             onYChanged: overlays.noteEditGeometry()
             onWidthChanged: overlays.noteEditGeometry()
@@ -587,137 +634,155 @@ Item {
                                                                             : metadataBottom
                 height: naturalHeight
 
-                MediaMetadataText {
-                    id: titleText
-                    objectName: "expandedOverlayTitle"
-                    // A part of the block (``title``): scaled whole (its layout keeps today's size) and moved, kept
-                    // inside the block.
-                    readonly property real partScale: nowPlayingSlot.childWidthScale("title")
-                    // The title's semantic corner anchor (``semantic_corner_anchor``, as the Media card's header): a
+                // The text group (``metadata``, the Media card's role; plan 1C.3, operator 11 Nov: "one group box for all
+                // the text metadata with one easy-to-reach handle"): the title, artist and album lines in one box that
+                // moves and scales as one (its child record: offset, uniform scale, the flip glyph's alignment and its
+                // semantic corner anchor), as the Media card's metadata block. Its frame is the whole group (its
+                // widest line, up to the column, where lines elide or wrap; its rows' height), on the block's side of
+                // the column, so it can be moved across the column's free room; never under the artwork, inside the
+                // block at every anchor. Its
+                // alignment record is the explicit flip on top of the block's side; the artist line keeps its own part
+                // inside the group (the Media card's ``artist`` role), the title and album have none (Media has none).
+                Item {
+                    id: textGroup
+                    objectName: "expandedOverlayNowPlayingMetadata"
+                    width: Math.min(textColumn.width, Math.ceil(Math.max(
+                        titleText.implicitWidth, artistText.implicitWidth,
+                        nowPlayingSlot.albumShown ? albumText.implicitWidth : 0.0, 1.0)))
+                    height: textColumn.metadataBottom
+                    x: nowPlayingSlot.contentRightSide ? textColumn.width - width : 0.0
+                    // Where the group's origin sits in the block's coordinates before its own record moves it.
+                    readonly property real originX: nowPlayingSlot.columnX + textGroup.x
+                    readonly property real partScale: nowPlayingSlot.childWidthScale("metadata")
+                    // The group's semantic corner anchor (``semantic_corner_anchor``, as the Media card's header): a
                     // move that ends snapped into one of the block's corners pins it there, so the block's resizes
                     // keep it in that corner; a free move detaches it (the child editor clears the anchor).
-                    readonly property string customAnchor: nowPlayingSlot.childAnchor("title")
-                    readonly property real drawnWidth: titleText.width * titleText.partScale
-                    readonly property real drawnHeight: titleText.height * titleText.partScale
-                    // Where its offset alone puts it; a pinned title's difference is folded into the offset once when
-                    // a move detaches it (the child editor's placement compensation), so it never jumps.
+                    readonly property string customAnchor: nowPlayingSlot.childAnchor("metadata")
+                    readonly property real drawnWidth: textGroup.width * textGroup.partScale
+                    readonly property real drawnHeight: textGroup.height * textGroup.partScale
+                    // Where its offset alone puts it; a pinned group's difference is folded into the offset once when a
+                    // move detaches it (the child editor's placement compensation), so it never jumps.
                     readonly property real offsetShiftX: nowPlayingSlot.containX(
-                        nowPlayingSlot.columnX + titleText.x + nowPlayingSlot.childOffsetX("title"), drawnWidth)
-                        - nowPlayingSlot.columnX - titleText.x
+                        textGroup.originX + nowPlayingSlot.childOffsetX("metadata"), drawnWidth) - textGroup.originX
                     readonly property real offsetShiftY: nowPlayingSlot.containY(
-                        nowPlayingSlot.columnY + nowPlayingSlot.childOffsetY("title"), drawnHeight)
+                        nowPlayingSlot.columnY + nowPlayingSlot.childOffsetY("metadata"), drawnHeight)
                         - nowPlayingSlot.columnY
                     readonly property real customEditPlacementCompensationX:
-                        customAnchor.length > 0 ? titleShift.x - offsetShiftX : 0.0
+                        customAnchor.length > 0 ? groupShift.x - offsetShiftX : 0.0
                     readonly property real customEditPlacementCompensationY:
-                        customAnchor.length > 0 ? titleShift.y - offsetShiftY : 0.0
+                        customAnchor.length > 0 ? groupShift.y - offsetShiftY : 0.0
                     transform: [
-                        Scale { id: titleScale; xScale: titleText.partScale; yScale: titleText.partScale },
+                        Scale { id: groupScale; xScale: textGroup.partScale; yScale: textGroup.partScale },
                         Translate {
-                            id: titleShift
+                            id: groupShift
                             // Pinned: the containment's own corner (the block's frame, its card padding included).
-                            x: nowPlayingSlot.containX(titleText.customAnchor.endsWith("right") ? Infinity
-                                                       : titleText.customAnchor.endsWith("left") ? -Infinity
-                                                       : nowPlayingSlot.columnX + titleText.x
-                                                         + nowPlayingSlot.childOffsetX("title"),
-                                                       titleText.drawnWidth)
-                               - nowPlayingSlot.columnX - titleText.x
-                            y: nowPlayingSlot.containY(titleText.customAnchor.startsWith("bottom") ? Infinity
-                                                       : titleText.customAnchor.startsWith("top") ? -Infinity
-                                                       : nowPlayingSlot.columnY + nowPlayingSlot.childOffsetY("title"),
-                                                       titleText.drawnHeight)
+                            x: nowPlayingSlot.containX(textGroup.customAnchor.endsWith("right") ? Infinity
+                                                       : textGroup.customAnchor.endsWith("left") ? -Infinity
+                                                       : textGroup.originX + nowPlayingSlot.childOffsetX("metadata"),
+                                                       textGroup.drawnWidth)
+                               - textGroup.originX
+                            y: nowPlayingSlot.containY(textGroup.customAnchor.startsWith("bottom") ? Infinity
+                                                       : textGroup.customAnchor.startsWith("top") ? -Infinity
+                                                       : nowPlayingSlot.columnY + nowPlayingSlot.childOffsetY("metadata"),
+                                                       textGroup.drawnHeight)
                                - nowPlayingSlot.columnY
                         }
                     ]
                     // The child editor maps through these applied transform values (never the transform list).
-                    readonly property string customEditMappingDependency: [titleScale.xScale, titleScale.yScale,
-                                                                          titleShift.x, titleShift.y].join(",")
-                    // As wide as its text draws (up to the box, where it elides or wraps), on its side of the box: the
-                    // part's frame is the line itself, so it can move across the box (the pixels are today's).
-                    width: Math.min(Math.ceil(implicitWidth), textColumn.width)
-                    x: nowPlayingSlot.contentRightSide ? textColumn.width - width : 0.0
-                    text: nowPlayingSlot.contentTitle
-                    font.family: overlays.fontFamily
-                    font.pixelSize: Math.max(1, Math.round(nowPlayingSlot.fontSize))
-                    font.weight: Font.DemiBold
-                    color: nowPlayingSlot.textColor
-                    maximumLineCount: nowPlayingSlot.titleLines
-                    horizontalAlignment: nowPlayingSlot.contentRightSide ? Text.AlignRight : Text.AlignLeft
-                    shadowSoft: true
-                    shadowColor: overlays.textShadowColor
-                    shadowOffsetX: 0.0
-                    shadowOffsetY: overlays.textShadowOffset
-                }
-                MediaMetadataText {
-                    id: artistText
-                    objectName: "expandedOverlayArtist"
-                    y: titleText.height + textColumn.spacing
-                    // A part of the block (``artist``): scaled whole and moved from its row, kept inside the block.
-                    readonly property real partScale: nowPlayingSlot.childWidthScale("artist")
-                    transform: [
-                        Scale { id: artistScale; xScale: artistText.partScale; yScale: artistText.partScale },
-                        Translate {
-                            id: artistShift
-                            x: nowPlayingSlot.containX(
-                                   nowPlayingSlot.columnX + artistText.x + nowPlayingSlot.childOffsetX("artist"),
-                                   artistText.width * artistText.partScale) - nowPlayingSlot.columnX - artistText.x
-                            y: nowPlayingSlot.containY(
-                                   nowPlayingSlot.columnY + artistText.y + nowPlayingSlot.childOffsetY("artist"),
-                                   artistText.height * artistText.partScale) - nowPlayingSlot.columnY - artistText.y
-                        }
-                    ]
-                    readonly property string customEditMappingDependency: [artistScale.xScale, artistScale.yScale,
-                                                                          artistShift.x, artistShift.y].join(",")
-                    x: nowPlayingSlot.textRight("artist") ? textColumn.width - width : 0.0
-                    width: Math.min(Math.ceil(implicitWidth), textColumn.width)
-                    text: nowPlayingSlot.contentArtist
-                    maximumLineCount: nowPlayingSlot.metadataLines
-                    font.family: overlays.fontFamily
-                    font.pixelSize: Math.max(1, Math.round(nowPlayingSlot.fontSize * 0.74))
-                    color: nowPlayingSlot.textColor
-                    opacity: 0.88
-                    elide: Text.ElideRight
-                    horizontalAlignment: nowPlayingSlot.textRight("artist") ? Text.AlignRight : Text.AlignLeft
-                    shadowSoft: true
-                    shadowColor: overlays.textShadowColor
-                    shadowOffsetX: 0.0
-                    shadowOffsetY: overlays.textShadowOffset
-                }
-                MediaMetadataText {
-                    id: albumText
-                    objectName: "expandedOverlayAlbum"
-                    visible: nowPlayingSlot.albumShown
-                    readonly property real partScale: nowPlayingSlot.childWidthScale("album")
-                    transform: [
-                        Scale { id: albumScale; xScale: albumText.partScale; yScale: albumText.partScale },
-                        Translate {
-                            id: albumShift
-                            x: nowPlayingSlot.containX(
-                                   nowPlayingSlot.columnX + albumText.x + nowPlayingSlot.childOffsetX("album"),
-                                   albumText.width * albumText.partScale) - nowPlayingSlot.columnX - albumText.x
-                            y: nowPlayingSlot.containY(
-                                   nowPlayingSlot.columnY + albumText.y + nowPlayingSlot.childOffsetY("album"),
-                                   albumText.height * albumText.partScale) - nowPlayingSlot.columnY - albumText.y
-                        }
-                    ]
-                    readonly property string customEditMappingDependency: [albumScale.xScale, albumScale.yScale,
-                                                                          albumShift.x, albumShift.y].join(",")
-                    x: nowPlayingSlot.textRight("album") ? textColumn.width - width : 0.0
-                    y: artistText.y + artistText.height + textColumn.spacing
-                    width: Math.min(Math.ceil(implicitWidth), textColumn.width)
-                    height: visible ? implicitHeight : 0.0
-                    text: nowPlayingSlot.contentAlbum
-                    font.family: overlays.fontFamily
-                    font.pixelSize: Math.max(1, Math.round(nowPlayingSlot.fontSize * 0.74 * 0.82))
-                    font.italic: true
-                    maximumLineCount: nowPlayingSlot.metadataLines
-                    color: nowPlayingSlot.textColor
-                    opacity: 0.75
-                    horizontalAlignment: nowPlayingSlot.textRight("album") ? Text.AlignRight : Text.AlignLeft
-                    shadowSoft: true
-                    shadowColor: overlays.textShadowColor
-                    shadowOffsetX: 0.0
-                    shadowOffsetY: overlays.textShadowOffset
+                    readonly property string customEditMappingDependency: [groupScale.xScale, groupScale.yScale,
+                                                                          groupShift.x, groupShift.y].join(",")
+                    // The block's containment in the group's own coordinates (for the artist part inside it).
+                    function containLocalX(x, extent) {
+                        const origin = textGroup.originX + groupShift.x
+                        return Math.max((-nowPlayingSlot.padding - origin) / partScale,
+                                        Math.min((nowPlayingSlot.naturalWidth + nowPlayingSlot.padding - origin)
+                                                 / partScale - extent, x))
+                    }
+                    function containLocalY(y, extent) {
+                        const origin = nowPlayingSlot.columnY + groupShift.y
+                        return Math.max((-nowPlayingSlot.padding - origin) / partScale,
+                                        Math.min((nowPlayingSlot.naturalHeight + nowPlayingSlot.padding - origin)
+                                                 / partScale - extent, y))
+                    }
+                    onXChanged: overlays.noteEditGeometry()
+                    onYChanged: overlays.noteEditGeometry()
+                    onWidthChanged: overlays.noteEditGeometry()
+                    onHeightChanged: overlays.noteEditGeometry()
+
+                    MediaMetadataText {
+                        id: titleText
+                        objectName: "expandedOverlayTitle"
+                        // As wide as its text draws (up to the column, where it elides or wraps), on the group's side.
+                        width: Math.min(Math.ceil(implicitWidth), textGroup.width)
+                        x: nowPlayingSlot.textRight("metadata") ? textGroup.width - width : 0.0
+                        text: nowPlayingSlot.contentTitle
+                        font.family: overlays.fontFamily
+                        font.pixelSize: Math.max(1, Math.round(nowPlayingSlot.fontSize))
+                        font.weight: Font.DemiBold
+                        color: nowPlayingSlot.textColor
+                        maximumLineCount: nowPlayingSlot.titleLines
+                        horizontalAlignment: nowPlayingSlot.textRight("metadata") ? Text.AlignRight : Text.AlignLeft
+                        shadowSoft: true
+                        shadowColor: overlays.textShadowColor
+                        shadowOffsetX: 0.0
+                        shadowOffsetY: overlays.textShadowOffset
+                    }
+                    MediaMetadataText {
+                        id: artistText
+                        objectName: "expandedOverlayArtist"
+                        y: titleText.height + textColumn.spacing
+                        // A part inside the group (``artist``, the Media card's role): scaled whole and moved from its
+                        // row, on top of the group's own transform; kept inside the block.
+                        readonly property real partScale: nowPlayingSlot.childWidthScale("artist")
+                        transform: [
+                            Scale { id: artistScale; xScale: artistText.partScale; yScale: artistText.partScale },
+                            Translate {
+                                id: artistShift
+                                x: textGroup.containLocalX(artistText.x + nowPlayingSlot.childOffsetX("artist"),
+                                                           artistText.width * artistText.partScale) - artistText.x
+                                y: textGroup.containLocalY(artistText.y + nowPlayingSlot.childOffsetY("artist"),
+                                                           artistText.height * artistText.partScale) - artistText.y
+                            }
+                        ]
+                        readonly property string customEditMappingDependency: [
+                            artistScale.xScale, artistScale.yScale, artistShift.x, artistShift.y,
+                            groupScale.xScale, groupShift.x, groupShift.y].join(",")
+                        x: nowPlayingSlot.textRight("artist") ? textGroup.width - width : 0.0
+                        width: Math.min(Math.ceil(implicitWidth), textGroup.width)
+                        text: nowPlayingSlot.contentArtist
+                        maximumLineCount: nowPlayingSlot.metadataLines
+                        font.family: overlays.fontFamily
+                        font.pixelSize: Math.max(1, Math.round(nowPlayingSlot.fontSize * 0.74))
+                        color: nowPlayingSlot.textColor
+                        opacity: 0.88
+                        elide: Text.ElideRight
+                        horizontalAlignment: nowPlayingSlot.textRight("artist") ? Text.AlignRight : Text.AlignLeft
+                        shadowSoft: true
+                        shadowColor: overlays.textShadowColor
+                        shadowOffsetX: 0.0
+                        shadowOffsetY: overlays.textShadowOffset
+                    }
+                    MediaMetadataText {
+                        id: albumText
+                        objectName: "expandedOverlayAlbum"
+                        visible: nowPlayingSlot.albumShown
+                        x: nowPlayingSlot.textRight("metadata") ? textGroup.width - width : 0.0
+                        y: artistText.y + artistText.height + textColumn.spacing
+                        width: Math.min(Math.ceil(implicitWidth), textGroup.width)
+                        height: visible ? implicitHeight : 0.0
+                        text: nowPlayingSlot.contentAlbum
+                        font.family: overlays.fontFamily
+                        font.pixelSize: Math.max(1, Math.round(nowPlayingSlot.fontSize * 0.74 * 0.82))
+                        font.italic: true
+                        maximumLineCount: nowPlayingSlot.metadataLines
+                        color: nowPlayingSlot.textColor
+                        opacity: 0.75
+                        horizontalAlignment: nowPlayingSlot.textRight("metadata") ? Text.AlignRight : Text.AlignLeft
+                        shadowSoft: true
+                        shadowColor: overlays.textShadowColor
+                        shadowOffsetX: 0.0
+                        shadowOffsetY: overlays.textShadowOffset
+                    }
                 }
                 // Seek Bar (plan 1B.7g, default off): the Media card's one seek bar (MediaSeekBar.qml), its look the
                 // Media model's (seekBarLook), its position the model's own timeline events (no timer here), its seeks
@@ -729,11 +794,14 @@ Item {
                     objectName: "expandedOverlaySeekBar"
                     readonly property var model: overlays.mediaModel
                     visible: nowPlayingSlot.seekShown
-                    x: nowPlayingSlot.containX(nowPlayingSlot.columnX + nowPlayingSlot.childOffsetX("seek_bar"), width)
+                    // It follows the text group's width and horizontal place (plan 1C.3: the group moved or scaled, the
+                    // bar spans it), on its own row under the metadata; its own record moves and sizes it on top.
+                    x: nowPlayingSlot.containX(textGroup.originX + groupShift.x
+                                               + nowPlayingSlot.childOffsetX("seek_bar"), width)
                        - nowPlayingSlot.columnX
                     y: nowPlayingSlot.containY(nowPlayingSlot.columnY + textColumn.seekRowY
                                                + nowPlayingSlot.childOffsetY("seek_bar"), height) - nowPlayingSlot.columnY
-                    width: Math.max(1.0, Math.round(textColumn.width * nowPlayingSlot.childWidthScale("seek_bar")))
+                    width: Math.max(1.0, Math.round(textGroup.drawnWidth * nowPlayingSlot.childWidthScale("seek_bar")))
                     height: Math.max(1.0, Math.round(nowPlayingSlot.seekHeight * nowPlayingSlot.childHeightScale("seek_bar")))
                     fraction: !!model && isFinite(Number(model.progressFraction)) ? Number(model.progressFraction) : 0.0
                     seekEnabled: nowPlayingSlot.interactive && !!model && model.canSeek === true

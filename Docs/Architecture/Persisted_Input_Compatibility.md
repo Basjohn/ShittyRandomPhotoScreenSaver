@@ -223,6 +223,37 @@ without the safe path below.
   handles between 8 and 11 Nov 2026).
   *Blocked:* reading the factors in QML again (a second artwork size carrier), or renaming the persisted key.
 
+- **Now Playing's retired text-line parts** (`core/settings/fullscreen_overlays.py`, `_bridge_text_group`, inside
+  `normalize_now_playing_children`, which the one normaliser `normalize_fullscreen_overlays` calls; plan 1C.3,
+  2026-11-12). `widgets.spotify_visualizer.fullscreen_overlays.now_playing.child_geometry` once held records for the
+  `title` and `album` lines as parts of their own. They are now one text group part, `metadata` (the Media card's
+  role). A stored `title` record (offset, scale, alignment, anchor) becomes the `metadata` record when the value has
+  none (the title led the text and carried the block's flip and corner pin); an `album` record is dropped (the album
+  moves with the group); every other record and member is kept; a value without them is unchanged, so a second load
+  does nothing. Not bridged (unchanged members, compatible by construction): `text_width` now measures the block's
+  width beyond its natural artwork column, which is exactly the text box a 1B.7 value set beside a natural artwork,
+  so the block draws the same width (the artwork inside it is now reshaped by the Media artwork rule); `text_height` is now the block's height (a 1B.7 value at or above the natural
+  artwork height draws the same block; one below it, which drew nothing under 1B.7, now shrinks the block and its
+  artwork). Tests:
+  `tests/test_visualizer_expansion_overlay_settings.py::test_a_raw_profile_file_with_the_text_line_parts_loads_them_into_the_text_group`
+  with the raw old file `tests/fixtures/fullscreen_overlays_now_playing_text_lines_profile.json` (remove both with
+  the bridge), and the saved-profile load test in `tests/test_visualizer_expansion_fullscreen_edit.py`.
+  *Horizon:* until the operator closes it (the records exist only in profiles that used Fullscreen Edit's child
+  editing between 8 and 12 Nov 2026).
+  *Blocked:* re-adding `title` / `album` as roles beside the group (two owners of one line's place), or renaming the
+  persisted key or the `metadata` role.
+- **Now Playing's block base** (`core/settings/fullscreen_overlays.py`, `_bridge_base_width`, inside the one
+  normaliser; plan 1C.3, 12 Nov 2026). Since 12 Nov the Media artwork rule measures Now Playing's width share against
+  `now_playing.base_width`, the block's width stored once at its first size gesture in Fullscreen Edit (so that first
+  sample moves nothing). Fullscreen Edit never writes a set block width (`text_width`) without a base. A value with a
+  set width and no base (the member missing or zero) was written before it: by 1B.7 (the text box) or by the first
+  1C.3 rule, which measured against the natural artwork, the gap and the text's minimum room. Its base is that
+  reference (`now_playing_text_room`: 2.5 ems, or the Media Controls bar's width, with the QML's pixel rounding), so
+  it draws exactly what that rule drew; a second load changes nothing. Tests: the bridge asserts in
+  `tests/test_visualizer_expansion_overlay_settings.py::test_a_raw_profile_file_with_the_text_line_parts_loads_them_into_the_text_group`
+  (the same raw fixture) and the drawn check in the saved-profile load test of
+  `tests/test_visualizer_expansion_fullscreen_edit.py`. *Horizon:* until the operator closes it.
+  *Blocked:* treating a set width without a base as an edited block (its artwork would step on the next touch).
 - **Visualizer preset references** (`core/settings/visualizer_preset_indices.py`, `preset_references` beside
   the `preset_<mode>` indices; plan 1C.1, 12 Nov 2026; R-190). A stored preset is the slot index plus the preset's
   identity (its authored name without the slot number), a signature of the catalogue it was chosen from and the

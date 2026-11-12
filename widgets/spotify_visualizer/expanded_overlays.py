@@ -43,6 +43,9 @@ def resolve_expanded_overlay_config(section: Mapping[str, Any] | None, *, card_t
             "textWidth": float(options["text_width"]),
             "textHeight": float(options["text_height"]),
         }
+        if "base_width" in options:
+            # Now Playing's block width at its first edit (the Media artwork rule's reference; 0 = never edited).
+            projected["baseWidth"] = float(options["base_width"])
         if "media_controls" in options:
             projected["mediaControls"] = bool(options["media_controls"])
             projected["mediaControlsStyle"] = str(options["media_controls_style"])

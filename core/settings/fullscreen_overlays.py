@@ -13,14 +13,24 @@ child record (plan 1B.7d; the retired ``artwork_scale`` / ``artwork_width`` / ``
 edits exactly these placement values: the offsets, the scales and the single-axis extents below. The corner is Settings'
 (the anchor); changing it rebases the offset (:func:`rebase_offset_for_corner`).
 
-Single-axis sizing (Fullscreen Edit's side handles, ordinary Edit's content box; plan 1B.7b): each overlay's parent
-edits its text box, ``text_width`` / ``text_height`` in ems of its font size (``0`` = natural), as the Media card's
-content extent reflows its content; the artwork's size is its child record's alone. Individual artwork, metadata and control child geometry remains separately editable. No resize changes a curated
-Visualizer preset.
+Single-axis sizing (Fullscreen Edit's side handles, ordinary Edit's content box; plan 1B.7b, 1C.3): each overlay's
+parent edits its box in ems of its font size (``0`` = natural), as the Media card's content extent reflows its content.
+The preset toast's box is its text (``text_width`` / ``text_height``). Now Playing's box is its whole block (plan 1C.3,
+operator 11 Nov: "X/Y artwork should adjust, media does this well"): ``text_height`` is the block's height and
+``text_width`` its width beyond the natural artwork column (the artwork's natural side and the gap; a value written
+when it set the text box beside a natural artwork draws the same block width), and the artwork and the text reflow in
+it by the Media card's one artwork rule (``rendering/quick/qml/MediaArtworkRule.js``); the artwork child record
+multiplies on top. The rule's width share is measured against ``base_width`` (same unit as ``text_width``): the
+block's width at the first edit gesture on it (a side handle, a corner, the wheel), stored once by Fullscreen Edit
+together with the block's height at that instant, so that first sample moves nothing and later gestures change the
+artwork from there, never from the current track's text (lead, 12 Nov). ``0`` = never edited: the natural block, which
+hugs its text beside a natural artwork. Restore Size returns all three to ``0``. Individual artwork, metadata and
+control child geometry remains separately editable. No resize changes a curated Visualizer preset.
 
 Now Playing's parts (Fullscreen Edit's child editing, operator 8 Nov: "I should be able to move every element around in
 that block and change it"): ``now_playing.child_geometry`` is ordinary Edit's CUSTOM ``child_geometry`` carrier for the
-block's children (:data:`NOW_PLAYING_CHILD_ROLES`: the artwork, title, artist, optional album and Media Controls bar),
+block's children (:data:`NOW_PLAYING_CHILD_ROLES`: the artwork, the text group, the artist line inside it, and the
+optional Media Controls bar and Seek Bar),
 one record per moved or sized part (``width_scale``/``height_scale`` of its own drawn size, ``x_offset``/``y_offset``
 in fractions of :data:`CHILD_NORMALIZATION_EMS` ems of the overlay's font); ``{}`` (the canonical default) is today's
 layout, so a value stored before it reads as it always drew (no bridge). It is parsed by ordinary Edit's own
@@ -64,27 +74,30 @@ SCALE_KEYS = ("scale",)
 #: Retired Now Playing members (plan 1B.7d: one artwork size carrier, its ``artwork`` child record). A stored value
 #: that still has them loads through :func:`_bridge_artwork_factors` (Docs/Architecture/Persisted_Input_Compatibility.md).
 LEGACY_ARTWORK_FACTOR_KEYS = ("artwork_scale", "artwork_width", "artwork_height")
-#: Text-box extents in ems (0 = natural): each overlay's parent side handles edit them (ordinary Edit's content box).
+#: Box extents in ems (0 = natural): each overlay's parent side handles edit them (ordinary Edit's content box): the
+#: preset toast's text box, Now Playing's block (its height; its width beyond the natural artwork column).
 TEXT_EXTENT_KEYS = ("text_width", "text_height")
 TEXT_EXTENT_MAX = 60.0
+#: Now Playing's block width at its first edit (ems beyond its natural artwork column; 0 = never edited): the Media
+#: artwork rule's reference for the block's width (plan 1C.3, lead 12 Nov).
+BASE_WIDTH_KEY = "base_width"
 #: Now Playing's per-part geometry member (ordinary Edit's CUSTOM ``child_geometry`` carrier).
 CHILD_GEOMETRY_KEY = CUSTOM_CHILD_GEOMETRY_PAYLOAD_KEY
 #: Now Playing's children in Fullscreen Edit (ordinary Edit's child-role descriptors, mirroring the Media card's): the
-#: artwork is ordinary Edit's freeform artwork frame (free X/Y, the image cropped); the title and the artist line scale
-#: uniformly (their text keeps its shape, as the Media card's metadata and artist do); the Media Controls bar sizes
-#: freely on each axis (as the Media card's transport controls). Every one moves. Alignment is declared as on the Media
-#: card (plan 1B.7c): the title, like Media's header, carries the block's one orientation (``alignment_flip``: its record's
-#: ``alignment`` flips the corner's authored side) and its ``semantic_corner_anchor``; the artist and album lines flip
-#: their own text alignment on top of that orientation (Media's metadata and artist).
+#: artwork is ordinary Edit's freeform artwork frame (free X/Y, the image cropped); the text group (``metadata``, the
+#: Media card's role and limits; plan 1C.3: the title, artist and album lines in one box that moves and scales as one)
+#: and the artist line inside it (the Media card's ``artist``) scale uniformly; the Media Controls bar sizes freely on
+#: each axis (as the Media card's transport controls). Every one moves. Alignment is declared as on the Media card: the
+#: group's record (``alignment_flip``) is the explicit flip on top of the block's side of the display, and it carries the
+#: ``semantic_corner_anchor`` (as Media's header); the artist line flips its own text alignment on top of that. The
+#: title and album have no part of their own (Media has none); their records from before 1C.3 load through
+#: :func:`_bridge_text_group`.
 NOW_PLAYING_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
     freeform_artwork_child_role("artwork", minimum_scale=(0.40, 0.40), maximum_scale=(3.00, 3.00), movable=True),
-    CustomChildRoleDescriptor("title", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
-                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True, alignment_flip=True,
+    CustomChildRoleDescriptor("metadata", axes=("horizontal", "vertical"), minimum_scale=(0.55, 0.55),
+                              maximum_scale=(1.90, 1.90), uniform_scale=True, movable=True, alignment_flip=True,
                               authored_alignment="left", semantic_corner_anchor=True),
     CustomChildRoleDescriptor("artist", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
-                              maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True, alignment_flip=True,
-                              authored_alignment="left"),
-    CustomChildRoleDescriptor("album", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
                               maximum_scale=(2.50, 2.50), uniform_scale=True, movable=True, alignment_flip=True,
                               authored_alignment="left"),
     CustomChildRoleDescriptor("controls", axes=("horizontal", "vertical"), minimum_scale=(0.50, 0.50),
@@ -98,7 +111,8 @@ NOW_PLAYING_CHILD_ROLES: tuple[CustomChildRoleDescriptor, ...] = (
 CHILD_NORMALIZATION_EMS = 10.0
 #: The placement members Fullscreen Edit writes, per overlay (the corner is Settings').
 PLACEMENT_KEYS = {"preset": ("offset_x", "offset_y", "scale", "text_width", "text_height"),
-                  "now_playing": ("offset_x", "offset_y", "scale", "text_width", "text_height", CHILD_GEOMETRY_KEY),
+                  "now_playing": ("offset_x", "offset_y", "scale", "text_width", "text_height", BASE_WIDTH_KEY,
+                                  CHILD_GEOMETRY_KEY),
                   VOLUME_OSD_ID: ("offset_x", "offset_y", "scale")}
 
 _TRUE = frozenset({"1", "true", "yes", "on"})
@@ -179,10 +193,11 @@ def normalize_fullscreen_overlays(value: Any, application: str | None = None) ->
                 target[key] = _number(item, float(default), OFFSET_MIN, OFFSET_MAX)
             elif key in SCALE_KEYS:
                 target[key] = _number(item, float(default), SCALE_MIN, SCALE_MAX)
-            elif key in TEXT_EXTENT_KEYS:
+            elif key in TEXT_EXTENT_KEYS or key == BASE_WIDTH_KEY:
                 target[key] = _number(item, float(default), 0.0, TEXT_EXTENT_MAX)
         if overlay == "now_playing":
             _bridge_artwork_factors(raw, target)
+            _bridge_base_width(raw, target, float(result["font_size"]))
     return result
 
 
@@ -208,12 +223,60 @@ def _bridge_artwork_factors(raw: Mapping[str, Any], target: dict[str, Any]) -> N
     target[CHILD_GEOMETRY_KEY] = normalize_now_playing_children(children)
 
 
+def now_playing_text_room(font_size: float, scale: float, media_controls: bool) -> float:
+    """The text's minimum room beside Now Playing's artwork, in ems of the block's font (the QML's ``textRoom``: 2.5
+    ems, or the Media Controls bar's width when shown; its pixel rounding reproduced, so the value is exact)."""
+
+    size = max(1.0, float(font_size) * max(SCALE_MIN, min(SCALE_MAX, float(scale))))
+    minimum = float(round(size * 2.5))
+    if media_controls:
+        bar_height = max(16.0, float(round(size * 0.74 * 1.44)))
+        minimum = max(minimum, float(round(bar_height * 6.0)) + 2.0)
+    return minimum / size
+
+
+def _bridge_base_width(raw: Mapping[str, Any], target: dict[str, Any], font_size: float) -> None:
+    """Load bridge (plan 1C.3, 12 Nov): a Now Playing value with a set block width but no ``base_width`` was written
+    before the base existed (1B.7's text box, or 1C.3's first rule, which measured the share against the natural
+    artwork, the gap and the text's minimum room). Its base is that reference, so it draws exactly what that rule drew.
+    Fullscreen Edit never writes a set width without a base (its first size gesture stores both), so a set width with
+    no base (the member missing or zero) is always such a value. A value with a base, or without a set width, is
+    unchanged (a second load does nothing)."""
+
+    if float(target.get(BASE_WIDTH_KEY, 0.0)) > 0.0 or float(target.get("text_width", 0.0)) <= 0.0:
+        return
+    room = now_playing_text_room(font_size, float(target.get("scale", 1.0)), bool(target.get("media_controls")))
+    target[BASE_WIDTH_KEY] = round(min(TEXT_EXTENT_MAX, room), 4)
+
+
+#: Now Playing's text-line parts before plan 1C.3 grouped them: the title's record becomes the group's, the album's is
+#: dropped (:func:`_bridge_text_group`).
+RETIRED_TEXT_ROLES = ("title", "album")
+
+
+def _bridge_text_group(raw: Any) -> Any:
+    """Load bridge (plan 1C.3): before the text group, the title and album lines were parts of their own. The title
+    led the text and carried the block's flip and corner pin, so its record (offset, scale, alignment, anchor) becomes
+    the group's (``metadata``) when the value has none: the whole group goes where the title went and keeps its flip.
+    The album's own placement has no part any more and is dropped (it moves with the group). A value without them is
+    returned unchanged, so a second load does nothing."""
+
+    if not isinstance(raw, Mapping) or not any(role in raw for role in RETIRED_TEXT_ROLES):
+        return raw
+    bridged = {key: value for key, value in raw.items() if key not in RETIRED_TEXT_ROLES}
+    title = raw.get("title")
+    if "metadata" not in bridged and isinstance(title, Mapping):
+        bridged["metadata"] = dict(title)
+    return bridged
+
+
 def normalize_now_playing_children(raw: Any) -> dict[str, dict[str, Any]]:
     """Now Playing's ``child_geometry`` as stored: ordinary Edit's parse (known roles, clamped, authored records
-    omitted), each record in its canonical mapping form."""
+    omitted), each record in its canonical mapping form; records of the retired text-line parts load through
+    :func:`_bridge_text_group`."""
 
     return {role_id: size.to_mapping()
-            for role_id, size in normalize_child_geometry(raw, NOW_PLAYING_CHILD_ROLES).items()}
+            for role_id, size in normalize_child_geometry(_bridge_text_group(raw), NOW_PLAYING_CHILD_ROLES).items()}
 
 
 def rebase_offset_for_corner(options: Mapping[str, Any], corner: str) -> dict[str, Any]:
@@ -276,6 +339,7 @@ def volume_osd_rect(authored: tuple[float, float, float, float], safe: tuple[flo
 
 
 __all__ = [
+    "BASE_WIDTH_KEY",
     "CHILD_GEOMETRY_KEY",
     "CHILD_NORMALIZATION_EMS",
     "CORNERS",
@@ -293,10 +357,12 @@ __all__ = [
     "TEXT_EXTENT_KEYS",
     "TEXT_EXTENT_MAX",
     "NOW_PLAYING_CHILD_ROLES",
+    "RETIRED_TEXT_ROLES",
     "VOLUME_OSD_ID",
     "canonical_fullscreen_overlays",
     "normalize_fullscreen_overlays",
     "normalize_now_playing_children",
+    "now_playing_text_room",
     "rebase_offset_for_corner",
     "volume_osd_anchor",
     "volume_osd_rect",

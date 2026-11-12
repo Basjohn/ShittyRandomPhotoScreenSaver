@@ -168,7 +168,12 @@ def test_media_authored_xy_reflow_survives_child_editor_and_visibility_gates() -
     assert "canonicalProgressTrackWidth\n            + (authoredCardContentWidth - canonicalCardContentWidth) * 0.75" in qml
     assert "width: mediaRoot.authoredProgressTrackWidth\n" in qml
     assert "width: mediaRoot.authoredCardContentWidth\n" in qml
-    assert "baseArtworkWidth + extraHorizontalRoom * 0.35" in qml
+    # The artwork's width share lives in the one Media artwork rule (plan 1C.3: Now Playing draws it too).
+    assert "ArtworkRule.provisionalWidth(\n                    baseArtworkWidth, extraHorizontalRoom," in qml
+    rule = _text("rendering/quick/qml/MediaArtworkRule.js")
+    assert "var widthShare = 0.35" in rule and "baseWidth + extraWidth * widthShare" in rule
+    # The Media card's own spec: its artwork is never wider than tall (Now Playing's spec may differ; one rule).
+    assert "provisionalArtworkWidth, referenceHeight, 1.0\n" in qml
     assert "mediaRoot.authoredCardWidth - mediaRoot.canonicalPreferredCardWidth" in qml
     assert "readonly property real normalBottomInColumn: controlsBandSlot.visible" in qml
     assert "readonly property real bottomInColumn: seekWouldIntersectArtwork" in qml

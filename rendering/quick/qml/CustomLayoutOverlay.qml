@@ -3044,10 +3044,17 @@ Item {
                                 const occupied = occupiedRectAt(
                                     frame, rect.x, rect.y, rect.width, rect.height
                                 )
-                                const inside = occupied.x >= bounds.x - 0.0001
-                                    && occupied.y >= bounds.y - 0.0001
-                                    && occupied.x + occupied.width <= bounds.x + bounds.width + 0.0001
-                                    && occupied.y + occupied.height <= bounds.y + bounds.height + 0.0001
+                                // Half a pixel (and a hair): the Edit frame is the parent's
+                                // rectangle rounded to whole pixels while the parent may sit at
+                                // a fractional place, so a child flush with the parent's edge
+                                // (Now Playing's full-height artwork) reads up to half a pixel
+                                // outside the frame. A tighter bound took that for an existing
+                                // protrusion and froze the resize at its start (plan 1C.3).
+                                const slack = 0.51
+                                const inside = occupied.x >= bounds.x - slack
+                                    && occupied.y >= bounds.y - slack
+                                    && occupied.x + occupied.width <= bounds.x + bounds.width + slack
+                                    && occupied.y + occupied.height <= bounds.y + bounds.height + slack
                                 if (!inside || !frame.centeredResize)
                                     return inside
                                 // The clock face grows on both sides at once.

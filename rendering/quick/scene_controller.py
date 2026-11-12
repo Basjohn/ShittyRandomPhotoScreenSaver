@@ -1454,7 +1454,10 @@ class QuickSceneController(QObject):
         stage = self._expanded_overlay_stage()
         if stage is None:
             return None
-        target = overlay.item
+        try:
+            target = overlay.item
+        except RuntimeError:
+            return None         # the Edit layer retired with the scene (a late geometry report reads nothing)
 
         def rect(item: QQuickItem) -> tuple[float, float, float, float]:
             mapped = item.mapRectToItem(target, QRectF(0.0, 0.0, item.width(), item.height()))
@@ -1476,16 +1479,20 @@ class QuickSceneController(QObject):
         text = stage.findChild(QQuickItem, "expandedOverlayNowPlayingText")
         if text is None:
             return None
-        # The toast's side handles set text extents. Now Playing's parent handles instead size its actual
-        # artwork border; its text box and authored artwork dimensions are reported separately for the editor.
+        # The side handles' box per overlay (``text``: what its ``text_width`` / ``text_height`` measure) and what its
+        # frame holds beside that box horizontally (``beside``). The toast's box is its text. Now Playing's is its
+        # content box (plan 1C.3): its height, and its width beyond the natural artwork column (the artwork's natural
+        # side and the gap), inside which the Media artwork rule reflows the artwork and the text group.
         for name, slot in slots.items():
             x, y, width, height = slot["rect"]
             pad = slot["padding"]
             slot["text"] = (x + pad, y + pad, max(0.0, width - 2.0 * pad), max(0.0, height - 2.0 * pad))
             slot["beside"] = 0.0
         now_playing = stage.findChild(QQuickItem, "expandedOverlayNowPlaying")
-        slots["now_playing"]["text"] = rect(text)
-        slots["now_playing"]["beside"] = float(now_playing.property("artWidth")) + float(now_playing.property("gap"))
+        column = float(now_playing.property("artBase")) + float(now_playing.property("gap"))
+        x, y, width, height = slots["now_playing"]["text"]
+        slots["now_playing"]["text"] = (x + column, y, max(0.0, width - column), height)
+        slots["now_playing"]["beside"] = column
         slots["now_playing"]["artwork_size"] = (float(now_playing.property("artWidth")),
                                                    float(now_playing.property("artHeight")))
         # The Edit parts: the preset toast and Now Playing's block (its whole overlay; its parts are the block's
