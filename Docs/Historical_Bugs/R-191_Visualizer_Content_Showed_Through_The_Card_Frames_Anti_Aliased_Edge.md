@@ -1,4 +1,4 @@
-# R-NEW | Visualizer content lay under the card frame's anti-aliased inner edge, so bright lines read as reaching into the border
+# R-191 | Visualizer content lay under the card frame's anti-aliased inner edge, so bright lines read as reaching into the border
 
 **Status:** fixed 12 Nov 2026 (plan 1C.4; commits 938aee6f, d1b989b4). The Visualizer clip now ends one device pixel
 (the frame's anti-aliasing width) inside the frame's inner edge as Qt Quick draws it:

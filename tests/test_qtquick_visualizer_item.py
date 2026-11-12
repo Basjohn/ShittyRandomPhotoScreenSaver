@@ -109,6 +109,37 @@ def test_clip_frame_uses_item_local_inner_chrome_geometry(dpr, border) -> None:
     assert frame.viewport == (0, 0, 2880, 1620)
 
 
+def test_clip_path_is_resolved_once_per_record_at_sync_never_per_frame(monkeypatch) -> None:
+    from rendering.quick.visualizer import clip_host
+
+    calls = []
+    resolve = clip_host.resolve_card_clip_path
+
+    def counting(presentation):
+        calls.append(presentation)
+        return resolve(presentation)
+
+    monkeypatch.setattr(clip_host, "resolve_card_clip_path", counting)
+    node = VisualizerRenderNode()
+    first, second = _presentation(), _presentation(scale=0.8)
+    for _ in range(3):
+        node.synchronize(identity=None, snapshot=None, presentation=first)
+    assert calls == [first]
+    node.synchronize(identity=None, snapshot=None, presentation=second)
+    assert calls == [first, second]
+
+    # The render path builds its clip frame from the geometry resolved at sync, without resolving again.
+    geometry = VisualizerClipFrame.local_geometry(second)
+    del calls[:]
+    frame = VisualizerClipFrame.from_presentation(
+        second, matrix_values=tuple(float(index) for index in range(16)), viewport=(0, 0, 10, 10),
+        local_geometry=geometry)
+    assert calls == []
+    assert (frame.logical_size, frame.local_content_rect, frame.inner_corner_radius) == geometry
+    source = inspect.getsource(VisualizerRenderNode.render)
+    assert "local_geometry=self._clip_geometry" in source
+
+
 def test_frameless_clip_is_its_content_rect() -> None:
     from core.settings.visualizer_mode_registry import (
         VisualizerClipPolicy, VisualizerModePresentationPolicy, VisualizerShellPolicy,
