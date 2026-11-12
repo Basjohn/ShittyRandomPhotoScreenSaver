@@ -364,10 +364,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     platform plugin are unread there). Placed: SMP's audio sink period and cover-art key in plan 02 section 4.1 and
     5.2; the SMP desktop window's backdrop call in N0.6. Checks on 6.12 (the venv moved on 12 Nov; Display 1 was
     off at the time, so the D1 part waits for it):
-    - [ ] Colour: Qt 6.12 takes the screen colour space from the display's ICC profile. A D1 run on Display 1 with
-      the 6.11.2 run's recipe (`20261112_devcurve_card_edge_whole_logical`): the wallpaper, card and border colours
-      in the grabbed frame and the DWM composite equal the 6.11.2 run's within the run-to-run floor, or the change
-      is understood and recorded (a wide-gamut display is the case to watch).
+    - Colour and card edges on Qt 6.12, lead's D1 run 12 Nov (`20261112_qt612_card_edge` against 6.11.2's
+      `20261112_devcurve_card_edge_whole_logical`): every card edge still 8 solid border pixels, nothing blended, and
+      the authored border colour exactly `#d2b2ff` in both (no ICC remap of an authored colour on this display).
     - [ ] Text: DirectWrite now reads a font's GASP table to choose antialiasing. Compare text crops (a widget title
       and body text, the Settings dialog via the offscreen render route) before and after; a visible change in
       weight or crispness is recorded and judged by the lead.
@@ -1006,11 +1005,16 @@ in `Docs/Guardrails/Presentation_Change_Preflight.md` ("Retarget before rebuild"
 `.artifacts/evidence/visualizers/expanded/20261112_1c2_root_cause/`. Teardown remains only for a display
 arrangement change, a display added or removed, the owning display lost, Settings, and corrupted-object recovery.
 
-- [ ] Lead, when two displays are connected (12 Nov only the LG TV was): the `d1_run.py --with-hidden-display 0`
-  move recipe in `--help`, first with `--hidden`, then visible on Display 1; frames across the 0.5 s fade reviewed
-  (no blank card, no pop, the music response continuous); Extruded Bubble and Spectrum, both directions.
-- [ ] Is the 1.5 s preparation bound enough for Extruded Bubble on real hardware? Measure on the D1 run (the test
-  needed more than 40 frames); a slow target goes ahead and finishes on its first visible frame.
+- Lead's two-display runs, 12 Nov (Extruded Bubble, display-wide on the MSI, the up-right glyph to the TV; the
+  operator allowed Display 0 for this test; its window stayed invisible): the move works with no rebuild (the session
+  commits in place, "Display move landed screen=1"; the view ends display-wide on Display 1 and the MSI shows its
+  wallpaper). Evidence `.artifacts/evidence/display/d1_run/20261112_1c2_move_hidden/` and `20261112_1c2_move_visible/`.
+  The recipe needs a profile whose `monitor_bindings.spotify_visualizer.screen` names the MSI (an identity binding
+  outranks `monitor`; `d1_run.py --setting` cannot set it): the lead's copy is `D:/Temp/Scratch/SRPSS/profile_move/`.
+- [ ] Defect (in flight, Opus Medium): the move takes about 7 s from press to landing (design: 0.5 s fade, target
+  prepared within 1.5 s) and the render threads stall during it (grabs asked 0.7 s apart came back 4.5 s apart): root
+  cause with numbers, fix at the owners (preparation in small units over already-rendered frames), measure on hidden
+  hosts, then the lead's visible rerun.
 - Landed 12 Nov: the neighbouring display prepares on the transfer arrows' hover (Edit's and the hover glyph's) and
   on a Visualizer drag within one card width of the seam, released on leave, turn-back, drag end, Edit end or
   retirement (edges only); a preparing card takes no input (`prepareOnly`, the scene's hit test refuses it) and
@@ -1023,12 +1027,13 @@ arrangement change, a display added or removed, the owning display lost, Setting
     before and after its renderer is prepared.
   - [ ] Stop feeding at the "prepared" edge (the renderer is kept, nothing is redrawn until the hop or the release);
     guard: zero updates of the prepared item across steady frames once prepared (negative control: today's feed).
-- [ ] One test that renders the hop through the real owner and asserts the target's first visible frame reuses the
-  prepared renderer (today proved in two halves: the hop takes the prepared item; the GPU test shows the renderer
-  survives the take-over).
-- [ ] Fullscreen Edit with pixel shift active: a test (only ordinary Edit has one).
-- [ ] Side defect: `tests/test_visualizer_hover_transfer_native.py` shows a small window on screen: convert it to the
-  invisible-window pattern (`tests/_invisible_windows.py`) so no test shows a window.
+- Landed 12 Nov (visible-window audit): every test window goes through `tests/_invisible_windows.py`; 7 test sites and
+  two smoke tools converted; `tests/test_no_visible_test_windows.py` forbids any other route; the hop-renders-prepared
+  test and Fullscreen Edit under pixel shift landed with it.
+- [ ] Side defect: `tests/test_visualizer_hover_transfer_native.py:61` pins UI wording (`activeTip == "MOVE TO NEXT
+  DISPLAY"`): assert the tip's structure (non-empty, from the glyph's own source), never the wording.
+- [ ] Side defect: `tests/test_settings_undo.py:63` and `:132`: four tests skip ("no steppable NoWheelSlider on the
+  page", "no colour swatch on the page"), so they prove nothing: give them a page that has the controls.
 - [ ] PyOpenGL's `GL_TIMEOUT_IGNORED` has the wrong value (`glWaitSync` rejects it): the move uses the GL spec's
   value; record it where GL constants are shared so nothing else takes PyOpenGL's.
 
