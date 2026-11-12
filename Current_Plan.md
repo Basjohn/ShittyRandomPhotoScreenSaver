@@ -412,8 +412,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 
 **N2. The substrate's 2D half and Spectrum (C++; `native/spike_p1` stays evidence, never a shipped renderer)**
 
-- [ ] N2.1 leftovers: the native core's MSVC runtime check runs after the module is imported; it refuses before
-  import (read the PE imports from the file, then load), with a test whose negative control loads first.
 - [ ] N2.2 The host interface and the frame driver (D5.1, D5.2): the Qt Quick host and the hidden host; all core
   work recorded on `beforeRendering` through a C++ connection; the thread probe reports zero Python thread
   states.

@@ -48,6 +48,9 @@ def test_the_built_module_imports_no_stl_dll_and_a_runtime_new_enough(core):
     imports = runtime_check.read_imports(core.path)
     assert not [dll for dll in imports if dll.startswith(runtime_check.STL_PREFIX)]
     assert runtime_check.check_module(core.path, core.info["msc_full_ver"]) == []
+    # The check before the import reads the linker's toolset from the file: the compiler's, for the built module.
+    assert runtime_check.linker_toolset(core.path) == runtime_check.toolset_of(core.info["msc_full_ver"])
+    assert runtime_check.check_file(core.path) == []
     assert {"qt6core.dll", "qt6quick.dll"} <= set(imports)        # the host entry really binds Qt Quick
 
 

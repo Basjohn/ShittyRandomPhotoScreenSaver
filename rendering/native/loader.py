@@ -7,7 +7,8 @@ A missing or wrong module fails here, in one place, with one reason (``NativeCor
 - the Qt it was compiled for, the Qt it runs on and PySide6's Qt are not one version;
 - its ABI is not the one this package speaks (``EXPECTED_ABI``; ``native/core/src/abi.h``);
 - the CPython stable ABI it was built for is newer than this interpreter;
-- its MSVC runtime arrangement is unsupported (``runtime_check``).
+- its MSVC runtime arrangement is unsupported (``runtime_check``): read from the file before the import, so such a
+  module never runs code here, and checked again after it with the compiler version the module reports.
 
 Where it is loaded from: by default the package itself (``rendering/native/_srpss_native_core.pyd``, where the product
 build places it and where a frozen build carries it); tools and tests name a folder instead (``module_dir``, for
@@ -90,6 +91,52 @@ def _bind_pyside6_qt() -> str:
     return QtCore.qVersion()
 
 
+def _module_file(module_dir: Path | None) -> Path | None:
+    """The file the import will load, found without importing it; None when the module is already in this process
+    (there is nothing left to refuse before its import)."""
+    if module_dir is None:
+        if PACKAGE_MODULE in sys.modules:
+            return None
+        try:
+            spec = importlib.util.find_spec(PACKAGE_MODULE)
+        except (ImportError, ValueError) as exc:
+            raise NativeCoreUnavailable(f"{MODULE_NAME} cannot be imported: {exc}") from exc
+        if spec is None:
+            raise NativeCoreUnavailable(
+                f"{MODULE_NAME} cannot be imported: no {MODULE_NAME}.pyd in {Path(__file__).resolve().parent}")
+        if not spec.origin or not Path(spec.origin).is_file():
+            raise NativeCoreUnavailable(f"{MODULE_NAME} cannot be imported: the import system names no file for it "
+                                        f"({spec.origin!r}), so its MSVC runtime cannot be checked first")
+        return Path(spec.origin)
+    folder = Path(module_dir)
+    candidates = sorted(folder.glob(f"{MODULE_NAME}*.pyd")) if folder.is_dir() else []
+    if not candidates:
+        raise NativeCoreUnavailable(f"the native core is not built: no {MODULE_NAME}.pyd in {folder}")
+    return None if MODULE_NAME in sys.modules else candidates[0]
+
+
+def _refuse_by_runtime(problems_of) -> None:
+    """The MSVC runtime refusal, before or after the import: the first problem is the one reason."""
+    try:
+        problems = problems_of()
+    except (OSError, ValueError) as exc:
+        problems = [f"its MSVC runtime cannot be checked: {exc}"]
+    if problems:
+        raise NativeCoreUnavailable(f"{MODULE_NAME}'s MSVC runtime: {problems[0]}")
+
+
+def _check_before_import(path: Path) -> None:
+    """The runtime rule from the file alone (``runtime_check.check_file``), so a module it refuses is never imported:
+    importing runs the module's code (its ``DllMain``, its static initialisers, ``PyInit``) in this process."""
+    try:
+        problems = runtime_check.check_file(path)
+    except (OSError, runtime_check.PeFormatError) as exc:   # not a readable image: Windows could not load it either
+        raise NativeCoreUnavailable(f"{MODULE_NAME} cannot be imported: {exc}") from exc
+    except ValueError as exc:                               # an image, but not linked by an MSVC 14.x toolset
+        problems = [f"its MSVC runtime cannot be checked: {exc}"]
+    _refuse_by_runtime(lambda: problems)
+
+
 def _import_module(module_dir: Path | None) -> ModuleType:
     if module_dir is None:
         return importlib.import_module(PACKAGE_MODULE)
@@ -136,24 +183,28 @@ def checked(module: ModuleType, running_qt: str, *, hexversion: int | None = Non
     if not isinstance(limited, int) or limited > (sys.hexversion if hexversion is None else hexversion):
         raise NativeCoreUnavailable(f"{MODULE_NAME} needs the CPython stable ABI 0x{limited or 0:08x}, newer than "
                                     f"this interpreter {sys.version.split()[0]}")
-    try:
-        problems = runtime_problems(Path(str(info.get("module_path"))), int(info.get("msc_full_ver") or 0))
-    except (OSError, ValueError) as exc:
-        problems = [f"its MSVC runtime cannot be checked: {exc}"]
-    if problems:
-        raise NativeCoreUnavailable(f"{MODULE_NAME}'s MSVC runtime: {problems[0]}")
+    _refuse_by_runtime(lambda: runtime_problems(Path(str(info.get("module_path"))), int(info.get("msc_full_ver") or 0)))
     return NativeCore(module, info)
 
 
 def load(module_dir: Path | None = None) -> NativeCore:
-    """Import and check the native core; raises ``NativeCoreUnavailable`` with the one reason it cannot be used."""
+    """Check, import and check again the native core; raises ``NativeCoreUnavailable`` with the one reason it cannot be
+    used. The MSVC runtime rule runs on the file before the import (PySide6's Qt, and with it shiboken6's runtime
+    copies, is loaded first, so the copies the module would bind to are the ones checked)."""
     if os.name != "nt":
         raise NativeCoreUnavailable("the native core is built for Windows only so far")
     running_qt = _bind_pyside6_qt()
+    path = _module_file(module_dir)
+    if path is not None:
+        _check_before_import(path)
     try:
         module = _import_module(module_dir)
     except NativeCoreUnavailable:
         raise
-    except ImportError as exc:                          # not there, a DLL that does not load, the exact-Qt guard
+    except ImportError as exc:                          # a DLL that does not load, the exact-Qt guard
         raise NativeCoreUnavailable(f"{MODULE_NAME} cannot be imported: {exc}") from exc
+    imported = getattr(module, "__file__", None)
+    if path is not None and imported and os.path.normcase(Path(imported).resolve()) != os.path.normcase(path.resolve()):
+        raise NativeCoreUnavailable(f"{MODULE_NAME} was imported from {imported}, not from {path}, the file checked "
+                                    "before the import")
     return checked(module, running_qt)
