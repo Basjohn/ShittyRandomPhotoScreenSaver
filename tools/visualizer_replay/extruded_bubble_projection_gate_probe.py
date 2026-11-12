@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Bounded, Qt-free EB camera/near-layer discontinuity probe on the real authored presets.
+"""Bounded, Qt-free EB camera/near-layer discontinuity probe on authored presets chosen per run.
 
     py -3.14 tools/visualizer_replay/extruded_bubble_projection_gate_probe.py
     py -3.14 tools/visualizer_replay/extruded_bubble_projection_gate_probe.py --json
+    py -3.14 tools/visualizer_replay/extruded_bubble_projection_gate_probe.py \
+        --visualizer-preset extruded_bubble=2 --visualizer-preset extruded_bubble=4
+
+The presets are run options (``MODE=N``, N the number Settings shows); without one, the mode's default.
 
 Mirrors the declared pinhole projection, tangent-cone silhouette and sceneNearCircle
 primitive's authored focus component; footprint protection can supersede this scalar
@@ -18,6 +22,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
 def silhouette_aspect(angle_deg: float, *, fov_y_degrees=45.0, sphere_radius=0.4, distance=10.0, frame=(1600, 900), samples=1440):
@@ -48,24 +54,32 @@ def near_circle(front_depth: float, focus: float, aperture: float, pixel_scale: 
     return pixel_scale * (aperture / 3.0) * max(focus-front_depth, 0.0) / max(front_depth, 2.5)
 
 
-# The authored presets this probe reads, by stable file-name identity (``preset_<n>_<name>.json``), never by slot:
-# a reindex or a new preset must not silently change which look is measured.
-PRESETS = ("sunlit_surface", "ember_drift")
+# The looks this probe measures are run options, never named in code (presets are authored, mutable content):
+# ``--visualizer-preset MODE=N`` with N the number Settings shows (1-based), as tools/onboarding_preview_foundry.py
+# takes it. Without one, the mode's default (its first preset) is measured.
+DEFAULT_MODE = "extruded_bubble"
 
 
-def preset_path(name: str) -> Path:
-    folder = ROOT / "presets/visualizer_modes/extruded_bubble"
-    matches = sorted(path for path in folder.glob(f"preset_*_{name}.json")
-                     if path.stem.split("_", 2)[1].isdigit() and path.stem.split("_", 2)[2] == name)
-    if len(matches) != 1:
-        found = ", ".join(sorted(path.name for path in folder.glob("preset_*.json")))
-        raise LookupError(f"expected one Extruded Bubble preset named {name!r}, found {len(matches)} ({found})")
-    return matches[0]
+def parse_selection(values: list[str] | None) -> list[tuple[str, int]]:
+    """``MODE=N`` options -> [(mode, N)] in the order given; one mode may be measured at several numbers."""
+    from tools.onboarding_preview_foundry import parse_preset_numbers
+
+    selection: list[tuple[str, int]] = []
+    for value in values or ():
+        selection.extend(parse_preset_numbers([value]).items())
+    return selection or [(DEFAULT_MODE, 1)]
 
 
-def parameters(name: str):
-    p = preset_path(name)
-    return json.loads(p.read_text(encoding="utf-8"))["snapshot"]["widgets"]["spotify_visualizer"]
+def parameters(mode: str, number: int) -> tuple[str, dict]:
+    """(preset display name, resolved settings) of preset ``number`` of ``mode``, through the preset owner.
+
+    A number past the mode's catalogue is this run's own choice, so it fails loudly."""
+    from core.settings import visualizer_presets as vp
+
+    if not 1 <= number <= vp.get_custom_preset_index(mode):
+        raise LookupError(f"{mode} has no preset {number} in the curated catalogue")
+    activation = vp.resolve_visualizer_activation_payload({"mode": mode, f"preset_{mode}": number - 1}, mode=mode)
+    return activation.preset_name, activation.resolved_config
 
 
 def check_owners():
@@ -91,7 +105,7 @@ def check_owners():
     assert '"uNearCoc": 22.0 * optical_height / 941.0' in renderer
 
 
-def inspect():
+def inspect(selection: list[tuple[str, int]] | None = None):
     check_owners()
     projection = [silhouette_aspect(a) for a in (0, 15, 30, 40)]
     # Compare the same pixel position with the narrower DEFAULT FOV and the
@@ -106,10 +120,10 @@ def inspect():
                                             "off_axis_degrees": round(angle, 4),
                                             "width_to_height": result["width_to_height"]}
     gates = {}
-    for name in PRESETS:
-        p = parameters(name)
-        focus = 2.5+3*float(p['extruded_bubble_focus'])
-        aperture = 0.3+2.7*float(p['extruded_bubble_aperture'])
+    for mode, number in selection or parse_selection(None):
+        preset_name, p = parameters(mode, number)
+        focus = 2.5+3*float(p[f'{mode}_focus'])
+        aperture = 0.3+2.7*float(p[f'{mode}_aperture'])
         # 941px tall, scene camera scale=1; threshold invert when front depth >=2.5.
         scale = 22.0
         factor = scale * aperture / 3.0
@@ -121,7 +135,8 @@ def inspect():
                    "circle_px": round(near_circle(depth-r, focus, aperture, scale), 4),
                    "focus_component_above_gate": near_circle(depth-r, focus, aperture, scale) > 1.5}
                   for r in (0.98, 1.0, 1.02)]
-        gates[f'{preset_path(name).stem}'] = {"focus": round(focus, 4), "aperture": round(aperture, 4),
+        gates[f'{mode}={number}'] = {"preset_name": preset_name,
+                            "focus": round(focus, 4), "aperture": round(aperture, 4),
                             "critical_front_depth": round(critical, 5),
                             "held_centre_depth": round(depth, 5), "states": states}
     return {"claim_scope": "analytic geometry and focus component only; footprint protection can supersede this gate; not native pixels or judder causation",
@@ -131,8 +146,15 @@ def inspect():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--json', action='store_true')
+    parser.add_argument('--visualizer-preset', action='append', metavar='MODE=N',
+                        help='a preset to measure, by the number Settings shows (repeatable; default: '
+                             f'{DEFAULT_MODE}=1, the mode\'s default)')
     args = parser.parse_args()
-    result = inspect()
+    try:
+        selection = parse_selection(args.visualizer_preset)
+    except ValueError as exc:
+        parser.error(str(exc))
+    result = inspect(selection)
     if args.json:
         print(json.dumps(result, indent=2))
     else:
@@ -143,7 +165,7 @@ def main():
             print(f" screen x=75% of half-width: {key} at {value['off_axis_degrees']:.2f}° from centre -> "
                   f"{value['width_to_height']:.3f}:1 aspect")
         for slot, item in result['near_layer_gate'].items():
-            print(f" {slot}: CoC 1.5px boundary at front depth {item['critical_front_depth']:.4f},"
+            print(f" {slot} ({item['preset_name']}): CoC 1.5px boundary at front depth {item['critical_front_depth']:.4f},"
                   f" focus {item['focus']:.3f}, aperture {item['aperture']:.3f}")
             for state in item['states']:
                 print(f"  radius {state['physical_radius']:.2f} -> CoC {state['circle_px']:.4f} px"
