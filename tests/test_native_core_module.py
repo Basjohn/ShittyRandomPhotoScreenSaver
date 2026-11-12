@@ -111,6 +111,28 @@ def test_the_hidden_host_round_passes_on_opengl(tmp_path):
     assert record["live_hosts_at_end"] == 0
 
 
+def test_the_composite_rounds_pass_on_opengl(tmp_path):
+    """N2.4's harness, its hidden rounds in their own process: texels one to one under pixel shift, CUSTOM scale and
+    quarter turns, plan 1C.4's clip contract on the native item in every display style, overflow held to the display
+    rect, each with its negative controls; nothing of the core's left at the end."""
+    import subprocess
+
+    record_path = tmp_path / "child.json"
+    proc = subprocess.run(
+        [sys.executable, str(ROOT / "native" / "core" / "python" / "composite_check.py"), "--child", "--api", "opengl",
+         "--rounds", "texels", "contract", "overflow", "--repo", str(ROOT), "--module-dir", str(MODULE_DIR),
+         "--out-dir", str(tmp_path), "--child-json", str(record_path)],
+        capture_output=True, text=True, timeout=900, cwd=str(ROOT))
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    assert not record.get("error"), record.get("error")
+    for name in ("texels", "contract", "overflow"):
+        entry = record[name]
+        assert entry["pass"], {k: v for k, v in entry.get("checks", {}).items() if not v} or entry.get("error")
+    assert record["live_hosts_at_end"] == 0
+    assert record["composites_at_end"] == {"items": 0, "surfaces": 0, "surface_resources": 0, "handles": 0}
+
+
 def test_the_import_check_passes_the_built_module(core, tmp_path, monkeypatch):
     monkeypatch.syspath_prepend(str(ROOT / "native" / "core" / "python"))
     monkeypatch.delitem(sys.modules, "import_check", raising=False)

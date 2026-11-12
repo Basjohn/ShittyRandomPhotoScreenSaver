@@ -6,7 +6,9 @@
 // Qt versions, the ABI, the MSVC runtime the process loaded) and fails in one place with one reason. N2.2: the host
 // adapter (host_adapter.h: the Qt Quick window host and the hidden host) and the frame driver behind it
 // (frame_driver.h), the module's Vulkan instance and devices (vulkan_context.h), and the probe pass a harness switches
-// on (probe_pass.h). Nothing in the product calls them yet (N2.7 adds the backend owner).
+// on (probe_pass.h). N2.4: the composite, a scene-graph texture node carrying the card's coverage (composite.h), and
+// the surfaces the frame driver records for it (surfaces.h). Nothing in the product calls them yet (N2.7 adds the
+// backend owner).
 //
 // Every entry runs on the GUI thread. The ones that wait for the hidden host's render thread release the GIL while
 // they wait; the render thread itself never takes it (D5.4).
@@ -14,13 +16,17 @@
 #include <Python.h>
 
 #include "abi.h"
+#include "composite.h"
 #include "host_adapter.h"
 #include "process_counters.h"
+#include "surfaces.h"
 #include "vulkan_context.h"
 
 #include <QtCore/QHash>
 #include <QtCore/QJsonDocument>
+#include <QtCore/QJsonObject>
 #include <QtCore/QObject>
+#include <QtCore/QPointer>
 #include <QtCore/QString>
 #include <QtCore/QtGlobal>
 #include <QtQuick/QQuickItem>
@@ -182,7 +188,8 @@ PyObject *host_attach(PyObject *, PyObject *args)
     int width = 0;
     int height = 0;
     int threaded = 1;
-    if (!PyArg_ParseTuple(args, "s|Kiip", &kindText, &address, &width, &height, &threaded))
+    double dpr = 1.0;
+    if (!PyArg_ParseTuple(args, "s|Kiipd", &kindText, &address, &width, &height, &threaded, &dpr))
         return nullptr;
     srpss_core::HostKind kind;
     if (!srpss_core::parseHostKind(kindText, &kind)) {
@@ -216,7 +223,7 @@ PyObject *host_attach(PyObject *, PyObject *args)
         }
         std::unique_ptr<srpss_core::HiddenHost> created;
         Py_BEGIN_ALLOW_THREADS
-        created = srpss_core::HiddenHost::create(width, height, threaded != 0, &error);
+        created = srpss_core::HiddenHost::create(width, height, threaded != 0, dpr, &error);
         Py_END_ALLOW_THREADS
         if (!created)
             return runtimeError(error);
@@ -313,6 +320,51 @@ PyObject *host_frames(PyObject *, PyObject *args)
     Py_RETURN_NONE;
 }
 
+PyObject *host_set_dpr(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    double dpr = 1.0;
+    if (!PyArg_ParseTuple(args, "Ld", &handle, &dpr))
+        return nullptr;
+    srpss_core::HiddenHost *host = hiddenOf(handle);
+    if (!host)
+        return nullptr;
+    QString error;
+    bool ok = false;
+    Py_BEGIN_ALLOW_THREADS
+    ok = host->setDevicePixelRatio(dpr, &error);
+    Py_END_ALLOW_THREADS
+    if (!ok)
+        return runtimeError(error);
+    Py_RETURN_NONE;
+}
+
+PyObject *host_read(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::HiddenHost *host = hiddenOf(handle);
+    if (!host)
+        return nullptr;
+    srpss_core::QuickReadback read;
+    QString error;
+    bool ok = false;
+    Py_BEGIN_ALLOW_THREADS
+    ok = host->readFrame(&read, &error);
+    Py_END_ALLOW_THREADS
+    if (!ok)
+        return runtimeError(error);
+    PyObject *d = PyDict_New();
+    put(d, "rgba", PyBytes_FromStringAndSize(read.rgba.constData(), Py_ssize_t(read.rgba.size())));
+    put(d, "width", PyLong_FromLong(read.width));
+    put(d, "height", PyLong_FromLong(read.height));
+    put(d, "y_up_in_framebuffer", PyBool_FromLong(read.yUpInFramebuffer ? 1 : 0));
+    put(d, "frame", PyLong_FromLongLong(read.frame));
+    put(d, "prime", pyStr(read.prime));
+    return d;
+}
+
 PyObject *host_close(PyObject *, PyObject *args)
 {
     long long handle = 0;
@@ -406,6 +458,104 @@ PyObject *live_hosts(PyObject *, PyObject *)
     return PyLong_FromLongLong(hosts().live.size());
 }
 
+// ---------------------------------------------------------------- the composite (D5.2, N2.4)
+
+struct Composites
+{
+    qint64 next = 1;
+    QHash<qint64, QPointer<srpss_core::CompositeItem>> live;
+};
+
+Composites &composites()
+{
+    static Composites c;
+    return c;
+}
+
+srpss_core::CompositeItem *compositeOf(long long handle)
+{
+    if (!composites().live.contains(handle)) {
+        PyErr_Format(PyExc_KeyError, "no composite %lld (destroyed, or never created)", handle);
+        return nullptr;
+    }
+    srpss_core::CompositeItem *item = composites().live.value(handle).data();
+    if (!item)
+        PyErr_Format(PyExc_RuntimeError, "composite %lld was deleted with its parent item", handle);
+    return item;
+}
+
+PyObject *composite_create(PyObject *, PyObject *args)
+{
+    unsigned long long address = 0;
+    if (!PyArg_ParseTuple(args, "K", &address))
+        return nullptr;
+    auto *parent = qobject_cast<QQuickItem *>(reinterpret_cast<QObject *>(static_cast<quintptr>(address)));
+    if (!address || !parent) {
+        PyErr_SetString(PyExc_TypeError, "a composite is placed in a QQuickItem: pass its address");
+        return nullptr;
+    }
+    auto *item = new srpss_core::CompositeItem(parent); // owned by its parent item (QObject parent) and deletable here
+    const qint64 handle = composites().next++;
+    composites().live.insert(handle, QPointer<srpss_core::CompositeItem>(item));
+    return PyLong_FromLongLong(handle);
+}
+
+PyObject *composite_set(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *config = "";
+    Py_ssize_t length = 0;
+    if (!PyArg_ParseTuple(args, "Ls#", &handle, &config, &length))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    srpss_core::CompositeConfig updated = item->config();
+    QString error;
+    if (!srpss_core::CompositeConfig::update(QByteArray(config, qsizetype(length)), &updated, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    item->apply(updated);
+    Py_RETURN_NONE;
+}
+
+PyObject *composite_state(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    return pyJson(item->stateJson());
+}
+
+PyObject *composite_destroy(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    if (!composites().live.contains(handle)) {
+        PyErr_Format(PyExc_KeyError, "no composite %lld (destroyed, or never created)", handle);
+        return nullptr;
+    }
+    QPointer<srpss_core::CompositeItem> item = composites().live.take(handle);
+    const bool deleted = !item.isNull();
+    delete item.data(); // GUI thread: Qt Quick releases its node on the render thread at the next sync
+    return PyBool_FromLong(deleted ? 1 : 0);
+}
+
+PyObject *composite_live(PyObject *, PyObject *)
+{
+    QJsonObject o;
+    o.insert(QStringLiteral("items"), srpss_core::CompositeItem::liveItems());
+    o.insert(QStringLiteral("surfaces"), srpss_core::Surface::liveSurfaces());
+    o.insert(QStringLiteral("surface_resources"), srpss_core::Surface::liveResourcesTotal());
+    o.insert(QStringLiteral("handles"), int(composites().live.size()));
+    return pyJson(o);
+}
+
 PyMethodDef methods[] = {
     { "runtime_info", runtime_info, METH_NOARGS,
       "() -> dict: version, ABI, the compiled and running Qt, the compiler, the loaded Qt and MSVC runtime DLLs." },
@@ -418,8 +568,13 @@ PyMethodDef methods[] = {
     { "vulkan_set_phase", vulkan_set_phase, METH_VARARGS,
       "(phase) -> None: the phase the validation messages that follow are counted under." },
     { "host_attach", host_attach, METH_VARARGS,
-      "(kind 'window', quick_window_address) | ('hidden', 0, width, height, threaded=True) -> int handle: a host "
-      "with its frame driver attached (D5.1, D5.2)." },
+      "(kind 'window', quick_window_address) | ('hidden', 0, width, height, threaded=True, dpr=1.0) -> int handle: a "
+      "host with its frame driver attached (D5.1, D5.2); a hidden host's size is device pixels." },
+    { "host_set_dpr", host_set_dpr, METH_VARARGS,
+      "(handle, dpr) -> None: the hidden host renders its device pixels at this device pixel ratio." },
+    { "host_read", host_read, METH_VARARGS,
+      "(handle) -> dict: the hidden host renders one frame and reads Qt Quick's target back (raw rows, size, "
+      "y_up_in_framebuffer, frame)." },
     { "host_reattach", host_reattach, METH_VARARGS, "(handle) -> None: a new frame driver on the host's window." },
     { "host_detach", host_detach, METH_VARARGS,
       "(handle) -> None: the frame driver stops and releases on the render thread." },
@@ -436,6 +591,18 @@ PyMethodDef methods[] = {
     { "host_probe_result", host_probe_result, METH_VARARGS,
       "(handle) -> dict | None: the last completed probe readback (facts JSON, raw RGBA rows, size, frame)." },
     { "live_hosts", live_hosts, METH_NOARGS, "() -> int: hosts not closed." },
+    { "composite_create", composite_create, METH_VARARGS,
+      "(parent_quick_item_address) -> int handle: a composite item (D5.2) in that item, its surface drawn by the "
+      "window's frame driver." },
+    { "composite_set", composite_set, METH_VARARGS,
+      "(handle, config_json) -> None: rect, coverage ({rect, radius} or null), quarters, pattern, visible, opacity; "
+      "missing keys keep their values." },
+    { "composite_state", composite_state, METH_VARARGS,
+      "(handle) -> JSON str: the item's configuration, its node's last sync and draws, its surface." },
+    { "composite_destroy", composite_destroy, METH_VARARGS,
+      "(handle) -> bool: deletes the item (False when its parent deleted it first)." },
+    { "composite_live", composite_live, METH_NOARGS,
+      "() -> JSON str: composite items, surfaces and their QRhi objects alive in the process." },
     { nullptr, nullptr, 0, nullptr }
 };
 
