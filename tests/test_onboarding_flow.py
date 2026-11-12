@@ -674,3 +674,61 @@ def test_guided_setup_cancel_keeps_the_saved_default_mode(qapp, settings, monkey
         assert settings.writes == [] and settings.get(_MODE_KEY) == stored
     finally:
         wizard.deleteLater()
+
+
+def _transitions_wizard(settings):
+    from ui.onboarding.wizard import GuidedSetupPanel
+    settings.set("sources.folders", ["C:/Pictures"])  # Finish needs an image source
+    settings.writes.clear()
+    wizard = GuidedSetupPanel(settings)
+    wizard.show_page("transitions")
+    return wizard, wizard.pages["transitions"][0]
+
+
+def _another_interval(spin):
+    """A value inside the control's own range that differs from the current one."""
+    step = spin.singleStep()
+    return spin.value() + step if spin.value() + step <= spin.maximum() else spin.value() - step
+
+
+@pytest.mark.parametrize("leave", ["finish", "cancel"])
+def test_guided_setup_image_time_row_edits_the_draft_and_only_finish_saves(qapp, settings, monkeypatch, leave):
+    from ui.styled_popup import StyledPopup
+    monkeypatch.setattr(StyledPopup, "exec", lambda popup: setattr(popup, "_result_value", "discard"))
+    wizard, page = _transitions_wizard(settings)
+    try:
+        stored = settings.get("timing.interval")
+        assert page.interval.value() == stored and settings.writes == []  # entry shows the value, writes nothing
+        chosen = _another_interval(page.interval)
+        page.interval.setValue(chosen)
+        assert wizard.settings.get("timing.interval") == chosen
+        assert settings.writes == [] and settings.get("timing.interval") == stored
+        wizard.show_page("ready"); wizard.show_page("transitions")  # re-entry reads the draft
+        assert page.interval.value() == chosen
+        if leave == "finish":
+            wizard.finish()
+            assert settings.get("timing.interval") == chosen
+        else:
+            wizard.skip.click()  # Skip, then Discard Changes
+            assert settings.writes == [] and settings.get("timing.interval") == stored
+    finally:
+        wizard.deleteLater()
+
+
+def test_guided_setup_image_time_row_is_settings_own_control(qapp, settings, settings_manager):
+    """Same range, step and unit as Settings' Display tab "Change Image Every", compared on the live controls."""
+    from PySide6.QtWidgets import QLabel
+    from ui.tabs.display_tab import DisplayTab
+    from ui.widgets.image_interval_spin import IMAGE_INTERVAL_UNIT
+    wizard, page = _transitions_wizard(settings)
+    tab = DisplayTab(settings_manager)
+    try:
+        ours, theirs = page.interval, tab.interval_spin
+        assert (ours.minimum(), ours.maximum(), ours.singleStep(), ours.prefix(), ours.suffix(), ours.isAccelerated()) == \
+               (theirs.minimum(), theirs.maximum(), theirs.singleStep(), theirs.prefix(), theirs.suffix(), theirs.isAccelerated())
+        for host in (page, tab):  # the unit is shown beside each control
+            assert any(label.text() == IMAGE_INTERVAL_UNIT for label in host.findChildren(QLabel)), host
+        # The row sits right under the page heading.
+        assert page.body.itemAt(1).layout() is not None and page.body.itemAt(1).layout().indexOf(ours) >= 0
+    finally:
+        wizard.deleteLater(); tab.deleteLater()

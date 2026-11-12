@@ -286,16 +286,13 @@ class DisplayTab(QWidget):
             "Change Image Every:",
             label_width=self._LABEL_WIDTH,
         )
-        self.interval_spin = QSpinBox()
-        self.interval_spin.setRange(1, 3600)
-        self.interval_spin.setSingleStep(1)
-        self.interval_spin.setAccelerated(True)
-        self.interval_spin.setSuffix("")
+        from ui.widgets.image_interval_spin import IMAGE_INTERVAL_UNIT, make_image_interval_spin
+        self.interval_spin = make_image_interval_spin()
         self.interval_spin.setValue(int(self._canonical_default("timing.interval")))
         self.interval_spin.valueChanged.connect(self._save_settings)
         self.interval_spin.setFixedWidth(140)
         interval_row.addWidget(self.interval_spin)
-        interval_row.addWidget(create_inline_label("Seconds"))
+        interval_row.addWidget(create_inline_label(IMAGE_INTERVAL_UNIT))
         interval_row.addStretch()
 
         shuffle_row, _ = add_aligned_row(

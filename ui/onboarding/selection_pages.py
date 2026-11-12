@@ -490,6 +490,19 @@ class TransitionsPage(Page):
     def __init__(self, settings, parent=None):
         super().__init__(settings, parent)
         self.body.addWidget(text_label("How should your wallpapers change?", heading=True))
+        # Image time: Settings' own "Change Image Every" control (range, step and unit from its owner).
+        from ui.widgets.image_interval_spin import IMAGE_INTERVAL_UNIT, make_image_interval_spin
+        interval_row = QHBoxLayout(); interval_row.setSpacing(12)
+        interval_label = text_label("Change Every"); interval_label.setWordWrap(False)
+        interval_row.addWidget(interval_label)
+        self.interval = make_image_interval_spin()
+        self.interval.setFixedWidth(140)
+        self.interval.valueChanged.connect(lambda value: self.settings.set("timing.interval", int(value)))
+        interval_row.addWidget(self.interval)
+        unit = text_label(IMAGE_INTERVAL_UNIT); unit.setWordWrap(False)
+        interval_row.addWidget(unit)
+        interval_row.addStretch()
+        self.body.addLayout(interval_row)
         self.body.addWidget(text_label("Select transitions to include in the available effects and random pool. Each preview shows three moments of the change."))
         self.rows = CheckList(); self.rows.setMinimumHeight(190); self.rows.setMaximumHeight(270)
         self.rows.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
@@ -504,6 +517,8 @@ class TransitionsPage(Page):
         self.rows.currentItemChanged.connect(self._show)
 
     def refresh(self):
+        with QSignalBlocker(self.interval):  # entry shows the draft's value and writes nothing
+            self.interval.setValue(int(self.settings.get("timing.interval")))
         selected = self.rows.currentRow()
         cfg = self.settings.get("transitions")
         with QSignalBlocker(self.rows):
