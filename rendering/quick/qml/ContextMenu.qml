@@ -22,7 +22,6 @@ Item {
     property color separatorColor: "#59778a"
     property color indicatorBorderColor: "#b9eaff"
     property color indicatorFillColor: "#82cdff"
-    property color arrowColor: "#d8f3ff"
     property color submenuSurfaceColor: "#f21b1d24"
     property color submenuBorderColor: "#d8f3ff"
     property color submenuTextColor: "#f6f8ff"
@@ -238,13 +237,16 @@ Item {
                             sourceFont.weight: Font.DemiBold
                         }
 
+                        // The submenu arrow is part of the label: it takes the label's ink
+                        // (the theme's border tone read 1.7-3.6:1 on light themes).
                         ThemedText {
                             id: submenuArrow
+                            objectName: "retainedContextMenuSubmenuArrow"
                             anchors.right: parent.right
                             anchors.rightMargin: 10.0
                             anchors.verticalCenter: parent.verticalCenter
                             text: "▸"
-                            color: menuRoot.arrowColor
+                            color: menuRoot.textColor
                             sourceFont.pixelSize: 16
                             visible: menuRow.modelData.kind === "submenu"
                         }

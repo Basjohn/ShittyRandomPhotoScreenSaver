@@ -153,6 +153,57 @@ Item { x: 10; y: 40; width: 260; height: 24
         line.deleteLater()
 
 
+def test_a_run_on_its_own_fill_is_judged_on_that_fill(material_scene) -> None:
+    # 1B.8 follow-up: a run inside a further fill (a metric panel, a tile) has its ink judged on
+    # that fill, not on the card panel, so a run that reads where it sits keeps its authored
+    # colour byte for byte; the same run on the card panel itself is still corrected.
+    from PySide6.QtCore import QUrl
+    from PySide6.QtQml import QQmlComponent
+    from PySide6.QtQuick import QQuickItem
+
+    scene = material_scene
+    scene.set_wallpaper(_flat_image(640, 360, (235, 235, 235, 255), "bright"))
+    card = _card(scene)
+    component = QQmlComponent(scene.scene.qml_context.engine())
+    component.setData(b"""import QtQuick
+Item { x: 10; y: 30; width: 280; height: 90
+  ShadowedText { objectName: "onCard"; x: 4; y: 0; width: 120; height: 20; text: "CPU LOAD"
+                 color: "#d7668cff"; font.pixelSize: 12; shadowEnabled: false }
+  Rectangle { id: panel; objectName: "panel"; y: 30; width: 280; height: 60; radius: 8; color: "#ff05060a"
+    readonly property Item textLegibilityRow: panelRow
+    LegibilityRow { id: panelRow; x: 3; y: 3; width: 274; height: 54; radius: 5
+                    underlayColor: panel.color; primaryColor: "#d7668cff" }
+    ShadowedText { objectName: "onPanel"; x: 4; y: 20; width: 120; height: 20; text: "CPU LOAD"
+                   color: "#d7668cff"; font.pixelSize: 12; shadowEnabled: false }
+  }
+}""", QUrl.fromLocalFile(str(QML / "_test_underlay.qml")))
+    block = component.create(scene.scene.qml_context)
+    assert block is not None, component.errorString()
+    content = card.item.findChild(QQuickItem, "overlayCardContent")
+    block.setParentItem(content)
+    block.setParent(content)
+    try:
+        scene.set_material("glass")
+        scene.render(4)
+        on_card = block.findChild(QQuickItem, "onCard")
+        on_panel = block.findChild(QQuickItem, "onPanel")
+        authored = on_card.property("color")
+        assert on_card.property("inkColor") != authored                # misses on the card panel
+        assert on_panel.property("inkColor") == authored               # reads on its own fill: untouched
+        assert on_panel.property("underlayColor") == block.findChild(QQuickItem, "panel").property("color")
+    finally:
+        block.deleteLater()
+
+
+def test_every_fill_with_a_legibility_row_names_it_for_its_runs() -> None:
+    # The row and the runs on a fill judge against the same surface (ShadowedText finds the row
+    # on the run's ancestors as textLegibilityRow and takes its fill and its lift).
+    for path in list(QML.glob("*Presentation.qml")) + [QML / "AchievementCapsule.qml"]:
+        text = path.read_text(encoding="utf-8")
+        rows = len(list(_qml_blocks(text, "LegibilityRow {")))
+        assert text.count("readonly property Item textLegibilityRow:") == rows, path.name
+
+
 def _qml_blocks(text: str, head: str):
     for match in re.finditer(re.escape(head), text):
         index, depth = match.end(), 1

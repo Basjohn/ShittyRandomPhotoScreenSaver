@@ -28,7 +28,6 @@ Item {
     property color contextMenuSeparatorColor: "#59778a"
     property color contextMenuIndicatorBorderColor: "#b9eaff"
     property color contextMenuIndicatorFillColor: "#82cdff"
-    property color contextMenuArrowColor: "#d8f3ff"
     property color contextSubmenuSurfaceColor: "#f21b1d24"
     property color contextSubmenuBorderColor: "#d8f3ff"
     property color contextSubmenuTextColor: "#f6f8ff"
@@ -353,7 +352,6 @@ Item {
         separatorColor: displayScene.contextMenuSeparatorColor
         indicatorBorderColor: displayScene.contextMenuIndicatorBorderColor
         indicatorFillColor: displayScene.contextMenuIndicatorFillColor
-        arrowColor: displayScene.contextMenuArrowColor
         submenuSurfaceColor: displayScene.contextSubmenuSurfaceColor
         submenuBorderColor: displayScene.contextSubmenuBorderColor
         submenuTextColor: displayScene.contextSubmenuTextColor

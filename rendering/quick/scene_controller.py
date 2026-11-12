@@ -979,7 +979,6 @@ class QuickSceneController(QObject):
             "contextMenuSeparatorColor": style.menu_separator,
             "contextMenuIndicatorBorderColor": style.menu_indicator_border,
             "contextMenuIndicatorFillColor": style.menu_indicator_fill,
-            "contextMenuArrowColor": style.menu_arrow,
             "contextSubmenuSurfaceColor": style.submenu_surface,
             "contextSubmenuBorderColor": style.submenu_border,
             "contextSubmenuTextColor": style.submenu_text,

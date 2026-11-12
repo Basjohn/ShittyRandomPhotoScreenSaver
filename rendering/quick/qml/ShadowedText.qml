@@ -63,11 +63,33 @@ Item {
     // opacity (RefreshStateGlyph's twins) passes its resting value, so a fade neither re-solves
     // the ink every frame nor loads and drops a plate part-way through.
     property real inkOpacity: opacity
+    // The further fill this run sits on inside its card (a System Stats metric panel, a Feed or
+    // Friend Pulse tile, a Games You Follow story, an Achievement capsule): the ink is judged
+    // where the run actually sits, so a run that reads there keeps its authored colour. Each
+    // such fill names its LegibilityRow on the run's ancestor chain as `textLegibilityRow`; the
+    // row carries the fill (`underlayColor`) and the run colours it holds to their floor, and
+    // the ink is judged on that fill with the row's lift (SurfaceContrast.underlaidPoles).
+    function _findLegibilityRow(item, card) {
+        for (var candidate = item; candidate && candidate !== card; candidate = candidate.parent) {
+            if (candidate.textLegibilityRow !== undefined)
+                return candidate.textLegibilityRow
+        }
+        return null
+    }
+    readonly property Item legibilityRow: _findLegibilityRow(shadowedText.parent, surfaceCard)
+    readonly property color underlayColor: legibilityRow ? legibilityRow.underlayColor : "transparent"
+    readonly property var _underlay: legibilityRow === null ? null : {
+        "color": legibilityRow.underlayColor,
+        "rowColors": legibilityRow.active
+            ? [legibilityRow.primaryColor, legibilityRow.secondaryColor, legibilityRow.tertiaryColor] : [],
+        "rowFloor": legibilityRow.pixelSize < 18.0 ? 4.5 : 3.0
+    }
     readonly property real _pixelSize: effectiveFont.pixelSize > 0 ? effectiveFont.pixelSize
         : effectiveFont.pointSize * 96.0 / 72.0
     readonly property var _inkSolution: onSurfaceMaterial
         && typeof surfaceCard.surfaceInkSolution === "function"
-        ? surfaceCard.surfaceInkSolution(shadowedText.color, shadowedText.inkOpacity, _pixelSize < 18.0) : null
+        ? surfaceCard.surfaceInkSolution(shadowedText.color, shadowedText.inkOpacity, _pixelSize < 18.0,
+                                         shadowedText._underlay) : null
     readonly property color inkColor: _inkSolution === null ? shadowedText.color
         : Qt.rgba(_inkSolution[0], _inkSolution[1], _inkSolution[2], _inkSolution[3])
     readonly property bool inkNeedsPlate: _inkSolution !== null && !_inkSolution[4]
@@ -163,6 +185,7 @@ Item {
             runColor: Qt.rgba(shadowedText.inkColor.r, shadowedText.inkColor.g, shadowedText.inkColor.b,
                               shadowedText.inkColor.a * shadowedText.inkOpacity)
             runPixelSize: shadowedText._pixelSize
+            underlayColor: shadowedText.underlayColor
             radiusOverride: inkPlate.height / 2.0
             edgeSoftness: inkPlate.soft
             ownOpacity: shadowedText.inkOpacity

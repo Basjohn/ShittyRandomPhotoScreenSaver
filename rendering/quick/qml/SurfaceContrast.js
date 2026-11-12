@@ -189,28 +189,91 @@ function _contrast(a, b) {
     return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
 }
 
+// WCAG contrast of a straight-alpha run composited over bg (the legibility row's contrastOver).
+function _contrastOver(bg, run) {
+    return _contrast(_mix(bg, [run.r, run.g, run.b], run.a), bg)
+}
+
+// The legibility row's overlay toward its pole for one run colour over c (text_legibility's
+// overlayFor, the same 10 % margin): 0 when c already meets the floor or the pole cannot.
+function _rowOverlayFor(c, run, ratio, lift) {
+    var pole = lift ? [1, 1, 1] : [0, 0, 0]
+    if (run.a < 1 && _contrastOver(pole, run) < ratio)
+        run = { "r": run.r, "g": run.g, "b": run.b, "a": 1 }
+    if (_contrastOver(c, run) >= ratio || _contrastOver(pole, run) < ratio)
+        return 0
+    var lo = 0, hi = 1
+    for (var i = 0; i < 12; ++i) {
+        var mid = (lo + hi) / 2
+        if (_contrastOver(_mix(c, pole, mid), run) >= ratio) hi = mid; else lo = mid
+    }
+    return hi
+}
+
+// The poles as a run sitting on a further fill sees them (a metric panel, a tile, a capsule
+// between the run and its card). `underlay` is that fill (a colour, straight alpha) or
+// {color, rowColors, rowFloor}: the fill plus the LegibilityRow on it, which lifts the surface
+// until each of its run colours holds its floor (TextLegibilityPlate, text_legibility.vert:
+// side from the row's mean against its primary run, 10 % margin). The fill is composited over
+// each pole, then that row's lift is applied as the shader applies it. A transparent or absent
+// underlay leaves the card's own poles.
+function underlaidPoles(poles, underlay) {
+    if (!underlay)
+        return poles
+    var fill = underlay.color !== undefined ? underlay.color : underlay
+    var rowColors = underlay.rowColors || []
+    var ratio = (underlay.rowFloor || 4.5) * 1.10
+    if (!(fill.a > 0) && rowColors.length === 0)
+        return poles
+    var result = []
+    for (var i = 0; i < poles.length; ++i) {
+        var c = fill.a > 0 ? _mix(poles[i], [fill.r, fill.g, fill.b], Math.min(1, fill.a)) : poles[i]
+        if (rowColors.length > 0) {
+            var surfaceL = luminance(c[0], c[1], c[2])
+            var primary = rowColors[0]
+            var runL = luminance(primary.r, primary.g, primary.b)
+            var lift = surfaceL >= runL ? ratio * (runL + 0.05) - 0.05 <= 1.0 : (runL + 0.05) / ratio - 0.05 < 0.0
+            var amount = 0
+            for (var k = 0; k < rowColors.length; ++k)
+                amount = Math.max(amount, _rowOverlayFor(c, rowColors[k], ratio, lift))
+            c = _mix(c, lift ? [1, 1, 1] : [0, 0, 0], amount)
+        }
+        result.push(c)
+    }
+    return result
+}
+
 // A text run's ink on its card's composed panel, corrected the way the Settings variant
 // corrects semantic ink (ui/settings_surface_composition.py _correct_ink), on every theme:
-// judged at its real alpha (colour alpha x the run's opacity) over both poles; kept when it
-// reads, else its alpha rises, else it moves toward the card's ink pole keeping its hue
-// (darker toward black on a light panel, lighter toward white on a dark one). Returns
-// [r, g, b, a, reachable] (straight alpha, colour only: the run's own opacity stays). When
-// even the pole at the run's own opacity cannot read (an item-opacity fade), the result is
-// the pole and reachable is false: the run then takes a text-local plate (ShadowedText).
-// small: 4.8:1 (4.5 plus the solver's headroom), else 3.2:1. lightInk: the card's ink pole.
-function legibleInk(ink, opacity, poles, small, lightInk) {
-    var ratio = small ? 4.8 : 3.2
+// judged at its real alpha (colour alpha x the run's opacity) over both poles (through the
+// fill the run sits on, `underlay`, when it sits on one). A run that reads at its floor (4.5:1
+// small, 3:1 large) is kept exactly as authored, byte for byte; only a run under its floor is
+// corrected, and that one aims for the solver's headroom (4.8:1 small, 3.2:1 large: grain,
+// coloured backdrops and 8-bit output): its alpha rises, else it moves toward the card's ink
+// pole keeping its hue (darker toward black on a light panel, lighter toward white on a dark
+// one). Returns [r, g, b, a, reachable] (straight alpha, colour only: the run's own opacity
+// stays). When even the pole at the run's own opacity cannot read (an item-opacity fade), the
+// result is the pole and reachable is false: the run then takes a text-local plate
+// (ShadowedText). lightInk: the card's ink pole.
+var SMALL_TEXT_FLOOR = 4.5
+var LARGE_TEXT_FLOOR = 3.0
+var SMALL_TEXT_TARGET = 4.8
+var LARGE_TEXT_TARGET = 3.2
+function legibleInk(ink, opacity, poles, small, lightInk, underlay) {
+    var floor = small ? SMALL_TEXT_FLOOR : LARGE_TEXT_FLOOR
+    var ratio = small ? SMALL_TEXT_TARGET : LARGE_TEXT_TARGET
+    poles = underlaidPoles(poles, underlay)
     opacity = Math.max(0, Math.min(1, opacity))
-    function quality(rgb, alpha) {
+    function quality(rgb, alpha, bar) {
         var worst = Infinity
         for (var i = 0; i < poles.length; ++i) {
             var pole = poles[i]
-            worst = Math.min(worst, _contrast(_mix(pole, rgb, alpha), pole) / ratio)
+            worst = Math.min(worst, _contrast(_mix(pole, rgb, alpha), pole) / (bar === undefined ? ratio : bar))
         }
         return worst
     }
     var rgb = [ink.r, ink.g, ink.b]
-    if (quality(rgb, ink.a * opacity) >= 1)
+    if (quality(rgb, ink.a * opacity, floor) >= 1)
         return [ink.r, ink.g, ink.b, ink.a, true]
     if (quality(rgb, opacity) >= 1) {
         var low = ink.a, high = 1

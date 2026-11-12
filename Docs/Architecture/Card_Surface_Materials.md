@@ -203,8 +203,10 @@ wallpaper (surviving wallpaper swing 0). The rule now, light ink (dark themes) u
 - *Corrected ink, not panel.* Each `ShadowedText` run on a dark-ink material card asks its card
   (`OverlayCard.surfaceInkSolution`) for its ink, judged at its real alpha (colour alpha x the run's opacity) over the
   composed panel on a black and a white wallpaper (`MaterialSurface.inkPoles`, the shader's terms evaluated once at
-  style edges; every wallpaper lies between the two). The Settings `_correct_ink` order: kept when it reads (4.8:1
-  small, 3.2:1 large), else its alpha rises, else it darkens toward black keeping its hue.
+  style edges; every wallpaper lies between the two). The Settings `_correct_ink` order: kept byte for byte when it
+  reads at its floor (4.5:1 small, 3:1 large; since 12 Nov, before it was the 4.8 / 3.2 headroom), else its alpha
+  rises, else it darkens toward black keeping its hue; a corrected run aims for the headroom (4.8:1 small, 3.2:1
+  large) for grain and 8-bit output.
 - *Text-local plate, only where ink cannot.* A run faded by its own item opacity (Media's PLAYING at 62 %) can stay
   short even as black; only then its `ShadowedText` loads one `TextLegibilityPlate` hugging the painted text (a pill),
   which lifts only where the surface under it misses the floor (`ownOpacity` keeps the run's fade off the plate).
@@ -243,6 +245,15 @@ the same rounded, concentric rule. It evaluates the identical surface, so where 
 floor for its colours it draws nothing: no double darkening. Bars: `tests/test_surface_material_style.py`,
 `tests/test_card_surface_panels.py`.
 
+*A run on such a fill is judged where it sits (12 Nov, 1B.8 follow-up).* The fill names its row to the runs on it
+(`readonly property Item textLegibilityRow: <row>` on the fill or the item that holds fill and runs); `ShadowedText`
+finds it on its ancestor chain and its ink is solved over the card's poles seen through that fill and then through the
+row's lift (`SurfaceContrast.underlaidPoles`: the fill composited over each pole, then the row's overlay for its
+three colours at the floor plus 10 %, side chosen as `text_legibility.vert` chooses it). A run the row holds keeps its
+authored colour; before, every run was judged on the bare card panel, so Midnight Cobalt's System Stats labels
+(#668cff on their dark metric panel, 4.95:1 where they sit) were lightened to #7e9eff, and runs on a light tile fill
+could pass on the panel while the tile itself was the harder surface. The run's ink plate takes the same fill.
+
 **Historical faint-run measurement (7 Nov, encoded-RGB floor; superseded by the actual-ink guard above).** Runs drawn at 55-76 % of their colour (Gmail's dates and menu glyph,
 Media's PLAYING, Feed sources and ages, System Stats' notes) have no plate of their own, so the panel's floor must
 carry them. Measured on Glass (Default Dark [Single], PERSONALSET 859804, 656207 and 670483; the run's colour
@@ -274,7 +285,11 @@ mute button its gradient) meanwhile. On Normal it is an inactive `Loader` and th
   (`legibilityPanel: false`), so the backdrop reads through ("deserves more transparency"); the outline sits on top
   unchanged. Its drop shadow fades out on every material and on Normal: the accessory lane's paint boundary is grown
   by the shadow's reach (`OverlayWidget.accessoryPaintOutset`), so an Edit-widened or moved track no longer has its
-  shadow cut square at the lane edge (1C.5, R-187; not a material effect).
+  shadow cut square at the lane edge (1C.5, R-187; not a material effect). The track itself is never taller than its
+  lane (12 Nov): the descriptor admits 2.5x the authored height but the lane is the widget's height, so from about
+  1.2x the track ran past it and was cut square; its height is now bounded by the lane at the presentation owner
+  (`MediaPresentation.qml`, the same place that already bounds its x and y). Edit's resize was already contained by
+  the lane; the bound covers saved and reflowed geometry (a later taller card shrinks the lane's headroom).
 - The volume's level (the adjustable part inside the track) is material too (operator, 8 Nov: it "does not inherit
   surfaces"): its own `ChildMaterialSurface` tinted by the fill colour at full strength, no darker panel, so it reads
   above the track's 40 % tint; it drops its flat colour while the material is active and keeps it on Normal
@@ -320,12 +335,21 @@ wallpaper pole on 46 of the 98 material mirrors, all dark (worst Royal Orchard 1
 material mirror is under 4.5:1 (58 dark mirrors' accent changes; light mirrors unchanged). In rendered pixels (six worst
 dark mirrors plus Default Dark and Midnight Cobalt, main and list cards, both wallpapers) small runs under 4.5:1 on the
 material go from 3-10 per frame to 0, and no pixel changes outside the changed runs. Runs between 4.5 and the solver's
-4.8 headroom get a few percent more alpha; System Stats labels on their own metric fill are judged against the card
-panel, not the fill (Midnight Cobalt's move lighter although they read at 4.95 on the fill). The accents of Royal
+4.8 headroom got a few percent more alpha (27 groups; since 12 Nov a run at or above 4.5 is left exactly as authored and
+the headroom is only the target of a run the solver corrects); System Stats labels on their own metric fill were judged against the card
+panel, not the fill (Midnight Cobalt's moved lighter although they read at 4.95 on the fill; since the 12 Nov
+follow-up above a run on a fill is judged on that fill and its row). The accents of Royal
 Orchard and Smoke Quartz lose most of their hue toward the card text (Royal Orchard keeps 48 % of its chroma).
 Evidence `.artifacts/evidence/materials/20261111_m2b/ink_rule/` (`OPEN_FIRST_*`, `accent_collapse_candidates_3x.png`,
 `tables/`). Default Dark [Single] on Normal keeps its 8-10 faint small runs at 3.89-4.27 on the bright wallpaper:
 Normal is outside the material rule.
+
+*Context Menu submenu arrows (12 Nov follow-up).* The Context Menu's labels are drawn in the menu's text ink, which its
+material panel carries; the submenu arrow ("▸") had its own tone, the theme's `context.menu.arrow` role (by default the
+menu border), and read 1.7-3.6:1 on Polished Chrome and Pearl Blush (2.3-3.0 on Normal too). The arrow is part of its
+row's label and now takes the label's ink on every theme and material (10.4-13.2:1 there; dark themes unchanged where the
+two were equal). The `context.menu.arrow` role stays in the theme schema so every theme file still loads, but nothing reads
+it. Evidence `.artifacts/evidence/materials/20261112_followups/box3_menu_arrow/`.
 
 **Style sweep fixes outside the materials (6 Nov evening; they change Normal pixels on purpose, nowhere else):**
 
