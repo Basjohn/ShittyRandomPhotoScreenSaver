@@ -403,10 +403,18 @@ Item {
 
             objectName: "customLayoutEditFrame-" + widgetId
             z: 10
-            x: geometryX
-            y: geometryY
-            width: geometryWidth
-            height: geometryHeight
+            // The Visualizer card is drawn on whole device pixels (R-191: ``resolve_card_drawn_rect``), up to half a
+            // device pixel from its exact record; its outline and handles sit where the card is drawn. The scene
+            // publishes that rect on the card's root (``drawnCardRect``, display-local like geometryX/Y). Movement
+            // keeps the session geometry (the move's press offset is taken from geometryX/Y).
+            readonly property rect drawnCardRect: widgetId === "spotify_visualizer" && contentEnvelopeItem
+                    && contentEnvelopeItem.drawnCardRect !== undefined
+                ? contentEnvelopeItem.drawnCardRect : Qt.rect(0, 0, 0, 0)
+            readonly property bool followsDrawnCard: drawnCardRect.width > 0 && drawnCardRect.height > 0
+            x: followsDrawnCard ? drawnCardRect.x : geometryX
+            y: followsDrawnCard ? drawnCardRect.y : geometryY
+            width: followsDrawnCard ? drawnCardRect.width : geometryWidth
+            height: followsDrawnCard ? drawnCardRect.height : geometryHeight
             Rectangle {
                 anchors.fill: parent
                 visible: !editFrame.fullscreenCard
@@ -1219,8 +1227,8 @@ Item {
                         customLayoutOverlay.sessionModel.selectItem(editFrame.index)
                         customLayoutOverlay.sessionModel.finishMove()
                         altMoveDragging = true
-                        pressOffsetX = point.x - editFrame.x
-                        pressOffsetY = point.y - editFrame.y
+                        pressOffsetX = point.x - editFrame.geometryX
+                        pressOffsetY = point.y - editFrame.geometryY
                         mouse.accepted = true
                         return
                     }
@@ -1230,8 +1238,10 @@ Item {
                     }
                     customLayoutOverlay.sessionModel.selectItem(editFrame.index)
                     customLayoutOverlay.sessionModel.finishMove()
-                    pressOffsetX = point.x - editFrame.x
-                    pressOffsetY = point.y - editFrame.y
+                    // The session's geometry, not the frame's drawn position (the Visualizer's frame follows its
+                    // drawn card, which may sit a fraction of a pixel from the session rect).
+                    pressOffsetX = point.x - editFrame.geometryX
+                    pressOffsetY = point.y - editFrame.geometryY
                 }
                 onPositionChanged: function(mouse) {
                     if (!pressed)

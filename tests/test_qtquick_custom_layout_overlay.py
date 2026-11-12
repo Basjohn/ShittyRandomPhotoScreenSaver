@@ -1333,6 +1333,94 @@ def test_visualizer_custom_session_preserves_retained_item_and_render_identity(q
     qt_app.processEvents()
 
 
+@pytest.mark.qt
+@pytest.mark.parametrize("dpr", [1.25, 1.5])
+def test_visualizer_edit_outline_and_handles_sit_on_the_drawn_card(qt_app, dpr) -> None:
+    """1C.4: the card is drawn on whole device pixels (R-191); Edit's outline and handles sit on it, not the record.
+
+    The session rect's origin is a whole logical pixel that falls inside a device pixel at this DPR, so the exact
+    record and the drawn card differ by a fraction of a device pixel; the frame must equal the drawn card.
+    """
+    from widgets.spotify_visualizer.presentation_geometry import resolve_card_drawn_rect
+    from core.settings.visualizer_mode_registry import VisualizerShellPolicy
+
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=111,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    policy = get_visualizer_presentation_policy("spectrum")
+    assert policy.shell_policy is VisualizerShellPolicy.CARD
+    origin = (207.0, 311.0)  # whole logical pixels, inside a device pixel at 125 % and 150 %
+    presentation = resolve_visualizer_presentation(
+        policy=policy,
+        display_size=(1920.0, 1080.0),
+        outer_origin=origin,
+        dpr=dpr,
+        uniform_visual_scale=1.37,
+    )
+    _x, _y, outer_width, outer_height = presentation.outer_rect
+    session = CustomLayoutSession()
+    session.add_item(_item(
+        "spotify_visualizer",
+        "display:a",
+        QRect(100 + int(origin[0]), 200 + int(origin[1]), int(outer_width), int(outer_height)),
+        resizable=True,
+        viewport_capable=True,
+        baseline_viewport_extent=tuple(presentation.viewport_extent),
+    ))
+    # As in the product: the Visualizer is presented before Edit opens.
+    bridge = VisualizerSnapshotBridge()
+    render_identity = bridge.begin_activation(
+        runtime_generation=111, engine_generation=5, activation_id=9, mode_id="spectrum",
+    )
+    controller.set_visualizer_render_source(bridge, render_identity)
+    controller.apply_visualizer_presentation(presentation)
+    model = controller.bind_custom_layout_session(
+        session, display_identity="display:a", display_origin=QPoint(100, 200),
+    )
+    qt_app.processEvents()
+    overlay = controller.scene_root.findChild(QQuickItem, "customLayoutOverlay")
+    assert overlay is not None
+
+    def frame_rect():
+        frame = _quick_items_named(overlay, "customLayoutEditFrame-spotify_visualizer")[0]
+        return frame, (frame.x(), frame.y(), frame.width(), frame.height())
+
+    for step in range(2):
+        record = controller.visualizer_item.presentation
+        assert record is not None and record.dpr == pytest.approx(dpr)
+        drawn = resolve_card_drawn_rect(record)
+        # The case is off the device grid: the exact record is not where the card is drawn.
+        assert any(abs(a - b) > 1e-6 for a, b in zip(record.outer_rect, drawn))
+        assert all(abs(v * dpr - round(v * dpr)) < 1e-6 for v in drawn)
+        frame, rect = frame_rect()
+        assert rect == pytest.approx(drawn, abs=1e-9)
+        # The corner handles sit on the drawn card's corners.
+        for corner, (cx, cy) in {
+            "top_left": (drawn[0], drawn[1]),
+            "bottom_right": (drawn[0] + drawn[2], drawn[1] + drawn[3]),
+        }.items():
+            handle = _quick_items_named(overlay, f"customLayoutResize-spotify_visualizer-{corner}")[0]
+            centre = handle.mapToItem(overlay, handle.width() / 2.0, handle.height() / 2.0)
+            assert (centre.x(), centre.y()) == pytest.approx((cx, cy), abs=1e-9)
+        if step == 0:
+            # A move goes through the session geometry; the frame follows the card it draws.
+            model.moveItem(0, origin[0] + 80.0, origin[1] + 45.0, origin[0] + 90.0, origin[1] + 55.0)
+            qt_app.processEvents()
+
+    controller.clear_custom_layout_session()
+    controller.quiesce_for_retirement()
+    window.deleteLater()
+    factory.deleteLater()
+    qt_app.processEvents()
+
+
 def test_quick_custom_layout_overlay_is_presentation_only() -> None:
     source = (
         ROOT / "rendering" / "quick" / "custom_layout_overlay.py"

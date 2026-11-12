@@ -1907,6 +1907,8 @@ class QuickSceneController(QObject):
         if baseline is None:
             loader.setX(local_origin[0])
             loader.setY(local_origin[1])
+            # No record places the card: Edit's frame keeps the session geometry.
+            root.setProperty("drawnCardRect", QRectF())
             return
         # A hidden mode activation parks the outgoing profile before its new
         # render identity/presentation has been committed. The outgoing shell
@@ -2594,6 +2596,7 @@ class QuickSceneController(QObject):
         # The card is drawn on whole device pixels (1C.4): its frame then has no edge pixel that is part frame, part
         # content. The record stays exact; the content moves rigidly with the drawn card (at most half a pixel).
         outer_x, outer_y, outer_width, outer_height = resolve_card_drawn_rect(presentation)
+        drawn_rect = QRectF(outer_x, outer_y, outer_width, outer_height)
         # Steady publications (~90 Hz) usually carry an equal record. The
         # retained item's record plus the live shell geometry/visibility are the
         # only "already applied" truth (no parallel cache): CUSTOM sync can move
@@ -2610,6 +2613,7 @@ class QuickSceneController(QObject):
             and root.y() == 0.0
             and root.width() == outer_width
             and root.height() == outer_height
+            and root.property("drawnCardRect") == drawn_rect
         ):
             return
         loader.setX(outer_x)
@@ -2620,6 +2624,8 @@ class QuickSceneController(QObject):
         root.setY(0.0)
         root.setWidth(outer_width)
         root.setHeight(outer_height)
+        # Edit's outline and handles sit on the drawn card, from this one resolution (1C.4).
+        root.setProperty("drawnCardRect", drawn_rect)
         item.set_presentation(presentation)
         self._resolve_visualizer_framed_view(presentation)
 

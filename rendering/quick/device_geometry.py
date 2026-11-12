@@ -7,7 +7,8 @@ wider or narrower than the monitor: the shared edge then overshoots into the
 neighbouring display (R-63 mixed-DPR follow-up). The window's native rectangle
 is therefore derived here in device pixels from the real monitor and virtual
 desktop rectangles: exactly the monitor, plus the R-63 overscan on one exterior
-edge only.
+edge, and a second one on the other axis when that axis is not a whole number
+of logical pixels and has an exterior edge (R-192); never on a shared edge.
 
 The scene is then laid out on the window's on-desktop part (``visible_rect_in_window``),
 which for the display window is exactly its monitor, so the wallpaper, startup
@@ -72,12 +73,35 @@ def overscan_amount(extent: int, dpr: float) -> int:
     return max(1, math.ceil(dpr))
 
 
+def _overscanned(rect: Rect, edge: str, amount: int) -> Rect:
+    left, top, right, bottom = rect
+    if edge == "top":
+        return (left, top - amount, right, bottom)
+    if edge == "bottom":
+        return (left, top, right, bottom + amount)
+    if edge == "left":
+        return (left - amount, top, right, bottom)
+    return (left, top, right + amount, bottom)
+
+
 def compat_native_rect(monitor: Rect, virtual: Rect, dpr: float) -> Rect:
-    """The R-63 window in device pixels: the monitor plus one exterior-edge overscan.
+    """The R-63 window in device pixels: the monitor plus exterior-edge overscan.
 
     Never exact cover (Windows would promote an exact-cover borderless window
-    to Legacy Flip and flash); never extends past the monitor on any other
-    edge, so a neighbouring display is never overdrawn.
+    to Legacy Flip and flash): one exterior edge is always overscanned (top,
+    bottom, left, right in that order). Qt Quick stretches any axis whose device
+    extent is not a whole number of logical pixels (R-192), so when the *other*
+    axis of the monitor is not whole at this DPR (1366 px at 125 %) and the
+    monitor has an exterior edge on that axis too, that edge gets its own
+    overscan, chosen by the same whole-logical rule. Overscan only ever goes past
+    an edge on the virtual desktop's boundary, so a neighbouring display is
+    never overdrawn and every shared edge stays exactly the monitor's.
+
+    Not fixable here: an axis with no exterior edge (a monitor enclosed on both
+    sides of that axis, e.g. the middle of three in a row has no left or right
+    exterior edge) keeps Qt Quick's stretch on that axis when its extent is not
+    whole; and a monitor with no exterior edge at all falls back to a top
+    overscan into its neighbour (R-63's accepted fallback).
     """
     left, top, right, bottom = monitor
     v_left, v_top, v_right, v_bottom = virtual
@@ -91,17 +115,16 @@ def compat_native_rect(monitor: Rect, virtual: Rect, dpr: float) -> Rect:
         "right": right >= v_right,
     }
     edge = next((name for name in _EDGES if exterior[name]), "top")
-    if edge in ("top", "bottom"):
-        amount = overscan_amount(height, dpr)
-    else:
-        amount = overscan_amount(width, dpr)
-    if edge == "top":
-        return (left, top - amount, right, bottom)
-    if edge == "bottom":
-        return (left, top, right, bottom + amount)
-    if edge == "left":
-        return (left - amount, top, right, bottom)
-    return (left, top, right + amount, bottom)
+    vertical = edge in ("top", "bottom")
+    rect = _overscanned(monitor, edge, overscan_amount(height if vertical else width, dpr))
+    # The second axis: overscanned only when it is not whole and has an exterior edge of its own.
+    other_extent = width if vertical else height
+    if not is_whole_logical(other_extent, dpr):
+        other_edges = ("left", "right") if vertical else ("top", "bottom")
+        second = next((name for name in other_edges if exterior[name]), None)
+        if second is not None:
+            rect = _overscanned(rect, second, overscan_amount(other_extent, dpr))
+    return rect
 
 
 def visible_rect_in_window(window: Rect, virtual: Rect, dpr: float) -> tuple[float, float, float, float] | None:
