@@ -18,6 +18,7 @@ from core.settings.default_contract import require_canonical_default
 from core.settings.settings_manager import SettingsManager
 from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
 from ui.settings_dialog import SettingsDialog
+from tests._invisible_windows import keep_off_screen
 from ui.settings_undo import settings_undo_for
 from ui.tabs.shared_styles import NoWheelSlider
 from ui.widgets.visual_controls import RangeSlider
@@ -111,6 +112,7 @@ def test_a_range_control_step_is_undoable(dialog):
     control.setValue((20, 60))
     commits = []
     control.valueCommitted.connect(commits.append)
+    keep_off_screen(control.window())  # the dialog is never shown; off screen even so
     control.show()
     control.setFocus()
     QTest.keyClick(control, Qt.Key.Key_Right)

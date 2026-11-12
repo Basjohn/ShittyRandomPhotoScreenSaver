@@ -72,6 +72,7 @@ def test_nested_bucket_rails_stop_at_headers_and_visible_rows(qt_app):
         assert subtree.isHidden()
         assert _points(body) == (_anchor(top, body), _anchor(child, body))
         _assert_painted_rail_ends_at(body, _anchor(child, body)[1])
+        keep_off_screen(last.window())  # its top-level is the off-screen host; said here for the window guard
         last.show()
         _settle(qt_app)
         assert _points(body)[-1] == _anchor(last, body)

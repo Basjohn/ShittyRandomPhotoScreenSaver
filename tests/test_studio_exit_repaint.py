@@ -31,6 +31,7 @@ pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="native Windows 
 
 from PySide6.QtCore import QCoreApplication, QEvent, Qt  # noqa: E402
 
+from tests._invisible_windows import keep_off_screen_unlayered  # noqa: E402
 from tests.test_studio_exit_every_mode import _click_close  # noqa: E402
 
 
@@ -89,15 +90,6 @@ def visible_pixel_windows() -> list[int]:
     return found
 
 
-def make_invisible(widget) -> int:
-    """No pixels, no clicks, never focused or topmost: an empty region (set before the first show) on a tool window."""
-    widget.setWindowFlags(widget.windowFlags() | Qt.WindowType.Tool | Qt.WindowType.WindowDoesNotAcceptFocus)
-    hwnd = int(widget.winId())
-    user32, gdi32 = _win32()
-    assert user32.SetWindowRgn(hwnd, gdi32.CreateRectRgn(0, 0, 0, 0), False)
-    return hwnd
-
-
 class Native:
     def __init__(self, hwnd: int) -> None:
         self.hwnd = hwnd
@@ -136,7 +128,7 @@ class Probe:
         # Focus and z-order are not what is under test, and nothing here may touch the operator's focus.
         self.dialog.raise_ = lambda: None
         self.dialog.activateWindow = lambda: None
-        self.native = Native(make_invisible(self.dialog))
+        self.native = Native(keep_off_screen_unlayered(self.dialog))
         if acrylic:
             from core.windows.dwm_blur import enable_acrylic_blur
             enable_acrylic_blur(self.native.hwnd, tint_r=20, tint_g=30, tint_b=40, tint_alpha=120)
