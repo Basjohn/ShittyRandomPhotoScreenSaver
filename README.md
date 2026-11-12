@@ -90,7 +90,9 @@ Transition and Visualizer availability is COMPLETELY configurable so you can dis
 
 ### Studios
 
-<img width="50%" alt="image" src="https://github.com/user-attachments/assets/e22a7df8-e3a1-4911-b8bf-8fc846a4a5d6" />
+<img width="60%" alt="image" src="https://github.com/user-attachments/assets/044eab51-6c9b-4d83-9d9d-30b289cb2e1a" />
+
+
 
 - Studios expand the preset system to give user friendly and advanced ways to make and share your own presets.
 - Every single mode has a studio. Letting you paint terrain, curve waveforms or just make bubbles bigger. Your fetish achieved.
