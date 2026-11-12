@@ -225,6 +225,30 @@ def test_display_diagram_click_toggles_a_display(qapp, settings, monkeypatch):
         page.deleteLater()
 
 
+def test_widgets_page_names_a_required_family_by_its_label(qapp, settings):
+    """A family that needs another one says so with that family's label (what the list shows), never its id."""
+    from core.settings.capability_activation import set_widget_family_activated
+    from core.settings.widget_family_catalog import get_widget_family_descriptors
+    from ui.onboarding.selection_pages import WidgetsPage
+    families = {family.family_id: family for family in get_widget_family_descriptors()}
+    dependent = next(family for family in families.values() if family.required_family_ids)
+    for required in dependent.required_family_ids:
+        set_widget_family_activated(settings.values["widgets"], required, False)
+    page = WidgetsPage(settings)
+    try:
+        page.refresh()
+        row = next(page.rows.item(i) for i in range(page.rows.count())
+                   if page.rows.item(i).data(Qt.ItemDataRole.UserRole) == dependent.family_id)
+        tooltip = page.rows.itemWidget(row).toolTip()
+        assert all(families[required].label in tooltip for required in dependent.required_family_ids)
+        page.rows.setCurrentItem(row)
+        from PySide6.QtWidgets import QLabel
+        shown = " ".join(label.text() for label in page.panel.findChildren(QLabel)).casefold()
+        assert all(families[required].label.casefold() in shown for required in dependent.required_family_ids)
+    finally:
+        page.deleteLater()
+
+
 def test_widget_setup_clocks_section_sets_face_and_timezones(qapp, settings, monkeypatch):
     import ui.onboarding.state as state
     from PySide6.QtWidgets import QCheckBox, QToolButton

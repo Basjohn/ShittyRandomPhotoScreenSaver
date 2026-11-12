@@ -40,6 +40,12 @@ def _member_setting(widget_id):
     return widget_id, "enabled"
 
 
+def _family_labels(family_ids) -> str:
+    """What people read for families: their catalog labels, never their ids."""
+    labels = {family.family_id: family.label for family in get_widget_family_descriptors()}
+    return ", ".join(labels.get(family_id, family_id) for family_id in family_ids)
+
+
 def _member_label(member, family):
     if len(family.member_widget_ids) == 1:
         return family.label
@@ -106,7 +112,7 @@ class WidgetsPage(Page):
                 dependencies_ready = all(is_widget_family_effective(widgets, required) for required in family.required_family_ids)
                 self.rows.itemWidget(item).setEnabled(dependencies_ready)
                 if not dependencies_ready:
-                    self.rows.itemWidget(item).setToolTip("Activate " + ", ".join(family.required_family_ids) + " first.")
+                    self.rows.itemWidget(item).setToolTip(f"Turn on {_family_labels(family.required_family_ids)} first.")
                 if selected == family.family_id: self.rows.setCurrentItem(item)
             if self.rows.currentRow() < 0: self.rows.setCurrentRow(0)
         self._show(self.rows.currentItem(), None)
@@ -126,7 +132,7 @@ class WidgetsPage(Page):
         widgets = self.settings.get("widgets")
         requirement = "READY"
         if family.required_family_ids and not is_widget_family_effective(widgets, family.family_id):
-            requirement = "REQUIRES " + ", ".join(family.required_family_ids).upper()
+            requirement = "REQUIRES " + _family_labels(family.required_family_ids).upper()
         elif family.family_id in {"steam", "gmail"}:
             if not saved_account_states(self.settings)[family.family_id]: requirement = f"NEEDS {family.family_id.upper()}"
         elif family.family_id == "weather" and not widgets["weather"]["location"]:
