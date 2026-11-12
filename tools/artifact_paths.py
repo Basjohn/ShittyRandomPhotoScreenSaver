@@ -113,6 +113,8 @@ AREAS = frozenset({
     "themes",
     "tests",
     "architecture",
+    "native_core",
+    "materials",
 })
 _NAMED_AREAS = frozenset({"visualizers", "transitions"})
 # Not a mode id: shared visualizer infrastructure (DSP, audio, cross-mode comparisons).

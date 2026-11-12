@@ -350,11 +350,20 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   near layer's defocus before the bound is quoted as visible error.
 - [ ] Verify the drift programs on a non-NVIDIA driver and through fxc/dxc and the Vulkan backend when the native
   core first runs them (D4.7's self-check reports a compiler that breaks the pairs; Watchlist until then).
-- [ ] N1.2 The remaining 16 compute sources on `LEGACY_GL_ONLY` (`tests/test_vulkan_shader_readiness.py`: fog
-  volume integrate and inject, Waveform atmosphere field, Waveform floor give blur and section, the five edge
-  field passes and header, motion tile max, population scan, the propagation field's three) compile through
-  `qsb`: loose uniforms into blocks, nothing OpenGL-only; each stays pixel-identical in OpenGL (its own harness
-  before and after) and leaves the list. The list ends empty and the test then forbids it.
+- N1.2 landed 12 Nov (e8a5694b): every compute source bakes through `qsb` for every target and the exception list
+  is gone (the test fails on any source that does not bake); dispatch values are std140 blocks at one binding
+  (`SCENE3D_COMPUTE_BLOCK_BINDING`, `DispatchBlocks` in `scene3d/compute.py`); each pass bit-identical in OpenGL on
+  Qt 6.12 through `tools/compute_pass_identity.py` (the propagation relaxation within its own documented race
+  spread); GL calls per run fell for the edge field, propagation, Waveform's fields and fog (motion and population
+  +1 and +2, a bind replacing a uniform). Evidence `.artifacts/evidence/architecture/native_core_n1_2/`.
+- [ ] Bake targets are the shipped backends' (lead's decision, 12 Nov): SPIR-V, GLSL 430, HLSL 5.0, MSL 1.2. GLSL
+  310 es is used by no backend we ship (desktop QRhi OpenGL takes the 430 variant) and is dropped from the required
+  set in the readiness test; the images N1.2 widened only for ES (the edge field's luma, blur and strength images,
+  +6 MB per field and 0.019 ms at 1080p, two fields under Edge Bloom; the fog's steady share, +7.1 MB at Waveform's
+  largest grid) go back to R16F where the result stays bit-identical (N1.7's rule, measured before and after).
+- [ ] `qsb` accepts `rg16f`/`rg32f` storage images for ES although GLSL ES 3.1 does not: the motion tiles
+  (`scene3d/motion.py`) and the edge field's flood and field images still use them; N1.7 decides each against the
+  shipped targets only.
 - [ ] N1.3 The readiness check discovers every shader source in `rendering/` (today it scans module-level compute
   strings in eight modules; the population count and scatter sources and the composed fog medium program are
   never checked), vertex and fragment included, compiles each through `qsb` and ratchets the failures down, mode
