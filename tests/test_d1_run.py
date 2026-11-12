@@ -101,7 +101,63 @@ def test_the_plan_refuses_late_steps_hidden_desktop_grabs_and_unknown_settings()
             plan(*argv)
 
 
-# -- the profile copy and its edits -----------------------------------------------------------------------------------
+# -- two displays, the second always invisible (1C.2) -------------------------------------------------------------------
+
+def test_a_step_can_name_the_always_invisible_display_and_only_with_in_process_input_or_a_grab():
+    assert d1_run.parse_step("10:hover@0:@visualizerCardFrame") == d1_run.Step(10.0, "hover", "@visualizerCardFrame", 0)
+    assert d1_run.parse_step("11:press@0:@visualizerExpandRightGlyph").text() == "11:press@0:@visualizerExpandRightGlyph"
+    with pytest.raises(Exception):
+        d1_run.parse_step("5:grab@x:a")
+
+    def plan(*argv):
+        d1_run.check_plan(d1_run.parse_args(["--display", "1", "--seconds", "20", *argv]))
+
+    plan("--with-hidden-display", "0", "--step", "5:hover@0:@visualizerCardFrame", "--step", "6:press@0:10,10",
+         "--step", "7:grab@0:moved")
+    for argv in (["--step", "5:grab@0:a"],                                          # no such display in the run
+                 ["--with-hidden-display", "0", "--step", "5:click@0:@visualizerCardFrame"],   # posted: dropped
+                 ["--with-hidden-display", "0", "--step", "5:screen@0:a"],          # its desktop shows something else
+                 ["--with-hidden-display", "0", "--step", "5:key@0:esc"]):
+        with pytest.raises(d1_run.Refusal):
+            plan(*argv)
+    with pytest.raises(SystemExit):
+        d1_run.parse_args(["--display", "1", "--with-hidden-display", "1"])
+
+
+def test_the_runner_command_forwards_the_invisible_display(tmp_path):
+    args = d1_run.parse_args(["--display", "1", "--with-hidden-display", "0", "--hidden",
+                              "--step", "5:press@0:@visualizerExpandRightGlyph"])
+    with artifact_paths.use_root(tmp_path / ".artifacts"):
+        command = d1_run.runner_command(args, artifact_paths.scratch_root("d1_run") / "run" / "out")
+        forwarded = d1_run.parse_args(command[2:])
+    assert forwarded.with_hidden_display == 0 and forwarded.step == args.step
+
+
+def test_the_pair_admits_exactly_the_two_displays_present():
+    class Manager:
+        def _get_allowed_screen_indices(self, screen_count):
+            return set(range(screen_count))              # the profile's selection: every screen
+
+    d1_run.install_display_pair(1, 0, manager_class=Manager)
+    assert Manager()._get_allowed_screen_indices(3) == {0, 1}         # never the third
+    assert Manager()._get_allowed_screen_indices(1) == {0}            # a display gone: never another
+
+
+def test_the_guard_admits_an_off_display_window_only_while_it_cannot_show_a_pixel(monkeypatch):
+    """The visible run's guard: a saver window on another monitor kills the run unless the run has an
+    always-invisible display and that window cannot show a pixel (``window_could_show`` is None)."""
+    chosen = (2560, 0, 6400, 2160)
+    other = (0, 0, 2560, 1440)
+    showing = {"value": "hwnd 7 could show"}
+    monkeypatch.setattr(d1_run.live_check, "window_could_show", lambda _hwnd: showing["value"])
+    monitor = MONITORS[1]
+    assert not d1_run.off_display_violates(7, chosen, monitor, unseen_ok=True)       # on the chosen display
+    assert d1_run.off_display_violates(7, other, monitor, unseen_ok=False)
+    assert d1_run.off_display_violates(7, other, monitor, unseen_ok=True)            # it could show: killed
+    showing["value"] = None
+    assert not d1_run.off_display_violates(7, other, monitor, unseen_ok=True)        # invisible: admitted
+    assert d1_run.off_display_violates(7, other, monitor, unseen_ok=False)           # only with the option
+
 
 def _fake_appdata(tmp_path) -> Path:
     appdata = tmp_path / "appdata"

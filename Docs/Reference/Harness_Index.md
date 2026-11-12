@@ -381,6 +381,12 @@ only with `--hidden`. `--help` prints the ready recipes (the first: Spline Curve
   run's scratch is kept and printed): `frames/<label>.png`, `frames/<label>__<crop>_x<zoom>.png`, `d1_state.json` (each
   step, the window's client size, DPR, screen, the item's logical and device rectangle, the Visualizer's mode and
   display-wide state), `summary.json`, `plan.json`, `runner.txt`, `logs/` (the frame trace included).
+- **Two displays, one always invisible** (`--with-hidden-display N`, 1C.2): display N joins the run with its window
+  presented but invisible (empty region; the guard kills the run if that window could show a pixel, `window_could_show`),
+  the runner narrows the manager's selection to exactly the two displays (`install_display_pair`), and steps reach it as
+  `KIND@N` with `grab`, `hover` or `press` (in process: `QCoreApplication.postEvent` to its window, since posted Win32
+  pointers are dropped by its empty region). The second recipe in `--help` drives a Visualizer move toward Display 1.
+  Refused with fewer than two displays present.
 - **Hidden proof only:** a `--hidden` run proves launch, `--only-display`, the reveal, the steps, the readback (the
   invisible window still renders: its frames are real), crops, logs, the self-exit and teardown. It cannot prove what the
   panel shows through DWM, nor posted pointer delivery (Qt drops a posted pointer whose position lies over another

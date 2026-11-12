@@ -90,6 +90,21 @@ bar border on; the run copies it again and edits only that copy):
       --crop left-mid --crop bottom-mid --crop bottom-left --crop bottom-right --zoom 4
 
 and the display-wide card: the same line with expanded_display_requested=true and --label devcurve_display_wide.
+
+Recipe: a Visualizer display move toward Display 1 (Current_Plan 1C.2). Display 0 joins the run with its window ALWAYS
+invisible (--with-hidden-display 0: presented, empty region, the guard kills the run if it could show a pixel); the
+Visualizer starts display-wide on Display 0 and its up-right glyph, pressed in process, moves it to Display 1 as one
+fade-through. Frames on Display 1 across the move; one hidden frame on Display 0 (read back from its back buffer):
+
+  .venv\Scripts\python.exe tools\d1_run.py --display 1 --with-hidden-display 0 --profile <profile copy>
+      --mode extruded_bubble --setting widgets.spotify_visualizer.monitor=\"1\"
+      --setting widgets.spotify_visualizer.expanded_display_requested=true
+      --clip logs\visualizer_recordings\anything_mixed2.jsonl --seconds 40 --label 1c2_move_to_d1
+      --step 12:hover@0:@visualizerCardFrame --step 13.5:press@0:@visualizerExpandRightGlyph
+      --step 13.6:grab@0:d0_fading --step 13.7:grab:d1_a --step 13.9:grab:d1_b --step 14.1:grab:d1_c
+      --step 14.3:grab:d1_d --step 14.6:grab:d1_e --step 15.0:grab:d1_f --step 16.0:grab:d1_g --step 20:grab:d1_steady
+
+Agents prove it only with --hidden added (every window invisible); never without it, and never with --allow-primary.
 Frames land in frames/: <step>.png (the whole window), <step>__<crop>_x4.png, and d1_state.json records each item's
 exact scene rectangle (logical and device pixels), the window's DPR and screen. List the displays first:
   .venv\Scripts\python.exe tools\d1_run.py --list-displays
@@ -205,7 +220,10 @@ def match_monitor(display: Display, monitors: list[Monitor], *, allow_primary: b
 _VK = {"ESC": 0x1B, "ESCAPE": 0x1B, "SPACE": 0x20, "RETURN": 0x0D, "ENTER": 0x0D, "TAB": 0x09, "LEFT": 0x25,
        "UP": 0x26, "RIGHT": 0x27, "DOWN": 0x28, **{f"F{n}": 0x6F + n for n in range(1, 13)}}
 POINTER_KINDS = ("move", "click", "rclick", "dblclick")
-STEP_KINDS = ("grab", "screen", "key", *POINTER_KINDS)
+# In-process input (1C.2): delivered to the window through Qt's own event queue (QCoreApplication.postEvent), the
+# route for the always-invisible window of --with-hidden-display, whose empty region makes Qt drop posted pointers.
+IN_PROCESS_KINDS = ("hover", "press")
+STEP_KINDS = ("grab", "screen", "key", *POINTER_KINDS, *IN_PROCESS_KINDS)
 
 
 @dataclass(frozen=True)
@@ -213,9 +231,11 @@ class Step:
     at: float                  # seconds after the first reveal
     kind: str
     arg: str
+    display: int | None = None  # ``KIND@N``: the step acts on display N (the run's --with-hidden-display); None: --display
 
     def text(self) -> str:
-        return f"{self.at:g}:{self.kind}:{self.arg}"
+        kind = self.kind if self.display is None else f"{self.kind}@{self.display}"
+        return f"{self.at:g}:{kind}:{self.arg}"
 
 
 def virtual_key(name: str) -> int:
@@ -239,11 +259,17 @@ def parse_target(text: str) -> tuple[str, int, int] | tuple[str, str]:
 
 def parse_step(text: str) -> Step:
     """``AT:KIND:ARG``: AT seconds after the first reveal; grab/screen take a label, key a key name, move/click/rclick/
-    dblclick a target."""
+    dblclick (posted) and hover/press (in process) a target. ``KIND@N`` acts on display N (--with-hidden-display)."""
     parts = str(text).split(":", 2)
     if len(parts) != 3:
         raise argparse.ArgumentTypeError(f"a step is AT:KIND:ARG, got {text!r}")
     at_text, kind, arg = parts
+    display: int | None = None
+    if "@" in kind:
+        kind, _at, index = kind.partition("@")
+        if not index.isdigit():
+            raise argparse.ArgumentTypeError(f"a step's display is KIND@N (N a display index), got {parts[1]!r}")
+        display = int(index)
     try:
         at = float(at_text)
     except ValueError:
@@ -261,7 +287,7 @@ def parse_step(text: str) -> Step:
             parse_target(arg)
     except (ValueError, artifact_paths.ArtifactPathError) as exc:
         raise argparse.ArgumentTypeError(str(exc)) from None
-    return Step(at, kind, arg)
+    return Step(at, kind, arg, display)
 
 
 def parse_key_value(text: str) -> tuple[str, object]:
@@ -285,6 +311,13 @@ def check_plan(args) -> None:
         if step.kind == "screen" and args.hidden:
             raise Refusal("a screen step grabs the desktop of that display; a --hidden run would grab what lies "
                           "beneath its invisible window")
+        if step.display is not None and step.display != args.display:
+            if step.display != getattr(args, "with_hidden_display", None):
+                raise Refusal(f"step {step.text()} names display {step.display}, which is neither --display nor "
+                              "--with-hidden-display")
+            if step.kind not in ("grab", *IN_PROCESS_KINDS):
+                raise Refusal(f"step {step.text()}: the always-invisible display takes only grab, hover and press "
+                              "(posted input is dropped by its empty region; its desktop shows something else)")
     if args.crop and not any(step.kind in ("grab", "screen") for step in args.step):
         raise Refusal("--crop needs a grab or screen step")
     application = ENTRIES[args.entry][1]
@@ -567,20 +600,26 @@ class D1Driver:
                 rows.append({"screen_index": getattr(unit, "screen_index", None), "error": repr(exc)})
         return rows
 
-    def _window(self):
+    def _window(self, display: int | None = None):
         engine = self._engine
         manager = getattr(engine, "display_manager", None)
+        wanted = self.display if display is None else int(display)
         units = [unit for unit in tuple(getattr(manager, "displays", ()) or ())
-                 if unit.screen_index == self.display and not unit.is_retired]
+                 if unit.screen_index == wanted and not unit.is_retired]
         if len(units) != 1:
-            raise RuntimeError(f"{len(units)} live display units on screen {self.display}")
+            raise RuntimeError(f"{len(units)} live display units on screen {wanted}")
         return units[0].runtime.window
 
     def fire(self, index: int) -> None:
         step = self.steps[index]
         record = {"index": index, "step": step.text(), "fired_at": self._now()}
         try:
-            window = self._window()
+            window = self._window(step.display)
+            if step.kind in IN_PROCESS_KINDS:
+                record.update(self._send_pointer(window, step.kind, parse_target(step.arg)))
+                record["ok"] = True
+                self._complete(record)
+                return
             if step.kind == "grab":
                 # The scene geometry is read now, on the GUI thread; the pixels come from the next rendered frame.
                 record.update(self._frame_facts(window))
@@ -705,8 +744,8 @@ class D1Driver:
         self._post(window, 0x0101, vk, 1 | (scan << 16) | (1 << 30) | (1 << 31))      # WM_KEYUP
         return {"vk": vk}
 
-    def _post_pointer(self, window, kind: str, target) -> dict:
-        self._receive(window)
+    def _target_point(self, window, target) -> tuple[float, float]:
+        """The target in the window's logical scene coordinates (an item's centre, or device pixels / DPR)."""
         dpr = float(window.devicePixelRatio())
         if target[0] == "item":
             self.item, wanted = target[1], self.item
@@ -717,7 +756,35 @@ class D1Driver:
             if not items:
                 raise RuntimeError(f"no visible scene item named {target[1]!r}")
             lx, ly, lw, lh = max(items, key=lambda row: row["logical"][2] * row["logical"][3])["logical"]
-            x, y = int(round((lx + lw / 2.0) * dpr)), int(round((ly + lh / 2.0) * dpr))
+            return lx + lw / 2.0, ly + lh / 2.0
+        return target[1] / dpr, target[2] / dpr
+
+    def _send_pointer(self, window, kind: str, target) -> dict:
+        """In-process input (``hover``: a move; ``press``: a move, a left press and its release), queued to the
+        window through Qt's event queue, the route a real pointer's events take into the scene (``--with-hidden-
+        display``'s invisible window drops posted pointers: its region is empty)."""
+        from PySide6.QtCore import QCoreApplication, QEvent, QPointF, Qt
+        from PySide6.QtGui import QMouseEvent
+
+        self._receive(window)
+        x, y = self._target_point(window, target)
+        local = QPointF(x, y)
+        global_point = QPointF(window.mapToGlobal(local))
+        none, left = Qt.MouseButton.NoButton, Qt.MouseButton.LeftButton
+        modifiers = Qt.KeyboardModifier.NoModifier
+        events = [(QEvent.Type.MouseMove, none, none)]
+        if kind == "press":
+            events += [(QEvent.Type.MouseButtonPress, left, left), (QEvent.Type.MouseButtonRelease, left, none)]
+        for event_type, button, buttons in events:
+            QCoreApplication.postEvent(window, QMouseEvent(event_type, local, global_point, button, buttons, modifiers))
+        return {"logical": [x, y], "in_process": True}
+
+    def _post_pointer(self, window, kind: str, target) -> dict:
+        self._receive(window)
+        dpr = float(window.devicePixelRatio())
+        lx, ly = self._target_point(window, target)
+        if target[0] == "item":
+            x, y = int(round(lx * dpr)), int(round(ly * dpr))
         else:
             x, y = target[1], target[2]
         lparam = (y & 0xFFFF) << 16 | (x & 0xFFFF)
@@ -752,6 +819,19 @@ class D1Driver:
         (self.out / STATE_NAME).write_text(json.dumps(self.state(), indent=1), encoding="utf-8")
 
 
+def install_display_pair(display: int, hidden_display: int, *, manager_class=None) -> None:
+    """Runner side: the saver's windows go on exactly ``display`` and ``hidden_display`` (those present), whatever
+    the profile selects; never any other screen (the run fails closed if one would show)."""
+    if manager_class is None:
+        from engine.display_manager import DisplayManager as manager_class
+    pair = {int(display), int(hidden_display)}
+
+    def allowed(self, screen_count: int) -> set[int]:
+        return {index for index in pair if 0 <= index < int(screen_count)}
+
+    manager_class._get_allowed_screen_indices = allowed
+
+
 def _runner(args) -> int:
     from tools import eb_live_phases as phases
 
@@ -768,10 +848,20 @@ def _runner(args) -> int:
             print(f"REFUSED setting: {exc}", file=sys.stderr)
             return 6
         (out / "applied_settings.json").write_text(json.dumps(applied, indent=1, default=str), encoding="utf-8")
+    hidden_display = getattr(args, "with_hidden_display", None)
+    if hidden_display is None:
+        only = ["--only-display", str(args.display)]
+    else:
+        # Two displays (1C.2): the product's RUN flag names one screen, so the runner narrows the manager's own
+        # selection to exactly these two; the second one's window is always invisible (below).
+        only = []
+        install_display_pair(args.display, hidden_display)
     sys.argv = [str(ROOT / entry), *args.diag, "--frame-trace", "--exit-after", f"{args.seconds:g}",
-                "--only-display", str(args.display), *args.app_arg, "/s"]
+                *only, *args.app_arg, "/s"]
     if args.hidden:
         live_check.install_invisible_windows()
+    elif hidden_display is not None:
+        live_check.install_invisible_windows({int(hidden_display)})
     driver = D1Driver(args.step, display=args.display, out=out, crops=args.crop, item=args.item,
                       crop_size=args.crop_size, zoom=args.zoom)
     driver.install()
@@ -792,6 +882,8 @@ def runner_command(args, out: Path) -> list[str]:
                "--clip-start", f"{args.clip_start:g}", "--item", args.item, "--crop-size", str(args.crop_size),
                "--zoom", str(args.zoom)]
     command += ["--hidden"] if args.hidden else []
+    if getattr(args, "with_hidden_display", None) is not None:
+        command += ["--with-hidden-display", str(args.with_hidden_display)]
     command += [f"--diag={flag}" for flag in args.diag]
     command += [f"--app-arg={token}" for token in args.app_arg]
     command += [f"--step={step.text()}" for step in args.step]
@@ -800,8 +892,18 @@ def runner_command(args, out: Path) -> list[str]:
     return command
 
 
-def off_display_windows(pids: set[int], monitor: Monitor) -> list[str]:
-    """Visible windows of ``pids`` whose monitor is not ``monitor``."""
+def off_display_violates(hwnd, window_monitor: tuple[int, int, int, int], monitor: Monitor, *,
+                         unseen_ok: bool) -> bool:
+    """A visible saver window on ``window_monitor`` breaks the run: it is on another monitor than the chosen one, and
+    (with ``unseen_ok``, the always-invisible display's run) it could show a pixel or take a click."""
+    if window_monitor == (monitor.left, monitor.top, monitor.right, monitor.bottom):
+        return False
+    return not (unseen_ok and live_check.window_could_show(hwnd) is None)
+
+
+def off_display_windows(pids: set[int], monitor: Monitor, *, unseen_ok: bool = False) -> list[str]:
+    """Visible windows of ``pids`` whose monitor is not ``monitor`` (``unseen_ok``: except those that cannot show a
+    pixel or take a click, ``visualizer_live_check.window_could_show``: the always-invisible display's window)."""
     from ctypes import wintypes
 
     user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -821,7 +923,7 @@ def off_display_windows(pids: set[int], monitor: Monitor) -> list[str]:
             info.cbSize = ctypes.sizeof(info)
             user32.GetMonitorInfoW(user32.MonitorFromWindow(hwnd, 2), ctypes.byref(info))     # NEAREST
             r = info.rcMonitor
-            if (r.left, r.top, r.right, r.bottom) != (monitor.left, monitor.top, monitor.right, monitor.bottom):
+            if off_display_violates(hwnd, (r.left, r.top, r.right, r.bottom), monitor, unseen_ok=unseen_ok):
                 rect = wintypes.RECT()
                 user32.GetWindowRect(hwnd, ctypes.byref(rect))
                 name = ctypes.create_unicode_buffer(256)
@@ -963,6 +1065,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--zoom", type=int, default=4, help="nearest-neighbour zoom of each crop (default 4)")
     parser.add_argument("--hidden", action="store_true",
                         help="agents: the saver's windows presented but invisible (proves plumbing, not pixels)")
+    parser.add_argument("--with-hidden-display", type=int, metavar="N",
+                        help="a second display in the run whose window is ALWAYS invisible (presented, empty region, "
+                             "the guard kills the run if it could show a pixel): a Visualizer can move between it and "
+                             "--display; steps reach it as KIND@N with grab, hover or press (in process)")
     parser.add_argument("--startup-grace", type=float, default=90.0, help="watchdog: seconds allowed before the "
                                                                           "self-exit countdown starts (default 90)")
     parser.add_argument("--teardown-grace", type=float, default=45.0, help="watchdog: seconds allowed after it")
@@ -988,6 +1094,9 @@ def parse_args(argv=None):
         parser.error("--viz-set needs --mode")
     if args.app_arg and any(token.startswith("--only-display") for token in args.app_arg):
         parser.error("the display is --display, not an --app-arg")
+    if args.with_hidden_display is not None and (args.with_hidden_display < 0
+                                                 or args.with_hidden_display == args.display):
+        parser.error("--with-hidden-display names another display than --display")
     if not args.updates and not args.runner:
         args.diag.append("--noupdates")          # no live network unless asked: feeds, mail and weather stay cached
     args.diag = list(dict.fromkeys(args.diag))
@@ -1016,6 +1125,10 @@ def main(argv=None) -> int:
         displays = enumerate_displays()
         chosen = check_display_choice(displays, args.display, allow_primary=args.allow_primary)
         monitor = match_monitor(chosen, win32_monitors(), allow_primary=args.allow_primary)
+        if args.with_hidden_display is not None and not any(
+                display.index == args.with_hidden_display for display in displays):
+            raise Refusal(f"no display {args.with_hidden_display} for --with-hidden-display "
+                          f"(present: {', '.join(str(d.index) for d in displays)})")
     except Refusal as exc:
         print(f"REFUSED: {exc}")
         return 2
@@ -1029,7 +1142,9 @@ def main(argv=None) -> int:
     if args.hidden:
         guard = live_check._visible_window_violations
     else:
-        guard = partial(off_display_windows, monitor=monitor)
+        # With --with-hidden-display, a window off the chosen monitor is admitted only while it cannot show a pixel.
+        guard = partial(off_display_windows, monitor=monitor,
+                        unseen_ok=args.with_hidden_display is not None)
     try:
         viz = dict(args.viz_set)
         live_check._prepare_profile(out, args.mode, args.preset, viz, appdata_root=profile_root,
@@ -1037,7 +1152,8 @@ def main(argv=None) -> int:
         plan = {"display": asdict(chosen), "monitor": asdict(monitor), "entry": args.entry, "mode": args.mode,
                 "preset": args.preset, "viz_set": viz, "setting": dict(args.setting), "seconds": args.seconds,
                 "steps": [step.text() for step in args.step], "crops": args.crop, "item": args.item,
-                "hidden": args.hidden, "diag": args.diag, "app_arg": args.app_arg, "clip": args.clip,
+                "hidden": args.hidden, "with_hidden_display": args.with_hidden_display,
+                "diag": args.diag, "app_arg": args.app_arg, "clip": args.clip,
                 "destination": str(destination)}
         (out / "plan.json").write_text(json.dumps(plan, indent=1), encoding="utf-8")
         outcome = supervise(runner_command(args, out), log_path=out / "runner.txt",

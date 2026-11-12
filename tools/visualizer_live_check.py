@@ -520,33 +520,50 @@ def isolate_profile_paths(out: Path) -> None:
     logger._FORCED_LOG_DIR=(out/'logs').resolve()
 
 
-def install_invisible_windows() -> None:
-    """Runner side: every saver display window is presented, yet shows no pixel and takes no click.
+def install_invisible_windows(screens: set[int] | None = None) -> None:
+    """Runner side: every saver display window (or, with ``screens``, the windows on those screen indices) is
+    presented, yet shows no pixel and takes no click.
 
     Invisible but presented like a visible window: an empty window region clips every pixel and every click, while
     the window stays an ordinary (non-layered) one, so its swap is paced by its own display. Opacity 0 or
     WindowTransparentForInput would make it layered, and a layered window's swap is not vsync-paced (it ran at the
-    90 Hz publication rate on a 60 Hz panel).
+    90 Hz publication rate on a 60 Hz panel). ``screens`` (``tools/d1_run.py --with-hidden-display``): the other
+    windows stay exactly as the product makes them.
     """
     from PySide6.QtCore import Qt
     from rendering.quick import state, window
 
-    flags = state.QuickWindowPolicy.flags
-
-    def invisible_flags(self):
-        return ((flags(self) & ~Qt.WindowType.WindowStaysOnTopHint) | Qt.WindowType.Tool
+    def invisible(window_flags):
+        return ((window_flags & ~Qt.WindowType.WindowStaysOnTopHint) | Qt.WindowType.Tool
                 | Qt.WindowType.WindowDoesNotAcceptFocus)
 
     show_on_screen = window.QuickDisplayWindow.show_on_screen
     gdi32 = ctypes.WinDLL("gdi32")
+    chosen = None if screens is None else {int(index) for index in screens}
+
+    def hidden(quick_window) -> bool:
+        return chosen is None or int(quick_window.screen_index) in chosen
 
     def invisible_show(self):
         # Placement is committed and the show is only queued: create the native window now, on its screen
         # (earlier, in __init__, it is created before its screen and the display reads as displaced).
         show_on_screen(self)
-        _user32.SetWindowRgn(int(self.winId()), gdi32.CreateRectRgn(0, 0, 0, 0), False)
+        if hidden(self):
+            _user32.SetWindowRgn(int(self.winId()), gdi32.CreateRectRgn(0, 0, 0, 0), False)
 
-    state.QuickWindowPolicy.flags = invisible_flags
+    if chosen is None:
+        flags = state.QuickWindowPolicy.flags
+        state.QuickWindowPolicy.flags = lambda self: invisible(flags(self))
+    else:
+        # The policy does not know its screen; the window does, once constructed (before it is shown).
+        construct = window.QuickDisplayWindow.__init__
+
+        def construct_hidden(self, *args, **kwargs):
+            construct(self, *args, **kwargs)
+            if hidden(self):
+                self.setFlags(invisible(self.flags()))
+
+        window.QuickDisplayWindow.__init__ = construct_hidden
     window.QuickDisplayWindow.show_on_screen = invisible_show
 
 
@@ -645,29 +662,37 @@ def _visible_window_violations(pids: set[int]) -> list[str]:
     """Visible windows of ``pids`` that could show a pixel or take a click: anything but a non-topmost window
     with an empty window region (or one fully transparent, click-through and layered)."""
     found: list[str] = []
-    gdi32 = ctypes.WinDLL("gdi32")
 
     def check(hwnd, _lparam):
         pid = wintypes.DWORD()
         _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
         if pid.value in pids and _user32.IsWindowVisible(hwnd):
-            style = _user32.GetWindowLongW(hwnd, -20)                       # GWL_EXSTYLE
-            region = gdi32.CreateRectRgn(0, 0, 0, 0)
-            empty = _user32.GetWindowRgn(hwnd, region) == 1                 # NULLREGION
-            gdi32.DeleteObject(region)
-            alpha, flags, key = ctypes.c_ubyte(), wintypes.DWORD(), wintypes.DWORD()
-            layered = _user32.GetLayeredWindowAttributes(hwnd, ctypes.byref(key), ctypes.byref(alpha),
-                                                         ctypes.byref(flags))
-            transparent = (style & 0x80000 and style & 0x20 and layered and flags.value & 2 and alpha.value == 0)
-            if style & 0x8 or not (empty or transparent):
-                title, name = ctypes.create_unicode_buffer(256), ctypes.create_unicode_buffer(256)
-                _user32.GetWindowTextW(hwnd, title, 256)
-                _user32.GetClassNameW(hwnd, name, 256)
-                found.append(f"hwnd {hwnd} '{title.value}' class {name.value} exstyle {style:#x} alpha {alpha.value}")
+            shows = window_could_show(hwnd)
+            if shows is not None:
+                found.append(shows)
         return True
 
     _user32.EnumWindows(_EnumWindowsProc(check), 0)
     return found
+
+
+def window_could_show(hwnd) -> str | None:
+    """A description of a visible window that could show a pixel or take a click, or None when it cannot (a
+    non-topmost window with an empty window region, or one fully transparent, click-through and layered)."""
+    gdi32 = ctypes.WinDLL("gdi32")
+    style = _user32.GetWindowLongW(hwnd, -20)                       # GWL_EXSTYLE
+    region = gdi32.CreateRectRgn(0, 0, 0, 0)
+    empty = _user32.GetWindowRgn(hwnd, region) == 1                 # NULLREGION
+    gdi32.DeleteObject(region)
+    alpha, flags, key = ctypes.c_ubyte(), wintypes.DWORD(), wintypes.DWORD()
+    layered = _user32.GetLayeredWindowAttributes(hwnd, ctypes.byref(key), ctypes.byref(alpha), ctypes.byref(flags))
+    transparent = (style & 0x80000 and style & 0x20 and layered and flags.value & 2 and alpha.value == 0)
+    if style & 0x8 or not (empty or transparent):
+        title, name = ctypes.create_unicode_buffer(256), ctypes.create_unicode_buffer(256)
+        _user32.GetWindowTextW(hwnd, title, 256)
+        _user32.GetClassNameW(hwnd, name, 256)
+        return f"hwnd {hwnd} '{title.value}' class {name.value} exstyle {style:#x} alpha {alpha.value}"
+    return None
 
 
 def usage_summary(usage_log: Path) -> dict | None:
