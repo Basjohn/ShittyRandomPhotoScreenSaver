@@ -9,9 +9,14 @@ from PySide6.QtCore import QRect
 
 from core.settings.default_contract import get_raw_default_settings
 from core.settings.scene3d_quality import resolve_visualizer_tier
-from engine.display_manager import DisplayManager
 from rendering.custom_layout_session import CustomLayoutKey, CustomLayoutSession, CustomLayoutSessionItem
 from rendering.quick.custom_layout_overlay import CustomLayoutOverlayModel
+from tests._display_manager_doubles import (
+    bare_display_manager,
+    display_runtime_double,
+    display_unit_double,
+    scene_controller_double,
+)
 from tests._visualizer_presentation import resolve_presentation
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
 from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
@@ -87,7 +92,7 @@ def test_held_orbit_updates_from_gui_publication_and_audio_only_has_no_observer(
         render_bridge=SimpleNamespace(peek=lambda: accepted_slot[0]),
     )
     published = []
-    scene = SimpleNamespace(
+    scene = scene_controller_double(
         visualizer_item=SimpleNamespace(presentation=presentation, retained_snapshot=lambda identity: retained[0]),
         set_visualizer_edit_content_envelope=lambda record: published.append((threading.get_ident(), record)),
     )
@@ -101,11 +106,12 @@ def test_held_orbit_updates_from_gui_publication_and_audio_only_has_no_observer(
     session.add_item(visualizer)
     session.add_item(clock)
     custom_owner = SimpleNamespace(is_editing=True, session=session)
-    manager = DisplayManager.__new__(DisplayManager)
-    manager._quick_visualizer_owner = owner
-    manager._quick_visualizer_unit = SimpleNamespace(is_retired=False, runtime=SimpleNamespace(scene_controller=scene))
-    manager._quick_custom_layout_owner = custom_owner
-    manager._quick_view_orbit_pending = None
+    manager = bare_display_manager(
+        _quick_visualizer_owner=owner,
+        _quick_visualizer_unit=display_unit_double(display_runtime_double(scene_controller=scene)),
+        _quick_custom_layout_owner=custom_owner,
+        _quick_view_orbit_pending=None,
+    )
     model = CustomLayoutOverlayModel(session=session, display_identity="display:a")
     model.selection_changed.connect(manager._refresh_quick_visualizer_edit_content_envelope)
     resolutions = []

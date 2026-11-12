@@ -82,8 +82,9 @@ def test_number_key_slot_save_commits_custom_and_reloads_exactly_once() -> None:
     from unittest.mock import Mock
 
     from engine.display_manager import DisplayManager
+    from tests._display_manager_doubles import bare_display_manager
 
-    manager = DisplayManager.__new__(DisplayManager)
+    manager = bare_display_manager()
     reload_calls: list[str] = []
     manager._request_custom_layout_runtime_reload = lambda kind: reload_calls.append(kind)
 
@@ -121,8 +122,9 @@ def test_number_key_slot_load_quiesces_and_reloads_exactly_once() -> None:
     from unittest.mock import Mock
 
     from engine.display_manager import DisplayManager
+    from tests._display_manager_doubles import bare_display_manager
 
-    manager = DisplayManager.__new__(DisplayManager)
+    manager = bare_display_manager()
     reload_calls: list[str] = []
     disable_calls: list[tuple[bool, bool]] = []
     manager._request_custom_layout_runtime_reload = lambda kind: reload_calls.append(kind)

@@ -12,6 +12,9 @@ follow the real surfaces instead of a copied list:
   invents a member.
 * ``visualizer_owner_double``: the read surface of ``QuickDisplayVisualizerOwner`` (started, retired, controller),
   each name checked against the real class.
+* ``display_unit_double`` / ``display_runtime_double``: the read surface of ``QuickDisplayUnit`` (live by default) and
+  ``QuickDisplayRuntime`` (its scene and input controllers default to the setter doubles), each name checked against
+  the real class.
 """
 from __future__ import annotations
 
@@ -112,8 +115,43 @@ def visualizer_owner_double(controller: Any, *, started: bool = True, retired: b
     return SimpleNamespace(**surface)
 
 
+def _checked_surface(cls: type, surface: dict[str, Any]) -> SimpleNamespace:
+    unknown = sorted(name for name in surface if not hasattr(cls, name))
+    if unknown:
+        raise AttributeError(f"{cls.__name__} has no {', '.join(unknown)}: the double would invent members")
+    return SimpleNamespace(**surface)
+
+
+def display_runtime_double(*, scene_controller: Any = None, input_controller: Any = None,
+                           **members: Any) -> SimpleNamespace:
+    """The read surface of a ``QuickDisplayRuntime``; every name must exist on the real class.
+
+    The scene and input controllers default to the setter doubles, so a setter ``DisplayManager`` starts calling on
+    the unit's controllers never breaks a test that did not pass its own controller.
+    """
+    from rendering.quick.runtime import QuickDisplayRuntime
+
+    surface = {
+        "scene_controller": scene_controller_double() if scene_controller is None else scene_controller,
+        "input_controller": input_controller_double() if input_controller is None else input_controller,
+        **members,
+    }
+    return _checked_surface(QuickDisplayRuntime, surface)
+
+
+def display_unit_double(runtime: Any = None, *, retired: bool = False, **members: Any) -> SimpleNamespace:
+    """The read surface of a ``QuickDisplayUnit`` (live by default); every name must exist on the real class."""
+    from rendering.quick.display_unit import QuickDisplayUnit
+
+    surface = {"runtime": display_runtime_double() if runtime is None else runtime,
+               "is_retired": bool(retired), **members}
+    return _checked_surface(QuickDisplayUnit, surface)
+
+
 __all__ = [
     "bare_display_manager",
+    "display_runtime_double",
+    "display_unit_double",
     "input_controller_double",
     "scene_controller_double",
     "visualizer_owner_double",
