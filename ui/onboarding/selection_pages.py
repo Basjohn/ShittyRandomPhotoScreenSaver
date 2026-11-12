@@ -253,9 +253,13 @@ class VisualizerPage(Page):
         check.ensurePolished()
         tag = text_label("Default")
         tag.setWordWrap(False)
+        tag.ensurePolished()
         tag.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        layout = QHBoxLayout(check); layout.setContentsMargins(check.sizeHint().width() + self._TAG_GAP, 0, 0, 0)
+        name_width = check.sizeHint().width() + self._TAG_GAP
+        layout = QHBoxLayout(check); layout.setContentsMargins(name_width, 0, 0, 0)
         layout.addWidget(tag); layout.addStretch()
+        # Every row keeps room for the tag (the list sizes a row's control from its hint), so moving it shifts nothing.
+        check.setMinimumWidth(name_width + tag.sizeHint().width())
         tag.setVisible(False)
         return tag
 

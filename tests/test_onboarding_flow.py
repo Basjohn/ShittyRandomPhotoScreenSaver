@@ -604,6 +604,11 @@ def _assert_one_default(page, rows):
     expected = resolve_effective_mode(draft["mode"], draft["mode_activation"])[0]  # the runtime's own reading
     assert expected in _enabled_modes(page)
     assert _tagged_modes(page) == [expected]
+    # The tag sits inside its row's control, after the mode name (a tag laid out past the control is clipped away).
+    tag = page._default_tags[expected]; check = tag.parentWidget()
+    check.layout().activate()
+    assert check.rect().contains(tag.geometry()) and tag.width() >= tag.sizeHint().width()
+    assert tag.x() >= check.sizeHint().width()
     for mode, item in rows.items():  # the radio is ticked only on the default mode's preview
         page.rows.setCurrentItem(item)
         assert page.make_default.isChecked() is (mode == expected), mode
