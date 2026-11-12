@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** the N2.1 product build round 3 on GitHub (lead).
+**Now (in flight):** N0.3's scenes (High), 1D.0's code boxes (Medium), the plan narrative cleanup (Sonnet).
 
 **Next, by slot (lead, 12 Nov night audit, `Docs/Future_Work/Audit_2026-11-12_Night.md`):**
 - High:
@@ -423,46 +423,8 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 
 **N2. The substrate's 2D half and Spectrum (C++; `native/spike_p1` stays evidence, never a shipped renderer)**
 
-- [ ] N2.1 The product module's build (waits for neither N0.6 nor N0.7; the SDK fetch per Qt version and the
-  workflow itself are N0.9's and done; the spike already refuses another Qt, `native/spike_p1/src/module.cpp:652`):
-  - [ ] The product module's tree with the spike's CMake guard (the PySide6 pin), the exact-Qt import guard and
-    the MSVC runtime's origin check (`msvcp140`, `vcruntime140`) carried over, each with its failing test.
-    - Written (d6b45288, not yet compiled): `native/core/` (CMake pin guard, `build.cmd` with the spike's four
-      arguments, `src/module.cpp` with the exact-Qt guard, `runtime_info()`, `ABI`/`QT_VERSION`/`__version__` and the
-      no-op `host_attach` that `qobject_cast`s to `QQuickWindow`; `src/abi.h`; `shaders/` baked per source). The MSVC
-      runtime origin check is `rendering/native/runtime_check.py` (the module's PE imports: nothing from `msvcp140*`;
-      every `vcruntime140*` symbol exported by the loaded copy, which is at least as new as the compiler). Tests
-      `test_native_core_build.py`, `test_native_core_runtime_check.py` (negative controls in each test; PySide6's
-      QtCore, which imports `msvcp140`, is the rule's real negative). Found: in the venv `vcruntime140_1` and
-      `msvcp140` are shiboken6's 14.44.35211 and `vcruntime140` Python's 14.51, so a core compiled by a toolset newer
-      than 14.44 fails the check (intended: that is the unsupported arrangement).
-    - Build round 1 (run 43274074011, 89c9a7ce): the spike built and published to `release/native_spike/`; the core
-      compiled with cl 19.51 and was refused by its import check (`shiboken6\VCRUNTIME140_1.dll` 14.44.35211 older
-      than toolset 14.51). Fix: the core is built without the FH4 handler (`/d2FH4-`, link `/d2:-FH4-`), so it needs
-      only `vcruntime140.dll` (Python's 14.51); `test_native_core_build.py` holds both flags. The spike is unchanged
-      (its import check does not run this rule).
-  - [ ] `native-module.yml` takes the source folder as an input (today `NATIVE_SOURCE: native/spike_p1`, line 61),
-    so the spike and the product module build through one workflow; staging fails when the module is missing.
-    - Written (074ac296, not yet run): input `source` (default `native/core`); targets `native_module` (the core,
-      `release/native_module/`) and `native_spike` (the spike, now `release/native_spike/`; the lead's spike command
-      is `--select native_spike`); the run is named for the source's target and checked against `MODULE_TARGETS` on
-      the runner; staging and local validation require the module and exactly one `.qsb` per shader source at the
-      built commit; the manifest records the source.
-  - [ ] The product workflows call it (`workflow_call`) and place the module in the product's `release/` tree;
-    the frozen probe rerun from the product's pruned build.
-    - Written (not yet run; build round 2 of 49c3e385 built and import-checked the core): `windows-build.yml` job
-      `native` calls `native-module.yml` (source `native/core`); the build job waits on it, validates the artifact
-      against its checkout and places it in `release/native_module` (`github_remote_build.py place-native`), then
-      `scripts/venv/build_native_core_probe.ps1` freezes the separate `native/core/python/frozen_probe.py` with the
-      product's Qt includes and QML prune and runs it (`main.py` untouched). Both products' targets now publish
-      `release/native_module` and require the probe report; local validation refuses a carried core that is not the
-      run's validated build or a probe that did not load it frozen.
-  - [ ] Tests that need the module skip with a stated reason where it is not built.
-    - Written (with box 1 and the docs commit): `rendering/native/` (`load(module_dir=None)`: the package location
-      by default, a named folder for tools and tests; every check in `loader.checked`, one `NativeCoreUnavailable`
-      reason), `native/core/python/import_check.py` (the workflow's check, through `rendering.native`),
-      `test_native_core_loader.py` (stand-in modules) and `test_native_core_module.py` (skips with its reason until
-      `release/native_module/_srpss_native_core.pyd` exists). Nothing in the product calls it.
+- [ ] N2.1 leftovers: the native core's MSVC runtime check runs after the module is imported; it refuses before
+  import (read the PE imports from the file, then load), with a test whose negative control loads first.
 - [ ] N2.2 The host interface and the frame driver (D5.1, D5.2): the Qt Quick host and the hidden host; all core
   work recorded on `beforeRendering` through a C++ connection; the thread probe reports zero Python thread
   states.
