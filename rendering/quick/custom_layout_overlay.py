@@ -560,7 +560,7 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         self._notify_resize(item)
         return True
 
-    @Slot(int, str, str, float, float, float, float, float, float, result=bool)
+    @Slot(int, str, str, float, float, float, float, float, float, float, float, result=bool)
     def beginChildResize(
         self,
         row: int,
@@ -572,6 +572,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
         visible_height: float,
         normalization_width: float,
         normalization_height: float,
+        size_compensation_width: float = 1.0,
+        size_compensation_height: float = 1.0,
     ) -> bool:
         if not 0 <= int(row) < len(self._items):
             return False
@@ -592,6 +594,8 @@ class CustomLayoutOverlayModel(QAbstractListModel):
                 float(visible_height),
                 float(normalization_width),
                 float(normalization_height),
+                float(size_compensation_width),
+                float(size_compensation_height),
             )
         )
 

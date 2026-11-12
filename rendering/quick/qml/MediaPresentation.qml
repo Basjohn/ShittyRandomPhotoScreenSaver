@@ -1071,6 +1071,11 @@ OverlayWidget {
                 // (it was cut square at the lane edge from about 1.2x; 1C.5). Edit's resize is
                 // already contained by the lane; this bounds saved and reflowed geometry too.
                 height: Math.max(1.0, Math.min(mediaRoot.customVolumeTrackHeight, parent.height))
+                // Drawn/requested height: below 1.0 when the lane bounds a saved scale. Edit's
+                // child resize folds it into the saved scale on the first real sample, so the
+                // first shrink of an over-lane track moves at once (1C.5: it had a dead zone).
+                readonly property real customEditSizeCompensationHeight:
+                    height / Math.max(1.0, mediaRoot.customVolumeTrackHeight)
                 radius: width / 2.0
                 // On a surface material the track is material too (its fill tints it).
                 color: appVolumeTrackMaterial.active ? "transparent" : mediaRoot.mediaModel.appVolumeTrackColor

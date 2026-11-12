@@ -3031,8 +3031,21 @@ Item {
                             return customLayoutOverlay.sessionModel.beginChildResize(
                                 editFrame.index, frame.roleId, handle, point.x, point.y,
                                 frame.width, frame.height,
-                                frame.normalizationWidth, frame.normalizationHeight
+                                frame.normalizationWidth, frame.normalizationHeight,
+                                childSizeCompensation(frame, "customEditSizeCompensationWidth"),
+                                childSizeCompensation(frame, "customEditSizeCompensationHeight")
                             )
+                        }
+
+                        // A family that bounds a role's drawn size (Media's volume
+                        // track by its lane) exposes the drawn/requested ratio on the
+                        // target item; the resize starts from what is drawn, so a
+                        // saved scale above the bound has no dead zone (1C.5). Read
+                        // only at the press; 1.0 for every other role.
+                        function childSizeCompensation(frame, name) {
+                            const target = frame && frame.targetItem ? frame.targetItem : null
+                            const value = target !== null ? Number(target[name]) : NaN
+                            return isFinite(value) && value > 0.0 ? value : 1.0
                         }
 
                         function containChildResize(frame, handle, gesture, point) {

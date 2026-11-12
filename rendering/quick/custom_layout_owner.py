@@ -176,6 +176,11 @@ class _ChildResizeOrigin:
     normalization_width: float
     normalization_height: float
     size: CustomChildSize
+    # The family's rendered/requested size ratio at the press (1.0 unless the
+    # family bounds the drawn size); folded into the saved scale on the first real
+    # sample by resolve_child_resize_geometry.
+    size_compensation_width: float = 1.0
+    size_compensation_height: float = 1.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -1775,12 +1780,17 @@ class QuickCustomLayoutOwner:
         visible_height: float,
         normalization_width: float,
         normalization_height: float,
+        size_compensation_width: float = 1.0,
+        size_compensation_height: float = 1.0,
     ) -> bool:
         """Begin one descriptor-gated child-size gesture.
 
         QML reports only the currently rendered child dimensions so pointer
         deltas remain correct through outer uniform transforms. Python owns the
-        normalized factor math and persistence.
+        normalized factor math and persistence. ``size_compensation_*`` is the
+        family's rendered/requested ratio for a role whose drawn size it bounds
+        (Media's volume track by its lane): the gesture resizes from what is
+        drawn, not from a saved scale the bound hides.
         """
 
         role = item.child_role(role_id)
@@ -1794,6 +1804,11 @@ class QuickCustomLayoutOwner:
             norm_height = float(normalization_height)
         except (TypeError, ValueError):
             return False
+        try:
+            compensation_w = float(size_compensation_width)
+            compensation_h = float(size_compensation_height)
+        except (TypeError, ValueError):
+            compensation_w = compensation_h = 1.0
         if not (
             math.isfinite(width)
             and math.isfinite(height)
@@ -1819,6 +1834,8 @@ class QuickCustomLayoutOwner:
             normalization_width=norm_width,
             normalization_height=norm_height,
             size=item.child_size(role.role_id),
+            size_compensation_width=compensation_w,
+            size_compensation_height=compensation_h,
         )
         self._begin_undo_gesture(item, "child_resize")
         return True
@@ -1856,6 +1873,8 @@ class QuickCustomLayoutOwner:
             normalization_width=origin.normalization_width,
             normalization_height=origin.normalization_height,
             outer_scale=float(item.resize_scale),
+            size_compensation_width=origin.size_compensation_width,
+            size_compensation_height=origin.size_compensation_height,
         )
         next_size = resolved.geometry
         changed = item.set_child_size(role.role_id, next_size)
@@ -1908,6 +1927,8 @@ class QuickCustomLayoutOwner:
             normalization_width=origin.normalization_width,
             normalization_height=origin.normalization_height,
             outer_scale=float(item.resize_scale),
+            size_compensation_width=origin.size_compensation_width,
+            size_compensation_height=origin.size_compensation_height,
         )
         width_delta = resolved.visible_width - origin.visible_width
         height_delta = resolved.visible_height - origin.visible_height
