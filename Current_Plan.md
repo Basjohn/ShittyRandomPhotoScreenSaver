@@ -1011,6 +1011,18 @@ arrangement change, a display added or removed, the owning display lost, Setting
   (no blank card, no pop, the music response continuous); Extruded Bubble and Spectrum, both directions.
 - [ ] Is the 1.5 s preparation bound enough for Extruded Bubble on real hardware? Measure on the D1 run (the test
   needed more than 40 frames); a slow target goes ahead and finishes on its first visible frame.
+- [ ] Defect (lead, real two displays, 12 Nov): an Extruded Bubble move from Display 0 (2560x1440 150 %) to
+  Display 1 (3840x2160 150 %) takes about 7 s from the press to landing (design: 0.5 s fade, target prepared
+  within 1.5 s); "goes ahead before the target's renderer prepared" at +2 s, landing at +7 s; the render threads
+  stall (grabs 0.7 s apart came back 4.5 s apart); Display 1 showed the desktop until the landing. Evidence
+  `.artifacts/evidence/display/d1_run/20261112_1c2_move_visible/` and `20261112_1c2_move_hidden/`.
+  - [ ] Root cause with numbers: the frame trace's per-frame times on both displays, what the render threads do
+    during the preparation, why the landing comes 5 s after the bound; reproduced on two hidden hosts at the real
+    sizes with each step timed.
+  - [ ] Fix at the owners: preparation in small units over already-rendered frames, no render-thread stall over a
+    frame's budget, the fade starting promptly, landing within the bound plus the fade; before/after on the hidden
+    hosts; the visible proof left to the lead with the exact `d1_run.py` command.
+  - [ ] Historical bug entry (R-NEW).
 - Landed 12 Nov: the neighbouring display prepares on the transfer arrows' hover (Edit's and the hover glyph's) and
   on a Visualizer drag within one card width of the seam, released on leave, turn-back, drag end, Edit end or
   retirement (edges only); a preparing card takes no input (`prepareOnly`, the scene's hit test refuses it) and
