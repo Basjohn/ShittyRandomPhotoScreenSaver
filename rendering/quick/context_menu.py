@@ -121,7 +121,8 @@ class QuickContextMenuPaletteStyle:
     menu_separator: tuple[int, int, int, int]
     menu_indicator_border: tuple[int, int, int, int]
     menu_indicator_fill: tuple[int, int, int, int]
-    menu_arrow: tuple[int, int, int, int]
+    # No arrow colour: the submenu arrow takes the label's ink (menu_text); the theme's
+    # ``context.menu.arrow`` role is no longer read (it read 1.7-3.6:1 on light themes).
     submenu_surface: tuple[int, int, int, int]
     submenu_border: tuple[int, int, int, int]
     submenu_text: tuple[int, int, int, int]
@@ -164,7 +165,6 @@ def project_quick_context_menu_palette() -> QuickContextMenuPaletteStyle:
         menu_indicator_fill=resolved(
             "context.menu.indicator.fill", (130, 205, 255, 255)
         ),
-        menu_arrow=resolved("context.menu.arrow", (216, 243, 255, 255)),
         submenu_surface=resolved("context.submenu.surface", (27, 29, 36, 242)),
         submenu_border=resolved("context.submenu.border", (216, 243, 255, 255)),
         submenu_text=resolved("context.submenu.text", (246, 248, 255, 255)),

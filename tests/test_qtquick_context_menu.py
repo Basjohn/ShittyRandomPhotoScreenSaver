@@ -393,6 +393,39 @@ def test_retained_context_menu_draws_real_quick_pixels_and_clamps(qt_app) -> Non
         qt_app.processEvents()
 
 
+def test_submenu_arrows_take_their_labels_ink(qt_app) -> None:
+    # 1B.8 follow-up: the submenu arrow is part of its row's label, so it is drawn in the label's
+    # ink (the theme's separate arrow tone read 1.7-3.6:1 on Polished Chrome and Pearl Blush).
+    from PySide6.QtGui import QColor
+
+    owner = QObject()
+    factory = QuickSceneFactory(owner)
+    context, root = factory.create_display_root(owner=owner, screen_index=0, runtime_generation=1)
+    model = QuickContextMenuModel(screen_index=0, runtime_generation=1, parent=owner)
+    try:
+        model.replace_entries(_entries())
+        root.setProperty("contextMenuModel", model)
+        ink = QColor(30, 35, 39, 255)                          # a test-owned dark label ink
+        root.setProperty("contextMenuTextColor", ink)
+        qt_app.processEvents()
+        arrows = []
+        pending = [root]
+        while pending:
+            node = pending.pop()
+            pending.extend(node.childItems())
+            if node.property("text") == "▸":
+                arrows.append(node)
+        submenus = sum(1 for entry in _entries() if entry.kind == "submenu")
+        assert submenus and len(arrows) >= submenus
+        for arrow in arrows:
+            assert arrow.property("color") == ink
+    finally:
+        root.deleteLater()
+        context.deleteLater()
+        owner.deleteLater()
+        qt_app.processEvents()
+
+
 def test_quick_context_menu_has_no_settings_or_qwidget_authority() -> None:
     from pathlib import Path
 

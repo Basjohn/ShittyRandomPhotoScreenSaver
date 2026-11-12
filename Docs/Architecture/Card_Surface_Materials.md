@@ -340,6 +340,13 @@ Evidence `.artifacts/evidence/materials/20261111_m2b/ink_rule/` (`OPEN_FIRST_*`,
 `tables/`). Default Dark [Single] on Normal keeps its 8-10 faint small runs at 3.89-4.27 on the bright wallpaper:
 Normal is outside the material rule.
 
+*Context Menu submenu arrows (12 Nov follow-up).* The Context Menu's labels are drawn in the menu's text ink, which its
+material panel carries; the submenu arrow ("▸") had its own tone, the theme's `context.menu.arrow` role (by default the
+menu border), and read 1.7-3.6:1 on Polished Chrome and Pearl Blush (2.3-3.0 on Normal too). The arrow is part of its
+row's label and now takes the label's ink on every theme and material (10.4-13.2:1 there; dark themes unchanged where the
+two were equal). The `context.menu.arrow` role stays in the theme schema so every theme file still loads, but nothing reads
+it. Evidence `.artifacts/evidence/materials/20261112_followups/box3_menu_arrow/`.
+
 **Style sweep fixes outside the materials (6 Nov evening; they change Normal pixels on purpose, nowhere else):**
 
 - Media's content column clipped at the padded content edge, cutting the transport bar's small offset shadow (and
