@@ -9,7 +9,7 @@ from rendering.gl_error_policy import disable_per_call_gl_error_checking
 disable_per_call_gl_error_checking()
 from OpenGL import GL as gl
 from rendering.gl_programs.fog_volume import fog_inject_source
-from rendering.quick.render.gl_resources import compile_compute_program
+from rendering.quick.render.gl_resources import compile_compute_program, delete_program
 from rendering.quick.scene3d.fog_volume import FogMarch, FogVolume
 from tools.labs.render_target import OffscreenRenderTarget
 
@@ -45,7 +45,7 @@ def gl_context(qt_app):
     with target.current():
         parts['volume'].release()
         parts['march'].release()
-        gl.glDeleteProgram(parts['program'])
+        delete_program(parts['program'])
     target.close()
 
 

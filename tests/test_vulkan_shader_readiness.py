@@ -229,11 +229,6 @@ def test_every_target_is_checked_not_only_spirv(tmp_path):
 
 # The sources that did not bake on 12 Nov 2026 (N1.3), in N5's order. Only ever shrinks.
 _RATCHET = {
-    "Waveform Ribbon": (
-        "rendering.gl_programs.fog_volume.FOG_COMPOSITE_FRAGMENT",
-        "rendering.gl_programs.fog_volume.FOG_FULLSCREEN_VERTEX",
-        "rendering.gl_programs.fog_volume.fog_march_source(coverage_glsl)",
-    ),
     "Extruded Bubble": (
         "rendering.gl_programs.extruded_bubble_program.BACKDROP_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.BEAD_VERTEX",

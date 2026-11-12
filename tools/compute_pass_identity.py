@@ -480,7 +480,7 @@ def pass_fog_volume(target):
     samples the medium, the steady share and the camera mapping."""
     from OpenGL import GL as gl
     from rendering.gl_programs.fog_volume import fog_inject_source
-    from rendering.quick.render.gl_resources import compile_compute_program
+    from rendering.quick.render.gl_resources import compile_compute_program, delete_program
     from rendering.quick.scene3d.fog_volume import FogMarch, FogVolume
     outputs, calls = {}, {}
     program = compile_compute_program(fog_inject_source(_FOG_MEDIUM), label="identity fog medium")
@@ -514,7 +514,7 @@ def pass_fog_volume(target):
                 volume.release()
                 march.release()
     finally:
-        gl.glDeleteProgram(program)
+        delete_program(program)
     return outputs, calls
 
 
