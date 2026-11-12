@@ -37,6 +37,6 @@ cmake -S "%SRC%." -B "%BUILD%" -G Ninja ^
   -DCMAKE_PREFIX_PATH="%SPIKE%\qt" ^
   -DPython_EXECUTABLE="%VENV%\Scripts\python.exe" ^
   -DSPIKE_QSB="%VENV%\Lib\site-packages\PySide6\qsb.exe" ^
-  -DSPIKE_VULKAN_INCLUDE="%SPIKE%\vulkan_headers\Vulkan-Headers-1.4.341\include" ^
+  -DSPIKE_VULKAN_INCLUDE="%SPIKE%\vulkan_headers\include" ^
   -DSPIKE_WITH_QUICK=%QUICK% || exit /b 1
 cmake --build "%BUILD%" || exit /b 1

@@ -22,6 +22,7 @@ from tools import native_sdk_fetch as sdk
 ROOT = Path(__file__).resolve().parents[1]
 QT = sdk.pinned_qt_version()
 ARCHIVES = sdk.archives_for(QT)
+VULKAN_TOP = f"Vulkan-Headers-{sdk.QT_SDKS[QT].vulkan_headers}"      # the tag zip's versioned top folder
 
 
 def _sha(data: bytes) -> str:
@@ -31,7 +32,7 @@ def _sha(data: bytes) -> str:
 def _vulkan_zip(extra: dict[str, bytes] | None = None) -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as bundle:
-        top = f"Vulkan-Headers-{sdk.VULKAN_HEADERS_VERSION}"
+        top = VULKAN_TOP
         bundle.writestr(f"{top}/include/vulkan/vulkan.h", "/* vulkan */\n")
         bundle.writestr(f"{top}/README.md", "not extracted\n")
         for name, data in (extra or {}).items():
@@ -86,8 +87,9 @@ def test_a_verified_sdk_is_extracted_into_the_build_layout_and_stamped(tmp_path)
     prefix = (tmp_path / "sdk").resolve()
     assert layout.fetched and layout.qt_version == QT
     assert Path(layout.qt_prefix) == prefix / sdk.QT_DIR
+    assert Path(layout.vulkan_include) == prefix / sdk.VULKAN_DIR / "include"           # no version in the path
     assert (Path(layout.vulkan_include) / "vulkan" / "vulkan.h").is_file()
-    assert not (prefix / sdk.VULKAN_DIR / f"Vulkan-Headers-{sdk.VULKAN_HEADERS_VERSION}" / "README.md").exists()
+    assert not list((prefix / sdk.VULKAN_DIR).rglob("README.md")) and not (prefix / sdk.VULKAN_DIR / VULKAN_TOP).exists()
     assert sdk.layout_problem(prefix, QT) is None
     stamp = json.loads((prefix / sdk.STAMP_NAME).read_text(encoding="utf-8"))
     assert stamp["pins"] == sdk.pins_fingerprint(fixture.archives, QT) and set(stamp["sha256"]) == {
@@ -143,7 +145,7 @@ def test_any_checksum_mismatch_extracts_nothing(tmp_path, case):
 
 
 def test_an_archive_that_escapes_its_prefix_is_refused(tmp_path):
-    hostile = _vulkan_zip({f"Vulkan-Headers-{sdk.VULKAN_HEADERS_VERSION}/include/../../../escape.h": b"x"})
+    hostile = _vulkan_zip({f"{VULKAN_TOP}/include/../../../escape.h": b"x"})
     fixture = Fixture(zip_bytes=hostile)
     with pytest.raises(sdk.SdkFetchError, match="outside"):
         fixture.fetch(tmp_path / "sdk")
@@ -203,6 +205,8 @@ def test_every_pinned_qt_version_has_checksummed_archives(version):
         if item.kind == "7z":
             assert item.published_sha256_url == f"{item.url}.sha256" and item.destination == sdk.QT_DIR
             assert version in item.url
+        else:
+            assert item.url.endswith(f"/v{sdk.QT_SDKS[version].vulkan_headers}") and item.strip_top
     assert {item.name for item in archives} == {"qtbase", "qtdeclarative", "vulkan_headers"}
 
 

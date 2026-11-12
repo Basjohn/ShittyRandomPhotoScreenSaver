@@ -6,7 +6,8 @@ Throwaway spike for the Graphics Backend Decision's piece B (P1, go/no-go). Find
 ## What it builds
 
 `_srpss_native_spike.pyd`: a plain CPython extension module (stable ABI, abi3, Python >= 3.10) compiled with
-MSVC against the Qt 6.11.2 SDK, which is the exact Qt that PySide6 6.11.2 ships. It loads into our PySide6 process and
+MSVC against the exact Qt that the pinned PySide6 ships (`requirements.txt`'s `PySide6==x.y.z`; the spike was first
+built on 6.11.2). It loads into our PySide6 process and
 binds to PySide6's own `Qt6Core.dll`/`Qt6Gui.dll` (and `Qt6Qml.dll`/`Qt6Quick.dll` for part B). It refuses to import
 under any other Qt version. Shaders (GLSL 440 compiled by PySide6's `qsb.exe` to SPIR-V, HLSL 5.0 and GLSL) are
 embedded in the module, so a frozen build needs no data files.
@@ -25,10 +26,12 @@ Since 12 Nov 2026 the module is compiled only by `.github/workflows/native-modul
 (operator: builds happen only through GitHub workflows, never on this machine). The lead runs
 `tools/build_runner.py --mode github --run --select native_module`; the validated module lands in
 `release\native_module\` of the checkout the tool runs from. The SDK fetch below is now
-`tools/native_sdk_fetch.py` (the pins, sha256-checked before extraction), and `build.cmd` is the workflow's one CMake
-invocation. Everything (the lead's command, what the runner checks, how a C++ slice iterates) is in
-`Docs/Guides/GitHub_Remote_Build.md`, section "The native module". The sections below record the P1 spike's local
-toolchain and commands as they were run on 7 Nov 2026.
+`tools/native_sdk_fetch.py` (the archives per Qt version, sha256-checked before extraction), and `build.cmd` is the
+workflow's one CMake invocation. The Qt version is one value, the PySide6 pin: CMake's guard reads it from
+`requirements.txt`. The SDK layout no longer names a version (`vulkan_headers\include`). Everything (the lead's
+command, what the runner checks, how a C++ slice iterates) is in `Docs/Guides/GitHub_Remote_Build.md`, section "The
+native module". The sections below record the P1 spike's local toolchain and commands as they were run on 7 Nov
+2026 (Qt 6.11.2, the older SDK layout).
 
 ## Toolchain on the reference machine (7 Nov 2026)
 

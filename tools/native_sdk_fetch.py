@@ -1,5 +1,5 @@
 """Fetch the pinned SDK the native module compiles against: PySide6's Qt (msvc2022_64 qtbase + qtdeclarative) and
-Vulkan-Headers v1.4.341, each checked against its sha256 before anything is extracted.
+Vulkan-Headers, each checked against its sha256 before anything is extracted.
 
 The one owner of the SDK pins (decision D11: the Qt is PySide6's exact Qt, upgraded only between stages through this
 script). ``.github/workflows/native-module.yml`` runs it on GitHub's Windows runner before compiling; the lead may run
@@ -7,15 +7,15 @@ it locally only to *download* (builds happen only through GitHub workflows, oper
 
 The Qt version is one value: the ``PySide6==x.y.z`` pin in ``requirements.txt`` (``pinned_qt_version``). The
 workflow reads it from here (``--print-qt-version``), ``native/spike_p1/CMakeLists.txt`` reads the same pin for its
-guard, and the build manifest is checked against it. Each Qt version's archive names and sha256 values are one entry
-of ``QT_SDKS``; a pin with no entry is refused. A Qt upgrade (the lead's, between stages) is: add the version's
-entry, change the PySide6 pins in ``requirements.txt``.
+guard, and the build manifest is checked against it. Each Qt version's archive names, sizes and sha256 values, and
+the Vulkan-Headers release it is built with, are one entry of ``QT_SDKS``; a pin with no entry is refused. A Qt
+upgrade (the lead's, between stages) is: add the version's entry, change the PySide6 pins in ``requirements.txt``.
 
-Layout under ``--prefix`` (the one ``native/spike_p1/build.cmd`` reads):
+Layout under ``--prefix`` (the one ``native/spike_p1/build.cmd`` reads; no version in any path):
 
-    qt/                                          Qt prefix (qtbase; qtdeclarative extracts into the same prefix)
-    vulkan_headers/Vulkan-Headers-1.4.341/include
-    native_sdk.json                              stamp: the pins this prefix was fetched for
+    qt/                      Qt prefix (qtbase; qtdeclarative extracts into the same prefix)
+    vulkan_headers/include   the Vulkan-Headers release's include/ (its top folder stripped)
+    native_sdk.json          stamp: the pins this prefix was fetched for
 
 Fail closed: every archive is downloaded and verified (size where pinned, the pinned sha256 where pinned, and the
 sha256 Qt publishes beside each archive) before any is extracted; one mismatch extracts nothing and exits non-zero.
@@ -44,12 +44,11 @@ from typing import Callable, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS = REPO_ROOT / "requirements.txt"
-VULKAN_HEADERS_VERSION = "1.4.341"
 
 QT_DIR = "qt"
 VULKAN_DIR = "vulkan_headers"
 # Relative to the prefix, with the separators build.cmd uses.
-VULKAN_INCLUDE_RELATIVE = f"{VULKAN_DIR}\\Vulkan-Headers-{VULKAN_HEADERS_VERSION}\\include"
+VULKAN_INCLUDE_RELATIVE = f"{VULKAN_DIR}\\include"
 STAMP_NAME = "native_sdk.json"
 DOWNLOADS_DIR = "downloads"
 STAMP_SCHEMA = 1
@@ -82,30 +81,56 @@ def pinned_qt_version(requirements: Path = REQUIREMENTS) -> str:
 
 
 @dataclass(frozen=True)
+class VulkanHeaders:
+    """One Vulkan-Headers release (GitHub's tag zip): what it must hash to."""
+
+    sha256: str
+    size: int
+
+
+VULKAN_HEADERS: dict[str, VulkanHeaders] = {
+    # Recorded in native/spike_p1/README.md when the P1 spike fetched it (7 Nov 2026).
+    "1.4.341": VulkanHeaders("c3b074a30b5bce4cf32a41d234fa559ff458513b7314d69cd0b336a01b53bb78", 3_092_442),
+}
+
+
+@dataclass(frozen=True)
 class QtSdk:
-    """One Qt version's msvc2022_64 archives in Qt's online repository: where they are and what they must hash to
-    (``None``: only Qt's published ``.sha256`` is checked)."""
+    """One Qt version's msvc2022_64 archives in Qt's online repository (where they are and what they must hash to;
+    ``None``: only Qt's published ``.sha256`` is checked) and the Vulkan-Headers release it is built with."""
 
     repository: str
     stamp: str
     tail: str
+    vulkan_headers: str
     qtbase_sha256: str | None = None
     qtbase_size: int | None = None
     qtdeclarative_sha256: str | None = None
     qtdeclarative_size: int | None = None
 
 
+_QT_ONLINE = "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop"
+_QT_TAIL_WIN11_MSVC2022 = "-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"
+
+# aqtinstall 3.3.0 cannot read this repository layout, so the archives are named here. Older entries stay as history.
 QT_SDKS: dict[str, QtSdk] = {
-    # Values recorded in native/spike_p1/README.md when the P1 spike fetched them (7 Nov 2026). aqtinstall 3.3.0
-    # cannot read this repository layout, so the archives are named here.
+    # Recorded in native/spike_p1/README.md when the P1 spike fetched them (7 Nov 2026).
     "6.11.2": QtSdk(
-        "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_6112/qt6_6112_msvc2022_64/"
-        "qt.qt6.6112.win64_msvc2022_64",
-        "6.11.2-0-202608131017",
-        "-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z",
+        f"{_QT_ONLINE}/qt6_6112/qt6_6112_msvc2022_64/qt.qt6.6112.win64_msvc2022_64",
+        "6.11.2-0-202608131017", _QT_TAIL_WIN11_MSVC2022, "1.4.341",
         qtbase_sha256="fd984b7264361b4dd3fd2a417702ca1258e4086268f2ee6a69b9a393d9c3f6bb",
         qtbase_size=39_618_573,
         qtdeclarative_size=172_484_222,
+    ),
+    # Read from the repository on 12 Nov 2026: each archive's published .sha256 and its mirror page (size, SHA-256)
+    # agree. Archives dated 29 Sep 2026.
+    "6.12.0": QtSdk(
+        f"{_QT_ONLINE}/qt6_6120/qt6_6120_msvc2022_64/qt.qt6.6120.win64_msvc2022_64",
+        "6.12.0-0-202609280346", _QT_TAIL_WIN11_MSVC2022, "1.4.341",
+        qtbase_sha256="219d1b86def3be418e31d704572bc4acc91b2ec373c65595c9fb12b42bf098dc",
+        qtbase_size=40_184_745,
+        qtdeclarative_sha256="258146e9972fadbc1162cda31c7d7ed7e627f5022b2a848f2edb84d9c2ce27db",
+        qtdeclarative_size=199_517_162,
     ),
 }
 
@@ -124,23 +149,31 @@ class SdkArchive:
     size: int | None = None
     published_sha256_url: str | None = None
     member_filter: str | None = None  # zip only: extract the members whose path contains this
+    strip_top: bool = False           # zip only: drop the archive's top folder (a versioned name)
 
 
-VULKAN_HEADERS_ARCHIVE = SdkArchive(
-    "vulkan_headers",
-    f"https://codeload.github.com/KhronosGroup/Vulkan-Headers/zip/refs/tags/v{VULKAN_HEADERS_VERSION}",
-    "vulkan_headers.zip", "zip", VULKAN_DIR, size=3_092_442,
-    sha256="c3b074a30b5bce4cf32a41d234fa559ff458513b7314d69cd0b336a01b53bb78",
-    member_filter="/include/",
-)
+def vulkan_headers_archive(version: str) -> SdkArchive:
+    pin = VULKAN_HEADERS.get(version)
+    if pin is None:
+        raise SdkFetchError(f"no Vulkan-Headers {version} is pinned in VULKAN_HEADERS ({Path(__file__).name})")
+    return SdkArchive(
+        "vulkan_headers", f"https://codeload.github.com/KhronosGroup/Vulkan-Headers/zip/refs/tags/v{version}",
+        "vulkan_headers.zip", "zip", VULKAN_DIR, sha256=pin.sha256, size=pin.size, member_filter="/include/",
+        strip_top=True,
+    )
 
 
-def archives_for(qt_version: str) -> tuple[SdkArchive, ...]:
-    """Every download for ``qt_version``: its two Qt archives (from ``QT_SDKS``) and Vulkan-Headers."""
+def sdk_for(qt_version: str) -> QtSdk:
     sdk = QT_SDKS.get(qt_version)
     if sdk is None:
         raise SdkFetchError(f"no SDK is pinned for Qt {qt_version}: add its archives to QT_SDKS in {Path(__file__).name}"
                             f" (pinned: {', '.join(sorted(QT_SDKS))})")
+    return sdk
+
+
+def archives_for(qt_version: str) -> tuple[SdkArchive, ...]:
+    """Every download for ``qt_version``: its two Qt archives and its Vulkan-Headers (from ``QT_SDKS``)."""
+    sdk = sdk_for(qt_version)
 
     def qt_archive(module: str, sha256: str | None, size: int | None) -> SdkArchive:
         url = f"{sdk.repository}/{sdk.stamp}{module}{sdk.tail}"
@@ -150,7 +183,7 @@ def archives_for(qt_version: str) -> tuple[SdkArchive, ...]:
     return (
         qt_archive("qtbase", sdk.qtbase_sha256, sdk.qtbase_size),
         qt_archive("qtdeclarative", sdk.qtdeclarative_sha256, sdk.qtdeclarative_size),
-        VULKAN_HEADERS_ARCHIVE,
+        vulkan_headers_archive(sdk.vulkan_headers),
     )
 
 
@@ -190,7 +223,7 @@ def py7zr_extract(archive: Path, destination: Path) -> None:
         seven.extractall(path=destination)
 
 
-def _extract_zip(archive: Path, destination: Path, member_filter: str | None) -> None:
+def _extract_zip(archive: Path, destination: Path, member_filter: str | None, strip_top: bool = False) -> None:
     with zipfile.ZipFile(archive) as bundle:
         names = [name for name in bundle.namelist() if member_filter is None or member_filter in name]
         unsafe = [name for name in names if not _safe_member(name)]
@@ -198,7 +231,17 @@ def _extract_zip(archive: Path, destination: Path, member_filter: str | None) ->
             raise SdkFetchError(f"{archive.name} names paths outside its prefix: {unsafe[:3]}")
         if not names:
             raise SdkFetchError(f"{archive.name} holds no member matching {member_filter!r}")
-        bundle.extractall(destination, names)
+        if not strip_top:
+            bundle.extractall(destination, names)
+            return
+        for name in names:
+            relative = PurePosixPath(name.replace("\\", "/")).parts[1:]
+            if not relative or name.endswith("/"):
+                continue
+            target = destination.joinpath(*relative)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with bundle.open(name) as source, target.open("wb") as handle:
+                shutil.copyfileobj(source, handle)
 
 
 def sha256_of(path: Path) -> str:
@@ -310,7 +353,7 @@ def fetch_sdk(
     prefix = Path(prefix).resolve()
     fingerprint = pins_fingerprint(archives, qt_version)
     if _stamp_matches(prefix, fingerprint, qt_version) and layout_problem(prefix, qt_version) is None:
-        log(f"[NATIVE-SDK] {prefix} already holds Qt {qt_version} and Vulkan-Headers {VULKAN_HEADERS_VERSION}")
+        log(f"[NATIVE-SDK] {prefix} already holds the SDK pinned for Qt {qt_version}")
         return _layout(prefix, qt_version, fetched=False)
 
     downloads = prefix / DOWNLOADS_DIR
@@ -341,7 +384,7 @@ def fetch_sdk(
             if item.kind == "7z":
                 extract_7z(archive, destination)
             elif item.kind == "zip":
-                _extract_zip(archive, destination, item.member_filter)
+                _extract_zip(archive, destination, item.member_filter, item.strip_top)
             else:
                 raise SdkFetchError(f"{item.name}: unknown archive kind {item.kind!r}")
             log(f"[NATIVE-SDK] {item.name}: extracted into {destination}")
@@ -352,8 +395,8 @@ def fetch_sdk(
     problem = layout_problem(prefix, qt_version)
     if problem is not None:
         raise SdkFetchError(f"the extracted SDK is not whole: {problem}")
-    stamp = {"schema": STAMP_SCHEMA, "qt_version": qt_version, "vulkan_headers": VULKAN_HEADERS_VERSION,
-             "pins": fingerprint, "sha256": verified}
+    stamp = {"schema": STAMP_SCHEMA, "qt_version": qt_version, "pins": fingerprint,
+             "archives": {item.name: item.url for item in archives}, "sha256": verified}
     (prefix / STAMP_NAME).write_text(json.dumps(stamp, indent=2) + "\n", encoding="utf-8")
     return _layout(prefix, qt_version, fetched=True)
 

@@ -122,10 +122,12 @@ F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.venv\Scripts\python.exe <check
 Runner pre-flight, or the tab's checkbox in the window.
 
 **What the runner does** (`windows-2025`, about the products' toolchain): checks out the exact pushed SHA and verifies
-it; creates the repo `.venv` from `requirements.txt` (PySide6 6.11.2: `qsb.exe` and the Qt DLLs the module binds to);
-creates a tool venv from `native/tool_requirements.txt` (ninja, py7zr); fetches the pinned SDK with
-`tools/native_sdk_fetch.py` (Qt 6.11.2 msvc2022_64 qtbase and qtdeclarative, Vulkan-Headers 1.4.341, each checked
-against its pinned or published sha256 before anything is extracted; cached per Qt version and script hash); runs
+it; reads the Qt version, which is one value: `requirements.txt`'s `PySide6==x.y.z` pin
+(`tools/native_sdk_fetch.py --print-qt-version`; CMake's guard reads the same pin); creates the repo `.venv` from
+`requirements.txt` (PySide6: `qsb.exe` and the Qt DLLs the module binds to); creates a tool venv from
+`native/tool_requirements.txt` (ninja, py7zr); fetches that Qt's SDK with `tools/native_sdk_fetch.py` (its entry in
+`QT_SDKS`: the msvc2022_64 qtbase and qtdeclarative archives and the Vulkan-Headers release, each checked against its
+pinned and published sha256 before anything is extracted; cached per Qt version and script hash); runs
 `native/spike_p1/build.cmd`, the one CMake invocation (MSVC found with `vswhere`, Ninja, Release, Qt Quick part on);
 runs `native/spike_p1/python/import_check.py` (the import, `runtime_info()`, the Qt DLLs loaded from PySide6's
 folder: the GPU-free part; every rendering part of the spike needs a GPU device, which the runner does not have);
@@ -134,7 +136,8 @@ then stages and uploads.
 **What is checked before `release\native_module` is replaced:** the local HEAD must be the pushed commit (an unpushed
 or diverged HEAD makes the row unavailable at pre-flight and is refused at START; the products, by contrast, build
 the pushed tip and warn). The download must name the requested commit, version and run token like a product, plus
-Qt 6.11.2 (the pin in `tools/native_sdk_fetch.py`), PySide6 6.11.2.x and an MSVC version; the `.pyd` and at least one
+the Qt that the built commit's `requirements.txt` pins, the PySide6 release of that Qt and an MSVC version; the `.pyd`
+and at least one
 baked shader must be listed; every listed file must match its size and SHA-256 and no unlisted file may be present.
 Only then is `release\native_module` swapped (a locked `.pyd`, for example a Python process that imported it, makes
 the swap fail and the previous module is restored).
@@ -168,10 +171,13 @@ iterate.
 One-time setup beyond the products': `native-module.yml` must be on `main` before GitHub lists it (pre-flight warns
 and marks only this row unavailable until then).
 
-Qt upgrades (decision D11, between stages, by the lead): change the pins in `tools/native_sdk_fetch.py`; the pin in
-`native/spike_p1/CMakeLists.txt`, the workflow's `QT_VERSION` and `requirements.txt`'s PySide6 must agree
-(`tests/test_native_sdk_fetch.py`, `tests/test_native_module_build.py` fail otherwise); the cache key changes with the
-script, so the next run fetches the new SDK.
+Qt upgrades (decision D11, between stages, by the lead): add the version's entry to `QT_SDKS` in
+`tools/native_sdk_fetch.py` (from `download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_<xyz>/
+qt6_<xyz>_msvc2022_64/qt.qt6.<xyz>.win64_msvc2022_64/`: the qtbase and qtdeclarative archive names, their published
+`.sha256` and their sizes from the `.mirrorlist` page; the Vulkan-Headers release from `VULKAN_HEADERS`), then change
+the PySide6 pins in `requirements.txt`. Nothing else names the version: the workflow, CMake's guard and the manifest
+check all read the pin, and a pin with no entry is refused (`tests/test_native_sdk_fetch.py` holds this). The cache key
+changes with the version, so the next run fetches the new SDK. Older entries stay in the table as history.
 
 ## Limitations
 
