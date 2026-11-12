@@ -3271,6 +3271,16 @@ class QuickSceneController(QObject):
             raise ValueError(f"invalid visualizer shell color: {value!r}")
         return color
 
+    def visible_display_size(self) -> tuple[float, float] | None:
+        """The display's exact logical size as the scene is laid out on it: the window's on-desktop rect (R-63 /
+        R-192: the monitor, every edge on a whole device pixel), or None before the native window publishes it.
+
+        Qt's screen geometry is a whole number of logical pixels (2560 px at 150 % reads 1707); this is the monitor
+        itself (1706.67), which a card on the display's edges must use (1D.2)."""
+
+        rect = self._published_scene_rect()
+        return None if rect is None else (float(rect.width()), float(rect.height()))
+
     def _published_scene_rect(self) -> Any:
         rect = getattr(self._window, "scene_rect", None)
         if rect is None or rect.width() <= 0.0 or rect.height() <= 0.0:
