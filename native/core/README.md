@@ -24,5 +24,5 @@ Build and fetch it (the lead; agents never build):
 ```
 
 The module lands in `release\native_module\` of the checkout the command runs from; `rendering.native.load(Path(
-"release/native_module"))` loads it from there. `Docs/Guides/GitHub_Remote_Build.md`, "The native module", has the
+"release/native_module"))` loads it from there. `Docs/Guides/GitHub_Remote_Build.md`, "The native modules", has the
 rest.

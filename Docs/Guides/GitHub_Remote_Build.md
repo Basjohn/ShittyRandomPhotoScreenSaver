@@ -7,8 +7,8 @@ the result, validates it, puts it into `release\` exactly where a local build wo
 installers locally. Nothing is virtualised or compiled locally for the remote products: no WSL, Docker or Hyper-V.
 
 Owners: `tools/github_remote_build.py` (the remote contract, both sides), `.github/workflows/windows-build.yml` (the
-runner job), `tools/build_runner.py` (the tab). Normal and Repo Venv are unchanged. The native module has its own
-workflow on the same contract (section "The native module").
+runner job), `tools/build_runner.py` (the tab). Normal and Repo Venv are unchanged. The native modules (the product's
+native core and the P1 harness) have their own workflow on the same contract (section "The native modules").
 
 ## One-time setup
 
@@ -102,66 +102,84 @@ compiled even when its product's build failed in the same run: it packages the p
 retrieval leaves in place. The Standard installer packages `release\reddit_helper` as it is: select **Reddit Helper
 (local)** when its badge says rebuild.
 
-## The native module (job `native_module`)
+## The native modules (jobs `native_module` and `native_spike`)
 
-The native module (`native/spike_p1` today, the native core later; `Current_Plan.md` item 8b, N0.9) is compiled only
-on GitHub (operator, 12 Nov 2026: builds happen only through GitHub workflows, never on this machine). It is a target
-of the same contract as the products: `.github/workflows/native-module.yml` compiles it, `tools/github_remote_build.py`
-dispatches, follows, cancels, downloads and validates it, and **Native Module (GitHub)** on this tab (job key
-`native_module`) runs it. It is never pre-selected and no installer packages it (until N2.1 folds it into the product
-builds, which will call the same workflow as a job: it is a reusable `workflow_call` workflow).
+Two native modules are compiled only on GitHub (operator, 12 Nov 2026: builds happen only through GitHub workflows,
+never on this machine), both by one workflow, `.github/workflows/native-module.yml`, whose `source` input names the
+folder (`Current_Plan.md` item 8b, N0.9 and N2.1):
 
-**The lead's command** (agents never start it, nor any other build):
+| Job key | Source | Module | What it is |
+| --- | --- | --- | --- |
+| `native_module` | `native/core` (the workflow's default source) | `_srpss_native_core.pyd` | the product's native core (D5.7); imported only by `rendering/native/` |
+| `native_spike` | `native/spike_p1` | `_srpss_native_spike.pyd` | the P1 harness (the N0.6 and N0.7 rounds); never ships |
+
+Each is a target of the same contract as the products: the workflow compiles it, `tools/github_remote_build.py`
+dispatches (with `source=<folder>`), follows, cancels, downloads and validates it, and **Native Core Module (GitHub)**
+and **Native Spike Harness (GitHub)** on this tab run them. Neither is pre-selected and no installer packages either.
+The workflow is reusable (`workflow_call`), so the product builds can call it as a job.
+
+**The lead's commands** (agents never start them, nor any other build):
 
 ```
 F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.venv\Scripts\python.exe <checkout>\tools\build_runner.py --mode github --run --select native_module
+F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.venv\Scripts\python.exe <checkout>\tools\build_runner.py --mode github --run --select native_spike
 ```
 
-`<checkout>` is the checkout whose `release\` should receive the module: the main checkout, or an agent's worktree
-(see below). The same run is `python tools/github_remote_build.py run --target native_module` without the Build
-Runner pre-flight, or the tab's checkbox in the window.
+(`--select native_module native_spike` builds both, as two runs in parallel.) `<checkout>` is the checkout whose
+`release\` should receive the module: the main checkout, or an agent's worktree (see below). The same runs are
+`python tools/github_remote_build.py run --target native_module` (or `--target native_spike`) without the Build Runner
+pre-flight, or the tab's checkboxes in the window. Until 12 Nov 2026 the spike was the job `native_module` and landed
+in `release\native_module\`; it is now `native_spike` in `release\native_spike\`, and the N0.6/N0.7 drivers say so.
 
 **What the runner does** (`windows-2025`, about the products' toolchain): checks out the exact pushed SHA and verifies
-it; reads the Qt version, which is one value: `requirements.txt`'s `PySide6==x.y.z` pin
-(`tools/native_sdk_fetch.py --print-qt-version`; CMake's guard reads the same pin); creates the repo `.venv` from
-`requirements.txt` (PySide6: `qsb.exe` and the Qt DLLs the module binds to); creates a tool venv from
-`native/tool_requirements.txt` (ninja, py7zr); fetches that Qt's SDK with `tools/native_sdk_fetch.py` (its entry in
-`QT_SDKS`: the msvc2022_64 qtbase and qtdeclarative archives and the Vulkan-Headers release, each checked against its
-pinned and published sha256 before anything is extracted; cached per Qt version and script hash); runs
-`native/spike_p1/build.cmd`, the one CMake invocation (MSVC found with `vswhere`, Ninja, Release, Qt Quick part on);
-runs `native/spike_p1/python/import_check.py` (the import, `runtime_info()`, the Qt DLLs loaded from PySide6's
-folder: the GPU-free part; every rendering part of the spike needs a GPU device, which the runner does not have);
-then stages and uploads.
+it; resolves the source's target (`tools/github_remote_build.py native-target --source <folder>`, refused for a folder
+no target builds, and checked against the target the run was named for, which Build Runner looks it up by); reads the
+Qt version, which is one value: `requirements.txt`'s `PySide6==x.y.z` pin (`tools/native_sdk_fetch.py
+--print-qt-version`; each source's CMake guard reads the same pin); creates the repo `.venv` from `requirements.txt`
+(PySide6: `qsb.exe` and the Qt DLLs the module binds to); creates a tool venv from `native/tool_requirements.txt`
+(ninja, py7zr); fetches that Qt's SDK with `tools/native_sdk_fetch.py` (its entry in `QT_SDKS`: the msvc2022_64 qtbase
+and qtdeclarative archives and the Vulkan-Headers release, each checked against its pinned and published sha256 before
+anything is extracted; cached per Qt version and script hash); runs `<source>\build.cmd`, the one CMake invocation
+(every source takes the same four arguments; MSVC found with `vswhere`, Ninja, Release, Qt Quick part on); runs
+`<source>\python\import_check.py`, the GPU-free part (the runner has no GPU device): for the core it loads the module
+through `rendering.native` (the exact-Qt guard, the Qt and ABI checks, the MSVC runtime origin check of
+`rendering/native/runtime_check.py`: no `msvcp140` import, the loaded `vcruntime140` copies at least as new as the
+compiler) and checks the Qt DLLs came from PySide6's folder; for the spike, the import, `runtime_info()` and the Qt
+DLLs' origin. Then it stages (refused when the module, or a baked shader for any shader source in `<source>\shaders\`,
+is missing) and uploads.
 
-**What is checked before `release\native_module` is replaced:** the local HEAD must be the pushed commit (an unpushed
-or diverged HEAD makes the row unavailable at pre-flight and is refused at START; the products, by contrast, build
-the pushed tip and warn). The download must name the requested commit, version and run token like a product, plus
-the Qt that the built commit's `requirements.txt` pins, the PySide6 release of that Qt and an MSVC version; the `.pyd`
-and at least one
-baked shader must be listed; every listed file must match its size and SHA-256 and no unlisted file may be present.
-Only then is `release\native_module` swapped (a locked `.pyd`, for example a Python process that imported it, makes
-the swap fail and the previous module is restored).
+**What is checked before `release\<job key>` is replaced:** the local HEAD must be the pushed commit (an unpushed or
+diverged HEAD makes the rows unavailable at pre-flight and is refused at START; the products, by contrast, build the
+pushed tip and warn). The download must name the requested commit, version and run token like a product, plus its
+source folder, the Qt that the built commit's `requirements.txt` pins, the PySide6 release of that Qt and an MSVC
+version; the `.pyd` must be listed, and exactly one baked shader per shader source the built commit has in
+`<source>\shaders\` (read with `git ls-tree` at that commit; the core has none yet); every listed file must match its
+size and SHA-256 and no unlisted file may be present. Only then is `release\<job key>` swapped (a locked `.pyd`, for
+example a Python process that imported it, makes the swap fail and the previous module is restored).
 
 | What | Where |
 | --- | --- |
-| The module | `release\native_module\_srpss_native_spike.pyd`, `release\native_module\shaders\*.qsb` |
-| What it was built from and with | `release\native_module\remote_build_manifest.json` (commit, version, Qt, PySide6, MSVC, sha256 per file) |
-| Runner log | `logs\build_runner_native_module_<token>.log` |
-| The runner's build log and import check | `logs\native_module_build_<token>.log`, `logs\native_module_import_<token>.json` |
-| Evidence bundle | `logs\build_evidence_native_module_<token>.zip` |
-| A failed run | the run's `srpss-native_module-failure-logs` artifact (the logs, CMake's cache and configure log) |
+| The module | `release\native_module\_srpss_native_core.pyd`; `release\native_spike\_srpss_native_spike.pyd` and its `shaders\*.qsb` |
+| What it was built from and with | `release\<job key>\remote_build_manifest.json` (source, commit, version, Qt, PySide6, MSVC, sha256 per file) |
+| Runner log | `logs\build_runner_<job key>_<token>.log` |
+| The runner's build log and import check | `logs\<job key>_build_<token>.log`, `logs\<job key>_import_<token>.json` |
+| Evidence bundle | `logs\build_evidence_<job key>_<token>.zip` |
+| A failed run | the run's `srpss-<job key>-failure-logs` artifact (the logs, CMake's cache and configure log) |
 
 **How a C++ slice iterates** (the agent never pushes or builds; the lead does both):
 
 1. The agent commits its slice in its worktree (its branch is `worktree-agent-<id>`), says so in its journal and asks
-   the lead for a module build.
+   the lead for a module build (and which: `native_module` for `native/core`, `native_spike` for the harness).
 2. The lead pushes that branch from the main checkout: `git push origin worktree-agent-<id>` (any work-branch name
-   works; GitHub runs the branch's own copy of the workflow, so the branch must contain `native-module.yml`).
+   works; GitHub runs the branch's own copy of the workflow, so the branch must contain `native-module.yml` with the
+   `source` input: GitHub refuses an input a branch's workflow does not declare).
 3. The lead runs the command above with `<checkout>` = the agent's worktree, so the validated module lands in that
-   worktree's `release\native_module\` (ignored by git). Pre-flight refuses when the worktree's HEAD is not the pushed
+   worktree's `release\<job key>\` (ignored by git). Pre-flight refuses when the worktree's HEAD is not the pushed
    commit.
-4. The agent tests it from there, offscreen and hidden only:
-   `python native/spike_p1/python/run_spike.py --module-dir release/native_module --part all --label <label>`.
+4. The agent tests it from there, offscreen and hidden only: the core with
+   `python -m pytest tests/test_native_core_module.py` (it skips, saying why, where the module is not built) or
+   `python native/core/python/import_check.py --module-dir release/native_module --expect-qt <Qt>`; the harness with
+   `python native/spike_p1/python/run_spike.py --module-dir release/native_spike --part all --label <label>`.
 5. A failed compile: the row's log names the GitHub run; the failure-logs artifact has the compiler output.
    The next attempt is a new commit, push and run.
 

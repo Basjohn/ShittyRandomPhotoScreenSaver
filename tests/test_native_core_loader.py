@@ -65,7 +65,10 @@ def test_a_module_that_reports_nothing_is_refused():
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the native core is built for Windows only so far")
-def test_a_missing_module_fails_in_load_with_its_reason(tmp_path):
+def test_a_missing_module_fails_in_load_with_its_reason(tmp_path, monkeypatch):
+    # A built module the module tests loaded earlier in this process is set aside (and restored afterwards).
+    monkeypatch.delitem(sys.modules, loader.MODULE_NAME, raising=False)
+    monkeypatch.delitem(sys.modules, loader.PACKAGE_MODULE, raising=False)
     with pytest.raises(native.NativeCoreUnavailable, match="not built: no _srpss_native_core.pyd"):
         native.load(tmp_path)
     with pytest.raises(native.NativeCoreUnavailable, match="cannot be imported"):
@@ -75,10 +78,26 @@ def test_a_missing_module_fails_in_load_with_its_reason(tmp_path):
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the native core is built for Windows only so far")
 def test_a_module_whose_import_refuses_becomes_the_reason(tmp_path, monkeypatch):
+    monkeypatch.delitem(sys.modules, loader.MODULE_NAME, raising=False)
     (tmp_path / f"{loader.MODULE_NAME}.pyd").write_bytes(b"MZ not really a module")
     with pytest.raises(native.NativeCoreUnavailable, match="cannot be imported"):
         native.load(tmp_path)
     assert loader.MODULE_NAME not in sys.modules
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the native core is built for Windows only so far")
+def test_the_core_import_check_reports_a_missing_module_as_its_failure(tmp_path, monkeypatch):
+    monkeypatch.delitem(sys.modules, loader.MODULE_NAME, raising=False)
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "native" / "core" / "python"))
+    monkeypatch.delitem(sys.modules, "import_check", raising=False)
+    import import_check
+
+    try:
+        report = import_check.check(tmp_path, QT)
+        assert report["ok"] is False and report["checks"]["import"].startswith("FAILED: the native core is not built")
+        assert import_check.main(["--module-dir", str(tmp_path), "--expect-qt", QT]) == 1
+    finally:
+        sys.modules.pop("import_check", None)
 
 
 def test_the_host_entry_takes_only_a_quick_window():

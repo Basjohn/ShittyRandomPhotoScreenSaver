@@ -509,11 +509,30 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     stays the harness and evidence (the N0.6 and N0.7 rounds keep running there). Tests: `tests/test_native_core_*.py`.
   - [ ] The product module's tree with the spike's CMake guard (the PySide6 pin), the exact-Qt import guard and
     the MSVC runtime's origin check (`msvcp140`, `vcruntime140`) carried over, each with its failing test.
+    - Written (d6b45288, not yet compiled): `native/core/` (CMake pin guard, `build.cmd` with the spike's four
+      arguments, `src/module.cpp` with the exact-Qt guard, `runtime_info()`, `ABI`/`QT_VERSION`/`__version__` and the
+      no-op `host_attach` that `qobject_cast`s to `QQuickWindow`; `src/abi.h`; `shaders/` baked per source). The MSVC
+      runtime origin check is `rendering/native/runtime_check.py` (the module's PE imports: nothing from `msvcp140*`;
+      every `vcruntime140*` symbol exported by the loaded copy, which is at least as new as the compiler). Tests
+      `test_native_core_build.py`, `test_native_core_runtime_check.py` (negative controls in each test; PySide6's
+      QtCore, which imports `msvcp140`, is the rule's real negative). Found: in the venv `vcruntime140_1` and
+      `msvcp140` are shiboken6's 14.44.35211 and `vcruntime140` Python's 14.51, so a core compiled by a toolset newer
+      than 14.44 fails the check (intended: that is the unsupported arrangement).
   - [ ] `native-module.yml` takes the source folder as an input (today `NATIVE_SOURCE: native/spike_p1`, line 61),
     so the spike and the product module build through one workflow; staging fails when the module is missing.
+    - Written (074ac296, not yet run): input `source` (default `native/core`); targets `native_module` (the core,
+      `release/native_module/`) and `native_spike` (the spike, now `release/native_spike/`; the lead's spike command
+      is `--select native_spike`); the run is named for the source's target and checked against `MODULE_TARGETS` on
+      the runner; staging and local validation require the module and exactly one `.qsb` per shader source at the
+      built commit; the manifest records the source.
   - [ ] The product workflows call it (`workflow_call`) and place the module in the product's `release/` tree;
     the frozen probe rerun from the product's pruned build.
   - [ ] Tests that need the module skip with a stated reason where it is not built.
+    - Written (with box 1 and the docs commit): `rendering/native/` (`load(module_dir=None)`: the package location
+      by default, a named folder for tools and tests; every check in `loader.checked`, one `NativeCoreUnavailable`
+      reason), `native/core/python/import_check.py` (the workflow's check, through `rendering.native`),
+      `test_native_core_loader.py` (stand-in modules) and `test_native_core_module.py` (skips with its reason until
+      `release/native_module/_srpss_native_core.pyd` exists). Nothing in the product calls it.
 - [ ] N2.2 The host interface and the frame driver (D5.1, D5.2): the Qt Quick host and the hidden host; all core
   work recorded on `beforeRendering` through a C++ connection; the thread probe reports zero Python thread
   states.
