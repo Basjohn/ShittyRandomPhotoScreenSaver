@@ -38,12 +38,12 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N0.3's scenes (High; build round 2 after the lead's F1 to F4 decisions), 1D.1 (Medium).
+**Now (in flight):** 1D.1 (Medium). The High slot is next for 1D.2.
 
 **Next, by slot (lead, 12 Nov night audit, `Docs/Future_Work/Audit_2026-11-12_Night.md`):**
 - High:
-  1. N0.3's three convention scenes (the native core's critical path; N2.2 and N2.4 wait on it).
-  2. 1D.2 (design note approved 12 Nov: plan 01, "Display styles of the expanded card").
+  1. 1D.2 (design note approved 12 Nov: plan 01, "Display styles of the expanded card").
+  2. N2.2, the host interface and frame driver (unblocked by N0.3, proved 12 Nov).
   3. 1C.10.
   4. The 1C.2 Save stall.
 - Medium:
@@ -230,7 +230,7 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
 **State, 12 Nov (night audit):** N0's contracts are decided, and N0.6 and N0.7 are proved (D6 and D9 accepted). N1.6
 is merged to ratchet 95 (its remainder is open). N2.1 (the product module's build) is merged and its first product
 build round runs under the lead; the Python half of N2.3 (Spectrum's native schema, the `payload_schema` check) is
-merged and its C++ reader is open. N2.2 and N2.4 wait for N0.3's scenes.
+merged and its C++ reader is open. N0.3 is proved (12 Nov, run 2), so N2.2 and N2.4 can start.
 
 **Order.** N0 and N1 now. Then N2 (the substrate and Spectrum), N2b (the background layer and the first full
 rehearsal), N3 (the 3D substrate). From there two ordered tracks, one High slot each: the **modes track** (N5.1,
@@ -370,10 +370,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [ ] Extruded Spectrum's and Sphere's backdrop uv (`extruded_spectrum_program.py:415`, `sphere_voxel.py:658`)
     and the four 2D shaders (`gl_FragCoord.xy - u_viewport_origin_px`), each with its N1.6 group. Spectrum's group
     merged without it (`spectrum.frag:521` still reads raw `gl_FragCoord`): Spectrum's is owed before N2.5.
-  - [ ] Projection matrices (`framed_camera.py` perspective, depth -1..1) corrected once at upload, with the two
-    depth side defects above; proved by N0.3's known-depth scene.
-  - [ ] The winding rule on a backend other than OpenGL: N0.3's culled-triangle scene (today only the truth table
-    and Sphere's OpenGL answer are tested).
+  - [ ] The core's own upload correction (the matrix correction and the front-face rule on the corrected matrix,
+    proved in the harness by N0.3 run 2: decisions document, N0.3 "As proved") built into `native/core` in N2.2,
+    with the two depth side defects above.
   - The eight scene composites in `scene3d/target.py:125-286` (and their oriented forms) keep raw `gl_FragCoord`
     and are never converted: D5.2 replaces them with a texture node.
 - [ ] N1.6 Loose uniforms into blocks across the renderer (838 `glUniform*` call sites; `qsb` needs blocks), each
