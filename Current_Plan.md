@@ -1064,9 +1064,9 @@ solid border pixels with nothing blended, in the saver's frame and in the DWM co
   MSI display at 150 % was stretched horizontally by 0.9998 and now overscans 2 px on its outer left edge) and the
   Visualizer's Edit outline and handles on the drawn card (`drawnCardRect`, one owner with the card's placement).
   Neither seen on a real display yet.
-- [ ] D1 run of the second-axis fix when two displays are connected (the MSI is Display 0 and is never taken without the
-  operator's permission; a check there is the operator's or waits for their leave): the card's left and right edges
-  on the MSI at native pixels.
+- The second-axis fix seen on the MSI, 12 Nov (one bounded Display 0 run by the lead, the operator's leave; evidence
+  `.artifacts/evidence/display/d1_run/20261112_msi_second_axis_edges/`): window `(-2,-3)` 2562 x 1443 device pixels, every
+  card edge 8 solid border pixels with nothing blended, in the saver's frame and the DWM composite.
 - [ ] R-192's "Still open", recorded only in the bug entry: an axis with no exterior edge (the middle display of
   three in a row; a display enclosed on all sides, which also takes R-63's top fallback into its neighbour) keeps
   Qt Quick's stretch when its extent is not whole at its DPR. Decide: Watchlist with the layouts named, or the
