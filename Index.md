@@ -150,6 +150,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Shared G1 attachments, G3A transparent layering, G2 shadow-map and selective G3B optics proof | `Docs/Reference/Scene3D_Resources.md`; `Current_Plan.md` §6 |
 | Usu character authoring source and static review renders | local checkout `assets/usu/README.md` (excluded from normal Godzip) |
 | shared 3D resource ownership, DSA, immutable storage and state restoration | `Docs/Reference/Scene3D_Resources.md` |
+| rendering primitives and shared services catalogue (existing, native-core services, planned N6; consumers, harnesses, potential class, portability) | `Docs/Reference/Primitives.md`; `Current_Plan.md` item 8b |
 | runtime audit 2026-09-22 outcomes and rejected ideas (closed) | `Docs/Guardrails/Performance_Optimization_Contract.md` |
 | FEEDS architecture, terminal failure/queued settlement, bundle admission and open physical acceptance | `Docs/Reference/Feeds.md`; `Docs/TestSuite.md` → FEEDS |
 | defaults | `Docs/Guides/Defaults_Guide.md` |
