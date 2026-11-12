@@ -504,7 +504,7 @@ through a scripted step: fetch the matching SDK, rebuild, both backends' parity 
 
 ## D1, D2, D3 and the transport rule
 
-*Proposed (draft for the lead), 12 Nov 2026. Nothing in this section is decided. Drafted by a Sonnet agent from
+*Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts" below); drafted as:* *Proposed (draft for the lead), 12 Nov 2026. Nothing in this section is decided. Drafted by a Sonnet agent from
 current source; every "today" claim carries a file:line and was read on 12 Nov 2026 at commit `7ac980d7`. The
 statements are in `Current_Plan.md` (item 8b, N0, box P3.0) and the inputs in the closeout document's section 3.
 D9's job thread uses D1's barrier, so D1 is written with both readers in mind.*
@@ -838,7 +838,7 @@ native schema id equals `frame_codec.CODEC_SCHEMA` and that the Python decoder r
 
 ## D5, the rest: resources, lifetime, admission, device loss, and what a mode may not do (N0.5)
 
-*Proposed (draft for the lead), 12 Nov 2026. This completes D5 (N0.5); it does not change D5.1 to D5.4, D6, D7, D9
+*Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts" below); drafted as:* *Proposed (draft for the lead), 12 Nov 2026. This completes D5 (N0.5); it does not change D5.1 to D5.4, D6, D7, D9
 or D10, and nothing here is decided. Every "today" claim was read in source at commit `7ac980d7`.*
 
 ### Today, in source
@@ -1012,7 +1012,7 @@ a Python callback reports a Python thread state.
 
 ## N0.3. Conventions, written once and tested per backend
 
-*Proposed (draft for the lead), 12 Nov 2026. Nothing here is decided. Inputs: the lead's research file (outside the
+*Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts" below); drafted as:* *Proposed (draft for the lead), 12 Nov 2026. Nothing here is decided. Inputs: the lead's research file (outside the
 repository, `D:\Temp\Scratch\SRPSS\research\20261112\native_core_qrhi_gaps_and_conventions.md`, section N0.3, read
 only; its file:line citations were taken at `a5ee7189`, and the ones restated below were re-read at `7ac980d7`
 unless marked "research"), the Qt 6.11.2 QRhi documentation (doc.qt.io/qt-6/qrhi.html: `clipSpaceCorrMatrix()` "can
@@ -1170,7 +1170,7 @@ available backend and the backends equal each other within the P1 spike's measur
 
 ## N0.4. The camera (proposed D5.5)
 
-*Proposed (draft for the lead), 12 Nov 2026. Nothing here is decided. Read at `7ac980d7`. One finding differs from
+*Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts" below); drafted as:* *Proposed (draft for the lead), 12 Nov 2026. Nothing here is decided. Read at `7ac980d7`. One finding differs from
 the plan's wording ("the core receives finished matrices and rays from the worker"): today no finished matrix
 travels from the worker to the renderer at all, so "keeps receiving" is not available and the contract below says
 what has to be added.*
@@ -1269,6 +1269,46 @@ worker's build proves to cost the tick.
    worker's view message (an internal protocol, not a persisted one); confirm no bridge is needed.
 3. Neon Lake builds its axes inside program builders (`neon_lake_basin_program.py:81,99`); under the proposal that
    moves to the packet like the others. Confirm it is in scope of the Neon Lake port (N5.5), not of N0.
+
+## Lead decisions on the N0 drafts (12 Nov 2026)
+
+The four drafted sections above (D1 to D3 and the transport rule; the rest of D5; N0.3; N0.4) are accepted as
+written, with these answers to their questions. "Nothing here is decided" in their headers is history.
+
+**D1 to D3 and the transport rule.**
+1. D1: the core maps its own view by name and retires asynchronously on the render thread; the GUI never waits.
+   The bounded GUI wait is rejected (it can deadlock against Qt's synchronisation of the two threads).
+2. D2: the core acknowledges at the accept edge (parity with today's `take`), not at the swap.
+3. D3: geometry moves into the parent-owned arena, two banks per family; the slot shrinks to the base envelope.
+   The OpenGL solver's delete-before-allocate order and its leak on a failed dispatch are fixed now, in the
+   OpenGL renderer (plan N1), not only in the native path: they are today's defects. The revision-only identity is
+   proved or disproved now by the D3 identity test against the Python solver.
+4. Transport: the numbering stands (`payload_schema` 1 the tagged Python codec; native `0x100 | mode_code`, the
+   version in bits 16 to 23; 2 to 0xFF reserved).
+
+**The rest of D5.**
+1. After a device loss the drift solver's GPU-only per-mote state restarts, hidden by the mode's reveal fade (fade,
+   never vanish). It is not rebuilt from the log (128 steps cannot rebuild it), and a device loss is rare.
+2. The bound: a second device loss on a window before 3,600 presented frames since its rebuild is a backend
+   failure: the Visualizer on that window fades out and parks, and D6 point 5's remembered failed start applies.
+   Counted in frames at the frame edge, never by a timer.
+3. Admission is accounting only (the ownership table and today's capacity envelope); a per-window GPU-memory
+   budget is added only if a measurement shows a surface exceeding what the device can hold.
+4. Pipelines are device-scoped and survive a mode release: the set is finite and a return to a mode then costs no
+   warm-up.
+
+**N0.3.**
+1. Core-owned offscreen targets are top-left, Y-down on every backend (Vulkan is the front face; OpenGL is the
+   backend that flips).
+2. No reverse-Z now; it is decided separately only if the near-plane bead check (plan N1) calls for depth precision.
+3. The conventions block has one fixed, reserved binding in every shader; N2 chooses the index once.
+
+**N0.4.**
+1. The camera is built in the worker's tick by `core/settings/framed_camera.py` and published in the packet; the
+   GUI-thread build is rejected.
+2. The two new view floats (exact pixel aspect, exact aperture scale) change an internal message, not a persisted
+   shape: no bridge; the message's version is raised.
+3. Neon Lake's camera axes move into the packet at its port (N5.5), not in N0.
 
 ## Long-term risks of this direction, and what holds each (audit, 12 Nov 2026)
 
