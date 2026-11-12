@@ -6,6 +6,7 @@ visibility window and a velocity/spin kick that start at its event time. With
 no event the kick is zero and the path is exactly the plain shatter.
 """
 
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_ghost_fragment, scene3d_motion_fragment, scene3d_motion_vertex
 
 GLASS_VERTEX = """#version 460 core
@@ -189,3 +190,12 @@ GLASS_MOTION_VERTEX = scene3d_motion_vertex(GLASS_VERTEX)
 GLASS_MOTION_FRAGMENT = scene3d_motion_fragment(GLASS_FRAGMENT)
 # With motion trails: the same shards as flat ghost silhouettes.
 GLASS_GHOST_FRAGMENT = scene3d_ghost_fragment(GLASS_MOTION_FRAGMENT)
+
+# N1.6: each program's values in one std140 pass block (``portable_program``; the motion-writing shards and their
+# ghosts share one), the photographs and the environment at their units.
+GLASS_SAMPLERS = {"uOldTex": 0, "uNewTex": 1, "uEnvironment": 2}
+GLASS_VERTEX, (GLASS_FRAGMENT,), GLASS_BLOCK = portable_program(GLASS_VERTEX, (GLASS_FRAGMENT,), block="GlassShatter",
+                                                                samplers=GLASS_SAMPLERS)
+GLASS_MOTION_VERTEX, (GLASS_MOTION_FRAGMENT, GLASS_GHOST_FRAGMENT), GLASS_MOTION_BLOCK = portable_program(
+    GLASS_MOTION_VERTEX, (GLASS_MOTION_FRAGMENT, GLASS_GHOST_FRAGMENT), block="GlassShatterMotion",
+    samplers=GLASS_SAMPLERS)
