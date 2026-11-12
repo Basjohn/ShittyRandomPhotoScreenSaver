@@ -16,6 +16,7 @@ import random
 
 from rendering.gl_programs.depth_cascade_options import CASCADE_CARDS_RANGE  # noqa: F401 (re-exported)
 from rendering.gl_programs.depth_cards import CARD_GLSL, card_partition, card_pose
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import SCENE3D_CAMERA, SCENE3D_GLSL
 
 CASCADE_STAGGER = 0.5       # the run's share over which cards start, first to last along the sweep
@@ -187,3 +188,11 @@ void main() {{
     FragColor = vec4(0.0, 0.0, 0.0, strength * inside);
 }}
 """)
+
+# N1.6: each program's values in one std140 pass block (``portable_program``), the old picture and the environment at
+# their units.
+CASCADE_VERTEX_SOURCE, (CASCADE_FRAGMENT_SOURCE,), CASCADE_BLOCK = portable_program(
+    CASCADE_VERTEX_SOURCE, (CASCADE_FRAGMENT_SOURCE,), block="DepthCascadeCards",
+    samplers={"uOldTex": 0, "uEnvironment": 2})
+CASCADE_SHADOW_VERTEX_SOURCE, (CASCADE_SHADOW_FRAGMENT_SOURCE,), CASCADE_SHADOW_BLOCK = portable_program(
+    CASCADE_SHADOW_VERTEX_SOURCE, (CASCADE_SHADOW_FRAGMENT_SOURCE,), block="DepthCascadeShadows", samplers={})

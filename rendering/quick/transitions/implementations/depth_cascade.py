@@ -7,15 +7,18 @@ from collections.abc import Mapping
 from OpenGL import GL as gl
 
 from rendering.gl_programs.depth_cascade_program import (
+    CASCADE_BLOCK,
     CASCADE_CARDS_RANGE,
     CASCADE_DONE,
     CASCADE_FRAGMENT_SOURCE,
+    CASCADE_SHADOW_BLOCK,
     CASCADE_SHADOW_FRAGMENT_SOURCE,
     CASCADE_SHADOW_VERTEX_SOURCE,
     CASCADE_VERTEX_SOURCE,
     cascade_cards,
 )
 from rendering.gl_programs.depth_cascade_options import CASCADE_SWEEP_VECTORS
+from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.scene3d import scene3d_request_samples
 from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
@@ -44,8 +47,9 @@ def depth_cascade_parameters(parameters: Mapping[str, object]) -> tuple[int, flo
 class QuickDepthCascadeRenderer:
     transition_id = "depth_cascade"
 
-    _CARD_UNIFORMS = ("uMatrix", "uItemSize", "uProgress", "uOldTex", "uNewTex", "uEnvironment", "uGloss")
-    _SHADOW_UNIFORMS = ("uMatrix", "uItemSize", "uProgress")
+    # The photographs bind_frame binds (units 0 and 1; the cards read only the old); every other value is in the
+    # programs' pass blocks.
+    _CARD_SAMPLERS = ("uOldTex", "uNewTex")
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Depth Card Cascade")
@@ -131,32 +135,35 @@ class QuickDepthCascadeRenderer:
         r.draw_image(frame, frame.destination_texture_id)         # the new picture beneath the cards
         if shadows:
             program = r.program("shadows", CASCADE_SHADOW_VERTEX_SOURCE, CASCADE_SHADOW_FRAGMENT_SOURCE)
-            uniforms = r.uniforms("shadows", self._SHADOW_UNIFORMS)
-            bind_frame(program, uniforms, frame)
-            gl.glUniform1f(uniforms["uProgress"], progress)
+            uniforms = r.uniforms("shadows", ())
+            values = r.values("shadows")
+            bind_frame(program, uniforms, frame, values)
+            values["uProgress"] = progress
             gl.glEnable(gl.GL_BLEND)
             gl.glBlendFuncSeparate(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA, gl.GL_ZERO, gl.GL_ONE)
             try:
                 gl.glBindVertexArray(vao)
-                gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
+                with r.pass_blocks.bound(pack_block(CASCADE_SHADOW_BLOCK, values)):
+                    gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
             finally:
                 gl.glDisable(gl.GL_BLEND)
         r.begin_depth(frame)
         program = r.program("cards", CASCADE_VERTEX_SOURCE, CASCADE_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("cards", self._CARD_UNIFORMS, required=False)
-        bind_frame(program, uniforms, frame)
-        gl.glUniform1f(uniforms["uProgress"], progress)
-        gl.glUniform1f(uniforms["uGloss"], gloss)
+        uniforms = r.uniforms("cards", self._CARD_SAMPLERS, required=False)
+        values = r.values("cards")
+        bind_frame(program, uniforms, frame, values)
+        values["uProgress"] = progress
+        values["uGloss"] = gloss
         # Units 0 and 1 hold the photographs (bind_frame); the copy goes on 2 (restored by the host fence).
         gl.glActiveTexture(gl.GL_TEXTURE2)
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
-        gl.glUniform1i(uniforms["uEnvironment"], 2)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glEnable(gl.GL_DEPTH_TEST)
         gl.glDepthFunc(gl.GL_LESS)
         gl.glDepthMask(gl.GL_TRUE)
         gl.glBindVertexArray(vao)
-        gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
+        with r.pass_blocks.bound(pack_block(CASCADE_BLOCK, values)):
+            gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, vertices, count)
 
     def release_resources(self) -> None:
         errors: list[str] = []
