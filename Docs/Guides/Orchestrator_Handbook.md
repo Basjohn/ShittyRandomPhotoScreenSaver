@@ -125,8 +125,8 @@ Added 12 Nov 2026 with the native core's direction (`Docs/Future_Work/Native_Cor
   build as long as you use github workflows to do it. This is authoritive."). The audit proposed that agents
   compile the module in their own worktrees with the scripted CMake step; that is *not* in force: no local
   compile exception is added to `Docs/Guardrails/Agent_Worktree_Rules.md` without the operator's explicit yes.
-  Until then a C++ slice's module is compiled by a GitHub workflow for a pushed ref (plan N0.9 builds that
-  workflow first; the harness proofs N0.6 and N0.7 wait on it), the artefact is downloaded into the worktree
+  A C++ slice's module is compiled by a GitHub workflow for a pushed ref (N0.9 built that workflow on 12 Nov:
+  `.github/workflows/native-module.yml`; the harness proofs N0.6 and N0.7 ran through it), the artefact is downloaded into the worktree
   (`Docs/Guides/GitHub_Remote_Build.md`, "The native module": the lead pushes the agent's branch and runs
   `tools/build_runner.py --mode github --run --select native_module` from that worktree), and agents never start a
   build, remote included. Frozen products and installers stay on GitHub and with the lead.

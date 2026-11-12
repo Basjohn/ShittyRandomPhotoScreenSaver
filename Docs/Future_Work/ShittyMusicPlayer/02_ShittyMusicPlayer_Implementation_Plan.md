@@ -6,7 +6,7 @@ tracked; this file is the one source of truth). Reviewed 7 Nov against `a295697c
 gate, the phase ladder with entry/exit gates, owners, dormancy, lifecycle, budgets and risks; §13-16 hold the  
 operator's box items (audio quality, the SMP Settings tab with pills, the icon and artwork rules, full rearrangement)  
 as live checklist targets. Sections 0-12 are the original plan, corrected where the review found drift.  
-**Status:** FUTURE, NOT ADMITTED. Do not implement, modify builds or reorder `Current_Plan.md` until the operator explicitly begins this work.  
+**Status:** FUTURE, NOT ADMITTED. Do not implement, modify builds or reorder `Current_Plan.md` until the operator explicitly begins this work. *(12 Nov 2026, doc sweep: `Current_Plan.md` item 9 now orders SMP's foundations after the native core's flip, on the operator's 12 Nov direction; whether the entry gates below still hold in that order is the lead's to say.)*  
 **Entry gates:** (1) Waveform Ribbon accepted; (2) `01_Expanded_Visualizer_Implementation_Plan.md` physically accepted, with its display-takeover and dormant-resource contracts proven (needed by M6, not by M1-M5); (3) the prerequisite phases in §0A.1 landed before the milestone each precedes.  
 **First visible implementation:** **Library + Playlists**, two independently placeable/resizable/movable MC panes that are **ONE widget entry** and ONE feature/capability in Settings. **Not** a playback-only stub followed by the library later.  
 **Pre-profile gate:** deliver **Expanded Media in MC**, reusing the earlier display-takeover semantics, before creating a standalone SMP build/profile.  

@@ -27,6 +27,10 @@ eventual Vulkan backend is a native render core on Qt Quick's Vulkan RHI (DLSS/F
 measured triggers (never a Python-driven Vulkan port); mixed resolution for soft layers meanwhile (whole-frame
 upscalers rejected); port-readiness rules bind new GPU code.
 
+*Superseded in part on 12 Nov 2026 (the document's own addendum and `Native_Core_P3_Decisions.md` D5 to D11):* the
+native core is no longer waiting on triggers. It is admitted work, `Current_Plan.md` item 8b, with Vulkan the
+default and OpenGL selectable; SMP's foundations follow it (item 9).
+
 ## 3. Visual concepts
 
 Accepted transition membership belongs to the canonical registry and `Docs/Reference/Transitions.md`.
@@ -79,7 +83,9 @@ Keep these deferred unless new evidence or an explicit request promotes them:
   cache-writer overlap. Do not add private socket cancellation, weaken retirement or claim a hard deadline from read timeouts;
 - Steam asset-cache/catalog reconciliation if missing-image requests recur: the 2026-10-07 loaded RUN received HTTP 404 for
   asset hashes `4b349d51e996` and `3f5b734df3c5`. Resolve the source identities and verify failure backoff before changing asset admission;
-- persistent shader/program cache only for a measured residual cold-compile hitch after gradual warm-up;
+- persistent shader/program cache: the GL program binary cache landed 8 Nov (8c4bec4d,
+  `rendering/quick/render/gl_program_cache.py`, R-180); only a further measured residual cold-compile hitch after
+  gradual warm-up reopens it;
 - bindless/sparse texture extension research only for a concrete consumer and without a permanent duplicate renderer path.
 - optional long-tail test-oracle cleanup from the completed durability tranche: manually review remaining default-pin,
   source-string and exact-UI-copy advisory candidates only when touched or when they obscure a real contract. Preserve deliberate
@@ -91,7 +97,8 @@ Keep these deferred unless new evidence or an explicit request promotes them:
 
 ### 2.5 SMP & Full Display
 
-Decided 5 Nov (§2): this series follows Waveform and the Studios; the Vulkan core waits for a recorded trigger. The
+Decided 5 Nov (§2): this series follows Waveform and the Studios; the Vulkan core waited for a recorded trigger
+(superseded 12 Nov: the native core is admitted, `Current_Plan.md` item 8b, and SMP's foundations follow it). The
 plans are live tracked documents (extracted 7 Nov; the zip they shipped in was never tracked and is superseded):
 
 - `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md`: full-display Visualizer
