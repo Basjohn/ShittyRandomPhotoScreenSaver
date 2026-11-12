@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.2 (High), 1D.4 (Medium).
+**Now (in flight):** N2.2 (High; build round 2), the N1.6 remainder (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,9 +47,8 @@ at the size asked.
   2. Then N2.4, the composite node, and N2.6/N2.7 toward N2.5 (Spectrum at parity).
   3. The 1C.2 Save stall, and 1C.10, as defects between N steps.
 - Medium:
-  1. 1D.4 (the default-mode marker and the image-time row; small, as asked).
-  2. The N1.6 remainder (the motion and trail family, then its transitions; no C++).
-  3. 1B.10.
+  1. The N1.6 remainder (the motion and trail family, then its transitions; no C++).
+  2. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -1056,19 +1055,6 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   Settings and Studio box.
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
-
-### 1D.4 Guided Setup: the default Visualizer mode (operator, 12 Nov; Medium, after 1D.1's side defects)
-
-- [ ] The Visualizer page marks which enabled mode plays first. A small "Default" text sits next to that mode in
-  the list. The mode's preview pane has a circle (radio) checkbox, "Make Default", and only one mode can hold it.
-  Choosing it moves the "Default" text. It edits the wizard's draft (only Finish saves), writes the existing
-  setting that picks the starting mode (find its owner; never a new parallel key), and refuses or moves the default
-  when that mode is unticked.
-  - [ ] Test through the real wizard: exactly one default; it follows a change; unticking the default mode moves
-    it to an enabled mode (rule stated in the test); Finish saves it, Cancel does not; negative controls.
-- [ ] Image time on the Transitions page (operator, 12 Nov: "Row on Transitions"): one compact row under the
-  heading ("Change Every" and the 	iming.interval control Settings uses, same range and steps, read from its
-  owner), editing the draft; a test through the real wizard (Finish saves, Cancel does not) with a negative control.
 
 ### 1D.2 Fullscreen Visualizer display styles (merged and proved on Display 1, 12 Nov)
 
