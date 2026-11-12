@@ -94,6 +94,42 @@ def populate_online_source_rows(list_widget: QListWidget, pools, feeds, *, cache
         list_widget.addItem(item)
 
 
+def active_pools(settings) -> tuple:
+    """The active pools in their canonical order (a settings store or the Guided Setup draft)."""
+    from sources.rss.pools import WALLPAPER_POOLS, read_pool_selection
+    active = read_pool_selection(settings).active_ids
+    return tuple(pool for pool in WALLPAPER_POOLS if pool.pool_id in active)
+
+
+def refresh_online_source_list(list_widget: QListWidget, settings, *, cache_dir=None) -> tuple:
+    """The one read both Settings' Sources tab and Guided Setup's sources page make: the active pools and the
+    custom feeds of ``settings`` become the list's rows. Returns the active pools."""
+    pools = active_pools(settings)
+    populate_online_source_rows(list_widget, pools, list(settings.get("sources.rss_feeds") or ()), cache_dir=cache_dir)
+    return pools
+
+
+def build_online_source_list(min_height: int) -> QListWidget:
+    """The online sources list as Settings shows it: the outlined list in the shared Settings list style, the row
+    delegate, and URLs that elide inside the row instead of scrolling sideways."""
+    from ui.tabs import shared_styles
+    from ui.widgets.continuous_border import OutlinedListWidget
+    list_widget = OutlinedListWidget()
+    list_widget.setMinimumHeight(min_height)
+    list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    shared_styles.apply_settings_list_style(list_widget)
+    list_widget.setItemDelegate(OnlineSourceRowDelegate(list_widget))
+    return list_widget
+
+
+def selected_feed_url(list_widget: QListWidget) -> str | None:
+    """The custom feed URL of the current row, or None (a pool row is managed by the pool chooser)."""
+    item = list_widget.currentItem()
+    if item is None or item.data(KIND_ROLE) != FEED:
+        return None
+    return item.data(KEY_ROLE)
+
+
 def rows_of_kind(list_widget: QListWidget, kind: str) -> list[QListWidgetItem]:
     return [list_widget.item(row) for row in range(list_widget.count()) if list_widget.item(row).data(KIND_ROLE) == kind]
 

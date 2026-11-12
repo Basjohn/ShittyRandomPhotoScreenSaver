@@ -85,13 +85,14 @@ def test_sources_page_is_two_large_buckets_and_adds_custom_feeds(qapp, settings)
         page.add_custom_feed()
         assert settings.get("sources.rss_feeds") == ["https://example.org/wallpapers.rss"]
         assert page.can_continue()
-        custom = next(page.feeds.item(i) for i in range(page.feeds.count())
-                      if page.feeds.item(i).data(Qt.ItemDataRole.UserRole) == "https://example.org/wallpapers.rss")
-        custom.setCheckState(Qt.CheckState.Unchecked)
+        from ui.tabs import online_source_rows as rows
+        custom = next(item for item in rows.rows_of_kind(page.feeds, rows.FEED)
+                      if item.data(rows.KEY_ROLE) == "https://example.org/wallpapers.rss")
+        # Removing is Settings' Remove Selected (the shared online sources list), staged in the wizard's draft.
+        page.feeds.setCurrentItem(custom)
+        page.remove_custom_feed()
         assert settings.get("sources.rss_feeds") == []
-        # Unticked custom feeds stay listed so they can be ticked again.
-        assert any(page.feeds.item(i).data(Qt.ItemDataRole.UserRole) == "https://example.org/wallpapers.rss"
-                   for i in range(page.feeds.count()))
+        assert not rows.rows_of_kind(page.feeds, rows.FEED)
         page.custom_feed.setText("not a feed")
         page.add_custom_feed()
         assert settings.get("sources.rss_feeds") == []
