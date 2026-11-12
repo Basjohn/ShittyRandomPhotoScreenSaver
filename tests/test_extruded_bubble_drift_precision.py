@@ -5,7 +5,8 @@ hour's and at eight hours' stream travel and motion phase. No GPU: this proves t
 The float64 work is done once on the logical side and published: each chain's knot decision per step (the
 reference's own ``KnotClock``), the field's growing phase arguments reduced mod 2 pi, travel as a float pair, and
 per mote ``carry / span`` as a float pair and the seed as a head. Everything modelled here is float32: the
-per-mote quotient ``travel x carry / span`` is rebuilt from pairs (an fma two-product), and the seed and the phase
+per-mote quotient ``travel x carry / span`` is rebuilt from pairs (an exact two-product from Veltkamp halves, equal
+to the fma two-product, which HLSL cannot keep fused), and the seed and the phase
 offset are pairs too, so a mote recycles on the reference's tick at any horizon.
 """
 from __future__ import annotations
@@ -45,10 +46,17 @@ def fast_two_sum(a, b):
     return s, b - (s - a)
 
 
+def split(a):
+    c = F(4097.) * a
+    high = c - (c - a)
+    return high, a - high
+
+
 def two_prod(a, b):
-    """``(p, fma(a, b, -p))``: the error of a float32 product is itself a float32, so float64 computes it exactly."""
+    """Dekker's product from Veltkamp halves, as the shader computes it: ``(p, e)`` with ``p + e == a x b`` exactly."""
     p = a * b
-    return p, (np.float64(a) * np.asarray(b, dtype=np.float64) - np.asarray(p, dtype=np.float64)).astype(F)
+    (ah, al), (bh, bl) = split(a), split(b)
+    return p, ((ah * bh - p) + ah * bl + al * bh) + al * bl
 
 
 def mul_pair(x, y):
@@ -363,10 +371,10 @@ def run(log) -> ModelRun:
 
 # -- the proof ------------------------------------------------------------------------------------------------------
 
-def test_pair_product_is_the_fma_two_product():
+def test_pair_product_is_exact_like_the_fma_two_product():
     rng = np.random.default_rng(3)
-    a = rng.uniform(1., 3e5, 2000).astype(F)
-    b = rng.uniform(1e-3, 300., 2000).astype(F)
+    a = np.concatenate((rng.uniform(1., 3e5, 2000), rng.uniform(1e-6, 1., 2000))).astype(F)
+    b = np.concatenate((rng.uniform(1e-3, 300., 2000), rng.uniform(1e-6, 3e5, 2000))).astype(F)
     p, e = two_prod(a, b)
     assert all(float(e[i]) == float(np.float32(math.fma(float(a[i]), float(b[i]), -float(p[i]))))
                for i in range(len(a)))

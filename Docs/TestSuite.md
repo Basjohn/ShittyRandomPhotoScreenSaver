@@ -1119,10 +1119,13 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   display's refresh-edge clock (the production `RefreshStateGlyph.qml` settles at once, no phase callback) and
   animates again after uncover. Negative controls: no host call at the cover edge (3 red), the Clock not bound to
   the cover (2 red), refresh edges animating while covered (1 red), a transfer ignoring the target's cover (1 red).
-- `tests/test_vulkan_shader_readiness.py` — port-readiness rule 5: every GLSL compute shader compiles to SPIR-V
-  with PySide6's `qsb`, except the shrinking legacy list of 18 loose-uniform sources (P3 converts them per mode);
-  a listed shader that now compiles must leave the list. A second test pins the rule's two sides on a tiny
-  program (loose uniform fails, std140 block compiles). Negative control: dropping a legacy entry fails it.
+- `tests/test_vulkan_shader_readiness.py` — port-readiness rule 5: every GLSL compute shader the tool discovers in
+  the product compiles with PySide6's `qsb` for every target (SPIR-V, GLSL 430 and 310 es, HLSL 5.0, MSL 1.2),
+  except the shrinking legacy list of 16 loose-uniform sources (P3 converts them per mode; EB's drift solver left
+  it with D4); a listed shader that now compiles must leave the list. Further tests pin the rule's two sides on a
+  tiny program (loose uniform fails, std140 block compiles), that discovery finds every listed module, and that a
+  64-bit float, which SPIR-V alone accepts, fails the full target set. Negative control: dropping a legacy entry
+  fails it.
 - `tests/test_visualizer_glyph_row.py` — the Visualizer card's one bottom-right glyph row (operator, 8 Nov) on the
   hidden production scene: on the ordinary, a narrow and the display-wide card, every combination of Reset Camera and
   the expand glyph lays the offered glyphs in one row (one bottom edge and size, preset steps then Reset Camera then
@@ -1355,6 +1358,18 @@ High-value permanent guards include:
   the collector (before the fix: 30 for 10 round trips).
   `tests/test_extruded_bubble_frame_drift_boundary.py` keeps CPU-reference arrays out of canonical captured frames,
   preserving renderer bytes/digests and descriptor reuse through capacity growth and edits without cyclic retention.
+  EB's drift solver without 64-bit floats (D4, `Docs/Future_Work/Native_Core_P3_Decisions.md`), all against the
+  float64 `MaterialDriftReference`: `tests/test_extruded_bubble_drift_precision.py` is the NumPy float32 model of
+  both compute programs in their operation order at an hour's and eight hours' travel and phase (no GPU; a plain
+  float32 port of the quotient on the same run must miss the bound: its negative control);
+  `tests/test_extruded_bubble_drift_publication.py` proves the published knot decisions are the reference's own
+  on every tick across an edit and a resize, and the angle and pair fields; `tests/test_extruded_bubble_drift_solver.py`
+  runs the real programs on GL 4.6 (hidden): every drift direction, an edit, a render gap, the long-horizon runs
+  (tick-exact chains, no mote recycled on another tick, within 1e-4; keep these in the suite), no 64-bit type in
+  any program, a frame with no new step dispatching and uploading nothing, the step ring sized to the chain rows,
+  and the warm-up pair check (a broken compile is reported). Today's `double` programs live test-only in
+  `tests/_eb_drift_solver_fp64_baseline.py` as the comparison baseline. `tests/test_extruded_bubble_drift_gpu.py`
+  also traces a drift program that fails to compile (a loud, repeated error; drift-free frames still draw).
   `tests/test_visualizer_engine_frame_capacity.py` covers non-default/schema-maximum controls in every mode, maximum
   EB geometry/step/wake/body payload, activation-time admission, matching hidden-edge remaps and read quiescence,
   stale/failed/retired mappings, initial IPC allocation cleanup, and terminal overflow reporting without execution-path

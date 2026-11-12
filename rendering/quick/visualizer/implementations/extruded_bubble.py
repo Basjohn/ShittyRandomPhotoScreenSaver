@@ -361,13 +361,16 @@ class QuickExtrudedBubbleRenderer:
                                                                        background=True, oit=True, hdr=True, rotation=rotation))]
 
     def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
-        """One unit of what a first visible frame would otherwise compile or allocate (a program, the instance
-        buffers, the shaft targets, the probe, the near layer, the scene target), on a hidden reveal frame; True
+        """One unit of what a first visible frame would otherwise compile or allocate (a program, the drift solver's
+        pair check, the instance buffers, the shaft targets, the probe, the near layer, the scene target), on a
+        hidden reveal frame; True
         once nothing is left."""
         frame = orient_visualizer_scene_frame(frame)
         parameters = frame.snapshot.logical.mode_state.parameters
         samples = _scene_samples(parameters)
         if not warm_programs(self._programs(samples, frame.scene_output_rotation)):
+            return False
+        if not self._drift.check(self._resources):      # the drift pair arithmetic, checked once on this device
             return False
         if not self._shells.vao:
             self._allocate_instances()
