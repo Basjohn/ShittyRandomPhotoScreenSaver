@@ -502,7 +502,7 @@ the lead takes the upgrade first, through the whole suite and a GitHub frozen bu
 disappears. Otherwise the core starts on 6.11.2. After that, Qt is upgraded only between stages of the ladder,
 through a scripted step: fetch the matching SDK, rebuild, both backends' parity gates, a frozen build.
 
-*Proposed (draft for the lead), 12 Nov 2026 (N0.8, researched from pypi.org and doc.qt.io only).* **Facts.**
+*Decided by the lead, 12 Nov 2026: take 6.12 (its newest patch release at the checkpoint) before N2.1, as the plan's N0.8 checkpoint lists; the venv is bumped only while no agent is running tests; fallback 6.11.3.* *Proposed (draft for the lead), 12 Nov 2026 (N0.8, researched from pypi.org and doc.qt.io only).* **Facts.**
 PyPI lists PySide6 6.12.0 (uploaded 8 Oct 2026, `Requires-Python >=3.10,<3.16`, classifier "Python :: 3.14",
 wheel `pyside6-6.12.0-cp310-abi3-win_amd64.whl`, so CPython 3.14 x64 Windows is covered) as the newest minor and
 6.11.3 (26 Oct 2026) as the newest 6.11; 6.11.2 was 18 Aug 2026. The Qt 6.12.0 class reference and "What's New in
