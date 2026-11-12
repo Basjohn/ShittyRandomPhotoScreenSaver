@@ -11,11 +11,25 @@
 #include <QtCore/QObject>
 #include <QtCore/QThread>
 #include <QtGui/QOpenGLContext>
+#include <QtGui/QVulkanFunctions>
+#include <QtGui/QVulkanInstance>
 #include <QtQuick/QQuickRenderControl>
 #include <QtQuick/QQuickRenderTarget>
 #include <QtQuick/QQuickWindow>
 
 #include <functional>
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002 // Windows 10 1803 and later
+#endif
 
 namespace srpss_spike {
 
@@ -63,10 +77,64 @@ private:
     QObject *m_context = nullptr;
 };
 
+namespace {
+
+// N0.7, validation (Qt 6.12.0 finding C, Docs/Future_Work/Native_Core_N06_N07_Qt_Facts.md section I): a target
+// whose render pass loads its contents (PreserveColorContents, loadOp LOAD) is moved to
+// COLOR_ATTACHMENT_OPTIMAL by QRhi's resource tracker with dstAccessMask COLOR_ATTACHMENT_WRITE only (the
+// TexColorOutput access), so the pass's load reads after that layout transition without a dependency
+// (SYNC-HAZARD-READ-AFTER-WRITE). That happens on the first frame and again on the first frame after any other use
+// of the target (build round 3: a readback moved it to TRANSFER_SRC_OPTIMAL and the next frame's transition back
+// raised the same hazard). So the harness records the transition to COLOR_ATTACHMENT_OPTIMAL itself, with READ and
+// WRITE in the second scope and every earlier command and write in the first (ALL_COMMANDS, MEMORY_WRITE: after a
+// transfer read or a store), in an offscreen frame of the same QRhi, at creation and after every readback of the
+// target, and tells QRhi the layout (setNativeLayout). Vulkan only; returns what was done.
+QString primeColorTargetForLoad(QRhi *rhi, QRhiTexture *texture)
+{
+    if (!rhi || !texture || rhi->backend() != QRhi::Vulkan)
+        return QStringLiteral("not Vulkan");
+    const auto *handles = static_cast<const QRhiVulkanNativeHandles *>(rhi->nativeHandles());
+    if (!handles || !handles->inst || !handles->dev)
+        return QStringLiteral("no native handles");
+    QVulkanDeviceFunctions *df = handles->inst->deviceFunctions(handles->dev);
+    QRhiCommandBuffer *cb = nullptr;
+    if (!df || rhi->beginOffscreenFrame(&cb) != QRhi::FrameOpSuccess || !cb)
+        return QStringLiteral("no offscreen frame");
+    const QRhiTexture::NativeTexture native = texture->nativeTexture();
+    cb->beginExternal();
+    const auto *cbHandles = static_cast<const QRhiVulkanCommandBufferNativeHandles *>(cb->nativeHandles());
+    VkImageMemoryBarrier barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.oldLayout = VkImageLayout(native.layout); // PREINITIALIZED on Qt 6.12.0 (finding A), else UNDEFINED
+    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = reinterpret_cast<VkImage>(quintptr(native.object));
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.layerCount = 1;
+    if (cbHandles && cbHandles->commandBuffer) {
+        df->vkCmdPipelineBarrier(cbHandles->commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1,
+                                 &barrier);
+    }
+    cb->endExternal();
+    rhi->endOffscreenFrame();
+    rhi->finish();
+    if (!cbHandles || !cbHandles->commandBuffer)
+        return QStringLiteral("no native command buffer");
+    texture->setNativeLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    return QStringLiteral("primed from layout %1").arg(native.layout);
+}
+
+} // namespace
+
 QuickOffscreenSession::QuickOffscreenSession(QQuickRenderControl *control, QQuickWindow *window,
-                                             int width, int height, bool threaded)
+                                             int width, int height, bool threaded, bool preserveColor)
     : m_control(control), m_window(window), m_width(width), m_height(height),
-      m_host(new RenderThreadHost(threaded))
+      m_host(new RenderThreadHost(threaded)), m_preserveColor(preserveColor)
 {
     m_guiThread = quintptr(QThread::currentThreadId());
     if (threaded)
@@ -102,8 +170,10 @@ bool QuickOffscreenSession::begin()
                 m_vkQueueIndex = int(handles->gfxQueueIdx);
             }
         }
-        if (!createOffscreenTarget(rhi, m_width, m_height, &m_target, &m_error))
+        if (!createOffscreenTarget(rhi, m_width, m_height, &m_target, &m_error, m_preserveColor))
             return;
+        if (m_preserveColor)
+            m_primeNote = primeColorTargetForLoad(rhi, m_target.texture);
         m_window->setRenderTarget(QQuickRenderTarget::fromRhiRenderTarget(m_target.renderTarget));
         m_begun = true;
     });
@@ -141,6 +211,10 @@ QuickFramesResult QuickOffscreenSession::frames(QObject *animated, int count, co
         });
         res.frameMs << double(timer.nsecsElapsed()) / 1.0e6;
     }
+    if (!pngPath.isEmpty() && m_preserveColor) {
+        // The readback left the target in TRANSFER_SRC_OPTIMAL: prime it again before any later frame loads it.
+        m_host->runBlocking([&]() { m_primeNote = primeColorTargetForLoad(m_control->rhi(), m_target.texture); });
+    }
     if (!pngPath.isEmpty()) {
         const QImage image = imageFromReadback(readback.data, readback.pixelSize, yUp);
         const ImageStats stats = imageStats(image);
@@ -166,8 +240,10 @@ bool QuickOffscreenSession::resize(int width, int height)
         // The old target is released through QRhi's deferred release (a frame in flight keeps it alive).
         m_window->setRenderTarget(QQuickRenderTarget());
         destroyOffscreenTarget(&m_target);
-        if (!createOffscreenTarget(m_control->rhi(), width, height, &m_target, &m_error))
+        if (!createOffscreenTarget(m_control->rhi(), width, height, &m_target, &m_error, m_preserveColor))
             return;
+        if (m_preserveColor)
+            m_primeNote = primeColorTargetForLoad(m_control->rhi(), m_target.texture);
         m_window->setRenderTarget(QQuickRenderTarget::fromRhiRenderTarget(m_target.renderTarget));
         ok = true;
     });
@@ -176,6 +252,116 @@ bool QuickOffscreenSession::resize(int width, int height)
         m_height = height;
     }
     return ok;
+}
+
+namespace {
+
+// A waitable timer the GUI thread blocks on until a frame's grid point (high resolution where Windows offers it;
+// the default timer resolution of 15.6 ms would make a 60 Hz grid meaningless).
+class GridTimer
+{
+public:
+    GridTimer()
+    {
+        m_timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+        m_highResolution = m_timer != nullptr;
+        if (!m_timer)
+            m_timer = CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS);
+    }
+    GridTimer(const GridTimer &) = delete;
+    GridTimer &operator=(const GridTimer &) = delete;
+    ~GridTimer()
+    {
+        if (m_timer)
+            CloseHandle(m_timer);
+    }
+    bool highResolution() const { return m_highResolution; }
+    void waitMs(double ms)
+    {
+        if (ms <= 0.0 || !m_timer)
+            return;
+        LARGE_INTEGER due;
+        due.QuadPart = -LONGLONG(ms * 10000.0); // relative, in 100 ns units
+        if (SetWaitableTimer(m_timer, &due, 0, nullptr, nullptr, FALSE))
+            WaitForSingleObject(m_timer, INFINITE);
+    }
+
+private:
+    HANDLE m_timer = nullptr;
+    bool m_highResolution = false;
+};
+
+} // namespace
+
+PacedFramesResult QuickOffscreenSession::pacedFrames(QObject *animated, int count, double periodMs,
+                                                     FrameHooks *hooks)
+{
+    PacedFramesResult res;
+    res.periodMs = periodMs;
+    if (!m_begun) {
+        res.error = QStringLiteral("session not begun");
+        return res;
+    }
+    if (periodMs <= 0.0) {
+        res.error = QStringLiteral("the period must be positive");
+        return res;
+    }
+    GridTimer timer;
+    res.highResolutionTimer = timer.highResolution();
+    QElapsedTimer clock;
+    clock.start();
+    auto nowMs = [&clock]() { return double(clock.nsecsElapsed()) / 1.0e6; };
+    double scheduled = 0.0;
+    for (int i = 0; i < count; ++i) {
+        timer.waitMs(scheduled - nowMs());
+        const double start = nowMs();
+        if (animated)
+            animated->setProperty("time", double(m_frameIndex++) / 60.0);
+        m_control->polishItems(); // GUI thread
+        double complete = 0.0;
+        bool ok = true;
+        m_host->runBlocking([&]() {
+            QRhi *rhi = m_control->rhi();
+            m_control->beginFrame();
+            QRhiCommandBuffer *cb = m_control->commandBuffer(); // null when the frame did not begin
+            if (!rhi || !cb) {
+                ok = false;
+                return;
+            }
+            if (hooks)
+                hooks->frameStart(rhi, cb, i);
+            m_control->sync(); // GUI thread is blocked here
+            m_control->render();
+            m_control->endFrame();
+            rhi->finish(); // vkQueueWaitIdle on this QRhi's queue: the frame's GPU work is complete
+            complete = nowMs();
+            if (hooks)
+                hooks->frameEnd(rhi, i);
+        });
+        if (!ok) {
+            res.error = QStringLiteral("QQuickRenderControl::beginFrame failed at frame %1").arg(i);
+            return res;
+        }
+        res.scheduledMs << scheduled;
+        res.startMs << start;
+        res.completeMs << complete;
+        scheduled += periodMs;
+        const double after = nowMs();
+        while (scheduled < after) { // the frame overran: the grid points it covered are missed
+            scheduled += periodMs;
+            ++res.missedPeriods;
+        }
+    }
+    res.ok = true;
+    return res;
+}
+
+bool QuickOffscreenSession::runOnRenderThread(const std::function<void(QRhi *)> &work)
+{
+    if (!m_begun)
+        return false;
+    m_host->runBlocking([&]() { work(m_control->rhi()); });
+    return true;
 }
 
 void QuickOffscreenSession::end()

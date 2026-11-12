@@ -300,24 +300,22 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - Validation layer installed 12 Nov with the operator's yes: Khronos's Windows build from the nightly release of
     KhronosGroup/Vulkan-ValidationLayers (`Validation_Layers_Windows_64.zip`, 6,367,674 bytes, sha256
     1d65db0662b448af422c756609b472274a96998bc473a44bf514e353956da95d, published 12 Nov 08:09 UTC; the tagged SDK releases
-    carry Android binaries only), in `D:/Temp/Scratch/SRPSS/native_spike/validation_layers/extracted/`. The loader
-    finds it only through the registry or `VK_ADD_LAYER_PATH`; the lead sets that variable for the harness process
-    alone (no registry entry, nothing persistent), so `environment_clean` reports it.
-  - [ ] First validated runs (module from 6850e8c4; evidence `.artifacts/evidence/native_core/n06/*_validated/`):
-    synchronisation validation is on and finds errors. Device and lifecycle rounds, in the hidden host's render on our
-    device: SYNC-HAZARD-WRITE-AFTER-WRITE at `vkCmdBeginRenderPass` between two submissions (10 and more, capped by the
-    layer), and VUID-VkImageCreateInfo-initialLayout-12478 (an image created PREINITIALIZED with OPTIMAL tiling).
-    Translucent round, real hidden windows at teardown: WRITE_AFTER_PRESENT, WRITE_AFTER_READ and
-    UNASSIGNED-non-acquired-swapchain-image-used. Attribute each to its owner: our module, the spike's scene
-    (QuadField), or Qt's QRhi/Qt Quick (run the same host on Qt's own device with validation enabled on the reference
-    instance too, name objects with debug utils); fix ours; record Qt's with its source reference and, if it is
-    Qt's, decide whether the native core avoids that path. Then validation clean through every N0.6 round.
-  - [ ] The harness fails closed: `run_n06.py` (and `run_n07.py`) take `--require-validation`, the lead's default
-    from now on; a round whose layer did not load is a FAIL, never a PASS with "owed" (D6's amendment and the facts
-    file E2 say so; today `run_n06.py:399-410,569-580,763` pass). `VK_ADD_LAYER_PATH` is admitted by name: the
-    environment check allows exactly that variable, records its value, and still fails on any other.
-  - [ ] Decisions document: D6's "As proved" reads "As measured (validation open)" until every round is clean, and
-    its sentence "no environment variable is used" names the layer path as the one exception, harness only.
+    carry Android binaries only), in `D:/Temp/Scratch/SRPSS/native_spike/validation_layers/extracted/`, given to the
+    harness process alone with `--layer-path` (no registry entry, nothing persistent).
+  - Validation clean 12 Nov (N0.7 build round 4, 7750374e: device, lifecycle and jobs rounds PASS with the layer;
+    translucent, retire and rest PASS in round 3) apart from Qt 6.12.0's own defects, each excused only by its id,
+    text and Qt caller (`run_n06.py` `QT_DEFECTS`; owners and sources in `Native_Core_N06_N07_Qt_Facts.md` section I):
+    A (`QVkTexture::create` PREINITIALIZED with optimal tiling), B (`createOffscreenRenderPass` without an external
+    dependency, only with non-preserving targets), D (Qt Quick's `grabWindow` on Vulkan, grab phases only). C
+    (`toVkAccess(TexColorOutput)` write-only) is avoided by priming targets at creation and after every readback and
+    is never excused.
+  - [ ] The A excuse is removed when the project takes the next Qt 6.12 patch release (the branch head already uses
+    `UNDEFINED`): the upgrade's rerun deletes A from `QT_DEFECTS` and every round is clean without it.
+  - [ ] The harness fails closed: `run_n06.py` and `run_n07.py` take `--require-validation`, the lead's default from
+    now on; a round whose layer did not load is a FAIL, never a PASS with "owed". `VK_ADD_LAYER_PATH` is admitted
+    by name only when `--layer-path` is given.
+  - [ ] Decisions document: D6's "no environment variable is used" names the layer path as the one exception,
+    harness only.
   - [ ] Lead, Display 1 visible and bounded, when two displays are connected: a real translucent window on the
     module's device: see-through to the desktop (D7 point 8's first route; the hidden runs cannot read the composed
     alpha), with the DWM system backdrop and the project's glass, then the swapchain under resize, DPI change and
@@ -335,16 +333,22 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     `gl_FrontFacing` agrees. Negative control: front face fixed to counter-clockwise.
 - [ ] N0.7 D9's proof, in the same harness: the job thread, its queue and the latch; the six measurements of D9
   ("How it is proved"), with system conditions recorded. The verdict (jobs for compute on this vendor, or
-  uploads only) is written into D9. Its gate (iv) is synchronisation validation on N0.6's host: not trusted until
-  N0.6's hazards are attributed.
-  - [ ] The harness builds and the job QRhi runs on the second queue of our device (U1 of the facts file).
-  - [ ] (ii) Outputs hashed, identical between the job form and the in-frame form.
-  - [ ] (iii) No Python thread state on the job thread.
-  - [ ] (iv) Validation with synchronisation validation clean (`--require-validation`), U3 answered.
-  - [ ] (i) The heavy job in-frame and as a job: frame GPU time median, p90, p99 and late frames, conditions recorded.
-  - [ ] (v) Retirement and device destruction in the middle of a job: no crash, no leak.
-  - [ ] (vi) At rest, zero wake-ups of the job thread over a minute.
-  - [ ] The verdict written into D9; the timer's form (D5.6 answer 4) settled from where the core records a pass.
+  uploads only) is written into D9.
+  - Done 12 Nov (rounds 1 to 4; `native/spike_p1` `src/vk_n07.*`, `python/run_n07.py`; evidence
+    `.artifacts/evidence/native_core/n07/`): a job thread with its own QRhi on our VkDevice and the second queue of
+    Qt's family (family 0, index 1), three slots per job kind published by one atomic generation, Qt's QRhi importing
+    each slot (`createFrom`, layouts handed over with `setNativeLayout`); (ii) outputs hash-identical in-frame and as
+    jobs; (iii) no Python thread state on the job thread or the frame driver; (iv) validation clean but for Qt's A;
+    (i) the 4K edge field x4 per job at 164.8 Hz: in-frame 40 of 1,200 frames late, as a job 0 (completion p99 2.1 to
+    2.9 ms against 2.2 to 3.8 with no job); (v) 12 cycles retired with the job's GPU work in flight, handles back to
+    the driver's 3 per device; (vi) 60 s at rest, 0 wake-ups. QPainter's large antialiased fills start Qt's GUI thread
+    pool (`QT_THREAD_PARALLEL_FILLS`), so the job thread writes pixels itself. D9's verdict accepted by the lead (12
+    Nov): jobs for compute on this vendor as well as uploads, with the rules written there (no QPainter or QImage
+    conversion on job or render threads; targets keep contents and are primed at creation and after readback; never
+    grab the swapchain).
+  - [ ] AMD and Intel unmeasured: the same measure round on another vendor before a mode moves compute to a job by
+    default there (GitHub runners have no GPU; a Watchlist entry until a machine is available).
+  - [ ] The timer's form (D5.6 answer 4) settled from where the core records a pass.
 - N0.8 done 12 Nov: PySide6/Qt 6.12.0 (655b04bf; focused Qt Quick, shader and render set 372 of 373 green; the one
   red was Qt's own sync resetting the array-buffer binding, which the handoff probe had attributed to our code:
   the probe now measures around our adopting code and the background node's setup restores inherited bindings,

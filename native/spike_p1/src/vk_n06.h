@@ -8,8 +8,30 @@
 #include <QtCore/QString>
 
 class QQuickWindow;
+class QVulkanInstance;
 
 namespace srpss_spike {
+
+// N0.7 (D9's proof): the context's device, for the job service. Handles as integers so that this header needs no
+// vulkan.h (VkPhysicalDevice and VkDevice are pointers). GUI thread.
+struct N06DeviceHandles
+{
+    QVulkanInstance *instance = nullptr; // ours, adopting our VkInstance
+    quint64 physicalDevice = 0;
+    quint64 device = 0;
+    quint32 family = 0;                  // Qt's graphics queue is (family, 0)
+    bool hasSecondQueue = false;
+    quint32 secondFamily = 0;
+    quint32 secondIndex = 0;
+    bool validationLoaded = false;       // our instance has the validation layer (job QRhi: debug markers)
+};
+// False when there is no context with our instance and device.
+bool n06DeviceHandles(N06DeviceHandles *out);
+// N0.7, D9's teardown order (the job thread is quiesced first, then vkDeviceWaitIdle, then the device): the hook is
+// called by n06ContextDestroyJson before vkDeviceWaitIdle and returns a JSON object (empty when nothing ran); a
+// non-empty record adds the step "job thread quiesced" and is returned as "job_quiesce".
+using N06QuiesceHook = QByteArray (*)();
+void n06SetQuiesceHook(N06QuiesceHook hook);
 
 // Round 1, facts with no behaviour change. GUI thread, a QGuiApplication must exist, no window is created.
 // A throwaway VkInstance of our own (no layers) enumerates the loader version, the instance layers and extensions

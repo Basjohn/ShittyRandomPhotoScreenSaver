@@ -1,0 +1,46 @@
+#version 440
+// N0.7 (harness only): the edge field's edges stage (edge_field.py, _EDGES_COMPUTE: Sobel, ridge thinning,
+// sub-texel seeds), ported for QRhi. 0.25 is _SOBEL_SCALE, 0.25 in the seed test is EDGE_FIELD_SEED.
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(std140, binding = 0) uniform Params {
+    ivec2 uSize;
+    vec2 uStep;
+    float uLow;
+    float uHigh;
+    int uJump;
+    float uPad;
+};
+layout(binding = 1, r16f) uniform readonly image2D uLuma;
+layout(binding = 2, r16f) uniform writeonly image2D uEdge;
+layout(binding = 3, rgba32f) uniform writeonly image2D uSeed;
+float lumaAt(ivec2 q) {
+    return imageLoad(uLuma, clamp(q, ivec2(0), uSize - 1)).r;
+}
+vec2 gradientAt(ivec2 p) {
+    float a = lumaAt(p + ivec2(-1, -1)), b = lumaAt(p + ivec2(0, -1)), c = lumaAt(p + ivec2(1, -1));
+    float d = lumaAt(p + ivec2(-1, 0)), f = lumaAt(p + ivec2(1, 0));
+    float g = lumaAt(p + ivec2(-1, 1)), h = lumaAt(p + ivec2(0, 1)), i = lumaAt(p + ivec2(1, 1));
+    return vec2(c + 2.0 * f + i - a - 2.0 * d - g, g + 2.0 * h + i - a - 2.0 * b - c) * 0.25;
+}
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= uSize.x || p.y >= uSize.y) return;
+    vec2 gradient = gradientAt(p);
+    float magnitude = length(gradient);
+    vec2 seed = vec2(p);
+    if (magnitude > 0.0) {
+        ivec2 o = ivec2(floor(gradient / magnitude + 0.5));
+        ivec2 ahead = clamp(p + o, ivec2(0), uSize - 1), behind = clamp(p - o, ivec2(0), uSize - 1);
+        float forward = length(gradientAt(ahead)), backward = length(gradientAt(behind));
+        if (magnitude < forward || magnitude <= backward) {
+            magnitude = 0.0;
+        } else {
+            float curve = backward - 2.0 * magnitude + forward;
+            float shift = curve < -1e-6 ? clamp(0.5 * (backward - forward) / curve, -0.49, 0.49) : 0.0;
+            seed += shift * vec2(o);
+        }
+    }
+    float strength = smoothstep(uLow, uHigh, magnitude);
+    imageStore(uEdge, p, vec4(strength, 0.0, 0.0, 0.0));
+    imageStore(uSeed, p, strength >= 0.25 ? vec4(seed, 0.0, 0.0) : vec4(-1.0, -1.0, 0.0, 0.0));
+}

@@ -30,16 +30,22 @@ bool attachVulkanInstance(QWindow *window, QString *error)
     return true;
 }
 
-bool createOffscreenTarget(QRhi *rhi, int width, int height, OffscreenTarget *out, QString *error)
+bool createOffscreenTarget(QRhi *rhi, int width, int height, OffscreenTarget *out, QString *error,
+                           bool preserveColor)
 {
     out->texture = rhi->newTexture(QRhiTexture::RGBA8, QSize(width, height), 1,
                                    QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource);
+    out->texture->setName(QByteArrayLiteral("spike offscreen target"));
     if (!out->texture->create()) {
         *error = QStringLiteral("texture create failed");
         destroyOffscreenTarget(out);
         return false;
     }
-    out->renderTarget = rhi->newTextureRenderTarget({ QRhiColorAttachment(out->texture) });
+    QRhiTextureRenderTarget::Flags flags;
+    if (preserveColor)
+        flags |= QRhiTextureRenderTarget::PreserveColorContents;
+    out->renderTarget = rhi->newTextureRenderTarget({ QRhiColorAttachment(out->texture) }, flags);
+    out->renderTarget->setName(QByteArrayLiteral("spike offscreen target"));
     out->renderPass = out->renderTarget->newCompatibleRenderPassDescriptor();
     out->renderTarget->setRenderPassDescriptor(out->renderPass);
     if (!out->renderTarget->create()) {

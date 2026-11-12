@@ -462,3 +462,88 @@ Principle: put the cheapest, most decisive unknowns first and keep each step's o
 Risks, summarised: validation layer availability (step 2); feature-set mismatch silently changing capability flags
 (step 3); present-capable family choice (step 5); the host-fence visibility question (step 6); vendor-dependent
 transparency (step 5); Qt behaviour not covered by documentation in step 6 (two QRhi on one device).
+
+---
+
+## I. Measured under validation: whose each finding is (N0.7, 12 Nov 2026; added by the N0.7 agent)
+
+Measured with the Khronos validation layer and synchronisation validation (the lead's install, found through
+`--layer-path`), Qt 6.12.0 (PySide6's), NVIDIA 617.42. Every message is kept with its phase, the instance that
+reported it (ours, or the validated reference instance on which Qt creates its own device), the calling thread and
+the caller's stack (module+offset); Qt's QRhi names its objects (debug markers) and ours are named. Evidence: build
+round 2 (`71cac383`), `.artifacts/evidence/native_core/n06/20261112_n06_{device,lifecycle,translucent}_attrib/`
+and `n07/20261112_n07_{jobs,rest,measure,retire}_validated/`. Sources read at the tag `v6.12.0` this time (the
+module's Qt), and the `6.12` head where they differ. The harness classifies these four (`run_n06.py`
+`QT_DEFECTS`, `classify_group`) and excuses them only where it says; anything else fails `validation_clean`.
+
+**A. `VUID-VkImageCreateInfo-initialLayout-12478` (PREINITIALIZED with OPTIMAL tiling): Qt's QRhi, fixed after
+6.12.0.** Every QRhi texture on Vulkan: callers `Qt6Gui.dll` (QRhi) from our `createOffscreenTarget`, from the job
+service's bodies, on both devices alike. [SRC] `v6.12.0` `QVkTexture::create`: `imageInfo.tiling =
+VK_IMAGE_TILING_OPTIMAL; imageInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;` and `prepareCreate` tracks
+`usageState.layout = VK_IMAGE_LAYOUT_PREINITIALIZED`; the `6.12` head has `UNDEFINED` with the comment "Must be
+UNDEFINED (and not PREINITIALIZED) with optimal tiling". Harmless on NVIDIA (the content is undefined either way) but
+invalid usage. Route: the next PySide6/Qt patch release that carries the head's line (D11's upgrade reruns every
+gate); until then excused everywhere, by id and the Qt caller only. The native core does not work around it (it
+would mean creating every image raw); D9's slots already read the true initial layout from `nativeTexture()`.
+
+**B. `SYNC-HAZARD-WRITE-AFTER-WRITE` at `vkCmdBeginRenderPass` (a target rendered every frame): Qt's QRhi, triggered
+by a target that does not keep its contents.** On Qt's own device and ours alike (device round, lifecycle round);
+callers `Qt6Gui.dll` (QRhiVulkan's submit) from `Qt6Quick.dll`. [SRC] `QRhiVulkan::createOffscreenRenderPass`
+(head and tag): without `PreserveColorContents` the colour attachment's `initialLayout` is `UNDEFINED` and no
+`VK_SUBPASS_EXTERNAL` dependency is added (a comment says the barriers come from resource tracking and
+`activateTextureRenderTarget`); the tracker's write-after-write barrier ends at `COLOR_ATTACHMENT_OUTPUT`, which does
+not order the render pass's own layout transition. Harness: every host target now keeps its contents (the scene
+covers it, pixel-identical); the device round keeps a pair of non-preserving hosts as evidence, where B must appear
+on both devices and only there. Route for the native core: its own texture render targets are created with
+`PreserveColorContents` and primed once (C); a target that must be cleared is cleared by the core's first draw or a
+clear pass, not by `UNDEFINED`. Qt Quick's own layers (`layer.enabled`, `ShaderEffectSource`) would show B; none
+exists in the native surfaces. Worth a Qt bug report with the one-line fix (an external dependency with
+`srcAccessMask` `COLOR_ATTACHMENT_WRITE`).
+
+**C. `SYNC-HAZARD-READ-AFTER-WRITE` at `vkCmdBeginRenderPass` with `loadOp LOAD` (the first frame of a preserving
+target): Qt's QRhi.** On both devices, once per target. [SRC] `v6.12.0` `toVkAccess(TexColorOutput)` returns
+`VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT` only, and `recordTransitionPassResources` sets `barrier.dstAccessMask` from it,
+so any transition to `COLOR_ATTACHMENT_OPTIMAL` does not make the image visible to the pass's load (a read). It
+happens on a target's first frame and again on the first frame after any other use of it: build round 3's device
+round showed it once more on our device's host, on the frame after the negative control's readback (the readback
+had moved the target to `TRANSFER_SRC_OPTIMAL`; the host on Qt's own device, which reads back only on its last
+frame, stayed clean). Harness fix (ours, `quick_offscreen.cpp` `primeColorTargetForLoad`): at creation and after
+every readback of the target, in an offscreen frame of the same QRhi, the harness records the transition itself
+(`beginExternal`, a barrier to `COLOR_ATTACHMENT_OPTIMAL`, first scope `ALL_COMMANDS`/`MEMORY_WRITE`, second scope
+`COLOR_ATTACHMENT_READ | WRITE`), then `setNativeLayout`. Never excused. The native core's route: each of its render
+targets is primed at creation, and a target read back or sampled is primed again before its next loading pass (or
+the readback reads a copy).
+
+**D. `SYNC-HAZARD-WRITE-AFTER-PRESENT`, `SYNC-HAZARD-WRITE-AFTER-READ` and `UNASSIGNED-non-acquired-swapchain-image-used`
+(real windows): Qt Quick's `grabWindow` on Vulkan, with Qt's QRhi.** Only in the translucent round's grab phases, on
+Qt's own device and ours alike; every show, present, backdrop and teardown phase is clean. Callers `Qt6Gui.dll`
+from `Qt6Quick.dll` on `QSGRenderThread`. [SRC] `QTDECL` `QSGRhiSupport::grabAndBlockInCurrentFrame` reads back the
+swapchain image and calls `rhi->finish()` inside the frame; `v6.12.0` `QRhiVulkan::finish` submits the swapchain
+frame's command buffer, which already rendered into the acquired image, with no wait semaphore
+(`endAndSubmitPrimaryCommandBuffer(cb, VK_NULL_HANDLE, nullptr, nullptr)`), so the acquire semaphore is never waited
+on before the image is written. Route: the product never grabs a Vulkan window (only tools and the hidden harness
+do); the core reads pixels back from its own targets, never from the swapchain. Excused only in grab phases.
+
+**E. Qt's thread pool started from the job thread (owners round): ours, through QPainter.** The extra +4 handles and
++1 thread of the retire round were `Qt6Core.dll` threads named "Thread (pooled)" (+1 Thread, +1 IoCompletion,
+Events), appearing in the step where the job thread generated a photo (service start: the edge field's photograph;
+the upload job). Reproduced in a plain process: QPainter's antialiased fills of more than 2^17 pixels into a
+non-premultiplied image (RGBA8888) start four pooled threads; aliased fills, small fills or premultiplied targets do
+not. [SRC] `v6.12` `qdrawhelper.cpp` `QT_THREAD_PARALLEL_FILLS` (`blend_color_generic` and the other generic blends
+split spans across `QGuiApplicationPrivate::qtGuiThreadPool()` from `MinParallelSolidPixels = 1 << 17`). The
+threads persist while reused (QThreadPool's default expiry is 30 s idle), so the count plateaus at the pool's peak; not a leak, but a job
+thread must use no other thread. Fix: the harness's photo generator writes pixels itself. Rule for the native core:
+no QPainter and no QImage conversion on the job thread or the render thread.
+
+**Conditions seen.** A third-party graphics hook, `we-graphics-hook64.dll`, is injected into the Python process and
+sits in the call chain of `vkCmdBeginRenderPass` (it shows above `Qt6Gui.dll` in finding C's stacks); it owns none
+of the findings, but it is part of every measurement on this machine and is recorded as such. `windhawk.dll` is
+injected too (one thread). The one-time thread step in the first cycles of the owners and retire rounds (+23
+threads) is numpy's OpenBLAS pool (`libscipy_openblas64_*.dll`), started by the harness's own census on its first
+numpy use, plus one `WINMM.dll` timer thread; both before the baseline, neither ours in the product sense.
+
+**U1 and U3 under validation.** No message names the second QRhi, the job queue or the latch path in the validated
+jobs, rest, measure and retire rounds: a second QRhi on our VkDevice on the second queue is clean (U1), and the job's
+writes followed by its host-side completion edge and Qt's queue reading the slot (copy and readback) raise no
+synchronisation hazard (U3). Build round 3 (`3bd851cd`, C primed): the validated jobs, retire and rest rounds have
+no message but A (10, 60 and 10, all QRhi texture creations).

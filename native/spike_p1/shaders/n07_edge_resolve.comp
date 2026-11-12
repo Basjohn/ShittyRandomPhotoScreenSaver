@@ -1,0 +1,25 @@
+#version 440
+// N0.7 (harness only): the edge field's resolve stage (edge_field.py, _RESOLVE_COMPUTE), ported for QRhi.
+// 4.0 is EDGE_FIELD_NONE.
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(std140, binding = 0) uniform Params {
+    ivec2 uSize;
+    vec2 uStep;
+    float uLow;
+    float uHigh;
+    int uJump;
+    float uPad;
+};
+layout(binding = 1, rgba32f) uniform readonly image2D uSeed;
+layout(binding = 2, r16f) uniform readonly image2D uEdge;
+layout(binding = 3, rgba16f) uniform writeonly image2D uField;
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= uSize.x || p.y >= uSize.y) return;
+    vec2 seed = imageLoad(uSeed, p).rg;
+    vec2 value = vec2(4.0, 0.0);
+    if (seed.x >= 0.0) {
+        value = vec2(length(seed - vec2(p)) / float(uSize.y), imageLoad(uEdge, ivec2(floor(seed + 0.5))).r);
+    }
+    imageStore(uField, p, vec4(value, 0.0, 0.0));
+}

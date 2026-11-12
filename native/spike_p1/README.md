@@ -111,6 +111,18 @@ reads are in `python/n06_windows.py`.
 Evidence: `.artifacts/evidence/native_core/n06/<date>_<label>/summary.json`; the last line is `N06 VERDICT PASS` or
 `N06 VERDICT FAIL: <checks>`.
 
+N0.7 (D9's proof: the job thread, its QRhi on the second queue, the latch, the edge field's compute stages in
+`shaders/n07_edge_*.comp`; `src/vk_n07.*`) builds on N0.6's context; one module build serves its four rounds:
+
+```bat
+.venv\Scripts\python.exe native\spike_p1\python\run_n07.py --module-dir release\native_module --round jobs --label n07_jobs
+.venv\Scripts\python.exe native\spike_p1\python\run_n07.py --module-dir release\native_module --round measure --label n07_measure
+.venv\Scripts\python.exe native\spike_p1\python\run_n07.py --module-dir release\native_module --round retire --label n07_retire
+.venv\Scripts\python.exe native\spike_p1\python\run_n07.py --module-dir release\native_module --round rest --label n07_rest
+```
+
+Evidence: `.artifacts/evidence/native_core/n07/<date>_<label>/summary.json`; the last line is `N07 VERDICT ...`.
+
 `python/import_check.py` is the GPU-free part the runner runs after compiling (import, `runtime_info()`, the Qt DLLs
 loaded from PySide6's folder); every part of `run_spike.py` needs a GPU device.
 

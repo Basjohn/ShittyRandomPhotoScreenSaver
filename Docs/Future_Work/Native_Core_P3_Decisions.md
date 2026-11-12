@@ -560,6 +560,61 @@ synchronised through Qt's frame submit, with ownership of the submit as the open
 are uploads and transition preparation, the default route needs no GPU-side wait, and the open risk is closed by
 the header (D6 point 6).
 
+*Accepted by the lead, 12 Nov 2026 (N0.7 rounds 1 to 4).* *Proposed (draft for the lead), 12 Nov 2026, from N0.7 (`native/spike_p1`, build rounds 1 to 3: 5475b04d,
+71cac383, 3bd851cd; evidence `.artifacts/evidence/native_core/n07/`; Qt findings in `Native_Core_N06_N07_Qt_Facts.md`
+section I).* **Verdict: jobs for compute on this vendor (NVIDIA RTX 4090, driver 617.42, Qt 6.12.0), and uploads.**
+The job service as built: one job thread per device with its own QRhi on our VkDevice and the second queue of Qt's
+graphics family (family 0, index 1); the probe found that second QRhi working (created in under 1 ms, its own
+queue, an upload read back exactly), so the job bodies are QRhi, not raw Vulkan. Three slots per job kind; the job
+waits on its own `QRhi::finish()` and publishes one atomic generation; the frame driver reads it at frame start and
+Qt's QRhi imports the slot with `createFrom`, layouts handed over both ways with `setNativeLayout`.
+- (i) A hidden Qt Quick host on our device at the display's 164.8 Hz (6.07 ms), every frame completed with
+  `finish()`; the heavy job is the edge field's five stages ported 1:1 at 3840x2160, four builds per job, every 30
+  frames; 600 frames x 2 passes per form. Round 1: no jobs 0 late of 1200, Qt frame GPU p99 0.032 ms, completion p99
+  3.78 ms; in-frame 40 late (every job frame), 214 periods missed, frame GPU p99 32.7 ms (job frames median 31.2 ms),
+  completion p99 34.0 ms; as a job 0 late, 0 missed, frame GPU p99 0.036 ms, completion p99 2.94 ms, the job's GPU
+  wait median 19.8 ms (p99 216.7), published a median 26.6 ms after its trigger and swapped in 5 frames later
+  (median; p99 36). Round 3 (a new photo): no jobs 0 late, p99 0.024 / 2.20 ms; in-frame 40 late, 185 missed, p99
+  31.2 / 32.2 ms (job frames median 20.2 ms); as a job 0 late, p99 0.022 / 2.06 ms, GPU wait median 33.3 ms (p99
+  76.2), swap 6 frames later (median; p99 13). Conditions: other GPU users dwm, Firefox, Spotify, Ld9BoxHeadless
+  and System (round 1), Ld9BoxHeadless, System and another python.exe (round 3); GPU in P0 at 2595 MHz; two
+  third-party hooks injected into the process (`we-graphics-hook64.dll`, in the `vkCmdBeginRenderPass` chain, and
+  `windhawk.dll`).
+- (ii) Hash-identical outputs: the upload's mip 0 equals the photo's own hash and mip 0 and mip 4 equal the in-frame
+  upload; the edge field equals the in-frame field; other seeds and thresholds differ (negative controls).
+- (iii) No Python thread state on the job thread (9 of 9 calls) or in the frame driver.
+- (iv) Synchronisation validation: the job rounds show only Qt 6.12.0's finding A (every QRhi texture's creation);
+  nothing names the second QRhi, the job queue or the latch path, so a second QRhi on one device (U1) and the latch's
+  visibility after a host-side completion edge (U3) are clean on this vendor. Qt's other findings (B, C, D) are on
+  other paths and are recorded with their routes.
+- (v) Twelve retirements with the job's GPU work in flight, by both routes (render side, quiesce with abandon; or the
+  context's teardown quiescing first): no crash, the job dropped unpublished, handles exactly the baseline plus the
+  driver's 3 per device (+30 for +30), threads, GPU heaps and private bytes back; the job service, jobs and both
+  abandon routes add no handle (owners round).
+- (vi) 60 s at rest while the host read the latch 9,890 times: 0 wake-ups and 0 CPU cycles on the job thread; one job
+  afterwards woke it once (negative control).
+
+Why compute and not uploads only: the 4K build is 20 to 31 ms on Qt's queue, so the in-frame form makes every frame
+that carries it late at 165 Hz, while the same work on the second queue leaves every frame on time and Qt's own frame
+GPU time unchanged (p99 0.02 to 0.04 ms either way). The cost moves to the job's latency, which is long and uneven
+(GPU wait median 20 to 33 ms, p99 217 ms in round 1, when dwm, Firefox and Spotify were also on the GPU, 76 ms in
+round 3; the cause of the tail is not attributed): consumers of class (a) and (b)
+wait for the completion edge with point 2's deadline and in-frame fallback, and simulations stay in the frame
+(point 2c) unless their own measurement moves one. Limits of the proof: the host's scene is light (frame GPU 0.02
+ms), so contention under a heavy Visualizer frame is not yet measured (N3.8 re-measures it as D8 row 3 states:
+image changes with a Visualizer running); AMD and Intel are unmeasured; a device with no second queue in the graphics
+family runs the in-frame form (D6 point 5).
+
+Rules N0.7 gives N3.8 (the core): the job thread uses no other thread, so no QPainter and no QImage conversion on the
+job thread or the render thread (QPainter's large antialiased fills into a non-premultiplied image start Qt GUI's
+pooled threads, finding E); the core's render targets keep their contents (`PreserveColorContents`) and are primed
+once at creation, and again before a loading pass after any readback or sampling (findings B and C); the core never
+grabs the swapchain (finding D: Qt Quick's `grabWindow` on Vulkan); slots are imported into Qt's QRhi with
+`createFrom` and their layouts handed over with `setNativeLayout` both ways; retirement releases Qt's wrappers of the
+slots first, then quiesces the job thread, then the device waits idle; a device's job QRhi takes debug markers when
+validation is on. Owed: the validated N0.6 device rerun with the prime-after-readback fix (N0.7 build round 4); the A
+excuse goes with the next Qt 6.12 patch release.
+
 ## D10. The Vulkan rehearsal path and the flip gate (decided 12 Nov 2026)
 
 **The problem this solves.** One window has one backend, and a Vulkan window cannot host a Python OpenGL node.

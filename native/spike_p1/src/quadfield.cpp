@@ -92,6 +92,10 @@ bool QuadField::ensure(QRhi *rhi, QRhiRenderPassDescriptor *renderPass, int samp
                                             instBytes));
         m_uniforms.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer,
                                         sizeof(Uniforms)));
+        // Debug-utils names (QRhi applies them with QRhi::EnableDebugMarkers): validation messages name them.
+        m_corners->setName(QByteArrayLiteral("spike QuadField corners"));
+        m_instanceData->setName(QByteArrayLiteral("spike QuadField instances"));
+        m_uniforms->setName(QByteArrayLiteral("spike QuadField uniforms"));
         if (!m_corners->create() || !m_instanceData->create() || !m_uniforms->create()) {
             release();
             return false;
@@ -128,6 +132,7 @@ bool QuadField::createPipeline(QRhiRenderPassDescriptor *renderPass, int sampleC
         return false;
 
     m_pipeline.reset(m_rhi->newGraphicsPipeline());
+    m_pipeline->setName(QByteArrayLiteral("spike QuadField pipeline"));
     QRhiGraphicsPipeline::TargetBlend blend;
     blend.enable = true;
     blend.srcColor = QRhiGraphicsPipeline::One;

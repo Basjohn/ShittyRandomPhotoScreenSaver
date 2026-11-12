@@ -15,6 +15,7 @@
 #ifdef SPIKE_WITH_QUICK
 #include "quick_item.h"
 #include "quick_offscreen.h"
+#include "vk_n07.h"
 #include <QtQuick/QQuickRenderControl>
 #include <QtQuick/QQuickWindow>
 #endif
@@ -499,11 +500,12 @@ QHash<qint64, QuickOffscreenSession *> &sessions()
 PyObject *quick_session_begin(PyObject *, PyObject *args)
 {
     unsigned long long rcPtr = 0, windowPtr = 0;
-    int w = 0, h = 0, threaded = 1;
-    if (!PyArg_ParseTuple(args, "KKii|p", &rcPtr, &windowPtr, &w, &h, &threaded))
+    int w = 0, h = 0, threaded = 1, preserveColor = 0;
+    if (!PyArg_ParseTuple(args, "KKii|pp", &rcPtr, &windowPtr, &w, &h, &threaded, &preserveColor))
         return nullptr;
     auto *session = new QuickOffscreenSession(ptr<QQuickRenderControl>(rcPtr),
-                                              ptr<QQuickWindow>(windowPtr), w, h, threaded != 0);
+                                              ptr<QQuickWindow>(windowPtr), w, h, threaded != 0,
+                                              preserveColor != 0);
     bool ok = false;
     Py_BEGIN_ALLOW_THREADS
     ok = session->begin();
@@ -527,6 +529,7 @@ PyObject *quick_session_begin(PyObject *, PyObject *args)
     put(d, "vk_device", PyLong_FromUnsignedLongLong(session->vkDevice()));
     put(d, "vk_queue_family", PyLong_FromLong(session->vkQueueFamily()));
     put(d, "vk_queue_index", PyLong_FromLong(session->vkQueueIndex()));
+    put(d, "target_prime", pyStr(session->primeNote()));
     return d;
 }
 
@@ -586,9 +589,129 @@ PyObject *quick_session_end(PyObject *, PyObject *args)
         return nullptr;
     QuickOffscreenSession *session = sessions().take(handle);
     Py_BEGIN_ALLOW_THREADS
+    if (session)
+        n07SessionEnding(session); // N0.7: the frame driver's wrappers go before Qt's QRhi
     delete session;
     Py_END_ALLOW_THREADS
     Py_RETURN_NONE;
+}
+
+// ---------------------------------------------------------------- N0.7 (D9's proof)
+// Every call that can wait (the job thread's start-up and quiesce, paced frames, retirement) releases the GIL.
+
+PyObject *n07_attach_window(PyObject *, PyObject *args)
+{
+    unsigned long long windowPtr = 0;
+    if (!PyArg_ParseTuple(args, "K", &windowPtr))
+        return nullptr;
+    QString error;
+    if (!n07AttachQuickWindow(ptr<QQuickWindow>(windowPtr), &error)) {
+        PyErr_SetString(PyExc_RuntimeError, error.toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+
+PyObject *n07_service_start(PyObject *, PyObject *args)
+{
+    int w = 3840, h = 2160;
+    if (!PyArg_ParseTuple(args, "|ii", &w, &h))
+        return nullptr;
+    QByteArray out;
+    Py_BEGIN_ALLOW_THREADS
+    out = n07ServiceStartJson(w, h);
+    Py_END_ALLOW_THREADS
+    return pyJson(out);
+}
+
+PyObject *n07_service_stop(PyObject *, PyObject *args)
+{
+    int abandon = 0;
+    if (!PyArg_ParseTuple(args, "|p", &abandon))
+        return nullptr;
+    QByteArray out;
+    Py_BEGIN_ALLOW_THREADS
+    out = n07ServiceStopJson(abandon != 0);
+    Py_END_ALLOW_THREADS
+    return pyJson(out);
+}
+
+PyObject *n07_service_stats(PyObject *, PyObject *args)
+{
+    int includeLog = 0;
+    if (!PyArg_ParseTuple(args, "|p", &includeLog))
+        return nullptr;
+    return pyJson(n07ServiceStatsJson(includeLog != 0));
+}
+
+PyObject *n07_run(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    unsigned long long animatedPtr = 0;
+    int frames = 0;
+    double periodMs = 0.0;
+    const char *config = "{}";
+    if (!PyArg_ParseTuple(args, "LKid|s", &handle, &animatedPtr, &frames, &periodMs, &config))
+        return nullptr;
+    QuickOffscreenSession *session = sessions().value(handle);
+    if (!session) {
+        PyErr_SetString(PyExc_KeyError, "unknown session");
+        return nullptr;
+    }
+    const QByteArray configJson(config);
+    QByteArray out;
+    Py_BEGIN_ALLOW_THREADS
+    out = n07RunFramesJson(session, ptr<QObject>(animatedPtr), frames, periodMs, configJson);
+    Py_END_ALLOW_THREADS
+    return pyJson(out);
+}
+
+PyObject *n07_release_render_side(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    QuickOffscreenSession *session = sessions().value(handle);
+    if (!session) {
+        PyErr_SetString(PyExc_KeyError, "unknown session");
+        return nullptr;
+    }
+    QByteArray out;
+    Py_BEGIN_ALLOW_THREADS
+    out = n07ReleaseRenderSideJson(session);
+    Py_END_ALLOW_THREADS
+    return pyJson(out);
+}
+
+PyObject *n07_retire(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    int repeat = 16;
+    if (!PyArg_ParseTuple(args, "L|i", &handle, &repeat))
+        return nullptr;
+    QuickOffscreenSession *session = sessions().value(handle);
+    if (!session) {
+        PyErr_SetString(PyExc_KeyError, "unknown session");
+        return nullptr;
+    }
+    QByteArray out;
+    Py_BEGIN_ALLOW_THREADS
+    out = n07RetireJson(session, repeat);
+    Py_END_ALLOW_THREADS
+    return pyJson(out);
+}
+
+PyObject *n07_photo_hash(PyObject *, PyObject *args)
+{
+    int w = 0, h = 0;
+    unsigned int seed = 1;
+    if (!PyArg_ParseTuple(args, "iiI", &w, &h, &seed))
+        return nullptr;
+    QByteArray out;
+    Py_BEGIN_ALLOW_THREADS
+    out = n07PhotoHashJson(w, h, quint32(seed));
+    Py_END_ALLOW_THREADS
+    return pyJson(out);
 }
 #endif
 
@@ -628,11 +751,25 @@ PyMethodDef methods[] = {
     { "n06_window_surface", n06_window_surface, METH_VARARGS,
       "(quick_window_ptr) -> JSON str: the shown Vulkan window's surface capabilities (composite alpha, ...)" },
     { "quick_session_begin", quick_session_begin, METH_VARARGS,
-      "(rc, window, w, h[, threaded]) -> dict with handle" },
+      "(rc, window, w, h[, threaded[, preserve_color]]) -> dict with handle" },
     { "quick_session_frames", quick_session_frames, METH_VARARGS,
       "(handle, animated, count[, png]) -> dict" },
     { "quick_session_resize", quick_session_resize, METH_VARARGS, "(handle, w, h) new offscreen target size" },
     { "quick_session_end", quick_session_end, METH_VARARGS, "(handle)" },
+    { "n07_attach_window", n07_attach_window, METH_VARARGS,
+      "(quick_window_ptr) N0.7: our instance and device, and Qt Quick's GPU timestamps" },
+    { "n07_service_start", n07_service_start, METH_VARARGS,
+      "([w, h]) -> JSON str: the job thread, its QRhi on the second queue (the probe) and the job bodies" },
+    { "n07_service_stop", n07_service_stop, METH_VARARGS, "([abandon]) -> JSON str: quiesce and join the job thread" },
+    { "n07_service_stats", n07_service_stats, METH_VARARGS,
+      "([include_log]) -> JSON str: wake-ups, state, CPU cycles, Python thread state counts, the job log" },
+    { "n07_run", n07_run, METH_VARARGS,
+      "(session, animated, frames, period_ms[, config_json]) -> JSON str: paced frames with the frame driver" },
+    { "n07_release_render_side", n07_release_render_side, METH_VARARGS,
+      "(session) -> JSON str: the frame driver's render-side resources released on the render thread" },
+    { "n07_retire", n07_retire, METH_VARARGS,
+      "(session[, repeat]) -> JSON str: retirement and quiesce in the middle of a heavy job" },
+    { "n07_photo_hash", n07_photo_hash, METH_VARARGS, "(w, h, seed) -> JSON str: FNV-1a 64 of the upload photo" },
 #endif
     { nullptr, nullptr, 0, nullptr }
 };
