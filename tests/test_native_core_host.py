@@ -115,6 +115,23 @@ def test_no_core_source_uses_the_stls_dll_backed_types():
     assert stl_dll_uses("// not std::function\n") == []
 
 
+# `QList<T> name(qsizetype(n));` declares a function, not a sized container (build round 1 of N2.2 failed on five).
+_VEXING_PARSE = re.compile(r"^\s*(?!return\b)[\w:<>,* ]+?\s+(\w+)\(\s*[\w:]+\(\s*\w+\s*\)\s*\)\s*;", re.M)
+
+
+def vexing_parses(text: str) -> list[str]:
+    return [m.group(0).strip() for m in _VEXING_PARSE.finditer(re.sub(r"//[^\n]*", "", text))]
+
+
+def test_no_core_source_declares_a_function_where_it_meant_a_sized_object():
+    found = {p.name: vexing_parses(p.read_text(encoding="utf-8"))
+             for p in sorted((CORE / "src").glob("*")) if p.suffix in (".cpp", ".h")}
+    assert {name: hits for name, hits in found.items() if hits} == {}
+    # Negative control: round 1's declaration is found; a return statement and an explicit size are not.
+    assert vexing_parses("    QList<VkLayerProperties> props(qsizetype(n));\n")
+    assert vexing_parses("    return QStringLiteral(\"x\").arg(int(r));\n    props.resize(qsizetype(n));\n") == []
+
+
 # ------------------------------------------------------------------------------------------------- the probe's analysis
 
 W, H = 160, 90
@@ -263,6 +280,7 @@ def test_the_python_face_passes_through_and_refuses_what_the_module_would():
 
 def test_the_harness_fails_a_vulkan_run_without_the_layer_when_validation_is_required():
     record = {"rounds": ["hidden"], "hidden": {"pass": True, "checks": {"x": True}}, "live_hosts_at_end": 0,
+              "module_loaded": True, "instance_created": True,
               "validation": {"layer_loaded": False}, "instance_teardown": {"ok": True}}
     assert host_check.api_verdict("vulkan", record, require_validation=True)[0] is False
     assert host_check.api_verdict("vulkan", record, require_validation=False)[0] is True
@@ -272,6 +290,22 @@ def test_the_harness_fails_a_vulkan_run_without_the_layer_when_validation_is_req
     assert host_check.api_verdict("vulkan", dirty, require_validation=True)[0] is False
     left_open = dict(clean, live_hosts_at_end=1)
     assert host_check.api_verdict("vulkan", left_open, require_validation=True)[0] is False
+
+
+def test_a_module_that_never_loaded_reports_that_alone():
+    # Build round 1 (12 Nov): the module was not built, and the verdict also blamed validation and the teardown.
+    unloaded = {"api": "vulkan", "rounds": ["hidden", "window"], "module_loaded": False, "instance_created": False,
+                "error": "the module did not load: the native core is not built"}
+    ok, reasons = host_check.api_verdict("vulkan", unloaded, require_validation=True)
+    assert ok is False and reasons == ["vulkan: the module did not load: the native core is not built"]
+    # A child that left no record at all says so, and nothing else.
+    crashed = {"api": "opengl", "rounds": ["hidden"], "error": "the child process ended without a record (3)"}
+    assert host_check.api_verdict("opengl", crashed, require_validation=True)[1] == [
+        "opengl: the child process ended without a record (3)"]
+    # A Vulkan instance that was not created: that reason alone, no validation or teardown verdict.
+    no_instance = dict(unloaded, module_loaded=True, error="the Vulkan instance failed: vkCreateInstance: -9")
+    assert host_check.api_verdict("vulkan", no_instance, require_validation=True)[1] == [
+        "vulkan: the Vulkan instance failed: vkCreateInstance: -9"]
 
 
 def test_the_validation_rule_excuses_only_qts_recorded_defects():

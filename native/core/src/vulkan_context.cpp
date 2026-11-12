@@ -301,7 +301,8 @@ QByteArrayList availableInstanceExtensions(const Loader &loader, const char *lay
         return names;
     uint32_t n = 0;
     enumerate(layer, &n, nullptr);
-    QList<VkExtensionProperties> props(qsizetype(n));
+    QList<VkExtensionProperties> props; // sized by resize: `props(qsizetype(n))` would declare a function
+    props.resize(qsizetype(n));
     if (n)
         enumerate(layer, &n, props.data());
     for (uint32_t i = 0; i < n; ++i)
@@ -317,7 +318,8 @@ bool layerAvailable(const Loader &loader, const char *name)
         return false;
     uint32_t n = 0;
     enumerate(&n, nullptr);
-    QList<VkLayerProperties> props(qsizetype(n));
+    QList<VkLayerProperties> props;
+    props.resize(qsizetype(n));
     if (n)
         enumerate(&n, props.data());
     for (uint32_t i = 0; i < n; ++i) {
@@ -589,7 +591,8 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
 
     uint32_t count = 0;
     enumerateDevices(vk, &count, nullptr);
-    QList<VkPhysicalDevice> devices(qsizetype(count));
+    QList<VkPhysicalDevice> devices;
+    devices.resize(qsizetype(count));
     if (count)
         enumerateDevices(vk, &count, devices.data());
     if (devices.isEmpty()) {
@@ -611,7 +614,8 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
 
     uint32_t familyCount = 0;
     getQueueFamilies(physDev, &familyCount, nullptr);
-    QList<VkQueueFamilyProperties> families(qsizetype(familyCount));
+    QList<VkQueueFamilyProperties> families;
+    families.resize(qsizetype(familyCount));
     if (familyCount)
         getQueueFamilies(physDev, &familyCount, families.data());
     uint32_t family = 0;
@@ -630,7 +634,8 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
 
     uint32_t extCount = 0;
     enumerateDeviceExtensions(physDev, nullptr, &extCount, nullptr);
-    QList<VkExtensionProperties> extProps(qsizetype(extCount));
+    QList<VkExtensionProperties> extProps;
+    extProps.resize(qsizetype(extCount));
     if (extCount)
         enumerateDeviceExtensions(physDev, nullptr, &extCount, extProps.data());
     QByteArrayList available;

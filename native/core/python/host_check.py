@@ -525,12 +525,14 @@ def child(args) -> dict:
     app = QGuiApplication([sys.argv[0]])
     from rendering.native import NativeCoreUnavailable, load
 
-    record: dict = {"api": args.api, "rounds": list(args.rounds)}
+    # module_loaded and instance_created say how far the child got: the verdict judges only what ran.
+    record: dict = {"api": args.api, "rounds": list(args.rounds), "module_loaded": False, "instance_created": False}
     try:
         core = load((root / args.module_dir) if not Path(args.module_dir).is_absolute() else Path(args.module_dir))
     except NativeCoreUnavailable as exc:
         record["error"] = f"the module did not load: {exc.reason}"
         return record
+    record["module_loaded"] = True
     record["runtime"] = dict(core.info)
     out = Path(args.out_dir)
     vulkan = args.api == "vulkan"
@@ -540,6 +542,7 @@ def child(args) -> dict:
         if not instance.get("ok"):
             record["error"] = f"the Vulkan instance failed: {instance.get('instance', {}).get('error')}"
             return record
+        record["instance_created"] = True
     engine = QQmlEngine()
     try:
         for name in args.rounds:
@@ -573,9 +576,16 @@ def child(args) -> dict:
 # --------------------------------------------------------------------------------------------------------- verdict
 
 def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool, list[str]]:
+    """What failed on one API. A child that stopped before the module loaded (or, on Vulkan, before the instance
+    existed) reports that one reason alone: nothing after it ran, so no round, validation or teardown is judged."""
+    error = (record.get("error") or "").strip()
+    if not record.get("module_loaded"):
+        return False, [f"{api}: {error.splitlines()[0] if error else 'the module did not load'}"]
+    if api == "vulkan" and not record.get("instance_created"):
+        return False, [f"{api}: {error.splitlines()[0] if error else 'the Vulkan instance was not created'}"]
     failed: list[str] = []
-    if record.get("error"):
-        failed.append(f"{api}: {record['error'].splitlines()[0]}")
+    if error:
+        failed.append(f"{api}: {error.splitlines()[0]}")
     for name in record.get("rounds", []):
         entry = record.get(name, {})
         if not entry.get("pass"):
@@ -619,7 +629,8 @@ def main(argv: list[str] | None = None) -> int:
         try:
             record = child(args)
         except Exception:
-            record = {"api": args.api, "error": traceback.format_exc()}
+            text = traceback.format_exc()
+            record = {"api": args.api, "error": text.strip().splitlines()[-1], "traceback": text}
         args.child_json.write_text(json.dumps(record, indent=2, default=str), encoding="utf-8")
         return 0
 
