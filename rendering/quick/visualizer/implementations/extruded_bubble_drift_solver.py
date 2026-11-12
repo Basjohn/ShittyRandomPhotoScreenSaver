@@ -12,9 +12,10 @@ No shader here uses a 64-bit float, on any backend (D4, ``Docs/Future_Work/Nativ
 float64 work is done once on the logical side and published: each chain's knot decision per step (how many knots
 its row moves, its shift and phase offset: the reference's own ``KnotClock``), the field's growing phase
 arguments reduced mod 2 pi, and travel as a float pair. The per-mote progress ``fract(seed + travel x carry /
-span + phase offset)`` is rebuilt from pairs of floats (an ``fma`` two-product, ``precise`` so the compiler may not
-reorder or contract it): the quotient arrives as a pair in the mote's geometry, the seed as a head the pair is
-rebuilt from, the phase offset is kept as a pair. Positions and displacement are float32, as the draws read them.
+span + phase offset)`` is rebuilt from pairs of floats (an exact two-product from Veltkamp halves, ``precise`` so
+the compiler may not reorder or contract it; not ``fma``, which HLSL cannot keep fused): the quotient arrives as a
+pair in the mote's geometry, the seed as a head the pair is rebuilt from, the phase offset is kept as a pair.
+Positions and displacement are float32, as the draws read them.
 
 A geometry edit continues the old history (the CPU rebase); a render gap longer than the published history, a
 lost context or a retired family restarts that family's history from zero (lifecycle, like a fresh family).
@@ -23,6 +24,7 @@ from __future__ import annotations
 
 import ctypes
 import math
+import struct
 from dataclasses import dataclass
 
 import numpy as np
@@ -38,15 +40,20 @@ from widgets.spotify_visualizer.extruded_bubble_drift_log import (
 )
 from widgets.spotify_visualizer.extruded_bubble_material_paths import CHAIN_PATHS, PATH_NODES
 
-# Storage bindings used only inside the solver's dispatches (each restored afterwards).
-_STEPS, _GEOMETRY, _STATE, _AUX, _OUT, _OLD_GEOMETRY = 8, 9, 10, 11, 12, 13
+# Storage bindings used only inside the solver's dispatches (each restored afterwards), and the uniform block's
+# (apart from them: one binding namespace on Vulkan).
+_STEPS, _GEOMETRY, _STATE, _AUX, _OUT, _OLD_GEOMETRY, _BLOCK = 8, 9, 10, 11, 12, 13, 14
+# DriftDispatch in std140: eleven ints, a float, a vec2 at offset 48; 64 bytes.
+_DISPATCH_BLOCK = struct.Struct("<11if2f8x")
 _CLOUD_GROUP = 256
 _R = STEP_INDEX
 # The uploaded steps are float32 copies of the float64 records (every field the programs read is exactly a float32
 # value or a small count); in the serial's place each carries where its knot decisions begin in the upload.
 _KNOT_START = _R["serial"]
 _KNOT_WORDS = KNOT_DECISION_BYTES // 4
-_HOLD_BYTES = STEP_HISTORY * (4 * STEP_FLOATS + CHAIN_PATHS * KNOT_DECISION_BYTES)
+# One upload holds a history of steps with their knot decisions, then a dispatch block per dispatch (at most two per
+# family, each at the uniform offset alignment, which is at most 256).
+_HOLD_BYTES = STEP_HISTORY * (4 * STEP_FLOATS + CHAIN_PATHS * KNOT_DECISION_BYTES) + 6 * (256 + _DISPATCH_BLOCK.size)
 
 _PAIRS_GLSL = """
 // Error-free float32 transforms (precise: evaluated as written, never reordered or contracted).
@@ -61,9 +68,18 @@ vec2 fastTwoSum(float a, float b) {
     precise float e = b - (s - a);
     return vec2(s, e);
 }
+// Dekker's exact product from Veltkamp halves (adds and multiplies only): fma is not one fused operation on every
+// backend (HLSL has no float fma; qsb's HLSL turns it into mad, which may round twice).
+vec2 split(float a) {
+    precise float c = 4097.0 * a;
+    precise float high = c - (c - a);
+    precise float low = a - high;
+    return vec2(high, low);
+}
 vec2 twoProd(float a, float b) {
     precise float p = a * b;
-    precise float e = fma(a, b, -p);
+    vec2 x = split(a), y = split(b);
+    precise float e = ((x.x * y.x - p) + x.x * y.y + x.y * y.x) + x.y * y.y;
     return vec2(p, e);
 }
 vec2 mulPair(vec2 x, vec2 y) {
@@ -124,11 +140,22 @@ vec3 driftVelocity(int kind, vec3 world, float phase, int step, vec3 direction, 
 
 _COMMON = f"""#version 460 core
 layout(std430, binding = {_STEPS}) readonly buffer DriftSteps {{ uint steps[]; }};
-uniform int uFirstStep;
-uniform int uStepCount;
-uniform int uFresh;        // 1: the history starts here (zero state)
-uniform int uRebase;       // 1: a geometry edit; continue the old history onto the new geometry first
-uniform int uOutOffset;    // first vec4 of this family in the shaders' ebMaterialDrift
+// One block for every dispatch value (Vulkan GLSL has no loose uniforms); _dispatch_block packs it.
+layout(std140, binding = {_BLOCK}) uniform DriftDispatch {{
+    int uFirstStep;
+    int uStepCount;
+    int uFresh;            // 1: the history starts here (zero state)
+    int uRebase;           // 1: a geometry edit; continue the old history onto the new geometry first
+    int uOutOffset;        // first vec4 of this family in the shaders' ebMaterialDrift
+    int uOldRows;          // chains: paths that already have history (rows past it start fresh)
+    int uKnotBase;         // chains: first word of the uploaded knot decisions
+    int uCapacity;         // clouds: motes in the geometry
+    int uOldCount;         // clouds: motes alive before this dispatch's first step
+    int uCountField;       // clouds: the step field holding this family's mote count
+    int uAmountField;      // clouds: the step field holding this family's signed amount
+    float uCarry;          // clouds: the family's stream carry
+    vec2 uLastTravel;      // clouds: travel of the last step applied before this dispatch, as a pair
+}};
 """
 
 CHAIN_COMPUTE = _COMMON + f"""
@@ -138,8 +165,6 @@ layout(std430, binding = {_OLD_GEOMETRY}) readonly buffer OldGeometry {{ vec4 ol
 layout(std430, binding = {_STATE}) buffer Knots {{ vec4 knots[]; }};
 layout(std430, binding = {_AUX}) buffer Paths {{ vec4 paths[]; }};      // (shift, phase offset) after the last step
 layout(std430, binding = {_OUT}) writeonly buffer Out {{ vec4 outDrift[]; }};
-uniform int uOldRows;      // paths that already have history (rows past it start fresh)
-uniform int uKnotBase;     // first word of the uploaded knot decisions
 shared vec3 sDisplacement[{PATH_NODES}];
 {_VELOCITY_GLSL}
 void main() {{
@@ -197,12 +222,6 @@ layout(std430, binding = {_OLD_GEOMETRY}) readonly buffer OldGeometry {{ vec4 ol
 layout(std430, binding = {_STATE}) buffer Motes {{ vec4 motes[]; }};   // (displacement, phase offset high)
 layout(std430, binding = {_AUX}) buffer Bases {{ vec4 bases[]; }};     // (previous base, phase offset low)
 layout(std430, binding = {_OUT}) writeonly buffer Out {{ vec4 outDrift[]; }};
-uniform int uCapacity;
-uniform int uOldCount;     // motes alive before this dispatch's first step
-uniform int uCountField;   // the step field holding this family's mote count
-uniform int uAmountField;  // the step field holding this family's signed amount
-uniform float uCarry;
-uniform vec2 uLastTravel;  // travel of the last step applied before this dispatch, as a pair
 {_PAIRS_GLSL}
 {_VELOCITY_GLSL}
 void main() {{
@@ -304,7 +323,6 @@ class DriftSolver:
         self._output_vec4s = 0
         self._families: dict[str, _Family] = {}
         self._ring = StreamRing(f"{label} drift steps", slots=4, slot_bytes=2 * _HOLD_BYTES, hold_bytes=_HOLD_BYTES)
-        self._locations: dict[tuple[int, str], int] = {}
 
     @property
     def has_resources(self) -> bool:
@@ -317,7 +335,6 @@ class DriftSolver:
         _delete(self.output)
         self.output, self._output_vec4s = 0, 0
         self._ring.release()
-        self._locations.clear()
 
     @staticmethod
     def layout(families) -> dict[str, int]:
@@ -445,46 +462,33 @@ class DriftSolver:
             gl.glCopyNamedBufferSubData(previous.aux, aux, 0, 0, 16 * keep)
         return _Family(family.revision, family.capacity, geometry, state, aux, float(family.carry))
 
-    def _location(self, program: int, name: str) -> int:
-        key = (program, name)
-        if key not in self._locations:
-            self._locations[key] = int(gl.glGetUniformLocation(program, name))
-        return self._locations[key]
-
     def _dispatch(self, resources, name: str, state: _Family, offset: int, upload: np.ndarray, pending: np.ndarray,
                   *, fresh: bool, old_geometry: int = 0) -> None:
         chains = name == "chains"
         first, last = int(pending[0]), int(pending[-1])
-        program = resources.compute_program(*PROGRAMS[0 if chains else 1])
-        gl.glUseProgram(program)
-        location = lambda uniform: self._location(program, uniform)
-        gl.glUniform1i(location("uFirstStep"), first)
-        gl.glUniform1i(location("uStepCount"), last - first + 1)
-        gl.glUniform1i(location("uFresh"), int(fresh))
-        gl.glUniform1i(location("uRebase"), int(bool(old_geometry)))
-        gl.glUniform1i(location("uOutOffset"), offset)
+        gl.glUseProgram(resources.compute_program(*PROGRAMS[0 if chains else 1]))
         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _GEOMETRY, state.geometry)
         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _OLD_GEOMETRY, old_geometry or state.geometry)
         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _STATE, state.state)
         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _AUX, state.aux)
         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _OUT, self.output)
         record = upload[last]
+        old = 0 if fresh else state.count
         if chains:
             rows = min(state.capacity, int(record[_R["chain_rows"]]) or state.capacity)
-            gl.glUniform1i(location("uOldRows"), 0 if fresh else state.count)
-            gl.glUniform1i(location("uKnotBase"), len(upload) * STEP_FLOATS)
-            gl.glDispatchCompute(rows, 1, 1)
+            block = _DISPATCH_BLOCK.pack(first, last - first + 1, int(fresh), int(bool(old_geometry)), offset, old,
+                                         len(upload) * STEP_FLOATS, 0, 0, 0, 0, 0., 0., 0.)
+            groups = rows
             state.count = rows
         else:
             count_field, amount_field = _CLOUD_FIELDS[name]
-            gl.glUniform1i(location("uCapacity"), state.capacity)
-            gl.glUniform1i(location("uOldCount"), 0 if fresh else state.count)
-            gl.glUniform1i(location("uCountField"), count_field)
-            gl.glUniform1i(location("uAmountField"), amount_field)
-            gl.glUniform1f(location("uCarry"), float(state.carry))
-            gl.glUniform2f(location("uLastTravel"), *state.travel)
-            gl.glDispatchCompute(-(-state.capacity // _CLOUD_GROUP), 1, 1)
+            block = _DISPATCH_BLOCK.pack(first, last - first + 1, int(fresh), int(bool(old_geometry)), offset, 0, 0,
+                                         state.capacity, old, count_field, amount_field, float(state.carry),
+                                         *state.travel)
+            groups = -(-state.capacity // _CLOUD_GROUP)
             state.count = int(record[count_field])
+        with self._ring.bound(gl.GL_UNIFORM_BUFFER, _BLOCK, block):
+            gl.glDispatchCompute(groups, 1, 1)
         # The next dispatch (or the draws) read what this one wrote.
         gl.glMemoryBarrier(gl.GL_SHADER_STORAGE_BARRIER_BIT)
         state.serial = int(record[_R["serial"]])
