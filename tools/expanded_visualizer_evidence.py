@@ -212,7 +212,9 @@ class HiddenDisplayHost:
     orbit target) as inert stand-ins: nothing here receives input.
     """
 
-    def __init__(self, width: int, height: int, *, dpr: float) -> None:
+    def __init__(self, width: int, height: int, *, dpr: float, share: bool = False) -> None:
+        """``share``: the context joins the application's global share group, as every product display window's
+        does (``AA_ShareOpenGLContexts``); two such hosts stand in for two display windows (1C.2)."""
         from OpenGL import GL as gl
         from PySide6.QtCore import QObject, QSize
         from PySide6.QtGui import QColor, QGuiApplication, QOffscreenSurface, QOpenGLContext
@@ -245,6 +247,11 @@ class HiddenDisplayHost:
         self.dpr = float(dpr)
         self.pixels = (round(width * self.dpr), round(height * self.dpr))
         self.context = QOpenGLContext()
+        if share:
+            global_share = QOpenGLContext.globalShareContext()
+            if global_share is None:
+                raise RuntimeError("a shared hidden host needs AA_ShareOpenGLContexts (configure_quick_graphics)")
+            self.context.setShareContext(global_share)
         if not self.context.create():
             raise RuntimeError("hidden render GL context is unavailable")
         self.surface = QOffscreenSurface()

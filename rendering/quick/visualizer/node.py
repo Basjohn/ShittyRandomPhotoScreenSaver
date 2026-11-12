@@ -103,10 +103,11 @@ class VisualizerRenderNode(QSGRenderNode):
     def render_host(self) -> QuickVisualizerRenderHost:
         return self._render_host
 
-    def release_inactive_implementations(self, active_mode_id: str | None) -> None:
-        """Release inactive mode resources on the current Quick render thread."""
+    def release_inactive_implementations(self, active_mode_id: str | None, carryover=None) -> None:
+        """Release inactive mode resources on the current Quick render thread (handing a moved mode's history to
+        ``carryover``, 1C.2)."""
 
-        self._render_host.release_inactive_implementations(active_mode_id)
+        self._render_host.release_inactive_implementations(active_mode_id, carryover)
 
     def synchronize(
         self,
