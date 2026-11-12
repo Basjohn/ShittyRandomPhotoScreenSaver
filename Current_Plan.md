@@ -465,17 +465,21 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   pass writes outside the card nor under the border's anti-aliased edge; Sphere's and Extruded Spectrum's
   overflow setting is the one admitted exception and skips the coverage term). Proof: one-to-one texels under
   pixel shift and a uniform CUSTOM scale; the clip-contract test of 1C.4 run on the native item.
-- [ ] N2.5 Spectrum at parity on both backends (the port rule above), then its Python renderer retires. N1.6's
-  Spectrum group is merged (`spectrum.frag` bakes); N1.4's raw `gl_FragCoord` in it is not. Bar coverage keeps R-197's rule: one
-  continuous coordinate from the target's own pixel (`fragPixel`), and the diagonal-seam test runs on the native
-  item. GPU time per pass (port rule e) needs N2.6: build the timer before this port, or record the whole-frame
-  time and say so.
+
+Order inside N2 (the numbers stay stable for the documents that cite them): N2.1 to N2.4, then N2.6, N2.7, then
+N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the Python renderer's retirement.
+
 - [ ] N2.6 The per-pass GPU timer service (D8 plus 2): raw timestamps on Vulkan, timer queries on OpenGL, in the
   frame trace as today's `TIME_ELAPSED` figures are; off means no query objects.
 - [ ] N2.7 The backend owner and the rehearsal path (D10): one owner in `rendering/quick/bootstrap.py`, a
   diagnostic command-line switch, the Vulkan window set up through the module (D6), "available on this backend"
   in the mode and transition registries (an unported mode is not offered, an unported transition is Crossfade),
   the start-up fallback to OpenGL with its remembered failed start and a forced-failure negative control.
+- [ ] N2.5 Spectrum at parity on both backends (the port rule above; scheduled after N2.6 and N2.7, which its rule
+  needs: (e) GPU time per pass is N2.6's timer, (f) the bounded Vulkan rehearsal is N2.7's path and N2.8's run).
+  The Python renderer retires only after N2.8 passes. N1.6's Spectrum group is merged (`spectrum.frag` bakes);
+  N1.4's raw `gl_FragCoord` in it is not. Bar coverage keeps R-197's rule: one continuous coordinate from the
+  target's own pixel (`fragPixel`), and the diagonal-seam test runs on the native item.
 - [ ] N2.8 Lead, Display 1: the first rehearsal (cards and Spectrum on Vulkan; no wallpaper yet).
 
 **N2b. The background layer, natively, and the first full rehearsal**
