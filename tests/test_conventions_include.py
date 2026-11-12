@@ -18,6 +18,7 @@ import pytest
 
 from rendering.gl_programs.conventions import (
     CONVENTIONS_BLOCK_NAME,
+    NATIVE_CORE_DEFINE,
     OPENGL_CONVENTIONS,
     SRPSS_CONVENTIONS_FRAGMENT_GLSL,
     SRPSS_CONVENTIONS_GLSL,
@@ -53,8 +54,16 @@ def test_the_include_bakes_for_every_shipped_target(tmp_path):
     compute = ("#version 460 core\nlayout(local_size_x = 8) in;\nlayout(std430, binding = 0) buffer B { vec2 v[]; };\n"
                + SRPSS_CONVENTIONS_GLSL + "void main() { uint i = gl_GlobalInvocationID.x; v[i] = ndcToUv(v[i]); }\n")
     assert compile_source(qsb, compute, tmp_path / "mapping.comp") == (True, "")
-    # A stage without SRPSS_CONVENTIONS_FRAGMENT gets no gl_FragCoord function and no block.
-    assert "gl_FragCoord" not in SRPSS_CONVENTIONS_GLSL.split("#if defined(SRPSS_CONVENTIONS_FRAGMENT)")[0]
+    # The native core's text (the mapping reads the block, decided F2) bakes too, in a fragment and a compute stage.
+    native = f"#define {NATIVE_CORE_DEFINE}\n"
+    assert compile_source(qsb, _FRAGMENT.replace("#version 460 core\n", "#version 460 core\n" + native),
+                          tmp_path / "native.frag") == (True, "")
+    assert compile_source(qsb, compute.replace("#version 460 core\n", "#version 460 core\n" + native),
+                          tmp_path / "native.comp") == (True, "")
+    # A stage without SRPSS_CONVENTIONS_FRAGMENT gets no gl_FragCoord function, and every stage gets the block.
+    mapping_part = SRPSS_CONVENTIONS_GLSL.split("#if defined(SRPSS_CONVENTIONS_FRAGMENT)")[0]
+    assert "gl_FragCoord" not in mapping_part
+    assert f"uniform {CONVENTIONS_BLOCK_NAME}" in mapping_part
 
 
 def test_the_block_has_one_reserved_binding_no_other_resource_takes():
@@ -135,7 +144,9 @@ def _bound_conventions() -> int:
     return int(value[0])
 
 
-def _draw(program: int, vao: int, size: tuple[int, int], flip: bool = False) -> tuple[np.ndarray, np.ndarray]:
+def _draw(program: int, vao: int, size: tuple[int, int], flip: bool = False,
+          values: tuple[float, float, float, float] | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Draws ``program``; ``flip`` binds the block with the fragment flip on, ``values`` binds the block with these."""
     import ctypes
 
     from OpenGL import GL as gl
@@ -158,10 +169,10 @@ def _draw(program: int, vao: int, size: tuple[int, int], flip: bool = False) -> 
     gl.glNamedBufferStorage(sizes, len(data), data, 0)
     gl.glBindBufferBase(gl.GL_UNIFORM_BUFFER, 0, sizes)
     flipped, previous = 0, _bound_conventions()
-    if flip:
+    if flip or values is not None:
         gl.glCreateBuffers(1, name)
         flipped = int(name[0])
-        block = conventions_block((1.0, 0.0, 0.0, 0.0))
+        block = conventions_block(values if values is not None else (1.0, 0.0, 0.0, 0.0))
         gl.glNamedBufferStorage(flipped, len(block), block, 0)
         gl.glBindBufferBase(gl.GL_UNIFORM_BUFFER, SCENE3D_CONVENTIONS_BLOCK_BINDING, flipped)
     try:
@@ -405,9 +416,10 @@ def test_a_destroyed_context_leaves_no_entry(qt_app):
 
 
 @pytest.mark.qt
-def test_only_a_program_that_reads_the_block_holds_it(qt_app):
-    """The mapping-only include carries the block's name inside a false ``#if``: the fog march and composite fragments
-    (the product's sources) and any other program without the block take no hold; one with the block does. (A std140
+def test_every_program_that_includes_the_conventions_holds_the_block_and_no_other_does(qt_app):
+    """Decided F2 (12 Nov): every stage that includes the conventions declares the block, mapping-only ones too, so the
+    fog march and composite fragments (the product's mapping-only sources) hold it like a fragment reader; a program
+    whose text names the block but does not include the conventions (the name in a comment) takes no hold. (A std140
     block a program declares counts as active even if unread, so the linked program says "declares", truthfully.)"""
     from rendering.gl_programs.fog_volume import FOG_COMPOSITE_FRAGMENT, FOG_FULLSCREEN_VERTEX, fog_march_source
     from rendering.quick.render import gl_resources
@@ -415,24 +427,56 @@ def test_only_a_program_that_reads_the_block_holds_it(qt_app):
 
     mapping_only = ("#version 460 core\nout vec4 C;\n" + SRPSS_CONVENTIONS_GLSL
                     + "void main() { C = vec4(ndcToUv(vec2(0.25)), 0.0, 1.0); }\n")
+    named_only = ("#version 460 core\nout vec4 C;\n// " + CONVENTIONS_BLOCK_NAME + " is not included here\n"
+                  "void main() { C = vec4(1.0); }\n")
     context = _QtOwnedContext()
     programs = []
     try:
+        programs.append(compile_program(_VERTEX, named_only, label="names the block only"))
+        assert _held_by(context.key) == [] and context.key not in gl_resources._conventions
+        holders = []
         for label, vertex, fragment in (("fog march", FOG_FULLSCREEN_VERTEX, fog_march_source()),
                                         ("fog composite", FOG_FULLSCREEN_VERTEX, FOG_COMPOSITE_FRAGMENT),
-                                        ("mapping only", _VERTEX, mapping_only)):
-            assert CONVENTIONS_BLOCK_NAME in fragment            # the text alone would have taken a hold
-            programs.append(compile_program(vertex, fragment, label=label))
-            assert _held_by(context.key) == [], label
-        assert context.key not in gl_resources._conventions and _bound_conventions() == 0
-        reader = compile_program(_VERTEX, _FRAGMENT, label="reads the block")
-        programs.append(reader)
-        assert _held_by(context.key) == [reader]
+                                        ("mapping only", _VERTEX, mapping_only),
+                                        ("fragment reader", _VERTEX, _FRAGMENT)):
+            program = compile_program(vertex, fragment, label=label)
+            programs.append(program)
+            holders.append(program)
+            assert _held_by(context.key) == sorted(holders), label
+        assert _bound_conventions() == gl_resources._conventions[context.key][0]
     finally:
         for program in programs:
             delete_program(program)
         context.close()
     assert _held_by(context.key) == []
+
+
+@pytest.mark.qt
+def test_the_native_cores_mapping_reads_the_clip_ndc_flip_from_the_block(qt_app):
+    """With ``NATIVE_CORE_DEFINE`` the mapping negates Y when the block's y is set (D3D11, D3D12, Metal) and is the plain
+    arithmetic when it is 0; without the define (this renderer) y is never read."""
+    from rendering.quick.render.gl_resources import compile_program, delete_program
+
+    body = ("layout(location = 0) out vec4 Texel;\nlayout(location = 1) out vec4 Uv;\n"
+            "layout(std140, binding = 0) uniform Size { vec2 uSize; };\n" + SRPSS_CONVENTIONS_FRAGMENT_GLSL
+            + "void main() { Texel = vec4(ndcToUv(vec2(0.25, 0.5)), uvToNdc(vec2(0.25, 0.75)));"
+              " Uv = vec4(0.0); }\n")
+    context = _Context()
+    try:
+        native = compile_program(_VERTEX, f"#version 460 core\n#define {NATIVE_CORE_DEFINE}\n" + body,
+                                 label="native mapping")
+        renderer = compile_program(_VERTEX, "#version 460 core\n" + body, label="renderer mapping")
+        try:
+            plain = (0.625, 0.75, -0.5, 0.5)
+            flipped = (0.625, 0.25, -0.5, -0.5)
+            for program, y, expected in ((native, 0.0, plain), (native, 1.0, flipped), (renderer, 1.0, plain)):
+                texel, _uv = _draw(program, context.vao, (4, 2), values=(0.0, y, 0.0, 0.0))
+                assert np.array_equal(texel[0, 0], np.array(expected, np.float32)), (program, y)
+        finally:
+            delete_program(native)
+            delete_program(renderer)
+    finally:
+        context.close()
 
 
 def test_every_program_linked_through_gl_resources_is_deleted_through_delete_program():
