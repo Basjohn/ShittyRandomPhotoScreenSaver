@@ -851,22 +851,28 @@ What it owns (inventory, `.artifacts/evidence/visualizers/shockwave_grid/water_l
 - **Edge line**: the shoreline (`basinShoreLight`, alpha `uCrestColor.a`) and its Shore Glow. Before this nothing
   removed it alone: Wave / Ridge Glow alpha 0 also removes the land's ridge lines.
 - **The mirrored surface pass** (pass 0 triangles) draws only those lines' reflections (fringe lines, shoreline).
+- **Water Reaction's line cores** (`la`, `lb` in its net, with their whitening where they cross): the net's thin
+  lines are face lines too (lead decision, 12 Nov: with them kept, a driven lake at 0 still read as a bright grid).
+  Its soft light either side of each line (`ga`, `gb`) and the lake's lift in the net's colours stay.
 
-Fading: the face coverage, the shoreline's alpha (after its clamp) and the Shore Glow's alpha and emission are
-multiplied by the amount, so glow fades with its line. At 0 the ripple field, the curves/network/rings/sheen block,
-the shoreline contour and the Shore Glow are skipped by branches on the uniform, and the renderer does not issue
+Fading: the face coverage, the net's line cores, the shoreline's alpha (after its clamp) and the Shore Glow's alpha
+and emission are multiplied by the amount, so glow fades with its line. At 0 the ripple field, the
+curves/network/rings/sheen block, the net's cores, the shoreline contour and the Shore Glow are skipped by branches
+on the uniform, and the renderer does not issue
 the pass-0 triangle draw (reflected land marks still draw). At 1 the frame equals the earlier one (max 1/255 on
 Presets 1-3, rest and driven). A dead per-fragment `sceneHeightfieldCurveWire` call (its result was always
 overwritten or zeroed) was removed on the way.
 
 Stays at 0: the water's colour, reflection and mirrored land/skyline, shine and its glints, the Sun / Moon path,
-the crest wash on the body, Water Reaction (its net, lift and the ridge breath) and every land line (ridges,
-Contour Lines, marks). Contracts: `tests/test_neon_water_lines.py`.
+the crest wash on the body, Water Reaction's soft light, lift and ridge breath, and every land line (ridges,
+Contour Lines, marks). The net's soft light still follows its two warped families, so a loud passage leaves a faint,
+blurred lattice of light on the water, without lines. Contracts: `tests/test_neon_water_lines.py`.
 
 Cost (RTX 4090, 2560x1440, PairedBench, control-relative): at 1 the Guided Setup frame is unchanged (255.5 -> 255.0
 cf; +1 GL call, the uniform; +10 Python calls). At 0, driven, one session: Preset 1 281.0 -> 248.0 cf, Preset 2
-257.1 -> 225.6, Preset 3 522.6 -> 497.9, two GL calls fewer (the skipped mirrored-line draw). Evidence
-`.artifacts/evidence/visualizers/shockwave_grid/water_lines/20261112_{inventory,sheet,cost}/`.
+257.1 -> 225.6, Preset 3 522.6 -> 497.9, two GL calls fewer (the skipped mirrored-line draw); measured before the
+net's cores joined, whose skip only removes work at 0. Evidence
+`.artifacts/evidence/visualizers/shockwave_grid/water_lines/20261112_{inventory,sheet,sheet_net,cost}/`.
 
 ## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
 
