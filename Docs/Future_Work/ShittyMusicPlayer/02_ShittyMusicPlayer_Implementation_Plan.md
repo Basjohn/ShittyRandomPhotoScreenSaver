@@ -290,6 +290,12 @@ entry with the pane, not a second widget (§4.1; mock R10).
 
 ### 4.1 Service/queue contracts
 
+*Qt 6.12 (the project's Qt since 12 Nov 2026; `Docs/Future_Work/Qt_6_12_Gains.md`):* if playback uses Qt
+Multimedia's `QAudioSink`, its buffer period is settable since 6.12 (`setNativePeriodFrameCount()`, powers of two from
+32 to 4096 frames, only while stopped; on Windows it maps to the audio client's buffer duration, default about 1024
+frames). Choose the period once from the Visualizer's latency budget and the PCM source seam
+(`03_PCM_Source_and_Native_Core_Seams_2026-11-09.md`), measured, not left at the default.
+
 Define small interfaces first (illustrative, not new business superclasses): `PlaybackService` (output, commands, state and exactly-once retirement), `QueueController` (ordered track references, shuffle/repeat/history), `LibraryRepository` (read-only queries/transactions), `AudioAnalysisSource` (timestamped decoded PCM adapter), `PlaybackStateSnapshot` (immutable revision, track identity, provider, position, playing, audio generation). Clear player lifecycle is distinct from window and display lifetime.
 
 - [ ] Begin with local file play/pause/stop/seek/volume, one player-owned stream, one queue and one persisted player state. If media missing/unsupported, fail action with visible reason while preserving queue and library.
@@ -343,6 +349,9 @@ Current `core/media/provider_registry.py` encodes explicit external Windows GSMT
   admit podcasts (§1, §12).
 
 ### 5.2 Artwork and metadata
+
+*Qt 6.12:* where Qt Multimedia reads a file's metadata, cover art is `QMediaMetaData::CoverArtImage`;
+`ThumbnailImage` is deprecated in 6.12 and is not used.
 
 - [ ] Art precedence: the operator's order in §15 (embedded, `artist.*`, `album.*`, `folder.*`, other images in the folder, opt-in fetch); explicit user override outranks auto discovery.Original assets untouched. Cache bounded variants (row, album tile, mosaic, detail) keyed by stable source identity/version. Verify dimension/file/decoder caps and error handling; never permit remote art to be a mandatory paint dependency.
 - [ ] Local tags: title, artist, album artist, album, track/disc numbers, year/date, genre, comments, composer, artwork and technical properties when format supports. Use a tested parser library candidate such as Mutagen only after source/build reachability is demonstrated. All reads off GUI/render.

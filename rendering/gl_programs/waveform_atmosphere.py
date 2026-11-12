@@ -2,19 +2,26 @@
 from core.ribbon_geometry import MAX_PATH_SAMPLES
 from core.waveform_ribbon_authoring import RIBBON_CAPACITY
 from rendering.gl_programs.ribbon_continuation import CONTINUATION_GLSL
-from rendering.gl_programs.ribbon import RIBBON_GRADE_GLSL
+from rendering.gl_programs.ribbon import (RIBBON_GRADE_FIELDS, RIBBON_GRADE_FUNCTION, RIBBON_GRADE_GLSL,
+                                          RIBBON_GRADE_HEAD)
+from rendering.gl_programs.scene3d import SCENE3D_COMPUTE_BLOCK_BINDING, Scene3DBlockLayout
 from rendering.gl_programs.mist import MIST_GLSL
 from rendering.gl_programs.fog_volume import FOG_FULLSCREEN_VERTEX
 
 FIELD_RIBBONS=RIBBON_CAPACITY
 FIELD_ROWS=FIELD_RIBBONS*2
-PACKET_GLSL=('''
+_PACKET_BUFFERS='''
 struct Knot {vec4 p;vec4 q;vec4 tangent;vec4 side;vec4 tint;};
 struct Path {vec4 meta;vec4 extra;vec4 colourA;vec4 colourB;Knot knots[MAX_KNOTS];};
 layout(std430,binding=0) readonly buffer Paths {Path paths[];};
-uniform vec4 uFieldOrigin; // packet origin+scroll, ribbon count
+'''
+_PACKET_UNIFORMS='''uniform vec4 uFieldOrigin; // packet origin+scroll, ribbon count
 uniform float uFieldSide;   // Travel Direction: -1 maps world x to the history axis mirrored (0/unset: +1)
-'''+CONTINUATION_GLSL+RIBBON_GRADE_GLSL+'''
+'''
+# The packet's own values as block members, for a compute program (``packet_compute_glsl``): the packet origin plus
+# scroll and the ribbon count, the Travel Direction sign, and the colour grade.
+PACKET_FIELDS=(('uFieldOrigin','vec4'),('uFieldSide','float'),*RIBBON_GRADE_FIELDS)
+_PACKET_FIELD='''
 void packetField(float x,int owner,out vec4 shape,out vec4 light) {
     float local=(uFieldSide<0.0?-x:x)-uFieldOrigin.x;
         shape=vec4(0);light=vec4(0);
@@ -37,11 +44,25 @@ void packetField(float x,int owner,out vec4 shape,out vec4 light) {
             }
         }
 }
-''').replace('MAX_KNOTS',str(MAX_PATH_SAMPLES))
-FIELD_COMPUTE=('#version 460 core\n'+PACKET_GLSL+'''
+'''
+# The draws' form: loose uniforms (they convert with their modes, N1.6).
+PACKET_GLSL=(_PACKET_BUFFERS+_PACKET_UNIFORMS+CONTINUATION_GLSL+RIBBON_GRADE_GLSL+_PACKET_FIELD
+             ).replace('MAX_KNOTS',str(MAX_PATH_SAMPLES))
+
+
+def packet_compute_glsl(block):
+    """``PACKET_GLSL`` for a compute program whose dispatch ``block`` (a ``Scene3DBlockLayout`` declaration holding
+    ``PACKET_FIELDS``) replaces the loose uniforms; the packet's storage stays at binding 0."""
+    return (_PACKET_BUFFERS+block+CONTINUATION_GLSL+RIBBON_GRADE_HEAD+RIBBON_GRADE_FUNCTION+_PACKET_FIELD
+            ).replace('MAX_KNOTS',str(MAX_PATH_SAMPLES))
+
+
+FIELD_BLOCK_BINDING=SCENE3D_COMPUTE_BLOCK_BINDING
+FIELD_BLOCK=Scene3DBlockLayout.of('WaveformFieldDispatch',(*PACKET_FIELDS,('uFieldSpan','vec4')))
+FIELD_COMPUTE=('#version 460 core\n'+packet_compute_glsl(FIELD_BLOCK.glsl(FIELD_BLOCK_BINDING))+'''
 layout(local_size_x=64) in;
-layout(rgba32f,binding=0) writeonly uniform image2D uOutput;
-uniform vec4 uFieldSpan; // first x, last x, samples, ribbon count
+layout(rgba32f,binding=1) writeonly uniform image2D uOutput;  // binding 0 is the packet
+// uFieldSpan: first x, last x, samples, ribbon count
 void main() {
     int column=int(gl_GlobalInvocationID.x),samples=int(uFieldSpan.z);
     if(column>=samples)return;

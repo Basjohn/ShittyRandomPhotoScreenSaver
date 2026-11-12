@@ -11,6 +11,9 @@ import pytest
 
 from tools import build_runner, regen_qrc
 
+# The fake toolchains answer with the repository's own pin, so a version bump never needs a test edit.
+QT = regen_qrc._required_qt_version()
+
 
 def _qrc_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     assets = tmp_path / "assets"
@@ -57,8 +60,8 @@ def test_regeneration_uses_only_selected_python_and_publishes_atomically(tmp_pat
             return subprocess.CompletedProcess(
                 command,
                 0,
-                "PySide6=6.11.2;PySide6_Addons=6.11.2;PySide6_Essentials=6.11.2;"
-                f"shiboken6=6.11.2;Qt=6.11.2;rcc={rcc}",
+                f"PySide6={QT};PySide6_Addons={QT};PySide6_Essentials={QT};"
+                f"shiboken6={QT};Qt={QT};rcc={rcc}",
                 "",
             )
         temporary = Path(command[-1])
@@ -109,8 +112,8 @@ def test_failed_regeneration_keeps_prior_binary_pack(tmp_path: Path) -> None:
                 command,
                 0 if command[1] == "-c" else 9,
                 (
-                    "PySide6=6.11.2;PySide6_Addons=6.11.2;PySide6_Essentials=6.11.2;"
-                    f"shiboken6=6.11.2;Qt=6.11.2;rcc={rcc}"
+                    f"PySide6={QT};PySide6_Addons={QT};PySide6_Essentials={QT};"
+                    f"shiboken6={QT};Qt={QT};rcc={rcc}"
                     if command[1] == "-c"
                     else ""
                 ),
@@ -133,8 +136,8 @@ def test_two_target_compile_failure_preserves_every_prior_binary_pack(tmp_path: 
             return subprocess.CompletedProcess(
                 command,
                 0,
-                "PySide6=6.11.2;PySide6_Addons=6.11.2;PySide6_Essentials=6.11.2;"
-                f"shiboken6=6.11.2;Qt=6.11.2;rcc={rcc}",
+                f"PySide6={QT};PySide6_Addons={QT};PySide6_Essentials={QT};"
+                f"shiboken6={QT};Qt={QT};rcc={rcc}",
                 "",
             )
         if Path(command[2]) == second_qrc:
@@ -166,8 +169,8 @@ def test_input_change_during_generation_prevents_any_publish(tmp_path: Path) -> 
             return subprocess.CompletedProcess(
                 command,
                 0,
-                "PySide6=6.11.2;PySide6_Addons=6.11.2;PySide6_Essentials=6.11.2;"
-                f"shiboken6=6.11.2;Qt=6.11.2;rcc={rcc}",
+                f"PySide6={QT};PySide6_Addons={QT};PySide6_Essentials={QT};"
+                f"shiboken6={QT};Qt={QT};rcc={rcc}",
                 "",
             )
         Path(command[-1]).write_bytes(b"replacement")
@@ -185,7 +188,7 @@ def test_input_change_during_generation_prevents_any_publish(tmp_path: Path) -> 
 
 
 def test_selected_pyside_rcc_compiles_a_tiny_fixture(tmp_path: Path) -> None:
-    """The real 6.11 sidecar works without invoking a build script or GUI."""
+    """The real sidecar works without invoking a build script or GUI."""
     import importlib.util
 
     if importlib.util.find_spec("PySide6") is None:
@@ -232,7 +235,7 @@ def test_mismatched_selected_qt_toolchain_cannot_rewrite_resources(tmp_path: Pat
             "",
         )
 
-    with pytest.raises(regen_qrc.QrcRegenerationError, match="pinned Qt 6.11.2"):
+    with pytest.raises(regen_qrc.QrcRegenerationError, match=f"pinned Qt {QT}"):
         regen_qrc.ensure_qrc_current(
             python_executable=Path(sys.executable),
             qrc_path=qrc,
@@ -423,8 +426,8 @@ def test_foundry_qrc_sidecar_uses_the_active_owner_and_cancellation(monkeypatch,
                 return ("environment ready", "")
             if command[1] == "-c":  # type: ignore[index]
                 return (
-                    "PySide6=6.11.2;PySide6_Addons=6.11.2;PySide6_Essentials=6.11.2;"
-                    f"shiboken6=6.11.2;Qt=6.11.2;rcc={rcc}",
+                    f"PySide6={QT};PySide6_Addons={QT};PySide6_Essentials={QT};"
+                    f"shiboken6={QT};Qt={QT};rcc={rcc}",
                     "",
                 )
             Path(command[-1]).write_text("generated", encoding="utf-8")  # type: ignore[index]

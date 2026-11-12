@@ -11,7 +11,7 @@ checks on the render thread:
   (orientation, channel order, filtering, DPR scaling);
 * the previous adopted texture is deleted once replaced, the shown one stays
   alive, and retirement deletes every GL texture (no leak, no double delete);
-* the adopting sync leaves the inherited GL state untouched.
+* the adopting code (the item's updatePaintNode in that sync) leaves the inherited GL state untouched.
 """
 
 from __future__ import annotations
@@ -111,9 +111,22 @@ def gl_state():
                                                                 bool(gl.glIsEnabled(gl.GL_STENCIL_TEST))]
 
 
-def before_sync():
-    if state["capture"] == "adopt-c":
+# The adopting code runs in the item's updatePaintNode; the GL state is read around it, not around Qt's whole sync
+# (Qt 6.12's own sync resets the array-buffer binding, which is Qt's and not the adopting code's).
+_real_update_paint_node = BackgroundRenderItem.updatePaintNode
+
+
+def _measured_update_paint_node(self, old_node, data):
+    measure = state["capture"] == "adopt-c" and state["gl_after"] is None
+    if measure:
         state["gl_before"] = gl_state()
+    node = _real_update_paint_node(self, old_node, data)
+    if measure:
+        state["gl_after"] = gl_state()
+    return node
+
+
+BackgroundRenderItem.updatePaintNode = _measured_update_paint_node
 
 
 def after_sync():
@@ -122,8 +135,6 @@ def after_sync():
         if textures is not None:
             with lock:
                 state["records"] = {k: r.texture_id for k, r in textures._records.items()}
-        if state["capture"] == "adopt-c" and state["gl_before"] is not None and state["gl_after"] is None:
-            state["gl_after"] = gl_state()
     except Exception as exc:  # noqa: BLE001
         state["error"] = repr(exc)
 
@@ -143,7 +154,6 @@ def after_rendering():
         state["frames"].setdefault(label, []).append((fb_w, fb_h, data))
 
 
-window.beforeSynchronizing.connect(before_sync, Qt.ConnectionType.DirectConnection)
 window.afterSynchronizing.connect(after_sync, Qt.ConnectionType.DirectConnection)
 window.afterRendering.connect(after_rendering, Qt.ConnectionType.DirectConnection)
 
@@ -298,3 +308,19 @@ def test_retirement_deletes_the_adopted_texture_exactly_once(probe) -> None:
 
 def test_the_adopting_sync_leaves_inherited_gl_state_untouched(probe) -> None:
     assert probe["gl_before"] is not None and probe["gl_before"] == probe["gl_after"]
+
+
+def test_a_leaked_gl_binding_in_the_adopting_code_is_caught() -> None:
+    """Negative control: adopting code that leaves its own array buffer bound fails the inherited-state check."""
+    fault = '''
+from rendering.quick.render.background_item import BackgroundRenderItem as _Leaky
+_real_leaky = _Leaky.updatePaintNode
+def _leaky_update_paint_node(self, old_node, data):
+    node = _real_leaky(self, old_node, data)
+    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, int(gl.glGenBuffers(1)))
+    return node
+_Leaky.updatePaintNode = _leaky_update_paint_node
+'''
+    result = _run_probe(_PROBE, fault)
+    assert result["gl_before"] is not None
+    assert result["gl_before"][3] != result["gl_after"][3]

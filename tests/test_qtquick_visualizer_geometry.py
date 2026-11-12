@@ -177,6 +177,41 @@ def test_edge_reproject_changes_extent_only_without_touching_uniform_scale(
     assert reprojected.shell_style["shadow_blur"] == pytest.approx(18.0 * 1.5)
 
 
+@pytest.mark.parametrize("dpr", (1.0, 1.25, 1.5, 1.75, 2.0))
+@pytest.mark.parametrize("origin", ((24.3, 96.3), (101.5, 7.49), (0.2, 0.7)))
+@pytest.mark.parametrize("scale", (0.73, 1.0, 1.37))
+def test_the_card_is_drawn_on_whole_device_pixels_within_half_a_pixel_of_its_record(dpr, origin, scale) -> None:
+    # 1C.4: with the drawn card's edges on the device-pixel grid, Qt Quick's anti-aliased frame has no pixel that is
+    # part frame, part content along its straight edges. Each edge moves by at most half a device pixel and the drawn
+    # size does not depend on position. The record itself (the geometry every consumer derives from) is untouched.
+    from widgets.spotify_visualizer.presentation_geometry import resolve_card_drawn_rect
+
+    kwargs = dict(policy=get_visualizer_presentation_policy("devcurve"), display_size=(1280.0, 720.0), dpr=dpr,
+                  border_width=3.0, corner_radius=8.0, content_inset=0.0)
+    card = resolve_visualizer_presentation(outer_origin=origin, uniform_visual_scale=scale, **kwargs)
+    assert card.outer_rect == pytest.approx((origin[0], origin[1], 420.0 * scale, 280.0 * scale))
+    drawn = resolve_card_drawn_rect(card)
+    for value in drawn:
+        assert value * dpr == pytest.approx(round(value * dpr), abs=1e-6)
+    for value, exact in zip(drawn, card.outer_rect):
+        assert abs(value - exact) * dpr <= 0.5 + 1e-9
+    moved = resolve_visualizer_presentation(outer_origin=(origin[0] + 0.4, origin[1] + 0.4),
+                                            uniform_visual_scale=scale, **kwargs)
+    assert resolve_card_drawn_rect(moved)[2:] == drawn[2:]
+
+
+def test_a_frameless_stage_is_drawn_where_it_is() -> None:
+    from widgets.spotify_visualizer.presentation_geometry import resolve_card_drawn_rect
+
+    frameless = VisualizerModePresentationPolicy(
+        shell_policy=VisualizerShellPolicy.FRAMELESS, clip_policy=VisualizerClipPolicy.VIEWPORT_RECT,
+        viewport_resize_capable=True)
+    stage = resolve_visualizer_presentation(
+        policy=frameless, display_size=(1280.0, 720.0), outer_origin=(24.3, 96.3), dpr=1.25,
+        border_width=3.0, corner_radius=8.0, content_inset=0.0)
+    assert resolve_card_drawn_rect(stage) == stage.outer_rect
+
+
 def test_edge_and_uniform_reproject_compose_independently() -> None:
     baseline = resolve_visualizer_presentation(
         policy=get_visualizer_presentation_policy("bubble"),

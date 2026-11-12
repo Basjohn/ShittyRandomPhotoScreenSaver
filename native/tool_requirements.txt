@@ -1,0 +1,12 @@
+# The native module's tool venv (never the repo .venv): Ninja for CMake, py7zr for the Qt SDK archives
+# (tools/native_sdk_fetch.py). Versions as in the P1 spike's reference tool venv (7 Nov 2026).
+ninja==1.13.2
+py7zr==1.1.4
+brotli==1.2.1
+inflate64==1.0.4
+multivolumefile==0.2.3
+psutil==7.2.2
+pybcj==1.0.8
+pycryptodomex==3.24.2
+pyppmd==1.3.1
+texttable==1.7.2

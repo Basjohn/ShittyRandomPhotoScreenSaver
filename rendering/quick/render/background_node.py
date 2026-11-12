@@ -435,6 +435,10 @@ class BackgroundRenderNode(QSGRenderNode):
         )
         self._vao = int(gl.glGenVertexArrays(1))
         self._vbo = int(gl.glGenBuffers(1))
+        # Created on the render thread, possibly inside Qt's sync (a warm-up step): the bindings Qt left are
+        # restored, never reset to 0 (Qt 6.12 leaves an array buffer bound across sync).
+        prior_vao = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)
+        prior_array_buffer = gl_query.get_int(gl.GL_ARRAY_BUFFER_BINDING)
         gl.glBindVertexArray(self._vao)
         gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self._vbo)
         gl.glBufferData(
@@ -452,8 +456,8 @@ class BackgroundRenderNode(QSGRenderNode):
             2 * ctypes.sizeof(ctypes.c_float),
             ctypes.c_void_p(0),
         )
-        gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
-        gl.glBindVertexArray(0)
+        gl.glBindVertexArray(prior_vao)
+        gl.glBindBuffer(gl.GL_ARRAY_BUFFER, prior_array_buffer)
 
         self._matrix_location = int(gl.glGetUniformLocation(self._program, "uMatrix"))
         self._item_size_location = int(

@@ -34,7 +34,9 @@ import math
 import numpy as np
 from OpenGL import GL as gl
 
-from .compute import bound_image, dispatch
+from rendering.gl_programs.scene3d import Scene3DBlockLayout
+
+from .compute import COMPUTE_BLOCK_BINDING, DispatchBlocks, bound_image, dispatch
 
 EDGE_FIELD_SIZE = 768
 EDGE_FIELD_NONE = 4.0          # distance reported where a picture has no contour at all (picture heights)
@@ -52,12 +54,18 @@ vec2 edgeFieldSample(sampler2D field, vec2 uv) {
 }
 """
 
-_HEADER = f"#version 460 core\nlayout(local_size_x = {_GROUP}, local_size_y = {_GROUP}) in;\nuniform ivec2 uSize;\n"
+# One dispatch block for every stage (each reads its own members): the field size, the luma stage's quarter texel in
+# uv, the edges stage's thresholds and the flood step's jump.
+_DISPATCH_BLOCK = Scene3DBlockLayout.of("EdgeFieldDispatch", (
+    ("uSize", "ivec2"), ("uStep", "vec2"), ("uLow", "float"), ("uHigh", "float"), ("uJump", "int")))
+# The stages' shared head (a fragment, not a shader: each stage puts the version line before it).
+_HEADER = (f"layout(local_size_x = {_GROUP}, local_size_y = {_GROUP}) in;\n"
+           + _DISPATCH_BLOCK.glsl(COMPUTE_BLOCK_BINDING))
+_VERSION = "#version 460 core\n"
 
-_LUMA_COMPUTE = _HEADER + f"""
-uniform sampler2D uPhoto;
-uniform vec2 uStep;                 // a quarter of one field texel, in uv
-layout(r16f, binding = 0) writeonly uniform image2D uLuma;
+_LUMA_COMPUTE = _VERSION + _HEADER + f"""
+layout(binding = 0) uniform sampler2D uPhoto;
+layout(rgba16f, binding = 1) writeonly uniform image2D uLuma;
 void main() {{
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
     if (p.x >= uSize.x || p.y >= uSize.y) return;
@@ -70,9 +78,9 @@ void main() {{
 }}
 """
 
-_BLUR_COMPUTE = _HEADER + """
-layout(r16f, binding = 0) readonly uniform image2D uLuma;
-layout(r16f, binding = 1) writeonly uniform image2D uBlur;
+_BLUR_COMPUTE = _VERSION + _HEADER + """
+layout(rgba16f, binding = 0) readonly uniform image2D uLuma;
+layout(rgba16f, binding = 1) writeonly uniform image2D uBlur;
 const float W[5] = float[5](1.0, 4.0, 6.0, 4.0, 1.0);
 void main() {
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
@@ -85,11 +93,9 @@ void main() {
 }
 """
 
-_EDGES_COMPUTE = _HEADER + f"""
-uniform float uLow;
-uniform float uHigh;
-layout(r16f, binding = 0) readonly uniform image2D uLuma;
-layout(r16f, binding = 1) writeonly uniform image2D uEdge;
+_EDGES_COMPUTE = _VERSION + _HEADER + f"""
+layout(rgba16f, binding = 0) readonly uniform image2D uLuma;
+layout(rgba16f, binding = 1) writeonly uniform image2D uEdge;
 layout(rg32f, binding = 2) writeonly uniform image2D uSeed;
 float lumaAt(ivec2 q) {{
     return imageLoad(uLuma, clamp(q, ivec2(0), uSize - 1)).r;
@@ -126,8 +132,7 @@ void main() {{
 }}
 """
 
-_FLOOD_COMPUTE = _HEADER + """
-uniform int uJump;
+_FLOOD_COMPUTE = _VERSION + _HEADER + """
 layout(rg32f, binding = 0) readonly uniform image2D uSeedIn;
 layout(rg32f, binding = 1) writeonly uniform image2D uSeedOut;
 void main() {
@@ -153,9 +158,9 @@ void main() {
 }
 """
 
-_RESOLVE_COMPUTE = _HEADER + f"""
+_RESOLVE_COMPUTE = _VERSION + _HEADER + f"""
 layout(rg32f, binding = 0) readonly uniform image2D uSeed;
-layout(r16f, binding = 1) readonly uniform image2D uEdge;
+layout(rgba16f, binding = 1) readonly uniform image2D uEdge;
 layout(rg16f, binding = 2) writeonly uniform image2D uField;
 void main() {{
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
@@ -269,7 +274,7 @@ def edge_distance_reference(strength: np.ndarray, points: np.ndarray) -> tuple[n
 class EdgeField:
     """One photograph's edge field, rebuilt when the run, photograph or thresholds change."""
 
-    _ROLES = (("luma", gl.GL_R16F, False), ("blur", gl.GL_R16F, False), ("edge", gl.GL_R16F, False),
+    _ROLES = (("luma", gl.GL_RGBA16F, False), ("blur", gl.GL_RGBA16F, False), ("edge", gl.GL_RGBA16F, False),
               ("ping", gl.GL_RG32F, False), ("pong", gl.GL_RG32F, False), ("field", gl.GL_RG16F, True))
 
     def __init__(self, label: str) -> None:
@@ -277,17 +282,19 @@ class EdgeField:
         self._textures: dict[str, int] = {}
         self._size: tuple[int, int] | None = None
         self._key: tuple | None = None
+        self._blocks = DispatchBlocks(f"{label} edge field")
         self.builds = 0     # fields built (once per run; for tests and traces)
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._textures)
+        return bool(self._textures) or self._blocks.has_resources
 
     def warm(self, pixel_size: tuple[int, int]) -> bool:
-        """Allocate for a render of ``pixel_size`` if not yet; True if it already was."""
+        """Allocate for a render of ``pixel_size`` if not yet, one unit per call (the textures, then the dispatch
+        blocks); True if all of it already was."""
         size = edge_field_size(pixel_size)
         if self._size == size and len(self._textures) == len(self._ROLES):
-            return True
+            return self._blocks.warm()
         self.release()
         try:
             for role, internal, linear in self._ROLES:
@@ -316,48 +323,44 @@ class EdgeField:
         groups = (-(-width // _GROUP), -(-height // _GROUP), 1)
         t = self._textures
         image_barrier = gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT
+        values = {"uSize": (width, height), "uStep": (0.25 / width, 0.25 / height), "uLow": float(low),
+                  "uHigh": float(high), "uJump": 0}
 
-        def use(key: str, source: str, names: tuple[str, ...]) -> dict[str, int]:
+        def use(key: str, source: str) -> None:
             gl.glUseProgram(resources.compute_program(key, source))
-            uniforms = resources.uniforms(key, ("uSize", *names))
-            gl.glUniform2i(uniforms["uSize"], width, height)
-            return uniforms
 
-        uniforms = use("edge_field_luma", _LUMA_COMPUTE, ("uPhoto", "uStep"))
-        gl.glUniform1i(uniforms["uPhoto"], 0)
-        gl.glUniform2f(uniforms["uStep"], 0.25 / width, 0.25 / height)
-        gl.glBindTextureUnit(0, photo)
-        with bound_image(0, t["luma"], gl.GL_WRITE_ONLY, gl.GL_R16F):
-            dispatch(groups, image_barrier)
-
-        use("edge_field_blur", _BLUR_COMPUTE, ())
-        for read, write in (("luma", "blur"), ("blur", "luma")):
-            with bound_image(0, t[read], gl.GL_READ_ONLY, gl.GL_R16F), \
-                    bound_image(1, t[write], gl.GL_WRITE_ONLY, gl.GL_R16F):
+        with self._blocks.bound(_DISPATCH_BLOCK.pack(values)) as rebind:
+            use("edge_field_luma", _LUMA_COMPUTE)
+            gl.glBindTextureUnit(0, photo)
+            with bound_image(1, t["luma"], gl.GL_WRITE_ONLY, gl.GL_RGBA16F):
                 dispatch(groups, image_barrier)
 
-        uniforms = use("edge_field_edges", _EDGES_COMPUTE, ("uLow", "uHigh"))
-        gl.glUniform1f(uniforms["uLow"], low)
-        gl.glUniform1f(uniforms["uHigh"], high)
-        with bound_image(0, t["luma"], gl.GL_READ_ONLY, gl.GL_R16F), \
-                bound_image(1, t["edge"], gl.GL_WRITE_ONLY, gl.GL_R16F), \
-                bound_image(2, t["ping"], gl.GL_WRITE_ONLY, gl.GL_RG32F):
-            dispatch(groups, image_barrier)
+            use("edge_field_blur", _BLUR_COMPUTE)
+            for read, write in (("luma", "blur"), ("blur", "luma")):
+                with bound_image(0, t[read], gl.GL_READ_ONLY, gl.GL_RGBA16F), \
+                        bound_image(1, t[write], gl.GL_WRITE_ONLY, gl.GL_RGBA16F):
+                    dispatch(groups, image_barrier)
 
-        uniforms = use("edge_field_flood", _FLOOD_COMPUTE, ("uJump",))
-        source, target = t["ping"], t["pong"]
-        for jump in edge_field_jumps(self._size):
-            gl.glUniform1i(uniforms["uJump"], jump)
+            use("edge_field_edges", _EDGES_COMPUTE)
+            with bound_image(0, t["luma"], gl.GL_READ_ONLY, gl.GL_RGBA16F), \
+                    bound_image(1, t["edge"], gl.GL_WRITE_ONLY, gl.GL_RGBA16F), \
+                    bound_image(2, t["ping"], gl.GL_WRITE_ONLY, gl.GL_RG32F):
+                dispatch(groups, image_barrier)
+
+            use("edge_field_flood", _FLOOD_COMPUTE)
+            source, target = t["ping"], t["pong"]
+            for jump in edge_field_jumps(self._size):
+                rebind(_DISPATCH_BLOCK.pack({**values, "uJump": jump}))
+                with bound_image(0, source, gl.GL_READ_ONLY, gl.GL_RG32F), \
+                        bound_image(1, target, gl.GL_WRITE_ONLY, gl.GL_RG32F):
+                    dispatch(groups, image_barrier)
+                source, target = target, source
+
+            use("edge_field_resolve", _RESOLVE_COMPUTE)
             with bound_image(0, source, gl.GL_READ_ONLY, gl.GL_RG32F), \
-                    bound_image(1, target, gl.GL_WRITE_ONLY, gl.GL_RG32F):
-                dispatch(groups, image_barrier)
-            source, target = target, source
-
-        use("edge_field_resolve", _RESOLVE_COMPUTE, ())
-        with bound_image(0, source, gl.GL_READ_ONLY, gl.GL_RG32F), \
-                bound_image(1, t["edge"], gl.GL_READ_ONLY, gl.GL_R16F), \
-                bound_image(2, t["field"], gl.GL_WRITE_ONLY, gl.GL_RG16F):
-            dispatch(groups, gl.GL_TEXTURE_FETCH_BARRIER_BIT)
+                    bound_image(1, t["edge"], gl.GL_READ_ONLY, gl.GL_RGBA16F), \
+                    bound_image(2, t["field"], gl.GL_WRITE_ONLY, gl.GL_RG16F):
+                dispatch(groups, gl.GL_TEXTURE_FETCH_BARRIER_BIT)
 
     def _allocate(self, size: tuple[int, int], internal: int, linear: bool, role: str) -> None:
         name = (ctypes.c_uint * 1)()
@@ -385,5 +388,9 @@ class EdgeField:
         self._textures = kept
         self._size = None
         self._key = None
+        try:
+            self._blocks.release()
+        except Exception as exc:
+            errors.append(str(exc))
         if errors:
             raise RuntimeError(f"{self.label} edge field cleanup incomplete: {' | '.join(errors)}")

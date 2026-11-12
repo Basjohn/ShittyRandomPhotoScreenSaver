@@ -154,8 +154,11 @@ captures matched the preceding implementation byte-for-byte.
   - It stops at an optional analytic ground plane and composites `dst x T + S`, plus a bloom share.
   - The steady share, smooth haze for example, is never eroded.
 - **Resources and lifecycle:**
-  - Three 3D textures per volume, plus one 2D target and the noise per march. All allocate at first use, are reused
-    at a size, and are released in the owning context.
+  - Three RGBA16F 3D textures per volume (medium, integral, steady share), plus one 2D target and the noise per
+    march. All allocate at first use, are reused at a size, and are released in the owning context. The steady share
+    was R16F until N1.2 (GLSL ES 3.1 has no `r16f` storage image; RGBA16F holds the same half value in .r, and the
+    medium, integral and march stayed bit-identical): at Waveform's largest grid (128 x 72 x 128) it went from 2.4 to
+    9.4 MB, and the reflected volume (80 x 45 x 96 at 1440p) from 0.7 to 2.8 MB; the update stayed about 0.05 ms GPU.
   - A mirrored reflection camera uses its own instances.
 - **Proof:** `tests/test_scene3d_fog_volume.py` proves exact slab transmittance and in-scatter in both projections,
   world anchoring (a moved clear sphere; a moved eye), the steady share surviving full erosion with erodible coverage
@@ -286,6 +289,13 @@ previous binding back (name, level, layering, access, format), because the trans
 `MeshResources.compute_program` compiles through `compile_compute_program` (shared link/cleanup with graphics programs)
 and `warm_programs` accepts `(resources, key, compute_source)` entries, so compute programs are gradual warm-up steps.
 No queue, scheduler, worker, readback or polling exists: work runs on the owning render thread in the frame that uses it.
+A compute program has no loose uniforms (Vulkan GLSL, N1.2): its values are one std140 `Scene3DBlockLayout` declared
+with `layout.glsl(COMPUTE_BLOCK_BINDING)`, which the pass's owner binds through its own `DispatchBlocks` (a small
+stream ring, warmed as one step of the owner's `warm`, left unbound after each scope; `rebind` gives a later dispatch
+in the same scope its own values). Every resource in a compute source has its own binding number (samplers, images,
+storage and the block share one namespace on Vulkan); in OpenGL the texture or image unit is that number.
+`tools/compute_pass_identity.py` records each converted pass's outputs on fixed inputs and its GL calls, and compares
+two records bit by bit.
 
 **First consumer: motion blur's tile max.** The candidates were measured first (2560x1440 offscreen, RTX 4090):
 
@@ -369,7 +379,10 @@ the CPU side stays constant. A future consumer with a smaller pool should be mea
 picture's nearest structural contour and that contour's strength (RG16F, linear) from the lent presentation texture:
 luma copy, two binomial blurs, Sobel ridges after non-maximum suppression (seeded at their sub-texel ridge position), jump flooding on 32-bit positions, resolve. Seven dispatches
 plus one per flood step, on the render thread in the frame that first needs it; image units are scoped by
-`bound_image`. Six textures at 768 px on the longer side (about 8.6 MB at 16:9: three R16F, two RG32F flood buffers, the RG16F field), allocated by the consumer's warm-up
+`bound_image`. Six textures at 768 px on the longer side (about 14.6 MB at 16:9: three RGBA16F for the luma, blur
+and strength, two RG32F flood buffers, the RG16F field; the three scalar images were R16F, 8.6 MB in all, until N1.2:
+GLSL ES 3.1 has no `r16f` storage image, and RGBA16F keeps the same half-float values, so the field stays
+bit-identical; the build went from about 0.11 to 0.13 ms GPU at 1080p), allocated by the consumer's warm-up
 for the render size and dropped at its `park()`; nothing exists otherwise. `edge_field_reference` is the CPU mirror
 (tests compare ridges and flooded distances). First consumer: Edge Bloom Reveal. Seeded differently it can serve
 organic fills (Capillary Bloom, Surface Tension Merge).

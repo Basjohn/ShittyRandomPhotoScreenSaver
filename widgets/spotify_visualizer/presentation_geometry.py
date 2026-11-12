@@ -43,6 +43,12 @@ VISUALIZER_CARD_SHADOW_SPREAD = 0.0
 EXPANDED_CARD_EDGE_GAP = 2.0
 
 
+def snap_to_device_pixels(value: float, dpr: float) -> float:
+    """The logical coordinate nearest ``value`` that lies on a whole device pixel (halves round up, as Qt's qRound)."""
+
+    return math.floor(float(value) * dpr + 0.5) / dpr
+
+
 def _finite(value: object, *, name: str) -> float:
     number = float(value)
     if not math.isfinite(number):
@@ -257,6 +263,74 @@ def resolve_visualizer_presentation(
         shell_style=style,
         expanded_display=bool(expanded_display),
     )
+
+
+def resolve_card_drawn_rect(
+    presentation: ResolvedVisualizerPresentation,
+) -> tuple[float, float, float, float]:
+    """Where the card is drawn: its outer rect on whole device pixels, display-logical (1C.4).
+
+    Qt Quick draws the card's frame anti-aliased and rounds its border to whole device pixels, so a card whose edges
+    fall inside device pixels (pixel shift, CUSTOM scale, centred layouts, fractional DPRs) has a frame edge pixel
+    that is part frame, part content: bright content reads as reaching into the border. Drawn on the pixel grid, every
+    straight frame edge falls on a pixel boundary. Origin and size snap separately (a moved card keeps its size),
+    each by at most half a device pixel. Only the card's drawing snaps: the record (its outer and content rects, its
+    world, extent and scale) stays the exact geometry every consumer derives from, and the content moves rigidly with
+    the drawn card. Resolved once per record (the scene's projection and the render node's clip), never per frame.
+    A frameless shell draws no frame and is drawn where it is.
+    """
+
+    rect = tuple(float(value) for value in presentation.outer_rect)
+    if presentation.shell_policy is not VisualizerShellPolicy.CARD:
+        return rect
+    dpr = float(presentation.dpr)
+    x, y, width, height = rect
+    return (
+        snap_to_device_pixels(x, dpr),
+        snap_to_device_pixels(y, dpr),
+        max(snap_to_device_pixels(width, dpr), 1.0 / dpr),
+        max(snap_to_device_pixels(height, dpr), 1.0 / dpr),
+    )
+
+
+def resolve_card_clip_path(
+    presentation: ResolvedVisualizerPresentation,
+) -> tuple[tuple[float, float, float, float], float]:
+    """The rounded path Visualizer content is clipped to: (rect, corner radius), display-logical (1C.4).
+
+    The card's frame is a Qt Quick ``Rectangle`` (``cardFrame`` in ``VisualizerPresentation.qml``) filling the drawn
+    card (``resolve_card_drawn_rect``): ``border.width`` is ``border_width`` and ``radius`` the record's
+    ``corner_radius``. Qt draws it with its pen pixel-aligned (``border.pixelAligned``: the width is rounded to whole
+    device pixels, half away from zero) and, the radius being non-zero, anti-aliased with a one-device-pixel ramp
+    centred on each edge (measured on the hidden production host). The drawn card's edges are on whole device pixels,
+    so the frame's inner edge, its rounded width inside them, lies on a pixel boundary too: along the straight edges no
+    pixel is part frame, part content, and the clip ends exactly there, with neither a blended pixel nor a ring of
+    card surface between the frame and the content. The corners are the frame's inner arc (concentric), whose pixels
+    Qt anti-aliases against whatever lies beneath, as any rounded edge. ``content_rect`` (the authored content
+    geometry, R-21) is unchanged; an authored content inset beyond the border is kept. A frameless shell draws no
+    frame: its clip is its content rect.
+    """
+
+    content_rect = tuple(float(value) for value in presentation.content_rect)
+    inner_radius = float(presentation.shell_style["inner_corner_radius"])
+    if presentation.shell_policy is not VisualizerShellPolicy.CARD:
+        return content_rect, inner_radius
+    dpr = float(presentation.dpr)
+    outer_x, outer_y, outer_width, outer_height = resolve_card_drawn_rect(presentation)
+    frame_inner_edge = math.floor(float(presentation.border_width) * dpr + 0.5) / dpr
+    if float(presentation.shell_style["content_inset"]) > 0.0:
+        inset = max(content_rect[0] - float(presentation.outer_rect[0]), frame_inner_edge)
+    else:
+        inset = frame_inner_edge
+    inset = min(inset, outer_width / 2.0, outer_height / 2.0)
+    rect = (
+        outer_x + inset,
+        outer_y + inset,
+        max(0.0, outer_width - 2.0 * inset),
+        max(0.0, outer_height - 2.0 * inset),
+    )
+    radius = max(0.0, float(presentation.shell_style["corner_radius"]) - inset)
+    return rect, radius
 
 
 def resize_visualizer_presentation(
@@ -496,6 +570,9 @@ __all__ = [
     "CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE",
     "EXPANDED_CARD_EDGE_GAP",
     "expanded_card_inset",
+    "resolve_card_clip_path",
+    "resolve_card_drawn_rect",
+    "snap_to_device_pixels",
     "resize_visualizer_presentation",
     "resolve_expanded_visualizer_presentation",
     "resize_visualizer_presentation_uniformly",

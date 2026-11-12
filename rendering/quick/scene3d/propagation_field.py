@@ -29,7 +29,9 @@ import math
 
 from OpenGL import GL as gl
 
-from .compute import bound_image, dispatch
+from rendering.gl_programs.scene3d import Scene3DBlockLayout
+
+from .compute import COMPUTE_BLOCK_BINDING, DispatchBlocks, bound_image, dispatch
 
 PROPAGATION_SIZE = 256
 PROPAGATION_PASSES = 192
@@ -44,16 +46,22 @@ float propagationArrival(sampler2D arrival, vec2 uv) { return texture(arrival, u
 float propagationExtent(sampler2D extent) { return texelFetch(extent, ivec2(0), 0).r; }
 """
 
-_HEADER = (f"#version 460 core\nlayout(local_size_x = {_GROUP}, local_size_y = {_GROUP}) in;\n"
-           "uniform ivec2 uSize;\nuniform float uAspect;\n"
-           "vec2 fieldPoint(ivec2 q) { vec2 uv = (vec2(q) + 0.5) / vec2(uSize);"
+# One dispatch block for the three stages (each reads its own members): the field size and aspect, and the seed's
+# sources (x, y, head start; w unused), their count and the costliest rate. The consumer's cost uniforms are its own.
+_DISPATCH_BLOCK = Scene3DBlockLayout.of("PropagationDispatch", (
+    ("uSize", "ivec2"), ("uAspect", "float"), ("uSourceCount", "int"), ("uBound", "float"),
+    ("uSources", f"vec4[{PROPAGATION_MAX_SOURCES}]")))
+_VERSION = "#version 460 core\n"
+# The stages' shared head (a fragment, not a shader: each stage puts the version line before it).
+_HEADER = (f"layout(local_size_x = {_GROUP}, local_size_y = {_GROUP}) in;\n"
+           + _DISPATCH_BLOCK.glsl(COMPUTE_BLOCK_BINDING)
+           + "vec2 fieldPoint(ivec2 q) { vec2 uv = (vec2(q) + 0.5) / vec2(uSize);"
            " return vec2((uv.x - 0.5) * uAspect, 0.5 - uv.y); }\n")
 
 
 def _seed_source(cost_glsl: str) -> str:
-    return (_HEADER + f"uniform vec3 uSources[{PROPAGATION_MAX_SOURCES}];\nuniform int uSourceCount;\n"
-            "uniform float uBound;\n"
-            "layout(r32f, binding = 0) writeonly uniform image2D uCost;\n"
+    return (_VERSION + _HEADER
+            + "layout(r32f, binding = 0) writeonly uniform image2D uCost;\n"
             "layout(r32f, binding = 1) writeonly uniform image2D uArrival;\n" + cost_glsl + """
 void main() {
     ivec2 q = ivec2(gl_GlobalInvocationID.xy);
@@ -68,7 +76,7 @@ void main() {
 """)
 
 
-_RELAX_COMPUTE = _HEADER + """
+_RELAX_COMPUTE = _VERSION + _HEADER + """
 layout(r32f, binding = 0) readonly uniform image2D uCost;
 layout(r32f, binding = 1) coherent uniform image2D uArrival;
 const ivec2 STEPS[16] = ivec2[](ivec2(1, 0), ivec2(-1, 0), ivec2(0, 1), ivec2(0, -1),
@@ -91,10 +99,8 @@ void main() {
 }
 """
 
-_EXTENT_COMPUTE = f"""#version 460 core
-layout(local_size_x = {_REDUCE_GROUP}) in;
-uniform ivec2 uSize;
-layout(r32f, binding = 0) readonly uniform image2D uArrival;
+_EXTENT_COMPUTE = _VERSION + f"""layout(local_size_x = {_REDUCE_GROUP}) in;
+{_DISPATCH_BLOCK.glsl(COMPUTE_BLOCK_BINDING)}layout(r32f, binding = 0) readonly uniform image2D uArrival;
 layout(r32f, binding = 1) writeonly uniform image2D uExtent;
 shared float partial[{_REDUCE_GROUP}];
 void main() {{
@@ -138,25 +144,28 @@ class PropagationField:
         self._size: tuple[int, int] | None = None
         self._key: tuple | None = None
         self._passes = -1          # -1: not seeded; then passes done; None once complete
+        self._blocks = DispatchBlocks(f"{label} propagation")
         self.builds = 0
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._textures)
+        return bool(self._textures) or self._blocks.has_resources
 
     @property
     def programs(self) -> list[tuple[str, str]]:
         return list(self._programs)
 
     def warm(self, pixel_size: tuple[int, int]) -> bool:
-        """Allocate for a render of ``pixel_size`` if not yet; True if it already was."""
+        """Allocate for a render of ``pixel_size`` if not yet (the textures and the dispatch blocks); True if it
+        already was."""
         size = propagation_size(pixel_size)
         if self._size == size and len(self._textures) == len(self._ROLES):
-            return True
+            return self._blocks.warm()
         self.release()
         try:
             for role, internal, linear in self._ROLES:
                 self._allocate(size if role != "extent" else (1, 1), internal, linear, role)
+            self._blocks.warm()   # part of the same allocation
         except Exception:
             self.release()
             raise
@@ -177,42 +186,37 @@ class PropagationField:
         width, height = self._size
         groups = (-(-width // _GROUP), -(-height // _GROUP), 1)
         t = self._textures
-        if self._passes == -1:
-            seed_key, seed_source = self._programs[0]
-            gl.glUseProgram(resources.compute_program(seed_key, seed_source))
-            locate = lambda name: gl.glGetUniformLocation(resources.compute_program(seed_key, seed_source), name)
-            gl.glUniform2i(locate("uSize"), width, height)
-            gl.glUniform1f(locate("uAspect"), width / height)
-            count = min(len(sources), PROPAGATION_MAX_SOURCES)
-            gl.glUniform3fv(locate("uSources"), count, [v for source in sources[:count] for v in source])
-            gl.glUniform1i(locate("uSourceCount"), count)
-            gl.glUniform1f(locate("uBound"), float(bound))
-            set_cost_uniforms(locate)
-            with bound_image(0, t["cost"], gl.GL_WRITE_ONLY, gl.GL_R32F), \
-                    bound_image(1, t["arrival"], gl.GL_WRITE_ONLY, gl.GL_R32F):
-                dispatch(groups, gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
-            self._passes = 0
-            return False
-        relax_key, relax_source = self._programs[1]
-        program = resources.compute_program(relax_key, relax_source)
-        gl.glUseProgram(program)
-        gl.glUniform2i(gl.glGetUniformLocation(program, "uSize"), width, height)
-        gl.glUniform1f(gl.glGetUniformLocation(program, "uAspect"), width / height)
-        todo = min(passes, PROPAGATION_PASSES - self._passes)
-        with bound_image(0, t["cost"], gl.GL_READ_ONLY, gl.GL_R32F), \
-                bound_image(1, t["arrival"], gl.GL_READ_WRITE, gl.GL_R32F):
-            for _ in range(todo):
-                dispatch(groups, gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
-        self._passes += todo
-        if self._passes < PROPAGATION_PASSES:
-            return False
-        extent_key, extent_source = self._programs[2]
-        program = resources.compute_program(extent_key, extent_source)
-        gl.glUseProgram(program)
-        gl.glUniform2i(gl.glGetUniformLocation(program, "uSize"), width, height)
-        with bound_image(0, t["arrival"], gl.GL_READ_ONLY, gl.GL_R32F), \
-                bound_image(1, t["extent"], gl.GL_WRITE_ONLY, gl.GL_R32F):
-            dispatch((1, 1, 1), gl.GL_TEXTURE_FETCH_BARRIER_BIT)
+        count = min(len(sources), PROPAGATION_MAX_SOURCES)
+        packed = [(*source[:3], 0.0) for source in sources[:count]]
+        block = _DISPATCH_BLOCK.pack({
+            "uSize": (width, height), "uAspect": width / height, "uSourceCount": count, "uBound": float(bound),
+            "uSources": packed + [(0.0, 0.0, 0.0, 0.0)] * (PROPAGATION_MAX_SOURCES - count)})
+        with self._blocks.bound(block):
+            if self._passes == -1:
+                seed_key, seed_source = self._programs[0]
+                program = resources.compute_program(seed_key, seed_source)
+                gl.glUseProgram(program)
+                set_cost_uniforms(lambda name: gl.glGetUniformLocation(program, name))
+                with bound_image(0, t["cost"], gl.GL_WRITE_ONLY, gl.GL_R32F), \
+                        bound_image(1, t["arrival"], gl.GL_WRITE_ONLY, gl.GL_R32F):
+                    dispatch(groups, gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+                self._passes = 0
+                return False
+            relax_key, relax_source = self._programs[1]
+            gl.glUseProgram(resources.compute_program(relax_key, relax_source))
+            todo = min(passes, PROPAGATION_PASSES - self._passes)
+            with bound_image(0, t["cost"], gl.GL_READ_ONLY, gl.GL_R32F), \
+                    bound_image(1, t["arrival"], gl.GL_READ_WRITE, gl.GL_R32F):
+                for _ in range(todo):
+                    dispatch(groups, gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+            self._passes += todo
+            if self._passes < PROPAGATION_PASSES:
+                return False
+            extent_key, extent_source = self._programs[2]
+            gl.glUseProgram(resources.compute_program(extent_key, extent_source))
+            with bound_image(0, t["arrival"], gl.GL_READ_ONLY, gl.GL_R32F), \
+                    bound_image(1, t["extent"], gl.GL_WRITE_ONLY, gl.GL_R32F):
+                dispatch((1, 1, 1), gl.GL_TEXTURE_FETCH_BARRIER_BIT)
         self._passes = None
         self.builds += 1
         return True
@@ -252,6 +256,10 @@ class PropagationField:
         self._size = None
         self._key = None
         self._passes = -1
+        try:
+            self._blocks.release()
+        except Exception as exc:
+            errors.append(str(exc))
         if errors:
             raise RuntimeError(f"{self.label} propagation cleanup incomplete: {' | '.join(errors)}")
 

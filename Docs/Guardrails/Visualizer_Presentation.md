@@ -268,7 +268,14 @@ version advancement by itself does not reopen the failed handoff. Current Quick 
 - temporary stencil contents and every touched direct-GL state are restored;
 - the clip is built from the record the scene draws the card from at this sync (the retained item's), never from the
   record inside a retained snapshot, which can be older and larger after a resize or a collapse from the display-wide
-  card (R-188; `tests/test_visualizer_card_clip_contract.py` checks every registered mode, steady and retained).
+  card (R-188; `tests/test_visualizer_card_clip_contract.py` checks every registered mode, steady and retained);
+- the card is drawn on whole device pixels (`resolve_card_drawn_rect`: the scene places the card item there, the
+  record stays exact) and the clip ends exactly at the frame's inner edge as Qt Quick draws it (pen rounded to whole
+  device pixels; `resolve_card_clip_path`), so along the straight edges no pixel is part frame, part content and no
+  card surface shows between frame and content (1C.4: over bright content a blended edge pixel reads as the content
+  reaching into the border; an inset leaves a dark seam, which is a defect). The corners are the frame's inner arc,
+  anti-aliased by Qt as any rounded edge. Pixel shift moves the cards by whole device pixels. `content_rect` stays
+  the authored content geometry (R-21).
 
 Do not preserve the failed clip-node route as a second selectable implementation.
 

@@ -44,15 +44,14 @@ def test_pinned_wheels_and_native_dependency_probe():
     req = source('requirements.txt')
     assert 'threadpoolctl==3.6.0' in req
     assert 'from threadpoolctl import threadpool_info' in source('tests/test_native_thread_pools.py')
-    for exact in (
-        'PySide6==6.11.2',
-        'numpy==2.4.5',
-        'Nuitka==4.2',
-        'PyAudioWPatch==0.2.12.9',
-        'psutil==7.2.2',
-    ):
-        assert exact in req
+    # The pins are exact (==) and the probe checks the pins themselves, so a version bump edits requirements.txt only.
+    from tools.python314_probe import pinned_versions
+    pins = pinned_versions()
+    for name in ('PySide6', 'PySide6_Addons', 'PySide6_Essentials', 'shiboken6', 'numpy', 'Nuitka', 'PyAudioWPatch', 'psutil'):
+        assert f'{name}=={pins[name]}' in req
+    assert len({pins[name] for name in ('PySide6', 'PySide6_Addons', 'PySide6_Essentials', 'shiboken6')}) == 1
     probe = source('tools/python314_probe.py')
+    assert 'pinned_versions()' in probe and '"6.' not in probe
     for token in ('QtCore.qVersion()', 'sys._is_gil_enabled()', 'struct.pack(', 'winrt.windows.media.control'):
         assert token in probe
 

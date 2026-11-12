@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import inspect
 
+import pytest
+
 from PySide6.QtQuick import QQuickItem, QSGRenderNode
 
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
@@ -76,19 +78,85 @@ def test_visualizer_item_returns_one_inline_render_node() -> None:
     assert isinstance(node.clip_host, VisualizerClipHost)
 
 
-def test_clip_frame_uses_item_local_inner_chrome_geometry() -> None:
-    presentation = _presentation(origin=(530.0, 240.0))
+@pytest.mark.parametrize("dpr", (1.0, 1.25, 1.5))
+@pytest.mark.parametrize("border", (3.0, 4.0))
+def test_clip_frame_uses_item_local_inner_chrome_geometry(dpr, border) -> None:
+    # 1C.4: the card sits on whole device pixels and the clip ends exactly at the frame's inner edge, which Qt Quick
+    # draws with its pen rounded to whole device pixels (border.pixelAligned, half away from zero): no pixel is part
+    # frame, part content, and no card surface shows between them.
+    import math
+
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("spectrum"), display_size=(1920.0, 1080.0),
+        outer_origin=(530.3, 240.3), dpr=dpr, border_width=border, corner_radius=8.0)
     frame = VisualizerClipFrame.from_presentation(
         presentation,
         matrix_values=tuple(float(index) for index in range(16)),
         viewport=(0, 0, 2880, 1620),
     )
 
-    assert frame.logical_size == (420.0, 280.0)
-    assert frame.local_content_rect == (4.0, 4.0, 412.0, 272.0)
-    assert frame.inner_corner_radius == 4.0
+    # The card is drawn (and its item placed) on whole device pixels; the clip is local to that drawn card.
+    drawn = tuple(math.floor(value * dpr + 0.5) / dpr for value in presentation.outer_rect)
+    outer_width, outer_height = drawn[2:]
+    assert frame.logical_size == pytest.approx((outer_width, outer_height))
+    frame_inner_edge = math.floor(border * dpr + 0.5) / dpr
+    inset_x, inset_y, width, height = frame.local_content_rect
+    assert (inset_x, inset_y) == pytest.approx((frame_inner_edge, frame_inner_edge))
+    assert (width, height) == pytest.approx((outer_width - 2.0 * inset_x, outer_height - 2.0 * inset_x))
+    # The corner is the parallel curve of the frame's inner corner (the same centre).
+    assert frame.inner_corner_radius == pytest.approx(8.0 - inset_x)
+    # The authored content geometry is unchanged (R-21): only the clip moves.
+    assert presentation.content_rect[0] - presentation.outer_rect[0] == border
     assert len(frame.matrix_values) == 16
     assert frame.viewport == (0, 0, 2880, 1620)
+
+
+def test_clip_path_is_resolved_once_per_record_at_sync_never_per_frame(monkeypatch) -> None:
+    from rendering.quick.visualizer import clip_host
+
+    calls = []
+    resolve = clip_host.resolve_card_clip_path
+
+    def counting(presentation):
+        calls.append(presentation)
+        return resolve(presentation)
+
+    monkeypatch.setattr(clip_host, "resolve_card_clip_path", counting)
+    node = VisualizerRenderNode()
+    first, second = _presentation(), _presentation(scale=0.8)
+    for _ in range(3):
+        node.synchronize(identity=None, snapshot=None, presentation=first)
+    assert calls == [first]
+    node.synchronize(identity=None, snapshot=None, presentation=second)
+    assert calls == [first, second]
+
+    # The render path builds its clip frame from the geometry resolved at sync, without resolving again.
+    geometry = VisualizerClipFrame.local_geometry(second)
+    del calls[:]
+    frame = VisualizerClipFrame.from_presentation(
+        second, matrix_values=tuple(float(index) for index in range(16)), viewport=(0, 0, 10, 10),
+        local_geometry=geometry)
+    assert calls == []
+    assert (frame.logical_size, frame.local_content_rect, frame.inner_corner_radius) == geometry
+    source = inspect.getsource(VisualizerRenderNode.render)
+    assert "local_geometry=self._clip_geometry" in source
+
+
+def test_frameless_clip_is_its_content_rect() -> None:
+    from core.settings.visualizer_mode_registry import (
+        VisualizerClipPolicy, VisualizerModePresentationPolicy, VisualizerShellPolicy,
+    )
+
+    presentation = resolve_visualizer_presentation(
+        policy=VisualizerModePresentationPolicy(
+            shell_policy=VisualizerShellPolicy.FRAMELESS, clip_policy=VisualizerClipPolicy.VIEWPORT_RECT,
+            viewport_resize_capable=True),
+        display_size=(1920.0, 1080.0), outer_origin=(530.0, 240.0), dpr=1.5, border_width=4.0, corner_radius=8.0)
+    frame = VisualizerClipFrame.from_presentation(
+        presentation, matrix_values=tuple(float(index) for index in range(16)), viewport=(0, 0, 2880, 1620))
+
+    assert frame.local_content_rect == (0.0, 0.0, 420.0, 280.0)
+    assert frame.inner_corner_radius == 0.0
 
 
 def test_item_consumes_exact_bridge_identity_once_and_resets_on_replacement() -> None:

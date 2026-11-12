@@ -2,34 +2,27 @@
 ``qsb`` for every backend it targets (SPIR-V, GLSL 430 and 310 es, HLSL 5.0, MSL 1.2).
 
 PySide6 ships ``qsb`` (glslang -> SPIR-V -> SPIRV-Cross), so the rule is enforced by test, over every compute source
-the tool discovers in the product (never a fixed module list). The compute shaders written before this test exist use
-loose uniforms outside a block (OpenGL-only GLSL); they are listed below and convert per mode as the native render
-core (P3) ports them. A ratchet: every compute shader not listed must compile, and a listed one that now compiles
-must leave the list (so it can never regress)."""
+the tool discovers in the product (never a fixed module list). There are no exceptions: the 18 loose-uniform sources
+that predated the rule (8 Nov 2026) were converted by D4 and N1.2 (12 Nov 2026), each bit-identical in OpenGL
+(``tools/compute_pass_identity.py``), and the exception list was removed with the last of them, so a compute source
+that does not bake for every target fails here, with no list to add it to."""
 import subprocess
 
 import pytest
 
 from tools.vulkan_shader_readiness import _compute_sources, _qsb, compile_source, compute_modules
 
-#: Compute shader sources that predate the rule (8 Nov 2026) and still use loose uniforms. Only ever shrinks.
-LEGACY_GL_ONLY = frozenset({
-    "rendering.gl_programs.fog_volume.FOG_INTEGRATE_COMPUTE",
-    "rendering.gl_programs.fog_volume._INJECT_HEAD",
-    "rendering.gl_programs.waveform_atmosphere.FIELD_COMPUTE",
-    "rendering.gl_programs.waveform_floor_give.FLOOR_GIVE_BLUR_COMPUTE",
-    "rendering.gl_programs.waveform_floor_give.FLOOR_GIVE_SECTION_COMPUTE",
-    "rendering.quick.scene3d.edge_field._BLUR_COMPUTE",
-    "rendering.quick.scene3d.edge_field._EDGES_COMPUTE",
-    "rendering.quick.scene3d.edge_field._FLOOD_COMPUTE",
-    "rendering.quick.scene3d.edge_field._HEADER",
-    "rendering.quick.scene3d.edge_field._LUMA_COMPUTE",
-    "rendering.quick.scene3d.edge_field._RESOLVE_COMPUTE",
-    "rendering.quick.scene3d.motion._TILE_MAX_COMPUTE",
-    "rendering.quick.scene3d.population.POPULATION_SCAN_SOURCE",
-    "rendering.quick.scene3d.propagation_field._EXTENT_COMPUTE",
-    "rendering.quick.scene3d.propagation_field._HEADER",
-    "rendering.quick.scene3d.propagation_field._RELAX_COMPUTE",
+# The modules whose compute sources this rule was written for (they must stay discovered, so a scan that silently
+# stopped finding them cannot pass vacuously).
+_CONVERTED_MODULES = frozenset({
+    "rendering.gl_programs.fog_volume",
+    "rendering.gl_programs.waveform_atmosphere",
+    "rendering.gl_programs.waveform_floor_give",
+    "rendering.quick.scene3d.edge_field",
+    "rendering.quick.scene3d.motion",
+    "rendering.quick.scene3d.population",
+    "rendering.quick.scene3d.propagation_field",
+    "rendering.quick.visualizer.implementations.extruded_bubble_drift_solver",
 })
 
 
@@ -40,30 +33,34 @@ def _require_qsb():
     return qsb
 
 
-def test_compute_shaders_compile_for_every_target_or_are_listed_legacy(tmp_path):
+def test_every_compute_shader_compiles_for_every_target(tmp_path):
     qsb = _require_qsb()
-    seen, new_failures, now_compiling = set(), [], []
+    seen, failures = set(), []
     for module_name in compute_modules():
         for name, source in _compute_sources(module_name).items():
             key = f"{module_name}.{name}"
             seen.add(key)
             ok, error = compile_source(qsb, source, tmp_path / f"{key.replace('.', '_')}.comp")
-            if not ok and key not in LEGACY_GL_ONLY:
-                new_failures.append((key, error))
-            if ok and key in LEGACY_GL_ONLY:
-                now_compiling.append(key)
-    assert len(seen) > len(LEGACY_GL_ONLY)
-    assert not new_failures, f"new compute shaders must be Vulkan GLSL for every qsb target: {new_failures}"
-    assert not now_compiling, f"these compile now: remove them from LEGACY_GL_ONLY: {now_compiling}"
-    assert LEGACY_GL_ONLY <= seen, f"listed shaders no longer exist: {sorted(LEGACY_GL_ONLY - seen)}"
+            if not ok:
+                failures.append((key, error))
+    assert len(seen) >= len(_CONVERTED_MODULES)
+    assert not failures, f"compute shaders must be Vulkan GLSL for every qsb target (no exceptions): {failures}"
 
 
 def test_compute_sources_are_discovered_not_listed():
     modules = compute_modules()
     # Every module the scan finds holds a compute source, and the ones this rule was written for are among them.
     assert all(_compute_sources(module) for module in modules)
-    assert {key.rsplit(".", 1)[0] for key in LEGACY_GL_ONLY} <= set(modules)
-    assert "rendering.quick.visualizer.implementations.extruded_bubble_drift_solver" in modules
+    assert _CONVERTED_MODULES <= set(modules)
+
+
+def test_an_r16f_storage_image_fails_the_es_target_and_rgba16f_compiles(tmp_path):
+    # Why the scalar half-float images became RGBA16F (edge field, fog steady share): GLSL ES 3.1 has no r16f image.
+    qsb = _require_qsb()
+    source = ("#version 460 core\nlayout(local_size_x=8) in;\nlayout(FORMAT, binding=0) writeonly uniform image2D i;\n"
+              "void main(){ imageStore(i, ivec2(gl_GlobalInvocationID.xy), vec4(1.0)); }\n")
+    assert not compile_source(qsb, source.replace("FORMAT", "r16f"), tmp_path / "r16f.comp")[0]
+    assert compile_source(qsb, source.replace("FORMAT", "rgba16f"), tmp_path / "rgba16f.comp")[0]
 
 
 def test_a_loose_uniform_fails_and_a_block_compiles(tmp_path):

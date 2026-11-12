@@ -71,6 +71,10 @@ class VisualizerRenderNode(QSGRenderNode):
         # The record the scene draws the card from at this sync (the item's own). The clip is built from it, never
         # from the retained snapshot's record, which can be older and larger (R-188).
         self._presentation: ResolvedVisualizerPresentation | None = None
+        # That record's clip geometry, resolved once when the record changes (never per frame).
+        self._clip_geometry: (
+            tuple[tuple[float, float], tuple[float, float, float, float], float] | None
+        ) = None
         self._logical_size = (0.0, 0.0)
         self._clip_host = VisualizerClipHost()
         self._render_host = QuickVisualizerRenderHost()
@@ -146,6 +150,12 @@ class VisualizerRenderNode(QSGRenderNode):
                 # pixels until a current source replaces them. A non-present
                 # logical publication likewise cannot erase a valid scene.
                 self._telemetry.note_admission_rejected()
+        if presentation is not self._presentation:
+            self._clip_geometry = (
+                None
+                if presentation is None
+                else VisualizerClipFrame.local_geometry(presentation)
+            )
         self._presentation = presentation
         self._logical_size = (
             (0.0, 0.0)
@@ -267,6 +277,7 @@ class VisualizerRenderNode(QSGRenderNode):
                 card,
                 matrix_values=matrix_values,
                 viewport=viewport,
+                local_geometry=self._clip_geometry,
             )
             if trace is not None:
                 trace.record(

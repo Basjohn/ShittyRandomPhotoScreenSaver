@@ -5,7 +5,7 @@
 that call. The original PySide 6.9.1 reproducer held the GIL for the whole call, so a
 render thread running Python (updatePaintNode, a DirectConnection render-phase slot, a Python
 render node) cannot finish the render stop the close waits for, and the whole
-process wedges. The pinned 6.11.2 runtime must be re-proven safe before this
+process wedges. The pinned runtime must be re-proven safe before this
 guard changes.
 
 ``request_application_quit`` queues the native ``quit()`` slot instead. The

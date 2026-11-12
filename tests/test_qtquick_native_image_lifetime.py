@@ -11,7 +11,7 @@ threaded render loop) and pin, on a real QQuickWindow:
 2. Once uploaded, later frames never read the buffer again.
 3. The original PySide 6.9.1 proof showed the Python buffer stays alive while any
    C++ QImage copy of it exists (texture/upload batch), not only while the wrapper
-   lives; the pinned 6.11.2 runtime must keep this contract.
+   lives; the pinned runtime must keep this contract.
 4. End to end, the production native node renders correct pixels when the
    GUI-side reference is dropped right after sync and freed memory is churned.
 
@@ -307,7 +307,7 @@ def test_steady_frames_do_not_read_the_native_image_again(probe) -> None:
 def test_pyside_ties_the_bytes_to_the_cxx_image_data_not_the_wrapper(qt_app) -> None:
     """Keep bytes alive for C++ QImage copies, not merely the Python wrapper.
 
-    The original PySide 6.9.1 proof established this; the pinned 6.11.2 runtime
+    The original PySide 6.9.1 proof established this; the pinned runtime
     must preserve it.
     """
 
