@@ -163,7 +163,7 @@ def check_display_choice(displays: list[Display], index: int, *, allow_primary: 
     if chosen is None:
         raise Refusal(f"no display {index} (present: {', '.join(str(d.index) for d in displays)})")
     if chosen.primary and not allow_primary:
-        raise Refusal(f"display {index} is the primary display; pass --allow-primary only with the operator's leave")
+        raise Refusal(f"display {index} is the primary display; pass --allow-primary only for a rare lead check nothing else can make")
     return chosen
 
 

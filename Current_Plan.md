@@ -203,11 +203,9 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
   the Python substrate and is therefore a port is listed in `Docs/Reference/Scene3D_Resources.md` ("Shared
   Scene3D capability inventory").
 
-**What can start now, with no product C++:** all of N1 (in the OpenGL renderer; the Medium slots), the contracts
-of N0 (D1 to D3, the rest of D5, N0.3, N0.4; Sonnet drafts, the lead decides), and the two harness proofs N0.6
-and N0.7 (C++ in `native/spike_p1`'s harness, never shipped; one High slot), built through N0.9's workflow. Of N2,
-two pieces wait for neither proof: N2.1 (the product module's build) and the Python half of N2.3 (Spectrum's native
-schema, the `payload_schema` check); N2.2 and N2.4 wait for N0.6 clean under validation and N0.3's scenes.
+**State, 12 Nov:** N0's contracts are decided, and N0.6 and N0.7 are proved (D6 and D9 accepted). The rest of N1
+is in flight. N2.1 (the product module's build) and the Python half of N2.3 (Spectrum's native schema, the
+`payload_schema` check) are in flight. N2.2 and N2.4 wait for N0.3's scenes.
 
 **Order.** N0 and N1 now. Then N2 (the substrate and Spectrum), N2b (the background layer and the first full
 rehearsal), N3 (the 3D substrate). From there two ordered tracks, one High slot each: the **modes track** (N5.1,
@@ -1635,6 +1633,9 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 - [ ] The overhead baseline cannot see the QML scene: `tools/overhead_baseline.py` renders render nodes on a bare
   host, never `DisplayScene.qml`, so scene-level dormancy (M3's cover) is proven by the QObject census and the
   no-per-frame-work structure instead.
+- [ ] Re-baseline after Qt 6.12.0 (doc sweep, 12 Nov): `tools/overhead_baseline.py`'s stored baselines and the
+  figures in `Docs/Reference/Benchmarks.md` predate the bump; record new baselines with system usage before the
+  next shared-path comparison.
 
 **Found while building Expanded Visualizer M3b (8 Nov; recorded, not yet admitted):**
 
