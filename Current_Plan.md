@@ -272,8 +272,7 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - Validation layer installed 12 Nov with the operator's yes: Khronos's Windows build from the nightly release of
     KhronosGroup/Vulkan-ValidationLayers (`Validation_Layers_Windows_64.zip`, 6,367,674 bytes, sha256
     1d65db0662b448af422c756609b472274a96998bc473a44bf514e353956da95d, published 12 Nov 08:09 UTC; the tagged SDK releases
-    carry Android binaries only), in `D:\Temp\Scratch\SRPSS
-ative_spikealidation_layers\extracted\`. The loader
+    carry Android binaries only), in `D:/Temp/Scratch/SRPSS/native_spike/validation_layers/extracted/`. The loader
     finds it only through the registry or `VK_ADD_LAYER_PATH`; the lead sets that variable for the harness process
     alone (no registry entry, nothing persistent), so `environment_clean` reports it.
   - [ ] First validated runs (module from 6850e8c4; evidence `.artifacts/evidence/native_core/n06/*_validated/`):
