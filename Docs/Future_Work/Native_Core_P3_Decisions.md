@@ -1010,6 +1010,164 @@ a Python callback reports a Python thread state.
 4. Pipelines are device-scoped and survive a mode release (rule 5). The alternative, releasing a mode's private
    pipelines with it, saves a little memory and costs a warm-up on every return to the mode.
 
+## N0.3. Conventions, written once and tested per backend
+
+*Proposed (draft for the lead), 12 Nov 2026. Nothing here is decided. Inputs: the lead's research file (outside the
+repository, `D:\Temp\Scratch\SRPSS\research\20261112\native_core_qrhi_gaps_and_conventions.md`, section N0.3, read
+only; its file:line citations were taken at `a5ee7189`, and the ones restated below were re-read at `7ac980d7`
+unless marked "research"), the Qt 6.11.2 QRhi documentation (doc.qt.io/qt-6/qrhi.html: `clipSpaceCorrMatrix()` "can
+be used to allow applications keep using OpenGL-targeted vertex data and perspective projection matrices ...
+regardless of the active QRhi backend", vertex data "Y up" and viewports "with depth range 0 - 1"; the example
+flips a readback with `if (rhi->isYUpInFramebuffer())`), and the sentences the research file quotes for
+`isYUpInNDC()` (false in practice for Vulkan only), `isYUpInFramebuffer()` (true in practice for OpenGL only) and
+`isClipDepthZeroToOne()` (false in practice for OpenGL only). Items marked *unverified* are proved by the harness
+scenes below before anything is built on them. The page was only partly readable in the fetch used for this draft
+(its first 100,000 of 151,680 characters), so the three `is*` sentences rest on the research file.*
+
+### The conventions, per backend
+
+| Convention | OpenGL | Vulkan | D3D11 / D3D12 | Metal |
+|---|---|---|---|---|
+| Clip-space Y (`isYUpInNDC()`) | up | **down** | up (QRhi's rule: false for Vulkan only) | up |
+| Framebuffer / render-target origin (`isYUpInFramebuffer()`) | bottom-left (true) | top-left | top-left | top-left |
+| Clip depth range (`isClipDepthZeroToOne()`) | -1..1 | 0..1 | 0..1 | 0..1 |
+| `gl_FragCoord` origin in the shader | bottom-left | top-left (SPIR-V `FragCoord`) | top-left | top-left |
+| `QRhiCommandBuffer` viewport and scissor origin | bottom-left on every backend (QRhi's rule; research, QRhiCommandBuffer page) | same | same | same |
+| Texture row order on upload | first uploaded row is texel row 0; QRhi's GL backend hides the API's own bottom-up order (*unverified here*) | same | same | same |
+| Front-face winding | QRhi defines CCW-front on the pre-correction, Y-up output for every backend, and the Vulkan backend compensates for the Y flip (research, *unverified*; one-triangle test below) | | | |
+| Uniform and storage layout | std140 and std430, identical across backends after SPIRV-Cross; use reflected offsets | | | |
+| sRGB | `QRhiTexture::sRGB` flag, not a format; non-sRGB targets in the product | same | same | same |
+| HDR intermediates | RGBA16F/RGBA32F/R16F/R32F; `RGB10A2` is unorm; no RG16F, RG32F, R11G11B10F (N0.2 item 13) | same | same | same |
+
+Metal is listed as QRhi reports it; it cannot be run on this project's machine (Windows only), so it is a Watchlist
+entry and never a claim. D3D11 and D3D12 are run through QRhi's backends in the hidden harness where Qt provides
+them (the P1 spike already creates a D3D pipeline, `Native_Core_P1_Spike.md:103-106`).
+
+### The rules (proposed)
+
+1. **CPU matrices stay in OpenGL form, from one owner, and are corrected once, at upload.**
+   `core/settings/framed_camera.py:286-289` (`perspective_matrix`) builds the OpenGL form (`(far + near) /
+   (near - far)` and `2 far near / (near - far)`, NDC z in [-1, 1], the docstring of `view_matrices` at `:294` says
+   "GL mat4 projection"); the substrate multiplies `clipSpaceCorrMatrix()` on the left exactly once, when the scene's
+   uniform block is written, never in a shader and never twice. Matrices that arrive from Quick
+   (`QSGRenderNode::projectionMatrix()`) are already corrected by Qt for Quick's own pass and are **not** corrected
+   again (the P1 spike's use: `native/spike_p1/src/quick_item.cpp:40`, `quadfield.cpp:184-190`, per the research
+   file); the composite uses Quick's matrices, the scenes the core renders itself use the corrected camera matrix.
+   One flag in the matrix object records "corrected", and writing a corrected matrix through the correcting path
+   fails an assertion.
+2. **Offscreen targets the core owns have one defined origin: texel (0,0) is top-left, window Y points down, on every
+   backend.** The include provides the translation from whatever the backend's `gl_FragCoord` is, so a texture
+   written by one pass and sampled by the next never needs a per-pass flip. Item-pixel arithmetic that is Y-up today
+   (`rendering/quick/scene3d/frame.py:19-34` keeps "the bottom-up convention the transition fragments were authored
+   in": `vUv = vec2(aPosition.x, 1.0 - aPosition.y)`, `:31`) gets one flip at the substrate boundary.
+3. **One include, `srpss_conventions.glsl`, is the only place a shader learns a backend convention.** It provides:
+   - `ivec2 fragTexel()`: the fragment's pixel in the top-left, Y-down convention (flips `gl_FragCoord.y` against
+     the target height when the backend's framebuffer is Y-up);
+   - `vec2 fragUv(vec2 targetSize)`: `(fragTexel() + 0.5) / targetSize`;
+   - `vec2 ndcToUv(vec2 ndc)` and `vec2 uvToNdc(vec2 uv)`: the clip-to-texture mapping for the backend's NDC Y
+     direction (after rule 1 this is the same expression on every backend; the include exists so no shader writes
+     `ndc * 0.5 + 0.5` by hand, the form at `rendering/gl_programs/waveform_ribbon.py:159` and
+     `rendering/quick/qml/shaders/surface_material.vert:30` per the research);
+   - `float viewDepthFromDepthTexture(float d)`: sampled depth is window depth in [0, 1] on every backend once
+     rule 1 has run, so this is one function and the only place a reverse-Z or range change would ever go.
+   The backend values arrive in a small std140 block (two or three floats and ints) at one reserved binding. It is
+   written once per device at creation (the values never change for a device), so it adds no per-frame upload. (SPIR-V is
+   shared by Vulkan, D3D and Metal after translation, so a compile-time branch per backend is not available; a
+   uniform is.)
+4. **Front face is one function of (the item matrix's handedness, `isYUpInNDC()`)**, evaluated when pipelines are
+   created, giving two pre-built pipeline variants (CW and CCW) for every culling pass. Today
+   `sphere_voxel.py:988-992` and `:1072-1076` choose `GL_CW` or `GL_CCW` each frame from the sign of
+   `matrix_values[0] * matrix_values[5]` (Quick's item matrix is Y-down) and restore the state after
+   (`:1025-1026`); modes that cull are few (the rest draw with culling off; research). `gl_FrontFacing` users
+   (`rendering/gl_programs/ribbon.py:658`, the back-side normal) are covered by the third test scene.
+5. **Uniform blocks are std140, storage blocks std430, and C++ packs from reflected offsets, never hand-computed
+   ones.** Rules the packer and the shaders follow: `vec3` aligns to 16; arrays of scalars, `vec2` or `vec3` in a
+   std140 block have a 16-byte stride (so padded float arrays become `vec4`-packed arrays); `mat3` is three `vec4`;
+   structs round to 16; a following scalar may fill a preceding `vec3`'s padding; storage blocks keep natural
+   array strides but `vec3` stays 16-aligned; dynamic uniform offsets are aligned to `QRhi::ubufAlignment()`.
+   Today: 838 `glUniform*`/`glProgramUniform*` call sites with loose uniforms (research count), 33 block
+   declarations in 13 files; N1.2 and N1.3 move every program to blocks (`Current_Plan.md`, N1). The Python packer
+   `Scene3DBlockLayout` (`rendering/gl_programs/scene3d.py:1070`) is the oracle the C++ packer is first tested against.
+6. **sRGB and HDR: keep the product's rule.** Targets are plain unorm or float and shaders do the math, so a backend
+   change moves no pixel; the single sRGB asset (the floor albedo, `GL_SRGB8_ALPHA8`,
+   `rendering/quick/scene3d/waveform.py:114`) uses the `sRGB` texture flag on every backend, and the harness checks
+   the sampled value against the OpenGL decode. No `GL_FRAMEBUFFER_SRGB` is enabled anywhere in `rendering/` (grep:
+   none). An HDR swapchain is not admitted (D8 plus 9).
+
+### What today assumes OpenGL conventions (inventory, `rendering/` and `core/settings/`, at `7ac980d7`)
+
+- **`gl_FragCoord` as texel or uv: 51 occurrences in 14 files.** Texel addressing into offscreen targets:
+  `rendering/quick/scene3d/target.py:112,130,142,180,193,228,235,272,279,289,304,317,334,343` (for example
+  `ivec2 texel = ivec2(gl_FragCoord.xy) - uOrigin` at `:130,142,228,235,272,279`), `defocus.py:93,150-153`,
+  `motion.py:115`, `trails.py:40`, `shafts.py:56`, `rendering/gl_programs/fog_volume.py:160,283`,
+  `reflection.py:84`. Uv from fragment position over a target size:
+  `rendering/gl_programs/extruded_bubble_program.py:194,196,584-587,896,1010,1058,1940`, `waveform_ribbon.py:159,189,
+  204`, `extruded_spectrum_program.py:415`, `rendering/quick/visualizer/implementations/sphere_voxel.py:651`,
+  `defocus.py:106,119`. NDC from fragment position: `extruded_bubble_program.py:980,1164`
+  (`gl_FragCoord.xy / uFrameSize * 2.0 - 1.0 - uLensShift`). The Quick material shaders use it for a noise seed only
+  (`surface_material.frag:178`), which no convention can change visibly.
+- **Front-face and culling:** `sphere_voxel.py:988-992,1025-1026,1072-1076`; `ribbon.py:658` (`gl_FrontFacing`).
+- **The perspective matrix and depth:** `core/settings/framed_camera.py:286-289` (OpenGL form, rule 1);
+  `glClearDepth(1.0)` with the OpenGL depth test at `scene3d/target.py:845,885`, `scene3d/resources.py:324`,
+  `transitions/render_host.py:139`, `transitions/implementations/block_spins.py:172`; depth read back as a sampled
+  texture in `scene3d/target.py:306` (the nearest depth, `texelFetch(uDepth).r`; research).
+- **Texture and readback origin:** `rendering/quick/offscreen_target.py:179` and
+  `rendering/quick/render/background_node.py:686` (`glReadPixels`, bottom-up rows); `frame.py:31` above.
+- **sRGB:** `scene3d/waveform.py:114` only.
+- **Not re-read for this draft (research file, `a5ee7189`):** the transition fragments' own flips
+  (`gl_programs/blinds_program.py:60-61`, `beam_program.py:136`, `blockspin_program.py:281-290`,
+  `capillary_bloom_program.py:92`, `blinds_slats_program.py:141`), `visualizer` depth-func flips in
+  `shockwave_grid.py:473-581`, and the Quick `.qsb` shaders baked `--glsl 460` only (`surface_material.vert:2`).
+
+N1.4 applies the include to every existing shader in the OpenGL renderer, where each stays pixel-identical on
+OpenGL (the include's OpenGL values make it an identity there) before any C++ exists; the include is therefore
+proved against the Python path first.
+
+### The three test scenes (hidden host, run on OpenGL, Vulkan, D3D11 and D3D12 where available; Metal Watchlist)
+
+Each scene renders a fixed, single-sampled frame to an offscreen target, reads it back (flipped by
+`isYUpInFramebuffer()` only in the harness's own readback), and is compared with **both** the analytical expected
+image and the OpenGL result. They are the proof for rules 1 to 6; they live in the P1 harness (after N0.9).
+
+1. **Checkerboard with a gradient.** A target of non-square size (so a width/height mix-up shows) with a checker
+   whose four corner cells have four distinct colours, a horizontal red gradient and a vertical green gradient, drawn
+   by a first pass and then sampled by a second pass that writes its own `fragUv()` and `fragTexel()` as colour.
+   Checks: texel (0,0) is top-left on every backend; `fragUv`, `fragTexel` and `ndcToUv` agree with the pass
+   that wrote the texture; the upload row order; the harness readback flip; the sRGB strip (a small sRGB-flagged
+   gradient texture) equals the OpenGL decode; a std140 block with a `vec3`, a `vec3` array, a `mat3` and a trailing
+   scalar is packed from reflected offsets and its values read back through colour. *Negative controls:* drop
+   the Y correction in the include (the corner colours swap on Vulkan); drop `clipSpaceCorrMatrix()` from rule 1
+   (the image is upside down on Vulkan); pack the block with hand-computed offsets that ignore the `vec3` rule (the
+   block test fails).
+2. **A known-depth plane.** A plane facing the camera at a chosen view depth (and a second nearer one that
+   overlaps it), rendered through the project's camera matrix (`framed_camera.perspective_matrix` with the corrected
+   upload) into a `D32F` target, then sampled by a pass that writes `viewDepthFromDepthTexture()`. Checks: the stored
+   value equals the analytical window depth (the same number on every backend, within a stated float tolerance); the
+   nearer plane wins the depth test; clear value and `GL_LESS`-style compare agree; the near and far clip planes
+   cull at the same depths. *Negative controls:* skip the depth part of the correction (the value is wrong on
+   Vulkan, D3D and Metal); upload an uncorrected matrix.
+3. **One culled triangle.** Two triangles, one counter-clockwise and one clockwise as authored in OpenGL form, drawn
+   with back-face culling and the front face from rule 4, once with Quick's Y-down item matrix and once with an
+   up-facing one; each triangle has a distinct colour, and a second pass colours by `gl_FrontFacing`. Checks: the
+   same triangle is culled on every backend; the matrix-handedness switch of `sphere_voxel.py:988-992` gives the same
+   image; `gl_FrontFacing` agrees. *Negative control:* fix the front face to CCW regardless of handedness (the
+   wrong triangle is culled on Vulkan or with the Y-down matrix).
+
+**Pass condition per scene:** the harness image equals the analytical image within its stated tolerance on each
+available backend and the backends equal each other within the P1 spike's measured backend difference (0 to 3 of
+255 on trivial content, D8 point 1). A new backend or a Qt upgrade (D11) reruns the three scenes first.
+
+### Questions for the lead (N0.3)
+
+1. Rule 2 chooses **top-left, Y-down** for core-owned offscreen targets (the research file's choice), not OpenGL's
+   bottom-up. The alternative keeps OpenGL's bottom-up and flips on Vulkan, D3D and Metal; it leaves the existing
+   shaders untouched on OpenGL but makes every other backend the odd one. The draft prefers the former because
+   Vulkan is to be the front face.
+2. Reverse-Z (`D32F`, near at 1) is not proposed; it is a separate decision if depth precision at EB's near plane
+   (N1, "the beads at the near plane") calls for it.
+3. The conventions block is one binding reserved in every shader. Is a fixed binding index acceptable, or should it
+   be allocated by the pass-graph builder?
+
 ## Long-term risks of this direction, and what holds each (audit, 12 Nov 2026)
 
 | Risk | Why it could make the direction fail | What holds it |
