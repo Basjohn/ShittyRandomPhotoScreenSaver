@@ -200,18 +200,22 @@ Corrections only; no open box of today was deleted except the one named.
   "What can start now" names N2.1 and N2.3's Python half.
 - N0: new boxes for N0.3's three scenes; N0.4's remainder (the camera in the packet, D5.5's tests) and the offline
   Waveform hosts; N0.6 failing closed, the admitted layer path and D6's heading; N0.7 split into D9's six steps
-  behind N0.6's attribution; under N0.8 the frozen build on 6.12 and the handoff control. The four note-boxes under
-  N0.8 moved to N4.c, N3.6 and the modes track; the `@Slot` box removed (nothing to do; the rule stands in the
-  agent rules).
+  behind N0.6's attribution; under N0.8 the frozen build on 6.12 and the handoff control.
 - N1: new boxes for the conventions registry (High) and its holders; N1.2's line corrected (module-level sources;
   six composed programs on the ratchet); N1.4 reworded to its remainder; N1.6 ordered by first consumer with one
   box per group; N1.8 lists its uses.
 - N2: N2.1 reworded to what is left; N2.3 gains its Python half; N2.5 carries R-197's rule and names its N1.6
   prerequisite and the timer.
 - N3.6 and N4.c: the Qt 6.12 clauses moved in; N4.c's service wording corrected.
-- 1C.2: a box for the prepared neighbour's per-frame feed. 1C.4: a box for R-192's enclosed axis and the unseen
-  Display 0 change.
+- 1C.2: a box for the prepared neighbour's per-frame feed. 1C.4: a box for R-192's enclosed axis (the Display 0
+  check of the second axis was already a box).
 - Item 5, item 6 and 1A 1.9: the detail the freshness pass deleted is restored (from 1d16c74d's removed lines).
+  Item 5's two stubs "Retain concrete failing palette roles" and "Raw linked widget mirrors remain an authoring
+  concern" are folded into the restored re-authoring box, not dropped.
+- Moved, not deleted (today's boxes under N0.8): QRhi indirect draws and `DrawIndirectMulti` to N4.c, shader draw
+  parameters to the modes track's rule, `VK_EXT_device_fault` to N3.6. Deleted with its reason: the
+  `@Slot(result=...)` box, which asked for nothing (the rule that QML-signal handlers are plain methods stands in
+  the guardrails whatever 6.12's changelog says).
 
 ## 6. Not verified
 
