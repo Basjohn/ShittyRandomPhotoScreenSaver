@@ -149,6 +149,10 @@ not a different renderer.
 
 ### 0.7 Performance budgets, including 4K, and the backend triggers
 
+*(12 Nov 2026, doc sweep: the native core is no longer waiting on a trigger; it is admitted work, `Current_Plan.md`
+item 8b, Vulkan the default after the flip. The triggers below now only decide whether a 4K miss is recorded as a
+budget failure; M6 waits on Extruded Bubble's port, item 8b N5.)*
+
 Budgets are the live-shape ones in `Docs/Guides/Visualizer_Change_Checklist.md` §1C, applied at the display size.
 Measure with `tools/visualizer_live_check.py --mode <mode> --preset N --load game60` on the quiet machine, A/B
 alternated against the card size, system conditions recorded (`Docs/Reference/Benchmarks.md`), median and p90.
@@ -196,7 +200,7 @@ Repository `Basjohn/ShittyRandomPhotoScreenSaver`, default `main`, examined 2026
 
 | Existing fact / seam | Actual source of authority | Consequence for implementation |
 | --- | --- | --- |
-| One accelerated retained `QQuickWindow` per participating display, Qt 6.11.2/OpenGL 4.6, `QSGRenderNode` | `Spec.md` Build/runtime presentation; `Docs/Contracts.md` Physical presentation; `rendering/quick/runtime.py`; `rendering/quick/qml/DisplayScene.qml` | Expansion enlarges the existing retained visualizer inside the **existing** display, not an extra window, `QQuickWidget` or second GL context. |
+| One accelerated retained `QQuickWindow` per participating display, Qt 6.12.0 (6.11.2 when examined on 5 Nov)/OpenGL 4.6, `QSGRenderNode` | `Spec.md` Build/runtime presentation; `Docs/Contracts.md` Physical presentation; `rendering/quick/runtime.py`; `rendering/quick/qml/DisplayScene.qml` | Expansion enlarges the existing retained visualizer inside the **existing** display, not an extra window, `QQuickWidget` or second GL context. |
 | One Visualizer owner/controller/logical clock/DSP lane and newest-state bridge | `Docs/Contracts.md` Transition / visualizer; `Docs/Reference/Visualizer_Reference.md`; `widgets/spotify_visualizer/quick_display_visualizer_owner.py`; `widgets/spotify_visualizer/quick_presentation_sync.py` | Expansion must not recreate simulation, analysis, mode, preset, camera or frame cadence. |
 | `DisplayManager` admits exactly one visualizer to participating displays | `engine/display_manager.py::_admit_quick_visualizer`, `_construct_quick_visualizer_owner_on`; `rendering/quick/visualizer_admission.py` | Expansion attaches to that owner; `ALL` still selects first participating display; unavailable explicit monitor does **not** silently reroute. |
 | Existing cross-display visualizer transfer is transactional | `engine/display_manager.py::_transfer_quick_visualizer_unit`; `rendering/quick/scene_controller.py::_release_visualizer_for_transfer/_adopt_visualizer_transfer` | Extend this seam for takeover handoff. Never use retire/recreate for a normal move. |

@@ -181,7 +181,7 @@ changes with the version, so the next run fetches the new SDK. Older entries sta
 
 ## Limitations
 
-- GitHub builds pushed commits only. Uncommitted work needs a commit and push first (a local build covers it).
+- GitHub builds pushed commits only. Uncommitted work needs a commit and push first (the operator's local build covers it; the lead never builds locally).
 - The runner's toolchain is GitHub's `windows-2025` image (Visual Studio 2022 MSVC) with Python 3.14 from
   `actions/setup-python`, not this machine's Build Tools; the requirement pins and Nuitka version are identical.
 - The Linux Media Center artifact uses `srpss-linux-mc` and publishes `SRPSS-<version>-linux-mc-x86_64.tar.gz`;
@@ -190,7 +190,7 @@ changes with the version, so the next run fetches the new SDK. Older entries sta
 - The repository is public: its Actions minutes on standard runners are free, and run logs and artifacts are
   visible to signed-in GitHub users until they expire (3 days; failure logs 7).
 - Each run reinstalls `requirements.txt` into a fresh `.venv`; Nuitka's compile cache is kept between runs.
-- No installer is compiled on GitHub. The Linux job is the other tabs' own (`Docs/Guides/Linux_Guide.md` §7); here it
+- No installer is compiled on GitHub; the lead's installers are the Build Runner's Inno step over the downloaded payloads, and the operator may compile them locally too. The Linux job is the other tabs' own (`Docs/Guides/Linux_Guide.md` §7); here it
   builds the pre-flight's commit, and its tarball is downloaded as is (no manifest validation like the Windows
   products; the runner's smoke test is its gate). Only this tab's Linux dispatch sends the workflow's `commit` and
   `token` inputs (`-Commit`): GitHub refuses inputs a branch's `linux-build.yml` does not declare (HTTP 422), so the

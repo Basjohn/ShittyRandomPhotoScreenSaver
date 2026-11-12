@@ -771,7 +771,8 @@ Traps to decide before P3's first slice:
      universal: Intel Arc and most mobile and Apple GPUs lack native fp64. **Resolved by D4 (12 Nov 2026,
      `Native_Core_P3_Decisions.md`):** both programs now use no 64-bit float and compile for every `qsb` target.
    - QRhi exposes no fp64 feature query. Correction (12 Nov 2026): `qsb` compiles fp64 to SPIR-V only when SPIR-V
-     is its only target, which is how the ratchet called it then; with the GLSL ES, HLSL 5.0 and MSL targets it
+     is its only target, which is how the ratchet called it then; with the GLSL ES (superseded on 12 Nov 2026 by N1.7:
+     GLSL ES is no longer a target, the baked set is SPIR-V, GLSL 430, HLSL 5.0 and MSL 1.2), HLSL 5.0 and MSL targets it
      refuses fp64 ("FP64 not supported in ES profile", "double types are not supported in buffers in MSL"), so the
      ratchet, which now bakes every target (`tests/test_vulkan_shader_readiness.py`), does see it. The drift solver
      never reached `qsb` before D4 anyway: its loose uniforms failed first.

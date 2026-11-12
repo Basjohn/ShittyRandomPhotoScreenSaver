@@ -9,13 +9,15 @@ This is the **short preflight**, not a second documentation authority. Use the f
 - Physical display owns one standalone `QQuickWindow` and retained Qt Quick scene; **Settings is Qt Widgets**. The only Qt Quick window opened from Settings is the Visualizer Studio, which saves through Settings' canonical preset/Custom authority and always restores the same Settings window ([Visualizer Studio](Reference/Visualizer_Studio.md)). No retired presenter fallback, duplicated scene authority or new presentation polling loop.
 - Qt Quick owns scheduling; preserve latest-wins state, transition admission, render-thread safety and bounded lifetime. No unnecessary dormant work or GUI blocking.
 - Keep visualizers musically faithful and geometrically correct. Performance changes cannot reduce authored fidelity.
-- **The Visualizer runs in the engine worker by default (Windows):** capture, DSP and the tick live in
-  `WorkerType.VISUALIZER`; in process is the bounded automatic fallback, the `--viz-in-process` A/B control and the
-  current Linux path. Automatic fallbacks warn/error with their reason; capacity violations never fall back.
+- **The Visualizer runs in the engine worker by default (every platform; on Linux a source-level default that has
+  never run, `Spec.md` and `Linux_Plan.md` Phase 4):** capture, DSP and the tick live in
+  `WorkerType.VISUALIZER`; in process is the bounded automatic fallback and the `--viz-in-process` diagnostic
+  control. Automatic fallbacks warn/error with their reason; capacity violations never fall back.
   One owner of logical state: never keep a main-side engine or tick copy beside the worker, never block the
   GUI on a worker reply, and keep the worker importing QtCore only ([Contracts](Contracts.md) "Process path").
-- **Graphics backend (decided 5 Nov 2026, [decision](Future_Work/Graphics_Backend_Decision_2026-11-05.md)):** when Vulkan
-  (or any non-GL API) is admitted, it is a **native (compiled) render core behind `QSGRenderNode`, hosted by Qt Quick on
+- **Graphics backend (decided 5 Nov 2026, [decision](Future_Work/Graphics_Backend_Decision_2026-11-05.md); on 12 Nov 2026
+  the native core was admitted as `Current_Plan.md` item 8b, Vulkan the default and OpenGL selectable, see the
+  decision's addendum and `Future_Work/Native_Core_P3_Decisions.md`):** Vulkan (or any non-GL API) is, a **native (compiled) render core behind `QSGRenderNode`, hosted by Qt Quick on
   its RHI backend**: that is better than today (no GIL on the render thread; DLSS/FSR via the RHI native handles). A
   Python-driven Vulkan/D3D port is forbidden: far more API calls per frame, each fighting for the GIL, so it is worse
   than today's GL. Whole-frame upscalers are rejected for our content (FSR 1/spatial: soft lines, ringing on dot grids

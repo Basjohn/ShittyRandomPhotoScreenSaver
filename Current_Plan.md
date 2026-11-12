@@ -382,7 +382,7 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 
 - D4 landed (D4.1 to D4.8 merged 12 Nov, evidence `.artifacts/evidence/native_core/20261112_d4/`): no 64-bit type
   in either drift program; exact Dekker products instead of `fma` (`qsb` turns `fma` into HLSL `mad`, which may round
-  twice); baked for SPIR-V, GLSL 430 and 310 es, HLSL 5.0 and MSL 1.2; the readiness check discovers compute sources
+  twice); baked for SPIR-V, GLSL 430, HLSL 5.0 and MSL 1.2; the readiness check discovers compute sources
   and bakes every target (`LEGACY_GL_ONLY` now 16); full specks 0.279 to 0.050 ms GPU and 3.89 to 0.34 ms CPU
   submit; the worst 4K difference 1.4 px at the near plane (the old `double` path 1.3 px; both keep float32
   displacement); the stream ring sized to the chain count; a warm-up self-check of the pair arithmetic.
@@ -942,7 +942,7 @@ Measured: press-to-menu on the untouched path 300-308 us before, 311-314 us afte
 Tools: `--only-display <index>` (RUN only, fails closed) and `tools/d1_run.py` (the real saver on one display,
 bounded, frames read back from the saver's own window and from the desktop, crops, logs; refuses the primary
 display; `--help` holds the recipes); both in `Docs/Reference/Harness_Index.md`. Permissions (operator, 11 Nov):
-bounded runs on Display 1 are the lead's; Display 0 is never taken; builds run only through GitHub's workflows.
+bounded runs on Display 1 are the lead's; Display 0 is rare (the lead only, through `--allow-primary`, never in a test, recipe or automated run; agents never take it); builds run only through GitHub's workflows.
 Agents build harnesses and prove them hidden; each visible run is short, bounded, fails closed and tears down.
 Every `[~]` box in this plan that says "D1 run", "Studio run on D1" or "Frozen run" is run in these sessions.
 

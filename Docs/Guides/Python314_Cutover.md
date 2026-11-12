@@ -5,7 +5,7 @@
 ## Interpreter, dependencies and compiler
 
 - Run developer tools with `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.venv\Scripts\python.exe` (or `pythonw.exe` for GUI desktop shortcuts), not a global `python`/`pythonw` or obsolete `C:\Python311` path.
-- PySide6/Qt **6.11.2**; NumPy **2.4.5**; Nuitka **4.2**; PyAudioWPatch **0.2.12.9**; `threadpoolctl` inspects the actual NumPy 2 BLAS backend. The pinned `requirements.txt` and helper requirements are authoritative.
+- PySide6/Qt **6.12.0** (bumped from 6.11.2 on 12 Nov 2026, commit 655b04bf); NumPy **2.4.5**; Nuitka **4.2**; PyAudioWPatch **0.2.12.9**; `threadpoolctl` inspects the actual NumPy 2 BLAS backend. The pinned `requirements.txt` and helper requirements are authoritative.
 - Windows frozen builds require **Visual Studio 2022+ Build Tools**, *Desktop development with C++*, MSVC and Windows SDK. Nuitka's regular MinGW64 flow is unsupported under Python 3.14; experimental forced MinGW is not the SRPSS release authority. Retain `--msvc=latest` until the operator accepts an alternative compiler.
 - `scripts/python314_runtime.ps1` resolves the single interpreter. Normal and Repo Venv Build Runner options still have independent build workspaces but use the **same repo `.venv` Python for QRC and Nuitka preparation**. Godzip Foundry RUN SCRIPT does not rewrite pasted commands.
 - Preserve `core/native_threads.py`'s **one OpenBLAS thread before NumPy import**, including child processes, and the Qt GUI image-pool thread-retention policy (R-99/R-97). Both are native-memory/thread-churn guardrails, not optional Python-migration cleanup.
@@ -23,7 +23,7 @@ workarounds. If the warning also occurs outside the managed sandbox, investigate
 
 The operator's migration tooling selection passed **47/47**; R149's source repair focus passed **124/124**; R150 Sphere/Shockwave audio isolation focus passed **96/96**; and R151's Windows Steam/Settings regression selection passed **106/106**. Sphere and Shockwave were also physically accepted. Those focused results do not imply a full R151 destination-suite pass. The latest supplied four-chunk results, from before the R151 publication-lock repair, had one Windows Steam final-publication collision in chunk 4; its repair has now passed the relevant focused tests. The now-retired R149 test diary is not current evidence authority; the substantial Sphere analysis and cache publication mechanisms remain in R150 and R151, linked from `Docs/Historical_Bugs.md`.
 
-## Build and physical acceptance | operator owns execution
+## Build and physical acceptance | the operator (locally) or the lead (GitHub workflows only) runs builds
 
 **Agents must not launch Build Runner, Nuitka, installers, trial builds, helper freezes, or expensive product compilation.** The **operator** runs Standard (which also publishes the Diagnostic file), Media Center and Reddit Helper frozen builds and provides their outputs, Nuitka compilation reports and footprint JSON. The agent then diagnoses the actual logs and returns source corrections with only relevant focused tests. A full four-chunk repeat is **not requested** unless the operator chooses it.
 
