@@ -292,6 +292,26 @@ def test_the_harness_fails_a_vulkan_run_without_the_layer_when_validation_is_req
     assert host_check.api_verdict("vulkan", left_open, require_validation=True)[0] is False
 
 
+def test_the_lifecycle_judges_the_core_against_qt_alone_on_the_same_api():
+    def series(handles, users, trough, span):
+        return {"handle_slope_per_cycle": handles, "user_object_slope_per_cycle": users,
+                "private_trough_growth_mib": trough, "private_range_mib": span}
+
+    # Round 2 (13 Nov), OpenGL: Qt's threaded render control keeps 2 handles and 1 USER object per cycle; ours the same.
+    opengl_control = series(2.0, 1.0, 1.0, 8.0)
+    assert all(v for k, v in host_check._against(series(2.0, 1.0, 0.5, 9.0), opengl_control).items()
+               if k != "private_tolerance_mib")
+    # Vulkan: the driver's 32/64 MiB blocks move private bytes by ~92 MiB in Qt alone; a 48 MiB trough step is noise.
+    vulkan_control = series(3.0, 0.0, -20.0, 92.0)
+    assert host_check._against(series(3.0, 0.0, 48.5, 180.0), vulkan_control)["private_bytes"] is True
+    # Negative controls: a handle, a USER object or a trough growth beyond Qt alone's is ours and fails.
+    assert host_check._against(series(3.0, 0.0, 0.0, 9.0), opengl_control)["handles"] is False
+    assert host_check._against(series(2.0, 2.0, 0.0, 9.0), opengl_control)["user_objects"] is False
+    assert host_check._against(series(3.0, 0.0, 150.0, 200.0), vulkan_control)["private_bytes"] is False
+    quiet = series(0.0, 0.0, 0.0, 1.3)                                     # D3D11's Qt alone: 1.3 MiB of noise
+    assert host_check._against(series(0.0, 0.0, 17.0, 20.0), quiet)["private_bytes"] is False   # the 16 MiB floor
+
+
 def test_a_module_that_never_loaded_reports_that_alone():
     # Build round 1 (12 Nov): the module was not built, and the verdict also blamed validation and the teardown.
     unloaded = {"api": "vulkan", "rounds": ["hidden", "window"], "module_loaded": False, "instance_created": False,

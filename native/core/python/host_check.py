@@ -17,17 +17,20 @@ Rounds (each per API):
              on Qt's render thread, detach (released at the next frame edge on the render thread), re-attach, and the
              window destroyed while it animates (mid-frame): released at the scene graph's invalidation on the render
              thread, then (Vulkan) the module's device destroyed after the window.
-  lifecycle  create-use-destroy cycles of three kinds: a window without the core (the control: Qt alone), a window
-             with the core (attach, probe, detach, re-attach, destroyed mid-frame), a hidden host (probe, readback,
-             detach, re-attach, close). After a warm-up, handles and threads must stay flat against the control and
-             private bytes must plateau (the N0.6 owners round's measures).
+  lifecycle  create-use-destroy cycles, each kind of ours right after its control (Qt alone doing the same on the
+             same API): a window with the core (attach, probe, detach, re-attach, destroyed mid-frame) against a window
+             without it; a hidden host (probe, readback, detach, re-attach, close) against Qt's threaded render control
+             in the same sequence (on Vulkan against the Qt-only window). After a warm-up, the core may add no handle,
+             USER object or private-byte trough growth over its control (the control's own noise is the tolerance),
+             and threads stay flat. What the drivers and Qt keep per cycle themselves is recorded in
+             Docs/Future_Work/Native_Core_N06_N07_Qt_Facts.md section J.
 On Vulkan the instance has the Khronos validation layer with synchronisation validation when --layer-path gives it; every
 message is attributed and only Qt 6.12.0's recorded defects are excused, by id (vk_validation.py, the N0.6 rule).
 
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/host_check.py --module-dir release/native_module --require-validation
       --layer-path D:\\Temp\\Scratch\\SRPSS\\native_spike\\validation_layers\\extracted
-  [--apis opengl vulkan d3d11 d3d12] [--rounds hidden window lifecycle] [--cycles 8] [--label n22_hosts]
+  [--apis opengl vulkan d3d11 d3d12] [--rounds hidden window lifecycle] [--cycles 16] [--label n22_hosts]
 Evidence: .artifacts/evidence/native_core/n2_2/<date>_<label>/ (summary.json, the probe readbacks as PNG). Exit 0 whenever
 the harness ran; the verdict is the last printed line ("N22 VERDICT PASS" or "N22 VERDICT FAIL: ...").
 """
@@ -58,10 +61,11 @@ PROBE_FRAMES = 10
 WINDOW_FRAMES = 20
 WAIT_S = 15.0
 CHILD_TIMEOUT_S = 900
-WARMUP_CYCLES = 2
-HANDLE_SLOPE_TOLERANCE = 0.25      # handles per cycle the core may differ from Qt alone
+LIFECYCLE_WARMUP_CYCLES = 8        # D3D12's own pools grow in 8 MiB steps for about 8 creations, then plateau
+LIFECYCLE_CYCLES = 16
+HANDLE_SLOPE_TOLERANCE = 0.25      # handles (or USER objects) per cycle the core may add over Qt alone
 THREAD_TOLERANCE = 1
-PRIVATE_PLATEAU_TOLERANCE_MIB = 16.0
+PRIVATE_PLATEAU_TOLERANCE_MIB = 16.0   # the floor; the control's own range on that API when larger
 DEVICE_TEARDOWN = ["vkDeviceWaitIdle: VK_SUCCESS", "vkDestroyDevice", "resetDeviceFunctions"]
 # Negative controls of the probe (probe_pass.h ProbeConfig); the clip-NDC flip's inverse is added per backend.
 NEGATIVES = {
@@ -463,51 +467,177 @@ def _cycle_hidden(core, engine, app) -> bool:
     return ok
 
 
+def _cycle_hidden_qt_alone(engine, app) -> bool:
+    """The hidden host's control: Qt alone, the same sequence on a QThread (a render control prepared for the thread,
+    initialised, a preserving target, 5 frames, invalidated, the OpenGL context handed back, deleted on the GUI thread),
+    driven from Python with no native core. Not on Vulkan: PySide6 has no QVulkanInstance to give the window."""
+    import queue
+
+    import shiboken6
+    from PySide6.QtCore import QSize, QSizeF, QThread
+    from PySide6.QtGui import (QOpenGLContext, QRhiColorAttachment, QRhiTexture, QRhiTextureRenderTarget,
+                               QRhiTextureRenderTargetDescription)
+    from PySide6.QtQuick import QQuickRenderControl, QQuickRenderTarget, QQuickWindow
+
+    class Worker(QThread):
+        def __init__(self):
+            super().__init__()
+            self.jobs, self.done = queue.Queue(), queue.Queue()
+
+        def run(self):
+            while True:
+                job = self.jobs.get()
+                if job is None:
+                    return
+                try:
+                    self.done.put((True, job()))
+                except Exception as exc:  # noqa: BLE001  handed back to the GUI thread
+                    self.done.put((False, exc))
+
+    worker = Worker()
+    worker.start()
+
+    def call(fn):
+        worker.jobs.put(fn)
+        ok, value = worker.done.get()
+        if not ok:
+            raise value
+        return value
+
+    item, _component = _content(engine)
+    control = QQuickRenderControl()
+    window = QQuickWindow(control)                # never shown
+    window.setGeometry(0, 0, *HOST_SIZE)
+    window.contentItem().setSize(QSizeF(*HOST_SIZE))
+    item.setParentItem(window.contentItem())
+    control.prepareThread(worker)
+    held: dict = {}
+    gui = app.thread()
+
+    def init():
+        if not control.initialize():
+            raise RuntimeError("QQuickRenderControl::initialize failed")
+        rhi = control.rhi()
+        texture = rhi.newTexture(QRhiTexture.Format.RGBA8, QSize(*HOST_SIZE), 1, QRhiTexture.Flag.RenderTarget)
+        texture.create()
+        target = rhi.newTextureRenderTarget(QRhiTextureRenderTargetDescription(QRhiColorAttachment(texture)),
+                                            QRhiTextureRenderTarget.Flag.PreserveColorContents)
+        rp = target.newCompatibleRenderPassDescriptor()
+        target.setRenderPassDescriptor(rp)
+        target.create()
+        window.setRenderTarget(QQuickRenderTarget.fromRhiRenderTarget(target))
+        held.update(target=target, rp=rp, texture=texture)
+
+    def frame():
+        control.beginFrame()
+        control.sync()
+        control.render()
+        control.endFrame()
+
+    def end():
+        window.setRenderTarget(QQuickRenderTarget())
+        for key in ("target", "rp", "texture"):
+            shiboken6.delete(held.pop(key))
+        control.invalidate()
+        context = QOpenGLContext.currentContext()
+        if context is not None:
+            context.doneCurrent()
+            context.moveToThread(gui)
+
+    try:
+        call(init)
+        for _ in range(5):
+            control.polishItems()
+            call(frame)
+        call(end)
+    finally:
+        worker.jobs.put(None)
+        worker.wait()
+        item.setParentItem(None)
+        shiboken6.delete(control)
+        shiboken6.delete(window)
+        shiboken6.delete(worker)
+        _drop_item(app, item)
+    return True
+
+
+def _series(core, app, run, cycles: int) -> dict:
+    for _ in range(LIFECYCLE_WARMUP_CYCLES):
+        run()
+    _flush_deletes(app)
+    readings, oks = [], []
+    for _ in range(cycles):
+        oks.append(run())
+        _flush_deletes(app)
+        readings.append(core.process_counters())
+    handles = [r["handles"] for r in readings]
+    users = [r["user_objects"] for r in readings]
+    private = [r.get("private_mib", 0.0) for r in readings]
+    half = max(1, len(private) // 2)
+    return {
+        "cycles_ok": oks, "readings": readings,
+        "handle_slope_per_cycle": _slope(handles),
+        "user_object_slope_per_cycle": _slope(users),
+        "threads_last_minus_first": readings[-1]["threads"] - readings[0]["threads"],
+        # A leak raises the troughs; a driver's block allocator moves the readings up and down by whole blocks (32 or
+        # 64 MiB on Vulkan, measured 13 Nov), so the troughs of the two halves are compared, never single readings.
+        "private_trough_growth_mib": round(min(private[half:]) - min(private[:half]), 1),
+        "private_range_mib": round(max(private) - min(private), 1),
+        "private_slope_mib_per_cycle": _slope(private),
+    }
+
+
+def _against(ours: dict, control: dict) -> dict:
+    """Our kind against its control: the core may add nothing Qt alone does not show on this API."""
+    tolerance = max(PRIVATE_PLATEAU_TOLERANCE_MIB, control["private_range_mib"])
+    return {
+        "handles": (ours["handle_slope_per_cycle"] is not None and control["handle_slope_per_cycle"] is not None
+                    and ours["handle_slope_per_cycle"] <= max(control["handle_slope_per_cycle"], 0.0)
+                    + HANDLE_SLOPE_TOLERANCE),
+        "user_objects": (ours["user_object_slope_per_cycle"] is not None
+                         and control["user_object_slope_per_cycle"] is not None
+                         and ours["user_object_slope_per_cycle"] <= max(control["user_object_slope_per_cycle"], 0.0)
+                         + HANDLE_SLOPE_TOLERANCE),
+        "private_bytes": ours["private_trough_growth_mib"] <= max(control["private_trough_growth_mib"], 0.0)
+        + tolerance,
+        "private_tolerance_mib": tolerance,
+    }
+
+
 def round_lifecycle(core, engine, app, api: str, cycles: int) -> dict:
-    kinds = {
+    """Each kind of ours runs right after its control (Qt alone doing the same on the same API, in the same process
+    state), after a warm-up long enough for the drivers' own pools (D3D12 grows in 8 MiB steps for about 8 creations).
+    The hidden host's control is Qt's threaded render control; on Vulkan, where PySide6 cannot give a render control
+    its instance, it is the Qt-only window, which also creates one device per cycle (NVIDIA keeps 3 handles per device
+    whoever creates it, N0.6). Findings behind these references: Native_Core_N06_N07_Qt_Facts.md section J."""
+    pairs = [("window_qt_alone", "window_with_core"),
+             ("window_qt_alone" if api == "vulkan" else "hidden_qt_alone", "hidden_host")]
+    runs = {
         "window_qt_alone": lambda: _cycle_window(core, engine, app, with_core=False),
         "window_with_core": lambda: _cycle_window(core, engine, app, with_core=True),
+        "hidden_qt_alone": lambda: _cycle_hidden_qt_alone(engine, app),
         "hidden_host": lambda: _cycle_hidden(core, engine, app),
     }
     series: dict = {}
-    for kind, run in kinds.items():
-        if api == "vulkan":
-            core.set_vulkan_phase(f"lifecycle {kind}")
-        for _ in range(WARMUP_CYCLES):
-            run()
-        _flush_deletes(app)
-        readings, oks = [], []
-        for _ in range(cycles):
-            oks.append(run())
-            _flush_deletes(app)
-            readings.append(core.process_counters())
-        handles = [r["handles"] for r in readings]
-        private = [r.get("private_mib", 0.0) for r in readings]
-        third = max(1, len(private) // 3)
-        series[kind] = {
-            "cycles_ok": oks, "readings": readings,
-            "handle_slope_per_cycle": _slope(handles),
-            "handles_last_minus_first": handles[-1] - handles[0],
-            "threads_last_minus_first": readings[-1]["threads"] - readings[0]["threads"],
-            "private_min_first_third_mib": round(min(private[:third]), 1),
-            "private_min_last_third_mib": round(min(private[-third:]), 1),
-            "private_slope_mib_per_cycle": _slope(private),
-        }
-    control = series["window_qt_alone"]["handle_slope_per_cycle"] or 0.0
-    checks = {}
+    for control, ours in pairs:
+        for kind in (control, ours):
+            if kind in series:
+                continue
+            if api == "vulkan":
+                core.set_vulkan_phase(f"lifecycle {kind}")
+            series[kind] = _series(core, app, runs[kind], cycles)
+    checks: dict = {}
+    comparisons: dict = {}
     for kind, s in series.items():
         checks[f"{kind}_every_cycle_ok"] = all(s["cycles_ok"])
         checks[f"{kind}_threads_flat"] = abs(s["threads_last_minus_first"]) <= THREAD_TOLERANCE
-        checks[f"{kind}_private_bytes_plateau"] = (s["private_min_last_third_mib"]
-                                                   <= s["private_min_first_third_mib"] + PRIVATE_PLATEAU_TOLERANCE_MIB)
-    # The core adds no handle Qt alone does not keep (the N0.6 finding: NVIDIA keeps 3 per VkDevice, whoever made it;
-    # each kind makes one device or context per cycle).
-    for kind in ("window_with_core", "hidden_host"):
-        slope = series[kind]["handle_slope_per_cycle"]
-        checks[f"{kind}_handles_flat_against_qt_alone"] = slope is not None and slope <= max(control, 0.0) + \
-            HANDLE_SLOPE_TOLERANCE
-    return {"cycles": cycles, "warmup": WARMUP_CYCLES, "series": series, "checks": checks,
-            "pass": all(checks.values()), "live_hosts_after": core.live_hosts()}
+    for control, ours in pairs:
+        result = _against(series[ours], series[control])
+        comparisons[ours] = dict(result, control=control)
+        for measure in ("handles", "user_objects", "private_bytes"):
+            checks[f"{ours}_{measure}_no_more_than_{control}"] = result[measure]
+    return {"cycles": cycles, "warmup": LIFECYCLE_WARMUP_CYCLES, "series": series, "comparisons": comparisons,
+            "checks": checks, "pass": all(checks.values()), "live_hosts_after": core.live_hosts()}
 
 
 # --------------------------------------------------------------------------------------------------------- child
@@ -613,7 +743,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo", default=".", help="the repository root (default: the current directory)")
     parser.add_argument("--apis", nargs="+", default=list(APIS), choices=APIS)
     parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=ROUNDS)
-    parser.add_argument("--cycles", type=int, default=8)
+    parser.add_argument("--cycles", type=int, default=LIFECYCLE_CYCLES)
     parser.add_argument("--label", default="n22_hosts")
     parser.add_argument("--layer-path", type=Path, default=None,
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")
