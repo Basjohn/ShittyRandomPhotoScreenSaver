@@ -279,7 +279,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [ ] A translucent Vulkan Qt Quick window: can it be see-through to the desktop at all (the Studio's window
     is translucent today, `ui/studio/surface.py:181`; the dedicated SMP build's material shows the desktop, the
     operator's 12 Nov answer, D7 point 8, so the three routes listed there are tried in order and the one that works
-    is recorded)? Hidden as far as possible; the visible part is the
+    is recorded)? Qt 6.12 has no system-backdrop API: the Windows backdrop (Mica/Acrylic) is a project-owned
+    `DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE)` on `QWindow::winId()`; a report of a "phantom white box"
+    with Mica under Qt Quick exists (`Docs/Future_Work/Qt_6_12_Gains.md`), so the harness tries it early, hidden. Hidden as far as possible; the visible part is the
     lead's, on Display 1.
   - [ ] Lead, Display 1, bounded: a real window on the module's device (swapchain, resize, DPI change, sleep and
     wake).
@@ -302,9 +304,25 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     that report it (D3D11 is not stated).
   - [ ] The Vulkan backend's `VK_EXT_device_fault`: D5's device-loss contract logs the fault detail once when the
     device reports it (vendor fault codes and addresses), so a lost device on a user's machine is diagnosable.
-  - [ ] The rest of 6.12 (Qt Quick, windowing on Windows, Multimedia for SMP, PySide6 changes, behaviour changes):
-    researched into `Docs/Future_Work/Qt_6_12_Gains.md` (Sonnet, in flight); the lead places each "worth using"
-    item as a box at its plan item and each "watch" item as a check.
+  - The rest of 6.12 is researched in `Docs/Future_Work/Qt_6_12_Gains.md` (merged 12 Nov; qtbase and qtdeclarative
+    `changes-6.12.0` were unreachable, so the threaded render loop, layers, D3D12/DirectComposition and the Windows
+    platform plugin are unread there). Placed: SMP's audio sink period and cover-art key in plan 02 section 4.1 and
+    5.2; the SMP desktop window's backdrop call in N0.6. Checks on 6.12 (the venv moved on 12 Nov; Display 1 was
+    off at the time, so the D1 part waits for it):
+    - [ ] Colour: Qt 6.12 takes the screen colour space from the display's ICC profile. A D1 run on Display 1 with
+      the 6.11.2 run's recipe (`20261112_devcurve_card_edge_whole_logical`): the wallpaper, card and border colours
+      in the grabbed frame and the DWM composite equal the 6.11.2 run's within the run-to-run floor, or the change
+      is understood and recorded (a wide-gamut display is the case to watch).
+    - [ ] Text: DirectWrite now reads a font's GASP table to choose antialiasing. Compare text crops (a widget title
+      and body text, the Settings dialog via the offscreen render route) before and after; a visible change in
+      weight or crispness is recorded and judged by the lead.
+    - [ ] QML required properties now fail instead of building silently: grep every run's log for "required
+      property" and QML component errors after the bump (the next D1 run and the next hidden-window test run);
+      each hit is fixed at its component.
+    - [ ] The PySide6 `@Slot(result=...)` crash from QML signals is not mentioned in 6.12's changelog: the
+      guardrail stays (QML-signal handlers are plain methods).
+    - [ ] `DrawIndirectMulti` is only expected on Vulkan 1.1+, GL 4.3+ and D3D12; elsewhere Qt issues separate
+      draws: the population port queries both features at runtime and records the backend's answer.
 
 **N1. Every shader portable, in the existing OpenGL renderer (no C++; can start now)**
 
