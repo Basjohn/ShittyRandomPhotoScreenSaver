@@ -348,7 +348,7 @@ independent of product work queues without owning a raw ad-hoc thread or a secon
 ### Display 1 run harness (`tools/d1_run.py`, the lead's; 1B.14)
 
 The real saver from source on one named display, bounded, with frames, logs and the frame trace brought back. Lead-run
-for visible runs (operator, 11 Nov: bounded runs on Display 1 are permitted, Display 0 is never taken); agents run it
+for visible runs (operator, 11 Nov: bounded runs on Display 1 are permitted; 12 Nov: Display 0 only rarely, for a specific check nothing else can make, with `--allow-primary`, never in tests or automated runs); agents run it
 only with `--hidden`. `--help` prints the ready recipes (the first: Spline Curve's bar border at the card edge).
 
 ```powershell

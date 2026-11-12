@@ -5,7 +5,7 @@
 ## Interpreter, dependencies and compiler
 
 - Run developer tools with `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.venv\Scripts\python.exe` (or `pythonw.exe` for GUI desktop shortcuts), not a global `python`/`pythonw` or obsolete `C:\Python311` path.
-- PySide6/Qt **6.11.2**; NumPy **2.4.5**; Nuitka **4.2**; PyAudioWPatch **0.2.12.9**; `threadpoolctl` inspects the actual NumPy 2 BLAS backend. The pinned `requirements.txt` and helper requirements are authoritative.
+- PySide6/Qt **6.12.0** (bumped from 6.11.2 on 12 Nov 2026, commit 655b04bf); NumPy **2.4.5**; Nuitka **4.2**; PyAudioWPatch **0.2.12.9**; `threadpoolctl` inspects the actual NumPy 2 BLAS backend. The pinned `requirements.txt` and helper requirements are authoritative.
 - Windows frozen builds require **Visual Studio 2022+ Build Tools**, *Desktop development with C++*, MSVC and Windows SDK. Nuitka's regular MinGW64 flow is unsupported under Python 3.14; experimental forced MinGW is not the SRPSS release authority. Retain `--msvc=latest` until the operator accepts an alternative compiler.
 - `scripts/python314_runtime.ps1` resolves the single interpreter. Normal and Repo Venv Build Runner options still have independent build workspaces but use the **same repo `.venv` Python for QRC and Nuitka preparation**. Godzip Foundry RUN SCRIPT does not rewrite pasted commands.
 - Preserve `core/native_threads.py`'s **one OpenBLAS thread before NumPy import**, including child processes, and the Qt GUI image-pool thread-retention policy (R-99/R-97). Both are native-memory/thread-churn guardrails, not optional Python-migration cleanup.
