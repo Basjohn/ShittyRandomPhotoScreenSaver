@@ -11,7 +11,9 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
   operator). Since 12 Nov 2026 the lead is Opus 5.5 High.
 - **Fable 5.2 High** is used rarely, as a one-off audit at a major architectural milestone (for example a native
   core stage closing, a backend switch). The lead asks for it by spawning one agent with `model: "fable"`, a
-  read-only brief and a fixed question; nothing else runs on Fable.
+  fixed question and a brief that names the few documents it may edit (the decision documents and the plan,
+  never product code, tests or builds); nobody else edits the plan while it runs; nothing else runs on Fable.
+  Its decisions are written with their reasons where the brief says, and the lead reviews and merges the branch.
 - **Agent slots, the cap** (operator, 12 Nov 2026): two Opus 5.5 High (architecture, shaders, visual work), two
   Opus 5.5 Medium (bounded repairs, test work, preset touch-ups at low priority), one Sonnet 5.5 Medium (documents
   and research only; never product code or tests), plus the lead. The cap counts agents running at once; when it
@@ -107,3 +109,28 @@ defaults, the installer script) are committed and pushed at once, silently.
 - Linux is best effort: it passes on code quality and the tests that run on Windows.
 - Verification is the lead's job: what can be proved by a harness, a hidden run, a Display 1 run or a frozen build
   is proved, not handed to the operator; what has no simple test goes to the Watchlist and holds nothing open.
+
+## 8. Native core work (C++; `Current_Plan.md` item 8b)
+
+Added 12 Nov 2026 with the native core's direction (`Docs/Future_Work/Native_Core_P3_Decisions.md`, D5 to D11).
+
+- **Compiling the native module is not a build in the sense of section 7.** An agent on a native-core item
+  compiles the module in its own worktree with the project's scripted CMake step (foreground, with a timeout,
+  output under the worktree's build folder, never committed), against the Qt SDK under
+  `D:\Temp\Scratch\SRPSS\native_spike\qt` (read only; fetched per Qt version by the script of plan N2.1). Frozen
+  products and installers stay on GitHub and with the lead. `Docs/Guardrails/Agent_Worktree_Rules.md` forbids
+  "builds or installers": the lead adds this exception there before the first C++ dispatch.
+- **A port is audited on both backends.** Beside section 4's checks: the OpenGL parity record against the Python
+  renderer, the Vulkan record against the native OpenGL result (hidden host), the thread probe (no call with a
+  Python thread state), GPU time per pass, and the Python renderer deleted in the same change (a transition's at
+  the background family's switch). A port with one record is not merged as done.
+- **Vulkan in a real window is the lead's alone** until the flip: the rehearsal (decision D10) runs through
+  `tools/d1_run.py` with the diagnostic backend switch, on Display 1, bounded, once per port. Agents prove Vulkan
+  in hidden hosts only.
+- **A native route beside QRhi needs its line first.** An agent that wants raw Vulkan or raw OpenGL for a pass
+  stops and reports the measurement; the lead admits it as one of D5.3's services (with its twin on the other
+  backend) or refuses it. The same holds for anything that would run on Vulkan only.
+- **Qt is upgraded only between stages** (decision D11), by the lead, through the scripted step; never inside an
+  agent's item.
+- **Two ordered tracks, one High slot each,** once the substrate exists (modes; the background family), and a
+  primitives track that never holds the flip. A track's next port is dispatched only when its last one is merged.

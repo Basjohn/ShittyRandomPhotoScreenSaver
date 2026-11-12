@@ -143,6 +143,17 @@ D4.7's self-check is for.
   runtime self-check of the two-product on a known pair at warm-up, on the edge, never per frame; a failure is
   logged and reported rather than silently producing drift.
 
+### As built (D4.1 to D4.3, merged 12 Nov 2026; moved here from the plan when its boxes were deleted)
+
+Evidence `.artifacts/evidence/native_core/20261112_d4/`. Both drift programs have no 64-bit type. Chain knot
+decisions equal the reference as integers on every tick. Everything else is within 1e-4 at one and at eight hours
+(worst 3.6e-6), where the `double` programs they replace, run on the same logs, recycled 4,431 to 31,524 motes on
+the wrong tick (their spans were float32). Beyond the design above: there are four reduced angles, not three (the
+swish term grows too); the chain phase offset is a third decision made on the logical side (12 bytes per chain
+per step); the seed and the cloud phase offset are carried as pairs. The logical side's added work is 15 to 17
+microseconds a tick. The stream ring grew from about 0.4 MB to 3.1 MB of mapped memory (240 chains times the full
+history); sizing it is part of D4.6. Still open: D4.4 to D4.8 (`Current_Plan.md`, item 8b, N1).
+
 ## D5. The core's shape (decided 12 Nov 2026; the full resource and lifetime contract is still owed, N0.5)
 
 Four rules. They are what keeps the ceiling high: none of them is needed for Spectrum, all of them are expensive
