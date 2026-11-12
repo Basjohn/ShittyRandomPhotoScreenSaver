@@ -14,6 +14,7 @@ No window: a hidden offscreen surface. Writes only into the evidence layout (``t
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import sys
@@ -82,6 +83,24 @@ def counting(counter: dict[str, int]):
             setattr(module, attribute, original)
         for helper, original in helpers:
             setattr(gl_query, helper, original)
+
+
+def gpu_ms(run, repeats: int = 9) -> float:
+    """Median GPU time (GL_TIME_ELAPSED) of ``run()`` over ``repeats`` calls, in milliseconds."""
+    from OpenGL import GL as gl
+    times = []
+    query = int(np.asarray(gl.glGenQueries(1)).reshape(-1)[0])
+    try:
+        for index in range(repeats):
+            gl.glBeginQuery(gl.GL_TIME_ELAPSED, query)
+            run(index)
+            gl.glEndQuery(gl.GL_TIME_ELAPSED)
+            value = ctypes.c_uint64(0)
+            gl.glGetQueryObjectui64v(query, gl.GL_QUERY_RESULT, ctypes.byref(value))
+            times.append(value.value / 1e6)
+    finally:
+        gl.glDeleteQueries(1, [query])
+    return float(np.median(times))
 
 
 def _texture(width, height, internal, data=None, layout=None):
@@ -183,9 +202,59 @@ vec4 populationState(uint id) { return vec4(float(id), sceneRandom(id, 2u, uSeed
     return outputs, calls
 
 
+def _photo(width, height, seed):
+    """A fixed synthetic photograph: smooth gradients, hard-edged shapes and grain (linear filtered, as the lent
+    presentation texture is)."""
+    from OpenGL import GL as gl
+    rng = np.random.default_rng(seed)
+    ys, xs = np.mgrid[0:height, 0:width].astype(np.float32)
+    image = np.zeros((height, width, 4), np.float32)
+    image[..., 0] = xs / width
+    image[..., 1] = ys / height
+    image[..., 2] = 0.5 + 0.5 * np.sin(xs * 0.05) * np.cos(ys * 0.07)
+    for _ in range(12):
+        cx, cy, r = rng.uniform(0, width), rng.uniform(0, height), rng.uniform(10, 0.3 * height)
+        image[(xs - cx) ** 2 + (ys - cy) ** 2 < r * r, :3] = rng.uniform(0, 1, 3)
+    image[..., :3] += rng.normal(0, 0.03, (height, width, 3))
+    image[..., 3] = 1.0
+    pixels = (np.clip(image, 0, 1) * 255).astype(np.uint8)
+    texture = _texture(width, height, gl.GL_RGBA8, pixels, (gl.GL_RGBA, gl.GL_UNSIGNED_BYTE))
+    for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
+        gl.glTextureParameteri(texture, parameter, gl.GL_LINEAR)
+    return texture
+
+
+def pass_edge_field(target):
+    from OpenGL import GL as gl
+    from rendering.quick.scene3d.edge_field import EdgeField
+    from rendering.quick.scene3d.resources import MeshResources
+    outputs, calls = {}, {}
+    for (width, height), (low, high) in (((1920, 1080), (0.04, 0.2)), ((333, 517), (0.02, 0.1))):
+        resources, field = MeshResources("identity"), EdgeField("identity")
+        photo = _photo(width, height, width)
+        try:
+            field.texture(resources, photo, (width, height), ("warm",), low, high)   # compiles and allocates
+            counter = {}
+            with counting(counter):
+                field.texture(resources, photo, (width, height), ("run",), low, high)
+            fw, fh = field._size
+            for role, internal, _linear in EdgeField._ROLES:
+                channels = 2 if internal in (gl.GL_RG32F, gl.GL_RG16F) else 1
+                outputs[f"{role}_{width}x{height}"] = _read_texture(field._textures[role], fw, fh, channels)
+            calls = calls or counter
+            build = lambda index: field.texture(resources, photo, (width, height), ("time", index), low, high)
+            calls[f"gpu_ms:{width}x{height}"] = gpu_ms(build)
+        finally:
+            gl.glDeleteTextures([photo])
+            field.release()
+            resources.release_resources()
+    return outputs, calls
+
+
 PASSES = {
     "motion_tile_max": pass_motion_tile_max,
     "population_scan": pass_population_scan,
+    "edge_field": pass_edge_field,
 }
 
 
@@ -197,13 +266,16 @@ def record(out: Path, names) -> int:
     try:
         with target.current():
             for name in names:
-                outputs, calls = PASSES[name](target)
+                outputs, measured = PASSES[name](target)
+                timing = {key: value for key, value in measured.items() if key.startswith("gpu_ms")}
+                calls = {key: value for key, value in measured.items() if key not in timing}
                 np.savez_compressed(out / f"{name}.npz", **outputs)
                 summary["passes"][name] = {
                     "outputs": {key: hashlib.sha256(np.ascontiguousarray(value).tobytes()).hexdigest()
                                 for key, value in sorted(outputs.items())},
-                    "gl_calls": sum(calls.values()), "gl_calls_by_name": dict(sorted(calls.items()))}
-                print(f"{name}: {len(outputs)} outputs, {sum(calls.values())} GL calls", flush=True)
+                    "gl_calls": sum(calls.values()), "gl_calls_by_name": dict(sorted(calls.items())),
+                    "gpu_ms": timing}
+                print(f"{name}: {len(outputs)} outputs, {sum(calls.values())} GL calls, GPU {timing}", flush=True)
     finally:
         target.close()
     (out / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -223,7 +295,8 @@ def compare(before: Path, after: Path) -> int:
             same = x.shape == y.shape and x.dtype == y.dtype and x.tobytes() == y.tobytes()
             detail = "" if same else f"  max |diff| {np.abs(x.astype(np.float64) - y.astype(np.float64)).max():.3g}"
             print(f"{name}.{key}: {'IDENTICAL' if same else 'DIFFERENT'}{detail}")
-        print(f"{name}: GL calls {a[name]['gl_calls']} -> {b[name]['gl_calls']}")
+        print(f"{name}: GL calls {a[name]['gl_calls']} -> {b[name]['gl_calls']}; GPU ms {a[name].get('gpu_ms', {})} -> "
+              f"{b[name].get('gpu_ms', {})}")
     return 0
 
 
