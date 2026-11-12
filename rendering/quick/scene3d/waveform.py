@@ -110,10 +110,12 @@ def _slope_texture(height: np.ndarray) -> int:
 
 
 def load_floor_textures(floor: Floor) -> dict:
-    """Saved maps: colour decoded from sRGB; roughness and height are linear data. Missing assets fail."""
+    """Saved maps: colour stays sRGB-encoded in plain RGBA8 and the floor shader decodes it (``srgbToLinear``, N0.3
+    decision F4: Qt's OpenGL backend ignores the sRGB texture flag, so no backend relies on it; the GPU filters and
+    mips the encoded values); roughness and height are linear data. Missing assets fail."""
     textures={}
     try:
-        for key,path,storage in (('albedo',floor.albedo,gl.GL_SRGB8_ALPHA8),('roughness',floor.roughness,gl.GL_RGBA8),
+        for key,path,storage in (('albedo',floor.albedo,gl.GL_RGBA8),('roughness',floor.roughness,gl.GL_RGBA8),
                                  ('height',floor.height,gl.GL_RGBA8)):
             with Image.open(ROOT/path) as source:
                 image=source.convert('RGBA')

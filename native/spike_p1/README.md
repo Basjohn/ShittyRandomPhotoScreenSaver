@@ -125,6 +125,22 @@ N0.7 (D9's proof: the job thread, its QRhi on the second queue, the latch, the e
 
 Evidence: `.artifacts/evidence/native_core/n07/<date>_<label>/summary.json`; the last line is `N07 VERDICT ...`.
 
+N0.3 (the three convention scenes of `Docs/Future_Work/Native_Core_P3_Decisions.md`, "The three test scenes";
+`src/n03_scenes.*`, `shaders/n03_*`) runs on Vulkan (our N0.6 device), OpenGL, D3D11 and D3D12 in one process. The
+scene shaders are baked with the production conventions include spliced in (`shaders/srpss_conventions.glsl`, the text
+of `rendering/gl_programs/conventions.py`, kept equal by `tests/test_native_spike_n03.py`; the splice is
+`cmake/compose_shader.cmake`; the scene shaders `#define SRPSS_NATIVE_CORE` first, the native core's form of the
+include). The module only corrects at upload (the lead's decisions F1 to F3: OpenGL's correction flips Y for core
+targets, the block carries the clip-NDC flip, rule 4 on the uploaded matrix), draws and reads back raw rows; the
+geometry, the matrices and every check are in the driver:
+
+```bat
+.venv\Scripts\python.exe native\spike_p1\python\run_n03.py --module-dir release\native_spike --label n03_scenes --layer-path <layer folder> --require-validation
+```
+
+Evidence: `.artifacts/evidence/native_core/n0_3/<date>_<label>/` (`summary.json`, one sheet per scene); the last line is
+`N03 VERDICT ...`.
+
 `python/import_check.py` is the GPU-free part the runner runs after compiling (import, `runtime_info()`, the Qt DLLs
 loaded from PySide6's folder); every part of `run_spike.py` needs a GPU device.
 

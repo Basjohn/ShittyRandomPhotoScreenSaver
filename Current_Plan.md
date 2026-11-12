@@ -311,17 +311,12 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     module's device: see-through to the desktop (D7 point 8's first route; the hidden runs cannot read the composed
     alpha), with the DWM system backdrop and the project's glass, then the swapchain under resize, DPI change and
     sleep and wake. If it is not see-through, D7's second route (DirectComposition) is tried next.
-- [ ] N0.3's three scenes (decisions document, "The three test scenes"), in the harness, on OpenGL, Vulkan, D3D11
-  and D3D12; before N2.4. Until they pass, the include's flip, the matrix correction and the winding rule are
-  proved on OpenGL only.
-  - [ ] Checkerboard with a gradient: texel (0,0) top-left on every backend; `fragUv`, `fragTexel`, `ndcToUv` agree
-    with the pass that wrote the texture; upload row order; the sRGB strip; the std140 block from reflected offsets.
-    Negative controls: no Y correction in the include; no `clipSpaceCorrMatrix()`; hand-computed offsets.
-  - [ ] Known-depth plane through `framed_camera.perspective_matrix` corrected at upload:
-    `viewDepthFromDepthTexture` equals the analytical window depth on every backend. Negative controls: skip the
-    depth part of the correction; upload an uncorrected matrix.
-  - [ ] One culled triangle with `front_face_clockwise`'s rule, Quick's Y-down matrix and an up-facing one;
-    `gl_FrontFacing` agrees. Negative control: front face fixed to counter-clockwise.
+- N0.3's three scenes: proved 12 Nov on Vulkan (our device, validated), OpenGL, D3D11 and D3D12 (run 2, harness
+  29816002, `N03 VERDICT PASS`; the record and the decided F1 to F4 are the decisions document's N0.3 "As proved"
+  sections; evidence `.artifacts/evidence/native_core/n0_3/`). Owed:
+  - [ ] The clip-NDC flip (block `y`, decision F2) through the native core itself on a real D3D11/D3D12 backend, when
+    N2 first runs a pass that maps NDC there (the harness proved the include, not the core's block writer).
+  - [ ] Metal: the three scenes on Metal (Watchlist; no Metal machine).
 - N0.7 D9's proof: proved in the harness and accepted 12 Nov (the verdict, jobs for compute on this vendor and
   uploads, is D9's "Accepted by the lead"). Owed, with the Qt 6.12 checks filed here:
   - [ ] AMD and Intel unmeasured: the same measure round on another vendor before a mode moves compute to a job by

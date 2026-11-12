@@ -314,6 +314,12 @@ run of a real window on Display 1 by the lead (swapchain, resize, DPI change, sl
   Windows plugin applies an empty-region `DwmEnableBlurBehindWindow` to accelerated alpha windows. N0.6 records what
   this machine reports and whether the window is see-through (D7 point 8's first route).
 
+**Amended by the lead, 12 Nov 2026, from N0.3 run 1 (decision F3).** On our device the front face of a culling pass is
+chosen by rule 4 (`front_face_clockwise`) on the matrix as uploaded, after `clipSpaceCorrMatrix()` (which flips Y on
+Vulkan) and, for a core-owned target on OpenGL, after F1's Y flip; never on the OpenGL-form matrix, which culled the
+wrong faces on Vulkan and OpenGL in run 1. For Quick's item matrix the rule then gives counter-clockwise on Vulkan,
+D3D11 and D3D12 and clockwise on the core's OpenGL (F1's flip turns the winding); run 1 measured exactly that.
+
 **As proved (N0.6 harness, `native/spike_p1`, 12 Nov 2026; each round built on GitHub and run by the lead; evidence
 `.artifacts/evidence/native_core/n06/`).** The rounds' record, moved from the plan:
 
@@ -615,7 +621,7 @@ family runs the in-frame form (D6 point 5).
 
 Rules N0.7 gives N3.8 (the core): the job thread uses no other thread, so no QPainter and no QImage conversion on the
 job thread or the render thread (QPainter's large antialiased fills into a non-premultiplied image start Qt GUI's
-pooled threads, finding E); the core's render targets keep their contents (`PreserveColorContents`) and are primed
+pooled threads, finding F of the facts document's section I; it was E until 12 Nov); the core's render targets keep their contents (`PreserveColorContents`) and are primed
 once at creation, and again before a loading pass after any readback or sampling (findings B and C); the core never
 grabs the swapchain (finding D: Qt Quick's `grabWindow` on Vulkan); slots are imported into Qt's QRhi with
 `createFrom` and their layouts handed over with `setNativeLayout` both ways; retirement releases Qt's wrappers of the
@@ -1391,6 +1397,18 @@ them (the P1 spike already creates a D3D pipeline, `Native_Core_P1_Spike.md:103-
    the sampled value against the OpenGL decode. No `GL_FRAMEBUFFER_SRGB` is enabled anywhere in `rendering/` (grep:
    none). An HDR swapchain is not admitted (D8 plus 9).
 
+**Amended by the lead, 12 Nov 2026, from run 1 (decisions F1 to F4 below; the rules above are kept as drafted):**
+- Rule 1: for a target the core owns, the correction is `clipSpaceCorrMatrix()` times a Y flip where
+  `isYUpInFramebuffer()` (F1). Quick's matrices for Quick's own pass stay as Qt gives them.
+- Rule 2: holds by rule 1's flip, not by the include; the core's readbacks are never flipped (F1).
+- Rule 3: the block (`x` the fragment Y flip, `y` the clip-NDC Y flip) is declared by every stage that includes the
+  conventions and its values belong to the target, set by the host that owns it, not once per device (F1). The core
+  writes `x` 0 for every target it owns and `y` = `isYUpInNDC() && !isYUpInFramebuffer()`; the Python OpenGL renderer
+  keeps 0 and 0 for every target until it retires. `ndcToUv`/`uvToNdc` take the clip NDC of the pass's own (uploaded)
+  matrices and negate Y from `y` under the native core (F2). New in the include: `srgbToLinear` (F4).
+- Rule 4: the function is evaluated on the matrix after the upload correction (F3).
+- Rule 6: the sRGB flag is not relied on anywhere; the floor albedo is plain RGBA8 decoded in its shader (F4).
+
 ### What today assumes OpenGL conventions (inventory, `rendering/` and `core/settings/`, at `7ac980d7`)
 
 - **`gl_FragCoord` as texel or uv: 51 occurrences in 14 files.** Texel addressing into offscreen targets:
@@ -1464,6 +1482,152 @@ available backend and the backends equal each other within the P1 spike's measur
    (N1, "the beads at the near plane") calls for it.
 3. The conventions block is one binding reserved in every shader. Is a fixed binding index acceptable, or should it
    be allocated by the pass-graph builder?
+
+### As proved (N0.3 harness, `native/spike_p1`, run 1, 12 Nov 2026)
+
+Harness 63f0e75e (`src/n03_scenes.*`, `shaders/n03_*` with the production include baked in, `python/run_n03.py`),
+built on GitHub and run by the lead with the Khronos layer and `--require-validation`
+(`.artifacts/evidence/native_core/n0_3/20261112_n03_scenes/`); the same module rerun with the corrected analysis
+(`20261112_n03_scenes_reanalysed/`, no rebuild). One process, four backends: Vulkan on our N0.6 device, OpenGL 4.6,
+D3D11, D3D12 (RTX 4090, NVIDIA 617.42). Validation clean: 10 errors, all Qt defect A by ID, 0 unexplained.
+
+- **Scene 2, the known-depth plane: proved on all four.** Through `framed_camera.perspective_matrix` corrected at
+  upload, `viewDepthFromDepthTexture` equals the analytical window depth within 1.6e-7 (tolerance 2e-6), the backends
+  within 1.2e-7 of OpenGL; the nearer plane wins whichever is drawn first, LESS rejects an equal depth, the cleared
+  depth reads 1.0 exactly, the near and far planes clip at the same depths. Negative controls fail where they change
+  anything: the depth part skipped (Vulkan, D3D11, D3D12; it changes nothing on OpenGL), no correction (all four).
+- **Scene 3, the culled triangle: proved on all four.** Rule 4 evaluated on the uploaded matrix keeps the authored-front
+  triangle with Quick's Y-down matrix and an up-facing one, `gl_FrontFacing` agrees, the up-facing image mirrored back
+  equals Quick's, and the C++ rule equals `front_face_clockwise` on the same matrix. Negative controls: the front face
+  fixed counter-clockwise culls the wrong triangle (up-facing on Vulkan, D3D11, D3D12; Quick's on OpenGL); rule 4 fed
+  the uncorrected matrix culls the wrong one on Vulkan and OpenGL (finding F3).
+- **Scene 1, the checkerboard: proved on all four except two findings that waited for the lead (F2, F4; decided 12
+  Nov, below; run 2 on the decided include and harness is owed, build round 2).** Texel (0,0)
+  top-left in memory, the upload row order, `fragTexel`, `fragUv` and `fragPixel` against the writing pass, the std140
+  probe from reflected offsets (equal to `Scene3DBlockLayout`'s offsets), the double correction refused: all four,
+  the backends identical to OpenGL (max 0). Negative controls fail: the include's flip inverted (all four), no
+  correction (Vulkan, OpenGL; it changes nothing in 2D on D3D), the probe packed by hand (all four).
+- Two errors of the first analysis, corrected without a rebuild: the sRGB check compared with the exact IEC curve at
+  1e-3, but the hardware decode carries 8 significant bits (below); and it compared the other backends with OpenGL's
+  decode, which does not exist (F4).
+
+### As proved (run 2, 12 Nov 2026): all three scenes pass on all four backends
+
+Harness 29816002 (the decided include: F1's correction, F2's block `y` in the core's form, F4's `srgbToLinear`),
+built on GitHub and run by the lead with the layer and `--require-validation`: `N03 VERDICT PASS`
+(`.artifacts/evidence/native_core/n0_3/20261112_n03_scenes_run2/`). Validation clean: 10 errors, all Qt defect A by
+ID, 0 unexplained.
+- Scene 1: every check on Vulkan (our device), OpenGL, D3D11 and D3D12. `ndcToUv` against the writer's uv within
+  1.2e-7 per axis and `uvToNdc` against the clip NDC within 3.0e-7 on all four, D3D included (run 1: 0.982 and 1.964);
+  the module wrote the backend's `y` (1 on D3D11 and D3D12, 0 elsewhere). `srgbToLinear` against the exact curve
+  within 2.6e-7 on all four, against OpenGL's within 1.8e-7; the sampler's own decode stays a record (OpenGL none,
+  defect E; the other three bit-identical). The checker identical to OpenGL's on every backend (max 0).
+- Scene 2: window depth within 1.6e-7 of the analytical value, backends within 1.2e-7 of OpenGL.
+- Scene 3: the authored-front triangle kept and `gl_FrontFacing` right on all four, with both matrices; images
+  identical to OpenGL's (max 0, edge-masked).
+- Negative controls fail wherever they change anything: the fragment flip inverted and the clip-NDC flip inverted
+  (all four), no correction (Vulkan, OpenGL; changes nothing in 2D on D3D), the hand-packed probe (all four), the
+  depth part skipped (Vulkan, D3D11, D3D12), no depth correction (all four), CCW fixed (up-facing on Vulkan and D3D;
+  Quick's on OpenGL), rule 4 on the uncorrected matrix (Vulkan, OpenGL). Each control is vacuous only where its
+  correction or front face equals the right one.
+Left open: the y path through the native core itself, on a real D3D backend, when N2 runs it; Metal (Watchlist).
+
+### Run 1's findings (decided by the lead 12 Nov 2026; drafted as proposals, kept below with their evidence)
+
+All four accepted. Each decision follows its finding; the proposal's text stays as drafted.
+
+**F1. OpenGL keeps texel (0,0) top-left only if the upload correction flips Y for core-owned targets.** Evidence
+(scene 1, OpenGL): with the correction `clipSpaceCorrMatrix() x flipY` (the harness's "target" route) every scene-1
+check holds and the image is byte-identical to Vulkan's, D3D11's and D3D12's; flipping the readback by
+`isYUpInFramebuffer()` (the draft's harness rule) would then show it upside down. With `clipSpaceCorrMatrix()` alone and
+the include's flip at 1 (what `rendering/gl_programs/conventions.py:19-21` says the core does), the content is upside
+down in memory (`content_upside_down_in_memory`), and `fragTexel`, `fragUv`, the upload fetch and `ndcToUv` all
+disagree with the writing pass. `gl_FragCoord` is the memory texel's centre on every backend (all four, exact).
+*Recommended rule:* for a target the core owns, the upload correction is `clipSpaceCorrMatrix()` times a Y flip where
+`isYUpInFramebuffer()`; the include's flip is 0 for every core-owned target on every backend (it would be 1 only for a
+core shader drawing into a bottom-up target it does not own, which D5.2's texture-node composite removes); readbacks
+of core targets are never flipped. Correct `conventions.py`'s docstring when this is accepted.
+**Decided by the lead 12 Nov:** for the core's offscreen targets the upload correction flips Y on OpenGL; the
+include's flip is 0 for those targets on every backend; the core's readbacks are never flipped. Guard: the shipping
+Python OpenGL renderer does not change; its targets keep their value until it retires, so the block's values belong to
+the target and are set by its host (that renderer writes `OPENGL_CONVENTIONS`, 0, for every target; the core writes 0
+for its own), not one global constant. *Rejected alternative:* `clipSpaceCorrMatrix()` alone with the include's flip at
+1 on OpenGL (bottom-up rows in memory, a per-pass flip for every sampled texture). *As built:* `conventions.py`'s
+docstring says both (3a2e2e51); the harness's "target" correction is this rule. Proof that product pixels did not
+move, recorded before and compared after with `tools/conventions_identity.py` (one change for F1 and F2): every mode
+(9) and every catalogue transition case (32) IDENTICAL frame for frame, and `pairs` against the parent revision 28 of 28
+changed fragment sources IDENTICAL, the multisample-only programs among them (`n0_3/20261112_identity_before*`,
+`_after_f1f2*`, `_pairs_f1f2`); `tests/test_conventions_include.py` passes (16).
+
+**F2. `ndcToUv` and `uvToNdc` of the clip NDC are wrong on D3D11 and D3D12 (predicted, confirmed).** Evidence
+(scene 1, "target" route, texel (0,0) = the top-left): `fragUv` (0.005208, 0.008929); the clip NDC the rasterizer
+used (-0.989583, +0.982143) on D3D11 and D3D12 but (-0.989583, -0.982143) on Vulkan and OpenGL; the production
+`ndcToUv` gives (0.005208, **0.991071**) on D3D, the mirrored row; `uvToNdc(fragUv)` gives y -0.982143 against the clip
++0.982143. Worst error over the target: 0.982 in uv y, 1.964 in NDC y, on both D3D backends; 1.5e-7 or less on Vulkan
+and OpenGL. With the NDC's Y negated first, the D3D error is 1.5e-7 (`candidate_ndc_to_uv_agrees`,
+`candidate_uv_to_ndc_agrees`: true on all four). The cause: D3D's clip Y points up (`isYUpInNDC()`) while its rows are
+top-down (`isYUpInFramebuffer()` false), and the correction leaves D3D's Y alone; no matrix can move D3D's NDC +1 off
+row 0. *Recommended rule:* the conventions block's reserved `y` carries `ndcYFlip = isYUpInNDC() && !isYUpInFramebuffer()`
+(1 on D3D11, D3D12 and Metal; 0 on Vulkan, on OpenGL with F1's correction, and in today's OpenGL renderer), and
+`ndcToUv`/`uvToNdc` negate Y when it is set. Consequence: the mapping functions read the block, so any stage that maps
+(vertex, compute) declares it too; `tests/test_conventions_include.py`'s "only a program that reads the block holds it"
+then covers mapping-only programs, and N1.4's identity runs prove the OpenGL renderer bit-identical with `y` 0.
+*Alternative:* define `ndc` in the include as the view NDC (OpenGL form, Y up) and compute it from the uncorrected
+matrix; rejected here because rule 1 gives shaders only corrected matrices.
+**Decided by the lead 12 Nov:** the block carries the "Y up in clip space, rows top-down" flip in `y`, read by
+`ndcToUv` and `uvToNdc`; stages that use the mapping functions declare the block; on OpenGL and Vulkan the value makes
+them compute what they compute today. *Rejected alternative:* the view NDC (above). *As built (3a2e2e51), one
+departure to note:* the block is declared by every stage that includes the conventions (the fog march and composite
+now hold it), but the Python renderer's text keeps the authored arithmetic, `ndc * 0.5 + 0.5` and `uv * 2.0 - 1.0`,
+and only the native core's text (`#define SRPSS_NATIVE_CORE`, set by the core's bake and the harness) reads `y`.
+Reason, measured: with `y` read at run time (0 bound), the composed `ndcToUv(uvToNdc(fragUv))` of the include test
+changed its last bits on NVIDIA 617.42 OpenGL (0x3c5d67c8 became 0x3c5d67c0 at the first texel: the driver no longer
+folds the arithmetic around a select on a uniform), so a value alone does not keep the renderer bit-identical. The
+renderer's `y` is 0 for good, so its text and the value say the same thing; the identity proof under F1 covers it.
+`tests/test_conventions_include.py` proves the core's text negates Y when `y` is 1 and is the plain arithmetic at 0, and
+that the renderer's text never reads it.
+
+**F3. Rule 4's input is the uploaded matrix, never the OpenGL-form one.** Evidence (scene 3): `front_face_clockwise` on
+the uploaded (corrected) matrix keeps the authored-front triangle on all four backends with both matrices; the same
+function on the uncorrected matrix culls the wrong triangle on Vulkan (the correction flips Y there) and OpenGL (F1's
+flip), with both matrices, and changes nothing on D3D. *Recommended rule:* the core evaluates rule 4 once per pipeline
+choice on the matrix after the upload correction, with `ndc_y_up = isYUpInNDC()`; the two prebuilt variants stay. Today's
+OpenGL renderer is unchanged (it uploads uncorrected matrices on an identity correction).
+**Decided by the lead 12 Nov:** the front-face rule is evaluated on the matrix after the upload correction (also
+recorded in D6, below its amendments, and in the C++ copy's comment, `native/spike_p1/src/n03_scenes.cpp`
+`frontFaceClockwise`, and `front_face_clockwise`'s docstring). *Rejected alternative:* the OpenGL-form matrix (wrong
+faces on Vulkan and on the core's OpenGL).
+
+**F4 (new). Qt 6.12.0's OpenGL backend ignores `QRhiTexture::sRGB` for uncompressed formats.** Evidence: on OpenGL the
+sRGB-flagged strip samples as byte/255 exactly (max 3e-8; worst 0.287 from the curve at byte 136), identical to the
+unflagged strip; on Vulkan, D3D11 and D3D12 it decodes, bit-identical across the three. A hidden probe through
+PySide6's QRhi read `GL_TEXTURE_INTERNAL_FORMAT` = `GL_RGBA` for the flagged and the unflagged RGBA8 texture alike, and
+qtbase v6.12.0 `src/gui/rhi/qrhigles2.cpp` reads the flag only in `toGlCompressedTextureFormat` (`toGlTextureFormat`
+takes no flags). So the cause is Qt's, not the harness's target creation; no rebuild fixes it. Rule 6 ("the `sRGB`
+texture flag on every backend") does not hold on OpenGL. Also measured: the hardware decode where it exists carries 8
+significant bits (7 fraction bits), worst 0.00375 at byte 251 (1.3 steps of that mantissa, 0.86 of half the gap to the
+neighbouring byte), monotonic, every byte kept.
+*Recommended rule:* the one sRGB asset (the floor albedo, `scene3d/waveform.py:114`) is uploaded as plain RGBA8 and
+decoded in its shader with the exact IEC formula on every backend: one route, bit-identical across backends, no reliance
+on a flag one backend ignores. Its parity bar against today's OpenGL renderer (hardware `GL_SRGB8_ALPHA8`) is the
+hardware's own precision, at most 0.00375 linear, recorded at the port. *Alternatives:* decode in the shader on OpenGL
+only (a block value; the backends then differ by up to 0.00375); or a native `GL_SRGB8_ALPHA8` texture adopted with
+`QRhiTexture::createFrom` on OpenGL (a D5.3 service, raw GL, to win a measurement first).
+**Decided by the lead 12 Nov:** the floor albedo is decoded in its shader with the exact sRGB formula on every
+backend. Filtering consequence, stated: the GPU filters (bilinear, trilinear, anisotropic) and mips the *encoded*
+values, and the decode follows, so a filtered sample is `decode(average(encoded))` instead of the hardware's
+`average(decode(encoded))`; that is accepted for this one asset (a dark, low-contrast concrete) and is not a general
+rule for sRGB assets: another sRGB asset gets its own decision. Qt's behaviour is defect E in
+`Native_Core_N06_N07_Qt_Facts.md` section I. *Rejected alternatives:* the two above. *As built (25688bbf):*
+`srgbToLinear` in the include (IEC 61966-2-1, exactly); `load_floor_textures` stores the albedo as plain `GL_RGBA8`;
+the floor fragment decodes its three albedo reads (the grain pair, the 1x1 mean level, the wet-film ratio). Before and
+after on Waveform Ribbon, the mode that owns the floor (every frame of its identity run, 549 frames at 739 x 529):
+pixels move, by exactly one 8-bit step (1/255) at most, on 0.513 % of pixels in 296 of 549 frames (the worst frame's
+difference image shows the floor band only); no pixel moves by more. Every other mode IDENTICAL (Sphere's last 52
+frames differ only because its script switches to Waveform Ribbon at frame 497). Evidence
+`n0_3/20261112_f4_floor/` (before, after, difference scaled) and `20261112_identity_after_f4/`. The harness gates the
+shader's decode against the exact curve (`srgb_shader_decode_matches_analytic`) and across backends; the sampler's
+decode of a flagged copy stays a record.
 
 ## N0.4. The camera (proposed D5.5; decided by the lead 12 Nov)
 
