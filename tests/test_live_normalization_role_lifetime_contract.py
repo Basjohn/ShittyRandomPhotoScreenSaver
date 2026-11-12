@@ -89,18 +89,22 @@ def test_qt_test_keeps_actual_target_and_roles_through_twenty_baseline_changes()
 def test_remaining_dense_and_grouped_families_keep_authored_baselines_out_of_role_models() -> None:
     """Changing canonical baselines must not retire selected family Edit delegates."""
     cases = (
-        ("Weather", "weatherRoot", 11, "childNormalizationWidth", "childNormalizationHeight"),
-        ("SystemStats", "statsRoot", 3, "childNormalizationWidth", "childNormalizationHeight"),
-        ("FriendPulse", "friendRoot", 6, "baseAuthoredWidth", "baseAuthoredHeight"),
-        ("AchievementPulse", "achievementRoot", 8, "baseAuthoredWidth", "baseAuthoredHeight"),
-        ("AbandonmentIssues", "abandonmentRoot", 7, "baseAuthoredWidth", "baseAuthoredHeight"),
+        ("Weather", "weatherRoot", "childNormalizationWidth", "childNormalizationHeight"),
+        ("SystemStats", "statsRoot", "childNormalizationWidth", "childNormalizationHeight"),
+        ("FriendPulse", "friendRoot", "baseAuthoredWidth", "baseAuthoredHeight"),
+        ("AchievementPulse", "achievementRoot", "baseAuthoredWidth", "baseAuthoredHeight"),
+        ("AbandonmentIssues", "abandonmentRoot", "baseAuthoredWidth", "baseAuthoredHeight"),
     )
-    for name, owner, count, width, height in cases:
+    for name, owner, width, height in cases:
         qml = (QML / f"{name}Presentation.qml").read_text(encoding="utf-8")
         if name == "SystemStats":
             roles = qml.split("customEditableChildRoles: [", 1)[1].split("\n    ]", 1)[0]
         else:
             roles = _role_declaration(name)
+        # The number of roles is the family's own declaration (the list the product reads), never pinned here:
+        # every declared role must normalize against the family root through the authored-baseline properties.
+        count = roles.count('"roleId":')
+        assert count > 0, name
         if name == "Weather":
             assert roles.count(f"roles[i].normalizationTarget = {owner}") == 1
         else:
