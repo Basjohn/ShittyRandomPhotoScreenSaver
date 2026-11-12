@@ -46,7 +46,7 @@ from rendering.gl_error_policy import raise_pending_gl_error
 
 from .. import gl_query
 from ..render_failure_log import RenderFailureLog
-from .gl_resources import compile_program
+from .gl_resources import compile_program, delete_program
 from .native_texture_bridge import NativeTextureUnavailable, wrap_gl_texture
 
 logger = get_logger(__name__)
@@ -357,7 +357,7 @@ class BackdropPipeline:
             self._output = 0
         for program in (self._down, self._up):
             if program:
-                gl.glDeleteProgram(program)
+                delete_program(program)
         self._down = self._up = 0
         if self._vao:
             gl.glDeleteVertexArrays(1, [self._vao])

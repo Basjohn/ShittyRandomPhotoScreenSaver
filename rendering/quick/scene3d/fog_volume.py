@@ -24,7 +24,7 @@ from rendering.gl_programs.fog_volume import (FOG_COMPOSITE_FRAGMENT, FOG_FULLSC
                                               FOG_VOLUME_BLOCK, fog_detail_noise, fog_march_source)
 from rendering.gl_programs.mist import FOG_TEXTURE_UNIT
 from rendering.quick import gl_query
-from rendering.quick.render.gl_resources import compile_compute_program
+from rendering.quick.render.gl_resources import compile_compute_program, delete_program
 from .compute import DispatchBlocks, bound_image, dispatch
 
 MAX_FOG_CELLS = 256*256*128
@@ -199,7 +199,7 @@ class FogVolume:
             self._check_context()
         self._drop_textures()
         if self._integrate_program:
-            gl.glDeleteProgram(self._integrate_program)
+            delete_program(self._integrate_program)
         self._integrate_program = 0
         self._blocks.release()
         self._uniforms = None
@@ -421,7 +421,7 @@ class FogMarch:
         if self._vao:
             gl.glDeleteVertexArrays(1, [self._vao])
         for program in self._programs.values():
-            gl.glDeleteProgram(program)
+            delete_program(program)
         self._programs = {}
         self._colour = self._fbo = self._detail = self._vao = 0
         self._size = (0, 0)

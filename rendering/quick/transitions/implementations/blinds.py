@@ -9,7 +9,7 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs.blinds_program import blinds_program
 from rendering.gl_programs.scene3d import scene3d_request_samples
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
 from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs
@@ -246,7 +246,7 @@ class QuickBlindsRenderer:
         except Exception as exc:
             errors.append(str(exc))
         if self._program:
-            gl.glDeleteProgram(self._program)
+            delete_program(self._program)
             self._program = 0
             self._uniforms.clear()
         if errors:

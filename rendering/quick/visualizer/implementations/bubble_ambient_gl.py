@@ -25,7 +25,7 @@ import ctypes
 import numpy as np
 from OpenGL import GL as gl
 
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.quick import gl_query
 from widgets.spotify_visualizer.bubble_ambient import (
     MAX_MICROBUBBLES, MAX_PARTICLES, RECORD_STRIDE,
@@ -263,10 +263,10 @@ class QuickBubbleAmbientPoints:
         except Exception:
             if mask_vbo: gl.glDeleteBuffers(1,[mask_vbo])
             if mask_vao: gl.glDeleteVertexArrays(1,[mask_vao])
-            if mask_program: gl.glDeleteProgram(mask_program)
+            if mask_program: delete_program(mask_program)
             if vbo: gl.glDeleteBuffers(1,[vbo])
             if vao: gl.glDeleteVertexArrays(1,[vao])
-            if program: gl.glDeleteProgram(program)
+            if program: delete_program(program)
             raise
 
     @staticmethod
@@ -434,10 +434,10 @@ class QuickBubbleAmbientPoints:
         if self._light_texture: gl.glDeleteTextures([self._light_texture])
         if self._occluder_vbo: gl.glDeleteBuffers(1,[self._occluder_vbo])
         if self._occluder_vao: gl.glDeleteVertexArrays(1,[self._occluder_vao])
-        if self._occluder_program: gl.glDeleteProgram(self._occluder_program)
+        if self._occluder_program: delete_program(self._occluder_program)
         if self._vbo: gl.glDeleteBuffers(1,[self._vbo])
         if self._vao: gl.glDeleteVertexArrays(1,[self._vao])
-        if self._program: gl.glDeleteProgram(self._program)
+        if self._program: delete_program(self._program)
         self._fbo = self._texture = self._light_texture = self._vbo = self._vao = self._program = 0
         self._occluder_vbo = self._occluder_vao = self._occluder_program = 0
         self._target_size = (0,0)

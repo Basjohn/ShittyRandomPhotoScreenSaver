@@ -6,9 +6,9 @@ through ``compile_program`` / ``compile_compute_program``). It first tries the a
 only if ``GL_LINK_STATUS`` says it linked. Otherwise it compiles and links as always and saves the linked binary. A
 cold driver link (Neon Lake's basin: ~6 s, R-180) is then paid once per machine and driver, not once per build.
 
-A program that declares the conventions block (``rendering.gl_programs.conventions``) holds that context's one
-conventions buffer, bound at its reserved point for the context's life; owners of such programs delete them with
-``delete_program``, which hands the hold back (the last one deletes the buffer).
+A program that declares the conventions block (``rendering.gl_programs.conventions``; an active block after link)
+holds that context's one conventions buffer, bound at its reserved point; every program linked here is deleted with
+``delete_program``, which hands a hold back (the last one deletes the buffer).
 """
 
 from __future__ import annotations
@@ -114,13 +114,22 @@ def _save_binary(cache: ProgramBinaryCache, key: str, program: int) -> int:
 
 def _link(stages, label: str) -> int:
     program = _link_program(stages, label)
-    if any(CONVENTIONS_BLOCK_NAME in source for _shader_type, source, _stage in stages):
+    # The text only says a source may declare the block: the mapping-only include carries the name inside a false
+    # ``#if``. The linked program says whether it declares it (a std140 block declared is an active block).
+    if any(CONVENTIONS_BLOCK_NAME in source for _shader_type, source, _stage in stages) and _declares_conventions(program):
         _acquire_conventions(program)
     return program
 
 
+def _declares_conventions(program: int) -> bool:
+    index = int(gl.glGetUniformBlockIndex(program, CONVENTIONS_BLOCK_NAME.encode("ascii"))) & 0xFFFFFFFF
+    return index != 0xFFFFFFFF            # GL_INVALID_INDEX: no active block of that name
+
+
 def delete_program(program: int) -> None:
-    """Delete a program linked here (in its own current context), releasing its hold on the conventions block."""
+    """Delete a program linked here (in its own current context), releasing its hold on the conventions block. Every
+    owner of a program linked through ``compile_program``/``compile_compute_program`` deletes it here, never with a raw
+    ``glDeleteProgram``: whether a program holds is decided at link, by the driver."""
 
     gl.glDeleteProgram(program)
     _release_conventions(program)

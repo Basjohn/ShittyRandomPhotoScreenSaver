@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 
 from OpenGL import GL as gl
 
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from widgets.spotify_visualizer.render_state import DevCurveFrame
 from widgets.spotify_visualizer.shaders import load_fragment_shader
 
@@ -453,7 +453,7 @@ class QuickDevCurveRenderer:
     def release_resources(self) -> None:
         if not self._program:
             return
-        gl.glDeleteProgram(self._program)
+        delete_program(self._program)
         self._program = 0
         self._last_content_rotation_quarters = None
         self._uniforms.clear()

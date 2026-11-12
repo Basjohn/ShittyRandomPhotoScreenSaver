@@ -24,7 +24,7 @@ from collections.abc import Mapping
 
 from OpenGL import GL as gl
 
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from .render_contract import QUICK_TRANSITION_VERTEX_SOURCE, QuickTransitionRenderFrame
 
 COMMON_UNIFORMS = ("uMatrix", "uItemSize", "u_progress", "uOldTex", "uNewTex")
@@ -80,7 +80,7 @@ class FullscreenPassRenderer:
     def release_resources(self) -> None:
         if not self._program:
             return
-        gl.glDeleteProgram(self._program)
+        delete_program(self._program)
         self._program = 0
         self._uniforms.clear()
 

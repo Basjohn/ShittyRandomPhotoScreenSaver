@@ -31,7 +31,7 @@ import math
 from OpenGL import GL as gl
 
 from rendering.quick import gl_query
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 
 # (forward, up) per face in GL's cube-map order and convention.
 _FACES = (
@@ -296,7 +296,7 @@ class SceneProbe:
         if self._vao:
             gl.glDeleteVertexArrays(1, [self._vao])
         if self._program:
-            gl.glDeleteProgram(self._program)
+            delete_program(self._program)
         self._texture = self._depth = self._fbo = self._layers = self._program = self._vao = 0
 
 

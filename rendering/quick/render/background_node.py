@@ -23,7 +23,7 @@ from ..transitions.render_contract import QuickTransitionRenderFrame
 from ..transitions.render_host import QuickTransitionRenderHost
 from ..transitions.state import TransitionRun, TransitionSample
 from ..render_failure_log import RenderFailureLog
-from .gl_resources import compile_program
+from .gl_resources import compile_program, delete_program
 from .image_textures import PresentationTextureHost
 from .telemetry import RenderNodeTelemetry
 
@@ -398,7 +398,7 @@ class BackgroundRenderNode(QSGRenderNode):
             self._transition_renderer.release_resources()
             self._image_textures.release()
             if self._program:
-                gl.glDeleteProgram(self._program)
+                delete_program(self._program)
             if self._vbo:
                 gl.glDeleteBuffers(1, [self._vbo])
             if self._vao:

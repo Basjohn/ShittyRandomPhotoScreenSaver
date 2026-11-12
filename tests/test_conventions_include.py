@@ -402,3 +402,48 @@ def test_a_destroyed_context_leaves_no_entry(qt_app):
     gc.collect()
     assert key not in gl_resources._conventions and _held_by(key) == []
     assert key not in getattr(gl_resources, "_watched_contexts", ())
+
+
+@pytest.mark.qt
+def test_only_a_program_that_reads_the_block_holds_it(qt_app):
+    """The mapping-only include carries the block's name inside a false ``#if``: the fog march and composite fragments
+    (the product's sources) and any other program without the block take no hold; one with the block does. (A std140
+    block a program declares counts as active even if unread, so the linked program says "declares", truthfully.)"""
+    from rendering.gl_programs.fog_volume import FOG_COMPOSITE_FRAGMENT, FOG_FULLSCREEN_VERTEX, fog_march_source
+    from rendering.quick.render import gl_resources
+    from rendering.quick.render.gl_resources import compile_program, delete_program
+
+    mapping_only = ("#version 460 core\nout vec4 C;\n" + SRPSS_CONVENTIONS_GLSL
+                    + "void main() { C = vec4(ndcToUv(vec2(0.25)), 0.0, 1.0); }\n")
+    context = _QtOwnedContext()
+    programs = []
+    try:
+        for label, vertex, fragment in (("fog march", FOG_FULLSCREEN_VERTEX, fog_march_source()),
+                                        ("fog composite", FOG_FULLSCREEN_VERTEX, FOG_COMPOSITE_FRAGMENT),
+                                        ("mapping only", _VERTEX, mapping_only)):
+            assert CONVENTIONS_BLOCK_NAME in fragment            # the text alone would have taken a hold
+            programs.append(compile_program(vertex, fragment, label=label))
+            assert _held_by(context.key) == [], label
+        assert context.key not in gl_resources._conventions and _bound_conventions() == 0
+        reader = compile_program(_VERTEX, _FRAGMENT, label="reads the block")
+        programs.append(reader)
+        assert _held_by(context.key) == [reader]
+    finally:
+        for program in programs:
+            delete_program(program)
+        context.close()
+    assert _held_by(context.key) == []
+
+
+def test_every_program_linked_through_gl_resources_is_deleted_through_delete_program():
+    """Whether a program holds the block is decided at link by the driver, so no owner can know that a raw
+    ``glDeleteProgram`` is safe: outside ``gl_resources`` itself nothing in ``rendering/`` deletes a program raw."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "rendering"
+    owner = root / "quick" / "render" / "gl_resources.py"
+    raw = re.compile(r"\bglDeleteProgram\s*\(")
+    found = [f"{path.relative_to(root.parent)}:{number}"
+             for path in sorted(root.rglob("*.py")) if path != owner
+             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1) if raw.search(line)]
+    assert found == []

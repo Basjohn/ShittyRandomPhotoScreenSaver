@@ -125,8 +125,9 @@ def test_mesh_cleanup_retains_only_failed_handles_for_retry(monkeypatch):
     monkeypatch.setattr(mesh_support, "gl", SimpleNamespace(
         glDeleteBuffers=lambda count, handles: deleted.append(("vbo", handles[0])),
         glDeleteVertexArrays=delete_vao,
-        glDeleteProgram=lambda handle: deleted.append(("program", handle)),
     ))
+    # Programs are deleted through gl_resources.delete_program (it hands back a conventions hold), not the module's gl.
+    monkeypatch.setattr(mesh_support, "delete_program", lambda handle: deleted.append(("program", handle)))
     resources = mesh_support.MeshResources("test")
     resources._meshes["fixture"] = (8, 9, 3)
     resources._programs["fixture"] = 10
