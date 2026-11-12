@@ -660,17 +660,15 @@ runs from 3-10 a frame to 0, light themes and Normal unchanged, no shader change
 and fixed (the solver added the Glass sheen after the legibility limit; a hidden crossfade copy held a plate).
 58 dark themes change; the table is `changed_table.md` in the evidence folder.
 
+Side defects landed 12 Nov (merge of a7b877d4): the dead `context.menu.arrow` role retired with a load bridge
+(`RETIRED_WIDGET_THEME_COLOR_ROLES`, 115 theme files lose the key through the generator's `--drop-retired-roles`);
+the dense families' role counts derived from their QML declarations; 1C.5's first Edit shrink of an over-lane volume
+height acts at once (R-193; the saved value is corrected at the first resize, no runtime observer).
+
 Follow-ups landed 12 Nov (evidence `.artifacts/evidence/materials/20261112_followups/`): ink is judged on the fill
 a run sits on (row lift included); passing runs stay byte-identical, headroom only for corrected runs; the
 Context Menu's arrows take the label ink; 1C.5's volume height is capped at its lane.
 
-- [ ] The theme role `context.menu.arrow` is dead since the arrows take the label ink (theme files,
-  `ui/widget_theme_spec.py`, `ui/widget_visual_roles.py`, `tools/generate_widget_theme_mirrors.py`; Theme Foundry
-  edits it with no effect): retire it with a load bridge for theme files that carry it
-  (`Docs/Architecture/Persisted_Input_Compatibility.md`), mirrors regenerated, the Foundry row removed.
-- [ ] `test_remaining_dense_and_grouped_families_keep_authored_baselines_out_of_role_models` pins role counts
-  (Weather 11, SystemStats 3, FriendPulse 6, AchievementPulse 8, AbandonmentIssues 7): derive them from the
-  declarations.
 
 - [ ] Accents whose corrected text ink collapses toward the card text: Royal Orchard most (#3e4f2c to #97a08d,
   48 % of its colour kept) and Smoke Quartz; Slate Lavender, Tungsten Blues, Lantern Grove and Riviera Dusk keep
@@ -905,8 +903,6 @@ strip's clip now grows by the shadow's reach; guard `test_media_child_shadows_ar
 card`. Evidence `.artifacts/evidence/materials/20261111_m2b/before_after_*_4x.png` (the "before" matches the
 operator's crop).
 
-- [ ] A saved volume height scale above what the lane holds has a dead zone on its first Edit shrink (Edit
-  resizes from the saved scale, the cap from the lane): clamp the saved scale at the owner when the lane shrinks.
 - [ ] The agent could not reproduce the cut at the operator's stored Media layout (no volume edits in their
   settings): a D1 run with a copy of the operator's profile (1B.14), a 4x crop of the volume bar, lead review.
 

@@ -1,4 +1,4 @@
-# R-NEW | A saved Media volume height above what its lane holds did not shrink on the first Edit steps
+# R-193 | A saved Media volume height above what its lane holds did not shrink on the first Edit steps
 
 **Status:** fixed 12 Nov 2026 (`Current_Plan.md` 1C.5). Edit's child resize now starts from what is drawn: a family
 that bounds a role's drawn size exposes the drawn/requested ratio on the target item
