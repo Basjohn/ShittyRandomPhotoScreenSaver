@@ -1060,7 +1060,7 @@ serves the Themes lists, the Folders list and this one; the delegate sets no fon
   this change): the same box as 1B.11's, checked on a real display in the D1 run and themed through
   `shared_styles` if they are native there.
 
-### 1C.11 Reds on main and small defects found by agents (12 Nov; one Opus Medium agent, bounded)
+### 1C.11 Reds on main and small defects found by agents (12 Nov; in flight, Opus Medium)
 
 Each box: reproduce on main first (the command given), decide whether the product or the test is wrong (current
 architecture is authoritative; a stale test is repaired to derive from the canonical source, never weakened), fix
