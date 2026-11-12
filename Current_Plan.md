@@ -1155,6 +1155,66 @@ serves the Themes lists, the Folders list and this one; the delegate sets no fon
 - The Sources list's scrollbars (unthemed black native bars in off-screen renders; the Themes list too): 1B.14's
   Settings and Studio box.
 
+## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
+
+### 1D.0 Studio: a mode switch floods the QML log with TypeErrors (in flight, Opus Medium)
+
+- [ ] After spectrum -> sphere, almost every `StudioShell.qml` binding reads `studio` as null (lines 14 to 3961,
+  between "open" and "shown", and some after "shown"); `lanes[hoverIndex].pinned` reads undefined (870, 1398).
+  - [ ] Root cause: which window evaluates with a null context (the retiring one, the new one before its
+    context is set, or both).
+  - [ ] Fix at the owner (`ui/studio/` surface and controller): no window ever evaluates with `studio` null; the
+    new window loads with its context already set; the lane guard fixed at its cause. No timers, no added rebuild.
+  - [ ] Test: open, switch and retire through the real controller on an invisible window, zero QML TypeErrors
+    (negative control: red on the old code); historical bug entry.
+
+### 1D.1 Guided Setup: newer Visualizer images, JMIT Pools, UX audit (one Opus Medium; the lead judges pixels)
+
+- [ ] Replace the Guided Setup Visualizer preview images with newer, better ones. The operator chose: Extruded
+  Bubble preset 9 (8 if 9 does not exist), Bubble preset 2, Extruded Spectrum preset 1. Render them with
+  `tools/onboarding_preview_foundry.py` (hidden GL, never a shown window) on a real photo backdrop, at the size
+  and crop the page shows; the lead compares old and new side by side at full resolution before merging. Only
+  the images change; no test names or counts a preset.
+- [ ] JMIT Pools missing from Guided Setup's online sources list. Settings' Sources tab lists them through
+  `ui/tabs/online_source_rows.py` (`populate_online_source_rows`, the `JMIT POOL -> <Pool Name>` rows), but the
+  Guided Setup sources page (`ui/onboarding/basic_pages.py`, the "Online Wallpaper Feeds" bucket, about :87 to
+  :190) builds its own list from `sources.rss_feeds` only.
+  - [ ] Root cause recorded. Fix: one shared row builder for both, so a pool turned on in either is shown and
+    counted in both (the count already uses `online_source_count`, which includes pools). Keep the Settings look:
+    the tag, arrow and active/valid state from 1C.9.
+  - [ ] Test through the real wizard page and the real Sources tab: the same pools listed and the same state in
+    both, with a negative control on the old page; historical bug entry if it shipped silently.
+- [ ] Audit Guided Setup's UX end to end (every page, both entry points, the draft-and-Finish rule): defects
+  found are fixed in this item. Anything new it should offer but does not is written to section 2 as a
+  suggestion for the operator, who must approve any wholly new addition before it is built.
+
+### 1D.2 Fullscreen Visualizer: three display styles (one Opus High; the lead runs the D1 proof)
+
+The setting lives in the Fullscreen Visualizer settings. It is one value per profile, beside
+`expanded_display_requested`; its owner is `core/settings/fullscreen_overlays.py`, and it is declared through the
+spec system and never by hand.
+- **Default:** today's look, unchanged pixel for pixel.
+- **Borders To Edge:** the card's frame and border sit on the display's edges.
+- **Fullscreen (Hide Borders):** the content fills the display with no card frame or border.
+
+- [ ] Design note first, in plan 01 (Expanded Visualizer) M3c beside the display-wide contract: per style, the
+  geometry, the coverage and clip contract (1C.4: nothing drawn outside the card or under the border's
+  anti-aliased edge; in Hide Borders the coverage is the whole display), the glyphs, the Now Playing overlay and
+  Edit. How each style keeps R-63/R-192's whole-logical overscan and the device-pixel card (1C.4). The lead
+  approves it before code.
+- [ ] Built on the existing presentation owners (a style is a geometry and border input to the framed view, not
+  a new renderer or a rebuild): switching style while expanded retargets in place and fades (Retarget before
+  rebuild; Fade, never vanish).
+- [ ] Guards: no artifact on any other display. The window and the overscan go only past an exterior edge; a
+  neighbour's pixels are unchanged in each style, checked on the hidden second host. The 3D framed modes keep the
+  framed camera standard (`core/settings/framed_camera.py`); the pixel aspect and the aperture follow the new
+  extent through `VIS_SET_VIEW`.
+- [ ] Tests: each style's geometry against the display at 100 %, 125 % and 150 % (whole logical, both axes), the
+  clip contract per style, the style round-trip through Settings, and the default reproducing today's pixels
+  (negative controls for each).
+- [ ] Lead: D1 run per style (Display 1, the hidden second host), edges read at native pixels as in R-192, plus
+  a style switch while expanded.
+
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
 These repairs run alongside the existing audit/native-worker work above; they do not replace or reorder it. Live
