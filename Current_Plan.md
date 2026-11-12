@@ -38,7 +38,26 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):**
+**Now (in flight):** the N2.1 product build round 3 on GitHub (lead).
+
+**Next, by slot (lead, 12 Nov night audit, `Docs/Future_Work/Audit_2026-11-12_Night.md`):**
+- High:
+  1. N0.3's three convention scenes (the native core's critical path; N2.2 and N2.4 wait on it).
+  2. 1D.2, once its design note is approved.
+  3. 1C.10.
+  4. The 1C.2 Save stall.
+- Medium:
+  1. 1D.0's two code boxes (the old bridge disconnect, the picker edge).
+  2. 1D.1.
+  3. The native runtime check before import.
+  4. 1B.10.
+- Docs (Sonnet):
+  1. The audit's fix-soon plan and document edits (N4.f split, N2.5's order, the re-baseline box's home, N3.8's
+     re-measure and warm-up jobs, the handbook's installer line, the N1.6 remainder's single home).
+  2. The 1D.2 design note in plan 01 M3c.
+  3. Item 6's narrative cleanup.
+  4. `Primitives.md` cited by section, not by line.
+- Audit: an Opus High behind each merge, scaled to its risk.
 
 ### Item 0. Operator defects of 11 Nov: section 1B, in its own order, ahead of everything below
 
