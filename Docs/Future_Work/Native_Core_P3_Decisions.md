@@ -285,6 +285,23 @@ are clean through create, render, resize and teardown (windows first, then devic
 second queue is found on the development GPU and its absence is forced as a negative control; then one bounded
 run of a real window on Display 1 by the lead (swapchain, resize, DPI change, sleep and wake).
 
+**Amended by the lead, 12 Nov 2026, from the Qt 6.12 source facts (`Native_Core_N06_N07_Qt_Facts.md`).**
+- The device enables the same features Qt's own device would (every supported feature except `robustBufferAccess`
+  and `robustImageAccess`): for an imported device QRhi derives its capability flags from what the physical device
+  supports, not from what our device enabled, so a narrower device would make QRhi report capabilities it cannot
+  use (`DrawIndirectMulti`, wide lines, shading rate). This settles point 3's "feature bits" question.
+- The instance is ours too: created by the module with validation and synchronisation validation enabled in code
+  (failing closed when the layer is missing in a harness run), adopted with `QVulkanInstance::setVkInstance` and
+  `setApiVersion(1, 2)` (the default is 1.0, and QRhi would treat the device as 1.0).
+  `QQuickGraphicsConfiguration::setDebugLayer` and its device extensions do nothing when the instance and device
+  are supplied, and no environment variable is used (the project forbids them).
+- Lifetime: the device outlives the `QQuickWindow` object, not only its visibility; after our `vkDestroyDevice`,
+  `QVulkanInstance::resetDeviceFunctions(device)` (QRhi does not call it for an imported device).
+- Translucent windows: Qt's Vulkan swapchain asks for `PRE_MULTIPLIED` composite alpha when the window has an alpha
+  format; Qt's own source notes NVIDIA on Windows reports `OPAQUE` only and transparency still works, and the
+  Windows plugin applies an empty-region `DwmEnableBlurBehindWindow` to accelerated alpha windows. N0.6 records what
+  this machine reports and whether the window is see-through (D7 point 8's first route).
+
 ## D7. The card-material backdrop on the native core (decided 12 Nov 2026)
 
 Operator, 12 Nov: "You need to decide on the card-material backdrop but obviously we want it working and looking
@@ -447,6 +464,24 @@ thread; (iv) validation layers with synchronisation validation clean; (v) retire
 the middle of a job, without a crash or a leak; (vi) at rest, zero wake-ups of the job thread over a minute.
 If (i) shows no gain on the development GPU, compute jobs stay in-frame on that vendor and the job thread is kept
 for uploads, whose CPU half (the staging copy) leaves the render thread whatever the GPU does.
+
+**Amended by the lead, 12 Nov 2026, from the Qt 6.12 source facts (`Native_Core_N06_N07_Qt_Facts.md`).**
+- Point 4 does not protect a sampled job result: Qt's frame submit waits on the semaphores passed through
+  `setQueueSubmitParams` only at `COLOR_ATTACHMENT_OUTPUT`, binary semaphores only, and the list is cleared after
+  every submit. So a job result that the same frame's shaders sample is never consumed through point 4; it is
+  published by the latch (point 3) and used from the next frame. Point 4 stays only for a job whose output is a
+  colour attachment Qt's pass then writes or blends into, and each such use is still a line here.
+- Point 3, the queue family: QRhi creates its images and buffers with exclusive ownership and never records a queue
+  family ownership transfer. The first proof (N0.7) uses a job queue in the same family as Qt's graphics queue; a
+  different family needs raw resources created with `VK_SHARING_MODE_CONCURRENT` and imported with `createFrom`,
+  built only if the same-family measurement shows a reason.
+- The completion edge is `QRhi::finish()` on the job's own QRhi (it waits for that QRhi's queue only), or a fence on
+  raw submissions; `endOffscreenFrame` waits only when a readback is pending, so it is never relied on as one.
+- Whether a second QRhi may drive the same `VkDevice` on its own queue is undocumented: N0.7 proves it under
+  synchronisation validation, or the job thread records raw Vulkan on its queue (the job bodies are written so
+  either form records them).
+- Teardown: the job thread is quiesced first, then `vkDeviceWaitIdle` (Qt's `vkQueueWaitIdle` covers its own
+  queue only), then the device.
 
 *Where this differs from the lead's position:* the lead framed async compute as simulation on a second queue,
 synchronised through Qt's frame submit, with ownership of the submit as the open risk. Here the first consumers

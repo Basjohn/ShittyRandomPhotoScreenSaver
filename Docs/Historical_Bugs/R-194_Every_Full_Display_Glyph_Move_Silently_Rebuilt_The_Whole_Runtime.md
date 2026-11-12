@@ -1,4 +1,4 @@
-# R-NEW | Every full-display glyph move silently rebuilt the whole runtime
+# R-194 | Every full-display glyph move silently rebuilt the whole runtime
 
 **Status:** fixed 12 Nov 2026 (Current_Plan 1C.2; decision in plan 01 M3c "Display moves retarget the live owner").
 The chrome-less move binds the source and target scenes as the direct Alt gesture binds its display

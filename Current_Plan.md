@@ -262,7 +262,14 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   no Python thread state), backends within 3/255 (`.artifacts/evidence/architecture/native_core_p1/20261112_n09/`).
   A C++ slice iterates: the agent commits, the lead pushes its branch and runs
   `tools/build_runner.py --mode github --run --select native_module` from that worktree.
-- [ ] N0.6 D6's proof, in the P1 harness (C++; nothing shipped):
+- [ ] N0.6 D6's proof, in the P1 harness (C++; nothing shipped). Facts and build order:
+  `Docs/Future_Work/Native_Core_N06_N07_Qt_Facts.md` (sections A to E, the order in H); D6 and D9 carry the lead's
+  12 Nov amendments from them. Read from Qt's 6.12 branch head: line-level details are checked against the
+  `v6.12.0` tag as the harness meets them.
+  - [ ] The Vulkan validation layer (with synchronisation validation) on the lead's machine: today there is no Vulkan
+    SDK here (the spike used the driver's loader and Vulkan-Headers only). Its download and install is the
+    operator's approval (a download); without it N0.6 and N0.7 run their functional parts and record validation as
+    owed.
   - [ ] The module creates the instance and a device at the baseline (Qt requires of it: a graphics queue that
     can present, the extensions `preferredExtensionsForImportedDevice()` names plus swapchain, the preferred
     instance extensions, API 1.1 or later, objects that outlive the windows); a hidden Qt Quick host on that
@@ -848,29 +855,31 @@ an agent's brief is its plan item, and its report is checked against the boxes, 
 in the lead's memory. Each item below starts with a root-cause box: the cause is established on the real product
 path (an off-screen reproduction or a Display 1 run), with a negative control, before anything is changed.
 
-### 1C.2 Diagonal fullscreen glyphs tear the Visualizer down and rebuild it (owner: Opus High, Expanded Visualizer)
+### 1C.2 Display moves retarget the live Visualizer (merged d14559e9, R-194; the two-display proof waits for both displays)
 
-Operator: the move works, "but have a teardown and rebuild, we do not want teardowns and rebuilds unless
-absolutely needed. They are a last resort." This is a standing rule, not only for the glyphs.
+Operator: "we do not want teardowns and rebuilds unless absolutely needed. They are a last resort." Landed: every
+glyph move rebuilt the whole runtime (its chrome-less Save refused and reloaded, R-194); now the move attaches its
+session to both scenes and commits in place, the owner, controller, runtime, engine worker session and revision
+counter survive both directions, one fade crosses the two displays with the target prepared first (bounded 1.5 s),
+and Extruded Bubble's drift history is handed over behind a GPU fence (the windows share one GL context group,
+proved; a non-sharing target refuses with one error and the history restarts there). Decision in plan 01 M3c; rule
+in `Docs/Guardrails/Presentation_Change_Preflight.md` ("Retarget before rebuild"); evidence
+`.artifacts/evidence/visualizers/expanded/20261112_1c2_root_cause/`. Teardown remains only for a display
+arrangement change, a display added or removed, the owning display lost, Settings, and corrupted-object recovery.
 
-- [ ] Root cause: trace one diagonal move (expanded on display A to expanded on display B, and ordinary card on A
-  to expanded on B) through `core/expanded_visualizer_takeover.py`, the DisplayManager and the Visualizer owner;
-  list exactly what is stopped, destroyed and recreated today (engine worker session, mode runtime and its
-  history, GPU resources, QML items, the card), with the log lines that show each.
-- [ ] Decide the minimum per layer and write it into plan 01 (M3c): the engine worker session and the mode's
-  logical state (simulation, history, adaptive levels) survive every display move; GPU resources are rebuilt only
-  where the target window's context cannot share them, and are warmed in the target before the swap; the
-  outgoing view fades and the incoming one fades in (fade, never vanish), with no black or empty frame between.
-- [ ] Implement the move as a retarget of the live owner (the request stays `expand_on_display`), not a
-  stop/start; a teardown remains only for the cases the decision lists, each with its reason.
-- [ ] Proof: a focused test that the engine worker's session id, the runtime object and its revision counter are
-  the same before and after a move in both directions; negative control on the pre-fix code.
-- [ ] Proof on the real product: a D1 run (1B.14 harness) of the move toward Display 1, frames grabbed across
-  the move and reviewed by the lead (no blank frame, the music response continuous); what needs both displays
-  visible is stated, not assumed.
-- [ ] The same audit for the other paths that move or re-admit a Visualizer (Edit's display hop, the hover
-  transfer arrows, a display arrangement change): each either retargets or names why it cannot.
-- [ ] `Docs/Guardrails/` gets the rule ("retarget before rebuild") where presentation changes are preflighted.
+- [ ] Lead, when two displays are connected (12 Nov only the LG TV was): the `d1_run.py --with-hidden-display 0`
+  move recipe in `--help`, first with `--hidden`, then visible on Display 1; frames across the 0.5 s fade reviewed
+  (no blank card, no pop, the music response continuous); Extruded Bubble and Spectrum, both directions.
+- [ ] Is the 1.5 s preparation bound enough for Extruded Bubble on real hardware? Measure on the D1 run (the test
+  needed more than 40 frames); a slow target goes ahead and finishes on its first visible frame.
+- [ ] Edit's display hop and the hover transfer arrows keep the live owner but build the target's renderer on its
+  first visible frame (no preparation on those paths): prepare the neighbouring display when the pointer hovers its
+  arrow or a drag nears the seam (an edge, never polling).
+- [ ] While preparing, the target card sits at 0.002 opacity (under one 8-bit level, over Qt Quick's 0.001 cutoff):
+  make it transparent to input for that time, and check on a bright display that no pixel shows; replace the
+  near-zero opacity with a render-without-show path when the native core's job thread exists (D9).
+- [ ] PyOpenGL's `GL_TIMEOUT_IGNORED` has the wrong value (`glWaitSync` rejects it): the move uses the GL spec's
+  value; record it where GL constants are shared so nothing else takes PyOpenGL's.
 
 ### 1C.3 Fullscreen Now Playing: one Edit contract with the Media widget (merged 426ec4aa, R-189; accepted by the operator 12 Nov)
 
