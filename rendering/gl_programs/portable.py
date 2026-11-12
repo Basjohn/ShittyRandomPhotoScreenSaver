@@ -4,6 +4,7 @@
 samplers given units by ``glUniform1i``, varyings matched by name, ``gl_VertexID``) and returns the same sources with
 only their declarations changed:
 
+- a declaration of several names (``uniform float a,b;``, ``in vec2 vUv,vCrack;``) becomes one per name first;
 - every loose (non-opaque) uniform of every stage becomes a member of ONE std140 block, declared identically at the
   top of every stage at ``binding`` (the pass block, ``SCENE3D_PASS_BLOCK_BINDING``); the members keep their names, so
   no function body changes, and the returned ``Scene3DBlockLayout`` is what the owner packs (``pack_block``);
@@ -33,6 +34,9 @@ _LOOSE = re.compile(rf"{_START}[ \t]*uniform[ \t]+(?:(?:lowp|mediump|highp)\s+)?
 _SAMPLER = re.compile(rf"{_START}([ \t]*)(?:layout\s*\([^)]*\)\s*)?uniform([ \t]+{_OPAQUE}[ \t]+)(\w+)[ \t]*;", re.M)
 _VARYING = re.compile(rf"{_START}([ \t]*)(?:layout\s*\(\s*location\s*=\s*\d+\s*\)\s*)?((?:(?:flat|smooth|noperspective"
                       r"|centroid)\s+)*)(in|out)([ \t]+)(\w+)[ \t]+(\w+)[ \t]*(\[[^\]]*\])?[ \t]*;", re.M)
+# A declaration of several names (``uniform float a,b;``, ``in vec2 vUv,vCrack;``), split into one per name first.
+_LIST = re.compile(rf"{_START}([ \t]*)((?:(?:flat|smooth|noperspective|centroid)\s+)*)(uniform|in|out)[ \t]+(\w+)[ \t]+"
+                   r"(\w+(?:[ \t]*,[ \t]*\w+)+)[ \t]*;", re.M)
 _COMMENTS = re.compile(r"//[^\n]*|/\*.*?\*/", re.S)
 _VERSION = re.compile(r"\A[ \t]*#version[^\n]*\n")
 _SLOTS = {"mat4": 4, "mat3": 3, "mat2": 2}
@@ -48,6 +52,17 @@ def _const_int(source: str, name: str) -> int:
 def _strip_comments(source: str) -> str:
     """Comments blanked to the same length (so offsets stay valid and nothing inside a comment matches)."""
     return _COMMENTS.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), source)
+
+
+def split_declaration_lists(source: str) -> str:
+    """``source`` with each declaration of several names (``uniform float a,b;``, ``flat out float x,y;``) written as
+    one declaration per name, in order, on the same line; nothing else changes."""
+    edits = []
+    for match in _LIST.finditer(_strip_comments(source)):
+        indent, qualifiers, way, kind, names = match.groups()
+        edits.append((match.span(), indent + " ".join(f"{qualifiers}{way} {kind} {name.strip()};"
+                                                      for name in names.split(","))))
+    return _replace_spans(source, edits)
 
 
 def _loose_uniforms(source: str) -> list[tuple[tuple[int, int], str, str]]:
@@ -138,7 +153,7 @@ def portable_program(vertex, fragments: Sequence[str], *, block: str, samplers: 
 def _convert(stages: list[str], vertices: int, block: str, samplers: Mapping[str, int], binding: int):
     fields: dict[str, str] = {}
     stripped = []
-    for source in stages:
+    for source in map(split_declaration_lists, stages):
         edits = []
         for span, name, kind in _loose_uniforms(source):
             if fields.setdefault(name, kind) != kind:
@@ -218,4 +233,4 @@ def pack_block(layout: Scene3DBlockLayout, values: Mapping[str, object]) -> byte
     return layout.pack(packed)
 
 
-__all__ = ["block_declaration", "block_layout_from_glsl", "pack_block", "portable_program"]
+__all__ = ["block_declaration", "block_layout_from_glsl", "pack_block", "portable_program", "split_declaration_lists"]

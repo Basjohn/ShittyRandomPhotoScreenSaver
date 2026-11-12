@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_ghost_fragment, scene3d_motion_fragment, scene3d_motion_vertex
 
 
@@ -113,3 +114,16 @@ DEBRIS_MOTION_FRAGMENT = scene3d_motion_fragment(DEBRIS_FRAGMENT)
 # With motion trails: the same chunks and chips as flat ghost silhouettes.
 CRUMBLE_GHOST_FRAGMENT = scene3d_ghost_fragment(CRUMBLE_MOTION_FRAGMENT)
 DEBRIS_GHOST_FRAGMENT = scene3d_ghost_fragment(DEBRIS_MOTION_FRAGMENT)
+
+# N1.6: each program's values in one std140 pass block (``portable_program``; a motion-writing variant and its ghost
+# share one), the old picture on unit 0 and the chunks' motion table on unit 1.
+_CHUNK_SAMPLERS = {"uOldTex": 0, "uMotion": 1}
+CRUMBLE_VERTEX, (CRUMBLE_FRAGMENT,), CRUMBLE_BLOCK = portable_program(
+    CRUMBLE_VERTEX, (CRUMBLE_FRAGMENT,), block="CrumbleChunks", samplers=_CHUNK_SAMPLERS)
+CRUMBLE_MOTION_VERTEX, (CRUMBLE_MOTION_FRAGMENT, CRUMBLE_GHOST_FRAGMENT), CRUMBLE_MOTION_BLOCK = portable_program(
+    CRUMBLE_MOTION_VERTEX, (CRUMBLE_MOTION_FRAGMENT, CRUMBLE_GHOST_FRAGMENT), block="CrumbleChunksMotion",
+    samplers=_CHUNK_SAMPLERS)
+DEBRIS_VERTEX, (DEBRIS_FRAGMENT,), DEBRIS_BLOCK = portable_program(
+    DEBRIS_VERTEX, (DEBRIS_FRAGMENT,), block="CrumbleDebris", samplers={})
+DEBRIS_MOTION_VERTEX, (DEBRIS_MOTION_FRAGMENT, DEBRIS_GHOST_FRAGMENT), DEBRIS_MOTION_BLOCK = portable_program(
+    DEBRIS_MOTION_VERTEX, (DEBRIS_MOTION_FRAGMENT, DEBRIS_GHOST_FRAGMENT), block="CrumbleDebrisMotion", samplers={})
