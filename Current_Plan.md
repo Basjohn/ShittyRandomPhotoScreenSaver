@@ -894,11 +894,19 @@ solid border pixels with nothing blended, in the saver's frame and in the DWM co
 `.artifacts/evidence/display/d1_run/20261112_devcurve_card_edge/` before,
 `20261112_devcurve_card_edge_whole_logical/` after; `20261112_devcurve_card_edge_after/before_after_crops_x4.png`).
 
-- [ ] The Edit outline and handles follow the exact record, so they can sit up to half a device pixel from the
-  drawn card: draw them from `resolve_card_drawn_rect` too (one owner), with a test.
-- [ ] R-192 remainder: a monitor whose non-overscanned axis is not a whole number of logical pixels at its DPR (for
-  example 1366 px at 125 %) is still stretched on that axis; add a second exterior-edge overscan for that axis when
-  one exists (never on a shared edge), extend the durability sweep in `tests/test_qtquick_window.py`.
+- Landed 12 Nov: R-192's second axis (an exterior overscan on the other axis when it is not a whole logical size; the
+  MSI display at 150 % was stretched horizontally by 0.9998 and now overscans 2 px on its outer left edge) and the
+  Visualizer's Edit outline and handles on the drawn card (`drawnCardRect`, one owner with the card's placement).
+  Neither seen on a real display yet.
+- [ ] D1 run of the second-axis fix when two displays are connected (the MSI is Display 0 and is never taken without the
+  operator's permission; a check there is the operator's or waits for their leave): the card's left and right edges
+  on the MSI at native pixels.
+- [ ] Side defect: `rendering/quick/custom_layout_overlay.py:998-1013` does not refresh `contentEnvelopeItem` when the
+  session item changes, so a Visualizer root created after Edit binds leaves the frame without envelope, glyph row or
+  drawn rect until the model resets (the product order shows the Visualizer first; a test binding first never gets
+  the root): refresh at the owner, test in both orders.
+- [ ] Side defect: the Edit overlay sits outside `pixelShiftLayer`, so with pixel shift active during Edit the frame
+  would not follow the shifted card: decide whether Edit suspends pixel shift or the overlay follows it, and test.
 - [ ] The tests that open windows were not run on the merge (`test_qtquick_visualizer_clip_smoke.py`, Neon Lake's
   `actual_neon_qsg_pixels`): run them hidden at the next milestone run.
 
