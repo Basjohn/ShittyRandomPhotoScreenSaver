@@ -278,6 +278,17 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     `VK_EXT_debug_utils` and the two surface extensions beside the preferred two. No validation layer installed
     (implicit layers present: NV optimus, NV present, WEOBS hook, Steam overlay and fossilize); no Qt or loader
     environment variable set.
+  - Round 2, our instance and device (731faf28, built first time; `run_n06.py --round device`, PASS, 16 of 16
+    checks, evidence `.artifacts/evidence/native_core/n06/20261112_n06_device/`): our VkInstance at API 1.2 (surface,
+    win32 surface, the two preferred instance extensions, debug utils) adopted by a QVulkanInstance with the same
+    lists; our VkDevice on family 0, one queue, the five imported-device extensions plus `VK_EXT_device_fault`, the
+    1.0/1.1/1.2 features equal to Qt's rule name for name (plus the shading-rate, divisor and fault structures);
+    the hidden Qt Quick host (the spike's QuadField, 120 frames) ran on our device (QRhi's native handle = ours,
+    family 0 queue 0) and is pixel-identical to the same host on Qt's own device (max difference 0; negative control,
+    the next frame: max 186, 108,748 pixels); QRhi feature flags equal. Teardown (device idle, destroy,
+    `resetDeviceFunctions`, both QVulkanInstances, messenger, instance) clean. Messenger: 0 errors and 0 warnings in
+    render and teardown; one loader warning at create ("Registry lookup failed to get layer manifest files", no
+    layers installed). Validation still owed.
   - [ ] The Vulkan validation layer (with synchronisation validation) on the lead's machine: today there is no Vulkan
     SDK here (the spike used the driver's loader and Vulkan-Headers only). Its download and install is the
     operator's approval (a download); without it N0.6 and N0.7 run their functional parts and record validation as
