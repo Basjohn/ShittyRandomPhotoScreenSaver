@@ -24,6 +24,16 @@ lost context or a retired family restarts that family's history from zero (lifec
 Every replacement of a family's state (a new revision, a geometry edit, a capacity change) allocates the new state
 before the old is released (D3's failed swap): an allocation that fails leaves the current state current and drawn,
 is logged once and its (revision, capacity) is not tried again; a new key is.
+
+A family's state is keyed on its revision alone, and that is a whole stream identity, not a per-process count: every
+engine session numbers its revisions from its own label namespace (``engine_worker``: ``namespace << 32``; the main
+process's ``engine_worker_link.next_label_namespace`` gives every configure a fresh one, never repeated, a replacement
+worker included), and the main process's own in-process simulations number from 1 in one shared counter, far below
+any namespace. So no two streams this renderer can be handed (a worker and its replacement, two activations, worker
+and in-process) present the same revision, and a stream's step serials restarting cannot hide behind an old state.
+The guard is ``test_a_replacement_stream_never_presents_an_alias_of_the_old_streams_geometry`` (D3's identity test):
+without the namespace the stale geometry is drawn. Only a tool that runs a namespace-0 session in the main process
+restarts that counter; the product never does.
 """
 from __future__ import annotations
 
