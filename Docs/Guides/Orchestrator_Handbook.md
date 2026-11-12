@@ -14,10 +14,17 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
   fixed question and a brief that names the few documents it may edit (the decision documents and the plan,
   never product code, tests or builds); nobody else edits the plan while it runs; nothing else runs on Fable.
   Its decisions are written with their reasons where the brief says, and the lead reviews and merges the branch.
-- **Agent slots, the cap** (operator, 12 Nov 2026): two Opus 5.5 High (architecture, shaders, visual work), two
-  Opus 5.5 Medium (bounded repairs, test work, preset touch-ups at low priority), one Sonnet 5.5 Medium (documents
-  and research only; never product code or tests), plus the lead. The cap counts agents running at once; when it
-  shrinks, nobody busy is stopped unless their work is safely handed over (journal current, work committed).
+- **Agent slots, the cap** (operator, 12 Nov 2026 evening; agents were dying to usage limits before delivering):
+  - one Opus 5.5 High for complex or architecturally sensitive work;
+  - one Opus 5.5 High for audits, including document and plan audits;
+  - one Opus 5.5 Medium for general work (bounded repairs, tests, presets);
+  - one Sonnet 5.5 Medium for research and documents only, never product code or tests;
+  - plus the lead.
+
+  Normally one high-end task, one medium task and one audit run at once, unless the operator changes the cap.
+  The cap counts agents running at once. When it shrinks, nobody busy is stopped: they finish, or hand over safely
+  (journal current, work committed). New work starts only once the plans are in logical order and the open
+  worries are solved.
 - **Closing before opening:** a slot takes no new work while its last report is unreviewed or unmerged. A dispatch
   is one plan item, or one step of a large one, sized to finish and report well inside a usage window.
 
