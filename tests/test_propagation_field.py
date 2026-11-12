@@ -80,6 +80,37 @@ def test_the_gpu_arrival_matches_the_cpu_geodesic_and_fingers_along_a_channel(gl
     assert not field.has_resources
 
 
+# A cost that varies everywhere, so a race between neighbouring texels shows in the result.
+_VARIED_COST_GLSL = ("uniform float uChannel;\nfloat propagationCost(vec2 p) {"
+                     " return abs(p.y) < 0.03 ? uChannel : 2.0 + sin(9.0 * p.x) * cos(7.0 * p.y); }\n")
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("size", [(1920, 1080), _SIZE])
+def test_the_build_is_bit_repeatable_and_independent_of_its_step_split(gl_resources, size):
+    """Relax never reads the field it writes (ping-pong), so ten builds of one input are bit-identical, and a build
+    split into odd-sized warm-up steps ends bit-identical to one built in a single frame."""
+    field = PropagationField("test", "repeat", _VARIED_COST_GLSL)
+    sources, cost = [(-0.7, 0.0, 0.0), (0.5, 0.3, 0.2), (0.1, -0.35, 0.05)], {"uChannel": 0.3}
+    try:
+        runs = []
+        for run in range(10):
+            arrival, extent = field.textures(gl_resources, size, ("repeat", run), sources, 2.6, cost)
+            runs.append((_read(arrival, propagation_size(size)), _read(extent, (1, 1))))
+        differing = [index for index, (arrival, extent) in enumerate(runs)
+                     if arrival.tobytes() != runs[0][0].tobytes() or extent.tobytes() != runs[0][1].tobytes()]
+        assert differing == [], (f"runs {differing} differ from run 0 in up to "
+                                 f"{max(np.count_nonzero(a != runs[0][0]) for a, _ in runs)} values")
+        while not field.build_step(gl_resources, size, ("split",), sources, 2.6, cost, passes=37):
+            pass
+        arrival, extent = field.textures(gl_resources, size, ("split",), sources, 2.6, cost)
+        assert _read(arrival, propagation_size(size)).tobytes() == runs[0][0].tobytes()
+        assert _read(extent, (1, 1)).tobytes() == runs[0][1].tobytes()
+    finally:
+        field.release()
+    assert not field.has_resources
+
+
 @pytest.mark.qt
 def test_without_a_channel_the_front_is_round(gl_resources):
     _field, flat, _extent = _build(gl_resources, 2.0)
