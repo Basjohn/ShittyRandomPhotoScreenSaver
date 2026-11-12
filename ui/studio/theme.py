@@ -257,6 +257,12 @@ def studio_theme(theme=None) -> dict[str, str]:
         trace2 = _ensure_on_surfaces(_mix(text, panel, .25), trace_bases, 3.0, well_light)
         well_trace2 = trace2
     else:
+        # accentText is drawn on the accent fill (the checked box's tick), not on accent_soft, which settled it above.
+        # Same ink rule as the cards (Card_Surface_Materials.md, M2b): an ink that misses its ratio on the fill it sits
+        # on corrects itself away from that fill; an ink that reads keeps its value byte for byte.
+        if contrast(accent_text, accent) < 4.5:
+            accent_on_light = contrast(accent, (0., 0., 0.)) > contrast(accent, (1., 1., 1.))
+            accent_text = _ensure(accent_text, accent, 4.5, accent_on_light)
         trace2 = _mix(text, panel, .25)
         well_trace2 = _ensure(trace2, well, 3.0, well_light)
     outer_border = token("chrome.outer_border", (255, 255, 255, 255))

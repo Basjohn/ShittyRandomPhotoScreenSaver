@@ -137,6 +137,7 @@ def owner_replay(clip: Any, mode: str, *, preset: int = 0, settings: Any = None,
     digests: list[str] = []
     drawn: list[tuple[float, ...]] = []
     extents: list[tuple[float, float]] = []
+    views: list[tuple] = []
     events: list[tuple[int, str]] = []
     ordinary_records: dict[str, Any] = {}
     current = [0]
@@ -183,6 +184,9 @@ def owner_replay(clip: Any, mode: str, *, preset: int = 0, settings: Any = None,
                     raise RuntimeError(f"missing logical frame {clip.name}:{index}")
                 digests.append(frame_digest(logical))
                 owner.sync_present()
+                # The view the owner's main side would send (``VIS_SET_VIEW``) after this frame's presentation: a
+                # worker replay applies it before the next tick, as the production link does (N0.4).
+                views.append(controller.layout_metrics_snapshot)
                 presentation = item.visualizer_item.presentation if item.visualizer_item is not None else None
                 drawn.append(tuple(presentation.outer_rect) if presentation is not None else ())
                 extents.append(tuple(controller.committed_viewport_extent))
@@ -198,7 +202,18 @@ def owner_replay(clip: Any, mode: str, *, preset: int = 0, settings: Any = None,
         factory.deleteLater()
         app.processEvents()
     return {"digests": digests, "drawn": drawn, "extents": extents, "events": events,
-            "ordinary": ordinary_records, "display": display}
+            "ordinary": ordinary_records, "display": display, "views": views}
+
+
+def view_message(snapshot: tuple) -> dict:
+    """A ``VIS_SET_VIEW`` payload for an owner's ``layout_metrics_snapshot`` (the link's own shape, N0.4)."""
+
+    from core.framed_view import VIEW_MESSAGE_VERSION
+
+    extent, rotations, override_extent, override_rotations, framed_view = snapshot
+    return {"version": VIEW_MESSAGE_VERSION, "extent": extent, "rotations": rotations,
+            "override_extent": override_extent, "override_rotations": override_rotations,
+            "framed_view": None if framed_view is None else tuple(float(v) for v in framed_view)}
 
 
 # ------------------------------------------------------------------------------- production host, hidden render
