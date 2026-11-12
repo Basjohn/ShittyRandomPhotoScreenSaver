@@ -49,6 +49,8 @@ from core.settings.visualizer_mode_registry import (  # noqa: E402
     get_visualizer_presentation_policy,
 )
 from rendering.quick.render.gl_resources import compile_program  # noqa: E402
+# The probe window is real and GPU-rendered but never on screen: pixels are read from its GL target.
+from tests._invisible_windows import keep_off_screen  # noqa: E402
 from rendering.quick.visualizer import (  # noqa: E402
     VisualizerClipFrame,
     VisualizerClipHost,
@@ -1485,7 +1487,7 @@ class _VisualizerModeRunner(QObject):
         self._frame_swap_count += 1
 
     def start(self) -> None:
-        self._window.show()
+        keep_off_screen(self._window).show()
         self._window.update()
         QTimer.singleShot(20, self._poll)
 
@@ -1574,7 +1576,7 @@ class _Runner(QObject):
 
     def start(self) -> None:
         self._apply_policy(self._policy)
-        self._window.show()
+        keep_off_screen(self._window).show()
         self._window.update()
         QTimer.singleShot(20, self._poll)
 
