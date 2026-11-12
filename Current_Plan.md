@@ -1072,9 +1072,6 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   failed once when run after `test_neon_terrain_growth.py::test_an_unpainted_growth_to_the_largest_grid_renders_the_same_picture`,
   and `...renders_the_same_picture[0]` failed once in a big batch. Both pass on rerun. Find the shared state
   (GL or global) at its owner.
-- [ ] The committed Neon Lake and Waveform Ribbon Guided Setup previews no longer match current renders (mean pixel
-  difference about 37 and 11). Re-render both through the foundry's recorded-run route, at the mode defaults; the
-  lead reviews old against new before merge.
 
 ### 1D.4 Guided Setup: the default Visualizer mode (operator, 12 Nov; Medium, after 1D.1's side defects)
 
