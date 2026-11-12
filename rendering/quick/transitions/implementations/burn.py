@@ -6,11 +6,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 import math
 
-from OpenGL import GL as gl
-
 from rendering.gl_programs.burn_program import burn_program
 from rendering.transition_settings import require_transition_settings
-from ..fullscreen_pass import FullscreenPassRenderer
+from ..fullscreen_pass import FullscreenPassRenderer, fullscreen_pass_parts
 from ..render_contract import QuickTransitionRenderFrame
 
 
@@ -134,7 +132,8 @@ class QuickBurnRenderer(FullscreenPassRenderer):
     transition_id = "burn"
     label = "Quick Burn"
     fragment_source = burn_program.fragment_source
-    uniform_names = (
+    vertex_source, block = fullscreen_pass_parts(fragment_source, "BurnPass")
+    value_names = (
         "u_direction", "u_jaggedness", "u_glow_intensity",
         "u_glow_color", "u_ember_color", "u_char_width", "u_smoke_enabled",
         "u_smoke_density", "u_ash_enabled", "u_ash_density",
@@ -145,21 +144,23 @@ class QuickBurnRenderer(FullscreenPassRenderer):
     def resolve(self, frame: QuickTransitionRenderFrame):
         return _burn_parameters(frame.run.request.parameter_dict())
 
-    def apply(self, params, uniforms, frame: QuickTransitionRenderFrame) -> None:
-        gl.glUniform1i(uniforms["u_direction"], params.direction)
-        gl.glUniform1f(uniforms["u_jaggedness"], params.jaggedness)
-        gl.glUniform1f(uniforms["u_glow_intensity"], params.glow_intensity)
-        gl.glUniform4f(uniforms["u_glow_color"], *params.glow_color)
-        gl.glUniform4f(uniforms["u_ember_color"], *params.ember_color)
-        gl.glUniform1f(uniforms["u_char_width"], params.char_width)
-        gl.glUniform1i(uniforms["u_smoke_enabled"], 1 if params.smoke_enabled else 0)
-        gl.glUniform1f(uniforms["u_smoke_density"], params.smoke_density)
-        gl.glUniform1i(uniforms["u_ash_enabled"], 1 if params.ash_enabled else 0)
-        gl.glUniform1f(uniforms["u_ash_density"], params.ash_density)
-        gl.glUniform1i(uniforms["u_flames"], 1 if params.flames else 0)
-        gl.glUniform1i(uniforms["u_ember_veins"], 1 if params.ember_veins else 0)
-        gl.glUniform1f(uniforms["u_time"], _burn_effect_time_seconds(frame))
-        gl.glUniform1f(uniforms["u_seed"], params.seed)
+    def values(self, params, frame: QuickTransitionRenderFrame) -> dict[str, object]:
+        return {
+            "u_direction": params.direction,
+            "u_jaggedness": params.jaggedness,
+            "u_glow_intensity": params.glow_intensity,
+            "u_glow_color": params.glow_color,
+            "u_ember_color": params.ember_color,
+            "u_char_width": params.char_width,
+            "u_smoke_enabled": 1 if params.smoke_enabled else 0,
+            "u_smoke_density": params.smoke_density,
+            "u_ash_enabled": 1 if params.ash_enabled else 0,
+            "u_ash_density": params.ash_density,
+            "u_flames": 1 if params.flames else 0,
+            "u_ember_veins": 1 if params.ember_veins else 0,
+            "u_time": _burn_effect_time_seconds(frame),
+            "u_seed": params.seed,
+        }
 
 
 def create_transition_renderer() -> QuickBurnRenderer:

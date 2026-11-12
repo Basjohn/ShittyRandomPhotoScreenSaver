@@ -6,7 +6,8 @@ import pytest
 
 from OpenGL import GL as gl
 
-from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
+from rendering.gl_programs.item_quad import item_quad_program
+from rendering.gl_programs.portable import pack_block
 from rendering.quick.scene3d import resources as resource_module
 from rendering.quick.scene3d.resources import MeshResources, bind_frame
 from tools.transition_contact_sheet import TransitionCapture
@@ -29,6 +30,9 @@ void main() {
     FragColor = vec4(texture(uOldTex, vUv).r, texture(uNewTex, vUv).g, 0.0, 1.0);
 }
 """
+# Over the item quad, its matrix and item size in the program's pass block (N1.6).
+_FRAME_VERTEX, _FRAME_FRAGMENT, _FRAME_BLOCK = item_quad_program(_FRAME_FRAGMENT, block="FrameProbe",
+                                                                 samplers={"uOldTex": 0, "uNewTex": 1})
 
 
 def test_a_program_that_fails_to_compile_is_cached_logged_once_and_settles_the_warm_up(monkeypatch, caplog):
@@ -173,8 +177,9 @@ def test_frame_multibind_initializes_linked_program_once_and_leaves_active_and_u
     try:
         run = capture.run("block_spins", direction="left")
         frame = capture.frame(run, 0.5)
-        program = resources.program("frame", ITEM_QUAD_VERTEX_SOURCE, _FRAME_FRAGMENT)
-        uniforms = resources.uniforms("frame", ("uMatrix", "uItemSize", "uOldTex", "uNewTex"))
+        program = resources.program("frame", _FRAME_VERTEX, _FRAME_FRAGMENT)
+        uniforms = resources.uniforms("frame", ("uOldTex", "uNewTex"))
+        values = resources.values("frame")
         gl.glActiveTexture(gl.GL_TEXTURE2)
         gl.glBindTexture(gl.GL_TEXTURE_2D, capture.textures[2])
         gl.glActiveTexture(gl.GL_TEXTURE3)
@@ -188,9 +193,10 @@ def test_frame_multibind_initializes_linked_program_once_and_leaves_active_and_u
             return original(*args)
 
         monkeypatch.setattr(resource_module.gl, "glProgramUniform1i", record)
-        bind_frame(program, uniforms, frame)
-        bind_frame(program, uniforms, frame)
+        bind_frame(program, uniforms, frame, values)
+        bind_frame(program, uniforms, frame, values)
 
+        assert values["uMatrix"] == frame.matrix_values and values["uItemSize"] == frame.logical_size
         assert calls == [
             (program, uniforms["uOldTex"], 0),
             (program, uniforms["uNewTex"], 1),
@@ -205,10 +211,12 @@ def test_frame_multibind_initializes_linked_program_once_and_leaves_active_and_u
         gl.glActiveTexture(active_before)
 
         resources.release_resources()
-        replacement = resources.program("frame", ITEM_QUAD_VERTEX_SOURCE, _FRAME_FRAGMENT)
-        replacement_uniforms = resources.uniforms("frame", ("uMatrix", "uItemSize", "uOldTex", "uNewTex"))
+        replacement = resources.program("frame", _FRAME_VERTEX, _FRAME_FRAGMENT)
+        replacement_uniforms = resources.uniforms("frame", ("uOldTex", "uNewTex"))
         assert replacement_uniforms is not uniforms
-        bind_frame(replacement, replacement_uniforms, frame)
+        replacement_values = resources.values("frame")
+        assert replacement_values is not values and not replacement_values   # a new program's values start at zero
+        bind_frame(replacement, replacement_uniforms, frame, replacement_values)
         assert calls[2:] == [
             (replacement, replacement_uniforms["uOldTex"], 0),
             (replacement, replacement_uniforms["uNewTex"], 1),
@@ -216,8 +224,9 @@ def test_frame_multibind_initializes_linked_program_once_and_leaves_active_and_u
 
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
         gl.glViewport(0, 0, capture.width, capture.height)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        with resources.pass_blocks.bound(pack_block(_FRAME_BLOCK, replacement_values)):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
         pixels = np.frombuffer(
             bytes(gl.glReadPixels(0, 0, capture.width, capture.height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)),
             dtype=np.uint8,

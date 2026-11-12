@@ -7,14 +7,16 @@ from collections.abc import Mapping
 from OpenGL import GL as gl
 
 from rendering.gl_programs.edge_bloom_program import (
+    EDGE_BLOOM_BLOCK,
     EDGE_BLOOM_FRAGMENT_SOURCE,
     EDGE_BLOOM_LINE_TEXELS,
     EDGE_BLOOM_SETTLED,
+    EDGE_BLOOM_VERTEX_SOURCE,
     edge_bloom_thresholds,
 )
 from rendering.gl_programs.photo_colour import photo_accent_colour, photo_glow_colour
+from rendering.gl_programs.portable import pack_block
 from rendering.quick.scene3d.edge_field import EdgeField, edge_field_size, edge_field_warm_entries
-from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from ..render_contract import QuickTransitionRenderFrame
 
@@ -47,8 +49,7 @@ def edge_bloom_parameters(parameters: Mapping[str, object]) -> tuple[tuple[float
 class QuickEdgeBloomRenderer:
     transition_id = "edge_bloom"
 
-    _UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uNewTex", "uOldField", "uNewField", "uProgress", "uTime",
-                 "uLineWidth", "uGlow", "uSeed", "uColor", "uOldColor")
+    _SAMPLERS = ("uOldTex", "uNewTex")      # the fields' samplers are bound in the source; values in EDGE_BLOOM_BLOCK
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Edge Bloom Reveal")
@@ -81,7 +82,7 @@ class QuickEdgeBloomRenderer:
         ``size`` in device pixels, allocate nothing (the fields are built, not allocated, then)."""
         edge_bloom_parameters(parameters)
         r = self._resources
-        entries = [(r, *UNDERLAY_PROGRAM), (r, "edge_bloom", ITEM_QUAD_VERTEX_SOURCE, EDGE_BLOOM_FRAGMENT_SOURCE),
+        entries = [(r, *UNDERLAY_PROGRAM), (r, "edge_bloom", EDGE_BLOOM_VERTEX_SOURCE, EDGE_BLOOM_FRAGMENT_SOURCE),
                    *edge_field_warm_entries(r)]
         if not warm_programs(entries):
             return False
@@ -126,28 +127,28 @@ class QuickEdgeBloomRenderer:
                                             (frame.run.run_id, request.destination_image.identity), low, high)
         old_field = self._old_field.texture(r, frame.source_texture_id, size,
                                             (frame.run.run_id, request.source_image.identity), low, high)
-        program = r.program("edge_bloom", ITEM_QUAD_VERTEX_SOURCE, EDGE_BLOOM_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("edge_bloom", self._UNIFORMS)
+        program = r.program("edge_bloom", EDGE_BLOOM_VERTEX_SOURCE, EDGE_BLOOM_FRAGMENT_SOURCE)
+        uniforms = r.uniforms("edge_bloom", self._SAMPLERS)
+        values = r.values("edge_bloom")
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame)
+        bind_frame(program, uniforms, frame, values)
         gl.glActiveTexture(gl.GL_TEXTURE0 + _OLD_FIELD_UNIT)
         inherited = int(gl.glGetIntegerv(gl.GL_TEXTURE_BINDING_2D))
         gl.glActiveTexture(gl.GL_TEXTURE0)
-        gl.glBindTextureUnit(_NEW_FIELD_UNIT, new_field)
+        gl.glBindTextureUnit(_NEW_FIELD_UNIT, new_field)       # the program's sampler bindings
         gl.glBindTextureUnit(_OLD_FIELD_UNIT, old_field)
-        gl.glUniform1i(uniforms["uNewField"], _NEW_FIELD_UNIT)
-        gl.glUniform1i(uniforms["uOldField"], _OLD_FIELD_UNIT)
-        gl.glUniform1f(uniforms["uProgress"], progress)
-        gl.glUniform1f(uniforms["uTime"], progress * request.duration_ms / 1000.0)
-        gl.glUniform1f(uniforms["uLineWidth"], EDGE_BLOOM_LINE_TEXELS / edge_field_size(size)[1])
-        gl.glUniform1f(uniforms["uGlow"], glow)
-        gl.glUniform1f(uniforms["uSeed"], float(seed))
-        gl.glUniform3f(uniforms["uColor"], *color)
-        gl.glUniform3f(uniforms["uOldColor"], *old_color)
+        values["uProgress"] = progress
+        values["uTime"] = progress * request.duration_ms / 1000.0
+        values["uLineWidth"] = EDGE_BLOOM_LINE_TEXELS / edge_field_size(size)[1]
+        values["uGlow"] = glow
+        values["uSeed"] = float(seed)
+        values["uColor"] = color
+        values["uOldColor"] = old_color
         gl.glBindVertexArray(frame.quad_vao)
         try:
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+            with r.pass_blocks.bound(pack_block(EDGE_BLOOM_BLOCK, values)):
+                gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
         finally:
             gl.glBindTextureUnit(_OLD_FIELD_UNIT, inherited)
 

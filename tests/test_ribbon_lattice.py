@@ -9,6 +9,8 @@ disable_per_call_gl_error_checking()
 from OpenGL import GL as gl
 from core.ribbon_ring import RibbonRing
 from tests.test_ribbon_gpu import parallel_mvp
+from rendering.gl_programs.portable import pack_block
+from rendering.gl_programs.ribbon import RIBBON_BLOCK
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.ribbon import RibbonMaterial, RibbonPrimitive
 from rendering.quick.scene3d.target import SceneTarget
@@ -26,7 +28,7 @@ LATTICE_ONLY = dict(strand_light=0., rim_light=0., fill_light=0., rim_glow_light
 @pytest.fixture
 def scene(qt_app):
     target = OffscreenRenderTarget(W, H)
-    parts = SimpleNamespace(target=target, primitive=RibbonPrimitive(), resources=MeshResources('lattice test'),
+    parts = SimpleNamespace(target=target, primitive=RibbonPrimitive(), resources=MeshResources('lattice test', block_bytes=RIBBON_BLOCK.size),
                             scene=SceneTarget('lattice test'))
     parts.card = SimpleNamespace(viewport=(0, 0, W, H), logical_size=(float(W), float(H)),
                                  matrix_values=(2/W, 0, 0, 0, 0, -2/H, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1), quad_vao=target.vao)
@@ -74,9 +76,10 @@ def scene_render(parts, packet, material):
 
 # A synthetic sheet: surface coordinates are linear in the pixel position, so the CPU knows where every line belongs.
 SURFACE_VERTEX = '''#version 460 core
-out vec3 vWorld; out vec3 vNormal; out float vPhase; out float vAcross;
-out float vEmission; out float vLocal; out float vCoverage; out float vExpanded; out float vFaceScale;
-flat out vec4 vColour; flat out vec4 vColourB; out vec4 vTint;
+layout(location=0) out vec3 vWorld; layout(location=1) out vec3 vNormal; layout(location=2) out float vPhase;
+layout(location=3) out float vAcross; layout(location=4) out float vEmission; layout(location=5) out float vLocal;
+layout(location=6) out float vCoverage; layout(location=7) out float vExpanded; layout(location=8) out float vFaceScale;
+layout(location=9) flat out vec4 vColour; layout(location=10) flat out vec4 vColourB; layout(location=11) out vec4 vTint;
 uniform vec3 uSheet;  // phase per pixel, across per pixel, phase offset
 void main() {
     vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2)*2.0-1.0;
@@ -95,13 +98,12 @@ def surface(parts, material, phase_per_pixel, across_per_pixel, phase_offset=0.)
     parts.target.bind(clear=(0., 0., 0., 0.))
     program = parts.resources.program('lattice surface', SURFACE_VERTEX, RIBBON_LIGHT_FRAGMENT)
     gl.glUseProgram(program)
-    for name, value in material.uniforms().items():
-        {2: gl.glUniform2f, 3: gl.glUniform3f, 4: gl.glUniform4f}[len(value)](gl.glGetUniformLocation(program, name), *value)
     gl.glUniform3f(gl.glGetUniformLocation(program, 'uSheet'), phase_per_pixel, across_per_pixel, phase_offset)
     gl.glDisable(gl.GL_DEPTH_TEST)
     gl.glDisable(gl.GL_BLEND)
     gl.glBindVertexArray(parts.target.vao)
-    gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+    with parts.resources.pass_blocks.bound(pack_block(RIBBON_BLOCK, material.uniforms())):
+        gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
     image = parts.target.read_rgba()[:, :, 0].astype(float)
     # Rows inside the sheet (across in 0..1) and away from its rims.
     return image[H//2 - 25:H//2 + 25, 10:W - 10]
@@ -138,8 +140,9 @@ def test_lattice_uniforms_reach_the_light_pass(scene):
     on = light(scene, packet, RibbonMaterial(**LATTICE_ONLY, lattice_light=1.))
     assert not off.any() and on.sum() > 0
     program = scene.primitive.resources._programs['light']
+    assert gl.glGetUniformBlockIndex(program, RIBBON_BLOCK.name) != gl.GL_INVALID_INDEX
     for name in ('uLattice', 'uLatticeTone'):
-        assert gl.glGetUniformLocation(program, name) >= 0
+        assert name in dict(RIBBON_BLOCK.fields)
 
 
 def test_lattice_lines_lie_on_the_sheet_coordinates_and_travel_with_its_phase(scene):

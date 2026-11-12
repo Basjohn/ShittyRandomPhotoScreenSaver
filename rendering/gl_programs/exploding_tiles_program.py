@@ -14,8 +14,11 @@ import math
 import random
 from collections.abc import Mapping
 
+from rendering.gl_programs.item_quad import item_quad_program
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import (
     SCENE3D_DETAIL_NAMES,
+    SCENE3D_FRAME_BLOCK_BINDING,
     SCENE3D_GLSL,
     Scene3DBlockLayout,
     scene3d_impulse,
@@ -308,7 +311,7 @@ EXPLODING_TILES_FRAME_BLOCK = Scene3DBlockLayout.of("ExplodingTilesFrame", (
     ("uSeconds", "float"), ("uBlast", "vec2"), ("uBody", "vec3"), ("uEmissive", "float"),
     ("uShutter", "float"), ("uViewport", "vec2"),
 ))
-_FRAME_GLSL = EXPLODING_TILES_FRAME_BLOCK.glsl()
+_FRAME_GLSL = EXPLODING_TILES_FRAME_BLOCK.glsl(SCENE3D_FRAME_BLOCK_BINDING)
 _MOTION_UNIFORMS_GLSL = "uniform mat4 uMatrix; uniform vec2 uItemSize;\n" + _FRAME_GLSL
 
 _TILE_MOTION_GLSL = f"""
@@ -673,3 +676,20 @@ void main() {
 )
 # With motion trails: the same slabs as flat ghost silhouettes.
 EXPLODING_TILES_GHOST_FRAGMENT_SOURCE = scene3d_ghost_fragment(EXPLODING_TILES_FRAGMENT_SOURCE)
+
+# N1.6: each program's loose values (the matrix and item size, a ghost's fade) in one std140 pass block beside the
+# frame block (``portable_program``; the slabs and their ghosts share one), samplers at their units (the photographs 0
+# and 1, the environment 2).
+EXPLODING_TILES_BACKDROP_VERTEX_SOURCE, EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE, EXPLODING_TILES_BACKDROP_BLOCK = (
+    item_quad_program(EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE, block="ExplodingTilesBackdrop",
+                      samplers={"uNewTex": 1}))
+(EXPLODING_TILES_VERTEX_SOURCE, (EXPLODING_TILES_FRAGMENT_SOURCE, EXPLODING_TILES_GHOST_FRAGMENT_SOURCE),
+ EXPLODING_TILES_BLOCK) = portable_program(
+    EXPLODING_TILES_VERTEX_SOURCE, (EXPLODING_TILES_FRAGMENT_SOURCE, EXPLODING_TILES_GHOST_FRAGMENT_SOURCE),
+    block="ExplodingTiles", samplers={"uOldTex": 0, "uEnvironment": 2})
+EXPLODING_TILES_SHADOW_VERTEX_SOURCE, (EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE,), EXPLODING_TILES_SHADOW_BLOCK = (
+    portable_program(EXPLODING_TILES_SHADOW_VERTEX_SOURCE, (EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE,),
+                     block="ExplodingTilesShadows", samplers={"uNewTex": 1}))
+EXPLODING_TILES_SPARK_VERTEX_SOURCE, (EXPLODING_TILES_SPARK_FRAGMENT_SOURCE,), EXPLODING_TILES_SPARK_BLOCK = (
+    portable_program(EXPLODING_TILES_SPARK_VERTEX_SOURCE, (EXPLODING_TILES_SPARK_FRAGMENT_SOURCE,),
+                     block="ExplodingTilesSparks", samplers={}))

@@ -8,6 +8,14 @@ from tests.test_waveform_ribbon_camera import camera
 pytestmark=pytest.mark.qt
 
 
+def probe_floor_vertex():
+    """The floor's vertex stage without its WaveformFloor block: a probe fragment built on FLOOR_WORLD_GLSL declares
+    those values as loose uniforms of its own (a test-only OpenGL program)."""
+    from rendering.gl_programs.portable import block_declaration
+    from rendering.gl_programs.waveform_ribbon import FLOOR_BLOCK,FLOOR_VERTEX
+    return FLOOR_VERTEX.replace(block_declaration(FLOOR_VERTEX,FLOOR_BLOCK.name),'')
+
+
 class GroundProbe:
     def __init__(self,width,height):
         from rendering.gl_error_policy import disable_per_call_gl_error_checking
@@ -16,7 +24,7 @@ class GroundProbe:
         from rendering.quick.offscreen_target import OffscreenRenderTarget
         from rendering.quick.scene3d.resources import MeshResources
         from rendering.quick.scene3d.waveform import floor_vertices
-        from rendering.gl_programs.waveform_ribbon import FLOOR_VERTEX,FLOOR_WORLD_GLSL
+        from rendering.gl_programs.waveform_ribbon import FLOOR_WORLD_GLSL
         self.gl=gl;self.target=OffscreenRenderTarget(width,height);self.resources=MeshResources('infinite ground probe')
         fragment='#version 460 core\n'+FLOOR_WORLD_GLSL+'''
 layout(std430,binding=5) writeonly buffer WorldHits { vec4 hits[]; };
@@ -26,7 +34,7 @@ void main(){vec3 world;float depth;if(!floorWorldHit(world,depth))discard;
 gl_FragDepth=depth;FragColor=vec4(1,0,0,1);
 hits[int(gl_FragCoord.y)*int(uTestWidth)+int(gl_FragCoord.x)]=vec4(world,depth);}
 '''
-        self.program=self.resources.program('ground',FLOOR_VERTEX,fragment)
+        self.program=self.resources.program('ground',probe_floor_vertex(),fragment)
         self.vao,self.count=self.resources.mesh('coverage',floor_vertices(),(3,))
         self.buffer=int(np.asarray(gl.glGenBuffers(1)).reshape(-1)[0])
 

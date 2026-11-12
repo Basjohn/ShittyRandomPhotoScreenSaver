@@ -865,3 +865,25 @@ void main() {
     Emission=vec4(glowing,dot(glowing,vec3(0.2126,0.7152,0.0722)))*uGlow.x;
 }
 """)
+
+# N1.6: the programs above as authored for OpenGL, rewritten portable (``rendering.gl_programs.portable``): each family's
+# loose uniforms in one pass block its owner packs (``rendering.quick.scene3d.ribbon``), samplers bound to the units
+# the owner uses (the yielding floor 13, the Pulse Rim field 7, the mist volume 8), varyings located. Binding plan per
+# program: the packet's storage 0, the strand cohorts' storage 1, the samplers above, the pass block 18.
+from rendering.gl_programs.mist import FOG_TEXTURE_UNIT as _FOG_UNIT  # noqa: E402
+from rendering.gl_programs.portable import portable_program  # noqa: E402
+
+RIBBON_FLOOR_GIVE_UNIT = 13
+RIBBON_PULSE_RIM_UNIT = 7
+_SAMPLERS = {"uFloorGiveField": RIBBON_FLOOR_GIVE_UNIT, "uPulseRimField": RIBBON_PULSE_RIM_UNIT,
+             "uFogVolume": _FOG_UNIT}
+(RIBBON_VERTEX, RIBBON_CONTINUOUS_VERTEX), (RIBBON_FRAGMENT, RIBBON_BODY_FRAGMENT, RIBBON_LIGHT_FRAGMENT), \
+    RIBBON_BLOCK = portable_program((RIBBON_VERTEX, RIBBON_CONTINUOUS_VERTEX),
+                                    (RIBBON_FRAGMENT, RIBBON_BODY_FRAGMENT, RIBBON_LIGHT_FRAGMENT),
+                                    block="RibbonDraw", samplers=_SAMPLERS)
+RIBBON_SPARK_VERTEX, (RIBBON_SPARK_FRAGMENT,), RIBBON_SPARK_BLOCK = portable_program(
+    RIBBON_SPARK_VERTEX, (RIBBON_SPARK_FRAGMENT,), block="RibbonSparkDraw", samplers=_SAMPLERS)
+RIBBON_STRAY_VERTEX, (RIBBON_STRAY_FRAGMENT,), RIBBON_STRAY_BLOCK = portable_program(
+    RIBBON_STRAY_VERTEX, (RIBBON_STRAY_FRAGMENT,), block="RibbonStrayDraw", samplers=_SAMPLERS)
+RIBBON_COHORT_STRAY_VERTEX, (RIBBON_COHORT_STRAY_FRAGMENT,), RIBBON_COHORT_STRAY_BLOCK = portable_program(
+    RIBBON_COHORT_STRAY_VERTEX, (RIBBON_COHORT_STRAY_FRAGMENT,), block="RibbonCohortStrayDraw", samplers=_SAMPLERS)

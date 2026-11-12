@@ -206,10 +206,12 @@ void main() {
 
 @pytest.mark.parametrize("samples", (1, 4))
 def test_motion_blur_smears_a_moving_surface_along_its_motion_only(capture, samples):
-    from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
+    from rendering.gl_programs.item_quad import item_quad_program
+    from rendering.gl_programs.portable import pack_block
     from rendering.quick.scene3d.motion import motion_blur_tile
     from rendering.quick.scene3d.resources import bind_frame
 
+    vertex, fragment, block = item_quad_program(_MOVING_FRAGMENT, block="MovingProbe", samplers={})
     resources, target = MeshResources("target test"), SceneTarget("target test")
     try:
         full = _card_frame(capture, 0, 0, WIDTH, HEIGHT)
@@ -220,16 +222,17 @@ def test_motion_blur_smears_a_moving_surface_along_its_motion_only(capture, samp
             _clear(capture)
             with target.scope(full, samples, resources, rect=(0, 0, WIDTH, HEIGHT), motion_blur=True):
                 gl.glClearColor(0.0, 0.0, 0.0, 1.0)
-                program = resources.program("moving", ITEM_QUAD_VERTEX_SOURCE, _MOVING_FRAGMENT)
-                bind_frame(program, resources.uniforms("moving", ("uMatrix", "uItemSize", "uMotion")), square)
-                gl.glUniform2f(resources.uniforms("moving", ("uMatrix", "uItemSize", "uMotion"))["uMotion"],
-                               *velocity)
+                program = resources.program("moving", vertex, fragment)
+                values = resources.values("moving")
+                bind_frame(program, resources.uniforms("moving", ()), square, values)
+                values["uMotion"] = velocity
                 gl.glBindVertexArray(capture.vao)
-                if writes:
-                    with target.velocity_writes():
+                with resources.pass_blocks.bound(pack_block(block, values)):
+                    if writes:
+                        with target.velocity_writes():
+                            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+                    else:
                         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-                else:
-                    gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
             return _read(capture)[::-1]   # top-down rows
 
         still = draw((0.0, 0.0))

@@ -11,43 +11,11 @@ from dataclasses import replace
 from types import SimpleNamespace
 from typing import Protocol
 
+from rendering.gl_programs.item_quad import item_quad_vertex_source  # noqa: F401  (the quad's home is gl_programs)
+
 # QMatrix4x4 stores binary32 coefficients. Bound their rounding relative to the
 # stored value, rather than treating cancellation noise as authored subpixels.
 _MATRIX_ROUNDING = (2.0 ** -24) / (1.0 - 2.0 ** -24)
-
-# The item quad: attribute 0 is a unit square placed in Qt Quick item pixels.
-# vUv keeps the bottom-up convention the transition fragments were authored in.
-ITEM_QUAD_VERTEX_SOURCE = """#version 460 core
-layout(location = 0) in vec2 aPosition;
-
-uniform mat4 uMatrix;
-uniform vec2 uItemSize;
-
-out vec2 vUv;
-
-void main() {
-    // Existing transition fragments flip Y. Feed their original bottom-up UV
-    // convention while positioning the quad in Qt Quick item coordinates.
-    vUv = vec2(aPosition.x, 1.0 - aPosition.y);
-    gl_Position = uMatrix * vec4(aPosition * uItemSize, 0.0, 1.0);
-}
-"""
-
-
-def item_quad_vertex_source(block_glsl: str) -> str:
-    """The item quad for a program whose loose values are one std140 block (N1.6): ``block_glsl`` is that program's
-    block declaration, holding ``uMatrix`` and ``uItemSize``, so the vertex and fragment stages declare the same block.
-    The arithmetic is ``ITEM_QUAD_VERTEX_SOURCE``'s, which the 2D transitions' programs keep until they convert."""
-    return f"""#version 460 core
-layout(location = 0) in vec2 aPosition;
-{block_glsl}
-layout(location = 0) out vec2 vUv;
-
-void main() {{
-    vUv = vec2(aPosition.x, 1.0 - aPosition.y);
-    gl_Position = uMatrix * vec4(aPosition * uItemSize, 0.0, 1.0);
-}}
-"""
 
 
 class SceneFrame(Protocol):

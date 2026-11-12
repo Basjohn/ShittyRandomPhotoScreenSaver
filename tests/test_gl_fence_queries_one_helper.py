@@ -112,8 +112,11 @@ def test_render_host_capture(queries):
 
 def test_background_base_draw_fence(queries):
     from rendering.quick.render.background_node import BackgroundRenderNode
-    node = SimpleNamespace(_program=0, _vao=0, _matrix_location=-1, _item_size_location=-1, _progress_location=-1,
-                           _has_image_location=-1, _image_location=-1, _logical_size=(4.0, 4.0),
-                           _state=SimpleNamespace(progress=0.0))
+    import contextlib
+
+    # The base program's values travel in its pass block (N1.6), which reads no GL state back: a scope that writes
+    # nothing stands in for its ring here.
+    node = SimpleNamespace(_program=0, _vao=0, _blocks=SimpleNamespace(bound=lambda _data: contextlib.nullcontext()),
+                           _logical_size=(4.0, 4.0), _state=SimpleNamespace(progress=0.0))
     BackgroundRenderNode._draw_base(node, texture_id=0, viewport=(0, 0, 4, 4), matrix_values=(1.0,) * 16)
     _check(queries, BACKGROUND_BASE, "background base draw")

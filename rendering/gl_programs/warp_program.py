@@ -33,7 +33,7 @@ class WarpProgram(BaseGLProgram):
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aUv;
 
-out vec2 vUv;
+layout(location = 0) out vec2 vUv;
 
 void main() {
     vUv = aUv;
@@ -44,13 +44,19 @@ void main() {
     @property
     def fragment_source(self) -> str:
         return """#version 460 core
-in vec2 vUv;
-out vec4 FragColor;
+layout(location = 0) in vec2 vUv;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform vec2 u_resolution;
+layout(binding = 0) uniform sampler2D uOldTex;
+layout(binding = 1) uniform sampler2D uNewTex;
+// The pass block (N1.6): the item quad's values and this program's, one std140 block at the pass-block binding
+// (SCENE3D_PASS_BLOCK_BINDING); the quad's vertex stage declares the same block (quick/transitions/fullscreen_pass).
+layout(std140, binding = 18) uniform WarpPass {
+    mat4 uMatrix;
+    vec2 uItemSize;
+    float u_progress;
+    vec2 u_resolution;
+};
 
 void main() {
     // Flip V to match Qt's top-left image origin.

@@ -58,6 +58,25 @@ def test_an_opengl_program_becomes_one_that_bakes_for_every_target(tmp_path):
     assert "vIndex = srpssInstanceIndex + srpssVertexIndex;" in vertex
 
 
+def test_declarations_sharing_a_line_are_each_rewritten(tmp_path):
+    # Several transitions declare ``uniform mat4 uMatrix; uniform vec2 uItemSize;`` and ``out vec2 a; out vec2 b;`` on
+    # one line: every one of them is a declaration (control: a rewrite that read only line starts left the second
+    # loose, which does not bake).
+    _require_qsb()
+    vertex = ("#version 460 core\nlayout(location = 0) in vec2 aPosition;\n"
+              "uniform mat4 uMatrix; uniform vec2 uItemSize;\nout vec2 vUv; out vec2 vFace;\n"
+              "void main() { vUv = aPosition; vFace = aPosition * uItemSize;"
+              " gl_Position = uMatrix * vec4(aPosition, 0.0, 1.0); }\n")
+    fragment = ("#version 460 core\nin vec2 vUv; in vec2 vFace;\nout vec4 FragColor;\n"
+                "uniform sampler2D uImage; uniform float uGain;\n"
+                "void main() { FragColor = texture(uImage, vUv + vFace) * uGain; }\n")
+    vertex, (fragment,), layout = portable_program(vertex, (fragment,), block="Line", samplers={"uImage": 0})
+    assert [name for name, _ in layout.fields] == ["uMatrix", "uItemSize", "uGain"]
+    assert "layout(location = 1) out vec2 vFace" in vertex and "layout(location = 1) in vec2 vFace" in fragment
+    assert compile_source(_qsb(), vertex, tmp_path / "v.vert")[0]
+    assert compile_source(_qsb(), fragment, tmp_path / "f.frag")[0]
+
+
 def test_a_sampler_without_a_binding_in_the_plan_is_refused():
     with pytest.raises(ValueError, match="uImage"):
         portable_program(_VERTEX, (_FRAGMENT,), block="Probe", samplers={})

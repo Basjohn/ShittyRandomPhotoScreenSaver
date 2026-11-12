@@ -117,7 +117,9 @@ def test_the_schedule_mirror_is_bounded_and_ends_exactly():
 
 def test_flat_style_stays_dormant(capture):
     run = capture.run("blinds", settings={"blinds": {"style": "Flat", "direction": "Vertical"}}, duration_ms=4000)
-    assert capture.host.warm_step("blinds", run.request.parameter_dict(), (W, H)) is True
+    # The flat program's two warm-up steps: its compile, then its pass block's ring (N1.6).
+    parameters = run.request.parameter_dict()
+    assert [capture.host.warm_step("blinds", parameters, (W, H)) for _ in range(3)] == [False, False, True]
     for progress in (0.0, 0.3, 0.7, 1.0):
         capture.render(run, progress)
     renderer = capture.host._implementations["blinds"]

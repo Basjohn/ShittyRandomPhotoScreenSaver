@@ -35,7 +35,7 @@ class BurnProgram(BaseGLProgram):
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aUv;
 
-out vec2 vUv;
+layout(location = 0) out vec2 vUv;
 
 void main() {
     vUv = aUv;
@@ -46,26 +46,32 @@ void main() {
     @property
     def fragment_source(self) -> str:
         return """#version 460 core
-in vec2 vUv;
-out vec4 FragColor;
+layout(location = 0) in vec2 vUv;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uOldTex;
-uniform sampler2D uNewTex;
-uniform float u_progress;
-uniform int   u_direction;      // 0=L->R, 1=R->L, 2=T->B, 3=B->T
-uniform float u_jaggedness;     // 0.0-1.0 edge waviness amplitude
-uniform float u_glow_intensity; // 0.0-1.0
-uniform vec4  u_glow_color;     // RGBA primary glow colour
-uniform vec4  u_ember_color;    // RGBA ember/char ramp colour
-uniform float u_char_width;     // 0.1-1.0 controls dark zone width
-uniform int   u_smoke_enabled;  // 1 = sparks + smoke on
-uniform float u_smoke_density;  // smoke/spark intensity multiplier
-uniform int   u_ash_enabled;    // 1 = falling ash on
-uniform float u_ash_density;    // ash quantity multiplier
-uniform int   u_flames;         // 1 = flames rise from the burning edge
-uniform int   u_ember_veins;    // 1 = glowing veins crawl through the char
-uniform float u_time;           // wall-clock seconds
-uniform float u_seed;           // per-transition random seed
+layout(binding = 0) uniform sampler2D uOldTex;
+layout(binding = 1) uniform sampler2D uNewTex;
+// The pass block (N1.6): the item quad's values and this program's, one std140 block at the pass-block binding
+// (SCENE3D_PASS_BLOCK_BINDING); the quad's vertex stage declares the same block (quick/transitions/fullscreen_pass).
+layout(std140, binding = 18) uniform BurnPass {
+    mat4  uMatrix;
+    vec2  uItemSize;
+    float u_progress;
+    int   u_direction;      // 0=L->R, 1=R->L, 2=T->B, 3=B->T
+    float u_jaggedness;     // 0.0-1.0 edge waviness amplitude
+    float u_glow_intensity; // 0.0-1.0
+    vec4  u_glow_color;     // RGBA primary glow colour
+    vec4  u_ember_color;    // RGBA ember/char ramp colour
+    float u_char_width;     // 0.1-1.0 controls dark zone width
+    int   u_smoke_enabled;  // 1 = sparks + smoke on
+    float u_smoke_density;  // smoke/spark intensity multiplier
+    int   u_ash_enabled;    // 1 = falling ash on
+    float u_ash_density;    // ash quantity multiplier
+    int   u_flames;         // 1 = flames rise from the burning edge
+    int   u_ember_veins;    // 1 = glowing veins crawl through the char
+    float u_time;           // wall-clock seconds
+    float u_seed;           // per-transition random seed
+};
 
 // =====================================================================
 //  Noise primitives

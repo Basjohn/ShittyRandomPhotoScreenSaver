@@ -18,7 +18,7 @@ def test_melt_keeps_the_rejected_forms_out():
 
 def test_melt_is_steered_by_an_origin_with_gravity():
     source = MELT_FRAGMENT_SOURCE
-    assert "uniform vec2 uItemSize,uOrigin;" in source
+    assert "vec2 uOrigin;" in source           # a member of the program's pass block (N1.6)
     assert "uOriginMode" in source
     assert "uDirection" not in source
     assert "float meltStart(" in source

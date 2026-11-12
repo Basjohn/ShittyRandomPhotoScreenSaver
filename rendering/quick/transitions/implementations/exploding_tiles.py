@@ -12,13 +12,18 @@ from __future__ import annotations
 
 from OpenGL import GL as gl
 from rendering.gl_programs.exploding_tiles_program import (
+    EXPLODING_TILES_BACKDROP_BLOCK,
     EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE,
+    EXPLODING_TILES_BACKDROP_VERTEX_SOURCE,
+    EXPLODING_TILES_BLOCK,
     EXPLODING_TILES_BOX_VERTICES,
     EXPLODING_TILES_FRAGMENT_SOURCE,
     EXPLODING_TILES_FRAME_BLOCK,
     EXPLODING_TILES_GHOST_FRAGMENT_SOURCE,
+    EXPLODING_TILES_SHADOW_BLOCK,
     EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE,
     EXPLODING_TILES_SHADOW_VERTEX_SOURCE,
+    EXPLODING_TILES_SPARK_BLOCK,
     EXPLODING_TILES_SPARK_FRAGMENT_SOURCE,
     EXPLODING_TILES_SPARK_VERTEX_SOURCE,
     EXPLODING_TILES_SPARKS,
@@ -30,7 +35,13 @@ from rendering.gl_programs.exploding_tiles_program import (
     exploding_tiles_sparks_live,
 )
 from rendering.gl_programs.photo_colour import photo_dominant_colour
-from rendering.gl_programs.scene3d import scene3d_detail, scene3d_shutter_progress, scene3d_trail_ghosts
+from rendering.gl_programs.portable import pack_block
+from rendering.gl_programs.scene3d import (
+    SCENE3D_TRAIL_GHOSTS,
+    scene3d_detail,
+    scene3d_shutter_progress,
+    scene3d_trail_ghosts,
+)
 from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
 from rendering.quick.scene3d.particles import draw_particles, particle_budget
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
@@ -40,14 +51,15 @@ from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, w
 from rendering.quick.scene3d.stream import StreamRing
 from rendering.quick.scene3d.uniforms import UniformBlock
 from ..directions import direction_vector
-from ..render_contract import QUICK_TRANSITION_VERTEX_SOURCE, QuickTransitionRenderFrame
+from ..render_contract import QuickTransitionRenderFrame
 
 
 class QuickExplodingTilesRenderer:
     transition_id = "exploding_tiles"
 
     def __init__(self) -> None:
-        self._resources = MeshResources("Quick Exploding Tiles")
+        # A ghost pass gives each of its draws its own pass block copy.
+        self._resources = MeshResources("Quick Exploding Tiles", copies=SCENE3D_TRAIL_GHOSTS)
         self._target = SceneTarget("Quick Exploding Tiles")
         self._environment = PhotoEnvironment("Quick Exploding Tiles")   # photo reflections
         self._trails = MotionTrails("Quick Exploding Tiles")
@@ -117,7 +129,7 @@ class QuickExplodingTilesRenderer:
         samples = samples or (1 if bloom > 0.0 or motion_blur or trails else 0)
         r = self._resources
         entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM),
-                   (r, "backdrop", QUICK_TRANSITION_VERTEX_SOURCE, EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE)]
+                   (r, "backdrop", EXPLODING_TILES_BACKDROP_VERTEX_SOURCE, EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE)]
         if detail.shadows:
             entries.append((r, "shadows", EXPLODING_TILES_SHADOW_VERTEX_SOURCE, EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE))
         entries.append((r, "tiles", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_FRAGMENT_SOURCE))
@@ -153,68 +165,81 @@ class QuickExplodingTilesRenderer:
         if sparks and exploding_tiles_sparks_live(progress, force, center_out):
             self._draw_sparks(frame, sparks)
 
-    def _use(self, key: str, vertex: str, fragment: str, names: tuple[str, ...], frame) -> None:
+    def _use(self, key: str, vertex: str, fragment: str, names: tuple[str, ...], frame) -> dict:
+        """Use the program with the frame block attached and the photographs ``names`` bound; its pass block's values
+        (the frame's matrix and item size among them) are returned for the draw to bind."""
         program = self._resources.program(key, vertex, fragment)
         self._frame_block.attach(program)
-        bind_frame(program, self._resources.uniforms(key, names), frame)
+        values = self._resources.values(key)
+        bind_frame(program, self._resources.uniforms(key, names), frame, values)
+        return values
 
     def _draw_backdrop(self, frame) -> None:
-        self._use("backdrop", QUICK_TRANSITION_VERTEX_SOURCE, EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE,
-                  ("uMatrix", "uItemSize", "uNewTex"), frame)
+        values = self._use("backdrop", EXPLODING_TILES_BACKDROP_VERTEX_SOURCE, EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE,
+                           ("uNewTex",), frame)
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        with self._resources.pass_blocks.bound(pack_block(EXPLODING_TILES_BACKDROP_BLOCK, values)):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
     def _draw_shadows(self, frame, tiles: int) -> None:
-        self._use("shadows", EXPLODING_TILES_SHADOW_VERTEX_SOURCE, EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE,
-                  ("uMatrix", "uItemSize", "uNewTex"), frame)
-        draw_planar_shadows(frame, tiles)
+        values = self._use("shadows", EXPLODING_TILES_SHADOW_VERTEX_SOURCE, EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE,
+                           ("uNewTex",), frame)
+        with self._resources.pass_blocks.bound(pack_block(EXPLODING_TILES_SHADOW_BLOCK, values)):
+            draw_planar_shadows(frame, tiles)
 
-    _TILE_UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uEnvironment")
+    # The photograph the slabs read (bind_frame binds it); the environment's sampler is bound in the source.
+    _TILE_SAMPLERS = ("uOldTex",)
 
     def _draw_tiles(self, frame, tiles: int, environment: int) -> None:
-        self._use("tiles", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_FRAGMENT_SOURCE,
-                  self._TILE_UNIFORMS, frame)
-        uniforms = self._resources.uniforms("tiles", self._TILE_UNIFORMS)
+        values = self._use("tiles", EXPLODING_TILES_VERTEX_SOURCE, EXPLODING_TILES_FRAGMENT_SOURCE,
+                           self._TILE_SAMPLERS, frame)
         gl.glActiveTexture(gl.GL_TEXTURE2)
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
-        gl.glUniform1i(uniforms["uEnvironment"], 2)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         vao, count = self._resources.mesh("beveled_slab", EXPLODING_TILES_BOX_VERTICES, (3, 3, 2))
         gl.glBindVertexArray(vao)
-        with self._target.velocity_writes():
+        with self._target.velocity_writes(), \
+                self._resources.pass_blocks.bound(pack_block(EXPLODING_TILES_BLOCK, values)):
             gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, tiles)
 
     def _draw_tile_ghosts(self, frame, ghosts, tiles: int, environment: int, values, now: float) -> None:
         """One prepared tile ghost pass; only the ghost's time-derived block fields and fade change."""
         program, uniforms = trail_program(
             self._resources, "tiles", EXPLODING_TILES_VERTEX_SOURCE,
-            EXPLODING_TILES_GHOST_FRAGMENT_SOURCE, self._TILE_UNIFORMS,
+            EXPLODING_TILES_GHOST_FRAGMENT_SOURCE, self._TILE_SAMPLERS,
         )
         self._ghost_block.attach(program)
-        bind_frame(program, uniforms, frame)
+        pass_values = self._resources.values("tiles_ghost")
+        bind_frame(program, uniforms, frame, pass_values)
         gl.glActiveTexture(gl.GL_TEXTURE2)
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
-        gl.glUniform1i(uniforms["uEnvironment"], 2)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         vao, count = self._resources.mesh("beveled_slab", EXPLODING_TILES_BOX_VERTICES, (3, 3, 2))
         gl.glBindVertexArray(vao)
-        with self._ghost_block.bound(values), self._target.velocity_writes():
-            for time, fade in ghosts:
+        ghosts = tuple(ghosts)
+        if ghosts:
+            pass_values["uGhostFade"] = ghosts[0][1]
+        with self._ghost_block.bound(values), self._target.velocity_writes(), \
+                self._resources.pass_blocks.bound(pack_block(EXPLODING_TILES_BLOCK, pass_values)) as rebind:
+            for index, (time, fade) in enumerate(ghosts):
                 # A negative shutter makes the ghost vertex stage find the tile at the moment now.
                 self._ghost_block.update_fields({
                     "uProgress": time,
                     "uBlast": exploding_tiles_blast(time),
                     "uShutter": time - now,
                 })
-                gl.glUniform1f(uniforms["uGhostFade"], fade)
+                if index:                  # each draw keeps the copy it was given (the ring's rebind)
+                    pass_values["uGhostFade"] = fade
+                    rebind(pack_block(EXPLODING_TILES_BLOCK, pass_values))
                 gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, count, tiles)
 
     def _draw_sparks(self, frame, count: int) -> None:
-        self._use("sparks", EXPLODING_TILES_SPARK_VERTEX_SOURCE, EXPLODING_TILES_SPARK_FRAGMENT_SOURCE,
-                  ("uMatrix", "uItemSize"), frame)
-        draw_particles(frame, count)
+        values = self._use("sparks", EXPLODING_TILES_SPARK_VERTEX_SOURCE, EXPLODING_TILES_SPARK_FRAGMENT_SOURCE,
+                           (), frame)
+        with self._resources.pass_blocks.bound(pack_block(EXPLODING_TILES_SPARK_BLOCK, values)):
+            draw_particles(frame, count)
 
     def _body_colour(self, frame) -> tuple[float, float, float]:
         """The source's most used colour, found once per run."""

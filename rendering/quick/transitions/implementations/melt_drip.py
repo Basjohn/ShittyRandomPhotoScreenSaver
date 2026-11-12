@@ -8,9 +8,10 @@ import math
 
 from OpenGL import GL as gl
 
-from rendering.gl_programs.melt_drip_program import MELT_FRAGMENT_SOURCE
-from rendering.quick.scene3d.resources import MeshResources, bind_frame
-from ..render_contract import QUICK_TRANSITION_VERTEX_SOURCE, QuickTransitionRenderFrame
+from rendering.gl_programs.melt_drip_program import MELT_BLOCK, MELT_FRAGMENT_SOURCE, MELT_VERTEX_SOURCE
+from rendering.gl_programs.portable import pack_block
+from rendering.quick.scene3d.resources import MeshResources, bind_frame, warm_pass_blocks, warm_programs
+from ..render_contract import QuickTransitionRenderFrame
 
 # Resolved melt origins: (screen origin with y down, mode 0 = spread from the
 # point, 1 = melt from every edge toward the centre).
@@ -84,36 +85,23 @@ class QuickMeltDripRenderer:
         return self._resources.has_resources
 
     def warm(self, parameters, size: tuple[int, int] | None = None) -> bool:
-        """The gradual warm-up's one step (render thread, between runs): compile the liquid
-        program so the run's first frame compiles nothing."""
-        self._resources.program("liquid", QUICK_TRANSITION_VERTEX_SOURCE, MELT_FRAGMENT_SOURCE)
-        return True
+        """The gradual warm-up's steps (render thread, between runs): compile the liquid program,
+        then, given the render ``size``, allocate its pass block's ring, so the run's first frame
+        compiles and allocates nothing."""
+        r = self._resources
+        return (warm_programs([(r, "liquid", MELT_VERTEX_SOURCE, MELT_FRAGMENT_SOURCE)])
+                and warm_pass_blocks(r, size))
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         try:
             params = melt_drip_parameters(
                 frame.run.request.parameter_dict(), frame.run.request.direction
             )
-            program = self._resources.program(
-                "liquid", QUICK_TRANSITION_VERTEX_SOURCE, MELT_FRAGMENT_SOURCE
-            )
-            u = self._resources.uniforms(
-                "liquid",
-                (
-                    "uMatrix",
-                    "uItemSize",
-                    "uOldTex",
-                    "uNewTex",
-                    "uProgress",
-                    "uSeed",
-                    "uDetail",
-                    "uDepth",
-                    "uGloss",
-                    "uOrigin",
-                    "uOriginMode",
-                ),
-            )
-            bind_frame(program, u, frame)
+            r = self._resources
+            program = r.program("liquid", MELT_VERTEX_SOURCE, MELT_FRAGMENT_SOURCE)
+            u = r.uniforms("liquid", ("uOldTex", "uNewTex"))   # every other value is in MELT_BLOCK
+            values = r.values("liquid")
+            bind_frame(program, u, frame, values)
             for name, value in (
                 ("uProgress", frame.sample.eased_progress),
                 ("uSeed", params.seed),
@@ -122,10 +110,11 @@ class QuickMeltDripRenderer:
                 ("uGloss", params.gloss),
                 ("uOriginMode", params.origin_mode),
             ):
-                gl.glUniform1f(u[name], float(value))
-            gl.glUniform2f(u["uOrigin"], *params.origin)
-            gl.glBindVertexArray(frame.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+                values[name] = float(value)
+            values["uOrigin"] = params.origin
+            with r.pass_blocks.bound(pack_block(MELT_BLOCK, values)):
+                gl.glBindVertexArray(frame.quad_vao)
+                gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
         except Exception:
             self.release_resources()
             raise

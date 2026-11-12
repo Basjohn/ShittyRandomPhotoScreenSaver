@@ -20,7 +20,9 @@ from __future__ import annotations
 
 import math
 
-from rendering.gl_programs.scene3d import SCENE3D_GLSL, Scene3DBlockLayout, scene3d_random
+from rendering.gl_programs.item_quad import item_quad_program
+from rendering.gl_programs.portable import portable_program
+from rendering.gl_programs.scene3d import SCENE3D_FRAME_BLOCK_BINDING, SCENE3D_GLSL, Scene3DBlockLayout, scene3d_random
 
 DISINTEGRATE_MAX_GRAINS = 600_000
 DISINTEGRATE_NOISE_SCALE = 5.0
@@ -74,7 +76,7 @@ DISINTEGRATE_FRAME_BLOCK = Scene3DBlockLayout.of("DisintegrateFrame", (
     ("uWind", "float"),
 ))
 
-_COMMON_GLSL = SCENE3D_GLSL + DISINTEGRATE_FRAME_BLOCK.glsl() + f"""
+_COMMON_GLSL = SCENE3D_GLSL + DISINTEGRATE_FRAME_BLOCK.glsl(SCENE3D_FRAME_BLOCK_BINDING) + f"""
 
 float grainLattice(int x, int y) {{
     return sceneRandom(uint(x) * 0x8DA6B343u ^ uint(y) * 0xD8163841u, 7u, uSeed);
@@ -167,3 +169,11 @@ void main() {
     FragColor = vec4(texture(uOldTex, vUv).rgb * vAlpha, vAlpha);   // premultiplied, blended over
 }
 """
+
+# N1.6: each program's loose values in one std140 pass block beside the frame block (``portable_program``; the intact
+# picture with the item quad's), samplers at the photographs' units.
+DISINTEGRATE_INTACT_VERTEX_SOURCE, DISINTEGRATE_INTACT_FRAGMENT_SOURCE, DISINTEGRATE_INTACT_BLOCK = item_quad_program(
+    DISINTEGRATE_INTACT_FRAGMENT_SOURCE, block="DisintegrateIntact", samplers={"uOldTex": 0, "uNewTex": 1})
+DISINTEGRATE_GRAIN_VERTEX_SOURCE, (DISINTEGRATE_GRAIN_FRAGMENT_SOURCE,), DISINTEGRATE_GRAIN_BLOCK = portable_program(
+    DISINTEGRATE_GRAIN_VERTEX_SOURCE, (DISINTEGRATE_GRAIN_FRAGMENT_SOURCE,), block="DisintegrateGrains",
+    samplers={"uOldTex": 0})

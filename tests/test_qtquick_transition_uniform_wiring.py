@@ -2,7 +2,8 @@
 
 These are renderer-boundary WIRING tests. A recording/fake GL uniform sink is
 the correct level of evidence here: it proves each authored request field is
-uploaded to its intended uniform with the intended value, that boolean/integer
+uploaded to its intended uniform (since N1.6 a member of the program's std140
+pass block, read back from the bytes the draw binds) with the intended value, that boolean/integer
 encodings are preserved, that Particle's ``u_resolution`` carries the physical
 framebuffer size, and that Burn's ``u_time`` derives from the immutable run
 clock. The separately-required real-GL harnesses still own actual rendering;
@@ -118,14 +119,55 @@ class _RecordingGL:
         pass
 
 
+def _unpack(layout, data: bytes) -> dict[str, object]:
+    """Each member of a packed std140 pass block read back from its offset (scalars as numbers, vectors and matrices
+    as tuples), so the wiring is proved on the bytes the draw binds."""
+    import struct
+
+    from rendering.gl_programs.scene3d import _STD140
+
+    values = {}
+    for (name, kind), offset in zip(layout.fields, layout.offsets):
+        read = struct.unpack_from("<" + _STD140[kind][2], data, offset)
+        values[name] = read[0] if len(read) == 1 else tuple(read)
+    return values
+
+
+class _RecordingBlocks:
+    """The renderer's pass blocks, recording the block each draw binds into the recorder's uniforms by member."""
+
+    recorder: _RecordingGL | None = None
+    layout = None
+
+    def __init__(self, label, **_kwargs) -> None:
+        self.has_resources = False
+
+    def bound(self, data: bytes):
+        import contextlib
+
+        type(self).recorder.uniforms.update(_unpack(type(self).layout, data))
+        return contextlib.nullcontext()
+
+    def warm(self) -> bool:
+        return True
+
+    def release(self) -> None:
+        pass
+
+
 def _install(monkeypatch, module, recorder: _RecordingGL) -> None:
-    # One-program renderers draw through the shared base (``fullscreen_pass``); their own module
-    # sets only their extra uniforms.
+    # One-program renderers draw through the shared base (``fullscreen_pass``): every value in one std140 pass block
+    # (N1.6), which the draw binds; their own module gives only their extra values.
     import rendering.quick.transitions.fullscreen_pass as fullscreen_pass
 
     for target in (module, fullscreen_pass):
         monkeypatch.setattr(target, "gl", recorder, raising=False)
         monkeypatch.setattr(target, "compile_program", lambda *a, **k: _FAKE_PROGRAM, raising=False)
+    renderer_class = next(value for value in vars(module).values()
+                          if isinstance(value, type) and issubclass(value, fullscreen_pass.FullscreenPassRenderer)
+                          and value is not fullscreen_pass.FullscreenPassRenderer)
+    blocks = type("_Blocks", (_RecordingBlocks,), {"recorder": recorder, "layout": renderer_class.block})
+    monkeypatch.setattr(fullscreen_pass, "PassBlocks", blocks)
 
 
 def _image(identity: str) -> PresentationImage:

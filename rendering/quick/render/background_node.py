@@ -17,7 +17,9 @@ from PySide6.QtQuick import QSGRenderNode
 
 from core.logging.logger import get_logger
 from core.performance.frame_trace import FrameTraceEvent, FrameTraceSink
+from rendering.gl_programs.portable import pack_block, portable_program
 from .. import gl_query
+from ..scene3d.uniforms import PassBlocks
 from ..image_state import PresentationImage
 from ..transitions.render_contract import QuickTransitionRenderFrame
 from ..transitions.render_host import QuickTransitionRenderHost
@@ -85,7 +87,7 @@ in vec2 vUv;
 out vec4 fragColor;
 
 uniform float uProgress;
-uniform bool uHasImage;
+uniform int uHasImage;
 uniform sampler2D uImage;
 
 vec3 oldPalette(float band) {
@@ -107,7 +109,7 @@ vec3 newPalette(float band) {
 }
 
 void main() {
-    if (uHasImage) {
+    if (uHasImage != 0) {
         fragColor = texture(uImage, vUv);
         return;
     }
@@ -124,6 +126,11 @@ void main() {
     fragColor = vec4(color, 1.0);
 }
 """
+
+# N1.6: the program's values (the quad's matrix and item size, the proof's progress, the image switch) in one std140
+# pass block, the image at unit 0 (``portable_program``); the draw packs the values it set as uniforms.
+_VERTEX_SOURCE, (_FRAGMENT_SOURCE,), _BLOCK = portable_program(_VERTEX_SOURCE, (_FRAGMENT_SOURCE,),
+                                                               block="BackgroundBase", samplers={"uImage": 0})
 
 
 @dataclass(frozen=True)
@@ -186,11 +193,8 @@ class BackgroundRenderNode(QSGRenderNode):
         self._program = 0
         self._vao = 0
         self._vbo = 0
-        self._matrix_location = -1
-        self._item_size_location = -1
-        self._progress_location = -1
-        self._has_image_location = -1
-        self._image_location = -1
+        # The base program's pass block ring (N1.6), allocated with the program.
+        self._blocks = PassBlocks("Quick background", block_bytes=_BLOCK.size)
 
     def __del__(self) -> None:
         # Some scene-graph backends may skip the virtual releaseResources()
@@ -381,6 +385,7 @@ class BackgroundRenderNode(QSGRenderNode):
 
         if not (
             self._program
+            or self._blocks.has_resources
             or self._vao
             or self._vbo
             or self._image_textures.has_resources
@@ -399,6 +404,7 @@ class BackgroundRenderNode(QSGRenderNode):
             self._image_textures.release()
             if self._program:
                 delete_program(self._program)
+            self._blocks.release()
             if self._vbo:
                 gl.glDeleteBuffers(1, [self._vbo])
             if self._vao:
@@ -459,27 +465,11 @@ class BackgroundRenderNode(QSGRenderNode):
         gl.glBindVertexArray(prior_vao)
         gl.glBindBuffer(gl.GL_ARRAY_BUFFER, prior_array_buffer)
 
-        self._matrix_location = int(gl.glGetUniformLocation(self._program, "uMatrix"))
-        self._item_size_location = int(
-            gl.glGetUniformLocation(self._program, "uItemSize")
-        )
-        self._progress_location = int(
-            gl.glGetUniformLocation(self._program, "uProgress")
-        )
-        self._has_image_location = int(
-            gl.glGetUniformLocation(self._program, "uHasImage")
-        )
-        self._image_location = int(
-            gl.glGetUniformLocation(self._program, "uImage")
-        )
-        if min(
-            self._matrix_location,
-            self._item_size_location,
-            self._progress_location,
-            self._has_image_location,
-            self._image_location,
-        ) < 0:
-            raise RuntimeError("Quick background uniforms are incomplete")
+        held = {name for name, _kind in _BLOCK.fields}
+        if not {"uMatrix", "uItemSize", "uProgress", "uHasImage"} <= held:
+            raise RuntimeError("Quick background pass block is incomplete")
+        # The base draw's pass block ring, with the program (this is the node's own warm-up step).
+        self._blocks.warm()
 
         self._telemetry.note_initialized(
             render_thread_id=threading.get_ident(),
@@ -617,23 +607,16 @@ class BackgroundRenderNode(QSGRenderNode):
             gl.glViewport(*viewport)
             gl.glUseProgram(self._program)
             gl.glBindVertexArray(self._vao)
-            gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, texture_id)     # unit 0, the image's binding
 
-            gl.glUniformMatrix4fv(
-                self._matrix_location,
-                1,
-                gl.GL_FALSE,
-                matrix_values,
-            )
-            gl.glUniform2f(
-                self._item_size_location,
-                float(self._logical_size[0]),
-                float(self._logical_size[1]),
-            )
-            gl.glUniform1f(self._progress_location, float(self._state.progress))
-            gl.glUniform1i(self._has_image_location, 1 if texture_id else 0)
-            gl.glUniform1i(self._image_location, 0)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+            data = pack_block(_BLOCK, {
+                "uMatrix": matrix_values,
+                "uItemSize": (float(self._logical_size[0]), float(self._logical_size[1])),
+                "uProgress": float(self._state.progress),
+                "uHasImage": 1 if texture_id else 0,
+            })
+            with self._blocks.bound(data):
+                gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
         finally:
             gl.glBindTexture(gl.GL_TEXTURE_2D, prior_texture)
             gl.glActiveTexture(prior_active_texture)

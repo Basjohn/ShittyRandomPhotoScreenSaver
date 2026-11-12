@@ -20,6 +20,9 @@ from __future__ import annotations
 
 import math
 
+from rendering.gl_programs.item_quad import item_quad_program
+from rendering.gl_programs.portable import portable_program
+
 # The share of the run a point takes to cure, from Cure Time's quickest to its slowest.
 BEAM_CURE_RANGE = (0.22, 0.55)
 # The cure's unevenness: each point cures over the cure time times a factor in this range.
@@ -219,3 +222,10 @@ void main() {
     FragColor = vec4(vColor * (1.0 - 4.0 * vAcross * vAcross), 1.0);
 }
 """
+
+# N1.6: each program's values (the quad's or the sparks' with the beam's) in one std140 pass block, samplers at their
+# units, varyings located (``portable_program``); the owner packs each block with the values it set as uniforms.
+BEAM_VERTEX_SOURCE, BEAM_FRAGMENT_SOURCE, BEAM_BLOCK = item_quad_program(
+    BEAM_FRAGMENT_SOURCE, block="BeamPass", samplers={"uOldTex": 0, "uNewTex": 1})
+BEAM_SPARK_VERTEX_SOURCE, (BEAM_SPARK_FRAGMENT_SOURCE,), BEAM_SPARK_BLOCK = portable_program(
+    BEAM_SPARK_VERTEX_SOURCE, (BEAM_SPARK_FRAGMENT_SOURCE,), block="BeamSparkPass", samplers={})

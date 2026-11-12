@@ -179,10 +179,11 @@ def test_quick_blinds_renderer_compiles_the_existing_authored_fragment_source():
     ).read_text(encoding="utf-8")
     assert "blinds_program.fragment_source" in renderer_source
     assert "_BLINDS_FRAGMENT_SOURCE" not in renderer_source
-    assert 'uniforms["u_progress"]' in renderer_source
-    assert 'uniforms["u_grid"]' in renderer_source
-    assert 'uniforms["u_feather"]' in renderer_source
-    assert 'uniforms["u_direction"]' in renderer_source
+    # Its values travel in the program's pass block (N1.6), by the authored uniforms' names.
+    assert 'values["u_progress"]' in renderer_source
+    assert 'values["u_grid"]' in renderer_source
+    assert 'values["u_feather"]' in renderer_source
+    assert 'values["u_direction"]' in renderer_source
 
 
 def test_authored_band_shaders_compile_in_the_real_opengl_46_context():

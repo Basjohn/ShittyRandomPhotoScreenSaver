@@ -20,6 +20,9 @@ from rendering.gl_programs.ribbon import (RIBBON_BODY_FRAGMENT, RIBBON_FRAGMENT,
                                           RIBBON_SPARK_FRAGMENT, RIBBON_SPARK_VERTEX, RIBBON_STRAY_FRAGMENT,
                                           RIBBON_STRAY_VERTEX, RIBBON_VERTEX, RIBBON_CONTINUOUS_VERTEX)
 from rendering.gl_programs.ribbon import RIBBON_COHORT_STRAY_VERTEX,RIBBON_COHORT_STRAY_FRAGMENT
+from rendering.gl_programs.ribbon import (RIBBON_BLOCK, RIBBON_COHORT_STRAY_BLOCK, RIBBON_FLOOR_GIVE_UNIT,
+                                          RIBBON_PULSE_RIM_UNIT, RIBBON_SPARK_BLOCK, RIBBON_STRAY_BLOCK)
+from rendering.gl_programs.portable import pack_block
 from core.ribbon_strand_cohorts import COHORT_BYTES,COHORT_ROWS
 from core.ribbon_geometry import MAX_PATH_SAMPLES
 from rendering.gl_programs.mist import FOG_OFF
@@ -65,54 +68,42 @@ def _floor_contact(floor, frame):
     return (height - float(frame[1]), gap, softness)
 
 
-# Texture unit of the yielding floor's field (``rendering.quick.scene3d.floor_give``); a plain constant here so the
-# primitive stays free of any scene owner.
-FLOOR_GIVE_UNIT = 13
+# Texture unit of the yielding floor's field (``rendering.quick.scene3d.floor_give``), the programs' sampler binding
+# (``rendering.gl_programs.ribbon``); a plain constant there so the primitive stays free of any scene owner.
+FLOOR_GIVE_UNIT = RIBBON_FLOOR_GIVE_UNIT
 
 
-def _apply_floor_give(locations, floor_give, frame):
+def _apply_floor_give(values, floor_give, frame):
     """``floor_give`` = (field texture, ``uFloorGive`` vec4[, history side]) from the scene's yielding floor, or None
     (off: the contact eases onto the rigid plane, exactly as without the option). The side (-1: the packet's x axis
-    is mirrored into the world, Travel Direction) defaults to +1. Always written: program uniforms persist."""
+    is mirrored into the world, Travel Direction) defaults to +1. Always written: the program's values persist as its
+    uniforms did (N1.6: they are its pass block's)."""
     if floor_give is None:
-        gl.glUniform4f(locations['uFloorGive'], 0., 0., 1., 1.)
+        values['uFloorGive'] = (0., 0., 1., 1.)
         return
-    texture, values, *side = floor_give
+    texture, give, *side = floor_give
     gl.glBindTextureUnit(FLOOR_GIVE_UNIT, int(texture))
-    gl.glUniform1i(locations['uFloorGiveField'], FLOOR_GIVE_UNIT)
-    gl.glUniform4f(locations['uFloorGive'], *values)
-    gl.glUniform3f(locations['uFloorGiveFrame'], float(frame[0]), float(frame[2]), float(side[0]) if side else 1.)
+    values['uFloorGive'] = tuple(give)
+    values['uFloorGiveFrame'] = (float(frame[0]), float(frame[2]), float(side[0]) if side else 1.)
 
-
-_FLOOR_GIVE_UNIFORMS = ('uFloorGive', 'uFloorGiveField', 'uFloorGiveFrame')
 
 # Texture unit of the Pulse Rim field (``rendering.quick.scene3d.pulse_rim``): clear of the floor's 0-4, the mist's 8-12
 # and 15, the yielding floor's 13 and the world field's 14. Bound for the light pass only and unbound after it.
-PULSE_RIM_UNIT = 7
-_PULSE_RIM_UNIFORMS = ('uPulseRim', 'uPulseRimField', 'uPulseRimShape')
+PULSE_RIM_UNIT = RIBBON_PULSE_RIM_UNIT
 
 
-def _apply_pulse_rim(locations, pulse_rim):
+def _apply_pulse_rim(values, pulse_rim):
     """``pulse_rim`` = (field texture, ``uPulseRim`` vec4, ``uPulseRimShape`` vec2) from the scene's Pulse Rim field,
-    or None (off: the rims exactly as without the option). Always written: program uniforms persist. Returns whether
-    a texture was bound."""
+    or None (off: the rims exactly as without the option). Always written: the program's values persist. Returns
+    whether a texture was bound."""
     if pulse_rim is None:
-        gl.glUniform4f(locations['uPulseRim'], 0., 0., 0., 0.)
+        values['uPulseRim'] = (0., 0., 0., 0.)
         return False
-    texture, values, shape = pulse_rim
+    texture, rim, shape = pulse_rim
     gl.glBindTextureUnit(PULSE_RIM_UNIT, int(texture))
-    gl.glUniform1i(locations['uPulseRimField'], PULSE_RIM_UNIT)
-    gl.glUniform4f(locations['uPulseRim'], *values)
-    gl.glUniform2f(locations['uPulseRimShape'], *shape)
+    values['uPulseRim'] = tuple(rim)
+    values['uPulseRimShape'] = tuple(shape)
     return True
-
-
-def _upload(location, value):
-    """A vec4 uniform, or the grade's vec4 array."""
-    if len(value) == 4*GRADE_STOPS:
-        gl.glUniform4fv(location, GRADE_STOPS, np.asarray(value, np.float32))
-    else:
-        gl.glUniform4f(location, *value)
 
 
 def _sweep_axis(value):
@@ -196,7 +187,10 @@ def _continuation_draw_ranges(packet, continuation, frame_x, cross_divisions):
 
 class RibbonPrimitive:
     def __init__(self):
-        self.resources = MeshResources('ribbon primitive')
+        # Every program's values are one pass block (N1.6); a continuation draw gives its body and two extensions
+        # their own copies.
+        self.resources = MeshResources('ribbon primitive', copies=3,
+                                       block_bytes=max(RIBBON_BLOCK.size, RIBBON_SPARK_BLOCK.size, RIBBON_STRAY_BLOCK.size))
         self.stream = None
         self._context_ref = None
         self._held_packet = self._lease = None
@@ -231,10 +225,14 @@ class RibbonPrimitive:
             resources=self._strand_resources() if strand_cohorts else self.resources
             vertex=RIBBON_COHORT_STRAY_VERTEX if strand_cohorts else RIBBON_STRAY_VERTEX
             programs.append((resources,'strays',vertex,RIBBON_COHORT_STRAY_FRAGMENT if strand_cohorts else RIBBON_STRAY_FRAGMENT))
-        return warm_programs(programs)
+        if not warm_programs(programs):return False
+        # Then the pass blocks' rings, one allocation a step.
+        if strays and strand_cohorts and not self._strand_resources().pass_blocks.warm():return False
+        return self.resources.pass_blocks.warm()
 
     def _strand_resources(self):
-        if self.strand_resources is None:self.strand_resources=MeshResources('ribbon strand cohorts')
+        if self.strand_resources is None:
+            self.strand_resources=MeshResources('ribbon strand cohorts',block_bytes=RIBBON_COHORT_STRAY_BLOCK.size)
         return self.strand_resources
 
     def _stream(self):
@@ -363,36 +361,23 @@ class RibbonPrimitive:
             vertex=RIBBON_CONTINUOUS_VERTEX if continuation is not None else RIBBON_VERTEX
             program = self.resources.program(key, vertex, _FRAGMENTS[shading])
             vao, _ = self.resources.mesh('empty', (0., 0.), (2,))
-            names = ('uMvp', 'uDiagnostic', 'uSurface', 'uSweepAxis', 'uFloorContact') if shaded is None else ('uMvp', 'uSurface', 'uSweepAxis', *_MATERIAL_UNIFORMS)
-            if continuation is not None:names+=('uContinuation',)
-            if shading == 'light':names+=_PULSE_RIM_UNIFORMS
-            # Each pass reads only part of the material, so its unused uniforms are compiled out (location -1).
-            uniforms = self.resources.uniforms(key, names+_FLOOR_GIVE_UNIFORMS, required=shaded is None)
+            # The program's values as its uniforms held them, one pass block (N1.6); the samplers carry their units.
+            values = self.resources.values(key)
             self._stream()
             gl.glUseProgram(program)
             gl.glBindVertexArray(vao)
-            gl.glUniformMatrix4fv(uniforms['uMvp'], 1, gl.GL_FALSE, matrix.flatten(order='F'))
-            gl.glUniform2f(uniforms['uSurface'], material.cross_curve, float(cross_divisions))
-            gl.glUniform3f(uniforms['uSweepAxis'], *axis)
-            _apply_floor_give(uniforms, floor_give, origin+np.asarray(mist_frame, float))
-            if shading == 'light':rim_bound = _apply_pulse_rim(uniforms, pulse_rim)
-            if continuation is not None:gl.glUniform4f(uniforms['uContinuation'],0.,0.,0.,0.)
+            values['uMvp'] = tuple(matrix.flatten(order='F'))
+            values['uSurface'] = (material.cross_curve, float(cross_divisions))
+            values['uSweepAxis'] = axis
+            _apply_floor_give(values, floor_give, origin+np.asarray(mist_frame, float))
+            if shading == 'light':rim_bound = _apply_pulse_rim(values, pulse_rim)
+            if continuation is not None:values['uContinuation'] = (0.,0.,0.,0.)
             if shaded is None:
-                gl.glUniform1i(uniforms['uDiagnostic'], diagnostic)
-                gl.glUniform3f(uniforms['uFloorContact'],*_floor_contact(floor,origin+np.asarray(mist_frame,float)))
+                values['uDiagnostic'] = diagnostic
+                values['uFloorContact'] = _floor_contact(floor,origin+np.asarray(mist_frame,float))
             else:
-                for name, value in shaded.items():
-                    if name == 'uFogVolume':
-                        gl.glUniform1i(uniforms[name], value)
-                    elif len(value) == 16:
-                        gl.glUniformMatrix4fv(uniforms[name], 1, gl.GL_FALSE, np.asarray(value, np.float32))
-                    elif len(value) == 2:
-                        gl.glUniform2f(uniforms[name], *value)
-                    elif len(value) == 3:
-                        gl.glUniform3f(uniforms[name], *value)
-                    else:
-                        _upload(uniforms[name], value)
-            with self._packet_bound(packet):
+                values.update(shaded)
+            with self._packet_bound(packet), self.resources.pass_blocks.bound(pack_block(RIBBON_BLOCK, values)) as rebind:
                 if timing_query is not None:
                     gl.glBeginQuery(gl.GL_TIME_ELAPSED, timing_query)
                 try:
@@ -401,7 +386,8 @@ class RibbonPrimitive:
                     if body[1]:gl.glDrawArraysInstanced(gl.GL_TRIANGLES,body[0],body[1],packet.instances)
                     if ranges is not None:
                         for side,divisions,first,count in extensions:
-                            gl.glUniform4f(uniforms['uContinuation'],*span,float(divisions),side)
+                            values['uContinuation'] = (*span,float(divisions),side)
+                            rebind(pack_block(RIBBON_BLOCK, values))
                             gl.glDrawArraysInstanced(gl.GL_TRIANGLES,first,count,packet.instances)
                 finally:
                     if timing_query is not None:
@@ -445,48 +431,46 @@ class RibbonPrimitive:
             program = (resources.program('sparks', RIBBON_SPARK_VERTEX, RIBBON_SPARK_FRAGMENT) if strays is None
                        else resources.program('strays',RIBBON_COHORT_STRAY_VERTEX if cohorts else RIBBON_STRAY_VERTEX,RIBBON_COHORT_STRAY_FRAGMENT if cohorts else RIBBON_STRAY_FRAGMENT))
             vao, _ = self.resources.mesh('empty', (0., 0.), (2,))
-            names = ('uMvp', 'uSpark', 'uSparkLook', 'uSparkClock', 'uSparkWhite', 'uMist', 'uMistShape', 'uMistOrigin',
-                     'uSurface','uSweepAxis', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange', 'uGradeStops',
-                     'uGrade', 'uFloorContact', 'uStray', 'uStrayLook', 'uStrayClock', 'uViewport', 'uStrayGlow', 'uStrayAdmission','uStrayBirthNow','uStrayPulse')
-            u = resources.uniforms(kind, names+_FLOOR_GIVE_UNIFORMS, required=False)
+            # The program's values as its uniforms held them, one pass block (N1.6); the samplers carry their units.
+            u = resources.values(kind)
+            block = (RIBBON_SPARK_BLOCK if strays is None else RIBBON_COHORT_STRAY_BLOCK if cohorts
+                     else RIBBON_STRAY_BLOCK)
             self._stream()
             gl.glUseProgram(program)
             gl.glBindVertexArray(vao)
             if points:gl.glEnable(gl.GL_PROGRAM_POINT_SIZE)
-            gl.glUniformMatrix4fv(u['uMvp'], 1, gl.GL_FALSE, matrix.astype(np.float32).flatten(order='F'))
-            gl.glUniform3f(u['uSweepAxis'],*sweep_axis)
-            gl.glUniform2f(u['uSurface'],material.cross_curve,1.)
+            u['uMvp'] = tuple(matrix.astype(np.float32).flatten(order='F'))
+            u['uSweepAxis'] = sweep_axis
+            u['uSurface'] = (material.cross_curve,1.)
             clock = (float(now) - float(packet.coordinate_origin), float(packet.coordinate_origin) % 1000.)
             if strays is None:
-                gl.glUniform4f(u['uSpark'], float(sparks.per_knot), sparks.lifetime, sparks.drift, sparks.rise)
-                gl.glUniform4f(u['uSparkLook'], sparks.smallest, sparks.largest, sparks.light, sparks.twinkle)
-                gl.glUniform2f(u['uSparkClock'], *clock)
-                gl.glUniform1f(u['uSparkWhite'], sparks.white)
+                u['uSpark'] = (float(sparks.per_knot), sparks.lifetime, sparks.drift, sparks.rise)
+                u['uSparkLook'] = (sparks.smallest, sparks.largest, sparks.light, sparks.twinkle)
+                u['uSparkClock'] = clock
+                u['uSparkWhite'] = sparks.white
             else:
-                gl.glUniform4f(u['uStray'], float(strays.per_knot), strays.length, strays.reach, strays.chance)
-                gl.glUniform4f(u['uStrayLook'], strays.width, strays.light, strays.beads, strays.peel_time)
-                gl.glUniform2f(u['uStrayClock'], *clock)
-                gl.glUniform2f(u['uStrayGlow'], strays.halo, strays.glow)
-                gl.glUniform1f(u['uStrayAdmission'], strays.admission_softness)
+                u['uStray'] = (float(strays.per_knot), strays.length, strays.reach, strays.chance)
+                u['uStrayLook'] = (strays.width, strays.light, strays.beads, strays.peel_time)
+                u['uStrayClock'] = clock
+                u['uStrayGlow'] = (strays.halo, strays.glow)
+                u['uStrayAdmission'] = strays.admission_softness
                 if cohorts:
-                    gl.glUniform1f(u['uStrayBirthNow'],float(now)-float(strand_origin))
-                    gl.glUniform2f(u['uStrayPulse'],strays.pulse_growth,strays.pulse_glow)
-                gl.glUniform2f(u['uViewport'], *(float(v) for v in viewport) if viewport is not None else
-                               (float(v) for v in gl_query.get_ints(gl.GL_VIEWPORT, 4)[2:4]))
+                    u['uStrayBirthNow'] = float(now)-float(strand_origin)
+                    u['uStrayPulse'] = (strays.pulse_growth,strays.pulse_glow)
+                u['uViewport'] = (tuple(float(v) for v in viewport) if viewport is not None else
+                                  tuple(float(v) for v in gl_query.get_ints(gl.GL_VIEWPORT, 4)[2:4]))
             mist_values = {'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **FOG_OFF, **(mist or {})}
-            gl.glUniform4f(u['uMist'], *mist_values['uMist'])
-            gl.glUniform4f(u['uMistShape'], *mist_values['uMistShape'])
-            gl.glUniform1i(u['uFogVolume'], mist_values['uFogVolume'])
-            gl.glUniform4f(u['uFogRange'], *mist_values['uFogRange'])
+            u['uMist'] = mist_values['uMist']
+            u['uMistShape'] = mist_values['uMistShape']
+            u['uFogRange'] = mist_values['uFogRange']
             if 'uFogView' in mist_values:
-                gl.glUniformMatrix4fv(u['uFogView'], 1, gl.GL_FALSE, np.asarray(mist_values['uFogView'], np.float32))
-                gl.glUniform4f(u['uFogLens'], *mist_values['uFogLens'])
-            gl.glUniform3f(u['uMistOrigin'], *frame)
-            gl.glUniform3f(u['uFloorContact'], *_floor_contact(floor, frame))
+                u['uFogView'] = mist_values['uFogView']
+                u['uFogLens'] = mist_values['uFogLens']
+            u['uMistOrigin'] = tuple(frame)
+            u['uFloorContact'] = _floor_contact(floor, frame)
             _apply_floor_give(u, floor_give, frame)
-            for name, value in {**GRADE_OFF, **(grade or {})}.items():
-                _upload(u[name], value)
-            with self._packet_bound(packet):
+            u.update({**GRADE_OFF, **(grade or {})})
+            with self._packet_bound(packet), resources.pass_blocks.bound(pack_block(block, u)):
                 if strays is None:
                     gl.glDrawArraysInstanced(gl.GL_POINTS, 0, MAX_PATH_SAMPLES*sparks.per_knot, packet.instances)
                 else:

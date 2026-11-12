@@ -18,6 +18,7 @@ front stays continuous while the picture blooms area by area.
 from __future__ import annotations
 
 from rendering.gl_programs.analog_signal import ANALOG_SIGNAL_GLSL
+from rendering.gl_programs.item_quad import item_quad_program
 from rendering.quick.scene3d.edge_field import EDGE_FIELD_GLSL
 
 # The old picture sinks into night over this window, and its own lines glow over this one
@@ -142,3 +143,9 @@ void main() {{
 }}
 """
 )
+
+# N1.6: the fragment's values and the item quad's in one std140 pass block (``item_quad_program``); the fields take
+# units 2 (new picture) and 3 (old picture), the owner's.
+EDGE_BLOOM_VERTEX_SOURCE, EDGE_BLOOM_FRAGMENT_SOURCE, EDGE_BLOOM_BLOCK = item_quad_program(
+    EDGE_BLOOM_FRAGMENT_SOURCE, block="EdgeBloomPass",
+    samplers={"uOldTex": 0, "uNewTex": 1, "uNewField": 2, "uOldField": 3})

@@ -9,10 +9,14 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs.scene3d import scene3d_request_samples
 from rendering.gl_programs.volumetric_dissolve_options import VOLUMETRIC_DIRECTIONS, VOLUMETRIC_PARTICLE_SIZE_RANGE
+from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.volumetric_dissolve_program import (
+    VOLUMETRIC_BACKDROP_BLOCK,
     VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE,
+    VOLUMETRIC_BACKDROP_VERTEX_SOURCE,
     VOLUMETRIC_FRAME_BLOCK,
     VOLUMETRIC_HOOKS,
+    VOLUMETRIC_PARTICLE_BLOCK,
     VOLUMETRIC_PARTICLE_FRAGMENT_SOURCE,
     VOLUMETRIC_PARTICLE_VERTEX_SOURCE,
     VOLUMETRIC_VERTICES,
@@ -20,7 +24,6 @@ from rendering.gl_programs.volumetric_dissolve_program import (
 )
 from rendering.quick import gl_query
 from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
-from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
 from rendering.quick.scene3d.passes import blend_scope
 from rendering.quick.scene3d.population import CompactedPopulation, population_programs
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
@@ -60,8 +63,10 @@ def volumetric_sweep(direction: object) -> tuple[tuple[float, float], float]:
 class QuickVolumetricDissolveRenderer:
     transition_id = "volumetric_dissolve"
 
-    _BACKDROP_UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uNewTex", "uNewCopy", "uOldCopy")
-    _PARTICLE_UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uOldCopy")
+    # The photographs each program reads (bind_frame binds them); the copies' samplers are bound in the sources, the
+    # quad's values are in each program's pass block and the rest in the frame block.
+    _BACKDROP_SAMPLERS = ("uOldTex", "uNewTex")
+    _PARTICLE_SAMPLERS = ("uOldTex",)
 
     def __init__(self) -> None:
         label = "Quick Volumetric Dissolve"
@@ -112,7 +117,7 @@ class QuickVolumetricDissolveRenderer:
         samples = scene3d_request_samples(parameters)
         r = self._resources
         entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM),
-                   (r, "backdrop", ITEM_QUAD_VERTEX_SOURCE, VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE),
+                   (r, "backdrop", VOLUMETRIC_BACKDROP_VERTEX_SOURCE, VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE),
                    (r, "particles", VOLUMETRIC_PARTICLE_VERTEX_SOURCE, VOLUMETRIC_PARTICLE_FRAGMENT_SOURCE)]
         entries += [(r, *program) for program in population_programs("particles", VOLUMETRIC_HOOKS)]
         if samples:
@@ -152,16 +157,16 @@ class QuickVolumetricDissolveRenderer:
 
     def _draw_bound(self, frame, population: int) -> None:
         r = self._resources
-        program = r.program("backdrop", ITEM_QUAD_VERTEX_SOURCE, VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE)
+        program = r.program("backdrop", VOLUMETRIC_BACKDROP_VERTEX_SOURCE, VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE)
         self._frame_block.attach(program)
-        uniforms = r.uniforms("backdrop", self._BACKDROP_UNIFORMS)
+        uniforms = r.uniforms("backdrop", self._BACKDROP_SAMPLERS)
+        values = r.values("backdrop")
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame)
-        gl.glUniform1i(uniforms["uNewCopy"], 2)
-        gl.glUniform1i(uniforms["uOldCopy"], 3)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        bind_frame(program, uniforms, frame, values)
+        with r.pass_blocks.bound(pack_block(VOLUMETRIC_BACKDROP_BLOCK, values)):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
         self._particles.warm(population)            # a no-op when warmed for this run's size
 
@@ -172,11 +177,12 @@ class QuickVolumetricDissolveRenderer:
             self._particles.update(r, "particles", VOLUMETRIC_HOOKS, population, VOLUMETRIC_VERTICES, configure)
             program = r.program("particles", VOLUMETRIC_PARTICLE_VERTEX_SOURCE, VOLUMETRIC_PARTICLE_FRAGMENT_SOURCE)
             self._frame_block.attach(program)
-            uniforms = r.uniforms("particles", self._PARTICLE_UNIFORMS)
-            bind_frame(program, uniforms, frame)
-            gl.glUniform1i(uniforms["uOldCopy"], 3)
+            uniforms = r.uniforms("particles", self._PARTICLE_SAMPLERS)
+            values = r.values("particles")
+            bind_frame(program, uniforms, frame, values)
             gl.glBindVertexArray(frame.quad_vao)
-            with blend_scope(gl.GL_FUNC_ADD, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA):
+            with blend_scope(gl.GL_FUNC_ADD, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA), \
+                    r.pass_blocks.bound(pack_block(VOLUMETRIC_PARTICLE_BLOCK, values)):
                 self._particles.draw(gl.GL_TRIANGLE_STRIP)
 
     def release_resources(self) -> None:

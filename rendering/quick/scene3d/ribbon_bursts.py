@@ -6,23 +6,28 @@ import numpy as np
 from OpenGL import GL as gl
 from PySide6.QtGui import QOpenGLContext
 from core.ribbon_bursts import CAPACITY, STRIDE
-from rendering.gl_programs.ribbon_bursts import VERTEX, FRAGMENT
+from rendering.gl_programs.portable import pack_block
+from rendering.gl_programs.ribbon_bursts import BURSTS_BLOCK, VERTEX, FRAGMENT
 from rendering.gl_programs.mist import FOG_OFF
 from rendering.quick import gl_query
 from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.stream import StreamRing
 from rendering.quick.scene3d.particles import draw_particles
 from rendering.quick.scene3d.ribbon import GRADE_OFF
+from rendering.quick.scene3d.uniforms import PassBlocks
 
 
 class RibbonBurstRenderer:
     def __init__(self):
         self.resources=MeshResources('ribbon event sparks')
         self.stream=None
+        self.blocks=PassBlocks('ribbon event sparks',block_bytes=BURSTS_BLOCK.size)
         self._context_ref=None
 
     @property
-    def has_resources(self):return self.resources.has_resources or (self.stream is not None and self.stream.has_resources)
+    def has_resources(self):
+        return (self.resources.has_resources or (self.stream is not None and self.stream.has_resources)
+                or self.blocks.has_resources)
 
     def _context(self, *, admit=False):
         current=QOpenGLContext.currentContext()
@@ -36,7 +41,7 @@ class RibbonBurstRenderer:
         if not warm_programs(((self.resources,'bursts',VERTEX,FRAGMENT),)):return False
         if not self.resources.has_mesh('quad'):
             self.resources.mesh('quad',(0.,0.,1.,0.,0.,1.,1.,1.),(2,));return False
-        return self._stream().warm()
+        return self._stream().warm() and self.blocks.warm()
 
     def _stream(self):
         if self.stream is None:
@@ -55,27 +60,21 @@ class RibbonBurstRenderer:
         # A revealed mode may enable Sparks after activation preparation has completed. The same lazy owners
         # admit that explicit user transition; initial activation still warms these units separately while hidden.
         program=self.resources.program('bursts',VERTEX,FRAGMENT)
-        names=('uMvp','uNow','uViewport','uMist','uMistShape','uFogVolume','uFogView','uFogLens','uFogRange','uGradeStops','uGrade')
-        u=self.resources.uniforms('bursts',names,required=False)
         gl.glUseProgram(program)
-        gl.glUniformMatrix4fv(u['uMvp'],1,gl.GL_FALSE,np.asarray(mvp,np.float32))
-        gl.glUniform1f(u['uNow'],now);gl.glUniform2f(u['uViewport'],*viewport)
-        values={'uMist':(0.,0.,1.,1.),'uMistShape':(0.,0.,0.,0.),**FOG_OFF,**mist,**GRADE_OFF,**grade}
-        for key,value in values.items():
-            if key not in u:continue
-            if key=='uFogVolume':gl.glUniform1i(u[key],value)
-            elif len(value)==16:gl.glUniformMatrix4fv(u[key],1,gl.GL_FALSE,np.asarray(value,np.float32))
-            elif key=='uGradeStops':gl.glUniform4fv(u[key],len(value)//4,np.asarray(value,np.float32))
-            else:gl.glUniform4f(u[key],*value)
+        # The mist volume samples unit FOG_TEXTURE_UNIT (its binding); every other value travels in the pass block.
+        values={'uMist':(0.,0.,1.,1.),'uMistShape':(0.,0.,0.,0.),**FOG_OFF,**mist,**GRADE_OFF,**grade,
+                'uMvp':tuple(mvp),'uNow':now,'uViewport':tuple(viewport)}
         vao,_=self.resources.mesh('quad',(0.,0.,1.,0.,0.,1.,1.,1.),(2,))
         stream=self._stream();stream.warm()
-        with stream.bound(gl.GL_SHADER_STORAGE_BUFFER,1,payload,restore=restore):
+        with self.blocks.bound(pack_block(BURSTS_BLOCK,values)), \
+                stream.bound(gl.GL_SHADER_STORAGE_BUFFER,1,payload,restore=restore):
             draw_particles(SimpleNamespace(quad_vao=vao),CAPACITY)
 
     def release(self):
         if self.has_resources:self._context()
         errors=[]
-        for release in ((self.stream.release,) if self.stream is not None else ())+(self.resources.release_resources,):
+        for release in (((self.stream.release,) if self.stream is not None else ())
+                        +(self.blocks.release,self.resources.release_resources)):
             try:release()
             except Exception as error:errors.append(error)
         if errors:raise ExceptionGroup('Ribbon event sparks remain for retry',errors)

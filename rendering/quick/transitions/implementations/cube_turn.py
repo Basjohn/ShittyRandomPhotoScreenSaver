@@ -7,16 +7,19 @@ from collections.abc import Mapping
 from OpenGL import GL as gl
 
 from rendering.gl_programs.cube_turn_program import (
+    CUBE_TURN_BACKDROP_BLOCK,
     CUBE_TURN_BACKDROP_FRAGMENT_SOURCE,
+    CUBE_TURN_BACKDROP_VERTEX_SOURCE,
+    CUBE_TURN_BLOCK,
     CUBE_TURN_FRAGMENT_SOURCE,
     CUBE_TURN_VERTEX_SOURCE,
     cube_turn_axis,
     cube_turn_lift,
     cube_turn_state,
 )
+from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VERTICES, scene3d_request_samples
 from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
-from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
 from ..render_contract import QuickTransitionRenderFrame
@@ -33,9 +36,7 @@ def cube_turn_parameters(parameters: Mapping[str, object]) -> float:
 class QuickCubeTurnRenderer:
     transition_id = "cube_turn"
 
-    _BOX_UNIFORMS = ("uMatrix", "uItemSize", "uAngle", "uFinal", "uAxis", "uZoom", "uOldTex", "uNewTex",
-                     "uEnvironment", "uGloss", "uLift")
-    _BACKDROP_UNIFORMS = ("uMatrix", "uItemSize", "uEnvironment")
+    _BOX_SAMPLERS = ("uOldTex", "uNewTex")   # every other value is in the programs' pass blocks
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Cube Turn")
@@ -77,7 +78,7 @@ class QuickCubeTurnRenderer:
         samples = scene3d_request_samples(parameters)
         r = self._resources
         entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM),
-                   (r, "backdrop", ITEM_QUAD_VERTEX_SOURCE, CUBE_TURN_BACKDROP_FRAGMENT_SOURCE),
+                   (r, "backdrop", CUBE_TURN_BACKDROP_VERTEX_SOURCE, CUBE_TURN_BACKDROP_FRAGMENT_SOURCE),
                    (r, "box", CUBE_TURN_VERTEX_SOURCE, CUBE_TURN_FRAGMENT_SOURCE)]
         if samples:
             entries += [(r, *program) for program in scene_target_programs(samples, False, False)]
@@ -98,32 +99,34 @@ class QuickCubeTurnRenderer:
     def _draw(self, frame, progress: float, axis: int, sign: float, gloss: float, environment: int) -> None:
         angle, zoom = cube_turn_state(progress, sign)
         r = self._resources
-        program = r.program("backdrop", ITEM_QUAD_VERTEX_SOURCE, CUBE_TURN_BACKDROP_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("backdrop", self._BACKDROP_UNIFORMS)
+        program = r.program("backdrop", CUBE_TURN_BACKDROP_VERTEX_SOURCE, CUBE_TURN_BACKDROP_FRAGMENT_SOURCE)
+        uniforms = r.uniforms("backdrop", ())
+        values = r.values("backdrop")
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame)
-        gl.glActiveTexture(gl.GL_TEXTURE2)
+        bind_frame(program, uniforms, frame, values)
+        gl.glActiveTexture(gl.GL_TEXTURE2)                # the environment's binding in both programs
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
-        gl.glUniform1i(uniforms["uEnvironment"], 2)
         gl.glActiveTexture(gl.GL_TEXTURE0)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        with r.pass_blocks.bound(pack_block(CUBE_TURN_BACKDROP_BLOCK, values)):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
         r.begin_depth(frame)
         program = r.program("box", CUBE_TURN_VERTEX_SOURCE, CUBE_TURN_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("box", self._BOX_UNIFORMS)
-        bind_frame(program, uniforms, frame)
-        gl.glUniform1f(uniforms["uAngle"], angle)
-        gl.glUniform1f(uniforms["uFinal"], sign * 1.5707963267948966)
-        gl.glUniform1i(uniforms["uAxis"], axis)
-        gl.glUniform1f(uniforms["uZoom"], zoom)
-        gl.glUniform1f(uniforms["uGloss"], gloss)
-        gl.glUniform1f(uniforms["uLift"], cube_turn_lift(angle))
-        gl.glUniform1i(uniforms["uEnvironment"], 2)      # still bound on unit 2
+        uniforms = r.uniforms("box", self._BOX_SAMPLERS)
+        values = r.values("box")
+        bind_frame(program, uniforms, frame, values)
+        values["uAngle"] = angle
+        values["uFinal"] = sign * 1.5707963267948966
+        values["uAxis"] = axis
+        values["uZoom"] = zoom
+        values["uGloss"] = gloss
+        values["uLift"] = cube_turn_lift(angle)
         vao, vertices = r.mesh("box", SCENE3D_BOX_VERTICES, SCENE3D_BOX_ATTRIBUTES)
-        gl.glBindVertexArray(vao)
-        gl.glDrawArrays(gl.GL_TRIANGLES, 0, vertices)
+        with r.pass_blocks.bound(pack_block(CUBE_TURN_BLOCK, values)):
+            gl.glBindVertexArray(vao)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, vertices)
 
     def release_resources(self) -> None:
         errors: list[str] = []

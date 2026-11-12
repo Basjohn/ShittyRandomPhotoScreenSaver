@@ -7,10 +7,13 @@ from collections.abc import Mapping
 from OpenGL import GL as gl
 
 from rendering.gl_programs.beam_program import (
+    BEAM_BLOCK,
     BEAM_FRAGMENT_SOURCE,
+    BEAM_SPARK_BLOCK,
     BEAM_SPARK_FRAGMENT_SOURCE,
     BEAM_SPARK_VERTEX_SOURCE,
     BEAM_SPARKS,
+    BEAM_VERTEX_SOURCE,
     beam_cure,
     beam_direction,
     beam_intensity,
@@ -21,7 +24,7 @@ from rendering.gl_programs.beam_program import (
     beam_spark_life_limit,
     beam_sweep_end,
 )
-from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
+from rendering.gl_programs.portable import pack_block
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from ..render_contract import QuickTransitionRenderFrame
 
@@ -50,10 +53,8 @@ def beam_parameters(parameters: Mapping[str, object]
 class QuickBeamRenderer:
     transition_id = "beam"
 
-    _COMMON = ("uMatrix", "uItemSize", "uDirection", "uProgress", "uLine", "uPath", "uReach", "uColor", "uGlow",
-               "uIntensity", "uSeed", "uSweepEnd")
-    _BEAM_UNIFORMS = _COMMON + ("uOldTex", "uNewTex", "uScorch", "uCure")
-    _SPARK_UNIFORMS = _COMMON + ("uDurationS", "uMaxLife", "uSpan")
+    # Every other value is in the programs' pass blocks (BEAM_BLOCK, BEAM_SPARK_BLOCK).
+    _BEAM_SAMPLERS = ("uOldTex", "uNewTex")
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Beam")
@@ -86,7 +87,7 @@ class QuickBeamRenderer:
         nothing per run."""
         _color, _glow, _scorch, _cure, sparks, _seed = beam_parameters(parameters)
         r = self._resources
-        entries = [(r, *UNDERLAY_PROGRAM), (r, "beam", ITEM_QUAD_VERTEX_SOURCE, BEAM_FRAGMENT_SOURCE)]
+        entries = [(r, *UNDERLAY_PROGRAM), (r, "beam", BEAM_VERTEX_SOURCE, BEAM_FRAGMENT_SOURCE)]
         if sparks:
             entries.append((r, "sparks", BEAM_SPARK_VERTEX_SOURCE, BEAM_SPARK_FRAGMENT_SOURCE))
         return warm_programs(entries) and warm_pass_blocks(r, size)
@@ -94,18 +95,18 @@ class QuickBeamRenderer:
     def park(self) -> None:
         """Nothing per run to drop; the programs stay warm."""
 
-    def _common(self, uniforms, frame, progress: float, sweep_end: float, direction, line: float, path,
+    def _common(self, values, frame, progress: float, sweep_end: float, direction, line: float, path,
                 reach: float, color, glow: float, seed: int) -> None:
-        gl.glUniform1f(uniforms["uSweepEnd"], sweep_end)
-        gl.glUniform2f(uniforms["uDirection"], *direction)
-        gl.glUniform1f(uniforms["uProgress"], progress)
-        gl.glUniform1f(uniforms["uLine"], line)
-        gl.glUniform2f(uniforms["uPath"], *path)
-        gl.glUniform1f(uniforms["uReach"], reach)
-        gl.glUniform3f(uniforms["uColor"], *color)
-        gl.glUniform1f(uniforms["uGlow"], glow)
-        gl.glUniform1f(uniforms["uIntensity"], beam_intensity(progress, sweep_end))
-        gl.glUniform1f(uniforms["uSeed"], float(seed))
+        values["uSweepEnd"] = sweep_end
+        values["uDirection"] = direction
+        values["uProgress"] = progress
+        values["uLine"] = line
+        values["uPath"] = path
+        values["uReach"] = reach
+        values["uColor"] = color
+        values["uGlow"] = glow
+        values["uIntensity"] = beam_intensity(progress, sweep_end)
+        values["uSeed"] = float(seed)
 
     def _draw(self, frame, progress: float, code: str, color, glow: float, scorch: float, cure: float,
               sparks: bool, seed: int) -> None:
@@ -119,32 +120,36 @@ class QuickBeamRenderer:
         line = beam_line(progress, *path, sweep_end)
         r = self._resources
 
-        program = r.program("beam", ITEM_QUAD_VERTEX_SOURCE, BEAM_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("beam", self._BEAM_UNIFORMS)
+        program = r.program("beam", BEAM_VERTEX_SOURCE, BEAM_FRAGMENT_SOURCE)
+        uniforms = r.uniforms("beam", self._BEAM_SAMPLERS)
+        values = r.values("beam")
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame)
-        self._common(uniforms, frame, progress, sweep_end, direction, line, path, reach, color, glow, seed)
-        gl.glUniform1f(uniforms["uScorch"], scorch)
-        gl.glUniform1f(uniforms["uCure"], cure)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        bind_frame(program, uniforms, frame, values)
+        self._common(values, frame, progress, sweep_end, direction, line, path, reach, color, glow, seed)
+        values["uScorch"] = scorch
+        values["uCure"] = cure
+        with r.pass_blocks.bound(pack_block(BEAM_BLOCK, values)):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
         if not sparks:
             return
 
         program = r.program("sparks", BEAM_SPARK_VERTEX_SOURCE, BEAM_SPARK_FRAGMENT_SOURCE)
-        # The sparks share the beam's uniforms but read only some of them.
-        uniforms = r.uniforms("sparks", self._SPARK_UNIFORMS, required=False)
-        bind_frame(program, uniforms, frame)
-        self._common(uniforms, frame, progress, sweep_end, direction, line, path, reach, color, glow, seed)
+        # The sparks share the beam's values but read only some of them.
+        uniforms = r.uniforms("sparks", (), required=False)
+        values = r.values("sparks")
+        bind_frame(program, uniforms, frame, values)
+        self._common(values, frame, progress, sweep_end, direction, line, path, reach, color, glow, seed)
         duration_s = frame.run.request.duration_ms / 1000.0
-        gl.glUniform1f(uniforms["uDurationS"], duration_s)
-        gl.glUniform1f(uniforms["uMaxLife"], beam_spark_life_limit(duration_s, sweep_end))
-        gl.glUniform2f(uniforms["uSpan"], *span)
+        values["uDurationS"] = duration_s
+        values["uMaxLife"] = beam_spark_life_limit(duration_s, sweep_end)
+        values["uSpan"] = span
         gl.glEnable(gl.GL_BLEND)
         gl.glBlendEquation(gl.GL_FUNC_ADD)
         gl.glBlendFunc(gl.GL_ONE, gl.GL_ONE)
-        gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, BEAM_SPARKS)
+        with r.pass_blocks.bound(pack_block(BEAM_SPARK_BLOCK, values)):
+            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, BEAM_SPARKS)
         gl.glDisable(gl.GL_BLEND)
 
     def release_resources(self) -> None:

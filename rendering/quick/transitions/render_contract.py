@@ -5,13 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
-
 from .state import TransitionRun, TransitionSample
 
-
-# The shared item quad (rendering.quick.scene3d.frame owns the source).
-QUICK_TRANSITION_VERTEX_SOURCE = ITEM_QUAD_VERTEX_SOURCE
+# The shared item quad is ``rendering.gl_programs.item_quad``: each program declares its values (the quad's among
+# them) in its own pass block (N1.6), so there is no one shared vertex text.
 
 
 @dataclass(frozen=True, slots=True)

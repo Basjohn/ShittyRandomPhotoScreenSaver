@@ -124,10 +124,10 @@ def test_default_draws_exactly_the_unmirrored_programs(qt_app, monkeypatch):
                     replaced = 0
                     for module, names in ((ribbon_module, ('RIBBON_VERTEX', 'RIBBON_CONTINUOUS_VERTEX', 'RIBBON_SPARK_VERTEX',
                                                            'RIBBON_STRAY_VERTEX', 'RIBBON_COHORT_STRAY_VERTEX')),
-                                          (waveform_module, ('FLOOR_FRAGMENT', 'MEDIUM_GLSL')),
+                                          (waveform_module, ('FLOOR_FRAGMENT', 'MEDIUM_INJECT_SOURCE')),
                                           (field_module, ('FIELD_COMPUTE',)),
                                           (give_module, ('FLOOR_GIVE_SECTION_COMPUTE',)),
-                                          (implementation_module, ('FLOOR_FRAGMENT', 'MEDIUM_GLSL'))):
+                                          (implementation_module, ('FLOOR_FRAGMENT', 'MEDIUM_INJECT_SOURCE'))):
                         for name in names:
                             source = getattr(module, name)
                             for branch in ('uFieldSide<0.0', 'uFloorGiveFrame.z<0.0'):

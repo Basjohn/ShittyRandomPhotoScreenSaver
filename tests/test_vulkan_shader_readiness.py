@@ -49,7 +49,6 @@ _CONVERTED_MODULES = frozenset({
 # The composers whose runtime sources N1.3 brought under the check (they must keep producing discovered sources).
 _RUNTIME_COMPOSERS = (
     "rendering.quick.scene3d.population.population_programs(",
-    "rendering.gl_programs.fog_volume.fog_inject_source(",
     "rendering.quick.scene3d.propagation_field.PropagationField(",
 )
 
@@ -106,6 +105,10 @@ def test_every_stage_and_every_kind_of_source_is_discovered():
     assert any(".fragment_source" in key for key in keys), "program classes' properties are read"
     for composer in _RUNTIME_COMPOSERS:
         assert any(key.startswith(composer) for key in keys), f"{composer} is not evaluated"
+    # The composed fog medium Waveform injects is composed once at module level since N1.6 (its portable form), and
+    # checked there as a compute source.
+    stage = {source.key: source.stage for source in sources}
+    assert stage.get("rendering.gl_programs.waveform_atmosphere.MEDIUM_INJECT_SOURCE") == "comp"
     # One identity per text: an imported or re-exported source is its owner's.
     assert len({source.text for source in sources}) == len(sources)
 
@@ -224,33 +227,10 @@ def test_every_target_is_checked_not_only_spirv(tmp_path):
 
 # The sources that did not bake on 12 Nov 2026 (N1.3), in N5's order. Only ever shrinks.
 _RATCHET = {
-    "Shared scene substrate": (
-        # N1.6: the substrate's own programs draw with item_quad_vertex_source(their block); this text stays the 2D
-        # transitions' vertex stage (QUICK_TRANSITION_VERTEX_SOURCE, its uMatrix/uItemSize set by bind_frame) and
-        # converts with them.
-        "rendering.quick.scene3d.frame.ITEM_QUAD_VERTEX_SOURCE",
-    ),
     "Waveform Ribbon": (
         "rendering.gl_programs.fog_volume.FOG_COMPOSITE_FRAGMENT",
         "rendering.gl_programs.fog_volume.FOG_FULLSCREEN_VERTEX",
-        "rendering.gl_programs.fog_volume.fog_inject_source(MEDIUM_GLSL)",
         "rendering.gl_programs.fog_volume.fog_march_source(coverage_glsl)",
-        "rendering.gl_programs.ribbon.RIBBON_BODY_FRAGMENT",
-        "rendering.gl_programs.ribbon.RIBBON_COHORT_STRAY_FRAGMENT",
-        "rendering.gl_programs.ribbon.RIBBON_COHORT_STRAY_VERTEX",
-        "rendering.gl_programs.ribbon.RIBBON_CONTINUOUS_VERTEX",
-        "rendering.gl_programs.ribbon.RIBBON_FRAGMENT",
-        "rendering.gl_programs.ribbon.RIBBON_LIGHT_FRAGMENT",
-        "rendering.gl_programs.ribbon.RIBBON_SPARK_FRAGMENT",
-        "rendering.gl_programs.ribbon.RIBBON_SPARK_VERTEX",
-        "rendering.gl_programs.ribbon.RIBBON_STRAY_FRAGMENT",
-        "rendering.gl_programs.ribbon.RIBBON_STRAY_VERTEX",
-        "rendering.gl_programs.ribbon.RIBBON_VERTEX",
-        "rendering.gl_programs.ribbon_bursts.FRAGMENT",
-        "rendering.gl_programs.ribbon_bursts.VERTEX",
-        "rendering.gl_programs.waveform_atmosphere.SKY_FRAGMENT",
-        "rendering.gl_programs.waveform_ribbon.FLOOR_FRAGMENT",
-        "rendering.gl_programs.waveform_ribbon.FLOOR_VERTEX",
     ),
     "Extruded Bubble": (
         "rendering.gl_programs.extruded_bubble_program.BACKDROP_FRAGMENT",
@@ -315,24 +295,11 @@ _RATCHET = {
         "widgets/spotify_visualizer/shaders/oscilloscope.frag",
     ),
     "Transitions": (
-        "rendering.gl_programs.base_program.BaseGLProgram.FULLSCREEN_VERTEX_SHADER",
-        "rendering.gl_programs.beam_program.BEAM_FRAGMENT_SOURCE",
-        "rendering.gl_programs.beam_program.BEAM_SPARK_FRAGMENT_SOURCE",
-        "rendering.gl_programs.beam_program.BEAM_SPARK_VERTEX_SOURCE",
-        "rendering.gl_programs.blinds_program.BlindsProgram.fragment_source",
-        "rendering.gl_programs.blinds_program.BlindsProgram.vertex_source",
-        "rendering.gl_programs.blinds_slats_program.BLINDS_BACKDROP_FRAGMENT_SOURCE",
-        "rendering.gl_programs.blinds_slats_program.BLINDS_SLATS_FRAGMENT_SOURCE",
-        "rendering.gl_programs.blinds_slats_program.BLINDS_SLATS_VERTEX_SOURCE",
         "rendering.gl_programs.blockspin_program.BLOCK_SPIN_FRAGMENT_SOURCE",
         "rendering.gl_programs.blockspin_program.BLOCK_SPIN_GHOST_FRAGMENT_SOURCE",
         "rendering.gl_programs.blockspin_program.BLOCK_SPIN_MOTION_FRAGMENT_SOURCE",
         "rendering.gl_programs.blockspin_program.BLOCK_SPIN_MOTION_VERTEX_SOURCE",
         "rendering.gl_programs.blockspin_program.BLOCK_SPIN_QUICK_VERTEX_SOURCE",
-        "rendering.gl_programs.burn_program.BurnProgram.fragment_source",
-        "rendering.gl_programs.capillary_bloom_program.CAPILLARY_BLOOM_FRAGMENT_SOURCE",
-        "rendering.gl_programs.chromatic_shear_program.CHROMATIC_SHEAR_FRAGMENT_SOURCE",
-        "rendering.gl_programs.crossfade_program.CrossfadeProgram.fragment_source",
         "rendering.gl_programs.crumble_program.CRUMBLE_FRAGMENT",
         "rendering.gl_programs.crumble_program.CRUMBLE_GHOST_FRAGMENT",
         "rendering.gl_programs.crumble_program.CRUMBLE_MOTION_FRAGMENT",
@@ -343,25 +310,10 @@ _RATCHET = {
         "rendering.gl_programs.crumble_program.DEBRIS_MOTION_FRAGMENT",
         "rendering.gl_programs.crumble_program.DEBRIS_MOTION_VERTEX",
         "rendering.gl_programs.crumble_program.DEBRIS_VERTEX",
-        "rendering.gl_programs.cube_turn_program.CUBE_TURN_BACKDROP_FRAGMENT_SOURCE",
-        "rendering.gl_programs.cube_turn_program.CUBE_TURN_FRAGMENT_SOURCE",
-        "rendering.gl_programs.cube_turn_program.CUBE_TURN_VERTEX_SOURCE",
         "rendering.gl_programs.depth_cascade_program.CASCADE_FRAGMENT_SOURCE",
         "rendering.gl_programs.depth_cascade_program.CASCADE_SHADOW_FRAGMENT_SOURCE",
         "rendering.gl_programs.depth_cascade_program.CASCADE_SHADOW_VERTEX_SOURCE",
         "rendering.gl_programs.depth_cascade_program.CASCADE_VERTEX_SOURCE",
-        "rendering.gl_programs.disintegrate_program.DISINTEGRATE_GRAIN_FRAGMENT_SOURCE",
-        "rendering.gl_programs.disintegrate_program.DISINTEGRATE_GRAIN_VERTEX_SOURCE",
-        "rendering.gl_programs.disintegrate_program.DISINTEGRATE_INTACT_FRAGMENT_SOURCE",
-        "rendering.gl_programs.edge_bloom_program.EDGE_BLOOM_FRAGMENT_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_BACKDROP_FRAGMENT_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_FRAGMENT_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_GHOST_FRAGMENT_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_SHADOW_FRAGMENT_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_SHADOW_VERTEX_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_SPARK_FRAGMENT_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_SPARK_VERTEX_SOURCE",
-        "rendering.gl_programs.exploding_tiles_program.EXPLODING_TILES_VERTEX_SOURCE",
         "rendering.gl_programs.glass_shatter_program.GLASS_FRAGMENT",
         "rendering.gl_programs.glass_shatter_program.GLASS_GHOST_FRAGMENT",
         "rendering.gl_programs.glass_shatter_program.GLASS_MOTION_FRAGMENT",
@@ -373,45 +325,19 @@ _RATCHET = {
         "rendering.gl_programs.jigsaw_program.JIGSAW_FLIGHT_VERTEX_SOURCE",
         "rendering.gl_programs.jigsaw_program.JIGSAW_SHADOW_FRAGMENT_SOURCE",
         "rendering.gl_programs.jigsaw_program.JIGSAW_SHADOW_VERTEX_SOURCE",
-        "rendering.gl_programs.liquid_lens_program.LIQUID_LENS_FRAGMENT_SOURCE",
-        "rendering.gl_programs.melt_drip_program.MELT_FRAGMENT_SOURCE",
         "rendering.gl_programs.membrane_program.MEMBRANE_FRAGMENT_SOURCE",
         "rendering.gl_programs.membrane_program.MEMBRANE_VERTEX_SOURCE",
-        "rendering.gl_programs.page_curl_program.PAGE_CURL_BACKDROP_FRAGMENT_SOURCE",
-        "rendering.gl_programs.page_curl_program.PAGE_CURL_FRAGMENT_SOURCE",
-        "rendering.gl_programs.page_curl_program.PAGE_CURL_VERTEX_SOURCE",
-        "rendering.gl_programs.particle_program.ParticleProgram.fragment_source",
         "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_FRAGMENT_SOURCE",
         "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_GHOST_FRAGMENT_SOURCE",
         "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_MOTION_FRAGMENT_SOURCE",
         "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_MOTION_VERTEX_SOURCE",
         "rendering.gl_programs.pixel_accretion_program.PIXEL_ACCRETION_VERTEX_SOURCE",
-        "rendering.gl_programs.raindrops_program.RaindropsProgram.fragment_source",
-        "rendering.gl_programs.slide_program.SlideProgram.fragment_source",
-        "rendering.gl_programs.surface_tension_program.SURFACE_TENSION_FRAGMENT_SOURCE",
-        "rendering.gl_programs.vhs_program.VHS_FRAGMENT_SOURCE",
-        "rendering.gl_programs.volumetric_dissolve_program.VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE",
-        "rendering.gl_programs.volumetric_dissolve_program.VOLUMETRIC_PARTICLE_FRAGMENT_SOURCE",
-        "rendering.gl_programs.volumetric_dissolve_program.VOLUMETRIC_PARTICLE_VERTEX_SOURCE",
-        "rendering.gl_programs.warp_program.WarpProgram.fragment_source",
-        "rendering.gl_programs.wipe_program.WipeProgram.fragment_source",
         "rendering.quick.scene3d.motion._GATHER_FRAGMENT",
-        "rendering.quick.scene3d.population.population_programs('grains', DISINTEGRATE_HOOKS)[grains_count]",
-        "rendering.quick.scene3d.population.population_programs('grains', DISINTEGRATE_HOOKS)[grains_scatter]",
-        "rendering.quick.scene3d.population.population_programs('particles', VOLUMETRIC_HOOKS)[particles_count]",
-        "rendering.quick.scene3d.population.population_programs('particles', VOLUMETRIC_HOOKS)[particles_scatter]",
         "rendering.quick.scene3d.propagation_field.PropagationField('Quick Capillary Bloom', 'capillary', "
         "CAPILLARY_COST_GLSL)[propagation_seed_capillary]",
         "rendering.quick.scene3d.trails._EDGE_FRAGMENT",
-        "rendering.quick.transitions.implementations.block_spins._VOID_FRAGMENT_SOURCE",
-        "rendering.quick.transitions.implementations.slide._SLIDE_FRAGMENT_SOURCE",
     ),
     "Quick hosts and materials": (
-        "rendering.quick.render.background_node._FRAGMENT_SOURCE",
-        "rendering.quick.render.background_node._VERTEX_SOURCE",
-        "rendering.quick.render.surface_backdrop._DOWN",
-        "rendering.quick.render.surface_backdrop._UP",
-        "rendering.quick.render.surface_backdrop._VERTEX",
         "rendering.quick.visualizer.clip_host._FRAGMENT_SOURCE",
         "rendering.quick.visualizer.clip_host._VERTEX_SOURCE",
     ),

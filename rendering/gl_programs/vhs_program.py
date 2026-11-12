@@ -21,6 +21,7 @@ from __future__ import annotations
 import math
 
 from rendering.gl_programs.analog_signal import ANALOG_SIGNAL_GLSL
+from rendering.gl_programs.item_quad import item_quad_program
 
 # Height of the blanking bar between frames, in picture heights, and the rolled strip's period.
 VHS_BAR = 0.12
@@ -165,3 +166,7 @@ void main() {{
 }}
 """
 )
+
+# N1.6: the fragment's values and the item quad's in one std140 pass block (``item_quad_program``).
+VHS_VERTEX_SOURCE, VHS_FRAGMENT_SOURCE, VHS_BLOCK = item_quad_program(
+    VHS_FRAGMENT_SOURCE, block="VhsPass", samplers={"uOldTex": 0, "uNewTex": 1})
