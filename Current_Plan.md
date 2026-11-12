@@ -251,6 +251,14 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   GUI-side functions the renderer calls today, sent at their edges), and `card_span`'s approximation
   (`core/waveform_ribbon_view.py:59-60`) ends. Python first, so the worker's camera equals the renderer's before
   any packet carries it.
+  Built (agent, 12 Nov, unproved on a real display): `VIS_SET_VIEW` version 2 carries `core/framed_view.FramedView`
+  (pixel aspect, `framed_aperture_scale` content=True, and content=False: Extruded Bubble draws with the latter), resolved
+  from the drawn card by `rendering/quick/visualizer/framed_view.py` at the scene's geometry edges; `card_span` and
+  `widgets/spotify_visualizer/framed_view_camera.py` build from it, bit for bit with the renderers. Edge sends (real
+  owner, stand-in worker): 0 across steady frames, 1 per Expanded enter or exit (instant or faded), 0 for an origin
+  move (`tests/test_framed_view_edges.py`). Worker camera cost, 5,000 laps, no window, development machine: `card_span`
+  at rest median 1.8 us / p99 2.9 us, at an edge 110 / 207 us; whole Waveform Ribbon camera 34.6 / 75.6 us; whole
+  Extruded Bubble camera 11.1 / 17.7 us.
 - N0.2 decided 12 Nov (`Native_Core_P3_Decisions.md` D5.6 and the lead's answers): eighteen dependencies to
   their routes, no service outside D5.3; the unused `glMultiDrawArraysIndirect` start-up requirement removed.
 - [ ] N0.9 The module compile on GitHub (operator, 12 Nov: builds only through GitHub workflows; handbook
