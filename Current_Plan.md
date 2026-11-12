@@ -269,10 +269,22 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   pixel-identical to Qt's own device; teardown order, resize and the second queue in Qt's family proved over cycles;
   the driver keeps 3 handles per VkDevice (ours add none); a translucent Vulkan window gets PRE_MULTIPLIED on NVIDIA
   with alpha intact in Qt's grab. Owed:
-  - [ ] The Vulkan validation layer (with synchronisation validation) on the lead's machine: today there is no Vulkan
-    SDK here (the spike used the driver's loader and Vulkan-Headers only). Its download and install is the
-    operator's approval (a download); without it N0.6 and N0.7 run their functional parts and record validation as
-    owed. Then: validation clean through every N0.6 round (`run_n06.py --round device|lifecycle|translucent`).
+  - Validation layer installed 12 Nov with the operator's yes: Khronos's Windows build from the nightly release of
+    KhronosGroup/Vulkan-ValidationLayers (`Validation_Layers_Windows_64.zip`, 6,367,674 bytes, sha256
+    1d65db0662b448af422c756609b472274a96998bc473a44bf514e353956da95d, published 12 Nov 08:09 UTC; the tagged SDK releases
+    carry Android binaries only), in `D:\Temp\Scratch\SRPSS
+ative_spikealidation_layers\extracted\`. The loader
+    finds it only through the registry or `VK_ADD_LAYER_PATH`; the lead sets that variable for the harness process
+    alone (no registry entry, nothing persistent), so `environment_clean` reports it.
+  - [ ] First validated runs (module from 6850e8c4; evidence `.artifacts/evidence/native_core/n06/*_validated/`):
+    synchronisation validation is on and finds errors. Device and lifecycle rounds, in the hidden host's render on our
+    device: SYNC-HAZARD-WRITE-AFTER-WRITE at `vkCmdBeginRenderPass` between two submissions (10 and more, capped by the
+    layer), and VUID-VkImageCreateInfo-initialLayout-12478 (an image created PREINITIALIZED with OPTIMAL tiling).
+    Translucent round, real hidden windows at teardown: WRITE_AFTER_PRESENT, WRITE_AFTER_READ and
+    UNASSIGNED-non-acquired-swapchain-image-used. Attribute each to its owner: our module, the spike's scene
+    (QuadField), or Qt's QRhi/Qt Quick (run the same host on Qt's own device with validation enabled on the reference
+    instance too, name objects with debug utils); fix ours; record Qt's with its source reference and, if it is
+    Qt's, decide whether the native core avoids that path. Then validation clean through every N0.6 round.
   - [ ] Lead, Display 1 visible and bounded, when two displays are connected: a real translucent window on the
     module's device: see-through to the desktop (D7 point 8's first route; the hidden runs cannot read the composed
     alpha), with the DWM system backdrop and the project's glass, then the swapchain under resize, DPI change and
