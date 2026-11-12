@@ -289,7 +289,10 @@ mute button its gradient) meanwhile. On Normal it is an inactive `Loader` and th
   lane (12 Nov): the descriptor admits 2.5x the authored height but the lane is the widget's height, so from about
   1.2x the track ran past it and was cut square; its height is now bounded by the lane at the presentation owner
   (`MediaPresentation.qml`, the same place that already bounds its x and y). Edit's resize was already contained by
-  the lane; the bound covers saved and reflowed geometry (a later taller card shrinks the lane's headroom).
+  the lane; the bound covers saved and reflowed geometry (a later taller card shrinks the lane's headroom). Edit's child
+  resize starts from the drawn height, not the saved scale: the track exposes its drawn/requested ratio
+  (`customEditSizeCompensationHeight`) and the owner folds it into the scale on the first real sample, so a saved
+  scale above the lane shrinks on the first step (R-NEW, no dead zone).
 - The volume's level (the adjustable part inside the track) is material too (operator, 8 Nov: it "does not inherit
   surfaces"): its own `ChildMaterialSurface` tinted by the fill colour at full strength, no darker panel, so it reads
   above the track's 40 % tint; it drops its flat colour while the material is active and keeps it on Normal
@@ -348,8 +351,8 @@ Normal is outside the material rule.
 material panel carries; the submenu arrow ("▸") had its own tone, the theme's `context.menu.arrow` role (by default the
 menu border), and read 1.7-3.6:1 on Polished Chrome and Pearl Blush (2.3-3.0 on Normal too). The arrow is part of its
 row's label and now takes the label's ink on every theme and material (10.4-13.2:1 there; dark themes unchanged where the
-two were equal). The `context.menu.arrow` role stays in the theme schema so every theme file still loads, but nothing reads
-it. Evidence `.artifacts/evidence/materials/20261112_followups/box3_menu_arrow/`.
+two were equal). The `context.menu.arrow` role is retired from the theme schema (same day): a theme file that still
+carries it loads and drops it (Persisted_Input_Compatibility.md, "Retired Widget Theme colour roles"). Evidence `.artifacts/evidence/materials/20261112_followups/box3_menu_arrow/`.
 
 **Style sweep fixes outside the materials (6 Nov evening; they change Normal pixels on purpose, nowhere else):**
 

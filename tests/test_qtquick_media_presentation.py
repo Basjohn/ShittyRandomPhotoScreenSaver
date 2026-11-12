@@ -1493,6 +1493,109 @@ def _shadow_reach_outside_clips(shadow: QQuickItem) -> list[tuple[str, float]]:
 
 
 @pytest.mark.qt
+def test_a_saved_volume_height_above_the_lane_shrinks_on_the_first_edit_step(qt_app, settings_manager) -> None:
+    """1C.5: the lane bounds the drawn track, so a saved height scale above what the lane holds once
+    had a dead zone: Edit resized from the saved scale and the first shrink steps drew nothing new.
+    The real Edit owner now resizes from what is drawn (the track's drawn/requested ratio), so one
+    shrink step changes the visible height at once; a zero-motion press still writes nothing."""
+
+    from PySide6.QtCore import QPoint, QRect
+    from rendering.custom_child_geometry import CustomChildSize
+    from rendering.custom_layout_session import CustomLayoutKey, CustomLayoutSessionItem
+    from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
+
+    # The Edit overlay hands the target's ratio to the owner at the press.
+    overlay_qml = (Path(__file__).resolve().parents[1] / "rendering/quick/qml/CustomLayoutOverlay.qml").read_text(
+        encoding="utf-8")
+    press_call = overlay_qml.split("function beginChildResizeGesture(", 1)[1].split("\n                        }", 1)[0]
+    assert 'childSizeCompensation(frame, "customEditSizeCompensationHeight")' in press_call
+
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0, runtime_generation=94, screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    window.setWidth(1600)
+    window.setHeight(900)
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime = _FakeMediaRuntime()
+    volume_runtime = _FakeMediaVolumeRuntime()
+    model, _, _ = _model(factory.media_artwork_provider, runtime, volume_runtime)
+    try:
+        presentation = RetainedMediaPresentation(
+            host=controller.ordinary_widget_host, model=model,
+            geometry=OverlayWidgetGeometry(35.0, 40.0, 650.0, 300.0),
+        )
+        widget = presentation.item
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, image=_image()))
+        controller.scene_root.setWidth(1600.0)
+        controller.scene_root.setHeight(900.0)
+        qt_app.processEvents()
+        track = widget.findChild(QQuickItem, "mediaAppVolumeTrack")
+        lane = widget.findChild(QQuickItem, "mediaAppVolumeSlider")
+        assert model.appVolumeAvailable and track is not None and lane is not None
+
+        descriptor = get_widget_runtime_descriptor("media")
+        role = next(r for r in descriptor.custom_child_roles if r.role_id == "volume_bar")
+        owner = QuickCustomLayoutOwner(
+            settings_manager=settings_manager,
+            participants_provider=lambda: (),
+            visualizer_provider=lambda: (None, None),
+            reload_request=lambda _kind: None,
+        )
+        rect = QRect(35, 40, 650, 300)
+        item = CustomLayoutSessionItem(
+            source_key=CustomLayoutKey("media", "display:volume-dead-zone"),
+            model_identity="media", baseline_global_rect=rect, current_global_rect=rect,
+            baseline_size_payload={}, current_size_payload={},
+            baseline_enabled=True, current_enabled=True,
+            custom_child_roles=descriptor.custom_child_roles,
+        )
+
+        def show(size: CustomChildSize) -> float:
+            model.set_custom_child_geometry({"volume_bar": size.to_mapping()})
+            qt_app.processEvents()
+            return track.height()
+
+        # A saved scale the lane cannot hold: the descriptor's tallest.
+        saved = CustomChildSize(1.0, role.maximum_scale[1])
+        item.set_child_size("volume_bar", saved)
+        drawn = show(saved)
+        assert drawn == pytest.approx(lane.height(), abs=0.01), "the saved scale must exceed the lane"
+        compensation = float(track.property("customEditSizeCompensationHeight"))
+        assert 0.0 < compensation < 1.0
+
+        def press(at: QPoint) -> None:
+            assert owner.begin_child_resize(
+                item, "volume_bar", "bottom", at, track.width(), track.height(),
+                float(widget.property("volumeChildNormalizationWidth")),
+                float(widget.property("childNormalizationHeight")),
+                size_compensation_height=float(track.property("customEditSizeCompensationHeight")),
+            )
+
+        # A zero-motion press/release writes nothing.
+        press(QPoint(500, 500))
+        owner.update_child_resize(item, "volume_bar", "bottom", QPoint(500, 500), True)
+        assert item.child_size("volume_bar") == saved
+
+        # One small shrink step: the visible height moves at once, by about the pointer's step.
+        step = 6
+        press(QPoint(500, 500))
+        assert owner.update_child_resize(item, "volume_bar", "bottom", QPoint(500, 500 - step), True)
+        after = show(item.child_size("volume_bar"))
+        assert after < drawn - 1.0, (drawn, after, item.child_size("volume_bar"))
+        assert after == pytest.approx(drawn - step, abs=1.0)
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
 @pytest.mark.parametrize("direction", ("SE", "NW"))
 def test_media_child_shadows_are_never_clipped_by_their_lane_or_card(qt_app, direction: str) -> None:
     """A child control's drop shadow fades out; no clipping ancestor cuts it (Current_Plan 1C.5).

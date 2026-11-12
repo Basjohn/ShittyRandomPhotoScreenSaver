@@ -35,7 +35,9 @@ def test_light_card_projection_establishes_wallpaper_independent_alpha_floor() -
 def test_dark_card_projection_does_not_force_light_theme_alpha_floor() -> None:
     theme = _test_theme(light=False)
     assert not _uses_dark_text_on_light_surface(theme)
-    assert _runtime_card_surface(theme) == theme.color('panel.group.surface')
+    # The generator projects the authored palette (``colors``), never the Settings
+    # window's opacity projection that ``theme.color()`` applies.
+    assert _runtime_card_surface(theme) == theme.colors['panel.group.surface']
 
 
 def test_fixture_settings_widget_theme_pair_round_trips_exactly() -> None:

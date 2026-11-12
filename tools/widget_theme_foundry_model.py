@@ -174,7 +174,7 @@ def default_seed_color(role: str, draft: WidgetThemeDraft) -> Rgba:
         return resolved.color
     if role.endswith(("border", "outline", "separator")):
         return draft.colors["card.border"]
-    if role.endswith(("text", "icon", "arrow")) or "sender" in role or "age" in role or "timestamp" in role:
+    if role.endswith(("text", "icon")) or "sender" in role or "age" in role or "timestamp" in role:
         return draft.colors["card.text"]
     if "accent" in role or role.endswith(("fill", "glow")):
         return draft.colors.get("widget.accent", draft.colors["card.border"])

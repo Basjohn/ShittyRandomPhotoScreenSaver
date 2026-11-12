@@ -1,0 +1,129 @@
+{
+  "format": "srpss.widget-theme",
+  "schema_version": 3,
+  "theme_id": "default_dark",
+  "name": "Default Dark",
+  "linked_settings_theme_id": "builtin:default-dark",
+  "colors": {
+    "card.background": [
+      35,
+      35,
+      35,
+      76
+    ],
+    "card.border": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "card.text": [
+      255,
+      255,
+      255,
+      230
+    ],
+    "context.menu.surface": [
+      25,
+      25,
+      25,
+      205
+    ],
+    "context.menu.border": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "context.menu.text": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "context.menu.selected_surface": [
+      62,
+      62,
+      62,
+      220
+    ],
+    "context.menu.disabled_text": [
+      120,
+      120,
+      130,
+      150
+    ],
+    "context.menu.separator": [
+      90,
+      90,
+      90,
+      150
+    ],
+    "context.submenu.surface": [
+      25,
+      25,
+      25,
+      205
+    ],
+    "context.submenu.border": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "context.submenu.text": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "context.submenu.selected_surface": [
+      62,
+      62,
+      62,
+      220
+    ],
+    "context.submenu.checked_text": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "context.submenu.checked_surface": [
+      62,
+      62,
+      62,
+      220
+    ],
+    "context.menu.indicator.border": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "context.menu.indicator.fill": [
+      255,
+      255,
+      255,
+      180
+    ],
+    "context.menu.arrow": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "context.submenu.indicator.border": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "context.submenu.indicator.fill": [
+      255,
+      255,
+      255,
+      180
+    ]
+  }
+}

@@ -181,7 +181,6 @@ _DEFAULT_DARK_WIDGET_COLORS: dict[str, Rgba] = {
     # Optional Context Menu detail roles stay neutral under compiled Default Dark.
     "context.menu.indicator.border": Rgba(255, 255, 255, 255),
     "context.menu.indicator.fill": Rgba(255, 255, 255, 180),
-    "context.menu.arrow": Rgba(255, 255, 255, 255),
     "context.submenu.indicator.border": Rgba(255, 255, 255, 255),
     "context.submenu.indicator.fill": Rgba(255, 255, 255, 180),
 }
