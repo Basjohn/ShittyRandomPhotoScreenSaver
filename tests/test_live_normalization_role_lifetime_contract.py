@@ -15,11 +15,16 @@ def _role_declaration(family: str) -> str:
 
 
 def test_card_and_accessory_normalization_changes_cannot_rebuild_role_lists() -> None:
-    for family, count in (("Media", 9), ("Reddit", 2), ("Gmail", 2)):
+    for family in ("Media", "Reddit", "Gmail"):
         qml = (QML / f"{family}Presentation.qml").read_text(encoding="utf-8")
         roles = _role_declaration(family)
         root = family[0].lower() + family[1:] + "Root"
-        assert roles.count(f'"normalizationTarget": {root}') == count, family
+        # Every declared role normalizes against the live family root; the number of roles is the family's own
+        # (rail roles come and go with the layout), so it is read from the declaration, never pinned here.
+        declared = roles.count('"roleId":')
+        assert declared > 0, family
+        assert roles.count(f'"normalizationTarget": {root}') == declared, family
+        assert roles.count('"normalizationTarget":') == declared, family
         assert '"normalizationWidth":' not in roles, family
         assert '"normalizationHeight":' not in roles, family
         # Evaluating a role list must never read a live baseline, actual widget
