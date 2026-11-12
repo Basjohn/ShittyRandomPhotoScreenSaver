@@ -19,7 +19,7 @@ from PySide6.QtGui import QOpenGLContext
 from PySide6.QtQuick import QSGRenderNode
 
 from core.performance.frame_trace import FrameTraceEvent, FrameTraceSink
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.quick import gl_query
 
 from .gl_state import InheritedGlState
@@ -459,7 +459,7 @@ class VisualizerClipHost:
                 "visualizer clip resources released without a current GL context"
             )
         if self._program:
-            gl.glDeleteProgram(self._program)
+            delete_program(self._program)
         if self._vbo:
             gl.glDeleteBuffers(1, [self._vbo])
         if self._vao:
@@ -582,7 +582,7 @@ class VisualizerClipHost:
                 raise RuntimeError("visualizer clip uniforms are incomplete")
         except Exception:
             if self._program:
-                gl.glDeleteProgram(self._program)
+                delete_program(self._program)
             if self._vbo:
                 gl.glDeleteBuffers(1, [self._vbo])
             if self._vao:

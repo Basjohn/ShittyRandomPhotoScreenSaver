@@ -15,7 +15,7 @@ from core.settings.bubble_gradient_semantics import (
     project_bubble_gradient,
     get_bubble_specular_shader_vector,
 )
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from widgets.spotify_visualizer.bubble_viewport_profile import (
     BUBBLE_RENDER_CAPACITY,
     bubble_stroke_extra_half_px,
@@ -462,7 +462,7 @@ class QuickBubbleRenderer:
             self._ambient_renderer = None
         if not self._program:
             return
-        gl.glDeleteProgram(self._program)
+        delete_program(self._program)
         self._program = 0
         self._last_content_rotation_quarters = None
         self._uniforms.clear()

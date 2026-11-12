@@ -220,13 +220,64 @@ void main() {
         context.close()
 
 
+def _native(qobject) -> int:
+    import shiboken6
+
+    return int(shiboken6.getCppPointer(qobject)[0])
+
+
+class _QtOwnedContext:
+    """Qt's global share context, current on an offscreen surface. Qt creates it in C++ (``AA_ShareOpenGLContexts``,
+    set by ``configure_quick_graphics`` as the product sets it), as it creates Qt Quick's render-thread context, and
+    the test keeps no wrapper of it, as the product keeps none: PySide makes a new wrapper per ``currentContext()``
+    call whenever Python holds none. ``key`` is the context's native pointer."""
+
+    def __init__(self):
+        import gc
+
+        from PySide6.QtGui import QOffscreenSurface, QOpenGLContext
+
+        share = QOpenGLContext.globalShareContext()
+        if share is None:
+            pytest.skip("no context created by Qt (AA_ShareOpenGLContexts is not set)")
+        self.surface = QOffscreenSurface()
+        self.surface.setFormat(share.format())
+        self.surface.create()
+        assert share.makeCurrent(self.surface)
+        self.key = _native(share)
+        del share
+        gc.collect()
+
+    @staticmethod
+    def churn():
+        """Ordinary allocations and a collection between two calls, as a render thread makes them."""
+        import gc
+
+        _junk = [(float(i), str(i), [i]) for i in range(500)]
+        del _junk
+        gc.collect()
+
+    def close(self):
+        from PySide6.QtGui import QOpenGLContext
+
+        current = QOpenGLContext.currentContext()
+        if current is not None:
+            current.doneCurrent()
+
+
+def _held_by(key: int) -> list[int]:
+    from rendering.quick.render import gl_resources
+
+    return sorted(program for context, program in gl_resources._convention_programs if context == key)
+
+
 @pytest.mark.qt
 def test_one_buffer_per_context_held_by_the_programs_that_declare_it(qt_app):
     from OpenGL import GL as gl
 
     from rendering.quick.render.gl_resources import compile_program, delete_program
 
-    context = _Context()
+    context = _QtOwnedContext()
     plain_fragment = "#version 460 core\nout vec4 C;\nvoid main() { C = vec4(1.0); }\n"
     generic = gl.glGetIntegerv(gl.GL_UNIFORM_BUFFER_BINDING)
     try:
@@ -251,3 +302,148 @@ def test_one_buffer_per_context_held_by_the_programs_that_declare_it(qt_app):
         delete_program(third)
     finally:
         context.close()
+
+
+@pytest.mark.qt
+def test_a_context_qt_owns_has_one_entry_one_buffer_and_every_hold_with_no_wrapper_kept(qt_app):
+    """The audit's probe as a guard (Fable, 12 Nov evening): N links in one context Qt owns, the wrapper dropped and
+    memory churned between calls. Keyed by ``id()`` of the wrapper this gave N entries, N buffers, holds of 1 each, and
+    all of them left after the deletes."""
+    from OpenGL import GL as gl
+
+    from rendering.quick.render import gl_resources
+    from rendering.quick.render.gl_resources import compile_program, delete_program
+
+    count = 6
+    context = _QtOwnedContext()
+    before = dict(gl_resources._conventions)
+    programs = []
+    try:
+        for index in range(count):
+            programs.append(compile_program(_VERTEX, _FRAGMENT.replace("0.5", repr(0.1 * (index + 1))),
+                                            label=f"qt-owned holder {index}"))
+            context.churn()
+        added = {key: entry for key, entry in gl_resources._conventions.items() if key not in before}
+        assert list(added) == [context.key]                           # one entry, for this context
+        buffer, holds = added[context.key][:2]
+        assert holds == count and _held_by(context.key) == sorted(programs)
+        assert _bound_conventions() == buffer and gl.glIsBuffer(buffer)   # one buffer, bound here
+        for program in programs[:-1]:
+            delete_program(program)
+            context.churn()
+        assert gl_resources._conventions[context.key][1] == 1 and gl.glIsBuffer(buffer)
+        delete_program(programs[-1])                                  # the last hold deletes the buffer
+        programs.clear()
+        assert context.key not in gl_resources._conventions
+        assert not gl.glIsBuffer(buffer) and _held_by(context.key) == []
+        assert dict(gl_resources._conventions) == before              # nothing else was left
+    finally:
+        for program in programs:
+            delete_program(program)
+        context.close()
+
+
+@pytest.mark.qt
+def test_two_sharing_contexts_each_bind_their_own_buffer_and_a_foreign_delete_is_refused(qt_app, caplog):
+    """A second display's context shares the first's objects but not its bindings: each context that links a holder
+    gets its own buffer at the binding. A holder deleted from the other context keeps its hold, loudly, rather than
+    unbinding the block where it was linked."""
+    from OpenGL import GL as gl
+    from PySide6.QtGui import QOpenGLContext
+
+    from rendering.quick.render import gl_resources
+    from rendering.quick.render.gl_resources import compile_program, delete_program
+
+    first = _QtOwnedContext()
+    second = QOpenGLContext()
+    second.setFormat(QOpenGLContext.globalShareContext().format())
+    second.setShareContext(QOpenGLContext.globalShareContext())
+    assert second.create()
+    try:
+        held_first = compile_program(_VERTEX, _FRAGMENT, label="first display holder")
+        buffer_first = _bound_conventions()
+        first.churn()
+        assert second.makeCurrent(first.surface)
+        held_second = compile_program(_VERTEX, _FRAGMENT, label="second display holder")
+        buffer_second = _bound_conventions()
+        assert buffer_second and buffer_second != buffer_first        # bound in this context too, its own buffer
+        assert gl_resources._conventions[_native(second)][1] == 1
+        with caplog.at_level("ERROR"):
+            delete_program(held_first)                                # from the wrong context
+        assert any("outside the context" in record.getMessage() for record in caplog.records)
+        assert _held_by(first.key) == [held_first]                    # the hold is kept
+        delete_program(held_second)
+        assert not gl.glIsBuffer(buffer_second)
+        assert QOpenGLContext.globalShareContext().makeCurrent(first.surface)
+        assert _bound_conventions() == buffer_first and gl.glIsBuffer(buffer_first)
+        gl_resources._release_conventions(held_first)                 # its program is gone; hand the hold back here
+        assert first.key not in gl_resources._conventions and not gl.glIsBuffer(buffer_first)
+    finally:
+        first.close()
+        second.doneCurrent()
+
+
+@pytest.mark.qt
+def test_a_destroyed_context_leaves_no_entry(qt_app):
+    """A context that goes with holders still linked (its objects go with it) is forgotten exactly once, so a later
+    context at the same native address starts clean."""
+    import gc
+
+    from rendering.quick.render import gl_resources
+    from rendering.quick.render.gl_resources import compile_program
+
+    context = _Context()
+    key = _native(context.context)
+    compile_program(_VERTEX, _FRAGMENT, label="holder left to its context")
+    assert gl_resources._conventions[key][1] == 1
+    context.close()
+    context.context = None
+    del context
+    gc.collect()
+    assert key not in gl_resources._conventions and _held_by(key) == []
+    assert key not in getattr(gl_resources, "_watched_contexts", ())
+
+
+@pytest.mark.qt
+def test_only_a_program_that_reads_the_block_holds_it(qt_app):
+    """The mapping-only include carries the block's name inside a false ``#if``: the fog march and composite fragments
+    (the product's sources) and any other program without the block take no hold; one with the block does. (A std140
+    block a program declares counts as active even if unread, so the linked program says "declares", truthfully.)"""
+    from rendering.gl_programs.fog_volume import FOG_COMPOSITE_FRAGMENT, FOG_FULLSCREEN_VERTEX, fog_march_source
+    from rendering.quick.render import gl_resources
+    from rendering.quick.render.gl_resources import compile_program, delete_program
+
+    mapping_only = ("#version 460 core\nout vec4 C;\n" + SRPSS_CONVENTIONS_GLSL
+                    + "void main() { C = vec4(ndcToUv(vec2(0.25)), 0.0, 1.0); }\n")
+    context = _QtOwnedContext()
+    programs = []
+    try:
+        for label, vertex, fragment in (("fog march", FOG_FULLSCREEN_VERTEX, fog_march_source()),
+                                        ("fog composite", FOG_FULLSCREEN_VERTEX, FOG_COMPOSITE_FRAGMENT),
+                                        ("mapping only", _VERTEX, mapping_only)):
+            assert CONVENTIONS_BLOCK_NAME in fragment            # the text alone would have taken a hold
+            programs.append(compile_program(vertex, fragment, label=label))
+            assert _held_by(context.key) == [], label
+        assert context.key not in gl_resources._conventions and _bound_conventions() == 0
+        reader = compile_program(_VERTEX, _FRAGMENT, label="reads the block")
+        programs.append(reader)
+        assert _held_by(context.key) == [reader]
+    finally:
+        for program in programs:
+            delete_program(program)
+        context.close()
+    assert _held_by(context.key) == []
+
+
+def test_every_program_linked_through_gl_resources_is_deleted_through_delete_program():
+    """Whether a program holds the block is decided at link by the driver, so no owner can know that a raw
+    ``glDeleteProgram`` is safe: outside ``gl_resources`` itself nothing in ``rendering/`` deletes a program raw."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "rendering"
+    owner = root / "quick" / "render" / "gl_resources.py"
+    raw = re.compile(r"\bglDeleteProgram\s*\(")
+    found = [f"{path.relative_to(root.parent)}:{number}"
+             for path in sorted(root.rglob("*.py")) if path != owner
+             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1) if raw.search(line)]
+    assert found == []

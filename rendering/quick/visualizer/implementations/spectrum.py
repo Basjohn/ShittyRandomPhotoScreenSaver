@@ -9,7 +9,7 @@ from typing import Sequence
 from OpenGL import GL as gl
 
 from rendering.gl_programs.portable import block_declaration, block_layout_from_glsl, pack_block
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.quick.scene3d.uniforms import PassBlocks
 from widgets.spotify_visualizer.render_state import SpectrumFrame
 from widgets.spotify_visualizer.shaders import load_fragment_shader
@@ -419,7 +419,7 @@ class QuickSpectrumRenderer:
         if not self._program and not self._blocks.has_resources:
             return
         if self._program:
-            gl.glDeleteProgram(self._program)
+            delete_program(self._program)
         self._program = 0
         self._blocks.release()
         self._last_content_rotation_quarters = None

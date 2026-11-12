@@ -413,6 +413,14 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   bound at binding 17 (undefined reads; zeros on NVIDIA equal OpenGL's values, so nothing here can see it). Opus
   Medium, before more programs go through `_link` (N1.6):
   - [ ] Root cause on the real path: the probe's four lines reproduced by the agent (it is the negative control).
+    - Reproduced on 73742841 (3 entries, buffers [1, 2, 3], holds [1, 1, 1]; 3 left after the deletes). Cause: the
+      key `id(QOpenGLContext.currentContext())` names a PySide wrapper, not the context. For a context Qt created
+      in C++ PySide keeps a wrapper only while Python references it; the registry kept the int, not the wrapper, and
+      a connected `aboutToBeDestroyed` does not keep it either, so each later call made a new wrapper at a new (or a
+      freed, reused) address. Fix: key by the native pointer (`shiboken6.getCppPointer`), which lives exactly as
+      long as the context; `aboutToBeDestroyed` connected once per context (Qt's connection outlives the wrapper)
+      forgets the entry. Holding the wrapper instead was tried and dropped: it kept Python-owned contexts alive
+      (a test's dead context kept its holds). After: 1 entry, buffer [1], holds [3]; nothing after the deletes.
   - [ ] Contract: a context is identified by something that lives as long as it does (the wrapper held in the
     entry, or the native pointer); one buffer per context for as long as a holder lives there; the buffer is bound
     in every context that links a holder; release happens in the holder's context or is refused loudly.
