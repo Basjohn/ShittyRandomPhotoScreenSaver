@@ -299,6 +299,73 @@ def test_a_dispatch_that_raises_at_a_geometry_edit_leaks_no_buffer(qt_app, monke
         target.close()
 
 
+def _session_frames(namespace, settings):
+    """Every drifting frame one production engine session publishes (its own label namespace, as each configure
+    takes one), read through the frame packet ABI as the owner reads them."""
+    import tools.expanded_visualizer_evidence as evidence
+    from core.visualizer_engine.engine_worker import EngineSession
+    from core.visualizer_engine.packet_mailbox import PacketMailbox
+    from core.visualizer_engine.frame_capacity import required_slot_bytes
+    reader = PacketMailbox(role='reader', slot_bytes=required_slot_bytes('extruded_bubble', settings))
+    session = EngineSession(mapping=reader.mapping_name, mode='extruded_bubble', runtime_generation=1,
+                            label_namespace=namespace, settings=settings)
+    frames = []
+    try:
+        for feature in evidence.shipped_clip(1.0).frames:
+            session.tick(feature)
+            state = reader.take().state.mode_state
+            if state.drift_families:
+                frames.append((state.drift_families, state.drift_steps, state.drift_knots))
+    finally:
+        session.close()
+        reader.close()
+    return frames
+
+
+@pytest.mark.qt
+def test_a_replacement_stream_never_presents_an_alias_of_the_old_streams_geometry(qt_app, monkeypatch):
+    """D3's identity test against this solver, which keys a family's state on its revision: a worker and its
+    replacement (two sessions, each in a fresh process as far as the revision counter goes) publish different geometry;
+    after the replacement's frames the uploaded geometry is the replacement's, byte for byte (hashed)."""
+    import hashlib
+    from OpenGL import GL as gl
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.visualizer.implementations.extruded_bubble_drift_solver import DriftSolver
+    from tools.labs.render_target import OffscreenRenderTarget
+    from widgets.spotify_visualizer import extruded_bubble_drift_log
+    monkeypatch.setattr(extruded_bubble_drift_log, '_REVISIONS', extruded_bubble_drift_log._REVISIONS)  # restored
+    from widgets.spotify_visualizer.engine_worker_link import next_label_namespace
+    from tests._visualizer_frozen_settings import frozen_visualizer_settings
+    settings = {**frozen_visualizer_settings('extruded_bubble'), 'extruded_bubble_drift': [.6, 1.],
+                **{f'extruded_bubble_drift_{name}': [1., 1.] for name in ('chains', 'snow', 'specks')}}
+    # The replacement runs with an edited spread, so its seeded geometry differs from the first stream's.
+    spread = float(settings['extruded_bubble_particle_spread'])
+    edited = {**settings, 'extruded_bubble_particle_spread': spread * 0.8 if spread > 0.5 else spread + 0.4}
+    worker, replacement = (_session_frames(next_label_namespace(), values) for values in (settings, edited))
+    assert worker and replacement
+    old = {family.family: hashlib.sha256(family.geometry).hexdigest() for family in worker[-1][0]}
+    new = {family.family: hashlib.sha256(family.geometry).hexdigest() for family in replacement[-1][0]}
+    assert set(old) == set(new) and all(old[name] != new[name] for name in new)   # the streams differ
+    target, resources, solver = OffscreenRenderTarget(16, 16), MeshResources('drift identity test'), \
+        DriftSolver('identity')
+    try:
+        solver.update(resources, *worker[-1])
+        for frame in replacement:
+            solver.update(resources, *frame)
+        gl.glFinish()
+        uploaded = {}
+        for name, state in solver._families.items():
+            size = len(next(f.geometry for f in replacement[-1][0] if f.family == name))
+            data = np.empty(size, dtype=np.uint8)
+            gl.glGetNamedBufferSubData(state.geometry, 0, size, data)
+            uploaded[name] = hashlib.sha256(data.tobytes()).hexdigest()
+        assert uploaded == new
+    finally:
+        solver.release()
+        resources.release_resources()
+        target.close()
+
+
 def test_no_compute_program_declares_a_64_bit_float():
     import re
     from rendering.quick.visualizer.implementations.extruded_bubble_drift_solver import PROGRAMS
