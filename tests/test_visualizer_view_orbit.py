@@ -233,9 +233,11 @@ class _Settings:
 
 
 def _manager(section, mode="extruded_spectrum"):
+    from tests._display_manager_doubles import bare_display_manager, visualizer_owner_double
+
     controller = SimpleNamespace(mode_id=mode, presentation_state=_host())
-    return SimpleNamespace(
-        _quick_visualizer_owner=SimpleNamespace(is_retired=False, controller=controller),
+    return bare_display_manager(
+        _quick_visualizer_owner=visualizer_owner_double(controller),
         _quick_view_orbit_pending=None,
         settings_manager=_Settings(section),
         _widgets_config_snapshot={},

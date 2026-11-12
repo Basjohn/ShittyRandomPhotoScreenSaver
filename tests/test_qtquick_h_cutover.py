@@ -1548,7 +1548,10 @@ def test_media_shortcuts_cross_displays_once_and_ignore_retired_owners() -> None
     focused = _Unit("focused")
     media_owner = _Unit("media", accepts=True)
     another_owner = _Unit("another", accepts=True)
-    manager = SimpleNamespace(_retired=False, displays=[focused, media_owner, another_owner])
+    from tests._display_manager_doubles import bare_display_manager
+
+    # _Unit stays hand-built on purpose: it records each transport request and answers accept/refuse per display.
+    manager = bare_display_manager(_retired=False, displays=[focused, media_owner, another_owner])
 
     for action in ("play", "previous", "next"):
         assert DisplayManager._route_quick_media_transport(manager, focused, action)

@@ -211,11 +211,14 @@ def _fake_engine_classes(*, completes: bool):
     from PySide6.QtCore import QObject, QTimer
 
     from rendering.quick.visualizer.double_click_admission import next_visualizer_mode_id
+    from tests._display_manager_doubles import visualizer_owner_double
 
+    # The manager stays its own class on purpose: it models the timed mode cycle the live check drives (a cycle
+    # that completes later or never), which a bare DisplayManager cannot do without a running display.
     class _Manager:
         def __init__(self) -> None:
             controller = SimpleNamespace(mode_id="spectrum", settings_model=SimpleNamespace(mode_activation=None))
-            self._quick_visualizer_owner = SimpleNamespace(is_retired=False, controller=controller)
+            self._quick_visualizer_owner = visualizer_owner_double(controller)
             self.cycles = 0
 
         def _cycle_quick_visualizer_mode(self) -> None:

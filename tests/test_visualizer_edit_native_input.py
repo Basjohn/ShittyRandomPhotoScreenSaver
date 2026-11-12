@@ -7,12 +7,12 @@ import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QPointF, QRect, Qt
 from PySide6.QtGui import QMouseEvent, QWheelEvent
 
-from engine.display_manager import DisplayManager
 from rendering.quick.ctrl_coordinator import SharedCtrlCoordinator
 from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
 from rendering.quick.display_unit import create_quick_display_unit
 from rendering.quick.scene_controller import QuickSceneFactory
 from rendering.quick.state import QuickWindowPolicy
+from tests._display_manager_doubles import bare_display_manager
 from tests._invisible_windows import keep_off_screen
 from tests.test_qtquick_custom_layout_owner import _configure_visualizer, _LiveCommitEngine, _Settings
 from tests.test_qtquick_edit_pointer_delivery import _one
@@ -57,9 +57,7 @@ def edit_scene(qt_app, monkeypatch):
     )
     scene = unit.runtime.scene_controller
     window = unit.runtime.window
-    manager = DisplayManager.__new__(DisplayManager)
-    manager._quick_visualizer_owner = visualizer
-    manager._quick_view_orbit_pending = None
+    manager = bare_display_manager(_quick_visualizer_owner=visualizer, _quick_view_orbit_pending=None)
     manager._refresh_quick_visualizer_edit_content_envelope = lambda *a: None
     scene.custom_layout_visualizer_orbit_requested.connect(manager._orbit_quick_visualizer_view_from_edit_drag)
     try:

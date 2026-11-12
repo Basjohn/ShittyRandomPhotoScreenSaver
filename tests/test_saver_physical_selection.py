@@ -8,6 +8,7 @@ from core.settings import SettingsManager
 from core.settings import monitor_routes
 from core.settings.display_selection import resolve_monitor_numbers, BINDINGS_KEY
 from engine.display_manager import DisplayManager
+from tests._display_manager_doubles import bare_display_manager
 from ui.tabs.display_tab import DisplayTab
 
 pytestmark = pytest.mark.usefixtures('qt_app')
@@ -22,7 +23,7 @@ def make_manager(tmp_path, monkeypatch, screens=(A, B), profile='PhysicalSelecti
 
 
 def admitted(manager, live):
-    return DisplayManager._get_allowed_screen_indices(SimpleNamespace(settings_manager=manager), len(live[0]))
+    return DisplayManager._get_allowed_screen_indices(bare_display_manager(settings_manager=manager), len(live[0]))
 
 
 def test_durable_selection_returns_to_same_physical_monitor(tmp_path, monkeypatch):

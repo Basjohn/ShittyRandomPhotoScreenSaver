@@ -14,6 +14,7 @@ from PySide6.QtGui import QKeyEvent
 from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, resolve_effective_enabled_modes
 
 from engine.display_manager import DisplayManager
+from tests._display_manager_doubles import bare_display_manager, display_runtime_double, display_unit_double
 from rendering.custom_layout_contract import (
     get_screen_layout_entries_for_screen,
     get_widget_layout_variant_payload,
@@ -170,14 +171,10 @@ def test_first_edit_entry_preserves_visible_visualizer_origin(qt_app):
     unit.attach_visualizer_owner(visualizer)
     layout = QuickCustomLayoutOwner(settings_manager=settings, participants_provider=lambda: (unit,),
         visualizer_provider=lambda: (visualizer, unit), reload_request=lambda _kind: None)
-    manager = DisplayManager.__new__(DisplayManager)
-    manager.displays = [unit]
-    manager.settings_manager = settings
-    manager._quick_custom_layout_owner = layout
-    manager._quick_visualizer_owner = visualizer
-    manager._quick_visualizer_unit = unit
-    manager._widgets_config_snapshot = widgets
-    manager._refresh_all_quick_context_menus = lambda: None
+    manager = bare_display_manager(
+        displays=[unit], settings_manager=settings, _quick_custom_layout_owner=layout,
+        _quick_visualizer_owner=visualizer, _quick_visualizer_unit=unit, _widgets_config_snapshot=widgets,
+        _refresh_all_quick_context_menus=lambda: None)
     try:
         _configure_visualizer(visualizer, playing=True)
         # TEST INPUT, NOT A DEFAULT GOLDEN: stay inside the offscreen QPA's
@@ -362,9 +359,7 @@ def test_custom_owner_publishes_peer_and_center_guides_from_snap_resolution() ->
         return _DisplayBinding(
             identity=identity,
             monitor_route="1",
-            unit=SimpleNamespace(
-                runtime=SimpleNamespace(scene_controller=scene),
-            ),
+            unit=display_unit_double(display_runtime_double(scene_controller=scene)),
             screen=None,
             geometry=QRect(0, 0, 800, 600),
         )
@@ -428,11 +423,11 @@ def test_visualizer_move_latches_one_cross_display_transfer_until_release(monkey
     )
     owner._bindings = {
         "display:a": _DisplayBinding(
-            "display:a", "1", SimpleNamespace(runtime=SimpleNamespace(scene_controller=scene_a)),
+            "display:a", "1", display_unit_double(display_runtime_double(scene_controller=scene_a)),
             screen_a, QRect(0, 0, 800, 600),
         ),
         "display:b": _DisplayBinding(
-            "display:b", "2", SimpleNamespace(runtime=SimpleNamespace(scene_controller=scene_b)),
+            "display:b", "2", display_unit_double(display_runtime_double(scene_controller=scene_b)),
             screen_b, QRect(800, 0, 800, 600),
         ),
     }
@@ -489,7 +484,7 @@ def test_visualizer_display_hop_uses_nearest_direction_and_preserves_shape() -> 
     def binding(identity: str, route: str, x: int) -> _DisplayBinding:
         return _DisplayBinding(
             identity, route,
-            SimpleNamespace(runtime=SimpleNamespace(scene_controller=_Scene())),
+            display_unit_double(display_runtime_double(scene_controller=_Scene())),
             object(), QRect(x, 0, 800, 600),
         )
 
@@ -1324,14 +1319,13 @@ def test_routed_ordinary_custom_transfer_moves_same_item_cancel_and_save(qt_app)
         for name, x in (("logical-a", 0), ("logical-b", 800))
     )
     routes = tuple(
-        SimpleNamespace(
-            screen_index=unit.screen_index,
-            presenter=unit.presenter,
-            is_retired=False,
-            runtime=SimpleNamespace(
+        display_unit_double(
+            display_runtime_double(
                 window=SimpleNamespace(screen=lambda screen=screen: screen),
                 scene_controller=unit.runtime.scene_controller,
             ),
+            screen_index=unit.screen_index,
+            presenter=unit.presenter,
         )
         for unit, screen in zip(units, logical_screens)
     )
@@ -1471,10 +1465,7 @@ def test_display_manager_visualizer_transfer_moves_unit_retirement_authority(fai
         refreshed.append(manager._quick_visualizer_unit)
         if fail_projection:
             raise RuntimeError("projection failed")
-    class _Manager(SimpleNamespace):
-        """The manager's routing record; the host binding reaches it weakly."""
-
-    manager = _Manager(
+    manager = bare_display_manager(
         _retired=False,
         _quick_visualizer_owner=visualizer,
         _quick_visualizer_unit=source,
@@ -1651,10 +1642,10 @@ def _move_rig(*, refuse_transfer: bool = False):
                                    presentation_policy=get_visualizer_presentation_policy("spectrum")),
         _mode_transition_phase="idle", promoted=[])
     visualizer.commit_live_custom_layout = lambda **kwargs: visualizer.promoted.append(kwargs)
-    units = tuple(SimpleNamespace(screen_index=index, is_retired=False, presenter=SimpleNamespace(bound_widget_ids=()),
-                                  visualizer_owner=visualizer if index == 0 else None,
-                                  runtime=SimpleNamespace(scene_controller=scene,
-                                                          window=SimpleNamespace(screen=lambda s=screen: s)))
+    units = tuple(display_unit_double(display_runtime_double(scene_controller=scene,
+                                                             window=SimpleNamespace(screen=lambda s=screen: s)),
+                                      screen_index=index, presenter=SimpleNamespace(bound_widget_ids=()),
+                                      visualizer_owner=visualizer if index == 0 else None)
                   for index, (scene, screen) in enumerate(zip(scenes, screens)))
     current = {"unit": units[0]}
 
@@ -2383,7 +2374,7 @@ def test_resize_side_drag_snaps_and_wheel_only_publishes_guides() -> None:
         "display:a": _DisplayBinding(
             identity="display:a",
             monitor_route="1",
-            unit=SimpleNamespace(runtime=SimpleNamespace(scene_controller=scene)),
+            unit=display_unit_double(display_runtime_double(scene_controller=scene)),
             screen=None,
             geometry=QRect(0, 0, 2000, 1200),
         )

@@ -109,14 +109,13 @@ def test_log_dir_environment_variable_is_ignored(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("splash", [False, True])
 def test_mc_window_role_follows_the_cli_admission(monkeypatch, splash):
-    from engine.display_manager import DisplayManager
     from rendering.quick.state import QuickWindowRole
+    from tests._display_manager_doubles import bare_display_manager
 
     monkeypatch.setattr("core.mc.is_mc_build", lambda: True)
     argv = ["main_mc.py", "/s"] + (["--mc-window-flags=splash"] if splash else [])
     ef.activate_experiment_flags(ef.parse_experiment_flags(argv))
-    manager = DisplayManager.__new__(DisplayManager)
-    manager.settings_manager = None
+    manager = bare_display_manager(settings_manager=None)
 
     policy = manager._quick_window_policy()
 
@@ -126,12 +125,11 @@ def test_mc_window_role_follows_the_cli_admission(monkeypatch, splash):
 
 
 def test_mc_window_role_ignores_the_retired_environment_variable(monkeypatch):
-    from engine.display_manager import DisplayManager
     from rendering.quick.state import QuickWindowRole
+    from tests._display_manager_doubles import bare_display_manager
 
     monkeypatch.setattr("core.mc.is_mc_build", lambda: True)
     monkeypatch.setenv("SRPSS_MC_WINDOW_FLAGS", "splash")
-    manager = DisplayManager.__new__(DisplayManager)
-    manager.settings_manager = None
+    manager = bare_display_manager(settings_manager=None)
 
     assert manager._quick_window_policy().role is QuickWindowRole.MEDIA_CENTER_TOOL

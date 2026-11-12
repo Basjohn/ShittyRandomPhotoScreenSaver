@@ -6,8 +6,6 @@ the opposite of the predicate) and require every surface to follow the predicate
 """
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 from PySide6.QtWidgets import QApplication
 
@@ -19,6 +17,7 @@ pytestmark = pytest.mark.qt
 def _surfaces(manager):
     """(Display tab locked, Display tab shows on, Display tab saves, Guided Setup, onboarding summary, runtime)."""
     from engine.display_manager import DisplayManager
+    from tests._display_manager_doubles import bare_display_manager
     from ui.onboarding.state import current_setup_summary, is_media_center_profile
     from ui.tabs.display_tab import DisplayTab
 
@@ -33,7 +32,7 @@ def _surfaces(manager):
         tab.deleteLater()
     manager.set("input.interaction_mode", False)
     summary = current_setup_summary(manager)
-    runtime = DisplayManager._interaction_mode_enabled(SimpleNamespace(settings_manager=manager))
+    runtime = DisplayManager._interaction_mode_enabled(bare_display_manager(settings_manager=manager))
     return locked, shown_on, saved_on, is_media_center_profile(manager), bool(summary.get("interaction")), runtime
 
 

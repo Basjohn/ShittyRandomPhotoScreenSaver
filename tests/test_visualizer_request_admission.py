@@ -19,6 +19,7 @@ from core.settings.visualizer_mode_registry import (
     resolve_effective_enabled_modes,
 )
 from engine.display_manager import DisplayManager
+from tests._display_manager_doubles import bare_display_manager
 
 
 class _Owner:
@@ -32,14 +33,14 @@ class _Owner:
 
 
 def _make_manager(section: dict, owner: _Owner) -> DisplayManager:
-    mgr = DisplayManager.__new__(DisplayManager)
-    mgr._quick_visualizer_owner = owner
-    mgr.settings_manager = SimpleNamespace(
-        get=lambda key, default=None: (
-            section if key == "widgets.spotify_visualizer" else default
-        )
+    return bare_display_manager(
+        _quick_visualizer_owner=owner,
+        settings_manager=SimpleNamespace(
+            get=lambda key, default=None: (
+                section if key == "widgets.spotify_visualizer" else default
+            )
+        ),
     )
-    return mgr
 
 
 def test_request_rejects_disabled_mode_without_activation():

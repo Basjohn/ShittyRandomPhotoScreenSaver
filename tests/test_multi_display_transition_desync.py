@@ -10,6 +10,7 @@ from engine.display_manager import DisplayManager
 from engine.image_pipeline import _image_batch_display_stagger_ms
 from rendering.quick.display_image_route import presentation_image_from_processed_qimage
 from rendering.quick.transitions.request_resolution import ResolvedQuickTransitionSpec
+from tests._display_manager_doubles import bare_display_manager, display_unit_double
 
 
 def _image(name: str):
@@ -31,7 +32,7 @@ def test_secondary_transition_extends_duration_without_mutating_batch_spec():
         duration_ms=2400, direction=None, parameters={},
     )
     outputs = []
-    manager = SimpleNamespace(
+    manager = bare_display_manager(
         _transition_work_pending=True,
         _quick_batch_expected_screens={0, 1},
         _quick_batch_published_screens=set(),
@@ -42,7 +43,7 @@ def test_secondary_transition_extends_duration_without_mutating_batch_spec():
     )
     source = _image("source")
     for screen in (0, 1):
-        target = SimpleNamespace(
+        target = display_unit_double(
             screen_index=screen,
             current_image=lambda: source,
             present_captured_image=lambda image: None,
@@ -64,13 +65,13 @@ def test_single_display_retains_exact_authored_duration():
         duration_ms=1500, direction=None, parameters={},
     )
     started = []
-    manager = SimpleNamespace(
+    manager = bare_display_manager(
         _transition_work_pending=True, _quick_batch_expected_screens={0},
         _quick_batch_published_screens=set(), _quick_transition_paths={},
         _startup_desktop_seed_screens=set(), _runtime_generation=4,
         _resolve_quick_transition_batch_spec=lambda: spec,
     )
-    target = SimpleNamespace(
+    target = display_unit_double(
         screen_index=0, current_image=lambda: _image("before"),
         present_captured_image=lambda img: None,
         start_transition=started.append, has_running_transition=lambda: False,
