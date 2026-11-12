@@ -56,7 +56,7 @@ Item {
     // Text on the overlay's own card reads like a widget card's (the theme's card text); on the bare Visualizer it is
     // white (operator, 8 Nov).
     readonly property color textColor: cardOn && stage ? stage.cardTextColor : "#ffffffff"
-    readonly property real padding: cardOn && stage ? Math.round(fontSize * 0.5) + stage.borderWidth : 0.0
+    readonly property real padding: cardOn && stage ? Math.round(fontSize * 0.5) + stage.cardBorderWidth : 0.0
     // The widest an overlay grows: under half the safe area, so a left and a right overlay never meet and a left one
     // never reaches the right-hand controls.
     readonly property real maxContentWidth: stage ? Math.max(48.0, stage.safeWidth * 0.45 - 2.0 * padding) : 48.0
@@ -342,7 +342,7 @@ Item {
             padding: 0.0
             backgroundColor: slot.stage.cardColor
             borderColor: slot.stage.borderColor
-            borderWidth: slot.stage.borderWidth
+            borderWidth: slot.stage.cardBorderWidth
             cornerRadius: slot.stage.cornerRadius
             surfaceMaterial: slot.stage.surfaceMaterial
             surfaceBackdrop: slot.stage.surfaceBackdrop

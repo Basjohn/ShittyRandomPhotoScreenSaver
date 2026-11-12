@@ -214,6 +214,15 @@ Item {
     property real cardShadowExtendTop: 0.0
     property real cardShadowExtendRight: 0.0
     property real cardShadowExtendBottom: 0.0
+    // The full-display overlays' own cards (1D.2): the widget cards' chrome. A display style may draw the expanded
+    // card with another frame (Borders To Edge: square; Hide Borders: none); the overlays' cards keep these. Bound to
+    // the card's own chrome unless the scene projects them.
+    property real overlayCardBorderWidth: cardBorderWidth
+    property real overlayCardCornerRadius: cardCornerRadius
+    property bool overlayCardShadowEnabled: cardShadowEnabled
+    property real overlayCardShadowBlur: cardShadowBlur
+    property real overlayCardShadowOffsetX: cardShadowOffsetX
+    property real overlayCardShadowOffsetY: cardShadowOffsetY
     readonly property real cardShadowBaseLeft: Math.max(0.0, -cardShadowOffsetX)
     readonly property real cardShadowBaseTop: Math.max(0.0, -cardShadowOffsetY)
     readonly property real cardShadowBaseRight: Math.max(0.0, cardShadowOffsetX)
@@ -403,16 +412,18 @@ Item {
             inputAdmitted: visualizerPresentationRoot.widgetGlowAdmitted
                 && visualizerPresentationRoot.volumeWheelEnabled
             borderColor: visualizerPresentationRoot.cardBorderColor
+            // The safe area is inset by the frame the card draws; the overlays' own cards draw the widget chrome.
             borderWidth: visualizerPresentationRoot.cardBorderWidth
-            cornerRadius: visualizerPresentationRoot.cardCornerRadius
+            cardBorderWidth: visualizerPresentationRoot.overlayCardBorderWidth
+            cornerRadius: visualizerPresentationRoot.overlayCardCornerRadius
             cardColor: visualizerPresentationRoot.cardBackgroundColor
             surfaceMaterial: visualizerPresentationRoot.cardSurfaceMaterial
             surfaceBackdrop: visualizerPresentationRoot.cardSurfaceBackdrop
-            cardShadowEnabled: visualizerPresentationRoot.cardShadowEnabled
+            cardShadowEnabled: visualizerPresentationRoot.overlayCardShadowEnabled
             cardShadowColor: visualizerPresentationRoot.cardShadowColor
-            cardShadowBlur: visualizerPresentationRoot.cardShadowBlur
-            cardShadowOffsetX: visualizerPresentationRoot.cardShadowOffsetX
-            cardShadowOffsetY: visualizerPresentationRoot.cardShadowOffsetY
+            cardShadowBlur: visualizerPresentationRoot.overlayCardShadowBlur
+            cardShadowOffsetX: visualizerPresentationRoot.overlayCardShadowOffsetX
+            cardShadowOffsetY: visualizerPresentationRoot.overlayCardShadowOffsetY
             // The card's own controls: the 3D control hint (top right); the glyph row (the preset steps, Edit's
             // Rotate Widget Content, Reset Camera, the collapse glyph) and their tips (bottom right).
             topRightReserve: controlHintImage.y + controlHintImage.height + 10.0

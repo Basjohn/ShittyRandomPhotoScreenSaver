@@ -46,7 +46,10 @@ Item {
     // clear of them vertically (the reserves below).
     property real rightControlsLeft: width
     property color borderColor: "#ffffffff"
+    // The expanded card's frame border (the safe area is inset by it) and the overlays' own cards' chrome (the widget
+    // cards': 1D.2 keeps it whatever frame a display style draws).
     property real borderWidth: 4.0
+    property real cardBorderWidth: borderWidth
     property real cornerRadius: 8.0
     property color cardColor: "#4c232323"
     property string surfaceMaterial: "normal"

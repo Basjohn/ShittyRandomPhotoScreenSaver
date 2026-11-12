@@ -2740,6 +2740,16 @@ class QuickSceneController(QObject):
         root.setProperty("cardShadowExtendTop", float(shadow_extensions[1]))
         root.setProperty("cardShadowExtendRight", float(shadow_extensions[2]))
         root.setProperty("cardShadowExtendBottom", float(shadow_extensions[3]))
+        # The full-display overlays' own cards (1D.2): the widget cards' chrome, which a display style may have kept
+        # out of the frame (``overlay_chrome``); otherwise the frame's own, exactly as before.
+        chrome = presentation.overlay_chrome
+        root.setProperty("overlayCardBorderWidth", float(chrome.get("border_width", presentation.border_width)))
+        root.setProperty("overlayCardCornerRadius", float(chrome.get("corner_radius", style["corner_radius"])))
+        root.setProperty("overlayCardShadowEnabled", bool(chrome.get("shadow_enabled", style["shadow_enabled"])))
+        root.setProperty("overlayCardShadowBlur", float(chrome.get("shadow_blur", style["shadow_blur"])))
+        overlay_offset = chrome.get("shadow_offset", shadow_offset)
+        root.setProperty("overlayCardShadowOffsetX", float(overlay_offset[0]))
+        root.setProperty("overlayCardShadowOffsetY", float(overlay_offset[1]))
         root.setProperty("presentationActive", bool(active))
 
     def set_visualizer_camera_reset_available(self, available: bool) -> None:

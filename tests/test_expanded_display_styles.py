@@ -222,3 +222,111 @@ def test_the_inset_helper_is_unchanged_and_default_only():
     base = ordinary("devcurve", "canonical", "shadow_se", "1920x1080_100")
     default = resolve_expanded_visualizer_presentation(base, display_size=(1920.0, 1080.0))
     assert default.outer_rect[0] == expanded_card_inset(base)
+
+
+# ------------------------------------------------- multi-display layouts: the window, the overscan, the neighbour
+
+#: (name, monitors in device pixels (left, top, right, bottom), the subject's index). The development machine's pair
+#: (2560 x 1440 beside 3840 x 2160), two 1366 x 768 side by side (neither axis whole at 125 %), and the middle of
+#: three 1366 x 768 (R-192's enclosed axis: no exterior edge left or right).
+LAYOUTS = (
+    ("pair_left", ((0, 0, 2560, 1440), (2560, -720, 6400, 1440)), 0),
+    ("pair_right", ((0, 0, 2560, 1440), (2560, -720, 6400, 1440)), 1),
+    ("1366_pair", ((0, 0, 1366, 768), (1366, 0, 2732, 768)), 1),
+    ("middle_of_three", ((0, 0, 1366, 768), (1366, 0, 2732, 768), (2732, 0, 4098, 768)), 1),
+)
+LAYOUT_DPRS = (1.0, 1.25, 1.5)
+#: Layouts whose subject has an axis with no exterior edge whose extent is not whole at some DPR: R-192's "Still
+#: open", a Watchlist entry (lead, 12 Nov). The test records Qt Quick's stretch there; it never hides it.
+ENCLOSED_AXIS_LAYOUTS = {"middle_of_three"}
+
+
+def _virtual(monitors):
+    return (min(m[0] for m in monitors), min(m[1] for m in monitors),
+            max(m[2] for m in monitors), max(m[3] for m in monitors))
+
+
+def _overlaps(a, b) -> bool:
+    return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
+@pytest.mark.parametrize("style", DISPLAY_STYLES)
+@pytest.mark.parametrize("dpr", LAYOUT_DPRS)
+@pytest.mark.parametrize("layout", [layout[0] for layout in LAYOUTS])
+def test_each_style_stays_on_its_display_and_never_reaches_a_neighbour(layout, dpr, style):
+    """R-63 / R-192 are kept by construction: the window comes only from ``compat_native_rect`` (never read by the
+    style), the card from the visible rect. In every style the drawn card lies inside the subject monitor on whole
+    device pixels, nothing of the window or the card covers a neighbour, and every axis with an exterior edge is a
+    whole number of logical pixels."""
+    from rendering.quick.device_geometry import compat_native_rect, is_whole_logical, visible_rect_in_window
+
+    _name, monitors, subject = next(entry for entry in LAYOUTS if entry[0] == layout)
+    monitor, virtual = monitors[subject], _virtual(monitors)
+    window = compat_native_rect(monitor, virtual, dpr)
+    neighbours = [m for i, m in enumerate(monitors) if i != subject]
+    assert not any(_overlaps(window, other) for other in neighbours)
+    vx, vy, vw, vh = visible_rect_in_window(window, virtual, dpr)
+    base = ordinary("devcurve", "canonical", "no_shadow", "1920x1080_100")
+    expanded = resolve_expanded_visualizer_presentation(base, display_size=(vw, vh), dpr=dpr, display_style=style)
+    x, y, w, h = resolve_card_drawn_rect(expanded)
+    device = (window[0] + (vx + x) * dpr, window[1] + (vy + y) * dpr,
+              window[0] + (vx + x + w) * dpr, window[1] + (vy + y + h) * dpr)
+    assert all(abs(v - round(v)) < 1e-6 for v in device), device
+    device = tuple(round(v) for v in device)
+    assert monitor[0] <= device[0] and monitor[1] <= device[1] and device[2] <= monitor[2] and device[3] <= monitor[3]
+    assert not any(_overlaps(device, other) for other in neighbours)
+    if style != DISPLAY_STYLE_DEFAULT:
+        assert device == monitor                         # the card is the display, nothing past it
+    exterior = {"left": monitor[0] <= virtual[0], "right": monitor[2] >= virtual[2],
+                "top": monitor[1] <= virtual[1], "bottom": monitor[3] >= virtual[3]}
+    for axis, extent, edges in (("x", window[2] - window[0], ("left", "right")),
+                                ("y", window[3] - window[1], ("top", "bottom"))):
+        if any(exterior[edge] for edge in edges):
+            assert is_whole_logical(extent, dpr), (axis, extent, dpr)
+
+
+def test_the_enclosed_axis_stretch_is_recorded_not_hidden():
+    """R-192 "Still open" (Watchlist, lead's decision 4): the middle of three 1366 x 768 at 125 % has no exterior
+    edge left or right, so its window keeps 1366 device pixels across = 1092.8 logical, which Qt holds as 1093: Qt
+    Quick draws the scene at 1366 / 1093 device pixels per logical pixel horizontally, not 1.25. Borders To Edge puts a
+    frame on that edge; the stretch softens it as it softens every edge there today. Recorded here (the exact
+    factor), so a change to it is seen; never asserted away."""
+    from rendering.quick.device_geometry import compat_native_rect, is_whole_logical
+
+    _name, monitors, subject = next(entry for entry in LAYOUTS if entry[0] == "middle_of_three")
+    window = compat_native_rect(monitors[subject], _virtual(monitors), 1.25)
+    width = window[2] - window[0]
+    assert width == 1366 and not is_whole_logical(width, 1.25)
+    stretch = width / round(width / 1.25)
+    assert stretch == pytest.approx(1366 / 1093) and stretch != 1.25
+    # The vertical axis has exterior edges (top and bottom) and is whole after its overscan.
+    assert is_whole_logical(window[3] - window[1], 1.25)
+    # Every other layout in the sweep has no such axis at any DPR.
+    for name, layout_monitors, layout_subject in LAYOUTS:
+        if name in ENCLOSED_AXIS_LAYOUTS:
+            continue
+        for dpr in LAYOUT_DPRS:
+            rect = compat_native_rect(layout_monitors[layout_subject], _virtual(layout_monitors), dpr)
+            assert is_whole_logical(rect[2] - rect[0], dpr) or is_whole_logical(rect[3] - rect[1], dpr), name
+
+
+def test_negative_control_a_card_sized_from_the_window_leaves_the_monitor():
+    """The bars above see the mistake the note forbids: a margin-0 card sized from the R-63 window (overscan
+    included) instead of the visible rect lies partly off the monitor, in the overscan."""
+    from rendering.quick.device_geometry import compat_native_rect
+
+    escaped = []
+    for name, monitors, subject in LAYOUTS:
+        for dpr in LAYOUT_DPRS:
+            monitor = monitors[subject]
+            window = compat_native_rect(monitor, _virtual(monitors), dpr)
+            size = ((window[2] - window[0]) / dpr, (window[3] - window[1]) / dpr)
+            base = ordinary("devcurve", "canonical", "no_shadow", "1920x1080_100")
+            expanded = resolve_expanded_visualizer_presentation(base, display_size=size, dpr=dpr,
+                                                                display_style=DISPLAY_STYLE_HIDE_BORDERS)
+            x, y, w, h = resolve_card_drawn_rect(expanded)
+            device = (round(window[0] + x * dpr), round(window[1] + y * dpr), round(window[0] + (x + w) * dpr),
+                      round(window[1] + (y + h) * dpr))
+            if device != monitor:
+                escaped.append((name, dpr))
+    assert len(escaped) == len(LAYOUTS) * len(LAYOUT_DPRS), escaped

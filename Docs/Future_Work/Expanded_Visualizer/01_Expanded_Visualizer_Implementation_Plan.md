@@ -1511,6 +1511,22 @@ the record already holds every fullscreen option and Settings' Fullscreen Mode p
 `SettingsDialog`, and Default reproducing today's pixels (negative control: a margin of 1 px must fail it); then the
 lead's D1 run per style with edges read at native pixels as in R-192, and a switch while expanded.
 
+*Built (12 Nov, agent branch; the lead's D1 run open).* Setting: `fullscreen_overlays.display_style`, declared once as
+a spec `Choice` (`core.settings.fullscreen_overlays.DISPLAY_STYLE_CONTROL`), Settings' Fullscreen Mode page, bucket
+Display. Resolver: `resolve_expanded_visualizer_presentation(..., display_style=)`; Default bit-identical to the
+pre-1D.2 record (`tests/fixtures/expanded_default_style_geometry.json`, 420 cases) and its pixels; the margin-0 styles
+keep the card's shadow values with the shadow off (a renderer reading the light direction sees the same light), and
+carry the widget chrome for the overlays' own cards (`overlay_chrome`). Owner: `set_expanded_display_style` retargets
+through the expanded-to-expanded fade-through; the display manager hands the stored value over where the overlays'
+inputs are published and on the engine's `settings.changed` route (`refresh_expanded_display_style`). Overflow: the
+render node holds it on a non-Default display-wide card (`renderer_overflow_held`). One correction to "What the source
+does today": the owner's display size was the display identity's geometry, Qt's whole-logical screen size (1707 for
+2560 px at 150 %), not the visible rect; Default keeps it (its record unchanged), the margin-0 styles use the scene's
+published visible rect (`QuickSceneController.visible_display_size`), or the card's frame would sit one device pixel
+past the monitor. Tests: `tests/test_expanded_display_styles.py`, `..._style_switch.py`, `..._style_overlays.py`,
+`test_visualizer_card_clip_contract.py` (per style, overflow held), `test_framed_view_record.py` (VIS_SET_VIEW per
+style and across a switch), `test_visualizers_fullscreen_mode_pill.py`, `test_d1_run.py` (the live `set` step).
+
 **Milestone 4 | Wallpaper transition policy and GPU savings**
 
 - [x] Complete E0 diagram ([02_E0](02_E0_Covered_Display_Admission.md)). - [x] Exclusion at admission built 8 Nov

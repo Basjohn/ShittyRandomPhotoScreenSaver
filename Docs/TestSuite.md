@@ -1023,6 +1023,16 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   (admission and owner order), the Fullscreen Mode page's checkbox in `tests/test_visualizers_fullscreen_mode_pill.py`.
   Saved-profile load (1B.7f):
   `tests/test_visualizer_expansion_fullscreen_edit.py::test_a_saved_profile_with_the_retired_artwork_factors_loads_to_the_same_geometry`.
+- Plan 1D.2 (the Fullscreen Visualizer's display styles): `tests/test_expanded_display_styles.py` (Default bit for
+  bit against the pre-1D.2 record, `tests/fixtures/expanded_default_style_geometry.json`, with a 1 px negative
+  control; margin and frame only; whole device pixels inside the display at 100/125/150 %; the multi-display layouts,
+  the neighbour never reached, the enclosed axis's stretch recorded), `tests/test_expanded_display_style_switch.py`
+  (retarget in place with one fade-through, a change while collapsed, the display manager's and the engine's routes),
+  `tests/test_expanded_display_style_overlays.py` (glyph inset, safe area, one placement, the overlays' card chrome,
+  the neighbour host's pixels), `tests/test_visualizer_card_clip_contract.py` (per style; overflow held),
+  `tests/test_framed_view_record.py` (VIS_SET_VIEW per style and across a switch),
+  `tests/test_visualizers_fullscreen_mode_pill.py` and `tests/test_visualizer_expansion_overlay_settings.py` (the
+  setting), `tests/test_d1_run.py` (the live `set` step).
 - Plan 1B.7e (snap and guides through the ordinary owner), same file:
   `test_a_move_snaps_to_the_safe_area_and_draws_its_guide_on_the_edit_layer` (safe-area centre and edge, and the
   other overlay as an ordinary peer with its guide in the Edit layer's coordinates); the one-step undo of a child
