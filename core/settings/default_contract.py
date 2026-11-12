@@ -219,7 +219,19 @@ def resolve_card_border_width_setting_px(widgets_config: Mapping[str, Any] | obj
     return int(resolve_card_border_width_px(widgets_config))
 
 
+# Display -> Image Timing "Change Image Every": the one admitted range of ``timing.interval``, in whole
+# seconds. Settings' control, Guided Setup's row and the stored-value repair all read it from here.
+IMAGE_INTERVAL_KEY = "timing.interval"
+IMAGE_INTERVAL_MIN_SECONDS = 1
+IMAGE_INTERVAL_MAX_SECONDS = 3600
+IMAGE_INTERVAL_STEP_SECONDS = 1
+
+
 __all__ = [
+    "IMAGE_INTERVAL_KEY",
+    "IMAGE_INTERVAL_MAX_SECONDS",
+    "IMAGE_INTERVAL_MIN_SECONDS",
+    "IMAGE_INTERVAL_STEP_SECONDS",
     "CARD_BORDER_WIDTH_KEY",
     "CARD_BORDER_WIDTH_MAX_PX",
     "CARD_BORDER_WIDTH_MIN_PX",

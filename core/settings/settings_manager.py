@@ -1506,15 +1506,16 @@ class SettingsManager(QObject):
             if interval is not None:
                 try:
                     interval_val = int(interval)
-                    if interval_val < 1:
-                        logger.warning(f"Repairing timing.interval: {interval_val} < 1")
+                    from core.settings.default_contract import IMAGE_INTERVAL_MAX_SECONDS, IMAGE_INTERVAL_MIN_SECONDS
+                    if interval_val < IMAGE_INTERVAL_MIN_SECONDS:
+                        logger.warning(f"Repairing timing.interval: {interval_val} < {IMAGE_INTERVAL_MIN_SECONDS}")
                         self._settings.setValue(
                             'timing.interval',
                             require_canonical_default('timing.interval', self._application),
                         )
                         repairs['timing.interval'] = f"Out of range: {interval_val}"
-                    elif interval_val > 3600:
-                        logger.warning(f"Repairing timing.interval: {interval_val} > 3600")
+                    elif interval_val > IMAGE_INTERVAL_MAX_SECONDS:
+                        logger.warning(f"Repairing timing.interval: {interval_val} > {IMAGE_INTERVAL_MAX_SECONDS}")
                         self._settings.setValue(
                             'timing.interval',
                             require_canonical_default('timing.interval', self._application),

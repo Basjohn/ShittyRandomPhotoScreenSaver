@@ -16,7 +16,7 @@ from core.settings.capability_activation import (
     set_transition_activated, set_widget_family_activated,
 )
 from core.settings.visualizer_mode_registry import (iter_visualizer_mode_descriptors,
-    iter_all_visualizer_mode_descriptors, is_mode_active, resolve_admissible_enabled_modes)
+    iter_all_visualizer_mode_descriptors, is_mode_active, resolve_admissible_enabled_modes, resolve_effective_mode)
 from core.settings.widget_family_catalog import get_widget_family_descriptors, get_widget_member_label
 from rendering.transition_registry import iter_transition_descriptors
 from ui.onboarding.common import Page, ImagePanel, action, asset_bytes, asset_path, checkbox, CheckList, text_label, font_with_point_delta
@@ -195,6 +195,9 @@ class VisualizerPage(Page):
         self.preview_note = text_label("Resource intensive, but high fidelity.", emphasis=True)
         self.preview_note.setVisible(False)
         preview_column.addWidget(self.preview_note)
+        # The previewed mode's claim on the starting mode; the preview image is inserted above it.
+        self.make_default = _check("Make Default", False, self._make_default)
+        preview_column.addWidget(self.make_default)
         self.preview = None
         self._preview_holder = preview_column
         preview_column.addStretch()
@@ -204,6 +207,7 @@ class VisualizerPage(Page):
         self.rows.itemChanged.connect(self._toggle)
         self.rows.currentItemChanged.connect(self._show)
         self._offered_modes = None
+        self._default_tags = {}
 
     def refresh(self):
         widgets = self.settings.get("widgets"); section = widgets["spotify_visualizer"]
@@ -221,6 +225,7 @@ class VisualizerPage(Page):
         self.enabled.setEnabled(effective)
         self._update_status(effective, active)
         selected = self.rows.currentRow()
+        self._default_tags = {}
         with QSignalBlocker(self.rows):
             self.rows.clear()
             for mode in self._offered_modes:
@@ -230,13 +235,61 @@ class VisualizerPage(Page):
                 item.setCheckState(Qt.CheckState.Checked if mode.mode_id in active
                                    else Qt.CheckState.Unchecked)
                 self.rows.addItem(item)
+                check = self.rows.itemWidget(item)
                 # Previews stay browsable even while the Visualizer family is off.
-                self.rows.itemWidget(item).setEnabled(effective)
+                check.setEnabled(effective)
+                self._default_tags[mode.mode_id] = self._add_default_tag(check)
             self.rows.setCurrentRow(max(0, min(selected, self.rows.count() - 1)))
-        # Narrow, but never truncating a mode name: fit the longest row.
+        # Narrow, but never truncating a mode name or its Default tag: fit the longest row.
         widest = max((self.rows.itemWidget(self.rows.item(i)).sizeHint().width() for i in range(self.rows.count())), default=200)
-        self.rows.setFixedWidth(min(360, max(220, widest + 2 * self.rows.frameWidth() + 44)))
+        tag = max((label.sizeHint().width() for label in self._default_tags.values()), default=0)
+        self.rows.setFixedWidth(min(360, max(220, widest + self._TAG_GAP + tag + 2 * self.rows.frameWidth() + 44)))
         self._show(self.rows.currentItem(), None)
+
+    _TAG_GAP = 8
+
+    def _add_default_tag(self, check):
+        """A small "Default" text right after the row's mode name, shown only on the default mode's row."""
+        check.ensurePolished()
+        tag = text_label("Default")
+        tag.setWordWrap(False)
+        tag.ensurePolished()
+        tag.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        name_width = check.sizeHint().width() + self._TAG_GAP
+        layout = QHBoxLayout(check); layout.setContentsMargins(name_width, 0, 0, 0)
+        layout.addWidget(tag); layout.addStretch()
+        # Every row keeps room for the tag (the list sizes a row's control from its hint), so moving it shifts nothing.
+        check.setMinimumWidth(name_width + tag.sizeHint().width())
+        tag.setVisible(False)
+        return tag
+
+    def default_mode(self):
+        """The mode the saver starts with: the stored mode as the runtime resolves it against the enabled modes."""
+        section = self.settings.get("widgets.spotify_visualizer")
+        return resolve_effective_mode(section.get("mode"), section["mode_activation"])[0]
+
+    def _mark_default(self):
+        default = self.default_mode()
+        for mode_id, tag in self._default_tags.items():
+            tag.setVisible(mode_id == default)
+        item = self.rows.currentItem()
+        mode_id = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        section = self.settings.get("widgets.spotify_visualizer")
+        with QSignalBlocker(self.make_default):
+            self.make_default.setChecked(mode_id == default)
+        # Only an enabled mode can be the default.
+        self.make_default.setEnabled(
+            mode_id in resolve_admissible_enabled_modes(section["mode_activation"])
+            and is_widget_family_effective(self.settings.get("widgets"), "visualizers"))
+
+    def _make_default(self, checked):
+        item = self.rows.currentItem()
+        if item is None:
+            return
+        if checked:
+            self.settings.set("widgets.spotify_visualizer.mode", item.data(Qt.ItemDataRole.UserRole))
+        # Unticking the default itself is refused: exactly one mode holds it.
+        self._mark_default()
 
     def _update_status(self, effective, active):
         """The status line asks for a mode only while none is chosen; with one or more it is empty."""
@@ -258,6 +311,7 @@ class VisualizerPage(Page):
             self._preview_holder.insertWidget(2, self.preview)
         else:
             self.preview.set_source(path)
+        self._mark_default()
 
     def _enable(self, enabled):
         self.settings.set("widgets.spotify_visualizer.enabled", enabled)
@@ -271,7 +325,14 @@ class VisualizerPage(Page):
         if not any(activation.values()):
             with QSignalBlocker(self.rows): item.setCheckState(Qt.CheckState.Checked)
             self.status.setText("Keep at least one Visualizer mode selected."); return
+        default = self.default_mode()
         self.settings.set("widgets.spotify_visualizer.mode_activation", activation)
+        # Unticking the default mode moves the default by the runtime's own substitution rule
+        # (resolve_effective_mode: the next enabled mode in registry order, wrapping), written to the draft.
+        moved, substituted = resolve_effective_mode(default, activation)
+        if substituted:
+            self.settings.set("widgets.spotify_visualizer.mode", moved)
+        self._mark_default()
         self._update_status(is_widget_family_effective(self.settings.get("widgets"), "visualizers"),
                             resolve_admissible_enabled_modes(activation))
 
@@ -433,6 +494,19 @@ class TransitionsPage(Page):
     def __init__(self, settings, parent=None):
         super().__init__(settings, parent)
         self.body.addWidget(text_label("How should your wallpapers change?", heading=True))
+        # Image time: Settings' own "Change Image Every" control (range, step and unit from its owner).
+        from ui.widgets.image_interval_spin import IMAGE_INTERVAL_UNIT, make_image_interval_spin
+        interval_row = QHBoxLayout(); interval_row.setSpacing(12)
+        interval_label = text_label("Change Every"); interval_label.setWordWrap(False)
+        interval_row.addWidget(interval_label)
+        self.interval = make_image_interval_spin()
+        self.interval.setFixedWidth(140)
+        self.interval.valueChanged.connect(lambda value: self.settings.set("timing.interval", int(value)))
+        interval_row.addWidget(self.interval)
+        unit = text_label(IMAGE_INTERVAL_UNIT); unit.setWordWrap(False)
+        interval_row.addWidget(unit)
+        interval_row.addStretch()
+        self.body.addLayout(interval_row)
         self.body.addWidget(text_label("Select transitions to include in the available effects and random pool. Each preview shows three moments of the change."))
         self.rows = CheckList(); self.rows.setMinimumHeight(190); self.rows.setMaximumHeight(270)
         self.rows.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
@@ -447,6 +521,8 @@ class TransitionsPage(Page):
         self.rows.currentItemChanged.connect(self._show)
 
     def refresh(self):
+        with QSignalBlocker(self.interval):  # entry shows the draft's value and writes nothing
+            self.interval.setValue(int(self.settings.get("timing.interval")))
         selected = self.rows.currentRow()
         cfg = self.settings.get("transitions")
         with QSignalBlocker(self.rows):
