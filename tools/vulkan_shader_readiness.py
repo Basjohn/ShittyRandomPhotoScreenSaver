@@ -2,8 +2,9 @@
 backend it targets?
 
 The native render core (P3) runs on Qt's RHI, where shaders must be Vulkan GLSL (no loose uniforms outside a block,
-explicit set/binding) that ``qsb`` turns into SPIR-V and, through SPIRV-Cross, GLSL (430 and 310 es), HLSL (SM 5.0)
-and MSL (1.2). Today's compute shaders are OpenGL GLSL 460 strings in Python modules. This tool discovers every
+explicit set/binding) that ``qsb`` turns into SPIR-V and, through SPIRV-Cross, GLSL 430, HLSL (SM 5.0) and MSL
+(1.2): the shipped backends' targets (lead's decision, 12 Nov 2026). GLSL 310 es is not baked: no backend we ship
+loads it (desktop QRhi OpenGL takes the 430 variant for compute), so a failure there must not block. Today's compute shaders are OpenGL GLSL 460 strings in Python modules. This tool discovers every
 product module whose text holds a compute shader (``local_size_x``; never a fixed list), takes each module-level
 string that is one (``#version`` + ``local_size_x``), compiles it with PySide6's ``qsb`` for all those targets, and
 reports which compile and the first error of each that does not. Read-only: writes only to ``--out``, inside the
@@ -29,8 +30,15 @@ from tools import artifact_paths  # noqa: E402
 
 # Where product shader sources live (tools, tests and labs are not the product).
 SOURCE_PACKAGES = ("core", "engine", "rendering", "ui", "widgets")
-# Every backend qsb bakes a compute shader for: SPIR-V always, then GLSL 430 / ES 3.1, HLSL SM 5.0 and MSL 1.2.
-QSB_TARGETS = ("--glsl", "430,310 es", "--hlsl", "50", "--msl", "12")
+# The shipped backends' targets: SPIR-V always (Vulkan), then GLSL 430 (OpenGL), HLSL SM 5.0 (D3D) and MSL 1.2
+# (Metal). GLSL ES is left out on purpose: nothing loads it.
+QSB_TARGETS = ("--glsl", "430", "--hlsl", "50", "--msl", "12")
+
+
+def qsb_targets(*, glsl: str = "430") -> tuple[str, ...]:
+    """The required target arguments with another ``--glsl`` list (only tests use it, to show a target that would
+    reject a construct is detected)."""
+    return ("--glsl", glsl, *QSB_TARGETS[2:])
 
 
 @functools.lru_cache(maxsize=1)
@@ -44,8 +52,8 @@ def compute_modules() -> tuple[str, ...]:
     return tuple(found)
 
 
-def qsb_command(qsb: Path, source: Path, output: Path) -> list[str]:
-    return [str(qsb), *QSB_TARGETS, str(source), "-o", str(output)]
+def qsb_command(qsb: Path, source: Path, output: Path, targets: tuple[str, ...] = QSB_TARGETS) -> list[str]:
+    return [str(qsb), *targets, str(source), "-o", str(output)]
 
 
 def _qsb() -> Path:
@@ -80,11 +88,12 @@ def main(argv=None) -> int:
     return 0
 
 
-def compile_source(qsb: Path, source: str, path: Path) -> tuple[bool, str]:
+def compile_source(qsb: Path, source: str, path: Path,
+                   targets: tuple[str, ...] = QSB_TARGETS) -> tuple[bool, str]:
     """Bake ``source`` (written to ``path``, a .comp) for every target; (ok, the first error line when not)."""
     path.write_text(source, encoding="utf-8")
     output = path.with_suffix(".comp.qsb")
-    result = subprocess.run(qsb_command(qsb, path, output), capture_output=True, text=True, timeout=120)
+    result = subprocess.run(qsb_command(qsb, path, output, targets), capture_output=True, text=True, timeout=120)
     text = (result.stdout + result.stderr).strip()
     ok = result.returncode == 0 and output.exists() and "failed" not in text.lower()
     lines = text.splitlines()
