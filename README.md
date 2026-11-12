@@ -88,7 +88,12 @@ Transition and Visualizer availability is COMPLETELY configurable so you can dis
 
 <img width="40%" alt="GuidedWidgets" src="https://github.com/user-attachments/assets/21b4ac58-50ee-42dd-a80f-4247c34c9197" />
 
+### Studios
 
+<img width="50%" alt="image" src="https://github.com/user-attachments/assets/e22a7df8-e3a1-4911-b8bf-8fc846a4a5d6" />
+
+- Studios expand the preset system to give user friendly and advanced ways to make and share your own presets.
+- Every single mode has a studio. Letting you paint terrain, curve waveforms or just make bubbles bigger. Your fetish achieved.
 ---
 
 
@@ -256,7 +261,7 @@ Use it for EVERYTHING. EMBRACE IT. HOLD IT. DO NOT LET OTHERS KNOW YOU HAVE IT. 
 </details>
 
 <details>
-<summary><b><ins>Keyboard shortcuts while the screensaver is running</ins></b></summary>
+<summary><b><ins>Keyboard shortcuts while the screensaver is running AND focused. Stealing keys is a no no.</ins></b></summary>
 
 | Key | Action |
 | --- | --- |
@@ -266,14 +271,14 @@ Use it for EVERYTHING. EMBRACE IT. HOLD IT. DO NOT LET OTHERS KNOW YOU HAVE IT. 
 | `Shift+0`–`Shift+9` | Save a layout slot |
 | `0`–`9` | Recall a layout slot |
 | `W` / `A` / `S` / `D` | Orbit a free-form 3D visualizer such as Extruded Spectrum; in framed Extruded Bubble these keys fly/strafe instead |
-| `Shift+W` / `Shift+S`; `Shift+A` / `Shift+D` | Extruded Bubble camera pitch up/down; yaw left/right |
-| `Q` / `E` | Extruded Bubble yaw left/right (alternative to Shift+A/D) |
+| `Shift+W` / `Shift+S`; `Shift+A` / `Shift+D` | Extruded Bubble camera pitch up/down; yaw left/right | [Just use the mouse]
+| `Q` / `E` | Extruded Bubble yaw left/right (alternative to Shift+A/D) | 
 | `R` | Reset framed 3D camera when admitted |
 | `PgUp` / `PgDown` | System volume up / down |
 | `Space` | Play/pause |
 | `Home` | Global media play/pause |
 | `End` | Global system mute toggle |
-| `Esc` | Exit the screensaver (`Q` is reserved for EB yaw; it is not a global exit key) |
+| `Esc` | Exit the screensaver
 
 </details>
 
@@ -296,8 +301,10 @@ Useful documentation for completely acceptable stealing of any code:
 
 Jayde Ver Elst / Basjohn
 
-Did you know I'm actually a published [author](https://www.goodreads.com/book/show/25006763-usu)? No? How could writing this cringe get published? I don't know either, and neither do most readers apparently.
+Did you know I'm actually an ancient published [author](https://www.goodreads.com/book/show/25006763-usu)? No? How could writing this cringe get published? I don't know either, and neither do most readers apparently.
 
-[basmilius.github.io](https://basmilius.github.io/) for the pillaged weather icons!
+## Attribution
+
+[basmilius.github.io](https://basmilius.github.io/) for the pillaged fancy weather icons!
 
 This README focuses on wasting your time.
