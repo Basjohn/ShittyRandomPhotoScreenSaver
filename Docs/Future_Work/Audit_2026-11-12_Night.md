@@ -135,6 +135,8 @@ more pressing (fix soon 4).
 
 ### 9. The native core's MSVC runtime check runs after the module is imported
 
+**Resolved 12 Nov:** the file's PE imports and linker version are checked before import; the post-import check stays.
+
 - **Where:** `rendering/native/loader.py:148-159` (`load`: `_import_module` executes `PyInit`, then `checked` runs
   `runtime_check.check_module`); `rendering/native/runtime_check.py:236-243`.
 - **What is wrong:** the check exists for an arrangement that "fails in ways no test sees" (an STL import bound to
