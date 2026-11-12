@@ -2242,7 +2242,7 @@ change.
 **Spline Curve Studio built (6 Nov), awaiting the lead's acceptance review**
 
 `ui/studio/devcurve_adapter.py`, registered; Spline Curve's preset row shows Open Studio and no Edit Preset. Evidence
-`.artifacts/evidence/visualizers/devcurve/studio/20261107_studio/` (Deep Blue on Rag Doll, Neon Skyline on Human: every
+`.artifacts/evidence/visualizers/devcurve/studio/20261107_studio/` (two presets, on Rag Doll and on Human: every
 workspace with the live traces, plus the node rows).
 
 - [~] Lead review on the rendered Studio frames: the per-layer Body / Accent / Swell traces as the way to read the
@@ -2255,8 +2255,8 @@ now hidden (`Docs/Reference/Visualizer_Reference.md` -> Audio Analysis controls 
 
 **Oscilloscope Studio built (6 Nov), awaiting the lead's acceptance review**
 
-`ui/studio/oscilloscope_adapter.py`, registered. Evidence `.artifacts/evidence/oscilloscope/studio/` (Preset 1 Phosphor
-on Human, Preset 3 Lissajous on Rag Doll: every workspace with the live traces). Recorded engine answers with the
+`ui/studio/oscilloscope_adapter.py`, registered. Evidence `.artifacts/evidence/oscilloscope/studio/` (two presets, on
+Human and on Rag Doll: every workspace with the live traces). Recorded engine answers with the
 capture history recorded by identity (binary sidecar; `Docs/Reference/Visualizer_Studio.md` section 3).
 
 - [~] Lead review on the rendered Studio frames: Level / Afterglow / Ghosts / Flare / Drive / Tone as the way to
