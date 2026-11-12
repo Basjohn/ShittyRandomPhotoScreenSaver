@@ -769,7 +769,7 @@ the press-scoped scene baseline (`DisplayManager._start_quick_scene_pan`) and pa
 input close or display loss ends it through the live view pose's existing save. A release without that travel opens the
 retained menu at the release point through the one `context_menu_requested` route, so `context_menu_active` never
 becomes true for a pan. Every other right press (another widget, the wallpaper, Edit, Alt-right, a mode that cannot
-pan, outside interaction/Ctrl) takes the unchanged press path. No timer or hold delay. Plain CUSTOM geometry controls retain their ordinary behavior. Its fixed card
+pan, outside interaction/Ctrl) takes the unchanged press path (measured when it merged: press-to-menu on that path 300-308 us before, 311-314 us after, run-to-run noise 300-426). No timer or hold delay. Plain CUSTOM geometry controls retain their ordinary behavior. Its fixed card
 rectangle owns selection; the projected internal guide is clipped derivative paint. See
 [Neon Lake](Reference/Neon_Lake_Basin.md). Wheel input preserves signed movement on either Qt axis; zero
 movement is a no-op. Geometry/settings/orbit edges refresh framing; ordinary audio and closed/deselected Edit add no continuing

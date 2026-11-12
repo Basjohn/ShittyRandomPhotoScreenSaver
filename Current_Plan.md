@@ -695,16 +695,13 @@ hardware is proven by the lead's harnesses in 1B.14, and behaviour that changed 
 
 ### 1B.2 Cursor keeps its changed shape after exit until a click (merged 0f8f4836; R-183; proof owed in 1B.14)
 
-The retire owner now gives Windows the arrow natively. The native harness reproduced the stuck shape only with
-Qt's pointer tracking cleared artificially, so the operator's real exit path is unproven.
+The harness reproduced the stuck shape only with Qt's pointer tracking cleared artificially: the real exit path is
+unproven.
 
 - [ ] Side defect: when a hovered QML item is destroyed or left, the saver window can keep the hand or arrow
   instead of the Halo until the Halo next re-applies it.
 
 ### 1B.4 Shape instrument for Spectrum and Neon Lake (merged; contract: Visualizer_Studio.md)
-
-One instrument in Spectrum, Extruded Spectrum, Neon Lake's Frequency Response and its Reaction Shaper; the old
-shape widget is retired; shape drags are in the churn guard; Studio tooltips wrap inside the window.
 
 - [~] `fft_to_bars` gained two helper calls per tick (`shape_bar_profile`, `lane_sample_positions`). The overhead
   baseline was re-recorded after 1B.4 merged (`tools/baselines/overhead/2026-11-11_4658981b.json`, with a Spectrum
@@ -714,12 +711,7 @@ shape widget is retired; shape drags are in the churn guard; Studio tooltips wra
 
 ### 1B.5 Neon Lake: all visible land is brush-editable (merged 33912e5ae; refinement round merged 11 Nov)
 
-A stroke past the grid grows the authored grid under it invisibly (grown cells are an overlay on the generated
-landscape; an authored origin keeps horizon, detail and glow; shipped presets' terrain loads byte-identical;
-one commit and one undo per stroke; a refused state at the 257 cap). The mesh refines under painted 16-cell tiles
-(two far corners 5.49 to 2.29 ms; an unpainted grid unchanged); Brush Radius is a share of the basin (default
-0.16, range 0.03 to 0.6, read from the brush owner); no mesh cache (the GPU mesh is the only copy). Contract:
-`Docs/Reference/Neon_Lake_Basin.md`; evidence `.artifacts/evidence/visualizers/shockwave_grid/20261111_refine/`.
+Contract: `Docs/Reference/Neon_Lake_Basin.md`.
 
 - [ ] Distance-based mesh density was not built (the mesh does not know the eye, and a camera-dependent mesh
   would rebuild and pop): no render shows whether the smallest brush aliases on far land seen up close; render
@@ -727,12 +719,8 @@ one commit and one undo per stroke; a refused state at the 257 cap). The mesh re
 
 ### 1B.6 Neon Lake: smooth land reaction, Growth and Indents (merged 33912e5ae; refinement round merged 11 Nov)
 
-The reaction reshapes the land smoothly; Growth (mounds to spires by Growth Shape, with Growth Density and Growth
-Region: Everywhere / Far Land / By Elevation) and Indents (a point may sink 0.65 of its authored height plus 0.40
-of Terrain Height, never below 8 % of its height, the water's edge fixed) are optional, default off, authored
-neutral into the three presets. Measured: tick 38.9 us with lanes, Growth and Indents (34.7 before); GPU with
-the reaction on +8 to +14 % against before 1B.6, Growth and Indents on top; mid-song kicks lift the drives in
-continuous play (median 3-20 %). The lead decides when the reactivity is good enough (operator, 11 Nov).
+Contract and measurements: `Docs/Reference/Neon_Lake_Basin.md`. The lead decides when the reactivity is good enough
+(operator, 11 Nov).
 
 - [~] Lead's reactivity verdict: watch `indents_p1_heavy1.webp` and one driven showcase per preset with Growth
   and Indents on, beside the music envelope (`tools/visualizer_replay/neon_lake_music_response.py --continuous`);
@@ -744,10 +732,8 @@ continuous play (median 3-20 %). The lead decides when the reactivity is good en
 
 ### 1B.7 Fullscreen Now Playing: one geometry contract with the Media widget (merged 189fbd36c; plan 01 M3c)
 
-Now Playing and the toast are edited by ordinary Edit's handlers; the Media seek bar is one component
-(`MediaSeekBar.qml`) and Now Playing has it as an option (Fullscreen Mode -> Now Playing -> Seek Bar, default
-off). What stays overlay-specific, with its reason, is listed in plan 01. Old profiles' artwork factors load
-through a bridge (`Docs/Architecture/Persisted_Input_Compatibility.md`).
+Contract: plan 01 M3c (what stays overlay-specific, with its reason); the old artwork-factor bridge is in
+`Docs/Architecture/Persisted_Input_Compatibility.md`.
 
 - [ ] The safe-area edge guides are no longer drawn in Fullscreen Edit (as in ordinary Edit); confirm that is
   wanted or restore them through the ordinary guide owner.
@@ -759,40 +745,15 @@ through a bridge (`Docs/Architecture/Persisted_Input_Compatibility.md`).
 
 **Material track (operator, 11 Nov: proper transparency on light themes, no inset while keeping the material on
 all themes, border materials). One agent, one shader, in this order, each its own reviewed checkpoint.** Contract:
-`Docs/Architecture/Card_Surface_Materials.md` ("M1 dark-ink rule"); evidence
-`.artifacts/evidence/materials/20261111_m1/` (open `OPEN_FIRST_overview_main.png`).
-
-M1 landed: dark ink's panel is bounded at the card's Settings-variant shell density (`SurfaceContrast.panelCeiling`,
-shader uniform `panelCeiling`), faint runs correct their own ink (`legibleInk`), and a run faded by item opacity
-takes a text-local plate. Wallpaper swing inside light cards went from 0.0 to 0.08-0.25; dark themes identical.
-
-M2 landed (evidence `.artifacts/evidence/materials/20261111_m2/`, `card_edge_zooms_3x.png`): the legibility layer is
-the whole face up to the real border on every theme and material (no inset panel, no inner rim), the light-theme
-inner hairline is gone, the ink plate fades over 5 px, legibility tables unchanged, no GPU rise. The Linked
-button's state ink may cross polarity (R-186; stills `.artifacts/evidence/settings/linked_button/`).
-
-M2b landed 12 Nov (evidence `.artifacts/evidence/materials/20261111_m2b/`): a text run that misses its ratio
-on a dark theme corrects its own ink; card roles under 4.5:1 on the materials went from 46 themes to 0, small
-runs from 3-10 a frame to 0, light themes and Normal unchanged, no shader change. Two faults found in audit
-and fixed (the solver added the Glass sheen after the legibility limit; a hidden crossfade copy held a plate).
-58 dark themes change; the table is `changed_table.md` in the evidence folder.
+`Docs/Architecture/Card_Surface_Materials.md` ("M1 dark-ink rule"; it also holds M1, M2, M2b and the 12 Nov
+follow-ups with their evidence folders).
 
 - [ ] Watch: the "three failures in one long run" were not reproduced in any order of that run's 21 files; the
   long run's other two failures may have been the engine worker gate (red since 438790f7, fixed 4a805fe6).
 
-Side defects landed 12 Nov (merge of a7b877d4): the dead `context.menu.arrow` role retired with a load bridge
-(`RETIRED_WIDGET_THEME_COLOR_ROLES`, 115 theme files lose the key through the generator's `--drop-retired-roles`);
-the dense families' role counts derived from their QML declarations; 1C.5's first Edit shrink of an over-lane volume
-height acts at once (R-193; the saved value is corrected at the first resize, no runtime observer).
-
-Follow-ups landed 12 Nov (evidence `.artifacts/evidence/materials/20261112_followups/`): ink is judged on the fill
-a run sits on (row lift included); passing runs stay byte-identical, headroom only for corrected runs; the
-Context Menu's arrows take the label ink; 1C.5's volume height is capped at its lane.
-
-
 - [ ] Accents whose corrected text ink collapses toward the card text: Royal Orchard most (#3e4f2c to #97a08d,
   48 % of its colour kept) and Smoke Quartz; Slate Lavender, Tungsten Blues, Lantern Grove and Riviera Dusk keep
-  61-70 % (`accent_collapse_candidates_3x.png`). A theme-authoring matter: these six accents are too dark for a
+  61-70 % (`.artifacts/evidence/materials/20261111_m2b/ink_rule/accent_collapse_candidates_3x.png`). A theme-authoring matter: these six accents are too dark for a
   dark card; note it for the theme files, no solver change.
 - [ ] The accent as a graphic (bars, dividers, icons; not recoloured) is under 3:1 on eight dark themes: Royal
   Orchard 1.44, Tungsten Blues 2.27, Lantern Grove 2.32, Slate Lavender 2.35, Smoke Quartz 2.59, Riviera Dusk
@@ -805,11 +766,8 @@ Context Menu's arrows take the label ink; 1C.5's volume height is capped at its 
 
 ### 1B.9 Settings and Studio window corners bleed (see-through corners merged a89ce123; continues 1.9)
 
-Both windows now end at their rounded border: nothing is painted outside it (alpha 1/255 there, so a layered
-window keeps those pixels for drag and resize), and the opaque corner caps, the backing stroke and its near-white
-inner line are gone. Thicker borders (they square the corner) and a pre-Accent region (staircase) are rejected;
-measurements and rules: `Docs/Architecture/Settings_Theme_Architecture.md`. Residue no layered window can remove:
-a few pixels of blurred wallpaper outside the arc (worst difference 41-86 levels, was 72-251).
+Measurements, rejected alternatives and the residue no layered window can remove:
+`Docs/Architecture/Settings_Theme_Architecture.md` (native corners).
 
 - [ ] Side defect: the Studio window shows only blur (no title bar or content) in native captures by
   `tools/settings_native_corners.py --window studio`; find whether it is the capture setup or the Studio.
@@ -829,19 +787,8 @@ this item describes looks, and nothing here or anywhere names, counts or pins th
 
 The operator's taste for Spectrum (11 Nov, on five of round 1: "are all ghastly ugly"): wide glossy, chrome,
 capsule, grid-on-block and dark-fill looks fail; fine luminous gradients pass; fewer good presets beat a full slot
-count. Round 2 merged 11 Nov as it stood when its agent was interrupted (0cf6f5c6; operator: "still better than
-what we have now"; evidence `.artifacts/evidence/visualizers/spectrum/presets/20261111_round2/`), with the Bar Gap
-control (0 to 4 px, default 2, `tests/test_spectrum_bar_gap.py`). The 7 Nov features (flag sheets, hue-preserving
-gradients, the rim glow cap, Bar Fill ghosts; `Docs/Reference/Visualizer_Reference.md`) stay.
+count. The Spectrum features and the Bar Gap control are in `Docs/Reference/Visualizer_Reference.md`.
 
-- The two weak Spectrum looks were re-authored and merged 12 Nov (c86f36a6; evidence
-  `.artifacts/evidence/visualizers/spectrum/presets/20261112_flaws_7_8/`): fine borderless filaments with a field
-  gradient; the level-colour one is a vertical gradient through its colours. Fill Gradient spans the whole field,
-  not the bar, so a tip colour must be set past the colour wanted at a normal bar height.
-- The level-colour look was dropped 12 Nov (lead's verdict on its showcase: seven of eight frames a saturated green
-  bar chart, the warm end only on one peak; fewer looks over filler). A profile that selected it falls back quietly.
-- The thin-bar diagonal seam is fixed (R-197, 277ac6a2): Spectrum's bar coverage comes from `gl_FragCoord` through an
-  affine map resolved once per placement; 192 seam columns corrected, every other pixel within 1 level.
 - [ ] Side defect (same cause as R-197, unchecked): Oscilloscope (`widgets/spotify_visualizer/shaders/oscilloscope.frag`
   about :352), Spline Curve (`devcurve.frag` about :262) and Bubble (`bubble.frag` about :121) threshold the
   interpolated `v_uv * u_resolution` too: render each at 840x560 and compare coverage across the quad's diagonal; fix
@@ -851,7 +798,8 @@ gradients, the rim glow cap, Bar Fill ghosts; `Docs/Reference/Visualizer_Referen
   from `tools/artifact_paths.py` (or an explicit argument), never from their own location.
 - [ ] Round 2 was never reported: check the Bar Gap control end to end (Settings and Studio rows through the
   spec, authored into every Spectrum preset by the repair fill, the Visualizer Reference) and the whole-song
-  reactivity table for the round's new presets (`response.json` in the evidence folder).
+  reactivity table for the round's new presets (`response.json` in
+  `.artifacts/evidence/visualizers/spectrum/presets/20261111_round2/`).
 - [ ] Bar Fill ghosts read as the default look's do (operator, 8 Nov: "Those ghosts are too solid and not
   blurred."): soft, blurred, translucent, no crisp stripes or stars inside, fading sooner, and no ~1 px dark seam
   where a transparent-border bar meets its ghost (merged as 092304dc; evidence `20261108_ghost_seam`). This binds
@@ -880,22 +828,12 @@ gradients, the rim glow cap, Bar Fill ghosts; `Docs/Reference/Visualizer_Referen
 
 ### 1B.12 Fullscreen glyphs relative to the Visualizer's display (merged 9bb4e806c; contract: plan 01 M3c)
 
-Up arrow: full display on the Visualizer's own display; diagonal up-left / up-right: on the display to its left or
-right by physical arrangement (`core/display_neighbours.py`: a display counts as beside only if it does not
-overlap horizontally, so a vertical stack offers no side arrows); only applicable arrows show; while expanded the
-current display's glyph is a Down arrow and the diagonals move the view. The owner request stays "expand on
-display N" (`expand_on_display`, the shape SMP will reuse).
-
 - [ ] A display arrangement changing while the saver runs is covered only by re-admission in tests; check it on
   the topology-replacement path.
 - [ ] The Reset Camera glyph (a font character) shows coloured edge fringes in off-screen crops; confirm on a
   real display and paint it as a path like the arrows if it does there too.
 
 ### 1B.13 Hold right-click to pan the live Visualizer (merged 21da6fbc; contract: Spec.md / Contracts.md input)
-
-Over a pan-capable card a right press arms a pending pan; travel past the drag distance pans (no menu for that
-press); a still release opens the menu at the release point; every other right press opens on press as before.
-Measured: press-to-menu on the untouched path 300-308 us before, 311-314 us after (run-to-run noise 300-426).
 
 - Native pointer capture on a real foreground window (tests use a stand-in capture): 1B.14's held-right pan
   box.
@@ -948,11 +886,6 @@ Every `[~]` box in this plan that says "D1 run", "Studio run on D1" or "Frozen r
 
 ### 1B.16 Tooling (Docs/Reference/Tooling.md, merged 12 Nov)
 
-Every tool and harness (236 files) with its flags, who may run it, output, tests and docs. Fixed with it: Live
-Check's `--load` defaulted to `game60`, so an agent omitting the flag started the lead-only load; the default is now
-`none`.
-
-- `Harness_Index.md`'s four disagreements with the code fixed 12 Nov (b7e84c31).
 - [ ] Candidates to retire (Tooling.md's table; the operator keeps useful tools, so the lead judges each and deletes
   only what is dead and superseded, recording the reason): high confidence `verify_compile.py` (repo root) and
   `.github/tools/linux_smoke_dist.py` (a stale copy no workflow runs); the medium and low rows stay unless a caller
@@ -1027,18 +960,8 @@ Contract: plan 01 M3c; evidence `.artifacts/evidence/visualizers/shared/expanded
 
 ### 1C.4 Spline Curve's white lines show about one pixel into the card border (fixed and proved on Display 1, 12 Nov; R-191, R-192)
 
-Merged: the transient case (R-188), then variant B (bf7add6a, R-191: the card drawn on whole device pixels, the clip
-ending exactly at the frame's inner edge; guard `tests/test_visualizer_card_clip_contract.py`). The lead's Display 1
-run then showed left and right exact but a blend on both sides of the bottom edge: the whole scene on that display
-was stretched vertically by an R-63 overscan of 2 device pixels (not a whole logical pixel at 150 %), fixed by a whole
-logical overscan (R-192, `rendering/quick/device_geometry.py`). After both, every edge of the card on Display 1 is 8
-solid border pixels with nothing blended, in the saver's frame and in the DWM composite (evidence
-`.artifacts/evidence/display/d1_run/20261112_devcurve_card_edge/` before,
-`20261112_devcurve_card_edge_whole_logical/` after; `20261112_devcurve_card_edge_after/before_after_crops_x4.png`).
+Records: R-188, R-191, R-192 (`Docs/Historical_Bugs/`), with the Display 1 and Display 0 evidence.
 
-- The second-axis fix seen on the MSI, 12 Nov (one bounded Display 0 run by the lead, the operator's leave; evidence
-  `.artifacts/evidence/display/d1_run/20261112_msi_second_axis_edges/`): window `(-2,-3)` 2562 x 1443 device pixels, every
-  card edge 8 solid border pixels with nothing blended, in the saver's frame and the DWM composite.
 - [ ] R-192's "Still open", recorded only in the bug entry: an axis with no exterior edge (the middle display of
   three in a row; a display enclosed on all sides, which also takes R-63's top fallback into its neighbour) keeps
   Qt Quick's stretch when its extent is not whole at its DPR. Decide: Watchlist with the layouts named, or the
@@ -1048,35 +971,16 @@ solid border pixels with nothing blended, in the saver's frame and in the DWM co
 
 ### 1C.5 Volume child control: its drop shadow was cut off sharply (fixed and merged 12 Nov, R-187; one check left)
 
-Cause: two clips (`overlayAccessoryLayer` in `OverlayWidget.qml`, `mediaAppVolumeSlider` in `MediaPresentation.qml`,
-both from b5bb788e) cut the track's shadow at the edge of the volume's own strip; at the default layout it fits by
-0.3 px, and once Edit widens, heightens or moves the track it is cut square. M1 and M2 were not the cause. The
-strip's clip now grows by the shadow's reach; guard `test_media_child_shadows_are_never_clipped_by_their_lane_or_
-card`. Evidence `.artifacts/evidence/materials/20261111_m2b/before_after_*_4x.png` (the "before" matches the
-operator's crop).
+Record: R-187 (`Docs/Historical_Bugs/`, cause, guard and evidence).
 
 - [ ] The agent could not reproduce the cut at the operator's stored Media layout (no volume edits in their
   settings): a D1 run with a copy of the operator's profile (1B.14), a 4x crop of the volume bar, lead review.
 
 ### 1C.6 SMP full-player mock restored (operator, 11 Nov; `references/` is ignored by git)
 
-Plan 02's body carries R1-R16, each cited, since d23432a3 (12 Nov).
-
-Files: `references/ShittyMusicPlayer-Miami-Afterdark-Mock-DETAILS.png` (the annotated full-size player, the
-long-range goal) and `references/SMP Material Surfaces And Vibrancy ONLY Example.png` (a material/vibrancy
-example; operator: "we can do better"). The lead may adjust the mock's UX and the plans.
-
-Documented 11 Nov in `Docs/Future_Work/ShittyMusicPlayer/04_Full_Player_Mock_2026-11-11.md` (layout, sixteen
-requirements R1-R16 from the annotations, their place in plan 02, the lead's proposals A1-A9, material direction);
-plan 02's "Proposal basis" and `Index.md` point to it.
-
-
-The operator's clarification of 11 Nov evening (three builds from profiles; Small and Full mode; SMP Edit; the
-long-term audio and library bar; Arrange's SMP section; compositor hosts on the screensaver and MC builds, desktop
-windows only on the SMP build) is written in document 04 sections 7 to 9 and plan 02 (8.2, 13, 16). The lead's
-route: SMP Edit is its own owner over a section tree, one edit session per surface, written once against a small
-host interface with two hosts (document 04 section 8). SMP stays behind the native core, the open defects and
-the fullscreen Visualizer; its material backdrop on both hosts is decision D7 point 8.
+The mock, its sixteen requirements (R1-R16), the lead's proposals and the operator's clarification are in
+`Docs/Future_Work/ShittyMusicPlayer/04_Full_Player_Mock_2026-11-11.md` and plan 02; the mock files are
+`references/` (ignored by git). SMP stays behind the native core, the open defects and the fullscreen Visualizer.
 
 - [ ] Rules that keep SMP's doors open, to check at every audit until SMP starts (document 04 section 8, last
   list): the Media widget, Now Playing and the seek bar stay host-agnostic; the Visualizer stays one owner that can
@@ -1089,10 +993,7 @@ the fullscreen Visualizer; its material backdrop on both hosts is decision D7 po
 
 ### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely (merged 290b039b, 12 Nov)
 
-One slider, Water Lines (`shockwave_grid_water_lines`, Water bucket): at 1 today's look (within 1/255), at 0 the face
-lines, shoreline, their glow and Water Reaction's whole net go, leaving a flat lift; the line work is skipped at 0
-(-2 GL calls). Guard `tests/test_neon_water_lines.py`; evidence
-`.artifacts/evidence/visualizers/shockwave_grid/water_lines/`; docs `Neon_Lake_Basin.md` "Water Lines".
+Contract and evidence: `Docs/Reference/Neon_Lake_Basin.md` "Water Lines".
 
 - [ ] The showcase WebP at Water Lines 0 was lost when its worktree was retired (the retire step copied only evidence;
   it now copies WebPs too): re-render it with `tools/release_media.py` (Preset 3 at 0 on the heavy recording) and
@@ -1190,11 +1091,7 @@ last because it touches the water's edge)**
 
 ### 1C.9 Sources: RSS Pools shows which pools are active and valid (rows and restyle merged 12 Nov)
 
-Active Just Make It Work pools are rows in the Sources list (the heading reads "Pools and Custom Feeds"), told
-apart by an accent "JMIT POOL" tag and an arrow glyph, with a right-aligned validity mark read from stored health;
-no network, no timer. One shared list style (`shared_styles.SETTINGS_LIST_STYLE`, Jost 12 pt, 32 px rows) now
-serves the Themes lists, the Folders list and this one; the delegate sets no font. Evidence
-`.artifacts/evidence/settings/rss_pools/20261111_restyle/` (Sources above Themes at 2x on three themes).
+Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list style and the Sources pool rows).
 
 - [ ] The marks seen with real stored health once (a D1 or frozen run of 1B.14 after a real fetch), lead review.
 - [ ] Not rendered: a Mica theme; the onboarding lists keep their own style (decide whether they join the shared

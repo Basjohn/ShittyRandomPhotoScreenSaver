@@ -134,7 +134,8 @@ Spectrum and Extruded Spectrum expose separate **Rainbow Ghost** controls in the
 Spectrum (2D) carries optional, default-off decoration, declared in its spec and read only by Spectrum's own capture
 and Quick shader (`widgets/spotify_visualizer/spectrum_decor.py`, `widgets/spotify_visualizer/shaders/spectrum.frag`):
 **Ghost Colour** (Bar Colour / Custom / Bar Fill; Rainbow Ghost, when on, still colours the ghosts), **Ghost Gradient** (toward a
-tip colour at the peak), the **Finish** bucket (Gloss, Fill Gradient toward a tip colour at the top of the field, Peak
+tip colour at the peak), the **Finish** bucket (Gloss, Fill Gradient toward a tip colour at the top of the field (it spans the whole field, not the bar, so a tip
+colour must be set past the colour wanted at a normal bar height), Peak
 Caps resting on the existing decaying peaks) and the **Pattern** bucket (a second-colour pattern over the bar fill:
 Horizontal Bands, Scanlines, Dots, Diagonal Stripes, Grid, Chevrons; Pattern Anchor Per Bar or Shared; Colour, Scale,
 Strength). The Pattern choice also offers **flag sheets** (USA, Japan, UK, Jamaica, Brazil, added 7 Nov 2026).
