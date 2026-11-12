@@ -106,6 +106,27 @@ def test_the_module_reports_what_its_importer_checks():
         assert f'L"{dll}"' in module, dll
 
 
+def fh4_problems(text: str) -> list[str]:
+    """The module must not use the FH4 exception handler (vcruntime140_1.dll, whose in-process copy is shiboken6's
+    older one): both halves of the switch, the compiler's and the linker's, inside the MSVC branch."""
+    branch = re.search(r"^if\(MSVC\)\n(.*?)^endif\(\)", text, re.S | re.M)
+    body = branch.group(1) if branch else ""
+    problems = []
+    if not re.search(r"target_compile_options\(_srpss_native_core PRIVATE[^)]*\s/d2FH4-[\s)]", body):
+        problems.append("the compiler still emits FH4 handlers (/d2FH4- missing)")
+    if not re.search(r"target_link_options\(_srpss_native_core PRIVATE[^)]*\s/d2:-FH4-[\s)]", body):
+        problems.append("the linker still pulls in the FH4 handler (/d2:-FH4- missing)")
+    return problems
+
+
+def test_the_module_is_built_without_the_fh4_exception_handler():
+    text = (CORE / "CMakeLists.txt").read_text(encoding="utf-8")
+    assert fh4_problems(text) == []
+    for flag in ("/d2FH4-", "/d2:-FH4-"):
+        removed = text.replace(f" {flag})", ")")
+        assert removed != text and fh4_problems(removed), flag
+
+
 # ----------------------------------------------------------------------------------------------- the build script
 
 

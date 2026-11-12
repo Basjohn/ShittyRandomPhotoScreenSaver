@@ -84,4 +84,10 @@ target_compile_definitions(_srpss_native_core PRIVATE
 target_link_libraries(_srpss_native_core PRIVATE Qt6::Core Qt6::Gui Qt6::GuiPrivate Qt6::Qml Qt6::Quick)
 if(MSVC)
     target_compile_options(_srpss_native_core PRIVATE /W4 /permissive- /Zc:__cplusplus /utf-8)
+    # No FH4 exception handler (compile /d2FH4-, link /d2:-FH4-): the module then imports nothing from
+    # vcruntime140_1.dll, whose in-process copy is shiboken6's, older than the runner's compiler (build round 1 of
+    # N2.1: 14.44 against cl 19.51). It needs only vcruntime140.dll, Python's own copy, at least as new as the compiler.
+    # rendering/native/runtime_check.py refuses the module otherwise.
+    target_compile_options(_srpss_native_core PRIVATE /d2FH4-)
+    target_link_options(_srpss_native_core PRIVATE /d2:-FH4-)
 endif()

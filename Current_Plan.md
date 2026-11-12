@@ -518,6 +518,11 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
       QtCore, which imports `msvcp140`, is the rule's real negative). Found: in the venv `vcruntime140_1` and
       `msvcp140` are shiboken6's 14.44.35211 and `vcruntime140` Python's 14.51, so a core compiled by a toolset newer
       than 14.44 fails the check (intended: that is the unsupported arrangement).
+    - Build round 1 (run 43274074011, 89c9a7ce): the spike built and published to `release/native_spike/`; the core
+      compiled with cl 19.51 and was refused by its import check (`shiboken6\VCRUNTIME140_1.dll` 14.44.35211 older
+      than toolset 14.51). Fix: the core is built without the FH4 handler (`/d2FH4-`, link `/d2:-FH4-`), so it needs
+      only `vcruntime140.dll` (Python's 14.51); `test_native_core_build.py` holds both flags. The spike is unchanged
+      (its import check does not run this rule).
   - [ ] `native-module.yml` takes the source folder as an input (today `NATIVE_SOURCE: native/spike_p1`, line 61),
     so the spike and the product module build through one workflow; staging fails when the module is missing.
     - Written (074ac296, not yet run): input `source` (default `native/core`); targets `native_module` (the core,

@@ -127,9 +127,10 @@ Added 12 Nov 2026 with the native core's direction (`Docs/Future_Work/Native_Cor
   compile exception is added to `Docs/Guardrails/Agent_Worktree_Rules.md` without the operator's explicit yes.
   Until then a C++ slice's module is compiled by a GitHub workflow for a pushed ref (plan N0.9 builds that
   workflow first; the harness proofs N0.6 and N0.7 wait on it), the artefact is downloaded into the worktree
-  (`Docs/Guides/GitHub_Remote_Build.md`, "The native module": the lead pushes the agent's branch and runs
-  `tools/build_runner.py --mode github --run --select native_module` from that worktree), and agents never start a
-  build, remote included. Frozen products and installers stay on GitHub and with the lead.
+  (`Docs/Guides/GitHub_Remote_Build.md`, "The native modules": the lead pushes the agent's branch and runs
+  `tools/build_runner.py --mode github --run --select native_spike` from that worktree for a harness slice, the module
+  landing in `release\native_spike\`, or `--select native_module` for the product's native core `native/core`, in
+  `release\native_module\`), and agents never start a build, remote included. Frozen products and installers stay on GitHub and with the lead.
 - **A port is audited on both backends.** Beside section 4's checks: the OpenGL parity record against the Python
   renderer, the Vulkan record against the native OpenGL result (hidden host), the thread probe (no call with a
   Python thread state), GPU time per pass, and the Python renderer deleted in the same change (a transition's at

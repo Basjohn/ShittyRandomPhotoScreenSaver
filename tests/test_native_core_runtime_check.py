@@ -80,6 +80,40 @@ def test_a_symbol_the_loaded_vcruntime_does_not_export_is_refused():
                                {"vcruntime140.dll": str(loaded)}) == []
 
 
+def test_build_round_one_fh4_against_shibokens_older_copy_is_refused_and_vcruntime140_alone_passes():
+    """N2.1 build round 1: a cl 19.51 module importing __CxxFrameHandler4 from vcruntime140_1.dll, whose loaded copy
+    was shiboken6's 14.44.35211, was refused. Built without FH4 it imports vcruntime140.dll alone (Python's 14.51)
+    and passes. The same numbers, with the exports and versions given, so the rule itself is what is tested."""
+    msc = 195136231                                                    # cl 19.51: toolset 14.51
+    loaded = {"vcruntime140.dll": "C:/python/VCRUNTIME140.dll", "vcruntime140_1.dll": "C:/shiboken6/VCRUNTIME140_1.dll"}
+    versions = {"VCRUNTIME140.dll": (14, 51, 36247, 0), "VCRUNTIME140_1.dll": (14, 44, 35211, 0)}
+    exports = {"VCRUNTIME140.dll": frozenset({"memcpy", "__CxxFrameHandler3", "__C_specific_handler"}),
+               "VCRUNTIME140_1.dll": frozenset({"__CxxFrameHandler4"})}
+
+    def problems(imports):
+        return rc.runtime_problems(imports, msc, loaded, exports_of=lambda path: exports[path.name],
+                                   version_of=lambda path: versions[path.name])
+
+    with_fh4 = {"vcruntime140.dll": frozenset({"memcpy", "__C_specific_handler"}),
+                "vcruntime140_1.dll": frozenset({"__CxxFrameHandler4"})}
+    refused = problems(with_fh4)
+    assert len(refused) == 1 and "VCRUNTIME140_1.dll is 14.44.35211.0" in refused[0], refused
+    assert "older than the module's toolset 14.51" in refused[0]
+    without_fh4 = {"vcruntime140.dll": frozenset({"memcpy", "__CxxFrameHandler3", "__C_specific_handler"})}
+    assert problems(without_fh4) == []
+
+
+def test_the_real_shiboken_vcruntime140_1_refuses_a_newer_compilers_fh4_import():
+    loaded = rc.loaded_module_path("vcruntime140_1.dll")
+    if loaded is None:
+        pytest.skip("this process has not loaded vcruntime140_1.dll")
+    version = rc.file_version(Path(loaded))
+    imports = {"vcruntime140_1.dll": frozenset({"__CxxFrameHandler4"})}
+    assert rc.runtime_problems(imports, _msc_for(version), {"vcruntime140_1.dll": loaded}) == []
+    newer = rc.runtime_problems(imports, _msc_for((14, version[1] + 1)), {"vcruntime140_1.dll": loaded})
+    assert newer and "older than the module's toolset" in newer[0]
+
+
 def test_a_vcruntime_the_process_has_not_loaded_is_refused():
     problems = rc.runtime_problems({"vcruntime140_1.dll": frozenset({"__CxxFrameHandler4"})}, 194435227,
                                    {"vcruntime140_1.dll": None})
