@@ -1,8 +1,7 @@
-"""Shader source loader for Spotify visualizer GL overlay.
+"""Shader source loader for the 2D Visualizer modes' fragment shaders.
 
-All fragment shaders share a common fullscreen-quad vertex shader.
-Each visualizer type has its own fragment shader file loaded at
-``initializeGL()`` time so that no runtime recompilation is needed.
+The Quick renderers draw them over the shared vertex shader
+(``rendering.quick.visualizer.render_contract.QUICK_VISUALIZER_VERTEX_SOURCE``).
 """
 from __future__ import annotations
 
@@ -16,16 +15,6 @@ logger = get_logger(__name__)
 
 _SHADER_DIR = Path(__file__).parent
 _FRAGMENT_SHADER_CACHE: Dict[str, str] | None = None
-
-# Shared vertex shader for all visualizer types (fullscreen quad)
-SHARED_VERTEX_SHADER: str = """#version 460 core
-layout(location = 0) in vec2 a_pos;
-out vec2 v_uv;
-void main() {
-    v_uv = a_pos * 0.5 + 0.5;
-    gl_Position = vec4(a_pos, 0.0, 1.0);
-}
-"""
 
 # Registry of available fragment shader filenames keyed by vis_mode string.
 _ALL_SHADER_FILES: Dict[str, str] = {

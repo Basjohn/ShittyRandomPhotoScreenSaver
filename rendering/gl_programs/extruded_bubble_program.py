@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from core.constants.extruded_bubble_world import (WAKE_COUNT, WAKE_LEAD, WAKE_PATH, WAKE_POINTS, WAKE_RADIUS,
                                                   WAKE_SPACING, WAKE_STRIDE, WAKE_WATER)
+from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
 from rendering.gl_programs.scene3d_optics import SCENE3D_OPTICS_GLSL
 from rendering.gl_programs.scene3d_spheres import SCENE3D_SPHERES_GLSL, SCENE3D_SPHERES_VERTEX_GLSL
 from rendering.gl_programs.scene3d_water import SCENE3D_WATER_GLSL
@@ -185,15 +186,15 @@ vec2 waterSpecks(vec3 ray, vec2 framePx) {
 """
 BACKDROP_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
                      "in vec2 vNdc;\nuniform sampler2D uShafts;\nuniform vec2 uFrameSize;\n" + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL + COMMON
-                     + """
+                     + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 void main() {
     vec3 ray = uViewToWorld * framedRayDirection(vNdc, uTan);
     vec3 rayOrigin = uEye + uViewToWorld * framedRayOrigin(vNdc, uTan);
     float shafts = uProbeMode > 0.5
                  ? 0.6 * pow(max(dot(ray, uSunBelow), 0.0), 3.0) * uRays
-                 : texture(uShafts, gl_FragCoord.xy / uFrameSize).r * uRays;
+                 : texture(uShafts, fragUv(uFrameSize)).r * uRays;
     if (uProbeMode < 0.5) {
-        float s = texture(uShafts, gl_FragCoord.xy / uFrameSize).r;
+        float s = texture(uShafts, fragUv(uFrameSize)).r;
         shafts = uRays * (uRayCut > 0.0 ? s * smoothstep(uRayCut * 0.6, uRayCut * 1.6, s) * 1.2 + s * 0.3 : s * 1.4);
     }
     // Beams gathered around the light (the sixth mock's corner) rather than filling the water.
@@ -577,14 +578,15 @@ BLUR_FRAGMENT = """#version 460 core
 out vec4 FragColor;
 uniform sampler2D uSource;
 uniform vec2 uStep;
+""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 void main() {
-    vec2 uv = gl_FragCoord.xy * abs(uStep) / max(abs(uStep.x) + abs(uStep.y), 1e-9) * 0.0 + gl_FragCoord.xy;
-    vec2 size = vec2(textureSize(uSource, 0));
+    vec2 size = vec2(textureSize(uSource, 0));   // the blur draws a target of its source's size
+    vec2 here = fragPixel(size);
     const float w[5] = float[5](0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216);
-    float sum = texture(uSource, gl_FragCoord.xy / size).r * w[0];
+    float sum = texture(uSource, here / size).r * w[0];
     for (int i = 1; i < 5; ++i) {
-        sum += texture(uSource, (gl_FragCoord.xy + uStep * float(i) * 1.5) / size).r * w[i];
-        sum += texture(uSource, (gl_FragCoord.xy - uStep * float(i) * 1.5) / size).r * w[i];
+        sum += texture(uSource, (here + uStep * float(i) * 1.5) / size).r * w[i];
+        sum += texture(uSource, (here - uStep * float(i) * 1.5) / size).r * w[i];
     }
     FragColor = vec4(sum);
 }
@@ -696,7 +698,7 @@ void main() {
     gl_Position = sceneSphereClipCorner(centre, radius + blur, corner, uProjection);
 }
 """
-SHADE_GLSL = """
+SHADE_GLSL = SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 uniform sampler2D uEnvironment;
 uniform sampler2D uBackground;   // what was drawn before the bubbles, covering the target allocation
 uniform vec3 uSunScreen;
@@ -714,7 +716,7 @@ vec3 environment(vec3 dir, float blur) { return textureLod(uEnvironment, equirec
 vec4 behindAt(vec3 viewPoint, float blurPx) {
     vec4 clip = uProjection * vec4(viewPoint, 1.0);
     if (clip.w <= 0.0) return vec4(0.0);
-    vec2 px = (clip.xy / clip.w * 0.5 + 0.5) * uFrameSize;
+    vec2 px = ndcToUv(clip.xy / clip.w) * uFrameSize;
     vec2 inside = min(px, uFrameSize - px);
     float trust = smoothstep(0.0, 60.0, min(inside.x, inside.y));
     if (trust <= 0.0) return vec4(0.0);
@@ -893,7 +895,7 @@ vec4 shadeBubbleRay(vec3 rayOrigin, vec3 rayView, vec4 sphere, float pixels, flo
             vec4 behind = behindAt(frontView + lensDir * uBehind, max(soft * pixels * 0.35, pixels * uInnerBlur));
             // Off the frame's edge the bent view falls back to the scene behind this pixel, never to the probe (its
             // scattered fill lit every bubble at the frame's edge).
-            vec3 here = texture(uBackground, gl_FragCoord.xy / uTargetSize).rgb;
+            vec3 here = texture(uBackground, fragUv(uTargetSize)).rgb;
             // Light that went through the glass wall leaves in directions that swing from pixel to pixel: its frame
             // lookups scatter over the screen (speckle). Only the core's gently bent view reads the frame; the rest
             // reads the scene's blurred light round this pixel.
@@ -977,7 +979,7 @@ flat in float vOpacity;
 flat in float vLensCircle;
 #endif
 void main() {
-    vec2 ndc = gl_FragCoord.xy / uFrameSize * 2.0 - 1.0 - uLensShift;
+    vec2 ndc = uvToNdc(fragUv(uFrameSize)) - uLensShift;
     vec3 ray = framedRayDirection(ndc, uTan);
     vec3 rayOrigin = framedRayOrigin(ndc, uTan);
     vec3 relative = vSphere.xyz;
@@ -1007,7 +1009,7 @@ void main() {
         vec3 normalV = hit ? normalize(front - vSphere.xyz) : -ray;
         float fresnel = pow(1.0 - clamp(dot(normalV, -ray), 0.0, 1.0), 3.0);
         vec3 probe = textureLod(uProbe, uViewToWorld * reflect(ray, normalV), min(uProbeLevels - 1.0, 3.0)).rgb;
-        vec3 waterBehind = texture(uBackground, gl_FragCoord.xy / uTargetSize).rgb;
+        vec3 waterBehind = texture(uBackground, fragUv(uTargetSize)).rgb;
         float glint = 0.65 + 0.35 * fract(vExtra.x * 17.31); // seeded identity, never the changing radius
         vec3 light = mix(waterBehind, probe, 0.22 + 0.45 * fresnel);
         light += uShaftColour * uSpeckGlow * (0.12 + 0.30 * fresnel) * glint;
@@ -1048,14 +1050,14 @@ void main() {
         return;
     }
     vec4 clipC = uProjection * vec4(vSphere.xyz, 1.0);
-    vec2 centrePx = (clipC.xy / clipC.w * 0.5 + 0.5) * uFrameSize;
+    vec2 centrePx = ndcToUv(clipC.xy / clipC.w) * uFrameSize;
     gl_FragDepth = sceneSphereDepth(front, uProjection);
     float speck = 1.0 - smoothstep(1.0, 2.5, pixels);
     // A bead of a pixel or less is all speck light below: its trace would be thrown away.
     vec4 shaded = speck < 1.0 ? shadeBubble(rayOrigin, ray, vSphere, pixels, soft, front) : vec4(0.0);
     if (uDiag == 5) shaded = vec4(vec3(coverage), 1.0);
     float centreness = clamp(dot(-ray, normalize(front - vSphere.xyz)), 0.0, 1.0);
-    vec3 behind = texture(uBackground, gl_FragCoord.xy / uTargetSize).rgb;
+    vec3 behind = texture(uBackground, fragUv(uTargetSize)).rgb;
     // A bead under a few pixels: a slightly dark core (it bends the darker water below into view) and, on some, a
     // sparkle. Every one adding the same glow turned dense streams into a uniform haze (mocks: glitter, not fog).
     // Material membership follows stable identity, never the breathing radius.
@@ -1161,7 +1163,7 @@ flat in vec4 vInfo;
 flat in vec3 vAlphas;
 flat in vec3 vLensCircles;
 void main() {
-    vec2 ndc = gl_FragCoord.xy / uFrameSize * 2.0 - 1.0 - uLensShift;
+    vec2 ndc = uvToNdc(fragUv(uFrameSize)) - uLensShift;
     vec3 ray = framedRayDirection(ndc, uTan);
     vec3 rayOrigin = framedRayOrigin(ndc, uTan);
     vec4 bound = vec4(vBound.xyz - rayOrigin, vBound.w);
@@ -1186,7 +1188,7 @@ void main() {
     vec3 point = ray * t;
     float pixels = vBound.w / (uPixelSize * framedPixelDepth(max(-point.z, 0.1)));
     vec4 clipC = uProjection * vec4(vBound.xyz, 1.0);
-    vec2 centrePx = (clipC.xy / clipC.w * 0.5 + 0.5) * uFrameSize;
+    vec2 centrePx = ndcToUv(clipC.xy / clipC.w) * uFrameSize;
     // The union surface carries the trace: a sphere tangent at this point along the union's own normal, its radius
     // that of the nearest member (curvature continues smoothly through the neck).
     float r = s[0].w;
@@ -1881,7 +1883,8 @@ void main() {
 }
 """
 TRAIL_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(location=2) out vec4 Emission;\n"
-                  + SCENE3D_SPHERES_GLSL + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL + COMMON + """
+                  + SCENE3D_SPHERES_GLSL + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL + COMMON
+                  + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 uniform sampler2D uBackground;
 uniform vec2 uTargetSize;
 uniform float uTrailTime;
@@ -1948,7 +1951,7 @@ void main() {
     float junction = exp(-pow((vUnder - 0.9) / 0.45, 2.0)) * body * (1.0 - 0.5 * abs(x));
     vec2 shift = acrossScreen * x * sqrt(max(1.0 - x * x, 0.0)) * min(vWidthPx * 0.18, 7.0) * strength * body * below;
     if (!(abs(shift.x) + abs(shift.y) < 1e4)) shift = vec2(0.0);
-    vec3 bent = texture(uBackground, (gl_FragCoord.xy + shift) / uTargetSize).rgb;
+    vec3 bent = texture(uBackground, (fragPixel(uTargetSize) + shift) / uTargetSize).rgb;
     vec3 light = (mix(uSkyTint, uShaftColour, 0.5) * 1.4 + uLightColour * 0.2) * max(uLightStrength, 0.3);
     // Thin water's colour: cyan in the body, a violet cast toward its walls (the goals' iridescent edges).
     vec3 tint = mix(vec3(0.4, 0.82, 1.0), vec3(0.72, 0.55, 1.0), smoothstep(0.55, 1.0, abs(x)));

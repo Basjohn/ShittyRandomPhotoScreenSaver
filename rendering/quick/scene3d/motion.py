@@ -26,6 +26,7 @@ import ctypes
 
 from OpenGL import GL as gl
 
+from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
 from rendering.gl_programs.scene3d import Scene3DBlockLayout
 
 from .compute import COMPUTE_BLOCK_BINDING, DispatchBlocks, bound_image, dispatch
@@ -113,9 +114,9 @@ uint mixBits(uint value) {{
     value ^= value >> 16;
     return value;
 }}
-
+{SRPSS_CONVENTIONS_FRAGMENT_GLSL}
 void main() {{
-    ivec2 pixel = ivec2(gl_FragCoord.xy);
+    ivec2 pixel = fragTexel(uSize);
     vec4 centre = texelFetch(uScene, pixel, 0);
     // The longest motion in this pixel's 3 x 3 tile neighbourhood, rows then columns, first longest wins.
     ivec2 tileCount = textureSize(uTiles, 0);

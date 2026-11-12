@@ -73,6 +73,7 @@ from typing import Iterator
 
 from OpenGL import GL as gl
 
+from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
 from rendering.quick import gl_query
 
 from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame, item_pixel_rect, scene_output_frame
@@ -176,8 +177,9 @@ _OIT_RESOLVE_FRAGMENT = """#version 460 core
 out vec4 FragColor;
 uniform sampler2D uAccum;
 uniform sampler2D uReveal;
+""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 void main() {
-    ivec2 texel = ivec2(gl_FragCoord.xy);
+    ivec2 texel = fragTexel(textureSize(uAccum, 0));   // drawn over the scene, the accumulation's size
     float coverage = 1.0 - texelFetch(uReveal, texel, 0).r;
     if (coverage <= 1.0 / 1024.0) discard;
     vec4 accum = texelFetch(uAccum, texel, 0);
@@ -188,9 +190,10 @@ _OIT_RESOLVE_SAMPLES_FRAGMENT = """#version 460 core
 out vec4 FragColor;
 uniform sampler2DMS uAccum;
 uniform sampler2DMS uReveal;
+""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 void main() {
     // gl_SampleID runs this once per sample, so each sample composites its own layer.
-    ivec2 texel = ivec2(gl_FragCoord.xy);
+    ivec2 texel = fragTexel(textureSize(uAccum));
     float coverage = 1.0 - texelFetch(uReveal, texel, gl_SampleID).r;
     if (coverage <= 1.0 / 1024.0) discard;
     vec4 accum = texelFetch(uAccum, texel, gl_SampleID);
@@ -300,10 +303,11 @@ layout(location = 1) out vec4 Depth;
 uniform sampler2D uColour;
 uniform sampler2D uDepth;
 uniform int uHasDepth;
+""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 void main() {
-    ivec2 texel = ivec2(gl_FragCoord.xy);
+    ivec2 texel = fragTexel(textureSize(uColour, 0));   // the capture is the scene's size
     Colour = texelFetch(uColour, texel, 0);
-    Depth = vec4(uHasDepth == 1 ? texelFetch(uDepth, texel, 0).r : 1.0);
+    Depth = vec4(uHasDepth == 1 ? viewDepthFromDepthTexture(texelFetch(uDepth, texel, 0).r) : 1.0);
 }
 """
 _BACKGROUND_SAMPLES_FRAGMENT = """#version 460 core
@@ -313,13 +317,14 @@ uniform sampler2DMS uColour;
 uniform sampler2DMS uDepth;
 uniform int uSamples;
 uniform int uHasDepth;
+""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 void main() {
-    ivec2 texel = ivec2(gl_FragCoord.xy);
+    ivec2 texel = fragTexel(textureSize(uColour));
     vec4 sum = vec4(0.0);
     float nearest = 1.0;
     for (int i = 0; i < uSamples; ++i) {
         sum += texelFetch(uColour, texel, i);
-        if (uHasDepth == 1) nearest = min(nearest, texelFetch(uDepth, texel, i).r);
+        if (uHasDepth == 1) nearest = min(nearest, viewDepthFromDepthTexture(texelFetch(uDepth, texel, i).r));
     }
     Colour = sum / float(uSamples);
     Depth = vec4(nearest);
@@ -329,18 +334,19 @@ BACKGROUND_PROGRAMS = (("scene_background", FULLSCREEN_VERTEX_SOURCE, _BACKGROUN
 BACKGROUND_SAMPLES_PROGRAMS = (("scene_background_samples", FULLSCREEN_VERTEX_SOURCE, _BACKGROUND_SAMPLES_FRAGMENT),)
 
 # The whole allocation, resolved for the post effects (outside the rect it is cleared black).
-_RESOLVE_FRAGMENT = "#version 460 core\nout vec4 FragColor;\n" + _RESOLVE_GLSL + """
+_RESOLVE_FRAGMENT = "#version 460 core\nout vec4 FragColor;\n" + _RESOLVE_GLSL + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 void main() {
-    FragColor = sceneResolved(ivec2(gl_FragCoord.xy));
+    FragColor = sceneResolved(fragTexel(textureSize(uSceneSamples)));
 }
 """
 
 # The same, with the screen motion averaged into the second output.
 _RESOLVE_MOTION_FRAGMENT = ("#version 460 core\nlayout(location = 0) out vec4 FragColor;\n"
-                            "layout(location = 1) out vec4 Motion;\n" + _RESOLVE_GLSL + """
+                            "layout(location = 1) out vec4 Motion;\n" + _RESOLVE_GLSL
+                            + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 uniform sampler2DMS uMotionSamples;
 void main() {
-    ivec2 texel = ivec2(gl_FragCoord.xy);
+    ivec2 texel = fragTexel(textureSize(uSceneSamples));
     FragColor = sceneResolved(texel);
     vec2 sum = vec2(0.0);
     for (int i = 0; i < uSamples; ++i) sum += texelFetch(uMotionSamples, texel, i).xy;
@@ -366,7 +372,8 @@ def scene_target_programs(samples: int, bloom: bool, motion: bool,
     for entry in _end_programs(multisampled, bloom, motion, overlay, shafts):
         if hdr and entry[0].startswith(("scene_overlay_bloom", "scene_overlay_shafts")):
             entry = (entry[0] + "_hdr", *entry[1:])
-        if rotation and entry[2] in _ORIENTED_COMPOSITES:
+        # A (key, compute source) entry (the motion tile max) has no fragment to orient.
+        if rotation and len(entry) == 3 and entry[2] in _ORIENTED_COMPOSITES:
             entry = (entry[0] + "_oriented", entry[1], _ORIENTED_COMPOSITES[entry[2]])
         programs.append(entry)
     return tuple(programs)

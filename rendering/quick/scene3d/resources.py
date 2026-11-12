@@ -13,7 +13,7 @@ from OpenGL import GL as gl
 from core.logging.logger import get_logger
 from rendering.gl_programs.scene3d import SCENE3D_GLSL
 from rendering.quick import gl_query as _query
-from rendering.quick.render.gl_resources import compile_compute_program, compile_program
+from rendering.quick.render.gl_resources import compile_compute_program, compile_program, delete_program
 from .frame import ITEM_QUAD_VERTEX_SOURCE, SceneFrame
 
 logger = get_logger(__name__)
@@ -378,7 +378,7 @@ class MeshResources:
                 errors.append(f"mesh {key}: {exc}")
         for key, program in tuple(self._programs.items()):
             try:
-                gl.glDeleteProgram(program)
+                delete_program(program)
             except Exception as exc:
                 errors.append(f"program {key}: {exc}")
             else:

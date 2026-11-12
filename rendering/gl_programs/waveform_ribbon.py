@@ -1,4 +1,5 @@
 """Waveform infinite wet-floor material; no scene lifetime or simulation."""
+from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
 from rendering.gl_programs.mist import MIST_GLSL
 from rendering.gl_programs.reflection import PLANAR_REFLECTION_GLSL
 from rendering.gl_programs.ribbon import FLOOR_GIVE_GLSL
@@ -86,7 +87,7 @@ uniform vec3 uForward;
 uniform vec2 uFloorGiveLook; // yielding floor: reflection reach (world), relief shading per unit tilt
 layout(location=0) out vec4 FragColor;
 layout(location=1) out vec4 Emission;
-""" + WORLD_FIELD_GLSL + MIST_GLSL + PLANAR_REFLECTION_GLSL + """
+""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + WORLD_FIELD_GLSL + MIST_GLSL + PLANAR_REFLECTION_GLSL + """
 const float HEIGHT_SLOPE_RMS=""" + repr(HEIGHT_SLOPE_RMS) + """;
 // World-space slope of one height sample set at two incommensurate orientations (no visible tile lattice).
 vec2 slopeAt(vec2 xz, float tile, float bias) {
@@ -150,15 +151,16 @@ vec3 columnReflection(vec2 screenUv, vec2 offset, float halfLength, float across
 // planar reflection is read where the image of what that ray reaches (uFloorGiveLook.x along it) lies on screen. On
 // the undented plane this is exactly the pixel itself, so the dent bends the reflected column; it never shifts it.
 // Perspective only (the sole projection): the view ray runs from the eye.
-vec2 floorGiveReflection(vec3 world, vec3 normal) {
+vec2 floorGiveReflection(vec3 world, vec3 normal, vec2 screenUv) {
     vec3 view=normalize(world-uEye);
     vec3 target=world+reflect(view,normal)*uFloorGiveLook.x;
     target.y=-target.y;
     vec4 clip=uMvp*vec4(target,1.0);
     if(clip.w<=1e-4) return vec2(0.0);
-    return clamp(clip.xy/clip.w*0.5+0.5-gl_FragCoord.xy/uViewport,vec2(-0.25),vec2(0.25));
+    return clamp(ndcToUv(clip.xy/clip.w)-screenUv,vec2(-0.25),vec2(0.25));
 }
 void main() {
+    vec2 screenUv=fragUv(uViewport);
     vec3 vWorldPos;float groundDepth;
     if(!floorWorldHit(vWorldPos,groundDepth))discard;
     gl_FragDepth=groundDepth;
@@ -186,14 +188,14 @@ void main() {
     float rise=dot(vec3(broadSlope.x,0,broadSlope.y),groundForward)*uFloor.x/HEIGHT_SLOPE_RMS;
     vec3 specular;
     if(uSpecMode==2) {
-        specular=texture(uSpecular,gl_FragCoord.xy/uViewport).rgb;
+        specular=texture(uSpecular,screenUv).rgb;
     } else {
     vec2 broad=broadSlope*uFloorTone.y;
     vec2 micro=slopeAt(vWorldPos.xz,uFloor.y,0.0)*uFloorTone.z;
     vec2 axes=vec2(dot(vec3(broad.x,0,broad.y),groundRight),dot(vec3(broad.x,0,broad.y),groundForward));
     vec2 fine=vec2(dot(vec3(micro.x,0,micro.y),groundRight),dot(vec3(micro.x,0,micro.y),groundForward));
     vec2 offset=axes*uRipple.x+fine*vec2(uRipple.y,uRipple.z);
-    if(uFloorGive.y>0.0) offset+=floorGiveReflection(vWorldPos,giveNormal);
+    if(uFloorGive.y>0.0) offset+=floorGiveReflection(vWorldPos,giveNormal,screenUv);
     float roughness=mix(uStreak.y,uStreak.z,clamp(surfaceRoughness+length(broad)*uStreak.w,0.0,1.0));
     // Optical streak length is fixed in world units. A fixed UV length grew with
     // the edge-resize aperture and washed the same physical reflection away.
@@ -201,7 +203,7 @@ void main() {
     vec4 direction=uMvp*vec4(groundForward,0.0);
     float projected=abs(0.5*(direction.y*clip.w-clip.y*direction.w)/(clip.w*clip.w));
     float streak=uStreak.x*uReflectionLook.x*projected;
-    vec3 reflected=columnReflection(gl_FragCoord.xy/uViewport,offset,streak*roughness,
+    vec3 reflected=columnReflection(screenUv,offset,streak*roughness,
                                     exp2(mix(uReflectionLook.y,uReflectionLook.z,roughness)));
     vec3 view=normalize(vWorldPos-uEye);
     float cosine=clamp(abs(uFloorGive.y>0.0?dot(view,giveNormal):view.y),0.0,1.0);

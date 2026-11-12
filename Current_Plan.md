@@ -338,6 +338,18 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   strings in eight modules; the population count and scatter sources and the composed fog medium program are
   never checked), vertex and fragment included, compiles each through `qsb` and ratchets the failures down, mode
   by mode in N5's order.
+  - Census, 12 Nov (`tools/vulkan_shader_readiness.py`, evidence `native_core/n1_3_readiness/20261112_census`):
+    218 distinct sources (132 fragment, 63 vertex, 22 compute, 1 geometry; files, module-level, program classes and
+    runtime compositions), 21 bake for every target (16 compute, the 5 Quick material files), 197 on the ratchet in
+    `tests/test_vulkan_shader_readiness.py` (substrate 30, Waveform Ribbon 20, Extruded Bubble 24, Neon Lake 9,
+    Extruded Spectrum 2, Sphere 3, 2D modes 13, transitions 89, Quick hosts 7). glslang stops at the first error:
+    first causes are in/out without a location 122, loose uniforms 57, a block or sampler without a binding 17,
+    OpenGL-only built-ins 1 (`gl_VertexID`). Causes held across all sources: in/out without a location 185, loose
+    uniforms 155, missing bindings 128, OpenGL-only built-ins 33 (`gl_VertexID`/`gl_InstanceID`, the probe's geometry
+    stage), `gl_FragCoord` conventions 45, binding collisions 0 declared (samplers get units by `glUniform1i`, so
+    collisions only show once bindings are declared). The composed compute programs N1.2 never saw fail: the
+    population count/scatter (the hooks' block has no binding), the capillary propagation seed and the fog medium
+    (their hooks' loose uniforms).
 - [ ] N1.4 Shaders stop assuming OpenGL's conventions (N0.3's include): one helper for `gl_FragCoord` used as a
   texel or uv; projection matrices (`framed_camera.py` perspective, depth -1..1) corrected at upload; the winding
   rule (Sphere picks `glFrontFace` from the matrix sign) tested once per backend.

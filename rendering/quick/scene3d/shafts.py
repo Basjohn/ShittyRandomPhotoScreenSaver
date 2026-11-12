@@ -21,6 +21,8 @@ from dataclasses import dataclass
 
 from OpenGL import GL as gl
 
+from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
+
 from .post import FULLSCREEN_VERTEX_SOURCE
 
 SHAFT_TAPS = 16
@@ -51,9 +53,10 @@ _DOWNSAMPLE_SAMPLES_FRAGMENT = """#version 460 core
 out vec4 FragColor;
 uniform sampler2DMS uSource;
 uniform int uSamples;
+""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 void main() {
     // The four full-size texels under this half-size texel, every sample of each.
-    ivec2 base = ivec2(gl_FragCoord.xy) * 2;
+    ivec2 base = fragTexel(textureSize(uSource) / 2) * 2;
     float sum = 0.0;
     for (int y = 0; y < 2; ++y)
         for (int x = 0; x < 2; ++x)
