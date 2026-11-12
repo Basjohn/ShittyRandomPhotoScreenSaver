@@ -1019,6 +1019,12 @@ arrangement change, a display added or removed, the owning display lost, Setting
   - [ ] Root cause with numbers: the frame trace's per-frame times on both displays, what the render threads do
     during the preparation, why the landing comes 5 s after the bound; reproduced on two hidden hosts at the real
     sizes with each step timed.
+    - Found 12 Nov: ~6.6 of the 7.1 s were `d1_run.py` itself: each grab's PNG encode ran on the saver's GUI
+      thread (2.0-2.3 s per 4K frame, 0.7 s at 2560), and no window renders while the GUI thread is busy (both
+      displays' traces stop for exactly those spans), so the 1.5 s bound, the fade and the hop were sampled
+      seconds late. The product's own move on two hidden hosts at the real sizes: prepared in 1.34 s (31 units),
+      landed ~1.85 s after the press; two units over a 90 Hz frame on the 4K target (scene target 23.5 ms, near
+      layer 12.6 ms) and a 33 ms first visible frame. Evidence `display/move_timing/20261112_root_cause/`.
   - [ ] Fix at the owners: preparation in small units over already-rendered frames, no render-thread stall over a
     frame's budget, the fade starting promptly, landing within the bound plus the fade; before/after on the hidden
     hosts; the visible proof left to the lead with the exact `d1_run.py` command.
