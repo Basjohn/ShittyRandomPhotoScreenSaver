@@ -41,7 +41,11 @@ call changed, so the protected QSG/clip optimisations (`ce07b991`, `07486d83`, `
 (`938aee6f`: clip one device pixel inside the frame, card unsnapped) removed the blend but left a dark seam of card
 surface between frame and content; it was not accepted (a seam is a defect). Comparison of that inset, the snapped
 card, and a composited corner-coverage variant (1x and 4x, white lines and Spline Curve's real frame, Normal and Glass,
-100/125/150 %, with counts): `.artifacts/evidence/visualizers/20261112_1c4_variants/`.
+100/125/150 %, with counts) was reviewed by the lead before the merge and then lost when the worktree was removed
+without copying its evidence (the handover tool's `--retire` now prevents that). The counts it carried: bright
+frame-band pixels A 0, B 20-36 (rounded corners only) with white lines and 8-18 on Spline Curve's frame, C 48-60 and
+4-14; dark seam A 752-2,040, B 0-1, C 0-8. The standing proof is `tests/test_visualizer_card_clip_contract.py`
+(54 cases, negative controls an unsnapped card and the one-pixel inset).
 
 ## Lesson
 
