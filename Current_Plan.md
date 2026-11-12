@@ -239,15 +239,15 @@ What it left open:
      low float32 in the mote record's two unused floats, and splits `travel` per step; the shader uses an
      `fma` two-product marked `precise`), about 48 significant bits against the 24 the float32 result can hold.
      It can be built now in the existing OpenGL renderer, behind the existing reference tests, before any C++.
-   - [ ] D4.1 A NumPy float32 model of the pair arithmetic in the shader's exact operation order (`math.fma`)
-     against `MaterialDriftReference`, on runs starting at one hour's and eight hours' `travel` and `phase`: no
-     GPU, a test file; this proves the formulation before any shader changes.
-   - [ ] D4.2 The worker's drift log publishes the chain decision stream and the three reduced angles; mote
-     geometry carries `carry / span` as a float pair; the step record carries `travel` as a pair; codec and slot
-     sizing follow (`core/visualizer_engine/frame_capacity.py`); in process and worker paths both.
-   - [ ] D4.3 Both compute programs rewritten without `double`; chain `moved` equals the reference's as integers
-     on every tick of a long recorded drive (not a tolerance); displacement, shift, phase offset and progress
-     within the existing 1e-4 at the long horizons; today's `double` shader run on the same horizons beside it.
+   - D4.1 to D4.3 merged 12 Nov (evidence `.artifacts/evidence/native_core/20261112_d4/`): both drift programs have
+     no 64-bit type; chain knot decisions equal the reference as integers on every tick; everything else within
+     1e-4 at one and eight hours (worst 3.6e-6), where today's `double` programs, run on the same logs, recycled
+     4,431 to 31,524 motes on the wrong tick (their float32 spans). Beyond the design: four reduced angles (the
+     swish term grows too), the chain phase offset is a third logical-side decision (12 bytes per chain per step),
+     the seed and the cloud phase offset are pairs. The logical side's added work is 15-17 us a tick. In flight:
+     D4.4 to D4.8, the same agent.
+   - [ ] The stream ring grew from about 0.4 MB to 3.1 MB of mapped memory (sized for 240 chains times the full
+     history): size it to the drawable chain count, or accept it with the reason, at D4.6.
    - [ ] D4.4 The largest displacement difference in pixels at 4K for the nearest bead the camera admits, stated.
    - [ ] D4.5 Both programs pass `qsb` (loose uniforms into a block) and leave `LEGACY_GL_ONLY`; the
      shader-readiness check discovers compute sources instead of a fixed module list; the phase-boundary audit's
@@ -964,8 +964,6 @@ dropped from the group and the cap. Its Spectrum work merges as it stands ("stil
 now"); flaws the lead sees are noted in 1B.10 for an Opus Medium agent "at a point where we do not have more
 significant work". Opus and Sonnet agents resume as the lead sees fit.
 
-- [ ] Native core D4 (`worktree-agent-a2e34d3d2dc0079ee`, stopped by the usage limit 12 Nov; its uncommitted
-  work saved as a "WIP (handover)" commit; journal in its worktree): resumed by the same agent (same session).
 
 ### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely (operator, 11 Nov; step b of round 3, 1C.10)
 
