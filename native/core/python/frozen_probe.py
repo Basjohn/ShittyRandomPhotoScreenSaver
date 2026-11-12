@@ -5,8 +5,8 @@ imports the module yet).
 Frozen, it loads the module the way the product will: ``rendering.native.load()`` from the package location, where the
 probe build placed it, with every check the importer makes (the MSVC runtime origin check against the runtime DLLs the
 frozen build actually carries, read from the module file before the import; exact Qt; ABI). On top it records where Qt and the module were loaded from (inside
-the frozen build's own folder, one copy each), and hands an unshown QQuickWindow to the host adapter's entry. No
-window is ever shown; no GPU device is opened.
+the frozen build's own folder, one copy each), and hands an unshown QQuickWindow to the host adapter's entry (attached
+and closed again). No window is ever shown; no GPU device is opened.
 
     SRPSS_NativeCoreProbe.exe --out <report.json>
 
@@ -56,9 +56,10 @@ def probe() -> dict:
     app = QGuiApplication.instance() or QGuiApplication([sys.argv[0]])
     window = QQuickWindow()                            # never shown
     try:
-        core.attach_host(window)
+        host = core.attach_host(window)                # the frame driver connects; no frame is ever rendered
+        host.close()
         checks["host entry"] = "ok"
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, RuntimeError) as exc:
         checks["host entry"] = f"FAILED: {exc}"
     finally:
         window.deleteLater()

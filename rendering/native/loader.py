@@ -12,13 +12,15 @@ A missing or wrong module fails here, in one place, with one reason (``NativeCor
 
 Where it is loaded from: by default the package itself (``rendering/native/_srpss_native_core.pyd``, where the product
 build places it and where a frozen build carries it); tools and tests name a folder instead (``module_dir``, for
-example ``release/native_module`` after a GitHub build). Nothing in the product loads it yet (N2.1).
+example ``release/native_module`` after a GitHub build). Nothing in the product loads it yet (N2.7 adds the backend
+owner); the host adapter's Python face is ``rendering.native.hosts`` (N2.2).
 """
 from __future__ import annotations
 
 import importlib
 import importlib.machinery
 import importlib.util
+import json
 import os
 import sys
 from dataclasses import dataclass, field
@@ -27,11 +29,12 @@ from types import ModuleType
 from typing import Any, Mapping
 
 from rendering.native import runtime_check
+from rendering.native.hosts import HiddenHost, WindowHost
 
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 1
+EXPECTED_ABI = 2
 HOST_KINDS = ("window", "hidden")
 
 
@@ -66,17 +69,47 @@ class NativeCore:
     def path(self) -> Path:
         return Path(str(self.info["module_path"]))
 
-    def attach_host(self, window: Any, kind: str = "window") -> None:
-        """The host adapter's entry (D5.1): a Qt Quick host hands over its window. A no-op until N2.2 builds the
-        frame driver behind it; refuses anything that is not a ``QQuickWindow``."""
+    def attach_host(self, window: Any, kind: str = "window") -> WindowHost:
+        """The host adapter's entry for a Qt Quick window the product shows (D5.1): the core's frame driver is connected
+        to its ``beforeRendering`` in C++ (D5.2). On Vulkan call it before the window is first shown, with the process
+        instance created (:meth:`vulkan_instance`). Refuses anything that is not a live ``QQuickWindow``; a hidden host
+        owns its window (:meth:`hidden_host`)."""
         from PySide6.QtQuick import QQuickWindow
         import shiboken6
 
         if kind not in HOST_KINDS:
             raise ValueError(f"unknown host kind {kind!r} (the hosts are {', '.join(HOST_KINDS)})")
+        if kind != "window":
+            raise ValueError("a hidden host owns its window: NativeCore.hidden_host(width, height)")
         if not isinstance(window, QQuickWindow) or not shiboken6.isValid(window):
             raise TypeError(f"a host hands over a live QQuickWindow, not {type(window).__name__}")
-        self.module.host_attach(kind, shiboken6.getCppPointer(window)[0])
+        return WindowHost(self.module, self.module.host_attach(kind, shiboken6.getCppPointer(window)[0]))
+
+    def hidden_host(self, width: int, height: int, *, threaded: bool = True) -> HiddenHost:
+        """A hidden host: a Qt Quick window the core drives with a render control on its own render thread
+        (``threaded``; False renders on the calling thread, the thread probe's negative control). On Vulkan it runs on
+        a device of the module's (create the process instance first)."""
+        return HiddenHost(self.module, self.module.host_attach("hidden", 0, int(width), int(height), bool(threaded)))
+
+    def vulkan_instance(self, *, validation: bool = False) -> dict:
+        """The process's Vulkan instance (D6 point 1), before any Vulkan host. ``validation`` (harness only) enables the
+        Khronos layer and synchronisation validation when installed; the result says whether it loaded."""
+        return json.loads(self.module.vulkan_instance_create(bool(validation)))
+
+    def destroy_vulkan_instance(self) -> dict:
+        """After every Vulkan host and window: the teardown steps and the validation messages per phase."""
+        return json.loads(self.module.vulkan_instance_destroy())
+
+    def set_vulkan_phase(self, phase: str) -> None:
+        """The phase the validation messages that follow are counted under."""
+        self.module.vulkan_set_phase(str(phase))
+
+    def process_counters(self) -> dict:
+        """Handles, GDI and USER objects, threads, private bytes and working set (lifecycle proofs)."""
+        return json.loads(self.module.process_counters())
+
+    def live_hosts(self) -> int:
+        return int(self.module.live_hosts())
 
 
 def _bind_pyside6_qt() -> str:

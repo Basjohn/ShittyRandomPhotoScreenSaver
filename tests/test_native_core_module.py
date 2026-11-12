@@ -1,6 +1,6 @@
-"""The built native core, loaded through rendering.native (N2.1). These tests need the compiled module, which only
+"""The built native core, loaded through rendering.native (N2.1, N2.2). These tests need the compiled module, which only
 GitHub builds: where ``release/native_module/_srpss_native_core.pyd`` is not in this checkout they skip and say so.
-Hidden only: the host adapter's window is never shown."""
+Hidden only: no window is ever shown (the hidden host renders through a render control)."""
 from __future__ import annotations
 
 import json
@@ -54,16 +54,27 @@ def test_the_built_module_imports_no_stl_dll_and_a_runtime_new_enough(core):
     assert {"qt6core.dll", "qt6quick.dll"} <= set(imports)        # the host entry really binds Qt Quick
 
 
-def test_the_host_entry_takes_a_quick_window_and_refuses_anything_else(core, qt_app):
+def test_the_window_host_takes_a_quick_window_and_refuses_anything_else(core, qt_app):
     from PySide6.QtCore import QObject
     from PySide6.QtQuick import QQuickWindow
     import shiboken6
 
-    window = QQuickWindow()                                       # never shown
+    window = QQuickWindow()                                       # never shown: no frame, no device
     plain = QObject()
     try:
-        for kind in native.HOST_KINDS:
-            assert core.attach_host(window, kind) is None
+        host = core.attach_host(window)
+        assert isinstance(host, native.WindowHost)
+        state = host.state()
+        assert state["kind"] == "window" and state["attached"] and state["driver"]["edges"] == 0
+        host.detach()
+        assert not host.state()["attached"] and host.state()["previous_driver"]["detach_requested"]
+        host.attach()
+        assert host.state()["attachments"] == 2
+        host.close()
+        with pytest.raises(RuntimeError, match="closed"):
+            host.state()
+        with pytest.raises(ValueError):
+            core.attach_host(window, "hidden")
         with pytest.raises(TypeError):
             core.attach_host(plain)
         with pytest.raises(TypeError):
@@ -72,9 +83,32 @@ def test_the_host_entry_takes_a_quick_window_and_refuses_anything_else(core, qt_
             core.module.host_attach("swapchain", shiboken6.getCppPointer(window)[0])
         with pytest.raises(ValueError):
             core.module.host_attach("window", 0)
+        with pytest.raises(ValueError):
+            core.module.host_attach("hidden", shiboken6.getCppPointer(window)[0], 64, 64)
+        assert core.live_hosts() == 0
     finally:
         plain.deleteLater()
         window.deleteLater()
+
+
+def test_the_hidden_host_round_passes_on_opengl(tmp_path):
+    """The harness's hidden round in its own process (Qt Quick's graphics API is process-wide): the frame edge on the
+    render thread with no Python thread state, the probe against the conventions with its negative controls, detach,
+    re-attach, close, and the GUI-thread negative control of the thread probe."""
+    import subprocess
+
+    record_path = tmp_path / "child.json"
+    proc = subprocess.run(
+        [sys.executable, str(ROOT / "native" / "core" / "python" / "host_check.py"), "--child", "--api", "opengl",
+         "--rounds", "hidden", "--repo", str(ROOT), "--module-dir", str(MODULE_DIR), "--out-dir", str(tmp_path),
+         "--child-json", str(record_path)],
+        capture_output=True, text=True, timeout=600, cwd=str(ROOT))
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    assert not record.get("error"), record.get("error")
+    hidden = record["hidden"]
+    assert hidden["pass"], {k: v for k, v in hidden.get("checks", {}).items() if not v} or hidden.get("error")
+    assert record["live_hosts_at_end"] == 0
 
 
 def test_the_import_check_passes_the_built_module(core, tmp_path, monkeypatch):

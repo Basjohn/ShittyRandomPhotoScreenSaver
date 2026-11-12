@@ -42,9 +42,13 @@ endif()
 
 # Shaders: every file in shaders/ (GLSL 440: .vert, .frag, .comp) is baked by PySide6's qsb for every shipped
 # backend (SPIR-V, GLSL 430, HLSL 5.0, MSL 1.2; N1.7) into generated/<file>.qsb and embedded in the module, so a
-# frozen build needs no data files. The workflow's staging requires one .qsb per shader source.
+# frozen build needs no data files. The workflow's staging requires one .qsb per shader source. Before the bake the
+# conventions include (shaders/srpss_conventions.glsl, the production text; N0.3 rule 3) is spliced in at the line
+# "//@srpss_conventions" (cmake/compose_shader.cmake): qsb has no include path.
 set(_gen "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${_gen}")
+file(MAKE_DIRECTORY "${_gen}/composed")
+set(_conventions "${CMAKE_CURRENT_SOURCE_DIR}/shaders/srpss_conventions.glsl")
 file(GLOB _shader_sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.vert"
     "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.frag"
@@ -54,14 +58,18 @@ set(_shader_includes "#pragma once\n")
 foreach(_src ${_shader_sources})
     get_filename_component(_file "${_src}" NAME)
     string(MAKE_C_IDENTIFIER "${_file}_qsb" _symbol)
+    set(_composed "${_gen}/composed/${_file}")
     set(_qsb "${_gen}/${_file}.qsb")
     set(_hdr "${_gen}/${_symbol}.h")
     add_custom_command(
         OUTPUT "${_qsb}" "${_hdr}"
-        COMMAND "${CORE_QSB}" --glsl 430 --hlsl 50 --msl 12 -o "${_qsb}" "${_src}"
+        COMMAND "${CMAKE_COMMAND}" -DINPUT=${_src} -DOUTPUT=${_composed} -DCONVENTIONS=${_conventions}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/compose_shader.cmake"
+        COMMAND "${CORE_QSB}" --glsl 430 --hlsl 50 --msl 12 -o "${_qsb}" "${_composed}"
         COMMAND "${CMAKE_COMMAND}" -DINPUT=${_qsb} -DOUTPUT=${_hdr} -DSYMBOL=${_symbol}
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_file.cmake"
-        DEPENDS "${_src}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_file.cmake"
+        DEPENDS "${_src}" "${_conventions}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/compose_shader.cmake"
+                "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_file.cmake"
         COMMENT "qsb ${_file}"
         VERBATIM)
     list(APPEND _shader_headers "${_hdr}")
@@ -73,6 +81,13 @@ configure_file("${_gen}/core_shaders.h.in" "${_gen}/core_shaders.h" COPYONLY)
 set(_sources
     src/module.cpp
     src/host_adapter.cpp
+    src/frame_driver.cpp
+    src/probe_pass.cpp
+    src/targets.cpp
+    src/conventions.cpp
+    src/vulkan_context.cpp
+    src/thread_probe.cpp
+    src/process_counters.cpp
     ${_shader_headers})
 
 # Stable ABI (abi3) like PySide6 itself: one .pyd for every CPython >= 3.10.
