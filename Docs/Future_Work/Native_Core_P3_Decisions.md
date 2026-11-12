@@ -210,7 +210,7 @@ pipeline with QRhi as the glue. The list of services is closed; adding one takes
 |---|---|---|
 | GPU timer (per pass) | QRhi times the whole frame only | built with the substrate (D8 plus 2); opt-in, no objects when off |
 | Stream ring (persistent mapped) | QRhi stages and copies dynamic buffers | measured against QRhi dynamic buffers at the product's ring sizes; QRhi stays if the difference is under 0.05 ms |
-| Indirect and count draws | no indirect draw in 6.11 (*header*) | measured against "draw the maximum, cull in the vertex shader" on the population harness; gone if D11 moves to a Qt that has it |
+| Indirect and count draws | no indirect draw in 6.11 (*header*) | measured against "draw the maximum, cull in the vertex shader" on the population harness; gone if D11 moves to a Qt that has it. **Retired 12 Nov 2026:** the project is on Qt 6.12, whose QRhi has `QRhiCommandBuffer::drawIndirect`/`drawIndexedIndirect` (feature `QRhi::DrawIndirect`; several draws per call where `DrawIndirectMulti` is reported); the core uses QRhi's form, and "draw the maximum, cull in the vertex shader" remains only for a backend that does not report `DrawIndirect` |
 | Per-sample multisample reads | QRhi forbids sampling a resolved multisample texture | only if resolve-first fails a mode's look or cost; parity is single-sampled |
 | Formats (RG16F, RG32F, R11G11B10F) | not in QRhi's format list | only where widening to RGBA16F or RGBA32F measurably costs memory or time (N1.7 widens first) |
 | Async GPU jobs | QRhi records on one queue | D9 |
@@ -386,7 +386,7 @@ rest and has an OpenGL form (D5.3). The gate is what admits it into the product.
 | 4 | Mixed-resolution soft layers (P4, N4.f) | Display-size and 4K budgets for fog, bloom, reflection blur and glows; the base for smoke; lines, dots and rims stay at full resolution | Moderate | Halos at depth edges | Per mode: stills side by side reviewed by the lead and GPU time before and after; never whole-frame upscaling |
 | 5 | The backdrop every transition frame with continuous blur levels; true glass over the Visualizer (D7) | Visible: materials that follow a transition instead of stepping, and overlays that are glass over live content | Small to moderate | Cost at 4K | D7's budgets and the lead's review |
 | 6 | High-potential 3D primitives without a consumer (N4.c, N4.h, N4.k, N4.m, N6.1 to N6.3) | What scenes can look like: populations, shadows, many lights, merged shafts, a reactive surface, places, smoke | Moderate each | Building what nobody uses well | Each on its harness with measured cost, lazy creation and a showcase; none blocks the flip |
-| 7 | GPU-driven populations with count draws | Populations of 10^5 to 10^6 with GPU culling and no readback, for droplets, debris, sprites | Moderate | No indirect draw in QRhi 6.11 | The population harness at one million sprites against "draw the maximum, cull in the vertex shader"; the two existing transitions port on the simple route |
+| 7 | GPU-driven populations with count draws | Populations of 10^5 to 10^6 with GPU culling and no readback, for droplets, debris, sprites | Moderate (smaller since Qt 6.12: the indirect draw is QRhi's own, no raw service) | No indirect draw in QRhi 6.11 (resolved by Qt 6.12, 12 Nov) | The population harness at one million sprites against "draw the maximum, cull in the vertex shader"; the two existing transitions port on the simple route |
 | 8 | Persistent high-rate rings | Larger histories and denser strands and particles at one copy per frame | Small | Low | D5.3's measurement; not built if QRhi's dynamic buffers are within 0.05 ms |
 | 9 | HDR output | Emissive scenes on an HDR display | Moderate | Window format and tone mapping per backend | Not admitted; reconsider after the flip |
 | 10 | Per-pass temporal upscaling, descriptor indexing, mesh shaders, ray tracing | None today | High | High | Not admitted: low potential until a consumer exists (the operator's rule); D6 keeps the door open |
@@ -1094,6 +1094,9 @@ gates), and every proof names its negative control, a change that must make it f
   sample); the nearest-depth rule has no QRhi equivalent, so a multisampled `background()` is a look question, not
   a blocker, decided by the A/B in row 7.
 - Row 14, indirect draws: the dead-tail cull is a restructured pass; nothing new is added to D5.3's list.
+  *Superseded 12 Nov 2026 by the move to Qt 6.12:* the population's `glDrawArraysIndirect`
+  (`scene3d/population.py`) ports 1:1 to `QRhiCommandBuffer::drawIndirect`; the dead-tail cull stays only as the
+  path for a backend without `QRhi::DrawIndirect`.
 - Row 11, point sprites: a restructured draw (quads); no feature is missing.
 No row needs a service outside D5.3's six.
 

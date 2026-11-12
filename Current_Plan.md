@@ -286,11 +286,25 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 - [ ] N0.7 D9's proof, in the same harness: the job thread, its queue and the latch; the six measurements of D9
   ("How it is proved"), with system conditions recorded. The verdict (jobs for compute on this vendor, or
   uploads only) is written into D9.
-- [ ] N0.8 D11 decided 12 Nov: the core starts on PySide6/Qt 6.12 (QRhi gains `drawIndirect`/`drawIndexedIndirect`
-  and `ShaderDrawParameters`, retiring D5.3's indirect-draw row). Operator, 12 Nov: "just bump" (no checkpoint
-  ceremony). Bump `requirements.txt` and the venv to 6.12.0 as soon as nothing holds the venv's PySide6 DLLs (the
-  first try failed with WinError 5 while `tools/godzip_foundry.py` was open; the venv was restored to 6.11.2),
-  run the focused Qt Quick tests, push; N0.9's single Qt value follows.
+- N0.8 done 12 Nov: PySide6/Qt 6.12.0 (655b04bf; focused Qt Quick, shader and render set 372 of 373 green; the one
+  red was Qt's own sync resetting the array-buffer binding, which the handoff probe had attributed to our code:
+  the probe now measures around our adopting code and the background node's setup restores inherited bindings,
+  ccc19ef0). What 6.12 gives the plan:
+  - [ ] QRhi indirect draws (`QRhiCommandBuffer::drawIndirect`/`drawIndexedIndirect`, `QRhi::DrawIndirect`,
+    `DrawIndirectMulti`): D5.3's indirect-draw service is retired (decisions document); the population primitive's
+    port (N3/N4) uses QRhi's `drawIndirect` 1:1 for `scene3d/population.py`'s `glDrawArraysIndirect`, with "draw
+    the maximum, cull in the vertex shader" only for a backend that does not report `DrawIndirect`; D8 plus 7
+    (GPU-driven populations, 10^5 to 10^6) becomes a QRhi-only build. Proof at that port: both paths on the
+    population harness, same pixels, cost recorded.
+  - [ ] `QRhi::ShaderDrawParameters` (`gl_DrawID`, `gl_BaseInstance`, `gl_BaseVertex`): one pipeline and one
+    indirect call for the many small instanced batches (bars, specks, snow, sprite families) instead of a draw per
+    batch: decide per mode at its N5 port when the batch count is measured above a handful; record the backends
+    that report it (D3D11 is not stated).
+  - [ ] The Vulkan backend's `VK_EXT_device_fault`: D5's device-loss contract logs the fault detail once when the
+    device reports it (vendor fault codes and addresses), so a lost device on a user's machine is diagnosable.
+  - [ ] The rest of 6.12 (Qt Quick, windowing on Windows, Multimedia for SMP, PySide6 changes, behaviour changes):
+    researched into `Docs/Future_Work/Qt_6_12_Gains.md` (Sonnet, in flight); the lead places each "worth using"
+    item as a box at its plan item and each "watch" item as a check.
 
 **N1. Every shader portable, in the existing OpenGL renderer (no C++; can start now)**
 
