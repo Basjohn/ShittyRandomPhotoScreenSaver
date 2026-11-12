@@ -239,3 +239,58 @@ the first P3 ports. New 3D modes stay behind P3, as the Decision already says.
 Revisit this decision at Expanded Visualizer acceptance (with its full-display measurements) and whenever a trigger is
 recorded. If the operator prefers to front-load the port despite the cost, the order becomes: native Vulkan core
 (parity across all accepted modes first) -> Expanded Visualizer -> SMP -> new 3D modes.
+
+## Addendum, 12 Nov 2026: the operator's direction and what it supersedes here (milestone audit)
+
+The text above is kept as written. This addendum records what the operator said on 11 and 12 Nov 2026, which
+sentences above are superseded by it, and where the decisions now live
+(`Docs/Future_Work/Native_Core_P3_Decisions.md`, D5 to D11; the ordered work is `Current_Plan.md`, item 8b).
+
+**The operator, 11 and 12 Nov 2026:** "Vulkan is not the fallback backend, it needs to be the front strong stable
+face." "We are a custom OpenGL and Vulkan Pipeline. Vulkan goes through QRhi from your suggestions but it should
+still be Vulkan. If we rely on QT then we run into other issues no?" "We want the best native core with Vulkan
+support we can muster, no shortcuts only smart low limitation direction with high potential ceilings. Async
+compute would be very useful for things like GIL contention, Transitions and Visualizers firing at the same time
+or other calculations but ultimately I leave it to you to get us to Parity+ with an emphasis on the plus." "Don't
+strictly build primitives when they have a consumer, we like to open potential. High potential primitives should
+be built regardless, low potential only when a consumer."
+
+**What stands.** A native C++ core, never Python-driven Vulkan. QRhi as the default recording layer and as the
+route that gives the OpenGL fallback from one core; raw Vulkan per pass where a measurement asks; OpenGL
+selectable, Vulkan the default (operator, 8 Nov: "we keep OpenGL selectable since it's cheap but Vulkan the
+default"; "as long as it is a genuine significant improvement we still win"). One core for everything we draw,
+never OpenGL and Vulkan mixed in one window. The core built against PySide6's exact Qt. Mixed resolution for soft
+layers and never whole-frame upscaling. The port-readiness rules. The core owning the swapchain as an escalation
+taken only on a measurement.
+
+**Superseded on 12 Nov 2026 (the original sentences stay above; these replace them):**
+
+1. *"Such a pass is Vulkan-only: on OpenGL it is unavailable or takes its QRhi form"* (the 8 Nov paragraph on
+   QRhi's limits). Superseded by D5.3: a native route is a service with two forms, raw Vulkan and raw OpenGL,
+   tested against each other, so the fallback draws the same pixels and is never the lesser path. Only an opt-in
+   extra that changes nothing by default may exist on Vulkan alone. Reason: the operator wants a custom OpenGL
+   and Vulkan pipeline, and OpenGL 4.6 already has each capability QRhi lacks.
+2. *"Qt Quick on Vulkan owns the device, queue, swapchain, render pass and frames in flight"* (the 8 Nov paragraph
+   on why QRhi). Superseded for the device by D6: the native module creates the instance and one device per
+   window and hands them to Qt Quick, from the first Vulkan host. Qt still owns the swapchain, the frame loop and
+   its queue. Reason: a second queue for async work, and a device that does not change with Qt.
+3. *"Lower driver overhead, explicit sync, async compute: Not our bottleneck"* (the 5 Nov table) and trigger 3's
+   wording, which admits async compute only when "an admitted mode genuinely needs" it. Superseded by D9 and by
+   the operator's rule on high-potential work: async GPU jobs are built and proved on their own harness, first for
+   image uploads and transition preparation, so that a transition and a Visualizer in the same frame no longer
+   make it late. The table's reasoning about the GIL stays true and is repeated in D9: async work is GPU
+   scheduling and does not touch the GIL.
+4. *"The flip: when nothing raw-GL is left, the window flips to Vulkan (or D3D12) by Qt setting"* and step 6 of
+   the order inside P3. Kept, and no longer the first time Vulkan runs in a real window: D10 adds a rehearsal
+   path from the first port (a diagnostic switch, the lead only, Display 1 only, unported surfaces absent), both
+   backends proved at every port, and an explicit flip gate. Reason: "the front strong stable face" needs real
+   hours before it is the default.
+5. *The order inside P3* ("Waveform Ribbon and Extruded Bubble; the rest"). Refined in the plan: after Spectrum
+   the background family's base (the shared fullscreen pass, the presenter, the backdrop) is built for the
+   rehearsal; then two ordered tracks, modes (Waveform Ribbon and Extruded Bubble ahead of the modes with no
+   measured need) and the background family (transitions by what they share).
+
+**Decided for the first time on 12 Nov 2026** (not in this document before): the core's shape, with every surface
+composited as a scene-graph texture and the core independent of Qt Quick's frame (D5); the card-material backdrop
+from the core's own background layer (D7); what Parity+ means and the ranked plus (D8); the Qt version chosen
+once (D11); the long-term risks and what holds each.

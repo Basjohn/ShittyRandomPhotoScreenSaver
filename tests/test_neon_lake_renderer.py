@@ -127,12 +127,13 @@ def test_raised_terrain_lifts_a_low_eye_above_the_new_land():
 def test_the_camera_floor_is_evaluated_only_when_its_inputs_change(monkeypatch):
     """At rest every frame asks for the same eye: the floor (cells round the eye) is evaluated once, again only when
     the terrain record, Terrain Height, the reaction's lift or the pose changes, and the eye is the same either way."""
+    from core.settings import neon_lake_camera
     from rendering.gl_programs import neon_lake_basin_program as program
     parameters = dict(_snapshot(shockwave_grid_terrain_reaction_enabled=True).logical.mode_state.parameters)
     field = (0., 0., 1600., 900.)
     built = []
-    # The program imports the floor by name, so it is counted where the program calls it.
-    real = program.terrain_floor
+    real = neon_lake_camera.terrain_floor
+    # The basin program binds terrain_floor at import (per-frame imports hoisted, e16af05d): count it there.
     monkeypatch.setattr(program, "terrain_floor", lambda *a, **k: built.append(1) or real(*a, **k))
     program._EYE_MEMO[:] = [None, None, None]
     first = program.basin_view(parameters, field).eye

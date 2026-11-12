@@ -45,7 +45,7 @@ def run_solvers(log, every, solvers):
     from tools.labs.render_target import OffscreenRenderTarget
     target, resources = OffscreenRenderTarget(16, 16), MeshResources('drift solver test')
     reference, frames, moved = MaterialDriftReference(), 0, [0, 0]
-    results = {label: {'worst': {}, 'channel': {}, 'wraps': 0} for label in solvers}
+    results = {label: {'worst': {}, 'absolute': {}, 'channel': {}, 'wraps': 0} for label in solvers}
     try:
         for index, (families, steps, knots) in enumerate(log):
             if index % every or not families:
@@ -68,9 +68,12 @@ def run_solvers(log, every, solvers):
                     got = data[offsets[family.family]:offsets[family.family] + len(expected)]
                     scale = max(1.0, float(np.abs(expected[:, :3]).max(initial=0.)))
                     name = family.family
+                    channel = np.abs(got[:, 3] - expected[:, 3])
+                    # Motes a whole wrap away (recycled on another tick) are counted below, not measured here.
+                    absolute = float(np.abs(got[:, :3] - expected[:, :3])[channel <= .5].max(initial=0.))
+                    result['absolute'][name] = max(result['absolute'].get(name, 0.), absolute)
                     result['worst'][name] = max(result['worst'].get(name, 0.),
                                                 float(np.abs(got[:, :3] - expected[:, :3]).max(initial=0.)) / scale)
-                    channel = np.abs(got[:, 3] - expected[:, 3])
                     result['channel'][name] = max(result['channel'].get(name, 0.), float(channel.max(initial=0.)))
                     result['wraps'] += int((channel > .5).sum())
             frames += 1
@@ -125,6 +128,78 @@ def test_a_render_gap_beyond_the_published_history_restarts_cleanly(qt_app):
     finally:
         solver.release()
         resources.release_resources()
+        target.close()
+
+
+def test_a_frame_with_no_new_step_dispatches_and_uploads_nothing_and_the_ring_follows_the_chain_rows(
+        qt_app, monkeypatch):
+    from OpenGL import GL as gl
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as module
+    from tools.labs.render_target import OffscreenRenderTarget
+    from widgets.spotify_visualizer.extruded_bubble_drift_log import STEP_INDEX, unpack_steps
+    log = list(_log(replace(_controls('wander'), bead_chains=(1., 1.5)), 40))
+    grown = list(_log(replace(_controls('wander'), bead_chains=(3., 4.)), 40))
+    calls = []
+    for name in ('glDispatchCompute', 'glBindBuffersRange'):
+        original = getattr(module.gl, name)
+        monkeypatch.setattr(module.gl, name, lambda *args, _o=original, _n=name: (calls.append(_n), _o(*args))[1])
+    monkeypatch.setattr(module.StreamRing, 'rebind', lambda self, *args, _o=module.StreamRing.rebind:
+                        (calls.append('ring write'), _o(self, *args))[1])
+    target, resources, solver = OffscreenRenderTarget(16, 16), MeshResources('drift rest test'), module.DriftSolver('rest')
+    try:
+        solver.update(resources, *log[-2])
+        assert 'glDispatchCompute' in calls and 'ring write' in calls      # the counters see real work
+        calls.clear()
+        solver.update(resources, *log[-2])                                # the same frame again: no new step
+        assert calls == []
+        rows = int(unpack_steps(log[-2][1])[:, STEP_INDEX['chain_rows']].max())
+        assert solver._ring.hold_bytes == module.hold_bytes(rows)
+        solver.update(resources, *grown[-1])                              # more chains: the ring grows once
+        more = int(unpack_steps(grown[-1][1])[:, STEP_INDEX['chain_rows']].max())
+        assert more > rows and solver._ring.hold_bytes == module.hold_bytes(more)
+        gl.glFinish()
+    finally:
+        solver.release()
+        resources.release_resources()
+        target.close()
+
+
+def test_the_pair_check_runs_once_and_reports_a_compiler_that_breaks_the_pairs(qt_app, monkeypatch, caplog):
+    from OpenGL import GL as gl
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as module
+    from tools.labs.render_target import OffscreenRenderTarget
+    target = OffscreenRenderTarget(16, 16)
+    resources, solver = MeshResources('pair check test'), module.DriftSolver('check')
+    broken_resources, broken = MeshResources('broken pair check test'), module.DriftSolver('broken')
+    try:
+        assert solver.check(resources) is False and solver.pairs_exact is True, solver.pairs_report
+        assert solver.pairs_report == {'fraction_error': solver.pairs_report['fraction_error'],
+                                       'product_mismatches': 0, 'sum_mismatches': 0}
+        dispatches = []
+        monkeypatch.setattr(module.gl, 'glDispatchCompute', lambda *args: dispatches.append(args))
+        assert solver.check(resources) is True and not dispatches     # done once, never again
+        monkeypatch.undo()
+        # What a compiler that ignores ``precise`` may do: reassociate the error terms away (and plain products).
+        name, source = module.PROGRAMS[2]
+        source = (source.replace("precise float e = (a - (s - v)) + (b - v);", "precise float e = 0.0;")
+                  .replace("precise float e = ((x.x * y.x - p) + x.x * y.y + x.y * y.x) + x.y * y.y;",
+                           "precise float e = 0.0;"))
+        assert source != module.PROGRAMS[2][1]
+        monkeypatch.setattr(module, 'PROGRAMS', (*module.PROGRAMS[:2], (name, source)))
+        with caplog.at_level('ERROR'):
+            broken.check(broken_resources)
+        assert broken.pairs_exact is False
+        assert broken.pairs_report['sum_mismatches'] and broken.pairs_report['product_mismatches']
+        assert broken.pairs_report['fraction_error'] > 1e-6
+        assert 'does not keep the drift solver' in caplog.text
+        gl.glFinish()
+    finally:
+        solver.release()
+        broken.release()
+        resources.release_resources()
+        broken_resources.release_resources()
         target.close()
 
 

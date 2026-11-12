@@ -242,7 +242,9 @@ Each foundation slice adds what it learned here.
 - No shader uses a 64-bit float (Vulkan's `shaderFloat64` is optional; EB drift, D4, 2026-11-12). Make each float64
   decision once on the logical side with the reference's own code and publish its result (EB's knot `moved`,
   shift and phase offset per chain per step; phase arguments reduced mod 2π), and rebuild an ever-growing
-  per-member quotient on the GPU from float pairs (an `fma` two-product, `precise`). A float32 input to a discrete
+  per-member quotient on the GPU from float pairs (an exact two-product from Veltkamp halves, `precise`; not
+  `fma`: qsb's HLSL turns it into `mad`, which may round twice; check every target's baked source, not only
+  SPIR-V). A float32 input to a discrete
   decision is a decision on another tick: a float32 seed (3e-8 off) would recycle a mote on another tick at
   roughly 1.5e-4 of its wraps (estimated, at a typical 2e-4 of a span per tick), so the seed and the phase offset are pairs too, and the wrap compares the pair-exact fraction.
   Prove it first in a NumPy float32 model in the shader's operation order against the float64 reference at

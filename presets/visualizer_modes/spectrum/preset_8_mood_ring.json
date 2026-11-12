@@ -1,5 +1,5 @@
 {
-  "description": "One colour for the whole field, drifting slowly round the spectrum; every bar pales to white at its tip.",
+  "description": "Fine bars whose colour follows their height: calm sea-green at rest, warming through gold to ember orange at the loudest.",
   "mode": "spectrum",
   "name": "Preset 8 (Mood Ring)",
   "preset_index": 7,
@@ -14,19 +14,19 @@
         "spectrum_shape_nodes": [
           [
             0.0,
-            0.44
+            0.5
           ],
           [
             0.4,
-            0.56
+            0.62
           ],
           [
             0.78,
-            0.8
+            0.84
           ],
           [
             1.0,
-            0.7
+            0.74
           ]
         ],
         "spectrum_notch_positions_mirrored": [
@@ -92,9 +92,9 @@
         "spectrum_glow_intensity": 0.3,
         "spectrum_render_mode": "bars",
         "spectrum_unique_colors": false,
-        "spectrum_rainbow_fill": true,
+        "spectrum_rainbow_fill": false,
         "spectrum_rainbow_border": false,
-        "spectrum_border_radius": 2.0,
+        "spectrum_border_radius": 0.0,
         "spectrum_bar_gap": 2.0,
         "spectrum_wave_amplitude": 0.15,
         "spectrum_profile_floor": 0.2,
@@ -121,8 +121,8 @@
         "spectrum_fill_gradient": true,
         "spectrum_fill_tip_color": [
           255,
-          196,
-          196,
+          40,
+          40,
           255
         ],
         "spectrum_peak_caps": false,
@@ -143,7 +143,7 @@
         ],
         "spectrum_pattern_scale": 1.0,
         "spectrum_pattern_strength": 0.6,
-        "spectrum_bar_count": 33,
+        "spectrum_bar_count": 56,
         "spectrum_audio_block_size": 128,
         "spectrum_adaptive_sensitivity": false,
         "spectrum_sensitivity": 1.15,
@@ -157,9 +157,9 @@
         "spectrum_manual_floor": 0.42,
         "spectrum_lane_transient_mix": 0.94,
         "spectrum_bar_fill_color": [
-          255,
-          40,
-          40,
+          0,
+          230,
+          190,
           255
         ],
         "spectrum_bar_border_color": [
@@ -169,8 +169,8 @@
           255
         ],
         "spectrum_bar_border_opacity": 0.0,
-        "spectrum_rainbow_enabled": true,
-        "spectrum_rainbow_speed": 0.3,
+        "spectrum_rainbow_enabled": false,
+        "spectrum_rainbow_speed": 0.6,
         "mode": "spectrum"
       }
     }

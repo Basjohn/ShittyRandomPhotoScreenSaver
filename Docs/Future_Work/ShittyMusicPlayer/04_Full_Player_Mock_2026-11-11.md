@@ -139,6 +139,9 @@ What ours should do better, using what the widget material track has built or is
 - The Visualizer pane is the live Visualizer on the same material, so the window's most vivid element is real.
 - Cost: one backdrop capture shared by all panes of the window, no per-pane blur passes; dormant when the window
   is hidden or minimised.
+- What the material shows (operator, 12 Nov): the artwork backdrop in the saver and MC builds (inside the
+  compositor); the desktop behind the window in the dedicated SMP build ("Material is meant to show what is
+  behind"). Routes and fallback: `Docs/Future_Work/Native_Core_P3_Decisions.md` D7 point 8.
 
 ## 6. Open questions for the operator (no action needed now)
 

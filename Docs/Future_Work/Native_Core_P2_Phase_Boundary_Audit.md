@@ -765,13 +765,19 @@ Traps to decide before P3's first slice:
    geometry each frame inherits H1's size problem. Geometry keyed by a revision belongs in a side record uploaded once
    per revision. A host-visible buffer copy per frame should carry only state that changes.
 4. **"QRhi-portable compute" is more than uniform blocks (Medium for P3).**
-   - Extruded Bubble's drift solver is fp64: `double` storage buffers, a uniform `double`, `shared double` and `LF`
-     literals (`extruded_bubble_drift_solver.py:39-92`). On Vulkan that needs `shaderFloat64`, on D3D12 the
-     double-precision option. Neither is universal: Intel Arc and most mobile and Apple GPUs lack native fp64.
-   - QRhi exposes no fp64 feature query. `qsb` compiles fp64 SPIR-V happily, so the readiness ratchet cannot see this.
-   - The ratchet also scans a fixed module list (`tools/vulkan_shader_readiness.py:26-32`). A new compute shader in a
-     new module escapes "every other compute shader must compile". Discover sources instead, for example every module
-     that imports the compute compile helper.
+   - Extruded Bubble's drift solver was fp64: `double` storage buffers, uniform `double`s, `shared double` and `LF`
+     literals throughout both programs (chains and clouds; at the time `extruded_bubble_drift_solver.py:38-210`,
+     not only `:39-92`). On Vulkan that needs `shaderFloat64`, on D3D12 the double-precision option. Neither is
+     universal: Intel Arc and most mobile and Apple GPUs lack native fp64. **Resolved by D4 (12 Nov 2026,
+     `Native_Core_P3_Decisions.md`):** both programs now use no 64-bit float and compile for every `qsb` target.
+   - QRhi exposes no fp64 feature query. Correction (12 Nov 2026): `qsb` compiles fp64 to SPIR-V only when SPIR-V
+     is its only target, which is how the ratchet called it then; with the GLSL ES, HLSL 5.0 and MSL targets it
+     refuses fp64 ("FP64 not supported in ES profile", "double types are not supported in buffers in MSL"), so the
+     ratchet, which now bakes every target (`tests/test_vulkan_shader_readiness.py`), does see it. The drift solver
+     never reached `qsb` before D4 anyway: its loose uniforms failed first.
+   - The ratchet also scanned a fixed module list (then `tools/vulkan_shader_readiness.py:26-32`). A new compute
+     shader in a new module escaped "every other compute shader must compile". **Resolved (12 Nov 2026):** the tool
+     discovers every product module whose text holds a compute shader (`compute_modules`).
 5. **Smaller ABI points (Low).**
    - `payload_schema` is one namespace, and today it is always `CODEC_SCHEMA` (1) for the tagged Python codec. Reserve
      1 as "Python-only, C readers refuse" and number fixed layouts per mode.

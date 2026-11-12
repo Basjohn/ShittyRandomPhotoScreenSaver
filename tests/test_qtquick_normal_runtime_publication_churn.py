@@ -191,7 +191,9 @@ def test_ordinary_card_geometry_style_and_visibility_reconcile_only_changed_axes
     from rendering.quick.widgets.host import OverlayCardStyle, OverlayWidgetGeometry
 
     item = _RecordingGeometryItem()
-    retained = SimpleNamespace(item=item)
+    # The real set_geometry reads the display-placement seam (a4d54e8e) and projects through _apply_geometry.
+    retained = SimpleNamespace(item=item, _display_placement=None)
+    retained._apply_geometry = lambda geometry: RetainedOverlayWidget._apply_geometry(retained, geometry)
     first = OverlayWidgetGeometry(15.0, 32.0, 280.0, 105.0)
     style = OverlayCardStyle()
     RetainedOverlayWidget.set_geometry(retained, first)

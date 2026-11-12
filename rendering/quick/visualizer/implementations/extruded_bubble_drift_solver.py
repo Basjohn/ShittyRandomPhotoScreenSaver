@@ -4,7 +4,8 @@ logical tick's step log (``widgets/spotify_visualizer/extruded_bubble_drift_log`
 The logical tick publishes each step (dt, motion phase, travel, speed, each family's signed amount, the cloud
 counts, the field basis) and each family's seeded geometry; it integrates nothing. Here, on the render thread,
 every step not yet applied is applied once, in order, to persistent per-knot / per-mote state in storage buffers,
-by the arithmetic of ``MaterialPaths`` / ``ProceduralOffsets`` (the float64 CPU reference). The output keeps the
+by the arithmetic of ``MaterialPaths`` / ``ProceduralOffsets`` (the CPU reference, which keeps positions and
+displacement in float64 and narrows to float32 only when it packs its payload). The output keeps the
 layout the bead and speck shaders read (``ebMaterialDrift``: chain rows, then snow, then specks), so no draw
 changes. No readback, no clock of its own: a frame that sees no new step dispatches nothing.
 
@@ -12,9 +13,10 @@ No shader here uses a 64-bit float, on any backend (D4, ``Docs/Future_Work/Nativ
 float64 work is done once on the logical side and published: each chain's knot decision per step (how many knots
 its row moves, its shift and phase offset: the reference's own ``KnotClock``), the field's growing phase
 arguments reduced mod 2 pi, and travel as a float pair. The per-mote progress ``fract(seed + travel x carry /
-span + phase offset)`` is rebuilt from pairs of floats (an ``fma`` two-product, ``precise`` so the compiler may not
-reorder or contract it): the quotient arrives as a pair in the mote's geometry, the seed as a head the pair is
-rebuilt from, the phase offset is kept as a pair. Positions and displacement are float32, as the draws read them.
+span + phase offset)`` is rebuilt from pairs of floats (an exact two-product from Veltkamp halves, ``precise`` so
+the compiler may not reorder or contract it; not ``fma``, which HLSL cannot keep fused): the quotient arrives as a
+pair in the mote's geometry, the seed as a head the pair is rebuilt from, the phase offset is kept as a pair.
+Positions and displacement are float32, as the draws read them.
 
 A geometry edit continues the old history (the CPU rebase); a render gap longer than the published history, a
 lost context or a retired family restarts that family's history from zero (lifecycle, like a fresh family).
@@ -23,6 +25,7 @@ from __future__ import annotations
 
 import ctypes
 import math
+import struct
 from dataclasses import dataclass
 
 import numpy as np
@@ -34,19 +37,29 @@ from rendering.quick.scene3d.stream import StreamRing
 from widgets.spotify_visualizer import extruded_bubble_drift as drift
 from widgets.spotify_visualizer.extruded_bubble_drift_log import (
     CHAIN_GEOMETRY_BYTES, CLOUD_GEOMETRY_BYTES, KNOT_DECISION_BYTES, STEP_FLOATS, STEP_HISTORY, STEP_INDEX,
-    knot_starts, unpack_steps,
+    float_pair, knot_starts, unpack_steps,
 )
-from widgets.spotify_visualizer.extruded_bubble_material_paths import CHAIN_PATHS, PATH_NODES
+from core.logging.logger import get_logger
+from widgets.spotify_visualizer.extruded_bubble_material_paths import PATH_NODES
 
-# Storage bindings used only inside the solver's dispatches (each restored afterwards).
-_STEPS, _GEOMETRY, _STATE, _AUX, _OUT, _OLD_GEOMETRY = 8, 9, 10, 11, 12, 13
+# Storage bindings used only inside the solver's dispatches (each restored afterwards), and the uniform block's
+# (apart from them: one binding namespace on Vulkan).
+_STEPS, _GEOMETRY, _STATE, _AUX, _OUT, _OLD_GEOMETRY, _BLOCK = 8, 9, 10, 11, 12, 13, 14
+# DriftDispatch in std140: eleven ints, a float, a vec2 at offset 48; 64 bytes.
+_DISPATCH_BLOCK = struct.Struct("<11if2f8x")
 _CLOUD_GROUP = 256
 _R = STEP_INDEX
+logger = get_logger(__name__)
 # The uploaded steps are float32 copies of the float64 records (every field the programs read is exactly a float32
 # value or a small count); in the serial's place each carries where its knot decisions begin in the upload.
 _KNOT_START = _R["serial"]
 _KNOT_WORDS = KNOT_DECISION_BYTES // 4
-_HOLD_BYTES = STEP_HISTORY * (4 * STEP_FLOATS + CHAIN_PATHS * KNOT_DECISION_BYTES)
+
+
+def hold_bytes(chain_rows: int) -> int:
+    """One upload: a history of steps with ``chain_rows`` knot decisions each, then a dispatch block per dispatch (at
+    most two per family, each at the uniform offset alignment, which is at most 256)."""
+    return STEP_HISTORY * (4 * STEP_FLOATS + chain_rows * KNOT_DECISION_BYTES) + 6 * (256 + _DISPATCH_BLOCK.size)
 
 _PAIRS_GLSL = """
 // Error-free float32 transforms (precise: evaluated as written, never reordered or contracted).
@@ -61,9 +74,18 @@ vec2 fastTwoSum(float a, float b) {
     precise float e = b - (s - a);
     return vec2(s, e);
 }
+// Dekker's exact product from Veltkamp halves (adds and multiplies only): fma is not one fused operation on every
+// backend (HLSL has no float fma; qsb's HLSL turns it into mad, which may round twice).
+vec2 split(float a) {
+    precise float c = 4097.0 * a;
+    precise float high = c - (c - a);
+    precise float low = a - high;
+    return vec2(high, low);
+}
 vec2 twoProd(float a, float b) {
     precise float p = a * b;
-    precise float e = fma(a, b, -p);
+    vec2 x = split(a), y = split(b);
+    precise float e = ((x.x * y.x - p) + x.x * y.y + x.y * y.x) + x.y * y.y;
     return vec2(p, e);
 }
 vec2 mulPair(vec2 x, vec2 y) {
@@ -124,11 +146,22 @@ vec3 driftVelocity(int kind, vec3 world, float phase, int step, vec3 direction, 
 
 _COMMON = f"""#version 460 core
 layout(std430, binding = {_STEPS}) readonly buffer DriftSteps {{ uint steps[]; }};
-uniform int uFirstStep;
-uniform int uStepCount;
-uniform int uFresh;        // 1: the history starts here (zero state)
-uniform int uRebase;       // 1: a geometry edit; continue the old history onto the new geometry first
-uniform int uOutOffset;    // first vec4 of this family in the shaders' ebMaterialDrift
+// One block for every dispatch value (Vulkan GLSL has no loose uniforms); _dispatch_block packs it.
+layout(std140, binding = {_BLOCK}) uniform DriftDispatch {{
+    int uFirstStep;
+    int uStepCount;
+    int uFresh;            // 1: the history starts here (zero state)
+    int uRebase;           // 1: a geometry edit; continue the old history onto the new geometry first
+    int uOutOffset;        // first vec4 of this family in the shaders' ebMaterialDrift
+    int uOldRows;          // chains: paths that already have history (rows past it start fresh)
+    int uKnotBase;         // chains: first word of the uploaded knot decisions
+    int uCapacity;         // clouds: motes in the geometry
+    int uOldCount;         // clouds: motes alive before this dispatch's first step
+    int uCountField;       // clouds: the step field holding this family's mote count
+    int uAmountField;      // clouds: the step field holding this family's signed amount
+    float uCarry;          // clouds: the family's stream carry
+    vec2 uLastTravel;      // clouds: travel of the last step applied before this dispatch, as a pair
+}};
 """
 
 CHAIN_COMPUTE = _COMMON + f"""
@@ -138,8 +171,6 @@ layout(std430, binding = {_OLD_GEOMETRY}) readonly buffer OldGeometry {{ vec4 ol
 layout(std430, binding = {_STATE}) buffer Knots {{ vec4 knots[]; }};
 layout(std430, binding = {_AUX}) buffer Paths {{ vec4 paths[]; }};      // (shift, phase offset) after the last step
 layout(std430, binding = {_OUT}) writeonly buffer Out {{ vec4 outDrift[]; }};
-uniform int uOldRows;      // paths that already have history (rows past it start fresh)
-uniform int uKnotBase;     // first word of the uploaded knot decisions
 shared vec3 sDisplacement[{PATH_NODES}];
 {_VELOCITY_GLSL}
 void main() {{
@@ -197,12 +228,6 @@ layout(std430, binding = {_OLD_GEOMETRY}) readonly buffer OldGeometry {{ vec4 ol
 layout(std430, binding = {_STATE}) buffer Motes {{ vec4 motes[]; }};   // (displacement, phase offset high)
 layout(std430, binding = {_AUX}) buffer Bases {{ vec4 bases[]; }};     // (previous base, phase offset low)
 layout(std430, binding = {_OUT}) writeonly buffer Out {{ vec4 outDrift[]; }};
-uniform int uCapacity;
-uniform int uOldCount;     // motes alive before this dispatch's first step
-uniform int uCountField;   // the step field holding this family's mote count
-uniform int uAmountField;  // the step field holding this family's signed amount
-uniform float uCarry;
-uniform vec2 uLastTravel;  // travel of the last step applied before this dispatch, as a pair
 {_PAIRS_GLSL}
 {_VELOCITY_GLSL}
 void main() {{
@@ -258,7 +283,24 @@ void main() {{
 }}
 """
 
-PROGRAMS = (("drift_chains", CHAIN_COMPUTE), ("drift_clouds", CLOUD_COMPUTE))
+_CHECK_CASES = 64
+# The pair arithmetic on known inputs, run once at warm-up (``DriftSolver.check``): a compiler that ignores ``precise``
+# (reorders, contracts or reassociates) shows here, not as silent drift. Inputs come from a buffer, never constants
+# the compiler could fold.
+PAIR_CHECK_COMPUTE = f"""#version 460 core
+layout(local_size_x = {_CHECK_CASES}) in;
+layout(std430, binding = {_STEPS}) readonly buffer CheckCases {{ vec4 cases[]; }};  // (travel, ratio), (seed head, a, b, 0)
+layout(std430, binding = {_OUT}) writeonly buffer CheckResults {{ vec4 results[]; }};
+{_PAIRS_GLSL}
+void main() {{
+    int i = int(gl_GlobalInvocationID.x);
+    vec4 quotient = cases[i * 2], extra = cases[i * 2 + 1];
+    float fraction = fractSum(mulPair(quotient.xy, quotient.zw), vec2(extra.x, extra.x * {2.0 ** -24!r}), vec2(0.0)).x;
+    results[i] = vec4(fraction, twoProd(extra.y, extra.z).y, twoSum(extra.y, extra.z).y, 0.0);
+}}
+"""
+
+PROGRAMS = (("drift_chains", CHAIN_COMPUTE), ("drift_clouds", CLOUD_COMPUTE), ("drift_pair_check", PAIR_CHECK_COMPUTE))
 _CLOUD_FIELDS = {"snow": (_R["count_snow"], _R["amount_snow"]), "specks": (_R["count_specks"], _R["amount_specks"])}
 
 
@@ -273,6 +315,29 @@ def _delete(*buffers: int) -> None:
     names = [b for b in buffers if b]
     if names:
         gl.glDeleteBuffers(len(names), names)
+
+
+def pair_check_cases() -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """The check's inputs (an hour to a day of travel at any carry and span, seed heads, products and sums whose
+    rounding error is nonzero) and what exact arithmetic gives for them."""
+    rng = np.random.default_rng(20261112)
+    travel_high, travel_low = float_pair(rng.uniform(1e3, 8e5, _CHECK_CASES))
+    ratio_high, ratio_low = float_pair(rng.uniform(1e-3, .45, _CHECK_CASES))
+    head = (rng.integers(0, 1 << 24, _CHECK_CASES) * 2.0 ** -24).astype(np.float32)
+    a = rng.uniform(1., 3e5, _CHECK_CASES).astype(np.float32)
+    b = rng.uniform(1e-3, 300., _CHECK_CASES).astype(np.float32)
+    a[0], b[0] = 1., 2.0 ** -30                  # a sum whose whole low part a reassociating compiler drops
+    cases = np.zeros((_CHECK_CASES, 2, 4), dtype=np.float32)
+    cases[:, 0] = np.stack((travel_high, travel_low, ratio_high, ratio_low), axis=-1)
+    cases[:, 1, :3] = np.stack((head, a, b), axis=-1)
+    wide = lambda values: values.astype(np.float64)
+    quotient = (wide(travel_high) + wide(travel_low)) * (wide(ratio_high) + wide(ratio_low))
+    expected = {
+        "fraction": np.mod(quotient + wide(head) * (1. + 2.0 ** -24), 1.),
+        "product": (wide(a) * wide(b) - wide(a * b)).astype(np.float32),
+        "sum": ((wide(a) + wide(b)) - wide(a + b)).astype(np.float32),
+    }
+    return cases, expected
 
 
 def _upload(records: np.ndarray, starts: np.ndarray, knots: bytes, first: int, last: int) -> bytes:
@@ -303,12 +368,14 @@ class DriftSolver:
         self.output = 0
         self._output_vec4s = 0
         self._families: dict[str, _Family] = {}
-        self._ring = StreamRing(f"{label} drift steps", slots=4, slot_bytes=2 * _HOLD_BYTES, hold_bytes=_HOLD_BYTES)
-        self._locations: dict[tuple[int, str], int] = {}
+        self._ring: StreamRing | None = None   # sized to the most chain rows a step has carried (_ring_for)
+        # The warm-up check of the pair arithmetic: None until run, then whether this device computes it exactly.
+        self.pairs_exact: bool | None = None
+        self.pairs_report: dict | None = None
 
     @property
     def has_resources(self) -> bool:
-        return bool(self.output or self._families or self._ring.has_resources)
+        return bool(self.output or self._families or (self._ring is not None and self._ring.has_resources))
 
     def release(self) -> None:
         for family in self._families.values():
@@ -316,8 +383,70 @@ class DriftSolver:
         self._families.clear()
         _delete(self.output)
         self.output, self._output_vec4s = 0, 0
-        self._ring.release()
-        self._locations.clear()
+        if self._ring is not None:
+            self._ring.release()
+            self._ring = None
+        self.pairs_exact = self.pairs_report = None   # a new context checks again
+
+    def check(self, resources) -> bool:
+        """One warm-up unit (the reveal's hidden frames, or the first frame with work): run the pair arithmetic on
+        known inputs and compare with exact arithmetic, once per solver lifetime, never per frame. A device whose
+        compiler ignores ``precise`` is logged as an error with what it got; drift still runs (with an error about
+        that of plain float32), but never silently. True when it was already done (a warm-up step's "nothing
+        left"), False when it ran now."""
+        if self.pairs_exact is not None:
+            return True
+        cases, expected = pair_check_cases()
+        source, target = _buffer(cases.nbytes), _buffer(16 * _CHECK_CASES)
+        gl.glNamedBufferSubData(source, 0, cases.nbytes, cases)
+        prior_program = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
+        saved = [(binding, gl_query.get_indexed_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING, binding),
+                  gl_query.get_indexed_int64(gl.GL_SHADER_STORAGE_BUFFER_START, binding),
+                  gl_query.get_indexed_int64(gl.GL_SHADER_STORAGE_BUFFER_SIZE, binding)) for binding in (_STEPS, _OUT)]
+        generic = gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING)
+        results = np.empty((_CHECK_CASES, 4), dtype=np.float32)
+        try:
+            gl.glUseProgram(resources.compute_program(*PROGRAMS[2]))
+            gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _STEPS, source)
+            gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _OUT, target)
+            gl.glDispatchCompute(1, 1, 1)
+            gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)
+            gl.glGetNamedBufferSubData(target, 0, results.nbytes, results)   # the one readback, at this edge only
+        finally:
+            for binding, buffer, start, size in saved:
+                if buffer and size:
+                    gl.glBindBufferRange(gl.GL_SHADER_STORAGE_BUFFER, binding, buffer, start, size)
+                else:
+                    gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, binding, buffer)
+            gl.glBindBuffer(gl.GL_SHADER_STORAGE_BUFFER, generic)
+            gl.glUseProgram(prior_program)
+            _delete(source, target)
+        fraction = np.abs(results[:, 0].astype(np.float64) - expected["fraction"])
+        fraction = np.minimum(fraction, 1. - fraction)          # a fraction near 0 and one near 1 are neighbours
+        report = {"fraction_error": float(fraction.max()),
+                  "product_mismatches": int((results[:, 1] != expected["product"]).sum()),
+                  "sum_mismatches": int((results[:, 2] != expected["sum"]).sum())}
+        # The pairs keep about 1e-9 of a span at a day's travel; plain float32 is about 1e-3 off.
+        self.pairs_exact = report["fraction_error"] < 1e-6 and not report["product_mismatches"] \
+            and not report["sum_mismatches"]
+        self.pairs_report = report
+        if self.pairs_exact:
+            logger.info("%s: drift pair arithmetic exact on this device (%s)", self.label, report)
+        else:
+            logger.error("%s: this device's shader compiler does not keep the drift solver's pair arithmetic exact "
+                         "(precise ignored?): %s. Extruded Bubble drift runs with plain float32 error.", self.label,
+                         report)
+        return False
+
+    def _ring_for(self, chain_rows: int) -> StreamRing:
+        """The step ring, grown (never shrunk) when a step carries more chain rows than it was sized for: an edge of
+        the Bead Chains Range, never a frame. Its old storage is released; GL keeps it until submitted work is done."""
+        hold = hold_bytes(chain_rows)
+        if self._ring is None or self._ring.hold_bytes < hold:
+            if self._ring is not None:
+                self._ring.release()
+            self._ring = StreamRing(f"{self.label} drift steps", slots=4, slot_bytes=2 * hold, hold_bytes=hold)
+        return self._ring
 
     @staticmethod
     def layout(families) -> dict[str, int]:
@@ -352,6 +481,7 @@ class DriftSolver:
                 needed.append(int(pending[0]))
         if not needed:
             return offsets      # no new logical step since the last frame: nothing to integrate
+        self.check(resources)   # once, if the warm-up did not already (an edge, never per frame)
         if offsets["_total"] > self._output_vec4s:
             # Every dispatch rewrites its family's whole output from its state: a new buffer loses nothing.
             _delete(self.output)
@@ -361,6 +491,7 @@ class DriftSolver:
         starts = knot_starts(records)
         if len(knots) != int(starts[-1]) * KNOT_DECISION_BYTES:
             raise ValueError(f"{self.label}: knot decisions do not match their steps")
+        ring = self._ring_for(int(records[base:, _R["chain_rows"]].max()))
         prior_program = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         saved = [(binding, gl_query.get_indexed_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING, binding),
                   gl_query.get_indexed_int64(gl.GL_SHADER_STORAGE_BUFFER_START, binding),
@@ -372,8 +503,7 @@ class DriftSolver:
             for start in range(base, len(records), STEP_HISTORY):
                 end = min(start + STEP_HISTORY, len(records))
                 upload = records[start:end]
-                with self._ring.bound(gl.GL_SHADER_STORAGE_BUFFER, _STEPS,
-                                      _upload(records, starts, knots, start, end)):
+                with ring.bound(gl.GL_SHADER_STORAGE_BUFFER, _STEPS, _upload(records, starts, knots, start, end)):
                     for name in ("chains", "snow", "specks"):
                         if name in live:
                             self._advance(resources, name, live[name], offsets[name], upload, serials[start:end])
@@ -445,46 +575,33 @@ class DriftSolver:
             gl.glCopyNamedBufferSubData(previous.aux, aux, 0, 0, 16 * keep)
         return _Family(family.revision, family.capacity, geometry, state, aux, float(family.carry))
 
-    def _location(self, program: int, name: str) -> int:
-        key = (program, name)
-        if key not in self._locations:
-            self._locations[key] = int(gl.glGetUniformLocation(program, name))
-        return self._locations[key]
-
     def _dispatch(self, resources, name: str, state: _Family, offset: int, upload: np.ndarray, pending: np.ndarray,
                   *, fresh: bool, old_geometry: int = 0) -> None:
         chains = name == "chains"
         first, last = int(pending[0]), int(pending[-1])
-        program = resources.compute_program(*PROGRAMS[0 if chains else 1])
-        gl.glUseProgram(program)
-        location = lambda uniform: self._location(program, uniform)
-        gl.glUniform1i(location("uFirstStep"), first)
-        gl.glUniform1i(location("uStepCount"), last - first + 1)
-        gl.glUniform1i(location("uFresh"), int(fresh))
-        gl.glUniform1i(location("uRebase"), int(bool(old_geometry)))
-        gl.glUniform1i(location("uOutOffset"), offset)
+        gl.glUseProgram(resources.compute_program(*PROGRAMS[0 if chains else 1]))
         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _GEOMETRY, state.geometry)
         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _OLD_GEOMETRY, old_geometry or state.geometry)
         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _STATE, state.state)
         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _AUX, state.aux)
         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _OUT, self.output)
         record = upload[last]
+        old = 0 if fresh else state.count
         if chains:
             rows = min(state.capacity, int(record[_R["chain_rows"]]) or state.capacity)
-            gl.glUniform1i(location("uOldRows"), 0 if fresh else state.count)
-            gl.glUniform1i(location("uKnotBase"), len(upload) * STEP_FLOATS)
-            gl.glDispatchCompute(rows, 1, 1)
+            block = _DISPATCH_BLOCK.pack(first, last - first + 1, int(fresh), int(bool(old_geometry)), offset, old,
+                                         len(upload) * STEP_FLOATS, 0, 0, 0, 0, 0., 0., 0.)
+            groups = rows
             state.count = rows
         else:
             count_field, amount_field = _CLOUD_FIELDS[name]
-            gl.glUniform1i(location("uCapacity"), state.capacity)
-            gl.glUniform1i(location("uOldCount"), 0 if fresh else state.count)
-            gl.glUniform1i(location("uCountField"), count_field)
-            gl.glUniform1i(location("uAmountField"), amount_field)
-            gl.glUniform1f(location("uCarry"), float(state.carry))
-            gl.glUniform2f(location("uLastTravel"), *state.travel)
-            gl.glDispatchCompute(-(-state.capacity // _CLOUD_GROUP), 1, 1)
+            block = _DISPATCH_BLOCK.pack(first, last - first + 1, int(fresh), int(bool(old_geometry)), offset, 0, 0,
+                                         state.capacity, old, count_field, amount_field, float(state.carry),
+                                         *state.travel)
+            groups = -(-state.capacity // _CLOUD_GROUP)
             state.count = int(record[count_field])
+        with self._ring.bound(gl.GL_UNIFORM_BUFFER, _BLOCK, block):
+            gl.glDispatchCompute(groups, 1, 1)
         # The next dispatch (or the draws) read what this one wrote.
         gl.glMemoryBarrier(gl.GL_SHADER_STORAGE_BARRIER_BIT)
         state.serial = int(record[_R["serial"]])

@@ -23,6 +23,10 @@ from rendering.quick.render.gl_resources import compile_program
 from rendering.quick import gl_query
 
 from .gl_state import InheritedGlState
+from widgets.spotify_visualizer.presentation_geometry import (
+    resolve_card_clip_path,
+    resolve_card_drawn_rect,
+)
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
 
 
@@ -73,6 +77,30 @@ class VisualizerClipFrame:
     matrix_values: tuple[float, ...]
     viewport: tuple[int, int, int, int]
 
+    @staticmethod
+    def local_geometry(
+        presentation: ResolvedVisualizerPresentation,
+    ) -> tuple[tuple[float, float], tuple[float, float, float, float], float]:
+        """(drawn card size, item-local clip rect, clip corner radius) of one record.
+
+        The clip follows the card frame as Qt Quick draws it (1C.4): the card is drawn on whole device pixels
+        (``resolve_card_drawn_rect``, where the scene places the item) and the canonical resolver derives the path
+        from the frame's own geometry. A record is immutable, so its owner computes this once per record (the render
+        node at sync, when the record changes), never per frame.
+        """
+
+        outer_x, outer_y, outer_width, outer_height = resolve_card_drawn_rect(
+            presentation
+        )
+        (clip_x, clip_y, clip_width, clip_height), clip_radius = (
+            resolve_card_clip_path(presentation)
+        )
+        return (
+            (outer_width, outer_height),
+            (clip_x - outer_x, clip_y - outer_y, clip_width, clip_height),
+            clip_radius,
+        )
+
     @classmethod
     def from_presentation(
         cls,
@@ -80,26 +108,23 @@ class VisualizerClipFrame:
         *,
         matrix_values: tuple[float, ...],
         viewport: tuple[int, int, int, int],
+        local_geometry: tuple[
+            tuple[float, float], tuple[float, float, float, float], float
+        ] | None = None,
     ) -> "VisualizerClipFrame":
-        outer_x, outer_y, outer_width, outer_height = presentation.outer_rect
-        content_x, content_y, content_width, content_height = (
-            presentation.content_rect
+        logical_size, local_clip_rect, clip_radius = (
+            cls.local_geometry(presentation)
+            if local_geometry is None
+            else local_geometry
         )
         if len(matrix_values) != 16:
             raise ValueError("visualizer clip matrix must contain 16 values")
         if len(viewport) != 4 or viewport[2] <= 0 or viewport[3] <= 0:
             raise ValueError("visualizer clip viewport must have positive extent")
         return cls(
-            logical_size=(outer_width, outer_height),
-            local_content_rect=(
-                content_x - outer_x,
-                content_y - outer_y,
-                content_width,
-                content_height,
-            ),
-            inner_corner_radius=float(
-                presentation.shell_style["inner_corner_radius"]
-            ),
+            logical_size=logical_size,
+            local_content_rect=local_clip_rect,
+            inner_corner_radius=clip_radius,
             matrix_values=tuple(float(value) for value in matrix_values),
             viewport=tuple(int(value) for value in viewport),
         )
