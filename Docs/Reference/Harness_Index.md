@@ -261,7 +261,8 @@ completed snapshots in evidence subdirectories remain preserved. Arbitrary value
 The MC wrapper sets persisted `input.interaction_mode=True` through the canonical Settings manager, making its ordinary
 interactive RUN route less disruptive; explicit `main.py` exercises the ordinary screensaver entrypoint. The coordinator
 itself never writes settings or supplies an environment override. `main_diagnostic.py` is excluded because it resolves a
-different per-user diagnostic log root. Choose a new dedicated evidence directory, for example `logs/run_matrix/<name>`;
+different per-user diagnostic log root. Choose a new dedicated evidence directory inside the evidence layout (`--output-dir` takes `artifact_paths.evidence_arg`, so a path
+outside it is refused), for example `.artifacts/evidence/lifecycle/run_matrix/<YYYYMMDD>_<label>`;
 existing directories are refused. After each child exits, the harness snapshots canonical logs and retained rotations,
 including settings diagnostics and binary frame-trace segments, before launching the next child. `run_matrix.json` and
 one-line JSON on stdout record source path/hash, Git revision/status, local source-tree digest (including JSON settings/presets), exact argv, exit code,

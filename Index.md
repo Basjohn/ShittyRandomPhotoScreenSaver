@@ -57,7 +57,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | R151 Steam cache publication and Settings UTC: focused Windows gate accepted, full rerun not requested | `Docs/Historical_Bugs/R-151_Steam_Cache_Windows_Publication_Race_And_Python314_Timestamps.md` |
 | R149 Python 3.14 full-test failures, Steam cache WinError 32, NumPy BLAS introspection and 35-minute runtime review | `Docs/Contracts.md` |
 | R134–R145 dual-display collapse, reboot-dependent recovery and pre/post performance/cache/handles investigation | `Docs/Historical_Bugs/R-134_to_R-145_Dual_Display_Reboot_Recovery.md` |
-| Python 3.14 active MSVC/frozen-product gate (operator runs builds and returns logs) | `Current_Plan.md` §5; `Docs/Guides/Python314_Cutover.md` |
+| Python 3.14 toolchain and the frozen-product workers (`Current_Plan.md` §5 no longer holds a Python 3.14 gate; builds run through the GitHub workflows) | `Docs/Guides/Python314_Cutover.md`; `Docs/Guides/GitHub_Remote_Build.md` |
 | durable product / architecture | `Spec.md` |
 | fast current owner map | `Docs/Contracts.md` |
 | architecture checklist (SSOT, dormancy, lifecycle, 2D/3D consistency, performance; SMP / full-display prerequisites AC-01..03) | `Docs/Reference/Architecture_Checklist.md` (live; evidence: `Docs/Audits/Architecture_Audit_2026-11-06.md`) |
@@ -83,7 +83,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | persisted Ban Image identity, zero-ban cost and explicit Clear | `Spec.md` → Persistent Ban Image admission; `Docs/Contracts.md` → Actions / images |
 | image filters, Lanczos cost, quality migration and measurements | `Docs/Reference/Image_Quality.md` |
 | Build Runner cancellation and supported products | `Spec.md` → Build control and products |
-| operator-only build execution / canonical Python 3.14 workers | `Current_Plan.md` §5; `Docs/Guides/Python314_Cutover.md` |
+| build execution owners / canonical Python 3.14 workers | `Spec.md` → Build control and products; `Docs/Guides/Python314_Cutover.md`; `Docs/Guides/GitHub_Remote_Build.md` |
 | immutable Qt resources, editable assets and automatic regeneration | `Spec.md` → Settings themes / native backdrop; `Docs/Guides/10_WIDGET_GUIDELINES.md` → asset ownership |
 | rules every dispatched agent follows (worktree environment, tests, forbidden actions, report shape) | `Docs/Guardrails/Agent_Worktree_Rules.md` |
 | native core P3 decisions before any C++ (D4: the Extruded Bubble drift solver without 64-bit shader floats, for Vulkan as the primary backend) | `Docs/Future_Work/Native_Core_P3_Decisions.md` |
