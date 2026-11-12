@@ -100,5 +100,8 @@ def write_baseline(path: Path = BASELINE_PATH) -> int:
     table = {}
     for label, record, size, dpr in cases():
         table[label] = record_fields(resolve_expanded_visualizer_presentation(record, display_size=size, dpr=dpr))
-    path.write_text(json.dumps(table, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    rows = [f" {json.dumps(label)}: {json.dumps(table[label], sort_keys=True, separators=(',', ':'))}"
+            for label in sorted(table)]
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write("{\n" + ",\n".join(rows) + "\n}\n")
     return len(table)
