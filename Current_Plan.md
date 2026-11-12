@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** 1D.1 (Medium). The High slot is next for 1D.2.
+**Now (in flight):** 1D.2 (High), 1D.1's side defects (Medium).
 
 **Next, by slot (lead, 12 Nov night audit, `Docs/Future_Work/Audit_2026-11-12_Night.md`):**
 - High:
@@ -47,7 +47,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
   3. 1C.10.
   4. The 1C.2 Save stall.
 - Medium:
-  1. 1D.1.
+  1. 1D.1's side defects.
   2. The 1D.0 test-order flake.
   3. The native runtime check before import.
   4. 1B.10.
@@ -1064,25 +1064,19 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   first: should a closed Studio's watch end at its close (product), or should the test only count its own
   session's writes? Fix at the owner, with a test.
 
-### 1D.1 Guided Setup: newer Visualizer images, JMIT Pools, UX audit (one Opus Medium; the lead judges pixels)
+### 1D.1 Guided Setup (merged 12 Nov: R-201, R-202, the new previews): side defects left (Medium)
 
-- [ ] Replace the Guided Setup Visualizer preview images with newer, better ones. The operator chose: Extruded
-  Bubble preset 9 (8 if 9 does not exist), Bubble preset 2, Extruded Spectrum preset 1. Render them with
-  `tools/onboarding_preview_foundry.py` (hidden GL, never a shown window) on a real photo backdrop, at the size
-  and crop the page shows; the lead compares old and new side by side at full resolution before merging. Only
-  the images change; no test names or counts a preset.
-- [ ] JMIT Pools missing from Guided Setup's online sources list. Settings' Sources tab lists them through
-  `ui/tabs/online_source_rows.py` (`populate_online_source_rows`, the `JMIT POOL -> <Pool Name>` rows), but the
-  Guided Setup sources page (`ui/onboarding/basic_pages.py`, the "Online Wallpaper Feeds" bucket, about :87 to
-  :190) builds its own list from `sources.rss_feeds` only.
-  - [ ] Root cause recorded. Fix: one shared row builder for both, so a pool turned on in either is shown and
-    counted in both (the count already uses `online_source_count`, which includes pools). Keep the Settings look:
-    the tag, arrow and active/valid state from 1C.9.
-  - [ ] Test through the real wizard page and the real Sources tab: the same pools listed and the same state in
-    both, with a negative control on the old page; historical bug entry if it shipped silently.
-- [ ] Audit Guided Setup's UX end to end (every page, both entry points, the draft-and-Finish rule): defects
-  found are fixed in this item. Anything new it should offer but does not is written to section 2 as a
-  suggestion for the operator, who must approve any wholly new addition before it is built.
+- [ ] `tools/onboarding_preview_foundry.py:1148` names a preset in a tool (`_PREVIEW_PRESETS`), against the preset
+  rule, and is now stale as the default. Remove it. The preview's preset is a run choice (`--visualizer-preset`),
+  and the default is the mode's own default.
+- [ ] The chosen previews are not stored: a full foundry rebuild, or `onboarding_sheet_previews.py`, puts the old
+  looks back. Record the chosen command line beside the manifest (data, not preset names in code), so a rebuild
+  reproduces it. The Bubble simulation is unseeded: seed it for a reproducible frame.
+- [ ] The Visualizer page's status line reads "Choose at least one mode." even when modes are chosen
+  (`ui/onboarding/selection_pages.py:212`). Fix it, with a test.
+- [ ] The packed `onboarding_assets.rcc` still holds the old images until regenerated. Regenerate it (the qrc tool)
+  and check the wizard loads the new images.
+- Kept as designed (9b585e86): the Sources page opens its Folders bucket by default.
 
 ### 1D.2 Fullscreen Visualizer: three display styles (one Opus High; the lead runs the D1 proof)
 

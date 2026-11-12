@@ -1,4 +1,4 @@
-# R-NEW | Guided Setup's online sources list showed no Just Make It Work pools (Settings' Sources tab did)
+# R-201 | Guided Setup's online sources list showed no Just Make It Work pools (Settings' Sources tab did)
 
 **Status:** fixed 12 Nov 2026 (plan 1D.1). Reported by the operator. Owner: `ui/tabs/online_source_rows.py`
 (`build_online_source_list`, `refresh_online_source_list`), used by `ui/tabs/sources_tab.py` and
