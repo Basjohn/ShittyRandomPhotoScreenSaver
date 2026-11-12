@@ -819,7 +819,7 @@ corner). Those changes are withdrawn: the Media widget's behaviour is the contra
 - [ ] Proof: before/after sheets for the three gestures and the four sides; a D1 run with a real player session;
   section 2's "Changed on 11 Nov" entry for Now Playing corrected to what ships.
 
-### 1C.4 Spline Curve's white lines show about one pixel into the card border (cause found on Display 1, 12 Nov)
+### 1C.4 Spline Curve's white lines show about one pixel into the card border (cause found on Display 1, 12 Nov; fix in flight, Opus High)
 
 Merged: the transient case (R-188, the clip followed the retained snapshot's record after a resize or collapse).
 
@@ -1170,7 +1170,7 @@ blur candidate was rejected by Windows before pixels; no candidate product edge/
 - [ ] Keep it a separate reversible fix.
 - [ ] Repeat the four-case corner/border/shadow gate before claiming improvement.
 
-### Test doubles for the display manager (stale-stub reds repaired 11 Nov; shared doubles in `tests/_display_manager_doubles.py`)
+### Test doubles for the display manager (stale-stub reds repaired 11 Nov; migration in flight, Opus Medium successor of batch 4)
 
 - [ ] Nineteen sibling test files still hand-build their own `DisplayManager` or owner stubs (green today; the
   list is in the repair's merge, e.g. `test_qtquick_custom_layout_owner`, `test_visualizer_hover_transfer`,
