@@ -614,13 +614,23 @@ def advance_options(runtime, values: Mapping[str, Any], extent=None) -> dict[str
     if "zoom_hold" in accepted:
         options["zoom_hold"] = False     # the Studio's preview orbit is not a live camera operation
     if "view_span" in accepted:
-        # As the production capture: the scene-axis span the presented card's camera shows (pulse birth edge); with
-        # no extent, the canonical card production uses until a CUSTOM edge drag commits one.
+        # As the production capture: the scene-axis span the presented card's camera shows (pulse birth edge).
         from core.waveform_ribbon_view import card_span
-        from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
-        options["view_span"] = card_span(camera_parameters(values), extent or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
-                                         CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1])
+        options["view_span"] = card_span(camera_parameters(values), studio_framed_view(extent))
     return options
+
+
+def studio_framed_view(extent=None):
+    """The framed view the Studio's runtime sizes its travelling pulse from, for the presented card ``extent`` (None:
+    the canonical card production uses until a CUSTOM edge drag commits one). The Studio draws no live card, so this
+    is the extent's own (its aspect, its height over the canonical card's); production reads the drawn card's exact
+    one (``VisualizerRuntimeController.framed_view``, N0.4). The recorded-clip extraction runs production's capture
+    with this same view, so the two stay byte for byte."""
+    from core.framed_view import FramedView
+    from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+    width, height = (float(v) for v in (extent or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE))
+    aperture = height / CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1]
+    return FramedView(width / height, aperture, aperture)
 
 
 class _RuntimeCheckpoint:

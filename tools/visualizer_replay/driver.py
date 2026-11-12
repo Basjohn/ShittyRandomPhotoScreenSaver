@@ -170,9 +170,8 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset:
         snapshots = {}
         wanted = frozenset(snapshots_at)
         drift_history: list[tuple[bytes, bytes]] = []   # EB drift steps (and knots) since the last returned snapshot
-        sync = QuickVisualizerPresentationSync(
-            controller,
-            resolve_presentation=lambda: resolve_visualizer_presentation(
+        def presentation():
+            return resolve_visualizer_presentation(
                 policy=get_visualizer_presentation_policy(controller.mode_id),
                 display_size=display, outer_origin=(0.0, 0.0), viewport_extent=extent,
                 border_width=0.0, corner_radius=0.0, content_inset=0.0,
@@ -180,8 +179,13 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset:
                 shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0.0,
                 shadow_offset=(0.0, 0.0), shadow_spread=0.0,
                 shadow_extensions=(0.0, 0.0, 0.0, 0.0),
-            ),
-        )
+            )
+
+        sync = QuickVisualizerPresentationSync(controller, resolve_presentation=presentation)
+        # The replayed card is the one a scene would draw: its framed view (N0.4) is what the scene would publish.
+        from rendering.quick.visualizer.framed_view import resolve_framed_view
+
+        controller.set_framed_view(resolve_framed_view(presentation()))
         try:
             for index, feature in enumerate(clip.frames):
                 clock[0] = feature.timestamp_us / 1_000_000.0

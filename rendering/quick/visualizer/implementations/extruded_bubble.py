@@ -34,7 +34,7 @@ from rendering.gl_programs.extruded_bubble_program import (
 from core.constants.extruded_bubble_world import WAKE_STRIDE, SNOW_FULL
 from rendering.gl_programs.extruded_bubble_scene import (
     CLUSTER_FLOATS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, bubble_instances, camera,
-    SPECKS_FULL, cluster_instances, wake_instances, physical_camera, speck_amount,
+    SPECKS_FULL, cluster_instances, wake_instances, parameter_camera, speck_amount,
     glint_proxies, hero_shell_instance, light_on_screen, ray_motion, ray_strength, scene_knobs, screen_streak,
 )
 from core.settings.framed_camera import effective_aperture_scale
@@ -419,18 +419,9 @@ class QuickExtrudedBubbleRenderer:
         self._shafts.warm(width, height)
         probe = self._probe_for(parameters)
 
-        pose = (float(parameter(parameters, "extruded_bubble_turn")), float(parameter(parameters, "extruded_bubble_tilt")))
-        scale = float(parameter(parameters, "extruded_bubble_scene_scale"))
-        fov_y = float(parameter(parameters, "extruded_bubble_camera_fov"))
-        # Orbit = Alt+left drag; Scene Pan = physical lateral/up translation;
-        # Scene Scale = physical dolly. None of these change the centred lens.
-        view_to_world, world_to_view, eye, tan, projection = physical_camera(
-            *pose, width / height, scale,
-            pan_x=float(parameter(parameters, "extruded_bubble_scene_pan_x")),
-            pan_y=float(parameter(parameters, "extruded_bubble_scene_pan_y")),
-            position_offset=tuple(parameter(parameters, "extruded_bubble_camera_position")),
-            fov_y_degrees=fov_y, surface_bound=knobs["mode"] == "surface",
-            aperture_scale=aperture_scale)
+        # The one camera assembly, which the logical side builds too from the same numbers (N0.4).
+        view_to_world, world_to_view, eye, tan, projection = parameter_camera(parameters, width / height,
+                                                                              aperture_scale)
         if knobs["mode"] == "deep":
             to_emitter = tuple(float(p) - float(e) for p, e in zip(knobs["light_source"], eye))
             distance = math.sqrt(sum(v*v for v in to_emitter))

@@ -74,8 +74,12 @@ def check_owners():
     shaders = (ROOT / "rendering/gl_programs/extruded_bubble_program.py").read_text(encoding="utf-8")
     renderer = (ROOT / "rendering/quick/visualizer/implementations/extruded_bubble.py").read_text(encoding="utf-8")
     assert "FOV_Y_DEGREES = 45.0" in scene
-    assert 'fov_y_degrees=fov_y, surface_bound=' in renderer
-    assert 'physical_camera(' in renderer
+    # The renderer's camera is the scene's one assembly (``parameter_camera``, N0.4), the physical camera at the
+    # authored lens with the surface bound from the light type.
+    assert 'parameter_camera(parameters, width / height' in renderer
+    assert 'fov_y_degrees=float(_p(parameters, "camera_fov")),' in scene
+    assert 'surface_bound=_LIGHT_TYPES[str(_p(parameters, "light_type"))] == "surface"' in scene
+    assert 'return physical_camera(' in scene
     assert 'camera_look_pan(' not in renderer
     assert 'uEye' in shaders and 'aSphere.xyz - uEye' in shaders
     assert 'shift = (0.0, 0.0)' in renderer

@@ -5,7 +5,6 @@ from widgets.spotify_visualizer.logical_frame_capture import (
     _mode_frame_runtime_type, _resolve_current_mode_runtime, _base_extras)
 from widgets.spotify_visualizer.render_state import WaveformRibbonFrame
 from widgets.spotify_visualizer.view_orbit import apply_view_orbit_motion, view_camera_operated
-from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
 from core.waveform_ribbon_view import card_span
 
 MODE='waveform_ribbon'
@@ -50,8 +49,9 @@ def capture_waveform_ribbon(widget,engine,context):
     camera={key:values[key] for key in camera_keys}
     camera=apply_view_orbit_motion(pres,MODE,camera,context.now_ts,runtime.camera_admission)
     # Configuration only (as Bubble reads it): the part of the scene axis this card's camera shows, so Travelling
-    # Pulse swells are born at its edge (core.waveform_ribbon_dynamics.VIEW_MARGIN). Cached per camera/extent.
-    view_span=card_span(camera,controller.presentation_viewport_extent,CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1])
+    # Pulse swells are born at its edge (core.waveform_ribbon_dynamics.VIEW_MARGIN). The drawn card's framed view: the
+    # renderer's own camera inputs (N0.4); cached per camera/view.
+    view_span=card_span(camera,controller.framed_view)
     snapshot=runtime.advance(onsets=onsets,now_ts=context.now_ts,playing=context.playing,
         identity=(context.runtime_generation,context.engine_generation,context.activation_id),
         source_identity=(context.source_generation,context.source_activation_id),controls=configuration.controls,

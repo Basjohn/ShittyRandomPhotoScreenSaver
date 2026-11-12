@@ -1,7 +1,8 @@
 """Waveform's physical camera view and the part of the scene axis it shows. Pure: no Qt/GL/clock.
 
 The renderer draws with ``physical_view``; the logical capture sizes the travelling pulse from ``visible_span`` of that
-very frustum (``core.waveform_ribbon_dynamics.VIEW_MARGIN``). The aperture is the CUSTOM edge-resize sensor scale
+very frustum (``core.waveform_ribbon_dynamics.VIEW_MARGIN``), built from the same numbers the renderer reads from the
+card it draws (``card_span`` of the controller's ``framed_view``). The aperture is the CUSTOM edge-resize sensor scale
 (``presentation_geometry.framed_aperture_scale``): a larger card reveals more world, so a 1282x1005 card shows about
 x in [-16, 16] where the canonical 420x280 card shows about [-5, 5].
 """
@@ -53,20 +54,17 @@ def visible_top(parameters:Mapping,aspect:float,aperture_scale:float=1.):
 _SPAN_CACHE = [None, None]
 
 
-def card_span(camera:Mapping, extent, baseline_height:float):
-    """``visible_span`` for a card of world ``extent`` (width, height), followed by its ``visible_top`` when the
-    camera has one: aspect from the extent and the edge-resize aperture extent height / ``baseline_height`` (the
-    canonical card's; ``framed_aperture_scale`` without the shell inset, within a few percent of the renderer's). One
-    cached solve per camera/extent change; None for no extent."""
-    if extent is None:
+def card_span(camera:Mapping, view):
+    """``visible_span`` for the drawn card's framed ``view`` (``core.framed_view.FramedView``: the card's pixel aspect
+    and its content aperture, ``framed_aperture_scale(..., content=True)``, exactly the numbers the renderer draws
+    with, N0.4), followed by its ``visible_top`` when the camera has one. One cached solve per camera/view change;
+    None for no view (no card drawn yet)."""
+    if view is None:
         return None
-    width, height = float(extent[0]), float(extent[1])
-    if not (width > 0. and height > 0.):
-        return None
+    aspect, aperture = float(view[0]), float(view[1])
     key = (tuple(sorted((k, tuple(v) if isinstance(v, (list, tuple)) else v) for k, v in camera.items())),
-           width, height, float(baseline_height))
+           aspect, aperture)
     if _SPAN_CACHE[0] != key:
-        aspect, scale = width/height, height/float(baseline_height)
-        top = visible_top(camera, aspect, scale)
-        _SPAN_CACHE[0], _SPAN_CACHE[1] = key, visible_span(camera, aspect, scale)+(() if top is None else (top,))
+        top = visible_top(camera, aspect, aperture)
+        _SPAN_CACHE[0], _SPAN_CACHE[1] = key, visible_span(camera, aspect, aperture)+(() if top is None else (top,))
     return _SPAN_CACHE[1]

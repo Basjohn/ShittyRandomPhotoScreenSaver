@@ -268,6 +268,20 @@ def physical_camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
     return view_to_world, world_to_view, eye, tan, projection
 
 
+def parameter_camera(parameters: Mapping[str, object], aspect: float, aperture_scale: float):
+    """``physical_camera`` for a frame's parameters, at the card's pixel ``aspect`` and its ``aperture_scale``
+    (``framed_aperture_scale(presentation)``): the one assembly of the renderer's camera, which the logical side
+    builds too (``widgets.spotify_visualizer.framed_view_camera``, N0.4). Orbit = Alt+left drag; Scene Pan = physical
+    lateral/up translation; Scene Scale = physical dolly. None of these change the centred lens. The eye is bound
+    below the surface for a surface light (``scene_knobs``' mode)."""
+    return physical_camera(
+        float(_p(parameters, "turn")), float(_p(parameters, "tilt")), aspect, float(_p(parameters, "scene_scale")),
+        pan_x=float(_p(parameters, "scene_pan_x")), pan_y=float(_p(parameters, "scene_pan_y")),
+        position_offset=tuple(_p(parameters, "camera_position")),
+        fov_y_degrees=float(_p(parameters, "camera_fov")),
+        surface_bound=_LIGHT_TYPES[str(_p(parameters, "light_type"))] == "surface", aperture_scale=aperture_scale)
+
+
 
 def bubble_instances(records) -> np.ndarray:
     """Pack physical xyz/radius, stable seed, kind, material opacity and the steady lens radius.
