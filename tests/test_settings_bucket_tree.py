@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QSlider, QVBoxLayo
 from ui.tabs.shared_styles import (
     add_aligned_row_widget, apply_shared_label_style, build_bucket_toggle,
 )
+from tests._invisible_windows import keep_off_screen
 from ui.widgets.bucket_tree import BUCKET_CHILD_INDENT, BucketTreeBody
 
 
@@ -56,7 +57,7 @@ def test_nested_bucket_rails_stop_at_headers_and_visible_rows(qt_app):
     wrapped_rows.addWidget(helper)
     children.addWidget(wrapper)
     host.resize(600, 420)
-    host.show()
+    keep_off_screen(host).show()  # a real native layout and paint, never on screen
     try:
         _settle(qt_app)
         assert isinstance(body, BucketTreeBody)
@@ -71,6 +72,7 @@ def test_nested_bucket_rails_stop_at_headers_and_visible_rows(qt_app):
         assert subtree.isHidden()
         assert _points(body) == (_anchor(top, body), _anchor(child, body))
         _assert_painted_rail_ends_at(body, _anchor(child, body)[1])
+        keep_off_screen(last.window())  # its top-level is the off-screen host; said here for the window guard
         last.show()
         _settle(qt_app)
         assert _points(body)[-1] == _anchor(last, body)
@@ -95,7 +97,7 @@ def test_dynamic_rows_resize_and_sibling_control_columns_share_one_gutter(qt_app
         labels.append(label)
         sliders.append(slider)
     host.resize(600, 320)
-    host.show()
+    keep_off_screen(host).show()  # a real native layout and paint, never on screen
     try:
         _settle(qt_app)
         for width in (780, 480, 670):
@@ -134,7 +136,7 @@ def test_control_without_label_connects_to_control_not_alignment_placeholder(qt_
     row.addWidget(placeholder)
     row.addWidget(checkbox)
     children.addLayout(row)
-    host.show()
+    keep_off_screen(host).show()  # a real native layout and paint, never on screen
     try:
         _settle(qt_app)
         assert _points(body) == (_anchor(checkbox, body),)
@@ -168,7 +170,7 @@ def test_explanatory_and_live_stack_captions_do_not_extend_parent_rail(qt_app, m
     assert status.text() == "Live contextual status"
     assert status.property("settingsAnnotation") is True
     host.resize(600, 550)
-    host.show()
+    keep_off_screen(host).show()  # a real native layout and paint, never on screen
     try:
         _settle(qt_app)
         assert status.mapTo(body, QPoint()).y() > child.mapTo(body, QPoint()).y() + 100

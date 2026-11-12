@@ -42,6 +42,7 @@ from widgets.spotify_visualizer.quick_display_visualizer_owner import (
 
 # Construct owners the way the display owner does (card kwargs + technical cache).
 from tests._visualizer_presentation import make_visualizer_owner as _make_owner
+from tests._invisible_windows import keep_off_screen
 
 from widgets.spotify_visualizer.render_state import (
     ResolvedVisualizerPresentation,
@@ -139,7 +140,10 @@ def test_successive_visualizer_revisions_reach_retained_sync_item(
     )
     try:
         owner.bind(engine_generation=3, activation_id=7)
-        runtime.show_on_screen()
+        # The real runtime window, shown and rendered but never on screen (show_on_screen would place it on a
+        # physical display; the conftest display guard refuses that).
+        keep_off_screen(runtime.window)
+        runtime.window.show()
         qtbot.waitUntil(runtime.window.isVisible, timeout=3000)
 
         controller = owner.controller
@@ -363,7 +367,8 @@ def test_qwindow_right_click_leaves_retained_qml_context_menu_visibly_open(
     model.replace_entries(_menu_entries())
     model.set_action_handler(lambda _action_id, _payload: True)
     try:
-        runtime.show_on_screen()
+        keep_off_screen(runtime.window)
+        runtime.window.show()
         qtbot.waitUntil(runtime.window.isVisible, timeout=3000)
 
         root = runtime.scene_controller.scene_root

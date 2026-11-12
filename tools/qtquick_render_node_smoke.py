@@ -62,6 +62,7 @@ from rendering.quick.transitions import (  # noqa: E402
 )
 from rendering.quick.window import QuickDisplayWindow  # noqa: E402
 from tools import artifact_paths  # noqa: E402
+from tests._invisible_windows import keep_off_screen  # noqa: E402
 
 
 _TRANSITION_IDS = (
@@ -721,7 +722,10 @@ class _SmokeRunner(QObject):
                         index,
                         screen,
                         generation=self._generation,
-                        accepts_focus=position == 0,
+                        # Off-screen probes never take the operator's focus; requestActivate on a
+                        # click-through zero-opacity window also never returned (12 Nov). Input is sent
+                        # to the window directly (``_request_exit_via_input``).
+                        accepts_focus=False,
                     )
                 )
         except Exception as exc:
@@ -788,6 +792,8 @@ class _SmokeRunner(QObject):
                 lambda runtime=runtime: self._on_runtime_exit_requested(runtime)
             )
         window = runtime.window
+        # Real, exposed and GPU-rendered, never on screen (pixels are captured inside the render node).
+        keep_off_screen(window)
         window.setColor(QColor("#080b14"))
 
         size: QSize = self._args.size
