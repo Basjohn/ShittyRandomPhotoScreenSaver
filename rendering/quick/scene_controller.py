@@ -105,6 +105,16 @@ def _qobject_is_alive(value: object) -> bool:
         return False
 
 
+def _projected_pixel_shift(state: QuickAuxiliaryState | None, window: Any, suspended: bool) -> tuple[float, float]:
+    """The shift the cards are drawn at: the admitted auxiliary state's on whole device pixels (1C.4: a card drawn on
+    the device-pixel grid stays on it), or none while Edit's chrome suspends it."""
+
+    if state is None or suspended:
+        return 0.0, 0.0
+    shift_dpr = _scene_device_pixel_ratio(window)
+    return (snap_to_device_pixels(float(state.pixel_shift_x), shift_dpr),
+            snap_to_device_pixels(float(state.pixel_shift_y), shift_dpr))
+
 
 
 def _render_snapshot_has_intentional_base_frame(snapshot: object) -> bool:
@@ -471,6 +481,11 @@ class QuickSceneController(QObject):
         # report their geometry to the listener while it is bound.
         self._custom_layout_fullscreen = False
         self._overlay_edit_geometry_listener: Callable[[], None] | None = None
+        # Edit's chrome suspends pixel shift on this display (1C.4): its overlay lies outside ``pixelShiftLayer``, so
+        # the cards sit unshifted where Edit frames, snaps and saves them; the last admitted auxiliary state returns
+        # the shift when Edit ends.
+        self._pixel_shift_suspended = False
+        self._auxiliary_state: QuickAuxiliaryState | None = None
         # Set only when the C++ DisplayScene root dies while this generation is
         # still admitting work. Normal terminal retirement closes admission first.
         self._unexpected_scene_root_loss = False
@@ -838,13 +853,14 @@ class QuickSceneController(QObject):
         # Pixel shift moves the cards by whole device pixels (1C.4): a card drawn on the device-pixel grid stays on it,
         # so its frame never gains a blended edge pixel. The shift is a few logical pixels; at 125 % and 150 % each
         # step lands within half a device pixel of the logical one.
-        shift_dpr = _scene_device_pixel_ratio(self._window)
+        self._auxiliary_state = state
+        shift_x, shift_y = _projected_pixel_shift(state, self._window, getattr(self, "_pixel_shift_suspended", False))
         backdrop_changed = False
         for name, value in (
             ("dimmingEnabled", state.dimming_enabled),
             ("dimmingOpacity", state.dimming_opacity),
-            ("pixelShiftX", snap_to_device_pixels(float(state.pixel_shift_x), shift_dpr)),
-            ("pixelShiftY", snap_to_device_pixels(float(state.pixel_shift_y), shift_dpr)),
+            ("pixelShiftX", shift_x),
+            ("pixelShiftY", shift_y),
         ):
             if root.property(name) != value:
                 root.setProperty(name, value)
@@ -855,6 +871,22 @@ class QuickSceneController(QObject):
         if backdrop_changed and owner is not None:
             owner.note_background_changed()
         return True
+
+    def _suspend_pixel_shift(self, suspended: bool) -> None:
+        """Edit's chrome opens or closes on this display (1C.4): the cards move to their unshifted place for Edit and
+        back to the latest shift after it. Settings' Arrange never shifts; Edit edits the same unshifted layout."""
+
+        suspended = bool(suspended)
+        if suspended == self._pixel_shift_suspended:
+            return
+        self._pixel_shift_suspended = suspended
+        root = self._scene_root
+        if root is None or not _qobject_is_alive(root):
+            return
+        shift = _projected_pixel_shift(self._auxiliary_state, self._window, suspended)
+        for name, value in zip(("pixelShiftX", "pixelShiftY"), shift):
+            if root.property(name) != value:
+                root.setProperty(name, value)
 
     def _publish_jedi_mode_event(
         self, trigger: str, model_identity: str = "ordinary_widget"
@@ -1266,6 +1298,8 @@ class QuickSceneController(QObject):
         self._custom_layout_display_identity = identity
         self._custom_layout_display_origin = QPoint(display_origin or QPoint())
         self._custom_layout_session = session
+        # The cards sit where Edit's frames are: unshifted while its chrome is open (1C.4).
+        self._suspend_pixel_shift(True)
         # Keep native runtime pointer semantics out of CUSTOM before enabling the
         # edit overlay. QML still receives the pointer through QQuickWindow.
         self._window.set_custom_layout_input_blocked(True)
@@ -1419,6 +1453,7 @@ class QuickSceneController(QObject):
         self._custom_layout_display_origin = QPoint(display_origin or QPoint())
         self._custom_layout_session = session
         self._custom_layout_fullscreen = True
+        self._suspend_pixel_shift(True)               # the overlays' frames sit on the unshifted card (1C.4)
         self._window.set_custom_layout_input_blocked(True)
         self.ordinary_widget_host.set_custom_layout_input_blocked(True)
         if self._visualizer_root is not None:
@@ -1673,6 +1708,7 @@ class QuickSceneController(QObject):
         # Fullscreen Edit: the overlays stop reporting geometry first, then return to their authored visibility.
         self._overlay_edit_geometry_listener = None
         self._custom_layout_fullscreen = False
+        self._suspend_pixel_shift(False)              # the latest pixel shift returns with Edit's end (1C.4)
         self._set_visualizer_overlay_editing(False)
         host = self.ordinary_widget_host
         invalid = host.prune_invalid_presentations()
