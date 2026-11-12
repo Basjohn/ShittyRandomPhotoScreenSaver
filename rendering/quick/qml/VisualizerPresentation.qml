@@ -12,6 +12,10 @@ Item {
     // The retained renderer/CPU reach authority supplies it; it never changes
     // this stage's saved rectangle, snapping or input ownership.
     property var editContentEnvelope: ({ admitted: false })
+    // Where the card is drawn (``resolve_card_drawn_rect``, in the loader's parent coordinates: display-local),
+    // published by the scene with the loader's geometry so Edit's outline and handles sit on the drawn card. Empty
+    // while no record places the card.
+    property rect drawnCardRect: Qt.rect(0, 0, 0, 0)
     signal appVolumeStepRequested(int direction)
     property bool cameraResetAvailable: false
     property bool studioGlyphAvailable: false

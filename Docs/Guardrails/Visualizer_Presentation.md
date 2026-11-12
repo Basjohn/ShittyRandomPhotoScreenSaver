@@ -275,7 +275,10 @@ version advancement by itself does not reopen the failed handoff. Current Quick 
   card surface shows between frame and content (1C.4: over bright content a blended edge pixel reads as the content
   reaching into the border; an inset leaves a dark seam, which is a defect). The corners are the frame's inner arc,
   anti-aliased by Qt as any rounded edge. Pixel shift moves the cards by whole device pixels. `content_rect` stays
-  the authored content geometry (R-21).
+  the authored content geometry (R-21). Edit's Visualizer outline and handles sit on the drawn card too: the scene
+  publishes the same resolution on the card's root (`drawnCardRect`) and the Edit frame follows it, while a move's
+  arithmetic keeps the session geometry (`tests/test_qtquick_custom_layout_overlay.py`,
+  `test_visualizer_edit_outline_and_handles_sit_on_the_drawn_card`).
 
 Do not preserve the failed clip-node route as a second selectable implementation.
 
