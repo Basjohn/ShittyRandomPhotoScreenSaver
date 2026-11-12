@@ -94,6 +94,41 @@ endforeach()
 file(WRITE "${_gen}/n07_shaders.h.in" "${_n07_includes}")
 configure_file("${_gen}/n07_shaders.h.in" "${_gen}/n07_shaders.h" COPYONLY)
 
+# N0.3 (the three convention scenes, src/n03_scenes.cpp): each shaders/n03_* source gets the production conventions
+# include (shaders/srpss_conventions.glsl, the text of rendering/gl_programs/conventions.py; a test keeps the two
+# equal) and the scenes' shared fragment declarations (shaders/n03_common.glsl) spliced in, then is baked for SPIR-V,
+# HLSL 5.0 (D3D11 and D3D12) and GLSL (the OpenGL backend picks the newest version its context takes).
+set(_n03_shaders n03_geom.vert n03_writer.frag n03_samples.frag n03_coords.frag n03_block.frag n03_color.frag
+    n03_depth.frag n03_facing.frag)
+set(_n03_conventions "${CMAKE_CURRENT_SOURCE_DIR}/shaders/srpss_conventions.glsl")
+set(_n03_common "${CMAKE_CURRENT_SOURCE_DIR}/shaders/n03_common.glsl")
+set(_n03_shader_headers)
+set(_n03_includes "#pragma once\n")
+file(MAKE_DIRECTORY "${_gen}/n03_composed")
+foreach(_file ${_n03_shaders})
+    string(REPLACE "." "_" _sym "${_file}")
+    set(_src "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${_file}")
+    set(_composed "${_gen}/n03_composed/${_file}")
+    set(_qsb "${_gen}/${_file}.qsb")
+    set(_hdr "${_gen}/${_sym}_qsb.h")
+    add_custom_command(
+        OUTPUT "${_qsb}" "${_hdr}"
+        COMMAND "${CMAKE_COMMAND}" -DINPUT=${_src} -DOUTPUT=${_composed} -DCONVENTIONS=${_n03_conventions}
+                -DCOMMON=${_n03_common} -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/compose_shader.cmake"
+        COMMAND "${SPIKE_QSB}" --glsl "430,330,150" --hlsl 50 -o "${_qsb}" "${_composed}"
+        COMMAND "${CMAKE_COMMAND}" -DINPUT=${_qsb} -DOUTPUT=${_hdr} -DSYMBOL=${_sym}_qsb
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_file.cmake"
+        DEPENDS "${_src}" "${_n03_conventions}" "${_n03_common}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/cmake/compose_shader.cmake"
+                "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_file.cmake"
+        COMMENT "qsb ${_file} (N0.3)"
+        VERBATIM)
+    list(APPEND _n03_shader_headers "${_hdr}")
+    string(APPEND _n03_includes "#include \"${_sym}_qsb.h\"\n")
+endforeach()
+file(WRITE "${_gen}/n03_shaders.h.in" "${_n03_includes}")
+configure_file("${_gen}/n03_shaders.h.in" "${_gen}/n03_shaders.h" COPYONLY)
+
 set(_sources
     src/module.cpp
     src/quadfield.cpp
@@ -102,7 +137,9 @@ set(_sources
     src/image_stats.cpp
     src/thread_probe.cpp
     src/vk_n06.cpp
-    ${_shader_headers})
+    src/n03_scenes.cpp
+    ${_shader_headers}
+    ${_n03_shader_headers})
 if(SPIKE_WITH_QUICK)
     list(APPEND _sources src/quick_item.cpp src/quick_offscreen.cpp src/vk_n07.cpp ${_n07_shader_headers})
 endif()

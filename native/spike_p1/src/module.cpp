@@ -7,6 +7,7 @@
 
 #include "gui_helpers.h"
 #include "image_stats.h"
+#include "n03_scenes.h"
 #include "quadfield.h"
 #include "rhi_offscreen.h"
 #include "thread_probe.h"
@@ -464,6 +465,20 @@ PyObject *n06_context_destroy(PyObject *, PyObject *)
     return pyJson(n06ContextDestroyJson());
 }
 
+// ---------------------------------------------------------------- N0.3 (the three convention scenes)
+
+PyObject *n03_run(PyObject *, PyObject *args)
+{
+    const char *backend = nullptr;
+    const char *spec = nullptr;
+    Py_ssize_t specLen = 0;
+    if (!PyArg_ParseTuple(args, "ss#", &backend, &spec, &specLen))
+        return nullptr;
+    // GUI thread, synchronous, keeps the GIL (as n06_facts): Qt may log through a message handler a Python caller
+    // installed.
+    return pyJson(n03RunJson(QString::fromUtf8(backend), QByteArray(spec, qsizetype(specLen))));
+}
+
 #ifdef SPIKE_WITH_QUICK
 PyObject *n06_attach_window(PyObject *, PyObject *args)
 {
@@ -745,6 +760,9 @@ PyMethodDef methods[] = {
     { "n06_set_phase", n06_set_phase, METH_VARARGS, "(phase) attributes later debug messages to it" },
     { "n06_context_destroy", n06_context_destroy, METH_NOARGS,
       "() -> JSON str: teardown steps and the debug message counts per phase (windows destroyed first)" },
+    { "n03_run", n03_run, METH_VARARGS,
+      "(backend, spec_json) -> JSON str: N0.3's convention scenes on one backend (vulkan: our N0.6 device), raw "
+      "readbacks in base64" },
 #ifdef SPIKE_WITH_QUICK
     { "n06_attach_window", n06_attach_window, METH_VARARGS,
       "(quick_window_ptr, ours) our instance + device, or the reference instance (Qt's own device)" },
