@@ -29,7 +29,16 @@ QByteArray n06VulkanFactsJson();
 // VK_EXT_device_fault, which Qt's own device enables) where available, and Qt's feature set (every supported
 // feature of the 1.0, 1.1 and 1.2 structures and of the enabled extensions' structures, robustBufferAccess off).
 // Also a reference QVulkanInstance (Qt creates it, API 1.2, preferred extensions) for hosts on Qt's own device.
-QByteArray n06ContextCreateJson(bool wantValidation);
+// queueMode (rounds 3 and 4): "one" = the graphics queue only (round 2); "second" = also a second queue, found
+// the D9 way (same family as the graphics queue first, index 1; else another family with compute; else none, and
+// D9's in-frame form runs), created at a lower priority and proved with an empty submit and a fence;
+// "force_absent" = the negative control: the same finder is given a forced shape (the graphics family with one
+// queue, no other family), must report none, and the device is created with the graphics queue only.
+QByteArray n06ContextCreateJson(bool wantValidation, const QString &queueMode = QStringLiteral("one"));
+// Process counters for the create/destroy cycles: handles, GDI and USER objects, threads, private bytes, working
+// set, and per memory heap the process's GPU usage (VK_EXT_memory_budget, read through a small probe instance of
+// its own that lives until process exit, so it is part of every reading alike). GUI thread.
+QByteArray n06ProcessCountersJson();
 // Attributes the debug messages that follow to this phase (any thread may log; the counters are atomic).
 void n06SetPhase(const QString &phase);
 // Tears down in the order of facts A7 (the caller has destroyed every window and render control first):

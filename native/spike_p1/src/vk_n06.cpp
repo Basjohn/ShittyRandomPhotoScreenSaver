@@ -38,6 +38,8 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <psapi.h>
+#include <tlhelp32.h>
 
 namespace srpss_spike {
 
@@ -736,6 +738,9 @@ struct Context
     VkPhysicalDevice physDev = VK_NULL_HANDLE;
     VkDevice device = VK_NULL_HANDLE;
     uint32_t family = 0;
+    bool hasSecondQueue = false; // the D9 job queue (N0.6 rounds 3 and 4 find and prove it; N0.7 uses it)
+    uint32_t secondFamily = 0;
+    uint32_t secondIndex = 0;
     std::unique_ptr<QVulkanInstance> ours;      // adopts `instance`
     std::unique_ptr<QVulkanInstance> reference; // Qt creates its own instance and, per window, its own device
     MessageStats stats;                         // outlives the messengers (deleted with the context)
@@ -914,8 +919,85 @@ bool createOurInstance(Context *ctx, bool wantValidation, QJsonObject *o)
     return true;
 }
 
-// Our VkDevice with Qt's feature set and one graphics+present queue. Fills `o`.
-bool createOurDevice(Context *ctx, QJsonObject *o)
+struct QueueChoice
+{
+    bool found = false;
+    uint32_t family = 0;
+    uint32_t index = 0;
+    QString how;
+};
+
+// D9's rule (facts C3): a second queue in the graphics family first (QRhi's resources are exclusive and it never
+// records an ownership transfer, so the same family needs none); else another family with compute (its outputs
+// must then be raw concurrent resources); else none, and the in-frame form runs.
+QueueChoice findSecondQueue(const std::vector<VkQueueFamilyProperties> &families, uint32_t graphicsFamily)
+{
+    QueueChoice c;
+    if (graphicsFamily < families.size() && families[graphicsFamily].queueCount >= 2) {
+        c.found = true;
+        c.family = graphicsFamily;
+        c.index = 1;
+        c.how = QStringLiteral("the graphics queue's family, index 1");
+        return c;
+    }
+    for (uint32_t f = 0; f < uint32_t(families.size()); ++f) {
+        if (f != graphicsFamily && (families[f].queueFlags & VK_QUEUE_COMPUTE_BIT) && families[f].queueCount >= 1) {
+            c.found = true;
+            c.family = f;
+            c.index = 0;
+            c.how = QStringLiteral("another family with compute (needs raw concurrent resources, facts C3)");
+            return c;
+        }
+    }
+    c.how = QStringLiteral("none: D9's in-frame form runs");
+    return c;
+}
+
+// The second queue exists and executes: its handle differs from the graphics queue's, and an empty submit with a
+// fence completes on it (GUI thread; Qt's render thread only ever touches the graphics queue).
+QJsonObject proveSecondQueue(Context *ctx)
+{
+    QJsonObject o;
+    auto getDeviceProcAddr = ctx->loader.get<PFN_vkGetDeviceProcAddr>(ctx->instance, "vkGetDeviceProcAddr");
+    if (!getDeviceProcAddr) {
+        o.insert(QStringLiteral("error"), QStringLiteral("no vkGetDeviceProcAddr"));
+        return o;
+    }
+    auto dev = [&](const char *name) { return getDeviceProcAddr(ctx->device, name); };
+    auto getQueue = reinterpret_cast<PFN_vkGetDeviceQueue>(dev("vkGetDeviceQueue"));
+    auto createFence = reinterpret_cast<PFN_vkCreateFence>(dev("vkCreateFence"));
+    auto destroyFence = reinterpret_cast<PFN_vkDestroyFence>(dev("vkDestroyFence"));
+    auto queueSubmit = reinterpret_cast<PFN_vkQueueSubmit>(dev("vkQueueSubmit"));
+    auto waitForFences = reinterpret_cast<PFN_vkWaitForFences>(dev("vkWaitForFences"));
+    if (!getQueue || !createFence || !destroyFence || !queueSubmit || !waitForFences) {
+        o.insert(QStringLiteral("error"), QStringLiteral("a device entry point is missing"));
+        return o;
+    }
+    VkQueue graphics = VK_NULL_HANDLE;
+    VkQueue second = VK_NULL_HANDLE;
+    getQueue(ctx->device, ctx->family, 0, &graphics);
+    getQueue(ctx->device, ctx->secondFamily, ctx->secondIndex, &second);
+    o.insert(QStringLiteral("handle_distinct"), second != VK_NULL_HANDLE && second != graphics);
+    VkFenceCreateInfo fenceInfo = {};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    VkFence fence = VK_NULL_HANDLE;
+    const VkResult made = createFence(ctx->device, &fenceInfo, nullptr, &fence);
+    if (made != VK_SUCCESS) {
+        o.insert(QStringLiteral("error"), QStringLiteral("vkCreateFence: ") + vkResultName(made));
+        return o;
+    }
+    const VkResult submitted = queueSubmit(second, 0, nullptr, fence);
+    const VkResult waited = submitted == VK_SUCCESS
+        ? waitForFences(ctx->device, 1, &fence, VK_TRUE, 1000000000ull) : submitted;
+    destroyFence(ctx->device, fence, nullptr);
+    o.insert(QStringLiteral("submit"), submitted == VK_SUCCESS ? QStringLiteral("VK_SUCCESS") : vkResultName(submitted));
+    o.insert(QStringLiteral("fence_wait"), waited == VK_SUCCESS ? QStringLiteral("VK_SUCCESS") : vkResultName(waited));
+    o.insert(QStringLiteral("submit_ok"), submitted == VK_SUCCESS && waited == VK_SUCCESS);
+    return o;
+}
+
+// Our VkDevice with Qt's feature set, one graphics+present queue and, by queueMode, the second queue. Fills `o`.
+bool createOurDevice(Context *ctx, const QString &queueMode, QJsonObject *o)
 {
     const VkInstance inst = ctx->instance;
     auto enumerateDevices = ctx->loader.get<PFN_vkEnumeratePhysicalDevices>(inst, "vkEnumeratePhysicalDevices");
@@ -981,7 +1063,37 @@ bool createOurDevice(Context *ctx, QJsonObject *o)
     }
     o->insert(QStringLiteral("queue_family_index"), qint64(ctx->family));
     o->insert(QStringLiteral("queue_family_flags"), queueFlagNames(families[ctx->family].queueFlags));
-    o->insert(QStringLiteral("queue_count_created"), 1);
+
+    QueueChoice second;
+    QJsonObject secondRecord;
+    secondRecord.insert(QStringLiteral("mode"), queueMode);
+    if (queueMode == QLatin1String("second")) {
+        second = findSecondQueue(families, ctx->family);
+    } else if (queueMode == QLatin1String("force_absent")) {
+        // The negative control: the same finder on a forced shape with no spare queue anywhere.
+        std::vector<VkQueueFamilyProperties> forced = families;
+        for (uint32_t f = 0; f < uint32_t(forced.size()); ++f)
+            forced[f].queueCount = f == ctx->family ? 1u : 0u;
+        second = findSecondQueue(forced, ctx->family);
+        secondRecord.insert(QStringLiteral("forced_shape"),
+                            QStringLiteral("graphics family with 1 queue, no other family"));
+    } else if (queueMode != QLatin1String("one")) {
+        o->insert(QStringLiteral("error"), QStringLiteral("unknown queue mode ") + queueMode);
+        return false;
+    }
+    secondRecord.insert(QStringLiteral("found"), second.found);
+    secondRecord.insert(QStringLiteral("how"), queueMode == QLatin1String("one") ? QStringLiteral("not requested")
+                                                                                 : second.how);
+    if (second.found) {
+        secondRecord.insert(QStringLiteral("family"), qint64(second.family));
+        secondRecord.insert(QStringLiteral("index"), qint64(second.index));
+        secondRecord.insert(QStringLiteral("same_family_as_graphics"), second.family == ctx->family);
+        secondRecord.insert(QStringLiteral("family_flags"), queueFlagNames(families[second.family].queueFlags));
+        secondRecord.insert(QStringLiteral("priority"), 0.5);
+    }
+    ctx->hasSecondQueue = second.found;
+    ctx->secondFamily = second.family;
+    ctx->secondIndex = second.index;
 
     uint32_t extCount = 0;
     enumerateDeviceExtensions(ctx->physDev, nullptr, &extCount, nullptr);
@@ -1059,18 +1171,37 @@ bool createOurDevice(Context *ctx, QJsonObject *o)
                                  offsetof(VkPhysicalDeviceVulkan12Features, samplerMirrorClampToEdge), kSpecCount12));
     o->insert(QStringLiteral("enabled_features"), enabled);
 
-    const float priority = 1.0f;
-    VkDeviceQueueCreateInfo queueInfo = {};
-    queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueInfo.queueFamilyIndex = ctx->family;
-    queueInfo.queueCount = 1;
-    queueInfo.pQueuePriorities = &priority;
+    // Graphics queue at 1.0, the job queue below it (0.5); same family: one create info with two queues.
+    const float priorities[2] = { 1.0f, 0.5f };
+    std::vector<VkDeviceQueueCreateInfo> queueInfos;
+    VkDeviceQueueCreateInfo graphicsInfo = {};
+    graphicsInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    graphicsInfo.queueFamilyIndex = ctx->family;
+    graphicsInfo.queueCount = (second.found && second.family == ctx->family) ? 2u : 1u;
+    graphicsInfo.pQueuePriorities = priorities;
+    queueInfos.push_back(graphicsInfo);
+    if (second.found && second.family != ctx->family) {
+        VkDeviceQueueCreateInfo jobInfo = {};
+        jobInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        jobInfo.queueFamilyIndex = second.family;
+        jobInfo.queueCount = 1;
+        jobInfo.pQueuePriorities = &priorities[1];
+        queueInfos.push_back(jobInfo);
+    }
+    QJsonArray queueLayout;
+    for (const VkDeviceQueueCreateInfo &qi : queueInfos) {
+        QJsonObject q;
+        q.insert(QStringLiteral("family"), qint64(qi.queueFamilyIndex));
+        q.insert(QStringLiteral("count"), qint64(qi.queueCount));
+        queueLayout.append(q);
+    }
+    o->insert(QStringLiteral("queues_created"), queueLayout);
     const std::vector<const char *> extensionPtrs = pointers(extensions);
     VkDeviceCreateInfo dci = {};
     dci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     dci.pNext = &f2;
-    dci.queueCreateInfoCount = 1;
-    dci.pQueueCreateInfos = &queueInfo;
+    dci.queueCreateInfoCount = uint32_t(queueInfos.size());
+    dci.pQueueCreateInfos = queueInfos.data();
     dci.enabledExtensionCount = uint32_t(extensionPtrs.size());
     dci.ppEnabledExtensionNames = extensionPtrs.empty() ? nullptr : extensionPtrs.data();
     const VkResult created = createDevice(ctx->physDev, &dci, nullptr, &ctx->device);
@@ -1081,6 +1212,9 @@ bool createOurDevice(Context *ctx, QJsonObject *o)
     }
     o->insert(QStringLiteral("vk_device"), qint64(reinterpret_cast<quintptr>(ctx->device)));
     o->insert(QStringLiteral("vk_physical_device"), qint64(reinterpret_cast<quintptr>(ctx->physDev)));
+    if (ctx->hasSecondQueue)
+        secondRecord.insert(QStringLiteral("proof"), proveSecondQueue(ctx));
+    o->insert(QStringLiteral("second_queue"), secondRecord);
     return true;
 }
 
@@ -1103,7 +1237,7 @@ QByteArray n06VulkanFactsJson()
     return QJsonDocument(root).toJson(QJsonDocument::Compact);
 }
 
-QByteArray n06ContextCreateJson(bool wantValidation)
+QByteArray n06ContextCreateJson(bool wantValidation, const QString &queueMode)
 {
     QJsonObject root;
     root.insert(QStringLiteral("round"), QStringLiteral("device"));
@@ -1123,7 +1257,7 @@ QByteArray n06ContextCreateJson(bool wantValidation)
     const bool instanceOk = createOurInstance(ctx.get(), wantValidation, &instance);
     root.insert(QStringLiteral("instance"), instance);
     QJsonObject device;
-    const bool deviceOk = instanceOk && createOurDevice(ctx.get(), &device);
+    const bool deviceOk = instanceOk && createOurDevice(ctx.get(), queueMode, &device);
     root.insert(QStringLiteral("device"), device);
 
     QJsonObject reference;
@@ -1203,6 +1337,158 @@ QByteArray n06ContextDestroyJson()
     delete ctx;
     g_context = nullptr;
     return QJsonDocument(root).toJson(QJsonDocument::Compact);
+}
+
+namespace {
+
+// A small instance of its own for reading the process's GPU heap usage (VK_EXT_memory_budget). Created on the
+// first reading and kept to process exit, so every reading includes it alike.
+struct BudgetProbe
+{
+    bool initialised = false;
+    QString error;
+    Loader loader;
+    VkInstance instance = VK_NULL_HANDLE;
+    VkPhysicalDevice physDev = VK_NULL_HANDLE;
+    bool budgetSupported = false;
+    PFN_vkGetPhysicalDeviceMemoryProperties2 getMemory2 = nullptr;
+
+    void init()
+    {
+        initialised = true;
+        if (!loader.load(&error))
+            return;
+        auto createInstance = loader.get<PFN_vkCreateInstance>(nullptr, "vkCreateInstance");
+        VkApplicationInfo app = {};
+        app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+        app.pApplicationName = "srpss-n06-budget-probe";
+        app.apiVersion = VK_API_VERSION_1_2;
+        VkInstanceCreateInfo ci = {};
+        ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+        ci.pApplicationInfo = &app;
+        if (!createInstance || createInstance(&ci, nullptr, &instance) != VK_SUCCESS) {
+            instance = VK_NULL_HANDLE;
+            error = QStringLiteral("probe vkCreateInstance failed");
+            return;
+        }
+        auto enumerateDevices = loader.get<PFN_vkEnumeratePhysicalDevices>(instance, "vkEnumeratePhysicalDevices");
+        auto getProperties = loader.get<PFN_vkGetPhysicalDeviceProperties>(instance,
+                                                                           "vkGetPhysicalDeviceProperties");
+        auto enumerateExtensions = loader.get<PFN_vkEnumerateDeviceExtensionProperties>(
+            instance, "vkEnumerateDeviceExtensionProperties");
+        getMemory2 = loader.get<PFN_vkGetPhysicalDeviceMemoryProperties2>(instance,
+                                                                          "vkGetPhysicalDeviceMemoryProperties2");
+        if (!enumerateDevices || !getProperties || !enumerateExtensions || !getMemory2) {
+            error = QStringLiteral("probe: an instance entry point is missing");
+            return;
+        }
+        uint32_t count = 0;
+        enumerateDevices(instance, &count, nullptr);
+        std::vector<VkPhysicalDevice> devices(count);
+        if (count)
+            enumerateDevices(instance, &count, devices.data());
+        if (devices.empty()) {
+            error = QStringLiteral("probe: no physical device");
+            return;
+        }
+        physDev = devices[0];
+        for (VkPhysicalDevice pd : devices) { // the same choice as our device: the first discrete GPU
+            VkPhysicalDeviceProperties p = {};
+            getProperties(pd, &p);
+            if (p.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+                physDev = pd;
+                break;
+            }
+        }
+        uint32_t extCount = 0;
+        enumerateExtensions(physDev, nullptr, &extCount, nullptr);
+        std::vector<VkExtensionProperties> exts(extCount);
+        if (extCount)
+            enumerateExtensions(physDev, nullptr, &extCount, exts.data());
+        for (const VkExtensionProperties &e : exts) {
+            if (std::strcmp(e.extensionName, "VK_EXT_memory_budget") == 0)
+                budgetSupported = true;
+        }
+    }
+
+    QJsonArray heaps()
+    {
+        QJsonArray a;
+        if (!physDev || !getMemory2)
+            return a;
+        VkPhysicalDeviceMemoryBudgetPropertiesEXT budget = {};
+        budget.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
+        VkPhysicalDeviceMemoryProperties2 memory = {};
+        memory.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+        memory.pNext = budgetSupported ? &budget : nullptr;
+        getMemory2(physDev, &memory);
+        constexpr double mib = 1024.0 * 1024.0;
+        for (uint32_t h = 0; h < memory.memoryProperties.memoryHeapCount; ++h) {
+            QJsonObject heap;
+            heap.insert(QStringLiteral("device_local"),
+                        (memory.memoryProperties.memoryHeaps[h].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0);
+            if (budgetSupported) {
+                heap.insert(QStringLiteral("usage_mib"), double(budget.heapUsage[h]) / mib);
+                heap.insert(QStringLiteral("budget_mib"), double(budget.heapBudget[h]) / mib);
+            }
+            a.append(heap);
+        }
+        return a;
+    }
+};
+
+BudgetProbe &budgetProbe()
+{
+    static BudgetProbe probe;
+    if (!probe.initialised)
+        probe.init();
+    return probe;
+}
+
+int processThreadCount()
+{
+    const DWORD pid = GetCurrentProcessId();
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snapshot == INVALID_HANDLE_VALUE)
+        return -1;
+    int count = 0;
+    THREADENTRY32 entry = {};
+    entry.dwSize = sizeof(entry);
+    if (Thread32First(snapshot, &entry)) {
+        do {
+            if (entry.th32OwnerProcessID == pid)
+                ++count;
+            entry.dwSize = sizeof(entry);
+        } while (Thread32Next(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+    return count;
+}
+
+} // namespace
+
+QByteArray n06ProcessCountersJson()
+{
+    QJsonObject o;
+    HANDLE process = GetCurrentProcess();
+    DWORD handles = 0;
+    GetProcessHandleCount(process, &handles);
+    o.insert(QStringLiteral("handles"), qint64(handles));
+    o.insert(QStringLiteral("gdi_objects"), qint64(GetGuiResources(process, GR_GDIOBJECTS)));
+    o.insert(QStringLiteral("user_objects"), qint64(GetGuiResources(process, GR_USEROBJECTS)));
+    o.insert(QStringLiteral("threads"), processThreadCount());
+    PROCESS_MEMORY_COUNTERS_EX memory = {};
+    memory.cb = sizeof(memory);
+    if (K32GetProcessMemoryInfo(process, reinterpret_cast<PROCESS_MEMORY_COUNTERS *>(&memory), sizeof(memory))) {
+        o.insert(QStringLiteral("private_mib"), double(memory.PrivateUsage) / (1024.0 * 1024.0));
+        o.insert(QStringLiteral("working_set_mib"), double(memory.WorkingSetSize) / (1024.0 * 1024.0));
+    }
+    BudgetProbe &probe = budgetProbe();
+    o.insert(QStringLiteral("gpu_budget_supported"), probe.budgetSupported);
+    if (!probe.error.isEmpty())
+        o.insert(QStringLiteral("gpu_probe_error"), probe.error);
+    o.insert(QStringLiteral("gpu_heaps"), probe.heaps());
+    return QJsonDocument(o).toJson(QJsonDocument::Compact);
 }
 
 #ifdef SPIKE_WITH_QUICK

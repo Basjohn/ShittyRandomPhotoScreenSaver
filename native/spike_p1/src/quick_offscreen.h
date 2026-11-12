@@ -39,6 +39,9 @@ public:
 
     bool begin();
     QuickFramesResult frames(QObject *animated, int count, const QString &pngPath);
+    // N0.6: a new offscreen target of this size replaces the old one (the caller resizes the window and the
+    // scene on the GUI thread before the next frames()).
+    bool resize(int width, int height);
     void end();
 
     QString error() const { return m_error; }

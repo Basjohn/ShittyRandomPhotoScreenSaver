@@ -13,10 +13,17 @@ Rounds (one per GitHub build of the module):
           one graphics+present queue; the spike scene (the C++ QuadField) in a hidden Qt Quick host
           (QQuickRenderControl, never shown) on Qt's own device and then on ours, pixel-compared; teardown windows
           first, then the device, then the instance.
+  lifecycle  rounds 3 and 4: --cycles create/use/destroy cycles of our context with the second queue (D9's
+          rule: the graphics family first; proved by an empty submit and a fence); in each, the hidden host on our
+          device renders, its target is resized and it renders again; the first cycle also runs Qt's own device
+          and is pixel-compared before and after the resize. Handles, threads, GDI/USER objects, private bytes and
+          the GPU heap usage are read after every teardown and must return to the first cycle's values; a last
+          cycle forces the second queue's absence (negative control; --force-no-second-queue forces it always).
 
 Usage (repository venv, the module built on GitHub):
   python native/spike_p1/python/run_n06.py --module-dir release/native_module --round facts --label n06_facts
   python native/spike_p1/python/run_n06.py --module-dir release/native_module --round device --label n06_device
+  python native/spike_p1/python/run_n06.py --module-dir release/native_module --round lifecycle --label n06_lifecycle
 Evidence: .artifacts/evidence/native_core/n06/<date>_<label>/summary.json. Exit 0 whenever the probe ran; the
 verdict is in the JSON and the last printed lines ("N06 VERDICT ...").
 """
@@ -206,13 +213,15 @@ def compare_pngs(a: Path, b: Path) -> dict:
             "differing_pixels": int((diff.reshape(diff.shape[0], -1, 4).max(axis=2) > 0).sum())}
 
 
-def _quick_host(native, ours: bool, png: Path, next_frame_png: Path | None) -> dict:
+def _quick_host(native, ours: bool, png: Path, next_frame_png: Path | None, *, frames_count: int = FRAMES,
+                resize_to: tuple[int, int] | None = None, resized_png: Path | None = None) -> dict:
     """The spike scene in a hidden Qt Quick host (QQuickRenderControl, never shown), on our device (ours) or on
-    the device Qt creates (the reference instance). Everything is destroyed before returning: the render control
-    (and with it Qt's QRhi), the scene, the window, the engine."""
+    the device Qt creates (the reference instance); with resize_to, the target is then replaced at that size and
+    the scene rendered again. Everything is destroyed before returning: the render control (and with it Qt's
+    QRhi), the scene, the window, the engine."""
     import shiboken6
     from PySide6.QtCore import QCoreApplication, QEvent, QSizeF, QUrl
-    from PySide6.QtGui import QRhi
+    from PySide6.QtGui import QImage, QRhi
     from PySide6.QtQml import QQmlComponent, QQmlEngine
     from PySide6.QtQuick import QQuickRenderControl, QQuickWindow
 
@@ -243,7 +252,7 @@ def _quick_host(native, ours: bool, png: Path, next_frame_png: Path | None) -> d
         result.update(backend=session["backend"], device=session["device"], vk_device=session.get("vk_device", 0),
                       vk_queue_family=session.get("vk_queue_family", -1),
                       vk_queue_index=session.get("vk_queue_index", -1))
-        frames = native.quick_session_frames(handle, _ptr(root), FRAMES, str(png))
+        frames = native.quick_session_frames(handle, _ptr(root), frames_count, str(png))
         result.update(frames_ok=frames["ok"], frames_error=frames["error"], lit_pixels=frames["lit_pixels"],
                       pixel_checksum=frames["pixel_checksum"], timing=_frame_summary(frames["frame_ms"]),
                       png=str(png) if frames["ok"] else None)
@@ -253,6 +262,23 @@ def _quick_host(native, ours: bool, png: Path, next_frame_png: Path | None) -> d
             nxt = native.quick_session_frames(handle, _ptr(root), 1, str(next_frame_png))
             result["next_frame_png"] = str(next_frame_png) if nxt["ok"] else None
         result["ok"] = bool(frames["ok"]) and frames["lit_pixels"] > 0
+        if resize_to is not None and resized_png is not None:
+            w2, h2 = resize_to
+            resize: dict = {"size": [w2, h2], "ok": False}
+            try:
+                native.quick_session_resize(handle, w2, h2)
+                window.setGeometry(0, 0, w2, h2)
+                window.contentItem().setSize(QSizeF(w2, h2))
+                root.setSize(QSizeF(w2, h2))
+                again = native.quick_session_frames(handle, _ptr(root), frames_count, str(resized_png))
+                read = QImage(str(resized_png)) if again["ok"] else QImage()
+                resize.update(frames_ok=again["ok"], frames_error=again["error"], lit_pixels=again["lit_pixels"],
+                              read_size=[read.width(), read.height()], png=str(resized_png) if again["ok"] else None)
+                resize["ok"] = bool(again["ok"]) and again["lit_pixels"] > 0 and resize["read_size"] == [w2, h2]
+            except RuntimeError as exc:
+                resize["error"] = str(exc)
+            result["resize"] = resize
+            result["ok"] = result["ok"] and resize["ok"]
         return result
     finally:
         if handle is not None:
@@ -354,8 +380,173 @@ def round_device(native, out: Path) -> dict:
     }
 
 
-ROUNDS = {"facts": round_facts, "device": round_device}
-REQUIRED = {"facts": ("n06_facts",), "device": ("n06_facts", "n06_context_create", "n06_attach_window")}
+# --------------------------------------------------------------------- rounds 3 and 4: lifecycle and the second queue
+
+CYCLE_FRAMES = 30
+RESIZED = (1280, 720)
+EXPECTED_TEARDOWN = ["vkDeviceWaitIdle: VK_SUCCESS", "vkDestroyDevice", "resetDeviceFunctions",
+                     "reference QVulkanInstance destroyed", "adopting QVulkanInstance destroyed",
+                     "vkDestroyDebugUtilsMessengerEXT", "vkDestroyInstance"]
+# Bounds for "back to baseline" after the warm-up cycle (first run of the round sets them; any change is the lead's).
+HANDLE_TOLERANCE = 8
+THREAD_TOLERANCE = 1
+GPU_HEAP_TOLERANCE_MIB = 2.0
+PRIVATE_GROWTH_PER_CYCLE_MIB = 1.0
+
+
+def _counters(native) -> dict:
+    import gc
+
+    gc.collect()
+    return json.loads(native.n06_process_counters())
+
+
+def _cycle(native, out: Path, index: int, queue_mode: str, with_reference: bool) -> dict:
+    """One create/use/destroy cycle: our context, the hidden host on our device (render, resize, render), and,
+    when asked, the same host on Qt's own device first; then the teardown (windows, device, instances)."""
+    record: dict = {"cycle": index, "queue_mode": queue_mode}
+    ctx = json.loads(native.n06_context_create(True, queue_mode))
+    record["context_ok"] = bool(ctx.get("ok"))
+    record["second_queue"] = ctx.get("device", {}).get("second_queue", {})
+    record["queues_created"] = ctx.get("device", {}).get("queues_created")
+    record["vk_device"] = ctx.get("device", {}).get("vk_device")
+    record["queue_family_index"] = ctx.get("device", {}).get("queue_family_index")
+    if index == 1:
+        record["context"] = ctx
+    tag = f"cycle{index:02d}_{queue_mode}"
+    if ctx.get("ok"):
+        if with_reference:
+            native.n06_set_phase(f"{tag}_render_qt_own_device")
+            record["qt_host"] = _quick_host(native, False, out / "n06_lifecycle_qt_own_device.png", None,
+                                            frames_count=CYCLE_FRAMES, resize_to=RESIZED,
+                                            resized_png=out / "n06_lifecycle_qt_own_device_resized.png")
+        native.n06_set_phase(f"{tag}_render_our_device")
+        keep = with_reference or queue_mode == "force_absent"
+        png = out / (f"n06_lifecycle_our_device_{queue_mode}.png" if keep else "n06_cycle_scratch.png")
+        resized = out / (f"n06_lifecycle_our_device_{queue_mode}_resized.png" if keep
+                         else "n06_cycle_scratch_resized.png")
+        record["our_host"] = _quick_host(native, True, png, None, frames_count=CYCLE_FRAMES, resize_to=RESIZED,
+                                         resized_png=resized)
+        for host in ("qt_host", "our_host"):
+            record.get(host, {}).pop("rhi_feature_flags", None)
+    teardown = json.loads(native.n06_context_destroy())
+    record["teardown_steps"] = teardown.get("steps", [])
+    record["teardown_ok"] = bool(teardown.get("ok")) and teardown.get("device_wait_idle_ok") is True
+    record["messages"] = teardown.get("messages", {})
+    record["validation"] = ctx.get("instance", {}).get("validation")
+    record["validation_layer_loaded"] = bool(ctx.get("instance", {}).get("validation_layer_loaded"))
+    record["counters_after"] = _counters(native)
+    return record
+
+
+def _delta(series: list[dict], key: str) -> float | None:
+    if len(series) < 2 or key not in series[0] or key not in series[-1]:
+        return None
+    return round(series[-1][key] - series[0][key], 3)
+
+
+def round_lifecycle(native, out: Path, cycles: int = 10, force_absent_all: bool = False) -> dict:
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtQuick import QQuickWindow, QSGRendererInterface
+
+    QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.Vulkan)
+    app = QGuiApplication([sys.argv[0]])  # no window is ever shown
+    facts = json.loads(native.n06_facts())
+    facts_analysis = analyse_facts(facts) if facts.get("ok") else {}
+    start = _counters(native)
+    mode = "force_absent" if force_absent_all else "second"
+    records = [_cycle(native, out, i, mode, with_reference=(i == 1)) for i in range(1, cycles + 1)]
+    negative = _cycle(native, out, cycles + 1, "force_absent", with_reference=False)
+    del app
+    for scratch in ("n06_cycle_scratch.png", "n06_cycle_scratch_resized.png"):
+        (out / scratch).unlink(missing_ok=True)
+
+    first = records[0]
+    after = [r["counters_after"] for r in records]  # after[0] is the baseline (after the warm-up cycle)
+    baseline, last = after[0], after[-1]
+    heap_deltas = [round(b.get("usage_mib", 0.0) - a.get("usage_mib", 0.0), 3)
+                   for a, b in zip(baseline.get("gpu_heaps", []), last.get("gpu_heaps", []))]
+    measured = max(1, len(after) - 1)
+    private_growth = (_delta(after, "private_mib") or 0.0) / measured
+    comparisons = {}
+    qt_host, our_host = first.get("qt_host", {}), first.get("our_host", {})
+    if qt_host.get("png") and our_host.get("png"):
+        comparisons["before_resize_qt_vs_ours"] = compare_pngs(Path(qt_host["png"]), Path(our_host["png"]))
+    if qt_host.get("resize", {}).get("png") and our_host.get("resize", {}).get("png"):
+        comparisons["after_resize_qt_vs_ours"] = compare_pngs(Path(qt_host["resize"]["png"]),
+                                                              Path(our_host["resize"]["png"]))
+    family_facts = facts_analysis.get("qt_family", {})
+    expect_same_family = family_facts.get("queue_count", 0) >= 2
+    all_messages = [r["messages"] for r in records + [negative]]
+    layer_loaded = all(r["validation_layer_loaded"] for r in records + [negative])
+
+    def cycle_ok(r: dict) -> bool:
+        host = r.get("our_host", {})
+        return (r["context_ok"] and r["teardown_ok"] and bool(host.get("ok"))
+                and host.get("vk_device") == r.get("vk_device") and host.get("vk_queue_index") == 0
+                and host.get("vk_queue_family") == r.get("queue_family_index"))
+
+    sq = [r["second_queue"] for r in records]
+    checks = {
+        "every_cycle_created_rendered_resized_and_tore_down": all(cycle_ok(r) for r in records),
+        "teardown_order": all(r["teardown_steps"] == EXPECTED_TEARDOWN for r in records + [negative]),
+        "qt_reference_host_ok": bool(qt_host.get("ok")),
+        "pixel_identical_before_resize": comparisons.get("before_resize_qt_vs_ours", {}).get("max_abs") == 0,
+        "pixel_identical_after_resize": comparisons.get("after_resize_qt_vs_ours", {}).get("max_abs") == 0,
+        "handles_back_to_baseline": abs(_delta(after, "handles") or 0) <= HANDLE_TOLERANCE,
+        "threads_back_to_baseline": abs(_delta(after, "threads") or 0) <= THREAD_TOLERANCE,
+        "gpu_heaps_back_to_baseline": bool(baseline.get("gpu_budget_supported"))
+        and all(abs(d) <= GPU_HEAP_TOLERANCE_MIB for d in heap_deltas),
+        "private_bytes_flat": private_growth <= PRIVATE_GROWTH_PER_CYCLE_MIB,
+        "no_messenger_errors": all(m.get("errors", -1) == 0 for m in all_messages),
+        "environment_clean": environment_record()["clean"],
+        "negative_control_cycle_ok": cycle_ok(negative),
+        "negative_control_second_queue_absent": negative["second_queue"].get("found") is False,
+    }
+    if not force_absent_all:
+        checks["second_queue_found_every_cycle"] = all(s.get("found") is True for s in sq)
+        checks["second_queue_in_graphics_family_index_1"] = (not expect_same_family) or all(
+            s.get("same_family_as_graphics") is True and s.get("index") == 1 for s in sq)
+        checks["second_queue_executes"] = all(s.get("proof", {}).get("submit_ok") is True
+                                              and s.get("proof", {}).get("handle_distinct") is True for s in sq)
+    owed = []
+    if layer_loaded:
+        checks["validation_clean"] = all(m.get("errors", -1) == 0 and m.get("warnings", -1) == 0
+                                         for m in all_messages)
+    else:
+        owed.append(first.get("validation") or "validation owed")
+    warnings = sorted({s for m in all_messages for s in m.get("samples", [])})
+    return {
+        "round": "lifecycle",
+        "checks": checks,
+        "pass": all(checks.values()),
+        "owed": owed,
+        "cycles": cycles,
+        "second_queue": {"expected_same_family": expect_same_family, "first_cycle": sq[0] if sq else {},
+                         "negative_control": negative["second_queue"]},
+        "counters": {"start": start, "after_each_cycle": after, "after_negative_control": negative["counters_after"],
+                     "deltas_last_vs_baseline": {"handles": _delta(after, "handles"),
+                                                 "threads": _delta(after, "threads"),
+                                                 "gdi_objects": _delta(after, "gdi_objects"),
+                                                 "user_objects": _delta(after, "user_objects"),
+                                                 "private_mib": _delta(after, "private_mib"),
+                                                 "gpu_heap_usage_mib": heap_deltas},
+                     "private_growth_per_cycle_mib": round(private_growth, 3),
+                     "tolerances": {"handles": HANDLE_TOLERANCE, "threads": THREAD_TOLERANCE,
+                                    "gpu_heap_mib": GPU_HEAP_TOLERANCE_MIB,
+                                    "private_growth_per_cycle_mib": PRIVATE_GROWTH_PER_CYCLE_MIB}},
+        "comparisons": comparisons,
+        "validation": {"status": first.get("validation"), "messenger_warning_texts": warnings},
+        "records": records,
+        "negative_control": negative,
+        "environment": environment_record(),
+    }
+
+
+ROUNDS = {"facts": round_facts, "device": round_device, "lifecycle": round_lifecycle}
+REQUIRED = {"facts": ("n06_facts",), "device": ("n06_facts", "n06_context_create", "n06_attach_window"),
+            "lifecycle": ("n06_facts", "n06_context_create", "n06_attach_window", "n06_process_counters",
+                          "quick_session_resize")}
 
 
 def main() -> int:
@@ -363,6 +554,11 @@ def main() -> int:
     parser.add_argument("--module-dir", required=True, type=Path)
     parser.add_argument("--round", default="facts", choices=sorted(ROUNDS))
     parser.add_argument("--label", default="n06")
+    parser.add_argument("--cycles", type=int, default=10, help="lifecycle: create/destroy cycles (the first is the "
+                        "warm-up and the baseline; one forced-absence cycle always follows)")
+    parser.add_argument("--force-no-second-queue", action="store_true",
+                        help="lifecycle: force the second queue's absence in every cycle (the negative control as "
+                             "a switch; never an environment variable)")
     args = parser.parse_args()
 
     native = _import_native(args.module_dir.resolve())
@@ -372,9 +568,17 @@ def main() -> int:
         return 0
     out = _evidence_dir(args.label)
     summary = {"runtime": native.runtime_info(), "python": sys.version}
-    summary.update(ROUNDS[args.round](native, out))
+    if args.round == "lifecycle":
+        summary.update(round_lifecycle(native, out, max(2, args.cycles), args.force_no_second_queue))
+    else:
+        summary.update(ROUNDS[args.round](native, out))
     (out / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     shown = ("round", "checks", "pass", "owed", "validation", "second_queue_same_family", "comparisons")
+    if args.round == "lifecycle":
+        shown += ("second_queue",)
+        print(json.dumps({"counter_deltas": summary["counters"]["deltas_last_vs_baseline"],
+                          "private_growth_per_cycle_mib": summary["counters"]["private_growth_per_cycle_mib"]},
+                         indent=2))
     print(json.dumps({k: summary[k] for k in shown if k in summary}, indent=2))
     failed = [k for k, v in summary["checks"].items() if not v]
     print(f"\nevidence: {out / 'summary.json'}")

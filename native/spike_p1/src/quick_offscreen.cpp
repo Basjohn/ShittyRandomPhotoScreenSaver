@@ -155,6 +155,29 @@ QuickFramesResult QuickOffscreenSession::frames(QObject *animated, int count, co
     return res;
 }
 
+bool QuickOffscreenSession::resize(int width, int height)
+{
+    if (!m_begun) {
+        m_error = QStringLiteral("session not begun");
+        return false;
+    }
+    bool ok = false;
+    m_host->runBlocking([&]() {
+        // The old target is released through QRhi's deferred release (a frame in flight keeps it alive).
+        m_window->setRenderTarget(QQuickRenderTarget());
+        destroyOffscreenTarget(&m_target);
+        if (!createOffscreenTarget(m_control->rhi(), width, height, &m_target, &m_error))
+            return;
+        m_window->setRenderTarget(QQuickRenderTarget::fromRhiRenderTarget(m_target.renderTarget));
+        ok = true;
+    });
+    if (ok) {
+        m_width = width;
+        m_height = height;
+    }
+    return ok;
+}
+
 void QuickOffscreenSession::end()
 {
     if (!m_host)

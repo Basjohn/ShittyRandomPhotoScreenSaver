@@ -432,9 +432,15 @@ PyObject *n06_facts(PyObject *, PyObject *)
 PyObject *n06_context_create(PyObject *, PyObject *args)
 {
     int validation = 1;
-    if (!PyArg_ParseTuple(args, "|p", &validation))
+    const char *queueMode = "one";
+    if (!PyArg_ParseTuple(args, "|ps", &validation, &queueMode))
         return nullptr;
-    return pyJson(n06ContextCreateJson(validation != 0));
+    return pyJson(n06ContextCreateJson(validation != 0, QString::fromUtf8(queueMode)));
+}
+
+PyObject *n06_process_counters(PyObject *, PyObject *)
+{
+    return pyJson(n06ProcessCountersJson());
 }
 
 PyObject *n06_set_phase(PyObject *, PyObject *args)
@@ -537,6 +543,28 @@ PyObject *quick_session_frames(PyObject *, PyObject *args)
     return d;
 }
 
+PyObject *quick_session_resize(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    int w = 0, h = 0;
+    if (!PyArg_ParseTuple(args, "Lii", &handle, &w, &h))
+        return nullptr;
+    QuickOffscreenSession *session = sessions().value(handle);
+    if (!session) {
+        PyErr_SetString(PyExc_KeyError, "unknown session");
+        return nullptr;
+    }
+    bool ok = false;
+    Py_BEGIN_ALLOW_THREADS
+    ok = session->resize(w, h);
+    Py_END_ALLOW_THREADS
+    if (!ok) {
+        PyErr_SetString(PyExc_RuntimeError, session->error().toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+
 PyObject *quick_session_end(PyObject *, PyObject *args)
 {
     long long handle = 0;
@@ -572,7 +600,10 @@ PyMethodDef methods[] = {
     { "n06_facts", n06_facts, METH_NOARGS,
       "() -> JSON str: N0.6 round 1, Vulkan facts and Qt's own device (GUI thread, QGuiApplication)" },
     { "n06_context_create", n06_context_create, METH_VARARGS,
-      "([validation=True]) -> JSON str: N0.6 our VkInstance (adopted by Qt) and VkDevice, and a reference instance" },
+      "([validation=True[, queue_mode='one'|'second'|'force_absent']]) -> JSON str: N0.6 our VkInstance (adopted "
+      "by Qt) and VkDevice, and a reference instance" },
+    { "n06_process_counters", n06_process_counters, METH_NOARGS,
+      "() -> JSON str: handles, GDI/USER objects, threads, private bytes, GPU heap usage" },
     { "n06_set_phase", n06_set_phase, METH_VARARGS, "(phase) attributes later debug messages to it" },
     { "n06_context_destroy", n06_context_destroy, METH_NOARGS,
       "() -> JSON str: teardown steps and the debug message counts per phase (windows destroyed first)" },
@@ -583,6 +614,7 @@ PyMethodDef methods[] = {
       "(rc, window, w, h[, threaded]) -> dict with handle" },
     { "quick_session_frames", quick_session_frames, METH_VARARGS,
       "(handle, animated, count[, png]) -> dict" },
+    { "quick_session_resize", quick_session_resize, METH_VARARGS, "(handle, w, h) new offscreen target size" },
     { "quick_session_end", quick_session_end, METH_VARARGS, "(handle)" },
 #endif
     { nullptr, nullptr, 0, nullptr }
