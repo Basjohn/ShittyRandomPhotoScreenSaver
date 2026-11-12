@@ -604,13 +604,6 @@ one commit and one undo per stroke; a refused state at the 257 cap). The mesh re
 0.16, range 0.03 to 0.6, read from the brush owner); no mesh cache (the GPU mesh is the only copy). Contract:
 `Docs/Reference/Neon_Lake_Basin.md`; evidence `.artifacts/evidence/visualizers/shockwave_grid/20261111_refine/`.
 
-- [ ] Dormancy fault from 1B.5: with React To Music off and a grid that never grew, the frame costs about 10 %
-  more GPU than before 1B.5 (c64ed434), from terrain-overlay branches that run whether or not the grid grew
-  (one noisy session, 31-40 % noise): re-measure alternated on a quiet machine, then make an ungrown grid skip
-  the overlay path entirely (identical pixels, the pre-1B.5 cost).
-- [ ] Five of the seven GL calls added per frame since the 7 Nov baseline (354 to 361; two are 1B.6's uniforms)
-  are not attributed, and relative GPU time went from 1.14 to 1.44 ms over the same span: find them in 1B.5's
-  path and remove the ones an ungrown grid does not need.
 - [ ] Distance-based mesh density was not built (the mesh does not know the eye, and a camera-dependent mesh
   would rebuild and pop): no render shows whether the smallest brush aliases on far land seen up close; render
   it once, and only then decide whether anything is owed.
@@ -627,10 +620,6 @@ continuous play (median 3-20 %). The lead decides when the reactivity is good en
 - [~] Lead's reactivity verdict: watch `indents_p1_heavy1.webp` and one driven showcase per preset with Growth
   and Indents on, beside the music envelope (`tools/visualizer_replay/neon_lake_music_response.py --continuous`);
   write the verdict here (good enough, or the one thing that is still weak) before any further reaction work.
-- [ ] Side defect: a paused Studio preview shows no terrain reaction at all (`advance_terrain_reaction` with
-  `playing=False` zeroes the energies), so every paused still or capture at a fixture time hides Growth, Indents
-  and the lanes. A paused seek should show the reaction the fixture has at that time (evaluate the drives for
-  the seek time; nothing per frame at rest).
 - [ ] Side defect: `tools/visualizer_replay/waveform_music_response.py:63` silently skips recordings without PCM
   (heavy1, quiet_intro*, balanced*) and the report drops those songs without saying so: name them in the report.
 - [ ] Side defect: the cost probe does not count GL or Python calls inside modules loaded under alias names, so
@@ -689,11 +678,8 @@ Context Menu's arrows take the label ink; 1C.5's volume height is capped at its 
   Orchard 1.44, Tungsten Blues 2.27, Lantern Grove 2.32, Slate Lavender 2.35, Smoke Quartz 2.59, Riviera Dusk
   2.67, Forest Rose 2.89, Nordic Signal 2.89. The same theme-authoring note.
 - [ ] Mid-transition frames and a real display for M1, M2 and M2b: a D1 run (1B.14 harness), lead review.
-- [ ] M3. Widget border material: the remaining boxes of 1.7b (ring shading from the same backdrop, Border
-  Material and Border Opacity Adjust in Style Overrides, Normal/Flat pixel-identical).
 - [ ] M3. With the inner hairline gone, the border stays clearly distinct from the face on the three light
   themes over a busy bright wallpaper and over a dark one (3x edge zooms); no second line inside the card.
-- [ ] M4. Window border material: 1B.9's box (the Settings/Studio border ring takes the same rule).
 - [ ] Each step: `.qsb` regenerated, the SURFACE block kept identical across its three shader files, one focused
   GPU before/after, lead pixel review on the operator's two wallpapers.
 
@@ -711,11 +697,6 @@ a few pixels of blurred wallpaper outside the arc (worst difference 41-86 levels
   test_every_theme_yields_readable_studio_chrome[Matte Graphite [Single]]`, accent-text contrast 2.12 against 4.5.
 - [ ] `tools/settings_native_corners.py --qt-scale-factor` sets Qt's `QT_SCALE_FACTOR` inside the tool process to
   emulate 100% and 200%: decide whether that tool-only use stands under the no-environment-variables rule.
-- [ ] If the operator still sees escape: the Windows 11 DWM corner preference on a non-layered variant
-  (Microsoft's guidance excludes layered windows and windows with a region from system rounding; cost check:
-  shadow ownership, translucency, the layered-window repaint path of section 9's freeze fix), then a
-  composition-host clip. Whichever clips needs input, resize, snap/maximise, DPI change, activation and
-  Studio-over-Settings modality proven on the real `SettingsDialog` and Studio window.
 - [ ] Window border material: the border ring takes 1.7b's border-material treatment (one rule for cards and
   windows), inside the +2 px budget (unused: the border stays 4 px).
 
@@ -921,6 +902,8 @@ operator's crop).
 
 ### 1C.6 SMP full-player mock restored (operator, 11 Nov; `references/` is ignored by git)
 
+Plan 02's body carries R1-R16, each cited, since d23432a3 (12 Nov).
+
 Files: `references/ShittyMusicPlayer-Miami-Afterdark-Mock-DETAILS.png` (the annotated full-size player, the
 long-range goal) and `references/SMP Material Surfaces And Vibrancy ONLY Example.png` (a material/vibrancy
 example; operator: "we can do better"). The lead may adjust the mock's UX and the plans.
@@ -929,15 +912,6 @@ Documented 11 Nov in `Docs/Future_Work/ShittyMusicPlayer/04_Full_Player_Mock_202
 requirements R1-R16 from the annotations, their place in plan 02, the lead's proposals A1-A9, material direction);
 plan 02's "Proposal basis" and `Index.md` point to it.
 
-- [ ] Reconcile plan 02's body with R1-R16 (Sonnet, when the slot is free); each change cites its requirement
-  number; nothing is promoted into this plan:
-  - [ ] 5.1: Audiobooks as a Library special group with bookmarks and chapters, replacing Podcasts.
-  - [ ] 7.1: the down-left arrow into Mini / Normal Media.
-  - [ ] 8.2 and 16: SMP Edit mode (every element but the title bar movable, sizeable and swappable).
-  - [ ] 8.3: the Visualizer / Lyrics / Artist Collage pane with glyph parity.
-  - [ ] 3 and 5.1: the favourites and library filters as one filter owner.
-  - [ ] 5.2: the track menu; the Track Information alignment swap.
-  - [ ] 4: existing sliders and seek bar, the alignment rule.
 
 The operator's clarification of 11 Nov evening (three builds from profiles; Small and Full mode; SMP Edit; the
 long-term audio and library bar; Arrange's SMP section; compositor hosts on the screensaver and MC builds, desktop
@@ -955,33 +929,16 @@ the fullscreen Visualizer; its material backdrop on both hosts is decision D7 po
   Nothing waits on them.
 
 
-### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely (operator, 11 Nov; step b of round 3, 1C.10)
+### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely (merged 290b039b, 12 Nov)
 
-Operator: "an option or slider for neon lake to allow the WATER edge/face lines to be completely hidden ... this
-shouldn't be very difficult". Mode id `shockwave_grid`. Today the water draws ripple/face lines (`Water Colour`,
-`Water Detail`), a shoreline line, `Water Line Glow` / `Water Line Glow Strength` and `Shore Glow` (0 "keeps only
-the shoreline"); none of them removes the lines themselves. The lead decides when Neon Lake's reactivity is good
-enough (operator, same message: it "has improved quite a bit already"); see 1B.6.
+One slider, Water Lines (`shockwave_grid_water_lines`, Water bucket): at 1 today's look (within 1/255), at 0 the face
+lines, shoreline, their glow and Water Reaction's whole net go, leaving a flat lift; the line work is skipped at 0
+(-2 GL calls). Guard `tests/test_neon_water_lines.py`; evidence
+`.artifacts/evidence/visualizers/shockwave_grid/water_lines/`; docs `Neon_Lake_Basin.md` "Water Lines".
 
-- [ ] Inventory first: every pass that draws a line on or round the water (face/ripple lines, the shoreline
-  line, the wet fringe, wave crests, reflections of land lines), with the uniform that scales each and whether 0
-  truly removes it today; one 4x crop per pass.
-- [ ] One canonical spec control in `core/settings/visualizer_mode_settings.py` (the single Settings owner; the
-  Surface bucket beside Water Detail): a slider, "Water Lines", 0 to 1, where 1 is today's look and 0 hides the
-  face lines and the edge line completely, fading between (never a hard switch). If the inventory shows the edge
-  and the face need to be hidden separately to look right, two sliders ("Water Lines", "Shoreline") instead; the
-  agent shows both variants and the lead picks.
-- [ ] At 0 the water keeps its body: colour, reflection, shine, the sun/moon path and Water Reaction still
-  draw; only lines go. The shoreline never moves (the standing rule) and the land's own lines are untouched.
-- [ ] Glow follows: Water Line Glow and Shore Glow scale with the lines they belong to, so no glow is left
-  hanging where a line was hidden.
-- [ ] Zero cost when hidden: at 0 the line terms are skipped, not multiplied by zero per fragment where a branch
-  on a uniform is cheaper; at 1 the frame is identical to today (within the run-to-run floor) on Presets 1 to 3.
-- [ ] Authored into every Neon Lake preset at 1 by the repair fill (the completeness guard); shown in Settings
-  and the Studio through the spec; Settings/Studio parity and the engine-worker parity for the mode rerun.
-- [ ] Evidence: a sheet of Presets 1 to 3 at 1, 0.5 and 0, at rest and driven; lead pixel review; one showcase
-  WebP at 0 on the preset where it looks best; `Docs/Reference/Neon_Lake_Basin.md` and the Visualizer Reference
-  updated.
+- [ ] The showcase WebP at Water Lines 0 was lost when its worktree was retired (the retire step copied only evidence;
+  it now copies WebPs too): re-render it with `tools/release_media.py` (Preset 3 at 0 on the heavy recording) and
+  review it.
 
 ### 1C.10 Neon Lake round 3 (operator, 11 Nov evening; one Opus High agent when a slot is free, in this order)
 
@@ -1178,10 +1135,6 @@ Contract: `Docs/Architecture/Card_Surface_Materials.md` §3.2.1.
   its geometric authority.
 - [ ] On Normal or Flat, retain today's Rectangle border **pixel-identically**; on active material, remove overdraw
   by that Rectangle only for the ring.
-- [ ] The shader currently still has `plateInset = borderWidth + 2.5/3 px`, creating the contrasting interior rim
-  the operator asked to eliminate; coordinate this same-pass geometry cleanup with the new border-ring treatment.
-  Extend the existing material face to the inside of the real border, without changing content padding or
-  inventing a separate plate system.
 - [ ] Must remain clear against the fill, including on Glass and bright wallpapers; validate stroke AA, translucent
   corners, 100/150/200% DPR, normal/material switching, card opacity/theme inheritance and Style Overrides reset.
 - [ ] One focused GPU before/after on busy cards.
@@ -1417,12 +1370,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 
 **Found while centralizing tool output (7 Nov; record, not yet admitted):**
 
-- [ ] Hidden cross-test dependency on an earlier test's `tmp_path` (lead, 7 Nov): with pytest's
-  `tmp_path_retention_policy = failed`, `test_3d_curated_preset_ownership.py::...promotes_missing_owned_temporal_
-  and_profile_keys...[shockwave_grid]` (0.7 vs 0.23) and two or three `test_settings_dialog.py` tab-restore tests
-  fail; each passes with the default retention, so something process-scoped keeps a path into an earlier test's
-  `tmp_path` (a cached preset tree or storage root). The setting was reverted. Find the cache and give each test its
-  own root; this may also hide state leaking between tests.
 - [ ] Dead evidence references (the folders no longer exist; `tools/artifact_migration.py refs` lists them):
   `logs/evidence_chest/08_*` in Historical_Bugs R-53/56/57/58/59/60/62, `.artifacts/evidence/{ribbon_path,
   ribbon_frames,ribbon_strip,expanded_visualizer,oscilloscope}` and several `waveform_ribbon/wr*` folders in
@@ -1490,7 +1437,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
   queues unthrottled frames, so the next texture upload (a glyph, a layer) waits for the whole queue (40-390 ms
   measured on the M3b scene) and time-based QML animations jump past what a test samples. The M3b tests finish each
   frame (`glFinish`); other users sampling animations should too, or the host could finish its frames itself.
-- [ ] The bright-area text switch is not built (see §1 item 3).
 
 **Found while building Expanded Visualizer M3c (8 Nov; recorded, not yet admitted):**
 
@@ -1564,7 +1510,6 @@ in source, confirm on the next build**
 
 Contract: `Spec.md` (frozen QML package contract); `test_every_shipped_qml_import_survives_the_frozen_prune`.
 
-- [~] Frozen run (1B.14): open a Studio from the fresh frozen build (the GitHub Remote artifact), on D1.
 
 **Widget/Settings material appearance: Awaiting Validation**
 
@@ -1580,10 +1525,6 @@ Active density/composition work and native evidence: section 1A, items 1.7/1.9. 
 **Widget theme legibility (open)**
 
 - [ ] Theme the Weather detail asset icons: they remain white and become faint on pale cards.
-- [ ] Re-author raw linked Widget Theme roles that fail `tools/theme_legibility.py`, especially widget.accent on
-  widget.panel/header surfaces; do not equate runtime ink correction with a corrected raw mirror export.
-- [ ] Fix light-theme widget shadows, then inspect actual faint text over the resulting cards; analytic panel
-  contrast alone does not account for the shadow's effect.
 
 **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent); second pass
 done, awaiting the lead's review**
@@ -2363,10 +2304,6 @@ batched"); evidence `.artifacts/evidence/studio/drag/20261106_drag/` (per move 5
 
 - [~] Studio run on D1 (1B.14 harness), drags posted by messages with `tools/studio_drag_profile.py`: the feel of
   drags (per move on the 0.07 ms scale of the evidence above).
-- [ ] Side defect (not measured): Bubble's, Extruded Bubble's and Sphere's evaluators still replay exactly in one
-  evaluation from the fixture start, without the frame budget and checkpoints Waveform and the engine-answer modes now
-  share (`ui/studio/exact_replay.py`). Measure with `tools/studio_drag_profile.py` and move them onto `ExactReplay`
-  where a release stalls.
 
 **UI frozen after closing a Studio, recovered by itself (operator 6 Nov 21:56, Extruded Bubble, Wine Ice Acrylic):
 owner found in source, awaiting a field log**

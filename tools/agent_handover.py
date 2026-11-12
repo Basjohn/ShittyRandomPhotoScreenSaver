@@ -15,7 +15,7 @@ a successor's brief needs: the branch to merge first and where the journal and e
 
 It never pushes, never merges and never stops a process. ``--retire`` is the one way the lead removes a merged
 agent's worktree: it refuses a branch that is not merged into ``main`` or a worktree with uncommitted work or a
-running process, copies the worktree's whole ``.artifacts/evidence`` tree into this checkout's (a file that already
+running process, copies the worktree's whole ``.artifacts/evidence`` and ``.artifacts/webp`` trees into this checkout's (a file that already
 exists here is never overwritten; a differing one is reported), and only then removes the worktree and deletes the
 branch. A bare ``git worktree remove --force`` deletes untracked evidence for good (12 Nov 2026: the 1C.4 comparison
 sheets were lost that way), so the handbook's merge steps use this instead. Trimming kept evidence to what the
@@ -38,6 +38,8 @@ WORKTREES = ROOT / ".claude" / "worktrees"
 # Each worktree has the same layout as this checkout; only the folder names are taken from the owner.
 ARTIFACTS_NAME = artifact_paths.ARTIFACTS_ROOT.name
 EVIDENCE_NAME = artifact_paths.EVIDENCE_ROOT.name
+# Kept output an agent leaves: evidence (stills, data) and showcase WebPs; both are copied before a worktree goes.
+KEPT_NAMES = (EVIDENCE_NAME, artifact_paths.WEBP_ROOT.name)
 JOURNAL = Path(ARTIFACTS_NAME) / "handover" / "JOURNAL.md"
 TRAILER = "Co-authored by an incoming existential crisis."
 
@@ -116,10 +118,12 @@ def retire(worktree: Path) -> int:
     if running_from(worktree):
         print(f"{worktree.name}: REFUSED, a process is still running from it")
         return 1
-    source = worktree / ARTIFACTS_NAME / EVIDENCE_NAME
-    target = ROOT / ARTIFACTS_NAME / EVIDENCE_NAME
     copied, kept, differing = 0, 0, []
-    if source.is_dir():
+    for name in KEPT_NAMES:
+        source = worktree / ARTIFACTS_NAME / name
+        target = ROOT / ARTIFACTS_NAME / name
+        if not source.is_dir():
+            continue
         for path in sorted(source.rglob("*")):
             if not path.is_file():
                 continue
@@ -132,7 +136,7 @@ def retire(worktree: Path) -> int:
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, destination)
             copied += 1
-    print(f"{worktree.name}: evidence copied {copied} file(s), {kept} already present")
+    print(f"{worktree.name}: evidence and WebPs copied {copied} file(s), {kept} already present")
     for name in differing[:20]:
         print(f"   DIFFERS (kept this checkout's): {name}")
     if differing:
