@@ -6,13 +6,16 @@ from collections.abc import Mapping
 
 from OpenGL import GL as gl
 
+from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.surface_tension_program import (
+    SURFACE_TENSION_BLOCK,
     SURFACE_TENSION_FRAGMENT_SOURCE,
+    SURFACE_TENSION_VERTEX_SOURCE,
+    TENSION_MAX_POOLS,
     TENSION_POOLS_RANGE,
     TENSION_SETTLE,
     tension_pools,
 )
-from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from ..render_contract import QuickTransitionRenderFrame
 
@@ -30,14 +33,19 @@ def surface_tension_parameters(parameters: Mapping[str, object]) -> tuple[int, f
     return pools, float(gloss), seed
 
 
+def _prefixed(previous, items: list, width: int) -> tuple:
+    """A ``TENSION_MAX_POOLS`` array: ``items`` first, then ``previous``'s later elements (zero when none)."""
+    rest = tuple(previous[len(items):]) if previous else ((0.0,) * width,) * (TENSION_MAX_POOLS - len(items))
+    return tuple(items) + rest
+
+
 class QuickSurfaceTensionRenderer:
     transition_id = "surface_tension"
 
-    _UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uNewTex", "uPools", "uDrift", "uPoolCount", "uProgress",
-                 "uGloss")
+    _SAMPLERS = ("uOldTex", "uNewTex")      # every other value is in SURFACE_TENSION_BLOCK
 
     def __init__(self) -> None:
-        self._resources = MeshResources("Quick Surface Tension Merge")
+        self._resources = MeshResources("Quick Surface Tension Merge", block_bytes=SURFACE_TENSION_BLOCK.size)
 
     @property
     def has_resources(self) -> bool:
@@ -66,7 +74,7 @@ class QuickSurfaceTensionRenderer:
         surface_tension_parameters(parameters)
         r = self._resources
         return warm_programs([(r, *UNDERLAY_PROGRAM),
-                              (r, "surface_tension", ITEM_QUAD_VERTEX_SOURCE, SURFACE_TENSION_FRAGMENT_SOURCE)]
+                              (r, "surface_tension", SURFACE_TENSION_VERTEX_SOURCE, SURFACE_TENSION_FRAGMENT_SOURCE)]
                              ) and warm_pass_blocks(r, size)
 
     def park(self) -> None:
@@ -74,21 +82,24 @@ class QuickSurfaceTensionRenderer:
 
     def _draw(self, frame, progress: float, count: int, gloss: float, seed: int) -> None:
         r = self._resources
-        program = r.program("surface_tension", ITEM_QUAD_VERTEX_SOURCE, SURFACE_TENSION_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("surface_tension", self._UNIFORMS)
+        program = r.program("surface_tension", SURFACE_TENSION_VERTEX_SOURCE, SURFACE_TENSION_FRAGMENT_SOURCE)
+        uniforms = r.uniforms("surface_tension", self._SAMPLERS)
+        values = r.values("surface_tension")
         width, height = frame.logical_size
         pools = tension_pools(seed, count, width / max(1e-6, height))
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame)
-        gl.glUniform4fv(uniforms["uPools"], count, [v for x, y, radius, birth, _dx, _dy in pools
-                                                    for v in (x, y, radius, birth)])
-        gl.glUniform2fv(uniforms["uDrift"], count, [v for *_rest, dx, dy in pools for v in (dx, dy)])
-        gl.glUniform1i(uniforms["uPoolCount"], count)
-        gl.glUniform1f(uniforms["uProgress"], progress)
-        gl.glUniform1f(uniforms["uGloss"], gloss)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        bind_frame(program, uniforms, frame, values)
+        # The first ``count`` elements, the rest as the array held them (glUniform*fv with a count wrote only those).
+        values["uPools"] = _prefixed(values.get("uPools"), [(x, y, radius, birth)
+                                                            for x, y, radius, birth, _dx, _dy in pools], 4)
+        values["uDrift"] = _prefixed(values.get("uDrift"), [(dx, dy) for *_rest, dx, dy in pools], 2)
+        values["uPoolCount"] = count
+        values["uProgress"] = progress
+        values["uGloss"] = gloss
+        with r.pass_blocks.bound(pack_block(SURFACE_TENSION_BLOCK, values)):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
     def release_resources(self) -> None:
         self._resources.release_resources()

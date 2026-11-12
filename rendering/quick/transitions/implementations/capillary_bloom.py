@@ -7,7 +7,9 @@ from collections.abc import Mapping
 from OpenGL import GL as gl
 
 from rendering.gl_programs.capillary_bloom_program import (
+    CAPILLARY_BLOOM_BLOCK,
     CAPILLARY_BLOOM_FRAGMENT_SOURCE,
+    CAPILLARY_BLOOM_VERTEX_SOURCE,
     CAPILLARY_COST_GLSL,
     CAPILLARY_SETTLE,
     CAPILLARY_SOURCES_RANGE,
@@ -15,7 +17,7 @@ from rendering.gl_programs.capillary_bloom_program import (
 )
 from rendering.gl_programs.capillary_field import CAPILLARY_COST
 from rendering.quick import gl_query
-from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
+from rendering.gl_programs.portable import pack_block
 from rendering.quick.scene3d.propagation_field import PropagationField
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from ..render_contract import QuickTransitionRenderFrame
@@ -37,7 +39,7 @@ def capillary_bloom_parameters(parameters: Mapping[str, object]) -> tuple[int, f
 class QuickCapillaryBloomRenderer:
     transition_id = "capillary_bloom"
 
-    _UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uNewTex", "uArrival", "uExtent", "uProgress", "uSeed")
+    _SAMPLERS = ("uOldTex", "uNewTex")      # every other value is in CAPILLARY_BLOOM_BLOCK
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Capillary Bloom")
@@ -71,7 +73,8 @@ class QuickCapillaryBloomRenderer:
         relaxation passes per step, so the first frame compiles, allocates and builds nothing."""
         count, fibres, seed = capillary_bloom_parameters(parameters)
         r = self._resources
-        entries = [(r, *UNDERLAY_PROGRAM), (r, "capillary_bloom", ITEM_QUAD_VERTEX_SOURCE, CAPILLARY_BLOOM_FRAGMENT_SOURCE)]
+        entries = [(r, *UNDERLAY_PROGRAM),
+                   (r, "capillary_bloom", CAPILLARY_BLOOM_VERTEX_SOURCE, CAPILLARY_BLOOM_FRAGMENT_SOURCE)]
         entries += [(r, key, source) for key, source in self._field.programs]
         if not warm_programs(entries):
             return False
@@ -100,26 +103,26 @@ class QuickCapillaryBloomRenderer:
 
     def _draw(self, frame, progress: float, seed: int, arrival: int, extent: int) -> None:
         r = self._resources
-        program = r.program("capillary_bloom", ITEM_QUAD_VERTEX_SOURCE, CAPILLARY_BLOOM_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("capillary_bloom", self._UNIFORMS)
+        program = r.program("capillary_bloom", CAPILLARY_BLOOM_VERTEX_SOURCE, CAPILLARY_BLOOM_FRAGMENT_SOURCE)
+        uniforms = r.uniforms("capillary_bloom", self._SAMPLERS)
+        values = r.values("capillary_bloom")
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame)
-        gl.glUniform1f(uniforms["uProgress"], progress)
-        gl.glUniform1f(uniforms["uSeed"], float(seed % 65536))
-        # Units 0 and 1 hold the photographs (bind_frame); the field goes on 2 and 3. The host
-        # fence restores units 0-2; unit 3 is handed back here.
+        bind_frame(program, uniforms, frame, values)
+        values["uProgress"] = progress
+        values["uSeed"] = float(seed % 65536)
+        # Units 0 and 1 hold the photographs (bind_frame); the field goes on 2 and 3 (the program's sampler
+        # bindings). The host fence restores units 0-2; unit 3 is handed back here.
         gl.glActiveTexture(gl.GL_TEXTURE2)
         gl.glBindTexture(gl.GL_TEXTURE_2D, arrival)
-        gl.glUniform1i(uniforms["uArrival"], 2)
         gl.glActiveTexture(gl.GL_TEXTURE3)
         inherited = gl_query.get_int(gl.GL_TEXTURE_BINDING_2D)
         gl.glBindTexture(gl.GL_TEXTURE_2D, extent)
-        gl.glUniform1i(uniforms["uExtent"], 3)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         try:
-            gl.glBindVertexArray(frame.quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+            with r.pass_blocks.bound(pack_block(CAPILLARY_BLOOM_BLOCK, values)):
+                gl.glBindVertexArray(frame.quad_vao)
+                gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
         finally:
             gl.glActiveTexture(gl.GL_TEXTURE3)
             gl.glBindTexture(gl.GL_TEXTURE_2D, inherited)

@@ -8,11 +8,13 @@ from collections.abc import Mapping
 from OpenGL import GL as gl
 
 from rendering.gl_programs.chromatic_shear_program import (
+    CHROMATIC_SHEAR_BLOCK,
     CHROMATIC_SHEAR_FRAGMENT_SOURCE,
+    CHROMATIC_SHEAR_VERTEX_SOURCE,
     SHEAR_AXES,
     SHEAR_SLICES_RANGE,
 )
-from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
+from rendering.gl_programs.portable import pack_block
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from ..render_contract import QuickTransitionRenderFrame
 
@@ -33,7 +35,7 @@ def chromatic_shear_parameters(parameters: Mapping[str, object]) -> tuple[float,
 class QuickChromaticShearRenderer:
     transition_id = "chromatic_shear"
 
-    _UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uNewTex", "uProgress", "uAxis", "uSpread", "uSlices", "uSeed")
+    _SAMPLERS = ("uOldTex", "uNewTex")      # every other value is in CHROMATIC_SHEAR_BLOCK
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Chromatic Shear")
@@ -67,7 +69,7 @@ class QuickChromaticShearRenderer:
         chromatic_shear_parameters(parameters)
         r = self._resources
         return warm_programs([(r, *UNDERLAY_PROGRAM),
-                              (r, "chromatic_shear", ITEM_QUAD_VERTEX_SOURCE, CHROMATIC_SHEAR_FRAGMENT_SOURCE)]
+                              (r, "chromatic_shear", CHROMATIC_SHEAR_VERTEX_SOURCE, CHROMATIC_SHEAR_FRAGMENT_SOURCE)]
                              ) and warm_pass_blocks(r, size)
 
     def park(self) -> None:
@@ -75,19 +77,21 @@ class QuickChromaticShearRenderer:
 
     def _draw(self, frame, progress: float, axis, spread: float, slices: int, seed: int) -> None:
         r = self._resources
-        program = r.program("chromatic_shear", ITEM_QUAD_VERTEX_SOURCE, CHROMATIC_SHEAR_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("chromatic_shear", self._UNIFORMS)
+        program = r.program("chromatic_shear", CHROMATIC_SHEAR_VERTEX_SOURCE, CHROMATIC_SHEAR_FRAGMENT_SOURCE)
+        uniforms = r.uniforms("chromatic_shear", self._SAMPLERS)
+        values = r.values("chromatic_shear")
         length = math.hypot(*axis)
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame)
-        gl.glUniform1f(uniforms["uProgress"], progress)
-        gl.glUniform2f(uniforms["uAxis"], axis[0] / length, axis[1] / length)
-        gl.glUniform1f(uniforms["uSpread"], spread)
-        gl.glUniform1f(uniforms["uSlices"], float(slices))
-        gl.glUniform1f(uniforms["uSeed"], float(seed % 997))
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        bind_frame(program, uniforms, frame, values)
+        values["uProgress"] = progress
+        values["uAxis"] = (axis[0] / length, axis[1] / length)
+        values["uSpread"] = spread
+        values["uSlices"] = float(slices)
+        values["uSeed"] = float(seed % 997)
+        with r.pass_blocks.bound(pack_block(CHROMATIC_SHEAR_BLOCK, values)):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
     def release_resources(self) -> None:
         self._resources.release_resources()

@@ -192,7 +192,9 @@ def test_warmed_runs_compile_nothing_and_beam_allocates_nothing(qt_app, monkeypa
         warmed, allocated = work.total, list(work.allocations)
         capture.render(run, 0.0)
         capture.render(run, 0.4)
-        assert work.total == warmed and work.allocations == allocated == []
+        # Beam allocates nothing per run: the warm-up's one allocation is its pass blocks' ring (N1.6), and the
+        # run's first frames allocate nothing more.
+        assert work.total == warmed and work.allocations == allocated == ["StreamRing._allocate"]
         renderer = capture.host._implementations["beam"]
         capture.host.park()
         renderer.release_resources()

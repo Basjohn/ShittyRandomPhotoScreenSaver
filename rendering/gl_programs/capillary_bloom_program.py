@@ -23,6 +23,7 @@ import random
 
 from rendering.gl_programs.capillary_bloom_options import CAPILLARY_SOURCES_RANGE  # noqa: F401 (re-exported)
 from rendering.gl_programs.capillary_field import CAPILLARY_COST, CAPILLARY_FIELD_GLSL
+from rendering.gl_programs.item_quad import item_quad_program
 from rendering.gl_programs.meniscus_field import MENISCUS_FIELD_GLSL
 from rendering.gl_programs.refraction import REFRACTION_GLSL, REFRACTION_IOR_WATER
 from rendering.gl_programs.scene3d import SCENE3D_GLSL
@@ -126,3 +127,8 @@ void main() {{
 }}
 """
 )
+
+# N1.6: the fragment's values and the item quad's in one std140 pass block (``item_quad_program``).
+CAPILLARY_BLOOM_VERTEX_SOURCE, CAPILLARY_BLOOM_FRAGMENT_SOURCE, CAPILLARY_BLOOM_BLOCK = item_quad_program(
+    CAPILLARY_BLOOM_FRAGMENT_SOURCE, block="CapillaryBloomPass",
+    samplers={"uOldTex": 0, "uNewTex": 1, "uArrival": 2, "uExtent": 3})

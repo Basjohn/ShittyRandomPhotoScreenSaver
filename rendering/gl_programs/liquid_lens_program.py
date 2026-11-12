@@ -24,6 +24,7 @@ import math
 import random
 from dataclasses import dataclass
 
+from rendering.gl_programs.item_quad import item_quad_program
 from rendering.gl_programs.liquid_lens_options import LIQUID_LENS_STOPS_RANGE
 from rendering.gl_programs.refraction import REFRACTION_GLSL, REFRACTION_IOR_WATER
 
@@ -383,3 +384,7 @@ void main() {{
 }}
 """
 )
+
+# N1.6: the fragment's values and the item quad's in one std140 pass block (``item_quad_program``).
+LIQUID_LENS_VERTEX_SOURCE, LIQUID_LENS_FRAGMENT_SOURCE, LIQUID_LENS_BLOCK = item_quad_program(
+    LIQUID_LENS_FRAGMENT_SOURCE, block="LiquidLensPass", samplers={"uOldTex": 0, "uNewTex": 1})

@@ -6,8 +6,10 @@ from collections.abc import Mapping
 
 from OpenGL import GL as gl
 
-from rendering.gl_programs.vhs_program import VHS_FRAGMENT_SOURCE, VHS_PERIOD, vhs_envelope, vhs_roll
-from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
+from rendering.gl_programs.portable import pack_block
+from rendering.gl_programs.vhs_program import (
+    VHS_BLOCK, VHS_FRAGMENT_SOURCE, VHS_PERIOD, VHS_VERTEX_SOURCE, vhs_envelope, vhs_roll,
+)
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from ..render_contract import QuickTransitionRenderFrame
 
@@ -31,8 +33,7 @@ def vhs_parameters(parameters: Mapping[str, object]) -> tuple[float, float, floa
 class QuickVhsRenderer:
     transition_id = "vhs"
 
-    _UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uNewTex", "uEnvelope", "uRoll", "uRollSign", "uTime",
-                 "uSeed", "uTracking", "uBleed", "uNoise")
+    _SAMPLERS = ("uOldTex", "uNewTex")      # every other value is in VHS_BLOCK
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick VHS Distortion")
@@ -67,7 +68,7 @@ class QuickVhsRenderer:
         allocates nothing per run."""
         vhs_parameters(parameters)
         r = self._resources
-        return (warm_programs([(r, *UNDERLAY_PROGRAM), (r, "vhs", ITEM_QUAD_VERTEX_SOURCE, VHS_FRAGMENT_SOURCE)])
+        return (warm_programs([(r, *UNDERLAY_PROGRAM), (r, "vhs", VHS_VERTEX_SOURCE, VHS_FRAGMENT_SOURCE)])
                 and warm_pass_blocks(r, size))
 
     def park(self) -> None:
@@ -76,21 +77,23 @@ class QuickVhsRenderer:
     def _draw(self, frame, progress: float, envelope: float, roll: float, sign: float, tracking: float,
               bleed: float, noise: float, seed: int) -> None:
         r = self._resources
-        program = r.program("vhs", ITEM_QUAD_VERTEX_SOURCE, VHS_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("vhs", self._UNIFORMS)
+        program = r.program("vhs", VHS_VERTEX_SOURCE, VHS_FRAGMENT_SOURCE)
+        uniforms = r.uniforms("vhs", self._SAMPLERS)
+        values = r.values("vhs")
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame)
-        gl.glUniform1f(uniforms["uEnvelope"], envelope)
-        gl.glUniform1f(uniforms["uRoll"], roll)
-        gl.glUniform1f(uniforms["uRollSign"], sign)
-        gl.glUniform1f(uniforms["uTime"], progress * frame.run.request.duration_ms / 1000.0)
-        gl.glUniform1f(uniforms["uSeed"], float(seed))
-        gl.glUniform1f(uniforms["uTracking"], tracking)
-        gl.glUniform1f(uniforms["uBleed"], bleed)
-        gl.glUniform1f(uniforms["uNoise"], noise)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        bind_frame(program, uniforms, frame, values)
+        values["uEnvelope"] = envelope
+        values["uRoll"] = roll
+        values["uRollSign"] = sign
+        values["uTime"] = progress * frame.run.request.duration_ms / 1000.0
+        values["uSeed"] = float(seed)
+        values["uTracking"] = tracking
+        values["uBleed"] = bleed
+        values["uNoise"] = noise
+        with r.pass_blocks.bound(pack_block(VHS_BLOCK, values)):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
     def release_resources(self) -> None:
         self._resources.release_resources()

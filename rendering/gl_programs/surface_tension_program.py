@@ -16,6 +16,7 @@ from __future__ import annotations
 import math
 import random
 
+from rendering.gl_programs.item_quad import item_quad_program
 from rendering.gl_programs.meniscus_field import MENISCUS_FIELD_GLSL, pool_kernel
 from rendering.gl_programs.refraction import REFRACTION_GLSL, REFRACTION_IOR_WATER
 from rendering.gl_programs.surface_tension_options import TENSION_POOLS_RANGE  # noqa: F401 (re-exported)
@@ -138,3 +139,7 @@ void main() {{
 }}
 """
 )
+
+# N1.6: the fragment's values and the item quad's in one std140 pass block (``item_quad_program``).
+SURFACE_TENSION_VERTEX_SOURCE, SURFACE_TENSION_FRAGMENT_SOURCE, SURFACE_TENSION_BLOCK = item_quad_program(
+    SURFACE_TENSION_FRAGMENT_SOURCE, block="SurfaceTensionPass", samplers={"uOldTex": 0, "uNewTex": 1})

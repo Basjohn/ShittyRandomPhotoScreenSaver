@@ -134,17 +134,24 @@ class _UniformLocations(dict[str, int]):
         self.image_sampler_units_initialized = False
 
 
-def bind_frame(program: int, uniforms: _UniformLocations, frame: SceneFrame) -> None:
+def bind_frame(program: int, uniforms: _UniformLocations, frame: SceneFrame, values: dict | None = None) -> None:
     """Use the program with the frame's matrix and item size; a transition frame's
     source/destination textures bind to units 0/1 when the program declares them.
+
+    A program whose values are one pass block (N1.6) passes its ``values`` (``MeshResources.values``): the matrix
+    and item size go there, for the block its draw binds; a program still on loose uniforms gets them as uniforms.
 
     ``QuickTransitionRenderFrame`` guarantees both image names are live.  Bind
     only the units the program declares: unlike ``glBindTexture``, a zero name
     given to ``glBindTextures`` unbinds every texture target on that unit.
     """
     gl.glUseProgram(program)
-    gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
-    gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
+    if values is not None:
+        values["uMatrix"] = frame.matrix_values
+        values["uItemSize"] = frame.logical_size
+    else:
+        gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
+        gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
     samplers = uniforms.image_samplers
     if not samplers:
         return
@@ -167,16 +174,18 @@ class MeshResources:
     context) and raises ``ProgramUnavailable`` at once on every later request, never recompiling,
     until ``release_resources`` (a new context tries again)."""
 
-    def __init__(self, label: str) -> None:
+    def __init__(self, label: str, *, block_bytes: int = 256) -> None:
+        """``block_bytes``: the largest pass block one of these resources' draws binds (its ring's copies hold it)."""
         self.label = label
         self._programs: dict[str, int] = {}
         self._failed_programs: dict[str, str] = {}
         self._uniforms: dict[str, _UniformLocations] = {}
+        self._values: dict[str, dict] = {}
         self._meshes: dict[str, tuple[int, int, int]] = {}
         self._instance_buffers: dict[str, int] = {}
         # The pass blocks of the draws made here and with these resources' photo environment copies (N1.6); nothing is
         # allocated until ``warm_pass_blocks`` or the first draw. A scene target's passes have their own.
-        self.pass_blocks = PassBlocks(label)
+        self.pass_blocks = PassBlocks(label, block_bytes=block_bytes)
 
     @property
     def has_resources(self) -> bool:
@@ -211,6 +220,14 @@ class MeshResources:
 
     def program_failed(self, key: str) -> bool:
         return key in self._failed_programs
+
+    def values(self, key: str) -> dict:
+        """The values of program ``key``'s pass block (N1.6) as its uniforms held them: empty (zero) when the program
+        links, kept between draws, dropped with the program. Its draw packs them (``portable.pack_block``)."""
+        values = self._values.get(key)
+        if values is None:
+            values = self._values[key] = {}
+        return values
 
     def has_mesh(self, key: str) -> bool:
         return key in self._meshes
@@ -404,5 +421,6 @@ class MeshResources:
             else:
                 del self._programs[key]
                 self._uniforms.pop(key, None)
+                self._values.pop(key, None)
         if errors:
             raise RuntimeError(f"{self.label} cleanup incomplete: {' | '.join(errors)}")

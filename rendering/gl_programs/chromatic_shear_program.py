@@ -17,6 +17,7 @@ from __future__ import annotations
 import math
 
 from rendering.gl_programs.chromatic_shear_options import SHEAR_SLICES_RANGE  # noqa: F401 (re-exported)
+from rendering.gl_programs.item_quad import item_quad_program
 from rendering.gl_programs.spectral import SPECTRAL_GLSL, SPECTRAL_LAYERS, spectral_position
 
 SHEAR_AMOUNT = 0.16          # largest slice offset at full spread, picture heights
@@ -91,3 +92,7 @@ void main() {{
 }}
 """
 )
+
+# N1.6: the fragment's values and the item quad's in one std140 pass block (``item_quad_program``).
+CHROMATIC_SHEAR_VERTEX_SOURCE, CHROMATIC_SHEAR_FRAGMENT_SOURCE, CHROMATIC_SHEAR_BLOCK = item_quad_program(
+    CHROMATIC_SHEAR_FRAGMENT_SOURCE, block="ChromaticShearPass", samplers={"uOldTex": 0, "uNewTex": 1})
