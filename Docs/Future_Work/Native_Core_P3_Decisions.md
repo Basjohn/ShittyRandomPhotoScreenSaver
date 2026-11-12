@@ -1,13 +1,16 @@
 # Native core P3: decisions before any C++ (P3.0)
 
-**Status (12 Nov 2026, after the milestone audit).** D4 is decided and partly built (D4.1 to D4.3 merged 12 Nov;
-D4.4 to D4.8 in flight). D5 (the core's shape), D6 (device ownership), D7 (the card-material backdrop), D8 (what
+**Status (12 Nov 2026, after the milestone audit; refreshed by the doc sweep of 12 Nov evening).** D4 is decided and
+built (D4.1 to D4.8 merged 12 Nov). D5 (the core's shape), D6 (device ownership), D7 (the card-material backdrop), D8 (what
 Parity+ means, with the ranked plus items), D9 (async GPU jobs), D10 (the Vulkan rehearsal path and the flip gate)
 and D11 (the Qt version) were decided by the one-off architectural audit of 12 Nov 2026 (Fable 5.2, at the lead's
 request, answering the operator's direction of 11 and 12 Nov). They bind until the lead or the operator supersedes
 one in writing here; a superseded decision is kept with its date, never overwritten. D1 to D3 and the transport
-rule are still to be written. Apart from D4.1 to D4.3 nothing in this file is built. The ordered work that carries
-these decisions out is `Current_Plan.md`, item 8b.
+rule, the rest of D5 (N0.5), N0.3 and N0.4 (D5.5) were drafted as "proposed" and accepted by the lead on 12 Nov
+(section "Lead decisions on the N0 drafts"); their "proposed" headings are history, the decision is the lead's
+answers. Built so far: D4 and the two harness proofs N0.6 and N0.7 (in `native/spike_p1`, never shipped); the
+product module `native/core/` (D5.7) does not exist yet. The ordered work that carries these decisions out is
+`Current_Plan.md`, item 8b.
 
 Inputs: `Native_Core_P2_Closeout_and_P3_Entry_2026-11-09.md` section 3, `Native_Core_P2_Phase_Boundary_Audit.md`,
 `Graphics_Backend_Decision_2026-11-05.md` (with its addendum of 12 Nov), `Native_Core_P1_Spike.md`, and the lead's
@@ -138,7 +141,7 @@ D4.7's self-check is for.
   programs, the step record, the mote geometry record and the worker's drift log, all behind the existing
   reference tests.
 - The step record grows by three floats and the travel pair; chains gain their per-step decision stream; mote
-  geometry does not grow. D3 (geometry once per revision) is unaffected and still owed.
+  geometry does not grow. D3 (geometry once per revision) is unaffected (written and accepted on 12 Nov, section "D1, D2, D3" below).
 - A device or driver whose compiler ignores `precise` would break (3). The readiness test therefore includes a
   runtime self-check of the two-product on a known pair at warm-up, on the edge, never per frame; a failure is
   logged and reported rather than silently producing drift.
@@ -764,7 +767,7 @@ ABI 2: a 64-byte header, three slots, a seqlock per slot, `consumed_sequence` wr
   `payload_schema` is written (`packet_mailbox.py:172`) but **read by nobody**; the only schema check is the codec's
   own two-byte prefix inside `decode` (`frame_codec.py:153-154`).
 
-### D1. The native reader against the GUI thread closing the mapping (proposed)
+### D1. The native reader against the GUI thread closing the mapping (proposed; decided by the lead 12 Nov)
 
 **The hazard (new with the native reader).** The render thread would read slots through a raw pointer while the GUI
 thread runs `close`/`commit_capacity`/retire/recovery, which close the Python `SharedMemory`, unmap it and (POSIX)
@@ -844,7 +847,7 @@ Python driver):
 - *per-stream liveness:* a reader paused inside a copy is reported for its stream while the worker's own
   heartbeats keep answering; negative control: remove the counters, the test sees no failure.
 
-### D2. One consuming reader, a non-consuming head read, and the drop edge (proposed)
+### D2. One consuming reader, a non-consuming head read, and the drop edge (proposed; decided by the lead 12 Nov)
 
 **Rule.** Once a stream is native, the core is the only reader that consumes: only it writes `consumed_sequence`
 (`packet_abi.py:317-319`), and only it decodes payloads. The Python owner reads the slot **head** only.
@@ -907,7 +910,7 @@ drop edge and watermark in the core.
 - *no resurrection:* drop at sequence S, then a head read and a replayed wake for S; the frame is not presented;
   publish S+2: presented. Negative control: reset the watermark on the head read.
 
-### D3. Extruded Bubble geometry once per revision (proposed)
+### D3. Extruded Bubble geometry once per revision (proposed; decided by the lead 12 Nov)
 
 **Today.** The drift families' geometry (`DriftFamily.geometry`, packed rows, `extruded_bubble_drift_log.py:46-72,
 102-115`) travels **inside every frame**: the frame carries `drift_families`
@@ -1455,7 +1458,7 @@ available backend and the backends equal each other within the P1 spike's measur
 3. The conventions block is one binding reserved in every shader. Is a fixed binding index acceptable, or should it
    be allocated by the pass-graph builder?
 
-## N0.4. The camera (proposed D5.5)
+## N0.4. The camera (proposed D5.5; decided by the lead 12 Nov)
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts" below); drafted as:* *Proposed (draft for the lead), 12 Nov 2026. Nothing here is decided. Read at `7ac980d7`. One finding differs from
 the plan's wording ("the core receives finished matrices and rays from the worker"): today no finished matrix
