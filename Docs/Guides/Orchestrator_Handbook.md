@@ -30,7 +30,8 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
 | State of every agent worktree; saving an interrupted agent's work | `tools/agent_handover.py` (section 5) |
 | An agent's progress journal | `<worktree>/.artifacts/handover/JOURNAL.md` (ignored by git) |
 | Agent worktrees and branches | `.claude/worktrees/agent-<id>/`, branch `worktree-agent-<id>` |
-| Every tool and harness | `Docs/Reference/Harness_Index.md` |
+| Every tool and harness: path, purpose, flags, who may run it, outputs, retire candidates (kept current: whoever adds, renames or removes a tool edits its row in the same commit) | `Docs/Reference/Tooling.md` |
+| Routing of the recurring regression, attribution and acceptance commands | `Docs/Reference/Harness_Index.md` |
 | Real-display proof (lead only, Display 1 only) | `tools/d1_run.py` (`--list-displays`, `--help` holds recipes) |
 | Evidence layout | `tools/artifact_paths.py`; kept evidence in `.artifacts/evidence/<area>/<topic>/<YYYYMMDD>_<label>/` (enforced; `areas` lists the vocabulary) |
 | Historical bugs | `Docs/Historical_Bugs.md` and `Docs/Historical_Bugs/R-NNN_*.md` |
