@@ -5,6 +5,9 @@
 #pragma once
 
 #include <QtCore/QByteArray>
+#include <QtCore/QString>
+
+class QQuickWindow;
 
 namespace srpss_spike {
 
@@ -15,5 +18,30 @@ namespace srpss_spike {
 // Then Qt's own device: a QVulkanInstance at API 1.2 with QRhi's preferred instance extensions and a QRhi that
 // creates its own VkDevice; we record the family and queue index Qt chose and the QRhi feature flags it reports.
 QByteArray n06VulkanFactsJson();
+
+// Round 2, the module's own instance and device (one process-wide context; GUI thread only).
+// Create: our VkInstance at API 1.2 (route ii of facts A3) with the surface extensions, QRhi's preferred instance
+// extensions and VK_EXT_debug_utils; with the Khronos validation layer when it is installed (and synchronisation
+// validation chained through VkValidationFeaturesEXT), otherwise "validation owed". Our debug messenger counts
+// every message per phase. A QVulkanInstance adopts it (setVkInstance, the exact layer and extension lists,
+// setApiVersion(1, 2)). Then our VkDevice: the first discrete GPU (else the first), the first family with
+// graphics and Win32 present support, one queue, QRhi's preferred imported-device extensions (plus
+// VK_EXT_device_fault, which Qt's own device enables) where available, and Qt's feature set (every supported
+// feature of the 1.0, 1.1 and 1.2 structures and of the enabled extensions' structures, robustBufferAccess off).
+// Also a reference QVulkanInstance (Qt creates it, API 1.2, preferred extensions) for hosts on Qt's own device.
+QByteArray n06ContextCreateJson(bool wantValidation);
+// Attributes the debug messages that follow to this phase (any thread may log; the counters are atomic).
+void n06SetPhase(const QString &phase);
+// Tears down in the order of facts A7 (the caller has destroyed every window and render control first):
+// vkDeviceWaitIdle, vkDestroyDevice, resetDeviceFunctions, the adopting QVulkanInstance, the reference instance,
+// our messenger, vkDestroyInstance. Returns the result of each step and the message counts per phase.
+QByteArray n06ContextDestroyJson();
+
+#ifdef SPIKE_WITH_QUICK
+// Before the window's scene graph is initialised (QQuickRenderControl::initialize). ours = true: our
+// QVulkanInstance and setGraphicsDevice(QQuickGraphicsDevice::fromDeviceObjects(our device)); ours = false: the
+// reference QVulkanInstance only, so Qt creates its own device.
+bool n06AttachQuickWindow(QQuickWindow *window, bool ours, QString *error);
+#endif
 
 } // namespace srpss_spike

@@ -3,6 +3,7 @@
 #include "image_stats.h"
 
 #include <rhi/qrhi.h>
+#include <rhi/qrhi_platform.h>
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QElapsedTimer>
@@ -92,6 +93,15 @@ bool QuickOffscreenSession::begin()
         QRhi *rhi = m_control->rhi();
         m_backendName = QString::fromLatin1(rhi->backendName());
         m_deviceName = QString::fromUtf8(rhi->driverInfo().deviceName);
+        if (rhi->backend() == QRhi::Vulkan) {
+            // N0.6: which VkDevice and queue this session's QRhi really runs on (ours, or one Qt created).
+            const auto *handles = static_cast<const QRhiVulkanNativeHandles *>(rhi->nativeHandles());
+            if (handles) {
+                m_vkDevice = quint64(reinterpret_cast<quintptr>(handles->dev));
+                m_vkQueueFamily = int(handles->gfxQueueFamilyIdx);
+                m_vkQueueIndex = int(handles->gfxQueueIdx);
+            }
+        }
         if (!createOffscreenTarget(rhi, m_width, m_height, &m_target, &m_error))
             return;
         m_window->setRenderTarget(QQuickRenderTarget::fromRhiRenderTarget(m_target.renderTarget));

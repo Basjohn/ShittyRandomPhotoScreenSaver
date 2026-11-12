@@ -429,6 +429,44 @@ PyObject *n06_facts(PyObject *, PyObject *)
     return pyJson(n06VulkanFactsJson());
 }
 
+PyObject *n06_context_create(PyObject *, PyObject *args)
+{
+    int validation = 1;
+    if (!PyArg_ParseTuple(args, "|p", &validation))
+        return nullptr;
+    return pyJson(n06ContextCreateJson(validation != 0));
+}
+
+PyObject *n06_set_phase(PyObject *, PyObject *args)
+{
+    const char *phase = nullptr;
+    if (!PyArg_ParseTuple(args, "s", &phase))
+        return nullptr;
+    n06SetPhase(QString::fromUtf8(phase));
+    Py_RETURN_NONE;
+}
+
+PyObject *n06_context_destroy(PyObject *, PyObject *)
+{
+    return pyJson(n06ContextDestroyJson());
+}
+
+#ifdef SPIKE_WITH_QUICK
+PyObject *n06_attach_window(PyObject *, PyObject *args)
+{
+    unsigned long long windowPtr = 0;
+    int ours = 1;
+    if (!PyArg_ParseTuple(args, "Kp", &windowPtr, &ours))
+        return nullptr;
+    QString error;
+    if (!n06AttachQuickWindow(ptr<QQuickWindow>(windowPtr), ours != 0, &error)) {
+        PyErr_SetString(PyExc_RuntimeError, error.toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+#endif
+
 // ---------------------------------------------------------------- part B
 
 #ifdef SPIKE_WITH_QUICK
@@ -466,6 +504,9 @@ PyObject *quick_session_begin(PyObject *, PyObject *args)
     put(d, "device", pyStr(session->deviceName()));
     put(d, "gui_thread_id", PyLong_FromUnsignedLongLong(session->guiThread()));
     put(d, "render_thread_id", PyLong_FromUnsignedLongLong(session->renderThread()));
+    put(d, "vk_device", PyLong_FromUnsignedLongLong(session->vkDevice()));
+    put(d, "vk_queue_family", PyLong_FromLong(session->vkQueueFamily()));
+    put(d, "vk_queue_index", PyLong_FromLong(session->vkQueueIndex()));
     return d;
 }
 
@@ -530,7 +571,14 @@ PyMethodDef methods[] = {
     { "probe_reset", probe_reset, METH_NOARGS, "()" },
     { "n06_facts", n06_facts, METH_NOARGS,
       "() -> JSON str: N0.6 round 1, Vulkan facts and Qt's own device (GUI thread, QGuiApplication)" },
+    { "n06_context_create", n06_context_create, METH_VARARGS,
+      "([validation=True]) -> JSON str: N0.6 our VkInstance (adopted by Qt) and VkDevice, and a reference instance" },
+    { "n06_set_phase", n06_set_phase, METH_VARARGS, "(phase) attributes later debug messages to it" },
+    { "n06_context_destroy", n06_context_destroy, METH_NOARGS,
+      "() -> JSON str: teardown steps and the debug message counts per phase (windows destroyed first)" },
 #ifdef SPIKE_WITH_QUICK
+    { "n06_attach_window", n06_attach_window, METH_VARARGS,
+      "(quick_window_ptr, ours) our instance + device, or the reference instance (Qt's own device)" },
     { "quick_session_begin", quick_session_begin, METH_VARARGS,
       "(rc, window, w, h[, threaded]) -> dict with handle" },
     { "quick_session_frames", quick_session_frames, METH_VARARGS,

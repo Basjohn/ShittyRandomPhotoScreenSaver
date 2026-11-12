@@ -99,6 +99,7 @@ per module build, hidden only, never an environment variable (`--help` lists the
 
 ```bat
 .venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_module --round facts --label n06_facts
+.venv\Scripts\python.exe native\spike_p1\python\run_n06.py --module-dir release\native_module --round device --label n06_device
 ```
 
 Evidence: `.artifacts/evidence/native_core/n06/<date>_<label>/summary.json`; the last line is `N06 VERDICT PASS` or

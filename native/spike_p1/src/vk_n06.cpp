@@ -8,6 +8,7 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 #include <QtCore/QVersionNumber>
 #include <QtGui/QVulkanFunctions>
 #include <QtGui/QVulkanInstance>
@@ -17,10 +18,17 @@
 #endif
 #include <vulkan/vulkan.h>
 
+#ifdef SPIKE_WITH_QUICK
+#include <QtQuick/QQuickGraphicsDevice>
+#include <QtQuick/QQuickWindow>
+#endif
+
 #include <cstddef>
 #include <cstring>
 #include <iterator>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -627,6 +635,455 @@ QJsonObject qtOwnDeviceFacts()
     return o;
 }
 
+// ------------------------------------------------------------------ round 2: our instance and device
+
+const char kValidationLayer[] = "VK_LAYER_KHRONOS_validation";
+
+// Every debug-utils message, counted per phase. Qt's own QRhi filter hides two known false positives
+// ("Mapping an image with layout ..." and VUID-VkDescriptorSetAllocateInfo-descriptorPool-00307, facts E2); they
+// are counted apart, never as clean, and nothing else is set aside.
+struct MessageStats
+{
+    struct Counts
+    {
+        int errors = 0;
+        int warnings = 0;
+        int info = 0;
+        int qtKnownFalsePositives = 0;
+    };
+
+    std::mutex mutex;
+    QString phase = QStringLiteral("create");
+    QStringList order { QStringLiteral("create") };
+    std::map<QString, Counts> counts;
+    QStringList samples; // the first error and warning texts
+
+    void setPhase(const QString &p)
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        phase = p;
+        if (!order.contains(p))
+            order.append(p);
+    }
+
+    QJsonObject toJson()
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        QJsonObject perPhase;
+        int errors = 0;
+        int warnings = 0;
+        for (const QString &p : order) {
+            const Counts c = counts[p];
+            QJsonObject o;
+            o.insert(QStringLiteral("errors"), c.errors);
+            o.insert(QStringLiteral("warnings"), c.warnings);
+            o.insert(QStringLiteral("info"), c.info);
+            o.insert(QStringLiteral("qt_known_false_positives"), c.qtKnownFalsePositives);
+            perPhase.insert(p, o);
+            errors += c.errors;
+            warnings += c.warnings;
+        }
+        QJsonObject o;
+        o.insert(QStringLiteral("per_phase"), perPhase);
+        o.insert(QStringLiteral("errors"), errors);
+        o.insert(QStringLiteral("warnings"), warnings);
+        o.insert(QStringLiteral("samples"), QJsonArray::fromStringList(samples));
+        return o;
+    }
+};
+
+VKAPI_ATTR VkBool32 VKAPI_CALL n06DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+                                                VkDebugUtilsMessageTypeFlagsEXT types,
+                                                const VkDebugUtilsMessengerCallbackDataEXT *data, void *user)
+{
+    auto *stats = static_cast<MessageStats *>(user);
+    const char *message = (data && data->pMessage) ? data->pMessage : "";
+    const char *id = (data && data->pMessageIdName) ? data->pMessageIdName : "";
+    const bool qtKnown = std::strstr(message, "Mapping an image with layout") != nullptr
+        || std::strstr(id, "VUID-VkDescriptorSetAllocateInfo-descriptorPool-00307") != nullptr
+        || std::strstr(message, "VUID-VkDescriptorSetAllocateInfo-descriptorPool-00307") != nullptr;
+    std::lock_guard<std::mutex> lock(stats->mutex);
+    MessageStats::Counts &c = stats->counts[stats->phase];
+    const bool error = (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0;
+    const bool warning = (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) != 0;
+    if (qtKnown && (error || warning)) {
+        ++c.qtKnownFalsePositives;
+    } else if (error) {
+        ++c.errors;
+    } else if (warning) {
+        ++c.warnings;
+    } else {
+        ++c.info;
+    }
+    if ((error || warning) && stats->samples.size() < 40) {
+        stats->samples.append(QStringLiteral("[%1][%2][type %3] %4 %5")
+                                  .arg(stats->phase, error ? QStringLiteral("error") : QStringLiteral("warning"))
+                                  .arg(int(types))
+                                  .arg(QString::fromUtf8(id), QString::fromUtf8(message)));
+    }
+    return VK_FALSE;
+}
+
+struct Context
+{
+    Loader loader;
+    VkInstance instance = VK_NULL_HANDLE;
+    VkDebugUtilsMessengerEXT messenger = VK_NULL_HANDLE;
+    PFN_vkDestroyInstance destroyInstance = nullptr;
+    PFN_vkDestroyDebugUtilsMessengerEXT destroyMessenger = nullptr;
+    PFN_vkDestroyDevice destroyDevice = nullptr;
+    PFN_vkDeviceWaitIdle deviceWaitIdle = nullptr;
+    VkPhysicalDevice physDev = VK_NULL_HANDLE;
+    VkDevice device = VK_NULL_HANDLE;
+    uint32_t family = 0;
+    std::unique_ptr<QVulkanInstance> ours;      // adopts `instance`
+    std::unique_ptr<QVulkanInstance> reference; // Qt creates its own instance and, per window, its own device
+    MessageStats stats;                         // outlives the messengers (deleted with the context)
+};
+
+Context *g_context = nullptr;
+
+QByteArrayList availableInstanceExtensions(const Loader &loader, const char *layer)
+{
+    auto enumerate = loader.get<PFN_vkEnumerateInstanceExtensionProperties>(
+        nullptr, "vkEnumerateInstanceExtensionProperties");
+    QByteArrayList names;
+    if (!enumerate)
+        return names;
+    uint32_t n = 0;
+    enumerate(layer, &n, nullptr);
+    std::vector<VkExtensionProperties> props(n);
+    if (n)
+        enumerate(layer, &n, props.data());
+    for (uint32_t i = 0; i < n; ++i)
+        names.append(QByteArray(props[i].extensionName));
+    return names;
+}
+
+bool layerAvailable(const Loader &loader, const char *name)
+{
+    auto enumerate = loader.get<PFN_vkEnumerateInstanceLayerProperties>(nullptr,
+                                                                         "vkEnumerateInstanceLayerProperties");
+    if (!enumerate)
+        return false;
+    uint32_t n = 0;
+    enumerate(&n, nullptr);
+    std::vector<VkLayerProperties> props(n);
+    if (n)
+        enumerate(&n, props.data());
+    for (uint32_t i = 0; i < n; ++i) {
+        if (std::strcmp(props[i].layerName, name) == 0)
+            return true;
+    }
+    return false;
+}
+
+std::vector<const char *> pointers(const QByteArrayList &list)
+{
+    std::vector<const char *> v;
+    v.reserve(std::size_t(list.size()));
+    for (const QByteArray &s : list)
+        v.push_back(s.constData());
+    return v;
+}
+
+// Our VkInstance (route ii) and the QVulkanInstance that adopts it. Fills `o`; false on failure with o["error"].
+bool createOurInstance(Context *ctx, bool wantValidation, QJsonObject *o)
+{
+    auto createInstance = ctx->loader.get<PFN_vkCreateInstance>(nullptr, "vkCreateInstance");
+    if (!createInstance) {
+        o->insert(QStringLiteral("error"), QStringLiteral("the loader has no vkCreateInstance"));
+        return false;
+    }
+    const QByteArrayList available = availableInstanceExtensions(ctx->loader, nullptr);
+    QByteArrayList wanted = { QByteArrayLiteral("VK_KHR_surface"), QByteArrayLiteral("VK_KHR_win32_surface") };
+    wanted += QRhiVulkanInitParams::preferredInstanceExtensions();
+    wanted.append(QByteArrayLiteral("VK_EXT_debug_utils"));
+    QByteArrayList extensions;
+    QByteArrayList missing;
+    for (const QByteArray &w : wanted) {
+        if (extensions.contains(w))
+            continue;
+        if (available.contains(w))
+            extensions.append(w);
+        else
+            missing.append(w);
+    }
+
+    QByteArrayList layers;
+    bool syncValidation = false;
+    QString validation;
+    const bool layerPresent = layerAvailable(ctx->loader, kValidationLayer);
+    if (!wantValidation) {
+        validation = QStringLiteral("not requested");
+    } else if (!layerPresent) {
+        validation = QStringLiteral("validation owed (layer not installed)");
+    } else {
+        layers.append(QByteArray(kValidationLayer));
+        const QByteArrayList layerExtensions = availableInstanceExtensions(ctx->loader, kValidationLayer);
+        if (layerExtensions.contains(QByteArrayLiteral("VK_EXT_validation_features"))) {
+            extensions.append(QByteArrayLiteral("VK_EXT_validation_features"));
+            syncValidation = true;
+            validation = QStringLiteral("enabled with synchronisation validation");
+        } else {
+            validation = QStringLiteral("enabled without synchronisation validation "
+                                        "(the layer offers no VK_EXT_validation_features)");
+        }
+    }
+    const bool debugUtils = extensions.contains(QByteArrayLiteral("VK_EXT_debug_utils"));
+
+    const std::vector<const char *> extensionPtrs = pointers(extensions);
+    const std::vector<const char *> layerPtrs = pointers(layers);
+    VkApplicationInfo app = {};
+    app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    app.pApplicationName = "srpss-n06";
+    app.apiVersion = VK_API_VERSION_1_2; // D6's baseline
+    VkDebugUtilsMessengerCreateInfoEXT messengerInfo = {};
+    messengerInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    messengerInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT
+        | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    messengerInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+        | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    messengerInfo.pfnUserCallback = n06DebugCallback;
+    messengerInfo.pUserData = &ctx->stats;
+    const VkValidationFeatureEnableEXT enables[] = { VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT };
+    VkValidationFeaturesEXT validationFeatures = {};
+    validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+    validationFeatures.enabledValidationFeatureCount = 1;
+    validationFeatures.pEnabledValidationFeatures = enables;
+
+    VkInstanceCreateInfo ci = {};
+    ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    ci.pApplicationInfo = &app;
+    ci.enabledExtensionCount = uint32_t(extensionPtrs.size());
+    ci.ppEnabledExtensionNames = extensionPtrs.empty() ? nullptr : extensionPtrs.data();
+    ci.enabledLayerCount = uint32_t(layerPtrs.size());
+    ci.ppEnabledLayerNames = layerPtrs.empty() ? nullptr : layerPtrs.data();
+    // The chained messenger sees vkCreateInstance and vkDestroyInstance themselves.
+    const void **tail = &ci.pNext;
+    if (debugUtils) {
+        *tail = &messengerInfo;
+        tail = &messengerInfo.pNext;
+    }
+    if (syncValidation)
+        *tail = &validationFeatures;
+
+    const VkResult created = createInstance(&ci, nullptr, &ctx->instance);
+    o->insert(QStringLiteral("api_version"), QStringLiteral("1.2"));
+    o->insert(QStringLiteral("extensions"), byteArrayList(extensions));
+    o->insert(QStringLiteral("extensions_missing"), byteArrayList(missing));
+    o->insert(QStringLiteral("layers"), byteArrayList(layers));
+    o->insert(QStringLiteral("validation"), validation);
+    o->insert(QStringLiteral("validation_layer_loaded"), !layers.isEmpty());
+    o->insert(QStringLiteral("synchronisation_validation"), syncValidation);
+    if (created != VK_SUCCESS) {
+        ctx->instance = VK_NULL_HANDLE;
+        o->insert(QStringLiteral("error"), QStringLiteral("vkCreateInstance: ") + vkResultName(created));
+        return false;
+    }
+    ctx->destroyInstance = ctx->loader.get<PFN_vkDestroyInstance>(ctx->instance, "vkDestroyInstance");
+    if (debugUtils) {
+        auto createMessenger = ctx->loader.get<PFN_vkCreateDebugUtilsMessengerEXT>(
+            ctx->instance, "vkCreateDebugUtilsMessengerEXT");
+        ctx->destroyMessenger = ctx->loader.get<PFN_vkDestroyDebugUtilsMessengerEXT>(
+            ctx->instance, "vkDestroyDebugUtilsMessengerEXT");
+        messengerInfo.pNext = nullptr;
+        if (createMessenger)
+            createMessenger(ctx->instance, &messengerInfo, nullptr, &ctx->messenger);
+    }
+    o->insert(QStringLiteral("messenger"), ctx->messenger != VK_NULL_HANDLE);
+
+    // Adopt: the exact lists we enabled (Qt does not query an adopted instance) and the API version, without
+    // which QRhi treats the device as Vulkan 1.0 (facts A3, A4).
+    ctx->ours.reset(new QVulkanInstance);
+    ctx->ours->setVkInstance(ctx->instance);
+    ctx->ours->setApiVersion(QVersionNumber(1, 2));
+    ctx->ours->setLayers(layers);
+    ctx->ours->setExtensions(extensions);
+    if (!ctx->ours->create()) {
+        o->insert(QStringLiteral("error"), QStringLiteral("QVulkanInstance::create (adopting) failed (VkResult %1)")
+                                               .arg(int(ctx->ours->errorCode())));
+        return false;
+    }
+    QJsonObject adopted;
+    adopted.insert(QStringLiteral("same_vk_instance"), ctx->ours->vkInstance() == ctx->instance);
+    adopted.insert(QStringLiteral("api_version"), ctx->ours->apiVersion().toString());
+    adopted.insert(QStringLiteral("extensions"), byteArrayList(ctx->ours->extensions()));
+    adopted.insert(QStringLiteral("layers"), byteArrayList(ctx->ours->layers()));
+    o->insert(QStringLiteral("adopted"), adopted);
+    return true;
+}
+
+// Our VkDevice with Qt's feature set and one graphics+present queue. Fills `o`.
+bool createOurDevice(Context *ctx, QJsonObject *o)
+{
+    const VkInstance inst = ctx->instance;
+    auto enumerateDevices = ctx->loader.get<PFN_vkEnumeratePhysicalDevices>(inst, "vkEnumeratePhysicalDevices");
+    auto getProperties = ctx->loader.get<PFN_vkGetPhysicalDeviceProperties>(inst, "vkGetPhysicalDeviceProperties");
+    auto getQueueFamilies = ctx->loader.get<PFN_vkGetPhysicalDeviceQueueFamilyProperties>(
+        inst, "vkGetPhysicalDeviceQueueFamilyProperties");
+    auto getFeatures2 = ctx->loader.get<PFN_vkGetPhysicalDeviceFeatures2>(inst, "vkGetPhysicalDeviceFeatures2");
+    auto enumerateDeviceExtensions = ctx->loader.get<PFN_vkEnumerateDeviceExtensionProperties>(
+        inst, "vkEnumerateDeviceExtensionProperties");
+    auto win32Present = ctx->loader.get<PfnWin32PresentationSupport>(
+        inst, "vkGetPhysicalDeviceWin32PresentationSupportKHR");
+    auto createDevice = ctx->loader.get<PFN_vkCreateDevice>(inst, "vkCreateDevice");
+    ctx->destroyDevice = ctx->loader.get<PFN_vkDestroyDevice>(inst, "vkDestroyDevice");
+    ctx->deviceWaitIdle = ctx->loader.get<PFN_vkDeviceWaitIdle>(inst, "vkDeviceWaitIdle");
+    if (!enumerateDevices || !getProperties || !getQueueFamilies || !getFeatures2 || !enumerateDeviceExtensions
+        || !win32Present || !createDevice || !ctx->destroyDevice || !ctx->deviceWaitIdle) {
+        o->insert(QStringLiteral("error"), QStringLiteral("an instance entry point is missing"));
+        return false;
+    }
+
+    uint32_t count = 0;
+    enumerateDevices(inst, &count, nullptr);
+    std::vector<VkPhysicalDevice> devices(count);
+    if (count)
+        enumerateDevices(inst, &count, devices.data());
+    if (devices.empty()) {
+        o->insert(QStringLiteral("error"), QStringLiteral("no physical device"));
+        return false;
+    }
+    std::size_t chosen = 0;
+    for (std::size_t i = 0; i < devices.size(); ++i) {
+        VkPhysicalDeviceProperties p = {};
+        getProperties(devices[i], &p);
+        if (p.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+            chosen = i;
+            break;
+        }
+    }
+    ctx->physDev = devices[chosen];
+    VkPhysicalDeviceProperties props = {};
+    getProperties(ctx->physDev, &props);
+    o->insert(QStringLiteral("physical_device_index"), qint64(chosen));
+    o->insert(QStringLiteral("name"), QString::fromUtf8(props.deviceName));
+    o->insert(QStringLiteral("vendor_id"), qint64(props.vendorID));
+    o->insert(QStringLiteral("device_id"), qint64(props.deviceID));
+
+    uint32_t familyCount = 0;
+    getQueueFamilies(ctx->physDev, &familyCount, nullptr);
+    std::vector<VkQueueFamilyProperties> families(familyCount);
+    if (familyCount)
+        getQueueFamilies(ctx->physDev, &familyCount, families.data());
+    bool found = false;
+    for (uint32_t f = 0; f < familyCount; ++f) {
+        if ((families[f].queueFlags & VK_QUEUE_GRAPHICS_BIT) && win32Present(ctx->physDev, f) == VK_TRUE) {
+            ctx->family = f;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        o->insert(QStringLiteral("error"), QStringLiteral("no queue family with graphics and Win32 present"));
+        return false;
+    }
+    o->insert(QStringLiteral("queue_family_index"), qint64(ctx->family));
+    o->insert(QStringLiteral("queue_family_flags"), queueFlagNames(families[ctx->family].queueFlags));
+    o->insert(QStringLiteral("queue_count_created"), 1);
+
+    uint32_t extCount = 0;
+    enumerateDeviceExtensions(ctx->physDev, nullptr, &extCount, nullptr);
+    std::vector<VkExtensionProperties> extProps(extCount);
+    if (extCount)
+        enumerateDeviceExtensions(ctx->physDev, nullptr, &extCount, extProps.data());
+    QByteArrayList available;
+    for (uint32_t e = 0; e < extCount; ++e)
+        available.append(QByteArray(extProps[e].extensionName));
+    QByteArrayList wanted = QRhiVulkanInitParams::preferredExtensionsForImportedDevice();
+    if (!wanted.contains(QByteArrayLiteral("VK_KHR_swapchain")))
+        wanted.append(QByteArrayLiteral("VK_KHR_swapchain"));
+    wanted.append(QByteArrayLiteral("VK_EXT_device_fault")); // Qt's own device enables it; QRhi claims it on import
+    QByteArrayList extensions;
+    QByteArrayList missing;
+    for (const QByteArray &w : wanted) {
+        if (extensions.contains(w))
+            continue;
+        if (available.contains(w))
+            extensions.append(w);
+        else
+            missing.append(w);
+    }
+    o->insert(QStringLiteral("extensions"), byteArrayList(extensions));
+    o->insert(QStringLiteral("extensions_missing"), byteArrayList(missing));
+
+    // Qt's feature set (facts A6.2): every supported feature of the structures API 1.2 chains, plus the feature
+    // structures of the extensions we enable, robustBufferAccess off (robustImageAccess is a 1.3 member and is not
+    // chained at 1.2). The query's output is the create's input.
+    VkPhysicalDeviceVulkan11Features f11 = {};
+    f11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+    VkPhysicalDeviceVulkan12Features f12 = {};
+    f12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr = {};
+    fsr.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
+    VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT divisor = {};
+    divisor.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_EXT;
+    VkPhysicalDeviceFaultFeaturesEXT fault = {};
+    fault.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT;
+    VkPhysicalDeviceFeatures2 f2 = {};
+    f2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    f2.pNext = &f11;
+    f11.pNext = &f12;
+    void **tail = &f12.pNext;
+    QJsonArray chained = { QStringLiteral("VkPhysicalDeviceFeatures"), QStringLiteral("VkPhysicalDeviceVulkan11Features"),
+                           QStringLiteral("VkPhysicalDeviceVulkan12Features") };
+    if (extensions.contains(QByteArrayLiteral("VK_KHR_fragment_shading_rate"))) {
+        *tail = &fsr;
+        tail = &fsr.pNext;
+        chained.append(QStringLiteral("VkPhysicalDeviceFragmentShadingRateFeaturesKHR"));
+    }
+    if (extensions.contains(QByteArrayLiteral("VK_EXT_vertex_attribute_divisor"))) {
+        *tail = &divisor;
+        tail = &divisor.pNext;
+        chained.append(QStringLiteral("VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT"));
+    }
+    if (extensions.contains(QByteArrayLiteral("VK_EXT_device_fault"))) {
+        *tail = &fault;
+        tail = &fault.pNext;
+        chained.append(QStringLiteral("VkPhysicalDeviceFaultFeaturesEXT"));
+    }
+    getFeatures2(ctx->physDev, &f2);
+    const bool robustSupported = f2.features.robustBufferAccess == VK_TRUE;
+    f2.features.robustBufferAccess = VK_FALSE;
+    o->insert(QStringLiteral("feature_structures"), chained);
+    o->insert(QStringLiteral("robust_buffer_access_supported_and_left_off"), robustSupported);
+    QJsonObject enabled;
+    enabled.insert(QStringLiteral("vulkan10"),
+                   featureRecord(&f2.features, kFeatures10, std::size(kFeatures10), 0, kSpecCount10));
+    enabled.insert(QStringLiteral("vulkan11"),
+                   featureRecord(&f11, kFeatures11, std::size(kFeatures11),
+                                 offsetof(VkPhysicalDeviceVulkan11Features, storageBuffer16BitAccess), kSpecCount11));
+    enabled.insert(QStringLiteral("vulkan12"),
+                   featureRecord(&f12, kFeatures12, std::size(kFeatures12),
+                                 offsetof(VkPhysicalDeviceVulkan12Features, samplerMirrorClampToEdge), kSpecCount12));
+    o->insert(QStringLiteral("enabled_features"), enabled);
+
+    const float priority = 1.0f;
+    VkDeviceQueueCreateInfo queueInfo = {};
+    queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queueInfo.queueFamilyIndex = ctx->family;
+    queueInfo.queueCount = 1;
+    queueInfo.pQueuePriorities = &priority;
+    const std::vector<const char *> extensionPtrs = pointers(extensions);
+    VkDeviceCreateInfo dci = {};
+    dci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    dci.pNext = &f2;
+    dci.queueCreateInfoCount = 1;
+    dci.pQueueCreateInfos = &queueInfo;
+    dci.enabledExtensionCount = uint32_t(extensionPtrs.size());
+    dci.ppEnabledExtensionNames = extensionPtrs.empty() ? nullptr : extensionPtrs.data();
+    const VkResult created = createDevice(ctx->physDev, &dci, nullptr, &ctx->device);
+    if (created != VK_SUCCESS) {
+        ctx->device = VK_NULL_HANDLE;
+        o->insert(QStringLiteral("error"), QStringLiteral("vkCreateDevice: ") + vkResultName(created));
+        return false;
+    }
+    o->insert(QStringLiteral("vk_device"), qint64(reinterpret_cast<quintptr>(ctx->device)));
+    o->insert(QStringLiteral("vk_physical_device"), qint64(reinterpret_cast<quintptr>(ctx->physDev)));
+    return true;
+}
+
 } // namespace
 
 QByteArray n06VulkanFactsJson()
@@ -645,5 +1102,125 @@ QByteArray n06VulkanFactsJson()
     root.insert(QStringLiteral("ok"), true);
     return QJsonDocument(root).toJson(QJsonDocument::Compact);
 }
+
+QByteArray n06ContextCreateJson(bool wantValidation)
+{
+    QJsonObject root;
+    root.insert(QStringLiteral("round"), QStringLiteral("device"));
+    if (g_context) {
+        root.insert(QStringLiteral("ok"), false);
+        root.insert(QStringLiteral("error"), QStringLiteral("a context exists already"));
+        return QJsonDocument(root).toJson(QJsonDocument::Compact);
+    }
+    auto ctx = std::make_unique<Context>();
+    QString error;
+    if (!ctx->loader.load(&error)) {
+        root.insert(QStringLiteral("ok"), false);
+        root.insert(QStringLiteral("error"), error);
+        return QJsonDocument(root).toJson(QJsonDocument::Compact);
+    }
+    QJsonObject instance;
+    const bool instanceOk = createOurInstance(ctx.get(), wantValidation, &instance);
+    root.insert(QStringLiteral("instance"), instance);
+    QJsonObject device;
+    const bool deviceOk = instanceOk && createOurDevice(ctx.get(), &device);
+    root.insert(QStringLiteral("device"), device);
+
+    QJsonObject reference;
+    if (deviceOk) {
+        ctx->reference.reset(new QVulkanInstance);
+        ctx->reference->setApiVersion(QVersionNumber(1, 2));
+        ctx->reference->setExtensions(QRhiVulkanInitParams::preferredInstanceExtensions());
+        if (ctx->reference->create()) {
+            reference.insert(QStringLiteral("api_version"), ctx->reference->apiVersion().toString());
+            reference.insert(QStringLiteral("extensions"), byteArrayList(ctx->reference->extensions()));
+        } else {
+            reference.insert(QStringLiteral("error"), QStringLiteral("QVulkanInstance::create failed (VkResult %1)")
+                                                          .arg(int(ctx->reference->errorCode())));
+        }
+    }
+    root.insert(QStringLiteral("reference_instance"), reference);
+    const bool ok = deviceOk && !reference.contains(QStringLiteral("error"));
+    root.insert(QStringLiteral("ok"), ok);
+    g_context = ctx.release(); // kept even on failure so that destroy() releases whatever was created
+    return QJsonDocument(root).toJson(QJsonDocument::Compact);
+}
+
+void n06SetPhase(const QString &phase)
+{
+    if (g_context)
+        g_context->stats.setPhase(phase);
+}
+
+QByteArray n06ContextDestroyJson()
+{
+    QJsonObject root;
+    if (!g_context) {
+        root.insert(QStringLiteral("ok"), false);
+        root.insert(QStringLiteral("error"), QStringLiteral("no context"));
+        return QJsonDocument(root).toJson(QJsonDocument::Compact);
+    }
+    Context *ctx = g_context;
+    ctx->stats.setPhase(QStringLiteral("teardown"));
+    QJsonArray steps;
+    if (ctx->device != VK_NULL_HANDLE) {
+        // The windows are gone; this wait also covers any queue Qt's QRhi never waited on (facts A7).
+        const VkResult idle = ctx->deviceWaitIdle(ctx->device);
+        steps.append(QStringLiteral("vkDeviceWaitIdle: ") + (idle == VK_SUCCESS ? QStringLiteral("VK_SUCCESS")
+                                                                               : vkResultName(idle)));
+        ctx->destroyDevice(ctx->device, nullptr);
+        steps.append(QStringLiteral("vkDestroyDevice"));
+        if (ctx->ours) {
+            ctx->ours->resetDeviceFunctions(ctx->device); // QRhi cached them; it never resets an imported device's
+            steps.append(QStringLiteral("resetDeviceFunctions"));
+        }
+        root.insert(QStringLiteral("device_wait_idle_ok"), idle == VK_SUCCESS);
+        ctx->device = VK_NULL_HANDLE;
+    }
+    if (ctx->reference) {
+        ctx->reference->destroy();
+        ctx->reference.reset();
+        steps.append(QStringLiteral("reference QVulkanInstance destroyed"));
+    }
+    if (ctx->ours) {
+        ctx->ours->destroy(); // an adopted VkInstance is not destroyed by Qt
+        ctx->ours.reset();
+        steps.append(QStringLiteral("adopting QVulkanInstance destroyed"));
+    }
+    if (ctx->messenger != VK_NULL_HANDLE && ctx->destroyMessenger) {
+        ctx->destroyMessenger(ctx->instance, ctx->messenger, nullptr);
+        ctx->messenger = VK_NULL_HANDLE;
+        steps.append(QStringLiteral("vkDestroyDebugUtilsMessengerEXT"));
+    }
+    if (ctx->instance != VK_NULL_HANDLE && ctx->destroyInstance) {
+        ctx->destroyInstance(ctx->instance, nullptr);
+        ctx->instance = VK_NULL_HANDLE;
+        steps.append(QStringLiteral("vkDestroyInstance"));
+    }
+    root.insert(QStringLiteral("steps"), steps);
+    root.insert(QStringLiteral("messages"), ctx->stats.toJson());
+    root.insert(QStringLiteral("ok"), true);
+    delete ctx;
+    g_context = nullptr;
+    return QJsonDocument(root).toJson(QJsonDocument::Compact);
+}
+
+#ifdef SPIKE_WITH_QUICK
+bool n06AttachQuickWindow(QQuickWindow *window, bool ours, QString *error)
+{
+    if (!window || !g_context || !g_context->ours || !g_context->reference || g_context->device == VK_NULL_HANDLE) {
+        *error = QStringLiteral("no window, or no complete N0.6 context");
+        return false;
+    }
+    if (ours) {
+        window->setVulkanInstance(g_context->ours.get());
+        window->setGraphicsDevice(QQuickGraphicsDevice::fromDeviceObjects(
+            g_context->physDev, g_context->device, int(g_context->family), 0));
+    } else {
+        window->setVulkanInstance(g_context->reference.get());
+    }
+    return true;
+}
+#endif
 
 } // namespace srpss_spike
