@@ -1060,6 +1060,23 @@ serves the Themes lists, the Folders list and this one; the delegate sets no fon
   this change): the same box as 1B.11's, checked on a real display in the D1 run and themed through
   `shared_styles` if they are native there.
 
+### 1C.11 Reds on main and small defects found by agents (12 Nov; one Opus Medium agent, bounded)
+
+Each box: reproduce on main first (the command given), decide whether the product or the test is wrong (current
+architecture is authoritative; a stale test is repaired to derive from the canonical source, never weakened), fix
+at the owner, negative control, one commit per cause.
+
+- [ ] `tests/test_godzip_foundry_core.py::test_run_auto_logzip_waits_for_process_exit_without_polling` fails:
+  `create_logzip(` no longer appears in `godzip_foundry.py` (run the file alone).
+- [ ] Four tests in `tests/test_studio_exit_every_mode.py` fail with `KeyError: 'Unknown visualizer mode:
+  toy_mode'` from `ui/studio/framed.py:114` `orbit_save_route` (run the file alone).
+- [ ] `tests/test_live_normalization_role_lifetime_contract.py::test_card_and_accessory_normalization_changes_
+  cannot_rebuild_role_lists` fails for Reddit (5 against an expected 2) (run the file alone).
+- [ ] The circular import of `core.settings.normalization` (1C.1's side defect: the enum parsing moves out of
+  `normalization` so `models/_core.py` no longer imports it at class definition); prove with a fresh-interpreter
+  import of each settings module first, in a test.
+- [ ] Report anything else found red in the files touched, with its command.
+
 ## 1A. Miscellaneous repair slices (operator, 9 Nov)
 
 These repairs run alongside the existing audit/native-worker work above; they do not replace or reorder it. Live
