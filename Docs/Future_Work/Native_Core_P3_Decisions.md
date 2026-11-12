@@ -1168,6 +1168,108 @@ available backend and the backends equal each other within the P1 spike's measur
 3. The conventions block is one binding reserved in every shader. Is a fixed binding index acceptable, or should it
    be allocated by the pass-graph builder?
 
+## N0.4. The camera (proposed D5.5)
+
+*Proposed (draft for the lead), 12 Nov 2026. Nothing here is decided. Read at `7ac980d7`. One finding differs from
+the plan's wording ("the core receives finished matrices and rays from the worker"): today no finished matrix
+travels from the worker to the renderer at all, so "keeps receiving" is not available and the contract below says
+what has to be added.*
+
+### What is true in source
+
+- **One owner of the camera's math.** `core/settings/framed_camera.py` ("the standard physical camera for framed
+  3D Visualizer modes", header `:1-14`; "pure and Qt-free: admission, flight on the capture clock, Settings editors
+  and renderers all call it"): `FramedCameraSpec` per mode (`spec_for_mode`, `:94`; declared through the mode
+  descriptor's `framed_camera`, `core/settings/visualizer_mode_registry.py:163,400,441,473`), `camera_axes` (`:116`),
+  `camera_baseline` (`:174`), `bound_eye` (`:201`), `resolve_camera_position` (`:214`), `resolve_camera_frame`
+  (`:247`), `viewport_tangents` (`:259`), `effective_aperture_scale` (`:275`), `perspective_matrix` (`:286`),
+  `view_matrices` (`:292`), `project_point` (`:302`). The per-mode modules are thin (`extruded_bubble_camera.py:33-34`
+  forwards `camera_axes` with its `SPEC`; Neon Lake and Waveform Ribbon declare specs the same way).
+- **Three consumers build matrices from it, in three places, none of them the worker's tick:**
+  1. Extruded Bubble: `rendering/gl_programs/extruded_bubble_scene.py:233-268` (`camera`, `physical_camera`), called
+     once per rendered frame by the render thread (`rendering/quick/visualizer/implementations/extruded_bubble.py:427-433`)
+     with the parameters from the frame, `width / height` from the card's pixel rect and `aperture_scale` from the
+     presentation.
+  2. Waveform Ribbon: `core/waveform_ribbon_view.py:16-27` (`physical_view`, "the renderer draws with `physical_view`"),
+     called per frame by the render thread (`implementations/waveform_ribbon.py:64-65`) with
+     `framed_aperture_scale(presentation, content=True)` and the per-frame `state.zoom`; **and** by the logical side
+     (`card_span`, `waveform_ribbon_view.py:56-72`, "within a few percent of the renderer's": it uses the extent
+     without the shell inset).
+  3. Neon Lake: `rendering/gl_programs/neon_lake_basin_program.py:81,99` takes `camera_axes` in its program builders.
+- **What reaches a renderer today is parameters, not matrices:** the frame's `parameters` (turn, tilt, scene scale,
+  pan, camera position, fov) cross the mapping as plain values (the Extruded Bubble frame,
+  `logical_frame_capture.py:457`); the renderer asks `framed_camera` for the matrices each frame, with two inputs that
+  only the GUI side knows exactly: the card's pixel size and `framed_aperture_scale`
+  (`widgets/spotify_visualizer/presentation_geometry.py:456-468`, driven by edge resizing and CUSTOM stages).
+- **Rays are not arrays.** The shaders rebuild a view ray from the tangent pair: `framedRayDirection(ndc, span) =
+  normalize(vec3(ndc * span, -1.0))` (`rendering/gl_programs/framed_camera.py:14-16`; "the CPU projection matrix and
+  these ray uniforms are resolved from the same camera", `:3-4`). So "matrices and rays" is: the view (axes and eye),
+  the projection, and the tangent pair `tan` (two floats).
+- **The worker already receives the GUI's view inputs** at edges: `VIS_SET_VIEW` carries the layout metrics and the
+  presentation inputs that changed (`widgets/spotify_visualizer/engine_worker_link.py:579-620`; the owner's
+  `set_view_source`). It is latest-wins and one send per GUI turn at most; it is what lets the worker size
+  Waveform's travelling pulse.
+
+### Per-frame cost today (evidence)
+
+A pure-Python timing of the camera build, 2,000 laps in one process, no GL, no window (script
+`.artifacts/scratch/n04_camera/time_camera.py`, deleted afterwards; development machine at `7ac980d7`):
+`physical_camera` (Extruded Bubble, the whole per-frame build) median 6.6 us, p99 8.3 us; `view_matrices` median
+1.9 us; `project_point` median 3.8 us. **Cost per frame argues against nothing: no per-frame cost was found that
+justifies a second camera.** Waveform Ribbon's `physical_view` (which also admits the full parameter set through
+`resolve_camera_frame`) was not timed: it needs the mode's complete parameter record. The reason the build must
+still leave the render thread is not its cost but D5.4: a Python call there puts the GIL back on the render thread.
+
+### Proposed D5.5
+
+1. `core/settings/framed_camera.py` stays the **only** implementation of camera math. The core contains no
+   `perspective_matrix`, no `viewport_tangents`, no axes and no eye resolution; there is no second camera to keep in
+   step, in C++ or elsewhere.
+2. **Finished camera data is built on the Python side by that module and published per frame in the packet**, in the
+   fixed per-mode native schema (transport rule 3): the view (`view_to_world` and `world_to_view` as float32, the
+   eye as float32), the projection (a 4 by 4, in OpenGL form, corrected once at upload, N0.3 rule 1), and the tangent
+   pair `tan`. That is about 40 floats, 160 bytes a frame. The core does not derive any of it.
+3. **The builder runs where the inputs are exact.** The worker's tick builds the camera; this needs two numbers the
+   worker only has approximately today: the card's exact pixel aspect and the exact `framed_aperture_scale`
+   (`content=True`). They are added to the `VIS_SET_VIEW` record as two plain floats, resolved by the same GUI-side
+   functions the renderer calls now (`item_pixel_rect`, `framed_aperture_scale`), and sent at the edges where they
+   change (resize, CUSTOM edge resize, DPI), never per frame. The approximation of `card_span`
+   (`waveform_ribbon_view.py:59-60`) then ends: logical and render use the same record.
+4. Per-frame inputs that change with the music (Waveform's `state.zoom`, Dynamic Zoom) are inputs to the worker's
+   build, not to the core.
+5. **A framed mode's pixels are a function of the packet alone:** same packet, same camera.
+
+*Alternative, if the lead rejects 3:* the core receives the parameters and the two exact numbers and builds the
+matrices itself. That is a C++ port of about 30 lines of `framed_camera` arithmetic and a second owner to keep equal
+to the Python one (the thing the plan forbids), so the draft does not propose it; it is the fallback only if the
+worker's build proves to cost the tick.
+
+### Tests that fail without it
+
+- *Equality to today's renderer:* for a recorded parameter set and a range of card sizes and apertures (resized,
+  CUSTOM edge-resized, DPI changed), the matrices, eye and `tan` in the packet equal bit for bit (after the float32
+  narrowing the schema defines) what `physical_camera` and `physical_view` return for the same inputs. The oracle is
+  the existing renderer code. *Negative control:* build the packet camera with the approximate extent
+  (`card_span`'s extent without the shell inset); the test fails on a CUSTOM stage.
+- *One owner:* a test that greps the native sources and the schemas for a perspective or tangent construction fails
+  if one exists (negative control: add `tan(fov / 2)` to a core file).
+- *Resize edge:* an edge resize reaches the packet within the next worker tick (`VIS_SET_VIEW` latest-wins), and a
+  frame between the resize and the tick is drawn with the old camera and the old target size together, never a
+  mixed pair (the packet carries the extent it was built for; the core compares it with the target it draws into and,
+  on a mismatch, holds the previous frame, the existing latest-wins behaviour). *Negative control:* ignore the
+  stamp; a stretched frame appears.
+
+### Questions for the lead (N0.4)
+
+1. Confirm that the camera is built in the worker's tick (proposed) rather than in the Python presentation sync on
+   the GUI thread. The GUI route needs no change to `VIS_SET_VIEW` but puts about 7 us of Python on the GUI turn per
+   frame per window and leaves the packet camera-less (the core would wait for the GUI's snapshot, which is the
+   hybrid the plan wants to avoid).
+2. The exact aspect and aperture are two new floats in the view record. They change the stored shape of the
+   worker's view message (an internal protocol, not a persisted one); confirm no bridge is needed.
+3. Neon Lake builds its axes inside program builders (`neon_lake_basin_program.py:81,99`); under the proposal that
+   moves to the packet like the others. Confirm it is in scope of the Neon Lake port (N5.5), not of N0.
+
 ## Long-term risks of this direction, and what holds each (audit, 12 Nov 2026)
 
 | Risk | Why it could make the direction fail | What holds it |
