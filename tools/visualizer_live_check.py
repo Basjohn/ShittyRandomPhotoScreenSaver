@@ -824,7 +824,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--set", action="append", default=[], metavar="KEY=JSON",
                         help="visualizer setting override, written into the copied profile only")
     parser.add_argument("--seconds", type=float, default=120.0)
-    parser.add_argument("--load", default="game60", help="gpu_load_generator profile, or 'none'")
+    parser.add_argument("--load", default="none", help="gpu_load_generator profile (e.g. game60: lead only, after the operator's yes), or 'none' (default)")
     parser.add_argument("--visible", action="store_true", help="an ordinary visible MC run (takes one display)")
     parser.add_argument("--clip", default=str(DEFAULT_CLIP),
                         help="recorded-music JSONL replayed as the loopback, or 'none' for the machine's own audio")

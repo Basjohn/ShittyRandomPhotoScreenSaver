@@ -87,7 +87,7 @@ threaded loop couples the GUI and render threads. Extruded Bubble passed every o
 a game at ~40 ms frame age (2026-10-31, `Docs/Audits/EB_Performance_Investigation_2026-10-29.md`). Design against
 these traps from the first slice, not after:
 
-- [ ] **Live check before acceptance:** `tools/visualizer_live_check.py --mode <mode> --preset N --load game60`
+- [ ] **Live check before acceptance:** `tools/visualizer_live_check.py --mode <mode> --preset N` (the lead adds `--load game60` only after the operator's yes)
       (recorded music, invisible window, game-shaped load) for each preset that differs materially in population or
       effects. No `FLAG` lines, or each one explained in the mode's own doc with the run's `summary.json`.
 - [ ] **Logical tick budget:** median 2.5 ms or less live at the ~90 Hz cadence (about a quarter of the GIL). Under a
