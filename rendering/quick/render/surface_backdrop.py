@@ -44,8 +44,11 @@ from PySide6.QtQuick import (
 from core.logging.logger import get_logger
 from rendering.gl_error_policy import raise_pending_gl_error
 
+from rendering.gl_programs.portable import portable_program
+
 from .. import gl_query
 from ..render_failure_log import RenderFailureLog
+from ..scene3d.uniforms import PassBlocks
 from .gl_resources import compile_program
 from .native_texture_bridge import NativeTextureUnavailable, wrap_gl_texture
 
@@ -102,6 +105,18 @@ void main() {
 }
 """
 
+# N1.6: both samplers' values (the half pixel) in one std140 pass block, the source at unit 0, the varying located,
+# the vertex index through the macro (``portable_program``). Each pass of a refresh gets its own copy of the block.
+_VERTEX, (_DOWN, _UP), _BLOCK = portable_program(_VERTEX, (_DOWN, _UP), block="SurfaceBackdropPass",
+                                                 samplers={"uSource": 0})
+# The passes of one refresh: the blit's level down to the last, then the light output and the heavy chain up.
+_PASSES = 2 * _LEVELS
+
+
+def _half_pixel(width: int, height: int) -> bytes:
+    """The pass block of a pass into a ``width`` x ``height`` target: half a texel of it."""
+    return _BLOCK.pack({"uHalfPixel": (0.5 / width, 0.5 / height)})
+
 
 def pyramid_sizes(width: int, height: int) -> tuple[tuple[int, int], ...]:
     """Level sizes 1/2 .. 1/2**_LEVELS of a ``width`` x ``height`` target (floor, >= 1)."""
@@ -125,8 +140,8 @@ class BackdropPipeline:
         self._down = 0
         self._up = 0
         self._vao = 0
-        self._down_source = self._down_half = -1
-        self._up_source = self._up_half = -1
+        # The passes' half-pixel values, one pass block copy per pass of a refresh (N1.6).
+        self._blocks = PassBlocks("surface backdrop", block_bytes=_BLOCK.size, copies=_PASSES)
         self._size: tuple[int, int] | None = None
         self._levels: list[tuple[int, int, int, int]] = []   # (texture, fbo, w, h) per pyramid level
         self._scratch: list[tuple[int, int, int, int]] = []  # heavy chain intermediates
@@ -155,10 +170,7 @@ class BackdropPipeline:
             return
         self._down = compile_program(_VERTEX, _DOWN, label="surface backdrop down")
         self._up = compile_program(_VERTEX, _UP, label="surface backdrop up")
-        self._down_source = gl.glGetUniformLocation(self._down, "uSource")
-        self._down_half = gl.glGetUniformLocation(self._down, "uHalfPixel")
-        self._up_source = gl.glGetUniformLocation(self._up, "uSource")
-        self._up_half = gl.glGetUniformLocation(self._up, "uHalfPixel")
+        self._blocks.warm()
         self._vao = int(gl.glGenVertexArrays(1))
         # The output name lives as long as the pipeline: a resize re-specifies its storage
         # in place, so the scenegraph wrapper that names it never goes stale.
@@ -261,33 +273,40 @@ class BackdropPipeline:
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, first[1])
             gl.glBlitFramebuffer(0, 0, int(width), int(height), 0, 0, first[2], first[3],
                                  gl.GL_COLOR_BUFFER_BIT, gl.GL_LINEAR)
-            gl.glUseProgram(self._down)
-            gl.glUniform1i(self._down_source, 0)
-            for source, target in zip(self._levels, self._levels[1:]):
-                self._pass(self._down_half, source, target[1], target[2], target[3])
-            gl.glUseProgram(self._up)
-            gl.glUniform1i(self._up_source, 0)
             light0, heavy1 = self._output_fbos
             level0, level1 = pyramid_sizes(width, height)[1:3]
+            down = [(source, target[1], target[2], target[3])
+                    for source, target in zip(self._levels, self._levels[1:])]
             # Light: level _LIGHT_FROM (1/8) -> output level 0 (1/4).
-            self._pass(self._up_half, self._levels[_LIGHT_FROM - 1], light0, *level0)
+            up = [(self._levels[_LIGHT_FROM - 1], light0, *level0)]
             # Heavy: level _HEAVY_FROM (1/32) -> intermediates -> output level 1 (1/8).
             source = self._levels[_HEAVY_FROM - 1]
             for scratch in self._scratch:
-                self._pass(self._up_half, source, scratch[1], scratch[2], scratch[3])
+                up.append((source, scratch[1], scratch[2], scratch[3]))
                 source = scratch
-            self._pass(self._up_half, source, heavy1, *level1)
+            up.append((source, heavy1, *level1))
+            # One scope, a copy of the block per pass (each draw keeps the half pixel it was given).
+            first_size = down[0][2:]
+            with self._blocks.bound(_half_pixel(*first_size)) as rebind:
+                gl.glUseProgram(self._down)
+                for index, (source, framebuffer, w, h) in enumerate(down):
+                    self._pass(rebind if index else None, source, framebuffer, w, h)
+                gl.glUseProgram(self._up)
+                for source, framebuffer, w, h in up:
+                    self._pass(rebind, source, framebuffer, w, h)
         finally:
             self._restore_state(saved)
         self.refresh_count += 1
         return True
 
     @staticmethod
-    def _pass(half_location: int, source, framebuffer: int, width: int, height: int) -> None:
+    def _pass(rebind, source, framebuffer: int, width: int, height: int) -> None:
+        """One pass into ``framebuffer``; ``rebind`` gives it its half pixel (None: the scope's first copy holds it)."""
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffer)
         gl.glViewport(0, 0, width, height)
         gl.glBindTexture(gl.GL_TEXTURE_2D, source[0])
-        gl.glUniform2f(half_location, 0.5 / width, 0.5 / height)
+        if rebind is not None:
+            rebind(_half_pixel(width, height))
         gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
 
     @staticmethod
@@ -359,6 +378,7 @@ class BackdropPipeline:
             if program:
                 gl.glDeleteProgram(program)
         self._down = self._up = 0
+        self._blocks.release()
         if self._vao:
             gl.glDeleteVertexArrays(1, [self._vao])
             self._vao = 0

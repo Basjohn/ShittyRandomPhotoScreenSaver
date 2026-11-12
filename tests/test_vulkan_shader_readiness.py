@@ -352,11 +352,6 @@ _RATCHET = {
         "rendering.quick.scene3d.trails._EDGE_FRAGMENT",
     ),
     "Quick hosts and materials": (
-        "rendering.quick.render.background_node._FRAGMENT_SOURCE",
-        "rendering.quick.render.background_node._VERTEX_SOURCE",
-        "rendering.quick.render.surface_backdrop._DOWN",
-        "rendering.quick.render.surface_backdrop._UP",
-        "rendering.quick.render.surface_backdrop._VERTEX",
         "rendering.quick.visualizer.clip_host._FRAGMENT_SOURCE",
         "rendering.quick.visualizer.clip_host._VERTEX_SOURCE",
     ),
