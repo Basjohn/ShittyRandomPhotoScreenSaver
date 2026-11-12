@@ -1,4 +1,4 @@
-# R-NEW | Extruded Bubble's drift failure edges deleted live buffers, leaked rows and emptied the card
+# R-195 | Extruded Bubble's drift failure edges deleted live buffers, leaked rows and emptied the card
 
 **Status:** fixed 12 Nov 2026 (Current_Plan item 8b, "D3 now, in the OpenGL renderer" and N1's drift program box;
 contract D3 in `Docs/Future_Work/Native_Core_P3_Decisions.md`, "Residency and release"). Regression bars in

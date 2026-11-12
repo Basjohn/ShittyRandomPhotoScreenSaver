@@ -238,15 +238,18 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   conventions and N0.4's camera. Each contract's tests (negative controls named in the document) are built with the
   code that implements it: D1, D2 and the transport rule with N2's reader, D3 with the Extruded Bubble port, D5's
   ownership-table, dormancy and device-loss tests with N2, N0.3's three scenes in the harness with N0.6.
-- [ ] D3 now, in the OpenGL renderer (today's defects, found in the draft):
-  - [ ] `extruded_bubble_drift_solver.py:539-549` deletes the old buffers before `_allocate`, which can raise:
-    allocate first, release the old only after the new exists; a test injects the allocation failure (negative
-    control: today's order leaves deleted names in `_families`).
-  - [ ] `:529-536`: a raise inside `_dispatch` skips the old rows' delete and leaks them: release on every path,
-    with a test counting live buffers.
-  - [ ] The solver keys its state on the revision alone (`:476,539`) while `_REVISIONS` is process-wide
-    (`extruded_bubble_drift_log.py:43`): prove whether a replacement worker's revision can alias (D3's identity
-    test against the Python solver); if it can, key on (stream, revision) now.
+- D3's defects in the OpenGL solver landed 12 Nov (R-195): allocate before release at every edge, release on every
+  path, a failed key logged once and not retried, the carryover's failure paths released exactly once, a failed
+  drift program compile cached once at `MeshResources` (`ProgramUnavailable`) and the mode drawn without drift. Revision
+  aliasing is impossible: each worker session numbers revisions in its own namespace (`engine_worker.py:171-175`),
+  guarded by a two-session upload-hash test.
+- [ ] `rendering/quick/visualizer/render_host.py:274-277`: if `adopt_carryover` raises, the host drops the taken
+  payload without an owner (the solver's `adopt` now discards it; the host should not rely on that): release it at the
+  host, with a test.
+- [ ] A capacity growth whose new allocation fails keeps the held state alive, but the drawn region can be stale or
+  zero until a new key succeeds: keep the old layout drawn until the new one exists.
+- [ ] A history carried into a window whose drift programs fail is released and that window draws without drift at
+  once: fade the drift layer out instead (fade, never vanish).
 - [ ] N0.4 in the worker: `VIS_SET_VIEW` carries the exact pixel aspect and aperture scale (resolved by the
   GUI-side functions the renderer calls today, sent at their edges), and `card_span`'s approximation
   (`core/waveform_ribbon_view.py:59-60`) ends. Python first, so the worker's camera equals the renderer's before
@@ -334,9 +337,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   and bakes every target (`LEGACY_GL_ONLY` now 16); full specks 0.279 to 0.050 ms GPU and 3.89 to 0.34 ms CPU
   submit; the worst 4K difference 1.4 px at the near plane (the old `double` path 1.3 px; both keep float32
   displacement); the stream ring sized to the chain count; a warm-up self-check of the pair arithmetic.
-- [ ] A drift program that fails to compile leaves Extruded Bubble's card empty and recompiles every frame
-  (`MeshResources.compute_program` caches only successes, `rendering/quick/scene3d/resources.py:155`): cache the
-  failure at the shared owner, and draw the mode without drift (fade, never vanish) with one logged error.
 - [ ] The beads at the near plane: D4.4's 1.4 px bound is geometric; check the bead shader's near culling and the
   near layer's defocus before the bound is quoted as visible error.
 - [ ] Verify the drift programs on a non-NVIDIA driver and through fxc/dxc and the Vulkan backend when the native
