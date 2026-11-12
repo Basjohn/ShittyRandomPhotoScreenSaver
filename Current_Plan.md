@@ -1022,12 +1022,21 @@ arrangement change, a display added or removed, the owning display lost, Setting
     - Found 12 Nov: ~6.6 of the 7.1 s were `d1_run.py` itself: each grab's PNG encode ran on the saver's GUI
       thread (2.0-2.3 s per 4K frame, 0.7 s at 2560), and no window renders while the GUI thread is busy (both
       displays' traces stop for exactly those spans), so the 1.5 s bound, the fade and the hop were sampled
-      seconds late. The product's own move on two hidden hosts at the real sizes: prepared in 1.34 s (31 units),
-      landed ~1.85 s after the press; two units over a 90 Hz frame on the 4K target (scene target 23.5 ms, near
-      layer 12.6 ms) and a 33 ms first visible frame. Evidence `display/move_timing/20261112_root_cause/`.
+      seconds late. The product's own move on two hidden hosts at the real sizes: prepared in 1.27 s (31 units);
+      on the render thread the near layer's unit took 12.3 ms (targets and three compiles) and the 4K target's
+      first visible frame 22.4 ms (864 uniform lookups; 119.6 ms on the real saver beside the hop's Save).
+      Evidence `display/move_timing/20261112_root_cause/` (`timeline.txt`).
   - [ ] Fix at the owners: preparation in small units over already-rendered frames, no render-thread stall over a
     frame's budget, the fade starting promptly, landing within the bound plus the fade; before/after on the hidden
     hosts; the visible proof left to the lead with the exact `d1_run.py` command.
+    - Built 12 Nov: `d1_run.py` encodes frames on a worker thread and arms steps on precise timers; Extruded
+      Bubble resolves its uniform locations in preparation (0 lookups on the first visible frame); the defocus
+      layer warms one program a step (largest unit 8.6 ms). Hidden real saver, press to landing: 7.4-7.7 s ->
+      1.8-2.1 s; first content frame 119.6 -> 20-23 ms.
+    - Left over a frame (for the lead to place): the hop's cross-display Save stalls the GUI thread 102-132 ms at
+      the fade's midpoint (no window renders; the fade-in waits for it); part of it is
+      `SettingsManager._normalize_widgets_mapping` re-normalising the whole Visualizer section on every widgets
+      write (`core/settings/settings_manager.py:542-552`, from `custom_layout_owner.save` line 954).
   - [ ] Historical bug entry (R-NEW).
 - Landed 12 Nov: the neighbouring display prepares on the transfer arrows' hover (Edit's and the hover glyph's) and
   on a Visualizer drag within one card width of the seam, released on leave, turn-back, drag end, Edit end or
