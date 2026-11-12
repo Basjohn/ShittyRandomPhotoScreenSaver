@@ -416,11 +416,18 @@ RESIZED = (1280, 720)
 EXPECTED_TEARDOWN = ["vkDeviceWaitIdle: VK_SUCCESS", "vkDestroyDevice", "resetDeviceFunctions",
                      "reference QVulkanInstance destroyed", "adopting QVulkanInstance destroyed",
                      "vkDestroyDebugUtilsMessengerEXT", "vkDestroyInstance"]
-# Bounds for "back to baseline" after the warm-up cycle (first run of the round sets them; any change is the lead's).
-HANDLE_TOLERANCE = 8
+# Bounds for "back to baseline" after the warm-up cycle.
+# The driver's own cost, measured by round 5 (owners, 94426903; NVIDIA 617.42): every VkDevice create and destroy
+# leaves 3 process handles, whoever creates it (ours and Qt's alike; instance, adoption, second queue, reference
+# instance, host, readback and resize add none). The handle check is therefore the baseline plus this cost times
+# the devices the run created after the baseline, counted from the run itself.
+DRIVER_HANDLES_PER_DEVICE = 3
+HANDLE_TOLERANCE = 2
 THREAD_TOLERANCE = 1
 GPU_HEAP_TOLERANCE_MIB = 2.0
-PRIVATE_GROWTH_PER_CYCLE_MIB = 1.0
+# Private bytes swing by about 100 MiB between cycles with no trend (rounds 3 to 5): the check is a plateau, the
+# lowest reading of the last third against the lowest of the first third.
+PRIVATE_PLATEAU_TOLERANCE_MIB = 16.0
 
 
 def _counters(native) -> dict:
@@ -458,6 +465,9 @@ def _cycle(native, out: Path, index: int, queue_mode: str, with_reference: bool)
                                          resized_png=resized)
         for host in ("qt_host", "our_host"):
             record.get(host, {}).pop("rhi_feature_flags", None)
+    # Devices this cycle created: ours, and Qt's own when the reference host got as far as its QRhi.
+    record["devices_created"] = int(bool(ctx.get("device", {}).get("vk_device"))) + int(
+        bool(record.get("qt_host", {}).get("vk_device")))
     teardown = json.loads(native.n06_context_destroy())
     record["teardown_steps"] = teardown.get("steps", [])
     record["teardown_ok"] = bool(teardown.get("ok")) and teardown.get("device_wait_idle_ok") is True
@@ -495,8 +505,15 @@ def round_lifecycle(native, out: Path, cycles: int = 10, force_absent_all: bool 
     baseline, last = after[0], after[-1]
     heap_deltas = [round(b.get("usage_mib", 0.0) - a.get("usage_mib", 0.0), 3)
                    for a, b in zip(baseline.get("gpu_heaps", []), last.get("gpu_heaps", []))]
-    measured = max(1, len(after) - 1)
-    private_growth = (_delta(after, "private_mib") or 0.0) / measured
+    # Devices created after the baseline: ours in every cycle, plus Qt's own in a cycle with the reference host.
+    devices_after_baseline = sum(r["devices_created"] for r in records[1:])
+    expected_handle_delta = DRIVER_HANDLES_PER_DEVICE * devices_after_baseline
+    handle_delta = _delta(after, "handles") or 0
+    measured_private = [a.get("private_mib", 0.0) for a in after]
+    third = max(1, len(measured_private) // 3)
+    private_plateau = {"min_first_third": round(min(measured_private[:third]), 1),
+                       "min_last_third": round(min(measured_private[-third:]), 1),
+                       "slope_per_cycle": _slope(measured_private)}
     comparisons = {}
     qt_host, our_host = first.get("qt_host", {}), first.get("our_host", {})
     if qt_host.get("png") and our_host.get("png"):
@@ -522,11 +539,12 @@ def round_lifecycle(native, out: Path, cycles: int = 10, force_absent_all: bool 
         "qt_reference_host_ok": bool(qt_host.get("ok")),
         "pixel_identical_before_resize": comparisons.get("before_resize_qt_vs_ours", {}).get("max_abs") == 0,
         "pixel_identical_after_resize": comparisons.get("after_resize_qt_vs_ours", {}).get("max_abs") == 0,
-        "handles_back_to_baseline": abs(_delta(after, "handles") or 0) <= HANDLE_TOLERANCE,
+        "handles_baseline_plus_driver_cost": abs(handle_delta - expected_handle_delta) <= HANDLE_TOLERANCE,
         "threads_back_to_baseline": abs(_delta(after, "threads") or 0) <= THREAD_TOLERANCE,
         "gpu_heaps_back_to_baseline": bool(baseline.get("gpu_budget_supported"))
         and all(abs(d) <= GPU_HEAP_TOLERANCE_MIB for d in heap_deltas),
-        "private_bytes_flat": private_growth <= PRIVATE_GROWTH_PER_CYCLE_MIB,
+        "private_bytes_plateau": private_plateau["min_last_third"]
+        <= private_plateau["min_first_third"] + PRIVATE_PLATEAU_TOLERANCE_MIB,
         "no_messenger_errors": all(m.get("errors", -1) == 0 for m in all_messages),
         "environment_clean": environment_record()["clean"],
         "negative_control_cycle_ok": cycle_ok(negative),
@@ -560,10 +578,13 @@ def round_lifecycle(native, out: Path, cycles: int = 10, force_absent_all: bool 
                                                  "user_objects": _delta(after, "user_objects"),
                                                  "private_mib": _delta(after, "private_mib"),
                                                  "gpu_heap_usage_mib": heap_deltas},
-                     "private_growth_per_cycle_mib": round(private_growth, 3),
-                     "tolerances": {"handles": HANDLE_TOLERANCE, "threads": THREAD_TOLERANCE,
+                     "handles_expected_delta": {"devices_after_baseline": devices_after_baseline,
+                                                "driver_handles_per_device": DRIVER_HANDLES_PER_DEVICE,
+                                                "expected": expected_handle_delta, "measured": handle_delta},
+                     "private_plateau_mib": private_plateau,
+                     "tolerances": {"handles_around_expected": HANDLE_TOLERANCE, "threads": THREAD_TOLERANCE,
                                     "gpu_heap_mib": GPU_HEAP_TOLERANCE_MIB,
-                                    "private_growth_per_cycle_mib": PRIVATE_GROWTH_PER_CYCLE_MIB}},
+                                    "private_plateau_mib": PRIVATE_PLATEAU_TOLERANCE_MIB}},
         "comparisons": comparisons,
         "validation": {"status": first.get("validation"), "messenger_warning_texts": warnings},
         "records": records,
@@ -723,7 +744,9 @@ def round_owners(native, out: Path, cycles: int = 12, long_cycles: int = 40) -> 
         "environment_clean": environment_record()["clean"],
         "our_host_adds_no_handles": abs(attribution["our hidden host (Quick, render thread, Qt's QRhi on our device)"])
         <= FLAT_HANDLES_PER_CYCLE and abs(attribution["readback and resize"]) <= FLAT_HANDLES_PER_CYCLE,
-        "our_host_full_handles_flat_in_second_half": second_half_rate <= FLAT_HANDLES_PER_CYCLE,
+        # One device per full cycle: the driver's measured cost and nothing more (round 5's verdict).
+        "our_host_full_handles_only_driver_cost": abs(second_half_rate - DRIVER_HANDLES_PER_DEVICE)
+        <= FLAT_HANDLES_PER_CYCLE,
         "our_host_full_private_bytes_plateau": private_plateau["min_last_third"]
         <= private_plateau["min_first_third"] + 16.0,
     }
@@ -788,8 +811,8 @@ def main() -> int:
     if args.round == "lifecycle":
         shown += ("second_queue",)
         print(json.dumps({"counter_deltas": summary["counters"]["deltas_last_vs_baseline"],
-                          "private_growth_per_cycle_mib": summary["counters"]["private_growth_per_cycle_mib"]},
-                         indent=2))
+                          "handles_expected_delta": summary["counters"]["handles_expected_delta"],
+                          "private_plateau_mib": summary["counters"]["private_plateau_mib"]}, indent=2))
     print(json.dumps({k: summary[k] for k in shown if k in summary}, indent=2))
     failed = [k for k, v in summary["checks"].items() if not v]
     print(f"\nevidence: {out / 'summary.json'}")

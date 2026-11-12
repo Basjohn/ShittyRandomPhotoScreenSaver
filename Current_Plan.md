@@ -298,6 +298,20 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     baseline (delta 0). Failed: handles grow exactly +3 per cycle (444 after the warm-up, 471 after cycle 10), and
     private bytes swing 295 to 399 MiB with no trend (the last-minus-first metric read 2.3 MiB per cycle). Round 5
     (`--round owners`) attributes the growth.
+  - Round 5, whose growth (94426903, built first time; `run_n06.py --round owners --cycles 12`, evidence
+    `.artifacts/evidence/native_core/n06/20261112_n06_owners/summary.json`): the driver's, not ours. Handles per
+    cycle by kind: our raw VkInstance 0, Qt's adoption 0, our device with one queue 3, plus the second queue and its
+    fence 3 (0 added), plus the reference instance 3 (0 added), our host without readback 3 (0 added), the full
+    cycle 3 (readback and resize 0 added; 40 cycles, linear at 3.0 in the second half), Qt's own device under the
+    same host 3. So NVIDIA 617.42 keeps 3 process handles per VkDevice create and destroy, whoever creates it; our
+    code adds none. Threads, GPU heaps and Python gc objects 0 per cycle everywhere; private bytes plateau (lowest
+    of the first third 304.3 MiB, of the last third 295.8). The lifecycle round now checks handles as the baseline
+    plus 3 per device the run created (counted from the run) and private bytes as that plateau: rerun on the round-5
+    module, 16 of 16 PASS (9 devices after the baseline, expected and measured +27;
+    `.artifacts/evidence/native_core/n06/20261112_n06_lifecycle_rerun/`).
+    For the decisions document's long-term risk table, driver variance row (the lead moves it): on NVIDIA 617.42 a
+    device rebuild costs 3 process handles that are never returned, so the product never rebuilds a device except
+    on device loss or window replacement (D6 point 4 already says so).
   - [ ] The Vulkan validation layer (with synchronisation validation) on the lead's machine: today there is no Vulkan
     SDK here (the spike used the driver's loader and Vulkan-Headers only). Its download and install is the
     operator's approval (a download); without it N0.6 and N0.7 run their functional parts and record validation as
