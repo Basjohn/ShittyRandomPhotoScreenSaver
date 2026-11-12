@@ -804,7 +804,9 @@ void main() {
     // Its own slow clock (not Scroll); fades where its lines would crowd under ~5 px. Off (0) does no work.
     float reactNet=0.0;
     vec3 reactColour=vec3(0.0);
-    if (uWaterReact>0.0) {
+    // The whole net (its thin cores and the soft light either side) is the water's face lines' pattern: Water Lines
+    // fades it and skips it at 0, leaving only the lake's flat lift below.
+    if (uWaterReact>0.0 && uWaterLines.x>0.0) {
         vec2 rq=vWorld.xz*2.2;
         // Each family is warped by two slow fields, so the cells are irregular (caustic light), not a ruled grid.
         float fa=sin(rq.x*4.1+rq.y*6.3+0.16*uTime+1.1*sin(rq.y*2.3-rq.x*1.3+0.07*uTime)
@@ -813,16 +815,11 @@ void main() {
                      +0.45*sin(-rq.x*4.9+rq.y*4.1+0.06*uTime));
         float wa=max(fwidth(fa),1e-5), wb=max(fwidth(fb),1e-5);
         float width=(0.8+1.2*uWaterReact)*uEdgePx;
-        // The net's thin line cores are water face lines: Water Lines fades them (and their whitening where they
-        // cross) and skips them at 0; the soft light either side and the body's lift stay.
-        float la=0.0, lb=0.0;
-        if (uWaterLines.x>0.0) {
-            la=(1.0-smoothstep(0.0,width,abs(fa)/wa))*(1.0-smoothstep(0.35,0.7,wa))*uWaterLines.x;
-            lb=(1.0-smoothstep(0.0,width,abs(fb)/wb))*(1.0-smoothstep(0.35,0.7,wb))*uWaterLines.x;
-        }
+        float la=(1.0-smoothstep(0.0,width,abs(fa)/wa))*(1.0-smoothstep(0.35,0.7,wa))*uWaterLines.x;
+        float lb=(1.0-smoothstep(0.0,width,abs(fb)/wb))*(1.0-smoothstep(0.35,0.7,wb))*uWaterLines.x;
         // A soft light either side of each line: light on the water, not hairlines.
-        float ga=exp(-abs(fa)/(4.0*wa))*(1.0-smoothstep(0.25,0.55,wa));
-        float gb=exp(-abs(fb)/(4.0*wb))*(1.0-smoothstep(0.25,0.55,wb));
+        float ga=exp(-abs(fa)/(4.0*wa))*(1.0-smoothstep(0.25,0.55,wa))*uWaterLines.x;
+        float gb=exp(-abs(fb)/(4.0*wb))*(1.0-smoothstep(0.25,0.55,wb))*uWaterLines.x;
         reactNet=clamp(max(la,lb)+0.35*max(ga,gb),0.0,1.0);
         // The mocks' net leans violet-magenta: the ripple family takes a third of the crest colour.
         reactColour=(mix(uLineColor.rgb,uCrestColor.rgb,0.35)*(la+0.35*ga)+uCrestColor.rgb*(lb+0.35*gb))
@@ -1047,7 +1044,10 @@ void main() {
         alpha=alpha*(1.0-glintAlpha)+glintAlpha;
     }
     vec3 reactLight=vec3(0.0);
-    if (reactNet>0.0 && waterCoverage>0.0) {
+    // The lake's lift reaches wherever the net draws; as Water Lines hides the net it eases onto the rest of the water
+    // too (where the net had faded to nothing), so at 0 it is one flat lift over the whole lake, with no pattern.
+    float reactLift=reactNet>0.0 ? 1.0 : 1.0-uWaterLines.x;
+    if (uWaterReact>0.0 && waterCoverage>0.0 && reactLift>0.0) {
         // Convex in the drive: a quiet passage's net stays faint, a loud one's vivid.
         float reactGain=uWaterReact*sqrt(uWaterReact);
         float reactAlpha=clamp(reactNet*reactGain*1.4,0.0,0.95)*waterCoverage;
@@ -1055,7 +1055,7 @@ void main() {
         alpha=alpha*(1.0-reactAlpha)+reactAlpha;
         reactLight=reactColour*reactAlpha*1.3;
         // The whole lake lifts a little in the net's colours (the mocks' high-react water is lit, not black).
-        premult+=mix(uLineColor.rgb,uCrestColor.rgb,0.6)*0.10*reactGain*waterCoverage*(1.0-reactAlpha);
+        premult+=mix(uLineColor.rgb,uCrestColor.rgb,0.6)*0.10*reactGain*waterCoverage*(1.0-reactAlpha)*reactLift;
     }
     FragColor=vec4(min(premult/max(alpha,1e-4),vec3(1.0)),alpha*distanceFade);
     // Only water carries lines here; their glow takes its own colour and strength.

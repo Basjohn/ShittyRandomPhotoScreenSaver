@@ -71,23 +71,16 @@ def test_the_lines_fade_between_one_and_zero(target):
     assert 0.2 < share < 0.8, f"half way is part way, never a switch ({share:.2f})"
 
 
-def _high_pass(image):
-    """The thin-line part of an image: what a 5-pixel box blur takes away."""
-    padded = np.pad(image, 2, mode="edge")
-    blurred = sum(padded[dy:dy + image.shape[0], dx:dx + image.shape[1]] for dy in range(5) for dx in range(5)) / 25.0
-    return np.abs(image - blurred)
-
-
-def test_water_reactions_line_cores_go_at_zero_and_its_soft_light_stays(target):
+def test_at_zero_water_reaction_keeps_only_a_flat_lift_with_no_pattern(target):
     capture, host = target
     loud = tuple((0.2 + k / 9.0, -0.4 + 0.2 * (k % 5), -1.0, 1.6) for k in range(36))   # a loud passage of waves
 
     def reaction(amount):
         """What Water Reaction adds to the frame (luma) at this Water Lines amount, driven by the passage."""
         def frame(react):
-            # No bloom: the net is judged on its own pixels, not a blown-out glow.
+            # No bloom and no Sun / Moon path: the net is judged on its own pixels.
             snapshot = _lake(amount, shockwave_grid_water_reaction=react, shockwave_grid_water_detail=0.0,
-                             shockwave_grid_shore_glow=0.0, shockwave_grid_glow=0.0)
+                             shockwave_grid_shore_glow=0.0, shockwave_grid_glow=0.0, shockwave_grid_water_glint=0.0)
             snapshot = replace(snapshot, logical=replace(snapshot.logical, mode_state=replace(
                 snapshot.logical.mode_state, events=loud)))
             capture.render(host, snapshot)
@@ -95,12 +88,16 @@ def test_water_reactions_line_cores_go_at_zero_and_its_soft_light_stays(target):
         return frame(1.0) - frame(0.0)
 
     drawn, hidden = reaction(1.0), reaction(0.0)
-    lit = np.abs(drawn) > 6
-    assert lit.mean() > 0.01, "the passage lights the lake"
-    # Its thin crossing lines are what a blur removes; with the lines hidden almost none of that is left ...
-    assert _high_pass(hidden)[lit].sum() < 0.35 * _high_pass(drawn)[lit].sum()
-    # ... while its soft light on the water still lifts the lake.
-    assert np.abs(hidden).mean() > 0.25 * np.abs(drawn).mean()
+    # The lake: what the reaction lights with the lines drawn, on the water half of the basin (the land's ridges,
+    # which breathe with the drive, stay out of it).
+    lake = np.abs(drawn) > 6
+    lake[:, int(0.45 * lake.shape[1]):] = False
+    assert lake.mean() > 0.01, "the passage lights the lake"
+    # The pattern is the addition minus its lake-wide mean: with the lines hidden next to none of it is left ...
+    pattern = lambda image: np.abs(image[lake] - image[lake].mean()).mean()   # noqa: E731
+    assert pattern(hidden) < 0.1 * pattern(drawn), (pattern(hidden), pattern(drawn))
+    # ... while the lake as a whole is still lifted by the music.
+    assert hidden[lake].mean() > 0.1 * drawn[lake].mean() > 0.0
 
 
 def test_the_mirrored_line_pass_is_skipped_at_zero(target, monkeypatch):
