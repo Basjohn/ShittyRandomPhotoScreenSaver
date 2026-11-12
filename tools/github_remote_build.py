@@ -12,6 +12,12 @@ exactly one pushed commit. This module owns the remote contract on both sides:
   manifest, the requested commit and its version, and only then replaces the published release directories. Any
   failure leaves the previous payload exactly where it was.
 
+The native module (``native_module``, ``.github/workflows/native-module.yml``) is a target of the same contract: its
+own workflow compiles it, ``stage-native`` places it under ``release/native_module`` on the runner, its manifest also
+records the Qt, PySide6 and MSVC it was built with, and locally it is validated against the pinned Qt
+(``tools/native_sdk_fetch.py``) and published into ``release/native_module`` with that manifest beside it. It is
+built only when the local HEAD is the pushed commit.
+
 Nothing here compiles anything locally. Docs/Guides/GitHub_Remote_Build.md is the operator guide.
 
     python tools/github_remote_build.py run --target standard --target media_center
@@ -350,9 +356,10 @@ def _safe_relative(relative: str, target: RemoteTarget) -> None:
 
 
 def validate_staging(staging: Path, target_key: str, *, commit: str, version: str, token: str) -> dict[str, Any]:
-    """Refuse a downloaded artifact unless it is exactly the requested commit's build, whole and unaltered."""
+    """Refuse a downloaded artifact unless it is exactly the requested commit's build, whole and unaltered (and, for
+    a native module, built against the pinned Qt and the PySide6 that ships it, with its baked shaders)."""
 
-    target = TARGETS[target_key]
+    target = ALL_TARGETS[target_key]
     manifest_path = staging / MANIFEST_NAME
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -388,10 +395,28 @@ def validate_staging(staging: Path, target_key: str, *, commit: str, version: st
         for companion in target.companions:
             if files[f"release/{companion}"]["sha256"] != primary_hash:
                 raise RemoteBuildError(f"release/{companion} is not the same binary as release/{target.primary}")
+    if target.module_qt:
+        _validate_module(manifest, target)
     pe_version = pe_product_version(staging / "release" / target.primary)
     if pe_version is not None and not _same_version(pe_version, version):
         raise RemoteBuildError(f"{target.primary} carries product version {pe_version}, expected {version}")
     return manifest
+
+
+def _validate_module(manifest: dict[str, Any], target: RemoteTarget) -> None:
+    """A module binds to PySide6's own Qt DLLs and refuses any other Qt: built against anything but the pinned Qt
+    (and the PySide6 release that ships it) it would never load."""
+
+    if manifest.get("qt_version") != target.module_qt:
+        raise RemoteBuildError(f"manifest qt_version is {manifest.get('qt_version')!r}, expected {target.module_qt!r}")
+    pyside6 = str(manifest.get("pyside6_version") or "")
+    if pyside6.split(".")[:3] != str(target.module_qt).split("."):
+        raise RemoteBuildError(f"manifest pyside6_version is {pyside6!r}, expected PySide6 {target.module_qt}")
+    if not re.fullmatch(r"\d+\.\d+\.\d+", str(manifest.get("msvc_version") or "")):
+        raise RemoteBuildError(f"manifest msvc_version is {manifest.get('msvc_version')!r}")
+    shaders = f"release/{target.payload_dirs[0]}/{SHADERS_DIR}/"
+    if not any(name.startswith(shaders) and name.endswith(".qsb") for name in manifest["files"]):
+        raise RemoteBuildError(f"the build published no baked shaders under {shaders}")
 
 
 # --------------------------------------------------------------------------------------------- publish (local)
@@ -400,7 +425,7 @@ def validate_staging(staging: Path, target_key: str, *, commit: str, version: st
 def publish_payload(staging: Path, release_dir: Path, target_key: str) -> tuple[Path, ...]:
     """Swap the validated payload directories into ``release_dir``; on any failure restore the previous ones."""
 
-    target = TARGETS[target_key]
+    target = ALL_TARGETS[target_key]
     release_dir.mkdir(parents=True, exist_ok=True)
     tag = uuid.uuid4().hex[:8]
     steps: list[list[Any]] = []          # [final, staged, backup or None, placed]
@@ -475,9 +500,9 @@ class GitHubCli:
     def signed_in(self) -> bool:
         return self._run(["gh", "auth", "status"], 30.0).returncode == 0
 
-    def workflow_registered(self) -> bool:
+    def workflow_registered(self, workflow: str = WORKFLOW_FILE) -> bool:
         """GitHub dispatches a workflow only once its file is on the default branch."""
-        return self._run(["gh", "workflow", "view", WORKFLOW_FILE], 60.0).returncode == 0
+        return self._run(["gh", "workflow", "view", workflow], 60.0).returncode == 0
 
     def actions_policy_problem(self) -> str | None:
         """Why the repository's Actions policy would refuse to start the workflow (None: it can start).
@@ -504,11 +529,11 @@ class GitHubCli:
         return ("the repository allows only its own actions; enable 'Allow actions created by GitHub' "
                 "(Settings > Actions > General)")
 
-    def startup_failure(self, since: datetime, sha: str) -> str | None:
-        """The URL of a run of this workflow that GitHub refused to start after ``since`` (its custom name is never
+    def startup_failure(self, since: datetime, sha: str, workflow: str = WORKFLOW_FILE) -> str | None:
+        """The URL of a run of ``workflow`` that GitHub refused to start after ``since`` (its custom name is never
         applied, so the request id cannot find it)."""
         listed = json.loads(self._call(
-            "run", "list", "--workflow", WORKFLOW_FILE, "--event", "workflow_dispatch", "--limit", "30",
+            "run", "list", "--workflow", workflow, "--event", "workflow_dispatch", "--limit", "30",
             "--json", "conclusion,createdAt,headSha,url",
         ) or "[]")
         for run in listed:
@@ -522,11 +547,13 @@ class GitHubCli:
         return None
 
     def dispatch(self, target_key: str, branch: str, sha: str, token: str) -> None:
-        self._call("workflow", "run", WORKFLOW_FILE, "--ref", branch,
-                   "-f", f"target={target_key}", "-f", f"commit={sha}", "-f", f"token={token}")
+        target = ALL_TARGETS[target_key]
+        fields = [argument for value in target.dispatch_inputs(sha, token) for argument in ("-f", value)]
+        self._call("workflow", "run", target.workflow, "--ref", branch, *fields)
 
-    def find_run(self, request_id: str, *, after_stop: bool = False) -> tuple[int, str] | None:
-        args = ["gh", "run", "list", "--workflow", WORKFLOW_FILE, "--event", "workflow_dispatch", "--limit", "30",
+    def find_run(self, request_id: str, *, after_stop: bool = False,
+                 workflow: str = WORKFLOW_FILE) -> tuple[int, str] | None:
+        args = ["gh", "run", "list", "--workflow", workflow, "--event", "workflow_dispatch", "--limit", "30",
                 "--json", "databaseId,displayTitle,url"]
         if after_stop:      # the operator stopped: look it up anyway, so the run can be cancelled on GitHub
             try:
@@ -631,15 +658,18 @@ def run_remote_builds(
     results: dict[str, RemoteResult] = {}
     logs: dict[str, _RunLog] = {}
     for key in keys:
-        target = TARGETS[key]
+        target = ALL_TARGETS[key]
         logs[key] = _RunLog(
             log_dir / f"build_runner_{key}_{token}.log",
             f"SRPSS Build Runner · GitHub Remote\nProduct: {key}\nCommit: {commit.describe()}\nRun token: {token}\n"
-            f"Workflow: {WORKFLOW_PATH.as_posix()} (artifact {target.artifact})\n{'=' * 72}\n",
+            f"Workflow: .github/workflows/{target.workflow} (artifact {target.artifact})\n{'=' * 72}\n",
         )
 
+    def workflow(key: str) -> str:
+        return ALL_TARGETS[key].workflow
+
     def finish(key: str, returncode: int, detail: str, *, aborted: bool = False, url: str | None = None) -> None:
-        target = TARGETS[key]
+        target = ALL_TARGETS[key]
         logs[key].write(f"Result: {detail} (exit {returncode})")
         evidence = None
         if returncode == 0:
@@ -681,10 +711,15 @@ def run_remote_builds(
         if cancelled():
             finish(key, 130, "Aborted by operator before dispatch", aborted=True)
             continue
+        if ALL_TARGETS[key].module_qt and not current.matches_local_head:
+            # A module is built for the work it is tested with: never the pushed tip in place of a local commit.
+            finish(key, 1, f"Local HEAD {current.local_head[:8]} is not origin/{current.branch} ({current.short}): "
+                           "push it first; GitHub builds only pushed commits")
+            continue
         emit("status", key, "Dispatching")
         try:
             cli.dispatch(key, commit.branch, commit.sha, token)
-            logs[key].write(f"Dispatched {WORKFLOW_FILE} on {commit.branch} for {commit.sha} ({version})")
+            logs[key].write(f"Dispatched {workflow(key)} on {commit.branch} for {commit.sha} ({version})")
             pending.append(key)
         except (RemoteBuildError, RemoteCancelled) as exc:
             finish(key, 1, f"Dispatch failed: {exc}", aborted=isinstance(exc, RemoteCancelled))
@@ -695,7 +730,7 @@ def run_remote_builds(
             if key in runs:
                 continue
             try:
-                found = cli.find_run(f"{key}-{token}")
+                found = cli.find_run(f"{key}-{token}", workflow=workflow(key))
             except (RemoteBuildError, RemoteCancelled) as exc:
                 logs[key].write(f"Run lookup failed: {exc}")
                 found = None
@@ -705,20 +740,24 @@ def run_remote_builds(
                 emit("link", key, found[1])
                 emit("status", key, "Queued")
         if len(runs) < len(pending):
-            try:
-                refused = cli.startup_failure(dispatched_at, commit.sha)
-            except (RemoteBuildError, RemoteCancelled, ValueError):
-                refused = None
-            if refused:
-                for key in [key for key in pending if key not in runs]:
-                    pending.remove(key)
-                    finish(key, 1, f"GitHub could not start the workflow (startup failure: repository Actions "
-                                   f"policy or workflow file): {refused}", url=refused)
+            any_refused = False
+            for name in dict.fromkeys(workflow(key) for key in pending if key not in runs):
+                try:
+                    refused = cli.startup_failure(dispatched_at, commit.sha, workflow=name)
+                except (RemoteBuildError, RemoteCancelled, ValueError):
+                    refused = None
+                if refused:
+                    any_refused = True
+                    for key in [key for key in pending if key not in runs and workflow(key) == name]:
+                        pending.remove(key)
+                        finish(key, 1, f"GitHub could not start the workflow (startup failure: repository Actions "
+                                       f"policy or workflow file): {refused}", url=refused)
+            if any_refused:
                 continue
             _wait(4.0, cancelled, sleep)
     for key in [key for key in pending if key not in runs]:
         if cancelled():
-            found = cli.find_run(f"{key}-{token}", after_stop=True)
+            found = cli.find_run(f"{key}-{token}", after_stop=True, workflow=workflow(key))
             if found is not None:
                 runs[key] = found          # cancelled on GitHub below, with the runs already being followed
                 continue
@@ -782,7 +821,7 @@ def _wait(seconds: float, cancelled: Callable[[], bool], sleep: Callable[[float]
 
 
 def _retrieve(repo_root, cli, key, run_id, url, commit, version, token, log_dir, release_dir, log, emit, finish) -> None:
-    target = TARGETS[key]
+    target = ALL_TARGETS[key]
     staging = repo_root / STAGING_DIR / token / key
     shutil.rmtree(staging, ignore_errors=True)
     staging.mkdir(parents=True)
@@ -793,6 +832,11 @@ def _retrieve(repo_root, cli, key, run_id, url, commit, version, token, log_dir,
         emit("status", key, "Validating")
         manifest = validate_staging(staging, key, commit=commit.sha, version=version, token=token)
         log.write(f"Validated {len(manifest['files'])} files against the manifest (commit {commit.sha}, {version})")
+        if target.module_qt:
+            # A module keeps its validated manifest beside it: what it was built from and against (Qt, MSVC).
+            shutil.copy2(staging / MANIFEST_NAME, staging / "release" / target.payload_dirs[0] / MANIFEST_NAME)
+            log.write(f"Built against Qt {manifest['qt_version']}, PySide6 {manifest['pyside6_version']}, "
+                      f"MSVC {manifest['msvc_version']}")
         emit("status", key, "Publishing")
         published = publish_payload(staging, release_dir, key)
         for relative in manifest["files"]:
@@ -887,7 +931,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     stage.add_argument("--target", choices=sorted(MODULE_TARGETS), default="native_module")
     stage.add_argument("--build-dir", required=True)
     run = sub.add_parser("run", help="build products on GitHub and publish them into release/")
-    run.add_argument("--target", choices=sorted(TARGETS), action="append", required=True)
+    run.add_argument("--target", choices=sorted(ALL_TARGETS), action="append", required=True)
     run.add_argument("--branch", default=None)
     args = parser.parse_args(argv)
     commands = {"manifest": _manifest_command, "stage-native": _stage_native_command, "run": _run_command}
