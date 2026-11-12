@@ -131,6 +131,40 @@ def test_a_render_gap_beyond_the_published_history_restarts_cleanly(qt_app):
         target.close()
 
 
+def test_a_frame_with_no_new_step_dispatches_and_uploads_nothing_and_the_ring_follows_the_chain_rows(
+        qt_app, monkeypatch):
+    from OpenGL import GL as gl
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as module
+    from tools.labs.render_target import OffscreenRenderTarget
+    from widgets.spotify_visualizer.extruded_bubble_drift_log import STEP_INDEX, unpack_steps
+    log = list(_log(replace(_controls('wander'), bead_chains=(1., 1.5)), 40))
+    grown = list(_log(replace(_controls('wander'), bead_chains=(3., 4.)), 40))
+    calls = []
+    for name in ('glDispatchCompute', 'glBindBuffersRange'):
+        original = getattr(module.gl, name)
+        monkeypatch.setattr(module.gl, name, lambda *args, _o=original, _n=name: (calls.append(_n), _o(*args))[1])
+    monkeypatch.setattr(module.StreamRing, 'rebind', lambda self, *args, _o=module.StreamRing.rebind:
+                        (calls.append('ring write'), _o(self, *args))[1])
+    target, resources, solver = OffscreenRenderTarget(16, 16), MeshResources('drift rest test'), module.DriftSolver('rest')
+    try:
+        solver.update(resources, *log[-2])
+        assert 'glDispatchCompute' in calls and 'ring write' in calls      # the counters see real work
+        calls.clear()
+        solver.update(resources, *log[-2])                                # the same frame again: no new step
+        assert calls == []
+        rows = int(unpack_steps(log[-2][1])[:, STEP_INDEX['chain_rows']].max())
+        assert solver._ring.hold_bytes == module.hold_bytes(rows)
+        solver.update(resources, *grown[-1])                              # more chains: the ring grows once
+        more = int(unpack_steps(grown[-1][1])[:, STEP_INDEX['chain_rows']].max())
+        assert more > rows and solver._ring.hold_bytes == module.hold_bytes(more)
+        gl.glFinish()
+    finally:
+        solver.release()
+        resources.release_resources()
+        target.close()
+
+
 def test_no_compute_program_declares_a_64_bit_float():
     import re
     from rendering.quick.visualizer.implementations.extruded_bubble_drift_solver import PROGRAMS

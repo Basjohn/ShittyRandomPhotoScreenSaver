@@ -39,7 +39,7 @@ from widgets.spotify_visualizer.extruded_bubble_drift_log import (
     CHAIN_GEOMETRY_BYTES, CLOUD_GEOMETRY_BYTES, KNOT_DECISION_BYTES, STEP_FLOATS, STEP_HISTORY, STEP_INDEX,
     knot_starts, unpack_steps,
 )
-from widgets.spotify_visualizer.extruded_bubble_material_paths import CHAIN_PATHS, PATH_NODES
+from widgets.spotify_visualizer.extruded_bubble_material_paths import PATH_NODES
 
 # Storage bindings used only inside the solver's dispatches (each restored afterwards), and the uniform block's
 # (apart from them: one binding namespace on Vulkan).
@@ -52,9 +52,12 @@ _R = STEP_INDEX
 # value or a small count); in the serial's place each carries where its knot decisions begin in the upload.
 _KNOT_START = _R["serial"]
 _KNOT_WORDS = KNOT_DECISION_BYTES // 4
-# One upload holds a history of steps with their knot decisions, then a dispatch block per dispatch (at most two per
-# family, each at the uniform offset alignment, which is at most 256).
-_HOLD_BYTES = STEP_HISTORY * (4 * STEP_FLOATS + CHAIN_PATHS * KNOT_DECISION_BYTES) + 6 * (256 + _DISPATCH_BLOCK.size)
+
+
+def hold_bytes(chain_rows: int) -> int:
+    """One upload: a history of steps with ``chain_rows`` knot decisions each, then a dispatch block per dispatch (at
+    most two per family, each at the uniform offset alignment, which is at most 256)."""
+    return STEP_HISTORY * (4 * STEP_FLOATS + chain_rows * KNOT_DECISION_BYTES) + 6 * (256 + _DISPATCH_BLOCK.size)
 
 _PAIRS_GLSL = """
 // Error-free float32 transforms (precise: evaluated as written, never reordered or contracted).
@@ -323,11 +326,11 @@ class DriftSolver:
         self.output = 0
         self._output_vec4s = 0
         self._families: dict[str, _Family] = {}
-        self._ring = StreamRing(f"{label} drift steps", slots=4, slot_bytes=2 * _HOLD_BYTES, hold_bytes=_HOLD_BYTES)
+        self._ring: StreamRing | None = None   # sized to the most chain rows a step has carried (_ring_for)
 
     @property
     def has_resources(self) -> bool:
-        return bool(self.output or self._families or self._ring.has_resources)
+        return bool(self.output or self._families or (self._ring is not None and self._ring.has_resources))
 
     def release(self) -> None:
         for family in self._families.values():
@@ -335,7 +338,19 @@ class DriftSolver:
         self._families.clear()
         _delete(self.output)
         self.output, self._output_vec4s = 0, 0
-        self._ring.release()
+        if self._ring is not None:
+            self._ring.release()
+            self._ring = None
+
+    def _ring_for(self, chain_rows: int) -> StreamRing:
+        """The step ring, grown (never shrunk) when a step carries more chain rows than it was sized for: an edge of
+        the Bead Chains Range, never a frame. Its old storage is released; GL keeps it until submitted work is done."""
+        hold = hold_bytes(chain_rows)
+        if self._ring is None or self._ring.hold_bytes < hold:
+            if self._ring is not None:
+                self._ring.release()
+            self._ring = StreamRing(f"{self.label} drift steps", slots=4, slot_bytes=2 * hold, hold_bytes=hold)
+        return self._ring
 
     @staticmethod
     def layout(families) -> dict[str, int]:
@@ -379,6 +394,7 @@ class DriftSolver:
         starts = knot_starts(records)
         if len(knots) != int(starts[-1]) * KNOT_DECISION_BYTES:
             raise ValueError(f"{self.label}: knot decisions do not match their steps")
+        ring = self._ring_for(int(records[base:, _R["chain_rows"]].max()))
         prior_program = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         saved = [(binding, gl_query.get_indexed_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING, binding),
                   gl_query.get_indexed_int64(gl.GL_SHADER_STORAGE_BUFFER_START, binding),
@@ -390,8 +406,7 @@ class DriftSolver:
             for start in range(base, len(records), STEP_HISTORY):
                 end = min(start + STEP_HISTORY, len(records))
                 upload = records[start:end]
-                with self._ring.bound(gl.GL_SHADER_STORAGE_BUFFER, _STEPS,
-                                      _upload(records, starts, knots, start, end)):
+                with ring.bound(gl.GL_SHADER_STORAGE_BUFFER, _STEPS, _upload(records, starts, knots, start, end)):
                     for name in ("chains", "snow", "specks"):
                         if name in live:
                             self._advance(resources, name, live[name], offsets[name], upload, serials[start:end])
