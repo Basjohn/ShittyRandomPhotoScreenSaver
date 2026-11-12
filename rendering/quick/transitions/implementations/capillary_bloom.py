@@ -92,14 +92,10 @@ class QuickCapillaryBloomRenderer:
     def _field_inputs(count: int, fibres: float, seed: int, size: tuple[int, int]):
         aspect = size[0] / max(1, size[1])
         sources, grain = capillary_sources(seed, count, aspect)
-
-        def set_cost_uniforms(locate) -> None:
-            gl.glUniform2f(locate("uGrain"), *grain)
-            gl.glUniform1f(locate("uFibres"), fibres)
-            gl.glUniform1f(locate("uSeed"), float(seed % 65536))
-
+        # The paper's cost values (the seed's pass block).
+        cost_values = {"uGrain": grain, "uFibres": fibres, "uSeed": float(seed % 65536)}
         key = (seed, count, round(fibres, 6), round(aspect, 4))
-        return key, sources, CAPILLARY_COST, set_cost_uniforms
+        return key, sources, CAPILLARY_COST, cost_values
 
     def _draw(self, frame, progress: float, seed: int, arrival: int, extent: int) -> None:
         r = self._resources

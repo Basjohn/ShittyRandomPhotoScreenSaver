@@ -3,7 +3,8 @@
 A shared primitive for anything that spreads through a material along the cheapest way (Capillary
 Bloom first: dye racing along paper fibres; burns, frost, cracks or roots could seed it with their
 own cost). The consumer gives a GLSL ``float propagationCost(vec2 p)`` (``p`` in picture heights,
-centred, y up; cost per picture height, positive) with whatever uniforms it reads, and up to
+centred, y up; cost per picture height, positive) with whatever uniforms it reads (they become the seed's
+std140 pass block, N1.6: the consumer gives their values by name), and up to
 ``PROPAGATION_MAX_SOURCES`` sources (position plus a head start in cost units). Compute stages at a
 reduced size (``PROPAGATION_SIZE`` on the longer side, the render's aspect):
 
@@ -26,9 +27,11 @@ from __future__ import annotations
 
 import ctypes
 import math
+from collections.abc import Mapping
 
 from OpenGL import GL as gl
 
+from rendering.gl_programs.portable import pack_block, portable_program
 from rendering.gl_programs.scene3d import Scene3DBlockLayout
 
 from .compute import COMPUTE_BLOCK_BINDING, DispatchBlocks, bound_image, dispatch
@@ -126,9 +129,16 @@ def propagation_size(pixel_size: tuple[int, int]) -> tuple[int, int]:
     return max(1, round(width * scale)), max(1, round(height * scale))
 
 
+def _portable_seed(cost_glsl: str):
+    """(seed source, its cost block): the consumer's cost uniforms as one std140 pass block (N1.6,
+    ``portable_program``) beside the dispatch block; the consumer packs it from the values it gives."""
+    _, (source,), block = portable_program(None, (_seed_source(cost_glsl),), block="PropagationCost", samplers={})
+    return source, block
+
+
 def propagation_programs(name: str, cost_glsl: str) -> list[tuple[str, str]]:
     """(key, compute source) of a consumer's field programs; ``name`` keys its seed variant."""
-    return [(f"propagation_seed_{name}", _seed_source(cost_glsl)), ("propagation_relax", _RELAX_COMPUTE),
+    return [(f"propagation_seed_{name}", _portable_seed(cost_glsl)[0]), ("propagation_relax", _RELAX_COMPUTE),
             ("propagation_extent", _EXTENT_COMPUTE)]
 
 
@@ -140,6 +150,7 @@ class PropagationField:
     def __init__(self, label: str, name: str, cost_glsl: str) -> None:
         self.label = label
         self._programs = propagation_programs(name, cost_glsl)
+        self._cost_block = _portable_seed(cost_glsl)[1]
         self._textures: dict[str, int] = {}
         self._size: tuple[int, int] | None = None
         self._key: tuple | None = None
@@ -173,11 +184,12 @@ class PropagationField:
         return False
 
     def build_step(self, resources, pixel_size: tuple[int, int], key: tuple, sources, bound: float,
-                   set_cost_uniforms, passes: int = PROPAGATION_PASSES_PER_STEP) -> bool:
+                   cost_values: Mapping[str, object], passes: int = PROPAGATION_PASSES_PER_STEP) -> bool:
         """Advance the build for ``key`` by at most ``passes`` relaxation passes; True once complete.
 
         ``sources``: (x, y, head start) per source; ``bound``: the costliest rate (for the seed's upper
-        bound); ``set_cost_uniforms(uniform_location)``: sets the cost function's own uniforms."""
+        bound); ``cost_values``: the cost function's own uniforms by name (its pass block, bound from
+        ``resources.pass_blocks`` for the seed; a member not given is zero)."""
         self.warm(pixel_size)
         if self._key != key:
             self._key, self._passes = key, -1
@@ -194,10 +206,9 @@ class PropagationField:
         with self._blocks.bound(block):
             if self._passes == -1:
                 seed_key, seed_source = self._programs[0]
-                program = resources.compute_program(seed_key, seed_source)
-                gl.glUseProgram(program)
-                set_cost_uniforms(lambda name: gl.glGetUniformLocation(program, name))
-                with bound_image(0, t["cost"], gl.GL_WRITE_ONLY, gl.GL_R32F), \
+                gl.glUseProgram(resources.compute_program(seed_key, seed_source))
+                with resources.pass_blocks.bound(pack_block(self._cost_block, cost_values)), \
+                        bound_image(0, t["cost"], gl.GL_WRITE_ONLY, gl.GL_R32F), \
                         bound_image(1, t["arrival"], gl.GL_WRITE_ONLY, gl.GL_R32F):
                     dispatch(groups, gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
                 self._passes = 0
@@ -222,9 +233,9 @@ class PropagationField:
         return True
 
     def textures(self, resources, pixel_size: tuple[int, int], key: tuple, sources, bound: float,
-                 set_cost_uniforms) -> tuple[int, int]:
+                 cost_values: Mapping[str, object]) -> tuple[int, int]:
         """(arrival, extent) for ``key``, finishing in this frame whatever the warm-up left."""
-        while not self.build_step(resources, pixel_size, key, sources, bound, set_cost_uniforms,
+        while not self.build_step(resources, pixel_size, key, sources, bound, cost_values,
                                   passes=PROPAGATION_PASSES):
             pass
         return self._textures["arrival"], self._textures["extent"]
