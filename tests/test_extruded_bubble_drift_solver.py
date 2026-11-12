@@ -259,6 +259,46 @@ def test_a_failed_allocation_keeps_the_current_state_drawn_logs_once_and_retries
         target.close()
 
 
+def test_a_dispatch_that_raises_at_a_geometry_edit_leaks_no_buffer(qt_app, monkeypatch):
+    """The geometry edit continues the old rows onto the new geometry; a raise inside that dispatch still releases
+    the old rows (counted: every buffer the solver created is gone after its release)."""
+    from OpenGL import GL as gl
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.visualizer.implementations import extruded_bubble_drift_solver as module
+    from tools.labs.render_target import OffscreenRenderTarget
+    log = _log(_controls('swirl_cw'), 160, edit_at=120)
+    created, injected = [], []
+    original_buffer, original_dispatch = module._buffer, module.DriftSolver._dispatch
+    monkeypatch.setattr(module, '_buffer', lambda size: created.append(original_buffer(size)) or created[-1])
+
+    def dispatch(self, *args, old_geometry=0, **kwargs):
+        if old_geometry:
+            injected.append(old_geometry)
+            raise RuntimeError('injected dispatch failure')
+        return original_dispatch(self, *args, old_geometry=old_geometry, **kwargs)
+    monkeypatch.setattr(module.DriftSolver, '_dispatch', dispatch)
+    target, resources, solver = OffscreenRenderTarget(16, 16), MeshResources('drift edit leak test'), \
+        module.DriftSolver('edit leak')
+    try:
+        for families, steps, knots in log:
+            if not families:
+                continue
+            try:
+                solver.update(resources, families, steps, knots)
+            except RuntimeError as exc:
+                assert 'injected' in str(exc)
+                break
+        assert injected, 'the geometry edit never dispatched onto the new rows'
+        gl.glFinish()
+        solver.release()
+        assert not solver.has_resources
+        assert [name for name in created if gl.glIsBuffer(name)] == []
+    finally:
+        solver.release()
+        resources.release_resources()
+        target.close()
+
+
 def test_no_compute_program_declares_a_64_bit_float():
     import re
     from rendering.quick.visualizer.implementations.extruded_bubble_drift_solver import PROGRAMS

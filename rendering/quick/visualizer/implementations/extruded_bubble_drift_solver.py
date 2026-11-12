@@ -553,10 +553,13 @@ class DriftSolver:
             replacement.serial, replacement.travel, replacement.count = state.serial, state.travel, state.count
             self._families[name] = replacement
             pending = np.flatnonzero(serials > replacement.serial)
-            if len(pending):
-                self._dispatch(resources, name, replacement, offset, upload, pending, fresh=False,
-                               old_geometry=state.geometry)
-            _delete(state.geometry, state.state, state.aux)
+            try:
+                if len(pending):
+                    self._dispatch(resources, name, replacement, offset, upload, pending, fresh=False,
+                                   old_geometry=state.geometry)
+            finally:
+                # The old rows are no longer the family's on every path (a raise included): nothing else holds them.
+                _delete(state.geometry, state.state, state.aux)
             return
         fresh = False
         # The new state exists before the old is released: a failed allocation leaves the old one current and drawn.
