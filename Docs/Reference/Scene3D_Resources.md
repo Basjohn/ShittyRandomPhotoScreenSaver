@@ -294,8 +294,10 @@ with `layout.glsl(COMPUTE_BLOCK_BINDING)`, which the pass's owner binds through 
 stream ring, warmed as one step of the owner's `warm`, left unbound after each scope; `rebind` gives a later dispatch
 in the same scope its own values). Every resource in a compute source has its own binding number (samplers, images,
 storage and the block share one namespace on Vulkan); in OpenGL the texture or image unit is that number.
-`tools/compute_pass_identity.py` records each converted pass's outputs on fixed inputs and its GL calls, and compares
-two records bit by bit.
+`tools/compute_pass_identity.py` records each converted pass's outputs on fixed inputs, its GL calls and its textures'
+memory, and compares two records bit by bit; `paired` times a git revision's owner against the working tree's in one
+process. Storage-image formats are the shipped backends' (SPIR-V, GLSL 430, HLSL 5.0, MSL 1.2): a scalar half-float
+image is `r16f` (the edge field's luma, blur and strength images, the fog's steady share); GLSL ES is not a target.
 
 **First consumer: motion blur's tile max.** The candidates were measured first (2560x1440 offscreen, RTX 4090):
 

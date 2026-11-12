@@ -5,7 +5,7 @@
 includes ``MIST_GLSL`` read it (``mistTransmittance`` / ``mistOver``). The caller sets its medium's own uniforms on
 the inject program through ``medium``; the owner sets the camera mapping and dispatches with its own barriers.
 
-Three RGBA16F 3D textures (medium, integrated, steady share), allocated at the first update of a grid size and reused while it holds; ``warm`` allocates
+Three 3D textures (medium and integrated RGBA16F, the steady share R16F), allocated at the first update of a grid size and reused while it holds; ``warm`` allocates
 on a hidden frame instead. Nothing is allocated per frame. ``release`` deletes everything under the owning context.
 A mirrored reflection camera uses its own instance (its view is ``mirror_view`` of the scene's).
 """
@@ -62,7 +62,7 @@ class FogVolume:
 
     @property
     def steady_texture(self) -> int:
-        """The coarse extinction share a detail march must not erode (in .r of an RGBA16F), from the last update."""
+        """The coarse extinction share a detail march must not erode (R16F), from the last update."""
         return self._steady
 
     @property
@@ -93,8 +93,9 @@ class FogVolume:
         names = (ctypes.c_uint*3)()
         gl.glCreateTextures(gl.GL_TEXTURE_3D, 3, names)
         self._inject, self._integrated, self._steady = (int(n) for n in names)
-        for texture in (self._inject, self._integrated, self._steady):
-            gl.glTextureStorage3D(texture, 1, gl.GL_RGBA16F, *grid)
+        for texture, internal in ((self._inject, gl.GL_RGBA16F), (self._integrated, gl.GL_RGBA16F),
+                                  (self._steady, gl.GL_R16F)):
+            gl.glTextureStorage3D(texture, 1, internal, *grid)
             gl.glTextureParameteri(texture, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
             gl.glTextureParameteri(texture, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
             for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T, gl.GL_TEXTURE_WRAP_R):
@@ -153,7 +154,7 @@ class FogVolume:
                 if medium is not None:
                     medium(inject_program)
                 with bound_image(2, self._inject, gl.GL_WRITE_ONLY, gl.GL_RGBA16F, layered=True, restore=restore), \
-                        bound_image(3, self._steady, gl.GL_WRITE_ONLY, gl.GL_RGBA16F, layered=True, restore=restore):
+                        bound_image(3, self._steady, gl.GL_WRITE_ONLY, gl.GL_R16F, layered=True, restore=restore):
                     dispatch(tuple(-(-n//4) for n in grid),
                              gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | gl.GL_TEXTURE_FETCH_BARRIER_BIT)
                 gl.glUseProgram(self._integrate_program)
