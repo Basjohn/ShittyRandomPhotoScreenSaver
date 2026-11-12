@@ -23,7 +23,15 @@ from __future__ import annotations
 
 import math
 
-from rendering.gl_programs.scene3d import SCENE3D_CAMERA, SCENE3D_GLSL, Scene3DBlockLayout, scene3d_random
+from rendering.gl_programs.item_quad import item_quad_program
+from rendering.gl_programs.portable import portable_program
+from rendering.gl_programs.scene3d import (
+    SCENE3D_CAMERA,
+    SCENE3D_FRAME_BLOCK_BINDING,
+    SCENE3D_GLSL,
+    Scene3DBlockLayout,
+    scene3d_random,
+)
 
 VOLUMETRIC_MAX_PARTICLES = 400_000
 VOLUMETRIC_NOISE_SCALE = 4.0
@@ -103,7 +111,7 @@ VOLUMETRIC_FRAME_BLOCK = Scene3DBlockLayout.of("VolumetricFrame", (
     ("uDepth", "float"), ("uMist", "float"), ("uRadial", "float"),
 ))
 
-_COMMON_GLSL = SCENE3D_GLSL + VOLUMETRIC_FRAME_BLOCK.glsl() + f"""
+_COMMON_GLSL = SCENE3D_GLSL + VOLUMETRIC_FRAME_BLOCK.glsl(SCENE3D_FRAME_BLOCK_BINDING) + f"""
 const float RELEASE_START = {VOLUMETRIC_RELEASE_START:.6f};
 const float RELEASE_SPAN = {VOLUMETRIC_RELEASE_SPAN:.6f};
 const float RELEASE_JITTER = {VOLUMETRIC_RELEASE_JITTER:.6f};
@@ -325,3 +333,12 @@ void main() {
 }
 """
 )
+
+# N1.6: each program's loose values (the quad's matrix and item size) in one std140 pass block beside the frame block
+# (``portable_program``), samplers at their units (the photographs 0 and 1, the copies 2 new and 3 old).
+VOLUMETRIC_BACKDROP_VERTEX_SOURCE, VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE, VOLUMETRIC_BACKDROP_BLOCK = item_quad_program(
+    VOLUMETRIC_BACKDROP_FRAGMENT_SOURCE, block="VolumetricBackdrop",
+    samplers={"uOldTex": 0, "uNewTex": 1, "uNewCopy": 2, "uOldCopy": 3})
+VOLUMETRIC_PARTICLE_VERTEX_SOURCE, (VOLUMETRIC_PARTICLE_FRAGMENT_SOURCE,), VOLUMETRIC_PARTICLE_BLOCK = portable_program(
+    VOLUMETRIC_PARTICLE_VERTEX_SOURCE, (VOLUMETRIC_PARTICLE_FRAGMENT_SOURCE,), block="VolumetricParticles",
+    samplers={"uOldTex": 0, "uOldCopy": 3})

@@ -1044,6 +1044,9 @@ SCENE3D_CONVENTIONS_BLOCK_BINDING = 17
 # conventions block (17). A program's samplers take the low bindings (their texture units), so on Vulkan, where
 # samplers and blocks share one binding namespace per program, nothing collides.
 SCENE3D_PASS_BLOCK_BINDING = 18
+# A renderer's per-frame draw blocks (``rendering.quick.scene3d.uniforms.UniformBlock``): their sources state it, and
+# ``attach`` points a program's block at it too.
+SCENE3D_FRAME_BLOCK_BINDING = 15
 
 # type -> (base alignment, size, struct format), per the std140 rules for these types.
 _STD140 = {

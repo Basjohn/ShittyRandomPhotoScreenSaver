@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import math
 
+from rendering.gl_programs.item_quad import item_quad_program
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import SCENE3D_GLSL
 
 CUBE_TURN_DOLLY = 0.22
@@ -101,3 +103,11 @@ void main() {{
     FragColor = vec4(textureLod(uEnvironment, uv, 5.0).rgb * {CUBE_TURN_BACKDROP:.6f}, 1.0);
 }}
 """
+
+# N1.6: each program's values in one std140 pass block (``portable_program``; the backdrop with the item quad's),
+# samplers at their units (the photographs 0 and 1, the environment 2).
+CUBE_TURN_BACKDROP_VERTEX_SOURCE, CUBE_TURN_BACKDROP_FRAGMENT_SOURCE, CUBE_TURN_BACKDROP_BLOCK = item_quad_program(
+    CUBE_TURN_BACKDROP_FRAGMENT_SOURCE, block="CubeTurnBackdrop", samplers={"uEnvironment": 2})
+CUBE_TURN_VERTEX_SOURCE, (CUBE_TURN_FRAGMENT_SOURCE,), CUBE_TURN_BLOCK = portable_program(
+    CUBE_TURN_VERTEX_SOURCE, (CUBE_TURN_FRAGMENT_SOURCE,), block="CubeTurnBox",
+    samplers={"uOldTex": 0, "uNewTex": 1, "uEnvironment": 2})

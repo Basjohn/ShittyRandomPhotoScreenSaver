@@ -23,11 +23,11 @@ from typing import Callable, Iterator, Mapping
 
 from OpenGL import GL as gl
 
-from rendering.gl_programs.scene3d import SCENE3D_PASS_BLOCK_BINDING, Scene3DBlockLayout
+from rendering.gl_programs.scene3d import SCENE3D_FRAME_BLOCK_BINDING, SCENE3D_PASS_BLOCK_BINDING, Scene3DBlockLayout
 from rendering.quick.scene3d.stream import StreamRing
 
 # Well clear of the points Qt Quick's own shaders use; restored after every use anyway.
-SCENE3D_UNIFORM_BINDING = 15
+SCENE3D_UNIFORM_BINDING = SCENE3D_FRAME_BLOCK_BINDING
 # A pass block's binding (``SCENE3D_PASS_BLOCK_BINDING``): its program's sources state it, the pass binds it.
 PASS_BLOCK_BINDING = SCENE3D_PASS_BLOCK_BINDING
 # Every copy of a pass block is written at the uniform-buffer offset alignment (at most 256 bytes), and every pass

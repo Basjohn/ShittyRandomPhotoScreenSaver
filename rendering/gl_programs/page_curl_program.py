@@ -24,6 +24,8 @@ import math
 
 import numpy as np
 
+from rendering.gl_programs.item_quad import item_quad_program
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_grid_vertex_source
 
 # The largest roll: its innermost radius (the free edge's curl) and its growth per radian.
@@ -276,3 +278,11 @@ void main() {{
 }}
 """
 )
+
+# N1.6: each program's values in one std140 pass block (``portable_program``; the backdrop with the item quad's),
+# samplers at their units (the photographs 0 and 1, the environment 2).
+PAGE_CURL_BACKDROP_VERTEX_SOURCE, PAGE_CURL_BACKDROP_FRAGMENT_SOURCE, PAGE_CURL_BACKDROP_BLOCK = item_quad_program(
+    PAGE_CURL_BACKDROP_FRAGMENT_SOURCE, block="PageCurlBackdrop", samplers={"uNewTex": 1})
+PAGE_CURL_VERTEX_SOURCE, (PAGE_CURL_FRAGMENT_SOURCE,), PAGE_CURL_BLOCK = portable_program(
+    PAGE_CURL_VERTEX_SOURCE, (PAGE_CURL_FRAGMENT_SOURCE,), block="PageCurlPage",
+    samplers={"uOldTex": 0, "uEnvironment": 2})

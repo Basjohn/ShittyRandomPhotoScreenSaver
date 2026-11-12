@@ -7,7 +7,10 @@ from collections.abc import Mapping
 from OpenGL import GL as gl
 
 from rendering.gl_programs.page_curl_program import (
+    PAGE_CURL_BACKDROP_BLOCK,
     PAGE_CURL_BACKDROP_FRAGMENT_SOURCE,
+    PAGE_CURL_BACKDROP_VERTEX_SOURCE,
+    PAGE_CURL_BLOCK,
     PAGE_CURL_FRAGMENT_SOURCE,
     PAGE_CURL_VERTEX_SOURCE,
     page_curl_direction,
@@ -24,7 +27,7 @@ from rendering.gl_programs.scene3d import (
     scene3d_request_samples,
 )
 from rendering.quick.scene3d.environment import PHOTO_ENVIRONMENT_PROGRAM, PhotoEnvironment
-from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
+from rendering.gl_programs.portable import pack_block
 from rendering.quick.scene3d.grid import draw_grid
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs, warm_run_resources
@@ -50,9 +53,9 @@ def page_curl_parameters(parameters: Mapping[str, object]) -> tuple[float, float
 class QuickPageCurlRenderer:
     transition_id = "page_curl"
 
-    _PAGE_UNIFORMS = ("uMatrix", "uItemSize", "uGridCells", "uDirection", "uLine", "uRoll", "uOldTex",
-                      "uEnvironment", "uGloss")
-    _BACKDROP_UNIFORMS = ("uMatrix", "uItemSize", "uNewTex", "uShade", "uDirection", "uLine", "uRoll")
+    # The photographs each program reads (bind_frame binds them); every other value is in its pass block.
+    _PAGE_SAMPLERS = ("uOldTex",)
+    _BACKDROP_SAMPLERS = ("uNewTex",)
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Page Curl")
@@ -97,7 +100,7 @@ class QuickPageCurlRenderer:
         samples = scene3d_request_samples(parameters)
         r = self._resources
         entries = [(r, *UNDERLAY_PROGRAM), (r, *PHOTO_ENVIRONMENT_PROGRAM),
-                   (r, "backdrop", ITEM_QUAD_VERTEX_SOURCE, PAGE_CURL_BACKDROP_FRAGMENT_SOURCE),
+                   (r, "backdrop", PAGE_CURL_BACKDROP_VERTEX_SOURCE, PAGE_CURL_BACKDROP_FRAGMENT_SOURCE),
                    (r, "page", PAGE_CURL_VERTEX_SOURCE, PAGE_CURL_FRAGMENT_SOURCE)]
         if samples:
             entries += [(r, *program) for program in scene_target_programs(samples, False, False)]
@@ -127,33 +130,36 @@ class QuickPageCurlRenderer:
         line = page_curl_line(progress, near, far, roll)
         r = self._resources
 
-        program = r.program("backdrop", ITEM_QUAD_VERTEX_SOURCE, PAGE_CURL_BACKDROP_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("backdrop", self._BACKDROP_UNIFORMS)
+        program = r.program("backdrop", PAGE_CURL_BACKDROP_VERTEX_SOURCE, PAGE_CURL_BACKDROP_FRAGMENT_SOURCE)
+        uniforms = r.uniforms("backdrop", self._BACKDROP_SAMPLERS)
+        values = r.values("backdrop")
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame)
-        gl.glUniform2f(uniforms["uDirection"], *direction)
-        gl.glUniform1f(uniforms["uLine"], line)
-        gl.glUniform2f(uniforms["uRoll"], *roll)
-        gl.glUniform1f(uniforms["uShade"], page_curl_shade_weight(line, near, far, roll))
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        bind_frame(program, uniforms, frame, values)
+        values["uDirection"] = direction
+        values["uLine"] = line
+        values["uRoll"] = roll
+        values["uShade"] = page_curl_shade_weight(line, near, far, roll)
+        with r.pass_blocks.bound(pack_block(PAGE_CURL_BACKDROP_BLOCK, values)):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
         r.begin_depth(frame)
         program = r.program("page", PAGE_CURL_VERTEX_SOURCE, PAGE_CURL_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("page", self._PAGE_UNIFORMS)
-        bind_frame(program, uniforms, frame)
+        uniforms = r.uniforms("page", self._PAGE_SAMPLERS)
+        values = r.values("page")
+        bind_frame(program, uniforms, frame, values)
         columns, rows = scene3d_grid_size(scene3d_detail(detail), aspect)
-        gl.glUniform2f(uniforms["uGridCells"], float(columns), float(rows))
-        gl.glUniform2f(uniforms["uDirection"], *direction)
-        gl.glUniform1f(uniforms["uLine"], line)
-        gl.glUniform2f(uniforms["uRoll"], *roll)
-        gl.glUniform1f(uniforms["uGloss"], gloss)
-        gl.glActiveTexture(gl.GL_TEXTURE2)
+        values["uGridCells"] = (float(columns), float(rows))
+        values["uDirection"] = direction
+        values["uLine"] = line
+        values["uRoll"] = roll
+        values["uGloss"] = gloss
+        gl.glActiveTexture(gl.GL_TEXTURE2)               # the environment's binding
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
-        gl.glUniform1i(uniforms["uEnvironment"], 2)
         gl.glActiveTexture(gl.GL_TEXTURE0)
-        draw_grid(r, columns, rows)
+        with r.pass_blocks.bound(pack_block(PAGE_CURL_BLOCK, values)):
+            draw_grid(r, columns, rows)
 
     def release_resources(self) -> None:
         errors: list[str] = []

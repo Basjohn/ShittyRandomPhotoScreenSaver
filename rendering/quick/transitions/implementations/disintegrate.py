@@ -8,15 +8,18 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs.disintegrate_program import (
     DISINTEGRATE_FRAME_BLOCK,
+    DISINTEGRATE_GRAIN_BLOCK,
     DISINTEGRATE_GRAIN_FRAGMENT_SOURCE,
     DISINTEGRATE_GRAIN_VERTEX_SOURCE,
     DISINTEGRATE_HOOKS,
+    DISINTEGRATE_INTACT_BLOCK,
     DISINTEGRATE_INTACT_FRAGMENT_SOURCE,
+    DISINTEGRATE_INTACT_VERTEX_SOURCE,
     DISINTEGRATE_VERTICES,
     disintegrate_grid,
 )
+from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.scene3d import scene3d_request_samples
-from rendering.quick.scene3d.frame import ITEM_QUAD_VERTEX_SOURCE
 from rendering.quick.scene3d.passes import blend_scope
 from rendering.quick.scene3d.population import CompactedPopulation, population_programs
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
@@ -42,8 +45,9 @@ def disintegrate_parameters(parameters: Mapping[str, object]) -> tuple[int, int,
 class QuickDisintegrateRenderer:
     transition_id = "disintegrate"
 
-    _INTACT_UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uNewTex")
-    _GRAIN_UNIFORMS = ("uMatrix", "uItemSize", "uOldTex", "uGrid")
+    # The photographs each program reads (bind_frame binds them); every other value is in a block.
+    _INTACT_SAMPLERS = ("uOldTex", "uNewTex")
+    _GRAIN_SAMPLERS = ("uOldTex",)
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Disintegrate")
@@ -88,7 +92,7 @@ class QuickDisintegrateRenderer:
         samples = scene3d_request_samples(parameters)
         r = self._resources
         entries = [(r, *UNDERLAY_PROGRAM),
-                   (r, "intact", ITEM_QUAD_VERTEX_SOURCE, DISINTEGRATE_INTACT_FRAGMENT_SOURCE),
+                   (r, "intact", DISINTEGRATE_INTACT_VERTEX_SOURCE, DISINTEGRATE_INTACT_FRAGMENT_SOURCE),
                    (r, "grains", DISINTEGRATE_GRAIN_VERTEX_SOURCE, DISINTEGRATE_GRAIN_FRAGMENT_SOURCE)]
         entries += [(r, *program) for program in population_programs("grains", DISINTEGRATE_HOOKS)]
         if samples:
@@ -116,14 +120,16 @@ class QuickDisintegrateRenderer:
 
     def _draw_bound(self, frame, columns: int, rows: int) -> None:
         r = self._resources
-        program = r.program("intact", ITEM_QUAD_VERTEX_SOURCE, DISINTEGRATE_INTACT_FRAGMENT_SOURCE)
+        program = r.program("intact", DISINTEGRATE_INTACT_VERTEX_SOURCE, DISINTEGRATE_INTACT_FRAGMENT_SOURCE)
         self._frame_block.attach(program)
-        uniforms = r.uniforms("intact", self._INTACT_UNIFORMS)
+        uniforms = r.uniforms("intact", self._INTACT_SAMPLERS)
+        values = r.values("intact")
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
-        bind_frame(program, uniforms, frame)
-        gl.glBindVertexArray(frame.quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        bind_frame(program, uniforms, frame, values)
+        with r.pass_blocks.bound(pack_block(DISINTEGRATE_INTACT_BLOCK, values)):
+            gl.glBindVertexArray(frame.quad_vao)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
 
         population = columns * rows
         self._grains.warm(population)              # a no-op when warmed for this run's size
@@ -134,11 +140,13 @@ class QuickDisintegrateRenderer:
         with self._grains.bound():
             self._grains.update(r, "grains", DISINTEGRATE_HOOKS, population, DISINTEGRATE_VERTICES, configure)
             program = r.program("grains", DISINTEGRATE_GRAIN_VERTEX_SOURCE, DISINTEGRATE_GRAIN_FRAGMENT_SOURCE)
-            uniforms = r.uniforms("grains", self._GRAIN_UNIFORMS)
-            bind_frame(program, uniforms, frame)
-            gl.glUniform2ui(uniforms["uGrid"], columns, rows)
+            uniforms = r.uniforms("grains", self._GRAIN_SAMPLERS)
+            values = r.values("grains")
+            bind_frame(program, uniforms, frame, values)
+            values["uGrid"] = (columns, rows)
             gl.glBindVertexArray(frame.quad_vao)
-            with blend_scope(gl.GL_FUNC_ADD, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA):
+            with blend_scope(gl.GL_FUNC_ADD, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA), \
+                    r.pass_blocks.bound(pack_block(DISINTEGRATE_GRAIN_BLOCK, values)):
                 self._grains.draw(gl.GL_TRIANGLE_STRIP)
 
     def release_resources(self) -> None:
