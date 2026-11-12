@@ -563,3 +563,59 @@ jobs, rest, measure and retire rounds: a second QRhi on our VkDevice on the seco
 writes followed by its host-side completion edge and Qt's queue reading the slot (copy and readback) raise no
 synchronisation hazard (U3). Build round 3 (`3bd851cd`, C primed): the validated jobs, retire and rest rounds have
 no message but A (10, 60 and 10, all QRhi texture creations).
+
+---
+
+## J. What a host's create-and-destroy cycle keeps, by owner (N2.2 lifecycle, 13 Nov 2026; added by the N2.2 agent)
+
+Measured on the product module (`native/core`, build of `14b04b15`) through `rendering.native`, Qt 6.12.0, RTX 4090,
+NVIDIA 617.42, one process per graphics API, counters after every cycle (`process_counters`: handles, USER objects,
+threads, private bytes). Round 2 of `native/core/python/host_check.py` failed three lifecycle checks, each with an
+absolute threshold and Qt-only windows as the only reference (`.artifacts/evidence/native_core/n2_2/20261113_n22_hosts/`).
+Each was attributed with a per-API control doing the same thing without the core
+(`.artifacts/evidence/native_core/n2_2/20261113_n22_lifecycle_attribution/`: `attrib.py` and one JSON per API, 24
+cycles per kind). None is the core's.
+
+**J1. OpenGL, Qt's threaded render control keeps 2 process handles and 1 USER object per create and destroy.** Qt alone,
+with no native core in the process: a `QQuickRenderControl` prepared for a QThread, initialised there (QRhi on OpenGL
+creates its context on that thread), invalidated there, its context handed back to the GUI thread and the control
+deleted on the GUI thread (the order the threaded render-control pattern requires). Over 24 cycles handles rise +2.0 per
+cycle and USER objects +1 per cycle, exactly linear, with or without frames (Qt alone threaded, no frames: 492 to 538;
+with 5 frames: 550 to 596). The same render control on the GUI thread: 0 and 0 (481 flat). The core's hidden host
+gives the same numbers (threaded: +2.0 and +1; with `threaded=False`: 0 and 0), and so do its no-frame, plain and full
+cycles. Qt Quick windows with Qt's own threaded render loop keep no handle (0 per cycle) and the same +1 USER object
+per window on OpenGL whether the core is attached or not. Whether the 2 handles and the USER object are Qt's or the
+OpenGL driver's is not separated (a context made current on a thread that then exits, its fallback surface); neither is
+the core's. Consequence: a hidden host on OpenGL is created once and kept (the product's hidden hosts are long-lived:
+the Studio's preview, capture tools), never one per use; at 10,000 USER objects per process that is the bound.
+
+**J2. D3D12, the runtime and driver commit private bytes in 8 MiB steps for the first render controls of a process, then
+plateau.** Qt alone on the GUI thread, first in its process: 865 to 948 MiB over 16 cycles in 8 MiB steps, flat
+afterwards; Qt's threaded control after it released about 145 MiB (to 803) and stayed flat; the core's plain hidden
+host after that rose back to 960 to 968 MiB and stayed flat for its last 8 cycles; its full cycle then drifted down
+(1007 to 984 over 24 cycles). Over 72 cycles of the core the process stayed within 1009 MiB. Handles and USER objects
+flat throughout. Round 2's `hidden_host` failure (956 to 989.6 over 8 cycles, flattening at 989.2, 989.3, 989.6) was
+this pool's first fill: the hidden host was the first render control in that process.
+
+**J3. Vulkan, private bytes move by whole 32 and 64 MiB blocks, and NVIDIA keeps 3 handles per VkDevice.** Every kind,
+the Qt-only window included: handles +3.0 per cycle (one device per cycle, ours or Qt's; N0.6 round 5's finding), and
+private bytes alternating by about 64 MiB from one cycle to the next (Qt-only window over 24 cycles: 353, 419, 354,
+419, ...; range 92 MiB, slope -0.35; `.artifacts/evidence/native_core/n2_2/20261113_n22_vulkan_lifecycle_24/`). The core's hidden host over 144 cycles of six kinds stays inside a band (about
+1050 to 1250 MiB) and returns to its troughs (about 1080 MiB) after 130 cycles; no kind has a trend in its troughs.
+Round 2's `window_with_core` failure was 8 cycles sampled from that alternation (first-third minimum 1114.6, last
+1146.1); over 24 cycles its slope is +0.15 MiB per cycle against the control's -0.35. The resolution of process
+counters on Vulkan is therefore one 32 MiB block: a smaller per-host leak would not show there, which is why the core's
+own objects are counted exactly (the probe pass's live resources return to 0 at every release, checked in every cycle).
+
+**J4. numpy's first import costs the harness about 750 MiB of private bytes and 23 threads** (12 to 759 MiB and 5 to
+28 threads in a plain interpreter; N0.7's OpenBLAS pool note). Any harness that imports numpy partway through a series
+sees it as one step; `host_check.py` imports it in its first round, before any lifecycle reading.
+
+**The lifecycle check since (`host_check.py`, `round_lifecycle`).** Each kind of the core runs right after its control,
+in the same process state, after 8 warm-up cycles, then 16 measured: the window with the core against the Qt-only
+window; the hidden host against Qt's threaded render control in the same sequence (on Vulkan, where PySide6 has no
+`QVulkanInstance` to give a render control, against the Qt-only window, which also makes one device per cycle). The
+core may add no handle and no USER object per cycle over its control (tolerance 0.25), no trough growth of private bytes
+over the control's (tolerance the control's own range on that API, at least 16 MiB), and no thread. Rerun on the same
+build: PASS on OpenGL, Vulkan (validation clean, A excused 10 times), D3D11 and D3D12
+(`.artifacts/evidence/native_core/n2_2/20261113_n22_hosts_controls/`).

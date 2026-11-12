@@ -686,6 +686,24 @@ python tools/native_schema_check.py [--seconds 1.5] [--clip growing_pains] [--la
 Tests: `tests/test_visualizer_engine_native_schema.py` (round trip, layout pin, namespaces, every slot-head refusal
 with its unchecked-reader control, the owner's failure edge).
 
+### Native core hosts and frame driver (N2.2)
+
+```powershell
+# The built module (release/native_module, GitHub only) through rendering.native, one child process per graphics API:
+# the hidden host (frame edge on the core's render thread, zero Python thread states, the probe pass against N0.3's
+# conventions with its negative controls, detach/re-attach/close), the window host on a real window kept off screen
+# (probe on Qt's render thread, detach, re-attach, destroyed mid-frame) and lifecycle cycles, each kind of ours right
+# after its per-API control doing the same with Qt alone (what drivers and Qt keep per cycle themselves:
+# Native_Core_N06_N07_Qt_Facts.md section J); Vulkan on the module's own instance and devices, every validation message
+# attributed (only Qt 6.12.0's recorded defects excused)
+python native/core/python/host_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan d3d11 d3d12] [--rounds hidden window lifecycle] [--cycles 16] [--label n22_hosts]
+```
+
+Tests: `tests/test_native_core_host.py` (no build: shaders bake with the include, the build lists every source, no STL
+DLL types, the probe analysis and validation rule with their controls, the Python face), `tests/test_native_core_module.py`
+(the built module: the window host entry and the hidden round on OpenGL; skipped without a build).
+
 ## 7. Qt Quick runtime checks
 
 The Qt Quick presenter is accepted architecture. Use focused runtime evidence for the seam being changed rather than rerunning old architecture-selection experiments.

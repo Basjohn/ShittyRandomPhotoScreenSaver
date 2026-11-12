@@ -6,11 +6,27 @@ never ships.
 
 - `CMakeLists.txt`, `build.cmd`: the build. Compiled only by `.github/workflows/native-module.yml` on GitHub (its
   default source); never on this machine. `build.cmd` is the workflow's one CMake invocation.
-- `src/`: the C++ module. `abi.h` holds the ABI that `rendering/native/loader.py` speaks (`EXPECTED_ABI`);
-  `host_adapter.*` is the host adapter's entry (D5.1).
+- `src/`: the C++ module. `abi.h` holds the ABI that `rendering/native/loader.py` speaks (`EXPECTED_ABI`).
+  - `host_adapter.*`: the host adapter (D5.1): the Qt Quick window host and the hidden host (a render control on the
+    core's own render thread) behind one interface.
+  - `frame_driver.*`: the frame driver (D5.2), connected in C++ to each window's `beforeRendering` with a direct
+    connection; it records the core's work for the frame there and releases on the render thread.
+  - `conventions.*`: N0.3's decided conventions (F1 to F3): the upload correction of a core-owned target, the matrix
+    corrected exactly once, the front-face rule on the corrected matrix, the target's conventions block.
+  - `targets.*`: the core's render targets and Qt 6.12.0's rules for them (preserving, primed on Vulkan).
+  - `probe_pass.*`: the trivial core pass a harness switches on (the frame edge, the correction and the readback
+    orientation end to end); nothing creates it otherwise.
+  - `vulkan_context.*`: D6, the process's Vulkan instance and one device per window, given to Qt Quick.
+  - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
+  - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
+    loader's runtime rule); Qt's types instead.
 - `shaders/`: GLSL 440 sources (`.vert`, `.frag`, `.comp`), each baked by PySide6's `qsb` for every shipped backend
-  and embedded in the module; the workflow's staging requires one `.qsb` per source.
+  and embedded in the module; the workflow's staging requires one `.qsb` per source. `srpss_conventions.glsl` is the
+  production conventions include (`rendering/gl_programs/conventions.py`), spliced in at `//@srpss_conventions` by
+  `cmake/compose_shader.cmake` before the bake.
 - `python/import_check.py`: the GPU-free check the workflow runs after the compile, through `rendering.native`.
+- `python/host_check.py`: N2.2's proof (hosts, frame driver, probe, lifecycle, validation; `probe_analysis.py`,
+  `vk_validation.py`). `Docs/Reference/Harness_Index.md` has the command.
 
 The guards: CMake refuses a Qt SDK other than `requirements.txt`'s PySide6 pin; the module refuses to import under
 any Qt but the one it was compiled for; `rendering.native` refuses a module whose Qt, ABI or MSVC runtime arrangement

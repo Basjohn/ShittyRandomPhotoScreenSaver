@@ -244,6 +244,8 @@ def test_the_host_entry_takes_only_a_quick_window():
                              {"abi": loader.EXPECTED_ABI})
     with pytest.raises(ValueError, match="unknown host kind"):
         core.attach_host(object(), kind="swapchain")
+    with pytest.raises(ValueError, match="hidden host owns its window"):
+        core.attach_host(object(), kind="hidden")
     with pytest.raises(TypeError, match="QQuickWindow"):
         core.attach_host(object())
     assert calls == []
