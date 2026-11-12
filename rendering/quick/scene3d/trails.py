@@ -67,16 +67,15 @@ def trail_line(height: float) -> float:
 
 
 def trail_program(resources, key: str, vertex: str, ghost_fragment: str,
-                  names: tuple[str, ...]) -> tuple[int, dict[str, int]]:
-    """An effect's ghost variant and its uniforms (``uGhostFade`` added). Its driver may drop
-    uniforms the flat output no longer reads; setting those is a harmless no-op.
+                  samplers: tuple[str, ...]) -> tuple[int, dict[str, int]]:
+    """An effect's ghost variant and the uniforms of its ``samplers`` (for ``bind_frame``). Its driver may drop a
+    sampler the flat output no longer reads; binding that one is a harmless no-op.
 
-    A ghost variant whose values are one std140 pass block (N1.6) passes its samplers as ``names`` (``uGhostFade``
-    looked up as well finds nothing, which is allowed here); its values are ``resources.values(key + "_ghost")``
-    and its ghosts are drawn by ``draw_ghosts``."""
+    Its values are one std140 pass block (N1.6), shared with the effect's motion-writing variant:
+    ``resources.values(key + "_ghost")``, and its ghosts are drawn by ``draw_ghosts``."""
     key = key + "_ghost"
     return (resources.program(key, vertex, ghost_fragment),
-            resources.uniforms(key, names + ("uGhostFade",), required=False))
+            resources.uniforms(key, samplers, required=False))
 
 
 def draw_ghosts(pass_blocks, block, values: dict, ghosts: Iterable[tuple[float, float]],

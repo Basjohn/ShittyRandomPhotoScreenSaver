@@ -72,6 +72,7 @@ void main() {
 
 @pytest.mark.qt
 def test_a_flat_grid_draws_the_photograph_and_a_bend_turns_its_normals(qt_app):
+    from rendering.gl_programs.portable import pack_block, portable_program
     from rendering.quick.scene3d.grid import draw_grid
     from rendering.quick.scene3d.resources import MeshResources, bind_frame
     from tools.transition_contact_sheet import TransitionCapture
@@ -99,20 +100,20 @@ def test_a_flat_grid_draws_the_photograph_and_a_bend_turns_its_normals(qt_app):
         photograph = read()
 
         columns, rows = lib.scene3d_grid_size(lib.SCENE3D_DETAIL_TIERS["Performance"], width / height)
-        program = resources.program("grid", lib.scene3d_grid_vertex_source(_DISPLACE, _DECLARATIONS), _PHOTO_FRAGMENT)
-        names = ("uMatrix", "uItemSize", "uGridCells", "uImage", "uTilt", "uShowNormal")
+        # The grid's program as the effects draw it (N1.6): its values one std140 pass block, the image at unit 0.
+        vertex, (fragment,), block = portable_program(lib.scene3d_grid_vertex_source(_DISPLACE, _DECLARATIONS),
+                                                      (_PHOTO_FRAGMENT,), block="GridProbe", samplers={"uImage": 0})
+        program = resources.program("grid", vertex, fragment)
 
         def draw(tilt, show_normal):
             clear()
-            uniforms = resources.uniforms("grid", names)
-            bind_frame(program, uniforms, frame)
-            gl.glUniform2f(uniforms["uGridCells"], float(columns), float(rows))
-            gl.glUniform1f(uniforms["uTilt"], tilt)
-            gl.glUniform1i(uniforms["uShowNormal"], show_normal)
+            values = resources.values("grid")
+            bind_frame(program, resources.uniforms("grid", ()), frame, values)
+            values.update({"uGridCells": (float(columns), float(rows)), "uTilt": tilt, "uShowNormal": show_normal})
             gl.glActiveTexture(gl.GL_TEXTURE0)
             gl.glBindTexture(gl.GL_TEXTURE_2D, capture.textures[0])
-            gl.glUniform1i(uniforms["uImage"], 0)
-            draw_grid(resources, columns, rows)
+            with resources.pass_blocks.bound(pack_block(block, values)):
+                draw_grid(resources, columns, rows)
             return read()
 
         # At rest the subdivided surface is the photograph.

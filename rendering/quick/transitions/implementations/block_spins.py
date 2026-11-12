@@ -207,7 +207,7 @@ class QuickBlockSpinsRenderer:
         program, _samplers, values, block = motion_program(
             r, "slab", (BLOCK_SPIN_QUICK_VERTEX_SOURCE, BLOCK_SPIN_FRAGMENT_SOURCE, BLOCK_SPIN_BLOCK),
             (BLOCK_SPIN_MOTION_VERTEX_SOURCE, BLOCK_SPIN_MOTION_FRAGMENT_SOURCE, BLOCK_SPIN_MOTION_BLOCK),
-            tuple(BLOCK_SPIN_SAMPLERS), motion, "uAngle")
+            tuple(BLOCK_SPIN_SAMPLERS), motion)
         gl.glUseProgram(program)
         spin_direction = self._slab_values(values, frame, edge_glass)
         values["uAngle"] = math.pi * block_spin_progress(progress) * spin_direction

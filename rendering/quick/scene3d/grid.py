@@ -13,7 +13,8 @@ from rendering.gl_programs.scene3d import scene3d_grid_vertices
 
 
 def draw_grid(resources, columns: int, rows: int) -> None:
-    """Draw the grid with the program already in use (its ``uGridCells`` set by the caller)."""
+    """Draw the grid with the program already in use (its pass block, ``uGridCells`` among its values, bound by the
+    caller)."""
     vao, count = resources.mesh(f"scene_grid_{columns}x{rows}", scene3d_grid_vertices(columns, rows), (2,))
     gl.glBindVertexArray(vao)
     gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
