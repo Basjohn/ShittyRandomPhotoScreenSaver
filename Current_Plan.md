@@ -439,13 +439,12 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   states.
 - [ ] N2.3 The packet reader with D1's barrier, D2's single consumer and the drop edge; the adversarial tests of
   P3.0.
-  - [ ] Its Python half, no C++, can start now (transport rule 3 to 5): Spectrum's fixed-layout native schema
-    (explicit offsets, little-endian, 16-byte aligned, a version; `payload_schema` `0x100 | mode_code`) and its
-    writer on the worker side, with a Python reference reader that validates by size and offsets.
-  - [ ] The Python reader validates `payload_schema` at the slot head (written today, read by nobody,
-    `packet_mailbox.py:172`): an unknown schema, mode code or version is refused, counted, not acknowledged, the
-    stream reported failed. Test (c) of the transport rule: no native schema id equals `frame_codec.CODEC_SCHEMA`
-    and the Python decoder refuses a native payload (negative control: a reader that falls through to the decode).
+  - [ ] The C++ reader matches the Python reference decoder (`core/visualizer_engine/spectrum_native_schema.py`,
+    `tools/native_schema_check.py`) bit for bit on the shipped clip.
+  - [ ] Side defect: `PacketMailbox.publish` counts a superseded frame before encoding (`packet_mailbox.py`
+    about :202), so an encode that raises leaves the count one high; count after the encode succeeds, with a test.
+  - [ ] The refusal path end to end with a real worker process (tested so far with a real mailbox and link and
+    an in-process writer).
 - [ ] N2.4 The composite as a scene-graph texture node with the card's coverage (D5.2; plan 1C.4's contract: no
   pass writes outside the card nor under the border's anti-aliased edge; Sphere's and Extruded Spectrum's
   overflow setting is the one admitted exception and skips the coverage term). Proof: one-to-one texels under
