@@ -7,7 +7,13 @@ from collections.abc import Mapping
 from OpenGL import GL as gl
 
 from rendering.gl_programs.membrane_options import MEMBRANE_SWEEP_VECTORS
-from rendering.gl_programs.membrane_program import MEMBRANE_DONE, MEMBRANE_FRAGMENT_SOURCE, MEMBRANE_VERTEX_SOURCE
+from rendering.gl_programs.membrane_program import (
+    MEMBRANE_BLOCK,
+    MEMBRANE_DONE,
+    MEMBRANE_FRAGMENT_SOURCE,
+    MEMBRANE_VERTEX_SOURCE,
+)
+from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.scene3d import (
     scene3d_detail,
     scene3d_grid_size,
@@ -36,8 +42,8 @@ def membrane_parameters(parameters: Mapping[str, object]) -> tuple[float, int, s
 class QuickMembraneRenderer:
     transition_id = "membrane"
 
-    _UNIFORMS = ("uMatrix", "uItemSize", "uGridCells", "uSweep", "uProgress", "uSpin", "uSeed", "uGloss",
-                 "uOldTex", "uNewTex", "uEnvironment")
+    # The photographs bind_frame binds (units 0 and 1); every other value is in MEMBRANE_BLOCK.
+    _SAMPLERS = ("uOldTex", "uNewTex")
 
     def __init__(self) -> None:
         self._resources = MeshResources("Quick Membrane Turnover")
@@ -108,25 +114,26 @@ class QuickMembraneRenderer:
         r.begin_depth(frame)
         program = r.program("membrane", MEMBRANE_VERTEX_SOURCE, MEMBRANE_FRAGMENT_SOURCE)
         # The new picture is drawn underneath, so the sheet itself never reads uNewTex.
-        uniforms = r.uniforms("membrane", self._UNIFORMS, required=False)
-        bind_frame(program, uniforms, frame)
+        uniforms = r.uniforms("membrane", self._SAMPLERS, required=False)
+        values = r.values("membrane")
+        bind_frame(program, uniforms, frame, values)
         width, height = frame.logical_size
         columns, rows = scene3d_grid_size(scene3d_detail(detail), width / height)
-        gl.glUniform2f(uniforms["uGridCells"], float(columns), float(rows))
-        gl.glUniform2f(uniforms["uSweep"], *sweep)
-        gl.glUniform1f(uniforms["uProgress"], progress)
-        gl.glUniform1f(uniforms["uSpin"], 1.0 if seed % 2 else -1.0)
-        gl.glUniform1f(uniforms["uSeed"], float(seed % 997))
-        gl.glUniform1f(uniforms["uGloss"], gloss)
+        values["uGridCells"] = (float(columns), float(rows))
+        values["uSweep"] = sweep
+        values["uProgress"] = progress
+        values["uSpin"] = 1.0 if seed % 2 else -1.0
+        values["uSeed"] = float(seed % 997)
+        values["uGloss"] = gloss
         # Units 0 and 1 hold the photographs (bind_frame); the copy goes on 2 (restored by the host fence).
         gl.glActiveTexture(gl.GL_TEXTURE2)
         gl.glBindTexture(gl.GL_TEXTURE_2D, environment)
-        gl.glUniform1i(uniforms["uEnvironment"], 2)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glEnable(gl.GL_BLEND)
         gl.glBlendFuncSeparate(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA)
         try:
-            draw_grid(r, columns, rows)
+            with r.pass_blocks.bound(pack_block(MEMBRANE_BLOCK, values)):
+                draw_grid(r, columns, rows)
         finally:
             gl.glDisable(gl.GL_BLEND)
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.refraction import REFRACTION_GLSL
 from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_grid_vertex_source
 from rendering.gl_programs.sheet_fold import SHEET_SIDES_GLSL, SHEET_TWIST_GLSL
@@ -121,3 +122,9 @@ void main() {{
 }}
 """
 )
+
+# N1.6: the program's values in one std140 pass block (``portable_program``), the photographs and the environment at
+# their units.
+MEMBRANE_VERTEX_SOURCE, (MEMBRANE_FRAGMENT_SOURCE,), MEMBRANE_BLOCK = portable_program(
+    MEMBRANE_VERTEX_SOURCE, (MEMBRANE_FRAGMENT_SOURCE,), block="Membrane",
+    samplers={"uOldTex": 0, "uNewTex": 1, "uEnvironment": 2})
