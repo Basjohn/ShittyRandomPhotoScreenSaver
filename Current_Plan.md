@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.7's leftovers (High); 1D.11 with 1D.8 (Medium).
+**Now (in flight):** N2.7's leftovers (High); 1D.7 (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,9 +47,7 @@ at the size asked.
      and N2.8.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. 1D.11 with 1D.8 as one dispatch (bind the trails'
-     `uBackground` first, then check whether the idle wake teleport is gone: its refraction read whatever unit 0
-     held), then 1D.7 (hover actions without Edit).
+  1. 1D.7 (hover actions without Edit), then 1D.11's fence-wait timing.
   2. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
      Sphere); a mode that cannot be made bit-identical in one dispatch converts at its port.
   3. 1B.10.
@@ -1088,12 +1086,6 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 
 ### 1D.11 Extruded Bubble side defects from N1.6 (14 Nov; Opus Medium)
 
-- [ ] Live defect: the wake trails program never gets `uBackground`
-  (`rendering/quick/visualizer/implementations/extruded_bubble.py:609`, `:742`), so its refraction reads texture
-  unit 0 instead of the captured background on unit 5. Bind it.
-  - This is a visible change: render before and after on a real wallpaper for the lead's judgement.
-  - Write a regression test that fails on the old binding, and a historical bug entry (silent since the trails
-    landed, f0ead35b).
 - [ ] Port note (N5.6): the beads program puts its probe sampler and its `EbMaterialDrift` storage buffer
   (`extruded_bubble_program.py:1441`) both at binding 6. That collides on Vulkan's single binding namespace;
   renumber at the port.
@@ -1139,16 +1131,6 @@ session open, so the user lands in Edit. The fullscreen path at `:2697` does the
   stay as they are?
 - [ ] Tests through the real display manager: each action outside Edit changes the record once, leaves no Edit
   session and shows no Edit overlay; inside Edit it stays undoable. Negative controls on the old route.
-
-### 1D.8 Extruded Bubble: an idle wake occasionally teleports (operator, 13 Nov; Opus Medium)
-
-Cause unknown. During playback wakes no longer jump: 480b398b (25 Oct) "wakes: no beat jumps; leave the bubble
-near its widest point". At idle (not playing) a wake's contents, length or attachment occasionally jumps; this
-is probably the idle path never brought to that fix's parity.
-- [ ] Root cause with evidence: an idle offscreen render sequence with a discontinuity detector on wake
-  attachment and length, compared with the playing path (what 480b398b changed, and whether idle bypasses it).
-- [ ] Fix at the owner so idle matches playing; frames before and after for the lead; a regression test that
-  fails on the old code. A historical bug entry if it shipped since 480b398b.
 
 ### 1D.9 Linux credential encryption, port from the archived branch (Opus Medium, low priority; Linux is best effort)
 
