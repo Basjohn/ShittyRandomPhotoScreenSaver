@@ -10,6 +10,13 @@ Desktop.ini
 *.swp
 *.swo
 
+# Application cache belongs in AppData, never in source control.
+/cache/
+
+# Personal Windows registry maintenance utility.
+/utilities/
+/python_registry_backup_*/
+
 # Node / frontend deps and build output
 node_modules/
 dist/

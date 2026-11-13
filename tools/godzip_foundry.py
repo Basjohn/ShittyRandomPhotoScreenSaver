@@ -3302,6 +3302,7 @@ class RunTab(QWidget):
         self._auto_logzip_process: subprocess.Popen | None = None
         self._auto_logzip_wait_thread: threading.Thread | None = None
         self._auto_logzip_generation = 0
+        self._auto_logzip_open_folder_on_completion = False
         self._loaded_once = False
         self.runWaitFinished.connect(self._run_wait_finished)
         self._build_ui()
@@ -3399,6 +3400,13 @@ class RunTab(QWidget):
         )
         self.auto_logzip.toggled.connect(self._auto_logzip_toggled)
         bottom.addWidget(self.auto_logzip)
+        self.open_logzip_folder = QCheckBox("Open Logzipped Folder After Zip")
+        self.open_logzip_folder.setToolTip(
+            "After an automatic LOGZIP has been created and verified, open its "
+            "logs/evidence_chest destination in the system file manager. "
+            "This only applies when automatic LOGZIP is enabled and succeeds."
+        )
+        bottom.addWidget(self.open_logzip_folder)
         bottom.addStretch(1)
         self.launch_button = QPushButton("RUN")
         self.launch_button.setObjectName("primaryButton")
@@ -3450,7 +3458,9 @@ class RunTab(QWidget):
                 self.flags_grid.addWidget(check, row, col)
 
             auto_logzip = bool(settings.get("run_auto_logzip_after_exit", False))
+            self.open_logzip_folder.setChecked(bool(settings.get("run_open_logzip_folder_after_zip", False)))
             self.auto_logzip.setChecked(auto_logzip)
+            self.open_logzip_folder.setEnabled(auto_logzip and self._auto_logzip_process is None)
             self.keep_console.setChecked(
                 bool(settings.get("run_keep_console_open", False)) and not auto_logzip
             )
@@ -3496,6 +3506,7 @@ class RunTab(QWidget):
     def _auto_logzip_toggled(self, checked: bool) -> None:
         if checked and self.keep_console.isChecked():
             self.keep_console.setChecked(False)
+        self.open_logzip_folder.setEnabled(checked and self._auto_logzip_process is None)
         self._selection_changed()
 
     def _display_command(self) -> str:
@@ -3520,6 +3531,8 @@ class RunTab(QWidget):
                 "Ready — launches in a dedicated console" +
                 (" that stays open after exit." if self.keep_console.isChecked() else " that closes when SRPSS exits.")
                 + (" LOGZIP will be created after SRPSS exits." if self.auto_logzip.isChecked() else "")
+                + (" Its folder will open when ready." if self.auto_logzip.isChecked()
+                   and self.open_logzip_folder.isChecked() else "")
             )
         except Exception as exc:
             self.launch_button.setEnabled(False)
@@ -3530,6 +3543,7 @@ class RunTab(QWidget):
         flags = self.selected_flags()
         keep_open = self.keep_console.isChecked()
         auto_logzip = self.auto_logzip.isChecked()
+        open_folder_after_zip = auto_logzip and self.open_logzip_folder.isChecked()
         try:
             process = launch_run_command(
                 self.repo_root,
@@ -3541,6 +3555,7 @@ class RunTab(QWidget):
             _save_local_setting(self.repo_root, "run_flags", flags)
             _save_local_setting(self.repo_root, "run_keep_console_open", keep_open)
             _save_local_setting(self.repo_root, "run_auto_logzip_after_exit", auto_logzip)
+            _save_local_setting(self.repo_root, "run_open_logzip_folder_after_zip", self.open_logzip_folder.isChecked())
             self.window.set_status(
                 f"Launched {entrypoint} as PID {process.pid} with {len(flags)} flag(s)"
             )
@@ -3550,11 +3565,11 @@ class RunTab(QWidget):
                 + (" LOGZIP will be created only after the SRPSS process exits." if auto_logzip else "")
             )
             if auto_logzip:
-                self._start_auto_logzip_wait(process)
+                self._start_auto_logzip_wait(process, open_folder_after_zip=open_folder_after_zip)
         except Exception as exc:
             self.window.show_error("RUN launch failed", exc)
 
-    def _start_auto_logzip_wait(self, process: subprocess.Popen) -> None:
+    def _start_auto_logzip_wait(self, process: subprocess.Popen, *, open_folder_after_zip: bool) -> None:
         """Wait off the UI thread for the actual SRPSS process, without polling.
 
         The watcher is deliberately daemon-owned by Foundry. Closing Foundry may
@@ -3565,8 +3580,10 @@ class RunTab(QWidget):
         self._auto_logzip_generation += 1
         generation = self._auto_logzip_generation
         self._auto_logzip_process = process
+        self._auto_logzip_open_folder_on_completion = open_folder_after_zip
         self.launch_button.setEnabled(False)
         self.auto_logzip.setEnabled(False)
+        self.open_logzip_folder.setEnabled(False)
         self.keep_console.setEnabled(False)
 
         def wait_for_exit() -> None:
@@ -3603,6 +3620,7 @@ class RunTab(QWidget):
         self._auto_logzip_generation += 1
         self._auto_logzip_process = None
         self._auto_logzip_wait_thread = None
+        self._auto_logzip_open_folder_on_completion = False
 
     def _run_wait_finished(self, payload: object) -> None:
         if not isinstance(payload, tuple) or len(payload) != 3:
@@ -3614,7 +3632,10 @@ class RunTab(QWidget):
 
         self._auto_logzip_process = None
         self._auto_logzip_wait_thread = None
+        open_folder_after_zip = self._auto_logzip_open_folder_on_completion
+        self._auto_logzip_open_folder_on_completion = False
         self.auto_logzip.setEnabled(True)
+        self.open_logzip_folder.setEnabled(self.auto_logzip.isChecked())
         self.keep_console.setEnabled(True)
 
         if status != "ok":
@@ -3644,6 +3665,8 @@ class RunTab(QWidget):
             self.window.set_status(message)
             self.run_status.setText(f"{message}\n{result.zip_path}")
             self.window.logzip_tab.refresh()
+            if open_folder_after_zip:
+                self.window.open_folder(result.zip_path.parent, label="automatic LOGZIP output folder")
 
         self.window.run_task(
             "SRPSS exited — creating automatic LOGZIP…",

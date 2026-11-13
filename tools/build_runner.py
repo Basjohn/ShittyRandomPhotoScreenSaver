@@ -1925,6 +1925,121 @@ class FoundryCheckbutton(tk.Frame):
         return self.state()
 
 
+class FoundryScrollTrack(tk.Canvas):
+    """Theme-coloured, arrowless thumb; invisible unless the body overflows.
+
+    A native Tk Scrollbar is painted by the OS on Windows even when its Tk
+    colours are set, and it also occupies an ugly fixed-width strip when the
+    whole body fits. This canvas contains only a tiny track and thumb and does
+    not drive widget layout during mouse dragging or routine scroll updates.
+    """
+
+    def __init__(self, parent: tk.Widget, *, scrollee: tk.Canvas, scale: float) -> None:
+        self._scrollee = scrollee
+        self._scale = scale
+        self._first = 0.0
+        self._last = 1.0
+        self._visible = False
+        self._visibility_idle: str | None = None
+        self._drag_offset: float | None = None
+        self._hover = False
+        self._bar_size = max(10, int(round(12 * scale)))
+        super().__init__(
+            parent,
+            width=self._bar_size,
+            bg=COLORS["root"],
+            highlightthickness=0,
+            bd=0,
+            relief="flat",
+            takefocus=0,
+            cursor="arrow",
+        )
+        self.bind("<Configure>", self._redraw)
+        self.bind("<ButtonPress-1>", self._press)
+        self.bind("<B1-Motion>", self._drag)
+        self.bind("<ButtonRelease-1>", self._release)
+        self.bind("<Enter>", self._enter)
+        self.bind("<Leave>", self._leave)
+
+    def set(self, first: str | float, last: str | float) -> None:
+        self._first = max(0.0, min(1.0, float(first)))
+        self._last = max(self._first, min(1.0, float(last)))
+        # Scrollbar/viewport geometry can change each other. Reconcile once
+        # after Tk's current pack/layout batch instead of nesting reflows.
+        if self._visibility_idle is None:
+            self._visibility_idle = self.after_idle(self._reconcile_visibility)
+        if self._visible:
+            self._redraw()
+
+    def _reconcile_visibility(self) -> None:
+        self._visibility_idle = None
+        should_show = self._last - self._first < 0.999
+        if should_show == self._visible:
+            return
+        self._visible = should_show
+        if should_show:
+            self.pack(side="right", fill="y", padx=(0, max(3, int(round(5 * self._scale)))), pady=(4, 4))
+        else:
+            self.pack_forget()
+        self._redraw()
+
+    def _thumb_bounds(self) -> tuple[float, float, float, float]:
+        width = float(max(1, self.winfo_width()))
+        height = float(max(1, self.winfo_height()))
+        margin = max(2.0, float(round(2 * self._scale)))
+        travel_height = max(1.0, height - 2.0 * margin)
+        visible_fraction = max(0.0, min(1.0, self._last - self._first))
+        thumb_height = min(travel_height, max(float(round(32 * self._scale)), travel_height * visible_fraction))
+        range_fraction = max(0.00001, 1.0 - visible_fraction)
+        position = max(0.0, min(1.0, self._first / range_fraction))
+        top = margin + position * (travel_height - thumb_height)
+        return (width, top, thumb_height, travel_height)
+
+    def _redraw(self, _event: tk.Event | None = None) -> None:
+        if not self._visible:
+            return
+        width, top, thumb_height, _ = self._thumb_bounds()
+        self.delete("all")
+        thickness = max(5.0, float(round(6 * self._scale)))
+        x0 = (width - thickness) / 2.0
+        x1 = x0 + thickness
+        bottom = top + thumb_height
+        radius = thickness / 2.0
+        color = COLORS["border"] if self._hover or self._drag_offset is not None else COLORS["faint"]
+        self.create_rectangle(x0, top + radius, x1, bottom - radius, fill=color, outline="")
+        self.create_oval(x0, top, x1, top + thickness, fill=color, outline="")
+        self.create_oval(x0, bottom - thickness, x1, bottom, fill=color, outline="")
+
+    def _move_to(self, y: float, *, offset: float) -> None:
+        _, _, thumb_height, travel_height = self._thumb_bounds()
+        margin = max(2.0, float(round(2 * self._scale)))
+        remaining = max(1.0, travel_height - thumb_height)
+        relative = max(0.0, min(1.0, (y - offset - margin) / remaining))
+        self._scrollee.yview_moveto(relative * max(0.0, 1.0 - (self._last - self._first)))
+
+    def _press(self, event: tk.Event) -> None:
+        _, top, thumb_height, _ = self._thumb_bounds()
+        self._drag_offset = (float(event.y) - top) if top <= event.y <= top + thumb_height else thumb_height / 2.0
+        self._move_to(float(event.y), offset=self._drag_offset)
+        self._redraw()
+
+    def _drag(self, event: tk.Event) -> None:
+        if self._drag_offset is not None:
+            self._move_to(float(event.y), offset=self._drag_offset)
+
+    def _release(self, _event: tk.Event) -> None:
+        self._drag_offset = None
+        self._redraw()
+
+    def _enter(self, _event: tk.Event) -> None:
+        self._hover = True
+        self._redraw()
+
+    def _leave(self, _event: tk.Event) -> None:
+        self._hover = False
+        self._redraw()
+
+
 @dataclass
 class JobWidgets:
     frame: tk.Frame
@@ -1963,6 +2078,10 @@ class BuildRunnerApp:
         self._initial_show_complete = False
         self._body_canvas: tk.Canvas | None = None
         self._body_content: tk.Frame | None = None
+        self._body_width_idle: str | None = None
+        self._body_requested_width = 0
+        self._body_applied_width = 0
+        self._body_scroll_bbox: tuple[int, int, int, int] | None = None
         self._footer: tk.Frame | None = None
         self._titlebar: tk.Frame | None = None
         selected_mode = initial_mode or self._preferences.mode
@@ -2059,34 +2178,42 @@ class BuildRunnerApp:
             ws_ex_appwindow = 0x00040000
 
             style = int(get_window_long(hwnd, gwl_style))
-            # Preserve the native sizing border even though the caption is
-            # custom. Without WS_THICKFRAME the operator cannot resize the
-            # frameless Foundry from any edge, regardless of Tk's minsize.
-            style = (style & ~(ws_caption | ws_maximizebox)) | ws_thickframe
-            set_window_long(hwnd, gwl_style, style)
-
+            # A native sizing border gives Windows its normal edge drag and
+            # snap semantics. Keep the rectangular Tk shell rectangular too.
+            # Frame refresh on *every* Map event triggers full non-client
+            # invalidation during window interaction, so mutate only on change.
+            desired_style = (style & ~(ws_caption | ws_maximizebox)) | ws_thickframe
             exstyle = int(get_window_long(hwnd, gwl_exstyle))
-            exstyle = (exstyle & ~ws_ex_toolwindow) | ws_ex_appwindow
-            set_window_long(hwnd, gwl_exstyle, exstyle)
+            desired_exstyle = (exstyle & ~ws_ex_toolwindow) | ws_ex_appwindow
+            changed = desired_style != style or desired_exstyle != exstyle
+            if desired_style != style:
+                set_window_long(hwnd, gwl_style, desired_style)
+            if desired_exstyle != exstyle:
+                set_window_long(hwnd, gwl_exstyle, desired_exstyle)
 
-            swp_nosize = 0x0001
-            swp_nomove = 0x0002
-            swp_nozorder = 0x0004
-            swp_noactivate = 0x0010
-            swp_framechanged = 0x0020
-            user32.SetWindowPos(
-                hwnd,
-                0,
-                0,
-                0,
-                0,
-                0,
-                swp_nosize
-                | swp_nomove
-                | swp_nozorder
-                | swp_noactivate
-                | swp_framechanged,
-            )
+            # Windows 11 rounds the native WS_THICKFRAME corners by default,
+            # clipping the Tk-drawn square outline and its contents. The rest
+            # of this Foundry is rectangular, so request square DWM corners.
+            try:
+                dwm = ctypes.windll.dwmapi.DwmSetWindowAttribute
+                dwm.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_uint]
+                dwm.restype = ctypes.c_long
+                corner_policy = ctypes.c_int(1)  # DWMWCP_DONOTROUND
+                dwm(ctypes.c_void_p(hwnd), 33, ctypes.byref(corner_policy), ctypes.sizeof(corner_policy))
+            except (AttributeError, OSError, ValueError, TypeError):
+                pass
+
+            if changed:
+                swp_nosize = 0x0001
+                swp_nomove = 0x0002
+                swp_nozorder = 0x0004
+                swp_noactivate = 0x0010
+                swp_framechanged = 0x0020
+                user32.SetWindowPos(
+                    hwnd, 0, 0, 0, 0, 0,
+                    swp_nosize | swp_nomove | swp_nozorder
+                    | swp_noactivate | swp_framechanged,
+                )
         except (AttributeError, OSError, TypeError, ValueError, tk.TclError):
             return
 
@@ -2147,7 +2274,10 @@ class BuildRunnerApp:
         width = min(work_width, max(self._dip(BASE_WINDOW_SIZE[0]),
                                     self._footer.winfo_reqwidth(),
                                     self._root.winfo_width() if preserve_current_size else 0))
-        self._root.minsize(min(self._dip(BASE_MINIMUM_SIZE[0]), work_width),
+        # Windows' resize border must not let the operator drag narrower than
+        # the persistent action row. Otherwise its right-hand checkbox clips.
+        self._root.minsize(min(work_width, max(self._dip(BASE_MINIMUM_SIZE[0]),
+                                               self._footer.winfo_reqwidth())),
                            min(self._dip(BASE_MINIMUM_SIZE[1]), work_height))
         # Preserve Tk's selected screen position when it fits, otherwise clamp
         # it to the selected monitor. Do not center against the primary display.
@@ -2158,14 +2288,29 @@ class BuildRunnerApp:
         self._sync_body_scrollregion()
 
     def _sync_body_scrollregion(self, _event: tk.Event | None = None) -> None:
-        if self._body_canvas is None or self._body_content is None:
+        canvas = self._body_canvas
+        if canvas is None:
             return
-        self._body_canvas.configure(scrollregion=self._body_canvas.bbox("all"))
+        bbox = canvas.bbox("all")
+        if bbox is not None and bbox != self._body_scroll_bbox:
+            self._body_scroll_bbox = bbox
+            canvas.configure(scrollregion=bbox)
 
     def _resize_body_canvas(self, event: tk.Event) -> None:
-        if self._body_canvas is None:
+        # Thousands of widget redraws can result from immediately resizing the
+        # canvas window on every Windows native sizing event. Queue one width
+        # update per Tk layout batch, and skip no-op updates entirely.
+        self._body_requested_width = max(1, int(event.width))
+        if self._body_width_idle is None:
+            self._body_width_idle = self._root.after_idle(self._apply_body_width)
+
+    def _apply_body_width(self) -> None:
+        self._body_width_idle = None
+        canvas = self._body_canvas
+        if canvas is None or self._body_requested_width == self._body_applied_width:
             return
-        self._body_canvas.itemconfigure("body", width=event.width)
+        self._body_applied_width = self._body_requested_width
+        canvas.itemconfigure("body", width=self._body_applied_width)
         self._sync_body_scrollregion()
 
     def _scroll_body(self, event: tk.Event) -> str | None:
@@ -2277,16 +2422,11 @@ class BuildRunnerApp:
         footer.pack(side="bottom", fill="x")
         self._footer = footer
 
-        scroll = tk.Scrollbar(self._shell, orient="vertical",
-                              bg=COLORS["panel_alt"], troughcolor=COLORS["root"],
-                              activebackground=COLORS["panel_hover"],
-                              highlightthickness=0, bd=0, width=self._dip(9))
-        scroll.pack(side="right", fill="y")
         canvas = tk.Canvas(self._shell, bg=COLORS["root"],
-                           bd=0, highlightthickness=0,
-                           yscrollcommand=scroll.set)
+                           bd=0, highlightthickness=0)
+        scroll = FoundryScrollTrack(self._shell, scrollee=canvas, scale=self._dpi_scale)
+        canvas.configure(yscrollcommand=scroll.set)
         canvas.pack(side="left", fill="both", expand=True)
-        scroll.configure(command=canvas.yview)
         body = tk.Frame(canvas, bg=COLORS["root"], padx=24, pady=18)
         canvas.create_window((0, 0), window=body, anchor="nw", tags="body")
         self._body_canvas = canvas
