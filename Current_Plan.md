@@ -38,12 +38,12 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.4 (High; build round 1); the remaining N1.6 groups (Medium).
+**Now (in flight):** N2.6 (High); the remaining N1.6 groups (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
 - High:
-  1. N2.4, the composite node, and N2.6/N2.7 toward N2.5 (Spectrum at parity).
+  1. N2.6 (the per-pass GPU timer service), then N2.7 (the backend owner), toward N2.5 (Spectrum at parity).
   2. The 1C.2 Save stall, and 1C.10, as defects between N steps.
 - Medium:
   1. The remaining N1.6 groups by first consumer (the 2D modes with `QUICK_VISUALIZER_VERTEX_SOURCE`, the scene
@@ -422,10 +422,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     about :202), so an encode that raises leaves the count one high; count after the encode succeeds, with a test.
   - [ ] The refusal path end to end with a real worker process (tested so far with a real mailbox and link and
     an in-process writer).
-- [ ] N2.4 The composite as a scene-graph texture node with the card's coverage (D5.2; plan 1C.4's contract: no
-  pass writes outside the card nor under the border's anti-aliased edge; Sphere's and Extruded Spectrum's
-  overflow setting is the one admitted exception and skips the coverage term). Proof: one-to-one texels under
-  pixel shift and a uniform CUSTOM scale; the clip-contract test of 1C.4 run on the native item.
+- [ ] N2.4 leftovers (N2.4 proved 13 Nov: `native/core/python/composite_check.py`, N24 VERDICT PASS on all four
+  backends):
+  - [ ] The Glass card material on the native composite; its contract read once Glass's own native path exists.
 
 Order inside N2 (the numbers stay stable for the documents that cite them): N2.1 to N2.4, then N2.6, N2.7, then
 N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the Python renderer's retirement.
