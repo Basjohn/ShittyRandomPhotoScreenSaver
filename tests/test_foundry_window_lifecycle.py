@@ -50,6 +50,65 @@ def _godzip_foundry(monkeypatch, calls, tmp_path):
     return godzip_foundry.GodzipFoundryWindow(_git_repo(tmp_path))
 
 
+def _godzip_workers() -> list:
+    import threading
+
+    return [thread for thread in threading.enumerate()
+            if thread.name == "godzip-foundry-worker" and thread.is_alive()]
+
+
+def test_godzip_close_ends_a_read_only_worker(qt_app, monkeypatch, tmp_path):
+    """Closing the GODZIP Foundry during its startup repository scan closes it and ends the scan's worker.
+
+    The close fence (no close while a task runs) is for mutations; it also refused a close during the read-only
+    startup scan, so the window stayed open and its worker alive. A read-only task's result is dropped at close and
+    its worker joined (bounded)."""
+    import time
+
+    from tools import godzip_foundry
+
+    def slow_scan(_root):
+        time.sleep(0.3)        # still running when the window closes
+        return []
+
+    monkeypatch.setattr(godzip_foundry, "collect_repo_files", slow_scan)
+    window = godzip_foundry.GodzipFoundryWindow(_git_repo(tmp_path))
+    try:
+        assert window._task_active and _godzip_workers(), "the startup scan is running"
+        assert window.close() is True
+        assert _godzip_workers() == []
+        qt_app.processEvents()
+        assert not window.create_tab._loaded, "a closed window received the dropped scan's result"
+    finally:
+        _join_worker(window)
+        window.deleteLater()
+        qt_app.processEvents()
+
+
+def test_godzip_close_still_waits_for_a_mutation(qt_app, monkeypatch, tmp_path):
+    """Control: a mutation's worker is never abandoned; the close is refused until it reports."""
+    import threading
+
+    from tools import godzip_foundry
+
+    monkeypatch.setattr(godzip_foundry, "collect_repo_files", lambda _root: [])
+    window = godzip_foundry.GodzipFoundryWindow(_git_repo(tmp_path))
+    release = threading.Event()
+    try:
+        _join_worker(window)
+        qt_app.processEvents()
+        assert window.run_task("Mutating…", lambda: release.wait(60))
+        assert window.close() is False
+        assert _godzip_workers()
+    finally:
+        release.set()
+        _join_worker(window)
+        qt_app.processEvents()
+        assert window.close() is True
+        window.deleteLater()
+        qt_app.processEvents()
+
+
 @pytest.mark.parametrize("build", [_theme_foundry, _widget_theme_foundry, _godzip_foundry],
                          ids=["theme", "widget_theme", "godzip"])
 def test_foundry_applies_its_native_backdrop_when_shown_not_when_built(qt_app, monkeypatch, tmp_path, build):
