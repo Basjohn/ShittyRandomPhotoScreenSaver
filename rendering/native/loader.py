@@ -12,8 +12,9 @@ A missing or wrong module fails here, in one place, with one reason (``NativeCor
 
 Where it is loaded from: by default the package itself (``rendering/native/_srpss_native_core.pyd``, where the product
 build places it and where a frozen build carries it); tools and tests name a folder instead (``module_dir``, for
-example ``release/native_module`` after a GitHub build). Nothing in the product loads it yet (N2.7 adds the backend
-owner); the host adapter's Python face is ``rendering.native.hosts`` (N2.2).
+example ``release/native_module`` after a GitHub build). The product loads it only through the backend owner,
+``rendering.quick.bootstrap`` (N2.7; a source checkout without the packaged module uses ``release/native_module``);
+the host adapter's Python face is ``rendering.native.hosts`` (N2.2).
 """
 from __future__ import annotations
 

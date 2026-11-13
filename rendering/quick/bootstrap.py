@@ -750,7 +750,33 @@ def host_quick_window(window: Any) -> Any:
         receiver = _completion_receiver()
         window.frameSwapped.connect(receiver.frame_presented, Qt.ConnectionType.QueuedConnection)
         _owner.completion_windows.append(weakref.ref(window))
+    _admit_gpu_pass_timing(window, host)
     return host
+
+
+def _admit_gpu_pass_timing(window: Any, host: Any) -> None:
+    """``--gpu-pass-timing`` with a frame trace (N2.6): the host's GPU timer on, drained into the trace on the GUI
+    thread at each presented frame (queued). Not admitted, nothing is created or connected."""
+    from core.diagnostics.experiment_flags import active_experiment_flags
+    from core.performance.frame_trace import current_frame_trace
+    from rendering.native.gpu_timing import gpu_pass_timing_wanted, write_to_frame_trace
+
+    sink = current_frame_trace()
+    if not gpu_pass_timing_wanted(active_experiment_flags(), sink):
+        return
+    from PySide6.QtCore import QObject, Qt, Slot
+
+    screen_index = int(getattr(window, "screen_index", -1))
+
+    class _GpuTimingDrain(QObject):
+        @Slot()
+        def drain(self) -> None:
+            if not host.closed:
+                write_to_frame_trace(sink, host.gpu_samples(), screen_index=screen_index)
+
+    host.set_gpu_timer(True)
+    drain = _GpuTimingDrain(window)          # lives (and goes) with the window, on the GUI thread
+    window.frameSwapped.connect(drain.drain, Qt.ConnectionType.QueuedConnection)
 
 
 def host_or_quit_quick_window(window: Any, *, reason: str) -> Any:

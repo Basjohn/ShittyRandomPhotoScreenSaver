@@ -136,6 +136,48 @@ def test_hosting_a_window_on_opengl_does_nothing():
     assert bootstrap.host_quick_window(object()) is None
 
 
+@pytest.mark.parametrize("admitted", [False, True])
+def test_gpu_pass_timing_is_switched_on_and_drained_only_when_admitted(admitted, monkeypatch, qt_app):
+    # N2.6's admission: --gpu-pass-timing with a frame trace. The window is never shown (no frame, no device).
+    from PySide6.QtQuick import QQuickWindow
+    from core.diagnostics import experiment_flags as ef
+    import core.performance.frame_trace as frame_trace
+    import rendering.native.gpu_timing as gpu_timing
+
+    calls: list = []
+
+    class Host:
+        handle, closed = 7, False
+
+        def set_gpu_timer(self, enabled=True, **_controls):
+            calls.append(("timer", enabled))
+
+        def gpu_samples(self):
+            return ("sample",)
+
+        def close(self):
+            return {}
+
+    sink = object()
+    monkeypatch.setattr(frame_trace, "current_frame_trace", lambda: sink)
+    monkeypatch.setattr(gpu_timing, "write_to_frame_trace",
+                        lambda to, samples, *, screen_index: calls.append(("drain", to is sink, tuple(samples))))
+    argv = ["main.py", ef.GPU_PASS_TIMING_FLAG] if admitted else ["main.py"]
+    ef.activate_experiment_flags(ef.parse_experiment_flags(argv))
+    bootstrap._owner.backend = bootstrap.QuickBackend("vulkan", "vulkan")
+    bootstrap._owner.core = type("Core", (), {"attach_host": lambda self, window: Host()})()
+    window = QQuickWindow()
+    try:
+        bootstrap.host_quick_window(window)
+        window.frameSwapped.emit()
+        qt_app.processEvents()
+        assert calls == ([("timer", True), ("drain", True, ("sample",))] if admitted else [])
+    finally:
+        ef.override_active_flags_for_testing(None)
+        window.deleteLater()
+        qt_app.processEvents()
+
+
 # ------------------------------------------------------------------------------------------ the real process, subprocesses
 
 _PRELUDE = r'''

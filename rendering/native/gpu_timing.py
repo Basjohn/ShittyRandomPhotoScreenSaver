@@ -11,8 +11,9 @@ trace's other durations take and ``tools/frame_trace_report.py`` reads: one reco
 nanoseconds (the unit ``GL_TIME_ELAPSED`` reports), summarised there as median, p95 and p99 milliseconds per pass kind.
 
 Admission: ``--gpu-pass-timing`` (``core.diagnostics.experiment_flags``), and only with a frame trace to write into
-(``gpu_pass_timing_wanted``). Nothing in the product attaches a host yet (N2.7 adds the backend owner, which switches the
-timer on when this admits it and drains it at a GUI-thread frame edge it already has).
+(``gpu_pass_timing_wanted``). The backend owner (``rendering.quick.bootstrap``, N2.7) switches each window host's timer on
+when this admits it and drains it into the trace at the window's presented frames (queued to the GUI thread); window
+hosts exist only on the Vulkan rehearsal path.
 """
 from __future__ import annotations
 

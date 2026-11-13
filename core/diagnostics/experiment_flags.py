@@ -43,7 +43,7 @@ Admissions:
   ``rendering.native.gpu_timing``): GPU time per pass written into the frame trace, so it takes effect only together
   with ``--frame-trace`` (``gpu_pass_timing_wanted``). Without it a host's timer is never switched on and the core
   holds no timer, no query object and no per-frame call for it (:func:`gpu_pass_timing_admitted`). Its consumer is
-  the backend owner that attaches native hosts (N2.7); nothing reads it before that exists.
+  the backend owner that attaches native hosts (``rendering.quick.bootstrap``, N2.7: window hosts on Vulkan only).
 * ``--graphics-backend=vulkan`` — the Vulkan rehearsal path (D10 point 1, Current_Plan.md item 8b N2.7): the one
   backend owner, ``rendering.quick.bootstrap``, runs the process's Qt Quick windows on Vulkan, on the native core's
   device (D6). Run by the lead only, bounded, on Display 1 (``tools/d1_run.py --app-arg=--graphics-backend=vulkan``).
