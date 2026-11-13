@@ -16,6 +16,7 @@ from .background_image_node import RetainedBackgroundSceneNode
 from .background_node import BackgroundRenderNode, SlideProofState
 from .telemetry import RenderNodeTelemetry
 from core.performance.frame_trace import FrameTraceEvent, current_frame_trace
+from rendering.transition_registry import background_family_available_on_backend
 
 
 class _RenderNodeRetirement:
@@ -146,6 +147,10 @@ class BackgroundRenderItem(QQuickItem):
         # item construction rather than resolving global state from render().
         self._frame_trace = current_frame_trace()
         self._retirement = _RenderNodeRetirement(self._telemetry)
+        # D10 point 2: the background family's renderers are Python OpenGL; on
+        # a backend without them (the Vulkan rehearsal) no background node is
+        # ever created. Read once: the process's backend never changes.
+        self._renderers_on_backend = background_family_available_on_backend()
         self._warm_up_cancel: threading.Event | None = None
         self._bound_window = None
         self.windowChanged.connect(self._bind_window_invalidation)
@@ -226,7 +231,8 @@ class BackgroundRenderItem(QQuickItem):
         retiring window must fail closed instead of creating a repaint loop.
         """
         window = self.window()
-        if window is None or not window.isExposed() or self._transition_run is not None:
+        if (window is None or not window.isExposed() or self._transition_run is not None
+                or not self._renderers_on_backend):
             return False
         self._cancel_warm_up()
         cancelled = threading.Event()
@@ -305,7 +311,7 @@ class BackgroundRenderItem(QQuickItem):
             self._presentation_image is None
             and self._transition_run is None
             and not self._proof_enabled
-        ):
+        ) or not self._renderers_on_backend:
             self._retire_replaced_node(old_node)
             self._retirement.set_node(None)
             return None

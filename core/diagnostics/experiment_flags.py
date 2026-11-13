@@ -43,7 +43,12 @@ Admissions:
   ``rendering.native.gpu_timing``): GPU time per pass written into the frame trace, so it takes effect only together
   with ``--frame-trace`` (``gpu_pass_timing_wanted``). Without it a host's timer is never switched on and the core
   holds no timer, no query object and no per-frame call for it (:func:`gpu_pass_timing_admitted`). Its consumer is
-  the backend owner that attaches native hosts (N2.7); nothing reads it before that exists.
+  the backend owner that attaches native hosts (``rendering.quick.bootstrap``, N2.7: window hosts on Vulkan only).
+* ``--graphics-backend=vulkan`` — the Vulkan rehearsal path (D10 point 1, Current_Plan.md item 8b N2.7): the one
+  backend owner, ``rendering.quick.bootstrap``, runs the process's Qt Quick windows on Vulkan, on the native core's
+  device (D6). Run by the lead only, bounded, on Display 1 (``tools/d1_run.py --app-arg=--graphics-backend=vulkan``).
+  ``--graphics-backend=opengl`` names the default. Absent or any other value: OpenGL, the product path, unchanged
+  (:func:`graphics_backend_request`). Only the ``=`` form is one token.
 
 All are ordinary argv tokens in the ``=`` form, so a harness that launches a
 child passes them as arguments; nothing is read from the environment.
@@ -86,6 +91,9 @@ class ExperimentFlags:
     only_display: int | None = None
     # ``--gpu-pass-timing``: the native core's per-pass GPU timer, into the frame trace (N2.6).
     gpu_pass_timing: bool = False
+    # ``--graphics-backend=<name>``: the Qt Quick graphics backend asked for (one of GRAPHICS_BACKENDS); None is the
+    # default (OpenGL). The backend owner (``rendering.quick.bootstrap``) decides what the process actually runs.
+    graphics_backend: str | None = None
 
     @property
     def lifecycle_telemetry_admitted(self) -> bool:
@@ -99,6 +107,9 @@ class ExperimentFlags:
 
 ONLY_DISPLAY_FLAG = "--only-display"
 GPU_PASS_TIMING_FLAG = "--gpu-pass-timing"
+GRAPHICS_BACKEND_FLAG = "--graphics-backend"
+#: The backends ``--graphics-backend`` may name (``rendering.quick.bootstrap.QUICK_BACKENDS`` is the same pair).
+GRAPHICS_BACKENDS = ("opengl", "vulkan")
 
 
 def parse_only_display(argv: Sequence[str]) -> int | None:
@@ -150,9 +161,14 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
     visualizer_engine_worker: bool | None = None
     in_process_chosen = False
     gpu_pass_timing = False
+    graphics_backend: str | None = None
     for index, arg in enumerate(args):
         if arg == "--viz-switch-telemetry":
             viz_switch_telemetry = True
+            continue
+        if arg.startswith(GRAPHICS_BACKEND_FLAG + "="):
+            requested = arg.split("=", 1)[1].strip().lower()
+            graphics_backend = requested if requested in GRAPHICS_BACKENDS else None
             continue
         if arg == GPU_PASS_TIMING_FLAG:
             gpu_pass_timing = True
@@ -219,6 +235,7 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
         visualizer_engine_worker=visualizer_engine_worker,
         only_display=only_display,
         gpu_pass_timing=gpu_pass_timing,
+        graphics_backend=graphics_backend,
     )
 
 
@@ -245,6 +262,7 @@ def experiment_flag_tokens(argv: Sequence[str]) -> tuple[str, ...]:
             or arg.startswith("--abc-layout-slot=")
             or arg.startswith("--abc-exclude-seconds=")
             or arg.startswith(ONLY_DISPLAY_FLAG + "=")
+            or arg.startswith(GRAPHICS_BACKEND_FLAG + "=")
         ):
             tokens.append(arg)
         elif arg in ("--abc-drive", "--abc-layout-slot", "--abc-exclude-seconds", ONLY_DISPLAY_FLAG):
@@ -336,6 +354,12 @@ def gpu_pass_timing_admitted() -> bool:
     return active_experiment_flags().gpu_pass_timing
 
 
+def graphics_backend_request() -> str | None:
+    """The Qt Quick backend ``--graphics-backend`` asked for (``"opengl"`` or ``"vulkan"``), or None (the default).
+    Read once, by the backend owner (``rendering.quick.bootstrap.configure_quick_graphics``)."""
+    return active_experiment_flags().graphics_backend
+
+
 def override_active_flags_for_testing(flags: ExperimentFlags | None) -> None:
     """Set/clear the process admission directly (tests of the admission only)."""
     global _ACTIVE
@@ -361,5 +385,8 @@ __all__ = [
     "only_display_index",
     "GPU_PASS_TIMING_FLAG",
     "gpu_pass_timing_admitted",
+    "GRAPHICS_BACKEND_FLAG",
+    "GRAPHICS_BACKENDS",
+    "graphics_backend_request",
     "override_active_flags_for_testing",
 ]

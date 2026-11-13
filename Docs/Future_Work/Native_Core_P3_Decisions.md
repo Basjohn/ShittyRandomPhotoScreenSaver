@@ -673,6 +673,38 @@ by a forced device failure; translucent windows are settled (D7's last paragraph
 Vulkan on Display 1; and one load session after the operator's yes shows Vulkan no worse than OpenGL. OpenGL then
 stays selectable in Settings as the fallback.
 
+**As built (N2.7, 13 Nov 2026; Python only, on the module of 2bec597a).**
+- The owner is `rendering/quick/bootstrap.py`: `configure_quick_graphics` chooses once (the request, else
+  `--graphics-backend=vulkan|opengl` from `core.diagnostics.experiment_flags`, else OpenGL) and every backend gets the
+  same OpenGL surface format and attributes; `start_quick_backend` (after the application, before any window, called
+  by `main.py`) loads the module and creates the process instance on Vulkan; `active_quick_backend()` and
+  `quick_backend_api()` answer for the process. The lead runs it with `tools/d1_run.py --app-arg=--graphics-backend=vulkan`.
+- D6 on the product window: `QuickDisplayWindow` hands itself to the module in its constructor
+  (`host_or_quit_quick_window`; on OpenGL it connects the GL 4.6 validation instead, as before). A window that cannot
+  be hosted quits through `request_application_quit`, as the OpenGL validation does. A destroyed window closes its
+  host; the device goes with the window (facts A7).
+- Fallback (D6 point 5): a module or instance failure sets OpenGL before any window exists and logs why. Each Vulkan
+  start writes `<data root>/state/graphics_backend/vulkan_start_<pid>.json` ("pending") before the module loads; the
+  first frame a hosted window presents, or a clean quit, removes it; a handled failure marks it "failed". The next
+  Vulkan start reads every record that is failed, unreadable, or pending from a process no longer running (pid and
+  creation time), removes them and runs OpenGL with the reason logged (`QuickBackend.reason`); the start after tries
+  Vulkan again. Controls: a module that cannot load, a device that fails in the module itself (no instance), a process
+  that dies before its first frame; each next start ran OpenGL (`tests/test_quick_backend_owner.py`).
+- "Available on this backend": `renderer_backends` on `VisualizerModeDescriptor` and `TransitionDescriptor` (every one
+  `("opengl",)`; a port adds `"vulkan"`), `BACKGROUND_FAMILY_BACKENDS` in `rendering/transition_registry.py`. On a backend
+  without a renderer: the Visualizer starts the next enabled mode with one or is not built
+  (`resolve_backend_mode`, `VisualizerHostBinding.construct`); activation requests and the double-click cycle skip the
+  mode; a transition resolves to Crossfade (`resolve_backend_transition_name` in `resolve_quick_transition_spec`); the
+  background and backdrop items create no node. On OpenGL nothing changes: `tools/conventions_identity.py` recorded
+  every transition and mode with and without N2.7, all identical, GL calls equal.
+- Facts J1 in the owner: `native_hidden_host` creates the process's one hidden host at the first request, keeps it,
+  refuses another size, and closes it at the application's quit (a process ending with it alive did not exit).
+- Not yet on Vulkan, and so not in the rehearsal: the wallpaper, the card backdrop and every transition (the background
+  family), every Visualizer mode until N2.5, and each mode's Studio (`has_studio` answers False without the mode's
+  renderer: its preview is that renderer). Settings' mode list is not filtered by the backend (a selection there is a
+  persisted choice; the runtime resolves it as above). Qt Quick's own `.qsb` shaders baked `--glsl 460` only
+  (`surface_material`, `widget_glow`, `text_legibility`) have no SPIR-V yet (N1.6).
+
 ## D11. The Qt version the core is built against (decided 12 Nov 2026)
 
 The core is compiled against the exact Qt of the shipped PySide6 (P1), and every upgrade reruns every parity gate

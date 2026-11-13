@@ -299,6 +299,48 @@ def test_the_binding_hands_the_owner_the_activations_resolved_inputs(constructed
     assert owner.configured["playing"] is False
 
 
+def _vulkan_with_ported_modes(monkeypatch, ported: set[str]) -> None:
+    """The process on the Vulkan rehearsal path (the backend owner's answer) with exactly ``ported`` modes."""
+    import dataclasses
+
+    from core.settings import visualizer_mode_registry as modes
+    from rendering.quick import bootstrap
+
+    monkeypatch.setattr(bootstrap, "quick_backend_api", lambda: "vulkan")
+    monkeypatch.setattr(modes, "_ALL_DESCRIPTORS", tuple(
+        dataclasses.replace(d, renderer_backends=("opengl", "vulkan") if d.mode_id in ported else ("opengl",))
+        for d in modes._ALL_DESCRIPTORS))
+
+
+def test_no_visualizer_is_built_on_a_backend_where_no_enabled_mode_has_a_renderer(constructed, monkeypatch) -> None:
+    # D10 point 2 (N2.7): never a surface without a renderer.
+    from widgets.spotify_visualizer.visualizer_host_binding import VisualizerHostBinding
+
+    _vulkan_with_ported_modes(monkeypatch, set())
+    host = _StubHost(3)
+    caller = _Caller([host])
+    assert VisualizerHostBinding(caller.services()).construct(host) is False
+    assert caller.outcomes[-1] == ("rejected", "no_mode_on_this_backend")
+    assert constructed == [] and host.visualizer_owner is None
+
+
+def test_an_unported_mode_starts_the_next_enabled_ported_mode_on_that_backend(constructed, monkeypatch) -> None:
+    from core.settings.visualizer_mode_registry import resolve_admissible_enabled_modes, resolve_effective_mode
+    from widgets.spotify_visualizer.visualizer_host_binding import VisualizerHostBinding
+
+    host = _StubHost(3)
+    caller = _Caller([host])
+    section = caller.widgets["spotify_visualizer"]
+    effective = resolve_effective_mode(section.get("mode"), section.get("mode_activation"))[0]
+    ported = next(mode for mode in resolve_admissible_enabled_modes(section.get("mode_activation"))
+                  if mode != effective)
+    _vulkan_with_ported_modes(monkeypatch, {ported})
+    assert VisualizerHostBinding(caller.services()).construct(host) is True
+    (owner,) = constructed
+    assert owner.controller.mode_id == ported
+    assert owner.configured["activation"]["settings_model"].mode == ported
+
+
 def test_the_binding_admits_card_input_and_clears_it_on_route_release(constructed) -> None:
     from widgets.spotify_visualizer.visualizer_host_binding import VisualizerHostBinding
 

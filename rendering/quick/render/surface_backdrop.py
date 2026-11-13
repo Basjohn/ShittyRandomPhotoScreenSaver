@@ -43,6 +43,7 @@ from PySide6.QtQuick import (
 
 from core.logging.logger import get_logger
 from rendering.gl_error_policy import raise_pending_gl_error
+from rendering.transition_registry import background_family_available_on_backend
 
 from rendering.gl_programs.portable import portable_program
 
@@ -621,6 +622,10 @@ class SurfaceBackdropSource(QQuickItem):
         self._acknowledged_serial = 0
         self._texture_ready = False
         self._retirement = _NodeRetirement()
+        # D10 points 2 and 4: the backdrop belongs to the background family,
+        # whose renderers are Python OpenGL; on a backend without them (the
+        # Vulkan rehearsal) its node is never created and no texture is ready.
+        self._renderers_on_backend = background_family_available_on_backend()
         self._bound_window = None
         self.windowChanged.connect(self._bind_window)
         self._bind_window(self.window())
@@ -709,6 +714,8 @@ class SurfaceBackdropSource(QQuickItem):
         return self._provider
 
     def updatePaintNode(self, old_node: QSGNode | None, _data) -> QSGNode | None:
+        if not self._renderers_on_backend:
+            return None
         root = self._paint_root
         if root is None or old_node is not root:
             if self._parked:

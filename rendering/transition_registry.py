@@ -28,6 +28,10 @@ class TransitionDescriptor:
     random_pool_name: Optional[str] = None
     legacy_names: tuple[str, ...] = ()
     section_key: Optional[str] = None
+    # The graphics backends this transition has a renderer on (D10 point 2, Current_Plan.md item 8b N2.7): on a
+    # backend without one it runs as Crossfade (``resolve_backend_transition_name``). Every transition has its Python
+    # OpenGL renderer; a native port adds "vulkan". Goes when the last Python renderer goes.
+    renderer_backends: tuple[str, ...] = ("opengl",)
 
     @property
     def settings_section(self) -> str:
@@ -300,6 +304,40 @@ def is_transition_available(setting_name: str) -> bool:
     """Return descriptor-level admission, independent of hardware state."""
     descriptor = get_transition_descriptor(setting_name)
     return bool(descriptor and descriptor.available)
+
+
+#: The transition every other one becomes on a backend where it has no renderer (D10 point 2).
+BACKEND_FALLBACK_TRANSITION = "Crossfade"
+#: The backends the background family runs on: its presenter, the card backdrop and every transition switch as one
+#: unit (D10 point 4). On a backend without it no background surface is created (no wallpaper yet on Vulkan).
+BACKGROUND_FAMILY_BACKENDS: tuple[str, ...] = ("opengl",)
+
+
+def _backend(backend: str | None) -> str:
+    if backend is None:
+        from rendering.quick.bootstrap import quick_backend_api
+
+        return quick_backend_api()
+    return str(backend)
+
+
+def is_transition_available_on_backend(setting_name: str, backend: str | None = None) -> bool:
+    """Whether the transition has a renderer on ``backend`` (the process's, from the backend owner, when None)."""
+    descriptor = get_transition_descriptor(setting_name)
+    return descriptor is not None and _backend(backend) in descriptor.renderer_backends
+
+
+def resolve_backend_transition_name(setting_name: str, backend: str | None = None) -> str:
+    """The transition that runs for ``setting_name`` on ``backend``: itself where it has a renderer (every one on
+    OpenGL), else Crossfade. Selection, activation and pools are decided before this; it only maps the result."""
+    if is_transition_available_on_backend(setting_name, backend):
+        return setting_name
+    return BACKEND_FALLBACK_TRANSITION
+
+
+def background_family_available_on_backend(backend: str | None = None) -> bool:
+    """Whether the background family (presenter, backdrop, transitions) has its renderers on ``backend``."""
+    return _backend(backend) in BACKGROUND_FAMILY_BACKENDS
 
 
 def transition_unavailability_reason(setting_name: str) -> str:

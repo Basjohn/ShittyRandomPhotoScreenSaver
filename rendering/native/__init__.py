@@ -3,8 +3,8 @@ side (D5.1). ``load()`` checks the module's Qt version and ABI and fails in one 
 (``NativeCoreUnavailable``); ``NativeCore.attach_host`` and ``NativeCore.hidden_host`` give the hosts
 (``rendering.native.hosts``); ``NativeCore.composite`` the composite item, placed from a presentation record by
 ``rendering.native.composite`` (N2.4); ``rendering.native.gpu_timing`` the per-pass GPU timer's samples and their
-frame-trace records (N2.6). Nothing in the product calls it yet (Current_Plan.md item 8b; N2.7 adds the backend
-owner)."""
+frame-trace records (N2.6). The product's one caller is the backend owner, ``rendering.quick.bootstrap`` (Current_Plan.md
+item 8b N2.7), and only on the Vulkan rehearsal path or for its one kept hidden host."""
 from rendering.native.composite import (
     COMPOSITE_OPTIONS,
     SURFACE_PATTERNS,

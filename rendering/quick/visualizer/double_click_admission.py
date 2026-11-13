@@ -21,9 +21,20 @@ from typing import Any, Callable
 
 from core.settings.visualizer_mode_registry import (
     coerce_visualizer_mode_id,
+    is_mode_available_on_backend,
     iter_visualizer_mode_descriptors,
     resolve_effective_enabled_modes,
 )
+
+
+def _cycle_ids(mode_activation: object) -> tuple[str, ...]:
+    """The modes the cycle walks: registered active (or enabled) ones with a renderer on this backend (D10 point 2;
+    every mode on OpenGL)."""
+    if mode_activation is None:
+        ids = tuple(desc.mode_id for desc in iter_visualizer_mode_descriptors())
+    else:
+        ids = resolve_effective_enabled_modes(mode_activation)
+    return tuple(mode_id for mode_id in ids if is_mode_available_on_backend(mode_id))
 
 
 def next_visualizer_mode_id(
@@ -37,13 +48,11 @@ def next_visualizer_mode_id(
     given, cycling is restricted to that effective enabled set (V3) so a disabled
     mode is never reachable by cycling; when it is ``None`` the full registered
     active set is used (legacy callers / no enable-state context). An unknown
-    current id starts the cycle at the first mode.
+    current id starts the cycle at the first mode. A mode without a renderer on
+    this backend is never reached (D10 point 2).
     """
 
-    if mode_activation is None:
-        ids = tuple(desc.mode_id for desc in iter_visualizer_mode_descriptors())
-    else:
-        ids = resolve_effective_enabled_modes(mode_activation)
+    ids = _cycle_ids(mode_activation)
     if not ids:
         return coerce_visualizer_mode_id(current_mode_id)
     current = coerce_visualizer_mode_id(current_mode_id)
@@ -62,10 +71,7 @@ def visualizer_mode_cycle_order(
     as ``next_visualizer_mode_id``, whose answer is the first entry). The Expanded Visualizer's cycle walks it to
     skip modes that cannot be expanded."""
 
-    if mode_activation is None:
-        ids = tuple(desc.mode_id for desc in iter_visualizer_mode_descriptors())
-    else:
-        ids = resolve_effective_enabled_modes(mode_activation)
+    ids = _cycle_ids(mode_activation)
     current = coerce_visualizer_mode_id(current_mode_id)
     try:
         idx = ids.index(current)

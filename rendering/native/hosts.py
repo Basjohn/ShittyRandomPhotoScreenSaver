@@ -13,8 +13,9 @@ here ever runs on a render thread: these objects only create, attach, detach, re
 The probe pass (``probe_pass.h``) is the harness's trivial core pass: switched on per host, it proves the frame edge,
 the upload correction and the readback orientation; nothing creates it otherwise. A host's frame driver also records
 the composited surfaces of its window (N2.4, ``rendering.native.composite``), and while its GPU timer is on it times
-every pass it records (N2.6, ``rendering.native.gpu_timing``; the known-cost pass is the timer's proof). Nothing in the
-product uses any of this yet (N2.7 adds the backend owner).
+every pass it records (N2.6, ``rendering.native.gpu_timing``; the known-cost pass is the timer's proof). The product's
+one user is the backend owner, ``rendering.quick.bootstrap`` (N2.7): window hosts on the Vulkan rehearsal path only,
+and the one kept hidden host.
 """
 from __future__ import annotations
 

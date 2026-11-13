@@ -14,7 +14,8 @@ What the core draws reaches the window as a scene-graph texture node carrying th
   (``renderer_overflow_held``: a non-Default display-wide card is the whole display), when the card's coverage stays;
 - the content's quarter turns.
 
-Nothing in the product calls it yet (N2.7 adds the backend owner).
+Nothing in the product places a composite yet: its first user is a native mode's surface (N2.5, Spectrum), in a window
+the backend owner hosted (``rendering.quick.bootstrap``, N2.7).
 """
 from __future__ import annotations
 

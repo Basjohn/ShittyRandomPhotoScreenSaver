@@ -11,7 +11,11 @@ from PySide6.QtCore import QEvent, QMetaObject, QObject, QPointF, QRect, QRectF,
 from PySide6.QtGui import QColor, QGuiApplication, QKeyEvent, QMouseEvent, QPointingDevice, QScreen
 from PySide6.QtQuick import QQuickWindow
 
-from .bootstrap import validate_or_quit_current_opengl_context
+from .bootstrap import (
+    active_quick_backend,
+    host_or_quit_quick_window,
+    validate_or_quit_current_opengl_context,
+)
 from .state import (
     QuickDisplayBindingLoss,
     QuickDisplayIdentity,
@@ -114,13 +118,25 @@ class QuickDisplayWindow(QQuickWindow):
         self.screenChanged.connect(self._on_window_screen_changed)
         self.visibleChanged.connect(self._on_window_visibility_changed)
         self.activeChanged.connect(self._cancel_orbit_on_deactivation)
-        # This is the first actual context boundary even when the retained
-        # background has no image/node yet. Direct delivery keeps the scene
-        # graph context current for the one startup validation query.
-        self.sceneGraphInitialized.connect(
-            self._validate_scene_graph_opengl,
-            Qt.ConnectionType.DirectConnection,
-        )
+        if active_quick_backend().api == "vulkan":
+            # The rehearsal path (D10): the native core's device, given to the
+            # window before its first show (D6); a failure quits, as the OpenGL
+            # validation below does, and the next start runs on OpenGL.
+            host_or_quit_quick_window(
+                self,
+                reason=(
+                    f"quick-display-screen-{self._screen_index}-"
+                    f"generation-{generation_label}"
+                ),
+            )
+        else:
+            # This is the first actual context boundary even when the retained
+            # background has no image/node yet. Direct delivery keeps the scene
+            # graph context current for the one startup validation query.
+            self.sceneGraphInitialized.connect(
+                self._validate_scene_graph_opengl,
+                Qt.ConnectionType.DirectConnection,
+            )
         # Geometry edges are rare (show, screen changes, resume); each re-derives
         # whether the scene sits on the monitor or fills the window.
         for changed in (self.xChanged, self.yChanged, self.widthChanged, self.heightChanged):
