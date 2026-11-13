@@ -233,6 +233,28 @@ def test_a_negative_control_must_fail_where_it_changes_the_rasterizers_input():
     assert verdict["changes_anything"] is False and verdict["ok"] is True
 
 
+@pytest.mark.parametrize("backend", sorted(Y_UP))
+def test_every_backend_has_a_front_face_control_that_bites(backend):
+    """The fixed front face opposite to the backend's rule changes the rasterizer's input, so it must fail there:
+    fixed-ccw on OpenGL, fixed-cw on Vulkan, D3D11 and D3D12 (audit 13 Nov, 2: D3D had none)."""
+    facts = facts_for(backend)
+    expected = pa.expected_image(facts)["image"]
+    opposite = "ccw" if facts["front_face"] == "cw" else "cw"
+    names = [name for name, config in host_check.NEGATIVES.items() if config == {"front_face": opposite}]
+    assert names and set(names) <= set(host_check.FRONT_FACE_CONTROLS)
+    flipped = dict(facts, front_face=opposite)
+    # The control's run culls the authored front triangle: its image is not the decided one.
+    culled = pa.negative_verdict(facts, _readback(flipped, expected[:, ::-1]))
+    assert culled["changes_anything"] and culled["image_failed"] and culled["ok"]
+    negatives = {name: culled for name in names}
+    same = [name for name in host_check.FRONT_FACE_CONTROLS if name not in names]
+    negatives.update({name: pa.negative_verdict(facts, _readback(dict(facts), expected)) for name in same})
+    assert host_check.front_face_rule_has_a_biting_control(negatives)
+    # Negative control: the controls before the fix (fixed-ccw only) bite nowhere the rule is counter-clockwise.
+    before = {name: verdict for name, verdict in negatives.items() if name != "front_face_fixed_cw"}
+    assert host_check.front_face_rule_has_a_biting_control(before) is (backend == "opengl")
+
+
 # ------------------------------------------------------------------------------------------------- the Python face
 
 

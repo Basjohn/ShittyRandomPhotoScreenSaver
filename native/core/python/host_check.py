@@ -78,8 +78,18 @@ NEGATIVES = {
     "no_correction": {"correction": "none"},
     "rule_on_the_uncorrected_matrix": {"front_face": "rule_uncorrected"},
     "front_face_fixed_ccw": {"front_face": "ccw"},
+    # Bites wherever the rule chooses counter-clockwise (Vulkan, D3D11, D3D12), as the fixed-ccw one bites on
+    # OpenGL: every backend has a front-face control that changes the rasterizer's input and must fail.
+    "front_face_fixed_cw": {"front_face": "cw"},
     "fragment_flip_inverted": {"fragment_flip": 1},
 }
+FRONT_FACE_CONTROLS = ("front_face_fixed_ccw", "front_face_fixed_cw")
+
+
+def front_face_rule_has_a_biting_control(negatives: dict) -> bool:
+    """At least one fixed front face changed what the rasterizer got on this backend, and the image failed."""
+    return any(negatives.get(name, {}).get("changes_anything") and negatives[name].get("image_failed")
+               for name in FRONT_FACE_CONTROLS)
 CONTENT_QML = b"""import QtQuick
 Rectangle {
     color: "#203040"
@@ -238,6 +248,7 @@ def round_hidden(core, engine, app, api: str, out: Path) -> dict:
         record["negative_controls"] = negatives
         checks["negative_controls_fail_where_they_change_anything"] = bool(negatives) and all(
             v.get("ok") for v in negatives.values())
+        checks["front_face_rule_has_a_biting_control"] = front_face_rule_has_a_biting_control(negatives)
 
         host.set_probe()
         host.frames(2)
