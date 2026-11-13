@@ -223,10 +223,11 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
   the Python substrate and is therefore a port is listed in `Docs/Reference/Scene3D_Resources.md` ("Shared
   Scene3D capability inventory").
 
-**State, 12 Nov (night audit):** N0's contracts are decided, and N0.6 and N0.7 are proved (D6 and D9 accepted). N1.6
-is merged to ratchet 95 (its remainder is open). N2.1 (the product module's build) is merged and its first product
-build round runs under the lead; the Python half of N2.3 (Spectrum's native schema, the `payload_schema` check) is
-merged and its C++ reader is open. N0.3 is proved (12 Nov, run 2), so N2.2 and N2.4 can start.
+**State, 13 Nov (audit):** N0's contracts are decided, and N0.3, N0.6 and N0.7 are proved (D6 and D9 accepted). N1.6
+is merged to ratchet 40 (the 3D modes are open). N2.1 (the product module's build), N2.2 (hosts and frame driver),
+N2.4 (the composite node) and N2.6 (the GPU timer) are merged and proved (ABI 4; the D3D window rounds with the
+displays on); the Python half of N2.3 (Spectrum's native schema, the `payload_schema` check) is merged and its C++
+reader is open. N2.7 is next.
 
 **Order.** N0 and N1 now. Then N2 (the substrate and Spectrum), N2b (the background layer and the first full
 rehearsal), N3 (the 3D substrate). From there two ordered tracks, one High slot each: the **modes track** (N5.1,
@@ -311,9 +312,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     sleep and wake. If it is not see-through, D7's second route (DirectComposition) is tried next.
 - N0.3's three scenes: proved 12 Nov on Vulkan (our device, validated), OpenGL, D3D11 and D3D12 (run 2, harness
   29816002, `N03 VERDICT PASS`; the record and the decided F1 to F4 are the decisions document's N0.3 "As proved"
-  sections; evidence `.artifacts/evidence/native_core/n0_3/`). Owed:
-  - [ ] The clip-NDC flip (block `y`, decision F2) through the native core itself on a real D3D11/D3D12 backend, when
-    N2 first runs a pass that maps NDC there (the harness proved the include, not the core's block writer).
+  sections; evidence `.artifacts/evidence/native_core/n0_3/`). The clip-NDC flip through the core's own block writer
+  on D3D11 and D3D12 was proved by N2.2's probe (13 Nov, `native_core/n2_2/20261113_n22_hosts`: the probe passes and
+  its `clip_ndc_flip_inverted` control fails on both). Owed:
   - [ ] Metal: the three scenes on Metal (Watchlist; no Metal machine).
 - N0.7 D9's proof: proved in the harness and accepted 12 Nov (the verdict, jobs for compute on this vendor and
   uploads, is D9's "Accepted by the lead"). Owed, with the Qt 6.12 checks filed here:
@@ -361,9 +362,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [ ] Extruded Spectrum's and Sphere's backdrop uv (`extruded_spectrum_program.py:415`, `sphere_voxel.py:658`)
     and the four 2D shaders (`gl_FragCoord.xy - u_viewport_origin_px`), each with its N1.6 group. Spectrum's group
     merged without it (`spectrum.frag:521` still reads raw `gl_FragCoord`): Spectrum's is owed before N2.5.
-  - [ ] The core's own upload correction (the matrix correction and the front-face rule on the corrected matrix,
-    proved in the harness by N0.3 run 2: decisions document, N0.3 "As proved") built into `native/core` in N2.2,
-    with the two depth side defects above.
   - The eight scene composites in `scene3d/target.py:125-286` (and their oriented forms) keep raw `gl_FragCoord`
     and are never converted: D5.2 replaces them with a texture node.
 - [ ] N1.6 Loose uniforms into blocks across the renderer (838 `glUniform*` call sites; `qsb` needs blocks), each
@@ -859,7 +857,7 @@ an agent's brief is its plan item, and its report is checked against the boxes, 
 in the lead's memory. Each item below starts with a root-cause box: the cause is established on the real product
 path (an off-screen reproduction or a Display 1 run), with a negative control, before anything is changed.
 
-### 1C.2 Display moves retarget the live Visualizer (merged d14559e9, R-194; the two-display proof waits for both displays)
+### 1C.2 Display moves retarget the live Visualizer (merged d14559e9, R-194; proved with both displays visible 13 Nov)
 
 Operator: "we do not want teardowns and rebuilds unless absolutely needed. They are a last resort." Landed: every
 glyph move rebuilt the whole runtime (its chrome-less Save refused and reloaded, R-194); now the move attaches its
@@ -1326,10 +1324,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 - [ ] **Vocal-band scorer into the music-response tool (8 Nov):** the PCM vocal-band (300-3400 Hz) series behind the
   mid-led routing evidence and guide §2C lives only in scratch (`lead_audit/vocal_band.py`); add it to
   `tools/visualizer_replay/waveform_music_response.py` as a lane so it survives scratch pruning.
-- [~] **Tool-output contract reds (found 8 Nov on `610e38c0`; fixed by `bed993a4`):**
-  `tests/test_artifact_paths_contract.py`. A further list (literal `evidence_chest` paths, PNG writes, a
-  `delete=False` temp file) was once recorded at 1B.2 and is no longer there: the lead runs the test once and
-  either deletes this box or lists what is still red.
 - [ ] **Side findings of the Waveform second tick cut (7 Nov, not fixed there):**
   - [ ] `capture_visualizer_logical_frame` refreezes the common style (`freeze_render_fields(_common_style(widget))`,
     logical_frame_capture.py) on every tick of every mode, ~0.02-0.04 ms; a FrozenFieldsMemo would remove it.
