@@ -11,7 +11,8 @@ here ever runs on a render thread: these objects only create, attach, detach, re
   never shown; the caller hands it the Qt Quick item to render and asks for frames.
 
 The probe pass (``probe_pass.h``) is the harness's trivial core pass: switched on per host, it proves the frame edge,
-the upload correction and the readback orientation; nothing creates it otherwise. Nothing in the product uses any of
+the upload correction and the readback orientation; nothing creates it otherwise. A host's frame driver also records
+the composited surfaces of its window (N2.4, ``rendering.native.composite``). Nothing in the product uses any of
 this yet (N2.7 adds the backend owner).
 """
 from __future__ import annotations
@@ -23,6 +24,20 @@ from typing import Any, Mapping
 
 #: The probe pass's options (``ProbeConfig`` in ``probe_pass.h``); anything but the defaults is a negative control.
 PROBE_OPTIONS = ("width", "height", "correction", "front_face", "fragment_flip", "ndc_flip")
+
+
+@dataclass(frozen=True)
+class QuickFrame:
+    """One frame of a hidden host's Qt Quick target, read back raw: rows as the target's memory holds them. Where the
+    framebuffer is Y-up (OpenGL), Qt Quick's first row is the scene's bottom: a reader flips by
+    ``y_up_in_framebuffer`` (N0.3's harness rule for Qt's own targets; the core's own targets are never flipped)."""
+
+    rgba: bytes = field(repr=False)
+    width: int
+    height: int
+    y_up_in_framebuffer: bool
+    frame: int
+    prime: str = ""
 
 
 @dataclass(frozen=True)
@@ -135,5 +150,16 @@ class HiddenHost(Host):
         """Renders ``count`` frames (the GIL is released while the render thread works)."""
         self._module.host_frames(self._live(), int(count))
 
+    def set_device_pixel_ratio(self, dpr: float) -> None:
+        """Qt Quick renders the host's device pixels at this ratio (its render target's); the content is resized to
+        the new logical size."""
+        self._module.host_set_dpr(self._live(), float(dpr))
 
-__all__ = ["HiddenHost", "Host", "PROBE_OPTIONS", "ProbeReadback", "WindowHost"]
+    def read(self) -> QuickFrame:
+        """Renders one frame and reads Qt Quick's target back at its end."""
+        raw = self._module.host_read(self._live())
+        return QuickFrame(raw["rgba"], int(raw["width"]), int(raw["height"]), bool(raw["y_up_in_framebuffer"]),
+                          int(raw["frame"]), str(raw.get("prime", "")))
+
+
+__all__ = ["HiddenHost", "Host", "PROBE_OPTIONS", "ProbeReadback", "QuickFrame", "WindowHost"]

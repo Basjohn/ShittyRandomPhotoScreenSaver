@@ -16,6 +16,7 @@
 
 #include "frame_driver.h"
 
+#include <QtCore/QByteArray>
 #include <QtCore/QJsonObject>
 #include <QtCore/QString>
 
@@ -82,12 +83,25 @@ private:
     std::shared_ptr<const HostFrameSource> m_source;
 };
 
+// One frame of the hidden host's Qt Quick target, read back raw: rows as the target's memory holds them (on a backend
+// whose framebuffer is Y-up, OpenGL, Qt Quick's first row is the scene's bottom; the reader flips by that fact).
+struct QuickReadback
+{
+    QByteArray rgba;
+    int width = 0;
+    int height = 0;
+    bool yUpInFramebuffer = false;
+    qint64 frame = -1;
+    QString prime; // rule C after the readback (the target's next pass loads it)
+};
+
 class HiddenHost final : public Host
 {
 public:
     // threaded: the render control's work runs on the core's own render thread (the product's form); false runs it on
-    // the calling (GUI) thread, the thread probe's negative control.
-    static std::unique_ptr<HiddenHost> create(int width, int height, bool threaded, QString *error);
+    // the calling (GUI) thread, the thread probe's negative control. `width` and `height` are device pixels; the scene
+    // is laid out in logical pixels, the device pixels over `dpr`.
+    static std::unique_ptr<HiddenHost> create(int width, int height, bool threaded, double dpr, QString *error);
     ~HiddenHost() override;
 
     HostKind kind() const override { return HostKind::Hidden; }
@@ -97,9 +111,14 @@ public:
 
     // The Qt Quick item it renders (parented to the window's content item, sized to it; never owned or deleted).
     bool setContent(QQuickItem *item, QString *error);
+    // The device pixel ratio Qt Quick renders the same device pixels at (the render target's; the content is resized
+    // to the new logical size). Call with the GIL released.
+    bool setDevicePixelRatio(double dpr, QString *error);
     // `count` frames: polish on the calling thread, then begin, sync, render and end on the render thread (beforeRendering
     // drives the frame driver there). Call with the GIL released.
     bool frames(int count, QString *error);
+    // One frame, with Qt Quick's target read back at its end. Call with the GIL released.
+    bool readFrame(QuickReadback *out, QString *error);
     // Detaches, invalidates Qt's scene graph on the render thread, deletes the render control (Qt's QRhi) and the window,
     // then destroys the device (Vulkan). Call with the GIL released. Idempotent.
     QJsonObject close();
@@ -109,6 +128,7 @@ public:
 
 private:
     HiddenHost();
+    bool renderFrames(int count, QuickReadback *readLast, QString *error);
     std::unique_ptr<State> m_state;
 };
 

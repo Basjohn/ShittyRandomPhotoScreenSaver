@@ -22,10 +22,12 @@ void ColorTarget::reset()
 {
     renderTarget.reset();
     renderPass.reset();
+    depthStencil.reset();
     texture.reset();
 }
 
-bool createColorTarget(QRhi *rhi, const QSize &size, const QByteArray &name, ColorTarget *out, QString *error)
+bool createColorTarget(QRhi *rhi, const QSize &size, const QByteArray &name, ColorTarget *out, QString *error,
+                       bool withDepthStencil)
 {
     out->reset();
     out->texture.reset(rhi->newTexture(QRhiTexture::RGBA8, size, 1,
@@ -36,8 +38,18 @@ bool createColorTarget(QRhi *rhi, const QSize &size, const QByteArray &name, Col
         out->reset();
         return false;
     }
-    out->renderTarget.reset(rhi->newTextureRenderTarget({ QRhiColorAttachment(out->texture.get()) },
-                                                        QRhiTextureRenderTarget::PreserveColorContents));
+    QRhiTextureRenderTargetDescription description { QRhiColorAttachment(out->texture.get()) };
+    if (withDepthStencil) {
+        out->depthStencil.reset(rhi->newRenderBuffer(QRhiRenderBuffer::DepthStencil, size, 1));
+        out->depthStencil->setName(name + QByteArrayLiteral(" depth-stencil"));
+        if (!out->depthStencil->create()) {
+            *error = QStringLiteral("%1: depth-stencil create failed").arg(QString::fromUtf8(name));
+            out->reset();
+            return false;
+        }
+        description.setDepthStencilBuffer(out->depthStencil.get());
+    }
+    out->renderTarget.reset(rhi->newTextureRenderTarget(description, QRhiTextureRenderTarget::PreserveColorContents));
     out->renderTarget->setName(name);
     out->renderPass.reset(out->renderTarget->newCompatibleRenderPassDescriptor());
     out->renderTarget->setRenderPassDescriptor(out->renderPass.get());

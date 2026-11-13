@@ -1,5 +1,7 @@
 #include "frame_driver.h"
 
+#include "surfaces.h"
+
 #include <rhi/qrhi.h>
 
 #include <QtQuick/QQuickWindow>
@@ -12,6 +14,9 @@ FrameDriver::~FrameDriver() = default;
 
 void FrameDriver::connectTo(QQuickWindow *window)
 {
+    // The window's composited surfaces: their nodes draw only while a driver is connected to record their content.
+    m_surfaces = WindowSurfaces::forWindow(window);
+    m_surfaces->driverAttached();
     // C++ direct connections (D5.2): the slot runs on the thread that emits, Qt's render thread for a window, the hidden
     // host's own render thread for a render control; no Python is involved. The lambdas own the driver, so it lives as
     // long as it is connected; the window as context removes them when the window is destroyed.
@@ -74,6 +79,8 @@ void FrameDriver::disconnectEdges()
     if (m_disconnected.testAndSetOrdered(0, 1)) {
         QObject::disconnect(m_beforeRendering);
         QObject::disconnect(m_invalidated);
+        if (m_surfaces)
+            m_surfaces->driverDetached();
     }
 }
 
@@ -161,31 +168,51 @@ void FrameDriver::onBeforeRendering()
         QMutexLocker lock(&m_mutex);
         pass = m_pass;
     }
-    if (!pass)
+    const QList<std::shared_ptr<Surface>> surfaces = m_surfaces ? m_surfaces->dirtySurfaces()
+                                                                : QList<std::shared_ptr<Surface>>();
+    if (!pass && surfaces.isEmpty())
         return; // at rest: nothing to record, nothing recorded
     QRhiCommandBuffer *cb = m_source->commandBuffer();
     if (!rhi || !cb) {
         m_edgesWithoutCommandBuffer.fetchAndAddRelaxed(1);
         return;
     }
-    // In dependency order (D5.2: background layer, backdrop pyramid, Visualizer scene, overlays): the probe alone today.
-    const bool readback = !pass->readbackPending() && m_readbackRequested.testAndSetOrdered(1, 0);
-    QString error;
-    if (!pass->record(rhi, cb, readback, edge, &error)) {
-        // The probe is dropped through the ordinary change at the next edge (released there, once nothing is in
-        // flight), never retried every frame.
-        setError(QStringLiteral("probe pass: ") + error);
-        {
-            QMutexLocker lock(&m_mutex);
-            m_wantProbe = false;
+    // In dependency order (D5.2: background layer, backdrop pyramid, Visualizer scene, overlays): the probe, then the
+    // composited surfaces (Qt Quick samples those in its own pass, after this edge).
+    bool recorded = false;
+    if (pass) {
+        const bool readback = !pass->readbackPending() && m_readbackRequested.testAndSetOrdered(1, 0);
+        QString error;
+        if (pass->record(rhi, cb, readback, edge, &error)) {
+            recorded = true;
+            m_passesRecorded.fetchAndAddRelaxed(1);
+            if (readback)
+                m_readbacksStarted.fetchAndAddRelaxed(1);
+        } else {
+            // The probe is dropped through the ordinary change at the next edge (released there, once nothing is in
+            // flight), never retried every frame.
+            setError(QStringLiteral("probe pass: ") + error);
+            {
+                QMutexLocker lock(&m_mutex);
+                m_wantProbe = false;
+            }
+            m_probeGeneration.fetchAndAddOrdered(1);
         }
-        m_probeGeneration.fetchAndAddOrdered(1);
-        return;
     }
-    m_framesRecorded.fetchAndAddRelaxed(1);
-    m_passesRecorded.fetchAndAddRelaxed(1);
-    if (readback)
-        m_readbacksStarted.fetchAndAddRelaxed(1);
+    for (const std::shared_ptr<Surface> &surface : surfaces) {
+        bool surfaceRecorded = false;
+        QString error;
+        if (!surface->record(rhi, cb, &surfaceRecorded, &error)) {
+            setError(QStringLiteral("surface: ") + error);
+            continue;
+        }
+        if (surfaceRecorded) {
+            recorded = true;
+            m_surfacePassesRecorded.fetchAndAddRelaxed(1);
+        }
+    }
+    if (recorded)
+        m_framesRecorded.fetchAndAddRelaxed(1);
 }
 
 void FrameDriver::onSceneGraphInvalidated()
@@ -204,6 +231,8 @@ QJsonObject FrameDriver::stateJson() const
     o.insert(QStringLiteral("edges_without_command_buffer"), m_edgesWithoutCommandBuffer.loadRelaxed());
     o.insert(QStringLiteral("frames_recorded"), m_framesRecorded.loadRelaxed());
     o.insert(QStringLiteral("passes_recorded"), m_passesRecorded.loadRelaxed());
+    o.insert(QStringLiteral("surface_passes_recorded"), m_surfacePassesRecorded.loadRelaxed());
+    o.insert(QStringLiteral("window_surfaces"), m_surfaces ? m_surfaces->count() : 0);
     o.insert(QStringLiteral("readbacks_started"), m_readbacksStarted.loadRelaxed());
     o.insert(QStringLiteral("edges_after_detach"), m_edgesAfterDetach.loadRelaxed());
     o.insert(QStringLiteral("detach_requested"), m_detach.loadRelaxed() != 0);

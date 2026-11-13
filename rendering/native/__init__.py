@@ -1,9 +1,17 @@
 """The native core's Python face (D5.7): the only importer of ``_srpss_native_core`` and the host adapter's Python
 side (D5.1). ``load()`` checks the module's Qt version and ABI and fails in one place with one reason
 (``NativeCoreUnavailable``); ``NativeCore.attach_host`` and ``NativeCore.hidden_host`` give the hosts
-(``rendering.native.hosts``). Nothing in the product calls it yet (Current_Plan.md item 8b; N2.7 adds the backend
-owner)."""
-from rendering.native.hosts import PROBE_OPTIONS, HiddenHost, Host, ProbeReadback, WindowHost
+(``rendering.native.hosts``); ``NativeCore.composite`` the composite item, placed from a presentation record by
+``rendering.native.composite`` (N2.4). Nothing in the product calls it yet (Current_Plan.md item 8b; N2.7 adds the
+backend owner)."""
+from rendering.native.composite import (
+    COMPOSITE_OPTIONS,
+    SURFACE_PATTERNS,
+    CompositeGeometry,
+    CompositeItem,
+    composite_geometry,
+)
+from rendering.native.hosts import PROBE_OPTIONS, HiddenHost, Host, ProbeReadback, QuickFrame, WindowHost
 from rendering.native.loader import (
     EXPECTED_ABI,
     HOST_KINDS,
@@ -13,5 +21,6 @@ from rendering.native.loader import (
     load,
 )
 
-__all__ = ["EXPECTED_ABI", "HOST_KINDS", "MODULE_NAME", "PROBE_OPTIONS", "HiddenHost", "Host", "NativeCore",
-           "NativeCoreUnavailable", "ProbeReadback", "WindowHost", "load"]
+__all__ = ["COMPOSITE_OPTIONS", "CompositeGeometry", "CompositeItem", "EXPECTED_ABI", "HOST_KINDS", "MODULE_NAME",
+           "PROBE_OPTIONS", "HiddenHost", "Host", "NativeCore", "NativeCoreUnavailable", "ProbeReadback", "QuickFrame",
+           "SURFACE_PATTERNS", "WindowHost", "composite_geometry", "load"]

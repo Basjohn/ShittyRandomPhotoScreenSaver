@@ -704,6 +704,23 @@ Tests: `tests/test_native_core_host.py` (no build: shaders bake with the include
 DLL types, the probe analysis and validation rule with their controls, the Python face), `tests/test_native_core_module.py`
 (the built module: the window host entry and the hidden round on OpenGL; skipped without a build).
 
+### Native core composite (N2.4)
+
+```powershell
+# The composite as a scene-graph texture node carrying the card's coverage, one child process per graphics API on one
+# hidden host at 100, 125 and 150 %: texels one to one (pixel shift, CUSTOM scales, quarter turns, a frameless shell),
+# plan 1C.4's clip contract on the native item (tools/card_clip_contract.py, the reading the Python node's test makes)
+# in every display style, a renderer's overflow held to the display rect outside Default, a real window kept off
+# screen (recorded once on Qt's render thread, nothing at rest, released when destroyed mid-frame); each with its
+# negative controls; Vulkan validated, only Qt 6.12.0's recorded defects excused
+python native/core/python/composite_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan d3d11 d3d12] [--rounds texels contract overflow window] [--label n24_composite]
+```
+
+Tests: `tests/test_native_core_composite.py` (no build: the geometry from the record in every style, the analysis and
+its controls, the coverage inside the contract's inner edge, the material's block names, the Python face, the
+verdict), `tests/test_native_core_module.py` (the hidden rounds on OpenGL; skipped without a build).
+
 ## 7. Qt Quick runtime checks
 
 The Qt Quick presenter is accepted architecture. Use focused runtime evidence for the seam being changed rather than rerunning old architecture-selection experiments.

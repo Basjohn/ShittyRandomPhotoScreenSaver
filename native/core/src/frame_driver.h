@@ -1,8 +1,10 @@
 // The frame driver (D5.2): one per attached window, it owns the core's per-frame edge. It is connected in C++, with a
 // direct connection, to the window's beforeRendering signal (Qt's render thread, after the frame's command buffer began
 // recording and before Qt Quick's own pass), so no Python slot and no GIL is ever on that edge (D5.4); it records all of
-// the core's work for the frame there, in dependency order (today the probe pass alone, and only while a harness asks
-// for it). With nothing to record it records nothing: a frame at rest costs one call and a few atomics.
+// the core's work for the frame there, in dependency order: the probe pass (only while a harness asks for it), then the
+// window's composited surfaces whose content changed (surfaces.h; Qt Quick samples them in its own pass, after this
+// edge). With nothing to record it records nothing: a frame at rest costs one call, a few atomics and one look at the
+// window's surfaces.
 //
 // Its GPU resources are created and released on the render thread only: at a frame edge, at the window's
 // sceneGraphInvalidated (the QRhi still exists; Qt's render thread or the hidden host's), or by the hidden host's close.
@@ -26,6 +28,8 @@ class QRhi;
 class QRhiCommandBuffer;
 
 namespace srpss_core {
+
+class WindowSurfaces;
 
 // What a host gives the core each frame (D5.1): the device and this frame's command buffer. Called on the render
 // thread inside the frame edge only. The Qt Quick window host and the hidden host each implement it.
@@ -76,6 +80,7 @@ private:
     void setError(const QString &error);
 
     std::shared_ptr<const HostFrameSource> m_source;
+    std::shared_ptr<WindowSurfaces> m_surfaces; // the window's composited surfaces (set once, at connectTo)
     QMetaObject::Connection m_beforeRendering;
     QMetaObject::Connection m_invalidated;
 
@@ -83,7 +88,8 @@ private:
     QAtomicInteger<qint64> m_edges { 0 };
     QAtomicInteger<qint64> m_edgesWithoutCommandBuffer { 0 };
     QAtomicInteger<qint64> m_framesRecorded { 0 }; // edges that recorded core work
-    QAtomicInteger<qint64> m_passesRecorded { 0 };
+    QAtomicInteger<qint64> m_passesRecorded { 0 };  // probe passes
+    QAtomicInteger<qint64> m_surfacePassesRecorded { 0 };
     QAtomicInteger<qint64> m_edgesAfterDetach { 0 };
     QAtomicInteger<qint64> m_readbacksStarted { 0 };
     QAtomicInteger<int> m_detach { 0 };

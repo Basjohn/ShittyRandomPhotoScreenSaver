@@ -20,6 +20,7 @@
 #include <QtQuick/QQuickWindow>
 #include <QtQuick/QSGRendererInterface>
 
+#include <cmath>
 #include <cstring>
 #include <utility>
 
@@ -333,8 +334,9 @@ private:
 
 struct HiddenHost::State
 {
-    int width = 0;
+    int width = 0;  // device pixels
     int height = 0;
+    double dpr = 1.0;
     QQuickRenderControl *control = nullptr; // owned
     QQuickWindow *window = nullptr;         // owned
     std::unique_ptr<RenderThread> thread;
@@ -352,6 +354,25 @@ struct HiddenHost::State
     quint64 renderThread = 0;
     QJsonObject deviceFacts;
     QJsonObject closeRecord;
+    qint64 readbacks = 0;
+
+    QSizeF logicalSize() const { return QSizeF(width / dpr, height / dpr); }
+    // Render thread (the GUI thread waiting): Qt Quick's target with the device pixel ratio it renders at.
+    void applyRenderTarget()
+    {
+        QQuickRenderTarget quickTarget = QQuickRenderTarget::fromRhiRenderTarget(target.renderTarget.get());
+        quickTarget.setDevicePixelRatio(dpr);
+        window->setRenderTarget(quickTarget);
+    }
+    // GUI thread: the scene's logical size.
+    void applyLogicalSize()
+    {
+        const QSizeF logical = logicalSize();
+        window->setGeometry(0, 0, int(std::lround(logical.width())), int(std::lround(logical.height())));
+        window->contentItem()->setSize(logical);
+        if (content)
+            content->setSize(logical);
+    }
 };
 
 HiddenHost::HiddenHost() : m_state(new State) {}
@@ -361,21 +382,25 @@ HiddenHost::~HiddenHost()
     close();
 }
 
-std::unique_ptr<HiddenHost> HiddenHost::create(int width, int height, bool threaded, QString *error)
+std::unique_ptr<HiddenHost> HiddenHost::create(int width, int height, bool threaded, double dpr, QString *error)
 {
     if (width < 1 || height < 1) {
         *error = QStringLiteral("a hidden host has a size");
+        return {};
+    }
+    if (!(dpr >= 0.25 && dpr <= 8.0)) {
+        *error = QStringLiteral("a hidden host's device pixel ratio is 0.25 to 8");
         return {};
     }
     std::unique_ptr<HiddenHost> host(new HiddenHost);
     State &s = *host->m_state;
     s.width = width;
     s.height = height;
+    s.dpr = dpr;
     s.guiThread = currentThreadNumber();
     s.control = new QQuickRenderControl;
     s.window = new QQuickWindow(s.control); // never shown
-    s.window->setGeometry(0, 0, width, height);
-    s.window->contentItem()->setSize(QSizeF(width, height));
+    s.applyLogicalSize();
     if (onVulkan()) {
         s.device = VulkanDevice::create(error);
         if (!s.device) {
@@ -402,11 +427,13 @@ std::unique_ptr<HiddenHost> HiddenHost::create(int width, int height, bool threa
         QRhi *rhi = s.control->rhi();
         s.backend = QString::fromLatin1(rhi->backendName());
         s.deviceName = QString::fromUtf8(rhi->driverInfo().deviceName);
+        // With a depth-stencil buffer: Qt Quick draws its opaque items front to back against it and clips with the
+        // stencil (N2.4 build round 1: without one an opaque item vanished under its opaque parent on every backend).
         if (!createColorTarget(rhi, QSize(s.width, s.height), QByteArrayLiteral("srpss hidden host Qt Quick target"),
-                               &s.target, &failure))
+                               &s.target, &failure, true))
             return;
         s.primeNote = primeForLoadOutsideFrame(rhi, s.target.texture.get()); // rule C, at creation
-        s.window->setRenderTarget(QQuickRenderTarget::fromRhiRenderTarget(s.target.renderTarget.get()));
+        s.applyRenderTarget();
     });
     if (!failure.isEmpty()) {
         *error = failure;
@@ -465,12 +492,39 @@ bool HiddenHost::setContent(QQuickItem *item, QString *error)
     s.content = item;
     if (item) {
         item->setParentItem(s.window->contentItem());
-        item->setSize(QSizeF(s.width, s.height));
+        item->setSize(s.logicalSize());
     }
     return true;
 }
 
+bool HiddenHost::setDevicePixelRatio(double dpr, QString *error)
+{
+    State &s = *m_state;
+    if (s.closed || !s.initialized) {
+        *error = QStringLiteral("the hidden host is closed");
+        return false;
+    }
+    if (!(dpr >= 0.25 && dpr <= 8.0)) {
+        *error = QStringLiteral("a hidden host's device pixel ratio is 0.25 to 8");
+        return false;
+    }
+    s.dpr = dpr;
+    s.applyLogicalSize();                       // the GUI thread
+    s.thread->run([&s]() { s.applyRenderTarget(); });
+    return true;
+}
+
 bool HiddenHost::frames(int count, QString *error)
+{
+    return renderFrames(count, nullptr, error);
+}
+
+bool HiddenHost::readFrame(QuickReadback *out, QString *error)
+{
+    return renderFrames(1, out, error);
+}
+
+bool HiddenHost::renderFrames(int count, QuickReadback *readLast, QString *error)
 {
     State &s = *m_state;
     if (s.closed || !s.initialized) {
@@ -481,24 +535,50 @@ bool HiddenHost::frames(int count, QString *error)
     for (int i = 0; i < count; ++i) {
         s.control->polishItems(); // the calling (GUI) thread
         bool ok = true;
-        s.thread->run([&s, &ok, driver]() {
+        QuickReadback *read = (readLast && i == count - 1) ? readLast : nullptr;
+        s.thread->run([&s, &ok, driver, read]() {
             s.control->beginFrame();
-            if (!s.control->commandBuffer()) {
+            QRhiCommandBuffer *cb = s.control->commandBuffer();
+            if (!cb) {
                 ok = false;
                 return;
             }
             s.control->sync();   // the GUI thread is blocked here, as with Qt's threaded render loop
             s.control->render(); // emits beforeRendering: the frame driver records here
-            s.control->endFrame();
+            QRhi *rhi = s.control->rhi();
+            QRhiReadbackResult result;
+            if (read) {
+                // Qt Quick's target at the end of its pass, in this frame (outside any pass).
+                QRhiResourceUpdateBatch *batch = rhi->nextResourceUpdateBatch();
+                batch->readBackTexture(QRhiReadbackDescription(s.target.texture.get()), &result);
+                cb->resourceUpdate(batch);
+            }
+            s.control->endFrame(); // an offscreen frame: waits for the GPU, readbacks complete
             // A probe readback recorded in this frame completes now, outside the frame (QRhi::finish).
-            if (driver && driver->readbackPending())
-                s.control->rhi()->finish();
+            if (read || (driver && driver->readbackPending()))
+                rhi->finish();
+            if (read) {
+                read->rgba = result.data;
+                read->width = result.pixelSize.width();
+                read->height = result.pixelSize.height();
+                read->yUpInFramebuffer = rhi->isYUpInFramebuffer();
+                read->frame = s.frames + 1;
+                // Rule C: the readback left the target in a transfer layout and its next pass loads it.
+                read->prime = primeForLoadOutsideFrame(rhi, s.target.texture.get());
+            }
         });
         if (!ok) {
             *error = QStringLiteral("QQuickRenderControl::beginFrame failed at frame %1").arg(s.frames);
             return false;
         }
         ++s.frames;
+        if (read) {
+            ++s.readbacks;
+            if (read->rgba.isEmpty()) {
+                *error = QStringLiteral("Qt Quick's target was not read back at frame %1").arg(s.frames);
+                return false;
+            }
+        }
     }
     return true;
 }
@@ -571,6 +651,10 @@ QJsonObject HiddenHost::stateJson() const
     const State &s = *m_state;
     QJsonObject o = Host::stateJson();
     o.insert(QStringLiteral("size"), QJsonArray { s.width, s.height });
+    o.insert(QStringLiteral("dpr"), s.dpr);
+    o.insert(QStringLiteral("logical_size"), QJsonArray { s.logicalSize().width(), s.logicalSize().height() });
+    o.insert(QStringLiteral("effective_dpr"), s.window ? double(s.window->effectiveDevicePixelRatio()) : 0.0);
+    o.insert(QStringLiteral("quick_readbacks"), s.readbacks);
     o.insert(QStringLiteral("threaded"), s.thread ? s.thread->threaded() : false);
     o.insert(QStringLiteral("initialized"), s.initialized);
     o.insert(QStringLiteral("closed"), s.closed);

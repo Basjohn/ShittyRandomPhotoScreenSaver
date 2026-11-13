@@ -29,12 +29,13 @@ from types import ModuleType
 from typing import Any, Mapping
 
 from rendering.native import runtime_check
+from rendering.native.composite import CompositeItem
 from rendering.native.hosts import HiddenHost, WindowHost
 
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 2
+EXPECTED_ABI = 3
 HOST_KINDS = ("window", "hidden")
 
 
@@ -85,11 +86,31 @@ class NativeCore:
             raise TypeError(f"a host hands over a live QQuickWindow, not {type(window).__name__}")
         return WindowHost(self.module, self.module.host_attach(kind, shiboken6.getCppPointer(window)[0]))
 
-    def hidden_host(self, width: int, height: int, *, threaded: bool = True) -> HiddenHost:
+    def hidden_host(self, width: int, height: int, *, threaded: bool = True, dpr: float = 1.0) -> HiddenHost:
         """A hidden host: a Qt Quick window the core drives with a render control on its own render thread
-        (``threaded``; False renders on the calling thread, the thread probe's negative control). On Vulkan it runs on
-        a device of the module's (create the process instance first)."""
-        return HiddenHost(self.module, self.module.host_attach("hidden", 0, int(width), int(height), bool(threaded)))
+        (``threaded``; False renders on the calling thread, the thread probe's negative control). ``width`` and
+        ``height`` are device pixels, laid out in logical pixels at ``dpr``. On Vulkan it runs on a device of the
+        module's (create the process instance first)."""
+        if dpr == 1.0:
+            return HiddenHost(self.module, self.module.host_attach("hidden", 0, int(width), int(height),
+                                                                   bool(threaded)))
+        return HiddenHost(self.module, self.module.host_attach("hidden", 0, int(width), int(height), bool(threaded),
+                                                               float(dpr)))
+
+    def composite(self, parent: Any) -> CompositeItem:
+        """A composite item (D5.2, N2.4) in the Qt Quick item ``parent``: a scene-graph texture node carrying the
+        card's coverage, its surface drawn by the frame driver of a host attached to the parent's window. Placed with
+        :meth:`CompositeItem.place` from ``rendering.native.composite.composite_geometry``."""
+        from PySide6.QtQuick import QQuickItem
+        import shiboken6
+
+        if not isinstance(parent, QQuickItem) or not shiboken6.isValid(parent):
+            raise TypeError(f"a composite is placed in a live QQuickItem, not {type(parent).__name__}")
+        return CompositeItem(self.module, self.module.composite_create(shiboken6.getCppPointer(parent)[0]))
+
+    def composite_live(self) -> dict:
+        """Composite items, surfaces and their QRhi objects alive in the process (lifecycle proofs)."""
+        return json.loads(self.module.composite_live())
 
     def vulkan_instance(self, *, validation: bool = False) -> dict:
         """The process's Vulkan instance (D6 point 1), before any Vulkan host. ``validation`` (harness only) enables the

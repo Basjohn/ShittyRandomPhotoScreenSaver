@@ -16,6 +16,12 @@ never ships.
   - `targets.*`: the core's render targets and Qt 6.12.0's rules for them (preserving, primed on Vulkan).
   - `probe_pass.*`: the trivial core pass a harness switches on (the frame edge, the correction and the readback
     orientation end to end); nothing creates it otherwise.
+  - `composite.*` (N2.4, D5.2): what the core draws reaches the window as a scene-graph texture node with a material of
+    ours: texels one to one (texelFetch at the item's integer device pixel), the card's coverage (the clip path Python
+    resolves, tested at each texel's centre; skipped only for an admitted overflow), the quarter turn, Qt's opacity.
+    Its geometry comes from `rendering/native/composite.py`.
+  - `surfaces.*`: the composite's target (owned by its node, on the render thread) and the per-window registry the
+    frame driver records from; a surface records only when its content changed (nothing at rest).
   - `vulkan_context.*`: D6, the process's Vulkan instance and one device per window, given to Qt Quick.
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
@@ -27,6 +33,9 @@ never ships.
 - `python/import_check.py`: the GPU-free check the workflow runs after the compile, through `rendering.native`.
 - `python/host_check.py`: N2.2's proof (hosts, frame driver, probe, lifecycle, validation; `probe_analysis.py`,
   `vk_validation.py`). `Docs/Reference/Harness_Index.md` has the command.
+- `python/composite_check.py`: N2.4's proof (texels one to one, plan 1C.4's clip contract on the native item in every
+  display style, overflow held to the display rect, the window round, validation; `composite_analysis.py` and
+  `tools/card_clip_contract.py`, the contract's one reading).
 
 The guards: CMake refuses a Qt SDK other than `requirements.txt`'s PySide6 pin; the module refuses to import under
 any Qt but the one it was compiled for; `rendering.native` refuses a module whose Qt, ABI or MSVC runtime arrangement
