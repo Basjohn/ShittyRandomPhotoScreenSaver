@@ -4489,7 +4489,11 @@ class GodzipFoundryWindow(QMainWindow):
             QTimer.singleShot(0, lambda: self.apply_tab.load_zip(initial_zip))
         else:
             self.create_tab.ensure_loaded()
-        QTimer.singleShot(0, self._apply_native_backdrop_theme)
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        # The native backdrop needs the window's native handle, which exists once it is shown.
+        self._apply_native_backdrop_theme()
 
     def open_folder(self, path: Path, *, label: str = "folder") -> None:
         """Open one existing directory through the desktop shell; never spawn a console."""
