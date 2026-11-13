@@ -238,6 +238,11 @@ item.setHeight(1.0)
 window.setOpacity(0.0)
 window.setFlag(Qt.WindowType.WindowTransparentForInput, True)
 window.setFlag(Qt.WindowType.Tool, True)
+# Placed on its bound screen before the show, as the product's show_on_screen places it (small, never full screen).
+# Unplaced, Windows put the window on the monitor in use (the second display, 14 Nov): the window saw a screen change,
+# took it as a lost binding and hid itself, as the product does, and its scene graph initialised a second time.
+bound = window.screen().geometry()
+window.setGeometry(bound.x() + 16, bound.y() + 16, 64, 64)
 
 
 class Presented(QObject):
@@ -248,8 +253,9 @@ class Presented(QObject):
         report["api"] = window.rendererInterface().graphicsApi().name
         report["records_after_first_frame"] = records()
         report["host"] = hosts[0].state() if hosts else None
-        report["gl_validations"] = gl_validations
+        report["gl_validations"] = list(gl_validations)      # at the first frame, before the teardown
         report["quits"] = quits
+        report["binding_lost"] = window.binding_loss is not None
         window.frameSwapped.disconnect(presented.frame)
         # The decided teardown order (facts A7): the window goes first (on Vulkan its device with it), then the
         # process ends (os._exit with the Vulkan window still alive ended this probe with 0xC0000005).
@@ -265,6 +271,7 @@ QTimer.singleShot(15000, lambda: emit(dict(report, timeout=True), 2))
 app.exec()
 hosts = list(bootstrap._owner.window_hosts.values())
 report["hosts_left"] = len(hosts)
+report["gl_validations_at_exit"] = gl_validations    # a scene graph initialised again before the exit would show here
 emit(report)
 '''
 
@@ -298,6 +305,7 @@ def test_the_rehearsal_window_renders_on_the_native_core_device_and_completes_it
     assert report["records_after_first_frame"] == []                 # the first presented frame completed the start
     assert report["gl_validations"] == [] and report["quits"] == []  # no OpenGL check on a Vulkan window
     assert report["hosts_left"] == 0                                  # the destroyed window closed its host
+    assert report["binding_lost"] is False and report["gl_validations_at_exit"] == []
 
 
 def test_the_default_path_loads_no_native_core_and_keeps_no_record(tmp_path):
@@ -308,6 +316,7 @@ def test_the_default_path_loads_no_native_core_and_keeps_no_record(tmp_path):
     assert report["host"] is None and report["records_after_first_frame"] == []
     assert not (tmp_path / bootstrap.START_RECORD_FOLDER).exists()
     assert report["gl_validations"] == ["quick-display-scene-graph-screen-0-generation-1"]
+    assert report["binding_lost"] is False and report["gl_validations_at_exit"] == report["gl_validations"]
 
 
 @needs_module
@@ -320,6 +329,7 @@ def test_a_module_that_cannot_load_falls_back_to_opengl_before_any_window(tmp_pa
     assert (api, requested) == ("opengl", "vulkan") and "not built" in reason
     assert report["api"] == "OpenGL"                                  # the same process, set before any window
     assert len(report["gl_validations"]) == 1 and report["host"] is None
+    assert report["binding_lost"] is False and report["gl_validations_at_exit"] == report["gl_validations"]
     [record] = report["records_after_first_frame"]
     assert record["state"] == "failed" and "not built" in record["reason"]
     # ... and the next start runs on OpenGL and says so (then the one after tries Vulkan again).
