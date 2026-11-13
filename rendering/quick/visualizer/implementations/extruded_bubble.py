@@ -22,15 +22,18 @@ from __future__ import annotations
 
 import ctypes
 import math
+import struct
+from contextlib import nullcontext
 
 import numpy as np
 from OpenGL import GL as gl
 
 from rendering.gl_programs.extruded_bubble_program import (
     BACKDROP_FRAGMENT, BEAD_VERTEX, BLUR_FRAGMENT, BUBBLE_FRAGMENT, BUBBLE_VERTEX, CLUSTER_FRAGMENT, CLUSTER_VERTEX, FULL_VERTEX,
-    NEAR_FRAGMENT, NEAR_CLUSTER_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT, SPECK_VERTEX,
-    TRAIL_FRAGMENT, TRAIL_SEGMENTS, TRAIL_VERTEX,
+    FULLSCREEN_BLOCK, NEAR_FRAGMENT, NEAR_CLUSTER_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT,
+    SPECK_VERTEX, TRAIL_FRAGMENT, TRAIL_SEGMENTS, TRAIL_VERTEX, block_defaults,
 )
+from rendering.gl_programs.scene3d import _STD140
 from core.constants.extruded_bubble_world import WAKE_STRIDE, SNOW_FULL
 from rendering.gl_programs.extruded_bubble_scene import (
     CLUSTER_FLOATS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, bubble_instances, camera,
@@ -73,6 +76,8 @@ _PROGRAMS = (
 )
 
 
+# The programs whose values are a pass block (N1.6), by key: each family's one layout.
+_BLOCKS = {"backdrop": FULLSCREEN_BLOCK, "shafts": FULLSCREEN_BLOCK, "blur": FULLSCREEN_BLOCK}
 # Preparation and drawing use these exact resource keys. Perspective is the only projection (Orthographic and
 # its constant-folded per-projection program specializations retired 5 Nov 2026).
 _PROGRAM_ROWS = tuple((key, (key, vertex, fragment)) for key, vertex, fragment in _PROGRAMS)
@@ -215,13 +220,32 @@ class _Instances:
 
 
 class _Uniforms:
-    """Uniform uploads by name for linked programs, each sent only when its value changed (``glProgramUniform*``:
-    no program bind). Values: int/bool, float, 2/3/4-float tuples, 9 (mat3) or 16 (mat4) floats, column-major."""
+    """Each program's values by name, each applied only when it changed. Values: int/bool, float, 2/3/4-float tuples,
+    9 (mat3) or 16 (mat4) floats, column-major.
+
+    A program registered with its family's pass block (N1.6, ``register``) keeps its values packed in that block as
+    they change: a changed value is written at its member's std140 offset, a name the block does not hold is
+    dropped, and its draws bind ``packed(program)``. No GL call, no lookup. Any other program takes its values as
+    loose uniforms (``glProgramUniform*``: no program bind), its locations resolved in preparation (``resolve``)."""
 
     def __init__(self) -> None:
         self._locations: dict[tuple[int, str], int] = {}
         self._values: dict[tuple[int, str], object] = {}
         self._resolved: set[int] = set()       # programs whose every active uniform location is known
+        self._blocks: dict[int, tuple[bytearray, dict[str, tuple[str, int]]]] = {}
+
+    def register(self, program: int, layout, initial: bytes) -> None:
+        """``program`` draws with ``layout``'s pass block, starting from the packed ``initial`` values."""
+        members = _members(layout)
+        self._blocks[program] = (bytearray(initial), members)
+        self._resolved.add(program)
+
+    def registered(self, program: int) -> bool:
+        return program in self._blocks
+
+    def packed(self, program: int) -> bytes:
+        """The program's pass block as its values stand (a copy: a draw already submitted keeps its own)."""
+        return bytes(self._blocks[program][0])
 
     def resolve(self, program: int) -> None:
         """Every active uniform location of ``program`` at once: a preparation unit (1C.2). Without it the first
@@ -243,6 +267,19 @@ class _Uniforms:
         return program in self._resolved
 
     def set(self, program: int, values: dict[str, object]) -> None:
+        block = self._blocks.get(program)
+        if block is not None:
+            data, members = block
+            for name, value in values.items():
+                key = (program, name)
+                if self._values.get(key, _UNSET) == value:
+                    continue
+                member = members.get(name)
+                if member is not None:            # the block holds it (else no stage of the family reads it)
+                    fmt, offset = member
+                    struct.pack_into(fmt, data, offset, *(value if isinstance(value, (tuple, list)) else (value,)))
+                self._values[key] = value
+            return
         for name, value in values.items():
             key = (program, name)
             if self._values.get(key, _UNSET) == value:
@@ -278,9 +315,20 @@ class _Uniforms:
         self._locations.clear()
         self._values.clear()
         self._resolved.clear()
+        self._blocks.clear()
 
 
 _UNSET = object()
+
+
+def _members(layout) -> dict[str, tuple[str, int]]:
+    """{member: (struct format, std140 offset)} of a pass block layout (no arrays in these blocks)."""
+    members = {}
+    for (name, kind), offset in zip(layout.fields, layout.offsets):
+        if "[" in kind:
+            raise ValueError(f"{layout.name}.{name}: an array member is not set by name here")
+        members[name] = ("<" + _STD140[kind][2], offset)
+    return members
 
 
 def _floats(values) -> tuple[float, ...]:
@@ -345,7 +393,8 @@ class QuickExtrudedBubbleRenderer:
     mode_id = "extruded_bubble"
 
     def __init__(self) -> None:
-        self._resources = MeshResources("Extruded Bubble")
+        # The pass blocks' ring (N1.6): each draw binds its own copy of its program's block.
+        self._resources = MeshResources("Extruded Bubble", block_bytes=max(layout.size for layout in _BLOCKS.values()))
         self._target = SceneTarget("Extruded Bubble")
         self._near = DefocusLayer("Extruded Bubble near layer")
         self._shafts = _ShaftTargets("Extruded Bubble shafts")
@@ -385,16 +434,34 @@ class QuickExtrudedBubbleRenderer:
                                                                        background=True, oit=True, hdr=True, rotation=rotation))]
 
     def _resolve_uniforms_step(self) -> bool:
-        """One unit: the uniform locations of the next drawing program not yet resolved; True once all are."""
+        """One unit: the uniform locations of the next drawing program not yet resolved; True once all are. A
+        program with a pass block (N1.6) is registered with it instead, which asks GL for nothing (no unit)."""
         r = self._resources
         for key, _program in _PROGRAM_ROWS:
             if not r.has_program(key):
                 continue                              # failed (logged once by its owner): nothing to resolve
             linked = r.program(*_program)
-            if not self._uniforms.resolved(linked):
-                self._uniforms.resolve(linked)
-                return False
+            if self._uniforms.resolved(linked):
+                continue
+            layout = _BLOCKS.get(key)
+            if layout is not None:
+                self._uniforms.register(linked, layout, block_defaults(layout))
+                continue
+            self._uniforms.resolve(linked)
+            return False
         return True
+
+    def _register_blocks(self, programs: dict[str, int]) -> None:
+        """Every drawn program with a pass block registered with it (pure: a frame drawn without preparation)."""
+        for key, layout in _BLOCKS.items():
+            if not self._uniforms.registered(programs[key]):
+                self._uniforms.register(programs[key], layout, block_defaults(layout))
+
+    def _bound(self, program: int):
+        """The scope a draw of ``program`` runs in: its pass block bound (N1.6), or nothing for a loose program."""
+        if self._uniforms.registered(program):
+            return self._resources.pass_blocks.bound(self._uniforms.packed(program))
+        return nullcontext()
 
     def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
         """One unit of what a first visible frame would otherwise compile, query or allocate (a program with the
@@ -410,6 +477,8 @@ class QuickExtrudedBubbleRenderer:
         if not warm_programs(self._programs(samples, frame.scene_output_rotation)):
             return False
         if not self._resolve_uniforms_step():
+            return False
+        if not self._resources.pass_blocks.warm():      # the pass blocks' ring (N1.6)
             return False
         if not self._drift.check(self._resources):      # the drift pair arithmetic, checked once on this device
             return False
@@ -455,6 +524,7 @@ class QuickExtrudedBubbleRenderer:
         samples = _scene_samples(parameters)
         r = self._resources
         programs = {key: r.program(*program) for key,program in _PROGRAM_ROWS}
+        self._register_blocks(programs)
         if not self._shells.vao:
             self._allocate_instances()
         self._shafts.warm(width, height)
@@ -627,7 +697,8 @@ class QuickExtrudedBubbleRenderer:
                 gl.glBindTextureUnit(_UNIT_SHAFTS, self._shafts.textures[0])
                 gl.glUseProgram(programs["backdrop"])
                 gl.glBindVertexArray(frame.quad_vao)
-                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+                with self._bound(programs["backdrop"]):
+                    gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
                 if specks:
                     # Light only: added over the water, never hiding it, and writing no depth.
                     gl.glEnablei(gl.GL_BLEND, 0)
@@ -724,7 +795,8 @@ class QuickExtrudedBubbleRenderer:
             gl.glDisable(gl.GL_BLEND)
             gl.glUseProgram(backdrop)
             gl.glBindVertexArray(quad_vao)
-            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            with self._bound(backdrop):
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             if not proxy_count:
                 return
             self._uniforms.set(proxies, {"uWorldToView": _floats(world_to_face), "uProjection": _floats(projection)})
@@ -750,14 +822,16 @@ class QuickExtrudedBubbleRenderer:
             gl.glBindVertexArray(quad_vao)
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffers[0])
             gl.glUseProgram(programs["shafts"])
-            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            with self._bound(programs["shafts"]):
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             gl.glUseProgram(programs["blur"])
             for source, target, step in ((textures[0], framebuffers[1], (1.0, 0.0)),
                                          (textures[1], framebuffers[0], (0.0, 1.0))):
                 gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, target)
                 gl.glBindTextureUnit(0, source)
                 self._uniforms.set(programs["blur"], {"uStep": step})
-                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+                with self._bound(programs["blur"]):
+                    gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             gl.glBindTextureUnit(0, 0)
         finally:
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, prior_framebuffer)

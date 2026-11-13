@@ -150,8 +150,35 @@ def portable_program(vertex, fragments: Sequence[str], *, block: str, samplers: 
     return None, tuple(converted), layout
 
 
-def _convert(stages: list[str], vertices: int, block: str, samplers: Mapping[str, int], binding: int):
+def portable_family(sources: Mapping[str, str], programs: Sequence[tuple[str, Sequence[str]]], *, block: str,
+                    samplers: Mapping[str, int], binding: int = SCENE3D_PASS_BLOCK_BINDING):
+    """Programs that share stages (one vertex stage drawn with several fragments, one fragment drawn with several
+    vertex stages), rewritten as ``portable_program`` does but over ONE std140 block holding every loose uniform of
+    every stage, so a shared stage has one converted text and every program of the family packs the same layout.
+    ``sources`` maps a key to its text and ``programs`` lists each program's (vertex key, fragment keys); returns
+    ({key: converted text}, layout). A shared stage that would convert differently in two programs (its vertex
+    stages' outputs differ) is an error."""
     fields: dict[str, str] = {}
+    keys = list(dict.fromkeys(key for vertex, fragments in programs for key in (vertex, *fragments)))
+    for key in keys:
+        for _span, name, kind in _loose_uniforms(split_declaration_lists(sources[key])):
+            if fields.setdefault(name, kind) != kind:
+                raise ValueError(f"uniform {name} is {fields[name]} in one stage and {kind} in another")
+    union = tuple(fields.items())
+    converted: dict[str, str] = {}
+    layout = None
+    for vertex, fragments in programs:
+        texts, layout = _convert([sources[vertex], *(sources[key] for key in fragments)], 1, block, samplers, binding,
+                                 union)
+        for key, text in zip((vertex, *fragments), texts):
+            if converted.setdefault(key, text) != text:
+                raise ValueError(f"{key} converts differently in two programs of the family")
+    return converted, layout
+
+
+def _convert(stages: list[str], vertices: int, block: str, samplers: Mapping[str, int], binding: int,
+             union: tuple[tuple[str, str], ...] | None = None):
+    fields: dict[str, str] = dict(union or ())
     stripped = []
     for source in map(split_declaration_lists, stages):
         edits = []
@@ -234,4 +261,5 @@ def pack_block(layout: Scene3DBlockLayout, values: Mapping[str, object]) -> byte
     return layout.pack(packed)
 
 
-__all__ = ["block_declaration", "block_layout_from_glsl", "pack_block", "portable_program", "split_declaration_lists"]
+__all__ = ["block_declaration", "block_layout_from_glsl", "pack_block", "portable_family", "portable_program",
+           "split_declaration_lists"]

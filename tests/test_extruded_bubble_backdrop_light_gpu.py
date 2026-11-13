@@ -7,13 +7,16 @@ from rendering.quick.render.gl_resources import delete_program
 @pytest.fixture
 def backdrop_light(qt_app):
     from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_program import BACKDROP_FRAGMENT, FULL_VERTEX
+    from rendering.gl_programs.extruded_bubble_program import (BACKDROP_FRAGMENT, EB_SAMPLERS, FULL_VERTEX,
+                                                               FULLSCREEN_BLOCK, block_defaults)
     from rendering.quick.render.gl_resources import compile_program
+    from rendering.quick.scene3d.uniforms import PassBlocks
     from rendering.quick.visualizer.implementations.extruded_bubble import _Uniforms
     from tools.transition_contact_sheet import TransitionCapture
 
     target = TransitionCapture(1, 1)
     program = texture = shafts = 0
+    blocks = PassBlocks('EB direct light backdrop', block_bytes=FULLSCREEN_BLOCK.size)
     try:
         program = compile_program(FULL_VERTEX, BACKDROP_FRAGMENT, label='EB direct light backdrop')
         texture, shafts = gl.glGenTextures(2)
@@ -31,12 +34,13 @@ def backdrop_light(qt_app):
         gl.glBindVertexArray(target.vao)
         gl.glUseProgram(program)
         bank = _Uniforms()
+        bank.register(program, FULLSCREEN_BLOCK, block_defaults(FULLSCREEN_BLOCK))   # the renderer's pass block
 
         def draw(values):
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glBindTexture(gl.GL_TEXTURE_2D, shafts)
-            bank.set(program, {**values, 'uShafts': 0, 'uFrameSize': (1., 1.), 'uLensShift': (0., 0.)})
-            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            gl.glBindTextureUnit(EB_SAMPLERS['uShafts'], shafts)
+            bank.set(program, {**values, 'uFrameSize': (1., 1.), 'uLensShift': (0., 0.)})
+            with blocks.bound(bank.packed(program)):
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             result = np.frombuffer(gl.glReadPixels(0, 0, 1, 1, gl.GL_RGBA, gl.GL_FLOAT), dtype='f4').copy()
             assert gl.glGetError() == gl.GL_NO_ERROR
             assert np.isfinite(result).all()
@@ -44,9 +48,11 @@ def backdrop_light(qt_app):
 
         yield draw
     finally:
+        blocks.release()
         if program:
             delete_program(program)
         if texture:
+            gl.glBindTextureUnit(EB_SAMPLERS['uShafts'], 0)
             gl.glDeleteTextures([texture, shafts])
         target.close()
 

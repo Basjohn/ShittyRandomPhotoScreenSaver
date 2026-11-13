@@ -10,21 +10,33 @@ from rendering.quick.render.gl_resources import delete_program
 def test_default_beam_matches_the_pre_acceptance_shader_in_both_light_types(qt_app):
     from OpenGL import GL as gl
     from core.settings.default_contract import require_canonical_default
-    from rendering.gl_programs.extruded_bubble_program import SHAFT_FRAGMENT,FULL_VERTEX
+    from rendering.gl_programs.extruded_bubble_program import (COMMON, EB_SAMPLERS, FULL_VERTEX, FULLSCREEN_BLOCK,
+                                                               SHAFT_FRAGMENT, block_defaults)
     from rendering.gl_programs.extruded_bubble_scene import scene_knobs,physical_camera
+    from rendering.gl_programs.portable import pack_block, portable_program
+    from rendering.gl_programs.scene3d_optics import SCENE3D_OPTICS_GLSL
+    from rendering.gl_programs.scene3d_water import SCENE3D_WATER_GLSL
     from rendering.quick.render.gl_resources import compile_program
+    from rendering.quick.scene3d.uniforms import PassBlocks
     from rendering.quick.visualizer.implementations.extruded_bubble import _Uniforms,_common
     from tools.transition_contact_sheet import TransitionCapture
 
     reference=(Path(__file__).parent/'fixtures/extruded_bubble/accepted_beam_a51aab8a.glsl').read_text(encoding='utf-8')
-    prefix=SHAFT_FRAGMENT[:SHAFT_FRAGMENT.index('uniform float uShaftScale;')]
+    # The oracle over the shaft fragment's own header, as one pass block like the product's (N1.6), drawn over a
+    # fullscreen vertex that reads no value (the product's lens shift is zero here).
+    prefix='#version 460 core\nout vec4 FragColor;\nin vec2 vNdc;\n'+SCENE3D_OPTICS_GLSL+SCENE3D_WATER_GLSL+COMMON
+    oracle_vertex,(oracle,),oracle_block=portable_program(
+        '#version 460 core\nout vec2 vNdc;\nvoid main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);'
+        'gl_Position=vec4(p*2.0-1.0,0.9999,1.0);vNdc=p*2.0-1.0;}\n',(prefix+reference,),block='EbOracle',
+        samplers=EB_SAMPLERS)
     target=TransitionCapture(1,1)
     programs=[]
     texture=0
     maxima=[]
+    blocks=PassBlocks('accepted BEAM parity',block_bytes=max(FULLSCREEN_BLOCK.size,oracle_block.size))
     try:
-        programs=[compile_program(FULL_VERTEX,fragment,label='accepted BEAM parity')
-                  for fragment in (prefix+reference,SHAFT_FRAGMENT)]
+        programs=[compile_program(oracle_vertex,oracle,label='accepted BEAM oracle'),
+                  compile_program(FULL_VERTEX,SHAFT_FRAGMENT,label='accepted BEAM parity')]
         texture=int(gl.glGenTextures(1))
         gl.glBindTexture(gl.GL_TEXTURE_2D,texture)
         gl.glTexImage2D(gl.GL_TEXTURE_2D,0,gl.GL_RGBA32F,1,1,0,gl.GL_RGBA,gl.GL_FLOAT,None)
@@ -36,6 +48,8 @@ def test_default_beam_matches_the_pre_acceptance_shader_in_both_light_types(qt_a
         gl.glDisable(gl.GL_BLEND);gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glBindVertexArray(target.vao)
         bank=_Uniforms()
+        bank.register(programs[0],oracle_block,pack_block(oracle_block,{}))
+        bank.register(programs[1],FULLSCREEN_BLOCK,block_defaults(FULLSCREEN_BLOCK))
         for light_type in ('Sunlit Surface','Deep Light'):
             for softness in (.15,.8):
                 knobs=scene_knobs({**require_canonical_default('widgets.spotify_visualizer'),
@@ -51,7 +65,8 @@ def test_default_beam_matches_the_pre_acceptance_shader_in_both_light_types(qt_a
                     results=[]
                     for program in programs:
                         gl.glUseProgram(program);bank.set(program,values)
-                        gl.glDrawArrays(gl.GL_TRIANGLES,0,3)
+                        with blocks.bound(bank.packed(program)):
+                            gl.glDrawArrays(gl.GL_TRIANGLES,0,3)
                         results.append(np.frombuffer(gl.glReadPixels(0,0,1,1,gl.GL_RGBA,gl.GL_FLOAT),dtype='f4').copy())
                     assert np.isfinite(results).all()
                     np.testing.assert_allclose(results[1],results[0],rtol=2e-6,atol=2e-7)
@@ -59,6 +74,7 @@ def test_default_beam_matches_the_pre_acceptance_shader_in_both_light_types(qt_a
         assert max(maxima)>.001  # Reject a vacuous comparison of black fields.
         assert gl.glGetError()==gl.GL_NO_ERROR
     finally:
+        blocks.release()
         if texture:gl.glDeleteTextures([texture])
         for program in programs:delete_program(program)
         target.close()

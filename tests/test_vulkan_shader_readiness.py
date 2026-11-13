@@ -230,19 +230,15 @@ def test_every_target_is_checked_not_only_spirv(tmp_path):
 # The sources that did not bake on 12 Nov 2026 (N1.3), in N5's order. Only ever shrinks.
 _RATCHET = {
     "Extruded Bubble": (
-        "rendering.gl_programs.extruded_bubble_program.BACKDROP_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.BEAD_VERTEX",
-        "rendering.gl_programs.extruded_bubble_program.BLUR_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.BUBBLE_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.BUBBLE_VERTEX",
         "rendering.gl_programs.extruded_bubble_program.CLUSTER_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.CLUSTER_VERTEX",
-        "rendering.gl_programs.extruded_bubble_program.FULL_VERTEX",
         "rendering.gl_programs.extruded_bubble_program.NEAR_CLUSTER_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.NEAR_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.PARTICLE_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.PARTICLE_VERTEX",
-        "rendering.gl_programs.extruded_bubble_program.SHAFT_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.SPECK_VERTEX",
         "rendering.gl_programs.extruded_bubble_program.TRAIL_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.TRAIL_VERTEX",

@@ -384,11 +384,12 @@ uniform vec4 uBlock3;
 uniform float uParticleAtten;   // bounded aggregate dust opacity; not per-particle shadowing
 // SCENE light extent (extruded_bubble_scene.scene_light_support): entry-face weights and travel (Surface), aim
 // (Deep); reach per entry face's axis (Surface) or range in x (Deep); 0 leaves that part unshaped.
-// A program that never sets them sees the unshaped light: the surface admits, nothing fades.
-uniform vec3 uLightFaces = vec3(0.0, 1.0, 0.0);
-uniform vec3 uLightTravel = vec3(0.0, -1.0, 0.0);
-uniform vec3 uLightAxis = vec3(0.0, -1.0, 0.0);
-uniform vec3 uLightReach = vec3(0.0);
+// A program that never sets them sees the unshaped light (FULLSCREEN_DEFAULTS, what its block starts from): the
+// surface admits, nothing fades.
+uniform vec3 uLightFaces;
+uniform vec3 uLightTravel;
+uniform vec3 uLightAxis;
+uniform vec3 uLightReach;
 
 float blockAttenuation(vec3 samplePoint, vec4 bubble, vec3 lightTravel) {
     if (bubble.w <= 0.0) return 1.0;
@@ -1974,6 +1975,31 @@ void main() {
 }
 """)
 
+# N1.6 (``portable_family``): each family's loose uniforms become ONE std140 pass block its every stage declares, the
+# samplers at the units the renderer binds (the shafts 4, the captured background 5, the probe 6; the blur's source
+# and the never-bound environment at 0, the unit they read as loose uniforms). The renderer
+# (``rendering.quick.visualizer.implementations.extruded_bubble``) keeps each program's values as its uniforms held
+# them and binds the packed block once per draw.
+from rendering.gl_programs.portable import pack_block, portable_family  # noqa: E402
+
+EB_SAMPLERS = {"uShafts": 4, "uBackground": 5, "uProbe": 6, "uSource": 0, "uEnvironment": 0}
+# The water, the shafts and their blur over the fullscreen triangle.
+_FULLSCREEN, FULLSCREEN_BLOCK = portable_family(
+    {"vertex": FULL_VERTEX, "backdrop": BACKDROP_FRAGMENT, "shafts": SHAFT_FRAGMENT, "blur": BLUR_FRAGMENT},
+    (("vertex", ("backdrop",)), ("vertex", ("shafts",)), ("vertex", ("blur",))),
+    block="EbFullscreen", samplers=EB_SAMPLERS)
+FULL_VERTEX, BACKDROP_FRAGMENT, SHAFT_FRAGMENT, BLUR_FRAGMENT = (
+    _FULLSCREEN["vertex"], _FULLSCREEN["backdrop"], _FULLSCREEN["shafts"], _FULLSCREEN["blur"])
+# What a fullscreen program's block starts from: the unshaped scene light (the shafts' extent; zero elsewhere).
+FULLSCREEN_DEFAULTS = {"uLightFaces": (0.0, 1.0, 0.0), "uLightTravel": (0.0, -1.0, 0.0),
+                       "uLightAxis": (0.0, -1.0, 0.0), "uLightReach": (0.0, 0.0, 0.0)}
+
+
+def block_defaults(layout) -> bytes:
+    """The packed block a program of ``layout``'s family starts from (its uniforms' initial values)."""
+    return pack_block(layout, FULLSCREEN_DEFAULTS if layout is FULLSCREEN_BLOCK else {})
+
+
 __all__ = [
     "BACKDROP_FRAGMENT",
     "BEAD_VERTEX",
@@ -1984,6 +2010,9 @@ __all__ = [
     "CLUSTER_FRAGMENT",
     "CLUSTER_VERTEX",
     "COMMON",
+    "EB_SAMPLERS",
+    "FULLSCREEN_BLOCK",
+    "FULLSCREEN_DEFAULTS",
     "FULL_VERTEX",
     "NEAR_FRAGMENT",
     "NEAR_CLUSTER_FRAGMENT",
