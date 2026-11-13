@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.6 (High); the remaining N1.6 groups (Medium).
+**Now (in flight):** N2.6 (High); the settings editor access violation (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -46,9 +46,11 @@ at the size asked.
   1. N2.6 (the per-pass GPU timer service), then N2.7 (the backend owner), toward N2.5 (Spectrum at parity).
   2. The 1C.2 Save stall, and 1C.10, as defects between N steps.
 - Medium:
-  1. The remaining N1.6 groups by first consumer (the 2D modes with `QUICK_VISUALIZER_VERTEX_SOURCE`, the scene
-     substrate), each bit-identical on OpenGL.
-  2. 1B.10.
+  1. Side defect: `tests/test_default_settings_editor.py` passes its 11 tests, then the process exits with an
+     access violation (0xC0000005; also on 0c54ef85). Root cause at the owner (teardown order of a native object).
+  2. N1.6's 3D modes, one per dispatch where it stays bit-identical (Extruded Bubble; Neon Lake; Extruded
+     Spectrum and Sphere); a mode that cannot be made bit-identical in one dispatch converts at its port.
+  3. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -374,10 +376,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   ratchet in the same change. A group whose conversion is not pixel-identical inside one dispatch is converted at
   its port instead. Order: by first consumer on the ladder, not N5's order. Merged 12 Nov (ratchet 197 to 95): the
   substrate step, Spectrum, the seven fullscreen transitions, the item-quad transition families, the Quick hosts and
-  Waveform Ribbon; 13 Nov (ratchet 95 to 52): the motion and trail family and its transitions, `bind_frame`'s loose
-  branch deleted, and Waveform's fog. Open (this is the one home of the remainder; ratchet 52):
-  - [ ] Spline Curve, Oscilloscope, Bubble (N5.1), with `QUICK_VISUALIZER_VERTEX_SOURCE`.
-  - [ ] The rest of the shared scene substrate (targets' resolves, post, environment, resources).
+  Waveform Ribbon; 13 Nov (ratchet 95 to 40): the motion and trail family and its transitions, `bind_frame`'s loose
+  branch deleted, Waveform's fog, and the 2D modes (the substrate was already done on 12 Nov). Open (this is the
+  one home of the remainder; ratchet 40):
   - [ ] Extruded Bubble; Neon Lake; Extruded Spectrum and Sphere.
   - `rendering/gl_programs/lighting.py` belongs to N4.m: it is not a product shader (no `#version`; only its test
     draws it), and a program that includes it converts it (a 3088-byte block, about 3 KB of resources).
