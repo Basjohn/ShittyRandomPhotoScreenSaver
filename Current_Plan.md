@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.7 (High); N1.6 Extruded Bubble (Medium).
+**Now (in flight):** N2.7 (High); 1D.10 (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,9 +47,10 @@ at the size asked.
      at parity) and N2.8.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. N1.6 Extruded Bubble (bit-identical on OpenGL or converted at its port).
-  2. 1D.7 (hover actions without Edit), then 1D.8 (idle wake).
-  3. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
+  1. 1D.10 (the 13 Nov audit's must-fixes first), then 1D.11 with 1D.8 as one dispatch (bind the trails'
+     `uBackground` first, then check whether the idle wake teleport is gone: its refraction read whatever unit 0
+     held), then 1D.7 (hover actions without Edit).
+  2. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
      Sphere); a mode that cannot be made bit-identical in one dispatch converts at its port.
   3. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
@@ -223,10 +224,11 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
   the Python substrate and is therefore a port is listed in `Docs/Reference/Scene3D_Resources.md` ("Shared
   Scene3D capability inventory").
 
-**State, 12 Nov (night audit):** N0's contracts are decided, and N0.6 and N0.7 are proved (D6 and D9 accepted). N1.6
-is merged to ratchet 95 (its remainder is open). N2.1 (the product module's build) is merged and its first product
-build round runs under the lead; the Python half of N2.3 (Spectrum's native schema, the `payload_schema` check) is
-merged and its C++ reader is open. N0.3 is proved (12 Nov, run 2), so N2.2 and N2.4 can start.
+**State, 13 Nov (audit):** N0's contracts are decided, and N0.3, N0.6 and N0.7 are proved (D6 and D9 accepted). N1.6
+is merged to ratchet 40 (the 3D modes are open). N2.1 (the product module's build), N2.2 (hosts and frame driver),
+N2.4 (the composite node) and N2.6 (the GPU timer) are merged and proved (ABI 4; the D3D window rounds with the
+displays on); the Python half of N2.3 (Spectrum's native schema, the `payload_schema` check) is merged and its C++
+reader is open. N2.7 is next.
 
 **Order.** N0 and N1 now. Then N2 (the substrate and Spectrum), N2b (the background layer and the first full
 rehearsal), N3 (the 3D substrate). From there two ordered tracks, one High slot each: the **modes track** (N5.1,
@@ -311,9 +313,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     sleep and wake. If it is not see-through, D7's second route (DirectComposition) is tried next.
 - N0.3's three scenes: proved 12 Nov on Vulkan (our device, validated), OpenGL, D3D11 and D3D12 (run 2, harness
   29816002, `N03 VERDICT PASS`; the record and the decided F1 to F4 are the decisions document's N0.3 "As proved"
-  sections; evidence `.artifacts/evidence/native_core/n0_3/`). Owed:
-  - [ ] The clip-NDC flip (block `y`, decision F2) through the native core itself on a real D3D11/D3D12 backend, when
-    N2 first runs a pass that maps NDC there (the harness proved the include, not the core's block writer).
+  sections; evidence `.artifacts/evidence/native_core/n0_3/`). The clip-NDC flip through the core's own block writer
+  on D3D11 and D3D12 was proved by N2.2's probe (13 Nov, `native_core/n2_2/20261113_n22_hosts`: the probe passes and
+  its `clip_ndc_flip_inverted` control fails on both). Owed:
   - [ ] Metal: the three scenes on Metal (Watchlist; no Metal machine).
 - N0.7 D9's proof: proved in the harness and accepted 12 Nov (the verdict, jobs for compute on this vendor and
   uploads, is D9's "Accepted by the lead"). Owed, with the Qt 6.12 checks filed here:
@@ -361,9 +363,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [ ] Extruded Spectrum's and Sphere's backdrop uv (`extruded_spectrum_program.py:415`, `sphere_voxel.py:658`)
     and the four 2D shaders (`gl_FragCoord.xy - u_viewport_origin_px`), each with its N1.6 group. Spectrum's group
     merged without it (`spectrum.frag:521` still reads raw `gl_FragCoord`): Spectrum's is owed before N2.5.
-  - [ ] The core's own upload correction (the matrix correction and the front-face rule on the corrected matrix,
-    proved in the harness by N0.3 run 2: decisions document, N0.3 "As proved") built into `native/core` in N2.2,
-    with the two depth side defects above.
   - The eight scene composites in `scene3d/target.py:125-286` (and their oriented forms) keep raw `gl_FragCoord`
     and are never converted: D5.2 replaces them with a texture node.
 - [ ] N1.6 Loose uniforms into blocks across the renderer (838 `glUniform*` call sites; `qsb` needs blocks), each
@@ -409,8 +408,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     transparent content must clear what Qt Quick does not cover; decide that when the first such host exists.
   - [ ] The `QT_DEFECTS` rule is copied in `native/core/python/vk_validation.py` and the spike's `run_n06.py`:
     one source, or both edited when defect A's excuse goes at the next Qt patch.
-  - [ ] The two depth side defects (`waveform_ribbon.py:54`, `scene3d_spheres.py:197`), Python-renderer shader
-    edits proved by identity renders.
 - [ ] N2.3 The packet reader with D1's barrier, D2's single consumer and the drop edge; the adversarial tests of
   P3.0.
   - [ ] The C++ reader matches the Python reference decoder (`core/visualizer_engine/spectrum_native_schema.py`,
@@ -611,6 +608,17 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
   or a mode built round the user's photos).
 - [ ] N6.5 The opt-in deformable sheet. **Low potential until a consumer.**
 - [ ] N6.6 Lightning: procedural bolt geometry and its light. **Low potential until a consumer** (one effect).
+
+- [ ] N6.7 Dense geometry route (operator, 13 Nov: mesh shaders for fidelity on the high-end modes). It is a
+  measured candidate, admitted by evidence, not by a consumer. Mesh shaders (`VK_EXT_mesh_shader`) are recorded
+  as raw Vulkan on the core's own device (D6) inside Qt's frame, with a compute-cull plus indirect-draw twin
+  (Qt 6.12 `drawIndirect`) for OpenGL and any device without the extension: the fast path, never the only path.
+  - Admitted when N2.6's per-pass timers show a ported mode's geometry pass is primitive-bound, or when a
+    fidelity target needs more geometry than the current path can feed. Candidates: Extruded Bubble's beads and
+    bubbles as real meshes, Neon Lake's terrain level of detail and culling, Waveform's ribbons, N6.2's scene
+    geometry, N6.3's smoke.
+  - Proof: the same picture as the twin; GPU time against the twin on the candidate's pass, median and p90;
+    validation clean; the twin exact on OpenGL.
 
 ### Item 9. After the native core: SMP foundations, then modes
 
@@ -859,7 +867,7 @@ an agent's brief is its plan item, and its report is checked against the boxes, 
 in the lead's memory. Each item below starts with a root-cause box: the cause is established on the real product
 path (an off-screen reproduction or a Display 1 run), with a negative control, before anything is changed.
 
-### 1C.2 Display moves retarget the live Visualizer (merged d14559e9, R-194; the two-display proof waits for both displays)
+### 1C.2 Display moves retarget the live Visualizer (merged d14559e9, R-194; proved with both displays visible 13 Nov)
 
 Operator: "we do not want teardowns and rebuilds unless absolutely needed. They are a last resort." Landed: every
 glyph move rebuilt the whole runtime (its chrome-less Save refused and reloaded, R-194); now the move attaches its
@@ -1053,6 +1061,59 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   Settings and Studio box.
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
+
+### 1D.10 Audit of 13 Nov (`Docs/Future_Work/Audit_2026-11-13.md`): what is left (Opus Medium, before 1D.7)
+
+- [ ] Must-fix: `tests/test_shared_spinbox_editor_style.py` is red. The operator fixed the spinbox alignment in
+  41932d38 (5.1.4); refine the editor half its test describes, in `ui/tabs/shared_styles.py`, keeping that
+  alignment exactly:
+  - drop `QLineEdit` from the combined `QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox { min-height... }`
+    selector (`:708`), keeping standalone line edits styled where they were;
+  - give `QAbstractSpinBox > QLineEdit` (`:729`) `min-height: 0px; padding: 0px`.
+  Render spinbox crops before and after for the lead (Settings, several themes, every spinbox kind), and run
+  `test_shared_spinbox_alignment.py` too.
+- [ ] Must-fix: `tests/test_build_foundry_window_layout.py:29` is red (732 against 696) and shows a real Build Runner
+  (Tk) window. The 732 px is the operator's correct fix: the native build targets added buttons without anyone
+  checking they stayed visible and clickable. The test's fixed 696 limit is the stale part.
+  - Assert what matters: every job button and action control lies wholly inside the window's client area and is
+    hit-testable, and the window fits the screen's work area. No fixed pixel height.
+  - Negative control: one more job row, or a smaller window, fails it.
+  - Keep the test's Tk window invisible (withdrawn or off screen). Extend `tests/test_no_visible_test_windows.py`
+    to Tk if it can see Tk windows.
+  - Rule from now on: a change that adds a Build Runner control runs this test.
+- [ ] D3D11/D3D12 have no failing negative control for the front-face rule: add the `front_face_fixed_cw` control
+  to `host_check.py` (the module already accepts it), then rerun host_check once (lead).
+- [ ] `native/core/src/vulkan_context.cpp:205-207` hides two validation patterns from every caller. Excuse them
+  only with Qt6Gui as the caller, like the other defects (C++: one build round).
+- [ ] `tools/d1_run.py:1324-1331`, the two-display guard: compare windows by handle from one scan, not strings
+  from two. Correct the help text (the parser always requires `--allow-primary`).
+- [ ] Lows (audit section 3), each a small fix:
+  - `vk_validation.py` skips "Loader Message" errors at any severity;
+  - the Qt-only hidden-host control always reports its cycles as OK;
+  - the timer's `reads_cost_little` check passes when the read cost stops being reported;
+  - `surfaces.cpp`'s window registry is never pruned;
+  - GODZIP's remaining self-capturing `singleShot` lambda;
+  - the 1D.4 Change Every row's self-capturing lambda (`ui/onboarding/selection_pages.py:504`);
+  - `combo_knob_overlay.py` imports the private `_WeakWidgetSlot`: make it a public helper of one owner.
+- Not entered: the shadow-helper lifetime fix (8f821353) needs no historical bug entry, because Settings itself
+  never freed widgets through the collector.
+
+### 1D.11 Extruded Bubble side defects from N1.6 (14 Nov; Opus Medium)
+
+- [ ] Live defect: the wake trails program never gets `uBackground`
+  (`rendering/quick/visualizer/implementations/extruded_bubble.py:609`, `:742`), so its refraction reads texture
+  unit 0 instead of the captured background on unit 5. Bind it.
+  - This is a visible change: render before and after on a real wallpaper for the lead's judgement.
+  - Write a regression test that fails on the old binding, and a historical bug entry (silent since the trails
+    landed, f0ead35b).
+- [ ] Port note (N5.6): the beads program puts its probe sampler and its `EbMaterialDrift` storage buffer
+  (`extruded_bubble_program.py:1441`) both at binding 6. That collides on Vulkan's single binding namespace;
+  renumber at the port.
+- [ ] Time the pass-block ring's fence waits (`glClientWaitSync`, 50 to 198 per run after N1.6) on the paired
+  harness. Raise the ring's depth if any wait costs more than a negligible amount.
+- The traced glass converts at its port (N5.6): converted alone it differs by one 8-bit level on 1-2 pixels in
+  14-26 of 549 frames (compiler rounding). Its probe geometry shader also stays on the ratchet (no HLSL for its
+  layered `gl_Layer` write).
 
 ### 1D.6 Leaving fullscreen on another display lands the card in a poor spot (operator, 13 Nov; Opus High, design first)
 
@@ -1326,10 +1387,6 @@ to AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-1
 - [ ] **Vocal-band scorer into the music-response tool (8 Nov):** the PCM vocal-band (300-3400 Hz) series behind the
   mid-led routing evidence and guide §2C lives only in scratch (`lead_audit/vocal_band.py`); add it to
   `tools/visualizer_replay/waveform_music_response.py` as a lane so it survives scratch pruning.
-- [~] **Tool-output contract reds (found 8 Nov on `610e38c0`; fixed by `bed993a4`):**
-  `tests/test_artifact_paths_contract.py`. A further list (literal `evidence_chest` paths, PNG writes, a
-  `delete=False` temp file) was once recorded at 1B.2 and is no longer there: the lead runs the test once and
-  either deletes this box or lists what is still red.
 - [ ] **Side findings of the Waveform second tick cut (7 Nov, not fixed there):**
   - [ ] `capture_visualizer_logical_frame` refreezes the common style (`freeze_render_fields(_common_style(widget))`,
     logical_frame_capture.py) on every tick of every mode, ~0.02-0.04 ms; a FrozenFieldsMemo would remove it.

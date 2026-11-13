@@ -494,6 +494,11 @@ rest and has an OpenGL form (D5.3). The gate is what admits it into the product.
 | 9 | HDR output | Emissive scenes on an HDR display | Moderate | Window format and tone mapping per backend | Not admitted; reconsider after the flip |
 | 10 | Per-pass temporal upscaling, descriptor indexing, mesh shaders, ray tracing | None today | High | High | Not admitted: low potential until a consumer exists (the operator's rule); D6 keeps the door open |
 
+Amended 13 Nov (operator: mesh shaders for fidelity): mesh shaders leave row 10 and become plan N6.7, a measured
+candidate. They are admitted when N2.6's timers show a ported mode's geometry pass is primitive-bound, or when a
+fidelity target needs the geometry. They are raw Vulkan on the core's device (D6) with a compute-cull and
+indirect-draw twin for OpenGL; never the only path.
+
 Multi-threaded command recording, which the lead listed as a CPU-side plus, is **not** a plus worth building: a
 frame here is a handful of passes and well under a millisecond of recording, and QRhi's command buffer is
 single-threaded. It is reconsidered only if a trace shows the render thread recording for more than 2 ms.

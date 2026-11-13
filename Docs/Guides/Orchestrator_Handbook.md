@@ -81,12 +81,23 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
 Agents can stop at any moment, and **an agent of an earlier session cannot be resumed** (SendMessage fails with
 "no transcript"). Their branch, their uncommitted files and their journal are what survive.
 
-- **When a usage-limit warning arrives:** stop every running agent (TaskStop), then run
-  `tools/agent_handover.py --commit` from the main checkout. It saves each worktree's uncommitted work as one
-  "WIP (handover)" commit on that agent's branch and prints each agent's commits, journal and successor brief.
-  Write the handover state into the plan (one box per interrupted agent: branch, last commits, what is left).
-- **After a cut-off in the same session:** a stopped agent can be resumed with SendMessage; tell it about the
-  handover commit.
+- **Read the plan limits every turn** (`mcp__ccd_session_mgmt__get_usage`: the 5-hour, weekly and Fable windows,
+  percent used and reset time; operator, 13 Nov).
+  - **At 85 % of the 5-hour or weekly window:**
+    - tell every running agent to checkpoint now: a WIP commit of everything on disk, plus a journal entry with
+      the exact next step and the numbers measured so far;
+    - run `tools/agent_handover.py --commit` from the main checkout. It saves each worktree's uncommitted work
+      as one "WIP (handover)" commit on that agent's branch.
+  - **At 90 %:** no new dispatch and no new build round.
+  - **A usage-limit warning:** the same as 85 %. Write the handover state into the plan: one box per interrupted
+    agent, with its branch, last commits and what is left.
+- **After a cut-off in the same session:** always resume the same agent with SendMessage, and tell it about any
+  handover commit. Never start a fresh agent for the same task: its transcript holds the analysis. On 13 Nov a
+  fresh start threw away an Extruded Bubble agent's reading, after its empty worktree had been cleaned up.
+- **Every brief requires:**
+  - a WIP commit at least every 20–30 minutes of edits, even mid-step;
+  - evidence and baselines written to disk the moment they are measured;
+  - a "next step" journal line before any long run.
 - **In a new session:** run `tools/agent_handover.py` first. For each interrupted agent dispatch a successor whose
   brief starts with "run `git merge <branch>` first, then read `<worktree>/.artifacts/handover/JOURNAL.md` and the
   branch's last commits; check that what it marked done really is". The tool prints that line.

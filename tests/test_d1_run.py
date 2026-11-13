@@ -133,6 +133,24 @@ def test_the_runner_command_forwards_the_invisible_display(tmp_path):
     assert forwarded.with_hidden_display == 0 and forwarded.step == args.step
 
 
+def test_the_visible_second_display_needs_its_pair_and_the_primary_permission(tmp_path):
+    """``--second-display-visible`` (the lead's two-display run, 13 Nov): refused without ``--with-hidden-display``,
+    without ``--allow-primary`` or with ``--hidden``; the runner gets both flags back."""
+    base = ["--display", "1", "--with-hidden-display", "0"]
+    for argv in (["--display", "1", "--second-display-visible", "--allow-primary"],     # no second display named
+                 [*base, "--second-display-visible"],                                    # no primary permission
+                 [*base, "--second-display-visible", "--allow-primary", "--hidden"]):    # visible and hidden at once
+        with pytest.raises(SystemExit):
+            d1_run.parse_args(argv)
+    args = d1_run.parse_args([*base, "--second-display-visible", "--allow-primary"])
+    assert args.second_display_visible
+    assert not d1_run.parse_args(base).second_display_visible                          # off unless asked
+    with artifact_paths.use_root(tmp_path / ".artifacts"):
+        command = d1_run.runner_command(args, artifact_paths.scratch_root("d1_run") / "run" / "out")
+        forwarded = d1_run.parse_args(command[2:])
+    assert forwarded.second_display_visible and forwarded.allow_primary and forwarded.with_hidden_display == 0
+
+
 def test_the_pair_admits_exactly_the_two_displays_present():
     class Manager:
         def _get_allowed_screen_indices(self, screen_count):

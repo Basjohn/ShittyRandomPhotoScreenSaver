@@ -17,20 +17,23 @@ SURFACE = 8.0
 
 @pytest.fixture
 def support(qt_app):
-    from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_program import SHAFT_FRAGMENT
+    from OpenGL import GL
+    from rendering.gl_programs.extruded_bubble_program import FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS, SHAFT_FRAGMENT
     from rendering.quick.render.gl_resources import compile_program
+    from tools.pass_block_gl import PassBlockGL
     from tools.transition_contact_sheet import TransitionCapture
 
+    gl = PassBlockGL(GL)          # the shaft's values are its pass block (N1.6), set by name as before
     prefix = SHAFT_FRAGMENT.rsplit('void main()', 1)[0]
     assert 'float sceneLightSupport(' in prefix
     fragment = prefix + 'uniform vec3 uTestPoint;\nvoid main() { FragColor = vec4(sceneLightSupport(uTestPoint)); }\n'
     vertex = '''#version 460 core
-out vec2 vNdc;
+layout(location = 0) out vec2 vNdc;
 void main(){ vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2)); vNdc=p*2.-1.; gl_Position=vec4(vNdc,0.,1.); }
 '''
     target = TransitionCapture(1, 1)
     program = compile_program(vertex, fragment, label='scene light support')
+    gl.register(program, FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS)
     texture = int(gl.glGenTextures(1))
     try:
         gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
@@ -61,6 +64,7 @@ void main(){ vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2)); vNdc=p
 
         yield at
     finally:
+        gl.release()
         gl.glDeleteTextures([texture])
         delete_program(program)
         target.close()
@@ -113,11 +117,14 @@ def test_scene_light_support_reads_the_authored_ray_path():
 
 def test_sunlit_scene_shafts_stay_visible_from_the_side(qt_app):
     """A side view (ray at right angles to the sun) gets light from the world march itself, not only the sun fan."""
-    from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_program import FULL_VERTEX, SHAFT_FRAGMENT
+    from OpenGL import GL
+    from rendering.gl_programs.extruded_bubble_program import (FULL_VERTEX, FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS,
+                                                               SHAFT_FRAGMENT)
     from rendering.quick.render.gl_resources import compile_program
+    from tools.pass_block_gl import PassBlockGL
     from tools.transition_contact_sheet import TransitionCapture
 
+    gl = PassBlockGL(GL)          # the shaft's values are its pass block (N1.6), set by name as before
     constant = 'const float SCENE_SIDE_SCATTER = 2.0;'
     assert SHAFT_FRAGMENT.count(constant) == 1
     target = TransitionCapture(1, 1)
@@ -134,6 +141,7 @@ def test_sunlit_scene_shafts_stay_visible_from_the_side(qt_app):
         gl.glDisable(gl.GL_BLEND)
         for source in (SHAFT_FRAGMENT, SHAFT_FRAGMENT.replace(constant, 'const float SCENE_SIDE_SCATTER = 0.0;')):
             program = compile_program(FULL_VERTEX, source, label='side scatter')
+            gl.register(program, FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS)
             gl.glUseProgram(program)
             loc = lambda name: gl.glGetUniformLocation(program, name)
             gl.glUniformMatrix3fv(loc('uViewToWorld'), 1, False, np.eye(3, dtype='f4'))   # looking along -z
@@ -153,6 +161,7 @@ def test_sunlit_scene_shafts_stay_visible_from_the_side(qt_app):
             delete_program(program)
         assert gl.glGetError() == gl.GL_NO_ERROR
     finally:
+        gl.release()
         gl.glDeleteTextures([texture])
         target.close()
     with_side, without = results

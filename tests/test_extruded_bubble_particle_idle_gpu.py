@@ -6,14 +6,16 @@ from rendering.quick.render.gl_resources import delete_program
 
 @pytest.mark.qt
 def test_idle_particles_keep_colour_but_emit_no_authored_or_intrinsic_glow(qt_app):
-    from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_program import PARTICLE_FRAGMENT
+    from OpenGL import GL
+    from rendering.gl_programs.extruded_bubble_program import PARTICLE_BLOCK, PARTICLE_FRAGMENT
     from rendering.quick.render.gl_resources import compile_program
+    from tools.pass_block_gl import PassBlockGL
     from tools.transition_contact_sheet import TransitionCapture
 
+    gl=PassBlockGL(GL)          # the particles' values are their pass block (N1.6), set by name as before
     vertex='''#version 460 core
-out vec2 vCorner;
-flat out vec3 vColour;
+layout(location=0) out vec2 vCorner;
+layout(location=1) flat out vec3 vColour;
 void main(){
     vCorner=vec2(float(gl_VertexID&1),float((gl_VertexID>>1)&1))*2.-1.;
     vColour=vec3(4.,3.,2.);
@@ -23,6 +25,7 @@ void main(){
     target=TransitionCapture(64,64);program=0;textures=[]
     try:
         program=compile_program(vertex,PARTICLE_FRAGMENT,label='particle idle emission')
+        gl.register(program,PARTICLE_BLOCK)
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER,target.fbo)
         textures=list(map(int,gl.glGenTextures(2)))
         for i,texture in enumerate(textures):
@@ -52,6 +55,7 @@ void main(){
         assert emissions[1]==pytest.approx(emissions[2]*.25,rel=1e-5)
         assert gl.glGetError()==gl.GL_NO_ERROR
     finally:
+        gl.release()
         if textures:gl.glDeleteTextures(textures)
         if program:delete_program(program)
         target.close()
@@ -61,23 +65,29 @@ void main(){
 def particle_stage_capture(qt_app):
     """One fixed-depth point, pixel-centred, through both production stages into HDR MRTs."""
     import re
-    from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_program import PARTICLE_VERTEX, PARTICLE_FRAGMENT
+    from OpenGL import GL
+    from rendering.gl_programs.extruded_bubble_program import PARTICLE_BLOCK, PARTICLE_VERTEX, PARTICLE_FRAGMENT
     from rendering.quick.render.gl_resources import compile_program
+    from tools.pass_block_gl import PassBlockGL
     from tools.transition_contact_sheet import TransitionCapture
 
+    gl = PassBlockGL(GL)          # the particles' values are their pass block (N1.6), set by name as before
     target = TransitionCapture(64, 64)
     programs = []
     textures = []
     vao = 0
     try:
         # The reference removes ONLY contraction. At share=1 this is the previous
-        # authored-radius draw/energy law, independently compiled in native GL.
-        reference, count = re.subn(r'uniform\s+float\s+uParticleRadiusShare\s*;', '', PARTICLE_VERTEX)
-        assert count == 1, 'production vertex must expose the explicit radius-share authority'
-        reference = re.sub(r'\buParticleRadiusShare\b', '1.0', reference)
+        # authored-radius draw/energy law, independently compiled in native GL. The member stays in the pass block
+        # (both stages declare the same block); only its reads become 1.0.
+        assert len(re.findall(r'\bfloat\s+uParticleRadiusShare\s*;', PARTICLE_VERTEX)) == 1, \
+            'production vertex must expose the explicit radius-share authority'
+        head, body = PARTICLE_VERTEX.split('void main()', 1)
+        reference = head + 'void main()' + re.sub(r'\buParticleRadiusShare\b', '1.0', body)
+        assert reference != PARTICLE_VERTEX
         for label, vertex in (('production', PARTICLE_VERTEX), ('active reference', reference)):
             programs.append(compile_program(vertex, PARTICLE_FRAGMENT, label='particle size ' + label))
+            gl.register(programs[-1], PARTICLE_BLOCK)
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
         textures = list(map(int, gl.glGenTextures(2)))
         for i, texture in enumerate(textures):
@@ -135,6 +145,7 @@ def particle_stage_capture(qt_app):
 
         yield draw
     finally:
+        gl.release()
         if textures:
             gl.glDeleteTextures(textures)
         for program in programs:

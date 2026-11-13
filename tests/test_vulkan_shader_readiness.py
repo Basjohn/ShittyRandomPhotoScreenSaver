@@ -230,30 +230,15 @@ def test_every_target_is_checked_not_only_spirv(tmp_path):
 # The sources that did not bake on 12 Nov 2026 (N1.3), in N5's order. Only ever shrinks.
 _RATCHET = {
     "Extruded Bubble": (
-        "rendering.gl_programs.extruded_bubble_program.BACKDROP_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.BEAD_VERTEX",
-        "rendering.gl_programs.extruded_bubble_program.BLUR_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.BUBBLE_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.BUBBLE_VERTEX",
         "rendering.gl_programs.extruded_bubble_program.CLUSTER_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.CLUSTER_VERTEX",
-        "rendering.gl_programs.extruded_bubble_program.FULL_VERTEX",
         "rendering.gl_programs.extruded_bubble_program.NEAR_CLUSTER_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.NEAR_FRAGMENT",
-        "rendering.gl_programs.extruded_bubble_program.PARTICLE_FRAGMENT",
-        "rendering.gl_programs.extruded_bubble_program.PARTICLE_VERTEX",
-        "rendering.gl_programs.extruded_bubble_program.SHAFT_FRAGMENT",
-        "rendering.gl_programs.extruded_bubble_program.SPECK_VERTEX",
-        "rendering.gl_programs.extruded_bubble_program.TRAIL_FRAGMENT",
-        "rendering.gl_programs.extruded_bubble_program.TRAIL_VERTEX",
-        "rendering.quick.scene3d.defocus._CLIP",
-        "rendering.quick.scene3d.defocus._GATHER",
-        "rendering.quick.scene3d.defocus._SPRITE_FRAGMENT",
-        "rendering.quick.scene3d.defocus._SPRITE_VERTEX",
-        "rendering.quick.scene3d.defocus._VERTEX",
-        "rendering.quick.scene3d.probe._PREFILTER_FRAGMENT",
+        # Not a loose uniform: SPIRV-Cross has no HLSL for the layered write (gl_Layer); converts at its port.
         "rendering.quick.scene3d.probe._PREFILTER_GEOMETRY",
-        "rendering.quick.scene3d.probe._PREFILTER_VERTEX",
     ),
     "Neon Lake": (
         "rendering.gl_programs.neon_lake_basin_program.NEON_FRAGMENT_SOURCE",

@@ -203,10 +203,13 @@ def test_a_history_carried_into_a_window_whose_drift_programs_fail_fades_out_ins
 @pytest.mark.parametrize('family',('snow','specks'))
 @pytest.mark.parametrize('coverage',('BEAM','SCENE'))
 def test_production_cloud_generators_read_nonuniform_stable_id_offsets_without_resizing_motes(qt_app,family,coverage):
-    from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_program import BEAD_VERTEX,SPECK_VERTEX
+    from OpenGL import GL
+    from rendering.gl_programs.extruded_bubble_program import BEAD_VERTEX,PARTICLE_BLOCK,SPECK_VERTEX
     from rendering.quick.render.gl_resources import compile_program
     from tools.labs.render_target import OffscreenRenderTarget
+    from tools.pass_block_gl import PassBlockGL
+    gl=PassBlockGL(GL)          # the generators' values are their pass block (N1.6), set by name as before
+    block={'specks':PARTICLE_BLOCK}.get(family)
     from widgets.spotify_visualizer.extruded_bubble_simulation import ExtrudedBubbleControls
     from widgets.spotify_visualizer.extruded_bubble_material_paths import cloud_geometry,ProceduralOffsets
     from widgets.spotify_visualizer.extruded_bubble_geometry import stream_basis,scene_source_face_weights,WORLD_HALF
@@ -229,6 +232,8 @@ gl_Position=vec4(0.0,0.0,0.0,1.0);}
     target=OffscreenRenderTarget(64,64);program=0;buffers=[]
     try:
         program=compile_program(vertex,'#version 460 core\nout vec4 colour;\nvoid main(){colour=vec4(0);}',label='production cloud drift '+family)
+        if block is not None:
+            gl.register(program,block)
         gl.glUseProgram(program)
         names=np.empty(2,dtype='u4');gl.glCreateBuffers(2,names);buffers=list(map(int,names))
         result,paths=buffers;gl.glNamedBufferData(result,320*16,None,gl.GL_DYNAMIC_READ)
@@ -290,6 +295,7 @@ gl_Position=vec4(0.0,0.0,0.0,1.0);}
         assert np.max(np.abs(visibility_rows))==0.
         assert gl.glGetError()==gl.GL_NO_ERROR
     finally:
+        gl.release()
         gl.glDisable(gl.GL_RASTERIZER_DISCARD)
         if buffers:gl.glDeleteBuffers(len(buffers),buffers)
         if program:delete_program(program)
