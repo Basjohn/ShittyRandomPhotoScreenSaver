@@ -38,12 +38,13 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.6 (High; build round 2); the 13 Nov side defects (Medium).
+**Now (in flight):** N2.7 (High); N1.6 Extruded Bubble (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
 - High:
-  1. N2.6 (the per-pass GPU timer service), then N2.7 (the backend owner), toward N2.5 (Spectrum at parity).
+  1. N2.7 (the backend owner and the rehearsal path), then the C++ packet reader (N2.3), toward N2.5 (Spectrum
+     at parity) and N2.8.
   2. The 1C.2 Save stall, and 1C.10, as defects between N steps.
 - Medium:
   1. Side defects found 13 Nov, each fixed at its owner with a test and a negative control:
@@ -327,7 +328,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   uploads, is D9's "Accepted by the lead"). Owed, with the Qt 6.12 checks filed here:
   - [ ] AMD and Intel unmeasured: the same measure round on another vendor before a mode moves compute to a job by
     default there (GitHub runners have no GPU; a Watchlist entry until a machine is available).
-  - [ ] The timer's form (D5.6 answer 4) settled from where the core records a pass.
   - [ ] The first frozen GitHub build on Qt 6.12 (D11's checkpoint named it; the bump was taken as a plain bump on
     the operator's word and no frozen product has been built since): 1B.14's frozen build box run on a commit after
     655b04bf, with the frozen QML package contract and the Studio opening. Then D11 in the decisions document says
@@ -441,8 +441,11 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 Order inside N2 (the numbers stay stable for the documents that cite them): N2.1 to N2.4, then N2.6, N2.7, then
 N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the Python renderer's retirement.
 
-- [ ] N2.6 The per-pass GPU timer service (D8 plus 2): raw timestamps on Vulkan, timer queries on OpenGL, in the
-  frame trace as today's `TIME_ELAPSED` figures are; off means no query objects.
+- [ ] Lead, when the display is on (13 Nov it was off: Qt alone presented 2 frames a second on D3D, fact J5): the D3D11
+  and D3D12 window rounds of N2.2, N2.4 and N2.6, which are the only parts of those three not yet proved:
+  `host_check.py --apis d3d11 d3d12 --rounds window lifecycle`, `composite_check.py --apis d3d11 d3d12 --rounds
+  window`, `timer_check.py --apis d3d11 d3d12 --rounds scaling window` (each with `--module-dir
+  release/native_module`; commands in `Docs/Reference/Harness_Index.md`).
 - [ ] N2.7 The backend owner and the rehearsal path (D10): one owner in `rendering/quick/bootstrap.py`, a
   diagnostic command-line switch, the Vulkan window set up through the module (D6), "available on this backend"
   in the mode and transition registries (an unported mode is not offered, an unported transition is Crossfade),
