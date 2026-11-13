@@ -154,8 +154,36 @@ _install_theme_shadow_configs(get_active_settings_theme())
 _THEMED_ROOT_REFS: list[weakref.ReferenceType[QWidget]] = []
 
 
+class _WeakWidgetSlot:
+    """A helper attribute that refers to the widget it watches without keeping it alive.
+
+    Every helper below is a Qt child of the widget it watches, and the widget keeps the helper
+    as a Python attribute (``_control_shadow_helper`` and friends). A strong reference back
+    would close a Python reference cycle, so a parentless shadowed widget could be freed only
+    by the cycle collector, which runs at any allocation, including inside Qt's dispatch of an
+    event to that very widget (through the helper's own ``eventFilter``): the widget and the
+    helper were then deleted under the dispatch ("Internal C++ object already deleted", heap
+    corruption). Held weakly, the widget is freed by reference counting where its owner lets
+    it go, and the helper dies with it as its Qt child.
+    """
+
+    def __set_name__(self, owner: type, name: str) -> None:
+        self._slot = f"_{name.lstrip('_')}_weak_ref"
+
+    def __get__(self, instance, owner=None):  # noqa: ANN001
+        if instance is None:
+            return self
+        ref = instance.__dict__.get(self._slot)
+        return None if ref is None else ref()
+
+    def __set__(self, instance, value) -> None:  # noqa: ANN001
+        instance.__dict__[self._slot] = None if value is None else weakref.ref(value)
+
+
 class _ControlShadowHelper(QObject):
     """Own the QGraphicsDropShadowEffect attached to one widget."""
+
+    _widget = _WeakWidgetSlot()
 
     def __init__(
         self,
@@ -170,7 +198,7 @@ class _ControlShadowHelper(QObject):
         self._checked_config = checked_config
         self._effect = QGraphicsDropShadowEffect(widget)
         self._toggled_connected = False
-        self._widget.installEventFilter(self)
+        widget.installEventFilter(self)
         self._ensure_toggle_connection()
         self._apply()
 
@@ -211,32 +239,36 @@ class _ControlShadowHelper(QObject):
         self._apply()
 
     def _ensure_toggle_connection(self) -> None:
+        widget = self._widget
         if (
             self._checked_config is not None
-            and isinstance(self._widget, QAbstractButton)
+            and isinstance(widget, QAbstractButton)
             and not self._toggled_connected
         ):
-            self._widget.toggled.connect(self._apply)
+            widget.toggled.connect(self._apply)
             self._toggled_connected = True
 
-    def _active_config(self) -> ShadowConfig:
+    def _active_config(self, widget: QWidget) -> ShadowConfig:
         if (
             self._checked_config is not None
-            and isinstance(self._widget, QAbstractButton)
-            and self._widget.isChecked()
+            and isinstance(widget, QAbstractButton)
+            and widget.isChecked()
         ):
             return self._checked_config
         return self._config
 
     def _apply(self, *_args) -> None:
-        config = self._active_config()
+        widget = self._widget
+        if widget is None:
+            return
+        config = self._active_config(widget)
         color = QColor(config.color)
-        if not self._widget.isEnabled():
+        if not widget.isEnabled():
             color.setAlpha(int(color.alpha() * config.disabled_alpha_scale))
         self._effect.setBlurRadius(max(0.0, float(config.blur_radius)))
         self._effect.setOffset(config.offset)
         self._effect.setColor(color)
-        self._widget.setGraphicsEffect(self._effect)
+        widget.setGraphicsEffect(self._effect)
 
 
 def attach_control_shadow(
@@ -326,6 +358,8 @@ class _TextShadowOverlay(QWidget):
 class _TextShadowHelper(QObject):
     """Track a QLabel with a sibling-painted hard shadow and untouched source glyphs."""
 
+    owner = _WeakWidgetSlot()
+
     def __init__(self, owner: QLabel, config: ShadowConfig) -> None:
         super().__init__(owner)
         self.owner = owner
@@ -359,8 +393,8 @@ class _TextShadowHelper(QObject):
         self.config = config
         self._sync()
 
-    def _ensure_overlay_parent(self) -> None:
-        parent = self.owner.parentWidget()
+    def _ensure_overlay_parent(self, owner: QWidget) -> None:
+        parent = owner.parentWidget()
         if parent is None:
             if self.overlay is not None:
                 self.overlay.hide()
@@ -371,17 +405,20 @@ class _TextShadowHelper(QObject):
             self.overlay.setParent(parent)
 
     def _sync(self) -> None:
-        self._ensure_overlay_parent()
+        owner = self.owner
+        if owner is None:
+            return
+        self._ensure_overlay_parent(owner)
         overlay = self.overlay
         if overlay is None:
             return
         offset = self.config.offset
         pad_x = max(2, int(math.ceil(max(0.0, float(offset.x())))) + 2)
         pad_y = max(2, int(math.ceil(max(0.0, float(offset.y())))) + 2)
-        geom = self.owner.geometry()
+        geom = owner.geometry()
         overlay.setGeometry(geom.x(), geom.y(), geom.width() + pad_x, geom.height() + pad_y)
-        overlay.setVisible(not self.owner.isHidden())
-        overlay.stackUnder(self.owner)
+        overlay.setVisible(not owner.isHidden())
+        overlay.stackUnder(owner)
         overlay.update()
 
 
@@ -459,6 +496,8 @@ class _CastShadowOverlay(QWidget):
 class _CastShadowHelper(QObject):
     """Track a widget with an independent outside-only hard shadow sibling."""
 
+    owner = _WeakWidgetSlot()
+
     def __init__(
         self,
         owner: QWidget,
@@ -503,6 +542,8 @@ class _CastShadowHelper(QObject):
 
     def base_rect(self) -> QRectF:
         owner = self.owner
+        if owner is None:
+            return QRectF()
         if self.group_box_frame and isinstance(owner, QGroupBox):
             # The Settings theme uses a 20 px title margin and 12 px bottom
             # margin for the visible rounded frame. Paint the cast against that
@@ -529,8 +570,8 @@ class _CastShadowHelper(QObject):
         self.group_box_frame = bool(group_box_frame)
         self._sync()
 
-    def _ensure_overlay_parent(self) -> None:
-        parent = self.owner.parentWidget()
+    def _ensure_overlay_parent(self, owner: QWidget) -> None:
+        parent = owner.parentWidget()
         if parent is None:
             if self.overlay is not None:
                 self.overlay.hide()
@@ -541,7 +582,10 @@ class _CastShadowHelper(QObject):
             self.overlay.setParent(parent)
 
     def _sync(self) -> None:
-        self._ensure_overlay_parent()
+        owner = self.owner
+        if owner is None:
+            return
+        self._ensure_overlay_parent(owner)
         overlay = self.overlay
         if overlay is None:
             return
@@ -549,12 +593,12 @@ class _CastShadowHelper(QObject):
         offset = self.config.offset
         pad_x = max(2, int(math.ceil(max(0.0, float(offset.x())))) + 2)
         pad_y = max(2, int(math.ceil(max(0.0, float(offset.y())))) + 2)
-        geom = self.owner.geometry()
+        geom = owner.geometry()
         overlay.setGeometry(geom.x(), geom.y(), geom.width() + pad_x, geom.height() + pad_y)
-        overlay.setVisible(not self.owner.isHidden())
+        overlay.setVisible(not owner.isHidden())
         # Keep the cast behind the source even when a hidden/lazy widget is
         # shown and Qt rebuilds child z-order.
-        overlay.stackUnder(self.owner)
+        overlay.stackUnder(owner)
         overlay.update()
 
 
@@ -627,6 +671,9 @@ class _ScrollBarShadowStripHelper(QObject):
 
     _CORNER_RADIUS = 1
 
+    owner = _WeakWidgetSlot()
+    scroll_area = _WeakWidgetSlot()
+
     def __init__(self, owner: QScrollBar, config: ShadowConfig) -> None:
         super().__init__(owner)
         self.owner = owner
@@ -680,7 +727,8 @@ class _ScrollBarShadowStripHelper(QObject):
         self._sync()
 
     def _bind_scroll_area(self) -> None:
-        next_area = _find_scroll_area(self.owner)
+        owner = self.owner
+        next_area = _find_scroll_area(owner) if owner is not None else None
         if next_area is self.scroll_area:
             return
 
@@ -732,9 +780,9 @@ class _ScrollBarShadowStripHelper(QObject):
 
         return self.right_shadow, self.bottom_shadow
 
-    def _apply_shadow_style(self, strip: QWidget) -> None:
+    def _apply_shadow_style(self, strip: QWidget, owner: QScrollBar) -> None:
         color = QColor(self.config.color)
-        if not self.owner.isEnabled():
+        if not owner.isEnabled():
             color.setAlpha(
                 int(color.alpha() * self.config.disabled_alpha_scale)
             )
@@ -747,6 +795,9 @@ class _ScrollBarShadowStripHelper(QObject):
         )
 
     def _sync(self) -> None:
+        owner = self.owner
+        if owner is None:
+            return
         area = self.scroll_area
         right_shadow, bottom_shadow = self._ensure_shadows()
         if area is None or right_shadow is None or bottom_shadow is None:
@@ -758,11 +809,11 @@ class _ScrollBarShadowStripHelper(QObject):
             bottom_shadow.hide()
             return
 
-        top_left = self.owner.mapTo(page, self.owner.rect().topLeft())
+        top_left = owner.mapTo(page, owner.rect().topLeft())
         dx = max(0, int(round(float(self.config.offset.x()))))
         dy = max(0, int(round(float(self.config.offset.y()))))
-        width = self.owner.width()
-        height = self.owner.height()
+        width = owner.width()
+        height = owner.height()
 
         # Hard-cast geometry = translated source rectangle minus the original.
         # Draw only those exposed pieces; absolutely nothing sits beneath the
@@ -780,15 +831,15 @@ class _ScrollBarShadowStripHelper(QObject):
             dy,
         )
 
-        self._apply_shadow_style(right_shadow)
-        self._apply_shadow_style(bottom_shadow)
+        self._apply_shadow_style(right_shadow, owner)
+        self._apply_shadow_style(bottom_shadow, owner)
 
         right_shadow.stackUnder(area)
         bottom_shadow.stackUnder(area)
 
         visible = (
             area.isVisible()
-            and self.owner.isVisible()
+            and owner.isVisible()
             and width > 0
             and height > 0
             and dx > 0

@@ -77,6 +77,55 @@ def test_combo_knob_eventfilter_still_handles_live_host(qt_app) -> None:
     assert controller._host is host
 
 
+@pytest.mark.parametrize("kind", ["control", "text", "cast"])
+def test_shadowed_widget_is_freed_where_its_owner_lets_it_go(qt_app, kind) -> None:
+    """A shadow helper never keeps the widget it watches alive.
+
+    A strong back-reference closed a Python cycle (widget attribute -> helper -> widget), so a
+    Python-owned shadowed widget could be freed only by the cycle collector, at any allocation,
+    including inside Qt's dispatch of an event to that widget through the helper's own
+    ``eventFilter``: the widget and the helper were deleted under the dispatch ("Internal C++
+    object already deleted", then heap corruption). Freed by reference counting, it dies where
+    its owner drops it, with its helper and event filter, and its pending events go with it.
+    """
+    import gc
+    import weakref
+
+    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtWidgets import QLabel, QPushButton
+
+    from ui.widgets import control_shadow
+
+    if kind == "control":
+        widget = QPushButton("Shadowed")
+        control_shadow.attach_control_shadow(widget, control_shadow.PILL_BUTTON_SHADOW)
+        helper = widget._control_shadow_helper
+    elif kind == "text":
+        widget = QLabel("Shadowed heading")
+        control_shadow.attach_text_shadow(widget, control_shadow.PAGE_TEXT_SHADOW)
+        helper = widget._settings_text_shadow_helper
+    else:
+        widget = QWidget()
+        control_shadow.attach_cast_shadow(widget, control_shadow.SHELL_PANEL_SHADOW, radius=8.0)
+        helper = widget._settings_cast_shadow_helper
+    widget_ref = weakref.ref(widget)
+    helper_ref = weakref.ref(helper)
+    del helper
+    QCoreApplication.postEvent(widget, QEvent(QEvent.Type.Polish))
+
+    collector_was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        del widget
+        assert widget_ref() is None, "the shadow helper kept its widget alive for the cycle collector"
+        assert helper_ref() is None
+    finally:
+        if collector_was_enabled:
+            gc.enable()
+    # The freed widget's pending events left with it; nothing reaches a deleted helper.
+    qt_app.processEvents()
+
+
 def test_control_shadow_eventfilter_ignores_events_for_other_widgets(qt_app) -> None:
     widget = QWidget()
     other = QWidget()

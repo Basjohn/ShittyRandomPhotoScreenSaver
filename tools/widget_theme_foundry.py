@@ -217,7 +217,12 @@ class WidgetThemeFoundryWindow(QMainWindow):
         )
         outer.addWidget(self.title_bar)
 
+        # Every row layout joins its parent layout before its widgets do: PySide hands a widget to Qt's
+        # ownership only when its layout already has a parent widget. A widget added to a parentless
+        # layout stays owned by Python while Qt also deletes it with the window, and PySide's exit-time
+        # cleanup then deletes it a second time (R-204).
         subtitle_row = QHBoxLayout()
+        outer.addLayout(subtitle_row)
         subtitle = QLabel(
             "Edit the exact retained Widget Theme palette. Shared semantics first; optional special roles stay sparse and inherited until you override them."
         )
@@ -228,9 +233,9 @@ class WidgetThemeFoundryWindow(QMainWindow):
         self.schema_label.setObjectName("scopePill")
         self.schema_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtitle_row.addWidget(self.schema_label)
-        outer.addLayout(subtitle_row)
 
         quick = QHBoxLayout()
+        outer.addLayout(quick)
         quick.setSpacing(8)
         theme_label = QLabel("Theme")
         theme_label.setFixedWidth(72)
@@ -246,9 +251,9 @@ class WidgetThemeFoundryWindow(QMainWindow):
         self.refresh_files_btn.setToolTip("Refresh themes/widgets")
         self.refresh_files_btn.clicked.connect(self._refresh_file_list)
         quick.addWidget(self.refresh_files_btn)
-        outer.addLayout(quick)
 
         actions = QHBoxLayout()
+        outer.addLayout(actions)
         actions.setSpacing(8)
         actions.addSpacing(80)
         self.new_btn = QPushButton("NEW FROM DEFAULT")
@@ -265,7 +270,6 @@ class WidgetThemeFoundryWindow(QMainWindow):
         self.save_as_btn.clicked.connect(self.save_theme_as)
         actions.addWidget(self.save_as_btn)
         actions.addStretch(1)
-        outer.addLayout(actions)
 
         meta = QFrame()
         meta.setObjectName("widgetThemeFoundryMetaBox")
@@ -314,6 +318,7 @@ class WidgetThemeFoundryWindow(QMainWindow):
         left_l = QVBoxLayout(left)
         left_l.setContentsMargins(10, 10, 10, 10)
         filter_row = QHBoxLayout()
+        left_l.addLayout(filter_row)
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Filter roles…")
         self.search_edit.textChanged.connect(self._apply_tree_filter)
@@ -331,7 +336,6 @@ class WidgetThemeFoundryWindow(QMainWindow):
         ])
         self.category_combo.currentTextChanged.connect(self._apply_tree_filter)
         filter_row.addWidget(self.category_combo)
-        left_l.addLayout(filter_row)
         self.tree = QTreeWidget()
         self.tree.setObjectName("roleTree")
         self.tree.setHeaderLabels(["Semantic role", "State", "Working colour"])
@@ -378,6 +382,7 @@ class WidgetThemeFoundryWindow(QMainWindow):
         right_l.addWidget(self.swatch)
 
         channel_grid = QGridLayout()
+        right_l.addLayout(channel_grid)
         self.r_spin = self._channel_spin()
         self.g_spin = self._channel_spin()
         self.b_spin = self._channel_spin()
@@ -386,9 +391,9 @@ class WidgetThemeFoundryWindow(QMainWindow):
             channel_grid.addWidget(QLabel(label), 0, index)
             channel_grid.addWidget(spin, 1, index)
             spin.valueChanged.connect(self._spins_changed)
-        right_l.addLayout(channel_grid)
 
         hex_row = QHBoxLayout()
+        right_l.addLayout(hex_row)
         self.hex_edit = QLineEdit()
         self.hex_edit.setPlaceholderText("#RRGGBB or #RRGGBBAA")
         self.hex_edit.returnPressed.connect(self._apply_hex)
@@ -399,18 +404,18 @@ class WidgetThemeFoundryWindow(QMainWindow):
         self.copy_btn = QPushButton("COPY RGBA")
         self.copy_btn.clicked.connect(self._copy_rgba)
         hex_row.addWidget(self.copy_btn)
-        right_l.addLayout(hex_row)
 
         role_actions = QHBoxLayout()
+        right_l.addLayout(role_actions)
         self.bulk_btn = QPushButton("CHANGE ALL EXACT MATCHES…")
         self.bulk_btn.clicked.connect(self._bulk_replace_selected)
         role_actions.addWidget(self.bulk_btn)
         self.remove_override_btn = QPushButton("REMOVE OPTIONAL OVERRIDE")
         self.remove_override_btn.clicked.connect(self._remove_override)
         role_actions.addWidget(self.remove_override_btn)
-        right_l.addLayout(role_actions)
 
         reset_actions = QGridLayout()
+        right_l.addLayout(reset_actions)
         self.reset_opened_btn = QPushButton("RESET ROLE → OPENED")
         self.reset_opened_btn.clicked.connect(self._reset_role_opened)
         self.reset_default_btn = QPushButton("RESET ROLE → DEFAULT")
@@ -423,7 +428,6 @@ class WidgetThemeFoundryWindow(QMainWindow):
         reset_actions.addWidget(self.reset_default_btn, 0, 1)
         reset_actions.addWidget(self.reset_all_opened_btn, 1, 0)
         reset_actions.addWidget(self.reset_all_default_btn, 1, 1)
-        right_l.addLayout(reset_actions)
 
         used_title = QLabel("MOST USED COLOURS")
         used_title.setObjectName("sectionTitle")
@@ -436,6 +440,7 @@ class WidgetThemeFoundryWindow(QMainWindow):
         self.most_used_counts: list[QLabel] = []
         for index in range(6):
             row = QHBoxLayout()
+            right_l.addLayout(row)
             button = SwatchButton("")
             button.colorRequested.connect(lambda index=index: self._replace_most_used(index))
             count = QLabel("")
@@ -444,7 +449,6 @@ class WidgetThemeFoundryWindow(QMainWindow):
             count.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             row.addWidget(button, 1)
             row.addWidget(count)
-            right_l.addLayout(row)
             self.most_used_buttons.append(button)
             self.most_used_counts.append(count)
 

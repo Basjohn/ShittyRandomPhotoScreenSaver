@@ -471,6 +471,63 @@ def test_editor_children_are_owned_by_qt_not_python(qt_app, tmp_path) -> None:
         editor.close()
 
 
+def _plain_editor(tmp_path) -> DefaultSettingsEditor:
+    base_path = _copy_base_source(tmp_path)
+    overrides_path = tmp_path / "default_profile_overrides.py"
+    overrides_path.write_text(render_profile_overrides_module({NORMAL_PROFILE: {}, MC_PROFILE: {}}), encoding="utf-8")
+    return DefaultSettingsEditor(base_path=base_path, overrides_path=overrides_path,
+                                 undo_path=tmp_path / "undo.json", validate=lambda: "")
+
+
+def test_editor_window_is_freed_where_its_owner_lets_it_go(qt_app, tmp_path) -> None:
+    """A closed editor is freed by reference counting the moment its last reference goes.
+
+    A connected lambda closing over the window kept it alive for the whole process, and a recursive closure
+    in the filter (a reference cycle through the window) left it for the cycle collector, which runs at any
+    allocation: inside Qt's dispatch of an event to one of the window's widgets it deleted the window under
+    that dispatch ("Internal C++ object already deleted", heap corruption)."""
+    import gc
+    import weakref
+
+    editor = _plain_editor(tmp_path)
+    # The paths that held the window: the Changed Only filter, and a delegate editor with its connections.
+    editor.changed_only_check.setChecked(True)
+    editor.changed_only_check.setChecked(False)
+    delegate = editor.tree.itemDelegateForColumn(1)
+    for key in ("color", "font_family"):
+        item = editor._leaf_items[("widgets", "achievement_pulse", key)]
+        delegate.createEditor(editor.tree, None, editor.tree.indexFromItem(item, 1))
+    del delegate, item
+    editor.close()
+    ref = weakref.ref(editor)
+
+    collector_was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        del editor
+        assert ref() is None, "something still holds the closed editor, or only the cycle collector can free it"
+    finally:
+        if collector_was_enabled:
+            gc.enable()
+    qt_app.processEvents()
+
+
+def test_editor_applies_its_native_backdrop_when_shown_not_when_built(qt_app, tmp_path, monkeypatch) -> None:
+    calls: list[object] = []
+    monkeypatch.setattr("tools.default_settings_editor.apply_native_backdrop",
+                        lambda window, _resolution: calls.append(window) or True)
+    editor = _plain_editor(tmp_path)
+    try:
+        qt_app.processEvents()
+        assert calls == []                       # nothing queued at construction
+        keep_off_screen(editor)
+        editor.show()
+        qt_app.processEvents()
+        assert calls == [editor]
+    finally:
+        editor.close()
+
+
 def test_by_transition_view_gathers_each_transitions_settings_and_edits_in_place(qt_app, tmp_path) -> None:
     from rendering.transition_registry import iter_transition_descriptors
     from tools.default_settings_editor import PATH_ROLE, VIEW_TRANSITIONS, get_path
