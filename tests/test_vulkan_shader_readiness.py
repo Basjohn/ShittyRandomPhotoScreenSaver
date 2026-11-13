@@ -237,8 +237,6 @@ _RATCHET = {
         "rendering.gl_programs.extruded_bubble_program.CLUSTER_VERTEX",
         "rendering.gl_programs.extruded_bubble_program.NEAR_CLUSTER_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.NEAR_FRAGMENT",
-        "rendering.gl_programs.extruded_bubble_program.TRAIL_FRAGMENT",
-        "rendering.gl_programs.extruded_bubble_program.TRAIL_VERTEX",
         # Not a loose uniform: SPIRV-Cross has no HLSL for the layered write (gl_Layer); converts at its port.
         "rendering.quick.scene3d.probe._PREFILTER_GEOMETRY",
     ),

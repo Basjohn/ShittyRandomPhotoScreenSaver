@@ -30,7 +30,7 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs.extruded_bubble_program import (
     BACKDROP_FRAGMENT, BEAD_VERTEX, BLUR_FRAGMENT, BUBBLE_FRAGMENT, BUBBLE_VERTEX, CLUSTER_FRAGMENT, CLUSTER_VERTEX, FULL_VERTEX,
-    FULLSCREEN_BLOCK, NEAR_FRAGMENT, PARTICLE_BLOCK, NEAR_CLUSTER_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT,
+    FULLSCREEN_BLOCK, GLASS_BLOCK, NEAR_FRAGMENT, PARTICLE_BLOCK, TRAIL_BLOCK, NEAR_CLUSTER_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT,
     SPECK_VERTEX, TRAIL_FRAGMENT, TRAIL_SEGMENTS, TRAIL_VERTEX, block_defaults,
 )
 from rendering.gl_programs.scene3d import _STD140
@@ -78,7 +78,7 @@ _PROGRAMS = (
 
 # The programs whose values are a pass block (N1.6), by key: each family's one layout.
 _BLOCKS = {"backdrop": FULLSCREEN_BLOCK, "shafts": FULLSCREEN_BLOCK, "blur": FULLSCREEN_BLOCK,
-           "proxies": PARTICLE_BLOCK, "specks": PARTICLE_BLOCK}
+           "proxies": PARTICLE_BLOCK, "specks": PARTICLE_BLOCK, "trails": TRAIL_BLOCK}  # BISECT
 # Preparation and drawing use these exact resource keys. Perspective is the only projection (Orthographic and
 # its constant-folded per-projection program specializations retired 5 Nov 2026).
 _PROGRAM_ROWS = tuple((key, (key, vertex, fragment)) for key, vertex, fragment in _PROGRAMS)
@@ -719,18 +719,21 @@ class QuickExtrudedBubbleRenderer:
                     if shell_count:
                         gl.glUseProgram(programs["shells"])
                         gl.glBindVertexArray(self._shells.vao)
-                        gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, shell_count)
+                        with self._bound(programs["shells"]):
+                            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, shell_count)
                     if cluster_count:
                         gl.glUseProgram(programs["clusters"])
                         gl.glBindVertexArray(self._clusters.vao)
-                        gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, cluster_count)
+                        with self._bound(programs["clusters"]):
+                            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, cluster_count)
                     if beads + snow + fizz:
                         # Wakes read stable emitters (including retiring tombstones), never reused shell slots.
                         prior = gl_query.get_indexed_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING, _WAKE_BINDING)
                         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _WAKE_BINDING, self._wakes.buffer)
                         gl.glUseProgram(programs["beads"])
                         gl.glBindVertexArray(self._empty_vao)
-                        self._draw_material_instances(beads+snow+fizz,material)
+                        with self._bound(programs["beads"]):
+                            self._draw_material_instances(beads+snow+fizz,material)
                         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _WAKE_BINDING, prior)
                     if trails > 0.0 and wake_count:
                         # Wake trails: one sheet per stable emitter, read from the same records as the fizz.
@@ -739,7 +742,8 @@ class QuickExtrudedBubbleRenderer:
                         self._uniforms.set(programs["trails"], {"uTargetSize": target_size})
                         gl.glUseProgram(programs["trails"])
                         gl.glBindVertexArray(self._empty_vao)
-                        gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 2 * (TRAIL_SEGMENTS + 1), wake_count)
+                        with self._bound(programs["trails"]):
+                            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 2 * (TRAIL_SEGMENTS + 1), wake_count)
                         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _WAKE_BINDING, prior)
             # Only ordinary large bubbles whose front surface actually reaches the focus region enter this layer.
             # BUBBLE_VERTEX makes the same depth decision in both passes so a bubble is never drawn twice.
@@ -750,11 +754,13 @@ class QuickExtrudedBubbleRenderer:
                 gl.glViewport(0, 0, width, height)
                 gl.glUseProgram(programs["near"])
                 gl.glBindVertexArray(self._shells.vao)
-                gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, shell_count)
+                with self._bound(programs["near"]):
+                    gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, shell_count)
                 if cluster_count:
                     gl.glUseProgram(programs["near_clusters"])
                     gl.glBindVertexArray(self._clusters.vao)
-                    gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, cluster_count)
+                    with self._bound(programs["near_clusters"]):
+                        gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, cluster_count)
                 self._near.end()
                 self._near.composite(_near_spread(optical_height))
             for unit in (_UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE):
