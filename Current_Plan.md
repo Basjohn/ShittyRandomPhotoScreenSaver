@@ -438,6 +438,15 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   N1.4's raw `gl_FragCoord` in it is not. Bar coverage keeps R-197's rule: one continuous coordinate from the
   target's own pixel (`fragPixel`), and the diagonal-seam test runs on the native item.
 - [ ] N2.8 Lead, Display 1: the first rehearsal (cards and Spectrum on Vulkan; no wallpaper yet).
+  - Pre-check done 14 Nov (`.artifacts/evidence/display/d1_run/20261114_n27_vulkan_visible/`, displays on):
+    the saver on Vulkan revealed on its first presented frame, every card drew with its material and text, and
+    it exited 0 through the terminal barrier.
+  - [ ] `d1_run.py`'s `grab` step reads back through OpenGL ("no current OpenGL context in afterRendering") and
+    fails on Vulkan; `screen` steps work. N2.8 needs a backend-neutral grab (the window's own readback on its
+    render thread through QRhi), with a test on both backends.
+  - [ ] With no admitted mode renderable on the backend (before N2.5), the Visualizer card shows as a thin empty
+    purple frame beside Spotify. Find its owner and decide: a card with nothing to draw fades out, never sits as
+    an empty frame. OpenGL unchanged.
 
 **N2b. The background layer, natively, and the first full rehearsal**
 
