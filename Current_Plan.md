@@ -47,7 +47,9 @@ at the size asked.
      at parity) and N2.8.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. 1D.10 (the 13 Nov audit's must-fixes first), then 1D.7 (hover actions without Edit), then 1D.8 (idle wake).
+  1. 1D.10 (the 13 Nov audit's must-fixes first), then 1D.11 with 1D.8 as one dispatch (bind the trails'
+     `uBackground` first, then check whether the idle wake teleport is gone: its refraction read whatever unit 0
+     held), then 1D.7 (hover actions without Edit).
   2. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
      Sphere); a mode that cannot be made bit-identical in one dispatch converts at its port.
   3. 1B.10.
