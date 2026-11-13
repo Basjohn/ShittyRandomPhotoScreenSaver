@@ -246,9 +246,8 @@ _RATCHET = {
         "rendering.gl_programs.extruded_bubble_program.SPECK_VERTEX",
         "rendering.gl_programs.extruded_bubble_program.TRAIL_FRAGMENT",
         "rendering.gl_programs.extruded_bubble_program.TRAIL_VERTEX",
-        "rendering.quick.scene3d.probe._PREFILTER_FRAGMENT",
+        # Not a loose uniform: SPIRV-Cross has no HLSL for the layered write (gl_Layer); converts at its port.
         "rendering.quick.scene3d.probe._PREFILTER_GEOMETRY",
-        "rendering.quick.scene3d.probe._PREFILTER_VERTEX",
     ),
     "Neon Lake": (
         "rendering.gl_programs.neon_lake_basin_program.NEON_FRAGMENT_SOURCE",

@@ -209,7 +209,8 @@ def block_layout_from_glsl(declaration: str) -> Scene3DBlockLayout:
 
 
 def _element_components(element: str) -> int:
-    return _STD140[element][1] // 4
+    """How many values one element takes (a mat3 nine: its padding is not a value)."""
+    return 9 if element == "mat3" else _STD140[element][1] // 4
 
 
 def pack_block(layout: Scene3DBlockLayout, values: Mapping[str, object]) -> bytes:

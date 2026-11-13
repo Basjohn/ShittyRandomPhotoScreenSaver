@@ -132,6 +132,22 @@ def test_bool_and_uvec4_members_pack_as_32_bit_integers():
     assert "bool uOn;" in layout.glsl(18) and "uvec4 uBits;" in layout.glsl(18)
 
 
+def test_mat3_members_pack_as_three_padded_columns():
+    # Extruded Bubble's rotations and the probe's six face rotations are mat3 (N1.6): std140 aligns each column as a
+    # vec4, so nine column-major values take 48 bytes; a mat3 array strides 48; a member never set packs as zeros.
+    layout = Scene3DBlockLayout.of("Probe", (("uA", "float"), ("uM", "mat3"), ("uFaces", "mat3[2]"), ("uB", "float")))
+    assert layout.offsets == (0, 16, 64, 160) and layout.size == 176
+    rotation = tuple(float(v) for v in range(1, 10))
+    data = pack_block(layout, {"uM": rotation, "uFaces": (rotation, tuple(-v for v in rotation)), "uB": 2.0})
+    for column in range(3):
+        assert struct.unpack_from("<3f", data, 16 + 16 * column) == rotation[3 * column:3 * column + 3]
+        assert struct.unpack_from("<f", data, 16 + 16 * column + 12) == (0.0,)
+        assert struct.unpack_from("<3f", data, 64 + 48 + 16 * column) == tuple(-v for v in rotation[3 * column:3 * column + 3])
+    assert struct.unpack_from("<f", data, 160) == (2.0,)
+    assert pack_block(layout, {}) == bytes(176)
+    assert "mat3 uM;" in layout.glsl(18) and "mat3 uFaces[2];" in layout.glsl(18)
+
+
 @pytest.mark.parametrize(("mode", "block"), (("bubble", "BubbleDraw"), ("devcurve", "DevCurveDraw")))
 def test_the_2d_modes_draw_one_block_declared_once_in_their_shader(mode, block):
     import importlib
