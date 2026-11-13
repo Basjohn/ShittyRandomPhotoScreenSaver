@@ -951,7 +951,12 @@ class DefaultSettingsEditor(QMainWindow):
         subtitle.setWordWrap(True)
         layout.addWidget(subtitle)
 
+        # A row layout joins the window before its widgets do: PySide hands a widget to Qt's
+        # ownership only when its layout already has a parent widget. A widget added to a
+        # parentless layout stays owned by Python while Qt also deletes it with the window,
+        # and PySide's exit-time cleanup then destroys it a second time (an access violation).
         controls = QHBoxLayout()
+        layout.addLayout(controls)
         controls.setSpacing(10)
         profile_label = QLabel("Build Profile")
         controls.addWidget(profile_label)
@@ -1000,7 +1005,6 @@ class DefaultSettingsEditor(QMainWindow):
         controls.addWidget(self.changed_only_check)
         self.count_label = QLabel()
         controls.addWidget(self.count_label)
-        layout.addLayout(controls)
 
         self.tree = DefaultsTree()
         self.tree.setObjectName("defaultsFoundryTree")
@@ -1026,6 +1030,7 @@ class DefaultSettingsEditor(QMainWindow):
         layout.addWidget(self.tree, stretch=1)
 
         actions = QHBoxLayout()
+        layout.addLayout(actions)
         self.status_label = QLabel("Ready.")
         self.status_label.setObjectName("defaultsFoundryStatus")
         actions.addWidget(self.status_label, stretch=1)
@@ -1046,7 +1051,6 @@ class DefaultSettingsEditor(QMainWindow):
         self.save_button.setObjectName("defaultsFoundryPrimary")
         self.save_button.clicked.connect(self._save_and_validate)
         actions.addWidget(self.save_button)
-        layout.addLayout(actions)
 
         # Tool appearance is applied by _apply_tool_theme(); product Settings
         # theme state is deliberately not read or mutated here.

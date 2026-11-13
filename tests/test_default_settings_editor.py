@@ -436,6 +436,41 @@ def test_editor_color_swatch_survives_modal_picker_and_persists(qt_app, tmp_path
         editor.close()
 
 
+def test_editor_children_are_owned_by_qt_not_python(qt_app, tmp_path) -> None:
+    """Every widget inside the window is Qt's to delete. A child still owned by Python is deleted twice: once with
+    the window, once by PySide's exit-time cleanup of Python-owned objects (an access violation at process exit)."""
+    import shiboken6
+    from PySide6.QtCore import QObject
+
+    base_path = _copy_base_source(tmp_path)
+    overrides_path = tmp_path / "default_profile_overrides.py"
+    overrides_path.write_text(render_profile_overrides_module({NORMAL_PROFILE: {}, MC_PROFILE: {}}), encoding="utf-8")
+    editor = DefaultSettingsEditor(base_path=base_path, overrides_path=overrides_path,
+                                   undo_path=tmp_path / "undo.json", validate=lambda: "")
+
+    def _inside_editor(obj: QObject) -> bool:
+        parent = obj.parent()
+        while parent is not None:
+            if parent is editor:
+                return True
+            parent = parent.parent()
+        return False
+
+    try:
+        # Read ownership from the live wrappers first: findChildren() itself hands what it returns to Qt.
+        wrappers = [
+            (obj, shiboken6.ownedByPython(obj))
+            for obj in shiboken6.getAllValidWrappers()
+            if isinstance(obj, QObject)
+        ]
+        children = [(obj, owned) for obj, owned in wrappers if _inside_editor(obj)]
+        assert children
+        python_owned = [f"{type(obj).__name__}({obj.objectName()!r})" for obj, owned in children if owned]
+        assert python_owned == []
+    finally:
+        editor.close()
+
+
 def test_by_transition_view_gathers_each_transitions_settings_and_edits_in_place(qt_app, tmp_path) -> None:
     from rendering.transition_registry import iter_transition_descriptors
     from tools.default_settings_editor import PATH_ROLE, VIEW_TRANSITIONS, get_path
