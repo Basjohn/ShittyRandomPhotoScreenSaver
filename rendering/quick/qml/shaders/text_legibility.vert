@@ -1,5 +1,5 @@
 #version 460 core
-// Bake with PySide6 qsb: --glsl "460" -o text_legibility.vert.qsb text_legibility.vert
+// Baked for every target by tools/regen_qrc.py --shaders (its --check says whether the pack is current).
 // One rounded legibility row on a card surface material (Docs/Architecture/
 // Card_Surface_Materials.md, 3.3). The row's tone is the same for every fragment, so it is
 // computed here, once per vertex (four per row), not per pixel: the surface (the SURFACE block,

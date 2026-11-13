@@ -1,5 +1,5 @@
 #version 460 core
-// Bake with PySide6 qsb: --glsl "460" -o widget_glow.frag.qsb widget_glow.frag
+// Baked for every target by tools/regen_qrc.py --shaders (its --check says whether the pack is current).
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
 layout(std140, binding = 0) uniform buf {

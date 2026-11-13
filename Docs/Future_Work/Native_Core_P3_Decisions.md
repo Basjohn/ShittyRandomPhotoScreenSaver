@@ -702,8 +702,10 @@ stays selectable in Settings as the fallback.
 - Not yet on Vulkan, and so not in the rehearsal: the wallpaper, the card backdrop and every transition (the background
   family), every Visualizer mode until N2.5, and each mode's Studio (`has_studio` answers False without the mode's
   renderer: its preview is that renderer). Settings' mode list is not filtered by the backend (a selection there is a
-  persisted choice; the runtime resolves it as above). Qt Quick's own `.qsb` shaders baked `--glsl 460` only
-  (`surface_material`, `widget_glow`, `text_legibility`) have no SPIR-V yet (N1.6).
+  persisted choice; the runtime resolves it as above). Qt Quick's own `.qsb` shaders (`surface_material`,
+  `widget_glow`, `text_legibility`) carried SPIR-V from the first (qsb always bakes it) beside GLSL 460; since 14 Nov
+  `tools/regen_qrc.py --shaders` bakes them for every shipped target (GLSL 460 kept first, so OpenGL draws with the
+  same variant), and `tests/test_quick_shader_packs.py` proves they draw on Vulkan in the hidden host.
 
 ## D11. The Qt version the core is built against (decided 12 Nov 2026)
 

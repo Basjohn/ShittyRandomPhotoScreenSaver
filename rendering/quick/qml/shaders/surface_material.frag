@@ -1,5 +1,5 @@
 #version 460 core
-// Bake with PySide6 qsb: --glsl "460" -o surface_material.frag.qsb surface_material.frag
+// Baked for every target by tools/regen_qrc.py --shaders (its --check says whether the pack is current).
 // One shader for every material; they differ only in uniforms (MaterialSurface.qml).
 //   blurTint        = (blur level 0..1, tint opacity at theme alpha 0, at alpha 1, saturation)
 //   lightNoise      = (luminosity pull, grain, haze toward white, smoke darkening)
