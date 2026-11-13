@@ -1031,7 +1031,7 @@ def _runner(args) -> int:
                 *only, *args.app_arg, "/s"]
     if args.hidden:
         live_check.install_invisible_windows()
-    elif hidden_display is not None:
+    elif hidden_display is not None and not getattr(args, "second_display_visible", False):
         live_check.install_invisible_windows({int(hidden_display)})
     driver = D1Driver(args.step, display=args.display, out=out, crops=args.crop, item=args.item,
                       crop_size=args.crop_size, zoom=args.zoom)
@@ -1055,6 +1055,8 @@ def runner_command(args, out: Path) -> list[str]:
     command += ["--hidden"] if args.hidden else []
     if getattr(args, "with_hidden_display", None) is not None:
         command += ["--with-hidden-display", str(args.with_hidden_display)]
+    if getattr(args, "second_display_visible", False):
+        command += ["--second-display-visible", "--allow-primary"]
     command += [f"--diag={flag}" for flag in args.diag]
     command += [f"--app-arg={token}" for token in args.app_arg]
     command += [f"--step={step.text()}" for step in args.step]
@@ -1241,6 +1243,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="a second display in the run whose window is ALWAYS invisible (presented, empty region, "
                              "the guard kills the run if it could show a pixel): a Visualizer can move between it and "
                              "--display; steps reach it as KIND@N with grab, hover or press (in process)")
+    parser.add_argument("--second-display-visible", action="store_true",
+                        help="the lead's two-display run: the --with-hidden-display window is shown, not invisible "
+                             "(needs --allow-primary when either display is the primary; never in tests, recipes or "
+                             "automated runs; agents never pass it)")
     parser.add_argument("--startup-grace", type=float, default=90.0, help="watchdog: seconds allowed before the "
                                                                           "self-exit countdown starts (default 90)")
     parser.add_argument("--teardown-grace", type=float, default=45.0, help="watchdog: seconds allowed after it")
@@ -1269,6 +1275,8 @@ def parse_args(argv=None):
     if args.with_hidden_display is not None and (args.with_hidden_display < 0
                                                  or args.with_hidden_display == args.display):
         parser.error("--with-hidden-display names another display than --display")
+    if args.second_display_visible and (args.with_hidden_display is None or not args.allow_primary or args.hidden):
+        parser.error("--second-display-visible needs --with-hidden-display and --allow-primary, and not --hidden")
     if not args.updates and not args.runner:
         args.diag.append("--noupdates")          # no live network unless asked: feeds, mail and weather stay cached
     args.diag = list(dict.fromkeys(args.diag))
@@ -1313,6 +1321,14 @@ def main(argv=None) -> int:
     entry_folder = ENTRIES[args.entry][2]
     if args.hidden:
         guard = live_check._visible_window_violations
+    elif args.second_display_visible:
+        # The lead's two-display run: a window violates only when it is on neither of the two named monitors.
+        second = match_monitor(next(d for d in displays if d.index == args.with_hidden_display), win32_monitors(),
+                               allow_primary=True)
+
+        def guard(pids):
+            outside_second = set(off_display_windows(pids, second))
+            return [entry for entry in off_display_windows(pids, monitor) if entry in outside_second]
     else:
         # With --with-hidden-display, a window off the chosen monitor is admitted only while it cannot show a pixel.
         guard = partial(off_display_windows, monitor=monitor,

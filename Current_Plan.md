@@ -38,8 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** nothing (agents resume after the weekly limit resets, 13 Nov 23:00). Next: N2.7 (High),
-N1.6 Extruded Bubble (Medium; the first attempt ended at the limit with nothing committed).
+**Now (in flight):** N2.7 (High); N1.6 Extruded Bubble (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -318,12 +317,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [ ] Metal: the three scenes on Metal (Watchlist; no Metal machine).
 - N0.7 D9's proof: proved in the harness and accepted 12 Nov (the verdict, jobs for compute on this vendor and
   uploads, is D9's "Accepted by the lead"). Owed, with the Qt 6.12 checks filed here:
-  - [ ] AMD and Intel unmeasured: the same measure round on another vendor before a mode moves compute to a job by
-    default there (GitHub runners have no GPU; a Watchlist entry until a machine is available).
-  - [ ] The first frozen GitHub build on Qt 6.12 (D11's checkpoint named it; the bump was taken as a plain bump on
-    the operator's word and no frozen product has been built since): 1B.14's frozen build box run on a commit after
-    655b04bf, with the frozen QML package contract and the Studio opening. Then D11 in the decisions document says
-    how the upgrade was taken.
   - [ ] The handoff probe's inherited-state assertion was narrowed from Qt's whole sync to the item's
     `updatePaintNode` (`tests/test_qtquick_native_texture_handoff_gl.py:114-129`) on the statement that Qt 6.12's
     own sync resets the array-buffer binding; no control shows it. Add the control: a sync in which the adopting
@@ -354,8 +347,8 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   displacement); the stream ring sized to the chain count; a warm-up self-check of the pair arithmetic.
 - [ ] The beads at the near plane: D4.4's 1.4 px bound is geometric; check the bead shader's near culling and the
   near layer's defocus before the bound is quoted as visible error.
-- [ ] Verify the drift programs on a non-NVIDIA driver and through fxc/dxc and the Vulkan backend when the native
-  core first runs them (D4.7's self-check reports a compiler that breaks the pairs; Watchlist until then).
+- [ ] Verify the drift programs through fxc/dxc and the Vulkan backend when the native core first runs them
+  (D4.7's self-check reports a compiler that breaks the pairs). Other vendors are best effort, never tested.
 - [ ] Side defect: `tools/gl_object_ledger.py:84` records only names a create call returns; objects created through
   out-parameters (`glCreateBuffers(1, arr)` in `scene3d/stream.py`, `population.py`, the defocus targets) are
   invisible to the lifecycle tests: record those too, with a test.
@@ -892,8 +885,9 @@ arrangement change, a display added or removed, the owning display lost, Setting
     deferral); before/after on the hidden run.
 - [ ] Defect (tool): `d1_run.py:440-475` reads 4K frames back and copies them on the render thread, costing the other
   display one 57-92 ms frame per 4K grab; move the copies off the render thread (the read-back itself stays).
-- Visible move confirmed by the operator's own two-display logs, 12 Nov (after R-199). A lead rerun with Display 0
-  hidden cannot prove it: the card's starting display must be visible too.
+- Visible move confirmed with both displays visible, 13 Nov (`d1_run.py --second-display-visible`): Extruded
+  Bubble expanded TV -> MSI -> TV, each landed about 2 s after the press; the hop's Save measured 64-89 ms of GUI
+  stall with both displays visible (the defect above). Evidence `display/d1_run/20261113_1c2_move_both_visible/`.
 - [ ] The 1.5 s preparation bound on a cold shader cache (34 units land at 1.22-1.28 s warm, close to the bound).
 - [ ] A prepared neighbour redraws for as long as the pointer rests on an arrow: every published frame calls
   `feed_visualizer_prewarm` (`quick_display_visualizer_owner.py:585-588`), and `feed_prewarm` calls `update()`
