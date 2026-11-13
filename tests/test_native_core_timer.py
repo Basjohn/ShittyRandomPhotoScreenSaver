@@ -268,6 +268,63 @@ def test_the_figures_reach_the_frame_trace_and_its_report_reads_them(tmp_path):
     assert timer_check._gpu_lines(_report(tmp_path / "empty.bin")) == {}
 
 
+class _SilentHost:
+    """A hidden host whose timer never returns a figure (a backend whose offscreen frames carry none)."""
+
+    def __init__(self, samples=()):
+        self._samples = list(samples)
+
+    def state(self):
+        return {"backend": "stand-in", "driver": {"gpu_timer": {}}}
+
+    def set_gpu_timer(self, *_a, **_k):
+        pass
+
+    def set_load(self, **_k):
+        pass
+
+    def clear_load(self):
+        pass
+
+    def frames(self, _count=1):
+        pass
+
+    def gpu_samples(self):
+        samples, self._samples = self._samples, []
+        return samples
+
+    def close(self):
+        return {}
+
+
+class _SilentCore:
+    def __init__(self, samples=()):
+        self.host = _SilentHost(samples)
+
+    def hidden_host(self, *_a, **_k):
+        return self.host
+
+    def gpu_timer_live(self):
+        return {"timers": 0, "query_pools": 0, "queries": 0}
+
+
+@pytest.mark.parametrize("api", ["d3d11", "opengl"])
+def test_a_trace_round_with_no_figure_fails(tmp_path, api):
+    """A trace of nothing passes every comparison and equals its own negative control, so it must fail on its own."""
+    record = timer_check.round_trace(_SilentCore(), None, None, api, tmp_path, {})
+    assert record["samples"] == 0 and record["pass"] is False and record["checks"]["figures_in_the_trace"] is False
+    # Control: the same round with QRhi's frame figures (D3D's only figure) passes.
+    frames = [s for s in _samples() if s.kind == 0]
+    passed = timer_check.round_trace(_SilentCore(), None, None, "d3d11", tmp_path, {"samples": frames})
+    assert passed["pass"] is True, passed["checks"]
+
+
+def test_a_scaling_round_without_qrhis_frame_figure_fails_where_it_is_the_only_figure(tmp_path):
+    record = timer_check.round_scaling(_SilentCore(), None, None, "d3d11", tmp_path, {})
+    assert record["qrhi_frame_figure_in_offscreen_frames"] is False
+    assert record["checks"]["qrhi_frame_figure_present"] is False and record["pass"] is False
+
+
 def test_each_figure_is_one_record_in_the_traces_form():
     from core.performance.frame_trace import FrameTraceEvent
 
