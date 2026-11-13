@@ -24,6 +24,12 @@ def simulation_module():
     return sys.modules[name]
 
 
+def _gpu_reach(lead, count):
+    """The GPU's trailReach (spacings behind the bubble the trail reaches)."""
+    from core.constants.extruded_bubble_world import WAKE_POINTS
+    return min(max(lead + count - 1.0, 0.0), WAKE_POINTS - 1.0)
+
+
 def source_records(snapshot):
     from core.constants.extruded_bubble_world import WAKE_STRIDE
     assert len(snapshot.wakes) % WAKE_STRIDE == 0
@@ -197,6 +203,56 @@ class WakeOwnershipTests(unittest.TestCase):
             self.assertLess(max(segments), 2.0 * sum(segments) / len(segments))
             checked += 1
         self.assertGreater(checked, 0)
+
+    def test_a_slow_trail_ends_where_its_water_ages_out_never_a_spacing_at_once(self):
+        """A slow (idle) bubble's oldest water ages past HISTORY_SECONDS between its new points: the trail's end
+        recedes with that age, continuously (trimming whole points cut it short by a spacing at once, 1D.8)."""
+        import math
+        from widgets.spotify_visualizer.extruded_bubble_wake import FLOW, WakeField
+        field = WakeField(2)
+        here = [0.0, 0.0, 0.0]
+        field.add(4, 0.4, tuple(here))
+        speed = 0.06                               # world units a second: a point laid every few seconds
+        reaches, counts = [], []
+        for _ in range(int(40 * 60)):
+            here[1] += speed / 60
+            field.flow(1 / 60, 0.0)
+            field.follow(4, tuple(here), 0.4, 1 / 60, 1.0)
+            spacing, count, _water, lead, *_rest = field.record(4, tuple(here))
+            reaches.append(_gpu_reach(lead, count) * spacing)
+            counts.append(count)
+        self.assertTrue(any(b < a for a, b in zip(counts, counts[1:])))   # the run spans water ageing out
+        steps = [abs(b - a) for a, b in zip(reaches, reaches[1:])]
+        # Only the bubble's own advance, the end's retreat (about as fast) and the water's swirl moving its newest
+        # point, over one tick: never a whole spacing.
+        self.assertLess(max(steps), (2.0 * speed + 2.0 * FLOW) / 60 + 1e-6, max(steps))
+        self.assertTrue(all(math.isfinite(r) for r in reaches))
+
+    def test_an_idle_wake_never_jumps_in_length(self):
+        """The idle detector (1D.8): at rest, every visible wake's drawn length changes by a sliver per tick."""
+        from dataclasses import replace
+        from core.constants.extruded_bubble_world import WAKE_COUNT, WAKE_LEAD, WAKE_SPACING
+        controls = replace(self.controls, large_count=(8, 8), wake_trails=1.0)
+        previous, worst, pairs = {}, 0.0, 0
+        for _ in range(20 * 60):
+            snap = self.sim.advance(self.mod.MusicInput(1 / 60, False), controls)
+            current = source_records(snap)
+            for ident, row in current.items():
+                old = previous.get(ident)
+                if old is None or row[8] < 0.5 or old[8] < 0.5 or row[5] >= 0.0 or old[5] >= 0.0:
+                    continue
+                pairs += 1
+                length = _gpu_reach(row[WAKE_LEAD], row[WAKE_COUNT]) * row[WAKE_SPACING]
+                before = _gpu_reach(old[WAKE_LEAD], old[WAKE_COUNT]) * old[WAKE_SPACING]
+                worst = max(worst, abs(length - before) / row[7])
+            previous = current
+        self.assertGreater(pairs, 1000)
+        self.assertLess(worst, 0.2)                # in its bubble's radii; a whole spacing is 0.7-1.5
+
+    def test_the_gpu_path_holds_a_fractional_end(self):
+        shader = (ROOT / 'rendering/gl_programs/extruded_bubble_program.py').read_text()
+        self.assertIn('int last = max(int(ceil(wakeField(owner, WAKE_COUNT) - 1e-4)), 1);', shader)
+        self.assertIn('wakeField(owner, WAKE_LEAD) + wakeField(owner, WAKE_COUNT) - 1.0', shader)
 
     def test_wake_trails_choose_trailing_bubbles_and_zero_keeps_no_history(self):
         from dataclasses import replace

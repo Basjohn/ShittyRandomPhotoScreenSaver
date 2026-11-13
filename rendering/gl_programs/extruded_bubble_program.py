@@ -1426,7 +1426,8 @@ float trailReach(int owner) {
 // by segment slid with the bubble and jumped back at every new point (the beads' teleport, the root's snap).
 vec3 trailWater(int owner, float c) {
     float lead = wakeField(owner, WAKE_LEAD);
-    int last = max(int(wakeField(owner, WAKE_COUNT) + 0.5), 1);
+    // The trail ends between points while its oldest water ages out (a fractional count): the path holds that end.
+    int last = max(int(ceil(wakeField(owner, WAKE_COUNT) - 1e-4)), 1);
     float f = c <= lead ? c / max(lead, 1e-4) : 1.0 + (c - lead);   // 0 the bubble, k its k-th point
     f = clamp(f, 0.0, float(last));
     int i = min(int(floor(f)), last - 1);
@@ -2005,11 +2006,10 @@ PARTICLE_VERTEX, SPECK_VERTEX, PARTICLE_FRAGMENT = _PARTICLES["proxies"], _PARTI
 # The traced glass (the shells, the procedural beads, the near layer; the fused clusters and their near variant) keeps
 # its loose uniforms: on one block each family drew 1-2 pixels per affected frame one 8-bit level apart in OpenGL
 # (shells/beads/near 26 of 549 recorded frames, clusters 14), so N1.6 does not convert it here; it converts at its port.
-# The wake trails' veils. Their background sampler is at unit 0, the unit it read as a loose uniform: the renderer
-# never gave it the captured background's unit (a defect kept as it is here, so the conversion stays bit-identical).
+# The wake trails' veils: their refraction reads the captured background on its unit, as the traced glass does (from
+# f0ead35b until 1D.11 it read unit 0, which the shafts' blur always leaves empty: a veil bent black, not the water).
 _TRAILS, TRAIL_BLOCK = portable_family({"vertex": TRAIL_VERTEX, "fragment": TRAIL_FRAGMENT},
-                                       (("vertex", ("fragment",)),), block="EbTrails",
-                                       samplers={**EB_SAMPLERS, "uBackground": 0})
+                                       (("vertex", ("fragment",)),), block="EbTrails", samplers=EB_SAMPLERS)
 TRAIL_VERTEX, TRAIL_FRAGMENT = _TRAILS["vertex"], _TRAILS["fragment"]
 
 
