@@ -346,6 +346,42 @@ def test_scene_readiness_preserves_generation_zero_and_requires_intentional_fram
     assert replace(ready, scene_graph_invalidated=True).ready_for_reveal is False
 
 
+@pytest.mark.parametrize("backend", ["vulkan", "opengl"])
+def test_presented_frame_is_published_only_without_a_background_renderer(backend, qt_app, monkeypatch) -> None:
+    # D10: on a backend without the background family's renderers the presented frame is the reveal's input
+    # (DisplayManager._startup_reveal_admits); on OpenGL the scene publishes exactly what it published before.
+    from rendering import transition_registry
+    from rendering.quick import bootstrap
+
+    monkeypatch.setattr(bootstrap, "quick_backend_api", lambda: backend)
+    without_background = not transition_registry.background_family_available_on_backend()
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(                       # never shown: the swap is emitted, not rendered
+        screen_index=0,
+        runtime_generation=0,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    published: list[QuickSceneReadiness] = []
+    controller.readiness_changed.connect(published.append)
+    try:
+        assert controller.readiness.frame_presented is False
+        for _ in range(3):
+            window.frameSwapped.emit()
+            qt_app.processEvents()
+        assert controller.readiness.frame_presented is without_background
+        assert [state.frame_presented for state in published] == ([True] if without_background else [])
+        assert controller.readiness.background_renderer_ready is False     # no background fact is invented
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
 def test_factory_shares_only_qml_compile_state_and_creates_per_display_contexts():
     source = (ROOT / "rendering" / "quick" / "scene_controller.py").read_text(
         encoding="utf-8"
