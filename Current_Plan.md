@@ -608,6 +608,17 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
 - [ ] N6.5 The opt-in deformable sheet. **Low potential until a consumer.**
 - [ ] N6.6 Lightning: procedural bolt geometry and its light. **Low potential until a consumer** (one effect).
 
+- [ ] N6.7 Dense geometry route (operator, 13 Nov: mesh shaders for fidelity on the high-end modes). It is a
+  measured candidate, admitted by evidence, not by a consumer. Mesh shaders (`VK_EXT_mesh_shader`) are recorded
+  as raw Vulkan on the core's own device (D6) inside Qt's frame, with a compute-cull plus indirect-draw twin
+  (Qt 6.12 `drawIndirect`) for OpenGL and any device without the extension: the fast path, never the only path.
+  - Admitted when N2.6's per-pass timers show a ported mode's geometry pass is primitive-bound, or when a
+    fidelity target needs more geometry than the current path can feed. Candidates: Extruded Bubble's beads and
+    bubbles as real meshes, Neon Lake's terrain level of detail and culling, Waveform's ribbons, N6.2's scene
+    geometry, N6.3's smoke.
+  - Proof: the same picture as the twin; GPU time against the twin on the candidate's pass, median and p90;
+    validation clean; the twin exact on OpenGL.
+
 ### Item 9. After the native core: SMP foundations, then modes
 
 Port-readiness rules bind all new GPU code now (the backend decision). Expanded Visualizer continues meanwhile
