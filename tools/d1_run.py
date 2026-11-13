@@ -1074,9 +1074,17 @@ def off_display_violates(hwnd, window_monitor: tuple[int, int, int, int], monito
     return not (unseen_ok and live_check.window_could_show(hwnd) is None)
 
 
-def off_display_windows(pids: set[int], monitor: Monitor, *, unseen_ok: bool = False) -> list[str]:
-    """Visible windows of ``pids`` whose monitor is not ``monitor`` (``unseen_ok``: except those that cannot show a
-    pixel or take a click, ``visualizer_live_check.window_could_show``: the always-invisible display's window)."""
+@dataclass(frozen=True)
+class VisibleWindow:
+    """One visible window of the saver's process tree, as one scan saw it."""
+
+    hwnd: int
+    monitor: tuple[int, int, int, int]      # the rcMonitor of its nearest monitor
+    description: str
+
+
+def visible_windows(pids: set[int]) -> list[VisibleWindow]:
+    """Every visible top-level window of ``pids`` with its monitor: one ``EnumWindows`` scan."""
     from ctypes import wintypes
 
     user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -1086,9 +1094,9 @@ def off_display_windows(pids: set[int], monitor: Monitor, *, unseen_ok: bool = F
                     ("dwFlags", wintypes.DWORD)]
 
     user32.MonitorFromWindow.restype = wintypes.HMONITOR
-    found: list[str] = []
+    found: list[VisibleWindow] = []
 
-    def check(hwnd, _lparam):
+    def collect(hwnd, _lparam):
         pid = wintypes.DWORD()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
         if pid.value in pids and user32.IsWindowVisible(hwnd):
@@ -1096,17 +1104,43 @@ def off_display_windows(pids: set[int], monitor: Monitor, *, unseen_ok: bool = F
             info.cbSize = ctypes.sizeof(info)
             user32.GetMonitorInfoW(user32.MonitorFromWindow(hwnd, 2), ctypes.byref(info))     # NEAREST
             r = info.rcMonitor
-            if off_display_violates(hwnd, (r.left, r.top, r.right, r.bottom), monitor, unseen_ok=unseen_ok):
-                rect = wintypes.RECT()
-                user32.GetWindowRect(hwnd, ctypes.byref(rect))
-                name = ctypes.create_unicode_buffer(256)
-                user32.GetClassNameW(hwnd, name, 256)
-                found.append(f"hwnd {hwnd} class {name.value} rect {(rect.left, rect.top, rect.right, rect.bottom)} "
-                             f"on monitor {(r.left, r.top, r.right, r.bottom)}")
+            rect = wintypes.RECT()
+            user32.GetWindowRect(hwnd, ctypes.byref(rect))
+            name = ctypes.create_unicode_buffer(256)
+            user32.GetClassNameW(hwnd, name, 256)
+            monitor_rect = (r.left, r.top, r.right, r.bottom)
+            found.append(VisibleWindow(
+                int(hwnd), monitor_rect,
+                f"hwnd {hwnd} class {name.value} rect {(rect.left, rect.top, rect.right, rect.bottom)} "
+                f"on monitor {monitor_rect}"))
         return True
 
-    user32.EnumWindows(live_check._EnumWindowsProc(check), 0)
+    user32.EnumWindows(live_check._EnumWindowsProc(collect), 0)
     return found
+
+
+def windows_off_monitors(windows: list[VisibleWindow], monitors: tuple[Monitor, ...], *,
+                         unseen_ok: bool = False) -> list[str]:
+    """The windows of one scan that are on none of ``monitors`` (``off_display_violates`` against each), by handle."""
+    return [window.description for window in windows
+            if all(off_display_violates(window.hwnd, window.monitor, monitor, unseen_ok=unseen_ok)
+                   for monitor in monitors)]
+
+
+def off_display_windows(pids: set[int], monitor: Monitor, *, unseen_ok: bool = False,
+                        scan=visible_windows) -> list[str]:
+    """Visible windows of ``pids`` whose monitor is not ``monitor`` (``unseen_ok``: except those that cannot show a
+    pixel or take a click, ``visualizer_live_check.window_could_show``: the always-invisible display's window)."""
+    return windows_off_monitors(scan(pids), (monitor,), unseen_ok=unseen_ok)
+
+
+def two_display_guard(monitor: Monitor, second: Monitor, *, scan=visible_windows):
+    """The lead's two-display run (``--second-display-visible``): a window violates only when it is on neither named
+    monitor. Each check is one scan, each window judged against both monitors by its handle in that scan (two scans
+    compared as strings missed a window that moved, or changed its rect, between them)."""
+    def guard(pids: set[int]) -> list[str]:
+        return windows_off_monitors(scan(pids), (monitor, second))
+    return guard
 
 
 def supervise(command: list[str], *, log_path: Path, deadline_s: float, guard=None, poll_s: float = 0.25,
@@ -1245,8 +1279,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "--display; steps reach it as KIND@N with grab, hover or press (in process)")
     parser.add_argument("--second-display-visible", action="store_true",
                         help="the lead's two-display run: the --with-hidden-display window is shown, not invisible "
-                             "(needs --allow-primary when either display is the primary; never in tests, recipes or "
-                             "automated runs; agents never pass it)")
+                             "(always needs --with-hidden-display and --allow-primary, never --hidden; never in tests, "
+                             "recipes or automated runs; agents never pass it)")
     parser.add_argument("--startup-grace", type=float, default=90.0, help="watchdog: seconds allowed before the "
                                                                           "self-exit countdown starts (default 90)")
     parser.add_argument("--teardown-grace", type=float, default=45.0, help="watchdog: seconds allowed after it")
@@ -1325,10 +1359,7 @@ def main(argv=None) -> int:
         # The lead's two-display run: a window violates only when it is on neither of the two named monitors.
         second = match_monitor(next(d for d in displays if d.index == args.with_hidden_display), win32_monitors(),
                                allow_primary=True)
-
-        def guard(pids):
-            outside_second = set(off_display_windows(pids, second))
-            return [entry for entry in off_display_windows(pids, monitor) if entry in outside_second]
+        guard = two_display_guard(monitor, second)
     else:
         # With --with-hidden-display, a window off the chosen monitor is admitted only while it cannot show a pixel.
         guard = partial(off_display_windows, monitor=monitor,

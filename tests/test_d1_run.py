@@ -177,6 +177,41 @@ def test_the_guard_admits_an_off_display_window_only_while_it_cannot_show_a_pixe
     assert d1_run.off_display_violates(7, other, monitor, unseen_ok=False)           # only with the option
 
 
+def test_the_two_display_guard_judges_each_window_of_one_scan_by_handle():
+    """``--second-display-visible``: a window violates only when it is on neither named monitor. One scan per check;
+    a window that moves between two scans (or whose rect changes) is still judged, by its handle."""
+    chosen, second = MONITORS
+    elsewhere = (6400, 0, 8320, 1080)                                    # a third monitor
+    as_rect = lambda monitor: (monitor.left, monitor.top, monitor.right, monitor.bottom)  # noqa: E731
+    scans = [
+        [d1_run.VisibleWindow(1, as_rect(chosen), "hwnd 1 rect A"), d1_run.VisibleWindow(2, as_rect(second), "hwnd 2"),
+         d1_run.VisibleWindow(3, elsewhere, "hwnd 3 rect (6400, 0, 7000, 600)")],
+        # The next scan of the same windows: hwnd 3 has moved (a new rect, so a new description).
+        [d1_run.VisibleWindow(1, as_rect(chosen), "hwnd 1 rect A"), d1_run.VisibleWindow(2, as_rect(second), "hwnd 2"),
+         d1_run.VisibleWindow(3, elsewhere, "hwnd 3 rect (6500, 0, 7100, 600)")],
+    ]
+    calls = []
+
+    def scan(pids):
+        calls.append(pids)
+        return scans[len(calls) - 1]
+
+    guard = d1_run.two_display_guard(chosen, second, scan=scan)
+    assert guard({9}) == ["hwnd 3 rect (6400, 0, 7000, 600)"]
+    assert len(calls) == 1                                                # one scan per check
+    # Both admitted monitors stay admitted; only the window on neither is named.
+    assert d1_run.windows_off_monitors(scans[0][:2], (chosen, second)) == []
+
+    # Negative control: the old guard, two scans compared as strings, lets the moving window through.
+    calls.clear()
+
+    def old_guard(pids):
+        outside_second = set(d1_run.off_display_windows(pids, second, scan=scan))
+        return [entry for entry in d1_run.off_display_windows(pids, chosen, scan=scan) if entry in outside_second]
+
+    assert old_guard({9}) == [] and len(calls) == 2
+
+
 def _fake_appdata(tmp_path) -> Path:
     appdata = tmp_path / "appdata"
     (appdata / "SRPSS").mkdir(parents=True)
