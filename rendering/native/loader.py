@@ -32,11 +32,18 @@ from typing import Any, Mapping
 from rendering.native import runtime_check
 from rendering.native.composite import CompositeItem
 from rendering.native.hosts import HiddenHost, WindowHost
+from rendering.native.packet_reader import (
+    PacketReader,
+    SchemaTableMismatch,
+    python_schema_table,
+    reader_config,
+    schema_table_differences,
+)
 
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 4
+EXPECTED_ABI = 5
 HOST_KINDS = ("window", "hidden")
 
 
@@ -137,6 +144,26 @@ class NativeCore:
 
     def live_hosts(self) -> int:
         return int(self.module.live_hosts())
+
+    def frame_schemas(self) -> dict:
+        """The frame ABI version, mode codes and native schemas compiled into the module (N2.3)."""
+        return json.loads(self.module.frame_schemas())
+
+    def packet_reader(self, mapping_name: str, *, expect: Mapping[str, int] | None = None,
+                      controls: tuple[str, ...] = ()) -> PacketReader:
+        """The core's reader of a frame stream (N2.3, D1 and D2) on its own view of the named mapping. ``expect``: the
+        stream's identity (runtime and engine generation, activation id, mode code; a slot of another is foreign);
+        ``controls``: a harness's negative controls (``READER_CONTROLS``). Refused while the module's compiled-in
+        schemas differ from this build's (``SchemaTableMismatch``)."""
+        differences = schema_table_differences(self.frame_schemas(), python_schema_table())
+        if differences:
+            raise SchemaTableMismatch(f"{MODULE_NAME}'s frame schemas are not this build's: {'; '.join(differences)}")
+        config = reader_config(expect, tuple(controls))
+        return PacketReader(self.module, self.module.packet_reader_open(str(mapping_name), config))
+
+    def packet_reader_live(self) -> dict:
+        """Packet readers alive, views mapped and handles: all zero once every reader is closed."""
+        return json.loads(self.module.packet_reader_live())
 
     def gpu_timer_live(self) -> dict:
         """GPU timers alive in the process and the query objects they hold (``timers``, ``query_pools``,
