@@ -38,13 +38,13 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.7 (High); 1D.10 (Medium).
+**Now (in flight):** N2.7's leftovers next (High); 1D.10 (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
 - High:
-  1. N2.7 (the backend owner and the rehearsal path), then the C++ packet reader (N2.3), toward N2.5 (Spectrum
-     at parity) and N2.8.
+  1. N2.7's Quick shader bake (before N2.8), then the C++ packet reader (N2.3), toward N2.5 (Spectrum at parity)
+     and N2.8.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
   1. 1D.10 (the 13 Nov audit's must-fixes first), then 1D.11 with 1D.8 as one dispatch (bind the trails'
@@ -423,10 +423,17 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 Order inside N2 (the numbers stay stable for the documents that cite them): N2.1 to N2.4, then N2.6, N2.7, then
 N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the Python renderer's retirement.
 
-- [ ] N2.7 The backend owner and the rehearsal path (D10): one owner in `rendering/quick/bootstrap.py`, a
-  diagnostic command-line switch, the Vulkan window set up through the module (D6), "available on this backend"
-  in the mode and transition registries (an unported mode is not offered, an unported transition is Crossfade),
-  the start-up fallback to OpenGL with its remembered failed start and a forced-failure negative control.
+- [ ] N2.7 leftovers (N2.7 merged 14 Nov: `--graphics-backend=vulkan`, the owner in `rendering/quick/bootstrap.py`,
+  `renderer_backends` in the registries, the remembered failed start; D10 "As built"):
+  - [ ] Before N2.8: the Quick shaders `surface_material`, `widget_glow` and `text_legibility` are baked `--glsl
+    460` only (their source comments say so), so cards may not draw on Vulkan. Bake them for every target
+    through the qrc/qsb tooling, and prove the cards draw on the Vulkan backend in a hidden run.
+  - [ ] Exit on Vulkan: `os._exit` with a live Vulkan window crashed a probe (0xC0000005). Check the product's own
+    exit and the `--exit-after` path on Vulkan; the window must be released before the process ends, with a test.
+  - [ ] Settings still lists modes that have no renderer on the running backend. Grey them out with a
+    one-line reason when the diagnostic backend is on (the runtime already skips them).
+  - [ ] Stale comment: `native/core/src/module.cpp:11` ("N2.7 adds the backend owner"). Fix it with the next C++
+    round.
 - [ ] N2.5 Spectrum at parity on both backends (the port rule above; scheduled after N2.6 and N2.7, which its rule
   needs: (e) GPU time per pass is N2.6's timer, (f) the bounded Vulkan rehearsal is N2.7's path and N2.8's run).
   The Python renderer retires only after N2.8 passes. N1.6's Spectrum group is merged (`spectrum.frag` bakes);
