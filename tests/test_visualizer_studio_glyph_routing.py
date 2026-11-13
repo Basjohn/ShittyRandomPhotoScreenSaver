@@ -90,6 +90,8 @@ def test_glyph_capabilities_are_retained_until_qml_root_creation():
 
 
 def test_fullscreen_rotate_uses_existing_edit_card_and_model(monkeypatch):
+    """The expanded card's Rotate runs Fullscreen Edit's card turn (``rotateContent``). Outside Edit it is Saved in
+    the same call (plan 1D.7: Rotate never drops the user into Edit); inside Edit it stays the draft step."""
     from engine import display_manager
     from core.expanded_visualizer_takeover import Phase
     from rendering.quick.fullscreen_overlay_edit import CARD_EDIT_ID
@@ -100,16 +102,22 @@ def test_fullscreen_rotate_uses_existing_edit_card_and_model(monkeypatch):
     scene.custom_layout_overlay = SimpleNamespace(model=SimpleNamespace(_items=[card],
                                           rotateContent=lambda index: actions.append(index) or True))
     unit = display_unit_double(display_runtime_double(scene_controller=scene))
-    layout = SimpleNamespace(is_fullscreen=True)
+    layout = SimpleNamespace(is_fullscreen=True, is_editing=False, visualizer_activation_idle=True)
     coordinator = SimpleNamespace(phase=Phase.EXPANDED, blocks_ordinary_layout=True)
     owner = visualizer_owner_double(SimpleNamespace(presentation_policy=SimpleNamespace(
         content_rotation_capable=True)))
     manager = bare_display_manager(_retired=False, displays=[unit], _quick_visualizer_unit=unit,
                                    _quick_visualizer_owner=owner, _quick_custom_layout_owner=layout,
                                    _expanded_display_coordinator=coordinator,
-                                   _start_quick_custom_layout_session=lambda _entry: actions.append("start") or True)
+                                   _start_quick_custom_layout_session=lambda _entry: actions.append("start") or True,
+                                   _save_quick_custom_layout=lambda: actions.append("save") or True)
+    assert DisplayManager._route_hover_edit_glyph(manager, unit, "rotate", "spotify_visualizer")
+    assert actions == ["start", 0, "save"]
+    actions.clear()
+    layout.is_editing = True
     assert DisplayManager._route_hover_edit_glyph(manager, unit, "rotate", "spotify_visualizer")
     assert actions == ["start", 0]
+    layout.is_editing = False
     actions.clear()
     coordinator.phase = Phase.ENTERING
     assert not DisplayManager._route_hover_edit_glyph(manager, unit, "rotate", "spotify_visualizer")

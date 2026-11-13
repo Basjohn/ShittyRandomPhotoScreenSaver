@@ -1377,6 +1377,17 @@ class QuickDisplayVisualizerOwner:
         self._committed_layout_extent = extent
         self._controller.hydrate_committed_layout_metrics(extent, rotations)
 
+    def present_custom_layout_draft(self) -> None:
+        """Resolve and commit the current route once at a CUSTOM Save edge, so the drawn record carries the working
+        override before ``commit_live_custom_layout`` validates against it.
+
+        While the card is display-wide (Fullscreen Edit's turn) the route consumes the override only at its next
+        publication, so a Save in the same GUI turn as the turn found the drawn record stale and rebuilt the runtime
+        (Rotate outside Edit commits at once, plan 1D.7). One event edge, never a cadence.
+        """
+        if self._started and not self._retired:
+            self._reapply_route(request_present=True)
+
     def commit_live_custom_layout(
         self,
         *,
