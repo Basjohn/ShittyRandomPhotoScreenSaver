@@ -21,7 +21,7 @@ import sys
 import time
 from typing import Any, Callable, Iterable, Mapping
 
-from PySide6.QtCore import QAbstractItemModel, QEvent, QModelIndex, Qt, QTimer, Signal
+from PySide6.QtCore import QAbstractItemModel, QEvent, QModelIndex, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -787,6 +787,19 @@ class DefaultValueDelegate(QStyledItemDelegate):
             return False
         return super().eventFilter(editor, event)
 
+    # Editor signals reach bound methods, never lambdas closing over the delegate or the editor, so
+    # neither is kept alive by its own connection.
+    def _commit_sending_editor(self, *_args) -> None:
+        editor = self.sender()
+        if isinstance(editor, QWidget):
+            self.commitData.emit(editor)
+
+    def _commit_and_close_sending_editor(self, *_args) -> None:
+        editor = self.sender()
+        if isinstance(editor, QWidget):
+            self.commitData.emit(editor)
+            self.closeEditor.emit(editor)
+
     def createEditor(self, parent, option, index):  # noqa: ANN001, N802
         value = index.data(VALUE_ROLE)
         path = index.data(PATH_ROLE)
@@ -799,12 +812,11 @@ class DefaultValueDelegate(QStyledItemDelegate):
             )
             editor.setMinimumHeight(30)
             editor.setMaximumHeight(34)
-            editor.color_changed.connect(lambda _color, target=editor: self.commitData.emit(target))
+            editor.color_changed.connect(self._commit_sending_editor)
             return editor
         if isinstance(path, tuple) and path[-1].lower() == "font_family":
             editor = QFontComboBox(parent)
-            editor.activated.connect(lambda _index, target=editor: self.commitData.emit(target))
-            editor.activated.connect(lambda _index, target=editor: self.closeEditor.emit(target))
+            editor.activated.connect(self._commit_and_close_sending_editor)
             return editor
         if isinstance(value, bool):
             editor = QComboBox(parent)
@@ -928,7 +940,11 @@ class DefaultSettingsEditor(QMainWindow):
         self._apply_tool_theme()
         self._reload_tree()
         self._update_undo_state()
-        QTimer.singleShot(0, lambda: apply_native_backdrop(self, self._theme_resolution))
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        # The native backdrop needs the window's native handle, which exists once it is shown.
+        apply_native_backdrop(self, self._theme_resolution)
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -1001,7 +1017,7 @@ class DefaultSettingsEditor(QMainWindow):
         self.changed_only_check.setToolTip(
             "Show only unsaved edits; in the MC view, also every value MC changes from Normal."
         )
-        self.changed_only_check.toggled.connect(lambda _checked: self._apply_filter(self.search_edit.text()))
+        self.changed_only_check.toggled.connect(self._on_changed_only_toggled)
         controls.addWidget(self.changed_only_check)
         self.count_label = QLabel()
         controls.addWidget(self.count_label)
@@ -1078,10 +1094,13 @@ class DefaultSettingsEditor(QMainWindow):
                 apply_theme=self._set_tool_theme,
             )
             self._appearance_dialog = dialog
-            dialog.finished.connect(lambda _code: setattr(self, "_appearance_dialog", None))
+            dialog.finished.connect(self._on_appearance_finished)
         dialog.show()
         dialog.raise_()
         dialog.activateWindow()
+
+    def _on_appearance_finished(self, _code: int) -> None:
+        self._appearance_dialog = None
 
     def _theme_qcolor(self, token: str) -> QColor:
         value = self._theme_resolution.theme.color(token)
@@ -1284,31 +1303,35 @@ class DefaultSettingsEditor(QMainWindow):
             self._building_tree = False
         self._set_status(f"Unsaved change: {'.'.join(path)}")
 
+    def _on_changed_only_toggled(self, _checked: bool) -> None:
+        self._apply_filter(self.search_edit.text())
+
     def _apply_filter(self, text: str) -> None:
         needle = text.strip().lower()
         changed_only = self.changed_only_check.isChecked()
-
-        def _visit(item: QTreeWidgetItem, ancestor_matched: bool) -> bool:
-            own = " ".join(item.text(column) for column in range(4)).lower()
-            path = item.data(0, PATH_ROLE) or item.data(1, PATH_ROLE)
-            if isinstance(path, tuple):
-                own += " " + ".".join(path).lower()
-            # A matching section shows everything inside it.
-            own_match = not needle or needle in own or ancestor_matched
-            child_match = False
-            for index in range(item.childCount()):
-                child_match = _visit(item.child(index), own_match and bool(needle)) or child_match
-            if isinstance(path, tuple):
-                matches = own_match and (not changed_only or self._is_changed(path))
-            else:
-                matches = child_match or (own_match and not changed_only and item.childCount() == 0)
-            item.setHidden(not matches)
-            if (needle or changed_only) and child_match:
-                item.setExpanded(True)
-            return matches
-
         for index in range(self.tree.topLevelItemCount()):
-            _visit(self.tree.topLevelItem(index), False)
+            self._filter_item(self.tree.topLevelItem(index), False, needle, changed_only)
+
+    # A method, not a recursive closure: a closure that calls itself holds its own cell, a reference
+    # cycle through ``self`` that left the window for the cycle collector to free at any allocation.
+    def _filter_item(self, item: QTreeWidgetItem, ancestor_matched: bool, needle: str, changed_only: bool) -> bool:
+        own = " ".join(item.text(column) for column in range(4)).lower()
+        path = item.data(0, PATH_ROLE) or item.data(1, PATH_ROLE)
+        if isinstance(path, tuple):
+            own += " " + ".".join(path).lower()
+        # A matching section shows everything inside it.
+        own_match = not needle or needle in own or ancestor_matched
+        child_match = False
+        for index in range(item.childCount()):
+            child_match = self._filter_item(item.child(index), own_match and bool(needle), needle, changed_only) or child_match
+        if isinstance(path, tuple):
+            matches = own_match and (not changed_only or self._is_changed(path))
+        else:
+            matches = child_match or (own_match and not changed_only and item.childCount() == 0)
+        item.setHidden(not matches)
+        if (needle or changed_only) and child_match:
+            item.setExpanded(True)
+        return matches
 
     def _set_status(self, message: str) -> None:
         self.status_label.setText(message)
