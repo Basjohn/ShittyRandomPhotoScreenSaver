@@ -6,20 +6,23 @@ from rendering.quick.render.gl_resources import delete_program
 
 @pytest.fixture
 def particle_light(qt_app):
-    from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_program import PARTICLE_VERTEX
+    from OpenGL import GL
+    from rendering.gl_programs.extruded_bubble_program import PARTICLE_BLOCK, PARTICLE_VERTEX
     from rendering.quick.render.gl_resources import compile_program
+    from tools.pass_block_gl import PassBlockGL
     from tools.transition_contact_sheet import TransitionCapture
 
+    gl = PassBlockGL(GL)          # the particles' values are their pass block (N1.6), set by name as before
     target = TransitionCapture(1, 1)
     program = texture = vao = 0
     try:
         # Keep the actual vertex colour/geometry law; isolate it from Gaussian,
         # bloom, tone mapping and framebuffer quantisation in this diagnostic.
         program = compile_program(PARTICLE_VERTEX, '''#version 460 core
-flat in vec3 vColour;out vec4 colour;
+layout(location = 1) flat in vec3 vColour;out vec4 colour;
 void main(){colour=vec4(vColour,1.);}
 ''', label='particle physical light strength')
+        gl.register(program, PARTICLE_BLOCK)
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
         texture = int(gl.glGenTextures(1))
         gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
@@ -66,6 +69,7 @@ void main(){colour=vec4(vColour,1.);}
 
         yield draw
     finally:
+        gl.release()
         if vao:
             gl.glDeleteVertexArrays(1, [vao])
         if texture:

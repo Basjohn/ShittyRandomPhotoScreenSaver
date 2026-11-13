@@ -1995,6 +1995,13 @@ FULLSCREEN_DEFAULTS = {"uLightFaces": (0.0, 1.0, 0.0), "uLightTravel": (0.0, -1.
                        "uLightAxis": (0.0, -1.0, 0.0), "uLightReach": (0.0, 0.0, 0.0)}
 
 
+# The glint proxies and the procedural particulate (one fragment, two vertex stages).
+_PARTICLES, PARTICLE_BLOCK = portable_family(
+    {"proxies": PARTICLE_VERTEX, "specks": SPECK_VERTEX, "fragment": PARTICLE_FRAGMENT},
+    (("proxies", ("fragment",)), ("specks", ("fragment",))), block="EbParticles", samplers=EB_SAMPLERS)
+PARTICLE_VERTEX, SPECK_VERTEX, PARTICLE_FRAGMENT = _PARTICLES["proxies"], _PARTICLES["specks"], _PARTICLES["fragment"]
+
+
 def block_defaults(layout) -> bytes:
     """The packed block a program of ``layout``'s family starts from (its uniforms' initial values)."""
     return pack_block(layout, FULLSCREEN_DEFAULTS if layout is FULLSCREEN_BLOCK else {})
@@ -2016,6 +2023,7 @@ __all__ = [
     "FULL_VERTEX",
     "NEAR_FRAGMENT",
     "NEAR_CLUSTER_FRAGMENT",
+    "PARTICLE_BLOCK",
     "PARTICLE_FRAGMENT",
     "PARTICLE_VERTEX",
     "SHADE_GLSL",

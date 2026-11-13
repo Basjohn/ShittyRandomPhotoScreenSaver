@@ -456,12 +456,14 @@ def _frame(snapshot, quad_vao):
 def test_an_instance_of_no_size_draws_no_quad(qt_app, stage):
     """Generated instances left out (or faded to nothing) carry radius 0. The vertex stages' size floors (half a pixel
     so specks resolve) once drew each as a shaded dot; with no size there is no quad at all."""
-    from OpenGL import GL as gl
+    from OpenGL import GL
 
-    from rendering.gl_programs.extruded_bubble_program import BUBBLE_VERTEX, PARTICLE_VERTEX
+    from rendering.gl_programs.extruded_bubble_program import BUBBLE_VERTEX, PARTICLE_BLOCK, PARTICLE_VERTEX
     from rendering.quick.render.gl_resources import compile_program
+    from tools.pass_block_gl import PassBlockGL
     from tools.transition_contact_sheet import TransitionCapture
 
+    gl = PassBlockGL(GL)          # the stages' values are their pass block (N1.6), set by name as before
     width, height = 96, 64
     capture = TransitionCapture(width, height)
     try:
@@ -470,6 +472,9 @@ def test_an_instance_of_no_size_draws_no_quad(qt_app, stage):
         program = compile_program(BUBBLE_VERTEX if stage == "bubble" else PARTICLE_VERTEX,
                                   "#version 460 core\nout vec4 colour;\nvoid main() { colour = vec4(1.0); }\n",
                                   label="no-size test")
+        block = {"particle": PARTICLE_BLOCK}.get(stage)
+        if block is not None:
+            gl.register(program, block)
         gl.glUseProgram(program)
         for name, value in (("uFocus", 10.0), ("uAperture", 0.0), ("uCrisp", 0.0), ("uNearLayer", 0.0),
                             ("uPixel", 2.0 * tan[1] / height), ("uSpecks", 1.0), ("uParticleRadiusShare", 1.0)):
@@ -505,6 +510,7 @@ def test_an_instance_of_no_size_draws_no_quad(qt_app, stage):
         gl.glDeleteVertexArrays(1, [vao])
         delete_program(program)
     finally:
+        gl.release()
         capture.close()
 
 

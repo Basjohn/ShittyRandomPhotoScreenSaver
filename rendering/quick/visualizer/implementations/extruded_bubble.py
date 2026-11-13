@@ -30,7 +30,7 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs.extruded_bubble_program import (
     BACKDROP_FRAGMENT, BEAD_VERTEX, BLUR_FRAGMENT, BUBBLE_FRAGMENT, BUBBLE_VERTEX, CLUSTER_FRAGMENT, CLUSTER_VERTEX, FULL_VERTEX,
-    FULLSCREEN_BLOCK, NEAR_FRAGMENT, NEAR_CLUSTER_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT,
+    FULLSCREEN_BLOCK, NEAR_FRAGMENT, PARTICLE_BLOCK, NEAR_CLUSTER_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT,
     SPECK_VERTEX, TRAIL_FRAGMENT, TRAIL_SEGMENTS, TRAIL_VERTEX, block_defaults,
 )
 from rendering.gl_programs.scene3d import _STD140
@@ -77,7 +77,8 @@ _PROGRAMS = (
 
 
 # The programs whose values are a pass block (N1.6), by key: each family's one layout.
-_BLOCKS = {"backdrop": FULLSCREEN_BLOCK, "shafts": FULLSCREEN_BLOCK, "blur": FULLSCREEN_BLOCK}
+_BLOCKS = {"backdrop": FULLSCREEN_BLOCK, "shafts": FULLSCREEN_BLOCK, "blur": FULLSCREEN_BLOCK,
+           "proxies": PARTICLE_BLOCK, "specks": PARTICLE_BLOCK}
 # Preparation and drawing use these exact resource keys. Perspective is the only projection (Orthographic and
 # its constant-folded per-projection program specializations retired 5 Nov 2026).
 _PROGRAM_ROWS = tuple((key, (key, vertex, fragment)) for key, vertex, fragment in _PROGRAMS)
@@ -707,7 +708,8 @@ class QuickExtrudedBubbleRenderer:
                     gl.glDepthMask(gl.GL_FALSE)
                     gl.glUseProgram(programs["specks"])
                     gl.glBindVertexArray(self._empty_vao)
-                    self._draw_material_instances(specks,material)
+                    with self._bound(programs["specks"]):
+                        self._draw_material_instances(specks,material)
                     gl.glDepthMask(gl.GL_TRUE)
                     gl.glDisablei(gl.GL_BLEND, 0)
                 background, _depth = self._target.background(frame, r)
@@ -806,7 +808,8 @@ class QuickExtrudedBubbleRenderer:
             gl.glDepthMask(gl.GL_FALSE)
             gl.glUseProgram(proxies)
             gl.glBindVertexArray(self._proxies.vao)
-            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, proxy_count)
+            with self._bound(proxies):
+                gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, proxy_count)
             gl.glDepthMask(gl.GL_TRUE)
             gl.glDisablei(gl.GL_BLEND, 0)
 

@@ -62,6 +62,7 @@ from rendering.gl_programs.extruded_bubble_program import (  # the product's sha
     EB_SAMPLERS,
     FULLSCREEN_BLOCK,
     FULLSCREEN_DEFAULTS,
+    PARTICLE_BLOCK,
 )
 from rendering.gl_programs.portable import portable_program
 
@@ -923,7 +924,7 @@ def main():
         # Each product program's pass block by its fragment (N1.6), with what the block starts from.
         blocks = {ENV_FRAGMENT: (ENV_BLOCK, {}), BACKDROP_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS),
                   SHAFT_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS),
-                  BLUR_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS)}
+                  BLUR_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS), PARTICLE_FRAGMENT: (PARTICLE_BLOCK, {})}
         cleanup.callback(gl.release)
 
         def owned_program(*args, **kwargs):
