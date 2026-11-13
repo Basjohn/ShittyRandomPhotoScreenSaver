@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.7 (High); N1.6 Extruded Bubble (Medium).
+**Now (in flight):** N2.7 (High); 1D.10 (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,9 +47,8 @@ at the size asked.
      at parity) and N2.8.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. N1.6 Extruded Bubble (bit-identical on OpenGL or converted at its port).
-  2. 1D.10 (the 13 Nov audit's must-fixes first), then 1D.7 (hover actions without Edit), then 1D.8 (idle wake).
-  3. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
+  1. 1D.10 (the 13 Nov audit's must-fixes first), then 1D.7 (hover actions without Edit), then 1D.8 (idle wake).
+  2. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
      Sphere); a mode that cannot be made bit-identical in one dispatch converts at its port.
   3. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
@@ -1096,6 +1095,23 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   - `combo_knob_overlay.py` imports the private `_WeakWidgetSlot`: make it a public helper of one owner.
 - Not entered: the shadow-helper lifetime fix (8f821353) needs no historical bug entry, because Settings itself
   never freed widgets through the collector.
+
+### 1D.11 Extruded Bubble side defects from N1.6 (14 Nov; Opus Medium)
+
+- [ ] Live defect: the wake trails program never gets `uBackground`
+  (`rendering/quick/visualizer/implementations/extruded_bubble.py:609`, `:742`), so its refraction reads texture
+  unit 0 instead of the captured background on unit 5. Bind it.
+  - This is a visible change: render before and after on a real wallpaper for the lead's judgement.
+  - Write a regression test that fails on the old binding, and a historical bug entry (silent since the trails
+    landed, f0ead35b).
+- [ ] Port note (N5.6): the beads program puts its probe sampler and its `EbMaterialDrift` storage buffer
+  (`extruded_bubble_program.py:1441`) both at binding 6. That collides on Vulkan's single binding namespace;
+  renumber at the port.
+- [ ] Time the pass-block ring's fence waits (`glClientWaitSync`, 50 to 198 per run after N1.6) on the paired
+  harness. Raise the ring's depth if any wait costs more than a negligible amount.
+- The traced glass converts at its port (N5.6): converted alone it differs by one 8-bit level on 1-2 pixels in
+  14-26 of 549 frames (compiler rounding). Its probe geometry shader also stays on the ratchet (no HLSL for its
+  layered `gl_Layer` write).
 
 ### 1D.6 Leaving fullscreen on another display lands the card in a poor spot (operator, 13 Nov; Opus High, design first)
 
