@@ -705,7 +705,7 @@ class RecommendedMarkSlider(NoWheelSlider):
 def _build_spinbox_style(theme: SettingsThemeSpec | None = None) -> str:
     return _theme_qss("""
     /* Rounded inputs with opaque borders + circular stepper controls */
-    QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox {
+    QSpinBox, QDoubleSpinBox, QAbstractSpinBox {
         min-height: 34px;
         padding: 4px 48px 4px 16px;
         margin-bottom: 0px;
@@ -716,7 +716,21 @@ def _build_spinbox_style(theme: SettingsThemeSpec | None = None) -> str:
         border: 2px solid @@color:control.input.border@@;
         border-radius: 18px;
     }
-    
+
+    /* Standalone line edits share the rounded input skin (the right padding
+       is narrowed below). A spinbox's own editor is restyled further down. */
+    QLineEdit {
+        min-height: 34px;
+        padding: 4px 48px 4px 16px;
+        margin-bottom: 0px;
+        color: @@color:control.input.text@@;
+        font-family: 'Jost';
+        font-weight: 600;
+        background-color: @@color:control.input.surface@@;
+        border: 2px solid @@color:control.input.border@@;
+        border-radius: 18px;
+    }
+
     /* QAbstractSpinBox exposes a real alignment property (default: left).
        Qt's QSS text-align does not apply to spinboxes; centre the editor's
        value via its owner so suffixes and editable selections agree too. */
@@ -729,6 +743,7 @@ def _build_spinbox_style(theme: SettingsThemeSpec | None = None) -> str:
     QAbstractSpinBox > QLineEdit {
         background-color: @@color:control.input.surface@@;
         border: none;
+        min-height: 0px;
         padding: 0px;
         margin: 0px;
     }
