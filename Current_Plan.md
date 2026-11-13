@@ -1125,7 +1125,8 @@ Cause: `engine/display_manager.py:2742` (`_route_hover_edit_glyph`'s Edit part) 
 run every hover glyph action (Rotate, Restore Size, Close, Child Lock, transfers). For Rotate it leaves that
 session open, so the user lands in Edit. The fullscreen path at `:2697` does the same through
 `_start_quick_custom_layout_session`.
-- [ ] Each hover action outside Edit runs as one committed change with no Edit chrome: through the same owner
+- Child Lock is the exception: it still enters Edit, as it does today (operator, 14 Nov). A test pins that.
+- [ ] Each other hover action outside Edit runs as one committed change with no Edit chrome: through the same owner
   and model action (no second path), then committed and closed at once. Inside Edit it stays a draft step as
   today. Decide per action from the code, and record the decision: Close already ends without Edit? Do transfers
   stay as they are?
