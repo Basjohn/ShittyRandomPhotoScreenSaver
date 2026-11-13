@@ -79,7 +79,8 @@ def _excused(g: dict) -> bool:
 
 
 def message_groups(messages: dict) -> list[dict]:
-    """Errors and warnings grouped by (id, phase, source) with the caller chain below the layer and the loader."""
+    """Errors and warnings grouped by (id, phase, source, severity) with the caller chain below the layer and the
+    loader."""
     groups: dict = {}
     for e in messages.get("entries", []):
         if e.get("qt_known_false_positive"):
@@ -91,7 +92,8 @@ def message_groups(messages: dict) -> list[dict]:
             module = frame.split("+0x")[0]
             if not chain or chain[-1] != module:
                 chain.append(module)
-        key = (e.get("id"), e.get("phase"), e.get("source"))
+        # Severity is part of the key: a loader error must never ride in a loader warning's group.
+        key = (e.get("id"), e.get("phase"), e.get("source"), e.get("severity"))
         g = groups.setdefault(key, {"id": e.get("id"), "phase": e.get("phase"), "source": e.get("source"),
                                     "severity": e.get("severity"), "count": 0, "threads": [], "caller_modules": chain,
                                     "caller_frames": stack[last_layer + 1:last_layer + 13],
@@ -118,8 +120,8 @@ def validation_summary(messages: dict) -> dict:
     recorded: dict = {}
     unexplained_errors = unexplained_warnings = 0
     for g in groups:
-        if g.get("id") == "Loader Message":
-            continue
+        if g.get("id") == "Loader Message" and g.get("severity") != "error":
+            continue  # the loader's general warnings are not validation findings; a loader error is counted
         g["excused"] = _excused(g)
         if g["excused"]:
             recorded[g["qt_defect"]] = recorded.get(g["qt_defect"], 0) + g["count"]

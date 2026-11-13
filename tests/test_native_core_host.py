@@ -387,3 +387,23 @@ def test_the_validation_rule_excuses_only_qts_recorded_defects():
     assert validation.validation_summary(hazard)["clean"] is False
     dropped = {"errors": 0, "entries": [], "entries_dropped": 1}
     assert validation.validation_summary(dropped)["clean"] is False
+
+
+def test_the_loaders_warnings_are_skipped_and_its_errors_counted():
+    """Audit 13 Nov, low 1: a "Loader Message" group was skipped at any severity, so a loader error was never
+    unexplained. Its warnings stay out (not validation findings); its errors count, even beside a warning."""
+    import vk_validation as validation
+
+    def loader(severity, count=1):
+        return {"phase": "hidden", "source": "our_instance", "severity": severity, "id": "Loader Message",
+                "message": "loader", "count": count, "stack": ["vulkan-1.dll+0x10"]}
+
+    warnings_only = {"errors": 0, "warnings": 3, "entries": [loader("warning", 3)]}
+    summary = validation.validation_summary(warnings_only)
+    assert summary["clean"] is True and summary["warnings_total"] == 0
+    an_error = {"errors": 2, "warnings": 0, "entries": [loader("error", 2)]}
+    assert validation.validation_summary(an_error)["unexplained_errors"] == 2
+    # A warning first must not carry the error's group (and its count) out with it.
+    both = {"errors": 1, "warnings": 1, "entries": [loader("warning"), loader("error")]}
+    summary = validation.validation_summary(both)
+    assert summary["unexplained_errors"] == 1 and summary["unexplained_warnings"] == 0 and summary["clean"] is False
