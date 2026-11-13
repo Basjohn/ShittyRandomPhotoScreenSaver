@@ -561,19 +561,22 @@ def _cycle_hidden_qt_alone(engine, app) -> bool:
     item.setParentItem(window.contentItem())
     control.prepareThread(worker)
     held: dict = {}
+    steps: dict = {"initialized": False, "texture_created": False, "target_created": False, "frames": 0}
     gui = app.thread()
 
     def init():
-        if not control.initialize():
+        steps["initialized"] = bool(control.initialize())
+        if not steps["initialized"]:
             raise RuntimeError("QQuickRenderControl::initialize failed")
         rhi = control.rhi()
         texture = rhi.newTexture(QRhiTexture.Format.RGBA8, QSize(*HOST_SIZE), 1, QRhiTexture.Flag.RenderTarget)
-        texture.create()
+        steps["texture_created"] = bool(texture.create())
         target = rhi.newTextureRenderTarget(QRhiTextureRenderTargetDescription(QRhiColorAttachment(texture)),
                                             QRhiTextureRenderTarget.Flag.PreserveColorContents)
         rp = target.newCompatibleRenderPassDescriptor()
         target.setRenderPassDescriptor(rp)
-        target.create()
+        steps["target_created"] = bool(target.create())
+        steps["target_size"] = [target.pixelSize().width(), target.pixelSize().height()]
         window.setRenderTarget(QQuickRenderTarget.fromRhiRenderTarget(target))
         held.update(target=target, rp=rp, texture=texture)
 
@@ -582,6 +585,7 @@ def _cycle_hidden_qt_alone(engine, app) -> bool:
         control.sync()
         control.render()
         control.endFrame()
+        steps["frames"] += 1
 
     def end():
         window.setRenderTarget(QQuickRenderTarget())
@@ -595,7 +599,7 @@ def _cycle_hidden_qt_alone(engine, app) -> bool:
 
     try:
         call(init)
-        for _ in range(5):
+        for _ in range(QT_ALONE_FRAMES):
             control.polishItems()
             call(frame)
         call(end)
@@ -607,7 +611,18 @@ def _cycle_hidden_qt_alone(engine, app) -> bool:
         shiboken6.delete(window)
         shiboken6.delete(worker)
         _drop_item(app, item)
-    return True
+    return qt_alone_cycle_ok(steps)
+
+
+QT_ALONE_FRAMES = 5
+
+
+def qt_alone_cycle_ok(steps: dict) -> bool:
+    """The Qt-only hidden control's cycle rendered: the render control initialised, its texture and preserving target
+    were created at the host's size (a non-empty target), and every frame ran. Never a constant True."""
+    return (steps.get("initialized") is True and steps.get("texture_created") is True
+            and steps.get("target_created") is True and steps.get("target_size") == list(HOST_SIZE)
+            and steps.get("frames") == QT_ALONE_FRAMES)
 
 
 def _series(core, app, run, cycles: int) -> dict:

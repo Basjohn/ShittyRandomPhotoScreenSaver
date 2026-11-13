@@ -233,6 +233,25 @@ def test_a_negative_control_must_fail_where_it_changes_the_rasterizers_input():
     assert verdict["changes_anything"] is False and verdict["ok"] is True
 
 
+def test_the_qt_alone_hidden_control_reports_whether_its_cycle_rendered():
+    """``hidden_qt_alone_every_cycle_ok`` can fail (audit 13 Nov, low 2: the cycle returned True whatever happened)."""
+    rendered = {"initialized": True, "texture_created": True, "target_created": True,
+                "target_size": list(host_check.HOST_SIZE), "frames": host_check.QT_ALONE_FRAMES}
+    assert host_check.qt_alone_cycle_ok(rendered) is True
+    for broken in ({"initialized": False}, {"texture_created": False}, {"target_created": False},
+                   {"target_size": [0, 0]}, {"frames": host_check.QT_ALONE_FRAMES - 1}, {"frames": 0}):
+        assert host_check.qt_alone_cycle_ok(dict(rendered, **broken)) is False, broken
+    assert host_check.qt_alone_cycle_ok({}) is False
+    # The cycle (GPU, run by the lead's host_check) answers with that verdict, never a constant.
+    import ast
+    import inspect
+
+    cycle = ast.parse(inspect.getsource(host_check._cycle_hidden_qt_alone).lstrip())
+    returns = [node.value for node in ast.walk(cycle) if isinstance(node, ast.Return) and node.value is not None]
+    assert [ast.unparse(value) for value in returns if not isinstance(value, ast.Name)] == [
+        "qt_alone_cycle_ok(steps)"], [ast.unparse(value) for value in returns]
+
+
 @pytest.mark.parametrize("backend", sorted(Y_UP))
 def test_every_backend_has_a_front_face_control_that_bites(backend):
     """The fixed front face opposite to the backend's rule changes the rasterizer's input, so it must fail there:
