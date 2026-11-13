@@ -47,7 +47,7 @@ at the size asked.
      and N2.8.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. 1D.7 (hover actions without Edit), then 1D.11's fence-wait timing.
+  1. 1D.7 (Rotate without Edit), then 1D.11's fence-wait timing.
   2. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
      Sphere); a mode that cannot be made bit-identical in one dispatch converts at its port.
   3. 1B.10.
@@ -1119,19 +1119,19 @@ borderless fullscreen transfers working smoothly.
   lands at B2; an invalid remembered spot falls back; nothing else in the record changes (negative controls).
 - [ ] Lead D1 run with both displays: the sequence above, edges read.
 
-### 1D.7 Hover glyph actions must not enter Edit (operator, 13 Nov: preferred across the application; Opus Medium)
+### 1D.7 Rotate must not enter Edit (operator, 13 Nov: preferred across the application; Opus Medium)
 
 Cause: `engine/display_manager.py:2742` (`_route_hover_edit_glyph`'s Edit part) opens or joins the Edit session to
-run every hover glyph action (Rotate, Restore Size, Close, Child Lock, transfers). For Rotate it leaves that
-session open, so the user lands in Edit. The fullscreen path at `:2697` does the same through
-`_start_quick_custom_layout_session`.
-- Child Lock is the exception: it still enters Edit, as it does today (operator, 14 Nov). A test pins that.
-- [ ] Each other hover action outside Edit runs as one committed change with no Edit chrome: through the same owner
-  and model action (no second path), then committed and closed at once. Inside Edit it stays a draft step as
-  today. Decide per action from the code, and record the decision: Close already ends without Edit? Do transfers
-  stay as they are?
-- [ ] Tests through the real display manager: each action outside Edit changes the record once, leaves no Edit
-  session and shows no Edit overlay; inside Edit it stays undoable. Negative controls on the old route.
+run every hover glyph action. For Rotate it leaves that session open, so the user lands in Edit. The fullscreen
+path at `:2697` does the same through `_start_quick_custom_layout_session`.
+- Scope is Rotate only. Restore Size (widgets and the Visualizer) and Child Lock still enter Edit, as today
+  (operator, 14 Nov). Close and the transfers stay on their routes.
+- [ ] Rotate outside Edit runs as one committed change with no Edit chrome, on every surface that has it: through
+  the same owner and model action (no second path), then committed and closed at once. Inside Edit it stays an
+  undoable draft step.
+- [ ] Tests through the real display manager: Rotate outside Edit changes the record once, leaves no Edit session
+  and shows no Edit overlay; inside Edit it stays undoable; Restore Size and Child Lock still open Edit. Negative
+  controls on the old route.
 
 ### 1D.9 Linux credential encryption, port from the archived branch (Opus Medium, low priority; Linux is best effort)
 
