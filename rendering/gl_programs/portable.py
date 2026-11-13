@@ -222,7 +222,7 @@ def pack_block(layout: Scene3DBlockLayout, values: Mapping[str, object]) -> byte
         element, count, _alignment, _stride = _std140_type(kind)
         width = _element_components(element)
         if value is None:
-            zero = 0 if element in ("int", "uint") else 0.0
+            zero = 0 if _STD140[element][2][-1] in "iI" else 0.0     # integer and bool members take an int
             item = zero if width == 1 else (zero,) * width
             value = (item,) * count if "[" in kind else item
         elif isinstance(value, (bytes, bytearray)):

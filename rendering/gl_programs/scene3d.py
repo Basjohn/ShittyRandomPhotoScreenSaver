@@ -1051,8 +1051,10 @@ SCENE3D_FRAME_BLOCK_BINDING = 15
 # type -> (base alignment, size, struct format), per the std140 rules for these types.
 _STD140 = {
     "float": (4, 4, "f"), "int": (4, 4, "i"), "uint": (4, 4, "I"),
+    # A block's bool is one 32-bit word (zero is false), as glUniform1i set the loose one.
+    "bool": (4, 4, "i"),
     "vec2": (8, 8, "2f"), "ivec2": (8, 8, "2i"), "uvec2": (8, 8, "2I"),
-    "vec3": (16, 12, "3f"), "vec4": (16, 16, "4f"), "ivec4": (16, 16, "4i"),
+    "vec3": (16, 12, "3f"), "vec4": (16, 16, "4f"), "ivec4": (16, 16, "4i"), "uvec4": (16, 16, "4I"),
     "mat4": (16, 64, "16f"),
 }
 

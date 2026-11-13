@@ -1,7 +1,7 @@
 """Shader source loader for the 2D Visualizer modes' fragment shaders.
 
-The Quick renderers draw them over the shared vertex shader
-(``rendering.quick.visualizer.render_contract.QUICK_VISUALIZER_VERTEX_SOURCE``).
+The Quick renderers draw them over the shared quad, declared with each shader's own pass block
+(``rendering.quick.visualizer.render_contract.quick_visualizer_vertex_source``).
 """
 from __future__ import annotations
 

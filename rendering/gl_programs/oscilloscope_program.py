@@ -42,6 +42,7 @@ import math
 
 import numpy as np
 
+from rendering.gl_programs.portable import portable_program
 from widgets.spotify_visualizer.transient_bus import musical_emphasis, musical_weight, passage_ramp
 
 SAMPLE_RATE = 48000              # capture's rate (audio_worker opens 48 kHz)
@@ -382,3 +383,11 @@ void main() {
     Emission = vec4(0.0);
 }
 """
+
+# Each program's loose uniforms are one std140 pass block (N1.6), its varyings located and its vertex index read through
+# the portable macro (``portable_program``); the renderer packs each block with the values it set as uniforms. The
+# points stay the storage buffer at ``POINT_BINDING``.
+OSC_BEAM_VERTEX_SOURCE, (OSC_BEAM_FRAGMENT_SOURCE,), OSC_BEAM_BLOCK = portable_program(
+    OSC_BEAM_VERTEX_SOURCE, (OSC_BEAM_FRAGMENT_SOURCE,), block="OscilloscopeBeam", samplers={})
+OSC_GRATICULE_VERTEX_SOURCE, (OSC_GRATICULE_FRAGMENT_SOURCE,), OSC_GRATICULE_BLOCK = portable_program(
+    OSC_GRATICULE_VERTEX_SOURCE, (OSC_GRATICULE_FRAGMENT_SOURCE,), block="OscilloscopeGraticule", samplers={})

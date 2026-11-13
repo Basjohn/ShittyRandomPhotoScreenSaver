@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from collections import defaultdict
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -638,37 +638,22 @@ def test_bubble_local_specular_reference_preserves_canonical_scale_and_inset(sca
         assert resized.specular_reference_aspect == pytest.approx(canonical.aspect_ratio)
 
 
-def test_quick_bubble_bulk_uniforms_use_reused_float32_transport(monkeypatch) -> None:
-    """PyOpenGL must never recursively convert immutable Bubble tuples in render."""
+def test_quick_bubble_bulk_arrays_use_reused_float32_transport(monkeypatch) -> None:
+    """PyOpenGL never recursively converts immutable Bubble tuples in render: the payload reaches the pass block
+    (N1.6) through the persistent float32 transport buffers, in std140 form (a vec3 trail sample takes 16 bytes)."""
     renderer = QuickBubbleRenderer()
     renderer._program = 1
-    renderer._uniforms = defaultdict(int)
 
-    uniform4_calls = []
-    uniform3_calls = []
-
-    for name in (
-        "glUseProgram",
-        "glUniformMatrix4fv",
-        "glUniform2f",
-        "glUniform1f",
-        "glUniform1i",
-        "glUniform4f",
-        # 5.1.3 (6dd336b7): the hero big/small class words ride a uvec4 uniform.
-        "glUniform4ui",
-        "glBindVertexArray",
-        "glDrawArrays",
-    ):
+    for name in ("glUseProgram", "glBindVertexArray", "glDrawArrays"):
         monkeypatch.setattr(quick_bubble_module.gl, name, lambda *_args, **_kwargs: None)
+    packed = []
 
-    def _uniform4(_location, count, values):
-        uniform4_calls.append((count, values))
+    @contextmanager
+    def bound(data):
+        packed.append(data)
+        yield lambda _values: None
 
-    def _uniform3(_location, count, values):
-        uniform3_calls.append((count, values))
-
-    monkeypatch.setattr(quick_bubble_module.gl, "glUniform4fv", _uniform4)
-    monkeypatch.setattr(quick_bubble_module.gl, "glUniform3fv", _uniform3)
+    monkeypatch.setattr(renderer._blocks, "bound", bound)
 
     frame = QuickVisualizerRenderFrame(
         snapshot=_snapshot(
@@ -685,31 +670,35 @@ def test_quick_bubble_bulk_uniforms_use_reused_float32_transport(monkeypatch) ->
     )
 
     renderer.render(frame)
-    assert len(uniform4_calls) == 2
-    assert len(uniform3_calls) == 1
-    first_ids = tuple(id(values) for _count, values in (*uniform4_calls, *uniform3_calls))
-    for _count, values in (*uniform4_calls, *uniform3_calls):
+    assert len(packed) == 1
+    layout = quick_bubble_module.BUBBLE_BLOCK
+    offsets = {name: offset for (name, _kind), offset in zip(layout.fields, layout.offsets)}
+    assert len(packed[0]) == layout.size
+    np.testing.assert_allclose(
+        np.frombuffer(packed[0], dtype=np.float32, count=4, offset=offsets["u_bubbles_pos"]),
+        np.asarray((0.25, 0.5, 0.04, 1.0), dtype=np.float32),
+    )
+    trail = np.frombuffer(packed[0], dtype=np.float32, count=12, offset=offsets["u_bubbles_trail"]).reshape(3, 4)
+    np.testing.assert_allclose(
+        trail[:, :3].reshape(-1),
+        np.asarray(frame.snapshot.logical.mode_state.trails, dtype=np.float32),
+    )
+    assert not trail[:, 3].any()
+    assert np.frombuffer(packed[0], dtype=np.int32, count=1, offset=offsets["u_bubble_count"])[0] == 1
+
+    transport = (renderer._position_uniform_buffer, renderer._extra_uniform_buffer,
+                 renderer._trail_uniform_buffer, renderer._trail_block)
+    first_ids = tuple(id(values) for values in transport)
+    for values in transport:
         assert isinstance(values, np.ndarray)
         assert values.dtype == np.float32
         assert values.flags.c_contiguous
 
-    assert uniform4_calls[0][0] == 1
-    assert uniform4_calls[1][0] == 1
-    assert uniform3_calls[0][0] == 3
-    np.testing.assert_allclose(
-        uniform4_calls[0][1][:4],
-        np.asarray((0.25, 0.5, 0.04, 1.0), dtype=np.float32),
-    )
-    np.testing.assert_allclose(
-        uniform3_calls[0][1][:9],
-        np.asarray(frame.snapshot.logical.mode_state.trails, dtype=np.float32),
-    )
-
-    uniform4_calls.clear()
-    uniform3_calls.clear()
     renderer.render(frame)
-    second_ids = tuple(id(values) for _count, values in (*uniform4_calls, *uniform3_calls))
+    second_ids = tuple(id(values) for values in (renderer._position_uniform_buffer, renderer._extra_uniform_buffer,
+                                                 renderer._trail_uniform_buffer, renderer._trail_block))
     assert second_ids == first_ids
+    assert packed[1] == packed[0]
 
 
 def test_quick_bubble_renderer_has_no_live_widget_or_simulation_dependency() -> None:

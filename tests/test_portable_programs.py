@@ -120,6 +120,36 @@ def test_the_block_packs_the_values_a_program_set_and_zero_for_the_rest():
         pack_block(layout, {"uStops": stops[:16]})
 
 
+def test_bool_and_uvec4_members_pack_as_32_bit_integers():
+    # Bubble's block holds a uvec4 of class bits and two bools (N1.6); a member never set packs as integer zero.
+    layout = Scene3DBlockLayout.of("Probe", (("uOn", "bool"), ("uBits", "uvec4"), ("uAlso", "bool")))
+    assert layout.offsets == (0, 16, 32) and layout.size == 48
+    data = pack_block(layout, {"uOn": 1, "uBits": (0xFFFFFFFF, 1, 2, 3)})
+    assert struct.unpack_from("<i4Ii", data, 0)[0] == 1
+    assert struct.unpack_from("<4I", data, 16) == (0xFFFFFFFF, 1, 2, 3)
+    assert struct.unpack_from("<i", data, 32)[0] == 0
+    assert pack_block(layout, {}) == bytes(48)
+    assert "bool uOn;" in layout.glsl(18) and "uvec4 uBits;" in layout.glsl(18)
+
+
+@pytest.mark.parametrize(("mode", "block"), (("bubble", "BubbleDraw"), ("devcurve", "DevCurveDraw")))
+def test_the_2d_modes_draw_one_block_declared_once_in_their_shader(mode, block):
+    import importlib
+
+    from widgets.spotify_visualizer.shaders import load_fragment_shader
+
+    module = importlib.import_module(f"rendering.quick.visualizer.implementations.{mode}")
+    prefix = mode.upper()
+    fragment = load_fragment_shader(mode)
+    declaration = block_declaration(fragment, block)
+    assert declaration in getattr(module, f"{prefix}_VERTEX_SOURCE")
+    assert getattr(module, f"{prefix}_BLOCK") == block_layout_from_glsl(declaration)
+    loose = [line for line in fragment.splitlines()
+             if line.startswith("uniform ") and not line.startswith(f"uniform {block}")]
+    assert not loose
+    assert "uniform mat4 uMatrix" not in getattr(module, f"{prefix}_VERTEX_SOURCE")
+
+
 def test_spectrum_draws_one_block_declared_once_in_its_shader():
     from rendering.quick.visualizer.implementations import spectrum
     from widgets.spotify_visualizer.shaders import load_fragment_shader

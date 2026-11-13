@@ -1,80 +1,84 @@
 #version 460 core
-in vec2 v_uv;
-out vec4 fragColor;
+layout(location = 0) in vec2 v_uv;
+layout(location = 0) out vec4 fragColor;
 
-uniform vec2 u_resolution;
-uniform float u_dpr;
-// Framebuffer-pixel origin of this visualizer's viewport. gl_FragCoord is
-// WINDOW space, so when the compositor draws the visualizer into the
-// whole-display framebuffer at a non-zero viewport origin the raw value is
-// not card-local. Subtracting this origin restores card-local pixels.
-// A card-sized, origin-zero target simply passes (0, 0).
-uniform vec2 u_viewport_origin_px;
-// Qt Quick uses interpolated item-local coordinates. The old compositor keeps
-// the framebuffer-coordinate branch until Phase-I deletion.
-uniform int u_quick_item_coords;
-uniform vec4 u_content_rect;  // item-local x, y, width, height
-uniform float u_visual_scale;
-uniform float u_viewport_height_scale;  // viewport extent height / canonical height
-uniform float u_fade;
-uniform float u_time;
+// The values as one std140 block at the pass-block binding (N1.6; SCENE3D_PASS_BLOCK_BINDING). No
+// renderer draws this legacy shader: the Quick Oscilloscope draws oscilloscope_program's beam.
+layout(std140, binding = 18) uniform OscilloscopeDraw {
+    vec2 u_resolution;
+    float u_dpr;
+    // Framebuffer-pixel origin of this visualizer's viewport. gl_FragCoord is
+    // WINDOW space, so when the compositor draws the visualizer into the
+    // whole-display framebuffer at a non-zero viewport origin the raw value is
+    // not card-local. Subtracting this origin restores card-local pixels.
+    // A card-sized, origin-zero target simply passes (0, 0).
+    vec2 u_viewport_origin_px;
+    // Qt Quick uses interpolated item-local coordinates. The old compositor keeps
+    // the framebuffer-coordinate branch until Phase-I deletion.
+    int u_quick_item_coords;
+    vec4 u_content_rect;  // item-local x, y, width, height
+    float u_visual_scale;
+    float u_viewport_height_scale;  // viewport extent height / canonical height
+    float u_fade;
+    float u_time;
 
-// Waveform data
-uniform float u_waveform[256];
-uniform int u_waveform_count;
+    // Waveform data
+    float u_waveform[256];
+    int u_waveform_count;
 
-// Energy bands
-uniform float u_overall_energy;
-uniform float u_bass_energy;
-uniform float u_mid_energy;
-uniform float u_high_energy;
+    // Energy bands
+    float u_overall_energy;
+    float u_bass_energy;
+    float u_mid_energy;
+    float u_high_energy;
 
-// Line colour (separate from glow)
-uniform vec4 u_line_color;
+    // Line colour (separate from glow)
+    vec4 u_line_color;
 
-// Glow configuration
-uniform int u_glow_enabled;
-uniform float u_glow_intensity;
-uniform float u_glow_size;
-uniform float u_glow_reactivity;
-uniform vec4 u_glow_color;
-uniform int u_reactive_glow;
+    // Glow configuration
+    int u_glow_enabled;
+    float u_glow_intensity;
+    float u_glow_size;
+    float u_glow_reactivity;
+    vec4 u_glow_color;
+    int u_reactive_glow;
 
-// Sensitivity & smoothing
-uniform float u_sensitivity;   // multiplier for waveform values (default 3.0)
-uniform float u_smoothing;     // 0 = linear/jagged, 1 = full Catmull-Rom smooth
+    // Sensitivity & smoothing
+    float u_sensitivity;   // multiplier for waveform values (default 3.0)
+    float u_smoothing;     // 0 = linear/jagged, 1 = full Catmull-Rom smooth
 
-// Multi-line mode (1 = single, 2-6 = extra lines)
-uniform int u_line_count;
-uniform vec4 u_line2_color;
-uniform vec4 u_line2_glow_color;
-uniform vec4 u_line3_color;
-uniform vec4 u_line3_glow_color;
-uniform vec4 u_line4_color;
-uniform vec4 u_line4_glow_color;
-uniform vec4 u_line5_color;
-uniform vec4 u_line5_glow_color;
-uniform vec4 u_line6_color;
-uniform vec4 u_line6_glow_color;
+    // Multi-line mode (1 = single, 2-6 = extra lines)
+    int u_line_count;
+    vec4 u_line2_color;
+    vec4 u_line2_glow_color;
+    vec4 u_line3_color;
+    vec4 u_line3_glow_color;
+    vec4 u_line4_color;
+    vec4 u_line4_glow_color;
+    vec4 u_line5_color;
+    vec4 u_line5_glow_color;
+    vec4 u_line6_color;
+    vec4 u_line6_glow_color;
 
-// Optional line 2/3 glow dimming (0 = equal glow, 1 = half-strength dim)
-uniform int u_osc_line_dim;
+    // Optional line 2/3 glow dimming (0 = equal glow, 1 = half-strength dim)
+    int u_osc_line_dim;
 
-// Line Offset Bias: 0 = energy-only spacing, 1 = max base spread + per-band weight (multi-line only)
-uniform float u_osc_line_offset_bias;
+    // Line Offset Bias: 0 = energy-only spacing, 1 = max base spread + per-band weight (multi-line only)
+    float u_osc_line_offset_bias;
 
-// Vertical Shift: when 1, disables offset and places lines at fixed top/middle/bottom positions
-uniform int u_osc_vertical_shift;
-uniform float u_rainbow_hue_offset; // 0..1 hue rotation (0 = disabled)
+    // Vertical Shift: when 1, disables offset and places lines at fixed top/middle/bottom positions
+    int u_osc_vertical_shift;
+    float u_rainbow_hue_offset; // 0..1 hue rotation (0 = disabled)
 
-// Ghost waveform (previous frame trail)
-uniform float u_prev_waveform[256];
-uniform float u_osc_ghost_alpha; // 0 = no ghost, >0 = ghost trail intensity
-uniform int u_ghost_line2_enabled;
-uniform int u_ghost_line3_enabled;
-uniform int u_ghost_line4_enabled;
-uniform int u_ghost_line5_enabled;
-uniform int u_ghost_line6_enabled;
+    // Ghost waveform (previous frame trail)
+    float u_prev_waveform[256];
+    float u_osc_ghost_alpha; // 0 = no ghost, >0 = ghost trail intensity
+    int u_ghost_line2_enabled;
+    int u_ghost_line3_enabled;
+    int u_ghost_line4_enabled;
+    int u_ghost_line5_enabled;
+    int u_ghost_line6_enabled;
+};
 
 float authored_visual_scale() {
     return (u_quick_item_coords == 1) ? max(u_visual_scale, 0.01) : 1.0;

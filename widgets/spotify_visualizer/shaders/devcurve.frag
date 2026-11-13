@@ -2,79 +2,85 @@
 // Spline Curve (mode id devcurve): smooth full-width spline-like filled curves.
 // Its sibling owners are mapped in Docs/Reference/Naming.md.
 
-in vec2 v_uv;
-out vec4 fragColor;
+layout(location = 0) in vec2 v_uv;
+layout(location = 0) out vec4 fragColor;
 
-uniform vec2 u_resolution;
-uniform float u_dpr;
-// Framebuffer-pixel origin of this visualizer's viewport. gl_FragCoord is
-// WINDOW space, so when the compositor draws the visualizer into the
-// whole-display framebuffer at a non-zero viewport origin the raw value is
-// not card-local. Subtracting this origin restores card-local pixels.
-// A card-sized, origin-zero target simply passes (0, 0).
-uniform vec2 u_viewport_origin_px;
-// Qt Quick uses interpolated item-local coordinates. The old compositor keeps
-// the framebuffer-coordinate/card-clip branch until Phase-I deletion.
-uniform int u_quick_item_coords;
-uniform vec4 u_content_rect;  // item-local x, y, width, height
-// Baseline/current normalized-axis transfer for authored pixel-like DevCurve
-// controls in the Quick branch. Legacy compositor leaves this unset and keeps
-// the historical canonical normalized clamps below.
-uniform vec2 u_devcurve_normalized_scale;
-uniform float u_devcurve_x_to_y_scale;
-uniform float u_border_width;
-uniform float u_fade;
-uniform int u_playing;
-uniform float u_ghost_alpha;
-uniform float u_rainbow_hue_offset;
+// Spline Curve's pass block (N1.6): every value the renderer sets, one std140 block at the pass-block binding
+// (SCENE3D_PASS_BLOCK_BINDING). The quad's vertex stage declares the same block, taken from this file
+// (rendering.quick.visualizer.implementations.devcurve), and the renderer packs it from this declaration
+// (rendering.gl_programs.portable.block_layout_from_glsl), so the stages and the packing never disagree.
+layout(std140, binding = 18) uniform DevCurveDraw {
+    mat4 uMatrix;                 // the quad: Qt's item matrix
+    vec2 uItemSize;
+    int uContentRotationQuarters;
+    vec2 u_resolution;
+    float u_dpr;
+    // Framebuffer-pixel origin of this visualizer's viewport. gl_FragCoord is WINDOW space, so when the compositor
+    // draws the visualizer into the whole-display framebuffer at a non-zero viewport origin the raw value is not
+    // card-local. Subtracting this origin restores card-local pixels. A card-sized, origin-zero target passes (0, 0).
+    vec2 u_viewport_origin_px;
+    // Qt Quick uses interpolated item-local coordinates. The old compositor keeps the framebuffer-coordinate/card-clip
+    // branch until Phase-I deletion.
+    int u_quick_item_coords;
+    vec4 u_content_rect;          // item-local x, y, width, height
+    // Baseline/current normalized-axis transfer for authored pixel-like DevCurve controls in the Quick branch. Legacy
+    // compositor leaves this unset and keeps the historical canonical normalized clamps below.
+    vec2 u_devcurve_normalized_scale;
+    float u_devcurve_x_to_y_scale;
+    float u_border_width;
+    float u_fade;
+    int u_playing;
+    float u_ghost_alpha;
+    float u_rainbow_hue_offset;
 
-uniform int u_devcurve_sample_count;
-uniform float u_devcurve_base_level;
+    int u_devcurve_sample_count;
+    float u_devcurve_base_level;
 
-uniform vec4 u_devcurve_layer_bass_color;
-uniform vec4 u_devcurve_layer_bass_outline_color;
-uniform float u_devcurve_layer_bass_outline_width;
-uniform int u_devcurve_layer_bass_enabled;
-uniform float u_devcurve_layer_bass_alpha;
-uniform float u_devcurve_curve_bass[96];
+    vec4 u_devcurve_layer_bass_color;
+    vec4 u_devcurve_layer_bass_outline_color;
+    float u_devcurve_layer_bass_outline_width;
+    int u_devcurve_layer_bass_enabled;
+    float u_devcurve_layer_bass_alpha;
+    float u_devcurve_curve_bass[96];
 
-uniform vec4 u_devcurve_layer_vocals_color;
-uniform vec4 u_devcurve_layer_vocals_outline_color;
-uniform float u_devcurve_layer_vocals_outline_width;
-uniform int u_devcurve_layer_vocals_enabled;
-uniform float u_devcurve_layer_vocals_alpha;
-uniform float u_devcurve_curve_vocals[96];
+    vec4 u_devcurve_layer_vocals_color;
+    vec4 u_devcurve_layer_vocals_outline_color;
+    float u_devcurve_layer_vocals_outline_width;
+    int u_devcurve_layer_vocals_enabled;
+    float u_devcurve_layer_vocals_alpha;
+    float u_devcurve_curve_vocals[96];
 
-uniform vec4 u_devcurve_layer_mids_color;
-uniform vec4 u_devcurve_layer_mids_outline_color;
-uniform float u_devcurve_layer_mids_outline_width;
-uniform int u_devcurve_layer_mids_enabled;
-uniform float u_devcurve_layer_mids_alpha;
-uniform float u_devcurve_curve_mids[96];
+    vec4 u_devcurve_layer_mids_color;
+    vec4 u_devcurve_layer_mids_outline_color;
+    float u_devcurve_layer_mids_outline_width;
+    int u_devcurve_layer_mids_enabled;
+    float u_devcurve_layer_mids_alpha;
+    float u_devcurve_curve_mids[96];
 
-uniform vec4 u_devcurve_layer_transients_color;
-uniform vec4 u_devcurve_layer_transients_outline_color;
-uniform float u_devcurve_layer_transients_outline_width;
-uniform int u_devcurve_layer_transients_enabled;
-uniform float u_devcurve_layer_transients_alpha;
-uniform float u_devcurve_curve_transients[96];
-uniform int u_devcurve_order0;
-uniform int u_devcurve_order1;
-uniform int u_devcurve_order2;
-uniform int u_devcurve_order3;
-uniform int u_devcurve_foreground_layer_id;
-uniform int u_devcurve_foreground_shadow_enabled;
-uniform float u_devcurve_foreground_shadow_alpha;
-uniform float u_devcurve_foreground_shadow_darken;
-uniform float u_devcurve_foreground_shadow_offset;
-uniform int u_devcurve_foreground_specular_enabled;
-uniform float u_devcurve_foreground_specular_alpha;
-uniform float u_devcurve_foreground_specular_width;
-uniform float u_devcurve_foreground_specular_offset;
-uniform float u_devcurve_foreground_specular_crest_bias;
-uniform vec4 u_devcurve_specular_slot0;
-uniform vec4 u_devcurve_specular_slot1;
-uniform vec4 u_devcurve_specular_slot2;
+    vec4 u_devcurve_layer_transients_color;
+    vec4 u_devcurve_layer_transients_outline_color;
+    float u_devcurve_layer_transients_outline_width;
+    int u_devcurve_layer_transients_enabled;
+    float u_devcurve_layer_transients_alpha;
+    float u_devcurve_curve_transients[96];
+    int u_devcurve_order0;
+    int u_devcurve_order1;
+    int u_devcurve_order2;
+    int u_devcurve_order3;
+    int u_devcurve_foreground_layer_id;
+    int u_devcurve_foreground_shadow_enabled;
+    float u_devcurve_foreground_shadow_alpha;
+    float u_devcurve_foreground_shadow_darken;
+    float u_devcurve_foreground_shadow_offset;
+    int u_devcurve_foreground_specular_enabled;
+    float u_devcurve_foreground_specular_alpha;
+    float u_devcurve_foreground_specular_width;
+    float u_devcurve_foreground_specular_offset;
+    float u_devcurve_foreground_specular_crest_bias;
+    vec4 u_devcurve_specular_slot0;
+    vec4 u_devcurve_specular_slot1;
+    vec4 u_devcurve_specular_slot2;
+};
 
 float _sample_curve(const float curve[96], float x, int count) {
     int n = clamp(count, 2, 96);
