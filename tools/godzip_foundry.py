@@ -4516,11 +4516,16 @@ class GodzipFoundryWindow(QMainWindow):
         self.refresh_repo_header()
         # Expensive repo/archive inspection now runs off the GUI thread. Avoid
         # scheduling two startup operations against the single mutation lane.
+        self._initial_zip = initial_zip
         if initial_zip is not None:
             self.tabs.setCurrentWidget(self.apply_tab)
-            QTimer.singleShot(0, lambda: self.apply_tab.load_zip(initial_zip))
+            # The window is the call's context: Qt drops it if the window is gone first (never a lambda over self).
+            QTimer.singleShot(0, self, self._load_initial_zip)
         else:
             self.create_tab.ensure_loaded()
+
+    def _load_initial_zip(self) -> None:
+        self.apply_tab.load_zip(self._initial_zip)
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)

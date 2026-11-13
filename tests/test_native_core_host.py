@@ -233,6 +233,47 @@ def test_a_negative_control_must_fail_where_it_changes_the_rasterizers_input():
     assert verdict["changes_anything"] is False and verdict["ok"] is True
 
 
+def test_the_qt_alone_hidden_control_reports_whether_its_cycle_rendered():
+    """``hidden_qt_alone_every_cycle_ok`` can fail (audit 13 Nov, low 2: the cycle returned True whatever happened)."""
+    rendered = {"initialized": True, "texture_created": True, "target_created": True,
+                "target_size": list(host_check.HOST_SIZE), "frames": host_check.QT_ALONE_FRAMES}
+    assert host_check.qt_alone_cycle_ok(rendered) is True
+    for broken in ({"initialized": False}, {"texture_created": False}, {"target_created": False},
+                   {"target_size": [0, 0]}, {"frames": host_check.QT_ALONE_FRAMES - 1}, {"frames": 0}):
+        assert host_check.qt_alone_cycle_ok(dict(rendered, **broken)) is False, broken
+    assert host_check.qt_alone_cycle_ok({}) is False
+    # The cycle (GPU, run by the lead's host_check) answers with that verdict, never a constant.
+    import ast
+    import inspect
+
+    cycle = ast.parse(inspect.getsource(host_check._cycle_hidden_qt_alone).lstrip())
+    returns = [node.value for node in ast.walk(cycle) if isinstance(node, ast.Return) and node.value is not None]
+    assert [ast.unparse(value) for value in returns if not isinstance(value, ast.Name)] == [
+        "qt_alone_cycle_ok(steps)"], [ast.unparse(value) for value in returns]
+
+
+@pytest.mark.parametrize("backend", sorted(Y_UP))
+def test_every_backend_has_a_front_face_control_that_bites(backend):
+    """The fixed front face opposite to the backend's rule changes the rasterizer's input, so it must fail there:
+    fixed-ccw on OpenGL, fixed-cw on Vulkan, D3D11 and D3D12 (audit 13 Nov, 2: D3D had none)."""
+    facts = facts_for(backend)
+    expected = pa.expected_image(facts)["image"]
+    opposite = "ccw" if facts["front_face"] == "cw" else "cw"
+    names = [name for name, config in host_check.NEGATIVES.items() if config == {"front_face": opposite}]
+    assert names and set(names) <= set(host_check.FRONT_FACE_CONTROLS)
+    flipped = dict(facts, front_face=opposite)
+    # The control's run culls the authored front triangle: its image is not the decided one.
+    culled = pa.negative_verdict(facts, _readback(flipped, expected[:, ::-1]))
+    assert culled["changes_anything"] and culled["image_failed"] and culled["ok"]
+    negatives = {name: culled for name in names}
+    same = [name for name in host_check.FRONT_FACE_CONTROLS if name not in names]
+    negatives.update({name: pa.negative_verdict(facts, _readback(dict(facts), expected)) for name in same})
+    assert host_check.front_face_rule_has_a_biting_control(negatives)
+    # Negative control: the controls before the fix (fixed-ccw only) bite nowhere the rule is counter-clockwise.
+    before = {name: verdict for name, verdict in negatives.items() if name != "front_face_fixed_cw"}
+    assert host_check.front_face_rule_has_a_biting_control(before) is (backend == "opengl")
+
+
 # ------------------------------------------------------------------------------------------------- the Python face
 
 
@@ -346,3 +387,23 @@ def test_the_validation_rule_excuses_only_qts_recorded_defects():
     assert validation.validation_summary(hazard)["clean"] is False
     dropped = {"errors": 0, "entries": [], "entries_dropped": 1}
     assert validation.validation_summary(dropped)["clean"] is False
+
+
+def test_the_loaders_warnings_are_skipped_and_its_errors_counted():
+    """Audit 13 Nov, low 1: a "Loader Message" group was skipped at any severity, so a loader error was never
+    unexplained. Its warnings stay out (not validation findings); its errors count, even beside a warning."""
+    import vk_validation as validation
+
+    def loader(severity, count=1):
+        return {"phase": "hidden", "source": "our_instance", "severity": severity, "id": "Loader Message",
+                "message": "loader", "count": count, "stack": ["vulkan-1.dll+0x10"]}
+
+    warnings_only = {"errors": 0, "warnings": 3, "entries": [loader("warning", 3)]}
+    summary = validation.validation_summary(warnings_only)
+    assert summary["clean"] is True and summary["warnings_total"] == 0
+    an_error = {"errors": 2, "warnings": 0, "entries": [loader("error", 2)]}
+    assert validation.validation_summary(an_error)["unexplained_errors"] == 2
+    # A warning first must not carry the error's group (and its count) out with it.
+    both = {"errors": 1, "warnings": 1, "entries": [loader("warning"), loader("error")]}
+    summary = validation.validation_summary(both)
+    assert summary["unexplained_errors"] == 1 and summary["unexplained_warnings"] == 0 and summary["clean"] is False

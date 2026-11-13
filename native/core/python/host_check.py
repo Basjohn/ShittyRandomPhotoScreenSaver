@@ -78,8 +78,18 @@ NEGATIVES = {
     "no_correction": {"correction": "none"},
     "rule_on_the_uncorrected_matrix": {"front_face": "rule_uncorrected"},
     "front_face_fixed_ccw": {"front_face": "ccw"},
+    # Bites wherever the rule chooses counter-clockwise (Vulkan, D3D11, D3D12), as the fixed-ccw one bites on
+    # OpenGL: every backend has a front-face control that changes the rasterizer's input and must fail.
+    "front_face_fixed_cw": {"front_face": "cw"},
     "fragment_flip_inverted": {"fragment_flip": 1},
 }
+FRONT_FACE_CONTROLS = ("front_face_fixed_ccw", "front_face_fixed_cw")
+
+
+def front_face_rule_has_a_biting_control(negatives: dict) -> bool:
+    """At least one fixed front face changed what the rasterizer got on this backend, and the image failed."""
+    return any(negatives.get(name, {}).get("changes_anything") and negatives[name].get("image_failed")
+               for name in FRONT_FACE_CONTROLS)
 CONTENT_QML = b"""import QtQuick
 Rectangle {
     color: "#203040"
@@ -238,6 +248,7 @@ def round_hidden(core, engine, app, api: str, out: Path) -> dict:
         record["negative_controls"] = negatives
         checks["negative_controls_fail_where_they_change_anything"] = bool(negatives) and all(
             v.get("ok") for v in negatives.values())
+        checks["front_face_rule_has_a_biting_control"] = front_face_rule_has_a_biting_control(negatives)
 
         host.set_probe()
         host.frames(2)
@@ -550,19 +561,22 @@ def _cycle_hidden_qt_alone(engine, app) -> bool:
     item.setParentItem(window.contentItem())
     control.prepareThread(worker)
     held: dict = {}
+    steps: dict = {"initialized": False, "texture_created": False, "target_created": False, "frames": 0}
     gui = app.thread()
 
     def init():
-        if not control.initialize():
+        steps["initialized"] = bool(control.initialize())
+        if not steps["initialized"]:
             raise RuntimeError("QQuickRenderControl::initialize failed")
         rhi = control.rhi()
         texture = rhi.newTexture(QRhiTexture.Format.RGBA8, QSize(*HOST_SIZE), 1, QRhiTexture.Flag.RenderTarget)
-        texture.create()
+        steps["texture_created"] = bool(texture.create())
         target = rhi.newTextureRenderTarget(QRhiTextureRenderTargetDescription(QRhiColorAttachment(texture)),
                                             QRhiTextureRenderTarget.Flag.PreserveColorContents)
         rp = target.newCompatibleRenderPassDescriptor()
         target.setRenderPassDescriptor(rp)
-        target.create()
+        steps["target_created"] = bool(target.create())
+        steps["target_size"] = [target.pixelSize().width(), target.pixelSize().height()]
         window.setRenderTarget(QQuickRenderTarget.fromRhiRenderTarget(target))
         held.update(target=target, rp=rp, texture=texture)
 
@@ -571,6 +585,7 @@ def _cycle_hidden_qt_alone(engine, app) -> bool:
         control.sync()
         control.render()
         control.endFrame()
+        steps["frames"] += 1
 
     def end():
         window.setRenderTarget(QQuickRenderTarget())
@@ -584,7 +599,7 @@ def _cycle_hidden_qt_alone(engine, app) -> bool:
 
     try:
         call(init)
-        for _ in range(5):
+        for _ in range(QT_ALONE_FRAMES):
             control.polishItems()
             call(frame)
         call(end)
@@ -596,7 +611,18 @@ def _cycle_hidden_qt_alone(engine, app) -> bool:
         shiboken6.delete(window)
         shiboken6.delete(worker)
         _drop_item(app, item)
-    return True
+    return qt_alone_cycle_ok(steps)
+
+
+QT_ALONE_FRAMES = 5
+
+
+def qt_alone_cycle_ok(steps: dict) -> bool:
+    """The Qt-only hidden control's cycle rendered: the render control initialised, its texture and preserving target
+    were created at the host's size (a non-empty target), and every frame ran. Never a constant True."""
+    return (steps.get("initialized") is True and steps.get("texture_created") is True
+            and steps.get("target_created") is True and steps.get("target_size") == list(HOST_SIZE)
+            and steps.get("frames") == QT_ALONE_FRAMES)
 
 
 def _series(core, app, run, cycles: int) -> dict:

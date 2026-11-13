@@ -13,6 +13,9 @@ module, never from a list of test files:
 - the ``NEVER_ON_SCREEN_ATTRIBUTE`` widget attribute set on the receiver;
 - a subprocess script (a string that imports PySide6) that runs on ``OFFSCREEN_PLATFORM``.
 
+Tk top-levels (``tk.Tk()``, ``Toplevel(...)``) are mapped as soon as they are constructed, so every construction needs
+one of the module's helpers (``keep_tk_off_screen``) applied to the new window in an enclosing scope.
+
 Tools that tests run as ``python -m tools.<name>`` must import and call one of the helpers when they show windows.
 Static and conservative: ``setVisible(True)`` on a scene item is not a window, so only window-like receiver names
 count for it.
@@ -127,6 +130,45 @@ def _visible_shows(tree: ast.Module, pattern: Pattern, *, script: bool) -> list[
     return found
 
 
+_TK_TOPLEVELS = frozenset({"Tk", "Toplevel"})
+
+
+def _is_tk_toplevel(call: ast.Call) -> bool:
+    """``tk.Tk()``, ``tkinter.Toplevel(...)``, a bare ``Tk()``: a Tk window, mapped as soon as it exists."""
+    func = call.func
+    name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
+    return name in _TK_TOPLEVELS
+
+
+def _visible_tk_windows(tree: ast.Module, pattern: Pattern) -> list[tuple[int, str]]:
+    """Every Tk top-level whose receiver no helper of the pattern is applied to, in an enclosing scope."""
+    parents = _parents(tree)
+    found = []
+    for call in ast.walk(tree):
+        if not (isinstance(call, ast.Call) and _is_tk_toplevel(call)):
+            continue
+        parent = parents.get(call)
+        if isinstance(parent, ast.Call) and isinstance(parent.func, ast.Name) and parent.func.id in pattern.helpers:
+            continue                                  # keep_tk_off_screen(tk.Tk())
+        receiver = None
+        if isinstance(parent, ast.Assign) and len(parent.targets) == 1:
+            receiver = ast.unparse(parent.targets[0])
+        scopes, node = [], call
+        while node in parents:
+            node = parents[node]
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                scopes.append(node)
+        scopes.append(tree)
+        protected = receiver is not None and any(
+            isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name) and inner.func.id in pattern.helpers
+            and inner.args and ast.unparse(inner.args[0]) == receiver
+            for scope in scopes for inner in ast.walk(scope)
+        )
+        if not protected:
+            found.append((call.lineno, ast.unparse(call)))
+    return found
+
+
 def _scripts(tree: ast.Module):
     """Subprocess scripts embedded as strings: (line of the string, parsed script)."""
     for node in ast.walk(tree):
@@ -141,7 +183,7 @@ def visible_shows_in_source(source: str, pattern: Pattern | None = None) -> list
     """Every show of a window in this test source that no invisible route covers: (line, call)."""
     pattern = pattern or load_pattern()
     tree = ast.parse(source)
-    found = _visible_shows(tree, pattern, script=False)
+    found = _visible_shows(tree, pattern, script=False) + _visible_tk_windows(tree, pattern)
     for line, script in _scripts(tree):
         found += [(line + inner - 1, text) for inner, text in _visible_shows(script, pattern, script=True)]
     return sorted(found)
@@ -219,6 +261,23 @@ def test_subprocess_scripts_are_scanned_and_offscreen_ones_accepted():
     assert [text for _line, text in visible_shows_in_source(visible, pattern)] == ["host.show()"]
     offscreen = f"SCRIPT = '''\nimport os\nos.environ['QT_QPA_PLATFORM'] = '{pattern.offscreen_platform}'\n{script}'''\n"
     assert visible_shows_in_source(offscreen, pattern) == []
+
+
+def test_tk_windows_need_the_tk_helper_on_their_own_receiver():
+    pattern = load_pattern()
+    assert "keep_tk_off_screen" in pattern.helpers
+    bare = "import tkinter as tk\ndef test_a():\n    root = tk.Tk()\n    root.withdraw()\n"
+    assert visible_shows_in_source(bare, pattern) == [(3, "tk.Tk()")]
+    toplevel = "def test_b():\n    top = tkinter.Toplevel(master)\n"
+    assert visible_shows_in_source(toplevel, pattern) == [(2, "tkinter.Toplevel(master)")]
+    accepted = [
+        "def test_c():\n    root = tk.Tk()\n    keep_tk_off_screen(root)\n",
+        "def test_d():\n    root = keep_tk_off_screen(tk.Tk())\n",
+    ]
+    for source in accepted:
+        assert visible_shows_in_source(source, pattern) == [], source
+    other = "def test_e():\n    a = tk.Tk()\n    b = tk.Tk()\n    keep_tk_off_screen(a)\n"
+    assert visible_shows_in_source(other, pattern) == [(3, "tk.Tk()")]
 
 
 def test_set_visible_counts_on_windows_not_on_scene_items():

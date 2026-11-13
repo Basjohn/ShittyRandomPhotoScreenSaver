@@ -501,7 +501,7 @@ class TransitionsPage(Page):
         interval_row.addWidget(interval_label)
         self.interval = make_image_interval_spin()
         self.interval.setFixedWidth(140)
-        self.interval.valueChanged.connect(lambda value: self.settings.set("timing.interval", int(value)))
+        self.interval.valueChanged.connect(self._set_interval)
         interval_row.addWidget(self.interval)
         unit = text_label(IMAGE_INTERVAL_UNIT); unit.setWordWrap(False)
         interval_row.addWidget(unit)
@@ -519,6 +519,10 @@ class TransitionsPage(Page):
         self.status = text_label(""); self.body.addWidget(self.status)
         self.rows.itemChanged.connect(self._toggle)
         self.rows.currentItemChanged.connect(self._show)
+
+    def _set_interval(self, value):
+        # A bound method, never a lambda over the page: the connection must not keep the page alive.
+        self.settings.set("timing.interval", int(value))
 
     def refresh(self):
         with QSignalBlocker(self.interval):  # entry shows the draft's value and writes nothing

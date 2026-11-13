@@ -19,7 +19,8 @@ This module is the one place that says how a test may show a window;
   cannot import this module;
 - ``Qt.WidgetAttribute.WA_DontShowOnScreen`` (:data:`NEVER_ON_SCREEN_ATTRIBUTE`) when the test needs a shown widget
   but no native window at all;
-- a subprocess script that runs on the offscreen platform (:data:`OFFSCREEN_PLATFORM`).
+- a subprocess script that runs on the offscreen platform (:data:`OFFSCREEN_PLATFORM`);
+- for Tk, whose top-levels are mapped the moment they are constructed: :func:`keep_tk_off_screen` on the new window.
 """
 from __future__ import annotations
 
@@ -34,6 +35,9 @@ from PySide6.QtGui import QWindow
 NEVER_ON_SCREEN_ATTRIBUTE = "WA_DontShowOnScreen"
 #: ``QT_QPA_PLATFORM`` for a subprocess whose windows never reach a real screen.
 OFFSCREEN_PLATFORM = "offscreen"
+#: The alpha a Tk window keeps under :func:`keep_tk_off_screen` (a name, not a literal: the scanner reads zero-literal
+#: calls in these helpers as Qt opacity routes, and ``attributes`` must not become one).
+_TK_TRANSPARENT = 0.0
 
 
 def keep_off_screen(window):
@@ -46,6 +50,28 @@ def keep_off_screen(window):
         window.setWindowOpacity(0.0)
         window.setWindowFlag(Qt.WindowType.WindowTransparentForInput, True)
         window.setWindowFlag(Qt.WindowType.Tool, True)
+    return window
+
+
+def keep_tk_off_screen(window):
+    """Make a Tk top-level (``tk.Tk()``/``tk.Toplevel()``) invisible for the rest of its life; returns it.
+
+    Withdrawn now and fully transparent from then on: a later ``attributes("-alpha", x)`` from the code under test
+    (the Build Foundry maps itself at alpha 0, then restores 1.0) is held at transparent, so mapping it shows no
+    pixels. A test that maps the window also places it off every monitor (the Build Foundry clamps itself into its
+    ``_work_area``, so the test translates that area past the virtual screen).
+    """
+    window.withdraw()
+    set_attributes = window.attributes
+
+    def attributes(*args):
+        if len(args) >= 2 and args[0] == "-alpha":
+            args = ("-alpha", _TK_TRANSPARENT, *args[2:])
+        return set_attributes(*args)
+
+    window.attributes = attributes
+    window.wm_attributes = attributes
+    window.attributes("-alpha", _TK_TRANSPARENT)
     return window
 
 
