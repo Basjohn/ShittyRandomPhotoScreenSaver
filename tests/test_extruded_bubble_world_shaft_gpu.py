@@ -3,6 +3,7 @@ import math
 
 import numpy as np
 import pytest
+from rendering.quick.render.gl_resources import delete_program
 
 
 def _constant_pattern(source):
@@ -105,7 +106,7 @@ void main(){
         if texture:
             gl.glDeleteTextures([texture])
         for program in programs:
-            gl.glDeleteProgram(program)
+            delete_program(program)
         target.close()
 
 
@@ -361,5 +362,5 @@ def test_scene_main_shadows_actual_contribution_centroid_not_fixed_depth(qt_app)
         assert gl.glGetError() == gl.GL_NO_ERROR
     finally:
         if texture: gl.glDeleteTextures([texture])
-        for program in programs: gl.glDeleteProgram(program)
+        for program in programs: delete_program(program)
         target.close()

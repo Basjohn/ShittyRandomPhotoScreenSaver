@@ -15,6 +15,7 @@ from rendering.gl_programs.heightfield_volume_glsl import (
 )
 from rendering.quick.scene3d.heightfield import HeightfieldTexture
 from tools.transition_contact_sheet import TransitionCapture
+from rendering.quick.render.gl_resources import delete_program
 
 
 pytestmark = pytest.mark.qt
@@ -183,6 +184,6 @@ def test_gl_volume_is_premultiplied_bounded_and_occluded_by_raised_land(qt_app):
         gl.glDeleteFramebuffers(1, [fbo])
         gl.glDeleteTextures([colour])
         gl.glDeleteVertexArrays(1, [vao])
-        gl.glDeleteProgram(program)
+        delete_program(program)
         texture.release()
         capture.close()

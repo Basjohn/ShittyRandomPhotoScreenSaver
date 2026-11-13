@@ -11,10 +11,12 @@ reduced size (``PROPAGATION_SIZE`` on the longer side, the render's aspect):
 1. seed: each texel's cost, and its arrival bounded from above by the straight line to every source
    at the costliest rate (``bound``), so the field is valid from the start;
 2. relax (repeated): ``arrival = min(arrival, neighbour + cost between them * step)`` over a 16-
-   neighbour stencil (the 8 adjacent plus knight moves, for rounder fronts), in place: the field only
-   ever falls and any value read is a true upper bound, so read races only speed convergence. Each
-   pass carries improvements about one texel further; ``PROPAGATION_PASSES`` passes cover paths
-   across the whole field, by which an arrival front that raced along cheap channels has branched;
+   neighbour stencil (the 8 adjacent plus knight moves, for rounder fronts), Jacobi order: each pass
+   reads one field and writes the other (ping-pong), so the result is the same on every run and
+   every backend. Relaxing in place let a pass read texels other workgroups were writing, an
+   undefined read whose outcome changed from run to run. Each pass carries improvements up to
+   two texels further; ``PROPAGATION_PASSES`` passes cover paths across the whole field, by which an
+   arrival front that raced along cheap channels has branched;
 3. extent: one workgroup reduces the field to its largest arrival, in a 1x1 texture the consumer
    reads with ``texelFetch`` (no readback), to time the spread so the last point arrives on time.
 
@@ -79,10 +81,14 @@ void main() {
 """)
 
 
-_RELAX_COMPUTE = _VERSION + _HEADER + """
-layout(r32f, binding = 0) readonly uniform image2D uCost;
-layout(r32f, binding = 1) coherent uniform image2D uArrival;
-const ivec2 STEPS[16] = ivec2[](ivec2(1, 0), ivec2(-1, 0), ivec2(0, 1), ivec2(0, -1),
+def _relax_source(read: int, write: int) -> str:
+    """One relax pass reading the field at image binding ``read`` and writing the one at ``write``."""
+    return (_VERSION + _HEADER + "layout(r32f, binding = 0) readonly uniform image2D uCost;\n"
+            f"layout(r32f, binding = {read}) readonly uniform image2D uArrival;\n"
+            f"layout(r32f, binding = {write}) writeonly uniform image2D uRelaxed;\n" + _RELAX_BODY)
+
+
+_RELAX_BODY = """const ivec2 STEPS[16] = ivec2[](ivec2(1, 0), ivec2(-1, 0), ivec2(0, 1), ivec2(0, -1),
                                 ivec2(1, 1), ivec2(-1, 1), ivec2(1, -1), ivec2(-1, -1),
                                 ivec2(2, 1), ivec2(-2, 1), ivec2(2, -1), ivec2(-2, -1),
                                 ivec2(1, 2), ivec2(-1, 2), ivec2(1, -2), ivec2(-1, -2));
@@ -98,9 +104,15 @@ void main() {
         float step = length(vec2(STEPS[i])) * texel * 0.5 * (here + imageLoad(uCost, n).r);
         best = min(best, imageLoad(uArrival, n).r + step);
     }
-    imageStore(uArrival, q, vec4(best, 0.0, 0.0, 0.0));
+    imageStore(uRelaxed, q, vec4(best, 0.0, 0.0, 0.0));
 }
 """
+# The ping-pong's two directions as two programs over the same two image bindings (1 and 2, each bound once for a
+# step's passes). Switching programs between passes costs less GPU time than rebinding both image units every pass
+# (192 passes at 1920x1080, paired against the in-place original on one NVIDIA context: +0.7 ms switching programs,
+# +1.8 ms rebinding units).
+_RELAX_FORWARD_COMPUTE = _relax_source(1, 2)
+_RELAX_BACK_COMPUTE = _relax_source(2, 1)
 
 _EXTENT_COMPUTE = _VERSION + f"""layout(local_size_x = {_REDUCE_GROUP}) in;
 {_DISPATCH_BLOCK.glsl(COMPUTE_BLOCK_BINDING)}layout(r32f, binding = 0) readonly uniform image2D uArrival;
@@ -138,14 +150,18 @@ def _portable_seed(cost_glsl: str):
 
 def propagation_programs(name: str, cost_glsl: str) -> list[tuple[str, str]]:
     """(key, compute source) of a consumer's field programs; ``name`` keys its seed variant."""
-    return [(f"propagation_seed_{name}", _portable_seed(cost_glsl)[0]), ("propagation_relax", _RELAX_COMPUTE),
+    return [(f"propagation_seed_{name}", _portable_seed(cost_glsl)[0]),
+            ("propagation_relax_forward", _RELAX_FORWARD_COMPUTE), ("propagation_relax_back", _RELAX_BACK_COMPUTE),
             ("propagation_extent", _EXTENT_COMPUTE)]
 
 
 class PropagationField:
     """One run's arrival field over a consumer's cost, built in bounded steps."""
 
-    _ROLES = (("cost", gl.GL_R32F, False), ("arrival", gl.GL_R32F, True), ("extent", gl.GL_R32F, False))
+    # "arrival" always names the newest field; "relaxed" is the other half of relax's ping-pong (the two names swap
+    # after each pass, so either texture may end as the arrival a consumer samples: both filter linearly).
+    _ROLES = (("cost", gl.GL_R32F, False), ("arrival", gl.GL_R32F, True), ("relaxed", gl.GL_R32F, True),
+              ("extent", gl.GL_R32F, False))
 
     def __init__(self, label: str, name: str, cost_glsl: str) -> None:
         self.label = label
@@ -213,17 +229,22 @@ class PropagationField:
                     dispatch(groups, gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
                 self._passes = 0
                 return False
-            relax_key, relax_source = self._programs[1]
-            gl.glUseProgram(resources.compute_program(relax_key, relax_source))
+            # Image units 1 and 2 hold the two fields for the step's passes (and are handed back after): the forward
+            # program reads 1 and writes 2, the back program the reverse. After each pass the names swap, so
+            # "arrival" always names the newest field and the next pass reads it.
+            directions = [resources.compute_program(key, source) for key, source in self._programs[1:3]]
             todo = min(passes, PROPAGATION_PASSES - self._passes)
             with bound_image(0, t["cost"], gl.GL_READ_ONLY, gl.GL_R32F), \
-                    bound_image(1, t["arrival"], gl.GL_READ_WRITE, gl.GL_R32F):
-                for _ in range(todo):
+                    bound_image(1, t["arrival"], gl.GL_READ_WRITE, gl.GL_R32F), \
+                    bound_image(2, t["relaxed"], gl.GL_READ_WRITE, gl.GL_R32F):
+                for index in range(todo):
+                    gl.glUseProgram(directions[index % 2])
                     dispatch(groups, gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+                    t["arrival"], t["relaxed"] = t["relaxed"], t["arrival"]
             self._passes += todo
             if self._passes < PROPAGATION_PASSES:
                 return False
-            extent_key, extent_source = self._programs[2]
+            extent_key, extent_source = self._programs[3]
             gl.glUseProgram(resources.compute_program(extent_key, extent_source))
             with bound_image(0, t["arrival"], gl.GL_READ_ONLY, gl.GL_R32F), \
                     bound_image(1, t["extent"], gl.GL_WRITE_ONLY, gl.GL_R32F):

@@ -3,6 +3,7 @@ import math
 
 import numpy as np
 import pytest
+from rendering.quick.render.gl_resources import delete_program
 
 
 @pytest.fixture
@@ -118,7 +119,7 @@ def sphere_pixels(qt_app, request):
         draw.near_budget=_near_spread(height)
         yield draw
     finally:
-        for program in programs.values():gl.glDeleteProgram(program)
+        for program in programs.values():delete_program(program)
         if vao:gl.glDeleteVertexArrays(1,[vao])
         if texture:gl.glDeleteTextures([texture])
         if circle_texture:gl.glDeleteTextures([circle_texture])

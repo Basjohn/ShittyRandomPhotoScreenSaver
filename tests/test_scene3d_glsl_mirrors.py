@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 
 from rendering.gl_programs import scene3d as lib
+from rendering.quick.render.gl_resources import delete_program
 
 pytestmark = pytest.mark.qt
 
@@ -96,7 +97,7 @@ void main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Positio
     def close(self) -> None:
         gl = self.gl
         for program in self.programs.values():
-            gl.glDeleteProgram(program)
+            delete_program(program)
         gl.glDeleteVertexArrays(1, [self.vao])
         self.context.doneCurrent()
 

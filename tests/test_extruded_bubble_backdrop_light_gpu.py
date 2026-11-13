@@ -1,6 +1,7 @@
 """Settings -> production backdrop HDR pixels: direct light preserves ambient."""
 import numpy as np
 import pytest
+from rendering.quick.render.gl_resources import delete_program
 
 
 @pytest.fixture
@@ -44,7 +45,7 @@ def backdrop_light(qt_app):
         yield draw
     finally:
         if program:
-            gl.glDeleteProgram(program)
+            delete_program(program)
         if texture:
             gl.glDeleteTextures([texture, shafts])
         target.close()

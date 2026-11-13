@@ -16,7 +16,7 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs.scene3d import SCENE3D_GLSL, scene3d_random
 from rendering.quick import gl_query
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.quick.scene3d import population as population_module
 from rendering.quick.scene3d.population import (
     POPULATION_DRAW_GLSL,
@@ -154,7 +154,7 @@ def test_the_indirect_draw_draws_exactly_the_live_members(context):
         gl.glDeleteFramebuffers(1, [fbo])
         gl.glDeleteTextures([texture])
         gl.glDeleteVertexArrays(1, [vao])
-        gl.glDeleteProgram(program)
+        delete_program(program)
         pool.release()
         resources.release_resources()
 

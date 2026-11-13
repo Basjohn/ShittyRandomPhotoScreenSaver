@@ -831,9 +831,22 @@ def _paired_edge_field(mod, target, size):
     return run, release
 
 
+def _paired_propagation_field(mod, target, size):
+    from rendering.quick.scene3d.resources import MeshResources
+    resources = MeshResources("paired")
+    field = mod("rendering.quick.scene3d.propagation_field").PropagationField("paired", "paired", _PROPAGATION_COST)
+    sources = [(-0.7, 0.0, 0.0), (0.5, 0.3, 0.2), (0.1, -0.35, 0.05)]
+    run = lambda index: field.textures(resources, size, ("time", index), sources, 2.6, {"uChannel": 0.3})
+
+    def release():
+        field.release()
+        resources.release_resources()
+    return run, release
+
+
 def _paired_fog(mod, target, grid):
     from OpenGL import GL as gl
-    from rendering.quick.render.gl_resources import compile_compute_program
+    from rendering.quick.render.gl_resources import compile_compute_program, delete_program
     volume = mod("rendering.quick.scene3d.fog_volume").FogVolume("paired")
     source = mod("rendering.gl_programs.fog_volume").fog_inject_source(_FOG_MEDIUM)
     program = compile_compute_program(source, label="paired fog medium")
@@ -847,7 +860,7 @@ def _paired_fog(mod, target, grid):
     def release():
         gl.glUseProgram(0)
         volume.release()
-        gl.glDeleteProgram(program)
+        delete_program(program)
     return run, release
 
 
@@ -1005,6 +1018,8 @@ def _paired_sampled(kind):
 
 PAIRED = {
     "edge_field": (("rendering.quick.scene3d.edge_field",), _paired_edge_field, ((1920, 1080),)),
+    "propagation_field": (("rendering.quick.scene3d.propagation_field",), _paired_propagation_field,
+                          ((1920, 1080), (300, 700))),
     "fog_volume": (("rendering.gl_programs.fog_volume", "rendering.quick.scene3d.fog_volume"), _paired_fog,
                    ((128, 72, 128),)),
     "motion_tile_max": (("rendering.quick.scene3d.motion",), _paired_motion, ((2560, 1440), (3840, 2160))),

@@ -13,7 +13,7 @@ from OpenGL import GL as gl
 from rendering.gl_programs.exploding_tiles_program import EXPLODING_TILES_FRAME_BLOCK
 from rendering.gl_programs.scene3d import Scene3DBlockLayout
 from rendering.quick import gl_query
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.quick.scene3d.uniforms import SCENE3D_UNIFORM_BINDING, UniformBlock
 
 _MIXED = Scene3DBlockLayout.of("MixedBlock", (
@@ -120,7 +120,7 @@ void main() {
         gl.glDeleteFramebuffers(1, [fbo])
         gl.glDeleteTextures([texture])
         gl.glDeleteVertexArrays(1, [vao])
-        gl.glDeleteProgram(program)
+        delete_program(program)
         block.release()
 
 
@@ -193,7 +193,7 @@ def test_the_driver_sees_our_layout_and_our_values(context, layout):
         gl.glDeleteFramebuffers(1, [fbo])
         gl.glDeleteTextures([target])
         gl.glDeleteVertexArrays(1, [vao])
-        gl.glDeleteProgram(program)
+        delete_program(program)
         block.release()
 
 
@@ -265,7 +265,7 @@ def test_partial_updates_reach_the_allocated_block_even_if_the_generic_binding_c
         gl.glDeleteFramebuffers(1, [fbo])
         gl.glDeleteTextures([target])
         gl.glDeleteVertexArrays(1, [vao])
-        gl.glDeleteProgram(program)
+        delete_program(program)
         block.release()
 
 
@@ -311,5 +311,5 @@ def test_draws_before_an_update_keep_their_values_and_the_scope_exit_drops_the_u
         gl.glDeleteFramebuffers(1, [fbo])
         gl.glDeleteTextures([target])
         gl.glDeleteVertexArrays(1, [vao])
-        gl.glDeleteProgram(program)
+        delete_program(program)
         block.release()

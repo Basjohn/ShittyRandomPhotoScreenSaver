@@ -48,7 +48,7 @@ from core.settings.visualizer_mode_registry import (  # noqa: E402
     VisualizerShellPolicy,
     get_visualizer_presentation_policy,
 )
-from rendering.quick.render.gl_resources import compile_program  # noqa: E402
+from rendering.quick.render.gl_resources import compile_program, delete_program  # noqa: E402
 # The probe window is real and GPU-rendered but never on screen: pixels are read from its GL target.
 from tests._invisible_windows import keep_off_screen  # noqa: E402
 from rendering.quick.visualizer import (  # noqa: E402
@@ -571,7 +571,7 @@ class _ProbeRenderNode(QSGRenderNode):
                 self._clip_host.release_resources()
                 self._parent_clip_host.release_resources()
                 if self._program:
-                    gl.glDeleteProgram(self._program)
+                    delete_program(self._program)
                 if self._vbo:
                     gl.glDeleteBuffers(1, [self._vbo])
                 if self._vao:

@@ -1,6 +1,7 @@
 """SCENE's physical fades must not erase valid thin in-tank regions."""
 import numpy as np
 import pytest
+from rendering.quick.render.gl_resources import delete_program
 
 
 @pytest.mark.qt
@@ -84,5 +85,5 @@ void main(){'''+generated+'''gl_Position=vec4(0,0,0,1);}
     finally:
         gl.glDisable(gl.GL_RASTERIZER_DISCARD);gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,6,0)
         if buffer:gl.glDeleteBuffers(1,[buffer])
-        if program:gl.glDeleteProgram(program)
+        if program:delete_program(program)
         target.close()

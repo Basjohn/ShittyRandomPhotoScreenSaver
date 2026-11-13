@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 from tests.test_extruded_bubble_renderer import target, _snapshot
+from rendering.quick.render.gl_resources import delete_program
 
 
 def test_production_beads_sample_frozen_paths_without_changing_radius(qt_app):
@@ -59,7 +60,7 @@ void main() {
     finally:
         gl.glDisable(gl.GL_RASTERIZER_DISCARD)
         if buffers:gl.glDeleteBuffers(len(buffers),buffers)
-        if program:gl.glDeleteProgram(program)
+        if program:delete_program(program)
         target.close()
 
 
@@ -291,5 +292,5 @@ gl_Position=vec4(0.0,0.0,0.0,1.0);}
     finally:
         gl.glDisable(gl.GL_RASTERIZER_DISCARD)
         if buffers:gl.glDeleteBuffers(len(buffers),buffers)
-        if program:gl.glDeleteProgram(program)
+        if program:delete_program(program)
         target.close()

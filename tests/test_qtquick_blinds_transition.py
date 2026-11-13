@@ -193,7 +193,7 @@ from rendering.quick.bootstrap import configure_quick_graphics
 configure_quick_graphics(reason="band-shader-regression")
 from PySide6.QtGui import QGuiApplication, QOffscreenSurface, QOpenGLContext, QSurfaceFormat
 from OpenGL import GL as gl
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.gl_programs.blinds_program import blinds_program
 app = QGuiApplication([])
 context = QOpenGLContext()
@@ -208,7 +208,7 @@ try:
     for shader in (blinds_program,):
         program = compile_program(shader.vertex_source, shader.fragment_source, label=shader.name)
         assert gl.glGetProgramiv(program, gl.GL_LINK_STATUS)
-        gl.glDeleteProgram(program)
+        delete_program(program)
         compiled.append(shader.name)
 finally:
     context.doneCurrent()

@@ -18,6 +18,7 @@ from OpenGL import GL as gl
 
 from rendering.quick.render import gl_program_cache, gl_resources
 from rendering.quick.render.gl_program_cache import ProgramBinaryCache, program_key
+from rendering.quick.render.gl_resources import delete_program
 
 pytestmark = pytest.mark.qt
 
@@ -100,7 +101,7 @@ def test_a_miss_compiles_links_and_saves_once(target, store, calls, caplog):
     assert len(saved) == 1 and "linked cold" in saved[0] and "cache test" in saved[0]
     assert _draw(target, program) == (255, 64, 191, 255)
     with target.current():
-        gl.glDeleteProgram(program)
+        delete_program(program)
 
 
 def test_a_hit_loads_without_compiling_and_draws_the_same(target, store, calls):
@@ -116,8 +117,8 @@ def test_a_hit_loads_without_compiling_and_draws_the_same(target, store, calls):
     assert second != first and _draw(target, second) == picture
     assert store.stats() == {"hits": 1, "misses": 1, "saved": 1}
     with target.current():
-        gl.glDeleteProgram(first)
-        gl.glDeleteProgram(second)
+        delete_program(first)
+        delete_program(second)
 
 
 def test_negative_control_with_the_store_disabled_the_hit_case_compiles(target, monkeypatch, calls, tmp_path):
@@ -127,8 +128,8 @@ def test_negative_control_with_the_store_disabled_the_hit_case_compiles(target, 
     with target.current():
         first = _link(fragment)
         second = _link(fragment)
-        gl.glDeleteProgram(first)
-        gl.glDeleteProgram(second)
+        delete_program(first)
+        delete_program(second)
     assert calls == {"glCompileShader": 4, "glLinkProgram": 2}
     assert disabled.stats() == {"hits": 0, "misses": 0, "saved": 0}
     assert not list(tmp_path.rglob("*.bin"))
@@ -139,8 +140,8 @@ def test_a_source_edit_misses(target, store, calls):
         first = _link(_fragment(0.2))
         calls.update(glCompileShader=0, glLinkProgram=0)
         second = _link(_fragment(0.2))     # same colour, different nonce: an edited source
-        gl.glDeleteProgram(first)
-        gl.glDeleteProgram(second)
+        delete_program(first)
+        delete_program(second)
     assert calls == {"glCompileShader": 2, "glLinkProgram": 1}
     assert len(_entries(store)) == 2
 
@@ -158,8 +159,8 @@ def test_a_driver_string_change_misses(target, store, calls, monkeypatch):
     calls.update(glCompileShader=0, glLinkProgram=0)
     with target.current():
         second = _link(fragment)
-        gl.glDeleteProgram(first)
-        gl.glDeleteProgram(second)
+        delete_program(first)
+        delete_program(second)
     assert calls == {"glCompileShader": 2, "glLinkProgram": 1}
     assert len(_entries(store)) == 2
 
@@ -196,7 +197,7 @@ def test_a_damaged_entry_falls_back_to_the_compile_and_is_replaced(target, store
     with target.current():
         third = _link(fragment)
         for program in (first, second, third):
-            gl.glDeleteProgram(program)
+            delete_program(program)
     assert calls == {"glCompileShader": 0, "glLinkProgram": 0}
 
 

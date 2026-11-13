@@ -7,6 +7,7 @@ import dataclasses
 import random
 
 import pytest
+from rendering.quick.render.gl_resources import delete_program
 
 pytest.importorskip("OpenGL")
 
@@ -71,7 +72,7 @@ def test_direct_reads_match_pyopengl_for_every_field_on_the_real_driver(gl_conte
         assert dataclasses.asdict(InheritedGlState.capture_clipped_shared()) == expected
         assert dataclasses.asdict(InheritedGlState.capture_render_host()) == {**expected, "color_mask": None}
     gl.glUseProgram(0)
-    gl.glDeleteProgram(program)
+    delete_program(program)
 
 
 def test_the_capture_reads_every_frame_and_keeps_nothing(gl_context):
