@@ -619,3 +619,15 @@ core may add no handle and no USER object per cycle over its control (tolerance 
 over the control's (tolerance the control's own range on that API, at least 16 MiB), and no thread. Rerun on the same
 build: PASS on OpenGL, Vulkan (validation clean, A excused 10 times), D3D11 and D3D12
 (`.artifacts/evidence/native_core/n2_2/20261113_n22_hosts_controls/`).
+
+**J5. D3D11 and D3D12 windows stop presenting while the display shows nothing; OpenGL and Vulkan windows do not (N2.6
+build round 1, 13 Nov 2026; added by the N2.6 agent).** Every D3D window round of host_check, composite_check and
+timer_check got 2 frame edges and no more. In a plain process with the native module never loaded, an off-screen Qt
+Quick window (the harnesses' invisible pattern, content animating) presented 2 frames in 2 s on D3D11 and on D3D12 and
+139 on OpenGL, on the same machine within the same minute (one monitor attached, desktop unlocked, no screen saver
+running). The likely cause is DXGI reporting the output occluded (the display powered down) and Qt's D3D swapchains
+then pausing (*unverified*: not read in Qt's source, the monitor's power state not queried); the other two backends keep
+going. Either way it is the environment's, not the core's: the D3D window rounds passed on the N2.2 and N2.4 builds when
+the display was on. Since then every window round is preceded by that control
+(`host_check.qt_alone_window_frames`, at least 10 frames in 1 s); fewer puts "environment" first in the verdict
+(`.artifacts/evidence/native_core/n2_2/20261113_n22_environment_recheck/`).

@@ -17,6 +17,9 @@ Rounds (each per API):
              on Qt's render thread, detach (released at the next frame edge on the render thread), re-attach, and the
              window destroyed while it animates (mid-frame): released at the scene graph's invalidation on the render
              thread, then (Vulkan) the module's device destroyed after the window.
+  (environment) before any window round, an off-screen window with Qt alone must present at least
+             ENVIRONMENT_MIN_FRAMES frames in ENVIRONMENT_SECONDS; fewer (a display off or an occluded output: DXGI
+             stops presenting) is reported as the environment's reason, beside the window rounds' own failures.
   lifecycle  create-use-destroy cycles, each kind of ours right after its control (Qt alone doing the same on the
              same API): a window with the core (attach, probe, detach, re-attach, destroyed mid-frame) against a window
              without it; a hidden host (probe, readback, detach, re-attach, close) against Qt's threaded render control
@@ -67,6 +70,9 @@ HANDLE_SLOPE_TOLERANCE = 0.25      # handles (or USER objects) per cycle the cor
 THREAD_TOLERANCE = 1
 PRIVATE_PLATEAU_TOLERANCE_MIB = 16.0   # the floor; the control's own range on that API when larger
 DEVICE_TEARDOWN = ["vkDeviceWaitIdle: VK_SUCCESS", "vkDestroyDevice", "resetDeviceFunctions"]
+ENVIRONMENT_SECONDS = 1.0          # the window rounds' environment control (qt_alone_window_frames)
+ENVIRONMENT_MIN_FRAMES = 10        # an animating window presents far more at any refresh rate
+WINDOW_ROUNDS = ("window", "lifecycle")
 # Negative controls of the probe (probe_pass.h ProbeConfig); the clip-NDC flip's inverse is added per backend.
 NEGATIVES = {
     "no_correction": {"correction": "none"},
@@ -310,6 +316,38 @@ def _off_screen_window():
 def _show(window) -> None:
     window.setOpacity(0.0)   # keep_off_screen's call, repeated where the window is shown
     window.show()
+
+
+def qt_alone_window_frames(app, engine, seconds: float = ENVIRONMENT_SECONDS) -> int:
+    """The environment control of every window round: frames an off-screen window presents in ``seconds`` with Qt
+    alone (no host of the core, its content animating). Build round 1 of N2.6 (13 Nov): with the module not even
+    loaded, D3D11 and D3D12 windows presented 2 frames in 2 s while OpenGL presented 139 (DXGI stops presenting a window
+    whose output is occluded or off); a window round on such an API cannot be judged."""
+    import shiboken6
+
+    item, _component = _content(engine)
+    window = _off_screen_window()
+    item.setParentItem(window.contentItem())
+    swaps = [0]
+    window.frameSwapped.connect(lambda: swaps.__setitem__(0, swaps[0] + 1))
+    try:
+        _show(window)
+        _pump(app, seconds)
+    finally:
+        shiboken6.delete(window)
+        _flush_deletes(app)
+        _drop_item(app, item)
+    return swaps[0]
+
+
+def environment_reasons(api: str, record: dict) -> list[str]:
+    """The window rounds' environment control, as a verdict reason: Qt alone presented too few frames on this API."""
+    frames = record.get("qt_alone_window_frames")
+    if frames is None or frames >= ENVIRONMENT_MIN_FRAMES:
+        return []
+    return [f"{api} environment: an off-screen window with Qt alone presented {frames} frames in {ENVIRONMENT_SECONDS} s "
+            f"(at least {ENVIRONMENT_MIN_FRAMES} expected): the display is off or the output occluded, so this API's "
+            "window rounds cannot be judged; rerun with the display on"]
 
 
 def _window_probe(app, host, analyse) -> tuple[object, dict]:
@@ -675,6 +713,10 @@ def child(args) -> dict:
         record["instance_created"] = True
     engine = QQmlEngine()
     try:
+        if any(name in WINDOW_ROUNDS for name in args.rounds):
+            if vulkan:
+                core.set_vulkan_phase("environment")
+            record["qt_alone_window_frames"] = qt_alone_window_frames(app, engine)
         for name in args.rounds:
             if vulkan:
                 core.set_vulkan_phase(name)
@@ -716,6 +758,7 @@ def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool,
     failed: list[str] = []
     if error:
         failed.append(f"{api}: {error.splitlines()[0]}")
+    failed += environment_reasons(api, record)
     for name in record.get("rounds", []):
         entry = record.get(name, {})
         if not entry.get("pass"):
