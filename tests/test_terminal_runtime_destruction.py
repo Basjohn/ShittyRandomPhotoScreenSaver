@@ -21,6 +21,7 @@ from __future__ import annotations
 import gc
 
 import pytest
+from PySide6.QtCore import QObject
 
 from engine.runtime_destruction import (
     RuntimeDestructionBarrier,
@@ -151,3 +152,82 @@ def test_terminal_barrier_completion_is_reported_once_for_stacked_then(qt_app) -
     late: list[int] = []
     barrier.then(lambda: late.append(1))
     assert late == [1]
+
+
+# ---------------------------------------------------------------------------------- every exiting stop is terminal
+
+
+class _ManagerRoot(QObject):
+    """The retiring generation's Quick roots, as the display manager publishes them (one QObject stands for them)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._runtime_generation = 11
+        self.window = QObject()
+
+    def collect_runtime_retirement_roots(self):
+        return [self.window], []
+
+    def get_display_count(self) -> int:
+        return 1
+
+    def cleanup(self) -> None:
+        pass
+
+
+class _StoppingEngine:
+    """``engine_lifecycle.stop``'s collaborators up to the terminal deferral (the function under test is the real one)."""
+
+    def __init__(self, manager: _ManagerRoot) -> None:
+        from engine.screensaver_engine import EngineState
+
+        self._state = EngineState.RUNNING
+        self._running = True
+        self.display_manager = manager
+        self.thread_manager = None
+        self.resource_manager = None
+        self._pending_runtime_destruction_barrier = None
+        self._terminal_shutdown_requested = False
+        self._rotation_timer = None
+        self._runtime_generation = 11
+
+    def _get_state(self):
+        return self._state
+
+    def _transition_state(self, target, expected_from=()):
+        self._state = target
+        return True
+
+    def _advance_runtime_generation(self, _reason: str) -> None:
+        self._runtime_generation += 1
+
+
+@pytest.mark.parametrize("reason", [None, "cli_exit_after", "no_display_shown"])
+def test_every_exiting_stop_waits_for_its_quick_roots_before_the_quit(reason, qt_app, qtbot, monkeypatch) -> None:
+    # Keyed on the reason "application_exit" alone, an exiting stop for any other reason (--exit-after's
+    # "cli_exit_after", a failed start's "no_display_shown") armed a replacement barrier, which cancels itself under
+    # terminal shutdown: the quit ran while the Quick windows were still alive (on Vulkan, 0xC0000005 at exit).
+    from shiboken6 import isValid
+
+    from core.windows import reddit_helper_runtime
+    from engine import engine_lifecycle
+
+    finalized: list[bool] = []
+    monkeypatch.setattr(engine_lifecycle, "_run_stop_finalization",
+                        lambda engine, exit_app: finalized.append(exit_app))
+    monkeypatch.setattr(reddit_helper_runtime, "clear_session_ticket", lambda **_kwargs: False)
+    manager = _ManagerRoot()
+    engine = _StoppingEngine(manager)
+    window = manager.window
+    try:
+        engine_lifecycle.stop(engine, exit_app=True, reason=reason)
+        barrier = engine._pending_runtime_destruction_barrier
+        assert barrier is not None and barrier.is_complete is False
+        assert finalized == []                       # no quit while the generation's Quick roots live
+        window.deleteLater()
+        qtbot.waitUntil(lambda: finalized == [True], timeout=2000)
+    finally:
+        for obj in (window, manager):
+            if isValid(obj):
+                obj.deleteLater()
+        qt_app.processEvents()

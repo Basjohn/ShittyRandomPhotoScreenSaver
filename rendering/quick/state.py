@@ -128,18 +128,29 @@ class QuickSceneReadiness:
     admission_open: bool = True
     qml_objects_retired: bool = False
     error: str | None = None
+    # A frame of this scene was presented. Published only on a backend without the background family's renderers
+    # (the Vulkan rehearsal, D10), where it is the reveal's input instead of the background facts above; on OpenGL
+    # the scene never sets it (DisplayManager._startup_reveal_admits holds the one rule).
+    frame_presented: bool = False
 
     @property
-    def ready_for_reveal(self) -> bool:
+    def scene_presentable(self) -> bool:
+        """Every fact of the reveal but the background's: the scene exists, renders and is admitted."""
         return bool(
             self.qml_root_created
             and self.scene_graph_initialized
-            and self.background_renderer_ready
-            and self.intentional_base_frame_ready
             and self.admission_open
             and not self.scene_graph_invalidated
             and not self.qml_objects_retired
             and self.error is None
+        )
+
+    @property
+    def ready_for_reveal(self) -> bool:
+        return bool(
+            self.scene_presentable
+            and self.background_renderer_ready
+            and self.intentional_base_frame_ready
         )
 
     def as_dict(self) -> dict[str, Any]:

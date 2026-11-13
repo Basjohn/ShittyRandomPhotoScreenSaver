@@ -37,6 +37,7 @@ from core.settings.visualizer_mode_registry import (
     iter_visualizer_mode_descriptors,
     iter_all_visualizer_mode_descriptors,
     is_mode_active,
+    is_mode_available_on_backend,
     resolve_effective_enabled_modes,
     resolve_effective_mode,
 )
@@ -99,6 +100,9 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         self._last_vis_mode_section = None
         self._mode_pills: dict[str, QPushButton] = {}
         self._mode_admission_checkboxes: dict[str, QCheckBox] = {}
+        # D10 point 2 on the diagnostic backend (the Vulkan rehearsal): a mode with no renderer there is greyed, with
+        # its reason. On OpenGL every mode has one and this is empty. Read once: the backend never changes.
+        self._modes_without_renderer = self._resolve_modes_without_renderer()
 
         self._initialize_visualizer_settings_context_state()
         self._setup_ui()
@@ -113,6 +117,18 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
     # ------------------------------------------------------------------
     # Construction
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_modes_without_renderer() -> dict[str, str]:
+        """{mode id: the one-line reason} for every active mode with no renderer on the process's backend."""
+        from rendering.quick.bootstrap import QuickBackend, quick_backend_api
+
+        backend = QuickBackend(api=quick_backend_api()).qt_graphics_api
+        return {
+            descriptor.mode_id: f"No {backend} renderer yet: the saver skips this mode on the {backend} backend."
+            for descriptor in iter_all_visualizer_mode_descriptors()
+            if is_mode_active(descriptor.mode_id) and not is_mode_available_on_backend(descriptor.mode_id)
+        }
 
     def _load_widget_defaults(self) -> Dict[str, Dict[str, Any]]:
         """Load canonical Widget defaults for the active application profile."""
@@ -185,6 +201,8 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             if not is_mode_active(descriptor.mode_id):
                 continue
             pill = self._make_mode_pill(descriptor.display_name)
+            if descriptor.mode_id in self._modes_without_renderer:
+                pill.setToolTip(self._modes_without_renderer[descriptor.mode_id])
             self._mode_pills[descriptor.mode_id] = pill
             self._nav_group.addButton(pill)
             pill.clicked.connect(
@@ -266,12 +284,25 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         mode_intro.setWordWrap(True)
         shared_styles.apply_shared_label_style(mode_intro, "INFO_LABEL_STYLE")
         behavior_layout.addWidget(mode_intro)
+        if self._modes_without_renderer:
+            # Only on the diagnostic backend: one line for the greyed modes; each says why in its tooltip.
+            from rendering.quick.bootstrap import QuickBackend, quick_backend_api
+
+            backend = QuickBackend(api=quick_backend_api()).qt_graphics_api
+            unported = QLabel(f"Greyed modes have no {backend} renderer yet: the saver skips them on the "
+                              f"{backend} backend.")
+            unported.setObjectName("visualizerModesWithoutRenderer")
+            unported.setWordWrap(True)
+            shared_styles.apply_shared_label_style(unported, "INFO_LABEL_STYLE")
+            behavior_layout.addWidget(unported)
 
         for descriptor in iter_all_visualizer_mode_descriptors():
             if not is_mode_active(descriptor.mode_id):
                 continue
             checkbox = QCheckBox(descriptor.display_name)
             checkbox.setProperty("circleIndicator", True)
+            if descriptor.mode_id in self._modes_without_renderer:
+                checkbox.setToolTip(self._modes_without_renderer[descriptor.mode_id])
             checkbox.toggled.connect(
                 lambda checked, mode=descriptor.mode_id: self._on_mode_admission_toggled(
                     mode, checked
@@ -344,7 +375,8 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             return
         page = str(state.get("page", "setup") or "setup").strip().lower()
         mode_id = str(state.get("mode_id", "") or "").strip().lower()
-        if page == "mode" and mode_id in self._vis_body_host.enabled_modes:
+        if (page == "mode" and mode_id in self._vis_body_host.enabled_modes
+                and mode_id not in self._modes_without_renderer):
             previous_loading = self._loading
             self._loading = True
             try:
@@ -407,6 +439,8 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         host = self._vis_body_host
         if target not in host.enabled_modes:
             raise ValueError(f"Disabled visualizer mode has no selectable pill: {target!r}")
+        if target in self._modes_without_renderer:
+            raise ValueError(f"Visualizer mode {target!r} is greyed: {self._modes_without_renderer[target]}")
 
         previous = self._get_active_visualizer_mode()
         if self._page_stack.currentWidget() is self._fullscreen_page:
@@ -528,15 +562,17 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         for mode_id, checkbox in self._mode_admission_checkboxes.items():
             checkbox.blockSignals(True)
             checkbox.setChecked(mode_id in enabled)
-            checkbox.setEnabled(mode_id not in enabled or len(enabled) > 1)
+            checkbox.setEnabled((mode_id not in enabled or len(enabled) > 1)
+                                and mode_id not in self._modes_without_renderer)
             checkbox.blockSignals(False)
 
     def _sync_mode_pills(self) -> None:
         enabled = set(self._vis_body_host.enabled_modes)
         for mode_id, pill in self._mode_pills.items():
+            selectable = mode_id in enabled and mode_id not in self._modes_without_renderer
             pill.setVisible(mode_id in enabled)
-            pill.setEnabled(mode_id in enabled)
-            if mode_id not in enabled:
+            pill.setEnabled(selectable)
+            if not selectable:
                 pill.setChecked(False)
 
     # ------------------------------------------------------------------

@@ -1,5 +1,5 @@
 #version 460 core
-// Bake with PySide6 qsb: --glsl "460" -o text_legibility.frag.qsb text_legibility.frag
+// Baked for every target by tools/regen_qrc.py --shaders (its --check says whether the pack is current).
 // One rounded legibility row (Docs/Architecture/Card_Surface_Materials.md, 3.3): under a
 // whole list line (LegibilityRow.qml) or a single text run (ShadowedText.qml). The vertex
 // stage computed the row's one even overlay (away from the text, on the side the surface is

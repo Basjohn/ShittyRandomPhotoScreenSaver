@@ -29,6 +29,7 @@ from core.settings.default_contract import require_canonical_default
 from core.constants.timing import TRANSITION_STAGGER_MS
 from rendering.display_modes import DisplayMode
 from rendering.transition_registry import (
+    background_family_available_on_backend,
     canonicalize_transition_name,
     is_transition_available_for_hw,
 )
@@ -435,6 +436,10 @@ class DisplayManager(QObject):
         self._display_startup_ready_emitted_generation: int = -1
         self._authoritative_first_frame_screens: Set[int] = set()
         self._authoritative_first_frame_emitted = False
+        # D10: without the background family's renderers (the Vulkan rehearsal)
+        # a display reveals on its first presented frame
+        # (_startup_reveal_admits). Read once: the backend never changes.
+        self._reveal_on_first_presented_frame = not background_family_available_on_backend()
         # Screens whose retained base image is a one-session desktop snapshot.
         # This staging source makes the first authored wallpaper a real crossfade
         # without pretending the snapshot is queue/history/current-image truth.
@@ -3074,10 +3079,7 @@ class DisplayManager(QObject):
             return
         if readiness.qml_root_created and readiness.admission_open:
             self._mark_display_startup_ready(unit, startup_generation)
-        if (
-            readiness.ready_for_reveal
-            and unit.screen_index in self._authoritative_first_frame_screens
-        ):
+        if self._startup_reveal_admits(unit.screen_index, readiness):
             self._mark_startup_reveal_ready(unit.screen_index)
 
     def _on_quick_runtime_retired(self, screen_index: int) -> None:
@@ -5217,8 +5219,39 @@ class DisplayManager(QObject):
         logger.debug(f"Image displayed on screen {screen_index}: {image_path}")
         self._evaluate_authoritative_first_frames()
         readiness = self._quick_readiness_by_screen.get(int(screen_index))
-        if readiness is not None and readiness.ready_for_reveal:
+        if readiness is not None and self._startup_reveal_admits(int(screen_index), readiness):
             self._mark_startup_reveal_ready(int(screen_index))
+
+    def _startup_reveal_admits(self, screen_index: int, readiness: QuickSceneReadiness) -> bool:
+        """The reveal's one rule for one display.
+
+        With the background family's renderers (OpenGL): the scene is ready
+        for reveal (its background renderer drew an intentional base frame)
+        and the display's first authored wallpaper is displayed. On a backend
+        without them (the Vulkan rehearsal before N2b, D10 point 2) no
+        wallpaper frame can ever draw, so the display reveals on its first
+        presented frame; the decision is logged once per display.
+        """
+
+        if not self._reveal_on_first_presented_frame:
+            return bool(
+                readiness.ready_for_reveal
+                and screen_index in self._authoritative_first_frame_screens
+            )
+        if not (readiness.scene_presentable and readiness.frame_presented):
+            return False
+        if screen_index not in self._startup_reveal_screens:
+            from rendering.quick.bootstrap import quick_backend_api
+
+            logger.info(
+                "[STARTUP_REVEAL] Display ready on its first presented frame "
+                "screen=%s generation=%s: the %s backend has no background "
+                "renderer, so no wallpaper frame is awaited (D10)",
+                screen_index,
+                int(self._runtime_generation or 0),
+                quick_backend_api(),
+            )
+        return True
 
     def _startup_awaited_screens(self) -> Set[int]:
         """Selected screens this generation's startup gates still wait for."""

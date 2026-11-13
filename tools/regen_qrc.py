@@ -5,6 +5,13 @@ truth. Build Foundry and the standalone build workers compile those manifests in
 raw binary ``.rcc`` packs. Runtime registers the packs with ``QResource`` so the
 existing ``:/srpss/...`` namespace is unchanged without embedding tens of megabytes
 of escaped resource bytes in generated Python source.
+
+``--shaders`` bakes the Qt Quick shader packs instead (``rendering/quick/qml/shaders``:
+every ``.vert``/``.frag`` there, discovered, its ``.qsb`` beside it, committed) with the
+same toolchain's ``qsb``, for every target the product ships: SPIR-V (Vulkan), the GLSL
+of the product's OpenGL 4.6 context, and the shipped targets of
+``tools/vulkan_shader_readiness.py`` (GLSL 430, HLSL 5.0, MSL 1.2). ``--shaders --check``
+fails when a committed pack is not what its source bakes to.
 """
 from __future__ import annotations
 
@@ -393,17 +400,171 @@ def ensure_qrc_current(
     )
 
 
+# ---- the Qt Quick shader packs ---------------------------------------------------------------------------------------
+
+QUICK_SHADER_SUFFIXES = (".vert", ".frag")
+
+
+@dataclass(frozen=True)
+class QuickShaderStatus:
+    source: Path
+    pack: Path
+    current: bool
+    reason: str
+
+
+def quick_shader_dir(repo_root: Path = ROOT) -> Path:
+    """Where the Qt Quick ``ShaderEffect`` sources live; each pack (``<source>.qsb``) is committed beside its source."""
+    return repo_root / "rendering" / "quick" / "qml" / "shaders"
+
+
+def quick_shader_sources(shader_dir: Path | None = None) -> tuple[Path, ...]:
+    """Every Qt Quick shader source (discovered, never listed)."""
+    folder = quick_shader_dir() if shader_dir is None else Path(shader_dir)
+    return tuple(sorted(path for path in folder.iterdir() if path.suffix in QUICK_SHADER_SUFFIXES))
+
+
+def quick_shader_targets() -> tuple[str, ...]:
+    """The ``qsb`` target arguments of every Qt Quick shader pack.
+
+    SPIR-V is qsb's own and always baked (Vulkan). Then the GLSL of the product's OpenGL context (4.6 core,
+    ``rendering.quick.bootstrap.QUICK_GLSL_VERSION``) first: Qt's OpenGL backend draws with the highest GLSL a pack
+    holds that its context runs, so the product's OpenGL path keeps the variant it drew with before every other
+    target was added. Then the shipped backends' targets of ``tools/vulkan_shader_readiness.py`` (GLSL 430, HLSL 5.0,
+    MSL 1.2), from that one source.
+    """
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from rendering.quick.bootstrap import QUICK_GLSL_VERSION
+    from tools.vulkan_shader_readiness import QSB_TARGETS
+
+    shipped = dict(zip(QSB_TARGETS[0::2], QSB_TARGETS[1::2]))
+    product_glsl = f"{QUICK_GLSL_VERSION[0]}{QUICK_GLSL_VERSION[1]:02d}"
+    glsl = ",".join(dict.fromkeys((product_glsl, *shipped.pop("--glsl", "").split(","))))
+    targets = ["--glsl", glsl]
+    for flag, versions in shipped.items():
+        targets += [flag, versions]
+    return tuple(targets)
+
+
+def quick_shader_baker(
+    python_executable: Path | str,
+    run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> Path:
+    """The ``qsb`` of the selected (pinned) PySide6 toolchain, beside its ``rcc``."""
+    toolchain = _selected_toolchain_identity(Path(python_executable), run)
+    qsb = toolchain.rcc_executable.with_name("qsb" + toolchain.rcc_executable.suffix)
+    if not qsb.is_file():
+        raise QrcRegenerationError(f"Selected PySide6 qsb executable is missing: {qsb}")
+    return qsb
+
+
+def _bake_quick_shader(
+    qsb: Path,
+    source: Path,
+    output: Path,
+    targets: Sequence[str],
+    run: Callable[..., subprocess.CompletedProcess[str]],
+) -> None:
+    output.unlink(missing_ok=True)
+    completed = run([str(qsb), *targets, str(source), "-o", str(output)], cwd=str(ROOT), check=False,
+                    capture_output=True, text=True)
+    if completed.returncode != 0 or not output.is_file() or output.stat().st_size <= 0:
+        detail = "\n".join(part.strip() for part in (completed.stdout, completed.stderr) if part and part.strip())
+        raise QrcRegenerationError(f"qsb failed for {source.name} (exit {completed.returncode})"
+                                   + (f": {detail}" if detail else ""))
+
+
+def quick_shader_status(
+    *,
+    qsb: Path,
+    shader_dir: Path | None = None,
+    targets: Sequence[str] | None = None,
+    run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> tuple[QuickShaderStatus, ...]:
+    """Whether each committed pack is exactly what its source bakes to (qsb is deterministic)."""
+    import tempfile
+
+    targets = tuple(quick_shader_targets() if targets is None else targets)
+    statuses = []
+    with tempfile.TemporaryDirectory(prefix="srpss_qsb_") as folder:
+        for source in quick_shader_sources(shader_dir):
+            pack = source.with_name(source.name + ".qsb")
+            fresh = Path(folder) / pack.name
+            _bake_quick_shader(qsb, source, fresh, targets, run)
+            if not pack.is_file():
+                statuses.append(QuickShaderStatus(source, pack, False, "the pack is missing"))
+            elif pack.read_bytes() != fresh.read_bytes():
+                statuses.append(QuickShaderStatus(source, pack, False,
+                                                  "the pack is not what its source bakes to for every target"))
+            else:
+                statuses.append(QuickShaderStatus(source, pack, True, "current"))
+    return tuple(statuses)
+
+
+def bake_quick_shaders(
+    *,
+    qsb: Path,
+    shader_dir: Path | None = None,
+    targets: Sequence[str] | None = None,
+    run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> tuple[QuickShaderStatus, ...]:
+    """Bake every stale pack beside its source (a temporary file replaced into place); returns the final status."""
+    targets = tuple(quick_shader_targets() if targets is None else targets)
+    for status in quick_shader_status(qsb=qsb, shader_dir=shader_dir, targets=targets, run=run):
+        if status.current:
+            continue
+        temporary = status.pack.with_name(f".{status.pack.name}.{os.getpid()}.tmp")
+        try:
+            _bake_quick_shader(qsb, status.source, temporary, targets, run)
+            temporary.replace(status.pack)
+        finally:
+            temporary.unlink(missing_ok=True)
+    final = quick_shader_status(qsb=qsb, shader_dir=shader_dir, targets=targets, run=run)
+    stale = next((status for status in final if not status.current), None)
+    if stale is not None:
+        raise QrcRegenerationError(f"{stale.pack.name}: {stale.reason} after its bake")
+    return final
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
     parser.add_argument("--qrc", type=Path, help="operate on one explicit manifest")
     parser.add_argument("--output", type=Path, help="binary .rcc output for --qrc")
     parser.add_argument("--check", action="store_true", help="fail if regeneration is needed")
+    parser.add_argument("--shaders", action="store_true",
+                        help="the Qt Quick shader packs (rendering/quick/qml/shaders) instead of the .rcc packs")
     return parser.parse_args(argv)
+
+
+def _main_shaders(args: argparse.Namespace) -> int:
+    try:
+        qsb = quick_shader_baker(args.python)
+        if args.check:
+            stale = [status for status in quick_shader_status(qsb=qsb) if not status.current]
+            for status in stale:
+                print(f"{status.pack.name}: {status.reason}", file=sys.stderr)
+            if stale:
+                return 1
+            statuses = quick_shader_status(qsb=qsb)
+        else:
+            statuses = bake_quick_shaders(qsb=qsb)
+    except QrcRegenerationError as exc:
+        print(f"Quick shader bake failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"Quick shader packs are current for {' '.join(quick_shader_targets())} (and SPIR-V); "
+          f"{len(statuses)} packs")
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.shaders:
+        if args.qrc is not None or args.output is not None:
+            print("Quick shader bake failed: --shaders takes no --qrc or --output", file=sys.stderr)
+            return 2
+        return _main_shaders(args)
     if args.qrc is None and args.output is not None:
         print("QRC regeneration failed: --output requires --qrc", file=sys.stderr)
         return 2

@@ -16,6 +16,7 @@ gating contract, not native Windows presentation.
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -197,6 +198,54 @@ def test_retired_manager_deadline_never_reveals(two_display_manager, qtbot):
     assert coordinator.is_started is False
     assert reveals == []
     assert [widgets.value for _unit, widgets, _vis in units] == [0.0, 0.0]
+
+
+def _presented_without_background(screen_index: int) -> QuickSceneReadiness:
+    """A scene that presented a frame and has no background facts (no background renderer drew)."""
+    return QuickSceneReadiness(
+        screen_index=screen_index,
+        runtime_generation=GENERATION,
+        qml_root_created=True,
+        scene_graph_initialized=True,
+        frame_presented=True,
+    )
+
+
+@pytest.mark.parametrize("backend", ["vulkan", "opengl"])
+def test_without_a_background_renderer_a_display_reveals_on_its_first_presented_frame(
+    backend,
+    qt_app,
+    qtbot,
+    monkeypatch,
+):
+    # D10 (Current_Plan.md 8b, N2.7 leftovers): on a backend without the background family's renderers no wallpaper
+    # frame can draw, so the reveal's owner reveals each display on its first presented frame. With them (OpenGL)
+    # the same facts reveal nothing: the wallpaper frame is still awaited.
+    from rendering import transition_registry
+    from rendering.quick import bootstrap
+
+    monkeypatch.setattr(bootstrap, "quick_backend_api", lambda: backend)
+    without_background = not transition_registry.background_family_available_on_backend()
+    manager, _units, reveals, first_frames = _make_manager(monkeypatch, reveal_ms=40)
+    try:
+        coordinator = manager._quick_startup_reveal
+        startup = manager._display_startup_generation
+        # Before any frame: a presentable scene alone is never enough.
+        for unit in manager.displays:
+            manager._on_quick_readiness_changed(
+                unit, replace(_presented_without_background(unit.screen_index), frame_presented=False), startup)
+        qtbot.wait(200)
+        assert coordinator.is_started is False and reveals == []
+        for unit in manager.displays:
+            manager._on_quick_readiness_changed(unit, _presented_without_background(unit.screen_index), startup)
+        if without_background:
+            qtbot.waitUntil(lambda: reveals == [GENERATION], timeout=2000)
+            assert first_frames == []                     # no wallpaper was displayed: none was waited for
+        else:
+            qtbot.wait(300)
+            assert coordinator.is_started is False and reveals == []
+    finally:
+        _retire(manager)
 
 
 def _non_decreasing(history: list[tuple[float, float]]) -> bool:

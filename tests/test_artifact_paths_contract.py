@@ -37,7 +37,8 @@ NOT_EVIDENCE = {
     "tools/release_media.py": "product showcase WebPs in assets/webp (release media)",
     "tools/convert_svg_to_png.py": "product icon PNGs beside their SVG sources",
     "tools/convert_weather_svgs.py": "product weather icon PNGs in assets",
-    "tools/regen_qrc.py": "product QRC resource packs in ui/resources",
+    "tools/regen_qrc.py": "product QRC resource packs in ui/resources and the Qt Quick shader packs beside their "
+                          "sources (--shaders)",
     "tools/linux_build.py": "release build output (release/linux)",
     "tools/build_runner.py": "release builds and the build log under logs/",
     "tools/github_remote_build.py": "GitHub Remote release builds (release/, logs/) and the runner's build manifest "

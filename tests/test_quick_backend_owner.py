@@ -389,6 +389,125 @@ def test_a_start_that_dies_before_its_first_frame_sends_the_next_start_to_opengl
     assert nxt["api"] == "OpenGL"
 
 
+_EXIT = r'''
+import threading
+import shiboken6
+from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
+from PySide6.QtWidgets import QApplication
+
+configured = bootstrap.configure_quick_graphics(reason="n27-exit", backend="vulkan", start_state_dir=state_dir)
+app = QApplication(sys.argv[:1])
+bootstrap.start_quick_backend()
+from engine import engine_lifecycle
+from engine.screensaver_engine import EngineState
+from rendering.quick.runtime import QuickDisplayRuntime
+from rendering.quick.scene_controller import QuickSceneFactory
+from rendering.quick.state import QuickWindowPolicy
+
+factory = QuickSceneFactory()
+runtime = QuickDisplayRuntime(screen_index=0, runtime_generation=1, screen=app.primaryScreen(), scene_factory=factory,
+                              window_policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False))
+window = runtime.window
+window.setOpacity(0.0)
+window.setFlag(Qt.WindowType.WindowTransparentForInput, True)
+window.setFlag(Qt.WindowType.Tool, True)
+bound = window.screen().geometry()
+window.setGeometry(bound.x() + 16, bound.y() + 16, 64, 64)
+
+
+class Manager(QObject):
+    """The display manager's teardown contract around the one real runtime: cleanup begins its retirement."""
+    _runtime_generation = 1
+
+    def collect_runtime_retirement_roots(self):
+        return [runtime, window], []
+
+    def get_display_count(self):
+        return 1
+
+    def cleanup(self):
+        runtime.close_runtime()
+
+
+class Engine(QObject):
+    """engine_lifecycle.stop's collaborators (the stop, the teardown and the finalization are the real ones)."""
+    stopped = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self._state = EngineState.RUNNING
+        self._running = True
+        self.display_manager = Manager()
+        self.thread_manager = self.resource_manager = self._process_supervisor = None
+        self._pending_runtime_destruction_barrier = None
+        self._terminal_shutdown_requested = False
+        self._rotation_timer = None
+        self._runtime_generation = 1
+        self._instance_lock = threading.Lock()
+
+    def _get_state(self):
+        return self._state
+
+    def _transition_state(self, target, expected_from=()):
+        self._state = target
+        return True
+
+    def _advance_runtime_generation(self, _reason):
+        self._runtime_generation += 1
+
+
+import core.windows.reddit_helper_runtime as reddit_helper_runtime
+reddit_helper_runtime.clear_session_ticket = lambda **_kwargs: False
+engine = Engine()
+report = {}
+
+
+class Presented(QObject):
+    @Slot()
+    def frame(self):
+        window.frameSwapped.disconnect(presented.frame)
+        report["api"] = window.rendererInterface().graphicsApi().name
+        if step == "stop":
+            engine_lifecycle.stop(engine, exit_app=True, reason="cli_exit_after")       # what --exit-after runs
+        else:
+            # The negative control: the stop before the fix. Its barrier was a replacement one (the reason was not
+            # "application_exit"), which cancels itself under terminal shutdown, so the stop finalized and quit at once.
+            engine._terminal_shutdown_requested = True
+            engine_lifecycle.teardown_display_runtime(engine, reason="cli_exit_after", terminal=False)
+            engine_lifecycle._run_stop_finalization(engine, True)
+
+
+presented = Presented()
+window.frameSwapped.connect(presented.frame, Qt.ConnectionType.QueuedConnection)
+window.show()
+window.requestUpdate()
+QTimer.singleShot(15000, lambda: emit(dict(report, timeout=True), 2))
+app.exec()
+report["window_alive_at_loop_end"] = shiboken6.isValid(window)
+report["hosts_left"] = len(bootstrap._owner.window_hosts)
+print("PROBE " + json.dumps(report), flush=True)
+sys.exit(0)          # a normal interpreter exit, never os._exit: the process's own end is what is tested
+'''
+
+
+@needs_module
+@pytest.mark.parametrize("step", ["stop", "old_stop"])
+def test_an_exiting_stop_releases_the_vulkan_window_and_the_process_exits_cleanly(step, tmp_path):
+    # Lead's run, 14 Nov: --exit-after on Vulkan ended with 0xC0000005, its window still alive when the loop ended.
+    completed = subprocess.run([sys.executable, "-c", _PRELUDE + _EXIT, str(tmp_path), step], cwd=ROOT,
+                               env=os.environ.copy(), text=True, capture_output=True, check=False, timeout=60)
+    lines = [line for line in completed.stdout.splitlines() if line.startswith("PROBE ")]
+    assert lines, completed.stdout + completed.stderr
+    report = json.loads(lines[-1][len("PROBE "):])
+    assert report["api"] == "Vulkan" and "timeout" not in report
+    if step == "stop":
+        assert report["window_alive_at_loop_end"] is False and report["hosts_left"] == 0
+        assert completed.returncode == 0, completed.stderr
+    else:
+        assert report["window_alive_at_loop_end"] is True and report["hosts_left"] == 1
+        assert completed.returncode != 0                               # the crash the lead's run ended with
+
+
 @needs_module
 def test_the_hidden_host_is_created_once_per_process_and_kept(tmp_path):
     # Facts J1: on OpenGL Qt's threaded render control keeps 2 handles and 1 USER object per create and destroy.
