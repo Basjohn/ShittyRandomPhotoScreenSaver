@@ -21,7 +21,7 @@ def speck_density(emission: float) -> float:
     return particle_amount(emission) ** 2
 # One wake emitter's record (simulation -> GPU): x, y, z, reacted radius, stable ident, retirement (-1 live, 0..1
 # dissolving), alpha, nominal radius, trails (1 / 0), then the trail's spacing (world distance between its points),
-# its point count, the bubble's water index (spacings travelled; the water c spacings behind it stays put), its lead
+# its point count (fractional while its oldest water ages out: the path then holds the next whole point), the bubble's water index (spacings travelled; the water c spacings behind it stays put), its lead
 # (spacings past its newest point), its size followed slowly, then from WAKE_PATH its path: WAKE_POINTS world points
 # newest first, laid one spacing apart along the water the bubble has passed through (the bubble itself is the head).
 WAKE_POINTS = 12

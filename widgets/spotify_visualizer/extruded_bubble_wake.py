@@ -55,6 +55,10 @@ class WakeField:
         self.carry = np.zeros((capacity, WAKE_POINTS, 3))
         self.age = np.zeros((capacity, WAKE_POINTS))
         self.count = np.zeros(capacity, dtype=int)
+        # Where the trail ends, in points from the newest (0 = the newest point): where its water reaches
+        # HISTORY_SECONDS of age, between the last young point and the first aged one (kept as its endpoint); below 0
+        # when even the newest point has aged (a share of the bubble's own span, see ``flow``).
+        self.tail = np.zeros(capacity)
         self._free = list(range(capacity - 1, -1, -1))
         self._slots: dict[int, int] = {}
         self._spacing: dict[int, float] = {}
@@ -97,6 +101,7 @@ class WakeField:
         """A new point where the bubble is now, the older ones moved one place back."""
         if fresh:
             self.count[slot] = 0
+            self.tail[slot] = -1.0
         else:
             self.points[slot, 1:] = self.points[slot, :-1]
             self.carry[slot, 1:] = self.carry[slot, :-1]
@@ -105,6 +110,7 @@ class WakeField:
         self.carry[slot, 0] = tuple(ENTRAIN * v for v in velocity)
         self.age[slot, 0] = 0.0
         self.count[slot] = min(int(self.count[slot]) + 1, WAKE_POINTS)
+        self.tail[slot] = min(float(self.tail[slot]) + 1.0, WAKE_POINTS - 1.0)   # the same water, one point further
         self._laid[ident] += 1
         self._since[ident] = 0.0
         self._newest[ident] = tuple(head)
@@ -145,7 +151,21 @@ class WakeField:
         rate = np.clip(DIFFUSION * dt * np.minimum(age[:, 1:-1], 1.0), 0.0, 0.25) * inner
         points[:, 1:-1] += rate[..., None] * (points[:, :-2] + points[:, 2:] - 2.0 * points[:, 1:-1])
         self.points[live], self.carry[live], self.age[live] = points, carry, age
-        counts = np.maximum(np.minimum(counts, (age < HISTORY_SECONDS).sum(axis=1)), 1)
+        # The trail ends where its water reaches HISTORY_SECONDS of age, found between its last young point and its
+        # first aged one, which stays as the endpoint: the end recedes continuously as the water ages (trimming whole
+        # points cut a slow, idle trail short by a spacing at once, every time one aged out).
+        valid = np.arange(WAKE_POINTS)[None, :] < counts[:, None]
+        young = ((age < HISTORY_SECONDS) & valid).sum(axis=1)
+        wake = np.arange(len(live))
+        last_young = age[wake, np.maximum(young - 1, 0)]
+        first_aged = age[wake, np.minimum(young, WAKE_POINTS - 1)]
+        between = np.clip((HISTORY_SECONDS - last_young) / np.maximum(first_aged - last_young, 1e-9), 0.0, 1.0)
+        aged = young < counts
+        # With every point aged the end lies between the bubble (fresh water) and its newest point: stored as the
+        # share of that span short of the point (-1..0), scaled by the span (``lead``) when recorded.
+        alone = HISTORY_SECONDS / np.maximum(age[:, 0], HISTORY_SECONDS) - 1.0
+        self.tail[live] = np.where(aged & (young > 0), young - 1 + between, np.where(aged, alone, counts - 1.0))
+        counts = np.where(aged, young + 1, counts)
         self.count[live] = counts
         rows = points.reshape(len(live), -1).tolist()
         for ident, row, n in zip(idents, rows, counts.tolist()):
@@ -154,12 +174,14 @@ class WakeField:
 
     def record(self, ident: int, head) -> tuple[float, ...]:
         """(spacing, count, water, lead, radius, path floats) of the trail behind ``head`` (the bubble, or where it
-        last was): ``water`` is the bubble's continuous water index, ``lead`` how far (in spacings) it is past its
-        newest point, ``radius`` its size followed slowly."""
+        last was): ``count`` is where the trail ends, one past its ``tail`` in points (fractional while its oldest
+        water ages out, below 1 once even its newest has; the path holds ceil(count) points), ``water`` the bubble's continuous water index, ``lead``
+        how far (in spacings) it is past its newest point, ``radius`` its size followed slowly."""
         spacing = self._spacing[ident]
         lead = min(math.dist(head, self._newest[ident]) / spacing, 1.0)
-        n = int(self.count[self._slots[ident]])
-        return (spacing, float(n), float(self._laid[ident]) + lead, lead, self._radius[ident], *self._flat[ident])
+        tail = float(self.tail[self._slots[ident]])
+        return (spacing, 1.0 + (tail if tail >= 0.0 else lead * tail), float(self._laid[ident]) + lead, lead,
+                self._radius[ident], *self._flat[ident])
 
 
 __all__ = ["DIFFUSION", "ENTRAIN", "FLOW", "HISTORY_SECONDS", "WakeField", "trails", "water_flow"]

@@ -1426,7 +1426,8 @@ float trailReach(int owner) {
 // by segment slid with the bubble and jumped back at every new point (the beads' teleport, the root's snap).
 vec3 trailWater(int owner, float c) {
     float lead = wakeField(owner, WAKE_LEAD);
-    int last = max(int(wakeField(owner, WAKE_COUNT) + 0.5), 1);
+    // The trail ends between points while its oldest water ages out (a fractional count): the path holds that end.
+    int last = max(int(ceil(wakeField(owner, WAKE_COUNT) - 1e-4)), 1);
     float f = c <= lead ? c / max(lead, 1e-4) : 1.0 + (c - lead);   // 0 the bubble, k its k-th point
     f = clamp(f, 0.0, float(last));
     int i = min(int(floor(f)), last - 1);
