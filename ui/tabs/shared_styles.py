@@ -717,6 +717,13 @@ def _build_spinbox_style(theme: SettingsThemeSpec | None = None) -> str:
         border-radius: 18px;
     }
     
+    /* QAbstractSpinBox exposes a real alignment property (default: left).
+       Qt's QSS text-align does not apply to spinboxes; centre the editor's
+       value via its owner so suffixes and editable selections agree too. */
+    QSpinBox, QDoubleSpinBox, QAbstractSpinBox {
+        qproperty-alignment: AlignHCenter;
+    }
+
     QSpinBox > QLineEdit,
     QDoubleSpinBox > QLineEdit,
     QAbstractSpinBox > QLineEdit {

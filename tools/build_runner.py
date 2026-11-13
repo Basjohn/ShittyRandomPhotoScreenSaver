@@ -208,7 +208,9 @@ def _apply_build_foundry_theme(theme_id: str) -> tuple[str, str]:
 WINDOWS_APP_ID = "JaydeVerElst.SRPSS.BuildFoundry"
 TASKBAR_TITLE = "Build Foundry"
 BASE_WINDOW_SIZE = (820, 670)
-BASE_MINIMUM_SIZE = (760, 640)
+BASE_MINIMUM_SIZE = (760, 520)
+# Leave a small visual margin around a frameless window at the work-area edge.
+WINDOW_WORKAREA_MARGIN_DIP = 8
 OUTER_BORDER_DIP = 1.5
 PROGRESS_TICK_MS = 24
 RUNNER_LOGS_PER_JOB = 10
@@ -1959,6 +1961,10 @@ class BuildRunnerApp:
         self._dpi_scale = self._initial_dpi_scale()
         self._shell: tk.Frame | None = None
         self._initial_show_complete = False
+        self._body_canvas: tk.Canvas | None = None
+        self._body_content: tk.Frame | None = None
+        self._footer: tk.Frame | None = None
+        self._titlebar: tk.Frame | None = None
         selected_mode = initial_mode or self._preferences.mode
         self._mode_var = tk.StringVar(value=selected_mode)
         self._auto_close_var = tk.BooleanVar(value=self._preferences.auto_close)
@@ -2053,7 +2059,10 @@ class BuildRunnerApp:
             ws_ex_appwindow = 0x00040000
 
             style = int(get_window_long(hwnd, gwl_style))
-            style &= ~(ws_caption | ws_thickframe | ws_maximizebox)
+            # Preserve the native sizing border even though the caption is
+            # custom. Without WS_THICKFRAME the operator cannot resize the
+            # frameless Foundry from any edge, regardless of Tk's minsize.
+            style = (style & ~(ws_caption | ws_maximizebox)) | ws_thickframe
             set_window_long(hwnd, gwl_style, style)
 
             exstyle = int(get_window_long(hwnd, gwl_exstyle))
@@ -2081,10 +2090,108 @@ class BuildRunnerApp:
         except (AttributeError, OSError, TypeError, ValueError, tk.TclError):
             return
 
+    def _work_area(self) -> tuple[int, int, int, int]:
+        """Return the current monitor's *work* rectangle in Tk screen pixels.
+
+        A screen-height check is insufficient on Windows: the taskbar occupies
+        part of the monitor, and this window can open on either display.
+        """
+        if sys.platform == "win32":
+            try:
+                class _RECT(ctypes.Structure):
+                    _fields_ = [(name, ctypes.c_long) for name in
+                                ("left", "top", "right", "bottom")]
+
+                class _MONITORINFO(ctypes.Structure):
+                    _fields_ = [("cbSize", ctypes.c_ulong),
+                                ("rcMonitor", _RECT), ("rcWork", _RECT),
+                                ("dwFlags", ctypes.c_ulong)]
+
+                hwnd = self._native_toplevel_hwnd()
+                if hwnd:
+                    user32 = ctypes.windll.user32
+                    user32.MonitorFromWindow.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+                    user32.MonitorFromWindow.restype = ctypes.c_void_p
+                    user32.GetMonitorInfoW.argtypes = [ctypes.c_void_p, ctypes.POINTER(_MONITORINFO)]
+                    user32.GetMonitorInfoW.restype = ctypes.c_bool
+                    monitor = user32.MonitorFromWindow(ctypes.c_void_p(hwnd), 2)  # nearest
+                    info = _MONITORINFO()
+                    info.cbSize = ctypes.sizeof(info)
+                    if monitor and user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+                        work = info.rcWork
+                        return work.left, work.top, work.right, work.bottom
+            except (AttributeError, OSError, TypeError, ValueError, tk.TclError):
+                pass
+        return 0, 0, self._root.winfo_screenwidth(), self._root.winfo_screenheight()
+
+    def _fit_initial_window(self, *, preserve_current_size: bool = False) -> None:
+        """Fit mode-dependent contents into the available monitor work area.
+
+        At 9 GitHub jobs the old constant 670-DIP geometry cut the action row
+        off. A canvas handles any remaining overflow on smaller displays.
+        Switching modes may grow the window, but never undoes a user enlargement.
+        """
+        if self._body_content is None or self._footer is None or self._titlebar is None:
+            return
+        self._root.update_idletasks()
+        left, top, right, bottom = self._work_area()
+        margin = self._dip(WINDOW_WORKAREA_MARGIN_DIP)
+        work_width = max(1, right - left - 2 * margin)
+        work_height = max(1, bottom - top - 2 * margin)
+        content_height = (self._body_content.winfo_reqheight()
+                          + self._footer.winfo_reqheight()
+                          + self._titlebar.winfo_reqheight()
+                          + self._dip(4))
+        height = min(work_height, max(self._dip(BASE_WINDOW_SIZE[1]), content_height,
+                                      self._root.winfo_height() if preserve_current_size else 0))
+        width = min(work_width, max(self._dip(BASE_WINDOW_SIZE[0]),
+                                    self._footer.winfo_reqwidth(),
+                                    self._root.winfo_width() if preserve_current_size else 0))
+        self._root.minsize(min(self._dip(BASE_MINIMUM_SIZE[0]), work_width),
+                           min(self._dip(BASE_MINIMUM_SIZE[1]), work_height))
+        # Preserve Tk's selected screen position when it fits, otherwise clamp
+        # it to the selected monitor. Do not center against the primary display.
+        x = max(left + margin, min(self._root.winfo_x(), right - margin - width))
+        y = max(top + margin, min(self._root.winfo_y(), bottom - margin - height))
+        self._root.geometry(f"{width}x{height}+{x}+{y}")
+        self._root.update_idletasks()
+        self._sync_body_scrollregion()
+
+    def _sync_body_scrollregion(self, _event: tk.Event | None = None) -> None:
+        if self._body_canvas is None or self._body_content is None:
+            return
+        self._body_canvas.configure(scrollregion=self._body_canvas.bbox("all"))
+
+    def _resize_body_canvas(self, event: tk.Event) -> None:
+        if self._body_canvas is None:
+            return
+        self._body_canvas.itemconfigure("body", width=event.width)
+        self._sync_body_scrollregion()
+
+    def _scroll_body(self, event: tk.Event) -> str | None:
+        canvas = self._body_canvas
+        if canvas is None:
+            return None
+        x, y = self._root.winfo_pointerx(), self._root.winfo_pointery()
+        if not (canvas.winfo_rootx() <= x < canvas.winfo_rootx() + canvas.winfo_width()
+                and canvas.winfo_rooty() <= y < canvas.winfo_rooty() + canvas.winfo_height()):
+            return None
+        if getattr(event, "num", None) == 4:
+            steps = -1
+        elif getattr(event, "num", None) == 5:
+            steps = 1
+        elif getattr(event, "delta", 0):
+            steps = -int(event.delta / 120) or (-1 if event.delta > 0 else 1)
+        else:
+            return None
+        canvas.yview_scroll(steps, "units")
+        return "break"
+
     def _show_initial_window(self) -> None:
-        """Map once as a normal app window, then remove only its native frame."""
+        """Size to content, map once, then apply the custom native frame."""
         if self._initial_show_complete:
             return
+        self._fit_initial_window()
 
         if sys.platform != "win32":
             self._root.deiconify()
@@ -2164,8 +2271,31 @@ class BuildRunnerApp:
         )
         self._shell.pack(fill="both", expand=True)
         self._build_titlebar()
-        body = tk.Frame(self._shell, bg=COLORS["root"], padx=24, pady=18)
-        body.pack(fill="both", expand=True)
+        # Dock actions before packing the scroll viewport, so the operator can
+        # always reach them even when screen height is less than content height.
+        footer = tk.Frame(self._shell, bg=COLORS["root"], padx=24, pady=12)
+        footer.pack(side="bottom", fill="x")
+        self._footer = footer
+
+        scroll = tk.Scrollbar(self._shell, orient="vertical",
+                              bg=COLORS["panel_alt"], troughcolor=COLORS["root"],
+                              activebackground=COLORS["panel_hover"],
+                              highlightthickness=0, bd=0, width=self._dip(9))
+        scroll.pack(side="right", fill="y")
+        canvas = tk.Canvas(self._shell, bg=COLORS["root"],
+                           bd=0, highlightthickness=0,
+                           yscrollcommand=scroll.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scroll.configure(command=canvas.yview)
+        body = tk.Frame(canvas, bg=COLORS["root"], padx=24, pady=18)
+        canvas.create_window((0, 0), window=body, anchor="nw", tags="body")
+        self._body_canvas = canvas
+        self._body_content = body
+        canvas.bind("<Configure>", self._resize_body_canvas)
+        body.bind("<Configure>", self._sync_body_scrollregion)
+        self._root.bind("<MouseWheel>", self._scroll_body, add="+")
+        self._root.bind("<Button-4>", self._scroll_body, add="+")
+        self._root.bind("<Button-5>", self._scroll_body, add="+")
 
         tk.Label(
             body,
@@ -2307,8 +2437,8 @@ class BuildRunnerApp:
         )
         self._progress_bar.pack(fill="x")
 
-        footer = tk.Frame(body, bg=COLORS["root"])
-        footer.pack(fill="x", pady=(12, 0))
+        # Status gets its own line. Previously a long build message was packed
+        # before the actions, consuming their width and clipping every button.
         self._footer_status = tk.Label(
             footer,
             text="Ready.",
@@ -2317,10 +2447,12 @@ class BuildRunnerApp:
             font=("Segoe UI", 9),
             anchor="w",
         )
-        self._footer_status.pack(side="left", fill="x", expand=True)
+        self._footer_status.pack(fill="x", anchor="w", pady=(0, 6))
+        actions = tk.Frame(footer, bg=COLORS["root"])
+        actions.pack(fill="x")
 
         self._auto_close_checkbox = FoundryCheckbutton(
-            footer,
+            actions,
             text="Auto-close after full success",
             variable=self._auto_close_var,
             command=self._persist_preferences,
@@ -2330,14 +2462,14 @@ class BuildRunnerApp:
         )
         self._auto_close_checkbox.pack(side="right", padx=(10, 0))
         self._start_button = ttk.Button(
-            footer,
+            actions,
             text="START SELECTED",
             command=self._on_start,
             style="Primary.TButton",
         )
         self._start_button.pack(side="right", padx=(10, 0))
         self._emergency_stop_button = ttk.Button(
-            footer,
+            actions,
             text="EMERGENCY STOP",
             command=self._on_emergency_stop,
             style="Foundry.TButton",
@@ -2345,14 +2477,14 @@ class BuildRunnerApp:
         self._emergency_stop_button.state(["disabled"])
         self._emergency_stop_button.pack(side="right", padx=(6, 0))
         self._select_none_button = ttk.Button(
-            footer,
+            actions,
             text="None",
             command=lambda: self._set_all(False),
             style="Foundry.TButton",
         )
         self._select_none_button.pack(side="right", padx=(6, 0))
         self._select_all_button = ttk.Button(
-            footer,
+            actions,
             text="All",
             command=lambda: self._set_all(True),
             style="Foundry.TButton",
@@ -2363,6 +2495,7 @@ class BuildRunnerApp:
         if self._shell is None:
             raise RuntimeError("Build shell must exist before the titlebar")
         titlebar = tk.Frame(self._shell, bg=COLORS["titlebar"], height=40)
+        self._titlebar = titlebar
         titlebar.pack(fill="x")
         titlebar.pack_propagate(False)
         icon_path = REPO_ROOT / "images" / "foundries" / "SRPSSBuild.ico"
@@ -2712,6 +2845,8 @@ class BuildRunnerApp:
         if persist:
             self._persist_preferences()
         self._start_button.state(["disabled"])
+        if self._initial_show_complete:
+            self._root.after_idle(lambda: self._fit_initial_window(preserve_current_size=True))
         threading.Thread(target=self._preflight_worker, args=(mode,), daemon=True).start()
 
     def _create_job_row(
