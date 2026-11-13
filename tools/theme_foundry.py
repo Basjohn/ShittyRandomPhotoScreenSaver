@@ -467,6 +467,7 @@ class ThemeFoundryWindow(QMainWindow):
         outer.addWidget(subtitle)
 
         quick = QHBoxLayout()
+        outer.addLayout(quick)
         quick.setSpacing(8)
         theme_label = QLabel("Theme")
         theme_label.setFixedWidth(72)
@@ -482,9 +483,9 @@ class ThemeFoundryWindow(QMainWindow):
         self.refresh_themes_btn.setToolTip("Refresh repository Settings themes")
         self.refresh_themes_btn.clicked.connect(self._refresh_theme_file_list)
         quick.addWidget(self.refresh_themes_btn)
-        outer.addLayout(quick)
 
         toolbar = QHBoxLayout()
+        outer.addLayout(toolbar)
         toolbar.setSpacing(8)
         # Match the labelled Theme/Name rows below instead of starting at the
         # window edge.  The Widget Theme Foundry already uses this gutter.
@@ -506,9 +507,9 @@ class ThemeFoundryWindow(QMainWindow):
         toolbar.addStretch(1)
         toolbar.addWidget(self.launch_widget_btn)
         toolbar.addWidget(self.launch_btn)
-        outer.addLayout(toolbar)
 
         file_row = QHBoxLayout()
+        outer.addLayout(file_row)
         file_row.setSpacing(8)
         name_label = QLabel("Theme name")
         name_label.setFixedWidth(72)
@@ -521,7 +522,6 @@ class ThemeFoundryWindow(QMainWindow):
         self.file_label.setObjectName("muted")
         self.file_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         file_row.addWidget(self.file_label, 1)
-        outer.addLayout(file_row)
 
         scope = QLabel(
             "Theme files are complete semantic snapshots. Default Dark remains compiled runtime fallback. "
@@ -622,6 +622,7 @@ class ThemeFoundryWindow(QMainWindow):
         layout.addWidget(help_label)
 
         view_row = QHBoxLayout()
+        layout.addLayout(view_row)
         view_row.addWidget(QLabel("View"))
         self.role_view = QComboBox()
         self.role_view.addItems(["Everyday", "All Roles"])
@@ -637,9 +638,9 @@ class ThemeFoundryWindow(QMainWindow):
         self.clear_filters_btn = QPushButton("CLEAR FILTERS")
         self.clear_filters_btn.clicked.connect(self._clear_role_filters)
         view_row.addWidget(self.clear_filters_btn)
-        layout.addLayout(view_row)
 
         search_row = QHBoxLayout()
+        layout.addLayout(search_row)
         search_row.addWidget(QLabel("Filter"))
         self.search = QLineEdit()
         self.search.setPlaceholderText("titlebar, selected, popup, shadow, gradient…")
@@ -649,7 +650,6 @@ class ThemeFoundryWindow(QMainWindow):
         search_row.addWidget(self.category_filter)
         self.favorites_only = QCheckBox("★ Favorites")
         search_row.addWidget(self.favorites_only)
-        layout.addLayout(search_row)
 
         self.tree = QTreeWidget()
         self.tree.setObjectName("themeFoundryTree")
@@ -692,6 +692,7 @@ class ThemeFoundryWindow(QMainWindow):
         layout.setSpacing(10)
 
         row = QHBoxLayout()
+        layout.addLayout(row)
         self.token_title = QLabel("Select a semantic role")
         self.token_title.setObjectName("tokenTitle")
         font = QFont(self.token_title.font())
@@ -703,7 +704,6 @@ class ThemeFoundryWindow(QMainWindow):
         self.favorite_btn.setObjectName("favoriteButton")
         self.favorite_btn.clicked.connect(self._toggle_selected_favorite)
         row.addWidget(self.favorite_btn)
-        layout.addLayout(row)
 
         layout.addWidget(
             self._collapsible(
@@ -781,17 +781,17 @@ class ThemeFoundryWindow(QMainWindow):
         reset_layout.setContentsMargins(0, 0, 0, 0)
         reset_layout.setSpacing(6)
         row = QHBoxLayout()
+        reset_layout.addLayout(row)
         self.reset_opened_btn = QPushButton("Reset Selected to Opened")
         self.reset_default_btn = QPushButton("Reset Selected to Default Dark")
         row.addWidget(self.reset_opened_btn)
         row.addWidget(self.reset_default_btn)
-        reset_layout.addLayout(row)
         row = QHBoxLayout()
+        reset_layout.addLayout(row)
         self.reset_all_opened_btn = QPushButton("Reset ALL to Opened")
         self.reset_all_default_btn = QPushButton("Reset ALL to Default Dark")
         row.addWidget(self.reset_all_opened_btn)
         row.addWidget(self.reset_all_default_btn)
-        reset_layout.addLayout(row)
         layout.addWidget(self._collapsible("RESET ACTIONS", reset_content, expanded=False))
         self.reset_opened_btn.clicked.connect(self._reset_selected_opened)
         self.reset_default_btn.clicked.connect(self._reset_selected_default)
@@ -816,6 +816,7 @@ class ThemeFoundryWindow(QMainWindow):
         layout.addWidget(note)
 
         grid = QGridLayout()
+        layout.addLayout(grid)
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(8)
         grid.setVerticalSpacing(6)
@@ -842,7 +843,6 @@ class ThemeFoundryWindow(QMainWindow):
             self.most_used_count_labels.append(count)
 
         grid.setColumnStretch(0, 1)
-        layout.addLayout(grid)
         return box
 
     def _refresh_most_used_colors(self) -> None:
@@ -902,6 +902,7 @@ class ThemeFoundryWindow(QMainWindow):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         preview_grid = QGridLayout()
+        layout.addLayout(preview_grid)
         preview_grid.addWidget(self._heading("Isolated role"), 0, 0)
         predicted = self._heading("Predicted visible composite")
         predicted.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -918,8 +919,8 @@ class ThemeFoundryWindow(QMainWindow):
         preview_grid.addWidget(self.composite_note, 2, 1)
         preview_grid.setColumnStretch(0, 1)
         preview_grid.setColumnStretch(1, 1)
-        layout.addLayout(preview_grid)
         color_actions = QHBoxLayout()
+        layout.addLayout(color_actions)
         self.color_swatch = SwatchButton()
         self.color_swatch.colorRequested.connect(self._choose_selected_color)
         color_actions.addWidget(self.color_swatch, 1)
@@ -930,8 +931,8 @@ class ThemeFoundryWindow(QMainWindow):
         )
         self.bulk_color_btn.clicked.connect(self._choose_all_matching_colors)
         color_actions.addWidget(self.bulk_color_btn)
-        layout.addLayout(color_actions)
         form = QFormLayout()
+        layout.addLayout(form)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         self.r_spin = self._channel_spin()
         self.g_spin = self._channel_spin()
@@ -951,9 +952,9 @@ class ThemeFoundryWindow(QMainWindow):
         row.addWidget(self.a_spin)
         row.addWidget(self.alpha_pct)
         form.addRow("Opacity", wrap)
-        layout.addLayout(form)
 
         hex_row = QHBoxLayout()
+        layout.addLayout(hex_row)
         self.color_hex_edit = QLineEdit()
         self.color_hex_edit.setPlaceholderText("#RRGGBB or #RRGGBBAA")
         self.color_hex_edit.returnPressed.connect(self._apply_selected_color_hex)
@@ -964,7 +965,6 @@ class ThemeFoundryWindow(QMainWindow):
         self.color_copy_rgba_btn = QPushButton("COPY RGBA")
         self.color_copy_rgba_btn.clicked.connect(self._copy_selected_rgba)
         hex_row.addWidget(self.color_copy_rgba_btn)
-        layout.addLayout(hex_row)
 
         for spin in (self.r_spin, self.g_spin, self.b_spin):
             spin.valueChanged.connect(self._color_channels_changed)
@@ -982,6 +982,7 @@ class ThemeFoundryWindow(QMainWindow):
         self.shadow_swatch.colorRequested.connect(self._choose_shadow_color)
         layout.addWidget(self.shadow_swatch)
         form = QFormLayout()
+        layout.addLayout(form)
         self.shadow_blur = self._double_spin(0.0, 100.0, 0.5, 1)
         self.shadow_x = self._double_spin(-50.0, 50.0, 0.5, 1)
         self.shadow_y = self._double_spin(-50.0, 50.0, 0.5, 1)
@@ -990,7 +991,6 @@ class ThemeFoundryWindow(QMainWindow):
         form.addRow("Offset X", self.shadow_x)
         form.addRow("Offset Y", self.shadow_y)
         form.addRow("Disabled alpha scale", self.shadow_disabled)
-        layout.addLayout(form)
         for spin in (self.shadow_blur, self.shadow_x, self.shadow_y, self.shadow_disabled):
             spin.valueChanged.connect(self._shadow_numbers_changed)
         return page
@@ -1024,6 +1024,7 @@ class ThemeFoundryWindow(QMainWindow):
         selected_heading = self._heading("Selected Stop / Structure")
         layout.addWidget(selected_heading)
         row = QHBoxLayout()
+        layout.addLayout(row)
         row.addWidget(QLabel("Stop"))
         self.gradient_stop_combo = QComboBox()
         self.gradient_stop_combo.currentIndexChanged.connect(self._gradient_stop_selected)
@@ -1034,16 +1035,15 @@ class ThemeFoundryWindow(QMainWindow):
         self.gradient_remove_btn.clicked.connect(self._gradient_remove_stop)
         row.addWidget(self.gradient_add_btn)
         row.addWidget(self.gradient_remove_btn)
-        layout.addLayout(row)
 
         self.gradient_swatch = SwatchButton("Stop Colour…")
         self.gradient_swatch.colorRequested.connect(self._choose_gradient_stop_color)
         layout.addWidget(self.gradient_swatch)
         form = QFormLayout()
+        layout.addLayout(form)
         self.gradient_position = self._double_spin(0.0, 1.0, 0.01, 3)
         self.gradient_position.valueChanged.connect(self._gradient_position_changed)
         form.addRow("Stop position", self.gradient_position)
-        layout.addLayout(form)
         return page
 
     def _heading(self, text: str) -> QLabel:

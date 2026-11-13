@@ -958,6 +958,7 @@ class FoundrySettingsDialog(FoundryPopupDialog):
         layout.addWidget(explainer)
 
         row = QHBoxLayout()
+        layout.addLayout(row)
         row.addWidget(QLabel("Theme"))
         self.theme_combo = QComboBox()
         self.theme_combo.setMinimumWidth(320)
@@ -968,14 +969,13 @@ class FoundrySettingsDialog(FoundryPopupDialog):
             self.theme_combo.setCurrentIndex(index)
         self.theme_combo.currentIndexChanged.connect(self._theme_changed)
         row.addWidget(self.theme_combo, 1)
-        layout.addLayout(row)
 
         close_button = QPushButton("CLOSE")
         close_button.clicked.connect(self.close)
         footer = QHBoxLayout()
+        layout.addLayout(footer)
         footer.addStretch(1)
         footer.addWidget(close_button)
-        layout.addLayout(footer)
 
     def _theme_changed(self, index: int) -> None:
         theme_id = self.theme_combo.itemData(index)
@@ -1012,6 +1012,7 @@ class CreateTab(QWidget):
         layout.addWidget(intro)
 
         controls = QHBoxLayout()
+        layout.addLayout(controls)
         self.filter_edit = QLineEdit()
         self.filter_edit.setPlaceholderText("Filter repository paths…")
         self.filter_edit.textChanged.connect(lambda _text: self._filter_timer.start())
@@ -1026,7 +1027,6 @@ class CreateTab(QWidget):
             button = QPushButton(label)
             button.clicked.connect(handler)
             controls.addWidget(button)
-        layout.addLayout(controls)
 
         self.tree = CheckPathTree(["Repository path", "Git", "Size", "Default"])
         self.tree.setColumnWidth(1, 170)
@@ -1039,6 +1039,7 @@ class CreateTab(QWidget):
         foot = QVBoxLayout(footer)
         foot.setContentsMargins(14, 12, 14, 12)
         row = QHBoxLayout()
+        foot.addLayout(row)
         self.output_edit = QLineEdit()
         local_settings = _load_local_settings(self.repo_root)
         remembered = str(local_settings.get("output_dir", str(self.repo_root.parent)))
@@ -1052,8 +1053,8 @@ class CreateTab(QWidget):
         row.addWidget(self.output_edit, 1)
         row.addWidget(browse)
         row.addWidget(open_saved)
-        foot.addLayout(row)
         row2 = QHBoxLayout()
+        foot.addLayout(row2)
         self._auto_name = suggested_godzip_name(self.repo_root)
         self.name_edit = QLineEdit(self._auto_name)
         self.include_debris = QCheckBox("Include checked Manual/Imported debris instructions")
@@ -1061,8 +1062,8 @@ class CreateTab(QWidget):
         row2.addWidget(QLabel("Name"))
         row2.addWidget(self.name_edit, 1)
         row2.addWidget(self.include_debris)
-        foot.addLayout(row2)
         action = QHBoxLayout()
+        foot.addLayout(action)
         self.summary = QLabel()
         self.summary.setObjectName("muted")
         self.create_button = QPushButton("CREATE GOD ZIP")
@@ -1070,7 +1071,6 @@ class CreateTab(QWidget):
         self.create_button.clicked.connect(self.create_archive)
         action.addWidget(self.summary, 1)
         action.addWidget(self.create_button)
-        foot.addLayout(action)
         layout.addWidget(footer)
 
     def mark_stale(self) -> None:
@@ -1276,9 +1276,11 @@ class ApplyTab(QWidget):
         context.addWidget(self.drop_panel, 0, Qt.AlignmentFlag.AlignTop)
 
         archive_box = QVBoxLayout()
+        context.addLayout(archive_box, 1)
         archive_box.setSpacing(7)
 
         archive_header = QHBoxLayout()
+        archive_box.addLayout(archive_header)
         archive_header.setSpacing(6)
         self.archive_label = QLabel("No GODZIP loaded")
         self.archive_label.setObjectName("archiveName")
@@ -1296,11 +1298,11 @@ class ApplyTab(QWidget):
         self.dirty_chip.setObjectName("chip")
         for chip in (self.kind_chip, self.head_chip, self.branch_chip, self.dirty_chip):
             archive_header.addWidget(chip)
-        archive_box.addLayout(archive_header)
 
         # One selector row: combo + filter + refresh + browse.  These controls
         # used to consume three rows, including a full-width Browse button.
         chooser_row = QHBoxLayout()
+        archive_box.addLayout(chooser_row)
         chooser_row.setSpacing(8)
         chooser_label = QLabel("GODZIP")
         chooser_label.setObjectName("faint")
@@ -1329,9 +1331,9 @@ class ApplyTab(QWidget):
         browse.setToolTip("Choose a GODZIP from another folder")
         browse.clicked.connect(self.browse)
         chooser_row.addWidget(browse)
-        archive_box.addLayout(chooser_row)
 
         state_row = QHBoxLayout()
+        archive_box.addLayout(state_row)
         state_row.setSpacing(8)
         self.relation = RelationBanner("Archive baseline applicability cannot be proven.")
         self.relation.setWordWrap(True)
@@ -1341,7 +1343,6 @@ class ApplyTab(QWidget):
         self.freshness.hide()
         state_row.addWidget(self.relation, 1)
         state_row.addWidget(self.freshness, 1)
-        archive_box.addLayout(state_row)
 
         self.warning_label = QLabel("")
         self.warning_label.setObjectName("warningText")
@@ -1352,7 +1353,6 @@ class ApplyTab(QWidget):
         self.strip_wrapper.hide()
         self.strip_wrapper.toggled.connect(self._wrapper_changed)
         archive_box.addWidget(self.strip_wrapper)
-        context.addLayout(archive_box, 1)
 
         # Historical name retained only as an internal visibility alias.
         self.info_panel = self.context_panel
@@ -1364,6 +1364,7 @@ class ApplyTab(QWidget):
         browser_l.setSpacing(8)
 
         tools = QHBoxLayout()
+        browser_l.addLayout(tools)
         self.filter_edit = QLineEdit()
         self.filter_edit.setPlaceholderText("Filter archive targets…")
         self.filter_edit.textChanged.connect(lambda _text: self._filter_timer.start())
@@ -1382,9 +1383,9 @@ class ApplyTab(QWidget):
         self.expand_button.setToolTip("Expand the Apply file browser to use the full tab height")
         self.expand_button.clicked.connect(self.toggle_browser_expanded)
         tools.addWidget(self.expand_button)
-        browser_l.addLayout(tools)
 
         legend_row = QHBoxLayout()
+        browser_l.addLayout(legend_row)
         legend = QLabel("Orange = timestamp-old · Red = timestamp-old + Git-old · Violet = local dirty")
         legend.setObjectName("faint")
         legend_row.addWidget(legend, 1)
@@ -1397,7 +1398,6 @@ class ApplyTab(QWidget):
         self.compact_apply_button.hide()
         self.compact_apply_button.clicked.connect(self.apply_selected)
         legend_row.addWidget(self.compact_apply_button)
-        browser_l.addLayout(legend_row)
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setObjectName("applySplitter")
@@ -1432,6 +1432,7 @@ class ApplyTab(QWidget):
         btm.setContentsMargins(12, 9, 12, 9)
         btm.setSpacing(7)
         row = QHBoxLayout()
+        btm.addLayout(row)
         row.setSpacing(12)
         self.rollback = QCheckBox("Rollback overwritten files to /deleteme")
         self.rollback.setChecked(True)
@@ -1449,7 +1450,6 @@ class ApplyTab(QWidget):
         self.apply_button.setEnabled(False)
         self.apply_button.clicked.connect(self.apply_selected)
         row.addWidget(self.apply_button)
-        btm.addLayout(row)
         self.history_ack = QCheckBox("I reviewed the selected timestamp + commit-history risk")
         self.history_ack.setObjectName("dangerCheck")
         self.history_ack.hide()
@@ -1980,6 +1980,7 @@ class DebrisTab(QWidget):
         debris_layout.setSpacing(10)
 
         row = QHBoxLayout()
+        debris_layout.addLayout(row)
         for label, handler in (
             ("Add Files…", self.add_files),
             ("Add Folder…", self.add_folder),
@@ -1996,7 +1997,6 @@ class DebrisTab(QWidget):
         self.clean_mode_button.setObjectName("cleanModeButton")
         self.clean_mode_button.clicked.connect(lambda: self.set_clean_mode(True))
         row.addWidget(self.clean_mode_button)
-        debris_layout.addLayout(row)
 
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["Path", "Source", "Exists", "Reason"])
@@ -2033,6 +2033,7 @@ class DebrisTab(QWidget):
         clean_layout.setSpacing(10)
 
         clean_controls = QHBoxLayout()
+        clean_layout.addLayout(clean_controls)
         for label, handler in (
             ("GODZIPS", lambda: self._clean_select_kind("GODZIP")),
             ("LOGZIPS", lambda: self._clean_select_kind("LOGZIP")),
@@ -2051,7 +2052,6 @@ class DebrisTab(QWidget):
         back.setObjectName("cleanModeButton")
         back.clicked.connect(lambda: self.set_clean_mode(False))
         clean_controls.addWidget(back)
-        clean_layout.addLayout(clean_controls)
 
         self.clean_tree = QTreeWidget()
         self.clean_tree.setHeaderLabels(["Archive", "Kind", "Stale likelihood", "Location"])
@@ -2585,6 +2585,7 @@ class LogzipTab(QWidget):
         il.addWidget(desc)
         layout.addWidget(intro)
         controls = QHBoxLayout()
+        layout.addLayout(controls)
         refresh = QPushButton("Refresh")
         refresh.clicked.connect(self.refresh)
         build_b = QPushButton("Build Logs")
@@ -2603,7 +2604,6 @@ class LogzipTab(QWidget):
         controls.addWidget(all_b)
         controls.addWidget(none_b)
         controls.addStretch(1)
-        layout.addLayout(controls)
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["Loose log file", "Size"])
         self.tree.setRootIsDecorated(False)
@@ -2617,6 +2617,7 @@ class LogzipTab(QWidget):
         fl = QHBoxLayout(footer)
         fl.setContentsMargins(14, 12, 14, 12)
         summary_box = QVBoxLayout()
+        fl.addLayout(summary_box, 1)
         self.summary = QLabel("Not scanned yet.")
         self.summary.setObjectName("muted")
         self.destination = QLabel("")
@@ -2631,7 +2632,6 @@ class LogzipTab(QWidget):
         open_saved = QPushButton("Open Saved Folder")
         open_saved.setToolTip("Open repository logs/evidence_chest, the LOGZIP destination.")
         open_saved.clicked.connect(self.open_saved_folder)
-        fl.addLayout(summary_box, 1)
         fl.addWidget(open_saved)
         fl.addWidget(self.button)
         layout.addWidget(footer)
@@ -2741,6 +2741,7 @@ class DiffResultDialog(FoundryPopupDialog):
         self.text.setPlainText(text)
         layout.addWidget(self.text, 1)
         buttons = QHBoxLayout()
+        layout.addLayout(buttons)
         copy = QPushButton("COPY TO CLIPBOARD")
         copy.setObjectName("primaryButton")
         copy.clicked.connect(self.copy_all)
@@ -2749,7 +2750,6 @@ class DiffResultDialog(FoundryPopupDialog):
         buttons.addStretch(1)
         buttons.addWidget(copy)
         buttons.addWidget(close)
-        layout.addLayout(buttons)
 
     def copy_all(self) -> None:
         QApplication.clipboard().setText(self.text.toPlainText())
@@ -2790,6 +2790,7 @@ class DiffTab(QWidget):
         cl = QVBoxLayout(chooser)
         cl.setContentsMargins(14, 12, 14, 12)
         row = QHBoxLayout()
+        cl.addLayout(row)
         self.combo = QComboBox()
         self.combo.setMinimumWidth(500)
         self.combo.activated.connect(self._choose_index)
@@ -2804,7 +2805,6 @@ class DiffTab(QWidget):
         browse = QPushButton("BROWSE…")
         browse.clicked.connect(self.browse)
         row.addWidget(browse)
-        cl.addLayout(row)
         self.selected = QLabel("No baseline selected")
         self.selected.setObjectName("faint")
         self.selected.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -2932,11 +2932,11 @@ class PushTab(QWidget):
         il.addWidget(desc)
         layout.addWidget(intro)
         row = QHBoxLayout()
+        layout.addLayout(row)
         refresh = QPushButton("Refresh")
         refresh.clicked.connect(self.refresh)
         row.addWidget(refresh)
         row.addStretch(1)
-        layout.addLayout(row)
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["Git path", "State", "Index", "Worktree"])
         self.tree.setRootIsDecorated(False)
@@ -2955,14 +2955,15 @@ class PushTab(QWidget):
         self.summary.setObjectName("muted")
         bl.addWidget(self.summary)
         msgrow = QHBoxLayout()
+        bl.addLayout(msgrow)
         settings = _load_local_settings(self.repo_root)
         self.message = QLineEdit(str(settings.get("git_commit_message", "")))
         self.message.setPlaceholderText("Commit message…")
         self.message.editingFinished.connect(self.persist_message)
         msgrow.addWidget(QLabel("Message"))
         msgrow.addWidget(self.message, 1)
-        bl.addLayout(msgrow)
         buttons = QHBoxLayout()
+        bl.addLayout(buttons)
         self.commit_button = QPushButton("COMMIT")
         self.commit_push_button = QPushButton("COMMIT & PUSH")
         self.commit_push_button.setObjectName("primaryButton")
@@ -2974,7 +2975,6 @@ class PushTab(QWidget):
         buttons.addWidget(self.commit_button)
         buttons.addWidget(self.push_button)
         buttons.addWidget(self.commit_push_button)
-        bl.addLayout(buttons)
         layout.addWidget(box)
 
     def persist_message(self) -> None:
@@ -3107,6 +3107,7 @@ class PullTab(QWidget):
         il.addWidget(desc)
         layout.addWidget(intro)
         row = QHBoxLayout()
+        layout.addLayout(row)
         refresh = QPushButton("FETCH / REFRESH")
         refresh.setObjectName("primaryButton")
         refresh.clicked.connect(self.refresh)
@@ -3118,7 +3119,6 @@ class PullTab(QWidget):
         row.addWidget(all_b)
         row.addWidget(none_b)
         row.addStretch(1)
-        layout.addLayout(row)
         self.banner = RelationBanner()
         self.banner.set_relation("unknown", "Not fetched yet.")
         layout.addWidget(self.banner)
@@ -3135,6 +3135,7 @@ class PullTab(QWidget):
         self.warning.setWordWrap(True)
         fl.addWidget(self.warning)
         line = QHBoxLayout()
+        fl.addLayout(line)
         self.summary = QLabel("No remote inspection yet.")
         self.summary.setObjectName("muted")
         self.sync_button = QPushButton("SELECTIVE SYNC CHECKED")
@@ -3146,7 +3147,6 @@ class PullTab(QWidget):
         line.addWidget(self.summary, 1)
         line.addWidget(self.sync_button)
         line.addWidget(self.pull_button)
-        fl.addLayout(line)
         layout.addWidget(footer)
         self.sync_button.setEnabled(False)
         self.pull_button.setEnabled(False)
@@ -3326,6 +3326,7 @@ class RunTab(QWidget):
         cl = QVBoxLayout(controls)
         cl.setContentsMargins(14, 12, 14, 12)
         row = QHBoxLayout()
+        cl.addLayout(row)
         row.addWidget(QLabel("Entrypoint"))
         self.entrypoint_combo = QComboBox()
         self.entrypoint_combo.addItems(list(RUN_ENTRYPOINTS))
@@ -3338,13 +3339,13 @@ class RunTab(QWidget):
         refresh = QPushButton("Refresh CLI")
         refresh.clicked.connect(self.refresh_flags)
         row.addWidget(refresh)
-        cl.addLayout(row)
         layout.addWidget(controls)
 
         flags_panel = Panel()
         fl = QVBoxLayout(flags_panel)
         fl.setContentsMargins(14, 12, 14, 12)
         heading = QHBoxLayout()
+        fl.addLayout(heading)
         label = QLabel("RUNTIME / DIAGNOSTIC FLAGS")
         label.setObjectName("sectionTitle")
         heading.addWidget(label)
@@ -3357,7 +3358,6 @@ class RunTab(QWidget):
             button = QPushButton(text)
             button.clicked.connect(handler)
             heading.addWidget(button)
-        fl.addLayout(heading)
         self.flags_host = QWidget()
         self.flags_grid = QGridLayout(self.flags_host)
         self.flags_grid.setContentsMargins(0, 4, 0, 0)
@@ -3374,6 +3374,7 @@ class RunTab(QWidget):
         self.command_preview.setReadOnly(True)
         cp.addWidget(self.command_preview)
         bottom = QHBoxLayout()
+        cp.addLayout(bottom)
         self.keep_console = QCheckBox("Keep console open after SRPSS exits")
         self.keep_console.setToolTip(
             "Off (default): the dedicated console closes naturally with Python. "
@@ -3395,7 +3396,6 @@ class RunTab(QWidget):
         self.launch_button.setObjectName("primaryButton")
         self.launch_button.clicked.connect(self.launch)
         bottom.addWidget(self.launch_button)
-        cp.addLayout(bottom)
         self.run_status = QLabel()
         self.run_status.setObjectName("muted")
         cp.addWidget(self.run_status)
@@ -3761,6 +3761,7 @@ class CommandTab(QWidget):
         panel_l.addWidget(self.admin)
 
         shells = QHBoxLayout()
+        panel_l.addLayout(shells)
         for label, kind in (
             ("POWERSHELL", "powershell"),
             ("CMD", "cmd"),
@@ -3771,9 +3772,9 @@ class CommandTab(QWidget):
             button.setMinimumHeight(44)
             button.clicked.connect(lambda _checked=False, shell=kind: self._launch(shell))
             shells.addWidget(button)
-        panel_l.addLayout(shells)
 
         utility = QHBoxLayout()
+        panel_l.addLayout(utility)
         explorer = QPushButton("OPEN REPO IN EXPLORER")
         explorer.clicked.connect(
             lambda: self.window.open_folder(self.repo_root, label="repository")
@@ -3783,7 +3784,6 @@ class CommandTab(QWidget):
         utility.addWidget(explorer)
         utility.addWidget(copy_path)
         utility.addStretch(1)
-        panel_l.addLayout(utility)
 
         self._build_script_runner(layout)
         layout.addStretch(1)
@@ -3807,6 +3807,7 @@ class CommandTab(QWidget):
         self.script_input.setFixedHeight(92)
         body.addWidget(self.script_input)
         options = QHBoxLayout()
+        body.addLayout(options)
         options.addWidget(QLabel("SHELL"))
         self.script_shell = QComboBox()
         self.script_shell.addItem("Auto (PowerShell by default)", "auto")
@@ -3821,8 +3822,8 @@ class CommandTab(QWidget):
         self.script_external.toggled.connect(self._external_mode_changed)
         options.addWidget(self.script_external)
         options.addStretch(1)
-        body.addLayout(options)
         actions = QHBoxLayout()
+        body.addLayout(actions)
         self.script_run_button = QPushButton("RUN SCRIPT")
         self.script_run_button.setObjectName("primaryButton")
         self.script_run_button.clicked.connect(self._run_script)
@@ -3847,7 +3848,6 @@ class CommandTab(QWidget):
         actions.addWidget(self.script_stop_button)
         actions.addWidget(self.script_result_badge)
         actions.addStretch(1)
-        body.addLayout(actions)
         self.script_status = QLabel("No script running")
         self.script_status.setObjectName("muted")
         self.script_status.setWordWrap(True)
@@ -3863,6 +3863,7 @@ class CommandTab(QWidget):
         self.script_output.setPlaceholderText("Captured terminal output appears here; the capped transcript is saved under .godzip_foundry/runs/.")
         results_body.addWidget(self.script_output)
         results = QHBoxLayout()
+        results_body.addLayout(results)
         self.script_copy = QPushButton("COPY RESULTS")
         self.script_copy.setEnabled(False)
         self.script_copy.clicked.connect(self._copy_results)
@@ -3875,7 +3876,6 @@ class CommandTab(QWidget):
         results.addWidget(self.script_copy)
         results.addWidget(self.script_show_results)
         results.addWidget(self.script_zip)
-        results_body.addLayout(results)
         hint = QLabel("Captured mode: exit code + scrollable output + Copy Results. ZIP includes the pasted command, transcript and this run's new/changed loose /logs files (50 MB cap). Review for secrets before sharing. Interactive commands: choose External terminal.")
         hint.setWordWrap(True)
         hint.setObjectName("faint")
@@ -4230,6 +4230,7 @@ class CommandTab(QWidget):
         output.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         body.addWidget(output, 1)
         buttons = QHBoxLayout()
+        body.addLayout(buttons)
         copy = QPushButton("COPY RESULTS")
         copy.clicked.connect(self._copy_results)
         close = QPushButton("CLOSE")
@@ -4237,7 +4238,6 @@ class CommandTab(QWidget):
         buttons.addWidget(copy)
         buttons.addStretch(1)
         buttons.addWidget(close)
-        body.addLayout(buttons)
         dialog.exec()
 
     def _zip_results(self) -> None:
@@ -4381,6 +4381,7 @@ class FoundriesTab(QWidget):
         ))
 
         divider = QHBoxLayout()
+        layout.addLayout(divider)
         divider.setContentsMargins(2, 8, 2, 0)
         heading = QLabel("TOOLS")
         heading.setObjectName("sectionTitle")
@@ -4389,7 +4390,6 @@ class FoundriesTab(QWidget):
         rule.setObjectName("launcherSeparator")
         rule.setFrameShape(QFrame.Shape.HLine)
         divider.addWidget(rule, 1)
-        layout.addLayout(divider)
         self._add_launchers(layout, (
             ("MUSIC CLIP RECORDER\n60-second clips · full waveforms + events", "music_recorder.py", False),
             ("VISUALIZER PRESET REPAIR\nReview and repair preset / SST files", "visualizer_preset_repair.py", False),
@@ -4847,6 +4847,7 @@ class GodzipFoundryWindow(QMainWindow):
         hl = QHBoxLayout(header)
         hl.setContentsMargins(20, 16, 10, 15)
         titles = QVBoxLayout()
+        hl.addLayout(titles, 1)
         title = QLabel("GODZIP FOUNDRY")
         title.setObjectName("appTitle")
         title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
@@ -4855,7 +4856,6 @@ class GodzipFoundryWindow(QMainWindow):
         subtitle.setObjectName("subtitle")
         subtitle.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         titles.addWidget(subtitle)
-        hl.addLayout(titles, 1)
         self.current_plan_button = QPushButton("OPEN CP & DIFF")
         self.current_plan_button.setObjectName("toolTitlePlanButton")
         self.current_plan_button.setFixedHeight(34)
@@ -4966,6 +4966,7 @@ class GodzipFoundryWindow(QMainWindow):
         outer.addWidget(shell, 1)
 
         status_row = QHBoxLayout()
+        outer.addLayout(status_row)
         self.status_label = QLabel("Ready")
         self.status_label.setObjectName("status")
         self.busy = QProgressBar()
@@ -4977,7 +4978,6 @@ class GodzipFoundryWindow(QMainWindow):
         status_row.addWidget(self.status_label, 1)
         status_row.addWidget(self.busy)
         status_row.addWidget(dpi)
-        outer.addLayout(status_row)
 
     def _tab_changed(self, _index: int) -> None:
         current = self.tabs.currentWidget()
