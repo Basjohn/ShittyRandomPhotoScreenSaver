@@ -99,12 +99,15 @@ def teardown_display_runtime(
     engine: ScreensaverEngine,
     *,
     reason: str,
+    terminal: bool = False,
 ) -> object | None:
     """Clean one display runtime and queue its Qt roots for destruction.
 
     Producer shutdown and strict GL deletion complete synchronously.  The
     returned barrier represents only Qt/Python root destruction, which must be
     observed on a later event-loop turn before constructing a replacement.
+    ``terminal`` (an exiting stop, whatever its reason) arms the terminal
+    barrier, whose drain the quit waits for.
     """
     # Invalidate delayed admission before any retained widget owner can retire.
     # Otherwise finishing a canceled feed lease could replay a rotation while
@@ -156,8 +159,13 @@ def teardown_display_runtime(
             # QObject/Python/resource drain that replacement already proves is
             # observed before QCoreApplication.quit(); it never admits a replacement
             # continuation. engine_cleanup runs on the final teardown path where
-            # the loop may already be gone, so it stays barrier-free.
-            purpose = "terminal" if reason == "application_exit" else "replacement"
+            # the loop may already be gone, so it stays barrier-free. Every
+            # exiting stop is terminal, whatever its reason: keyed on the reason
+            # "application_exit" alone, ``--exit-after`` ("cli_exit_after") and
+            # "no_display_shown" armed a replacement barrier, which cancels itself
+            # under terminal shutdown, so the loop ended with the Quick windows
+            # still alive (a Vulkan window alive at process end crashes it).
+            purpose = "terminal" if terminal else "replacement"
             barrier = create_runtime_destruction_barrier(
                 engine,
                 manager,
@@ -668,6 +676,7 @@ def stop(
         teardown_display_runtime(
             engine,
             reason=lifecycle_reason,
+            terminal=exit_app,
         )
         # Stop any pending image loads
         engine._loading_in_progress = False
