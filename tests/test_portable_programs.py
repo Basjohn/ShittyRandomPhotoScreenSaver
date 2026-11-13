@@ -132,6 +132,46 @@ def test_bool_and_uvec4_members_pack_as_32_bit_integers():
     assert "bool uOn;" in layout.glsl(18) and "uvec4 uBits;" in layout.glsl(18)
 
 
+def test_a_family_sharing_stages_declares_one_block_over_every_stage():
+    # Extruded Bubble's fullscreen vertex is drawn with three fragments and one fragment with two vertex stages
+    # (N1.6): each shared stage converts once, and every stage of the family declares the one union block.
+    from rendering.gl_programs.portable import portable_family
+
+    vertex = "#version 460 core\nuniform vec2 uShift;\nout vec2 vNdc;\nvoid main(){vNdc=uShift;gl_Position=vec4(0.0);}\n"
+    other = "#version 460 core\nuniform float uScale;\nout vec2 vNdc;\nvoid main(){vNdc=vec2(uScale);gl_Position=vec4(0.0);}\n"
+    fragment_a = "#version 460 core\nin vec2 vNdc;\nout vec4 c;\nuniform float uA;\nvoid main(){c=vec4(vNdc,uA,1.0);}\n"
+    fragment_b = ("#version 460 core\nin vec2 vNdc;\nout vec4 c;\nuniform sampler2D uImage;\nuniform vec3 uB;\n"
+                  "void main(){c=texture(uImage,vNdc)*vec4(uB,1.0);}\n")
+    converted, layout = portable_family({"v": vertex, "w": other, "a": fragment_a, "b": fragment_b},
+                                        (("v", ("a",)), ("v", ("b",)), ("w", ("a",))), block="Family",
+                                        samplers={"uImage": 3})
+    assert [name for name, _kind in layout.fields] == ["uShift", "uA", "uB", "uScale"]
+    declaration = layout.glsl(SCENE3D_PASS_BLOCK_BINDING)
+    assert all(declaration in text and "uniform float" not in text for text in converted.values())
+    assert "layout(binding = 3) uniform sampler2D uImage;" in converted["b"]
+    # A shared fragment whose vertex stages place their outputs differently cannot convert once: refused.
+    moved = "#version 460 core\nout vec3 vExtra;\nout vec2 vNdc;\nvoid main(){vExtra=vec3(0.0);vNdc=vec2(0.0);}\n"
+    with pytest.raises(ValueError, match="converts differently"):
+        portable_family({"v": vertex, "m": moved, "a": fragment_a}, (("v", ("a",)), ("m", ("a",))), block="Family",
+                        samplers={})
+
+
+def test_mat3_members_pack_as_three_padded_columns():
+    # Extruded Bubble's rotations and the probe's six face rotations are mat3 (N1.6): std140 aligns each column as a
+    # vec4, so nine column-major values take 48 bytes; a mat3 array strides 48; a member never set packs as zeros.
+    layout = Scene3DBlockLayout.of("Probe", (("uA", "float"), ("uM", "mat3"), ("uFaces", "mat3[2]"), ("uB", "float")))
+    assert layout.offsets == (0, 16, 64, 160) and layout.size == 176
+    rotation = tuple(float(v) for v in range(1, 10))
+    data = pack_block(layout, {"uM": rotation, "uFaces": (rotation, tuple(-v for v in rotation)), "uB": 2.0})
+    for column in range(3):
+        assert struct.unpack_from("<3f", data, 16 + 16 * column) == rotation[3 * column:3 * column + 3]
+        assert struct.unpack_from("<f", data, 16 + 16 * column + 12) == (0.0,)
+        assert struct.unpack_from("<3f", data, 64 + 48 + 16 * column) == tuple(-v for v in rotation[3 * column:3 * column + 3])
+    assert struct.unpack_from("<f", data, 160) == (2.0,)
+    assert pack_block(layout, {}) == bytes(176)
+    assert "mat3 uM;" in layout.glsl(18) and "mat3 uFaces[2];" in layout.glsl(18)
+
+
 @pytest.mark.parametrize(("mode", "block"), (("bubble", "BubbleDraw"), ("devcurve", "DevCurveDraw")))
 def test_the_2d_modes_draw_one_block_declared_once_in_their_shader(mode, block):
     import importlib

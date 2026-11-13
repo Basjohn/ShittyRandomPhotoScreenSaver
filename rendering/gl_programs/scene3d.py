@@ -1055,7 +1055,8 @@ _STD140 = {
     "bool": (4, 4, "i"),
     "vec2": (8, 8, "2f"), "ivec2": (8, 8, "2i"), "uvec2": (8, 8, "2I"),
     "vec3": (16, 12, "3f"), "vec4": (16, 16, "4f"), "ivec4": (16, 16, "4i"), "uvec4": (16, 16, "4I"),
-    "mat4": (16, 64, "16f"),
+    # A mat3 is three columns, each aligned as a vec4: its nine column-major values, each column padded to 16 bytes.
+    "mat3": (16, 48, "3f4x3f4x3f4x"), "mat4": (16, 64, "16f"),
 }
 
 

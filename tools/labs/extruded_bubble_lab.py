@@ -22,8 +22,14 @@ import numpy as np
 from rendering.gl_error_policy import disable_per_call_gl_error_checking
 if not disable_per_call_gl_error_checking():
     raise RuntimeError("GL imported before production policy")
-from OpenGL import GL as gl
+from OpenGL import GL
 from PIL import Image
+
+from tools.pass_block_gl import PassBlockGL
+
+# The product's programs take their values as pass blocks (N1.6): the lab sets them by name as before through this
+# stand-in, which packs and binds each registered program's block at its draws (``owned_program`` registers them).
+gl = PassBlockGL(GL)
 
 from rendering.gl_programs.scene3d_optics import SCENE3D_OPTICS_GLSL
 from rendering.quick.scene3d.defocus import SCENE_DEFOCUS_GLSL, DefocusLayer
@@ -53,7 +59,12 @@ from rendering.gl_programs.extruded_bubble_program import (  # the product's sha
     CLUSTER_FRAGMENT,
     PARTICLE_VERTEX,
     PARTICLE_FRAGMENT,
+    EB_SAMPLERS,
+    FULLSCREEN_BLOCK,
+    FULLSCREEN_DEFAULTS,
+    PARTICLE_BLOCK,
 )
+from rendering.gl_programs.portable import portable_program
 
 W, H = 1672, 941
 # --size=WxH: render (and time) at another size, e.g. a 1440p display (mock sheets and card crops assume the default).
@@ -149,6 +160,12 @@ void main() {
     FragColor = vec4(basinWater(dir, vec3(0.0), 0.6, shafts), 1.0);
 }
 """
+# The environment's own fullscreen pair with its own pass block (COMMON's values; the product's fullscreen vertex
+# declares the product's block).
+ENV_VERTEX, (ENV_FRAGMENT,), ENV_BLOCK = portable_program(
+    "#version 460 core\nout vec2 vNdc;\nvoid main() {\n    vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);\n"
+    "    gl_Position = vec4(p * 2.0 - 1.0, 0.9999, 1.0);\n    vNdc = p * 2.0 - 1.0;\n}\n",
+    (ENV_FRAGMENT,), block="EbLabEnvironment", samplers=EB_SAMPLERS)
 RIBBON_VERTEX = """#version 460 core
 layout(location=0) in vec4 aStart;    // world point under the bubble, bubble radius
 layout(location=1) in vec4 aShape;    // seed, length, current lean, strength
@@ -904,9 +921,17 @@ def main():
         capture = OffscreenRenderTarget(W, H, label="extruded-bubble-lab")
         cleanup.callback(capture.close)
 
+        # Each product program's pass block by its fragment (N1.6), with what the block starts from.
+        blocks = {ENV_FRAGMENT: (ENV_BLOCK, {}), BACKDROP_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS),
+                  SHAFT_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS),
+                  BLUR_FRAGMENT: (FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS), PARTICLE_FRAGMENT: (PARTICLE_BLOCK, {})}
+        cleanup.callback(gl.release)
+
         def owned_program(*args, **kwargs):
             program = compile_program(*args, **kwargs)
             cleanup.callback(delete_program, program)
+            if args[1] in blocks:
+                gl.register(program, *blocks[args[1]])
             return program
 
         PROBE = SceneProbe("bubble lab probe", PROBE_SIZE)
@@ -917,7 +942,7 @@ def main():
         cleanup.callback(resources.release_resources)
         target = SceneTarget("bubble lab")
         cleanup.callback(target.release)
-        programs = (owned_program(FULL_VERTEX, ENV_FRAGMENT, label="lab env"),
+        programs = (owned_program(ENV_VERTEX, ENV_FRAGMENT, label="lab env"),
                     owned_program(FULL_VERTEX, BACKDROP_FRAGMENT, label="lab backdrop"),
                     owned_program(BUBBLE_VERTEX, BUBBLE_FRAGMENT, label="lab bubbles"),
                     owned_program(CLUSTER_VERTEX, CLUSTER_FRAGMENT, label="lab clusters"),

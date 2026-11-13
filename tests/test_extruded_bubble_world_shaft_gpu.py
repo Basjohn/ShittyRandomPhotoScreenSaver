@@ -20,11 +20,13 @@ def _constant_pattern(source):
 
 @pytest.fixture
 def world_shaft(qt_app):
-    from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_program import SHAFT_FRAGMENT
+    from OpenGL import GL
+    from rendering.gl_programs.extruded_bubble_program import FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS, SHAFT_FRAGMENT
     from rendering.quick.render.gl_resources import compile_program
+    from tools.pass_block_gl import PassBlockGL
     from tools.transition_contact_sheet import TransitionCapture
 
+    gl = PassBlockGL(GL)          # the shaft's values are its pass block (N1.6), set by name as before
     prefix = SHAFT_FRAGMENT.rsplit('void main()', 1)[0]
     assert 'float worldShafts(' in prefix and 'vec2 shaftPatternCoords(' in prefix
     diagnostic = '''
@@ -46,7 +48,7 @@ void main() {
 }
 '''
     vertex = '''#version 460 core
-out vec2 vNdc;
+layout(location = 0) out vec2 vNdc;
 void main(){
     vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));
     vNdc=p*2.-1.;gl_Position=vec4(vNdc,0.,1.);
@@ -58,6 +60,7 @@ void main(){
     try:
         for label, fragment in (('actual density', prefix), ('controlled density', _constant_pattern(prefix))):
             programs.append(compile_program(vertex, fragment + diagnostic, label='world shafts ' + label))
+            gl.register(programs[-1], FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS)
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
         texture = int(gl.glGenTextures(1))
         gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
@@ -103,6 +106,7 @@ void main(){
 
         yield draw
     finally:
+        gl.release()
         if texture:
             gl.glDeleteTextures([texture])
         for program in programs:
@@ -301,11 +305,14 @@ def test_canonical_scene_light_geometry_does_not_depend_on_strength(world_shaft,
 
 @pytest.mark.qt
 def test_scene_main_shadows_actual_contribution_centroid_not_fixed_depth(qt_app):
-    from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_program import FULL_VERTEX, SHAFT_FRAGMENT
+    from OpenGL import GL
+    from rendering.gl_programs.extruded_bubble_program import (FULL_VERTEX, FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS,
+                                                               SHAFT_FRAGMENT)
     from rendering.quick.render.gl_resources import compile_program
+    from tools.pass_block_gl import PassBlockGL
     from tools.transition_contact_sheet import TransitionCapture
 
+    gl = PassBlockGL(GL)          # the shaft's values are its pass block (N1.6), set by name as before
     # Control only noise density and sample jitter. Keep production main wiring,
     # envelope, integration, phase and four-proxy attenuation unchanged.
     source = _constant_pattern(SHAFT_FRAGMENT)
@@ -330,6 +337,7 @@ def test_scene_main_shadows_actual_contribution_centroid_not_fixed_depth(qt_app)
         results = []
         for fragment in (source, former):
             program = compile_program(FULL_VERTEX, fragment, label='actual shaft main centroid')
+            gl.register(program, FULLSCREEN_BLOCK, FULLSCREEN_DEFAULTS)
             programs.append(program); gl.glUseProgram(program)
             loc = lambda name: gl.glGetUniformLocation(program, name)
             gl.glUniformMatrix3fv(loc('uViewToWorld'), 1, False, np.eye(3, dtype='f4'))
@@ -361,6 +369,7 @@ def test_scene_main_shadows_actual_contribution_centroid_not_fixed_depth(qt_app)
         assert results[1] == pytest.approx(results[0] * .84, rel=2e-5)
         assert gl.glGetError() == gl.GL_NO_ERROR
     finally:
+        gl.release()
         if texture: gl.glDeleteTextures([texture])
         for program in programs: delete_program(program)
         target.close()

@@ -30,8 +30,10 @@ import math
 
 from OpenGL import GL as gl
 
+from rendering.gl_programs.portable import portable_program
 from rendering.quick import gl_query
 from rendering.quick.render.gl_resources import compile_program, delete_program
+from rendering.quick.scene3d.uniforms import PassBlocks
 
 # (forward, up) per face in GL's cube-map order and convention.
 _FACES = (
@@ -56,9 +58,9 @@ void main() {
 _PREFILTER_GEOMETRY = """#version 460 core
 layout(triangles, invocations = 6) in;
 layout(triangle_strip, max_vertices = 3) out;
-in vec2 vNdc[];
-out vec2 fNdc;
-flat out int fFace;
+layout(location = 0) in vec2 vNdc[];
+layout(location = 0) out vec2 fNdc;
+layout(location = 1) flat out int fFace;
 void main() {
     for (int i = 0; i < 3; ++i) {
         fNdc = vNdc[i];
@@ -99,6 +101,12 @@ void main() {
     FragColor = vec4(sum / weights, 1.0);
 }
 """
+# N1.6 (``portable_program``): the prefilter's values in one std140 pass block (the faces' rotations and each level's
+# cone and source level), the cube at unit 0; the vertex's output and the fragment's inputs located in declaration
+# order, as the geometry stage states them.
+_PREFILTER_VERTEX, _, _ = portable_program(_PREFILTER_VERTEX, (), block="ProbePrefilterVertex", samplers={})
+_, (_PREFILTER_FRAGMENT,), _PREFILTER_BLOCK = portable_program(None, (_PREFILTER_FRAGMENT,), block="ProbePrefilter",
+                                                               samplers={"uSource": 0})
 
 SCENE3D_PROBE_GLSL = """
 #ifndef SCENE3D_PROBE_GLSL
@@ -120,6 +128,12 @@ def scene3d_probe_face_rotation(face: int) -> tuple[float, ...]:
     right = _cross(forward, up)
     back = tuple(-v for v in forward)
     return (*right, *up, *back)
+
+
+# The faces' rotations as the prefilter's block holds them: column-major (glProgramUniformMatrix3fv took the row-major
+# rotations transposed).
+_FACE_COLUMNS = tuple(tuple(rotation[3 * row + column] for column in range(3) for row in range(3))
+                      for rotation in map(scene3d_probe_face_rotation, range(6)))
 
 
 def scene3d_probe_face_of(direction) -> int:
@@ -152,13 +166,16 @@ class SceneProbe:
         self._layers = 0   # colour-only framebuffer holding one whole (layered) cube level for the prefilter
         self._program = 0
         self._vao = 0
+        # The prefilter's pass block (N1.6): one copy per filtered level in one bound scope.
+        self._blocks = PassBlocks(label, block_bytes=_PREFILTER_BLOCK.size, copies=self.levels)
 
     @property
     def texture(self) -> int:
         return self._texture
 
     def has_resources(self) -> bool:
-        return bool(self._texture or self._depth or self._fbo or self._layers or self._program or self._vao)
+        return bool(self._texture or self._depth or self._fbo or self._layers or self._program or self._vao
+                    or self._blocks.has_resources)
 
     def warm(self) -> bool:
         """One warm-up step: True when the probe is already allocated (and its prefilter compiled), else
@@ -196,11 +213,7 @@ class SceneProbe:
         self._vao = int(name[0])
         self._program = compile_program(_PREFILTER_VERTEX, _PREFILTER_FRAGMENT, label=f"{self.label} prefilter",
                                         geometry_source=_PREFILTER_GEOMETRY)
-        self._locations = {name: int(gl.glGetUniformLocation(self._program, name))
-                           for name in ("uSource", "uWorldToFace", "uCone", "uSourceLod")}
-        gl.glProgramUniformMatrix3fv(self._program, self._locations["uWorldToFace"], 6, gl.GL_TRUE,
-                                     (ctypes.c_float * 54)(*(v for face in range(6)
-                                                              for v in scene3d_probe_face_rotation(face))))
+        self._blocks.warm()
         gl.glCreateFramebuffers(1, name)
         self._layers = int(name[0])
         gl.glNamedFramebufferDrawBuffer(self._layers, gl.GL_COLOR_ATTACHMENT0)
@@ -223,21 +236,27 @@ class SceneProbe:
         gl.glDisable(gl.GL_BLEND)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_CUBE_MAP, self._texture)
-        locations = self._locations
-        gl.glUniform1i(locations["uSource"], 0)
-        cone, lod = locations["uCone"], locations["uSourceLod"]
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._layers)   # the caller restores its framebuffer
+
+        def values(level: int) -> bytes:
+            side = max(self.size >> level, 1)
+            return _PREFILTER_BLOCK.pack({"uWorldToFace": _FACE_COLUMNS,
+                                          "uCone": min(2.2 * (math.pi / 2.0) / side, math.pi / 2.0),
+                                          "uSourceLod": float(level - 1)})
+
         try:
-            for level in range(1, self.levels):
-                side = max(self.size >> level, 1)
-                # Sample only the level above while this one is written (never a feedback loop).
-                gl.glTexParameteri(gl.GL_TEXTURE_CUBE_MAP, gl.GL_TEXTURE_BASE_LEVEL, level - 1)
-                gl.glTexParameteri(gl.GL_TEXTURE_CUBE_MAP, gl.GL_TEXTURE_MAX_LEVEL, level - 1)
-                gl.glUniform1f(cone, min(2.2 * (math.pi / 2.0) / side, math.pi / 2.0))
-                gl.glUniform1f(lod, float(level - 1))
-                gl.glViewport(0, 0, side, side)
-                gl.glNamedFramebufferTexture(self._layers, gl.GL_COLOR_ATTACHMENT0, self._texture, level)
-                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            # Each level's values are its own copy of the pass block (N1.6), rebound per level in one scope.
+            with self._blocks.bound(values(1)) as rebind:
+                for level in range(1, self.levels):
+                    side = max(self.size >> level, 1)
+                    if level > 1:
+                        rebind(values(level))
+                    # Sample only the level above while this one is written (never a feedback loop).
+                    gl.glTexParameteri(gl.GL_TEXTURE_CUBE_MAP, gl.GL_TEXTURE_BASE_LEVEL, level - 1)
+                    gl.glTexParameteri(gl.GL_TEXTURE_CUBE_MAP, gl.GL_TEXTURE_MAX_LEVEL, level - 1)
+                    gl.glViewport(0, 0, side, side)
+                    gl.glNamedFramebufferTexture(self._layers, gl.GL_COLOR_ATTACHMENT0, self._texture, level)
+                    gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         finally:
             gl.glTexParameteri(gl.GL_TEXTURE_CUBE_MAP, gl.GL_TEXTURE_BASE_LEVEL, 0)
             gl.glTexParameteri(gl.GL_TEXTURE_CUBE_MAP, gl.GL_TEXTURE_MAX_LEVEL, self.levels - 1)
@@ -298,6 +317,7 @@ class SceneProbe:
         if self._program:
             delete_program(self._program)
         self._texture = self._depth = self._fbo = self._layers = self._program = self._vao = 0
+        self._blocks.release()
 
 
 __all__ = ["SCENE3D_PROBE_GLSL", "SceneProbe", "scene3d_probe_face_of", "scene3d_probe_face_rotation",

@@ -119,10 +119,12 @@ void main() {
 
 @pytest.mark.qt
 def test_glowing_specks_follow_authored_finite_stream_without_camera_dependent_world_positions(qt_app):
-    from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_program import SPECK_VERTEX
+    from OpenGL import GL
+    from rendering.gl_programs.extruded_bubble_program import PARTICLE_BLOCK, SPECK_VERTEX
     from rendering.quick.render.gl_resources import compile_program
+    from tools.pass_block_gl import PassBlockGL
     from tools.transition_contact_sheet import TransitionCapture
+    gl=PassBlockGL(GL)          # the specks' values are their pass block (N1.6), set by name as before
     prefix=SPECK_VERTEX.split('void main() {\n    speckInstance();\n')[0]
     vertex=prefix+'''
 layout(std430,binding=6) buffer Results { vec4 results[]; };
@@ -131,6 +133,7 @@ void main(){speckInstance();results[gl_InstanceID]=vec4(aPoint.xyz,aLook.x);gl_P
     target=TransitionCapture(64,64);program=buffer=0
     try:
         program=compile_program(vertex,'#version 460 core\nout vec4 colour;\nvoid main(){colour=vec4(0);}',label='fixed speck volume')
+        gl.register(program,PARTICLE_BLOCK)
         names=np.empty(1,dtype='u4');gl.glCreateBuffers(1,names);buffer=int(names[0])
         gl.glNamedBufferData(buffer,2048*16,None,gl.GL_DYNAMIC_READ);gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,6,buffer)
         gl.glUseProgram(program);loc=lambda name:gl.glGetUniformLocation(program,name)
@@ -158,6 +161,7 @@ void main(){speckInstance();results[gl_InstanceID]=vec4(aPoint.xyz,aLook.x);gl_P
         assert np.percentile(np.abs(live[:,0]), 98) < 10.0
         assert gl.glGetError()==gl.GL_NO_ERROR
     finally:
+        gl.release()
         gl.glDisable(gl.GL_RASTERIZER_DISCARD);gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,6,0)
         if buffer:gl.glDeleteBuffers(1,[buffer])
         if program:delete_program(program)
