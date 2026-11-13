@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.7's leftovers next (High); 1D.10 (Medium).
+**Now (in flight):** N2.7's leftovers (High); 1D.11 with 1D.8 (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,7 +47,7 @@ at the size asked.
      and N2.8.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. 1D.10 (the 13 Nov audit's must-fixes first), then 1D.11 with 1D.8 as one dispatch (bind the trails'
+  1. 1D.11 with 1D.8 as one dispatch (bind the trails'
      `uBackground` first, then check whether the idle wake teleport is gone: its refraction read whatever unit 0
      held), then 1D.7 (hover actions without Edit).
   2. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
@@ -1074,41 +1074,17 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
 
-### 1D.10 Audit of 13 Nov (`Docs/Future_Work/Audit_2026-11-13.md`): what is left (Opus Medium, before 1D.7)
+### 1D.10 Audit of 13 Nov: what is left after its merge (14 Nov)
 
-- [ ] Must-fix: `tests/test_shared_spinbox_editor_style.py` is red. The operator fixed the spinbox alignment in
-  41932d38 (5.1.4); refine the editor half its test describes, in `ui/tabs/shared_styles.py`, keeping that
-  alignment exactly:
-  - drop `QLineEdit` from the combined `QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox { min-height... }`
-    selector (`:708`), keeping standalone line edits styled where they were;
-  - give `QAbstractSpinBox > QLineEdit` (`:729`) `min-height: 0px; padding: 0px`.
-  Render spinbox crops before and after for the lead (Settings, several themes, every spinbox kind), and run
-  `test_shared_spinbox_alignment.py` too.
-- [ ] Must-fix: `tests/test_build_foundry_window_layout.py:29` is red (732 against 696) and shows a real Build Runner
-  (Tk) window. The 732 px is the operator's correct fix: the native build targets added buttons without anyone
-  checking they stayed visible and clickable. The test's fixed 696 limit is the stale part.
-  - Assert what matters: every job button and action control lies wholly inside the window's client area and is
-    hit-testable, and the window fits the screen's work area. No fixed pixel height.
-  - Negative control: one more job row, or a smaller window, fails it.
-  - Keep the test's Tk window invisible (withdrawn or off screen). Extend `tests/test_no_visible_test_windows.py`
-    to Tk if it can see Tk windows.
-  - Rule from now on: a change that adds a Build Runner control runs this test.
-- [ ] D3D11/D3D12 have no failing negative control for the front-face rule: add the `front_face_fixed_cw` control
-  to `host_check.py` (the module already accepts it), then rerun host_check once (lead).
-- [ ] `native/core/src/vulkan_context.cpp:205-207` hides two validation patterns from every caller. Excuse them
-  only with Qt6Gui as the caller, like the other defects (C++: one build round).
-- [ ] `tools/d1_run.py:1324-1331`, the two-display guard: compare windows by handle from one scan, not strings
-  from two. Correct the help text (the parser always requires `--allow-primary`).
-- [ ] Lows (audit section 3), each a small fix:
-  - `vk_validation.py` skips "Loader Message" errors at any severity;
-  - the Qt-only hidden-host control always reports its cycles as OK;
-  - the timer's `reads_cost_little` check passes when the read cost stops being reported;
-  - `surfaces.cpp`'s window registry is never pruned;
-  - GODZIP's remaining self-capturing `singleShot` lambda;
-  - the 1D.4 Change Every row's self-capturing lambda (`ui/onboarding/selection_pages.py:504`);
-  - `combo_knob_overlay.py` imports the private `_WeakWidgetSlot`: make it a public helper of one owner.
-- Not entered: the shadow-helper lifetime fix (8f821353) needs no historical bug entry, because Settings itself
-  never freed widgets through the collector.
+- [ ] C++, with the next native build round: excuse `vulkan_context.cpp:205-207`'s two messages only when Qt6Gui
+  is the caller; prune `surfaces.cpp`'s window registry (`:51-54`, `:295-305`). Then the lead runs host_check, which
+  also proves the new `front_face_fixed_cw` control and the Qt-only cycle verdict on the GPU.
+- [ ] `tools/build_runner.py:2272`, `:2285` (`_fit_initial_window`): on a work area shorter than the content, the
+  fit clamps Tk's client height without counting the native frame, so the window's bottom passes the work area by
+  about 25 px. This only affects short screens; the operator's 732 px stays. Count the frame in the clamp.
+  `tests/test_build_foundry_window_layout.py -k keeps_the_whole_window` is a strict expected failure until then.
+- [ ] GODZIP's close joins a read-only worker for up to 10 s on the GUI thread (audit low 5). Bound the join tighter,
+  or detach the result safely.
 
 ### 1D.11 Extruded Bubble side defects from N1.6 (14 Nov; Opus Medium)
 
