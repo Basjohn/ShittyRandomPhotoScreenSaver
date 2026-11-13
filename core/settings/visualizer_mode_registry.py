@@ -196,6 +196,11 @@ class VisualizerModeDescriptor:
     # intent is ``widgets.spotify_visualizer.expanded_display_requested``. Read it through
     # ``resolve_expanded_display_capable`` so a disabled, gated or unregistered mode can never force expansion.
     supports_expanded_display: bool = False
+    # The graphics backends the mode has a renderer on (D10 point 2, Current_Plan.md item 8b N2.7): on a backend
+    # without one the mode is not offered and no surface of it is created (``is_mode_available_on_backend``). Every
+    # mode has its Python OpenGL renderer; a native port adds "vulkan". The migration's only mechanism: it goes when
+    # the last Python renderer goes.
+    renderer_backends: tuple[str, ...] = ("opengl",)
 
     @property
     def preset_key(self) -> str:
@@ -1094,6 +1099,45 @@ def resolve_effective_mode(
     if default_mode in enabled:
         return default_mode, True
     return enabled[0], True
+
+
+def is_mode_available_on_backend(mode_id: object, backend: str | None = None) -> bool:
+    """Whether ``mode_id`` has a renderer on ``backend`` (D10 point 2): the process's backend, as the one backend
+    owner chose it (``rendering.quick.bootstrap``), when None. Unknown modes answer False. On OpenGL every mode does;
+    on Vulkan only a ported one, and a mode that is not ported is not offered there."""
+
+    requested = str(mode_id or "").strip().lower()
+    if requested not in VISUALIZER_MODE_IDS:
+        return False
+    if backend is None:
+        from rendering.quick.bootstrap import quick_backend_api
+
+        backend = quick_backend_api()
+    return str(backend) in get_visualizer_mode_descriptor(requested).renderer_backends
+
+
+def resolve_backend_mode(
+    requested_mode: object,
+    mode_activation: object,
+    backend: str | None = None,
+) -> str | None:
+    """The mode the Visualizer starts in on ``backend`` (the process's when None), or None when no enabled mode has a
+    renderer there: then no Visualizer is created (D10 point 2: never a surface without a renderer).
+
+    :func:`resolve_effective_mode`'s answer when it has a renderer on the backend (always, on OpenGL); else the next
+    enabled mode in canonical order that has one. Never re-enables a disabled mode. Pure."""
+
+    effective, _substituted = resolve_effective_mode(requested_mode, mode_activation)
+    if is_mode_available_on_backend(effective, backend):
+        return effective
+    enabled = resolve_admissible_enabled_modes(mode_activation)
+    start = VISUALIZER_MODE_IDS.index(effective)
+    count = len(VISUALIZER_MODE_IDS)
+    for step in range(1, count + 1):
+        candidate = VISUALIZER_MODE_IDS[(start + step) % count]
+        if candidate in enabled and is_mode_available_on_backend(candidate, backend):
+            return candidate
+    return None
 
 
 def resolve_expanded_display_capable(mode_id: object, mode_activation: object) -> bool:

@@ -1931,11 +1931,13 @@ class QuickDisplayVisualizerOwner:
         from core.settings.visualizer_mode_registry import (
             coerce_visualizer_mode_id,
             is_mode_active,
+            is_mode_available_on_backend,
         )
 
         requested = str(target_mode or "").strip().lower()
         target = coerce_visualizer_mode_id(requested)
-        if target != requested or not is_mode_active(target):
+        # A mode without a renderer on this backend is never activated (D10 point 2; every mode has one on OpenGL).
+        if target != requested or not is_mode_active(target) or not is_mode_available_on_backend(target):
             return False
         current = self._controller.mode_id
         if kind == "mode":

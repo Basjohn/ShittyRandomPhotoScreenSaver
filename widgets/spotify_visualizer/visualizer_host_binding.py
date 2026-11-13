@@ -375,6 +375,7 @@ class VisualizerHostBinding:
 
         from core.settings.models import SpotifyVisualizerSettings
         from core.settings.visualizer_mode_registry import (
+            resolve_backend_mode,
             resolve_effective_visualizer_section,
         )
         from core.settings.visualizer_presets import (
@@ -396,6 +397,24 @@ class VisualizerHostBinding:
                 requested_mode,
                 effective_mode,
             )
+        # D10 point 2: on a backend where the mode has no renderer the next
+        # enabled mode with one starts instead, and with none no Visualizer is
+        # created. On OpenGL every mode has one and this changes nothing.
+        backend_mode = resolve_backend_mode(effective_mode, section.get("mode_activation"))
+        if backend_mode is None:
+            services.set_construct_outcome(
+                "rejected",
+                "no_mode_on_this_backend",
+            )
+            return False
+        if backend_mode != effective_mode:
+            logger.info(
+                "[SPOTIFY_VIS] Visualizer mode %r has no renderer on this "
+                "graphics backend; starting %r instead",
+                effective_mode,
+                backend_mode,
+            )
+            section = {**section, "mode": backend_mode}
 
         activation = resolve_visualizer_activation_payload(section)
         model = SpotifyVisualizerSettings.from_mapping(

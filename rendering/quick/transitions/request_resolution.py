@@ -18,6 +18,7 @@ from rendering.transition_registry import (
     canonicalize_transition_name,
     get_transition_descriptor,
     is_transition_available_for_hw,
+    resolve_backend_transition_name,
 )
 
 from ..image_state import PresentationImage
@@ -187,6 +188,9 @@ def resolve_quick_transition_spec(
             transitions,
             requested_name,
         )
+    # D10 point 2: a transition without a renderer on this backend runs as
+    # Crossfade (its own duration and parameters); on OpenGL every one has one.
+    selected_name = resolve_backend_transition_name(selected_name)
 
     descriptor = get_transition_descriptor(selected_name)
     if descriptor is None:
