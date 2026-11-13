@@ -56,7 +56,11 @@ def studio_modes() -> tuple[StudioEntry, ...]:
 
 
 def has_studio(mode_id: str) -> bool:
-    return mode_id in _ENTRIES
+    """Whether ``mode_id`` offers its Studio: it has an adapter, and its mode a renderer on the process's graphics
+    backend (D10 point 2: the Studio's preview draws the mode's renderer; every mode has one on OpenGL)."""
+    from core.settings.visualizer_mode_registry import is_mode_available_on_backend
+
+    return mode_id in _ENTRIES and is_mode_available_on_backend(mode_id)
 
 
 def create_adapter(mode_id: str):
