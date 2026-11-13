@@ -48,7 +48,7 @@ at the size asked.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
   1. N1.6 Extruded Bubble (bit-identical on OpenGL or converted at its port).
-  2. 1D.7 (hover actions without Edit), then 1D.8 (idle wake).
+  2. 1D.10 (the 13 Nov audit's must-fixes first), then 1D.7 (hover actions without Edit), then 1D.8 (idle wake).
   3. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
      Sphere); a mode that cannot be made bit-identical in one dispatch converts at its port.
   3. 1B.10.
@@ -407,8 +407,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     transparent content must clear what Qt Quick does not cover; decide that when the first such host exists.
   - [ ] The `QT_DEFECTS` rule is copied in `native/core/python/vk_validation.py` and the spike's `run_n06.py`:
     one source, or both edited when defect A's excuse goes at the next Qt patch.
-  - [ ] The two depth side defects (`waveform_ribbon.py:54`, `scene3d_spheres.py:197`), Python-renderer shader
-    edits proved by identity renders.
 - [ ] N2.3 The packet reader with D1's barrier, D2's single consumer and the drop edge; the adversarial tests of
   P3.0.
   - [ ] The C++ reader matches the Python reference decoder (`core/visualizer_engine/spectrum_native_schema.py`,
@@ -1051,6 +1049,37 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   Settings and Studio box.
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
+
+### 1D.10 Audit of 13 Nov (`Docs/Future_Work/Audit_2026-11-13.md`): what is left (Opus Medium, before 1D.7)
+
+- [ ] Must-fix: `tests/test_shared_spinbox_editor_style.py` is red. 41932d38 (5.1.4) added the alignment rule but
+  not the editor half its test describes. Finish it in `ui/tabs/shared_styles.py`:
+  - drop `QLineEdit` from the combined `QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox { min-height... }`
+    selector (`:708`), keeping standalone line edits styled where they were;
+  - give `QAbstractSpinBox > QLineEdit` (`:729`) `min-height: 0px; padding: 0px`.
+  Render spinbox crops before and after for the lead (Settings, several themes, every spinbox kind), and run
+  `test_shared_spinbox_alignment.py` too.
+- [ ] Must-fix: `tests/test_build_foundry_window_layout.py:29` is red (window height 732 against 696) and shows a
+  real Build Runner (Tk) window (`tools/build_runner.py:2335-2356`). The Qt window guard does not cover Tk.
+  - Keep the test's window invisible: withdraw it, or keep it off screen as the Qt guard does.
+  - Extend `tests/test_no_visible_test_windows.py` to Tk if it can see Tk windows.
+  - Find the extra 36 px in `_fit_initial_window` (`:2254-2288`).
+- [ ] D3D11/D3D12 have no failing negative control for the front-face rule: add the `front_face_fixed_cw` control
+  to `host_check.py` (the module already accepts it), then rerun host_check once (lead).
+- [ ] `native/core/src/vulkan_context.cpp:205-207` hides two validation patterns from every caller. Excuse them
+  only with Qt6Gui as the caller, like the other defects (C++: one build round).
+- [ ] `tools/d1_run.py:1324-1331`, the two-display guard: compare windows by handle from one scan, not strings
+  from two. Correct the help text (the parser always requires `--allow-primary`).
+- [ ] Lows (audit section 3), each a small fix:
+  - `vk_validation.py` skips "Loader Message" errors at any severity;
+  - the Qt-only hidden-host control always reports its cycles as OK;
+  - the timer's `reads_cost_little` check passes when the read cost stops being reported;
+  - `surfaces.cpp`'s window registry is never pruned;
+  - GODZIP's remaining self-capturing `singleShot` lambda;
+  - the 1D.4 Change Every row's self-capturing lambda (`ui/onboarding/selection_pages.py:504`);
+  - `combo_knob_overlay.py` imports the private `_WeakWidgetSlot`: make it a public helper of one owner.
+- Not entered: the shadow-helper lifetime fix (8f821353) needs no historical bug entry, because Settings itself
+  never freed widgets through the collector.
 
 ### 1D.6 Leaving fullscreen on another display lands the card in a poor spot (operator, 13 Nov; Opus High, design first)
 
