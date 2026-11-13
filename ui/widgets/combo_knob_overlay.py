@@ -7,7 +7,7 @@ from PySide6.QtCore import QObject, QEvent, QPoint, QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QWidget
 from ui.settings_theme_runtime import get_active_settings_theme
-from ui.widgets.control_shadow import _WeakWidgetSlot
+from ui.widgets.weak_widget_slot import WeakWidgetSlot
 
 KnobState = Literal["normal", "hover", "pressed", "disabled"]
 
@@ -16,8 +16,8 @@ class ComboKnobOverlay(QWidget):
     """Paints a single circular indicator matching the spinbox dots."""
 
     # The combo keeps the controller (``_knob_overlay``) and the controller keeps this overlay, so a
-    # strong host reference would leave a parentless combo to the cycle collector (``_WeakWidgetSlot``).
-    _host = _WeakWidgetSlot()
+    # strong host reference would leave a parentless combo to the cycle collector (``WeakWidgetSlot``).
+    _host = WeakWidgetSlot()
 
     _SPINBOX_DOT_DIAMETER = 10.0
     _DOT_SCALE = 1.2  # 20% larger than spinbox dots
@@ -100,7 +100,7 @@ class ComboKnobController(QObject):
     """Attaches the overlay to any combobox-like widget and keeps it in sync."""
 
     # Held weakly: the host keeps this controller as an attribute (see ``ComboKnobOverlay._host``).
-    _host = _WeakWidgetSlot()
+    _host = WeakWidgetSlot()
 
     def __init__(self, host: QWidget) -> None:
         super().__init__(host)

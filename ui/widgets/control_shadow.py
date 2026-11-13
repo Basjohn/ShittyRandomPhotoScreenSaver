@@ -34,6 +34,7 @@ from ui.settings_theme_runtime import (
     subscribe_settings_theme,
 )
 from ui.settings_theme_spec import SettingsThemeSpec
+from ui.widgets.weak_widget_slot import WeakWidgetSlot
 
 
 def _active_input_style():
@@ -154,36 +155,10 @@ _install_theme_shadow_configs(get_active_settings_theme())
 _THEMED_ROOT_REFS: list[weakref.ReferenceType[QWidget]] = []
 
 
-class _WeakWidgetSlot:
-    """A helper attribute that refers to the widget it watches without keeping it alive.
-
-    Every helper below is a Qt child of the widget it watches, and the widget keeps the helper
-    as a Python attribute (``_control_shadow_helper`` and friends). A strong reference back
-    would close a Python reference cycle, so a parentless shadowed widget could be freed only
-    by the cycle collector, which runs at any allocation, including inside Qt's dispatch of an
-    event to that very widget (through the helper's own ``eventFilter``): the widget and the
-    helper were then deleted under the dispatch ("Internal C++ object already deleted", heap
-    corruption). Held weakly, the widget is freed by reference counting where its owner lets
-    it go, and the helper dies with it as its Qt child.
-    """
-
-    def __set_name__(self, owner: type, name: str) -> None:
-        self._slot = f"_{name.lstrip('_')}_weak_ref"
-
-    def __get__(self, instance, owner=None):  # noqa: ANN001
-        if instance is None:
-            return self
-        ref = instance.__dict__.get(self._slot)
-        return None if ref is None else ref()
-
-    def __set__(self, instance, value) -> None:  # noqa: ANN001
-        instance.__dict__[self._slot] = None if value is None else weakref.ref(value)
-
-
 class _ControlShadowHelper(QObject):
     """Own the QGraphicsDropShadowEffect attached to one widget."""
 
-    _widget = _WeakWidgetSlot()
+    _widget = WeakWidgetSlot()
 
     def __init__(
         self,
@@ -358,7 +333,7 @@ class _TextShadowOverlay(QWidget):
 class _TextShadowHelper(QObject):
     """Track a QLabel with a sibling-painted hard shadow and untouched source glyphs."""
 
-    owner = _WeakWidgetSlot()
+    owner = WeakWidgetSlot()
 
     def __init__(self, owner: QLabel, config: ShadowConfig) -> None:
         super().__init__(owner)
@@ -496,7 +471,7 @@ class _CastShadowOverlay(QWidget):
 class _CastShadowHelper(QObject):
     """Track a widget with an independent outside-only hard shadow sibling."""
 
-    owner = _WeakWidgetSlot()
+    owner = WeakWidgetSlot()
 
     def __init__(
         self,
@@ -671,8 +646,8 @@ class _ScrollBarShadowStripHelper(QObject):
 
     _CORNER_RADIUS = 1
 
-    owner = _WeakWidgetSlot()
-    scroll_area = _WeakWidgetSlot()
+    owner = WeakWidgetSlot()
+    scroll_area = WeakWidgetSlot()
 
     def __init__(self, owner: QScrollBar, config: ShadowConfig) -> None:
         super().__init__(owner)
