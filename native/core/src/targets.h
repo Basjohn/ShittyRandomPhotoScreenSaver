@@ -16,6 +16,7 @@
 
 class QRhi;
 class QRhiCommandBuffer;
+class QRhiRenderBuffer;
 class QRhiRenderPassDescriptor;
 class QRhiTexture;
 class QRhiTextureRenderTarget;
@@ -24,8 +25,9 @@ namespace srpss_core {
 
 struct ColorTarget
 {
-    // Destroyed in reverse order: the render target, its pass descriptor, then the texture.
+    // Destroyed in reverse order: the render target, its pass descriptor, the depth-stencil buffer, then the texture.
     std::unique_ptr<QRhiTexture> texture;
+    std::unique_ptr<QRhiRenderBuffer> depthStencil; // only a Qt Quick target's (createColorTarget's withDepthStencil)
     std::unique_ptr<QRhiRenderPassDescriptor> renderPass;
     std::unique_ptr<QRhiTextureRenderTarget> renderTarget;
 
@@ -38,7 +40,11 @@ struct ColorTarget
 };
 
 // An RGBA8 target the core owns: a render target, read back as a transfer source, keeping its contents (rule B).
-bool createColorTarget(QRhi *rhi, const QSize &size, const QByteArray &name, ColorTarget *out, QString *error);
+// `withDepthStencil`: a depth-stencil buffer beside it, which Qt Quick needs when it renders into the target (its opaque
+// items are drawn front to back against the depth buffer and its clips use the stencil; Qt creates none for a target
+// handed over with QQuickRenderTarget::fromRhiRenderTarget). Not preserved: Qt Quick clears it at every pass.
+bool createColorTarget(QRhi *rhi, const QSize &size, const QByteArray &name, ColorTarget *out, QString *error,
+                       bool withDepthStencil = false);
 
 // Rule C: on Vulkan, when the texture is not in COLOR_ATTACHMENT_OPTIMAL, records the transition into `cb` (recording,
 // outside any pass) and tells QRhi the layout; elsewhere nothing. Returns what was done.

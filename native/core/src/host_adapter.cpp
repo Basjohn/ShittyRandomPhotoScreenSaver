@@ -427,8 +427,10 @@ std::unique_ptr<HiddenHost> HiddenHost::create(int width, int height, bool threa
         QRhi *rhi = s.control->rhi();
         s.backend = QString::fromLatin1(rhi->backendName());
         s.deviceName = QString::fromUtf8(rhi->driverInfo().deviceName);
+        // With a depth-stencil buffer: Qt Quick draws its opaque items front to back against it and clips with the
+        // stencil (N2.4 build round 1: without one an opaque item vanished under its opaque parent on every backend).
         if (!createColorTarget(rhi, QSize(s.width, s.height), QByteArrayLiteral("srpss hidden host Qt Quick target"),
-                               &s.target, &failure))
+                               &s.target, &failure, true))
             return;
         s.primeNote = primeForLoadOutsideFrame(rhi, s.target.texture.get()); // rule C, at creation
         s.applyRenderTarget();

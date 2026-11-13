@@ -86,6 +86,7 @@ Rectangle {
         id: card
         objectName: "card"
         property bool shell: true
+        property bool frameShown: true
         property real cornerRadius: 0
         property real borderWidth: 0
         property color surfaceColor: "#000000"
@@ -99,7 +100,7 @@ Rectangle {
         Item { objectName: "contentHost"; anchors.fill: parent; z: 2 }
         Rectangle {
             anchors.fill: parent; z: 3
-            visible: card.shell
+            visible: card.shell && card.frameShown
             color: "transparent"
             radius: card.cornerRadius
             border.color: card.borderColor
@@ -249,6 +250,10 @@ def round_texels(core, engine, app, api: str, host, out: Path) -> dict:
     record: dict = {"cases": {}}
     checks: dict = {}
     scene = Scene(core, engine, host)
+    # The card's frame is drawn over the content (z 3) and anti-aliases its inner arc against it in the corners (build
+    # round 1: 16 corner pixels at 100 %, 20 at 125 %): the frame is the contract round's subject, so here it is off and
+    # every covered pixel is the composite's alone.
+    scene.card.setProperty("frameShown", False)
     try:
         for dpr in DPRS:
             scene.set_dpr(dpr)
