@@ -38,13 +38,13 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.7's leftovers (High); 1D.7 (Medium).
+**Now (in flight):** 1D.7 (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
 - High:
-  1. N2.7's Quick shader bake (before N2.8), then the C++ packet reader (N2.3), toward N2.5 (Spectrum at parity)
-     and N2.8.
+  1. The C++ packet reader (N2.3), toward N2.5 (Spectrum at parity) and N2.8; N2.7's two exit and grain
+     leftovers ride with the next fitting dispatch.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
   1. 1D.7 (Rotate without Edit), then 1D.11's fence-wait timing.
@@ -226,7 +226,7 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
 is merged to ratchet 40 (the 3D modes are open). N2.1 (the product module's build), N2.2 (hosts and frame driver),
 N2.4 (the composite node) and N2.6 (the GPU timer) are merged and proved (ABI 4; the D3D window rounds with the
 displays on); the Python half of N2.3 (Spectrum's native schema, the `payload_schema` check) is merged and its C++
-reader is open. N2.7 is next.
+reader is open. N2.7 and its first leftovers are merged (14 Nov); N2.8's Vulkan run is next.
 
 **Order.** N0 and N1 now. Then N2 (the substrate and Spectrum), N2b (the background layer and the first full
 rehearsal), N3 (the 3D substrate). From there two ordered tracks, one High slot each: the **modes track** (N5.1,
@@ -423,18 +423,13 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
 
 - [ ] N2.7 leftovers (N2.7 merged 14 Nov: `--graphics-backend=vulkan`, the owner in `rendering/quick/bootstrap.py`,
   `renderer_backends` in the registries, the remembered failed start; D10 "As built"):
-  - [ ] Before N2.8: the Quick shaders `surface_material`, `widget_glow` and `text_legibility` are baked `--glsl
-    460` only (their source comments say so), so cards may not draw on Vulkan. Bake them for every target
-    through the qrc/qsb tooling, and prove the cards draw on the Vulkan backend in a hidden run.
-  - [ ] Exit on Vulkan, confirmed in the product (lead's run 14 Nov, `d1_run.py --display 1
-    --app-arg=--graphics-backend=vulkan`): the saver presented its first Vulkan frame, then exited with 0xC0000005
-    at `--exit-after`. The window must be released before the process ends (the probe showed `os._exit` with a
-    live Vulkan window crashing). Fix the product's exit path, with a test.
-  - [ ] The same run never reached its reveal: the reveal waits for a wallpaper frame that cannot draw on Vulkan
-    before N2b, so `d1_run` grabbed nothing. For the rehearsal, a backend without a background renderer reveals
-    on its first presented frame (the reveal's owner decides, one rule, logged). Then N2.8 can grab frames.
-  - [ ] Settings still lists modes that have no renderer on the running backend. Grey them out with a
-    one-line reason when the diagnostic backend is on (the runtime already skips them).
+  - [ ] Exits that bypass the stop: the bare `QCoreApplication.exit(1)` routes (the barrier timeout, Settings
+    failures) still end the loop without waiting for the Quick windows, so on Vulkan they may still crash at exit
+    (R-207 fixed every exiting stop). Prove it per route first (hidden Vulkan run); then each route releases its
+    Quick windows before the loop ends (the barrier timeout cannot wait on its own barrier), with a test per route.
+  - [ ] `rendering/quick/qml/shaders/surface_material.frag:178` takes the card grain from raw `gl_FragCoord`,
+    whose origin differs by backend: Vulkan and OpenGL differ by up to 8/255 inside the material card. Apply
+    N1.4's `gl_FragCoord` rule, bake with `tools/regen_qrc.py --shaders`, OpenGL pixels unchanged.
   - [ ] Stale comment: `native/core/src/module.cpp:11` ("N2.7 adds the backend owner"). Fix it with the next C++
     round.
 - [ ] N2.5 Spectrum at parity on both backends (the port rule above; scheduled after N2.6 and N2.7, which its rule
