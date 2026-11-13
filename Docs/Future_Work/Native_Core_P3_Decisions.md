@@ -1796,8 +1796,10 @@ written, with these answers to their questions. "Nothing here is decided" in the
    commands). D3D11 and D3D12: QRhi offers no per-pass time and D5.3 gives the service no third form, so what QRhi
    provides is used there, as on the other two: the whole frame, `QRhiCommandBuffer::lastCompletedGpuTime()` of a QRhi
    created with `EnableTimestamps` (a host opts in at creation). No compute-pass external block is needed. Results are
-   latched in a ring of four frame slots and read only when available (no wait bit; OpenGL's availability first); off,
-   the driver holds no timer and no query object. The figures reach the frame trace as events 77 and 78 (GPU
+   latched in a ring of eight frame slots and read only when available (no wait bit; OpenGL's availability first); a
+   frame whose slot still holds unread results goes untimed and is counted, never waits (a hidden host's unpaced OpenGL
+   frames run ahead of their results; a real window times every frame); a switched-off timer's objects go once every
+   result was read; off, the driver holds no timer and no query object. The figures reach the frame trace as events 77 and 78 (GPU
    nanoseconds), read by `tools/frame_trace_report.py`; admitted by `--gpu-pass-timing` with `--frame-trace`.
 The `glMultiDrawArraysIndirect` start-up requirement is removed (nothing calls it; the only indirect draw is
 `glDrawArraysIndirect` in `scene3d/population.py`, which row 14 routes).

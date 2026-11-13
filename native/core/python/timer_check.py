@@ -23,8 +23,13 @@ Rounds (each per API):
            timestamps: the load pass made GPU-bound (about WINDOW_PASS_MS per frame, from the scaling round's per-draw
            cost), at a quarter, half and all of it. The frame figure (every backend) and the per-pass figure (Vulkan,
            OpenGL) scale; results arrive latched, a result not ready at the next edge is read at a later one, no read
-           waits and the reads cost little CPU. Negative control: the same frames read with a blocking wait show the
-           stall. The window destroyed while it animates releases the timer on the render thread.
+           waits, the reads cost little CPU and every frame is timed. Negative control: the same frames read with a
+           blocking wait show the stall (Vulkan: every earlier frame's results waited for at the edge; OpenGL: the naive
+           read right after the pass in its own frame, since Qt's OpenGL loop has finished the previous frame on the
+           GPU by the next edge, where build round 1's wait cost 0.025 ms). The window destroyed while it animates
+           releases the timer on the render thread.
+  (environment) before the window round, an off-screen window with Qt alone must present frames on this API
+           (host_check.qt_alone_window_frames); otherwise the verdict names the display, not the core.
   trace    the figures reach the frame trace as its other durations do: drained samples written through
            ``rendering.native.gpu_timing.write_to_frame_trace`` into a ``FrameTraceSink``, read back by
            ``tools/frame_trace_report.py``, whose medians equal the samples'. Negative control: a trace without the
@@ -69,7 +74,7 @@ ROUNDS = ("off", "scaling", "window", "trace")
 PER_PASS_APIS = ("opengl", "vulkan")      # the service's two native forms (D5.3)
 HOST_PIXELS = (320, 180)
 OFF_FRAMES = 30
-DRAIN_FRAMES = 8                          # more than the timer's ring: a stopped timer's objects have gone by then
+DRAIN_FRAMES = 12                         # more than the timer's ring (8): a stopped timer's objects have gone by then
 LOAD = {"width": 1024, "height": 1024, "iterations": 128}
 DRAWS = (1, 2, 4, 8, 16)
 WARM_FRAMES = 6
@@ -135,6 +140,7 @@ def round_off(core, engine, app, api: str, out: Path) -> dict:
         record["never_on"] = {"verdict": never, "driver_passes": driver.get("passes_recorded")}
         checks["never_on_holds_nothing"] = never["pass"] and driver.get("passes_recorded", 0) >= OFF_FRAMES
 
+        passes_before = int(driver.get("passes_recorded", 0))
         host.set_gpu_timer(True)
         host.frames(OFF_FRAMES)
         on = _driver(host)
@@ -142,14 +148,22 @@ def round_off(core, engine, app, api: str, out: Path) -> dict:
         samples_on = host.gpu_samples()
         timer = on.get("gpu_timer") or {}
         probe_samples = _of_kind(samples_on, "probe")
+        probe_passes = int(on.get("passes_recorded", 0)) - passes_before
         record["on"] = {"live": live_on, "timer": timer, "probe_samples": len(probe_samples),
+                        "probe_passes": probe_passes,
                         "probe_median_ms": ta.median_ms(s.nanoseconds for s in probe_samples)}
         checks["on_holds_one_timer"] = bool(timer) and int(live_on.get("timers", 0)) == 1
         if per_pass:
             checks["on_holds_query_objects"] = int(live_on.get("queries", 0)) > 0
-            # Every frame but the last ring's (still unread) has its probe figure.
-            checks["probe_timed_every_frame"] = len(probe_samples) >= OFF_FRAMES - 4 and all(
-                s.nanoseconds > 0 for s in probe_samples)
+            # Every probe pass recorded while on was bracketed, or left untimed because its slot still held unread
+            # results (counted; a result is never overwritten, the frame never waits). A hidden host's frames are not
+            # paced, so on OpenGL, whose offscreen frames only flush, they run ahead of the results: build round 1,
+            # 27 timed and 3 slot-busy of 30 with 4 slots (rerun on that module: 19 and 11, results 1 to 8+ frames
+            # late). The paced real window (the window round) must time every frame.
+            checks["every_probe_pass_timed_or_its_slot_busy"] = (
+                int(timer.get("timed_passes", -1)) + int(timer.get("slot_busy_frames", 0)) == probe_passes
+                and int(timer.get("over_capacity", -1)) == 0 and probe_passes >= OFF_FRAMES)
+            checks["probe_figures_positive"] = bool(probe_samples) and all(s.nanoseconds > 0 for s in probe_samples)
         else:
             checks["no_per_pass_form_on_this_backend"] = (int(live_on.get("queries", -1)) == 0 and not probe_samples
                                                           and "unavailable" in str(timer.get("per_pass", "")))
@@ -162,14 +176,19 @@ def round_off(core, engine, app, api: str, out: Path) -> dict:
         host.set_gpu_timer(False)
         host.frames(DRAIN_FRAMES)
         edges = int(_driver(host).get("gpu_timer_edges", 0))
-        host.gpu_samples()
+        tail = _of_kind(host.gpu_samples(), "probe")      # the readback's frame and the results still in flight
         host.frames(OFF_FRAMES)
         rest = _driver(host)
         again = ta.off_verdict(rest, core.gpu_timer_live(), edges_before=edges, samples=len(host.gpu_samples()))
         last = rest.get("gpu_timer_last") or {}
-        record["off_again"] = {"verdict": again, "last_timer": last}
+        record["off_again"] = {"verdict": again, "last_timer": last, "probe_samples_after_on": len(tail)}
         checks["switched_off_holds_nothing"] = again["pass"]
         checks["switched_off_without_a_wait"] = int(last.get("release_waits", -1)) == 0
+        if per_pass:
+            # Switched off, the objects go only once every bracket's result was read: none is lost.
+            checks["every_timed_pass_read_before_release"] = (
+                int(last.get("results", -1)) == int(last.get("timed_passes", -2))
+                == len(probe_samples) + len(tail))
 
         # Negative control: the objects kept when switched off must fail the same counts.
         host.set_gpu_timer(True, keep_when_off=True)
@@ -340,6 +359,9 @@ def round_window(core, engine, app, api: str, out: Path, shared: dict) -> dict:
             record["latched"] = latched
             record["latency_histogram"] = timer.get("latency_histogram")
             checks["read_latched_never_waited"] = latched["pass"]
+            # Paced by Qt's render loop, no frame's slot is still busy: every frame is timed.
+            checks["every_frame_timed"] = (int(timer.get("slot_busy_frames", -1)) == 0
+                                           and int(timer.get("over_capacity", -1)) == 0)
 
             # Negative control: the same frames, every result read with a blocking wait.
             host.set_gpu_timer(True, wait_for_results=True)
@@ -486,6 +508,10 @@ def child(args) -> dict:
     engine = QQmlEngine()
     shared: dict = {}
     try:
+        if "window" in args.rounds:
+            if vulkan:
+                core.set_vulkan_phase("n26 environment")
+            record["qt_alone_window_frames"] = host_check.qt_alone_window_frames(app, engine)
         for name in args.rounds:
             if vulkan:
                 core.set_vulkan_phase(f"n26 {name}")

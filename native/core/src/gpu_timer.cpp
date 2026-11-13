@@ -483,6 +483,19 @@ void GpuTimer::end(QRhi *rhi, QRhiCommandBuffer *cb, int scope)
     } else if (m_gl) {
         m_gl->endQuery(kGlTimeElapsed);
         slot.scope[scope].closed = true;
+        if (m_config.waitForResults) {
+            // The negative control on OpenGL: the naive read, right after the pass in its own frame (Qt's OpenGL loop
+            // has finished the previous frame on the GPU by the next edge, so a wait there costs nothing to show). The
+            // driver flushes and waits for the pass; the value is read again, latched, at a later edge.
+            QElapsedTimer clock;
+            clock.start();
+            quint64 value = 0;
+            m_gl->getQueryObjectui64v(m_gl->names[m_current * kMaxScopes + scope], kGlQueryResult, &value);
+            const qint64 ns = clock.nsecsElapsed();
+            ++m_blockingReads;
+            m_resolveNsTotal += ns;
+            m_resolveNsMax = qMax(m_resolveNsMax, ns);
+        }
     }
     cb->endExternal();
     ++m_timedPasses;
@@ -498,7 +511,17 @@ void GpuTimer::stop(qint64 edge)
 bool GpuTimer::drained(QRhi *rhi, qint64 edge) const
 {
     Q_UNUSED(rhi);
-    return m_lastWriteEdge < 0 || edge - m_lastWriteEdge > m_framesInFlight;
+    if (m_lastWriteEdge < 0)
+        return true;
+    const qint64 since = edge - m_lastWriteEdge;
+    if (since <= m_framesInFlight)
+        return false; // a frame that wrote a query may still be running
+    // Every result read first (OpenGL's lag can exceed its frames in flight); one never available is given up on once
+    // the ring has gone round.
+    bool pending = false;
+    for (const Slot &slot : m_slots)
+        pending = pending || slot.pending;
+    return !pending || since > kRingFrames;
 }
 
 void GpuTimer::release(QRhi *rhi, bool outsideFrame)
@@ -508,7 +531,7 @@ void GpuTimer::release(QRhi *rhi, bool outsideFrame)
             if (m_lastWriteEdge >= 0) {
                 if (outsideFrame && rhi) {
                     rhi->finish(); // the frames that wrote the pool complete first
-                } else if (!outsideFrame && !drained(rhi, m_edge)) {
+                } else if (!outsideFrame && m_edge - m_lastWriteEdge <= m_framesInFlight) {
                     // A detach inside a frame: the earlier frames may still use the pool. Once, at teardown only.
                     m_vk->df->vkQueueWaitIdle(m_vk->queue);
                     ++m_releaseWaits;

@@ -19,7 +19,9 @@
 // OpenGL GL_QUERY_RESULT_AVAILABLE first). A slot is reused only once its frame completed (QRhi never runs more than
 // FramesInFlight frames ahead, and the ring is longer); a slot whose results are still not available when its turn comes
 // again is skipped for that frame, never overwritten. `waitForResults` is the harness's negative control: the blocking
-// read the service never does.
+// read the service never does (Vulkan: every earlier frame's results with VK_QUERY_RESULT_WAIT_BIT at the edge; OpenGL
+// also the naive read right after the pass in its own frame, because Qt's OpenGL loop has already finished the previous
+// frame on the GPU by the next edge, so a wait there has nothing to show).
 //
 // Off is free: the frame driver holds no timer at all while it is off, so there is no query object and no per-frame call
 // (process-wide counts: liveJson()). Switched off, the timer stops recording at once and its query objects go once the
@@ -56,7 +58,7 @@ struct GpuTimerConfig
 {
     bool enabled = false;
     bool keepWhenOff = false;    // negative control: the query objects survive switching the timer off
-    bool waitForResults = false; // negative control: every earlier frame's results read with a blocking wait
+    bool waitForResults = false; // negative control: results read with a blocking wait (see above)
 
     // From the harness's JSON (missing keys keep the defaults); false with `error` for an unknown key or a wrong type.
     static bool fromJson(const QByteArray &json, GpuTimerConfig *out, QString *error);
@@ -91,7 +93,9 @@ private:
 class GpuTimer
 {
 public:
-    static constexpr int kRingFrames = 4;  // frame slots; longer than any QRhi's FramesInFlight plus one
+    // Frame slots: longer than any QRhi's FramesInFlight plus one, and than the OpenGL hidden host's lag (its offscreen
+    // frames only flush: build round 1 read results up to 5 frames late and left 3 of 30 frames untimed with 4 slots).
+    static constexpr int kRingFrames = 8;
     static constexpr int kMaxScopes = 16;  // timed passes per frame; more are recorded untimed and counted
 
     GpuTimer(const GpuTimerConfig &config, std::shared_ptr<GpuSampleQueue> queue);
@@ -111,8 +115,8 @@ public:
     // Render thread: no more recording (the timer switched off). Its objects stay until released.
     void stop(qint64 edge);
     bool stopped() const { return m_stopped; }
-    // Render thread, at a frame edge: true once every frame that wrote a query completed (its results were read or can no
-    // longer be), so the objects can go without a wait.
+    // Render thread, at a frame edge: true once every frame that wrote a query completed and its results were read (or
+    // the ring went round without them), so the objects can go without a wait and no result is lost.
     bool drained(QRhi *rhi, qint64 edge) const;
     // Render thread: the query objects go. Inside a frame that is not drained, Vulkan waits for its queue once (a detach);
     // outside a frame QRhi::finish() completes the earlier frames first.

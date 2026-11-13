@@ -108,6 +108,20 @@ def test_the_harness_verdict_counts_a_timer_left_alive():
     assert timer_check.api_verdict("opengl", left, require_validation=True)[0] is False
 
 
+def test_a_window_round_on_a_display_that_presents_nothing_names_the_environment():
+    import host_check
+
+    # Build round 1 (13 Nov): Qt alone presented 2 frames in 2 s on D3D11 and D3D12, 139 on OpenGL.
+    record = {"rounds": ["window"], "window": {"pass": False, "checks": {"frames_arrive": False}},
+              "live_hosts_at_end": 0, "module_loaded": True, "qt_alone_window_frames": 1}
+    ok, reasons = host_check.api_verdict("d3d11", record, require_validation=True)
+    assert ok is False and reasons[0].startswith("d3d11 environment:") and "frames_arrive" in reasons[1]
+    # Negative control: a display that presents keeps the verdict on the rounds alone.
+    presenting = dict(record, qt_alone_window_frames=70)
+    assert not any("environment" in r for r in host_check.api_verdict("d3d11", presenting, True)[1])
+    assert host_check.environment_reasons("d3d11", {"qt_alone_window_frames": None}) == []
+
+
 def test_the_forms_are_compared_only_when_both_ran_the_scaling_round():
     def result(slope):
         return {"rounds": ["scaling"], "scaling": {"scaling": {"fit": {"slope": slope}}}}
@@ -173,6 +187,18 @@ def test_the_timers_read_never_waits_outside_its_negative_control():
     branch = code.rfind("if (wait)", 0, wait_bits[0])
     assert branch >= 0 and code.find("} else {", branch) > wait_bits[0]
     assert "VK_QUERY_RESULT_WITH_AVAILABILITY_BIT" in code and "kGlQueryResultAvailable" in code
+    # OpenGL's naive read right after the pass (the control's other half) only under the control's switch.
+    assert gl_reads_outside_the_control(code) == []
+    unguarded = code.replace("if (m_config.waitForResults) {", "if (true) {", 1)
+    assert unguarded != code and gl_reads_outside_the_control(unguarded)
+
+
+def gl_reads_outside_the_control(code: str) -> list[str]:
+    """Blocking OpenGL result reads in GpuTimer::end that are not under the negative control's switch."""
+    start = code.index("void GpuTimer::end(")
+    body = code[start:code.index("\n}\n", start)]
+    guard = body.find("if (m_config.waitForResults) {")
+    return [m.group(0) for m in re.finditer(r"getQueryObjectui64v\([^;]*;", body) if guard < 0 or m.start() < guard]
 
 
 def test_the_pass_kinds_are_one_list_in_cpp_python_and_the_trace_report():
