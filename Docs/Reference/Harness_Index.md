@@ -686,6 +686,25 @@ python tools/native_schema_check.py [--seconds 1.5] [--clip growing_pains] [--la
 Tests: `tests/test_visualizer_engine_native_schema.py` (round trip, layout pin, namespaces, every slot-head refusal
 with its unchecked-reader control, the owner's failure edge).
 
+### Native core packet reader (N2.3)
+
+```powershell
+# The C++ packet reader (D1's own view and retire, D2's accept-edge acknowledgement, head read and one consumer, the drop
+# edge, the transport rule's refusal) against the Python reference, GPU-free: the shipped clip through the production
+# owner and the worker's native writer, read by the C++ reader and compared bit for bit with the reference decoder and
+# the tagged codec; the adversarial table (tools/packet_reader_adversary.py) with each case's negative controls; an
+# in-place writer process racing the reader's copy; D1 and D2 rounds. --rounds reference runs the Python half alone
+# (no module). Exit 0 only on "N23 VERDICT PASS".
+python native/core/python/packet_reader_check.py --module-dir release/native_module
+    [--rounds parity table stress d1 d2 reference] [--seconds 1.5] [--clip growing_pains] [--label n23_reader]
+```
+
+The C++ reader reads the layout and every record's fields and range rules from `native/core/src/frame_abi_generated.h`,
+generated from `packet_abi.py` and `native_schema.py`: `python tools/native_frame_abi_header.py` rewrites it,
+`--check` fails while it is stale. Tests: `tests/test_native_packet_reader_sources.py` (no build: the header's
+freshness, the source rules, the table on the Python reference with its naive control, the in-place race),
+`tests/test_native_core_packet_reader.py` (the built module; skipped without a build).
+
 ### Native core hosts and frame driver (N2.2)
 
 ```powershell

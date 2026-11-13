@@ -28,6 +28,12 @@ never ships.
     never waited for. Off, the driver holds no timer and no query object. `rendering/native/gpu_timing.py` writes the
     figures into the frame trace.
   - `load_pass.*`: the timer's known-cost pass (N full-target draws of a fixed fragment loop), a harness's only.
+  - `packet_reader.*` (N2.3, D1 and D2): the core's one consuming reader of a Visualizer frame stream, on its own view
+    of the named mapping (retire never waits; the last pin unmaps), the accept-edge acknowledgement, the non-consuming
+    head read, the drop edge's watermark, the transport rule's refusal at the slot head. `frame_abi_generated.h` is its
+    layout, mode codes and record tables, generated from `core/visualizer_engine/packet_abi.py` and `native_schema.py`
+    by `tools/native_frame_abi_header.py` (never edited by hand). Not yet opened by the product (N2.5's Spectrum is
+    its first consumer, on the render thread).
   - `vulkan_context.*`: D6, the process's Vulkan instance and one device per window, given to Qt Quick.
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
@@ -42,6 +48,8 @@ never ships.
 - `python/composite_check.py`: N2.4's proof (texels one to one, plan 1C.4's clip contract on the native item in every
   display style, overflow held to the display rect, the window round, validation; `composite_analysis.py` and
   `tools/card_clip_contract.py`, the contract's one reading).
+- `python/packet_reader_check.py`: N2.3's proof (bit-for-bit parity with the reference decoder on the shipped clip,
+  the adversarial table with each case's negative controls, the in-place race, D1 and D2; GPU-free).
 - `python/timer_check.py`: N2.6's proof (off is free by count, a known-cost pass scaled N times and its empty-bracket
   control, QRhi's frame figure, latched reads in a real window with the waiting read as control, the frame trace and
   its report, the two forms against each other, validation; `timer_analysis.py`).

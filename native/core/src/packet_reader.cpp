@@ -6,7 +6,6 @@
 #include <QtCore/QJsonParseError>
 #include <QtCore/QStringList>
 
-#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <cstring>
@@ -47,10 +46,11 @@ static_assert(offsetof(SlotHead, publishNs) == fa::kSlotPublishNs, "slot head la
 // A compiler barrier: no load or store is moved across it. On x86-64 the hardware never reorders a load with an earlier
 // load, nor a store with an earlier store, so with it an aligned load is an acquire load and an aligned store a release
 // store (packet_abi.py's ordering: "the P3 C reader acquire-loads latest_sequence and sequence_end, copies, then loads
-// sequence_begin after a load fence").
+// sequence_begin after a load fence"). MSVC's intrinsic, not the standard library's fence (the module's runtime rule
+// keeps <atomic> out of the core's sources).
 inline void barrier()
 {
-    std::atomic_signal_fence(std::memory_order_seq_cst);
+    _ReadWriteBarrier();
 }
 
 inline quint64 loadAcquire64(const uchar *p)
