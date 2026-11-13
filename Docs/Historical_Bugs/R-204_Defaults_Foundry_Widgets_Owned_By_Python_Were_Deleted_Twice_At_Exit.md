@@ -1,4 +1,4 @@
-# R-NEW | The Defaults Foundry's row widgets stayed owned by Python, so PySide's exit cleanup deleted them a second time
+# R-204 | The Defaults Foundry's row widgets stayed owned by Python, so PySide's exit cleanup deleted them a second time
 
 **Status:** fixed 13 Nov 2026 (Current_Plan Medium 1). Present since the tool's first version (884cb6f1, 10 Jul 2026).
 Owner: `tools/default_settings_editor.py` (`DefaultSettingsEditor._build_ui`). Regression bar:
