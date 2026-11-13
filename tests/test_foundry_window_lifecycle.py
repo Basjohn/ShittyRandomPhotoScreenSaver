@@ -109,6 +109,40 @@ def test_godzip_close_still_waits_for_a_mutation(qt_app, monkeypatch, tmp_path):
         qt_app.processEvents()
 
 
+def test_godzip_opening_archive_is_loaded_by_the_window_and_never_after_it_is_gone(qt_app, monkeypatch, tmp_path):
+    """``--open``'s archive loads once the event loop runs, through the window: a call queued at construction that
+    closed over the window (audit 13 Nov, low 5) still reached it after it had been deleted."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    from tools import godzip_foundry
+
+    loads: list[Path] = []
+    monkeypatch.setattr(godzip_foundry.ApplyTab, "load_zip", lambda _tab, path, **_k: loads.append(path))
+    archive = tmp_path / "opened.zip"
+
+    window = godzip_foundry.GodzipFoundryWindow(_git_repo(tmp_path), archive)
+    try:
+        assert loads == [], "loaded during construction"
+        qt_app.processEvents()
+        assert loads == [archive]
+    finally:
+        _join_worker(window)
+        window.deleteLater()
+        qt_app.processEvents()
+
+    loads.clear()
+    (tmp_path / "second").mkdir()
+    window = godzip_foundry.GodzipFoundryWindow(_git_repo(tmp_path / "second"), archive)
+    _join_worker(window)
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(window, QEvent.Type.DeferredDelete)   # gone before the loop runs
+    import shiboken6
+
+    assert not shiboken6.isValid(window)
+    qt_app.processEvents()
+    assert loads == [], "the queued load reached a deleted window"
+
+
 @pytest.mark.parametrize("build", [_theme_foundry, _widget_theme_foundry, _godzip_foundry],
                          ids=["theme", "widget_theme", "godzip"])
 def test_foundry_applies_its_native_backdrop_when_shown_not_when_built(qt_app, monkeypatch, tmp_path, build):
