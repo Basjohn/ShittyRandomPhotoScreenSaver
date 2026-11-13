@@ -54,6 +54,13 @@ public:
     bool requestReadback(QString *error);
     bool takeProbeResult(QJsonObject *facts, QByteArray *rgba, int *width, int *height, qint64 *frame);
 
+    // The known-cost pass (load_pass.h) on the attached driver: from the next frame; null config removes it.
+    bool setLoad(const LoadConfig *config, QString *error);
+    // The GPU timer (gpu_timer.h) on the attached driver, switched on or off from the next frame; its results read since
+    // the last call (the attached driver's, else the one detached last).
+    bool setGpuTimer(const GpuTimerConfig &config, QString *error);
+    QList<GpuTimingSample> takeGpuSamples();
+
     virtual QJsonObject stateJson() const;
 
 protected:
@@ -100,8 +107,11 @@ class HiddenHost final : public Host
 public:
     // threaded: the render control's work runs on the core's own render thread (the product's form); false runs it on
     // the calling (GUI) thread, the thread probe's negative control. `width` and `height` are device pixels; the scene
-    // is laid out in logical pixels, the device pixels over `dpr`.
-    static std::unique_ptr<HiddenHost> create(int width, int height, bool threaded, double dpr, QString *error);
+    // is laid out in logical pixels, the device pixels over `dpr`. `timestamps`: Qt's QRhi is created with
+    // EnableTimestamps (QQuickGraphicsConfiguration::setTimestamps), so it times its whole frames (the GPU timer's frame
+    // figure, the one QRhi gives on D3D11 and D3D12); off by default, QRhi then creates no query objects of its own.
+    static std::unique_ptr<HiddenHost> create(int width, int height, bool threaded, double dpr, QString *error,
+                                              bool timestamps = false);
     ~HiddenHost() override;
 
     HostKind kind() const override { return HostKind::Hidden; }

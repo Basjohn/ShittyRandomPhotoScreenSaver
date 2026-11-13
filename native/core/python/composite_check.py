@@ -591,6 +591,10 @@ def child(args) -> dict:
     engine = QQmlEngine()
     host = None
     try:
+        if "window" in args.rounds:
+            if vulkan:
+                core.set_vulkan_phase("n24 environment")
+            record["qt_alone_window_frames"] = host_check.qt_alone_window_frames(app, engine)
         hidden_rounds = [name for name in args.rounds if name != "window"]
         if hidden_rounds:
             # One hidden host for every hidden round (an OpenGL hidden host is created once and kept: facts J1).

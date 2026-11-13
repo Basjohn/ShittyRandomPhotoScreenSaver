@@ -116,6 +116,29 @@ def test_activation_is_deliberate_and_defaults_disabled():
     assert ef.visualizer_switch_telemetry_admitted() is True
 
 
+def test_gpu_pass_timing_is_admitted_only_by_its_own_token():
+    # N2.6: the native core's per-pass GPU timer. Absent (or misspelt), nothing admits it.
+    assert ef.parse_experiment_flags(["main.py", "/s", "--frame-trace"]).gpu_pass_timing is False
+    assert ef.parse_experiment_flags(["main.py", "--gpu-pass-timing=1"]).gpu_pass_timing is False
+    flags = ef.parse_experiment_flags(["main.py", "/s", ef.GPU_PASS_TIMING_FLAG])
+    assert flags.gpu_pass_timing is True
+    assert flags.lifecycle_telemetry_admitted is False          # it admits nothing else
+    assert ef.experiment_flag_tokens(["main.py", ef.GPU_PASS_TIMING_FLAG, "/s"]) == (ef.GPU_PASS_TIMING_FLAG,)
+
+
+def test_gpu_pass_timing_activation_and_its_trace_condition():
+    from rendering.native.gpu_timing import gpu_pass_timing_wanted
+
+    assert ef.gpu_pass_timing_admitted() is False
+    ef.activate_experiment_flags(ef.parse_experiment_flags(["main.py", ef.GPU_PASS_TIMING_FLAG]))
+    assert ef.gpu_pass_timing_admitted() is True
+    flags = ef.active_experiment_flags()
+    # The timer writes only into a frame trace: admitted without a sink, it stays off.
+    assert gpu_pass_timing_wanted(flags, object()) is True
+    assert gpu_pass_timing_wanted(flags, None) is False
+    assert gpu_pass_timing_wanted(ef.ExperimentFlags(), object()) is False
+
+
 def test_activation_with_only_telemetry_flag_leaves_no_abc_condition():
     ef.activate_experiment_flags(
         ef.parse_experiment_flags(["main.py", "--viz-switch-telemetry"])

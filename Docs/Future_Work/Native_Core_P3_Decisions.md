@@ -1784,6 +1784,23 @@ written, with these answers to their questions. "Nothing here is decided" in the
    only if the A/B at its port shows a visible or cost loss (N1.8's rule).
 4. The per-pass timer service's form is provisional until the N0.7 harness shows a timestamp around a whole pass
    from where the core records it; until then only the whole-frame time is relied on.
+   *Settled from where the core records a pass (N2.6, built 13 Nov 2026; proved when `timer_check.py` passes in its
+   build round):* the core records every pass in one place, the frame driver's `beforeRendering` edge, before Qt
+   Quick's pass and outside any render pass (D5.2). There the timer brackets each whole pass through
+   `QRhiCommandBuffer::beginExternal()` on the frame's own command buffer: outside a pass QRhi first records what it
+   holds into the primary command buffer, so the bracket sits exactly between the passes in submission order and no
+   secondary command buffer exists (the research's A.1 worry concerns only a timestamp inside a pass, which the core
+   never takes). Vulkan: `vkCmdWriteTimestamp` TOP_OF_PIPE before and BOTTOM_OF_PIPE after, in a query pool of the
+   timer's own, reset in the frame before its first write. OpenGL: `GL_TIME_ELAPSED` begun before and ended after
+   (QRhi's OpenGL backend issues its recorded commands at `beginExternal`, so the query encloses the pass's own GL
+   commands). D3D11 and D3D12: QRhi offers no per-pass time and D5.3 gives the service no third form, so what QRhi
+   provides is used there, as on the other two: the whole frame, `QRhiCommandBuffer::lastCompletedGpuTime()` of a QRhi
+   created with `EnableTimestamps` (a host opts in at creation). No compute-pass external block is needed. Results are
+   latched in a ring of eight frame slots and read only when available (no wait bit; OpenGL's availability first); a
+   frame whose slot still holds unread results goes untimed and is counted, never waits (a hidden host's unpaced OpenGL
+   frames run ahead of their results; a real window times every frame); a switched-off timer's objects go once every
+   result was read; off, the driver holds no timer and no query object. The figures reach the frame trace as events 77 and 78 (GPU
+   nanoseconds), read by `tools/frame_trace_report.py`; admitted by `--gpu-pass-timing` with `--frame-trace`.
 The `glMultiDrawArraysIndirect` start-up requirement is removed (nothing calls it; the only indirect draw is
 `glDrawArraysIndirect` in `scene3d/population.py`, which row 14 routes).
 

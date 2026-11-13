@@ -14,6 +14,7 @@
 #include <QtCore/QPointer>
 #include <QtCore/QThread>
 #include <QtGui/QOpenGLContext>
+#include <QtQuick/QQuickGraphicsConfiguration>
 #include <QtQuick/QQuickItem>
 #include <QtQuick/QQuickRenderControl>
 #include <QtQuick/QQuickRenderTarget>
@@ -139,6 +140,33 @@ bool Host::requestReadback(QString *error)
 bool Host::takeProbeResult(QJsonObject *facts, QByteArray *rgba, int *width, int *height, qint64 *frame)
 {
     return m_driver && m_driver->takeProbeResult(facts, rgba, width, height, frame);
+}
+
+bool Host::setLoad(const LoadConfig *config, QString *error)
+{
+    if (!m_driver) {
+        *error = QStringLiteral("the host is not attached");
+        return false;
+    }
+    m_driver->setLoad(config);
+    return true;
+}
+
+bool Host::setGpuTimer(const GpuTimerConfig &config, QString *error)
+{
+    if (!m_driver) {
+        *error = QStringLiteral("the host is not attached");
+        return false;
+    }
+    m_driver->setGpuTimer(config);
+    return true;
+}
+
+QList<GpuTimingSample> Host::takeGpuSamples()
+{
+    if (m_driver)
+        return m_driver->takeGpuSamples();
+    return m_lastDriver ? m_lastDriver->takeGpuSamples() : QList<GpuTimingSample>();
 }
 
 QJsonObject Host::stateJson() const
@@ -337,6 +365,7 @@ struct HiddenHost::State
     int width = 0;  // device pixels
     int height = 0;
     double dpr = 1.0;
+    bool timestamps = false;
     QQuickRenderControl *control = nullptr; // owned
     QQuickWindow *window = nullptr;         // owned
     std::unique_ptr<RenderThread> thread;
@@ -382,7 +411,8 @@ HiddenHost::~HiddenHost()
     close();
 }
 
-std::unique_ptr<HiddenHost> HiddenHost::create(int width, int height, bool threaded, double dpr, QString *error)
+std::unique_ptr<HiddenHost> HiddenHost::create(int width, int height, bool threaded, double dpr, QString *error,
+                                               bool timestamps)
 {
     if (width < 1 || height < 1) {
         *error = QStringLiteral("a hidden host has a size");
@@ -401,6 +431,13 @@ std::unique_ptr<HiddenHost> HiddenHost::create(int width, int height, bool threa
     s.control = new QQuickRenderControl;
     s.window = new QQuickWindow(s.control); // never shown
     s.applyLogicalSize();
+    s.timestamps = timestamps;
+    if (timestamps) {
+        // Read by Qt's QRhi creation at initialize() (and kept by the device's own configuration below).
+        QQuickGraphicsConfiguration config = s.window->graphicsConfiguration();
+        config.setTimestamps(true);
+        s.window->setGraphicsConfiguration(config);
+    }
     if (onVulkan()) {
         s.device = VulkanDevice::create(error);
         if (!s.device) {
@@ -652,6 +689,7 @@ QJsonObject HiddenHost::stateJson() const
     QJsonObject o = Host::stateJson();
     o.insert(QStringLiteral("size"), QJsonArray { s.width, s.height });
     o.insert(QStringLiteral("dpr"), s.dpr);
+    o.insert(QStringLiteral("qrhi_timestamps"), s.timestamps);
     o.insert(QStringLiteral("logical_size"), QJsonArray { s.logicalSize().width(), s.logicalSize().height() });
     o.insert(QStringLiteral("effective_dpr"), s.window ? double(s.window->effectiveDevicePixelRatio()) : 0.0);
     o.insert(QStringLiteral("quick_readbacks"), s.readbacks);

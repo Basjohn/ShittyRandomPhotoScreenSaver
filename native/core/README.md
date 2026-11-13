@@ -22,6 +22,12 @@ never ships.
     Its geometry comes from `rendering/native/composite.py`.
   - `surfaces.*`: the composite's target (owned by its node, on the render thread) and the per-window registry the
     frame driver records from; a surface records only when its content changed (nothing at rest).
+  - `gpu_timer.*` (N2.6, D8 plus 2): the per-pass GPU timer in the frame driver: each pass bracketed whole, outside
+    any render pass, through `beginExternal` (raw timestamps on Vulkan, `GL_TIME_ELAPSED` on OpenGL), QRhi's
+    whole-frame figure where the host's QRhi has timestamps (the only figure on D3D11 and D3D12); results read latched,
+    never waited for. Off, the driver holds no timer and no query object. `rendering/native/gpu_timing.py` writes the
+    figures into the frame trace.
+  - `load_pass.*`: the timer's known-cost pass (N full-target draws of a fixed fragment loop), a harness's only.
   - `vulkan_context.*`: D6, the process's Vulkan instance and one device per window, given to Qt Quick.
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
@@ -36,6 +42,9 @@ never ships.
 - `python/composite_check.py`: N2.4's proof (texels one to one, plan 1C.4's clip contract on the native item in every
   display style, overflow held to the display rect, the window round, validation; `composite_analysis.py` and
   `tools/card_clip_contract.py`, the contract's one reading).
+- `python/timer_check.py`: N2.6's proof (off is free by count, a known-cost pass scaled N times and its empty-bracket
+  control, QRhi's frame figure, latched reads in a real window with the waiting read as control, the frame trace and
+  its report, the two forms against each other, validation; `timer_analysis.py`).
 
 The guards: CMake refuses a Qt SDK other than `requirements.txt`'s PySide6 pin; the module refuses to import under
 any Qt but the one it was compiled for; `rendering.native` refuses a module whose Qt, ABI or MSVC runtime arrangement

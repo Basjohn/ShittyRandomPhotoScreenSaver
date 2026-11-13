@@ -127,6 +127,12 @@ class FrameTraceEvent(IntEnum):
     # trace sink is admitted, so ordinary runtime does no per-collection work.
     GC_BEGIN = 75
     GC_END = 76
+    # The native core's per-pass GPU timer (N2.6, ``rendering.native.gpu_timing``; admitted by ``--gpu-pass-timing``
+    # with a trace, its query objects exist only then): one record per figure, written when the timer's latched results
+    # are drained on the GUI thread. auxiliary = GPU nanoseconds, revision = the frame edge the pass was recorded at (a
+    # frame figure: the edge it was read at), logical_timestamp_ns = the pass kind (GPU_PASS_KINDS).
+    GPU_PASS_TIME = 77
+    GPU_FRAME_TIME = 78
 
 
 _MAGIC: Final[bytes] = b"SRPSSFT1"
