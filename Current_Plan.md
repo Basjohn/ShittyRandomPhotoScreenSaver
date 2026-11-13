@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.6 (High; build round 1); R-204's side defects (Medium).
+**Now (in flight):** N2.6 (High; build round 2); the 13 Nov side defects (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -46,16 +46,19 @@ at the size asked.
   1. N2.6 (the per-pass GPU timer service), then N2.7 (the backend owner), toward N2.5 (Spectrum at parity).
   2. The 1C.2 Save stall, and 1C.10, as defects between N steps.
 - Medium:
-  1. Side defects from R-204, each fixed at its owner with a test and a negative control:
-     - `ui/widgets/control_shadow.py:198`: `_ControlShadowHelper.eventFilter` ran after its helper was deleted
-       ("Internal C++ object already deleted") and the process then died with heap corruption (0xC0000374), once
-       the Defaults Foundry windows were freed mid-session. This is shared Settings code: reproduce it, then find
-       the helper's lifetime against its watched widget.
-     - The other foundries (`tools/theme_foundry.py`, `tools/widget_theme_foundry.py`, `tools/godzip_foundry.py`)
-       checked for R-204's pattern (a row layout filled before it has a parent), with the same ownership test.
-     - `tools/default_settings_editor.py`: connected lambdas close over `self`, so a window is never freed; and a
-       `QTimer.singleShot(0, ...)` backdrop call in `__init__`, which moves to `showEvent` as
-       `visualizer_preset_repair.py` does.
+  1. Side defects found 13 Nov, each fixed at its owner with a test and a negative control:
+     - `tests/test_artifact_paths_contract.py::test_png_output_goes_through_the_evidence_publisher` is red at main
+       on `tools/expanded_display_styles_evidence.py` (1D.2's tool writes PNGs outside the evidence publisher).
+     - `tests/test_settings_text_shadow_geometry.py:79`
+       (`test_combo_indicator_consumes_shared_stepper_state_roles`) is red at main: alpha 189 instead of 210. Root
+       cause first (find when it went red).
+     - `ui/widgets/combo_knob_overlay.py:99`: `ComboKnobController` holds its host strongly while the styled combos
+       keep it (`styled_combo_box.py:40`, `styled_font_combo_box.py:30`), the same cycle R-204's follow-up removed
+       from the shadow helpers. Hold the host weakly.
+     - The `singleShot(0, ...)` backdrop calls in `__init__` of `tools/widget_theme_foundry.py:197`,
+       `tools/theme_foundry.py:406` and `tools/godzip_foundry.py:4492` move to `showEvent`.
+     - `tools/godzip_foundry.py:5143`: the `godzip-foundry-worker` thread is still alive after `close()`. End it
+       at close.
   2. N1.6's 3D modes, one per dispatch where it stays bit-identical (Extruded Bubble; Neon Lake; Extruded
      Spectrum and Sphere); a mode that cannot be made bit-identical in one dispatch converts at its port.
   3. 1B.10.
