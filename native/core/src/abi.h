@@ -9,6 +9,8 @@
 // process_counters).
 // 3 (N2.4): the composite (composite_create/set/state/destroy, composite_live); the hidden host's device pixel ratio
 // (host_attach's sixth argument, host_set_dpr) and Qt Quick's target read back (host_read).
+// 4 (N2.6): the GPU timer (host_gpu_timer, host_gpu_samples, gpu_timer_live), the known-cost pass (host_load), the
+// hidden host's QRhi timestamps (host_attach's seventh argument).
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 3
+#define SRPSS_NATIVE_CORE_ABI 4

@@ -12,8 +12,9 @@ here ever runs on a render thread: these objects only create, attach, detach, re
 
 The probe pass (``probe_pass.h``) is the harness's trivial core pass: switched on per host, it proves the frame edge,
 the upload correction and the readback orientation; nothing creates it otherwise. A host's frame driver also records
-the composited surfaces of its window (N2.4, ``rendering.native.composite``). Nothing in the product uses any of
-this yet (N2.7 adds the backend owner).
+the composited surfaces of its window (N2.4, ``rendering.native.composite``), and while its GPU timer is on it times
+every pass it records (N2.6, ``rendering.native.gpu_timing``; the known-cost pass is the timer's proof). Nothing in the
+product uses any of this yet (N2.7 adds the backend owner).
 """
 from __future__ import annotations
 
@@ -118,6 +119,39 @@ class Host:
             return None
         return ProbeReadback(json.loads(raw["facts"]), raw["rgba"], int(raw["width"]), int(raw["height"]),
                              int(raw["frame"]))
+
+    def set_load(self, **config: Any) -> None:
+        """The known-cost pass from the next frame (``gpu_timing.LOAD_OPTIONS``): ``draws`` full-target draws of a fixed
+        fragment loop, the GPU timer's proof; ``timing="before"`` is its negative control."""
+        from rendering.native.gpu_timing import LOAD_OPTIONS, LOAD_TIMINGS
+
+        unknown = sorted(set(config) - set(LOAD_OPTIONS))
+        if unknown:
+            raise ValueError(f"unknown load option(s) {', '.join(unknown)} (the options are {', '.join(LOAD_OPTIONS)})")
+        if config.get("timing", "pass") not in LOAD_TIMINGS:
+            raise ValueError(f"unknown timing {config['timing']!r} (the timings are {', '.join(LOAD_TIMINGS)})")
+        self._module.host_load(self._live(), json.dumps(config))
+
+    def clear_load(self) -> None:
+        self._module.host_load(self._live(), "")
+
+    def set_gpu_timer(self, enabled: bool = True, **controls: bool) -> None:
+        """The GPU timer on or off from the next frame (``gpu_timing``). Off, the core's objects go once the frames that
+        used them completed. ``keep_when_off`` and ``wait_for_results`` are negative controls."""
+        from rendering.native.gpu_timing import TIMER_OPTIONS
+
+        unknown = sorted(set(controls) - set(TIMER_OPTIONS[1:]))
+        if unknown:
+            raise ValueError(f"unknown timer option(s) {', '.join(unknown)} (the options are "
+                             f"{', '.join(TIMER_OPTIONS)})")
+        config = {"enabled": bool(enabled), **{k: bool(v) for k, v in controls.items()}}
+        self._module.host_gpu_timer(self._live(), json.dumps(config))
+
+    def gpu_samples(self):
+        """The timer's results read since the last call, oldest first (``gpu_timing.GpuSample``)."""
+        from rendering.native.gpu_timing import samples_from
+
+        return samples_from(self._module.host_gpu_samples(self._live()))
 
     def close(self) -> dict:
         """Detaches (a hidden host also tears down its window and device); returns what was done. Idempotent."""

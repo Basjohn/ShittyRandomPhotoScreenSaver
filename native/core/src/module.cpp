@@ -7,8 +7,9 @@
 // adapter (host_adapter.h: the Qt Quick window host and the hidden host) and the frame driver behind it
 // (frame_driver.h), the module's Vulkan instance and devices (vulkan_context.h), and the probe pass a harness switches
 // on (probe_pass.h). N2.4: the composite, a scene-graph texture node carrying the card's coverage (composite.h), and
-// the surfaces the frame driver records for it (surfaces.h). Nothing in the product calls them yet (N2.7 adds the
-// backend owner).
+// the surfaces the frame driver records for it (surfaces.h). N2.6: the per-pass GPU timer in the frame driver
+// (gpu_timer.h) and its known-cost pass (load_pass.h). Nothing in the product calls them yet (N2.7 adds the backend
+// owner).
 //
 // Every entry runs on the GUI thread. The ones that wait for the hidden host's render thread release the GIL while
 // they wait; the render thread itself never takes it (D5.4).
@@ -189,7 +190,8 @@ PyObject *host_attach(PyObject *, PyObject *args)
     int height = 0;
     int threaded = 1;
     double dpr = 1.0;
-    if (!PyArg_ParseTuple(args, "s|Kiipd", &kindText, &address, &width, &height, &threaded, &dpr))
+    int timestamps = 0;
+    if (!PyArg_ParseTuple(args, "s|Kiipdp", &kindText, &address, &width, &height, &threaded, &dpr, &timestamps))
         return nullptr;
     srpss_core::HostKind kind;
     if (!srpss_core::parseHostKind(kindText, &kind)) {
@@ -201,6 +203,11 @@ PyObject *host_attach(PyObject *, PyObject *args)
     if (kind == srpss_core::HostKind::Window) {
         if (address == 0) {
             PyErr_SetString(PyExc_ValueError, "no window: a window host hands over its QQuickWindow");
+            return nullptr;
+        }
+        if (timestamps) {
+            PyErr_SetString(PyExc_ValueError, "a window's QRhi timestamps are its own graphics configuration, set "
+                                              "before it is first shown (QQuickGraphicsConfiguration.setTimestamps)");
             return nullptr;
         }
         QObject *object = reinterpret_cast<QObject *>(static_cast<quintptr>(address));
@@ -223,7 +230,7 @@ PyObject *host_attach(PyObject *, PyObject *args)
         }
         std::unique_ptr<srpss_core::HiddenHost> created;
         Py_BEGIN_ALLOW_THREADS
-        created = srpss_core::HiddenHost::create(width, height, threaded != 0, dpr, &error);
+        created = srpss_core::HiddenHost::create(width, height, threaded != 0, dpr, &error, timestamps != 0);
         Py_END_ALLOW_THREADS
         if (!created)
             return runtimeError(error);
@@ -453,6 +460,85 @@ PyObject *host_probe_result(PyObject *, PyObject *args)
     return d;
 }
 
+// ---------------------------------------------------------------- the GPU timer (N2.6) and its known-cost pass
+
+PyObject *host_load(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *config = "";
+    Py_ssize_t length = 0;
+    if (!PyArg_ParseTuple(args, "L|s#", &handle, &config, &length))
+        return nullptr;
+    srpss_core::Host *host = hostOf(handle);
+    if (!host)
+        return nullptr;
+    QString error;
+    if (length == 0) {
+        if (!host->setLoad(nullptr, &error))
+            return runtimeError(error);
+        Py_RETURN_NONE;
+    }
+    srpss_core::LoadConfig parsed;
+    if (!srpss_core::LoadConfig::fromJson(QByteArray(config, qsizetype(length)), &parsed, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    if (!host->setLoad(&parsed, &error))
+        return runtimeError(error);
+    Py_RETURN_NONE;
+}
+
+PyObject *host_gpu_timer(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *config = "";
+    Py_ssize_t length = 0;
+    if (!PyArg_ParseTuple(args, "Ls#", &handle, &config, &length))
+        return nullptr;
+    srpss_core::Host *host = hostOf(handle);
+    if (!host)
+        return nullptr;
+    srpss_core::GpuTimerConfig parsed;
+    QString error;
+    if (!srpss_core::GpuTimerConfig::fromJson(QByteArray(config, qsizetype(length)), &parsed, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    if (!host->setGpuTimer(parsed, &error))
+        return runtimeError(error);
+    Py_RETURN_NONE;
+}
+
+PyObject *host_gpu_samples(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::Host *host = hostOf(handle);
+    if (!host)
+        return nullptr;
+    const QList<srpss_core::GpuTimingSample> samples = host->takeGpuSamples();
+    PyObject *list = PyList_New(Py_ssize_t(samples.size()));
+    if (!list)
+        return nullptr;
+    for (qsizetype i = 0; i < samples.size(); ++i) {
+        const srpss_core::GpuTimingSample &s = samples.at(i);
+        PyObject *row = Py_BuildValue("(iLLL)", s.kind, (long long)s.frame, (long long)s.readAt,
+                                      (long long)s.nanoseconds);
+        if (!row) {
+            Py_DECREF(list);
+            return nullptr;
+        }
+        PyList_SetItem(list, Py_ssize_t(i), row); // steals the reference
+    }
+    return list;
+}
+
+PyObject *gpu_timer_live(PyObject *, PyObject *)
+{
+    return pyJson(srpss_core::GpuTimer::liveJson());
+}
+
 PyObject *live_hosts(PyObject *, PyObject *)
 {
     return PyLong_FromLongLong(hosts().live.size());
@@ -568,8 +654,9 @@ PyMethodDef methods[] = {
     { "vulkan_set_phase", vulkan_set_phase, METH_VARARGS,
       "(phase) -> None: the phase the validation messages that follow are counted under." },
     { "host_attach", host_attach, METH_VARARGS,
-      "(kind 'window', quick_window_address) | ('hidden', 0, width, height, threaded=True, dpr=1.0) -> int handle: a "
-      "host with its frame driver attached (D5.1, D5.2); a hidden host's size is device pixels." },
+      "(kind 'window', quick_window_address) | ('hidden', 0, width, height, threaded=True, dpr=1.0, timestamps=False) "
+      "-> int handle: a host with its frame driver attached (D5.1, D5.2); a hidden host's size is device pixels; "
+      "timestamps: its QRhi times whole frames (EnableTimestamps)." },
     { "host_set_dpr", host_set_dpr, METH_VARARGS,
       "(handle, dpr) -> None: the hidden host renders its device pixels at this device pixel ratio." },
     { "host_read", host_read, METH_VARARGS,
@@ -590,6 +677,16 @@ PyMethodDef methods[] = {
       "(handle) -> None: the next recorded probe pass reads its target back." },
     { "host_probe_result", host_probe_result, METH_VARARGS,
       "(handle) -> dict | None: the last completed probe readback (facts JSON, raw RGBA rows, size, frame)." },
+    { "host_load", host_load, METH_VARARGS,
+      "(handle, config_json='') -> None: the known-cost pass (width, height, draws, iterations, timing 'pass' or "
+      "'before') from the next frame; empty removes it." },
+    { "host_gpu_timer", host_gpu_timer, METH_VARARGS,
+      "(handle, config_json) -> None: the GPU timer on or off from the next frame (enabled; keep_when_off and "
+      "wait_for_results are negative controls)." },
+    { "host_gpu_samples", host_gpu_samples, METH_VARARGS,
+      "(handle) -> list of (kind, frame, read_at, nanoseconds): the timer's results read since the last call." },
+    { "gpu_timer_live", gpu_timer_live, METH_NOARGS,
+      "() -> JSON str: GPU timers alive in the process and their query objects (pools, queries)." },
     { "live_hosts", live_hosts, METH_NOARGS, "() -> int: hosts not closed." },
     { "composite_create", composite_create, METH_VARARGS,
       "(parent_quick_item_address) -> int handle: a composite item (D5.2) in that item, its surface drawn by the "

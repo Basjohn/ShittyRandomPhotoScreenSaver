@@ -721,6 +721,22 @@ Tests: `tests/test_native_core_composite.py` (no build: the geometry from the re
 its controls, the coverage inside the contract's inner edge, the material's block names, the Python face, the
 verdict), `tests/test_native_core_module.py` (the hidden rounds on OpenGL; skipped without a build).
 
+### Native core GPU timer (N2.6)
+
+```powershell
+# The per-pass GPU timer (D8 plus 2), one child process per graphics API: off is free (no timer, no query object, no
+# edge touched, by the module's counts; the kept-when-off control fails them); a known-cost pass of N draws scales with
+# N and its empty bracket does not; QRhi's whole-frame figure (the only one on D3D11 and D3D12) scales and agrees with
+# the pass's; in a real window kept off screen, GPU-bound, results arrive latched and no read waits (the waiting read is
+# the control); the figures written into a frame trace and read back by tools/frame_trace_report.py; the Vulkan and
+# OpenGL forms against each other; Vulkan validated, only Qt 6.12.0's recorded defects excused
+python native/core/python/timer_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan d3d11 d3d12] [--rounds off scaling window trace] [--label n26_timer]
+```
+
+Tests: `tests/test_native_core_timer.py` (no build: the judgements and their controls, every recorded pass bracketed,
+no waiting read outside the control, the trace and its report, the Python face).
+
 ## 7. Qt Quick runtime checks
 
 The Qt Quick presenter is accepted architecture. Use focused runtime evidence for the seam being changed rather than rerunning old architecture-selection experiments.

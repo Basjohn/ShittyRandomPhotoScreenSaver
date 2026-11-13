@@ -39,6 +39,11 @@ Admissions:
   selection for the run; nothing is persisted). ``main.py`` refuses a malformed value, or an index no screen has, at
   RUN startup with exit code 2; a display that disappears mid-run leaves the selection empty and never moves the
   saver to another display. Absent, nothing changes (:func:`only_display_index` is ``None``).
+* ``--gpu-pass-timing`` — admit the native core's per-pass GPU timer (D8 plus 2, Current_Plan.md item 8b N2.6;
+  ``rendering.native.gpu_timing``): GPU time per pass written into the frame trace, so it takes effect only together
+  with ``--frame-trace`` (``gpu_pass_timing_wanted``). Without it a host's timer is never switched on and the core
+  holds no timer, no query object and no per-frame call for it (:func:`gpu_pass_timing_admitted`). Its consumer is
+  the backend owner that attaches native hosts (N2.7); nothing reads it before that exists.
 
 All are ordinary argv tokens in the ``=`` form, so a harness that launches a
 child passes them as arguments; nothing is read from the environment.
@@ -79,6 +84,8 @@ class ExperimentFlags:
     visualizer_engine_worker: bool | None = None
     # ``--only-display``: the one screen index the saver's windows may use (RUN only); None leaves the selection alone.
     only_display: int | None = None
+    # ``--gpu-pass-timing``: the native core's per-pass GPU timer, into the frame trace (N2.6).
+    gpu_pass_timing: bool = False
 
     @property
     def lifecycle_telemetry_admitted(self) -> bool:
@@ -91,6 +98,7 @@ class ExperimentFlags:
 
 
 ONLY_DISPLAY_FLAG = "--only-display"
+GPU_PASS_TIMING_FLAG = "--gpu-pass-timing"
 
 
 def parse_only_display(argv: Sequence[str]) -> int | None:
@@ -141,9 +149,13 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
     log_dir: str | None = None
     visualizer_engine_worker: bool | None = None
     in_process_chosen = False
+    gpu_pass_timing = False
     for index, arg in enumerate(args):
         if arg == "--viz-switch-telemetry":
             viz_switch_telemetry = True
+            continue
+        if arg == GPU_PASS_TIMING_FLAG:
+            gpu_pass_timing = True
             continue
         if arg == "--viz-engine-worker":
             visualizer_engine_worker = True
@@ -206,6 +218,7 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
         log_dir=log_dir,
         visualizer_engine_worker=visualizer_engine_worker,
         only_display=only_display,
+        gpu_pass_timing=gpu_pass_timing,
     )
 
 
@@ -222,6 +235,7 @@ def experiment_flag_tokens(argv: Sequence[str]) -> tuple[str, ...]:
     for index, arg in enumerate(args):
         if (
             arg == "--viz-switch-telemetry"
+            or arg == GPU_PASS_TIMING_FLAG
             or arg == "--viz-engine-worker"
             or arg == "--viz-in-process"
             or arg == "--profile-cpu"
@@ -316,6 +330,12 @@ def only_display_index() -> int | None:
     return active_experiment_flags().only_display
 
 
+def gpu_pass_timing_admitted() -> bool:
+    """True when ``--gpu-pass-timing`` admitted the native core's per-pass GPU timer (it writes only into a frame trace:
+    ``rendering.native.gpu_timing.gpu_pass_timing_wanted``)."""
+    return active_experiment_flags().gpu_pass_timing
+
+
 def override_active_flags_for_testing(flags: ExperimentFlags | None) -> None:
     """Set/clear the process admission directly (tests of the admission only)."""
     global _ACTIVE
@@ -339,5 +359,7 @@ __all__ = [
     "ONLY_DISPLAY_FLAG",
     "parse_only_display",
     "only_display_index",
+    "GPU_PASS_TIMING_FLAG",
+    "gpu_pass_timing_admitted",
     "override_active_flags_for_testing",
 ]

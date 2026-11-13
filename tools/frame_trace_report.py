@@ -88,7 +88,13 @@ EVENT_NAMES = {
     74: "quick_sync_latest_admitted",
     75: "gc_begin",
     76: "gc_end",
+    77: "gpu_pass_time",
+    78: "gpu_frame_time",
 }
+# The native core's GPU timer (N2.6): auxiliary = GPU nanoseconds, logical_timestamp_ns = the kind
+# (rendering/native/gpu_timing.py GPU_PASS_KINDS; tests/test_native_core_timer.py holds the two equal).
+GPU_EVENT_IDS = (77, 78)
+GPU_PASS_KIND_NAMES = {0: "frame", 1: "probe", 2: "surface", 3: "load"}
 
 # Startup/teardown windows are not stall points (core/diagnostics/lifecycle_window.py):
 # frames inside them are reported apart; only frames just after one count as poisoning.
@@ -716,6 +722,21 @@ def _summary_ms(values_ns: list[int]) -> tuple[float, float, float] | None:
     )
 
 
+def _gpu_figure_lines(gpu_figures: dict[tuple[int, int], list[int]]) -> list[str]:
+    """The native core's GPU timer (N2.6): per screen and pass kind, the GPU time's median, p95 and p99 (QRhi's whole
+    frame as ``gpu_frame``), from the nanoseconds each record carries."""
+    lines = []
+    for (screen, kind), values in sorted(gpu_figures.items()):
+        summary = _summary_ms(values)
+        if summary is None:
+            continue
+        median, p95, p99 = summary
+        label = "gpu_frame" if kind == 0 else f"gpu_pass={GPU_PASS_KIND_NAMES.get(kind, str(kind))}"
+        lines.append(f"screen={screen} {label} n={len(values)} median_ms={median:.3f} p95_ms={p95:.3f} "
+                     f"p99_ms={p99:.3f}")
+    return lines
+
+
 def _print_render_cycle_attribution(
     *,
     screen: int,
@@ -901,6 +922,7 @@ def main() -> int:
     swap_timestamps_by_screen: dict[int, list[int]] = defaultdict(list)
     lifecycle_edges: list[tuple[int, int]] = []
     gc_edges: list[tuple[int, int, int, int]] = []   # (ts_ns, event, generation, collected)
+    gpu_figures: dict[tuple[int, int], list[int]] = defaultdict(list)   # (screen, kind) -> GPU nanoseconds
     first_ns, last_ns = None, None
     payload_bytes = len(raw) - HEADER.size
     records, trailing_bytes = divmod(payload_bytes, RECORD.size)
@@ -915,6 +937,10 @@ def main() -> int:
         counts[event] += 1
         first_ns = ts_ns if first_ns is None or ts_ns < first_ns else first_ns
         last_ns = ts_ns if last_ns is None or ts_ns > last_ns else last_ns
+        if event in GPU_EVENT_IDS:
+            # Durations, not edges: kept apart from every revision namespace below.
+            gpu_figures[(int(screen), int(logical_ns))].append(int(aux))
+            continue
         if event in (62, 63):
             lifecycle_edges.append((ts_ns, event))
         if event in (75, 76):
@@ -961,6 +987,8 @@ def main() -> int:
         print(f"trace_segments={trace_segments} retention=rolling_oldest_to_newest")
     for event in sorted(counts):
         print(f"{EVENT_NAMES.get(event, str(event))}: {counts[event]}")
+    for line in _gpu_figure_lines(gpu_figures):
+        print(line)
     for begin_id, end_id, label in (
         (72, 73, "retained_node_create"),
         (66, 67, "background_gl_setup"),

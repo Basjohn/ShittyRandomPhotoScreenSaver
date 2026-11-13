@@ -2,8 +2,9 @@
 side (D5.1). ``load()`` checks the module's Qt version and ABI and fails in one place with one reason
 (``NativeCoreUnavailable``); ``NativeCore.attach_host`` and ``NativeCore.hidden_host`` give the hosts
 (``rendering.native.hosts``); ``NativeCore.composite`` the composite item, placed from a presentation record by
-``rendering.native.composite`` (N2.4). Nothing in the product calls it yet (Current_Plan.md item 8b; N2.7 adds the
-backend owner)."""
+``rendering.native.composite`` (N2.4); ``rendering.native.gpu_timing`` the per-pass GPU timer's samples and their
+frame-trace records (N2.6). Nothing in the product calls it yet (Current_Plan.md item 8b; N2.7 adds the backend
+owner)."""
 from rendering.native.composite import (
     COMPOSITE_OPTIONS,
     SURFACE_PATTERNS,
@@ -11,6 +12,7 @@ from rendering.native.composite import (
     CompositeItem,
     composite_geometry,
 )
+from rendering.native.gpu_timing import GPU_PASS_KINDS, GpuSample, write_to_frame_trace
 from rendering.native.hosts import PROBE_OPTIONS, HiddenHost, Host, ProbeReadback, QuickFrame, WindowHost
 from rendering.native.loader import (
     EXPECTED_ABI,
@@ -21,6 +23,7 @@ from rendering.native.loader import (
     load,
 )
 
-__all__ = ["COMPOSITE_OPTIONS", "CompositeGeometry", "CompositeItem", "EXPECTED_ABI", "HOST_KINDS", "MODULE_NAME",
-           "PROBE_OPTIONS", "HiddenHost", "Host", "NativeCore", "NativeCoreUnavailable", "ProbeReadback", "QuickFrame",
-           "SURFACE_PATTERNS", "WindowHost", "composite_geometry", "load"]
+__all__ = ["COMPOSITE_OPTIONS", "CompositeGeometry", "CompositeItem", "EXPECTED_ABI", "GPU_PASS_KINDS", "GpuSample",
+           "HOST_KINDS", "MODULE_NAME", "PROBE_OPTIONS", "HiddenHost", "Host", "NativeCore", "NativeCoreUnavailable",
+           "ProbeReadback", "QuickFrame", "SURFACE_PATTERNS", "WindowHost", "composite_geometry", "load",
+           "write_to_frame_trace"]

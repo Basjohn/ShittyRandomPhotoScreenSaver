@@ -391,7 +391,7 @@ round (`native/spike_p1`) verified it.
 | **Texture-node composite** (D5.2) | line 185-199; N2.4 (N2.4's box) | decided; owed proof: one-to-one texels, the 1C.4 clip contract as the coverage term | each surface reaches the window as a texture provider a `ShaderEffect` can sample at no cost; Qt applies clip, opacity, batching |
 | **No Python on the core's threads** (D5.4) | line 232-234 | decided; rechecked at every port | frame pacing independent of the GIL (D8 plus 1) |
 | **Module location** (D5.7) | line 236-238 | decided; `native/core/`, module `_srpss_native_core`; N2.1 in flight | exact-Qt import guard, one Python importer (`rendering/native/`) |
-| **GPU timer per pass** (D5.3 row 1) | line 217; N2.6 (N2.6's box) | decided, unbuilt | per-pass figures in the frame trace; off means no query objects; every later port measured per pass |
+| **GPU timer per pass** (D5.3 row 1) | line 217; N2.6 (N2.6's box) | built 13 Nov (`native/core/src/gpu_timer.*`, `rendering/native/gpu_timing.py`), proof owed to the build round (`timer_check.py`) | per-pass figures in the frame trace; off means no query objects; every later port measured per pass |
 | **Stream ring service** (D5.3 row 2) | line 218; N3.2 | built only if it wins by 0.05 ms | larger histories and denser strands at one copy per frame |
 | **Indirect and count draws** (D5.3 row 3) | line 219 | **retired 12 Nov**: QRhi 6.12 has `drawIndirect` and `DrawIndirectMulti`; N4.c queries support at runtime (N4.c's box) | GPU-driven populations of 10^5 to 10^6 without a raw service |
 | **Per-sample reads** (D5.3 row 4) | line 220; N1.8 | built only if resolve-first fails a mode's look or cost | Extruded Bubble's nearest-depth `background()` if the A/B fails |

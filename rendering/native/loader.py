@@ -35,7 +35,7 @@ from rendering.native.hosts import HiddenHost, WindowHost
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 3
+EXPECTED_ABI = 4
 HOST_KINDS = ("window", "hidden")
 
 
@@ -86,11 +86,16 @@ class NativeCore:
             raise TypeError(f"a host hands over a live QQuickWindow, not {type(window).__name__}")
         return WindowHost(self.module, self.module.host_attach(kind, shiboken6.getCppPointer(window)[0]))
 
-    def hidden_host(self, width: int, height: int, *, threaded: bool = True, dpr: float = 1.0) -> HiddenHost:
+    def hidden_host(self, width: int, height: int, *, threaded: bool = True, dpr: float = 1.0,
+                    timestamps: bool = False) -> HiddenHost:
         """A hidden host: a Qt Quick window the core drives with a render control on its own render thread
         (``threaded``; False renders on the calling thread, the thread probe's negative control). ``width`` and
         ``height`` are device pixels, laid out in logical pixels at ``dpr``. On Vulkan it runs on a device of the
-        module's (create the process instance first)."""
+        module's (create the process instance first). ``timestamps``: Qt's QRhi times its whole frames (the GPU timer's
+        frame figure, the only one QRhi gives on D3D11 and D3D12); off, QRhi creates no query objects of its own."""
+        if timestamps:
+            return HiddenHost(self.module, self.module.host_attach("hidden", 0, int(width), int(height),
+                                                                   bool(threaded), float(dpr), True))
         if dpr == 1.0:
             return HiddenHost(self.module, self.module.host_attach("hidden", 0, int(width), int(height),
                                                                    bool(threaded)))
@@ -131,6 +136,11 @@ class NativeCore:
 
     def live_hosts(self) -> int:
         return int(self.module.live_hosts())
+
+    def gpu_timer_live(self) -> dict:
+        """GPU timers alive in the process and the query objects they hold (``timers``, ``query_pools``,
+        ``queries``): all zero while every timer is off (N2.6)."""
+        return json.loads(self.module.gpu_timer_live())
 
 
 def _bind_pyside6_qt() -> str:

@@ -83,6 +83,8 @@ set(_sources
     src/host_adapter.cpp
     src/frame_driver.cpp
     src/probe_pass.cpp
+    src/load_pass.cpp
+    src/gpu_timer.cpp
     src/surfaces.cpp
     src/composite.cpp
     src/targets.cpp
