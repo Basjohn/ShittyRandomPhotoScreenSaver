@@ -93,6 +93,7 @@ def test_traced_retained_node_construction_executes_without_missing_trace_names(
         _presentation_image = object()
         _transition_run = None
         _proof_enabled = False
+        _renderers_on_backend = True          # the product path (OpenGL): the background family's renderers exist
         _frame_trace = Trace()
         _screen_index = 1
         _telemetry = object()
