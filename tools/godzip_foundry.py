@@ -11,6 +11,7 @@ The UI deliberately never infers deletion from a missing ZIP member.
 from __future__ import annotations
 
 import argparse
+import contextlib
 from contextlib import contextmanager
 import ctypes
 import json
@@ -266,6 +267,9 @@ from godzip_foundry_theme import (  # noqa: E402
 APP_TITLE = "SRPSS GODZIP Foundry"
 CHUNKED_SUITE_COMMAND = r".\.venv\Scripts\python.exe tests\run_chunked.py --chunks 4 --log"
 PERSONAL_GODZIP_DROP_DIR = Path(r"Z:\Torrents\Torrentfiles")
+# How long a close waits for a read-only task's worker (a Git scan, an archive read) before leaving the daemon
+# thread to the process exit; a read-only worker leaves nothing half-done.
+_READ_ONLY_TASK_JOIN_SECONDS = 10.0
 
 ROLE_PAYLOAD = int(Qt.ItemDataRole.UserRole)
 ROLE_PATH = ROLE_PAYLOAD + 1
@@ -1126,6 +1130,7 @@ class CreateTab(QWidget):
             lambda: collect_repo_files(self.repo_root),
             apply_result,
             error_title="Repository scan failed",
+            read_only=True,
         )
 
     def _filter(self, text: str) -> None:
@@ -1642,6 +1647,7 @@ class ApplyTab(QWidget):
             lambda: inspect_godzip(self.repo_root, path, strip_legacy_prefix=strip),
             completed,
             error_title="GODZIP inspection failed",
+            read_only=True,
         )
 
     def _wrapper_changed(self, _checked: bool) -> None:
@@ -2218,6 +2224,7 @@ class DebrisTab(QWidget):
             self._scan_clean_archives,
             completed,
             error_title="GODZIP CLEAN scan failed",
+            read_only=True,
         )
 
     def _clean_select_all(self, checked: bool) -> None:
@@ -2903,6 +2910,7 @@ class DiffTab(QWidget):
             lambda: generate_godzip_diff(self.repo_root, current_zip),
             completed,
             error_title="GODZIP DIFF failed",
+            read_only=True,
         )
 
 
@@ -4455,6 +4463,7 @@ class GodzipFoundryWindow(QMainWindow):
         self._task_active = False
         self._task_bridge: _TaskBridge | None = None
         self._task_thread: threading.Thread | None = None
+        self._task_read_only = False
         self._auto_logzip_close_dialog: FoundryConfirmDialog | None = None
         self._allow_abandoned_auto_logzip_close = False
         self._native_backdrop_mode: str | None = None
@@ -4489,7 +4498,11 @@ class GodzipFoundryWindow(QMainWindow):
             QTimer.singleShot(0, lambda: self.apply_tab.load_zip(initial_zip))
         else:
             self.create_tab.ensure_loaded()
-        QTimer.singleShot(0, self._apply_native_backdrop_theme)
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        # The native backdrop needs the window's native handle, which exists once it is shown.
+        self._apply_native_backdrop_theme()
 
     def open_folder(self, path: Path, *, label: str = "folder") -> None:
         """Open one existing directory through the desktop shell; never spawn a console."""
@@ -4755,11 +4768,11 @@ class GodzipFoundryWindow(QMainWindow):
             self.set_status("A script is still running. Use STOP RUN (then KILL RUN if needed) before closing Foundry.")
             QApplication.beep()
             return
-        if self._task_active:
+        if self._task_active and not self._task_read_only:
             # Core mutations run on a daemon worker. Letting the GUI process exit
             # mid-apply/pull/create could terminate that worker in the middle of
             # a transactional operation. Normal close is therefore fenced until
-            # the current task reports completion.
+            # the current task reports completion. A read-only task is ended below.
             event.ignore()
             self.set_status("An operation is still running — wait for it to finish before closing Foundry.")
             QApplication.beep()
@@ -4769,6 +4782,8 @@ class GodzipFoundryWindow(QMainWindow):
             self.set_status("SRPSS is still running; closing now will abandon the pending automatic LOGZIP.")
             self._warn_auto_logzip_close()
             return
+        if self._task_active:
+            self._end_read_only_task()
         try:
             self.push_tab.persist_message()
         except Exception:
@@ -5096,8 +5111,14 @@ class GodzipFoundryWindow(QMainWindow):
         on_success: Callable[[Any], None] | None = None,
         *,
         error_title: str = "Operation failed",
+        read_only: bool = False,
     ) -> bool:
-        """Run one core operation off the Qt thread; mutations never overlap."""
+        """Run one core operation off the Qt thread; mutations never overlap.
+
+        ``read_only``: the operation changes nothing (a scan, an inspection, a diff), so closing the window does
+        not wait for it: its result is dropped and its worker joined (``_end_read_only_task``). A mutation fences
+        the close until it reports.
+        """
 
         if self._task_active:
             self.notify(
@@ -5107,6 +5128,7 @@ class GodzipFoundryWindow(QMainWindow):
             return False
 
         self._task_active = True
+        self._task_read_only = read_only
         self.set_busy(True, status)
         bridge = _TaskBridge(self)
         self._task_bridge = bridge
@@ -5136,14 +5158,31 @@ class GodzipFoundryWindow(QMainWindow):
             try:
                 result = worker()
             except Exception as exc:
-                bridge.failed.emit(exc)
+                outcome, payload = bridge.failed, exc
             else:
-                bridge.succeeded.emit(result)
+                outcome, payload = bridge.succeeded, result
+            # A read-only task outlives a closed window only past the join bound; its bridge may be gone.
+            with contextlib.suppress(RuntimeError):
+                outcome.emit(payload)
 
         thread = threading.Thread(target=run, name="godzip-foundry-worker", daemon=True)
         self._task_thread = thread
         thread.start()
         return True
+
+    def _end_read_only_task(self) -> None:
+        """At close: drop a running read-only task's result and join its worker, bounded."""
+
+        thread, bridge = self._task_thread, self._task_bridge
+        if bridge is not None:
+            for signal in (bridge.succeeded, bridge.failed):
+                with contextlib.suppress(RuntimeError, TypeError):
+                    signal.disconnect()
+        self._task_active = False
+        self._task_bridge = None
+        self._task_thread = None
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=_READ_ONLY_TASK_JOIN_SECONDS)
 
     def open_foundry_settings(self) -> None:
         dialog = self._settings_dialog

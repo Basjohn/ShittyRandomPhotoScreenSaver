@@ -7,12 +7,17 @@ from PySide6.QtCore import QObject, QEvent, QPoint, QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QWidget
 from ui.settings_theme_runtime import get_active_settings_theme
+from ui.widgets.control_shadow import _WeakWidgetSlot
 
 KnobState = Literal["normal", "hover", "pressed", "disabled"]
 
 
 class ComboKnobOverlay(QWidget):
     """Paints a single circular indicator matching the spinbox dots."""
+
+    # The combo keeps the controller (``_knob_overlay``) and the controller keeps this overlay, so a
+    # strong host reference would leave a parentless combo to the cycle collector (``_WeakWidgetSlot``).
+    _host = _WeakWidgetSlot()
 
     _SPINBOX_DOT_DIAMETER = 10.0
     _DOT_SCALE = 1.2  # 20% larger than spinbox dots
@@ -94,6 +99,9 @@ class ComboKnobOverlay(QWidget):
 class ComboKnobController(QObject):
     """Attaches the overlay to any combobox-like widget and keeps it in sync."""
 
+    # Held weakly: the host keeps this controller as an attribute (see ``ComboKnobOverlay._host``).
+    _host = _WeakWidgetSlot()
+
     def __init__(self, host: QWidget) -> None:
         super().__init__(host)
         self._host = host
@@ -156,10 +164,11 @@ class ComboKnobController(QObject):
     # Helpers
     # ------------------------------------------------------------------
     def _position_overlay(self) -> None:
-        if not self._host.isVisible():
+        host = self._host
+        if host is None or not host.isVisible():
             return
 
-        host_rect: QRect = self._host.rect()
+        host_rect: QRect = host.rect()
         if host_rect.height() <= 0:
             return
 
@@ -185,7 +194,7 @@ class ComboKnobController(QObject):
         if parent is None:
             return
 
-        host_top_left: QPoint = self._host.mapTo(parent, QPoint(0, 0))
+        host_top_left: QPoint = host.mapTo(parent, QPoint(0, 0))
         x = host_top_left.x() + x_host
         y = host_top_left.y() + y_host
 
@@ -201,7 +210,10 @@ class ComboKnobController(QObject):
         self._overlay.raise_()
 
     def _update_state(self) -> None:
-        if not self._host.isEnabled():
+        host = self._host
+        if host is None:
+            return
+        if not host.isEnabled():
             state: KnobState = "disabled"
         elif self._pressed:
             state = "pressed"

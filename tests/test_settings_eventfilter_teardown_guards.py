@@ -126,6 +126,43 @@ def test_shadowed_widget_is_freed_where_its_owner_lets_it_go(qt_app, kind) -> No
     qt_app.processEvents()
 
 
+@pytest.mark.parametrize("kind", ["combo", "font_combo"])
+def test_styled_combo_is_freed_where_its_owner_lets_it_go(qt_app, kind) -> None:
+    """The knob controller and its overlay never keep their combo alive.
+
+    The combo keeps its controller (``_knob_overlay``), the controller keeps the overlay; a strong
+    ``_host`` on either closed the same cycle the shadow helpers had, leaving a parentless styled
+    combo to the cycle collector (which may run inside Qt's dispatch of an event to it).
+    """
+    import gc
+    import weakref
+
+    from PySide6.QtCore import QCoreApplication
+
+    from ui.widgets.styled_combo_box import StyledComboBox
+    from ui.widgets.styled_font_combo_box import StyledFontComboBox
+
+    combo = StyledComboBox() if kind == "combo" else StyledFontComboBox()
+    combo.addItem("One")
+    controller = combo._knob_overlay
+    assert controller._host is combo and controller._overlay._host is combo
+    combo_ref = weakref.ref(combo)
+    controller_ref = weakref.ref(controller)
+    del controller
+    QCoreApplication.postEvent(combo, QEvent(QEvent.Type.Polish))
+
+    collector_was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        del combo
+        assert combo_ref() is None, "the knob controller kept its combo alive for the cycle collector"
+        assert controller_ref() is None
+    finally:
+        if collector_was_enabled:
+            gc.enable()
+    qt_app.processEvents()
+
+
 def test_control_shadow_eventfilter_ignores_events_for_other_widgets(qt_app) -> None:
     widget = QWidget()
     other = QWidget()

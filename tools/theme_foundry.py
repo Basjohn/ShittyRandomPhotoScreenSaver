@@ -52,7 +52,7 @@ _BOOTSTRAP_REPO_ROOT = _early_repo_root()
 if str(_BOOTSTRAP_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_BOOTSTRAP_REPO_ROOT))
 
-from PySide6.QtCore import QRect, Qt, QTimer, Signal  # noqa: E402
+from PySide6.QtCore import QRect, Qt, Signal  # noqa: E402
 from PySide6.QtGui import QColor, QFont, QIcon, QLinearGradient, QPainter, QPen  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QAbstractItemView,
@@ -403,7 +403,6 @@ class ThemeFoundryWindow(QMainWindow):
         self._build_ui()
         self._refresh_theme_file_list()
         self._apply_internal_style()
-        QTimer.singleShot(0, lambda: apply_native_backdrop(self, self._ui_theme_resolution))
         self._refresh_backdrop_ui()
         self._rebuild_tree()
         self._check_default_mirror()
@@ -415,6 +414,11 @@ class ThemeFoundryWindow(QMainWindow):
                 "Editing compiled Default Dark. Use Save As to create a selectable custom .srtheme."
             )
         self._update_dirty_status()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        # The native backdrop needs the window's native handle, which exists once it is shown.
+        apply_native_backdrop(self, self._ui_theme_resolution)
 
     def _fit_initial_window_to_screen(self) -> None:
         """Choose a useful initial size without exceeding the available display."""

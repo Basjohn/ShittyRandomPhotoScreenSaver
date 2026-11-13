@@ -33,7 +33,7 @@ TOOLS_DIR = REPO_ROOT / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from PySide6.QtCore import QRect, Qt, QTimer, Signal  # noqa: E402
+from PySide6.QtCore import QRect, Qt, Signal  # noqa: E402
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
@@ -194,12 +194,16 @@ class WidgetThemeFoundryWindow(QMainWindow):
         self.setMinimumSize(980, 650)
         self._build_ui()
         self._apply_style()
-        QTimer.singleShot(0, lambda: apply_native_backdrop(self, self._ui_theme_resolution))
         self._refresh_file_list()
         if initial_path is not None:
             self._open_theme_path(initial_path)
         else:
             self._load_spec(self.default_spec, None)
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        # The native backdrop needs the window's native handle, which exists once it is shown.
+        apply_native_backdrop(self, self._ui_theme_resolution)
 
     # ---- UI ---------------------------------------------------------
     def _build_ui(self) -> None:

@@ -187,21 +187,26 @@ def main(argv: list[str] | None = None) -> int:
     from PySide6.QtWidgets import QApplication
 
     app = QApplication(["expanded-display-styles-evidence"])
-    out = artifact_paths.evidence_dir("visualizers/shared", "expanded_display_styles", args.label)
-    out.mkdir(parents=True, exist_ok=True)
+    destination = artifact_paths.evidence_dir("visualizers/shared", "expanded_display_styles", args.label)
     from PIL import Image
 
+    from tools import evidence_media
+
     report = {"logical": list(args.logical), "dpr": args.dpr, "photo": args.photo.name, "modes": {}}
-    for mode in args.modes:
-        results = render_mode(mode, logical=tuple(args.logical), dpr=args.dpr, frames=args.frames, photo=args.photo)
-        for style, entry in results.items():
-            Image.fromarray(entry["image"], "RGB").save(out / f"{mode}__{style}.png")
-        _sheet(mode, results, args.dpr, out)
-        report["modes"][mode] = {style: entry["facts"] for style, entry in results.items()}
-        print(mode, {style: entry["facts"]["outer_rect"] for style, entry in results.items()}, flush=True)
-    (out / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    # Written in owner scratch and published unchanged (stills stay PNG) only when every mode rendered.
+    with evidence_media.evidence_workspace("expanded_display_styles", destination) as out:
+        out.mkdir(parents=True, exist_ok=True)
+        for mode in args.modes:
+            results = render_mode(mode, logical=tuple(args.logical), dpr=args.dpr, frames=args.frames,
+                                  photo=args.photo)
+            for style, entry in results.items():
+                Image.fromarray(entry["image"], "RGB").save(out / f"{mode}__{style}.png")
+            _sheet(mode, results, args.dpr, out)
+            report["modes"][mode] = {style: entry["facts"] for style, entry in results.items()}
+            print(mode, {style: entry["facts"]["outer_rect"] for style, entry in results.items()}, flush=True)
+        (out / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     app.processEvents()
-    print(out)
+    print(destination)
     return 0
 
 

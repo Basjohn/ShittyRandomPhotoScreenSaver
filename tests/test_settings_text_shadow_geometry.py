@@ -65,6 +65,9 @@ def test_shadow_direction_arrow_consumes_the_semantic_button_foreground(qt_app, 
 
 @pytest.mark.parametrize("state", ["normal", "hover", "pressed", "disabled"])
 def test_combo_indicator_consumes_shared_stepper_state_roles(qt_app, monkeypatch, state):
+    """The knob paints the theme's resolved stepper role for its state, exactly as the shared stepper QSS does
+    (``theme.color``: the authored role after the Settings surface composition, which calibrates surface alpha
+    to the material), never the authored entry itself."""
     from ui.widgets import combo_knob_overlay as knobs
     colors = dict(DEFAULT_DARK_SETTINGS_THEME.colors)
     role = "control.stepper." + ("surface" if state == "normal" else state + "_surface")
@@ -76,7 +79,9 @@ def test_combo_indicator_consumes_shared_stepper_state_roles(qt_app, monkeypatch
     overlay.set_state(state)
     host.setEnabled(state != "disabled")
     try:
-        assert overlay._resolve_color().getRgb() == colors[role].as_tuple()
+        expected = theme.color(role).as_tuple()
+        assert expected[:3] == colors[role].as_tuple()[:3], "the state's own role, not another stepper role"
+        assert overlay._resolve_color().getRgb() == expected
         host.setProperty("previewKnob" + state.title(), "#123456")
         assert overlay._resolve_color() == QColor("#123456")
     finally:
