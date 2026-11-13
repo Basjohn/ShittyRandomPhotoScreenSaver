@@ -38,30 +38,20 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.7 (High); N1.6 Extruded Bubble (Medium).
+**Now (in flight):** nothing (agents resume after the weekly limit resets, 13 Nov 23:00). Next: N2.7 (High),
+N1.6 Extruded Bubble (Medium; the first attempt ended at the limit with nothing committed).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
 - High:
   1. N2.7 (the backend owner and the rehearsal path), then the C++ packet reader (N2.3), toward N2.5 (Spectrum
      at parity) and N2.8.
-  2. The 1C.2 Save stall, and 1C.10, as defects between N steps.
+  2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. Side defects found 13 Nov, each fixed at its owner with a test and a negative control:
-     - `tests/test_artifact_paths_contract.py::test_png_output_goes_through_the_evidence_publisher` is red at main
-       on `tools/expanded_display_styles_evidence.py` (1D.2's tool writes PNGs outside the evidence publisher).
-     - `tests/test_settings_text_shadow_geometry.py:79`
-       (`test_combo_indicator_consumes_shared_stepper_state_roles`) is red at main: alpha 189 instead of 210. Root
-       cause first (find when it went red).
-     - `ui/widgets/combo_knob_overlay.py:99`: `ComboKnobController` holds its host strongly while the styled combos
-       keep it (`styled_combo_box.py:40`, `styled_font_combo_box.py:30`), the same cycle R-204's follow-up removed
-       from the shadow helpers. Hold the host weakly.
-     - The `singleShot(0, ...)` backdrop calls in `__init__` of `tools/widget_theme_foundry.py:197`,
-       `tools/theme_foundry.py:406` and `tools/godzip_foundry.py:4492` move to `showEvent`.
-     - `tools/godzip_foundry.py:5143`: the `godzip-foundry-worker` thread is still alive after `close()`. End it
-       at close.
-  2. N1.6's 3D modes, one per dispatch where it stays bit-identical (Extruded Bubble; Neon Lake; Extruded
-     Spectrum and Sphere); a mode that cannot be made bit-identical in one dispatch converts at its port.
+  1. N1.6 Extruded Bubble (bit-identical on OpenGL or converted at its port).
+  2. 1D.7 (hover actions without Edit), then 1D.8 (idle wake).
+  3. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
+     Sphere); a mode that cannot be made bit-identical in one dispatch converts at its port.
   3. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
@@ -314,6 +304,8 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     by name only when `--layer-path` is given.
   - [ ] Decisions document: D6's "no environment variable is used" names the layer path as the one exception,
     harness only.
+  - [ ] Harness first (13 Nov: `run_n06.py` has no visible mode): a bounded visible translucent round on a named
+    display, then the lead's run below.
   - [ ] Lead, Display 1 visible and bounded, when two displays are connected: a real translucent window on the
     module's device: see-through to the desktop (D7 point 8's first route; the hidden runs cannot read the composed
     alpha), with the DWM system backdrop and the project's glass, then the swapchain under resize, DPI change and
@@ -441,11 +433,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 Order inside N2 (the numbers stay stable for the documents that cite them): N2.1 to N2.4, then N2.6, N2.7, then
 N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the Python renderer's retirement.
 
-- [ ] Lead, when the display is on (13 Nov it was off: Qt alone presented 2 frames a second on D3D, fact J5): the D3D11
-  and D3D12 window rounds of N2.2, N2.4 and N2.6, which are the only parts of those three not yet proved:
-  `host_check.py --apis d3d11 d3d12 --rounds window lifecycle`, `composite_check.py --apis d3d11 d3d12 --rounds
-  window`, `timer_check.py --apis d3d11 d3d12 --rounds scaling window` (each with `--module-dir
-  release/native_module`; commands in `Docs/Reference/Harness_Index.md`).
 - [ ] N2.7 The backend owner and the rehearsal path (D10): one owner in `rendering/quick/bootstrap.py`, a
   diagnostic command-line switch, the Vulkan window set up through the module (D6), "available on this backend"
   in the mode and transition registries (an unported mode is not offered, an unported transition is Crossfade),
@@ -1072,6 +1059,60 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   Settings and Studio box.
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
+
+### 1D.6 Leaving fullscreen on another display lands the card in a poor spot (operator, 13 Nov; Opus High, design first)
+
+Case: the Visualizer sits at B2 on D1, is moved to A1 on D0, goes fullscreen and is moved to D1 (that move works),
+then leaves fullscreen. It lands at a spot mapped from D0 instead of its own B2 on D1. Log
+`logs/evidence_chest/logs2bec597a774.zip` (`screensaver_geometry.log`): every "Visualizer display move/hop" maps the
+source rect over (D0 (51,38) became D1 (2760,143)). The one time it came back to D0's original spot (06:38:37) the
+mapping only happened to match. Nothing remembers a display's own last ordinary placement. The log also shows
+borderless fullscreen transfers working smoothly.
+- [ ] Design note first (plan 01 M3c, beside "Display moves retarget"), for the lead's approval:
+  - One authority: `rendering/quick/custom_layout_owner.py` stays the only owner of ordinary placement. A
+    remembered per-display placement is a field of that owner's stored record, keyed by monitor identity (the
+    `monitor_bindings` identity), never a second store or a renderer-side guess.
+  - When it is written: only at a committed ordinary placement on that display (Edit commit, drag commit, a
+    move's landing).
+  - When it is read: on leaving fullscreen onto a display, and on an ordinary display move landing there.
+  - Its validity rules: still on that display's current geometry and DPR, inside the safe area, no overlap
+    breaking the existing collision rules. An invalid one falls back to today's mapping.
+  - The interaction with Edit's draft, Restore Size, the shape (B2 is a position and a shape), presets of
+    placement, and the R-63/R-192 whole-pixel rules.
+- [ ] Build to the note; the move keeps "retarget before rebuild" and the fade.
+- [ ] Tests: the operator's exact sequence (B2 on D1, move to A1 on D0, fullscreen, move to D1, leave fullscreen)
+  lands at B2; an invalid remembered spot falls back; nothing else in the record changes (negative controls).
+- [ ] Lead D1 run with both displays: the sequence above, edges read.
+
+### 1D.7 Hover glyph actions must not enter Edit (operator, 13 Nov: preferred across the application; Opus Medium)
+
+Cause: `engine/display_manager.py:2742` (`_route_hover_edit_glyph`'s Edit part) opens or joins the Edit session to
+run every hover glyph action (Rotate, Restore Size, Close, Child Lock, transfers). For Rotate it leaves that
+session open, so the user lands in Edit. The fullscreen path at `:2697` does the same through
+`_start_quick_custom_layout_session`.
+- [ ] Each hover action outside Edit runs as one committed change with no Edit chrome: through the same owner
+  and model action (no second path), then committed and closed at once. Inside Edit it stays a draft step as
+  today. Decide per action from the code, and record the decision: Close already ends without Edit? Do transfers
+  stay as they are?
+- [ ] Tests through the real display manager: each action outside Edit changes the record once, leaves no Edit
+  session and shows no Edit overlay; inside Edit it stays undoable. Negative controls on the old route.
+
+### 1D.8 Extruded Bubble: an idle wake occasionally teleports (operator, 13 Nov; Opus Medium)
+
+Cause unknown. During playback wakes no longer jump: 480b398b (25 Oct) "wakes: no beat jumps; leave the bubble
+near its widest point". At idle (not playing) a wake's contents, length or attachment occasionally jumps; this
+is probably the idle path never brought to that fix's parity.
+- [ ] Root cause with evidence: an idle offscreen render sequence with a discontinuity detector on wake
+  attachment and length, compared with the playing path (what 480b398b changed, and whether idle bypasses it).
+- [ ] Fix at the owner so idle matches playing; frames before and after for the lead; a regression test that
+  fails on the old code. A historical bug entry if it shipped since 480b398b.
+
+### 1D.9 Linux credential encryption, port from the archived branch (Opus Medium, low priority; Linux is best effort)
+
+- [ ] The Linux branch was deleted on 13 Nov and archived as tag `archive/linux-branch-2026-11-05`. Its one unported
+  piece: Linux credentials through a per-user key in the Secret Service keyring (`core/secret_service_key.py`,
+  the `core/windows/dpapi.py` rework, no plaintext fallback). Port it onto today's `dpapi.py` without changing
+  Windows behaviour, with its tests and the `Linux_Plan.md` row updated.
 
 ### 1D.2 Fullscreen Visualizer display styles (merged and proved on Display 1, 12 Nov)
 

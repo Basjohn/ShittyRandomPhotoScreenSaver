@@ -164,3 +164,5 @@ Added 12 Nov 2026 with the native core's direction (`Docs/Future_Work/Native_Cor
   agent's item.
 - **Two ordered tracks, one High slot each,** once the substrate exists (modes; the background family), and a
   primitives track that never holds the flip. A track's next port is dispatched only when its last one is merged.
+
+- Retiring a worktree also deletes its remote branch when the lead pushed it for a GitHub build (`git push origin --delete <branch>`); old branches are archived as `archive/<name>` tags only when they hold unported work (13 Nov: the Linux branch).
