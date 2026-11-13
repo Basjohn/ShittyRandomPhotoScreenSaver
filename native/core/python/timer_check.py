@@ -260,6 +260,8 @@ def round_scaling(core, engine, app, api: str, out: Path, shared: dict) -> dict:
         else:
             if frames_present:
                 shared["slope_ms"] = record["frame_scaling"]["fit"]["slope"]
+            # QRhi's frame figure is this backend's only figure: without it the round measured nothing.
+            checks["qrhi_frame_figure_present"] = frames_present
             checks["no_per_pass_figure_on_this_backend"] = all(r["load_n"] == 0 for r in rows["pass"])
         checks["no_timer_error"] = not timer.get("error")
         host.clear_load()
@@ -473,6 +475,8 @@ def round_trace(core, engine, app, api: str, out: Path, shared: dict) -> dict:
         name in found and found[name]["n"] == want["n"] and abs(found[name]["median_ms"] - want["median_ms"]) < 5e-4
         for name, want in expected.items())
     record["figures"] = sorted(expected)   # on D3D only QRhi's frame figure, where its offscreen frames carry one
+    # A trace of no figures passes every comparison above and equals the negative control: it proves nothing.
+    checks["figures_in_the_trace"] = bool(expected)
     if api in PER_PASS_APIS:
         checks["the_pass_figure_is_in_the_trace"] = "load" in found
     # Negative control: a trace without the timer's records has no GPU line.
