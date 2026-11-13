@@ -60,6 +60,24 @@ def test_selection_page_hydration_is_read_only(qapp, settings) -> None:
             page.deleteLater()
 
 
+def test_change_every_writes_the_interval_without_its_connection_keeping_the_page_alive(qapp, settings) -> None:
+    """The Change Every spin writes ``timing.interval``; its connection does not close over the page (audit 13 Nov,
+    low 6), so a page nothing else holds is released with its widgets."""
+    import gc
+    import weakref
+
+    page = TransitionsPage(settings)
+    value = page.interval.value() + page.interval.singleStep()
+    page.interval.setValue(value)
+    assert settings.values["timing"]["interval"] == value
+    released = weakref.ref(page)
+    del page
+    gc.collect()
+    qapp.processEvents()
+    gc.collect()
+    assert released() is None, "the Change Every connection keeps the page alive"
+
+
 def test_widget_member_aliases_write_media_and_obey_family_dependencies(qapp, settings) -> None:
     page = WidgetsPage(settings)
     try:
