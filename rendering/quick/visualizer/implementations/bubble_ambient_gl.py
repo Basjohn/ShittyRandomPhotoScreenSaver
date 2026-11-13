@@ -25,7 +25,9 @@ import ctypes
 import numpy as np
 from OpenGL import GL as gl
 
+from rendering.gl_programs.portable import pack_block, portable_program
 from rendering.quick.render.gl_resources import compile_program, delete_program
+from rendering.quick.scene3d.uniforms import PassBlocks
 from rendering.quick import gl_query
 from widgets.spotify_visualizer.bubble_ambient import (
     MAX_MICROBUBBLES, MAX_PARTICLES, RECORD_STRIDE,
@@ -189,6 +191,13 @@ void main() {
 }
 """
 
+# Their loose uniforms are one std140 pass block each (N1.6: the points' values, none for the mask), their varyings
+# located (``portable_program``); the points' owner packs the block with the values it set as uniforms.
+_POINT_VERTEX, (_POINT_FRAGMENT,), _POINT_BLOCK = portable_program(
+    _POINT_VERTEX, (_POINT_FRAGMENT,), block="BubbleAmbientPoints", samplers={})
+_OCCLUDER_VERTEX, (_OCCLUDER_FRAGMENT,), _ = portable_program(
+    _OCCLUDER_VERTEX, (_OCCLUDER_FRAGMENT,), block="BubbleAmbientMask", samplers={})
+
 
 # The state fence reads through ``rendering.quick.gl_query`` (the GL entry points directly, as the shared
 # Quick fence does): PyOpenGL's wrappers allocate a numpy array per query, and this pass makes twenty of
@@ -218,7 +227,7 @@ class QuickBubbleAmbientPoints:
         self._occluder_program = self._occluder_vao = self._occluder_vbo = 0
         self._fbo = self._texture = self._light_texture = 0
         self._target_size = (0, 0)
-        self._uniforms: dict[str, int] = {}
+        self._blocks = PassBlocks("Bubble ambience", block_bytes=_POINT_BLOCK.size)
         self._data = np.zeros((MAX_MICROBUBBLES+MAX_PARTICLES, RECORD_STRIDE), dtype=np.float32)
         self._occluder_data = np.zeros((110 * 6, 5), dtype=np.float32)
 
@@ -239,9 +248,8 @@ class QuickBubbleAmbientPoints:
             gl.glEnableVertexAttribArray(1)
             gl.glVertexAttribPointer(1, 2, gl.GL_FLOAT, gl.GL_FALSE, stride, ctypes.c_void_p(16))
             names = ('uTexelScale','uSpriteScale','uGlowSpread','uMicroColor','uParticleColor')
-            uniforms = {name:int(gl.glGetUniformLocation(program,name)) for name in names}
-            if any(value < 0 for value in uniforms.values()):
-                raise RuntimeError('Bubble ambient GL uniforms incomplete')
+            if not set(names) <= {name for name, _kind in _POINT_BLOCK.fields}:
+                raise RuntimeError('Bubble ambient GL block incomplete')
             # Explicit big-bubble mask. A few triangle quads are fast even when
             # the displayed circle exceeds GL_POINT_SIZE or at extreme viewports.
             mask_program = compile_program(_OCCLUDER_VERTEX, _OCCLUDER_FRAGMENT,
@@ -258,8 +266,10 @@ class QuickBubbleAmbientPoints:
             gl.glVertexAttribPointer(1,2,gl.GL_FLOAT,gl.GL_FALSE,mask_stride,ctypes.c_void_p(8))
             gl.glEnableVertexAttribArray(2)
             gl.glVertexAttribPointer(2,1,gl.GL_FLOAT,gl.GL_FALSE,mask_stride,ctypes.c_void_p(16))
-            self._program,self._vao,self._vbo,self._uniforms=program,vao,vbo,uniforms
+            self._program,self._vao,self._vbo=program,vao,vbo
             self._occluder_program,self._occluder_vao,self._occluder_vbo=mask_program,mask_vao,mask_vbo
+            # The points' block ring, allocated with the programs.
+            self._blocks.warm()
         except Exception:
             if mask_vbo: gl.glDeleteBuffers(1,[mask_vbo])
             if mask_vao: gl.glDeleteVertexArrays(1,[mask_vao])
@@ -384,15 +394,14 @@ class QuickBubbleAmbientPoints:
             data = self._data.reshape(-1)
             data[:len(points)] = points
             gl.glUseProgram(self._program)
-            gl.glUniform1f(self._uniforms['uTexelScale'],texel_scale)
-            gl.glUniform1f(self._uniforms['uSpriteScale'],sprite_scale)
-            gl.glUniform1f(self._uniforms['uGlowSpread'],glow_spread)
-            gl.glUniform4f(self._uniforms['uMicroColor'],*micro_color)
-            gl.glUniform4f(self._uniforms['uParticleColor'],*particle_color)
+            block = pack_block(_POINT_BLOCK, {'uTexelScale': texel_scale, 'uSpriteScale': sprite_scale,
+                                              'uGlowSpread': glow_spread, 'uMicroColor': tuple(micro_color),
+                                              'uParticleColor': tuple(particle_color)})
             gl.glBindVertexArray(self._vao)
             gl.glBindBuffer(gl.GL_ARRAY_BUFFER,self._vbo)
             gl.glBufferSubData(gl.GL_ARRAY_BUFFER,0,data[:len(points)].nbytes,data[:len(points)])
-            gl.glDrawArrays(gl.GL_POINTS,0,len(points)//RECORD_STRIDE)
+            with self._blocks.bound(block):
+                gl.glDrawArrays(gl.GL_POINTS,0,len(points)//RECORD_STRIDE)
             if occluders:
                 vertices = ambient_occluder_vertices(occluders, width, height,
                                                      response_radius_scale)
@@ -438,10 +447,10 @@ class QuickBubbleAmbientPoints:
         if self._vbo: gl.glDeleteBuffers(1,[self._vbo])
         if self._vao: gl.glDeleteVertexArrays(1,[self._vao])
         if self._program: delete_program(self._program)
+        self._blocks.release()
         self._fbo = self._texture = self._light_texture = self._vbo = self._vao = self._program = 0
         self._occluder_vbo = self._occluder_vao = self._occluder_program = 0
         self._target_size = (0,0)
-        self._uniforms.clear()
 
 
 __all__ = ['QuickBubbleAmbientPoints','ambient_target_size','MAX_AMBIENT_TEXTURE_EDGE']

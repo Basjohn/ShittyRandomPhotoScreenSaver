@@ -1,76 +1,83 @@
 #version 460 core
 
-in vec2 v_uv;
-out vec4 fragColor;
+layout(location = 0) in vec2 v_uv;
+layout(location = 0) out vec4 fragColor;
 
-// --- Card / overlay ---
-uniform vec2 u_resolution;
-uniform float u_dpr;
-// Framebuffer-pixel origin of this visualizer's viewport. gl_FragCoord is
-// WINDOW space, so when the compositor draws the visualizer into the
-// whole-display framebuffer at a non-zero viewport origin the raw value is
-// not card-local. Subtracting this origin restores card-local pixels.
-// A card-sized, origin-zero target simply passes (0, 0).
-uniform vec2 u_viewport_origin_px;
-// Qt Quick uses interpolated item-local coordinates. The old compositor keeps
-// the framebuffer-coordinate/card-clip branch until Phase-I deletion.
-uniform int u_quick_item_coords;
-uniform vec4 u_content_rect;  // item-local x, y, width, height
-uniform float u_visual_scale;
-uniform float u_response_radius_scale; // canonical-card radius unit (x world scale) / content height
-uniform float u_border_width;
-uniform float u_fade;
-uniform float u_time;
-uniform float u_playing;
+// Bubble's pass block (N1.6): every value the renderer sets, one std140 block at the pass-block binding
+// (SCENE3D_PASS_BLOCK_BINDING). The quad's vertex stage declares the same block, taken from this file
+// (rendering.quick.visualizer.implementations.bubble), and the renderer packs it from this declaration
+// (rendering.gl_programs.portable.block_layout_from_glsl), so the stages and the packing never disagree.
+layout(std140, binding = 18) uniform BubbleDraw {
+    mat4 uMatrix;                 // the quad: Qt's item matrix
+    vec2 uItemSize;
+    int uContentRotationQuarters;
 
-// --- Energy bands ---
-uniform float u_overall_energy;
-uniform float u_bass_energy;
-uniform float u_mid_energy;
-uniform float u_high_energy;
+    // --- Card / overlay ---
+    vec2 u_resolution;
+    float u_dpr;
+    // Framebuffer-pixel origin of this visualizer's viewport. gl_FragCoord is WINDOW space, so when the compositor
+    // draws the visualizer into the whole-display framebuffer at a non-zero viewport origin the raw value is not
+    // card-local. Subtracting this origin restores card-local pixels. A card-sized, origin-zero target passes (0, 0).
+    vec2 u_viewport_origin_px;
+    // Qt Quick uses interpolated item-local coordinates. The old compositor keeps the framebuffer-coordinate/card-clip
+    // branch until Phase-I deletion.
+    int u_quick_item_coords;
+    vec4 u_content_rect;          // item-local x, y, width, height
+    float u_visual_scale;
+    float u_response_radius_scale; // canonical-card radius unit (x world scale) / content height
+    float u_border_width;
+    float u_fade;
+    float u_time;
+    float u_playing;
 
-// --- Bubble data (max 110 bubbles) ---
-// xy = normalised position (0..1), z = radius (normalised), w = alpha
-uniform int u_bubble_count;
-// Four compact uint32 class words from the SAME authored snapshot. Unlike a
-// radius threshold, this respects original small/big identity during musical
-// pulses and temporary small-to-big promotion. No second hero draw is needed.
-uniform uvec4 u_big_class_bits;
-uniform vec4 u_bubbles_pos[110];
-// x = specular_size_factor, y = rotation (reserved), z = spec_ox, w = spec_oy
-uniform vec4 u_bubbles_extra[110];
-// Trail: 3 previous (x,y,strength) samples per bubble, oldest first
-uniform vec3 u_bubbles_trail[330];  // 110 * 3
-uniform float u_trail_strength;     // 0.0 = off, 1.0 = full
-uniform float u_tail_opacity;       // max opacity ceiling for tail gradient (0.0-0.85)
-uniform float u_trail_radial_scale;  // canonical-card wake ring geometry in current content heights
-uniform float u_viewport_stroke_extra_half_px; // cached physical half-stroke gradient (Quick only)
+    // --- Energy bands ---
+    float u_overall_energy;
+    float u_bass_energy;
+    float u_mid_energy;
+    float u_high_energy;
 
-// --- Styling ---
-uniform vec2 u_specular_dir;       // normalised direction to light source
-uniform float u_specular_reference_aspect; // canonical content at this scale/inset (Quick)
-uniform vec4 u_gradient;           // direction XY, centre-relative bias, mode (0/1/2)
-uniform vec4 u_outline_color;      // bubble outline colour (RGBA 0-1)
-uniform vec4 u_specular_color;     // specular highlight colour
-uniform vec4 u_gradient_light;     // gradient light end
-uniform vec4 u_gradient_dark;      // gradient dark end
-uniform vec4 u_pop_color;          // pop flash colour
-uniform float u_rainbow_hue_offset;
-// Optional water-decoration underlay. The transparent texture is rendered in
-// Bubble's logical content coordinates, never over the hero bubbles. Retired
-// default-off presets avoid sampling or allocating this texture entirely.
-uniform bool u_ambient_enabled;
-uniform sampler2D u_ambient_texture;
-// Particle glow: linear-light radiance from the same content-local target,
-// present only while some particle glows.
-uniform bool u_ambient_light_enabled;
-uniform sampler2D u_ambient_light;
+    // --- Bubble data (max 110 bubbles) ---
+    // xy = normalised position (0..1), z = radius (normalised), w = alpha
+    int u_bubble_count;
+    // Four compact uint32 class words from the SAME authored snapshot. Unlike a radius threshold, this respects
+    // original small/big identity during musical pulses and temporary small-to-big promotion. No second hero draw is
+    // needed.
+    uvec4 u_big_class_bits;
+    vec4 u_bubbles_pos[110];
+    // x = specular_size_factor, y = rotation (reserved), z = spec_ox, w = spec_oy
+    vec4 u_bubbles_extra[110];
+    // Trail: 3 previous (x,y,strength) samples per bubble, oldest first
+    vec3 u_bubbles_trail[330];    // 110 * 3
+    float u_trail_strength;       // 0.0 = off, 1.0 = full
+    float u_tail_opacity;         // max opacity ceiling for tail gradient (0.0-0.85)
+    float u_trail_radial_scale;   // canonical-card wake ring geometry in current content heights
+    float u_viewport_stroke_extra_half_px; // cached physical half-stroke gradient (Quick only)
 
+    // --- Styling ---
+    vec2 u_specular_dir;          // normalised direction to light source
+    float u_specular_reference_aspect; // canonical content at this scale/inset (Quick)
+    vec4 u_gradient;              // direction XY, centre-relative bias, mode (0/1/2)
+    vec4 u_outline_color;         // bubble outline colour (RGBA 0-1)
+    vec4 u_specular_color;        // specular highlight colour
+    vec4 u_gradient_light;        // gradient light end
+    vec4 u_gradient_dark;         // gradient dark end
+    vec4 u_pop_color;             // pop flash colour
+    float u_rainbow_hue_offset;
+    // Optional water-decoration underlay (u_ambient_texture below). Particle glow: linear-light radiance from the
+    // same content-local target (u_ambient_light below), present only while some particle glows.
+    bool u_ambient_enabled;
+    bool u_ambient_light_enabled;
 
-// Ghost: one history-backed afterimage ring per bubble. The existing smear
-// history owns temporal position/strength; this shader adds no second pass or clock.
-uniform float u_ghost_alpha;
-uniform float u_ghost_decay;
+    // Ghost: one history-backed afterimage ring per bubble. The existing smear history owns temporal
+    // position/strength; this shader adds no second pass or clock.
+    float u_ghost_alpha;
+    float u_ghost_decay;
+};
+// Optional water-decoration underlay. The transparent texture is rendered in Bubble's logical content coordinates,
+// never over the hero bubbles. Retired default-off presets avoid sampling or allocating this texture entirely.
+layout(binding = 0) uniform sampler2D u_ambient_texture;
+// Particle glow: linear-light radiance from the same content-local target, present only while some particle glows.
+layout(binding = 1) uniform sampler2D u_ambient_light;
 
 // =====================================================================
 // Helpers

@@ -18,8 +18,10 @@ import math
 from OpenGL import GL as gl
 
 from rendering.gl_programs.oscilloscope_program import (
+    OSC_BEAM_BLOCK,
     OSC_BEAM_FRAGMENT_SOURCE,
     OSC_BEAM_VERTEX_SOURCE,
+    OSC_GRATICULE_BLOCK,
     OSC_GRATICULE_FRAGMENT_SOURCE,
     OSC_GRATICULE_VERTEX_SOURCE,
     MAX_TRACES,
@@ -27,9 +29,10 @@ from rendering.gl_programs.oscilloscope_program import (
     RING_RADIUS,
     TRACE_POINTS,
 )
+from rendering.gl_programs.portable import pack_block
 from rendering.quick import gl_query
 from rendering.quick.scene3d.frame import item_pixel_rect
-from rendering.quick.scene3d.resources import MeshResources, warm_programs
+from rendering.quick.scene3d.resources import MeshResources, warm_pass_blocks, warm_programs
 from rendering.quick.scene3d.stream import StreamRing
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from widgets.spotify_visualizer.render_state import OscilloscopeFrame
@@ -37,10 +40,6 @@ from widgets.spotify_visualizer.render_state import OscilloscopeFrame
 from ..implementation_values import parameter, rgba
 from ..render_contract import QuickVisualizerRenderFrame
 
-_BEAM_UNIFORMS = ("uMatrix", "uField", "uScale", "uPoints", "uAlpha", "uReach", "uCore", "uPixel", "uBeam",
-                  "uGlowColour", "uGlow", "uBright", "uAnalog", "uFocus", "uHot", "uCentreFade", "uOriented",
-                  "uQuarters")
-_GRATICULE_UNIFORMS = ("uMatrix", "uField", "uColour", "uStyle", "uDivisions", "uOriented", "uQuarters")
 _GRATICULE_STYLES = {"Grid": 1, "Crosshair": 2}
 _TRACE_BYTES = TRACE_POINTS * 8
 _PADDING = 0.06               # the field's margin around the drawing (share of its smaller side)
@@ -92,7 +91,9 @@ class QuickOscilloscopeRenderer:
     mode_id = "oscilloscope"
 
     def __init__(self) -> None:
-        self._resources = MeshResources("Quick Oscilloscope")
+        # The programs' values are std140 pass blocks (N1.6), the beam's the larger.
+        self._resources = MeshResources("Quick Oscilloscope",
+                                        block_bytes=max(OSC_BEAM_BLOCK.size, OSC_GRATICULE_BLOCK.size))
         self._target = SceneTarget("Quick Oscilloscope")
         self._stream = StreamRing("Quick Oscilloscope", slots=4, slot_bytes=MAX_TRACES * _TRACE_BYTES * 4,
                                   hold_bytes=MAX_TRACES * _TRACE_BYTES)
@@ -105,9 +106,7 @@ class QuickOscilloscopeRenderer:
         """Compile both programs ahead of a first frame (shader admission)."""
         r = self._resources
         r.program("beam", OSC_BEAM_VERTEX_SOURCE, OSC_BEAM_FRAGMENT_SOURCE)
-        r.uniforms("beam", _BEAM_UNIFORMS)
         r.program("graticule", OSC_GRATICULE_VERTEX_SOURCE, OSC_GRATICULE_FRAGMENT_SOURCE)
-        r.uniforms("graticule", _GRATICULE_UNIFORMS)
 
     def prepare_step(self, frame: QuickVisualizerRenderFrame) -> bool:
         """One unit of what this activation's first visible frame would otherwise compile or
@@ -119,6 +118,8 @@ class QuickOscilloscopeRenderer:
         if not warm_programs([(r, "beam", OSC_BEAM_VERTEX_SOURCE, OSC_BEAM_FRAGMENT_SOURCE),
                               (r, "graticule", OSC_GRATICULE_VERTEX_SOURCE, OSC_GRATICULE_FRAGMENT_SOURCE),
                               *((r, *program) for program in scene_target_programs(1, bloom, False, overlay=True))]):
+            return False
+        if not warm_pass_blocks(r, item_pixel_rect(frame)[2:]):
             return False
         if not self._stream.warm():
             return False
@@ -160,7 +161,6 @@ class QuickOscilloscopeRenderer:
 
         r = self._resources
         beam_program = r.program("beam", OSC_BEAM_VERTEX_SOURCE, OSC_BEAM_FRAGMENT_SOURCE)
-        beam_uniforms = r.uniforms("beam", _BEAM_UNIFORMS)
         graticule = str(parameter(parameters, "osc_graticule"))
         with self._target.scope(frame, 1, r, overlay=presentation.content_fade, bloom=bloom):
             inherited = _blend_state()
@@ -171,38 +171,41 @@ class QuickOscilloscopeRenderer:
                 gl.glBindVertexArray(frame.quad_vao)
                 if graticule in _GRATICULE_STYLES:
                     program = r.program("graticule", OSC_GRATICULE_VERTEX_SOURCE, OSC_GRATICULE_FRAGMENT_SOURCE)
-                    uniforms = r.uniforms("graticule", _GRATICULE_UNIFORMS)
+                    values = r.values("graticule")
                     gl.glUseProgram(program)
-                    gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
-                    gl.glUniform4f(uniforms["uField"], *self._graticule_field(field, scale, display))
-                    gl.glUniform4f(uniforms["uColour"], *rgba(parameter(parameters, "osc_graticule_color")))
-                    gl.glUniform1i(uniforms["uStyle"], _GRATICULE_STYLES[graticule])
-                    gl.glUniform2f(uniforms["uDivisions"], *((10.0, 8.0) if display == "Trace" else (8.0, 8.0)))
-                    gl.glUniform2f(uniforms["uOriented"], *frame.oriented_logical_size)
-                    gl.glUniform1i(uniforms["uQuarters"], frame.content_rotation_quarters)
-                    gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+                    values["uMatrix"] = frame.matrix_values
+                    values["uField"] = tuple(self._graticule_field(field, scale, display))
+                    values["uColour"] = tuple(rgba(parameter(parameters, "osc_graticule_color")))
+                    values["uStyle"] = _GRATICULE_STYLES[graticule]
+                    values["uDivisions"] = (10.0, 8.0) if display == "Trace" else (8.0, 8.0)
+                    values["uOriented"] = tuple(frame.oriented_logical_size)
+                    values["uQuarters"] = frame.content_rotation_quarters
+                    with r.pass_blocks.bound(pack_block(OSC_GRATICULE_BLOCK, values)):
+                        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+                values = r.values("beam")
                 gl.glUseProgram(beam_program)
-                gl.glUniformMatrix4fv(beam_uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
-                gl.glUniform4f(beam_uniforms["uField"], *field)
-                gl.glUniform2f(beam_uniforms["uScale"], *scale)
-                gl.glUniform1i(beam_uniforms["uPoints"], points)
-                gl.glUniform1fv(beam_uniforms["uAlpha"], MAX_TRACES, alphas)
-                gl.glUniform1f(beam_uniforms["uReach"], reach)
-                gl.glUniform1f(beam_uniforms["uCore"], core)
-                gl.glUniform1f(beam_uniforms["uPixel"], pixel)
-                gl.glUniform3f(beam_uniforms["uBeam"], *beam)
-                gl.glUniform3f(beam_uniforms["uGlowColour"], *rgba(parameter(parameters, "osc_beam_glow_color"))[:3])
-                gl.glUniform1f(beam_uniforms["uGlow"], _GLOW_LIGHT)
-                gl.glUniform1f(beam_uniforms["uBright"], brightness)
-                gl.glUniform1f(beam_uniforms["uAnalog"], float(parameter(parameters, "osc_analog")))
-                gl.glUniform1f(beam_uniforms["uFocus"], 2.5 * length / max(1, points - 1))
-                gl.glUniform1f(beam_uniforms["uCentreFade"], 1.0 if display == "Phase" else 0.0)
+                values["uMatrix"] = frame.matrix_values
+                values["uField"] = field
+                values["uScale"] = tuple(scale)
+                values["uPoints"] = points
+                values["uAlpha"] = alphas
+                values["uReach"] = reach
+                values["uCore"] = core
+                values["uPixel"] = pixel
+                values["uBeam"] = tuple(beam)
+                values["uGlowColour"] = tuple(rgba(parameter(parameters, "osc_beam_glow_color"))[:3])
+                values["uGlow"] = _GLOW_LIGHT
+                values["uBright"] = brightness
+                values["uAnalog"] = float(parameter(parameters, "osc_analog"))
+                values["uFocus"] = 2.5 * length / max(1, points - 1)
+                values["uCentreFade"] = 1.0 if display == "Phase" else 0.0
                 # CUSTOM quarter turns: the trace is laid out in the rotated content (its field is
                 # the logical content rect) and turned into the item's physical space at the vertex.
-                gl.glUniform2f(beam_uniforms["uOriented"], *frame.oriented_logical_size)
-                gl.glUniform1i(beam_uniforms["uQuarters"], frame.content_rotation_quarters)
-                gl.glUniform1f(beam_uniforms["uHot"], min(0.6, 0.12 + 0.18 * drive + 0.3 * flare))
-                with self._stream.bound(gl.GL_SHADER_STORAGE_BUFFER, POINT_BINDING, state.points):
+                values["uOriented"] = tuple(frame.oriented_logical_size)
+                values["uQuarters"] = frame.content_rotation_quarters
+                values["uHot"] = min(0.6, 0.12 + 0.18 * drive + 0.3 * flare)
+                with r.pass_blocks.bound(pack_block(OSC_BEAM_BLOCK, values)), \
+                        self._stream.bound(gl.GL_SHADER_STORAGE_BUFFER, POINT_BINDING, state.points):
                     with self._target.emission_writes():
                         # The light combines by its maximum as the beam does: overlapping segments
                         # and afterglow traces never stack glow (the helper's default adds).

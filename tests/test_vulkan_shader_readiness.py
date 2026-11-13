@@ -275,22 +275,6 @@ _RATCHET = {
         "rendering.quick.visualizer.implementations.sphere_voxel._SHADOW_FRAGMENT_SOURCE",
         "rendering.quick.visualizer.implementations.sphere_voxel._VERTEX_SOURCE",
     ),
-    "2D modes": (
-        "rendering.gl_programs.oscilloscope_program.OSC_BEAM_FRAGMENT_SOURCE",
-        "rendering.gl_programs.oscilloscope_program.OSC_BEAM_VERTEX_SOURCE",
-        "rendering.gl_programs.oscilloscope_program.OSC_GRATICULE_FRAGMENT_SOURCE",
-        "rendering.gl_programs.oscilloscope_program.OSC_GRATICULE_VERTEX_SOURCE",
-        "rendering.quick.visualizer.implementations.bubble_ambient_gl._OCCLUDER_FRAGMENT",
-        "rendering.quick.visualizer.implementations.bubble_ambient_gl._OCCLUDER_VERTEX",
-        "rendering.quick.visualizer.implementations.bubble_ambient_gl._POINT_FRAGMENT",
-        "rendering.quick.visualizer.implementations.bubble_ambient_gl._POINT_VERTEX",
-        # N1.6: Spectrum draws with quick_visualizer_vertex_source(its block); this text stays Bubble's and Spline
-        # Curve's vertex stage (its uMatrix/uItemSize/uContentRotationQuarters set by their renderers) until N5.1.
-        "rendering.quick.visualizer.render_contract.QUICK_VISUALIZER_VERTEX_SOURCE",
-        "widgets/spotify_visualizer/shaders/bubble.frag",
-        "widgets/spotify_visualizer/shaders/devcurve.frag",
-        "widgets/spotify_visualizer/shaders/oscilloscope.frag",
-    ),
     "Quick hosts and materials": (
         "rendering.quick.visualizer.clip_host._FRAGMENT_SOURCE",
         "rendering.quick.visualizer.clip_host._VERTEX_SOURCE",

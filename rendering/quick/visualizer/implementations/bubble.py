@@ -15,7 +15,9 @@ from core.settings.bubble_gradient_semantics import (
     project_bubble_gradient,
     get_bubble_specular_shader_vector,
 )
+from rendering.gl_programs.portable import block_declaration, block_layout_from_glsl, pack_block
 from rendering.quick.render.gl_resources import compile_program, delete_program
+from rendering.quick.scene3d.uniforms import PassBlocks
 from widgets.spotify_visualizer.bubble_viewport_profile import (
     BUBBLE_RENDER_CAPACITY,
     bubble_stroke_extra_half_px,
@@ -30,8 +32,8 @@ from widgets.spotify_visualizer.bubble_ambient_geometry import ambient_sprite_sc
 from rendering.quick import gl_query
 from ..implementation_values import parameter, rgba, safe_hue
 from ..render_contract import (
-    QUICK_VISUALIZER_VERTEX_SOURCE,
     QuickVisualizerRenderFrame,
+    quick_visualizer_vertex_source,
 )
 
 
@@ -39,6 +41,19 @@ _MAX_BUBBLES = BUBBLE_RENDER_CAPACITY
 _BUBBLE_POS_SIZE = _MAX_BUBBLES * 4
 _BUBBLE_EXTRA_SIZE = _MAX_BUBBLES * 4
 _BUBBLE_TRAIL_SIZE = _MAX_BUBBLES * 3 * 3
+
+
+def _bubble_program_parts():
+    """(the quad's vertex stage, the block layout) from ``bubble.frag``'s own ``BubbleDraw`` declaration (N1.6):
+    one declaration for both stages and for the packing. (None, None) when the shader file is unavailable."""
+    fragment = load_fragment_shader("bubble")
+    if fragment is None:
+        return None, None
+    declaration = block_declaration(fragment, "BubbleDraw")
+    return quick_visualizer_vertex_source(declaration), block_layout_from_glsl(declaration)
+
+
+BUBBLE_VERTEX_SOURCE, BUBBLE_BLOCK = _bubble_program_parts()
 
 
 def _copy_uniform_float_buffer(
@@ -199,19 +214,24 @@ class QuickBubbleRenderer:
     def __init__(self) -> None:
         self._program = 0
         self._ambient_renderer = None  # lazily allocated, never if both layers are disabled
-        self._uniforms: dict[str, int] = {}
+        # The block's values as the program's uniforms held them: zero at link, kept between frames (N1.6).
+        self._values: dict[str, object] = {}
+        self._blocks = PassBlocks("Quick Bubble", block_bytes=BUBBLE_BLOCK.size if BUBBLE_BLOCK else 256)
         self._last_content_rotation_quarters: int | None = None
         # Persistent render-thread transport. Immutable authored snapshots remain
         # tuples; only the OpenGL upload representation is mutable/reused.
         self._position_uniform_buffer = np.zeros(_BUBBLE_POS_SIZE, dtype=np.float32)
         self._extra_uniform_buffer = np.zeros(_BUBBLE_EXTRA_SIZE, dtype=np.float32)
         self._trail_uniform_buffer = np.zeros(_BUBBLE_TRAIL_SIZE, dtype=np.float32)
+        # The trail samples in the block's std140 form (a vec3 element takes 16 bytes): the samples a frame uploads
+        # are copied in, the rest keep what they held, as the uniform array's elements did.
+        self._trail_block = np.zeros((_BUBBLE_TRAIL_SIZE // 3, 4), dtype=np.float32)
         self._layout_cache_key: tuple[object, ...] | None = None
         self._layout_cache: QuickBubbleLayout | None = None
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._program)
+        return bool(self._program) or self._blocks.has_resources
 
     def _gradient_parameters(self, parameters, layout: QuickBubbleLayout):
         """Named recipes retain their vectors; custom nodes use the shared physical projection."""
@@ -254,7 +274,9 @@ class QuickBubbleRenderer:
             trace.mark(FrameTraceEvent.BUBBLE_PROGRAM_READY)
 
         parameters = mode_state.parameters
-        uniforms = self._uniforms
+        # The program's values persist between frames as its uniforms did; the whole block is bound for the draw
+        # (N1.6).
+        values = self._values
         # Draw a small, content-local ambient texture BEFORE the Bubble draw.
         # The canonical Bubble shader then inserts it between the background
         # gradient and all existing wake, ghost and 110-body contributions.
@@ -280,42 +302,29 @@ class QuickBubbleRenderer:
             self._ambient_renderer.release_resources()
             self._ambient_renderer = None
         gl.glUseProgram(self._program)
-        gl.glUniform1i(uniforms["u_ambient_enabled"], int(bool(ambient_texture)))
-        gl.glUniform1i(uniforms["u_ambient_light_enabled"], int(bool(ambient_light)))
-        if ambient_texture:
-            gl.glUniform1i(uniforms["u_ambient_texture"], 0)
-        if ambient_light:
-            gl.glUniform1i(uniforms["u_ambient_light"], 1)
-        gl.glUniformMatrix4fv(
-            uniforms["uMatrix"],
-            1,
-            gl.GL_FALSE,
-            frame.matrix_values,
-        )
-        gl.glUniform2f(uniforms["uItemSize"], *frame.logical_size)
+        # The ambient samplers are bound at units 0 and 1 by the shader (layout bindings).
+        values["u_ambient_enabled"] = int(bool(ambient_texture))
+        values["u_ambient_light_enabled"] = int(bool(ambient_light))
+        values["uMatrix"] = frame.matrix_values
+        values["uItemSize"] = tuple(frame.logical_size)
         content_rotation_quarters = frame.content_rotation_quarters
         if content_rotation_quarters != self._last_content_rotation_quarters:
-            gl.glUniform1i(
-                uniforms["uContentRotationQuarters"],
-                content_rotation_quarters,
-            )
+            values["uContentRotationQuarters"] = content_rotation_quarters
             self._last_content_rotation_quarters = content_rotation_quarters
-        gl.glUniform2f(uniforms["u_resolution"], *frame.oriented_logical_size)
-        gl.glUniform1f(uniforms["u_dpr"], presentation.dpr)
-        gl.glUniform2f(uniforms["u_viewport_origin_px"], 0.0, 0.0)
-        gl.glUniform1i(uniforms["u_quick_item_coords"], 1)
-        gl.glUniform4f(uniforms["u_content_rect"], *layout.content_rect)
-        gl.glUniform1f(uniforms["u_visual_scale"], layout.effect_scale)
-        gl.glUniform1f(uniforms["u_response_radius_scale"], layout.response_radius_scale)
-        gl.glUniform1f(
-            uniforms["u_specular_reference_aspect"], layout.specular_reference_aspect,
-        )
-        gl.glUniform1f(uniforms["u_border_width"], presentation.border_width)
-        gl.glUniform1f(uniforms["u_fade"], presentation.content_fade)
-        gl.glUniform1i(uniforms["u_bubble_count"], payload.bubble_count)
+        values["u_resolution"] = tuple(frame.oriented_logical_size)
+        values["u_dpr"] = presentation.dpr
+        values["u_viewport_origin_px"] = (0.0, 0.0)
+        values["u_quick_item_coords"] = 1
+        values["u_content_rect"] = tuple(layout.content_rect)
+        values["u_visual_scale"] = layout.effect_scale
+        values["u_response_radius_scale"] = layout.response_radius_scale
+        values["u_specular_reference_aspect"] = layout.specular_reference_aspect
+        values["u_border_width"] = presentation.border_width
+        values["u_fade"] = presentation.content_fade
+        values["u_bubble_count"] = payload.bubble_count
         # Four uint32 words (16 bytes), not a per-hero uniform array or
         # additional pass. Uses true is_big classes from the same snapshot.
-        gl.glUniform4ui(uniforms["u_big_class_bits"], *payload.big_class_bits)
+        values["u_big_class_bits"] = tuple(payload.big_class_bits)
         if trace is not None:
             trace.mark(FrameTraceEvent.BUBBLE_COMMON_UNIFORMS_READY)
         if payload.bubble_count:
@@ -329,16 +338,10 @@ class QuickBubbleRenderer:
                 payload.extras,
                 active_size=payload.bubble_count * 4,
             )
-            gl.glUniform4fv(
-                uniforms["u_bubbles_pos"],
-                payload.bubble_count,
-                position_buffer,
-            )
-            gl.glUniform4fv(
-                uniforms["u_bubbles_extra"],
-                payload.bubble_count,
-                extra_buffer,
-            )
+            # vec4 arrays: the float32 buffers are already in std140 form. Elements past the count keep what an
+            # earlier frame gave them, as the uniform arrays' did (the shader reads only the first count).
+            values["u_bubbles_pos"] = position_buffer.tobytes()
+            values["u_bubbles_extra"] = extra_buffer.tobytes()
 
         trail_strength = max(
             0.0,
@@ -360,29 +363,24 @@ class QuickBubbleRenderer:
                 payload.trails,
                 active_size=payload.bubble_count * 9,
             )
-            gl.glUniform3fv(
-                uniforms["u_bubbles_trail"],
-                payload.bubble_count * 3,
-                trail_buffer,
-            )
+            samples = payload.bubble_count * 3
+            self._trail_block[:samples, :3] = trail_buffer[:samples * 3].reshape(samples, 3)
+            values["u_bubbles_trail"] = self._trail_block.tobytes()
         else:
             trail_strength = 0.0
             tail_opacity = 0.0
-        gl.glUniform1f(uniforms["u_trail_strength"], trail_strength)
-        gl.glUniform1f(uniforms["u_tail_opacity"], tail_opacity)
-        gl.glUniform1f(uniforms["u_trail_radial_scale"], layout.trail_radial_scale)
-        gl.glUniform1f(
-            uniforms["u_viewport_stroke_extra_half_px"],
-            layout.viewport_stroke_extra_half_px,
-        )
+        values["u_trail_strength"] = trail_strength
+        values["u_tail_opacity"] = tail_opacity
+        values["u_trail_radial_scale"] = layout.trail_radial_scale
+        values["u_viewport_stroke_extra_half_px"] = layout.viewport_stroke_extra_half_px
         if trace is not None:
             trace.mark(FrameTraceEvent.BUBBLE_REACTIVE_UNIFORMS_READY)
 
         specular_direction = get_bubble_specular_shader_vector(
             str(parameter(parameters, "bubble_specular_direction"))
         )
-        gl.glUniform2f(uniforms["u_specular_dir"], *specular_direction)
-        gl.glUniform4f(uniforms["u_gradient"], *self._gradient_parameters(parameters, layout))
+        values["u_specular_dir"] = tuple(specular_direction)
+        values["u_gradient"] = tuple(self._gradient_parameters(parameters, layout))
 
         color_parameters = (
             ("u_outline_color", "bubble_outline_color"),
@@ -392,10 +390,7 @@ class QuickBubbleRenderer:
             ("u_pop_color", "bubble_pop_color"),
         )
         for uniform_name, parameter_name in color_parameters:
-            gl.glUniform4f(
-                uniforms[uniform_name],
-                *rgba(parameter(parameters, parameter_name)),
-            )
+            values[uniform_name] = tuple(rgba(parameter(parameters, parameter_name)))
 
         ghost_alpha = 0.0
         if bool(parameter(parameters, "bubble_ghosting_enabled")):
@@ -406,7 +401,7 @@ class QuickBubbleRenderer:
                     float(parameter(parameters, "bubble_ghost_alpha")),
                 ),
             )
-        gl.glUniform1f(uniforms["u_ghost_alpha"], ghost_alpha)
+        values["u_ghost_alpha"] = ghost_alpha
         ghost_decay = max(
             0.1,
             min(
@@ -414,7 +409,7 @@ class QuickBubbleRenderer:
                 float(parameter(parameters, "bubble_ghost_decay")),
             ),
         )
-        gl.glUniform1f(uniforms["u_ghost_decay"], ghost_decay)
+        values["u_ghost_decay"] = ghost_decay
         hue = 0.0
         if bool(parameter(parameters, "rainbow_enabled")):
             speed = max(
@@ -425,34 +420,35 @@ class QuickBubbleRenderer:
                 ),
             )
             hue = safe_hue(mode_state.simulation_timestamp * speed * 0.1)
-        gl.glUniform1f(uniforms["u_rainbow_hue_offset"], hue)
+        values["u_rainbow_hue_offset"] = hue
         if trace is not None:
             trace.mark(FrameTraceEvent.BUBBLE_STYLE_UNIFORMS_READY)
-        gl.glBindVertexArray(frame.quad_vao)
-        if trace is not None:
-            trace.mark(FrameTraceEvent.BUBBLE_VAO_READY)
-        if ambient_texture:
-            prior_active = gl_query.get_int(gl.GL_ACTIVE_TEXTURE)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            prior_bound = gl_query.get_int(gl.GL_TEXTURE_BINDING_2D)
-            prior_light = 0
-            try:
-                gl.glBindTexture(gl.GL_TEXTURE_2D, ambient_texture)
-                if ambient_light:
-                    # Glowing particles' linear light on unit 1, for this draw only.
-                    gl.glActiveTexture(gl.GL_TEXTURE1)
-                    prior_light = gl_query.get_int(gl.GL_TEXTURE_BINDING_2D)
-                    gl.glBindTexture(gl.GL_TEXTURE_2D, ambient_light)
+        with self._blocks.bound(pack_block(BUBBLE_BLOCK, values)):
+            gl.glBindVertexArray(frame.quad_vao)
+            if trace is not None:
+                trace.mark(FrameTraceEvent.BUBBLE_VAO_READY)
+            if ambient_texture:
+                prior_active = gl_query.get_int(gl.GL_ACTIVE_TEXTURE)
+                gl.glActiveTexture(gl.GL_TEXTURE0)
+                prior_bound = gl_query.get_int(gl.GL_TEXTURE_BINDING_2D)
+                prior_light = 0
+                try:
+                    gl.glBindTexture(gl.GL_TEXTURE_2D, ambient_texture)
+                    if ambient_light:
+                        # Glowing particles' linear light on unit 1, for this draw only.
+                        gl.glActiveTexture(gl.GL_TEXTURE1)
+                        prior_light = gl_query.get_int(gl.GL_TEXTURE_BINDING_2D)
+                        gl.glBindTexture(gl.GL_TEXTURE_2D, ambient_light)
+                    gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+                finally:
+                    if ambient_light:
+                        gl.glActiveTexture(gl.GL_TEXTURE1)
+                        gl.glBindTexture(gl.GL_TEXTURE_2D, prior_light)
+                        gl.glActiveTexture(gl.GL_TEXTURE0)
+                    gl.glBindTexture(gl.GL_TEXTURE_2D, prior_bound)
+                    gl.glActiveTexture(prior_active)
+            else:
                 gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-            finally:
-                if ambient_light:
-                    gl.glActiveTexture(gl.GL_TEXTURE1)
-                    gl.glBindTexture(gl.GL_TEXTURE_2D, prior_light)
-                    gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, prior_bound)
-                gl.glActiveTexture(prior_active)
-        else:
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
         if trace is not None:
             trace.mark(FrameTraceEvent.BUBBLE_DRAW_READY)
 
@@ -460,76 +456,63 @@ class QuickBubbleRenderer:
         if self._ambient_renderer is not None:
             self._ambient_renderer.release_resources()
             self._ambient_renderer = None
-        if not self._program:
+        if not self._program and not self._blocks.has_resources:
             return
-        delete_program(self._program)
+        if self._program:
+            delete_program(self._program)
         self._program = 0
+        self._blocks.release()
         self._last_content_rotation_quarters = None
-        self._uniforms.clear()
+        self._values = {}    # a new program's values start at zero, as its uniforms did
 
     def _initialize(self) -> None:
         fragment_source = load_fragment_shader("bubble")
-        if fragment_source is None:
+        if fragment_source is None or BUBBLE_VERTEX_SOURCE is None:
             raise RuntimeError("canonical Bubble shader is unavailable")
-        program = compile_program(
-            QUICK_VISUALIZER_VERTEX_SOURCE,
-            fragment_source,
-            label="Quick Bubble",
+        written = (
+            "uMatrix",
+            "uItemSize",
+            "uContentRotationQuarters",
+            "u_resolution",
+            "u_dpr",
+            "u_viewport_origin_px",
+            "u_quick_item_coords",
+            "u_content_rect",
+            "u_visual_scale",
+            "u_response_radius_scale",
+            "u_specular_reference_aspect",
+            "u_border_width",
+            "u_fade",
+            "u_bubble_count",
+            "u_big_class_bits",
+            "u_bubbles_pos",
+            "u_bubbles_extra",
+            "u_bubbles_trail",
+            "u_trail_strength",
+            "u_tail_opacity",
+            "u_trail_radial_scale",
+            "u_viewport_stroke_extra_half_px",
+            "u_specular_dir",
+            "u_gradient",
+            "u_outline_color",
+            "u_specular_color",
+            "u_gradient_light",
+            "u_gradient_dark",
+            "u_pop_color",
+            "u_rainbow_hue_offset",
+            "u_ghost_alpha",
+            "u_ghost_decay",
+            "u_ambient_enabled",
+            "u_ambient_light_enabled",
         )
-        self._program = program
-        try:
-            required = (
-                "uMatrix",
-                "uItemSize",
-                "uContentRotationQuarters",
-                "u_resolution",
-                "u_dpr",
-                "u_viewport_origin_px",
-                "u_quick_item_coords",
-                "u_content_rect",
-                "u_visual_scale",
-                "u_response_radius_scale",
-                "u_specular_reference_aspect",
-                "u_border_width",
-                "u_fade",
-                "u_bubble_count",
-                "u_big_class_bits",
-                "u_bubbles_pos",
-                "u_bubbles_extra",
-                "u_bubbles_trail",
-                "u_trail_strength",
-                "u_tail_opacity",
-                "u_trail_radial_scale",
-                "u_viewport_stroke_extra_half_px",
-                "u_specular_dir",
-                "u_gradient",
-                "u_outline_color",
-                "u_specular_color",
-                "u_gradient_light",
-                "u_gradient_dark",
-                "u_pop_color",
-                "u_rainbow_hue_offset",
-                "u_ghost_alpha",
-                "u_ghost_decay",
-                "u_ambient_enabled",
-                "u_ambient_texture",
-                "u_ambient_light_enabled",
-                "u_ambient_light",
-            )
-            uniforms = {
-                name: int(gl.glGetUniformLocation(program, name))
-                for name in required
-            }
-            missing = [name for name in required if uniforms[name] < 0]
-            if missing:
-                raise RuntimeError(
-                    "Quick Bubble uniforms are incomplete: "
-                    + ", ".join(missing)
-                )
-            self._uniforms = uniforms
-        except Exception:
-            self.release_resources()
-            raise
+        held = {name for name, _kind in BUBBLE_BLOCK.fields}
+        missing = [name for name in written if name not in held]
+        if missing:
+            raise RuntimeError("Quick Bubble's block is incomplete: " + ", ".join(missing))
+        self._program = compile_program(BUBBLE_VERTEX_SOURCE, fragment_source, label="Quick Bubble")
+        self._values = {}
+        # The block's ring, allocated with the program (the first frame compiles it anyway).
+        self._blocks.warm()
 
 
 def create_visualizer_renderer() -> QuickBubbleRenderer:

@@ -265,6 +265,12 @@ def _seed(name: str) -> int:
     return int(hashlib.sha256(name.encode()).hexdigest()[:8], 16)
 
 
+def _uvec4_words(label: str) -> list[int]:
+    """Four 32-bit words from the name (a bit mask such as Bubble's class bits gets set and clear bits alike)."""
+    digest = hashlib.sha256(label.encode()).hexdigest()
+    return [int(digest[8 * k:8 * (k + 1)], 16) for k in range(4)]
+
+
 # A declaration starts a line or follows another on it (``in vec2 vUv; in vec2 vFace;``).
 _IN = re.compile(r"(?:^|(?<=;))[ \t]*(layout\s*\([^)]*\)\s*)?((?:flat|smooth|noperspective|centroid)\s+)*in\s+(\w+)\s+"
                  r"(\w+)\s*(?:\[\s*(\d+)\s*\])?\s*;", re.M)
@@ -480,6 +486,8 @@ def _set_uniforms(program: int, inputs: _PairInputs, integer: int = 1) -> str | 
                 (gl.glUniform2ui if kind == gl.GL_UNSIGNED_INT_VEC2 else gl.glUniform2i)(location, *size2)
             elif kind in (gl.GL_INT_VEC4,):
                 gl.glUniform4i(location, 0, 0, *PAIR_SIZE)
+            elif kind == gl.GL_UNSIGNED_INT_VEC4:
+                gl.glUniform4ui(location, *_uvec4_words(label))
             else:
                 return f"uniform {name} of type {kind} has no generated value"
     return None
@@ -508,6 +516,8 @@ def _pair_value(label: str, kind: int, integer: int):
         return ("I" if kind == gl.GL_UNSIGNED_INT_VEC2 else "i"), list(size2)
     if kind == gl.GL_INT_VEC4:
         return "i", [0, 0, *PAIR_SIZE]
+    if kind == gl.GL_UNSIGNED_INT_VEC4:
+        return "I", _uvec4_words(label)
     return None
 
 
@@ -729,7 +739,10 @@ def compare(before: Path, after: Path) -> int:
         return items
 
     a, b = load(before), load(after)
-    identical = True
+    # Nothing in common (a wrong folder, or a summary file given for its folder) is no proof of identity.
+    identical = bool(set(a) & set(b))
+    if not identical:
+        print(f"nothing to compare: {len(a)} items in {before}, {len(b)} in {after} (give the recorded folders)")
     for key in sorted(set(a) | set(b)):
         if key not in a or key not in b:
             print(f"{key}: only {'before' if key in a else 'after'}")
