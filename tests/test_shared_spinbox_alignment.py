@@ -10,6 +10,7 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDoubleSpinBox, QLineEdit, QSpinBox, QWidget
 
+from tests._invisible_windows import keep_off_screen
 from ui.tabs import shared_styles
 
 
@@ -29,7 +30,9 @@ def test_shared_settings_spinbox_value_is_centered(qt_app, spin_class, skin_firs
         host.setStyleSheet(shared_styles.SPINBOX_STYLE)
 
     try:
+        keep_off_screen(host)
         host.show()
+        keep_off_screen(spin.window())      # the same host: the guard reads each show's own top-level
         spin.show()
         spin.ensurePolished()
         qt_app.processEvents()
