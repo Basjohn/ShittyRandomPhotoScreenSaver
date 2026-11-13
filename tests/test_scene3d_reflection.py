@@ -10,7 +10,7 @@ from OpenGL import GL as gl
 from core.settings.framed_camera import perspective_matrix
 from rendering.gl_programs.reflection import PLANAR_REFLECTION_GLSL, mirror_view
 from rendering.quick import gl_query
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.quick.scene3d.reflection import PlanarReflection
 from tools.labs.render_target import OffscreenRenderTarget
 
@@ -62,7 +62,7 @@ def gl_scene(qt_app):
     with target.current():
         reflection.release()
         gl.glDeleteBuffers(1, vbo); gl.glDeleteVertexArrays(1, vao)
-        gl.glDeleteProgram(flat); gl.glDeleteProgram(floor)
+        delete_program(flat); delete_program(floor)
     target.close()
 
 
@@ -164,7 +164,7 @@ def test_rough_reflection_stretches_a_highlight_without_repeating_it(gl_scene):
         body=np.where(_streak_profile(result,W//2)>2)[0]
         assert len(body)>20 and np.diff(body).max()==1, body
     finally:
-        gl.glDeleteProgram(program)
+        delete_program(program)
 
 
 @pytest.mark.parametrize('scale', (1,2))
@@ -218,7 +218,7 @@ def _receive(target, vbo, reflection, fragment, look, contact=(0., 0., 0., 0.)):
         draw(program, vbo, quad_vertices((-1., -1., 0.), (1., 1., 0.)), np.identity(4))
         return target.read_rgba()[:, :, 0].astype(int)
     finally:
-        gl.glDeleteProgram(program)
+        delete_program(program)
 
 
 def _upload(reflection, highlights):

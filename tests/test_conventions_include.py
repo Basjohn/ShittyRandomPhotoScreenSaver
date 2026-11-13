@@ -479,15 +479,58 @@ def test_the_native_cores_mapping_reads_the_clip_ndc_flip_from_the_block(qt_app)
         context.close()
 
 
+# The files that may name ``glDeleteProgram`` in code: the owner itself, and a Mesa/EGL link gate that binds its own GL
+# entry points through ctypes on a context no Qt or PyOpenGL code ever sees (it imports neither, by design).
+_RAW_PROGRAM_DELETE_ALLOWED = frozenset({
+    "rendering/quick/render/gl_resources.py",
+    "tools/visualizer_replay/eb_shaft_mesa_compile.py",
+})
+
+
+def _raw_program_deletes(root, trees=("rendering", "tests", "tools")) -> list[str]:
+    """Every ``glDeleteProgram`` named in code (a call or a reference handed to a cleanup), by tokens so strings and
+    comments are not code; a fake GL's own ``def glDeleteProgram`` is a definition, not a delete."""
+    import io
+    import tokenize
+
+    found = []
+    for tree in trees:
+        for path in sorted((root / tree).rglob("*.py")):
+            relative = path.relative_to(root).as_posix()
+            if relative in _RAW_PROGRAM_DELETE_ALLOWED or "glDeleteProgram" not in (text := path.read_text("utf-8")):
+                continue
+            previous = None
+            for token in tokenize.generate_tokens(io.StringIO(text).readline):
+                if token.type == tokenize.NAME and token.string == "glDeleteProgram" and previous != "def":
+                    found.append(f"{relative}:{token.start[0]}")
+                if token.type == tokenize.NAME:
+                    previous = token.string
+                elif token.type not in (tokenize.NL, tokenize.NEWLINE, tokenize.COMMENT, tokenize.INDENT,
+                                        tokenize.DEDENT):
+                    previous = token.string
+    return found
+
+
 def test_every_program_linked_through_gl_resources_is_deleted_through_delete_program():
     """Whether a program holds the block is decided at link by the driver, so no owner can know that a raw
-    ``glDeleteProgram`` is safe: outside ``gl_resources`` itself nothing in ``rendering/`` deletes a program raw."""
+    ``glDeleteProgram`` is safe (a program that holds it leaves a stale hold): outside ``gl_resources`` nothing in
+    ``rendering/``, ``tests/`` or ``tools/`` deletes a program raw, as a call or as a function handed to a cleanup."""
     from pathlib import Path
 
-    root = Path(__file__).resolve().parents[1] / "rendering"
-    owner = root / "quick" / "render" / "gl_resources.py"
-    raw = re.compile(r"\bglDeleteProgram\s*\(")
-    found = [f"{path.relative_to(root.parent)}:{number}"
-             for path in sorted(root.rglob("*.py")) if path != owner
-             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1) if raw.search(line)]
-    assert found == []
+    root = Path(__file__).resolve().parents[1]
+    for allowed in _RAW_PROGRAM_DELETE_ALLOWED:
+        assert (root / allowed).is_file(), f"{allowed} is gone: drop it from the allowed files"
+    assert _raw_program_deletes(root) == []
+
+
+def test_the_raw_program_delete_scan_sees_calls_and_references_but_not_strings_or_fake_definitions(tmp_path):
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "probe.py").write_text(
+        "from OpenGL import GL as gl\n"
+        "class FakeGL:\n"
+        "    def glDeleteProgram(self, program):\n"
+        "        pass\n"
+        "NOTE = 'gl.glDeleteProgram(program) is banned'  # glDeleteProgram(program)\n"
+        "gl.glDeleteProgram(7)\n"
+        "cleanup.callback(gl.glDeleteProgram, 7)\n", encoding="utf-8")
+    assert _raw_program_deletes(tmp_path, trees=("tests",)) == ["tests/probe.py:6", "tests/probe.py:7"]

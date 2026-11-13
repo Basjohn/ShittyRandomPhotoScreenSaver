@@ -2,6 +2,7 @@
 from core.constants.extruded_bubble_world import WAKE_STRIDE
 import numpy as np
 import pytest
+from rendering.quick.render.gl_resources import delete_program
 
 
 @pytest.mark.qt
@@ -112,7 +113,7 @@ void main() {
         gl.glDisable(gl.GL_RASTERIZER_DISCARD)
         for binding in (6,7):gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,binding,0)
         if buffers:gl.glDeleteBuffers(len(buffers),buffers)
-        if program:gl.glDeleteProgram(program)
+        if program:delete_program(program)
         target.close()
 
 
@@ -159,7 +160,7 @@ void main(){speckInstance();results[gl_InstanceID]=vec4(aPoint.xyz,aLook.x);gl_P
     finally:
         gl.glDisable(gl.GL_RASTERIZER_DISCARD);gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,6,0)
         if buffer:gl.glDeleteBuffers(1,[buffer])
-        if program:gl.glDeleteProgram(program)
+        if program:delete_program(program)
         target.close()
 
 
@@ -217,7 +218,7 @@ def test_snow_fragment_honours_fractional_population_opacity(qt_app):
         assert 0 < energies[1] < energies[2]
         assert gl.glGetError() == gl.GL_NO_ERROR
     finally:
-        if program: gl.glDeleteProgram(program)
+        if program: delete_program(program)
         if texture: gl.glDeleteTextures([texture])
         target.close()
 
@@ -273,7 +274,7 @@ void main(){vOpacity=1.0;beadInstance();results[gl_InstanceID]=aSphere;gl_Positi
         gl.glDisable(gl.GL_RASTERIZER_DISCARD)
         for binding in (6,7):gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,binding,0)
         if buffers:gl.glDeleteBuffers(len(buffers),buffers)
-        if program:gl.glDeleteProgram(program)
+        if program:delete_program(program)
         target.close()
 
 
@@ -340,5 +341,5 @@ void main() {
         if buffer:
             gl.glDeleteBuffers(1, [buffer])
         if program:
-            gl.glDeleteProgram(program)
+            delete_program(program)
         target.close()

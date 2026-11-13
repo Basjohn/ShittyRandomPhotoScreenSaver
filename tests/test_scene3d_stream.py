@@ -14,7 +14,7 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs.scene3d import Scene3DStorageLayout
 from rendering.quick import gl_query
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.quick.scene3d import stream as stream_module
 from rendering.quick.scene3d.stream import StreamRing
 
@@ -165,7 +165,7 @@ def test_the_driver_reads_our_std430_records_through_the_ring(context, layout):
                 assert np.allclose(pixels[row, column, : expected.size], expected), (row, field)
     finally:
         canvas.close()
-        gl.glDeleteProgram(program)
+        delete_program(program)
         ring.release()
 
 
@@ -259,7 +259,7 @@ def test_slots_are_reused_only_after_their_fence_and_every_draw_reads_its_own_va
     finally:
         monkeypatch.undo()
         canvas.close()
-        gl.glDeleteProgram(program)
+        delete_program(program)
         ring.release()
 
 

@@ -16,6 +16,7 @@ from rendering.quick.scene3d.frame import item_pixel_rect
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.target import SceneTarget
 from tools.transition_contact_sheet import TransitionCapture
+from rendering.quick.render.gl_resources import delete_program
 
 pytestmark = pytest.mark.qt
 
@@ -328,7 +329,7 @@ def test_an_overlays_smoothed_edges_blend_without_a_dark_fringe(capture):
         assert pixels[..., 0].min() >= 253 and pixels[..., 2].min() >= 253
     finally:
         gl.glDisable(gl.GL_BLEND)
-        gl.glDeleteProgram(program)
+        delete_program(program)
         target.release()
         resources.release_resources()
 
@@ -431,8 +432,8 @@ def test_an_overlays_bloom_glows_only_from_emitted_light_and_never_darkens(captu
         assert programs <= set(resources._programs)
     finally:
         gl.glDisable(gl.GL_BLEND)
-        gl.glDeleteProgram(emitting)
-        gl.glDeleteProgram(plain)
+        delete_program(emitting)
+        delete_program(plain)
         target.release()
         resources.release_resources()
     assert not target.has_resources
@@ -543,8 +544,8 @@ def test_a_depth_texture_target_draws_the_same_and_its_background_holds_colour_a
         assert abs(int(left[0]) - 0) <= 1 and abs(int(left[1]) - round(0.2 * 255)) <= 1     # red, depth 0.2
         assert abs(int(right[0]) - 255) <= 1 and abs(int(right[1]) - round(0.6 * 255)) <= 1  # blue, depth 0.6
     finally:
-        gl.glDeleteProgram(flat)
-        gl.glDeleteProgram(read_back)
+        delete_program(flat)
+        delete_program(read_back)
         target.release()
         resources.release_resources()
     assert not target.has_resources
@@ -632,8 +633,8 @@ def test_transparent_layers_give_the_same_picture_in_either_order_and_respect_op
         assert both[0] > both[2] > 40                              # both: the nearer red outweighs the blue
         assert abs(int(wall[1]) - 255) <= 2 and wall[0] < 5       # the wall hides the yellow layer behind it
     finally:
-        gl.glDeleteProgram(flat)
-        gl.glDeleteProgram(glass)
+        delete_program(flat)
+        delete_program(glass)
         target.release()
         resources.release_resources()
 
@@ -691,7 +692,7 @@ def test_an_hdr_target_keeps_light_brighter_than_white_and_tone_maps_it_once(cap
         assert levels[0] < levels[1] < levels[2] < levels[3] <= 255
         assert levels[2] < 250
     finally:
-        gl.glDeleteProgram(flat)
+        delete_program(flat)
         target.release()
         resources.release_resources()
 
@@ -771,8 +772,8 @@ def test_bright_transparent_layers_at_the_near_plane_stay_finite_and_order_indep
         assert set(resources._programs) == {key for key, *_ in scene_target_programs(
             samples, True, False, overlay=True, background=True, oit=True, hdr=True)}
     finally:
-        gl.glDeleteProgram(flat)
-        gl.glDeleteProgram(glass)
+        delete_program(flat)
+        delete_program(glass)
         target.release()
         resources.release_resources()
 

@@ -6,7 +6,7 @@ from rendering.gl_error_policy import disable_per_call_gl_error_checking
 disable_per_call_gl_error_checking()
 from OpenGL import GL as gl
 from rendering.gl_programs.lighting import SOFT_LIGHT_GLSL
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from tools.labs.render_target import OffscreenRenderTarget
 
 pytestmark=pytest.mark.qt
@@ -50,5 +50,5 @@ def test_soft_irradiance_follows_source_position_normal_and_distance(qt_app):
             assert not pixels[:,:,1:].any()
     finally:
         gl.glDeleteVertexArrays(1,[vao])
-        gl.glDeleteProgram(program)
+        delete_program(program)
         target.close()

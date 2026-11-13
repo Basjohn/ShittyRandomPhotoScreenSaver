@@ -14,6 +14,7 @@ from rendering.quick.scene3d.heightfield import HeightfieldTexture
 from rendering.quick.scene3d.stream import StreamRing
 from tests.test_scene3d_heightfield import _VERTEX
 from tools.transition_contact_sheet import TransitionCapture
+from rendering.quick.render.gl_resources import delete_program
 
 pytestmark = pytest.mark.qt
 
@@ -116,7 +117,7 @@ class _SurfaceProbe:
         gl.glDeleteFramebuffers(1, [self.fbo])
         gl.glDeleteTextures([self.target])
         gl.glDeleteVertexArrays(1, [self.vao])
-        gl.glDeleteProgram(self.program)
+        delete_program(self.program)
         self.capture.close()
 
 

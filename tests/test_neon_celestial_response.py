@@ -8,6 +8,7 @@ from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_mode_settings import require_mode_settings, Toggle
 from rendering.gl_programs.neon_celestial import NEON_CELESTIAL_GLSL
 from tools.transition_contact_sheet import TransitionCapture
+from rendering.quick.render.gl_resources import delete_program
 
 
 @pytest.mark.qt
@@ -127,5 +128,5 @@ void main(){
         assert full[20:44,20:44].max()==0. # centre stays untouched
     finally:
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER,0)
-        gl.glDeleteFramebuffers(1,[fbo]);gl.glDeleteTextures([texture]);gl.glDeleteVertexArrays(1,[vao]);gl.glDeleteProgram(program)
+        gl.glDeleteFramebuffers(1,[fbo]);gl.glDeleteTextures([texture]);gl.glDeleteVertexArrays(1,[vao]);delete_program(program)
         capture.close()

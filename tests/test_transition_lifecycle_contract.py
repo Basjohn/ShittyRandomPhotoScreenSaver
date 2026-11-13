@@ -17,6 +17,7 @@ import pytest
 
 from tools.gl_object_ledger import GLObjectLedger
 from tools.release_media import catalogue
+from rendering.quick.render.gl_resources import delete_program
 
 pytestmark = pytest.mark.qt
 
@@ -71,7 +72,7 @@ def test_the_ledger_sees_creates_and_deletes(qt_app):
             assert ledger.live() == {"textures": 2, "buffers": 1, "programs": 1}
             gl.glDeleteTextures(2, textures)
             gl.glDeleteBuffers(1, [buffer])
-            gl.glDeleteProgram(program)
+            delete_program(program)
             assert not ledger.live() and ledger.created["textures"] == 2
         assert gl.glGenTextures.__name__ != "call"          # uninstalled on exit
     finally:

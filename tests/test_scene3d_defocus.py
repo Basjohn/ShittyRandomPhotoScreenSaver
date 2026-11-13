@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from OpenGL import GL as gl
 
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.quick.scene3d.defocus import SCENE_DEFOCUS_GLSL, DefocusLayer
 from tools.transition_contact_sheet import TransitionCapture
 
@@ -235,5 +235,5 @@ def test_small_circles_under_a_large_budget_keep_continuous_light_instead_of_a_m
         assert np.isfinite(profile).all() and profile.mean()>30.  # most source light survives
         assert profile.std()/profile.mean()<.03  # reject the source-proved 8px grid
     finally:
-        layer.release();gl.glDeleteProgram(program)
+        layer.release();delete_program(program)
         gl.glDeleteFramebuffers(1,[fbo]);gl.glDeleteTextures(1,[texture])

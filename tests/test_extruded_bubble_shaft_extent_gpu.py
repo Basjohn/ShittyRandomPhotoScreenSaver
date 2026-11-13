@@ -3,6 +3,7 @@ import math
 
 import numpy as np
 import pytest
+from rendering.quick.render.gl_resources import delete_program
 
 
 def _smooth(a, b, x):
@@ -93,7 +94,7 @@ void main() {
         if buffers:
             gl.glDeleteBuffers(len(buffers), buffers)
         if program:
-            gl.glDeleteProgram(program)
+            delete_program(program)
         target.close()
 
 

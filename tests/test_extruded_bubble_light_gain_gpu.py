@@ -1,6 +1,7 @@
 """Native Light Strength authority; distance falloff/emitter size are separate gates."""
 import numpy as np
 import pytest
+from rendering.quick.render.gl_resources import delete_program
 
 
 @pytest.fixture
@@ -70,7 +71,7 @@ void main(){colour=vec4(vColour,1.);}
         if texture:
             gl.glDeleteTextures([texture])
         if program:
-            gl.glDeleteProgram(program)
+            delete_program(program)
         target.close()
 
 

@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from rendering.quick.render.gl_resources import delete_program
 
 
 @pytest.mark.qt
@@ -59,5 +60,5 @@ def test_default_beam_matches_the_pre_acceptance_shader_in_both_light_types(qt_a
         assert gl.glGetError()==gl.GL_NO_ERROR
     finally:
         if texture:gl.glDeleteTextures([texture])
-        for program in programs:gl.glDeleteProgram(program)
+        for program in programs:delete_program(program)
         target.close()

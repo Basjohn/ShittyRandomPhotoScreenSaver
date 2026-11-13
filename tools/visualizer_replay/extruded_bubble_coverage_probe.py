@@ -14,7 +14,7 @@ if not disable_per_call_gl_error_checking():
     raise RuntimeError("GL imported before production policy")
 from OpenGL import GL as gl
 from tools.transition_contact_sheet import TransitionCapture
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.gl_programs.extruded_bubble_program import BUBBLE_VERTEX, BUBBLE_FRAGMENT, CLUSTER_VERTEX, CLUSTER_FRAGMENT
 from rendering.gl_programs.extruded_bubble_scene import camera
 from rendering.quick.visualizer.implementations.extruded_bubble import _near_spread
@@ -108,7 +108,7 @@ try:
         raise RuntimeError('source changed during coverage probe; reject this output')
     print(json.dumps(metadata,indent=2))
 finally:
-    for program in programs:gl.glDeleteProgram(program)
+    for program in programs:delete_program(program)
     if 'vbo' in locals():gl.glDeleteBuffers(1,[vbo])
     if 'vao' in locals():gl.glDeleteVertexArrays(1,[vao])
     if objects:gl.glDeleteTextures(objects)

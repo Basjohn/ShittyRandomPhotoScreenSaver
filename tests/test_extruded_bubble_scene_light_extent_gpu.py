@@ -7,6 +7,7 @@ import math
 
 import numpy as np
 import pytest
+from rendering.quick.render.gl_resources import delete_program
 
 pytestmark = pytest.mark.qt
 
@@ -61,7 +62,7 @@ void main(){ vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2)); vNdc=p
         yield at
     finally:
         gl.glDeleteTextures([texture])
-        gl.glDeleteProgram(program)
+        delete_program(program)
         target.close()
 
 
@@ -149,7 +150,7 @@ def test_sunlit_scene_shafts_stay_visible_from_the_side(qt_app):
                 gl.glUniform4f(loc(name), 0., 0., 0., 0.)
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             results.append(float(np.frombuffer(gl.glReadPixels(0, 0, 1, 1, gl.GL_RGBA, gl.GL_FLOAT), dtype='f4')[0]))
-            gl.glDeleteProgram(program)
+            delete_program(program)
         assert gl.glGetError() == gl.GL_NO_ERROR
     finally:
         gl.glDeleteTextures([texture])

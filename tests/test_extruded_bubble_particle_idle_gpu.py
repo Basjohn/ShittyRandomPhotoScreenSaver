@@ -1,6 +1,7 @@
 """Native particle stages: quiet size contraction must not erase subpixel colour."""
 import numpy as np
 import pytest
+from rendering.quick.render.gl_resources import delete_program
 
 
 @pytest.mark.qt
@@ -52,7 +53,7 @@ void main(){
         assert gl.glGetError()==gl.GL_NO_ERROR
     finally:
         if textures:gl.glDeleteTextures(textures)
-        if program:gl.glDeleteProgram(program)
+        if program:delete_program(program)
         target.close()
 
 
@@ -137,7 +138,7 @@ def particle_stage_capture(qt_app):
         if textures:
             gl.glDeleteTextures(textures)
         for program in programs:
-            gl.glDeleteProgram(program)
+            delete_program(program)
         if vao:
             gl.glDeleteVertexArrays(1, [vao])
         target.close()

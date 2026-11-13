@@ -19,6 +19,7 @@ from rendering.gl_programs.heightfield_glsl import HEIGHTFIELD_GLSL, HEIGHTFIELD
 from rendering.quick.scene3d import heightfield as texture_module
 from rendering.quick.scene3d.heightfield import HeightfieldTexture
 from tools.transition_contact_sheet import TransitionCapture
+from rendering.quick.render.gl_resources import delete_program
 
 
 pytestmark = pytest.mark.qt
@@ -76,7 +77,7 @@ def _draw_heightfield_probe(capture, texture: HeightfieldTexture, size: int, wid
         gl.glDeleteFramebuffers(1, [fbo])
         gl.glDeleteTextures([colour])
         gl.glDeleteVertexArrays(1, [vao])
-        gl.glDeleteProgram(program)
+        delete_program(program)
 
 
 def _draw_custom_probe(texture: HeightfieldTexture, size: int, width: int, height: int,
@@ -111,7 +112,7 @@ def _draw_custom_probe(texture: HeightfieldTexture, size: int, width: int, heigh
         gl.glDeleteFramebuffers(1, [fbo])
         gl.glDeleteTextures([colour])
         gl.glDeleteVertexArrays(1, [vao])
-        gl.glDeleteProgram(program)
+        delete_program(program)
 
 
 def _curve_probe_fragment(width: int, height: int) -> str:

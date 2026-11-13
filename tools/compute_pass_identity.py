@@ -846,7 +846,7 @@ def _paired_propagation_field(mod, target, size):
 
 def _paired_fog(mod, target, grid):
     from OpenGL import GL as gl
-    from rendering.quick.render.gl_resources import compile_compute_program
+    from rendering.quick.render.gl_resources import compile_compute_program, delete_program
     volume = mod("rendering.quick.scene3d.fog_volume").FogVolume("paired")
     source = mod("rendering.gl_programs.fog_volume").fog_inject_source(_FOG_MEDIUM)
     program = compile_compute_program(source, label="paired fog medium")
@@ -860,7 +860,7 @@ def _paired_fog(mod, target, grid):
     def release():
         gl.glUseProgram(0)
         volume.release()
-        gl.glDeleteProgram(program)
+        delete_program(program)
     return run, release
 
 

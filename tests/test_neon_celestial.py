@@ -12,6 +12,7 @@ from rendering.gl_programs.neon_celestial import (
     basin_body_position,
 )
 from tools.transition_contact_sheet import TransitionCapture
+from rendering.quick.render.gl_resources import delete_program
 
 
 pytestmark = pytest.mark.qt
@@ -359,5 +360,5 @@ def test_gl_body_sphere_alpha_sun_gate_moon_phase_and_independent_sky(qt_app):
         gl.glDeleteFramebuffers(1, [fbo])
         gl.glDeleteTextures([colour])
         gl.glDeleteVertexArrays(1, [vao])
-        gl.glDeleteProgram(program)
+        delete_program(program)
         capture.close()

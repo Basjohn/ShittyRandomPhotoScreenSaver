@@ -12,6 +12,7 @@ import pytest
 from OpenGL import GL as gl
 
 from rendering.gl_programs import scene3d_spheres as spheres
+from rendering.quick.render.gl_resources import delete_program
 
 pytestmark = pytest.mark.qt
 
@@ -103,7 +104,7 @@ class _Scene:
 
     def close(self):
         assert self.capture.context.makeCurrent(self.capture.surface)
-        gl.glDeleteProgram(self.program)
+        delete_program(self.program)
         gl.glDeleteRenderbuffers(1, [self.depth])
         self.capture.close()
 
@@ -220,7 +221,7 @@ def _cluster_picture(scene, members, blend):
         raw = gl.glReadPixels(0, 0, WIDTH, HEIGHT, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
         return np.frombuffer(bytes(raw), dtype=np.uint8).reshape(HEIGHT, WIDTH, 4)
     finally:
-        gl.glDeleteProgram(program)
+        delete_program(program)
 
 
 def test_touching_spheres_join_with_a_smooth_neck_and_none_without_a_blend(scene):

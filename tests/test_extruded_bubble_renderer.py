@@ -12,6 +12,7 @@ import pytest
 
 from rendering.gl_programs import extruded_bubble_scene as scene
 from tests._visualizer_frozen_settings import frozen_visualizer_settings
+from rendering.quick.render.gl_resources import delete_program
 
 SETTINGS = frozen_visualizer_settings("extruded_bubble")
 
@@ -502,7 +503,7 @@ def test_an_instance_of_no_size_draws_no_quad(qt_app, stage):
         assert lit(0.0) == 0
         gl.glBindVertexArray(0)
         gl.glDeleteVertexArrays(1, [vao])
-        gl.glDeleteProgram(program)
+        delete_program(program)
     finally:
         capture.close()
 

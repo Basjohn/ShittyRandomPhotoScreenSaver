@@ -30,7 +30,7 @@ from rendering.quick.scene3d.defocus import SCENE_DEFOCUS_GLSL, DefocusLayer
 from rendering.quick.scene3d.probe import SCENE3D_PROBE_GLSL, SceneProbe
 from rendering.gl_programs.scene3d_spheres import SCENE3D_SPHERES_GLSL, SCENE3D_SPHERES_VERTEX_GLSL
 from rendering.gl_programs.scene3d_water import SCENE3D_WATER_GLSL, water_sun_below
-from rendering.quick.render.gl_resources import compile_program
+from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.target import SCENE_OIT_GLSL, SceneTarget
 from tools.labs.render_target import OffscreenRenderTarget
@@ -906,7 +906,7 @@ def main():
 
         def owned_program(*args, **kwargs):
             program = compile_program(*args, **kwargs)
-            cleanup.callback(gl.glDeleteProgram, program)
+            cleanup.callback(delete_program, program)
             return program
 
         PROBE = SceneProbe("bubble lab probe", PROBE_SIZE)

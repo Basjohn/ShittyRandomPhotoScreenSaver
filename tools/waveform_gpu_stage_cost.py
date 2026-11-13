@@ -233,7 +233,7 @@ def measure(clip: Path, *, preset: int, size: tuple[int, int], frames: int, roun
     from OpenGL import GL as gl
     from OpenGL.raw.GL.VERSION import GL_3_3 as raw33
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
-    from rendering.quick.render.gl_resources import compile_program
+    from rendering.quick.render.gl_resources import compile_program, delete_program
     from tools.bench_stability import SystemSampler, summarise_environment
     from tools.labs.render_target import OffscreenRenderTarget
 
@@ -340,7 +340,7 @@ def measure(clip: Path, *, preset: int, size: tuple[int, int], frames: int, roun
                 conditions.append(sampler.sample())
         finally:
             host.release_resources()
-            gl.glDeleteProgram(control_program)
+            delete_program(control_program)
             gl.glDeleteVertexArrays(1, [control_vao])
             gl.glDeleteQueries(1, [query])
     target.close()
