@@ -33,8 +33,10 @@ import math
 from OpenGL import GL as gl
 
 from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
+from rendering.gl_programs.portable import portable_program
 from rendering.quick import gl_query
 from rendering.quick.render.gl_resources import compile_program, delete_program
+from rendering.quick.scene3d.uniforms import PassBlocks
 
 DEFOCUS_TAPS = 64
 _FINE_TAPS = 32
@@ -210,6 +212,16 @@ void main() {
 }
 """
 
+# N1.6 (``portable_program``): each program's values in one std140 pass block, the layer at units 0 (colour) and 1
+# (circle), the clipped read level at unit 2; ``composite`` packs and binds them. The fullscreen vertex reads no value.
+_VERTEX, _, _ = portable_program(_VERTEX, (), block="DefocusVertex", samplers={})
+_, (_GATHER,), _GATHER_BLOCK = portable_program(None, (_GATHER,), block="DefocusGather",
+                                                samplers={"uColour": 0, "uCircle": 1, "uBelow": 2})
+_, (_CLIP,), _CLIP_BLOCK = portable_program(None, (_CLIP,), block="DefocusClip", samplers={"uColour": 0, "uCircle": 1})
+_SPRITE_VERTEX, (_SPRITE_FRAGMENT,), _SPRITE_BLOCK = portable_program(_SPRITE_VERTEX, (_SPRITE_FRAGMENT,),
+                                                                      block="DefocusSprites",
+                                                                      samplers={"uColour": 0, "uCircle": 1})
+
 
 class DefocusLayer:
     """A near layer drawn sharp with each pixel's circle of confusion, then spread over those circles."""
@@ -223,7 +235,8 @@ class DefocusLayer:
         self._program = 0
         self._sprites = 0
         self._clip = 0
-        self._locations: dict[tuple[int, str], int] = {}
+        # The three composite passes' values (N1.6), one copy each per composite; allocated with the last program.
+        self._blocks = PassBlocks(label, block_bytes=max(_GATHER_BLOCK.size, _CLIP_BLOCK.size, _SPRITE_BLOCK.size))
         self._below = 0
         self._below_fbo = 0
         self._below_size = (0, 0)
@@ -232,7 +245,7 @@ class DefocusLayer:
 
     def has_resources(self) -> bool:
         return bool(self._colour or self._circle or self._fbo or self._program or self._sprites or self._clip
-                    or self._below or self._below_fbo or self._vao)
+                    or self._below or self._below_fbo or self._vao or self._blocks.has_resources)
 
     def _texture(self, internal, width, height) -> int:
         name = (ctypes.c_uint * 1)()
@@ -252,7 +265,8 @@ class DefocusLayer:
             pass
 
     def _compile_next(self) -> bool:
-        """Compile the next of the layer's three programs (the vertex array with the last); True once all exist."""
+        """Compile the next of the layer's three programs (the vertex array and the pass blocks' ring with the last);
+        True once all exist."""
         if not self._program:
             self._program = compile_program(_VERTEX, _GATHER, label=f"{self.label} defocus")
             return False
@@ -264,6 +278,7 @@ class DefocusLayer:
             name = (ctypes.c_uint * 1)()
             gl.glCreateVertexArrays(1, name)
             self._vao = int(name[0])
+            self._blocks.warm()
             return False
         return True
 
@@ -348,14 +363,6 @@ class DefocusLayer:
         (gl.glEnable if depth_test else gl.glDisable)(gl.GL_DEPTH_TEST)
         self._saved = None
 
-    def _location(self, program: int, name: str) -> int:
-        """A uniform's location, looked up once per linked program (they are fixed at link time)."""
-        key = (program, name)
-        location = self._locations.get(key)
-        if location is None:
-            location = self._locations[key] = int(gl.glGetUniformLocation(program, name))
-        return location
-
     def composite(self, max_radius: float, highlight: float = 0.25) -> None:
         """Spread the layer over its circles and lay it over the bound framebuffer (premultiplied over); light above
         ``highlight`` (texel-averaged luminance) and its surroundings becomes round discs."""
@@ -389,12 +396,10 @@ class DefocusLayer:
             gl.glViewport(0, 0, width, height)
             gl.glDisablei(gl.GL_BLEND, 0)
             gl.glUseProgram(self._clip)
-            gl.glUniform1i(self._location(self._clip, "uColour"), 0)
-            gl.glUniform1i(self._location(self._clip, "uCircle"), 1)
-            gl.glUniform1i(self._location(self._clip, "uLevel"), level)
-            gl.glUniform1f(self._location(self._clip, "uHighlight"), float(highlight))
-            gl.glUniform1f(self._location(self._clip, "uMaxRadius"), float(max_radius))
-            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            # Each pass's values are its pass block (N1.6); the samplers state their units in the source.
+            with self._blocks.bound(_CLIP_BLOCK.pack({"uLevel": level, "uHighlight": float(highlight),
+                                                      "uMaxRadius": float(max_radius)})):
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffer)
             gl.glViewport(*viewport)
             gl.glEnablei(gl.GL_BLEND, 0)
@@ -402,21 +407,15 @@ class DefocusLayer:
             gl.glActiveTexture(gl.GL_TEXTURE2)
             gl.glBindTexture(gl.GL_TEXTURE_2D, self._below)
             gl.glUseProgram(program)
-            gl.glUniform1i(self._location(program, "uColour"), 0)
-            gl.glUniform1i(self._location(program, "uCircle"), 1)
-            gl.glUniform1i(self._location(program, "uBelow"), 2)
-            gl.glUniform1f(self._location(program, "uMaxRadius"), float(max_radius))
-            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            with self._blocks.bound(_GATHER_BLOCK.pack({"uMaxRadius": float(max_radius)})):
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             if max_radius >= 0.5:
                 gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE)
                 gl.glUseProgram(self._sprites)
-                gl.glUniform1i(self._location(self._sprites, "uColour"), 0)
-                gl.glUniform1i(self._location(self._sprites, "uCircle"), 1)
-                gl.glUniform1i(self._location(self._sprites, "uLevel"), level)
-                gl.glUniform1f(self._location(self._sprites, "uHighlight"), float(highlight))
-                gl.glUniform1f(self._location(self._sprites, "uMaxRadius"), float(max_radius))
-                gl.glUniform2f(self._location(self._sprites, "uSize"), float(self._size[0]), float(self._size[1]))
-                gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, width * height)
+                with self._blocks.bound(_SPRITE_BLOCK.pack({
+                        "uLevel": level, "uHighlight": float(highlight), "uMaxRadius": float(max_radius),
+                        "uSize": (float(self._size[0]), float(self._size[1]))})):
+                    gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, width * height)
         finally:
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffer)
             gl.glViewport(*viewport)
@@ -474,7 +473,7 @@ class DefocusLayer:
             if program:
                 delete_program(program)
         self._program = self._sprites = self._clip = self._vao = 0
-        self._locations.clear()
+        self._blocks.release()
 
 
 __all__ = ["DEFOCUS_TAPS", "DefocusLayer", "SCENE_DEFOCUS_GLSL"]
