@@ -428,8 +428,13 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   - [ ] Before N2.8: the Quick shaders `surface_material`, `widget_glow` and `text_legibility` are baked `--glsl
     460` only (their source comments say so), so cards may not draw on Vulkan. Bake them for every target
     through the qrc/qsb tooling, and prove the cards draw on the Vulkan backend in a hidden run.
-  - [ ] Exit on Vulkan: `os._exit` with a live Vulkan window crashed a probe (0xC0000005). Check the product's own
-    exit and the `--exit-after` path on Vulkan; the window must be released before the process ends, with a test.
+  - [ ] Exit on Vulkan, confirmed in the product (lead's run 14 Nov, `d1_run.py --display 1
+    --app-arg=--graphics-backend=vulkan`): the saver presented its first Vulkan frame, then exited with 0xC0000005
+    at `--exit-after`. The window must be released before the process ends (the probe showed `os._exit` with a
+    live Vulkan window crashing). Fix the product's exit path, with a test.
+  - [ ] The same run never reached its reveal: the reveal waits for a wallpaper frame that cannot draw on Vulkan
+    before N2b, so `d1_run` grabbed nothing. For the rehearsal, a backend without a background renderer reveals
+    on its first presented frame (the reveal's owner decides, one rule, logged). Then N2.8 can grab frames.
   - [ ] Settings still lists modes that have no renderer on the running backend. Grey them out with a
     one-line reason when the diagnostic backend is on (the runtime already skips them).
   - [ ] Stale comment: `native/core/src/module.cpp:11` ("N2.7 adds the backend owner"). Fix it with the next C++
