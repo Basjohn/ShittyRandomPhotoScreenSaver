@@ -139,6 +139,33 @@ def test_gpu_pass_timing_activation_and_its_trace_condition():
     assert gpu_pass_timing_wanted(ef.ExperimentFlags(), object()) is False
 
 
+def test_graphics_backend_is_requested_only_by_its_own_token_and_named_backends():
+    # N2.7, D10 point 1: the diagnostic switch of the Vulkan rehearsal. Absent, misspelt, valueless or naming an
+    # unknown backend, nothing is requested (the owner runs OpenGL).
+    for argv in (["main.py", "/s"], ["main.py", ef.GRAPHICS_BACKEND_FLAG, "vulkan"],
+                 ["main.py", f"{ef.GRAPHICS_BACKEND_FLAG}=metal"], ["main.py", f"{ef.GRAPHICS_BACKEND_FLAG}="]):
+        assert ef.parse_experiment_flags(argv).graphics_backend is None, argv
+    for backend in ef.GRAPHICS_BACKENDS:
+        token = f"{ef.GRAPHICS_BACKEND_FLAG}={backend.upper()}"
+        flags = ef.parse_experiment_flags(["main.py", "/s", token])
+        assert flags.graphics_backend == backend
+        assert flags.lifecycle_telemetry_admitted is False and flags.gpu_pass_timing is False   # it admits nothing else
+        # Stripped from the argv screensaver mode detection reads (one token: only the "=" form exists).
+        assert ef.experiment_flag_tokens(["main.py", token, "/s"]) == (token,)
+
+
+def test_graphics_backend_request_is_read_after_deliberate_activation_only():
+    assert ef.graphics_backend_request() is None
+    ef.activate_experiment_flags(ef.parse_experiment_flags(["main.py", f"{ef.GRAPHICS_BACKEND_FLAG}=vulkan"]))
+    assert ef.graphics_backend_request() == "vulkan"
+
+
+def test_graphics_backend_names_match_the_owner():
+    from rendering.quick import bootstrap
+
+    assert ef.GRAPHICS_BACKENDS == bootstrap.QUICK_BACKENDS
+
+
 def test_activation_with_only_telemetry_flag_leaves_no_abc_condition():
     ef.activate_experiment_flags(
         ef.parse_experiment_flags(["main.py", "--viz-switch-telemetry"])

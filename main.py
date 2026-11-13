@@ -44,6 +44,7 @@ if not importing_parents_main(__name__):
     from rendering.quick.bootstrap import (
         configure_quick_environment,
         configure_quick_graphics,
+        start_quick_backend,
     )
 
     # The render loop and QML import root must be fixed before importing Qt.
@@ -1148,6 +1149,9 @@ def main(*, entrypoint: str = "main"):
     
     # Create Qt application
     app = QApplication(sys.argv)
+    # The backend owner's second step, before any Qt Quick window (D6 point 1): on the Vulkan rehearsal path the
+    # native core's instance, or OpenGL with the reason logged; on OpenGL nothing.
+    start_quick_backend()
     app.setApplicationName(APP_EXE_NAME)
     app.setOrganizationName("ShittyRandomPhotoScreenSaver")
     try:
