@@ -1052,18 +1052,23 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 
 ### 1D.10 Audit of 13 Nov (`Docs/Future_Work/Audit_2026-11-13.md`): what is left (Opus Medium, before 1D.7)
 
-- [ ] Must-fix: `tests/test_shared_spinbox_editor_style.py` is red. 41932d38 (5.1.4) added the alignment rule but
-  not the editor half its test describes. Finish it in `ui/tabs/shared_styles.py`:
+- [ ] Must-fix: `tests/test_shared_spinbox_editor_style.py` is red. The operator fixed the spinbox alignment in
+  41932d38 (5.1.4); refine the editor half its test describes, in `ui/tabs/shared_styles.py`, keeping that
+  alignment exactly:
   - drop `QLineEdit` from the combined `QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox { min-height... }`
     selector (`:708`), keeping standalone line edits styled where they were;
   - give `QAbstractSpinBox > QLineEdit` (`:729`) `min-height: 0px; padding: 0px`.
   Render spinbox crops before and after for the lead (Settings, several themes, every spinbox kind), and run
   `test_shared_spinbox_alignment.py` too.
-- [ ] Must-fix: `tests/test_build_foundry_window_layout.py:29` is red (window height 732 against 696) and shows a
-  real Build Runner (Tk) window (`tools/build_runner.py:2335-2356`). The Qt window guard does not cover Tk.
-  - Keep the test's window invisible: withdraw it, or keep it off screen as the Qt guard does.
-  - Extend `tests/test_no_visible_test_windows.py` to Tk if it can see Tk windows.
-  - Find the extra 36 px in `_fit_initial_window` (`:2254-2288`).
+- [ ] Must-fix: `tests/test_build_foundry_window_layout.py:29` is red (732 against 696) and shows a real Build Runner
+  (Tk) window. The 732 px is the operator's correct fix: the native build targets added buttons without anyone
+  checking they stayed visible and clickable. The test's fixed 696 limit is the stale part.
+  - Assert what matters: every job button and action control lies wholly inside the window's client area and is
+    hit-testable, and the window fits the screen's work area. No fixed pixel height.
+  - Negative control: one more job row, or a smaller window, fails it.
+  - Keep the test's Tk window invisible (withdrawn or off screen). Extend `tests/test_no_visible_test_windows.py`
+    to Tk if it can see Tk windows.
+  - Rule from now on: a change that adds a Build Runner control runs this test.
 - [ ] D3D11/D3D12 have no failing negative control for the front-face rule: add the `front_face_fixed_cw` control
   to `host_check.py` (the module already accepts it), then rerun host_check once (lead).
 - [ ] `native/core/src/vulkan_context.cpp:205-207` hides two validation patterns from every caller. Excuse them
