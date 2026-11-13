@@ -695,8 +695,10 @@ stays selectable in Settings as the fallback.
 - Facts J1 in the owner: `native_hidden_host` creates the process's one hidden host at the first request, keeps it,
   refuses another size, and closes it at the application's quit (a process ending with it alive did not exit).
 - Not yet on Vulkan, and so not in the rehearsal: the wallpaper, the card backdrop and every transition (the background
-  family), every Visualizer mode until N2.5, the Studio (its preview is a Python OpenGL node, opened from a mode's
-  Settings, which still lists every mode).
+  family), every Visualizer mode until N2.5, and each mode's Studio (`has_studio` answers False without the mode's
+  renderer: its preview is that renderer). Settings' mode list is not filtered by the backend (a selection there is a
+  persisted choice; the runtime resolves it as above). Qt Quick's own `.qsb` shaders baked `--glsl 460` only
+  (`surface_material`, `widget_glow`, `text_legibility`) have no SPIR-V yet (N1.6).
 
 ## D11. The Qt version the core is built against (decided 12 Nov 2026)
 
