@@ -2005,11 +2005,10 @@ PARTICLE_VERTEX, SPECK_VERTEX, PARTICLE_FRAGMENT = _PARTICLES["proxies"], _PARTI
 # The traced glass (the shells, the procedural beads, the near layer; the fused clusters and their near variant) keeps
 # its loose uniforms: on one block each family drew 1-2 pixels per affected frame one 8-bit level apart in OpenGL
 # (shells/beads/near 26 of 549 recorded frames, clusters 14), so N1.6 does not convert it here; it converts at its port.
-# The wake trails' veils. Their background sampler is at unit 0, the unit it read as a loose uniform: the renderer
-# never gave it the captured background's unit (a defect kept as it is here, so the conversion stays bit-identical).
+# The wake trails' veils: their refraction reads the captured background on its unit, as the traced glass does (from
+# f0ead35b until 1D.11 it read unit 0, which the shafts' blur always leaves empty: a veil bent black, not the water).
 _TRAILS, TRAIL_BLOCK = portable_family({"vertex": TRAIL_VERTEX, "fragment": TRAIL_FRAGMENT},
-                                       (("vertex", ("fragment",)),), block="EbTrails",
-                                       samplers={**EB_SAMPLERS, "uBackground": 0})
+                                       (("vertex", ("fragment",)),), block="EbTrails", samplers=EB_SAMPLERS)
 TRAIL_VERTEX, TRAIL_FRAGMENT = _TRAILS["vertex"], _TRAILS["fragment"]
 
 
