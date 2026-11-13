@@ -1,4 +1,4 @@
-# R-NEW | The propagation field relaxed in place, so its result changed from run to run
+# R-203 | The propagation field relaxed in place, so its result changed from run to run
 
 **Status:** fixed 13 Nov 2026 (N1.6 plan box "the propagation field's relax pass"). Present since the field landed with
 Capillary Bloom (a7742fe3, 11 Oct 2026). Owner: `rendering/quick/scene3d/propagation_field.py`. Regression bar in
