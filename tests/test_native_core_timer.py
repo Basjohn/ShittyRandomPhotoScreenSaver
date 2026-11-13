@@ -99,6 +99,19 @@ def test_the_stall_control_must_show_a_stall_to_pass():
     assert ta.stall_control_verdict({"blocking_reads": 0, "resolve_ns_max": 6_000_000}, latched)["pass"] is False
 
 
+def test_the_waiting_controls_pass_outlasts_the_windows_frame_interval():
+    # Build round 2: the display off, the window paced at 16.7 ms, the heavy pass 11.3 ms at 223 draws: the GPU had
+    # slack, every earlier frame was done by the next edge, and the wait cost nothing.
+    control = ta.control_draws(16.7, 11.3, 223, 1024)
+    assert control["draws"] * 11.3 / 223 >= ta.CONTROL_PASS_OVER_INTERVAL * 16.7
+    # Display on (round 1): GPU-bound already at a 12.5 ms interval; the control still doubles past it.
+    assert ta.control_draws(12.5, 12.4, 238, 1024)["draws"] * 12.4 / 238 >= 2 * 12.5
+    # Never fewer draws than measured, never more than the pass allows; no measurement keeps the measured count.
+    assert ta.control_draws(1.0, 12.4, 238, 1024)["draws"] == 238
+    assert ta.control_draws(500.0, 12.4, 238, 1024)["draws"] == 1024
+    assert ta.control_draws(None, 12.4, 238, 1024)["draws"] == 238
+
+
 def test_the_harness_verdict_counts_a_timer_left_alive():
     record = {"rounds": ["off"], "off": {"pass": True, "checks": {"x": True}}, "live_hosts_at_end": 0,
               "module_loaded": True, "instance_created": True, "timers_at_end": {"timers": 0, "query_pools": 0,

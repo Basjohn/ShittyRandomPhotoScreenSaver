@@ -11,6 +11,7 @@ their negative controls without a built module (tests/test_native_core_timer.py)
 """
 from __future__ import annotations
 
+import math
 import statistics
 from typing import Iterable, Mapping, Sequence
 
@@ -25,6 +26,7 @@ AGREEMENT_FLOOR_MS = 0.15         # ... or 0.15 ms (Qt Quick's own pass and the 
 FORMS_RATIO = (0.67, 1.5)         # the Vulkan form's per-draw cost over the OpenGL form's
 RESOLVE_MAX_MS = 0.5              # one edge's non-blocking reads, at most
 STALL_MIN_MS = 1.0                # the waiting control must show at least this, or it shows nothing
+CONTROL_PASS_OVER_INTERVAL = 2.0  # the waiting control's pass, in the window's own frame intervals
 
 
 def median_ms(values_ns: Iterable[int]) -> float | None:
@@ -122,6 +124,18 @@ def latched_verdict(timer: Mapping, latencies: Sequence[int], *, require_late_re
             "latency_min": min(latencies) if latencies else None, "latency_max": max(latencies) if latencies else None}
 
 
+def control_draws(interval_ms: float | None, pass_ms: float | None, draws: int, max_draws: int) -> dict:
+    """The waiting control's draw count: its pass at least CONTROL_PASS_OVER_INTERVAL of the window's frame intervals
+    (measured at ``draws``, where the pass took ``pass_ms``), so the GPU is the bottleneck and the frame waited for is
+    still running at the next edge; never fewer draws than measured, at most ``max_draws``."""
+    if not interval_ms or not pass_ms or pass_ms <= 0 or draws <= 0:
+        return {"draws": int(draws), "interval_ms": interval_ms, "target_ms": None}
+    target = CONTROL_PASS_OVER_INTERVAL * float(interval_ms)
+    wanted = int(math.ceil(target / (float(pass_ms) / draws)))
+    return {"draws": max(int(draws), min(int(max_draws), wanted)), "interval_ms": float(interval_ms),
+            "target_ms": target}
+
+
 def stall_control_verdict(control_timer: Mapping, latched_timer: Mapping) -> dict:
     """The negative control: the same frames read with a blocking wait must show it (reads waited, and an edge's reads
     cost far more CPU than the latched reads did)."""
@@ -135,5 +149,5 @@ def stall_control_verdict(control_timer: Mapping, latched_timer: Mapping) -> dic
 
 __all__ = ["AGREEMENT_FLOOR_MS", "AGREEMENT_RATIO", "FLAT_MAX_SLOPE_RATIO", "FORMS_RATIO", "RESOLVE_MAX_MS",
            "SCALING_MIN_R2", "SCALING_MIN_SLOPE_MS", "SCALING_RESIDUAL", "SCALING_RESIDUAL_FLOOR_MS", "STALL_MIN_MS",
-           "agreement_verdict", "fit_line", "flat_verdict", "forms_verdict", "latched_verdict", "median_ms",
+           "CONTROL_PASS_OVER_INTERVAL", "agreement_verdict", "control_draws", "fit_line", "flat_verdict", "forms_verdict", "latched_verdict", "median_ms",
            "off_verdict", "scaling_verdict", "stall_control_verdict"]

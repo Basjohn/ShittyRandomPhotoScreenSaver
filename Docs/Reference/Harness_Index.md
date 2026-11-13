@@ -737,6 +737,18 @@ python native/core/python/timer_check.py --module-dir release/native_module --re
 Tests: `tests/test_native_core_timer.py` (no build: the judgements and their controls, every recorded pass bracketed,
 no waiting read outside the control, the trace and its report, the Python face).
 
+Every window round of the three native-core harnesses starts with an environment control (an off-screen window with
+Qt alone must present at least 10 frames in 1 s on that API); D3D11 and D3D12 windows present nothing while the display
+is off (facts J5), and the verdict then says so first. To rerun only the window rounds on D3D once the display is on:
+
+```powershell
+python native/core/python/host_check.py --module-dir release/native_module --apis d3d11 d3d12 --rounds window lifecycle --label n22_d3d_windows
+python native/core/python/composite_check.py --module-dir release/native_module --apis d3d11 d3d12 --rounds window --label n24_d3d_windows
+python native/core/python/timer_check.py --module-dir release/native_module --apis d3d11 d3d12 --rounds scaling window --label n26_d3d_windows
+```
+(timer_check's `scaling` round only sizes the window's load from the measured per-draw cost; without it the window
+round uses a fixed draw count.)
+
 ## 7. Qt Quick runtime checks
 
 The Qt Quick presenter is accepted architecture. Use focused runtime evidence for the seam being changed rather than rerunning old architecture-selection experiments.

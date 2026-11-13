@@ -23,8 +23,10 @@ Rounds (each per API):
            timestamps: the load pass made GPU-bound (about WINDOW_PASS_MS per frame, from the scaling round's per-draw
            cost), at a quarter, half and all of it. The frame figure (every backend) and the per-pass figure (Vulkan,
            OpenGL) scale; results arrive latched, a result not ready at the next edge is read at a later one, no read
-           waits, the reads cost little CPU and every frame is timed. Negative control: the same frames read with a
-           blocking wait show the stall (Vulkan: every earlier frame's results waited for at the edge; OpenGL: the naive
+           waits, the reads cost little CPU and every frame is timed. Negative control: results read with a blocking
+           wait show the stall, its pass made twice the window's measured frame interval so the GPU is the bottleneck
+           whatever paces the window (build round 2, display off: paced at 16.7 ms, the 11.3 ms pass left the GPU idle
+           and the wait cost nothing) (Vulkan: every earlier frame's results waited for at the edge; OpenGL: the naive
            read right after the pass in its own frame, since Qt's OpenGL loop has finished the previous frame on the
            GPU by the next edge, where build round 1's wait cost 0.025 ms). The window destroyed while it animates
            releases the timer on the render thread.
@@ -320,9 +322,13 @@ def round_window(core, engine, app, api: str, out: Path, shared: dict) -> dict:
         for share in (4, 2, 1):
             draws = max(1, heavy // share)
             host.set_load(**LOAD, draws=draws)
-            got = _collect(app, host, int(_driver(host).get("edges", 0)), wanted)
+            edges_before, started = int(_driver(host).get("edges", 0)), time.monotonic()
+            got = _collect(app, host, edges_before, wanted)
+            edges_after, elapsed = int(_driver(host).get("edges", 0)), time.monotonic() - started
             frames = got["frame"]
-            row = {"draws": draws, "frame_n": len(frames), "frame_median_ms": ta.median_ms(s.nanoseconds for s in frames)}
+            row = {"draws": draws, "frame_n": len(frames), "frame_median_ms": ta.median_ms(s.nanoseconds for s in frames),
+                   "frame_interval_ms": (1000.0 * elapsed / (edges_after - edges_before))
+                   if edges_after > edges_before else None}
             if per_pass:
                 loads = got["load"]
                 row.update(load_n=len(loads), load_median_ms=ta.median_ms(s.nanoseconds for s in loads),
@@ -363,13 +369,22 @@ def round_window(core, engine, app, api: str, out: Path, shared: dict) -> dict:
             checks["every_frame_timed"] = (int(timer.get("slot_busy_frames", -1)) == 0
                                            and int(timer.get("over_capacity", -1)) == 0)
 
-            # Negative control: the same frames, every result read with a blocking wait.
+            # Negative control: every result read with a blocking wait. It can only show a stall where the GPU is still
+            # working on the frame it waits for, so its pass is made longer than the window's own frame interval (the
+            # GPU becomes the bottleneck and Qt's render loop runs a frame ahead): build round 2 ran with the display
+            # off, the window paced at 16.7 ms whatever the pass (2.8 to 11.3 ms), every earlier frame done by the
+            # next edge (94 % of results read one edge later) and the wait cost 0.008 ms.
+            top = steps[max(steps)]
+            control = ta.control_draws(top.get("frame_interval_ms"), top.get("load_median_ms"), top["draws"],
+                                       WINDOW_MAX_DRAWS)
+            host.set_load(**LOAD, draws=control["draws"])
             host.set_gpu_timer(True, wait_for_results=True)
             control_samples = _collect(app, host, int(_driver(host).get("edges", 0)),
                                        {"load": WINDOW_SAMPLES // 2})["load"]
             control_timer = dict(_driver(host).get("gpu_timer") or {})
             stall = ta.stall_control_verdict(control_timer, timer)
-            record["negative_waiting_read"] = dict(stall, samples=len(control_samples))
+            record["negative_waiting_read"] = dict(stall, samples=len(control_samples), **control,
+                                                   pass_ms=ta.median_ms(s.nanoseconds for s in control_samples))
             checks["negative_control_waiting_read_shows_the_stall"] = stall["pass"]
             host.set_gpu_timer(True, wait_for_results=False)
         else:
