@@ -112,11 +112,13 @@ def off_verdict(driver: Mapping, live: Mapping, *, edges_before: int, samples: i
 def latched_verdict(timer: Mapping, latencies: Sequence[int], *, require_late_read: bool) -> dict:
     """Read without stalling: every result read at a later edge than its own, none waited for, the reads cheap; with
     ``require_late_read`` (a GPU-bound real window) some result was not ready at the next edge and was read later."""
-    resolve_ms = int(timer.get("resolve_ns_max", 0)) / 1e6
+    # A module that stops reporting the read cost fails (-1), as one that stops reporting blocking reads does.
+    resolve_ns = int(timer.get("resolve_ns_max", -1))
+    resolve_ms = resolve_ns / 1e6
     checks = {"results_arrived": bool(latencies),
               "never_read_in_its_own_frame": bool(latencies) and min(latencies) >= 1,
               "no_read_waited": int(timer.get("blocking_reads", -1)) == 0,
-              "reads_cost_little": resolve_ms <= RESOLVE_MAX_MS}
+              "reads_cost_little": 0 <= resolve_ns and resolve_ms <= RESOLVE_MAX_MS}
     if require_late_read:
         checks["a_result_not_ready_was_read_later"] = (int(timer.get("not_ready_reads", 0)) > 0
                                                        and max(latencies or [0]) >= 2)

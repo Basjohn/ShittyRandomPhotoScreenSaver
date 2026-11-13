@@ -91,6 +91,17 @@ def test_latched_reads_pass_and_a_same_frame_or_waiting_read_fails():
     assert ta.latched_verdict(timer, [], require_late_read=False)["pass"] is False
 
 
+def test_a_read_cost_that_stops_being_reported_fails():
+    """``reads_cost_little`` needs the module's ``resolve_ns_max``, as ``no_read_waited`` needs ``blocking_reads``
+    (audit 13 Nov, low 3: a missing figure read as 0 and passed)."""
+    timer = {"blocking_reads": 0, "resolve_ns_max": 40_000}
+    assert ta.latched_verdict(timer, [1], require_late_read=False)["checks"]["reads_cost_little"] is True
+    unreported = {key: value for key, value in timer.items() if key != "resolve_ns_max"}
+    verdict = ta.latched_verdict(unreported, [1], require_late_read=False)
+    assert verdict["checks"]["reads_cost_little"] is False and verdict["pass"] is False
+    assert ta.latched_verdict(dict(timer, resolve_ns_max=-1), [1], require_late_read=False)["pass"] is False
+
+
 def test_the_stall_control_must_show_a_stall_to_pass():
     latched = {"resolve_ns_max": 30_000}
     assert ta.stall_control_verdict({"blocking_reads": 20, "resolve_ns_max": 6_000_000}, latched)["pass"] is True
