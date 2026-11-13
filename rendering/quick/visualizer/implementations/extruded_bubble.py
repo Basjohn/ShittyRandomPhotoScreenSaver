@@ -30,7 +30,7 @@ from OpenGL import GL as gl
 
 from rendering.gl_programs.extruded_bubble_program import (
     BACKDROP_FRAGMENT, BEAD_VERTEX, BLUR_FRAGMENT, BUBBLE_FRAGMENT, BUBBLE_VERTEX, CLUSTER_FRAGMENT, CLUSTER_VERTEX, FULL_VERTEX,
-    FULLSCREEN_BLOCK, GLASS_BLOCK, NEAR_FRAGMENT, PARTICLE_BLOCK, TRAIL_BLOCK, NEAR_CLUSTER_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT,
+    FULLSCREEN_BLOCK, NEAR_FRAGMENT, PARTICLE_BLOCK, TRAIL_BLOCK, NEAR_CLUSTER_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT,
     SPECK_VERTEX, TRAIL_FRAGMENT, TRAIL_SEGMENTS, TRAIL_VERTEX, block_defaults,
 )
 from rendering.gl_programs.scene3d import _STD140
@@ -78,7 +78,7 @@ _PROGRAMS = (
 
 # The programs whose values are a pass block (N1.6), by key: each family's one layout.
 _BLOCKS = {"backdrop": FULLSCREEN_BLOCK, "shafts": FULLSCREEN_BLOCK, "blur": FULLSCREEN_BLOCK,
-           "proxies": PARTICLE_BLOCK, "specks": PARTICLE_BLOCK, "trails": TRAIL_BLOCK}  # BISECT
+           "proxies": PARTICLE_BLOCK, "specks": PARTICLE_BLOCK, "trails": TRAIL_BLOCK}
 # Preparation and drawing use these exact resource keys. Perspective is the only projection (Orthographic and
 # its constant-folded per-projection program specializations retired 5 Nov 2026).
 _PROGRAM_ROWS = tuple((key, (key, vertex, fragment)) for key, vertex, fragment in _PROGRAMS)

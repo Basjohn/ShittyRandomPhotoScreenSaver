@@ -2002,17 +2002,9 @@ _PARTICLES, PARTICLE_BLOCK = portable_family(
 PARTICLE_VERTEX, SPECK_VERTEX, PARTICLE_FRAGMENT = _PARTICLES["proxies"], _PARTICLES["specks"], _PARTICLES["fragment"]
 
 
-# The traced glass: the shells, the procedural beads (the shells' fragment over the generated vertex stage), the fused
-# clusters and both near-layer variants.
-_GLASS, GLASS_BLOCK = portable_family(
-    {"bubble": BUBBLE_VERTEX, "bead": BEAD_VERTEX, "cluster": CLUSTER_VERTEX, "shell": BUBBLE_FRAGMENT,
-     "near": NEAR_FRAGMENT, "clusters": CLUSTER_FRAGMENT, "near_clusters": NEAR_CLUSTER_FRAGMENT},
-    (("bubble", ("shell",)), ("bead", ("shell",)), ("bubble", ("near",)), ("cluster", ("clusters",)),
-     ("cluster", ("near_clusters",))), block="EbGlass", samplers=EB_SAMPLERS)
-if False:  # BISECT
-  (BUBBLE_VERTEX, BEAD_VERTEX, CLUSTER_VERTEX, BUBBLE_FRAGMENT, NEAR_FRAGMENT, CLUSTER_FRAGMENT,
- NEAR_CLUSTER_FRAGMENT) = (_GLASS[key] for key in ("bubble", "bead", "cluster", "shell", "near", "clusters",
-                                                    "near_clusters"))
+# The traced glass (the shells, the procedural beads, the near layer; the fused clusters and their near variant) keeps
+# its loose uniforms: on one block each family drew 1-2 pixels per affected frame one 8-bit level apart in OpenGL
+# (shells/beads/near 26 of 549 recorded frames, clusters 14), so N1.6 does not convert it here; it converts at its port.
 # The wake trails' veils. Their background sampler is at unit 0, the unit it read as a loose uniform: the renderer
 # never gave it the captured background's unit (a defect kept as it is here, so the conversion stays bit-identical).
 _TRAILS, TRAIL_BLOCK = portable_family({"vertex": TRAIL_VERTEX, "fragment": TRAIL_FRAGMENT},
@@ -2040,7 +2032,6 @@ __all__ = [
     "FULLSCREEN_BLOCK",
     "FULLSCREEN_DEFAULTS",
     "FULL_VERTEX",
-    "GLASS_BLOCK",
     "TRAIL_BLOCK",
     "NEAR_FRAGMENT",
     "NEAR_CLUSTER_FRAGMENT",
