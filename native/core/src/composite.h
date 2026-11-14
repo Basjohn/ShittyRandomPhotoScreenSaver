@@ -49,6 +49,11 @@ struct CompositeConfig
     QString surfaceFormat = QStringLiteral("rgba8"); // the surface's texels: rgba8 or rgba16f (N2.5 rule (a))
     bool visible = true;
     qreal opacity = 1.0;
+    // The window's own logical-to-framebuffer ratio per axis (framebuffer pixels / window.size(), the ratio Qt's
+    // projection draws with); 0: the window's device pixel ratio. At a scale where the logical window size times the
+    // device pixel ratio is not the framebuffer (2560x1440 at 150 %: logical 1707) the two differ (audit 14 Nov, H1).
+    qreal pixelRatioX = 0.0;
+    qreal pixelRatioY = 0.0;
 
     // Updates `out` from the harness's JSON (missing keys keep what `out` holds); false with `error` for a bad value.
     static bool update(const QByteArray &json, CompositeConfig *out, QString *error);

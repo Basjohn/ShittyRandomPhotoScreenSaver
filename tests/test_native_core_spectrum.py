@@ -75,6 +75,60 @@ def test_the_card_maps_the_targets_pixel_to_the_items_oriented_coordinate(quarte
         assert mapped == pytest.approx((oriented[0] + u / dpr, oriented[1] + v / dpr), abs=1e-3)
 
 
+#: Displays whose logical window size times the scale is not the framebuffer (Qt rounds the logical size): 2560x1440
+#: at 150 % is a 1707x960 window, 3840x2160 at 175 % a 2194x1234 one (audit 14 Nov, H1).
+FRACTIONAL_DISPLAYS = (((2560, 1440), 1.5), ((3840, 2160), 1.75))
+
+
+@pytest.mark.parametrize("display", FRACTIONAL_DISPLAYS, ids=("2560x1440@150", "3840x2160@175"))
+@pytest.mark.parametrize("quarters", [0, 1, 2, 3])
+def test_the_card_maps_at_a_fractional_scale_with_the_windows_own_ratio(display, quarters) -> None:
+    """Audit 14 Nov, H1: on a display whose logical size times dpr is not its framebuffer, the composite lies on the
+    window's own device pixels (framebuffer over logical size, per axis) and the card's window map is whole pixels.
+    Control: the same card placed on dpr's grid (the code before the fix) raises."""
+    from rendering.native.composite import composite_geometry, window_pixel_ratio
+    from rendering.native.spectrum import framebuffer_pixels, spectrum_presentation
+    from widgets.spotify_visualizer.presentation_orientation import logical_rect_from_physical_rect
+
+    (device_width, device_height), dpr = display
+    window_size = (float(round(device_width / dpr)), float(round(device_height / dpr)))
+    window_pixels = framebuffer_pixels(window_size, dpr, native=(device_width, device_height))
+    assert window_pixels == (device_width, device_height)
+    ratio = window_pixel_ratio(window_size, window_pixels)
+    assert ratio != (dpr, dpr)                                     # the case: the two ratios differ
+    # A card well away from the window's left and top edge (the offset error grows with the distance).
+    presentation = _presentation(content_rotation_quarters=quarters, dpr=dpr, display_size=window_size,
+                                 viewport_extent=(820.0, 210.0), outer_origin=(803.0, 517.0))
+    assert tuple(presentation.outer_rect[:2]) == (803.0, 517.0)
+    geometry = composite_geometry(presentation, quad_aligned=True, pixel_ratio=ratio)
+    for edge, axis in ((geometry.rect[0], 0), (geometry.rect[1], 1), (geometry.rect[0] + geometry.rect[2], 0),
+                       (geometry.rect[1] + geometry.rect[3], 1)):
+        device = edge * ratio[axis]
+        assert device == pytest.approx(round(device), abs=1e-6) and round(device) % 2 == 0
+    assert geometry.item_config()["pixel_ratio"] == list(ratio)
+    card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels)
+    rebuild = card["window_from_target"]
+    assert all(value == round(value) for value in rebuild)
+    outer = tuple(float(v) for v in presentation.outer_rect)
+    item = (outer[2], outer[3])
+    target = (geometry.rect[0] - outer[0], geometry.rect[1] - outer[1], geometry.rect[2], geometry.rect[3])
+    oriented = target if quarters == 0 else tuple(logical_rect_from_physical_rect(
+        target, physical_size=item, content_rotation_quarters=quarters))
+    oriented_ratio = (ratio[1], ratio[0]) if quarters % 2 else ratio
+    for u, v in ((0.5, 0.5), (card["target_size"][0] - 0.5, card["target_size"][1] - 0.5)):
+        x = rebuild[0] * u + rebuild[1] * v + rebuild[2]
+        y = rebuild[3] * u + rebuild[4] * v + rebuild[5]
+        assert 0.0 <= x <= window_pixels[0] and 0.0 <= y <= window_pixels[1]
+        mapped = (card["item_from_window"][0] * x + card["item_from_window"][1] * y + card["item_from_window"][2],
+                  card["item_from_window"][3] * x + card["item_from_window"][4] * y + card["item_from_window"][5])
+        assert mapped == pytest.approx((oriented[0] + u / oriented_ratio[0], oriented[1] + v / oriented_ratio[1]),
+                                       abs=1e-3)
+    # Control: placed on dpr's grid, as before the fix, the card's map is not whole pixels.
+    with pytest.raises(ValueError, match="whole-pixel"):
+        spectrum_presentation(presentation, composite_geometry(presentation, quad_aligned=True),
+                              window_size=window_size, window_pixels=window_pixels)
+
+
 def test_the_face_speaks_the_modules_entries(monkeypatch) -> None:
     """Every NativeSpectrum call reaches its module entry with the composite's handle, and the card is checked whole
     before it is sent."""

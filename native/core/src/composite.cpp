@@ -383,6 +383,22 @@ bool CompositeConfig::update(const QByteArray &json, CompositeConfig *out, QStri
         }
         c.opacity = opacity;
     }
+    if (o.contains(QStringLiteral("pixel_ratio"))) {
+        const QJsonValue ratio = o.value(QStringLiteral("pixel_ratio"));
+        if (ratio.isNull()) {
+            c.pixelRatioX = c.pixelRatioY = 0.0;
+        } else {
+            const QJsonArray pair = ratio.toArray();
+            const double x = pair.size() == 2 ? pair.at(0).toDouble(-1.0) : -1.0;
+            const double y = pair.size() == 2 ? pair.at(1).toDouble(-1.0) : -1.0;
+            if (!(std::isfinite(x) && std::isfinite(y) && x > 0.0 && y > 0.0)) {
+                *error = QStringLiteral("pixel_ratio is null (the window's device pixel ratio) or [x, y], positive");
+                return false;
+            }
+            c.pixelRatioX = x;
+            c.pixelRatioY = y;
+        }
+    }
     *out = c;
     return true;
 }
@@ -404,6 +420,10 @@ QJsonObject CompositeConfig::toJson() const
     o.insert(QStringLiteral("surface_format"), surfaceFormat);
     o.insert(QStringLiteral("visible"), visible);
     o.insert(QStringLiteral("opacity"), opacity);
+    if (pixelRatioX > 0.0)
+        o.insert(QStringLiteral("pixel_ratio"), QJsonArray { pixelRatioX, pixelRatioY });
+    else
+        o.insert(QStringLiteral("pixel_ratio"), QJsonValue());
     return o;
 }
 
@@ -510,8 +530,11 @@ QSGNode *CompositeItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *d
     QQuickWindow *w = window();
     QRhi *rhi = w ? w->rhi() : nullptr;
     const double dpr = w ? double(w->effectiveDevicePixelRatio()) : 1.0;
-    const double deviceWidth = width() * dpr;
-    const double deviceHeight = height() * dpr;
+    // The window's own logical-to-framebuffer ratio when the owner gave it (rendering/native/composite.py), else dpr.
+    const double rx = m_config.pixelRatioX > 0.0 ? double(m_config.pixelRatioX) : dpr;
+    const double ry = m_config.pixelRatioY > 0.0 ? double(m_config.pixelRatioY) : dpr;
+    const double deviceWidth = width() * rx;
+    const double deviceHeight = height() * ry;
     const QSize device(int(std::lround(deviceWidth)), int(std::lround(deviceHeight)));
     QJsonObject facts;
     facts.insert(QStringLiteral("dpr"), dpr);
@@ -546,12 +569,12 @@ QSGNode *CompositeItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *d
                 node->surface()->markDirty();
             CompositeMaterial &m = node->material();
             m.coverageOn = m_config.coverage ? 1.0f : 0.0f;
-            m.coverageRadius = float(m_config.coverageRadius * dpr);
+            m.coverageRadius = float(m_config.coverageRadius * qMin(rx, ry));
             m.quarters = float(m_config.quarters);
-            m.coverageRect[0] = float(m_config.coverageRect.x() * dpr);
-            m.coverageRect[1] = float(m_config.coverageRect.y() * dpr);
-            m.coverageRect[2] = float(m_config.coverageRect.width() * dpr);
-            m.coverageRect[3] = float(m_config.coverageRect.height() * dpr);
+            m.coverageRect[0] = float(m_config.coverageRect.x() * rx);
+            m.coverageRect[1] = float(m_config.coverageRect.y() * ry);
+            m.coverageRect[2] = float(m_config.coverageRect.width() * rx);
+            m.coverageRect[3] = float(m_config.coverageRect.height() * ry);
             m.sizes[0] = float(device.width());
             m.sizes[1] = float(device.height());
             m.sizes[2] = float(texturePixels.width());
