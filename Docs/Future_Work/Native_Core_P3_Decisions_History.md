@@ -190,6 +190,43 @@ not depend on it. Whether such a window can be see-through at all is a proof ste
 SMP: the Studio's window is translucent today (`ui/studio/surface.py:181,242`) and changes backend with
 everything else at the flip.
 
+## From D7 (N5.7a): the Python presenter read-first, in full
+
+**Read first (box 1), the Python presenter as it is at 899c4475.**
+- *Image ownership.* The pixels a display shows are one immutable `PresentationImage` (`rendering/quick/image_state.py`:
+  RGBA8, rows top first, tight, its pixel size, logical size and dpr), detached from the image worker's processed
+  `QImage` by `display_image_route.presentation_image_from_processed_qimage` through `image_boundary.capture_qimage`
+  (one deep copy). Its owner in a display generation is the scene's `BackgroundRenderItem.presentation_image`
+  (`rendering/quick/render/background_item.py`): one identity, one content (an identity reused for other pixels is
+  refused). The retained node keeps the image for as long as its texture exists (`background_image_node.py`, PR-04
+  Stage B: the `QImage` wraps its bytes without a copy).
+- *The fit and crop.* The fit and crop to the display (FILL, FIT, SHRINK) is done before the presenter, in the image
+  worker process, at the display's device pixels (`display.get_target_size()`): `rendering/image_processor_async.py`
+  `AsyncImageProcessor.process_qimage` (Smooth) or `rendering/image_quality.process_image` (the Pillow filters); the
+  scaled cache keys it by size, mode, filter and dpr. The presenter's own part is one rule: the processed image's whole
+  pixel rect over the item's whole logical rect (`QSGImageNode.setSourceRect(0, 0, w, h)`, `setRect(0, 0, lw, lh)`,
+  linear, no mips, `TextureIsOpaque`, the opaque pixels labelled premultiplied); a size that does not match the item's
+  device pixels (a stale image after a resolution change) is stretched by that same rule. The item covers the scene
+  root, which lies at the monitor's exact rect inside the R-63 overscanned window, on whole device pixels
+  (`scene_controller._sync_root_*`, `device_geometry.py`).
+- *Covered-display admission.* Upstream of the presenter: `image_pipeline._leave_out_covered_destinations` reads
+  `DisplayManager.covered_image_destination_screens()` inside the batch admission; a covered display that shows an image
+  is left out of the batch through its omission receipt and keeps its image (history keeps its meta). The presenter is
+  simply not called for it.
+- *The timing and its edges.* `QuickDisplayRuntime.set_presentation_image` (refused during a run) publishes a new base;
+  a run starts against the current base (`start_transition` refuses another source) and announces the incoming image at
+  its start (`announce_incoming_image`); its finalization publishes the destination as the base, then
+  `transition_finalized`. The scene controller tells the backdrop owner (`note_background_changed`) and its one listener
+  on an identity change. The item's `update()` reaches the render thread at the next sync; the retained node uploads in
+  that frame (`createTextureFromImage`), or adopts the finished run's resident texture (PR-04, the wrapped-texture
+  bridge, OpenGL only).
+- *The protected retained-background path* (07486d83, in the lineage of ce07b991 and 985b9d53, which own the frame
+  pacer and the Visualizer's clip host and are not on this path): at rest a `QSGImageNode` under an opacity node,
+  retained by Qt's scene graph, with no Python per frame; the custom `BackgroundRenderNode` lives behind an opacity-0
+  node, drawn only for a run, a proof or a pixel oracle. On Vulkan (D10 point 2) neither exists: no background node
+  is created, the window shows black where the wallpaper will be.
+
+
 ## From D9: the proof plan's first form, the lead-position difference, and the N0.7 proof detail
 
 **How it is proved (plan item 8b, N0.7), before the substrate depends on it:** on the P1 harness with a fixed
