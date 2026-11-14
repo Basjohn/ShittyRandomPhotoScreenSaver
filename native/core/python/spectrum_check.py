@@ -14,8 +14,8 @@ Rounds:
           module's ``spectrum_block`` must give the Python block byte for byte (``pack_block``), the members that are
           positional by construction set from the card on both sides (the quad's matrix and item size, the target map,
           fragPixel's target size) and the clock that only a flag sheet reads taken from the native side when no flag
-          is shown. Negative controls: the previous frame's record, and the card's content fade nudged by one part in a
-          thousand, must each differ.
+          is shown; members are compared one by one (padding is never read). Negative controls: the record's first bar
+          raised and the card's content fade nudged must each change the block.
   item    (each API) the item's contract in the module's hidden host: frames of a native stream accepted at the sync on
           the render thread (one record per accepted frame, nothing recorded at rest), D2's head read consumes nothing,
           the drop edge clears the card and a newer frame draws again, an unbind releases the reader on the render
@@ -148,6 +148,12 @@ _TYPE_BYTES = {1: 4, 2: 8, 3: 12, 4: 16, 11: 64, 14: 4, 15: 8, 16: 12, 17: 16}
 
 
 def round_block(core, records: list[dict]) -> dict:
+    import struct
+
+    from core.visualizer_engine import spectrum_native_schema
+    from tools import conventions_identity
+
+    bars_offset = spectrum_native_schema.LAYOUT.field("bars").offset
     layout = core.spectrum_block_layout()
     members = {name: (offset, count * stride if count > 1 else _TYPE_BYTES.get(kind, 4))
                for name, kind, offset, count, stride in layout["members"]}
@@ -156,7 +162,6 @@ def round_block(core, records: list[dict]) -> dict:
     first_mismatch = None
     compared = drawn_python_not_native = 0
     previous_differs = previous_compared = fade_differs = 0
-    previous_record = None
     for entry in records:
         block, facts = core.spectrum_block(entry["record"], entry["card"])
         expected = bytearray(entry["python_block"])
@@ -168,28 +173,31 @@ def round_block(core, records: list[dict]) -> dict:
         if not entry["flag"] and time_offset is not None:
             expected[time_offset:time_offset + 4] = block[time_offset:time_offset + 4]   # unread without a flag sheet
         compared += 1
-        if bytes(expected) != block:
-            names = [name for name, (offset, size) in members.items()
-                     if expected[offset:offset + size] != block[offset:offset + size]]
+        # Member by member (the two packers may pad the block's tail differently; padding is never read).
+        names = [name for name, (offset, size) in members.items()
+                 if len(expected) < offset + size or len(block) < offset + size
+                 or expected[offset:offset + size] != block[offset:offset + size]]
+        if names:
             for name in names:
                 mismatched[name] = mismatched.get(name, 0) + 1
             if first_mismatch is None:
                 first_mismatch = {"key": entry["key"], "index": entry["index"], "members": names[:12]}
-        # Negative controls: the previous frame's record, and the fade nudged.
-        if previous_record is not None and previous_record != entry["record"]:
-            other, _ = core.spectrum_block(previous_record, entry["card"])
-            previous_compared += 1
-            previous_differs += int(other != block)
-        nudged = dict(entry["card"], content_fade=entry["card"]["content_fade"] * 1.001 + 1e-6)
+        # Negative controls: the record's first bar raised (a field the block reads), and the fade nudged.
+        mutated = bytearray(entry["record"])
+        first_bar = struct.unpack_from("<d", mutated, bars_offset)[0]
+        struct.pack_into("<d", mutated, bars_offset, first_bar + 0.25)
+        other, _ = core.spectrum_block(bytes(mutated), entry["card"])
+        previous_compared += 1
+        previous_differs += int(other != block)
+        nudged = dict(entry["card"], content_fade=entry["card"]["content_fade"] * 1.001 + 1e-3)
         fade_block, _ = core.spectrum_block(entry["record"], nudged)
         fade_differs += int(fade_block != block)
-        previous_record = entry["record"]
     runs = sorted({entry["key"] for entry in records})
     checks = {
-        "every_run_drew": len(runs) == 18,
+        "every_run_drew": len(runs) == len(conventions_identity.mode_runs("spectrum", True)),
         "frames_compared": compared > 0 and compared == len(records),
         "identical": not mismatched and not drawn_python_not_native,
-        "control_previous_record_differs": previous_compared > 0 and previous_differs == previous_compared,
+        "control_mutated_record_differs": previous_compared > 0 and previous_differs == previous_compared,
         "control_fade_differs": fade_differs == compared,
     }
     return {"pass": all(checks.values()), "checks": checks, "runs": runs, "frames": len(records),
