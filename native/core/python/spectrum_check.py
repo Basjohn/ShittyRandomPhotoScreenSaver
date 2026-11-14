@@ -750,7 +750,9 @@ def round_program(core, engine, app, host, records: list[dict]) -> dict:
     """N2.5 round 4's drawn proof of the standing port rule: a copy of spectrum.frag with a Settings-only uniform
     (``u_test_tint``: above 0.5 every drawn pixel is magenta) baked by regen_qrc's baker and handed over at run time;
     the item draws the value with no module rebuild (tint 1: magenta where the bars are; tint 0: none). Control: the
-    module's compiled-in copy refuses the name. Uses tests/test_native_core_spectrum_program.py's copy."""
+    module's compiled-in copy refuses the name. Uses tests/test_native_core_spectrum_program.py's copy. Then the
+    compiled-in copy draws the product pack's pixels exactly (it is baked from the product's spectrum.frag at build
+    time; control: a one-level change is seen)."""
     import tempfile
 
     import numpy as np
@@ -765,12 +767,18 @@ def round_program(core, engine, app, host, records: list[dict]) -> dict:
     stream = Stream()
     magenta = {}
     refused = ""
+    product = compiled = None
     try:
-        with tempfile.TemporaryDirectory(prefix="srpss_program_") as folder:
-            scene.spectrum.program(tinted_pack(Path(folder)))
         scene.place(card)
         scene.spectrum.bind(stream.name, expect=stream.expect)
-        for step, tint in enumerate((1.0, 0.0)):
+        # The product's pack (Scene's default), drawn once: the compiled-in copy must draw exactly this (below).
+        scene.spectrum.settings(_settings_for_card(card))
+        stream.publish(base["record"], 0.0)
+        scene.spectrum.update()
+        product = scene.read(card).copy()
+        with tempfile.TemporaryDirectory(prefix="srpss_program_") as folder:
+            scene.spectrum.program(tinted_pack(Path(folder)))
+        for step, tint in enumerate((1.0, 0.0), start=1):
             scene.spectrum.settings(dict(_settings_for_card(card), u_test_tint=tint))
             stream.publish(base["record"], float(step))
             scene.spectrum.update()
@@ -782,14 +790,32 @@ def round_program(core, engine, app, host, records: list[dict]) -> dict:
             scene.spectrum.settings(dict(_settings_for_card(card), u_test_tint=1.0))
         except ValueError as exc:
             refused = str(exc)
+        # N2.5 leftover: the compiled-in copy is baked from the product's spectrum.frag at build time (CMakeLists.txt
+        # _product_shader_sources), so a module built after R-210's hoist draws the product pack's pixels exactly
+        # (a copy from before the hoist differs on Vulkan, R-210's derivative after the discard).
+        scene.spectrum.settings(_settings_for_card(card))
+        stream.publish(base["record"], 0.0)
+        scene.spectrum.update()
+        compiled = scene.read(card).copy()
     finally:
         stream.close()
         scene.close(app)
         host.frames(2)
         host_check._flush_deletes(app)
+    import numpy as np
+
+    same = product is not None and compiled is not None and product.shape == compiled.shape
+    differing = int(np.any(product != compiled, axis=-1).sum()) if same else -1
+    nudged = None if product is None else product.copy()
+    if nudged is not None:
+        nudged.flat[nudged.size // 2] ^= 1                # control: one level in one channel is seen
     checks = {"new_uniform_drawn": magenta.get("1.0", 0) > 1000, "zero_draws_no_tint": magenta.get("0.0", 1) == 0,
-              "control_compiled_in_refuses_the_name": "u_test_tint" in refused}
-    return {"pass": all(checks.values()), "checks": checks, "magenta_pixels": magenta, "refused": refused}
+              "control_compiled_in_refuses_the_name": "u_test_tint" in refused,
+              "compiled_in_draws_the_product_pack": same and differing == 0
+              and int(np.abs(product.astype(int)).sum()) > 0,
+              "control_one_level_seen": nudged is not None and bool(np.any(nudged != product))}
+    return {"pass": all(checks.values()), "checks": checks, "magenta_pixels": magenta, "refused": refused,
+            "compiled_in_differing_pixels": differing}
 
 
 def vulkan_against_opengl(out: Path) -> dict:
