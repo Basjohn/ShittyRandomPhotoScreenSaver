@@ -371,6 +371,116 @@ def test_a_grabbed_frame_is_encoded_off_the_gui_thread_and_recorded_on_it(qt_app
     assert completed_on == [threading.main_thread()] * 2
 
 
+_GRAB_SCRIPT = r'''
+import json
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QGuiApplication, QOpenGLContext
+from PySide6.QtQuick import QQuickView, QQuickWindow, QSGRendererInterface
+
+from tools import d1_run
+
+API = {"opengl": QSGRendererInterface.GraphicsApi.OpenGL, "vulkan": QSGRendererInterface.GraphicsApi.Vulkan}
+QQuickWindow.setGraphicsApi(API[sys.argv[2]])
+app = QGuiApplication([])
+window = QQuickView()
+window.setOpacity(0.0)
+window.setFlag(Qt.WindowType.WindowTransparentForInput, True)
+window.setFlag(Qt.WindowType.Tool, True)
+window.setResizeMode(QQuickView.ResizeMode.SizeRootObjectToView)
+window.setSource(QUrl.fromLocalFile(sys.argv[3]))
+window.resize(320, 200)
+out = {"old_path": None}
+
+
+def old_path():
+    """The pre-N2.8 grab's first step: an OpenGL context current on the render thread inside afterRendering."""
+    window.afterRendering.disconnect(old_path)
+    window.beginExternalCommands()
+    try:
+        out["old_path"] = "ok" if QOpenGLContext.currentContext() is not None else \
+            "no current OpenGL context in afterRendering"
+    finally:
+        window.endExternalCommands()
+
+
+def done(result):
+    try:
+        out["delivered"] = type(result).__name__
+        if isinstance(result, Exception):
+            out["error"] = repr(result)
+        else:
+            image = d1_run.frame_image(result)
+            out["size"] = [image.width(), image.height()]
+            out["device_size"] = [round(320 * window.devicePixelRatio()), round(200 * window.devicePixelRatio())]
+            out["pixels"] = {f"{fx},{fy}": image.pixelColor(int(image.width() * fx),
+                                                            int(image.height() * fy)).name()
+                             for fx, fy in ((0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75))}
+            out["render_thread_ms"] = grabs[0].render_thread_ms
+    except Exception as exc:
+        out["error"] = repr(exc)
+    print("RESULT " + json.dumps(out), flush=True)
+    app.quit()
+
+
+grabs = []
+
+
+def first_frame():
+    if grabs:
+        return
+    window.afterRendering.connect(old_path, Qt.ConnectionType.DirectConnection)
+    grabs.append(d1_run._FrameGrab(window, done))
+
+
+window.frameSwapped.connect(first_frame)
+window.show()
+app.exec()
+'''
+
+_QUADRANTS_QML = """import QtQuick
+Item {
+    Rectangle { x: 0; y: 0; width: parent.width / 2; height: parent.height / 2; color: "#ff0000" }
+    Rectangle { x: parent.width / 2; y: 0; width: parent.width / 2; height: parent.height / 2; color: "#00ff00" }
+    Rectangle { x: 0; y: parent.height / 2; width: parent.width / 2; height: parent.height / 2; color: "#0000ff" }
+    Rectangle { x: parent.width / 2; y: parent.height / 2; width: parent.width / 2; height: parent.height / 2
+                color: "#ffffff" }
+}
+"""
+
+
+@pytest.mark.parametrize("backend", ["opengl", "vulkan"])
+def test_a_grab_reads_the_drawn_frame_back_on_both_backends_and_makes_the_image_off_the_render_thread(
+        tmp_path, backend):
+    """N2.8: the grab reads the swap chain back through QRhi, so it works on OpenGL and Vulkan: the grabbed pixels
+    are the known drawn frame (four coloured quadrants, the right way up) at the window's device pixels. 1C.2: the
+    render thread hands over the raw read-back (``RawFrame``); the image is made on the writer thread.
+    Controls: the old path (an OpenGL context current in ``afterRendering``) fails on Vulkan here; on the pre-fix
+    harness the Vulkan grab failed with that error and the OpenGL grab delivered a ``QImage`` made on the render thread.
+    An invisible window in a child process (the graphics API is chosen once per process)."""
+    import subprocess
+
+    script = tmp_path / "grab_child.py"
+    script.write_text(_GRAB_SCRIPT, encoding="utf-8")
+    scene = tmp_path / "quadrants.qml"
+    scene.write_text(_QUADRANTS_QML, encoding="utf-8")
+    root = Path(__file__).resolve().parents[1]
+    completed = subprocess.run([sys.executable, str(script), str(root), backend, str(scene)], capture_output=True,
+                               text=True, timeout=120)
+    lines = [line for line in completed.stdout.splitlines() if line.startswith("RESULT ")]
+    assert lines, completed.stdout + completed.stderr
+    out = json.loads(lines[-1][len("RESULT "):])
+    assert out["delivered"] == "RawFrame", out
+    assert out["size"] == out["device_size"]
+    assert out["pixels"] == {"0.25,0.25": "#ff0000", "0.75,0.25": "#00ff00", "0.25,0.75": "#0000ff",
+                             "0.75,0.75": "#ffffff"}
+    assert out["render_thread_ms"] is not None
+    expected_old = "ok" if backend == "opengl" else "no current OpenGL context in afterRendering"
+    assert out["old_path"] == expected_old
+
+
 def test_steps_are_armed_on_precise_timers_and_fire_in_order(qt_app, tmp_path):
     """Qt's default single-shot is coarse (5 %: about 1 s at 22 s) and reordered steps planned 0.1 s apart (12 Nov: a
     grab fired before the press it was meant to follow). Every step is armed precise and fires in plan order.

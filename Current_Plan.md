@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.9 merged at ABI 10 with N2.3's leftovers and the N2.5 audit's fixes. Medium: d1_run's backend-neutral grab done, merging. N2.8 waits for two displays.
+**Now (in flight):** nothing. N2.9 merged at ABI 10 (9181aafc); d1_run's grab works on both backends through QRhi, its 4K copies off the render thread (27.7 to 6.2 ms per grab). N2.8 waits for two displays.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -463,9 +463,6 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   - Pre-check done 14 Nov (`.artifacts/evidence/display/d1_run/20261114_n27_vulkan_visible/`, displays on):
     the saver on Vulkan revealed on its first presented frame, every card drew with its material and text, and
     it exited 0 through the terminal barrier.
-  - [ ] `d1_run.py`'s `grab` step reads back through OpenGL ("no current OpenGL context in afterRendering") and
-    fails on Vulkan; `screen` steps work. N2.8 needs a backend-neutral grab (the window's own readback on its
-    render thread through QRhi), with a test on both backends.
   - [ ] H1 on a real window: at a fractional scale (the MSI at 150 %) the native Spectrum draws placed exactly,
     the framebuffer size read from Qt's swapchain matching what Qt projects onto (N2.9 proved it in the hidden
     host's redirect target only).
@@ -925,8 +922,6 @@ arrangement change, a display added or removed, the owning display lost, Setting
     canonical one and the Save no longer copies the root three times; the settings part 39.1 -> 11.7 ms, saved
     bytes identical (`display/move_timing/20261114_save_cost/`).
   - [ ] Lead, two displays: the hidden two-display `--diag gui-stall-stacks` before/after on the product.
-- [ ] Defect (tool): `d1_run.py:440-475` reads 4K frames back and copies them on the render thread, costing the other
-  display one 57-92 ms frame per 4K grab; move the copies off the render thread (the read-back itself stays).
 - Visible move confirmed with both displays visible, 13 Nov (`d1_run.py --second-display-visible`): Extruded
   Bubble expanded TV -> MSI -> TV, each landed about 2 s after the press; the hop's Save measured 64-89 ms of GUI
   stall with both displays visible (the defect above). Evidence `display/d1_run/20261113_1c2_move_both_visible/`.

@@ -365,7 +365,8 @@ only with `--hidden`. `--help` prints the ready recipes (the first: Spline Curve
   `--setting DOTTED.KEY=JSON` goes through the copy's real `SettingsManager` and is read back. The runner reuses
   `visualizer_live_check.isolate_profile_paths` / `install_recorded_music` / `install_invisible_windows`.
 - **Steps** `AT:KIND:ARG`, AT seconds after the first reveal: `grab:LABEL` (the next frame the window renders, read back
-  from its back buffer on its render thread inside `afterRendering`, at the window's device pixels; `QQuickWindow.grabWindow`
+  from its swap chain through QRhi on its render thread inside `afterRendering`, at the window's device pixels, on OpenGL
+  and Vulkan; the image is made and encoded on a writer thread, and the step records `render_thread_ms`; `QQuickWindow.grabWindow`
   deadlocks against the saver's Python render nodes), `screen:LABEL` (the composited desktop of that display; refused
   with `--hidden`), `key:NAME`, `move|click|rclick|dblclick:X,Y` (device-pixel client coordinates) or `:@objectName`
   (that item's centre), all posted with `PostMessageW` to the saver's own window on that display; the system cursor
