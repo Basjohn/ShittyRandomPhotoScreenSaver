@@ -17,8 +17,9 @@ from OpenGL import GL as gl
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from core.settings.shadow_direction import ShadowDirection, shadow_direction_signs
 from rendering.gl_programs.conventions import front_face_clockwise
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import (
-    SCENE3D_GLSL, SCENE3D_SPHERE_CAMERA_GLSL, Scene3DBlockLayout, scene3d_detail,
+    SCENE3D_FRAME_BLOCK_BINDING, SCENE3D_GLSL, SCENE3D_SPHERE_CAMERA_GLSL, Scene3DBlockLayout, scene3d_detail,
 )
 from rendering.quick import gl_query
 from rendering.quick.scene3d.environment import BackdropEnvironment
@@ -179,7 +180,7 @@ _SPHERE_FRAME_BLOCK = Scene3DBlockLayout.of("SphereFrameBlock", (
 
 
 _VERTEX_SOURCE = f"""#version 460 core
-{_SPHERE_FRAME_BLOCK.glsl()}
+{_SPHERE_FRAME_BLOCK.glsl(SCENE3D_FRAME_BLOCK_BINDING)}
 {SCENE3D_GLSL}
 {SCENE3D_SPHERE_CAMERA_GLSL}
 layout(location = 0) in vec3 aPosition;
@@ -509,7 +510,7 @@ void main() {{
 }}
 """
 
-_FRAGMENT_SOURCE = "#version 460 core\n" + _SPHERE_FRAME_BLOCK.glsl() + """
+_FRAGMENT_SOURCE = "#version 460 core\n" + _SPHERE_FRAME_BLOCK.glsl(SCENE3D_FRAME_BLOCK_BINDING) + """
 in vec3 vScreenCenter;
 in vec3 vLocalPosition;
 in vec3 vWorldLocalPosition;
@@ -687,7 +688,7 @@ void main() {
 
 _SHADOW_VERTEX_SOURCE = _VERTEX_SOURCE
 
-_SHADOW_FRAGMENT_SOURCE = "#version 460 core\n" + _SPHERE_FRAME_BLOCK.glsl() + """
+_SHADOW_FRAGMENT_SOURCE = "#version 460 core\n" + _SPHERE_FRAME_BLOCK.glsl(SCENE3D_FRAME_BLOCK_BINDING) + """
 in float vArrivalFade;
 out vec4 fragColor;
 void main() {
@@ -700,7 +701,13 @@ void main() {
 }
 """
 
-_SAMPLER_UNIFORMS = ("uBackdrop", "uBackdropPrevious")
+# N1.6: both programs read only the frame block (its binding stated in the source, where ``UniformBlock.attach``
+# points it as well); the wallpaper samplers take the units the renderer binds them to (1 and 2) in the source, and
+# the varyings their locations. Arithmetic is untouched.
+_VERTEX_SOURCE, (_FRAGMENT_SOURCE, _SHADOW_FRAGMENT_SOURCE), _ = portable_program(
+    _VERTEX_SOURCE, (_FRAGMENT_SOURCE, _SHADOW_FRAGMENT_SOURCE), block="SphereVoxelPass",
+    samplers={"uBackdrop": 1, "uBackdropPrevious": 2})
+_SHADOW_VERTEX_SOURCE = _VERTEX_SOURCE
 # (key, vertex, fragment): what a first frame compiles, for the prepared reveal.
 _PROGRAMS = (
     ("hero", _VERTEX_SOURCE, _FRAGMENT_SOURCE),
@@ -724,7 +731,6 @@ class QuickSphereVoxelRenderer:
         self._vao = 0
         self._vertex_count = 0
         self._instance_count = 0
-        self._uniforms: dict[str, int] = {}
         self._parameters = None
         self._light = (0.0, 0.0, 1.0)
         self._light_xy = (0.0, 0.0)
@@ -1132,9 +1138,6 @@ class QuickSphereVoxelRenderer:
             self._shadow_program = r.program("shadow", _SHADOW_VERTEX_SOURCE, _SHADOW_FRAGMENT_SOURCE)
             self._frame_block.attach(self._program)
             self._frame_block.attach(self._shadow_program)
-            self._uniforms = r.uniforms("hero", _SAMPLER_UNIFORMS)
-            gl.glProgramUniform1i(self._program, self._uniforms["uBackdrop"], 1)
-            gl.glProgramUniform1i(self._program, self._uniforms["uBackdropPrevious"], 2)
             mesh = build_voxel_cube_mesh()
             instances = build_voxel_shell_instances()
             self._vao, self._vertex_count = r.mesh("voxels", mesh.tobytes(), _MESH_ATTRIBUTES,
@@ -1156,7 +1159,6 @@ class QuickSphereVoxelRenderer:
         if errors:
             raise RuntimeError("Quick Sphere voxel cleanup incomplete: " + " | ".join(errors))
         self._program = self._shadow_program = self._vao = 0
-        self._uniforms = {}
         self._vertex_count = 0
         self._instance_count = 0
         self._parameters = None
