@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.5 (High); N2.7's exit and grain leftovers with N2b's legacy program side defect (Medium).
+**Now (in flight):** N2.5 (High); N2.2 and N2.3 leftovers with N2.7's two exit checks and 1D.15 (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,8 +47,8 @@ at the size asked.
      ride with the next fitting dispatch.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. N2.7's leftovers (the exits that bypass the stop, the card grain's raw `gl_FragCoord`) with N2b's side defect
-     (the legacy program classes' unused `render()`/`cache_uniforms()`).
+  1. N2.2's and N2.3's leftovers (the hidden host created once, the `QT_DEFECTS` single source, the reader's control
+     lows), N2.7's two exit checks (the Studio window, the release's bound) and 1D.15.
   2. 1D.14 (Spectrum's rim glow), once N2.5 has merged.
   3. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
@@ -447,15 +447,15 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
 
 - [ ] N2.7 leftovers (N2.7 merged 14 Nov: `--graphics-backend=vulkan`, the owner in `rendering/quick/bootstrap.py`,
   `renderer_backends` in the registries, the remembered failed start; D10 "As built"):
-  - [ ] Exits that bypass the stop: the bare `QCoreApplication.exit(1)` routes (the barrier timeout, Settings
-    failures) still end the loop without waiting for the Quick windows, so on Vulkan they may still crash at exit
-    (R-207 fixed every exiting stop). Prove it per route first (hidden Vulkan run); then each route releases its
-    Quick windows before the loop ends (the barrier timeout cannot wait on its own barrier), with a test per route.
-    Same box (audit 14 Nov): a second exiting stop during the terminal drain cancels it and quits before the
-    windows retire.
-  - [ ] `rendering/quick/qml/shaders/surface_material.frag:178` takes the card grain from raw `gl_FragCoord`,
-    whose origin differs by backend: Vulkan and OpenGL differ by up to 8/255 inside the material card. Apply
-    N1.4's `gl_FragCoord` rule, bake with `tools/regen_qrc.py --shaders`, OpenGL pixels unchanged.
+  - Merged 14 Nov (4183dc52): the exits that bypass the stop (R-209) and the card grain through the conventions
+    rule. The grain keeps 2 frosted pixels 12 levels apart on Vulkan where its hash's `fract` wraps near 1.0
+    (accepted by the lead; an integer hash, exact on every backend, replaces it when the material moves to the
+    core).
+  - [ ] The Studio's own Quick window (inside Settings) is not released by `release_quick_windows_then` on an exit;
+    check it on Vulkan (hidden run) and release it the same way if it crashes.
+  - [ ] `release_quick_windows_then` has no bound: if a window's `destroyed` never arrives, the exit never happens.
+    Prove which failure could block a `deleteLater` (the stuck-retirement route is proved clean), or give the
+    failure routes a bounded last resort (a timer is admitted here: the process is ending on a failure).
 - [ ] N2.5 Spectrum at parity on both backends (the port rule above; scheduled after N2.6 and N2.7, which its rule
   needs: (e) GPU time per pass is N2.6's timer, (f) the bounded Vulkan rehearsal is N2.7's path and N2.8's run).
   The Python renderer retires only after N2.8 passes. N1.6's Spectrum group is merged (`spectrum.frag` bakes);
@@ -521,9 +521,6 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
 
 **N2b. The background layer, natively, and the first full rehearsal**
 
-- [ ] Side defect: the legacy program classes' `render()` and `cache_uniforms()` in
-  `rendering/gl_programs/{blinds,burn,crossfade,particle,raindrops,slide,warp,wipe}` are unused and now read
-  block sources; delete them (grep first) with the readiness ratchet unchanged.
 - [ ] N4.a The fullscreen pass and image sampling as a primitive.
 - [ ] N3.8 The async job service (D9), built to N0.7's verdict: the job thread, self-contained jobs, the latch,
   the in-frame form; first job: a photo's upload and mips.
@@ -1187,6 +1184,14 @@ borderless fullscreen transfers working smoothly.
 - [ ] Tests: the operator's exact sequence (B2 on D1, move to A1 on D0, fullscreen, move to D1, leave fullscreen)
   lands at B2; an invalid remembered spot falls back; nothing else in the record changes (negative controls).
 - [ ] Lead D1 run with both displays: the sequence above, edges read.
+
+### 1D.15 `test_settings_roundtrip_retired_generations.py` fails after other files (14 Nov; Opus Medium)
+
+- [ ] Red at HEAD when run after others ("3 retired display generation(s) ... still reachable"); alone it passes.
+  Reproduce: `pytest tests/test_logging_routing.py tests/test_logging_config.py tests/test_live_check_settings_roundtrip.py
+  tests/test_lifecycle_window.py tests/test_settings_roundtrip_retired_generations.py`. Find what an earlier file
+  leaves reachable (a logging handler or a live-check fixture holding a generation is likely) and fix it at the
+  owner if product, else in the tests; R-208's precedent.
 
 ### 1D.14 Spectrum's rim glow: a left-side bias, and Placement and Sharpness controls (operator, 14 Nov; Opus Medium, after N2.5 merges)
 
