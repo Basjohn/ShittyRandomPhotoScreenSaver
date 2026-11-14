@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.9 round 2's audit fixes merged at ABI 12; main's module rebuilding (the ghost change in `spectrum.frag` postdates the build); then the lead reruns Display 1 for the Vulkan border break. Medium: 1C.2's Save stall at the store. High: free.
+**Now (in flight):** High: the native composite's diagonal seam on Vulkan (a build round at ABI 13). Medium: free (1C.2's Save stall merged, R-216). Main's module rebuilt at ABI 12.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,8 +47,7 @@ at the size asked.
      N2.5's and N2.9's leftovers ride with the next fitting dispatch.
   2. 1D.6 (design note first), then 1C.10, as defects between N steps.
 - Medium:
-  1. 1C.2's Save stall at the store (in flight); the lead proves it on the two displays.
-  2. 1B.10's Extruded Bubble and Neon Lake parts.
+  1. 1B.10's Extruded Bubble and Neon Lake parts (with Neon Lake's 96-band side defect).
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -472,6 +471,11 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     into the window), the overscan placement, or the item's own quad. Next: the lead reruns on Display 1 with the
     ABI 12 module (round 2 changed the composite and `v_uv`); if it persists, the High extends the reproduction
     to the product's composite path and fixes it there.
+    - Rerun 14 Nov on ABI 12 (`display/d1_run/20261114_abi12_vulkan_border/`, wallpaper and music): it persists as
+      a thin diagonal seam from the card's bottom-left corner, the bars shifted about one pixel across it: the
+      composite quad's diagonal sampling neighbouring texels at the real window's fractional placement (window
+      at device (-2,-3) for overscan, 3840 x 2163). High in flight: reproduce with that placement, an exact
+      composite on both backends, rule (a)/(b) widened to offset windows and fractional origins.
   - H1 on a real window: done 14 Nov on Display 0 (the MSI at 150 %, operator's leave): the native Spectrum draws
     inside its card on Vulkan with crisp edges (`display/d1_run/20261114_d0_h1_vulkan_spectrum/`).
   - [ ] With no admitted mode renderable on the backend (before N2.5), the Visualizer card shows as a thin empty
@@ -923,20 +927,12 @@ arrangement change, a display added or removed, the owning display lost, Setting
   wallpaper). Evidence `.artifacts/evidence/display/d1_run/20261112_1c2_move_hidden/` and `20261112_1c2_move_visible/`.
   The recipe needs a profile whose `monitor_bindings.spotify_visualizer.screen` names the MSI (an identity binding
   outranks `monitor`; `d1_run.py --setting` cannot set it): the lead's copy is `D:/Temp/Scratch/SRPSS/profile_move/`.
-- [ ] Defect: the hop's cross-display Save stalls the GUI thread 102-132 ms at the fade's midpoint (no window renders;
-  the fade-in waits): `custom_layout_owner.py:954` -> `SettingsManager.set_widgets_map` ->
-  `core/settings/settings_manager.py:542-552`, which re-normalises the whole Visualizer section on every widgets write
-  (15-27 ms alone). Reproduce: hidden run plus `--diag gui-stall-stacks` (`20261112_1c2_move_hidden_stalls`).
-  - Root cause fixed 14 Nov (R-212): a route-only widgets write derives its section from the store's remembered
-    canonical one and the Save no longer copies the root three times; the settings part 39.1 -> 11.7 ms, saved
-    bytes identical (`display/move_timing/20261114_save_cost/`).
-  - [ ] Not fixed in the product (lead, 14 Nov, both displays, the 12 Nov recipe:
-    `display/d1_run/20261114_1c2_move_hidden_stalls_after_r212/`): the hop's Save still stalls the GUI thread
-    58.6 ms (57.2 before), now inside `JsonSettingsStore.setValue`'s deepcopy of the whole widgets root
-    (`json_store.py:345`), inflated by the render threads' GIL like the rest. R-212's single-threaded 39 to 12 ms
-    does not show at the product. Next: the store takes ownership of the fresh canonical root the manager builds
-    (no deepcopy for a value no caller keeps), or the Save moves to the hop fade's end edge by event order (no
-    timer); proved with this recipe, the stall's GUI stack free of settings.
+- Fixed 14 Nov (R-212, R-216): the hop's Save no longer stalls the GUI thread. The store shares unchanged values
+  instead of deep-copying the whole widgets root on every write; the settings part 11.7 to 0.85 ms (1.1 ms
+  median with two GIL competitors), saved bytes identical. The lead's two-display rerun shows no stall with a
+  settings stack (`display/d1_run/20261114_1c2_move_hidden_stalls_after_store/`); the remaining 40-53 ms
+  samples are the GUI thread waiting for the GIL while Extruded Bubble's Python render threads hold it (in
+  the event loop and on the move's call line), which the native 3D ports remove.
 - Visible move confirmed with both displays visible, 13 Nov (`d1_run.py --second-display-visible`): Extruded
   Bubble expanded TV -> MSI -> TV, each landed about 2 s after the press; the hop's Save measured 64-89 ms of GUI
   stall with both displays visible (the defect above). Evidence `display/d1_run/20261113_1c2_move_both_visible/`.

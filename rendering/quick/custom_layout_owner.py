@@ -953,7 +953,9 @@ class QuickCustomLayoutOwner:
         # of the existing Save promotion; do not initiate a layout publication.
         selected_geo_item = self._session.selected_item() if is_geometry_logging_enabled() else None
         self._log_selected_child_geometry_boundary("save_before", selected_geo_item)
-        widgets = self._settings_manager.get_widgets_map()
+        # The commit assigns section entries and rebuilds the layout maps, never changing a stored value in place,
+        # so it reads the root without copying it (a display move's Save, 1C.2).
+        widgets = self._widgets_without_copy()
         commit_custom_session(
             widgets, self._session, self._descriptors, self._bindings, held=self._held,
         )
@@ -1567,7 +1569,8 @@ class QuickCustomLayoutOwner:
         session = CustomLayoutSession()
         descriptors: dict[CustomLayoutKey, WidgetRuntimeDescriptor] = {}
         self._visualizer_pixels_per_world.clear()
-        self._admit_visualizer_item(session, descriptors, bindings, self._settings_manager.get_widgets_map())
+        # Admission only reads the root: no copy of it on the move's GUI-thread path (1C.2).
+        self._admit_visualizer_item(session, descriptors, bindings, self._widgets_without_copy())
         item = next(iter(session.items()), None)
         source = None if item is None else bindings.get(item.current_display_identity)
         if item is None or source is None or source.identity == target.identity:
@@ -2653,6 +2656,13 @@ class QuickCustomLayoutOwner:
             )
             session.add_item(item)
             descriptors[key] = descriptor
+
+    def _widgets_without_copy(self) -> dict[str, Any]:
+        """The widgets root for reading, or for a commit that assigns section entries and never changes a stored
+        value in place (``SettingsManager.get_widgets_map_to_write``). A settings owner without that read (a draft)
+        hands out its copying one."""
+        read = getattr(self._settings_manager, "get_widgets_map_to_write", None)
+        return read() if callable(read) else self._settings_manager.get_widgets_map()
 
     def _admit_visualizer_item(
         self,

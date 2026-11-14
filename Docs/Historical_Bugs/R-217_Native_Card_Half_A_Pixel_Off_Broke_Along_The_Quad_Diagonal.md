@@ -1,4 +1,4 @@
-# R-NEW | The native Visualizer item sat half a device pixel off its card, and the composite's quad broke the bars along its diagonal on Vulkan
+# R-217 | The native Visualizer item sat half a device pixel off its card, and the composite's quad broke the bars along its diagonal on Vulkan
 
 **Status:** fixed 14 Nov 2026 (Current_Plan N2.8, the operator's defect box), in two parts. The owner (Python, landed
 on ABI 12): the native route places its item relative to the content host's real origin, the drawn card. The core
