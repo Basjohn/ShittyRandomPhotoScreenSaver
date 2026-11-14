@@ -1203,7 +1203,9 @@ need no native build round.
 - [ ] Root cause first: render bars at several bar widths and both backends, measure the rim on each side of a bar
   (left against right, in device pixels), and say whether the left bias is the shader (the side distance, the
   `fwidth` feather, a half-pixel bar origin) or the bar layout (gaps). A defect is fixed at its cause with a test
-  and a historical bug entry.
+  and a historical bug entry. Lead (14 Nov): N2.5 found the rim's `fwidth` taken after a non-uniform `discard`
+  (undefined, driver-dependent helper pixels at cap corners) and hoists it; measure the bias again after that
+  merge before looking further.
 - [ ] Two controls in the spec (`visualizer_mode_settings.py`, the appearance bucket, under Enable Rim Glow):
   Rim Placement (Left, Right, Both) and Rim Sharpness (a slider over the core/falloff shape). Their defaults
   reproduce today's look exactly (pixel-identical at the widened run set with the defaults); every preset gets them
