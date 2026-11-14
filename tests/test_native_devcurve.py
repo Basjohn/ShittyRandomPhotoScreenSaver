@@ -255,6 +255,24 @@ def test_the_modules_block_is_the_python_renderers(dpr, qt_app):
 
 # ------------------------------------------------------------------------------------------------- the route
 
+def test_a_self_animating_modes_frames_are_admitted_without_a_current_source():
+    # The core admits a playing frame only with FLAG_SOURCE_CURRENT (the Python node's rule for Spectrum). Spline Curve
+    # animates by itself: the Python node draws its frames before its source is current, so the route's flags admit
+    # them (rule (a): the activation's first frames were refused, measured at 243 levels on the first input).
+    import dataclasses
+
+    from core.visualizer_engine.packet_abi import FLAG_PLAYING, FLAG_SOURCE_CURRENT
+    from core.visualizer_engine.packet_mailbox import publication_flags
+    from rendering.quick.visualizer.native_route import _admission_flags
+
+    waiting = dataclasses.replace(_logical(), source_generation=-1, source_activation_id=-1)
+    assert publication_flags(waiting) & FLAG_PLAYING and not publication_flags(waiting) & FLAG_SOURCE_CURRENT
+    assert _admission_flags(waiting) & FLAG_SOURCE_CURRENT
+    # Control: a mode that needs its tracked source (Spectrum) keeps the frame's own bit.
+    spectrum = SimpleNamespace(mode_id="spectrum", playing=True, present_frame=True, source_generation=-1,
+                               source_activation_id=-1, engine_generation=2, activation_id=3)
+    assert not _admission_flags(spectrum) & FLAG_SOURCE_CURRENT
+
 class _Composite:
     def __init__(self, log: list) -> None:
         from rendering.native.composite import ContentStatus

@@ -374,17 +374,18 @@ class _ParityRoute:
         route = Route(core, content_host)
         if NATIVE_SURFACE_FORMAT is not None:
             route.surface_format = NATIVE_SURFACE_FORMAT      # rule (a)'s target-format measurement (round 5)
-            spectrum = core.spectrum                           # checked on the first item the route creates
 
-            def checked(parent, _make=spectrum):
-                item = _make(parent)
-                item.composite.set(surface_format=NATIVE_SURFACE_FORMAT)
-                held = item.composite.state()["config"].get("surface_format", "rgba8")
-                if held != NATIVE_SURFACE_FORMAT:
-                    raise RuntimeError(f"the module draws its surface as {held}: build round 5")
-                return item
+            def checking(make):                                # checked on each item the route creates
+                def checked(parent):
+                    item = make(parent)
+                    item.composite.set(surface_format=NATIVE_SURFACE_FORMAT)
+                    held = item.composite.state()["config"].get("surface_format", "rgba8")
+                    if held != NATIVE_SURFACE_FORMAT:
+                        raise RuntimeError(f"the module draws its surface as {held}: build round 5")
+                    return item
+                return staticmethod(checked)
 
-            route._core = type("Core", (), {"spectrum": staticmethod(checked)})()
+            route._core = type("Core", (), {"spectrum": checking(core.spectrum), "mode": checking(core.mode)})()
         return route
 
 
@@ -723,8 +724,14 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     classified (``classes``). ``placement``: where both runs put the card (``PLACEMENTS``)."""
     script = parity_script(clip_frames, mode)
     with single_sample_scene_targets(), card_placement(placement):
-        python, mappings = _python_mappings_run(mode, script, settings)
-        native = native_drawn_run(mode, script, settings=settings, core=core, python_mappings=mappings)
+        if mode == "spectrum":
+            python, mappings = _python_mappings_run(mode, script, settings)
+        else:
+            # A generic mode's card maps nothing per fragment (its uv is the core's, N29 round 2 M6): no mapping control.
+            python, mappings = drawn_run(mode, script, worker=False, supervisor=None, namespace=None,
+                                         settings=settings), []
+        native = native_drawn_run(mode, script, settings=settings, core=core,
+                                  python_mappings=mappings if mode == "spectrum" else None)
     paths = pair_difference(native, python)
     rows = frame_differences(native, python)
     switch_at = next(i for i, (kind, _v) in enumerate(script) if kind == "mode")
@@ -760,10 +767,11 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
 
 
 def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
-               against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS) -> dict:
-    """``native_parity`` over Spectrum's widened run set (``conventions_identity.mode_runs``) at the rig's own
-    placement, and ``OVERSCAN_RUNS`` again at each other placement of ``placements`` (keyed ``run@placement``); the
-    report. ``against``: an accepted report this one is compared with (``against_baseline``)."""
+               against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS, mode: str = "spectrum") -> dict:
+    """``native_parity`` over ``mode``'s widened run set (``conventions_identity.mode_runs``; a mode of the route's
+    ``NATIVE_MODE_IDS``) at the rig's own placement, and ``OVERSCAN_RUNS`` again at each other placement of
+    ``placements`` (keyed ``run@placement``); the report. ``against``: an accepted report this one is compared with
+    (``against_baseline``)."""
     baseline = json.loads(Path(against).read_text(encoding="utf-8")) if against is not None else None
     import tools.expanded_visualizer_evidence as evidence
     from rendering.native import load
@@ -774,19 +782,23 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     clip = evidence.shipped_clip(seconds)
-    report: dict = {"mode": "spectrum", "offers": offers, "seconds": seconds, "display": list(DISPLAY), "results": {}}
+    from rendering.quick.visualizer.native_route import NATIVE_MODE_IDS
+
+    if mode not in NATIVE_MODE_IDS:
+        raise ValueError(f"the native route draws {sorted(NATIVE_MODE_IDS)}, not {mode!r}")
+    report: dict = {"mode": mode, "offers": offers, "seconds": seconds, "display": list(DISPLAY), "results": {}}
     started = time.perf_counter()
-    runs = conventions_identity.mode_runs("spectrum", offers)
+    runs = conventions_identity.mode_runs(mode, offers)
     planned = [(suffix, settings, "display") for suffix, settings in runs] if "display" in placements else []
     planned += [(suffix, settings, placement) for placement in placements if placement != "display"
                 for suffix, settings in runs if suffix in OVERSCAN_RUNS]
     try:
         for suffix, settings, placement in planned:
-            key = f"spectrum{suffix}" if placement == "display" else f"spectrum{suffix}@{placement}"
+            key = f"{mode}{suffix}" if placement == "display" else f"{mode}{suffix}@{placement}"
             if only and key not in only:
                 continue
             engine_worker_link.reset_run_state_for_testing()
-            verdict = native_parity(core, "spectrum", suffix, settings, clip.frames, out, placement=placement)
+            verdict = native_parity(core, mode, suffix, settings, clip.frames, out, placement=placement)
             report["results"][key] = verdict
             print(f"[NATIVE] {key:48s} {verdict['frames_drawn']} frames, native {verdict['native_published']}"
                   f" published; differing inputs {verdict['differing_inputs']}, pixels "
@@ -933,7 +945,9 @@ def main(argv=None) -> int:
     parser.add_argument("--module-dir", type=Path, default=Path("release/native_module"))
     parser.add_argument("--offers", action="store_true",
                         help="with --native: the widened run set (both variants and every Choice offer)")
-    parser.add_argument("--runs", nargs="*", default=(), help="with --native: only these run keys (spectrum[:...])")
+    parser.add_argument("--runs", nargs="*", default=(), help="with --native: only these run keys (<mode>[:...])")
+    parser.add_argument("--mode", default="spectrum",
+                        help="with --native: the native mode drawn (the route's NATIVE_MODE_IDS: spectrum, devcurve)")
     parser.add_argument("--surface-format", choices=("rgba8", "rgba16f"), default=None,
                         help="with --native: the native item's surface texels (default: the route's own)")
     parser.add_argument("--unprimed", action="store_true",
@@ -968,7 +982,7 @@ def main(argv=None) -> int:
             report = run_native(args.out, module_dir=args.module_dir.resolve(), offers=args.offers,
                                 seconds=args.seconds, only=tuple(args.runs),
                                 against=None if args.against is None else args.against.resolve(),
-                                placements=tuple(args.placements))
+                                placements=tuple(args.placements), mode=args.mode)
         else:
             report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
                          seconds=args.seconds, controls=not args.skip_controls)

@@ -420,7 +420,6 @@ class NativeVisualizerRoute:
             self.bind(identity)
         if bridge is None:
             return False
-        from core.visualizer_engine.packet_mailbox import publication_flags
         from rendering.native.composite import composite_geometry, window_pixel_ratio
 
         # On the window's own 2x2 quads (every edge on an even device pixel): the shader's fine derivatives then pair
@@ -468,7 +467,7 @@ class NativeVisualizerRoute:
                 payload, payload_schema = content.encode(logical)
                 self._writer.publish(payload, payload_schema=payload_schema,
                                      logical_timestamp=float(logical.logical_timestamp or 0.0),
-                                     flags=publication_flags(logical), mode_code=self._code,
+                                     flags=_admission_flags(logical), mode_code=self._code,
                                      runtime_generation=int(identity.runtime_generation),
                                      engine_generation=int(identity.engine_generation),
                                      activation_id=int(identity.activation_id))
@@ -552,6 +551,23 @@ class NativeVisualizerRoute:
 
 #: The native items a route holds, one per kind: Spectrum's hand-written item and the generic modes' item.
 _CONTENT_KINDS = ("spectrum", "mode")
+
+
+def _admission_flags(logical: Any) -> int:
+    """The slot flags of ``logical``'s publication (``publication_flags``), as the core's admission reads them. The
+    core admits a playing frame only with ``FLAG_SOURCE_CURRENT`` (``stream_source.cpp``): the Python node's rule
+    (``render_contract.snapshot_is_render_admissible``) for a mode whose first reactive output must come from its
+    tracked source. A mode that animates by itself (Spline Curve) is admitted by the Python node without a current
+    source, so its frames carry the bit as admitted: the native item then draws every frame the Python renderer draws
+    (rule (a); without it the first frames of an activation were refused, N5.1)."""
+    from core.visualizer_engine.packet_abi import FLAG_SOURCE_CURRENT
+    from core.visualizer_engine.packet_mailbox import publication_flags
+    from widgets.spotify_visualizer import mode_capabilities
+
+    flags = publication_flags(logical)
+    if not mode_capabilities.requires_authoritative_first_source(getattr(logical, "mode_id", "")):
+        flags |= FLAG_SOURCE_CURRENT
+    return flags
 
 
 def _content_kind(mode_id: str) -> str:
