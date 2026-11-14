@@ -673,7 +673,11 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
                "differing_pixels_total": sum(row["pixels"] for row in rows),
                "max_level": max((row["max_level"] for row in rows), default=0),
                "differences": rows[:200], "region": python["pixels"][0]["region"] if python["pixels"] else None,
-               "digests_identical": python["digests"] == native["digests"]}
+               "digests_identical": python["digests"] == native["digests"],
+               # Each drawn frame's pixel hash on both paths: a later run is bit-identical to this one where its
+               # native hashes are (``against_baseline``), whatever the Python reference did meanwhile.
+               "native_hashes": [entry["hash"] for entry in native["pixels"]],
+               "python_hashes": [entry["hash"] for entry in python["pixels"]]}
     verdict["identical"] = bool(paths["first"] is None and verdict["digests_identical"]
                                 and verdict["native_published"] > 0)
     verdict["split"] = _split_rows(rows, switch_input)
@@ -687,8 +691,11 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     return verdict
 
 
-def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = ()) -> dict:
-    """``native_parity`` over Spectrum's widened run set (``conventions_identity.mode_runs``); the report."""
+def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
+               against: Path | None = None) -> dict:
+    """``native_parity`` over Spectrum's widened run set (``conventions_identity.mode_runs``); the report. ``against``:
+    an accepted report this one is compared with (``against_baseline``)."""
+    baseline = json.loads(Path(against).read_text(encoding="utf-8")) if against is not None else None
     import tools.expanded_visualizer_evidence as evidence
     from rendering.native import load
     from tools import conventions_identity
@@ -714,8 +721,37 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
     finally:
         report["elapsed_s"] = round(time.perf_counter() - started, 1)
         report["identical"] = bool(report["results"]) and all(v["identical"] for v in report["results"].values())
+        if baseline is not None:
+            report["against"] = {"baseline": str(against), **against_baseline(baseline, report)}
+            for key, entry in report["against"]["runs"].items():
+                print(f"[AGAINST] {key:40s} {'SAME' if entry['same'] else 'DIFFERENT ' + json.dumps(entry)}", flush=True)
+            print(f"[AGAINST] {'SAME AS THE BASELINE' if report['against']['same'] else 'NOT THE BASELINE'}: {against}",
+                  flush=True)
         (out / "native_render_parity.json").write_text(json.dumps(report, indent=1), encoding="utf-8")
     return report
+
+
+#: What a rule (a) report shares with an accepted one, run by run, when the native frames are bit-identical to that
+#: run's (the Python renderer is the same, so the same differences mean the same native pixels).
+BASELINE_KEYS = ("frames_drawn", "native_frames", "differing_inputs", "differing_pixels_total", "max_level",
+                 "differences")
+
+
+def against_baseline(baseline: dict, report: dict) -> dict:
+    """``report`` (``run_native``'s) against an accepted ``baseline`` report: per run, the keys of ``BASELINE_KEYS``
+    that differ (a run on one side only differs). ``same``: every run of both, nothing differing."""
+    old, new = dict(baseline.get("results") or {}), dict(report.get("results") or {})
+    runs: dict = {}
+    for key in sorted(set(old) | set(new)):
+        a, b = old.get(key), new.get(key)
+        if a is None or b is None:
+            runs[key] = {"same": False, "only_in": "this run" if a is None else "the baseline"}
+            continue
+        differing = [name for name in BASELINE_KEYS
+                     if name not in a or name not in b or json.loads(json.dumps(a[name])) != json.loads(json.dumps(b[name]))]
+        runs[key] = {"same": not differing, "differing": differing, "max_level": b.get("max_level"),
+                     "native_frames": b.get("native_frames")}
+    return {"same": bool(runs) and all(entry["same"] for entry in runs.values()), "runs": runs}
 
 
 def _write_stills(out: Path, name: str, script, worker: dict, in_process: dict, paths: dict) -> None:
@@ -810,6 +846,9 @@ def main(argv=None) -> int:
     parser.add_argument("--runs", nargs="*", default=(), help="with --native: only these run keys (spectrum[:...])")
     parser.add_argument("--surface-format", choices=("rgba8", "rgba16f"), default=None,
                         help="with --native: the native item's surface texels (default: the route's own)")
+    parser.add_argument("--against", type=Path, default=None,
+                        help="with --native: an accepted native_render_parity.json; the run passes when every run's "
+                             "differences equal it (bit-identical native frames)")
     args = parser.parse_args(argv)
     # The stills (contact sheets, difference maps) and the report are written into owner scratch and published to
     # ``--out`` by the evidence publisher (``tools/evidence_media.py``); stills stay PNG, lossless.
@@ -830,7 +869,8 @@ def main(argv=None) -> int:
             global NATIVE_SURFACE_FORMAT
             NATIVE_SURFACE_FORMAT = args.surface_format
             report = run_native(args.out, module_dir=args.module_dir.resolve(), offers=args.offers,
-                                seconds=args.seconds, only=tuple(args.runs))
+                                seconds=args.seconds, only=tuple(args.runs),
+                                against=None if args.against is None else args.against.resolve())
         else:
             report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
                          seconds=args.seconds, controls=not args.skip_controls)
@@ -840,6 +880,8 @@ def main(argv=None) -> int:
     del app
     # A run that finished is published whatever its verdict: the frames of a difference are the evidence.
     evidence_media.finish(0)
+    if "against" in report:
+        return 0 if report["against"]["same"] else 1
     return 0 if report["identical"] else 1
 
 
