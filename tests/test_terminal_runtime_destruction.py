@@ -231,3 +231,36 @@ def test_every_exiting_stop_waits_for_its_quick_roots_before_the_quit(reason, qt
             if isValid(obj):
                 obj.deleteLater()
         qt_app.processEvents()
+
+
+def test_a_second_exiting_stop_during_the_terminal_drain_leaves_the_drain_to_quit(qt_app, qtbot, monkeypatch) -> None:
+    # Audit 14 Nov: the second exiting stop (the tray's Exit while --exit-after's stop drains) cancelled the pending
+    # barrier as if it were a replacement one and finalized at once: the quit ran before the Quick windows retired.
+    from shiboken6 import isValid
+
+    from core.windows import reddit_helper_runtime
+    from engine import engine_lifecycle
+
+    finalized: list[bool] = []
+    monkeypatch.setattr(engine_lifecycle, "_run_stop_finalization",
+                        lambda engine, exit_app: finalized.append(exit_app))
+    monkeypatch.setattr(reddit_helper_runtime, "clear_session_ticket", lambda **_kwargs: False)
+    manager = _ManagerRoot()
+    engine = _StoppingEngine(manager)
+    window = manager.window
+    try:
+        engine_lifecycle.stop(engine, exit_app=True, reason="cli_exit_after")
+        barrier = engine._pending_runtime_destruction_barrier
+        assert barrier is not None and barrier.is_terminal and barrier.is_complete is False
+        engine_lifecycle.stop(engine, exit_app=True)
+        assert engine._pending_runtime_destruction_barrier is barrier and barrier.is_complete is False
+        assert finalized == []                       # still no quit while the generation's Quick roots live
+        window.deleteLater()
+        qtbot.waitUntil(lambda: finalized == [True], timeout=2000)
+        qt_app.processEvents()
+        assert finalized == [True]                   # the first stop's drain finalized, exactly once
+    finally:
+        for obj in (window, manager):
+            if isValid(obj):
+                obj.deleteLater()
+        qt_app.processEvents()

@@ -8,18 +8,7 @@ default) flames licking up from the burning edge and glowing ember veins crawlin
 
 from __future__ import annotations
 
-import logging
-import time as _time
-from typing import Any, Dict, Tuple
-
 from rendering.gl_programs.base_program import BaseGLProgram
-
-logger = logging.getLogger(__name__)
-
-try:
-    from OpenGL import GL as gl
-except ImportError:
-    gl = None  # type: ignore
 
 
 class BurnProgram(BaseGLProgram):
@@ -412,99 +401,6 @@ void main() {
     FragColor = vec4(clamp(out_rgb, 0.0, 1.0), 1.0);
 }
 """
-
-    def cache_uniforms(self, program: int) -> Dict[str, int]:
-        if gl is None:
-            return {}
-        names = [
-            "u_progress", "uOldTex", "uNewTex",
-            "u_direction", "u_jaggedness", "u_glow_intensity",
-            "u_glow_color", "u_ember_color", "u_char_width",
-            "u_smoke_enabled", "u_smoke_density",
-            "u_ash_enabled", "u_ash_density",
-            "u_flames", "u_ember_veins",
-            "u_time", "u_seed",
-        ]
-        return {n: gl.glGetUniformLocation(program, n) for n in names}
-
-    def render(
-        self,
-        program: int,
-        uniforms: Dict[str, int],
-        viewport: Tuple[int, int],
-        old_tex: int,
-        new_tex: int,
-        state: Any,
-        quad_vao: int,
-    ) -> None:
-        if gl is None:
-            return
-
-        vp_w, vp_h = viewport
-        progress = max(0.0, min(1.0, float(getattr(state, "progress", 0.0))))
-        direction = int(getattr(state, "direction", 0))
-        jaggedness = float(getattr(state, "jaggedness", 0.5))
-        glow_intensity = float(getattr(state, "glow_intensity", 0.7))
-        glow_color = getattr(state, "glow_color", (1.0, 0.55, 0.12, 1.0))
-        ember_color = getattr(state, "ember_color", (0.9, 0.25, 0.05, 1.0))
-        char_width = float(getattr(state, "char_width", 0.5))
-        smoke_enabled = int(getattr(state, "smoke_enabled", True))
-        smoke_density = float(getattr(state, "smoke_density", 0.5))
-        ash_enabled = int(getattr(state, "ash_enabled", True))
-        ash_density = float(getattr(state, "ash_density", 0.5))
-        seed = float(getattr(state, "seed", 0.0))
-        wall_time = float(_time.monotonic())
-
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-        gl.glUseProgram(program)
-
-        def _set(name: str, fn, *args):
-            loc = uniforms.get(name, -1)
-            if loc != -1:
-                fn(loc, *args)
-
-        try:
-            _set("u_progress",      gl.glUniform1f, float(progress))
-            _set("u_direction",     gl.glUniform1i, direction)
-            _set("u_jaggedness",    gl.glUniform1f, jaggedness)
-            _set("u_glow_intensity",gl.glUniform1f, glow_intensity)
-            _set("u_char_width",    gl.glUniform1f, char_width)
-            _set("u_smoke_enabled", gl.glUniform1i, smoke_enabled)
-            _set("u_smoke_density", gl.glUniform1f, smoke_density)
-            _set("u_ash_enabled",   gl.glUniform1i, ash_enabled)
-            _set("u_ash_density",   gl.glUniform1f, ash_density)
-            _set("u_time",          gl.glUniform1f, wall_time)
-            _set("u_seed",          gl.glUniform1f, seed)
-
-            loc_gc = uniforms.get("u_glow_color", -1)
-            if loc_gc != -1:
-                r, g, b, a = (float(c) for c in glow_color)
-                gl.glUniform4f(loc_gc, r, g, b, a)
-
-            loc_ec = uniforms.get("u_ember_color", -1)
-            if loc_ec != -1:
-                r, g, b, a = (float(c) for c in ember_color)
-                gl.glUniform4f(loc_ec, r, g, b, a)
-
-            loc_old = uniforms.get("uOldTex", -1)
-            if loc_old != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, old_tex)
-                gl.glUniform1i(loc_old, 0)
-
-            loc_new = uniforms.get("uNewTex", -1)
-            if loc_new != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, new_tex)
-                gl.glUniform1i(loc_new, 1)
-
-            self._draw_fullscreen_quad(quad_vao)
-
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
 
 
 burn_program = BurnProgram()

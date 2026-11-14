@@ -402,9 +402,11 @@ def _exit_after_lifecycle_failure(engine: ScreensaverEngine, reason: str) -> Non
     """
 
     from engine.engine_lifecycle import retire_application_services
+    from engine.runtime_destruction import exit_application_after_quick_release
 
     retire_application_services(engine, reason=reason)
-    QCoreApplication.exit(1)
+    # The half-retired generation's windows go before the loop ends (on Vulkan a live one crashes the exit).
+    exit_application_after_quick_release(1, reason, engine=engine)
 
 
 def _retire_settings_service_leases(engine: ScreensaverEngine, dialog_generation: object) -> None:
@@ -624,7 +626,9 @@ def _open_settings_after_runtime_destroyed(
             engine._active_settings_dialog = None
             engine._settings_dialog_active = False
             # Off the UI thread: services are not retired from here.
-            QCoreApplication.exit(1)
+            from engine.runtime_destruction import exit_application_after_quick_release
+
+            exit_application_after_quick_release(1, "settings_callbacks_not_cancelled", engine=engine)
             return
 
         engine._active_settings_dialog = None
@@ -931,7 +935,9 @@ def _admit_custom_layout_reload(
             e,
             exc_info=True,
         )
-        QCoreApplication.exit(1)
+        from engine.runtime_destruction import exit_application_after_quick_release
+
+        exit_application_after_quick_release(1, "custom_reload_failed", engine=engine)
 
 
 def _restart_after_custom_runtime_destroyed(engine: ScreensaverEngine) -> None:

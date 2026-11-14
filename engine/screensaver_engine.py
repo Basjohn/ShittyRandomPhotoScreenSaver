@@ -26,7 +26,7 @@ import random
 from enum import Enum, auto
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
-from PySide6.QtCore import QCoreApplication, QObject, Signal, QTimer
+from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtGui import QImage
 
 from core.events import EventSystem
@@ -2535,7 +2535,9 @@ class ScreensaverEngine(QObject):
                 "[LIFECYCLE] Monitor rebuild aborted because full teardown failed",
                 exc_info=True,
             )
-            QCoreApplication.exit(1)
+            from engine.runtime_destruction import exit_application_after_quick_release
+
+            exit_application_after_quick_release(1, "monitor_teardown_failed", engine=self)
             return
 
         self._pending_monitor_replay_image = replay_image

@@ -6,18 +6,7 @@ revealing the new image as the wave passes.
 
 from __future__ import annotations
 
-import logging
-from typing import Any, Dict, Tuple
-
 from rendering.gl_programs.base_program import BaseGLProgram
-
-logger = logging.getLogger(__name__)
-
-# PyOpenGL import with graceful fallback
-try:
-    from OpenGL import GL as gl
-except ImportError:
-    gl = None  # type: ignore
 
 
 class RaindropsProgram(BaseGLProgram):
@@ -154,73 +143,6 @@ void main() {
     FragColor = mixed;
 }
 """
-
-    def cache_uniforms(self, program: int) -> Dict[str, int]:
-        """Cache uniform locations for the Raindrops program."""
-        if gl is None:
-            return {}
-        return {
-            "u_progress": gl.glGetUniformLocation(program, "u_progress"),
-            "u_resolution": gl.glGetUniformLocation(program, "u_resolution"),
-            "uOldTex": gl.glGetUniformLocation(program, "uOldTex"),
-            "uNewTex": gl.glGetUniformLocation(program, "uNewTex"),
-            "u_ripple_count": gl.glGetUniformLocation(program, "u_ripple_count"),
-            "u_ripple_seed": gl.glGetUniformLocation(program, "u_ripple_seed"),
-        }
-
-    def render(
-        self,
-        program: int,
-        uniforms: Dict[str, int],
-        viewport: Tuple[int, int],
-        old_tex: int,
-        new_tex: int,
-        state: Any,
-        quad_vao: int,
-    ) -> None:
-        """Draw one frame of the Raindrops transition."""
-        if gl is None:
-            return
-
-        vp_w, vp_h = viewport
-        progress = max(0.0, min(1.0, float(getattr(state, "progress", 0.0))))
-
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-
-        ripple_count = int(getattr(state, "ripple_count", 3))
-
-        gl.glUseProgram(program)
-        try:
-            if uniforms.get("u_progress", -1) != -1:
-                gl.glUniform1f(uniforms["u_progress"], float(progress))
-
-            if uniforms.get("u_resolution", -1) != -1:
-                gl.glUniform2f(uniforms["u_resolution"], float(vp_w), float(vp_h))
-
-            if uniforms.get("u_ripple_count", -1) != -1:
-                gl.glUniform1i(uniforms["u_ripple_count"], ripple_count)
-
-            if uniforms.get("u_ripple_seed", -1) != -1:
-                seed = float(getattr(state, "ripple_seed", 0.0))
-                gl.glUniform1f(uniforms["u_ripple_seed"], seed)
-
-            if uniforms.get("uOldTex", -1) != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, old_tex)
-                gl.glUniform1i(uniforms["uOldTex"], 0)
-
-            if uniforms.get("uNewTex", -1) != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, new_tex)
-                gl.glUniform1i(uniforms["uNewTex"], 1)
-
-            self._draw_fullscreen_quad(quad_vao)
-
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
 
 
 # Singleton instance for convenience

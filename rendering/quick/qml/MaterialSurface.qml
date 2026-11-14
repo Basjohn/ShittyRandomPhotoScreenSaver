@@ -71,6 +71,17 @@ ShaderEffect {
     readonly property vector4d lightNoise: resolvedParameters[1]
     readonly property vector4d glassLegibility: legibilityPanel ? resolvedParameters[2]
         : Qt.vector4d(resolvedParameters[2].x, resolvedParameters[2].y, 0.0, 1.0)
+    // The conventions include's values for the target this card draws into (N1.4's gl_FragCoord rule): the grain
+    // reads the fragment's pixel in OpenGL's row convention, so a backend whose rows run top-down flips the row
+    // against the target's height in pixels (the window's size at its own device pixel ratio, not the screen's).
+    // Until the scene graph names its backend (Unknown) nothing flips.
+    readonly property bool targetRowsTopDown: GraphicsInfo.api === GraphicsInfo.Vulkan
+        || GraphicsInfo.api === GraphicsInfo.Direct3D11 || GraphicsInfo.api === GraphicsInfo.Direct3D12
+        || GraphicsInfo.api === GraphicsInfo.Metal
+    readonly property vector4d srpssConventions: Qt.vector4d(targetRowsTopDown ? 1.0 : 0.0, 0.0, 0.0, 0.0)
+    readonly property real targetPixelRatio: Window.window ? Window.window.devicePixelRatio : 1.0
+    readonly property vector2d targetPx: Qt.vector2d(Math.round(Window.width * targetPixelRatio),
+                                                     Math.round(Window.height * targetPixelRatio))
 
     blending: true
     vertexShader: "shaders/surface_material.vert.qsb"

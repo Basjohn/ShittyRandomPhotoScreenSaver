@@ -22,6 +22,8 @@ layout(std140, binding = 0) uniform buf {
     vec4 glassLegibility;
     vec4 panelLimits;
     float panelCeiling;   // dark ink: the panel's furthest lift toward white (SurfaceContrast.panelCeiling)
+    vec4 srpssConventions;   // the fragment stage's (surface_material.frag)
+    vec2 targetPx;
 };
 out gl_PerVertex { vec4 gl_Position; };
 void main() {

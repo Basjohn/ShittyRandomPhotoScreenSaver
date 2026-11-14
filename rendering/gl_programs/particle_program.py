@@ -25,17 +25,7 @@ Settings:
 
 from __future__ import annotations
 
-import logging
-from typing import Any, Dict, Tuple
-
 from rendering.gl_programs.base_program import BaseGLProgram
-
-logger = logging.getLogger(__name__)
-
-try:
-    from OpenGL import GL as gl
-except ImportError:
-    gl = None
 
 
 class ParticleProgram(BaseGLProgram):
@@ -585,100 +575,6 @@ void main() {
     FragColor = vec4(finalColor, 1.0);
 }
 """
-
-    def cache_uniforms(self, program: int) -> Dict[str, int]:
-        """Cache uniform locations for the particle program."""
-        if gl is None:
-            return {}
-        
-        uniforms = {}
-        uniform_names = [
-            "uOldTex", "uNewTex", "u_progress", "u_resolution", "u_seed",
-            "u_mode", "u_direction", "u_particle_radius", "u_overlap",
-            "u_trail_length", "u_trail_strength", "u_swirl_strength",
-            "u_swirl_turns", "u_use_3d", "u_texture_map", "u_wobble",
-            "u_gloss_size", "u_light_dir", "u_swirl_order",
-        ]
-        
-        for name in uniform_names:
-            loc = gl.glGetUniformLocation(program, name)
-            uniforms[name] = loc
-            if loc == -1:
-                logger.debug("[PARTICLE] Uniform %s not found (may be optimized out)", name)
-        
-        return uniforms
-
-    def render(
-        self,
-        program: int,
-        uniforms: Dict[str, int],
-        viewport: Tuple[int, int],
-        old_tex: int,
-        new_tex: int,
-        state: Any,
-        quad_vao: int,
-    ) -> None:
-        """Draw one frame of the particle transition."""
-        if gl is None:
-            return
-        
-        vp_w, vp_h = viewport
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-        
-        gl.glUseProgram(program)
-        try:
-            # Bind textures
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glBindTexture(gl.GL_TEXTURE_2D, old_tex)
-            gl.glUniform1i(uniforms.get("uOldTex", -1), 0) if uniforms.get("uOldTex", -1) >= 0 else None
-            
-            gl.glActiveTexture(gl.GL_TEXTURE1)
-            gl.glBindTexture(gl.GL_TEXTURE_2D, new_tex)
-            gl.glUniform1i(uniforms.get("uNewTex", -1), 1) if uniforms.get("uNewTex", -1) >= 0 else None
-            
-            # Set uniforms
-            if uniforms.get("u_progress", -1) >= 0:
-                gl.glUniform1f(uniforms["u_progress"], state.progress)
-            if uniforms.get("u_resolution", -1) >= 0:
-                gl.glUniform2f(uniforms["u_resolution"], float(viewport[0]), float(viewport[1]))
-            if uniforms.get("u_seed", -1) >= 0:
-                gl.glUniform1f(uniforms["u_seed"], state.seed)
-            if uniforms.get("u_mode", -1) >= 0:
-                gl.glUniform1f(uniforms["u_mode"], float(state.mode))
-            if uniforms.get("u_direction", -1) >= 0:
-                gl.glUniform1f(uniforms["u_direction"], float(state.direction))
-            if uniforms.get("u_particle_radius", -1) >= 0:
-                gl.glUniform1f(uniforms["u_particle_radius"], state.particle_radius)
-            if uniforms.get("u_overlap", -1) >= 0:
-                gl.glUniform1f(uniforms["u_overlap"], state.overlap)
-            if uniforms.get("u_trail_length", -1) >= 0:
-                gl.glUniform1f(uniforms["u_trail_length"], state.trail_length)
-            if uniforms.get("u_trail_strength", -1) >= 0:
-                gl.glUniform1f(uniforms["u_trail_strength"], state.trail_strength)
-            if uniforms.get("u_swirl_strength", -1) >= 0:
-                gl.glUniform1f(uniforms["u_swirl_strength"], state.swirl_strength)
-            if uniforms.get("u_swirl_turns", -1) >= 0:
-                gl.glUniform1f(uniforms["u_swirl_turns"], state.swirl_turns)
-            if uniforms.get("u_use_3d", -1) >= 0:
-                gl.glUniform1f(uniforms["u_use_3d"], 1.0 if state.use_3d_shading else 0.0)
-            if uniforms.get("u_texture_map", -1) >= 0:
-                gl.glUniform1f(uniforms["u_texture_map"], 1.0 if state.texture_mapping else 0.0)
-            if uniforms.get("u_wobble", -1) >= 0:
-                gl.glUniform1f(uniforms["u_wobble"], 1.0 if getattr(state, 'wobble', False) else 0.0)
-            if uniforms.get("u_gloss_size", -1) >= 0:
-                gl.glUniform1f(uniforms["u_gloss_size"], getattr(state, 'gloss_size', 64.0))
-            if uniforms.get("u_light_dir", -1) >= 0:
-                gl.glUniform1f(uniforms["u_light_dir"], float(getattr(state, 'light_direction', 0)))
-            if uniforms.get("u_swirl_order", -1) >= 0:
-                gl.glUniform1f(uniforms["u_swirl_order"], float(getattr(state, 'swirl_order', 0)))
-            
-            # Draw fullscreen quad
-            self._draw_fullscreen_quad(quad_vao)
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
 
 
 # Stateless module-level shader helper; compiled IDs remain compositor-owned.

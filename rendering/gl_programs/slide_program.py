@@ -6,18 +6,7 @@ direction. The shader uses rect uniforms to position both images.
 
 from __future__ import annotations
 
-import logging
-from typing import Any, Dict, Tuple
-
 from rendering.gl_programs.base_program import BaseGLProgram
-
-logger = logging.getLogger(__name__)
-
-# PyOpenGL import with graceful fallback
-try:
-    from OpenGL import GL as gl
-except ImportError:
-    gl = None  # type: ignore
 
 
 class SlideProgram(BaseGLProgram):
@@ -98,73 +87,6 @@ void main() {
     FragColor = color;
 }
 """
-
-    def cache_uniforms(self, program: int) -> Dict[str, int]:
-        """Cache uniform locations for the Slide program."""
-        if gl is None:
-            return {}
-        return {
-            "u_progress": gl.glGetUniformLocation(program, "u_progress"),
-            "uOldTex": gl.glGetUniformLocation(program, "uOldTex"),
-            "uNewTex": gl.glGetUniformLocation(program, "uNewTex"),
-            "u_oldRect": gl.glGetUniformLocation(program, "u_oldRect"),
-            "u_newRect": gl.glGetUniformLocation(program, "u_newRect"),
-        }
-
-    def render(
-        self,
-        program: int,
-        uniforms: Dict[str, int],
-        viewport: Tuple[int, int],
-        old_tex: int,
-        new_tex: int,
-        state: Any,
-        quad_vao: int,
-        old_rect: Tuple[float, float, float, float] = (0.0, 0.0, 1.0, 1.0),
-        new_rect: Tuple[float, float, float, float] = (0.0, 0.0, 1.0, 1.0),
-    ) -> None:
-        """Draw one frame of the Slide transition.
-        
-        Args:
-            old_rect: (x, y, w, h) in normalized viewport coords for old image
-            new_rect: (x, y, w, h) in normalized viewport coords for new image
-        """
-        if gl is None:
-            return
-
-        vp_w, vp_h = viewport
-        progress = max(0.0, min(1.0, float(getattr(state, "progress", 0.0))))
-
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-
-        gl.glUseProgram(program)
-        try:
-            if uniforms.get("u_progress", -1) != -1:
-                gl.glUniform1f(uniforms["u_progress"], float(progress))
-
-            if uniforms.get("u_oldRect", -1) != -1:
-                gl.glUniform4f(uniforms["u_oldRect"], *old_rect)
-
-            if uniforms.get("u_newRect", -1) != -1:
-                gl.glUniform4f(uniforms["u_newRect"], *new_rect)
-
-            if uniforms.get("uOldTex", -1) != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, old_tex)
-                gl.glUniform1i(uniforms["uOldTex"], 0)
-
-            if uniforms.get("uNewTex", -1) != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, new_tex)
-                gl.glUniform1i(uniforms["uNewTex"], 1)
-
-            self._draw_fullscreen_quad(quad_vao)
-
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
 
 
 # Singleton instance for convenience
