@@ -1186,6 +1186,9 @@ class _Visualizer:
         self.ordinary_presentation = ordinary
         self.promoted: list[dict] = []
 
+    def present_custom_layout_draft(self) -> None:
+        pass                             # this stand-in's records are already what it would draw
+
     def commit_live_custom_layout(self, **kwargs) -> None:
         self.promoted.append(kwargs)
 

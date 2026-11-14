@@ -1525,12 +1525,46 @@ class DisplayManager(QObject):
                 self._quick_view_orbit_pending = None
                 self._quick_view_pose_owner = None
             return
+        self._finish_direct_visualizer_session()
+
+    def _finish_direct_visualizer_session(self) -> None:
+        """Commit and release the chrome-less direct session (a gesture's, or Rotate's outside Edit), then restore the
+        authored placement it quiesced when Settings still allow it."""
         owner = self._quick_custom_layout_owner
         if not owner.is_direct:
             return
         owner.finish_direct_visualizer_gesture()
         if self._authored_layout_allowed_by_settings():
             self._set_quick_authored_layout_enabled(True, restore_base=False)
+
+    def _rotate_quick_visualizer_outside_edit(self, source: QuickDisplayUnit, widget_id: str) -> bool:
+        """The card's hover Rotate outside Edit (plan 1D.7; operator 13-14 Nov: Rotate never drops the user into Edit).
+
+        One committed change with no Edit chrome: the direct session (Alt drag's: the Visualizer alone, its display
+        bound with no overlay, guides or input block) runs Edit's own turn (``rotate_visualizer_content``, the overlay
+        model's Rotate handler), whose working orientation the bound scene draws at once, and the session's end
+        commits it through the owner's Save with the live promotion (no rebuild). Inside Edit, Rotate stays Edit's
+        undoable draft step (``_route_hover_edit_action``). A direct gesture still held commits on its own first.
+        """
+        visualizer = self._quick_visualizer_owner
+        layout = self._quick_custom_layout_owner
+        if (widget_id != "spotify_visualizer" or source is not self._quick_visualizer_unit or visualizer is None
+                or visualizer.is_retired or not visualizer.is_started
+                or not visualizer.controller.presentation_policy.content_rotation_capable
+                or not layout.visualizer_activation_idle):
+            return False
+        if layout.is_direct:
+            self._finish_direct_visualizer_session()
+        if not self._begin_quick_visualizer_gesture():
+            return False
+        rotated = False
+        try:
+            session = layout.session
+            item = next(iter(session.items()), None) if session is not None else None
+            rotated = item is not None and bool(layout.rotate_visualizer_content(item))
+        finally:
+            self._finish_direct_visualizer_session()
+        return rotated and not layout.is_active
 
     def _route_quick_visualizer_input(self, unit, callback, *args) -> None:
         if (unit.is_retired or unit.runtime.runtime_generation != self._runtime_generation
@@ -2710,17 +2744,30 @@ class DisplayManager(QObject):
             from core.expanded_visualizer_takeover import Phase
             if coordinator is None or coordinator.phase is not Phase.EXPANDED:
                 return False
+            layout = self._quick_custom_layout_owner
+            # Outside Edit (plan 1D.7, operator 13-14 Nov: Rotate never drops the user into Edit) the turn is
+            # committed at once: Fullscreen Edit's own card turn and Save, opened and closed inside this one call, so
+            # no event-loop turn (and no frame) ever sees its chrome. Inside Edit it stays Edit's draft step.
+            was_editing = layout.is_editing
+            if not was_editing and not layout.visualizer_activation_idle:
+                return False    # Save could not commit during an activation, and the click must not strand Edit
             if not self._start_quick_custom_layout_session(source):
                 return False
-            layout = self._quick_custom_layout_owner
-            if not layout.is_fullscreen:
-                return False
-            from rendering.quick.fullscreen_overlay_edit import is_card_item
-            model = source.runtime.scene_controller.custom_layout_overlay.model
-            row = next((index for index, item in enumerate(model._items) if is_card_item(item)), -1)
-            if row < 0:
-                return False
-            return bool(model.rotateContent(row))
+            rotated = False
+            if layout.is_fullscreen:
+                from rendering.quick.fullscreen_overlay_edit import is_card_item
+                model = source.runtime.scene_controller.custom_layout_overlay.model
+                row = next((index for index, item in enumerate(model._items) if is_card_item(item)), -1)
+                rotated = row >= 0 and bool(model.rotateContent(row))
+            if was_editing:
+                return rotated
+            if rotated and self._save_quick_custom_layout():
+                return True
+            if layout.is_editing:
+                self.cancel_custom_layout_session()
+            return False
+        if action == "rotate" and not self._quick_custom_layout_owner.is_editing:
+            return self._rotate_quick_visualizer_outside_edit(source, widget_id)
         owner = self._quick_custom_layout_owner
         transfer_direction = action.removeprefix("transfer_") if action.startswith("transfer_") else None
         if transfer_direction is not None:

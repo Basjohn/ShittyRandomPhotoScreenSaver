@@ -320,6 +320,12 @@ class QuickCustomLayoutOwner:
         return self._active
 
     @property
+    def visualizer_activation_idle(self) -> bool:
+        """No Visualizer mode activation is under way: Save and Cancel are admitted (both refuse during one)."""
+        owner, _unit = self._visualizer_provider()
+        return (getattr(owner, "_mode_transition_phase", "idle") if owner is not None else "idle") == "idle"
+
+    @property
     def is_fullscreen(self) -> bool:
         """Fullscreen Edit is open: Edit edits the expanded display's full-display overlays, nothing else."""
         return self._active and self._fullscreen is not None
@@ -1053,6 +1059,9 @@ class QuickCustomLayoutOwner:
         if promotion is not None:
             owner, local_rect, extent = promotion
             try:
+                # The display-wide route draws the turn only at its next publication: draw it now (a Save in the
+                # turn's own GUI turn, as Rotate outside Edit's, plan 1D.7), so the promotion validates what is drawn.
+                owner.present_custom_layout_draft()
                 # The ordinary live promotion (as an ordinary Edit Save's), before Edit retires the preview override.
                 owner.commit_live_custom_layout(
                     local_rect=local_rect, viewport_extent=extent, content_rotation_by_mode=rotations)
