@@ -157,7 +157,8 @@ in any case. Decided beyond that:
   (background layer, backdrop pyramid, Visualizer scene, overlays), on the window's `beforeRendering` edge. It is
   connected in C++ with a direct connection; a Python slot there would put the GIL back on the render thread.
 - Each surface reaches the window as an ordinary scene-graph texture node with a small material of ours (the card's
-  alpha, the rounded-rectangle coverage, the quarter turn), not as a `QSGRenderNode` that draws inside Qt's pass.
+  alpha, the rounded-rectangle coverage, the quarter turn), not as a `QSGRenderNode` that draws inside Qt's pass (in
+  the code a `QSGGeometryNode` with the core's `CompositeMaterial`, `native/core/src/composite.cpp`).
   Qt's renderer then applies clip, opacity, order and batching itself. This is Qt's own pattern: *header*,
   `QQuickRhiItemNode` is a `QSGSimpleTextureNode` and a texture provider driven from `beforeRendering`
   (`private/qquickrhiitem_p.h:27,49`), and `QQuickWindow::createTextureFromRhiTexture` wraps the core's texture
@@ -167,13 +168,12 @@ in any case. Decided beyond that:
   restored, and the hand-built stencil pipelines the P1 spike's risk 5 feared are not written.
 - Because each layer is a texture provider, a QML `ShaderEffect` can sample it. That is what D7's backdrop and
   SMP's sections need, and it costs nothing when nobody samples.
-- Exactness: the core renders at the item's device-pixel rectangle and the composite maps texels one to one.
+- Exactness: the core renders at the item's device-pixel rectangle and the composite maps texels one to one. An
+  overflow mode (Sphere, Extruded Spectrum) renders to a target that covers the painted overflow footprint the
+  stencil allows today, and the coverage term clips to that footprint, not to the item rectangle (lead, 12 Nov).
   The first port proves this (Spectrum through the texture node equals the Python renderer's direct draw, also
   under pixel shift and a uniform CUSTOM scale). If it cannot be made exact, that surface falls back to a render
   node with one composite draw (the lead's N3.0 form); the rest of this decision stands either way.
-- Overflow modes (Sphere, Extruded Spectrum), lead's answer of 12 Nov: the core's target covers the painted overflow
-  footprint the stencil allows today, and the composite's coverage term clips to that footprint, not to the item
-  rectangle.
 - The coverage edge is anti-aliased and replaces the hard `discard` edge of `clip_host.py`, provided the card-clip
   contract of R-191 holds on the native composite (no content under a straight-edge frame pixel; in the corners only
   under pixels the frame covers by at most half): `tests/test_visualizer_card_clip_contract.py` is the native port's
@@ -263,8 +263,10 @@ escalation, taken only when a measurement demands it, and D5.1 keeps it cheap to
 6. **The lead's open question, answered.** Qt 6.11.2 can make its frame submit wait on, and signal, semaphores we
    supply: `QRhi::setQueueSubmitParams` with `QRhiVulkanQueueSubmitParams` (wait, signal and present-wait
    arrays; *header*, `rhi/qrhi.h:2073`, `rhi/qrhi_platform.h:107-115`). The struct carries no timeline values, so
-   the semaphores are binary. Owning the frame submit is therefore not needed for async work and does not move
-   earlier. D9's default route needs no GPU-side wait at all.
+   the semaphores are binary. Qt waits on them only at `COLOR_ATTACHMENT_OUTPUT` and clears the list after every
+   submit, so the wait protects only a job output that is a colour attachment Qt's pass writes or blends into, never
+   a job result that a shader samples (D9's amendment). Owning the frame submit is not needed for async work and does
+   not move earlier. D9's default route needs no GPU-side wait at all.
 
 **Proof before anything is built on it (plan item 8b, N0.6):** in the P1 harness, a hidden Qt Quick host on the
 module's device renders the spike scene pixel-identical to the same host on Qt's own device; validation layers
@@ -380,10 +382,10 @@ native in that window (D10); the native backdrop is built with the native presen
 the Vulkan rehearsal path, so the blit is never needed on Vulkan. At the switch on OpenGL the native backdrop is
 compared with the blit on the same frames.
 
-
-The lead's N0 position differed on: saturation and luminosity in the build pass (kept at sample time, rule 5);
-compute instead of fragment passes (fragment by default, rule 4); dimming in the build (sample time). Its original
-reasoning for SMP is in the History file ("D7").
+The lead's N0 position differed on saturation and luminosity in the build pass (kept at sample time, rule 5), compute
+instead of fragment passes (fragment by default, rule 4) and dimming in the build (sample time). The SMP desktop
+window shows the desktop (point 8); the earlier reasoning that it must not rely on the system backdrop is in the
+History file ("D7").
 
 ### Point 1 as built (N5.7a, 14 Nov 2026): the image presenter and background as the core's background layer
 
@@ -464,12 +466,8 @@ rest and has an OpenGL form (D5.3). The gate is what admits it into the product.
 | 7 | GPU-driven populations with count draws | Populations of 10^5 to 10^6 with GPU culling and no readback, for droplets, debris, sprites | Moderate (smaller since Qt 6.12: the indirect draw is QRhi's own, no raw service) | No indirect draw in QRhi 6.11 (resolved by Qt 6.12, 12 Nov) | The population harness at one million sprites against "draw the maximum, cull in the vertex shader"; the two existing transitions port on the simple route |
 | 8 | Persistent high-rate rings | Larger histories and denser strands and particles at one copy per frame | Small | Low | D5.3's measurement; not built if QRhi's dynamic buffers are within 0.05 ms |
 | 9 | HDR output | Emissive scenes on an HDR display | Moderate | Window format and tone mapping per backend | Not admitted; reconsider after the flip |
-| 10 | Per-pass temporal upscaling, descriptor indexing, mesh shaders, ray tracing | None today | High | High | Not admitted: low potential until a consumer exists (the operator's rule); D6 keeps the door open |
-
-Amended 13 Nov (operator: mesh shaders for fidelity): mesh shaders leave row 10 and become plan N6.7, a measured
-candidate. They are admitted when N2.6's timers show a ported mode's geometry pass is primitive-bound, or when a
-fidelity target needs the geometry. They are raw Vulkan on the core's device (D6) with a compute-cull and
-indirect-draw twin for OpenGL; never the only path.
+| 10 | Per-pass temporal upscaling, descriptor indexing, ray tracing | None today | High | High | Not admitted: low potential until a consumer exists (the operator's rule); D6 keeps the door open |
+| 10a | Mesh shaders (plan N6.7; operator, 13 Nov: for fidelity) | Geometry that needs them | High | Moderate | A measured candidate, admitted when N2.6's timers show a ported mode's geometry pass is primitive-bound or a fidelity target needs the geometry. Raw Vulkan on the core's device (D6) with a compute-cull and indirect-draw twin for OpenGL; never the only path |
 
 Multi-threaded command recording, which the lead listed as a CPU-side plus, is **not** a plus worth building: a
 frame here is a handful of passes and well under a millisecond of recording, and QRhi's command buffer is
@@ -497,11 +495,13 @@ interleave it. It is measured before it is trusted, per vendor.
 
 1. **Jobs, not only compute.** The core has one native job thread per device, with its own queue (compute and
    transfer), command pool and resources. A job is self-contained: it uploads its own inputs and writes its own
-   outputs. At rest the thread is parked on a condition variable and wakes only for a job (no polling, no timer).
+   outputs. The thread and its QRhi are created at the first job (a device that never runs one holds neither), then
+   parked on a condition variable; it wakes only for a job (no polling, no timer).
 2. **First consumers, in order of reward.** (a) An incoming photo: the texture upload, its mips, the reflection
    copy, the backdrop seed, and what the next transition needs prepared (edge field, propagation field,
-   population scan). The transition starts on the job's completion edge, with a deadline after which the in-frame
-   form runs. (b) Warm-up: static meshes, heightfield builds, probe filtering, raw pipelines. (c) Simulation
+   population scan). Two rules, both current. The photo upload (N3.8, built): a frame never waits for the job; the
+   old picture stays drawn until the item's textures commit together. A transition's start (N5.2g, not yet built):
+   the transition starts on the job's completion edge, with a deadline after which the in-frame form runs. (b) Warm-up: static meshes, heightfield builds, probe filtering, raw pipelines. (c) Simulation
    steps (the drift solver, Waveform's five passes, fog, later the surface field and smoke) stay in the frame by
    default: they are small and tied to the frame; one moves to a job only by its own measurement and a line here.
 3. **Synchronisation route: latched publication.** Job outputs are raw resources of the core, shared between the
@@ -669,7 +669,7 @@ Qt Quick surface of the process (the Studio's preview and window, the hidden hos
 the graphics API is process-wide); every port has both records; the rehearsal has run across the lead's checklist
 (start, wallpaper, transition, material card, each Visualizer, a Settings round trip, a Studio session, exit,
 resize and DPI change, display sleep and wake) with no Vulkan-only defect open; the start-up fallback is proved
-by a forced device failure; translucent windows are settled (D7's last paragraph); a frozen GitHub build runs on
+by a forced device failure; translucent windows are settled (D7 point 8); a frozen GitHub build runs on
 Vulkan on Display 1; and one load session after the operator's yes shows Vulkan no worse than OpenGL. OpenGL then
 stays selectable in Settings as the fallback.
 
@@ -732,13 +732,13 @@ The core is compiled against the exact Qt of the shipped PySide6 (P1), and every
 on both backends. So the version is chosen once, at the entry to the first C++ slice (plan N0.8), not drifted
 into: if a PySide6 release newer than 6.11.2 is available whose QRhi has indirect draws (Qt's documentation lists
 `DrawIndirect`, `DrawIndirectMulti` and `ShaderDrawParameters` for 6.12; they are absent from the 6.11.2 header),
-the lead takes the upgrade first, through the whole suite and a GitHub frozen build, and one service of D5.3
-disappears. Otherwise the core starts on 6.11.2. After that, Qt is upgraded only between stages of the ladder,
-through a scripted step: fetch the matching SDK, rebuild, both backends' parity gates, a frozen build.
+the lead takes the upgrade first and one service of D5.3 disappears. After that, Qt is upgraded only between stages
+of the ladder, through a scripted step: fetch the matching SDK, rebuild, both backends' parity gates, a frozen build.
 
-*Decided by the lead, 12 Nov 2026: take Qt 6.12 (its newest patch release at the checkpoint) before N2.1, as the
-plan's N0.8 checkpoint lists; the venv is bumped only while no agent is running tests; fallback 6.11.3.* The project is
-on Qt 6.12 (PySide6 6.12.0, whose QRhi has `drawIndirect`, `drawIndexedIndirect`, `DrawIndirect`, `DrawIndirectMulti`
+*Current rule (lead, 12 Nov 2026, then the operator): take Qt 6.12 before N2.1; the venv is bumped only while no agent
+is running tests. The operator made it a plain bump to 6.12: the checkpoint's whole-suite, GitHub frozen build and
+Display 1 card-edge check was not taken, and no frozen product has yet been built on 6.12 (the plan's 1B.14 owns
+that). The fallback if a regression is not ours is 6.11.3.* The project is on Qt 6.12 (PySide6 6.12.0, whose QRhi has `drawIndirect`, `drawIndexedIndirect`, `DrawIndirect`, `DrawIndirectMulti`
 and `ShaderDrawParameters`), so D5.3's indirect-draw service and D5.6 row 14's restructured pass are retired. Nothing
 else D5.3 or D5.6 lists is gained: 6.12 still has no RG16F, RG32F or R11G11B10F, still offers no sampling of a
 resolved multisample colour texture, and QRhi still has "no source or binary compatibility guarantees". Open
@@ -822,8 +822,7 @@ arithmetic moves to its simulation, with its parity rerun, as one change.
 **How a new mode is built:** `native/core/README.md`, "How a new mode is built". The worked example is the harness-only
 mode `native/core/python/probe_rings/` (a simulation, two passes, a spec; never registered).
 
-**As proved.** Round 1 (ABI 9, two blocks per pass): `generic_mode_check.py` passed on the built module (14 Nov).
-Round 2 owed: the build round of ABI 10, then `generic_mode_check.py` again (the blocks from the three sources against
+**As proved (round 2, ABI 10, merged at 9181aafc; N29 PASS).** `generic_mode_check.py` on the built module (the blocks from the three sources against
 an independent packer with every refusal, the product packs' admission and Bubble's sampler refusal, the reader by the
 runtime schema, the draw on OpenGL and Vulkan at dpr 1 and 1.5 with shader, spec, shader-and-spec and simulation
 changes and no rebuild, a refused frame keeping the card, the latch, the fade, nothing at rest, GPU time per pass, the
@@ -874,7 +873,7 @@ History file ("D13").
 texture bound while a picture is missing (draws a wrong picture instead of none). Keeping the core's copy of every
 photo to survive a rebuilt node (twice the memory of every displayed photo for a rare event).
 
-**As proved.** Owed: the build round of ABI 11, then `native/core/python/fullscreen_pass_check.py` (rule (a): OpenGL
+**As proved (ABI 11 build round, merged at 8394b992).** `native/core/python/fullscreen_pass_check.py` (rule (a): OpenGL
 equal to the production GL host; rule (b): Vulkan within 1 level; rule (e): GPU time and nothing at rest; rule (g);
 the textures' lifetime; Vulkan validation clean), with N2.9's `generic_mode_check.py` unchanged in its verdict.
 
@@ -1032,8 +1031,8 @@ refuses a native payload.
 - D1 as built: the reader maps its own view by name (`OpenFileMappingW` and `MapViewOfFile`; a name that no longer
   opens is a retired reader), the three states are one atomic, every read and head read pins the view and the last
   pin unmaps it, and the liveness counters (`copies_started`, `copies_finished`, `last_accepted_sequence`) are in the
-  reader's state. The render-thread retire job and the "close during copy" hook are not built: they come with the
-  reader's first user (N2.5).
+  reader's state. The render-thread retire job and the "close during copy" hook exist since N2.5 (the reader's first
+  user; the code decides).
 - D2 as built: `read()` is the one consuming read and acknowledges at the accept edge (the slot whole under its
   seqlock, admitted by its head, the expected identity, the record's range rules held), with the frame's
   protected-edge mask retained for the frame; `readHead()` moves nothing; the drop edge clears the retained frame
@@ -1107,7 +1106,7 @@ fails).
 
 - **Admission is lazy and edge-driven.** A window gets a device, a frame driver and layer targets when something
   needs them; a mode renderer exists only after its first activation; the backdrop pyramid exists only while the
-  demand count is above zero (D7 point 2); the job thread exists once per device and is parked (D9 point 1).
+  demand count is above zero (D7 point 2); the job thread and its QRhi are created at the first job, then parked (D9 point 1).
   Admission of capacity-bound inputs stays what it is today for the frame stream (the activation-time capacity
   envelope, `core/visualizer_engine/frame_capacity.py:12-42`); D3 adds the geometry arena to it.
 - **Dormancy is a state with a definition:** a surface that is off, a display that is powered off, a mode that is

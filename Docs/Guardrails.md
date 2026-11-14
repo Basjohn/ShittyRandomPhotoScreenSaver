@@ -17,8 +17,8 @@ This is the **short preflight**, not a second documentation authority. Use the f
   GUI on a worker reply, and keep the worker importing QtCore only ([Contracts](Contracts.md) "Process path").
 - **Graphics backend (decided 5 Nov 2026, [decision](Future_Work/Graphics_Backend_Decision_2026-11-05.md); on 12 Nov 2026
   the native core was admitted as `Current_Plan.md` item 8b, Vulkan the default and OpenGL selectable, see the
-  decision's addendum and `Future_Work/Native_Core_P3_Decisions.md`):** Vulkan (or any non-GL API) is, a **native (compiled) render core behind `QSGRenderNode`, hosted by Qt Quick on
-  its RHI backend**: that is better than today (no GIL on the render thread; DLSS/FSR via the RHI native handles). A
+  decision's addendum and `Future_Work/Native_Core_P3_Decisions.md`):** Vulkan (or any non-GL API) is, a **native (compiled) render core that renders into targets it owns and reaches the window through a scene-graph texture
+  node with a material of its own (not a `QSGRenderNode`), hosted by Qt Quick on its RHI backend**: that is better than today (no GIL on the render thread; DLSS/FSR via the RHI native handles). A
   Python-driven Vulkan/D3D port is forbidden: far more API calls per frame, each fighting for the GIL, so it is worse
   than today's GL. Whole-frame upscalers are rejected for our content (FSR 1/spatial: soft lines, ringing on dot grids
   and 1-px cores; FSR 2-3/DLSS temporal: smear emissive lines, particles, OIT and fog unless each mode supplies masks):
