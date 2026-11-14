@@ -12,10 +12,14 @@ Rounds:
           the record, oversize, another identity), each case again under each of its negative controls, which must
           fail it.
   stress  a writer process rewrites the latest slot in place while the reader reads: no mixed record is ever accepted
-          and torn copies are counted. Negative control: skip_seqlock accepts mixed records.
+          and torn copies are counted. Negative control: skip_copy_reread (the begin re-read after the copy, alone)
+          accepts mixed records. Then the same guard deterministically: a slot rewritten in place while the read is
+          paused inside its copy (pause_in_copy) is torn; under skip_copy_reread it is accepted. (The head's own
+          seqlock, skip_head_seqlock, is the table's control for the odd latest and the end behind.)
   d1      the reader's own view: the owner closes its mapping and the reader still reads the owner's last frame from
           its pinned view, while a new reader by that name is retired (the control: only the view keeps the section);
-          retire stops every copy at once, release unmaps, close leaves nothing alive; copies started equal finished.
+          retire stops every copy at once, even with a frame waiting (control: copy_while_retiring starts it), release
+          unmaps, close leaves nothing alive; copies started equal finished.
   d2      the head read moves nothing (ten reads: nothing accepted, nothing acknowledged); one consumer: a protected
           edge reaches the core exactly once (control: a Python take, the forbidden second consumer, steals it); the
           drop edge: the dropped frame never comes back, a newer one does (control: head_resets_watermark resurrects it).
@@ -43,7 +47,7 @@ from pathlib import Path
 ROUNDS = ("parity", "table", "stress", "d1", "d2", "reference")
 NATIVE_ROUNDS = ("parity", "table", "stress", "d1", "d2")
 STRESS_READS = 200_000
-#: The skip_seqlock control reads until its first mixed record, at most this many reads (build round 1: 4 mixed records
+#: The skip_copy_reread control (skip_seqlock until the split) reads until its first mixed record, at most this many reads (build round 1: 4 mixed records
 #: in 200,000 reads, so a fixed count was a thin margin).
 CONTROL_READ_CAP = 5_000_000
 
@@ -232,9 +236,33 @@ def d1_round(core) -> dict:
             and reader.read() == "retired" and reader.head() is None)
     finally:
         reader.close()
+    # The same rule with a frame waiting (above, nothing new was published, so no copy could start anyway).
+    checks["retiring with a frame waiting: no copy starts"] = _retiring_with_a_frame_waiting(core, controls=())
+    checks["control: copy_while_retiring starts that copy"] = not _retiring_with_a_frame_waiting(
+        core, controls=("copy_while_retiring",))
     after = core.packet_reader_live()
     checks["nothing left: readers, views and handles back to where they were"] = after == before
     return {"pass": all(checks.values()), "checks": checks, "live_before": before, "live_after": after}
+
+
+def _retiring_with_a_frame_waiting(core, *, controls: tuple) -> bool:
+    """A whole, admissible frame is waiting and the stream is retiring: the read returns retiring with no copy started,
+    nothing retained and nothing acknowledged."""
+    from tools import packet_reader_adversary as adversary
+
+    memory, adv = _mapping()
+    reader = core.packet_reader(memory.name, controls=controls)
+    try:
+        adv.publish(adversary.valid_record(1))
+        reader.retire()
+        result = reader.read()
+        state = reader.state()
+        held = (result == "retiring" and state["copies_started"] == 0 and reader.frame() is None
+                and adv.consumed() == 0)
+    finally:
+        reader.close()
+        _close_mapping(memory, adv)
+    return held
 
 
 def _edge_round(core, *, steal: bool) -> dict:
@@ -326,6 +354,8 @@ def _drop_round(core, *, controls: tuple) -> dict:
         steps["retained before the next read"] = reader.frame() is not None   # applied at the next frame edge
         steps["after the drop"] = reader.read()
         steps["retained after the drop"] = reader.frame()
+        # The accepted watermark is the drop's (audit 14 Nov, low 2: the drop keeps none of its own).
+        steps["watermark after the drop"] = reader.state()["accepted_sequence"]
         reader.head()                                                          # a head read and a late wake
         steps["late wake"] = reader.read()
         steps["retained after the late wake"] = None if reader.frame() is None else reader.frame().sequence
@@ -340,21 +370,61 @@ def _drop_round(core, *, controls: tuple) -> dict:
             and steps["after the drop"] == "nothing" and steps["retained after the drop"] is None
             and steps["late wake"] == "nothing" and steps["retained after the late wake"] is None
             and steps["newer"] == "accepted" and steps["retained newer"] == newer
-            and state["dropped_through"] == dropped and state["drops_applied"] == 1)
+            and steps["watermark after the drop"] == dropped and state["drops_applied"] == 1)
     steps["retained after the drop"] = None if steps["retained after the drop"] is None else "a frame"
-    return {"held": held, "steps": steps, "dropped_through": state["dropped_through"]}
+    return {"held": held, "steps": steps, "dropped": dropped}
 
 
 # ------------------------------------------------------------------------------------------------ stress
+
+def rewritten_during_copy(core, *, controls: tuple = ()) -> dict:
+    """The re-read after the copy, isolated and deterministic: the reader pauses inside its payload copy (the
+    pause_in_copy hook, on a second thread), the slot it copies is rewritten in place (its begin odd, another record),
+    and the copy resumes. Held: torn, nothing retained, nothing acknowledged. Control (skip_copy_reread, the only guard
+    that sees this write, since the head was whole when it was read): the rewritten record is accepted."""
+    import threading
+
+    from tools import packet_reader_adversary as adversary
+
+    memory, adv = _mapping()
+    reader = core.packet_reader(memory.name, controls=("pause_in_copy",) + tuple(controls))
+    outcome: dict = {}
+    try:
+        first = adv.publish(adversary.valid_record(1))
+        thread = threading.Thread(target=lambda: outcome.setdefault("read", reader.read()), name="copy-reread reader")
+        thread.start()
+        try:
+            paused = reader.wait_paused(10000)
+            if paused:
+                adv.write_slot(adv.slot_of(first), sequence=first + 2, payload=adversary.valid_record(2),
+                               begin=first + 1, end=first)
+        finally:
+            reader.resume()
+            thread.join(30)
+        frame = reader.frame()
+        consumed = adv.consumed()
+        torn = reader.state()["torn_reads"]
+    finally:
+        reader.close()
+        _close_mapping(memory, adv)
+    held = (paused and not thread.is_alive() and outcome.get("read") == "torn" and frame is None and consumed == 0
+            and torn == 1)
+    return {"held": held, "paused": paused, "read": outcome.get("read"), "retained": frame is not None,
+            "consumed": consumed, "torn_reads": torn}
+
 
 def stress_round(core) -> dict:
     from tools import packet_reader_adversary as adversary
 
     held = adversary.stress(lambda name: adversary.NativeReader(core, name), reads=STRESS_READS)
-    control = adversary.stress(lambda name: adversary.NativeReader(core, name, controls=("skip_seqlock",)),
+    control = adversary.stress(lambda name: adversary.NativeReader(core, name, controls=("skip_copy_reread",)),
                                reads=CONTROL_READ_CAP, stop_on_mixed=True)
-    passed = held["mixed"] == 0 and held["accepted"] > 0 and held["torn_reads"] > 0 and control["mixed"] > 0
-    return {"pass": passed, "seqlock": held, "control_skip_seqlock": control}
+    reread = rewritten_during_copy(core)
+    reread_control = rewritten_during_copy(core, controls=("skip_copy_reread",))
+    passed = (held["mixed"] == 0 and held["accepted"] > 0 and held["torn_reads"] > 0 and control["mixed"] > 0
+              and reread["held"] and not reread_control["held"] and reread_control["read"] == "accepted")
+    return {"pass": passed, "seqlock": held, "control_skip_copy_reread": control,
+            "rewritten_during_copy": reread, "rewritten_during_copy_control": reread_control}
 
 
 def reference_round(frames: list | None) -> dict:

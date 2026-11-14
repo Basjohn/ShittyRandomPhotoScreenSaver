@@ -98,3 +98,38 @@ def test_the_non_default_settings_move_every_ranged_control_and_differ_between_v
                 assert a[control.key] != b[control.key], (mode, control.key)
         nudged = parity.nondefault_settings(mode, "a", nudge=True)
         assert any(nudged[c.key] != a[c.key] for c in ranged if isinstance(c, Slider)), mode
+
+
+def test_a_native_run_is_compared_with_its_accepted_baseline_run_by_run():
+    # Rule (a) after a build round: the native frames bit-identical to the accepted run's (``--against``).
+    import copy
+
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    run = {"frames_drawn": [549, 549], "native_frames": 359, "differing_inputs": 2, "differing_pixels_total": 7,
+           "max_level": 1, "differences": [{"input": 3, "pixels": 4, "max_level": 1}, {"input": 9, "pixels": 3,
+                                                                                         "max_level": 1}]}
+    baseline = {"results": {"spectrum": run, "spectrum:b": dict(run, native_frames=350)}}
+    report = copy.deepcopy(baseline)
+    assert parity.against_baseline(baseline, report)["same"] is True
+    # Controls: one pixel more in one input, a run missing, a key missing are each a difference.
+    moved = copy.deepcopy(report)
+    moved["results"]["spectrum"]["differences"][1]["pixels"] = 4
+    verdict = parity.against_baseline(baseline, moved)
+    assert verdict["same"] is False and verdict["runs"]["spectrum"]["differing"] == ["differences"]
+    missing = {"results": {"spectrum": run}}
+    assert parity.against_baseline(baseline, missing)["runs"]["spectrum:b"] == {"same": False,
+                                                                                 "only_in": "the baseline"}
+    keyless = copy.deepcopy(report)
+    del keyless["results"]["spectrum"]["differing_pixels_total"]
+    assert parity.against_baseline(baseline, keyless)["same"] is False
+    assert parity.against_baseline({"results": {}}, {"results": {}})["same"] is False      # nothing compared
+    # With frame hashes on both sides the native frames decide: a moved Python reference alone is no difference.
+    hashed = {"results": {"spectrum": dict(run, native_hashes=["n0", "n1"], python_hashes=["p0", "p1"])}}
+    drifted = copy.deepcopy(hashed)
+    drifted["results"]["spectrum"].update(python_hashes=["p0", "p9"], differing_pixels_total=8)
+    verdict = parity.against_baseline(hashed, drifted)
+    assert verdict["same"] is True and verdict["runs"]["spectrum"]["python_same"] is False
+    drifted["results"]["spectrum"]["native_hashes"] = ["n0", "n9"]                     # control: a native frame moved
+    verdict = parity.against_baseline(hashed, drifted)
+    assert verdict["same"] is False and verdict["runs"]["spectrum"]["native_changed"] == [1]

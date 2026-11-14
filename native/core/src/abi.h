@@ -24,6 +24,19 @@
 // at run time; composite_spectrum_settings: Settings-derived members by name, packed by program_blocks.h);
 // spectrum_block takes the pack and the settings; spectrum_block_layout takes a pack; the composite's surface_format
 // option (rgba8, rgba16f; N2.5 rule (a)). Round 4 never compiled (limited-API macros): round 5 is ABI 8's first build.
+// 9 (N2.3 leftovers, audit 14 Nov lows): the packet reader's controls split (skip_seqlock is now skip_head_seqlock and
+// skip_copy_reread) and copy_while_retiring added; packet_reader_state no longer has dropped_through. The N2.5 audit's
+// fixes: the composite's pixel_ratio option (the window's own logical-to-framebuffer ratio per axis, H1); a Spectrum
+// content that failed to build reports content_failed/content_failures once and is not rebuilt every frame (M2).
+// Also 9 (N2.9, generic mode content, built in the same round): composite_mode_bind/unbind/program/settings/drop/head/
+// state/retire, mode_blocks, mode_program_layout, program_block_pack; packet_reader_open's schema argument;
+// composite_live's mode counts; the Spectrum program refused when it does not take the current settings (audit L4).
+// 10 (N2.9 round 2, audit 14 Nov N29): the generic pass in the product 2D shaders' shape (one block of its own filled
+// by name from the core's conventions, the settings and the record; v_uv); composite_mode_card, mode_core_members;
+// mode_blocks takes the card and the target and returns one block per pass; composite_window_pixels (Qt's own
+// framebuffer, L1); the composite's fade_ms option (M1) and its shown/shown_opacity/fading state; a Spectrum call on an
+// item that draws a mode is refused (L3), composite_spectrum_present included; the states' refused_frames,
+// last_refusal, content_failures (M2, M4).
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 8
+#define SRPSS_NATIVE_CORE_ABI 10

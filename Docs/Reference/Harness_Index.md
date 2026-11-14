@@ -763,7 +763,9 @@ no waiting read outside the control, the trace and its report, the Python face).
 # process through the widened run set, every drawn frame's SpectrumDraw values against the module's spectrum_block,
 # byte for byte; controls: the previous record and a nudged fade differ), item (frames accepted at the sync on the render
 # thread, nothing recorded at rest, the head read consumes nothing, the drop edge, an unbind released on the render
-# thread, D1's close during copy with its accept_after_retire control), pixels (sampled frames drawn by the native item
+# thread, D1's close during copy with its accept_after_retire control, a refused NaN frame keeping the card with a
+# no-bars frame clearing it as control), program (also the content failure recorded once and re-armed once by a changed
+# card), pixels (sampled frames drawn by the native item
 # against the Python renderer's own draw on OpenGL, and Vulkan against native OpenGL within 1 level; the surface's GPU
 # time per pass); Vulkan validated, only Qt 6.12.0's recorded defects excused
 python native/core/python/spectrum_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
@@ -773,13 +775,40 @@ python native/core/python/spectrum_check.py --module-dir release/native_module -
 # native route (NativeVisualizerRoute on the Visualizer item), frame for frame at dpr 1.5; per input rows split at the
 # mode switch (steady, fade), each card's window map checked against the Python renderer's own float32 rows, and every
 # pixel more than a level off classified (card-edge column, peak row, cap arc, fade frame, other); worst-frame crops
+# --against <accepted native_render_parity.json>: after a build round, each run against the accepted one (the native
+# frames' hashes decide where both runs keep them, else every difference row and total); exit 0 only when all match
 python tools/visualizer_replay/owner_render_parity.py --native --module-dir release/native_module --offers --out <dir>
-    [--runs spectrum spectrum:b ...]
+    [--runs spectrum spectrum:b ...] [--against <accepted json>]
 ```
 
 The work folder beside its summary holds the captured frames and references; delete it once the run is judged. Tests:
 `tests/test_native_core_spectrum.py` (no build: the card's target map at every quarter turn, the Python face, the shader
 baked from the product's file, the port's constants and block members against the Python renderer).
+
+### Generic mode content (N2.9)
+
+```powershell
+# The harness-only mode Probe Rings (native/core/python/probe_rings: a Python simulation, two passes, a spec; never
+# registered; its passes in the product 2D shaders' shape), an OpenGL child then a Vulkan child: blocks (GPU-free: each
+# pass's one block from the core's conventions, the settings and the record against an independent packer at the
+# reflected offsets; every refusal: unknown, unfilled, two owners, L7's range rule, the runtime schema's, a sampler, a
+# block at binding 17, two blocks; the product's Oscilloscope and Spline Curve packs admitted, Bubble refused for its
+# samplers and admitted without them), reader (the core's reader admits the mode's slots by the schema handed over;
+# controls: no schema, a broken range rule), draw (rings at the record's radii at dpr 1 and 1.5, the glow pass by v_uv,
+# a card change, nothing at rest, a refused NaN frame keeping the card, a shader, spec, shader+spec and simulation change
+# shown with no module rebuild, refusals on the live item, the fade, the content latch and its re-arm, the surface's GPU
+# time for 2 and 3 passes; Vulkan against native OpenGL within 1 level), framebuffer (a 2560x1440 host at 150 %: the
+# window's framebuffer from Qt's own target); Vulkan validated
+python native/core/python/generic_mode_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan] [--rounds blocks reader draw framebuffer] [--label n29_generic_mode]
+```
+
+Tests: `tests/test_native_mode_content.py` (no build: the runtime schema's row shape and fingerprint, appended mode codes,
+the two schema registries with a control, the registered entries, the core's conventions table against the face's and
+against what the Python 2D renderers take from the card, the product 2D shaders' shape, Probe Rings never registered
+and filling each member from one source, its shaders and the refusal shaders baked, the harness's own measures with
+controls) and `tests/test_native_core_mode.py` (the built module: packing by name from the three sources, the
+refusals, the product packs' admission, M3, the program-block edges of audit 14 Nov L2).
 
 Every window round of the three native-core harnesses starts with an environment control (an off-screen window with
 Qt alone must present at least 10 frames in 1 s on that API); D3D11 and D3D12 windows present nothing while the display

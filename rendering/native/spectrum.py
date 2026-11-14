@@ -51,14 +51,19 @@ def _ortho_item_matrix(window_size: tuple[float, float], origin: tuple[float, fl
     return tuple(m)
 
 
-def compose_window_from_target(window_rows, target_origin: tuple[float, float], dpr: float) -> list[float]:
-    """The target's pixel -> the window's, as rows x, y: the target's axes are the oriented item's (1 / dpr per pixel,
-    its origin at ``target_origin`` in the oriented item), composed with the exact (double) inverse of the window map
-    ``window_rows`` (window pixel -> oriented item). A signed permutation with whole offsets; anything else raises."""
+def compose_window_from_target(window_rows, target_origin: tuple[float, float],
+                               ratio: float | tuple[float, float]) -> list[float]:
+    """The target's pixel -> the window's, as rows x, y: the target's axes are the oriented item's (1 / ratio per
+    pixel on each oriented axis, its origin at ``target_origin`` in the oriented item), composed with the exact (double)
+    inverse of the window map ``window_rows`` (window pixel -> oriented item). ``ratio``: the window's
+    logical-to-framebuffer ratio along the oriented item's x and y (the device pixel ratio only where the window's
+    logical size times it is its framebuffer; audit 14 Nov, H1). A signed permutation with whole offsets; anything
+    else raises."""
+    sx, sy = (float(ratio), float(ratio)) if isinstance(ratio, (int, float)) else (float(ratio[0]), float(ratio[1]))
     (a, b, c), (d, e, f) = window_rows
     det = a * e - b * d
     inverse = ((e / det, -b / det), (-d / det, a / det))
-    target_map = ((1.0 / dpr, 0.0, float(target_origin[0])), (0.0, 1.0 / dpr, float(target_origin[1])))
+    target_map = ((1.0 / sx, 0.0, float(target_origin[0])), (0.0, 1.0 / sy, float(target_origin[1])))
     composed: list[float] = []
     for row in inverse:
         coefficients = [row[0] * target_map[0][k] + row[1] * target_map[1][k] for k in range(3)]
@@ -98,7 +103,10 @@ def spectrum_presentation(presentation: Any, geometry: CompositeGeometry, *, win
     content = oriented((content_x - outer_x, content_y - outer_y, content_width, content_height))
     target_x, target_y, target_width, target_height = geometry.rect
     target = oriented((target_x - outer_x, target_y - outer_y, target_width, target_height))
-    dpr = float(geometry.dpr)
+    # The rect's device pixels are counted with the window's own ratio per window axis; the oriented item's x is the
+    # window's y under an odd quarter turn.
+    ratio_x, ratio_y = geometry.ratio
+    oriented_ratio = (ratio_y, ratio_x) if quarters & 1 else (ratio_x, ratio_y)
     texture_width, texture_height = geometry.texture_size
     viewport = (0, 0, int(window_pixels[0]), int(window_pixels[1]))
     rows = {}
@@ -108,7 +116,7 @@ def spectrum_presentation(presentation: Any, geometry: CompositeGeometry, *, win
         if mapping is None:
             raise ValueError("the card's window map is degenerate")
         rows[single] = mapping
-    window_from_target = compose_window_from_target(rows[False], (target[0], target[1]), dpr)
+    window_from_target = compose_window_from_target(rows[False], (target[0], target[1]), oriented_ratio)
     return {
         "quarters": quarters,
         "item_size": [outer_width, outer_height],
@@ -127,15 +135,22 @@ def spectrum_presentation(presentation: Any, geometry: CompositeGeometry, *, win
     }
 
 
-def window_metrics(item: Any, dpr: float) -> tuple[tuple[float, float], tuple[int, int]]:
-    """``item``'s window at the card's ``dpr``: its logical size and its framebuffer's pixels (the Python node's
-    render target)."""
+def window_metrics(item: Any, composite: Any) -> tuple[tuple[float, float], tuple[int, int]]:
+    """``item``'s window: its logical size and its framebuffer's pixels, the target Qt's projection maps
+    ``QRectF(0, 0, window.size())`` onto, as Qt's own swapchain or redirect target reports it through the native item
+    (``CompositeItem.window_pixels``; audit N29 L1: no platform call, no rounding of the logical size). Raises while the
+    window has none yet (not exposed): the route then waits for its next update."""
     window = item.window()
     if window is None:
-        raise RuntimeError("the native Spectrum's item has no window")
-    dpr = float(dpr)
-    width, height = float(window.width()), float(window.height())
-    return (width, height), (int(round(width * dpr)), int(round(height * dpr)))
+        raise WindowNotReady("the native item has no window")
+    pixels = composite.window_pixels()
+    if pixels is None:
+        raise WindowNotReady("the native item's window has no framebuffer yet")
+    return (float(window.width()), float(window.height())), pixels
+
+
+class WindowNotReady(RuntimeError):
+    """The native item's window is not there yet, or has no framebuffer yet (an ordinary startup state)."""
 
 
 class NativeSpectrum:
@@ -220,5 +235,5 @@ def spectrum_block(module: ModuleType, record: bytes, card: Mapping[str, Any], p
     return block, json.loads(facts)
 
 
-__all__ = ["NativeSpectrum", "SPECTRUM_PRESENTATION_KEYS", "spectrum_block", "spectrum_presentation",
+__all__ = ["NativeSpectrum", "SPECTRUM_PRESENTATION_KEYS", "WindowNotReady", "spectrum_block", "spectrum_presentation",
            "window_metrics"]

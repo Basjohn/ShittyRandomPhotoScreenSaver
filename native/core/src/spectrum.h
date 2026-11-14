@@ -17,26 +17,24 @@
 //   to the item's oriented logical coordinate (u_item_from_frag, the Python renderer's own float32 rows) are two of
 //   them: the target is the card's drawn rect on whole device pixels, in the content's orientation.
 //
-// The stream (SpectrumSource): the GUI binds a frame mapping by name with its expected identity; the reader is opened on
-// the GUI thread and read only at the item's sync, on the render thread (the accept edge, D2; the Python path's
-// admit-at-sync). Retiring a stream (a rebind, an unbind, the item's destruction) stores Retiring at once and never
-// waits (D1); the render-thread retire job releases it at the next sync, or when Qt deletes the item's node (the render
-// thread, the QRhi alive). A source whose node never existed releases on its own last owner's thread: no read can be in
-// progress there. The drop edge (R-184) is the reader's own (dropRetainedFrame, applied by the next read).
+// The stream (SpectrumSource) is the shared StreamSource (stream_source.h: bound by name, read at the item's sync on the
+// render thread, retired without waiting, released by the render thread's retire job, the drop edge, the admission),
+// and the content's failure latch the shared ContentLatch. A frame whose values the block refuses keeps the last drawn
+// frame (audit N29 M4).
 //
 // Nothing at rest: the surface records only when a frame was accepted, the presentation changed or a frame was dropped.
 #pragma once
 
 #include "packet_reader.h"
 #include "program_blocks.h"
+#include "stream_source.h"
 #include "surfaces.h"
-#include "thread_probe.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QJsonObject>
-#include <QtCore/QList>
-#include <QtCore/QMutex>
+#include <QtCore/QSize>
 #include <QtCore/QString>
+#include <rhi/qrhi.h>
 
 #include <memory>
 
@@ -78,6 +76,7 @@ struct SpectrumProgram
     QShader fragment;
     BlockLayout layout;
     QJsonObject settings;
+    BlockValues packed;             // the settings packed into the block once, when they change (audit 14 Nov, L3)
     quint64 shaderGeneration = 0;   // the pipeline is rebuilt when it changes
     bool compiledIn = false;        // the module's own copy (the harness's negative control only)
 
@@ -95,89 +94,55 @@ extern const char *const kSpectrumFrameMembers[];
 // The block for one record under one presentation and program, as QuickSpectrumRenderer.render computes it. False when
 // nothing is drawn (no bars, a layout the renderer refuses, a refused value) with the reason; `facts` carries the
 // derived values a test reads and "unfilled": the reflected members neither side filled (a harness error).
+// `refused` (when given): the frame holds a value the block refuses (a NaN, a value with no defined conversion), as
+// against a frame that legitimately draws nothing (no bars, a layout too narrow): the content keeps the last drawn
+// frame for the first and clears for the second (audit N29 M4).
 bool spectrumBlock(const QByteArray &record, const SpectrumPresentation &presentation, const SpectrumProgram &program,
-                   QByteArray *block, QJsonObject *facts, QString *reason);
+                   QByteArray *block, QJsonObject *facts, QString *reason, bool *refused = nullptr);
 
 // Any thread: the QRhi objects every Spectrum content holds in the process (lifecycle proofs).
 int spectrumContentObjects();
 
-// The stream and the card a native Spectrum item draws: shared by the item (GUI thread) and its node (render thread).
-class SpectrumSource
+/// The stream and the card a native Spectrum item draws: shared by the item (GUI thread) and its node (render thread).
+// The stream, its admission, its retire job and the report are the shared StreamSource's (stream_source.h).
+class SpectrumSource final : public StreamSource
 {
 public:
     SpectrumSource();
-    ~SpectrumSource();
-    SpectrumSource(const SpectrumSource &) = delete;
-    SpectrumSource &operator=(const SpectrumSource &) = delete;
+    ~SpectrumSource() override;
 
-    // GUI thread. A new stream (the previous one retires); false with `error` when the mapping is not a frame buffer
-    // this build reads (a name that does not open gives a retired reader, D1 rule 1).
-    bool bind(const QString &mappingName, const PacketReaderConfig &config, QString *error);
-    void unbind();                                    // the current stream retires (never waits)
-    // Any thread: the current stream stores Retiring at once (D1; no copy starts after it, a copy in progress is not
-    // presented) and stays bound until unbind() moves it to the render thread's release.
-    void retireCurrent();
     void setPresentation(const SpectrumPresentation &presentation);
     // GUI thread: the program (a new pack rebuilds the pipeline at the next record) and its settings (re-packed only
-    // when they change: nothing per frame at rest).
-    void setProgram(const SpectrumProgram &program);
+    // when they change: nothing per frame at rest). A new program keeps the settings it was given before; it is
+    // refused when they no longer fit its block (audit 14 Nov, L4: the route sends unchanged settings only once).
+    bool setProgram(const SpectrumProgram &program, QString *error);
     bool setSettings(const QJsonObject &settings, QString *error);
-    void dropRetainedFrame();                         // R-184's edge, applied by the next read
-    bool readHead(SlotHead *out);                     // D2's head read of the current stream (consumes nothing)
-    // The D1 hook (the pause_in_copy control only): wait until the current reader is paused inside a copy; resume it.
-    bool waitPaused(int timeoutMs);
-    void resume();
 
     // Render thread, at the item's sync: the retired readers released (the retire job), the current stream read, the
     // presentation taken. True when the surface must record (a frame accepted or dropped, the presentation changed).
     bool sync();
-    // Render thread: every retired reader released (the node's destruction).
-    void releaseRetired();
 
-    // Render thread, while recording: what was synchronised last.
-    bool hasFrame() const { return m_hasFrame; }
-    const QByteArray &frameRecord() const { return m_record; }
+    // Render thread, while recording: what was synchronised last, and the inputs' generation (the card's and the
+    // settings' changes: a latched content failure is retried when it moves, audit N29 L10).
     const SpectrumPresentation &drawnPresentation() const { return m_drawn; }
     const SpectrumProgram &drawnProgram() const { return m_drawnProgram; }
+    quint64 drawnInputs() const { return m_drawnInputs; }
 
-    // The content's report (render thread writes, any thread reads).
-    void noteRecorded(bool drawn, const QString &reason, const QJsonObject &facts);
-
-    QJsonObject stateJson() const;
     static int liveSources();
 
+protected:
+    void stateInto(QJsonObject &o) const override;
+
 private:
-    mutable QMutex m_mutex;                 // guards the members down to m_presentationGeneration
-    PacketReader *m_current = nullptr;      // read only on the render thread; replaced on the GUI thread
-    QList<PacketReader *> m_retiring;       // retired, waiting for the render thread's release
-    SpectrumPresentation m_presentation;    // the GUI's latest
+    SpectrumPresentation m_presentation;    // the GUI's latest (under m_mutex)
     SpectrumProgram m_program;              // the GUI's latest program and settings
     quint64 m_presentationGeneration = 0;   // the presentation's or the program's change
-    QString m_mapping;
-    qint64 m_binds = 0;
-    qint64 m_retired = 0;
-    qint64 m_released = 0;
-    QJsonObject m_lastReader;               // the last released reader's state
-
-    ThreadProbe m_syncProbe;                // D5.4 at the accept edge: the threads the syncs (the reads) ran on
 
     // Render thread.
     quint64 m_takenGeneration = 0;
     SpectrumPresentation m_drawn;
     SpectrumProgram m_drawnProgram;
-    QByteArray m_record;
-    bool m_hasFrame = false;
-
-    mutable QMutex m_reportMutex;           // guards the report
-    qint64 m_syncs = 0;
-    qint64 m_accepted = 0;
-    qint64 m_admissionRejected = 0;         // accepted frames the node's admission rule does not draw
-    bool m_reportedFrame = false;
-    qint64 m_records = 0;
-    qint64 m_draws = 0;
-    QString m_lastReason;
-    QJsonObject m_lastFacts;
-    QString m_lastResult;
+    quint64 m_drawnInputs = 0;
 };
 
 // The surface content that draws Spectrum: its pipelines and buffers live on the render thread with the surface.
@@ -187,6 +152,7 @@ public:
     explicit SpectrumContent(std::shared_ptr<SpectrumSource> source);
     ~SpectrumContent() override;
 
+    bool keepsTarget(QRhi *rhi, ColorTarget &target) override;
     bool record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, QString *error) override;
     void release() override;
     int liveResources() const override;
@@ -195,9 +161,21 @@ public:
 private:
     struct Resources;
     bool ensure(QRhi *rhi, ColorTarget &target, QString *error);
+    bool build(QRhi *rhi, ColorTarget &target, QString *error);
+    void pack();
 
     std::shared_ptr<SpectrumSource> m_source;
     std::unique_ptr<Resources> m_res;
+    ContentLatch m_latch;                   // a failed build (audit 14 Nov, M2; N29 L10)
+    // The frame packed by keepsTarget for the record that follows it.
+    QByteArray m_block;
+    QJsonObject m_facts;
+    QString m_reason;
+    bool m_draw = false;
+    bool m_refused = false;
+    // The target a frame was last drawn into (a refused frame keeps it only when it holds one of ours, audit N29 M4).
+    const QRhiTexture *m_drawnTexture = nullptr;
+    QSize m_drawnSize;
 };
 
 } // namespace srpss_core

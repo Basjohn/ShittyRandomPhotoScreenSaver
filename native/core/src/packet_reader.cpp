@@ -16,7 +16,8 @@
 #define NOMINMAX
 #include <windows.h>
 
-#if !defined(_M_X64)
+// MSVC also defines _M_X64 for ARM64EC, a weakly ordered target where a compiler barrier is not an acquire load: refused.
+#if !defined(_M_X64) || defined(_M_ARM64EC)
 #error "the packet reader's seqlock loads rely on x86-64 load ordering (the module's one target)"
 #endif
 
@@ -80,7 +81,7 @@ inline quint16 read16(const uchar *p)
     return value;
 }
 
-bool knownMode(quint32 code)
+bool compiledMode(quint32 code)
 {
     for (const fa::ModeCode &mode : fa::kModeCodes) {
         if (mode.code == code)
@@ -178,8 +179,12 @@ bool PacketReaderConfig::fromJson(const QByteArray &json, PacketReaderConfig *ou
             const QString name = value.toString();
             if (name == QLatin1String("skip_head_check"))
                 c.skipHeadCheck = true;
-            else if (name == QLatin1String("skip_seqlock"))
-                c.skipSeqlock = true;
+            else if (name == QLatin1String("skip_head_seqlock"))
+                c.skipHeadSeqlock = true;
+            else if (name == QLatin1String("skip_copy_reread"))
+                c.skipCopyReread = true;
+            else if (name == QLatin1String("copy_while_retiring"))
+                c.copyWhileRetiring = true;
             else if (name == QLatin1String("accept_unordered"))
                 c.acceptUnordered = true;
             else if (name == QLatin1String("acknowledge_refused"))
@@ -218,8 +223,12 @@ QJsonObject PacketReaderConfig::toJson() const
     QJsonArray controls;
     if (skipHeadCheck)
         controls.append(QStringLiteral("skip_head_check"));
-    if (skipSeqlock)
-        controls.append(QStringLiteral("skip_seqlock"));
+    if (skipHeadSeqlock)
+        controls.append(QStringLiteral("skip_head_seqlock"));
+    if (skipCopyReread)
+        controls.append(QStringLiteral("skip_copy_reread"));
+    if (copyWhileRetiring)
+        controls.append(QStringLiteral("copy_while_retiring"));
     if (acceptUnordered)
         controls.append(QStringLiteral("accept_unordered"));
     if (acknowledgeRefused)
@@ -233,6 +242,8 @@ QJsonObject PacketReaderConfig::toJson() const
     if (acceptAfterRetire)
         controls.append(QStringLiteral("accept_after_retire"));
     o.insert(QStringLiteral("controls"), controls);
+    o.insert(QStringLiteral("runtime_schema"),
+             runtimeSchema ? QJsonValue(double(runtimeSchema->schema().schemaId)) : QJsonValue());
     return o;
 }
 
@@ -261,6 +272,18 @@ const fa::Schema *PacketReader::schema(quint32 schemaId)
             return &schema;
     }
     return nullptr;
+}
+
+const fa::Schema *PacketReader::admittedSchema(quint32 schemaId) const
+{
+    if (m_config.runtimeSchema && m_config.runtimeSchema->schema().schemaId == schemaId)
+        return &m_config.runtimeSchema->schema();
+    return schema(schemaId);
+}
+
+bool PacketReader::knownMode(quint32 code) const
+{
+    return compiledMode(code) || (m_config.runtimeSchema && m_config.runtimeSchema->schema().modeCode == code);
 }
 
 PacketReader *PacketReader::open(const QString &name, const PacketReaderConfig &config, QString *error)
@@ -414,9 +437,8 @@ void PacketReader::applyDrop()
 {
     if (!m_dropRequested.fetchAndStoreAcquire(0))
         return;
-    if (m_hasFrame)
-        m_droppedThrough = qMax(m_droppedThrough, m_frameHead.sequence);
-    m_droppedThrough = qMax(m_droppedThrough, m_accepted);
+    // The accepted watermark already covers the dropped frame (a retained frame is the last accepted one), so the drop
+    // keeps no watermark of its own (audit 14 Nov, low 2): nothing at or below m_accepted is accepted again.
     m_hasFrame = false;
     m_frameSchema = nullptr;
     ++m_dropsApplied;
@@ -483,13 +505,15 @@ bool PacketReader::admit(const SlotHead &head, QString *cause, QString *reason) 
         *reason = QStringLiteral("schema %1 is for mode code %2, the slot's is %3").arg(hexText(schemaId)).arg(schemaMode).arg(mode);
         return false;
     }
-    const fa::Schema *found = schema(schemaId);
+    const fa::Schema *found = admittedSchema(schemaId);
     if (!found) {
         quint32 newest = 0;
         for (const fa::Schema &known : fa::kSchemas) {
             if (known.modeCode == schemaMode)
                 newest = qMax(newest, known.version);
         }
+        if (m_config.runtimeSchema && m_config.runtimeSchema->schema().modeCode == schemaMode)
+            newest = qMax(newest, m_config.runtimeSchema->schema().version);
         if (!newest) {
             *cause = QStringLiteral("schema");
             *reason = QStringLiteral("mode code %1 has no native schema in this build").arg(schemaMode);
@@ -595,7 +619,7 @@ ReadResult PacketReader::read()
     const int state = m_state.loadAcquire();
     if (state == Retired)
         return ReadResult::Retired;
-    if (state == Retiring) {
+    if (state == Retiring && !m_config.copyWhileRetiring) {
         ++m_readsWhileRetiring;
         return ReadResult::Retiring;
     }
@@ -611,12 +635,11 @@ ReadResult PacketReader::read()
     } guard { this };
 
     const quint64 latest = loadAcquire64(m_base + fa::kHeaderLatestSequence);
-    const quint64 watermark = qMax(m_accepted, m_droppedThrough);
     if (m_config.acceptUnordered) {
         if (latest == m_accepted || latest == 0)
             return ReadResult::Nothing;
-    } else if (latest <= watermark) {
-        if (latest < watermark) {
+    } else if (latest <= m_accepted) { // the accepted watermark (a dropped frame is at or below it)
+        if (latest < m_accepted) {
             if (latest != m_lastStale) {
                 ++m_stale;
                 m_lastStale = latest;
@@ -625,7 +648,7 @@ ReadResult PacketReader::read()
         }
         return ReadResult::Nothing;
     }
-    const bool strict = !m_config.skipSeqlock;
+    const bool strict = !m_config.skipHeadSeqlock; // the head's seqlock: the odd latest, the end, the head's begin
     if (strict && (latest % 2)) {
         ++m_torn;
         return ReadResult::Torn;
@@ -657,9 +680,9 @@ ReadResult PacketReader::read()
         // The head alone, whole under its seqlock, decides admission before any payload byte is copied.
         if (!admit(head, &cause, &reason))
             return refuse(latest, cause, reason);
-        found = schema(head.payloadSchema);
+        found = admittedSchema(head.payloadSchema);
     }
-    if (m_state.loadAcquire() != Open) { // D1: no copy starts once the stream is retiring
+    if (m_state.loadAcquire() != Open && !m_config.copyWhileRetiring) { // D1: no copy starts once the stream is retiring
         ++m_readsWhileRetiring;
         return ReadResult::Retiring;
     }
@@ -678,7 +701,8 @@ ReadResult PacketReader::read()
     barrier();
     const quint64 begin = loadAcquire64(base + fa::kSlotSequenceBegin);
     m_copiesFinished.ref();
-    if (strict && (begin != latest || head.payloadBytes > m_capacity)) {
+    // The re-read after the copy (its own control, skip_copy_reread: the guard the in-place race depends on).
+    if ((!m_config.skipCopyReread && begin != latest) || (strict && head.payloadBytes > m_capacity)) {
         ++m_torn; // a write began during the copy: the previous frame stays
         return ReadResult::Torn;
     }
@@ -718,7 +742,6 @@ bool PacketReader::readHead(SlotHead *out)
     m_headReads.ref();
     if (m_config.headResetsWatermark) { // the negative control only (consumer state from the caller's thread)
         m_accepted = 0;
-        m_droppedThrough = 0;
     }
     const quint64 latest = loadAcquire64(m_base + fa::kHeaderLatestSequence);
     if (latest == 0 || (latest % 2))
@@ -773,7 +796,6 @@ QJsonObject PacketReader::stateJson() const
     }
     o.insert(QStringLiteral("retained"), m_hasFrame);
     o.insert(QStringLiteral("retained_sequence"), m_hasFrame ? double(m_frameHead.sequence) : 0.0);
-    o.insert(QStringLiteral("dropped_through"), double(m_droppedThrough));
     o.insert(QStringLiteral("drops_applied"), double(m_dropsApplied));
     o.insert(QStringLiteral("head_reads"), double(m_headReads.loadAcquire()));
     o.insert(QStringLiteral("reads_while_retiring"), double(m_readsWhileRetiring));

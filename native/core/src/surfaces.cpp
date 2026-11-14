@@ -253,10 +253,18 @@ bool Surface::record(QRhi *rhi, QRhiCommandBuffer *cb, bool *recorded, QString *
         return false;
     }
     if (m_content) {
+        if (m_content->keepsTarget(rhi, m_res->target)) {
+            m_dirty.storeRelease(0); // the target keeps what it holds; nothing primed, nothing recorded
+            return true;
+        }
         // A mode's content (N2.5): its own passes into the same target, primed for the load first (rule C).
         const QString prime = primeForLoad(rhi, cb, m_res->target.texture.get());
-        if (!m_content->record(rhi, cb, m_res->target, error))
+        if (!m_content->record(rhi, cb, m_res->target, error)) {
+            // Not retried every frame (audit 14 Nov, M2): the surface records again only when its content's inputs
+            // change (a new frame, card, program or settings marks it dirty), and the content fails fast meanwhile.
+            m_dirty.storeRelease(0);
             return false;
+        }
         m_dirty.storeRelease(0);
         m_passes.fetchAndAddRelaxed(1);
         *recorded = true;

@@ -16,7 +16,15 @@ the lead on 12 Nov 2026):
   refused (``PayloadRefused``), counted, not acknowledged, and the stream is reported failed. It never guesses, skips
   silently or falls back to the other decoder.
 
-The per-mode schemas live in their own modules (``_SCHEMA_MODULES``), imported on first use.
+The per-mode schemas live in their own modules, imported on first use, in two registries (audit N29 M5.1):
+
+- ``_SCHEMA_MODULES``: the schemas the module compiles (``compiled_schemas``): a hand-written C++ consumer reads them
+  (Spectrum). ``tools/native_frame_abi_header.py`` writes them into the C++ header and
+  ``rendering.native.packet_reader.schema_table_differences`` compares them with a built module's.
+- ``_RUNTIME_SCHEMA_MODULES``: the schemas a generic mode's stream carries (``runtime_schemas``): the Python transport
+  knows them (``native_schemas``: the engine worker's encoder, the reference reader) and the core receives each at bind
+  (``rendering.native.mode.schema_table_entry``), so adding or changing one never needs a module build and never makes a
+  built module's table differ.
 """
 from __future__ import annotations
 
@@ -31,10 +39,13 @@ from core.visualizer_engine.packet_abi import MODE_CODES, PacketAbiError
 
 NATIVE_BASE = 0x100
 NATIVE_ALIGNMENT = 16
-#: The native schema's mode id -> the module that defines it (``SCHEMA``: a ``NativeSchema``).
+#: The schemas the module compiles: mode id -> the module that defines them (``SCHEMAS``: ``NativeSchema`` objects).
 _SCHEMA_MODULES = {
     "spectrum": "core.visualizer_engine.spectrum_native_schema",
 }
+#: The runtime schemas (generic modes, handed to the core at bind): mode id -> its module, as above. A mode is in one
+#: registry only.
+_RUNTIME_SCHEMA_MODULES: dict[str, str] = {}
 
 PayloadKind = Literal["codec", "native"]
 
@@ -211,20 +222,43 @@ class NativeSchema:
 
 
 _schemas: dict[int, NativeSchema] | None = None
+_runtime_ids: frozenset[int] = frozenset()
+
+
+def _load(modules: dict[str, str]) -> dict[int, NativeSchema]:
+    table = {}
+    for mode_id, module in modules.items():
+        for schema in import_module(module).SCHEMAS:
+            if schema.mode_id != mode_id:
+                raise RuntimeError(f"{module} defines a schema for {schema.mode_id}, not {mode_id}")
+            table[schema.schema_id] = schema
+    return table
 
 
 def native_schemas() -> dict[int, NativeSchema]:
-    """Every native schema this build knows, by schema id."""
-    global _schemas
+    """Every native schema this build knows (compiled and runtime), by schema id: what the Python transport encodes
+    and admits."""
+    global _schemas, _runtime_ids
     if _schemas is None:
-        table = {}
-        for mode_id, module in _SCHEMA_MODULES.items():
-            for schema in import_module(module).SCHEMAS:
-                if schema.mode_id != mode_id:
-                    raise RuntimeError(f"{module} defines a schema for {schema.mode_id}, not {mode_id}")
-                table[schema.schema_id] = schema
-        _schemas = table
+        both = set(_SCHEMA_MODULES) & set(_RUNTIME_SCHEMA_MODULES)
+        if both:
+            raise RuntimeError(f"modes {sorted(both)} are in both schema registries")
+        compiled = _load(_SCHEMA_MODULES)
+        runtime = _load(_RUNTIME_SCHEMA_MODULES)
+        _runtime_ids = frozenset(runtime)
+        _schemas = {**compiled, **runtime}
     return _schemas
+
+
+def compiled_schemas() -> dict[int, NativeSchema]:
+    """The schemas the module compiles (a hand-written consumer's): the C++ header's table, and what a built module's
+    table is compared with."""
+    return {schema_id: schema for schema_id, schema in native_schemas().items() if schema_id not in _runtime_ids}
+
+
+def runtime_schemas() -> dict[int, NativeSchema]:
+    """The runtime schemas (generic modes): handed to the core at bind, never compiled."""
+    return {schema_id: schema for schema_id, schema in native_schemas().items() if schema_id in _runtime_ids}
 
 
 def schema_for_mode(mode_id: str | None) -> NativeSchema:
@@ -305,7 +339,9 @@ __all__ = [
     "NativeSchemaError",
     "PayloadRefused",
     "admit_slot_head",
+    "compiled_schemas",
     "decode_native_payload",
+    "runtime_schemas",
     "native_schema_id",
     "native_schemas",
     "parse_native_schema_id",

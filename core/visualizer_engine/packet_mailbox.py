@@ -293,14 +293,16 @@ class PacketMailbox(LatestStateMailbox):
     def _read(self) -> LogicalPublication | None:
         if self._closed:
             return None                               # a closed reader has nothing (its views are released)
-        if self._peeked is not None:
-            return self._peeked
+        if self._peeked is not None and not self._reader.has_unread():
+            return self._peeked                       # nothing newer since the peek (no copy)
         if self._payload_failure is not None:
             return None                               # the stream failed on a refused payload: nothing more
         try:
+            # A frame published after a peek supersedes the peeked one, as in process (N2.3 side defect: the peek was
+            # cached and the older frame handed out once). A torn or foreign newer slot keeps the peeked frame.
             packet = self._reader.read_latest()       # admits the slot by its head before any payload copy
             if packet is None:
-                return None
+                return self._peeked
             if self._payload == "native":
                 try:
                     state = decode_native_payload(packet.payload_schema, packet.payload)
@@ -312,6 +314,7 @@ class PacketMailbox(LatestStateMailbox):
             else:
                 generation, activation_id, produced, state = frame_codec.decode(packet.payload)
         except PayloadRefused as refusal:
+            self._peeked = None                       # a failed stream hands out nothing more, peeked or not
             self._refuse(refusal)
             return None
         completion = self._frame_completion

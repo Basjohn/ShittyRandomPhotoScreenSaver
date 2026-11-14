@@ -798,7 +798,14 @@ function Get-SRPSSVisualizerShaderNames {
     if ($shaderNames.Count -eq 0) {
         throw "Visualizer shader source directory contains no .frag files: $shaderSource"
     }
-    return $shaderNames
+    # The baked fragment packs (<mode>.frag.qsb, tools/regen_qrc.py --shaders) the native core loads at run time
+    # (rendering/native/program_values.py mode_fragment_pack): every pack beside its source ships too (audit 14 Nov, L7).
+    $packNames = @(
+        Get-ChildItem -LiteralPath $shaderSource -Filter '*.frag.qsb' -File |
+            Sort-Object Name |
+            Select-Object -ExpandProperty Name
+    )
+    return @($shaderNames + $packNames)
 }
 
 function Assert-SRPSSOnefileVisualizerShaderContract {

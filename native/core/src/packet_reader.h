@@ -25,8 +25,9 @@
 // consumed_sequence).
 //
 // The drop edge (R-184 as a contract): dropRetainedFrame() (GUI) posts a drop the next read() applies first: the
-// retained frame is cleared and dropped_through set to its sequence; no frame at or below the watermark is ever accepted
-// again, whatever a head read or a late wake says; only a newer sequence is.
+// retained frame is cleared. The retained frame is always the last accepted one, so the accepted watermark already
+// holds it: no frame at or below that watermark is ever accepted again, whatever a head read or a late wake says; only a
+// newer sequence is (the drop keeps no watermark of its own: audit 14 Nov, low 2).
 //
 // The transport rule: a slot whose payload_schema, mode code, version or size the reader does not know is refused at
 // its head, before any payload byte is copied; a record whose own field is out of range is refused after the copy.
@@ -40,15 +41,22 @@
 //
 // `controls` are the harness's negative controls (each disables one guard; the product never sets one).
 //
+// The runtime schema (N2.9, mode_schema.h): a generic mode's stream is read by the schema its owner hands over at bind
+// (`runtimeSchema`), beside the compiled-in table and by the same rules: its mode code is a known mode, its slots are
+// admitted by its id, version and size at the head, and its record's range rules hold after the copy. A slot of any
+// other schema is refused as before.
+//
 // Windows x64 only (the module's one target); no STL container, lock or function wrapper (README: msvcp140).
 #pragma once
 
 #include "frame_abi_generated.h"
+#include "mode_schema.h"
 
 #include <QtCore/QAtomicInteger>
 #include <QtCore/QByteArray>
 #include <QtCore/QJsonObject>
 #include <QtCore/QSemaphore>
+#include <QtCore/QSharedPointer>
 #include <QtCore/QString>
 
 namespace srpss_core {
@@ -82,7 +90,8 @@ struct PacketReaderConfig
 
     // Negative controls (harness only): each disables one guard.
     bool skipHeadCheck = false;       // no head admission and no record rules (a reader that decodes whatever it finds)
-    bool skipSeqlock = false;         // no sequence_end check and no begin re-read after the copy
+    bool skipHeadSeqlock = false;     // the head's seqlock off: an odd latest, the sequence_end check, the head's begin
+    bool skipCopyReread = false;      // no begin re-read after the payload copy (the in-place race's guard, alone)
     bool acceptUnordered = false;     // accept any latest sequence other than the accepted one (stale included)
     bool acknowledgeRefused = false;  // a refused slot is acknowledged
     bool headResetsWatermark = false; // a head read resets the accepted watermark (the drop's resurrection)
@@ -91,6 +100,11 @@ struct PacketReaderConfig
     // copy started and before its bytes are read, until resume(); waitPaused() tells another thread it is there.
     bool pauseInCopy = false;
     bool acceptAfterRetire = false;   // negative control: a copy finished after the stream began retiring is accepted
+    bool copyWhileRetiring = false;   // negative control: a copy starts although the stream is retiring
+
+    // A generic mode's schema (N2.9), given by its owner at bind, never by the configuration JSON; null: the compiled
+    // table alone.
+    QSharedPointer<const RuntimeSchema> runtimeSchema;
 
     static bool fromJson(const QByteArray &json, PacketReaderConfig *out, QString *error);
     QJsonObject toJson() const;
@@ -155,13 +169,17 @@ private:
 
     PacketReader(const QString &name, const PacketReaderConfig &config);
     bool validate(QString *problem);
+    // The schema of this id the reader admits (the runtime schema's, else the compiled one), and whether a mode code is
+    // known (the compiled table's, or the runtime schema's).
+    const frame_abi::Schema *admittedSchema(quint32 schemaId) const;
+    bool knownMode(quint32 code) const;
     bool pin();
     void unpin();
     void unmap();
     bool admit(const SlotHead &head, QString *cause, QString *reason) const;
     bool checkRecord(const frame_abi::Schema *schema, const QByteArray &record, QString *cause, QString *reason) const;
     // A whole slot's head under its seqlock (sequence_end first, the head, sequence_begin again): -1 none or torn.
-    // `strict` false is the skipSeqlock control (the slot found by its begin alone).
+    // `strict` false is the skipHeadSeqlock control (the slot found by its begin alone).
     int wholeSlot(quint64 latest, SlotHead *head, bool *ambiguous, bool strict) const;
     ReadResult refuse(quint64 sequence, const QString &cause, const QString &reason);
     void applyDrop();
@@ -186,8 +204,7 @@ private:
     qint64 m_copiesDiscarded = 0;     // copies finished after the stream began retiring (D1: nothing of them presented)
 
     // Consumer-thread state.
-    quint64 m_accepted = 0;        // the accepted watermark
-    quint64 m_droppedThrough = 0;  // the drop edge's watermark
+    quint64 m_accepted = 0;        // the accepted watermark (the drop edge's too)
     quint64 m_lastStale = 0;       // the last stale value counted (counted once per value)
     quint64 m_lastForeign = 0;     // the last foreign sequence counted
     bool m_failed = false;

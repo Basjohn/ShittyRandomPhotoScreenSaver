@@ -38,17 +38,17 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** High: N2.9 round 2 on the ABI 9 branch (round 1 passed N23, N25, N29 on the GitHub build f030503e; the audit `Audit_2026-11-14_N29.md` found the generic pass refuses the product 2D shaders' shape: widened to `v_uv` plus one Draw block filled by name from conventions, settings and record; the schema registry split; M1-M4 and lows), then a build round and merge. Medium: d1_run's backend-neutral grab (N2.8) and its 4K copies off the render thread (1C.2 tool defect); 1C.2's Save stall (R-212) and prepared neighbour merged 6faaf471. N2.8 waits for two displays.
+**Now (in flight):** N2.9 merged at ABI 10 with N2.3's leftovers and the N2.5 audit's fixes. Medium: d1_run's backend-neutral grab done, merging. N2.8 waits for two displays.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
 - High:
-  1. N2.9 (generic mode content: new modes iterate with no build round), then N2b; the lead runs N2.8 on Display 1
-     between them. N2.3's and N2.5's leftovers ride with the next fitting dispatch.
-  2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
+  1. N2b (the background layer natively); the lead runs N2.8 on Display 1 when both displays are present.
+     N2.5's and N2.9's leftovers ride with the next fitting dispatch.
+  2. 1D.6 (design note first), then 1C.10, as defects between N steps.
 - Medium:
-  1. N2.3's C++ control lows with the module's stale `spectrum.frag` copy (in flight).
-  2. 1D.14 (Spectrum's rim glow), once N2.5 has merged.
+  1. 1D.14 (Spectrum's rim glow; Settings-only, no build round: port rule (g)).
+  2. The N2.5 side defects (rule (a)'s fade-frame drift, the owner-parity wall-clock deadline).
   3. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
@@ -418,15 +418,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   backends; lifecycle facts J1 to J4 in `Native_Core_N06_N07_Qt_Facts.md`):
   - [ ] The hidden host's Qt Quick target keeps its contents between frames (defect B). A hidden host with
     transparent content must clear what Qt Quick does not cover; decide that when the first such host exists.
-- [ ] N2.3 leftovers (N2.3 proved 14 Nov: N23 VERDICT PASS on the GitHub-built ABI-5 module,
-  `native/core/python/packet_reader_check.py`; evidence `.artifacts/evidence/native_core/n2_3/20261114_n23_reader/`):
-  - [ ] Side defect: `PacketMailbox.peek` caches the frame it peeked (`packet_mailbox.py` `_read`, about :285), so
-    peek, publish, take hands out the older frame once; the in-process mailbox hands out the newest. Fix with a
-    test that fails on the old code.
-  - [ ] Audit 14 Nov lows (`Docs/Future_Work/Audit_2026-11-14.md`): the x86-64 guard also admits ARM64EC (weakly
-    ordered: refuse it); `skip_seqlock` drops three guards at once, so split it so one control isolates the
-    re-read after the copy; D1's "retiring: no copy starts" gets a negative control; the drop's own watermark is
-    redundant with the accepted sequence (delete it, or show a case only it catches).
 - [ ] N2.4 leftovers (N2.4 proved 13 Nov: `native/core/python/composite_check.py`, N24 VERDICT PASS on all four
   backends):
   - [ ] The Glass card material on the native composite; its contract read once Glass's own native path exists.
@@ -438,51 +429,36 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
 
 - [ ] N2.5 leftovers (N2.5 merged 14 Nov, b8457c3c, ABI 8: rules (a), (b), (c), (e) and (g) proved; route,
   figures and decisions in the merge message and `.artifacts/evidence/native_core/n2_5/`; the Python renderer
-  retires only after N2.8 passes, in the switch change):
+  retires only after N2.8 passes, in the switch change; its audit's H1, M1, M2, M4 and lows L1-L5, L7, L9 landed
+  with N2.9):
   - [ ] Studio on Vulkan: Spectrum's Studio preview is the Python renderer in an OpenGL node, so `has_studio` is
     OpenGL-only (`STUDIO_PREVIEW_BACKENDS`). A native Studio preview (the same native item in the Studio's scene)
     before the flip (NF) or before Vulkan becomes a default, whichever is first.
   - [ ] The two-block split (port rule (g)'s preferred shape): a settings block packed on change and a frame block
     per frame, removing the 980 to 995 Python calls a frame on the OpenGL path; OpenGL bit-identical at the
-    widened run set.
-  - [ ] The module's compiled-in `spectrum.frag` copy (the program round's negative control) predates the hoist;
-    refreshed at the next C++ round.
-  - [ ] Audit 14 Nov (`Docs/Future_Work/Audit_2026-11-14_N25.md`), H1: at fractional scales where the logical
-    window size times dpr is not the framebuffer (2560 x 1440 at 150 %: logical 1707; 3840 x 2160 at 175 %),
-    `compose_window_from_target` (`rendering/native/spectrum.py`) raises on every update and the native Spectrum
-    never draws on Vulkan. Build the map and `composite_geometry`'s placement from the window's real pixel ratio,
-    never raise out of `sync`, tests at 150 % and 175 % (red on the old code), and a check on Display 1 in N2.8.
-    (Medium, after N2.3's lows, in the same C++ round.)
-  - [ ] Audit M1/M2: the route and the content fail closed: bind cleanup (no leaked mapping), the program pack
-    retried or failed closed, no exception out of `update()`, no per-frame rebuild of a failed content record
-    (`surfaces.cpp`, `spectrum.cpp`), with tests. (Medium.)
-  - [ ] Audit M3: `spectrum_settings_values` and `QuickSpectrumRenderer.render` share one settings owner (or the
-    parity test widened past its one frozen setup). With the two-block split.
-  - [ ] Audit M4: unit tests of `NativeVisualizerRoute` itself (sync, caching, unbind's close and unlink, close).
-    (Medium.)
-  - [ ] Audit lows: L1 `spectrumBlock` checks `bars_len`/`peaks_len`, L9 the harness wait's use-after-free, L7 the
-    post-build check covers the `.qsb` packs (Medium, same C++ round); L2 `program_blocks` edge cases fail closed,
-    L3 settings packed on change only, L4 `setProgram` keeps the settings (High, with N2.9's files); L6 the native pipeline joins
-    the gradual warm-up; L8 the destruction barrier sees the native objects.
+    widened run set. With audit M3: `spectrum_settings_values` and `QuickSpectrumRenderer.render` share one
+    settings owner (today the guard compares one frozen setup).
+  - [ ] Audit lows: L6 the native pipeline joins the gradual warm-up (`renderer_prepared` is True at once on the
+    native route, `item.py:316-323`); L8 the destruction barrier sees the native objects.
+  - [ ] Side defect (14 Nov): rule (a)'s accepted run `n2_5/20261114_rule_a_round5_full` no longer reproduces from
+    its own commit (b8457c3c rerun the same day with the same module: a handful of level-1 pixels move in the fade
+    frames of 16 of 18 runs). Find the fade frames' time source in `owner_render_parity` and make the run
+    deterministic (two runs of one commit hash-identical), with a test; until then N2.9 was judged against the
+    same-day rerun (`n2_5/20261114_n25_round2/rule_a_n25_rerun_hashed/`).
+  - [ ] Side defect (14 Nov): the Spline Curve owner-parity test failed once under concurrent load with
+    `deadline:waiting_target` for Neon Lake on the worker path (a 6 s wall-clock deadline with no slow-but-alive
+    extension until the worker commits the target); passed 7 of 7 since. Replace the wall-clock deadline with the
+    worker's progress edges, or show the deadline is the right bound, with a test.
   - Surface format: RGBA8 (RGBA16F gave rule (a) no gain at twice the memory; quad alignment fixed it).
     `surface_format` stays a harness-only switch.
-- [ ] N2.9 Generic mode content: a mode drawn by the core from data alone, so new modes iterate with no build
-  round (after N2.5's round 4, which builds the settings half: runtime `.qsb` and the settings block packed by
-  name).
-  - [ ] The frame block packed by name from the mode's frame record the same way (the record's fields named in
-    the mode's schema, the same table the readers use); an unknown or unfilled member refused as for settings.
-  - [ ] Passes declared as data for what the 2D modes need (one or more full-card passes over the composite
-    surface, their blend, their order); anything beyond that is a primitive with its own C++ and harness.
-  - [ ] Proof on a harness-only mode (never registered, never in Settings): a Python simulation, a shader and a
-    spec drawn natively on OpenGL and Vulkan; a change to its shader, spec or simulation shows with no module
-    rebuild; GPU time per pass and nothing per frame at rest.
-  - [ ] `native/core/README.md` and `Native_Core_P3_Decisions.md` (a decision record) say how a new mode is built.
-  - [ ] Audit 14 Nov (`Docs/Future_Work/Audit_2026-11-14_N29.md`) M5: the generic pass takes the product 2D shaders' shape
-    (`v_uv` from `mode.vert`; one Draw block filled by name from the core's conventions, the settings and the
-    record; samplers stay a primitive), so the N5 ports are data; Oscilloscope and Spline Curve admitted by `checkPass`,
-    Bubble refused only for its samplers. The Python schema registry split into compiled and runtime schemas.
-  - [ ] Audit M1-M4: the latch re-arms on any changed input and fades; one shared latch for both contents; binding 17
-    refused; a refused record keeps the last frame drawn. Lows L1 (framebuffer size from Qt's swapchain, not ctypes) to L11.
+- Landed: N2.9 generic mode content (merged 14 Nov at ABI 10; N29, N23, N25 PASS, rule (a) hash-identical to N2.5's
+  own commit, rule (b) max 1 level). A mode is a Python simulation, its product shader (`v_uv` plus one Draw block
+  filled by name from the core's conventions, its settings and its record) and its spec; runtime schemas need no
+  build (README "How a new mode is built", decision D12). Its leftovers:
+  - [ ] Samplers are a primitive (N4.a): Bubble's `u_ambient_texture` (binding 0, the water-decoration underlay)
+    and `u_ambient_light` (binding 1, the particles' linear light), both from Bubble's offscreen ambient render.
+  - [ ] The Oscilloscope's port: its Quick renderer draws an instanced beam from a storage buffer with its own scene
+    target and bloom, not `oscilloscope.frag`, so its N5 port needs those primitives (or returns to the 2D shader).
 - [ ] N2.8 Lead, Display 1: the first rehearsal (cards and Spectrum on Vulkan; no wallpaper yet).
   - Pre-check done 14 Nov (`.artifacts/evidence/display/d1_run/20261114_n27_vulkan_visible/`, displays on):
     the saver on Vulkan revealed on its first presented frame, every card drew with its material and text, and
@@ -490,6 +466,9 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   - [ ] `d1_run.py`'s `grab` step reads back through OpenGL ("no current OpenGL context in afterRendering") and
     fails on Vulkan; `screen` steps work. N2.8 needs a backend-neutral grab (the window's own readback on its
     render thread through QRhi), with a test on both backends.
+  - [ ] H1 on a real window: at a fractional scale (the MSI at 150 %) the native Spectrum draws placed exactly,
+    the framebuffer size read from Qt's swapchain matching what Qt projects onto (N2.9 proved it in the hidden
+    host's redirect target only).
   - [ ] With no admitted mode renderable on the backend (before N2.5), the Visualizer card shows as a thin empty
     purple frame beside Spotify. Find its owner and decide: a card with nothing to draw fades out, never sits as
     an empty frame. OpenGL unchanged.

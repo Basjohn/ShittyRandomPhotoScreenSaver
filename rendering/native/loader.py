@@ -39,12 +39,13 @@ from rendering.native.packet_reader import (
     reader_config,
     schema_table_differences,
 )
+from rendering.native.mode import NativeMode, mode_blocks, program_json, schema_table_entry
 from rendering.native.spectrum import NativeSpectrum, spectrum_block
 
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 8
+EXPECTED_ABI = 10
 HOST_KINDS = ("window", "hidden")
 
 
@@ -146,6 +147,39 @@ class NativeCore:
         the members the core fills per frame."""
         return json.loads(self.module.spectrum_block_layout(pack))
 
+    def mode(self, parent: Any) -> NativeMode:
+        """A generic mode (N2.9, ``rendering.native.mode``) on a new composite item in ``parent``: place the
+        composite, give it its program and settings, bind its stream with its schema. Refused while the module's
+        compiled-in frame schemas differ from this build's (``SchemaTableMismatch``)."""
+        differences = schema_table_differences(self.frame_schemas(), python_schema_table())
+        if differences:
+            raise SchemaTableMismatch(f"{MODULE_NAME}'s frame schemas are not this build's: {'; '.join(differences)}")
+        return NativeMode(self.module, self.composite(parent))
+
+    def mode_blocks(self, schema: Any, passes: Any, settings: Mapping[str, Any], record: bytes,
+                    card: Mapping[str, Any] | None, target: tuple[int, int]) -> tuple[list[bytes], dict]:
+        """Each pass's block bytes a generic mode uploads for ``record`` under ``card`` into ``target`` pixels
+        (GPU-free)."""
+        return mode_blocks(self.module, schema, passes, settings, record, card, target)
+
+    def mode_core_members(self) -> dict:
+        """The core's conventions as compiled: name -> (components, read from the card)."""
+        rows = json.loads(self.module.mode_core_members())["members"]
+        return {str(name): (int(components), bool(from_card)) for name, components, from_card in rows}
+
+    def mode_program_layout(self, passes: Any) -> dict:
+        """The program's passes, blends and reflected ModeSettings and ModeFrame blocks (GPU-free)."""
+        declared, packs = program_json(passes)
+        return json.loads(self.module.mode_program_layout(declared, packs))
+
+    def program_block_pack(self, pack: bytes, block: str, values: Mapping[str, Any]) -> tuple[bytes, dict]:
+        """One reflected block of ``pack`` packed from ``values`` by name, as the core packs every block (GPU-free):
+        its bytes and facts (``layout``, ``unfilled``); ValueError when a value is refused."""
+        from rendering.native.program_values import settings_json
+
+        data, facts = self.module.program_block_pack(bytes(pack), str(block), settings_json(values))
+        return bytes(data), json.loads(facts)
+
     def vulkan_instance(self, *, validation: bool = False) -> dict:
         """The process's Vulkan instance (D6 point 1), before any Vulkan host. ``validation`` (harness only) enables the
         Khronos layer and synchronisation validation when installed; the result says whether it loaded."""
@@ -171,16 +205,21 @@ class NativeCore:
         return json.loads(self.module.frame_schemas())
 
     def packet_reader(self, mapping_name: str, *, expect: Mapping[str, int] | None = None,
-                      controls: tuple[str, ...] = ()) -> PacketReader:
+                      controls: tuple[str, ...] = (), schema: Any = None) -> PacketReader:
         """The core's reader of a frame stream (N2.3, D1 and D2) on its own view of the named mapping. ``expect``: the
         stream's identity (runtime and engine generation, activation id, mode code; a slot of another is foreign);
-        ``controls``: a harness's negative controls (``READER_CONTROLS``). Refused while the module's compiled-in
-        schemas differ from this build's (``SchemaTableMismatch``)."""
+        ``controls``: a harness's negative controls (``READER_CONTROLS``); ``schema``: a generic mode's
+        ``NativeSchema`` (or its table entry), admitted beside the compiled ones (N2.9). Refused while the module's
+        compiled-in schemas differ from this build's (``SchemaTableMismatch``)."""
         differences = schema_table_differences(self.frame_schemas(), python_schema_table())
         if differences:
             raise SchemaTableMismatch(f"{MODULE_NAME}'s frame schemas are not this build's: {'; '.join(differences)}")
         config = reader_config(expect, tuple(controls))
-        return PacketReader(self.module, self.module.packet_reader_open(str(mapping_name), config))
+        if schema is None:
+            return PacketReader(self.module, self.module.packet_reader_open(str(mapping_name), config))
+        table = schema if isinstance(schema, Mapping) else schema_table_entry(schema)
+        return PacketReader(self.module, self.module.packet_reader_open(str(mapping_name), config,
+                                                                        json.dumps(dict(table))))
 
     def packet_reader_live(self) -> dict:
         """Packet readers alive, views mapped and handles: all zero once every reader is closed."""

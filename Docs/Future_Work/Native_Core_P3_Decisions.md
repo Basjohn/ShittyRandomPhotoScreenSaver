@@ -776,6 +776,90 @@ the fields of `QRhiIndirectDrawCommand`/`QRhiIndexedIndirectDrawCommand`, `QRhi:
 `beginOffscreenFrame`/`clipSpaceCorrMatrix`/`backendName` signatures (the pages' text I read did not define them),
 and any 6.12 changelog entry beyond "What's New".
 
+## D12. Generic mode content: a mode drawn by the core from data alone (N2.9, 14 Nov 2026; proposed by the High agent)
+
+**The problem.** Port rule (g) (N2.5 round 4) made Settings and Studio work rebuild-free for a ported mode, but its
+per-frame values were still hand-written C++ (Spectrum's `spectrumBlock`), and the reader knew only the schemas compiled
+into `frame_abi_generated.h`. A new mode, or a new field in a mode's record, therefore still meant a module build, which
+the lead's rule of 14 Nov forbids while a mode is iterated ("new modes are built on the native core only, through its
+generic mode content").
+
+**The decision.**
+1. *The schema is data.* A mode's `NativeSchema` is handed to the core when its stream is bound, in the compiled
+   table's own row shape (`schema_table_entry`: `[name, kind, count, offset, check, limit]`, the check order, the
+   fingerprint). The core (`mode_schema.h`, `RuntimeSchema`) validates it as the transport rule demands (a well-formed
+   native id agreeing with its mode code and version; a record a multiple of 16; every field at its kind's alignment,
+   after the header words, inside the record and overlapping none; range rules on u32 scalars only, each once in the
+   check order), recomputes its fingerprint the way `NativeLayout.fingerprint` does, refuses a mode id or code that
+   disagrees with the compiled mode table, and never replaces a compiled schema. The packet reader admits the runtime
+   schema beside the compiled table by the same rules (its mode code is a known mode; head admission by id, version and
+   size; the record's range rules after the copy). The compiled table keeps only the schemas a hand-written consumer
+   reads (Spectrum). Mode codes stay append-only: the Python face tolerates codes appended after a module was built.
+   *Round 2 (lead's decision on audit N29 M5.1):* the Python registry is split. `_SCHEMA_MODULES` holds the schemas the
+   module compiles (the C++ header's table, compared with a built module's by `schema_table_differences`);
+   `_RUNTIME_SCHEMA_MODULES` the runtime schemas, known to the transport (`native_schemas`) and handed over at bind, so
+   a new one never raises `SchemaTableMismatch`. A mode is in one registry only. A runtime schema naming a compiled
+   mode at any version is refused (audit N29 L6).
+2. *One block of its own per pass, filled by name from three sources* (round 2, the lead's binding decision on audit
+   N29 M5; it supersedes round 1's two blocks `ModeSettings` and `ModeFrame`, which no product shader has). A pass's
+   block (any name, any binding but 17) is the product 2D shaders' own (`OscilloscopeDraw`, `DevcurveDraw`,
+   `BubbleDraw`). Each member is filled from exactly one source, by its name: the core's conventions (`kModeCoreMembers`
+   in `mode_content.cpp`, mirrored as `MODE_CORE_MEMBERS` in `rendering/native/mode.py` and held equal by a test: the
+   minimum the Oscilloscope, Spline Curve and Bubble Python renderers take from the card per frame, `uMatrix` (zeros:
+   the core draws its own triangle), `uItemSize`, `uContentRotationQuarters`, `u_resolution`, `u_dpr`,
+   `u_viewport_origin_px` (0, 0), `u_quick_item_coords` (1), `u_fade`, `u_border_width`, plus Spectrum's target maps
+   `u_item_from_frag*`, `u_window_from_target*` and `u_target_px`), read from the item's card (`NativeMode.card`) and
+   the target; the settings (the spec's values and anything mode-derived, from Python, packed when they change); and
+   the record's fields (packed per accepted frame by `packRecordField`: an f64 a float, an f64x4 a vec4, a u32 a uint,
+   a bool, or an int or float under a range rule that fits it (L7), arrays the same length). Refused with a reason: a
+   setting or a record field no pass declares (unknown); a member no source fills (unfilled); a name with two owners (a
+   setting or a field naming a core member, a setting naming a field); a pass declaring a core member at another size.
+   Checked when the program meets the schema (at bind and at program) and when settings arrive, so a mode whose data
+   does not match its shaders never draws zeros.
+3. *Passes are data, and only what the 2D modes need.* One to eight full-target passes over the composite surface, in
+   order, each with a blend (`replace`, `alpha` (Spectrum's straight-alpha over), `premultiplied`, `add` (light added,
+   alpha kept)), after a clearing draw, with the core's own triangle (`shaders/mode.vert`, which gives `v_uv` at
+   location 0, 0 to 1 over the target). A pass declares its own block, optionally the conventions block (bound at 17
+   only to a pass that declares it) and `v_uv`, and nothing else: a texture, a sampler, storage, a push constant, a
+   second block of its own, a block at binding 17 (M3) or another input is refused. Over the real `.qsb` packs,
+   Oscilloscope's and Spline Curve's fragment shaders are admitted as they are; Bubble's is refused for its two samplers
+   alone (`u_ambient_texture`, the water-decoration underlay, and `u_ambient_light`, the glowing particles' linear
+   light, both from its offscreen ambient render). Reading an earlier pass or an image, depth, more targets, compute or
+   a new resource is a primitive with its own C++ and harness, used by every mode as data afterwards: Bubble's two
+   textures wait for the sampling primitive (plan N4.a). Oscilloscope's Quick renderer no longer draws
+   `oscilloscope.frag` (an instanced beam from a storage buffer, its own scene target and bloom): its port needs those
+   primitives too, whatever this pass admits.
+4. *A program keeps its settings.* A new program is packed against the settings given with it, else the current ones,
+   and is refused (the drawn one kept) when they do not fit. Spectrum's program follows the same rule (audit 14 Nov, L4).
+5. *The item.* `ModeSource`/`ModeContent` follow the Spectrum item's rules: bound by mapping name on the GUI thread,
+   read at the item's sync on the render thread, retired without waiting and released by the render thread's retire
+   job (D1), the same admission (a present frame, a current source while playing), nothing recorded at rest. One
+   content per composite item. Round 2 (audit N29 M1, M2, M4, L1, L10): the two items share one implementation
+   (`stream_source.h`: `StreamSource` for the stream, `ContentLatch` for a content that fails to build: recorded once,
+   nothing created again for the same inputs, tried once more when the program, settings, card, stream or target
+   changes). A refused frame (a value with no defined conversion) never blanks the card: the last drawn frame stays,
+   the refusal counted with its reason. A composite item hides and shows by a fade (`fade_ms`; the product route fades
+   out on failure over the Visualizer's activation fade and back in after it; a new activation's first frame shows at
+   once under the card's own content fade, so rule (a) holds from it). The window's framebuffer is Qt's own swapchain
+   or redirect target (`CompositeItem.window_pixels`), never the logical size times the scale nor a platform call.
+
+**Rejected.** A per-mode C++ renderer (the rule it replaces). A mapping table from record fields to uniform names
+(a second table to drift; the name is the contract). Letting a record field go unused or a member be left at zero
+(silent: the very failure the refusals exist for). Moving Spectrum onto the generic path now: its per-frame arithmetic
+(the bar layout, the resample, the clock) is C++ ported line for line and proved at parity; it moves only when that
+arithmetic moves to its simulation, with its parity rerun, as one change.
+
+**How a new mode is built:** `native/core/README.md`, "How a new mode is built". The worked example is the harness-only
+mode `native/core/python/probe_rings/` (a simulation, two passes, a spec; never registered).
+
+**As proved.** Round 1 (ABI 9, two blocks per pass): `generic_mode_check.py` passed on the built module (14 Nov).
+Round 2 owed: the build round of ABI 10, then `generic_mode_check.py` again (the blocks from the three sources against
+an independent packer with every refusal, the product packs' admission and Bubble's sampler refusal, the reader by the
+runtime schema, the draw on OpenGL and Vulkan at dpr 1 and 1.5 with shader, spec, shader-and-spec and simulation
+changes and no rebuild, a refused frame keeping the card, the latch, the fade, nothing at rest, GPU time per pass, the
+framebuffer at 2560x1440 at 150 % on both backends, Vulkan within 1 level of OpenGL, validation clean), with N2.3's,
+N2.5's and rule (a)'s harnesses unchanged.
+
 ## D1, D2, D3 and the transport rule
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts" below); drafted as:* *Proposed (draft for the lead), 12 Nov 2026. Nothing in this section is decided. Drafted by a Sonnet agent from
@@ -958,6 +1042,9 @@ only metadata and the core's accepted-sequence watermark: after a drop the core 
 the sequence it held`, and any frame with `sequence <= dropped_through` is never re-presented, whatever a head read
 or a late wake says; only a frame with a larger sequence and a matching identity is. (Today `read_latest` has the
 same property through `accepted`, `packet_abi.py:290-291`; the contract makes it hold across the drop.)
+As built (ABI 9, audit 14 Nov low 2): the retained frame is always the last accepted one, so the accepted watermark
+is the drop's; the reader keeps no `dropped_through` of its own (it could never exceed `accepted`). The drop round's
+control is still `head_resets_watermark`, which resets `accepted` and resurrects the dropped frame.
 
 **Today vs new.** Today: acknowledgement at take; `peek` decodes and advances `accepted`; one drop edge for the
 Python node. New: a head read that decodes nothing and moves nothing; the native accept-edge acknowledgement; the

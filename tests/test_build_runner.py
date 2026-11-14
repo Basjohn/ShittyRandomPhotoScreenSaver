@@ -316,6 +316,8 @@ def test_preflight_passes_a_complete_release_tree(
         tmp_path / "themes" / "widgets" / "Default.srwtheme",
         tmp_path / "presets" / "visualizer_modes" / "bubble" / "preset_1.json",
         tmp_path / "widgets" / "spotify_visualizer" / "shaders" / "bubble.frag",
+        # The native modes' fragment packs became required release assets with N2.5 (b8457c3c).
+        tmp_path / "widgets" / "spotify_visualizer" / "shaders" / "spectrum.frag.qsb",
         tmp_path / "build_deps" / "requirements_helper.txt",
     ):
         asset.parent.mkdir(parents=True, exist_ok=True)

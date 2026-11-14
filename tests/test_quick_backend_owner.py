@@ -545,11 +545,15 @@ emit(report)
 _HIDDEN_HOST_OWNER = "rendering/quick/bootstrap.py"            # native_hidden_host: created once per process, kept
 _HIDDEN_HOST_PRIMITIVE = "rendering/native/loader.py"          # NativeCore.hidden_host itself
 # The core's own proof harnesses, each one bounded child process per backend, whose rounds measure a host's own
-# creation, timestamps setting or teardown (host_check's lifecycle rounds are how J1 was found).
+# creation, timestamps setting or teardown (host_check's lifecycle rounds are how J1 was found), or a content's draw on
+# its own validated device and host (N2.5's Spectrum, N2.9's generic mode: the Vulkan child creates the instance with
+# validation before its host, which the owner's host never has).
 _HIDDEN_HOST_HARNESSES = frozenset({
     "native/core/python/host_check.py",
     "native/core/python/timer_check.py",
     "native/core/python/composite_check.py",
+    "native/core/python/spectrum_check.py",
+    "native/core/python/generic_mode_check.py",
 })
 _SKIPPED_DIRS = frozenset({"tests", "release", "build", "dist", "node_modules", "__pycache__"})
 

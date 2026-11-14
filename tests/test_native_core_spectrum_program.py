@@ -102,6 +102,29 @@ def test_a_settings_only_uniform_reaches_the_native_block_with_no_rebuild(core, 
 
 
 @pytest.mark.qt
+def test_a_kept_length_beyond_the_record_is_clamped(core, qt_app):
+    # Audit 14 Nov, L1: spectrum_block takes any bytes (and the skip_head_check control admits any record), so a kept
+    # length over the bars field is clamped to it, never read past the record or written past the 64-entry arrays.
+    # Control: the record with its lengths at the field's capacity gives the same block.
+    from core.visualizer_engine import spectrum_native_schema as spectrum
+    from rendering.native.program_values import mode_fragment_pack
+
+    record, card, settings = _frame()
+    pack = mode_fragment_pack("spectrum")
+
+    def with_lengths(value: int) -> bytes:
+        changed = bytearray(record)
+        for name in ("bars_len", "peaks_len"):
+            struct.pack_into("<I", changed, spectrum.LAYOUT.field(name).offset, value)
+        return bytes(changed)
+
+    capacity = spectrum.LAYOUT.field("bars").count
+    huge, _facts = core.spectrum_block(with_lengths(0xFFFFFFFF), card, pack, settings)
+    full, _facts = core.spectrum_block(with_lengths(capacity), card, pack, settings)
+    assert huge is not None and huge == full
+
+
+@pytest.mark.qt
 def test_an_unknown_name_or_a_frame_member_is_refused(core, qt_app):
     from rendering.native.program_values import mode_fragment_pack
 
