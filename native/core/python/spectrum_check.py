@@ -870,7 +870,9 @@ def content_failure(core, engine, app, host, card: dict, record: bytes, frames: 
     """Audit 14 Nov, M2: an item with no program cannot build its content. Its failure is one edge (recorded once,
     reported in the source's state), and the frames after it create nothing again: the same failure is not rebuilt
     every frame, and no QRhi object of the content stays alive. (Before the fix nothing was recorded and the content's
-    buffers and bindings were created and freed every frame.)"""
+    buffers and bindings were created and freed every frame.) N29 round 2, L4: a card change (a fade's step) does not
+    re-arm the latch (no pipeline reads the card); a new target (the item resized) does, once; and the target the
+    content never wrote is cleared by the surface (M4)."""
     scene = Scene(core, engine, host, program=False)
     stream = Stream()
     states = []
@@ -885,11 +887,19 @@ def content_failure(core, engine, app, host, card: dict, record: bytes, frames: 
             scene.spectrum.update()
             host.frames(1)
             states.append(scene.spectrum.state())
-        # Audit N29 L10: a changed input (here the card's fade) re-arms the latch: tried once more, then held again.
+        # N29 round 2, L4: the card's fade changing re-arms nothing (held: no build tried per step of a fade) ...
         changed_fade = 0.25 if float(card["content_fade"]) == 0.5 else 0.5
         scene.spectrum.present_raw(_bare(dict(card, content_fade=changed_fade)))
-        rearmed = []
+        faded = []
         for step in range(frames, frames + 3):
+            stream.publish(record, float(step))
+            scene.spectrum.update()
+            host.frames(1)
+            faded.append(scene.spectrum.state())
+        # ... and a new target (the item two logical pixels wider: another size) re-arms it: tried once more, then held.
+        scene.spectrum.composite.set(rect=[0.0, 0.0, width + 2.0, height])
+        rearmed = []
+        for step in range(frames + 3, frames + 6):
             stream.publish(record, float(step))
             scene.spectrum.update()
             host.frames(1)
@@ -905,13 +915,17 @@ def content_failure(core, engine, app, host, card: dict, record: bytes, frames: 
     held = (bool(states) and facts.get("content_failed") is True and facts.get("content_failures") == 1
             and last.get("records") == 1 and last.get("draws") == 0
             and "content failed" in str(last.get("last_reason", "")) and last.get("accepted", 0) >= 1)
+    fade_held = bool(faded) and all(s.get("content_failures") == 1 and s.get("records") == 1 for s in faded)
     again = rearmed[-1] if rearmed else {}
     rearmed_once = (bool(rearmed) and again.get("content_failures") == 2 and again.get("records") == 2
                     and again.get("draws") == 0)
-    return {"held": held and rearmed_once, "held_first": held, "rearmed_once": rearmed_once,
-            "records": [s.get("records") for s in states + rearmed],
-            "failures": [s.get("content_failures") for s in states + rearmed], "last_reason": last.get("last_reason"),
-            "last_facts": facts, "composite_surface": composite.get("surface")}
+    surface = composite.get("surface") or {}
+    cleared = (surface.get("clears") or 0) >= 1
+    return {"held": held and fade_held and rearmed_once and cleared, "held_first": held,
+            "card_change_held": fade_held, "rearmed_once_by_a_new_target": rearmed_once, "unwritten_target_cleared": cleared,
+            "records": [s.get("records") for s in states + faded + rearmed],
+            "failures": [s.get("content_failures") for s in states + faded + rearmed],
+            "last_reason": last.get("last_reason"), "last_facts": facts, "composite_surface": surface}
 
 
 def vulkan_against_opengl(out: Path) -> dict:
