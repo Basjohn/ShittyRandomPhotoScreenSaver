@@ -21,6 +21,8 @@ engine worker builds the schema from it.
 
 ``per_frame``: the renderer reads the parameter on every frame; ``decor``: it is one of the optional decoration's
 inputs, fetched and compared only when the frame's parameters changed (``resolve_spectrum_decor_uniforms``).
+``record``: the native record carries it (False: a Settings-only input the native core gets by name with the other
+settings, ``spectrum_settings_values``, never through the record; N2.9's rule, so a new one needs no native build).
 """
 from __future__ import annotations
 
@@ -45,6 +47,7 @@ class SpectrumFrameInput:
     per_frame: bool = False
     decor: bool = False
     default: object = _REQUIRED
+    record: bool = True
 
     @property
     def required(self) -> bool:
@@ -65,6 +68,10 @@ def _frame(name: str, kind: str) -> SpectrumFrameInput:
 
 def _decor(name: str, kind: str, table: tuple[str, ...] = (), *, per_frame: bool = False) -> SpectrumFrameInput:
     return SpectrumFrameInput("parameters", name, kind, table, per_frame=per_frame, decor=True)
+
+
+def _setting(name: str, kind: str) -> SpectrumFrameInput:
+    return SpectrumFrameInput("parameters", name, kind, per_frame=True, record=False)
 
 
 SPECTRUM_FRAME_INPUTS: tuple[SpectrumFrameInput, ...] = (
@@ -113,6 +120,11 @@ SPECTRUM_FRAME_INPUTS: tuple[SpectrumFrameInput, ...] = (
     _decor("spectrum_pattern_strength", "f64"),
     _decor("spectrum_pattern_color", "rgba"),
     _decor("spectrum_pattern_scale", "f64"),
+    # Settings-only inputs (N2.9): the native core takes them by name from ``spectrum_settings_values`` with the other
+    # settings, so the record does not carry them and its layout (the compiled reader's table) is unchanged.
+    _setting("spectrum_glow_sharpness", "f64"),
+    _setting("spectrum_glow_left_mix", "f64"),
+    _setting("spectrum_glow_right_mix", "f64"),
 )
 
 #: ``SpectrumFrame`` fields the Spectrum renderer does not draw from (so the native schema does not carry them):

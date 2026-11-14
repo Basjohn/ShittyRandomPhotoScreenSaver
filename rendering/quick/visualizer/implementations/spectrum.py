@@ -112,6 +112,18 @@ _DECOR_UNIFORMS = (
 )
 
 
+_RIM_UNIFORMS = ("u_spectrum_glow_sharpness", "u_spectrum_glow_left", "u_spectrum_glow_right")
+
+
+def _rim_values(inputs) -> dict[str, float]:
+    """The rim glow's shape and side envelopes (Rim Sharpness; Rim Placement as the presentation owner fades it)."""
+    def unit(name: str) -> float:
+        return max(0.0, min(1.0, float(inputs[name])))
+    return {"u_spectrum_glow_sharpness": unit("spectrum_glow_sharpness"),
+            "u_spectrum_glow_left": unit("spectrum_glow_left_mix"),
+            "u_spectrum_glow_right": unit("spectrum_glow_right_mix")}
+
+
 def prepare_spectrum_shader_levels(
     bars: Sequence[object],
     peaks: Sequence[object],
@@ -388,6 +400,7 @@ class QuickSpectrumRenderer:
         values["u_spectrum_glow_intensity"] = max(
             0.0, min(1.5, float(inputs["spectrum_glow_intensity"])))
         values["u_spectrum_glow_color"] = tuple(glow_color)
+        values.update(_rim_values(inputs))
         values["u_rainbow_hue_offset"] = hue
         values["u_rainbow_ghost"] = 1 if bool(inputs["spectrum_rainbow_ghost"]) else 0
         values["u_ghost_hue_offset"] = safe_hue(mode_state.animation_time * rainbow_speed * 0.1)
@@ -456,7 +469,7 @@ class QuickSpectrumRenderer:
                    "u_single_piece", "u_border_radius", "u_spectrum_glow_enabled", "u_spectrum_glow_intensity",
                    "u_spectrum_glow_color", "u_rainbow_hue_offset", "u_rainbow_ghost", "u_ghost_hue_offset",
                    "u_rainbow_per_bar", "u_rainbow_fill", "u_rainbow_border", "u_bars_left", "u_bar_width_px",
-                   "u_bar_gap_px", "u_bar_span_px", *_DECOR_UNIFORMS, "u_playing", "u_time")
+                   "u_bar_gap_px", "u_bar_span_px", *_DECOR_UNIFORMS, "u_playing", "u_time", *_RIM_UNIFORMS)
         held = {name for name, _kind in SPECTRUM_BLOCK.fields}
         missing = [name for name in written if name not in held]
         if missing:
@@ -521,6 +534,7 @@ def spectrum_settings_values(logical, presentation, *, item_size: Sequence[float
         "u_spectrum_glow_enabled": 1 if bool(inputs["spectrum_glow_enabled"]) else 0,
         "u_spectrum_glow_intensity": max(0.0, min(1.5, float(inputs["spectrum_glow_intensity"]))),
         "u_spectrum_glow_color": tuple(rgba(inputs["spectrum_glow_color"])),
+        **_rim_values(inputs),
         "u_rainbow_ghost": 1 if bool(inputs["spectrum_rainbow_ghost"]) else 0,
         "u_rainbow_per_bar": 1 if bool(inputs["rainbow_per_bar"]) else 0,
         "u_rainbow_fill": 1 if bool(inputs["spectrum_rainbow_fill"]) else 0,

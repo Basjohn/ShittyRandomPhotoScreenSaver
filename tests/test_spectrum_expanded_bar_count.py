@@ -118,6 +118,7 @@ def draw(qt_app):
     params = {key: defaults[key] for key in DECOR_KEYS}
     params.update({f"spectrum_{n}_mix": 0.0 for n in ("ghost_custom", "ghost_fill", "ghost_gradient",
                                                        "fill_gradient", "peak_caps", "pattern")})
+    params.update({f"spectrum_glow_{side}_mix": 1.0 for side in ("left", "right")})      # the rim's sides (glow off)
     params.update(spectrum_pattern_shown="Off", spectrum_pattern_anchor_shown=defaults["spectrum_pattern_anchor"],
                   spectrum_ghosting_enabled=False, spectrum_ghost_alpha=0.0, spectrum_glow_enabled=False,
                   spectrum_glow_intensity=0.0, spectrum_glow_color=(255, 255, 255, 255), rainbow_enabled=False,

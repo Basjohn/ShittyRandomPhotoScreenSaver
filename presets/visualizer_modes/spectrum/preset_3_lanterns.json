@@ -86,6 +86,8 @@
           220
         ],
         "spectrum_glow_intensity": 0.3,
+        "spectrum_glow_placement": "Both",
+        "spectrum_glow_sharpness": 0.0,
         "spectrum_render_mode": "bars",
         "spectrum_unique_colors": false,
         "spectrum_rainbow_fill": false,

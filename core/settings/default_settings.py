@@ -5959,6 +5959,8 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'spectrum_glow_color': [110, 220, 255, 235],
                                     'spectrum_glow_enabled': False,
                                     'spectrum_glow_intensity': 0.55,
+                                    'spectrum_glow_placement': 'Both',
+                                    'spectrum_glow_sharpness': 0.0,
                                     'spectrum_gloss': 0.0,
                                     'spectrum_input_gain': 1.0,
                                     'spectrum_kick_lane_gain': 1.0,
