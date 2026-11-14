@@ -56,10 +56,9 @@ at the size asked.
   pick: its remaining high and medium findings and the Build Foundry's port from Tkinter to PySide6.
   - [ ] Side defect: `tests/test_godzip_foundry_core.py` and `test_godzip_foundry_script_runner.py` pin button
     wording; assert structure (the button exists, its action) instead.
-- [~] Defect (operator, 14 Nov): a Studio window's taskbar icon in frozen builds is Windows' default box. Built: one
-  owner of the application icon (`ui/app_icon.py`), an `[ICON]` startup line, and a warning if a shown Studio window
-  has no icon. The static cause is unproven (likely an icon set from a file Qt could not decode). Lead: check the next
-  GitHub frozen build's log and taskbar.
+- [~] Defect (operator, 14 Nov): a Studio window's taskbar icon in frozen builds is Windows' default box. The static
+  cause is unproven (likely an icon Qt could not decode). Lead: check the next GitHub frozen build's `[ICON]` startup
+  line, any no-icon warning for a shown Studio window, and the taskbar.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
 - [ ] Native Settings corners: section 1A, item 1.9. Keep their acceptance and reversible checkpoints separate.
 - [ ] Studio stall, clip selection and sidecar log (contract: `Docs/Reference/Visualizer_Studio.md`; the control-hints
@@ -851,14 +850,10 @@ Contract: plan 01 M3c; evidence `.artifacts/evidence/visualizers/shared/expanded
 
 ### 1C.4 Spline Curve's white lines show about one pixel into the card border (fixed and proved on Display 1, 12 Nov; R-191, R-192)
 
-Records: R-188, R-191, R-192 (`Docs/Historical_Bugs/`), with the Display 1 and Display 0 evidence.
-
 - [ ] The tests that open windows were not run on the merge (`test_qtquick_visualizer_clip_smoke.py`, Neon Lake's
   `actual_neon_qsg_pixels`): run them hidden at the next milestone run.
 
 ### 1C.5 Volume child control: its drop shadow was cut off sharply (fixed and merged 12 Nov, R-187; one check left)
-
-Record: R-187 (`Docs/Historical_Bugs/`, cause, guard and evidence).
 
 - [ ] The agent could not reproduce the cut at the operator's stored Media layout (no volume edits in their
   settings): a D1 run with a copy of the operator's profile (1B.14), a 4x crop of the volume bar, lead review.
@@ -992,7 +987,7 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 - [ ] C++, with the next native build round: excuse `vulkan_context.cpp:205-207`'s two messages only when Qt6Gui
   is the caller; prune `surfaces.cpp`'s window registry (`:51-54`, `:295-305`). Then the lead runs host_check, which
   also proves the new `front_face_fixed_cw` control and the Qt-only cycle verdict on the GPU.
-- [ ] `tools/build_runner.py:2272`, `:2285` (`_fit_initial_window`): on a work area shorter than the content, the
+- [ ] `tools/build_runner.py` `_fit_initial_window`: on a work area shorter than the content, the
   fit clamps Tk's client height without counting the native frame, so the window's bottom passes the work area by
   about 25 px. This only affects short screens; the operator's 732 px stays. Count the frame in the clamp.
   `tests/test_build_foundry_window_layout.py -k keeps_the_whole_window` is a strict expected failure until then.
@@ -1049,17 +1044,12 @@ borderless fullscreen transfers working smoothly.
 
 ### 1.0 Rotate in ordinary and fullscreen Edit
 
-Focused proof exists for renderer pixels at non-square extents, prepared Scene3D resources, per-mode Save/Cancel and
-all Studio frame builders; the physical stage and camera remain fixed. Extruded Spectrum retains its frameless
-overflow policy.
-
 - [~] Lead review of rendered frames (off-screen for ordinary Edit, D1 run of 1B.14 for fullscreen Edit): Rotate in
   every mode except Sphere, in ordinary and in fullscreen Edit.
 - [~] Lead review of zoomed glyph crops: the rectangle/quarter-turn glyph against Reset Camera.
 
 ### 1.0b Studio Rotate control
 
-Off-screen proofs cover non-square production pixels, input transforms, preparation barriers and canonical saves.
 Preview orientation is per-open state, separate from camera/artwork and desktop CUSTOM orientation; Copy Frame
 captures it.
 
@@ -1076,15 +1066,11 @@ captures it.
 
 ### 1.4-1.5 Remaining fullscreen visual acceptance
 
-Existing Settings/input/text-layout/Edit checks are green; actual Windows full-layout acceptance is still owed.
-
 - [~] Fullscreen run on D1 (1B.14 harness), lead review of grabbed frames: Media Bar and Floating Glyphs styles.
 - [~] Same run: long metadata fitting.
 - [~] Same run: multiline Edit boxes and optional album, including Save/Cancel.
 
 ### 1.6 Achievement Pulse child placement
-
-The enabled-row regression is green; other families' extent floors are static.
 
 - [~] D1 run (1B.14 harness) with `--geo`: check child placement after Settings/fullscreen return (replaying the
   saved payload on Edit entry must not change the canvas; disabled provider fields must not count as painted capsule
@@ -1140,9 +1126,6 @@ Contract: `Docs/Architecture/Card_Surface_Materials.md` §3.2.1.
   GLSL changes or assume every QRhi backend accepts an untested shader variant.
 
 ### 1.8 Gmail and Reddit/Reddit2 column gestures
-
-Retained-QML proof covers transformed opposite-edge stability, all-row updates, collision policy, Save/Cancel, Undo,
-slots and fresh-profile hydration.
 
 - [~] D1 run (1B.14 harness), gestures posted by messages: top grips reorder.
 - [~] Same run: solid-span endpoints change start/width and truncation.
@@ -1411,24 +1394,20 @@ validation steps and open side defects.
 
 **Slow startup (operator, 6 Nov 10:30; owners fixed, awaiting the lead's cold start)**
 
-Evidence `.artifacts/evidence/lifecycle/slow_startup/20261106_slow_startup/`; the held-lock rule is in
-`Docs/Guardrails/Performance_Optimization_Contract.md` section 5, the optional-worker start in its appendix.
+The held-lock rule is in `Docs/Guardrails/Performance_Optimization_Contract.md` section 5, the optional-worker start
+in its appendix.
 
 - [~] D1 run (1B.14 harness): cold start with `--usage`, then the lead reads the log:
-  - [ ] No `UI_CALLBACK` / `FEED_GUI_DELIVERY` line exceeds a frame. The 166-240 ms `FEED_GUI_DELIVERY` lines at
-    10:30:40-42 were not reproduced offline (Feeds cache delivery including the NEWS card model is 0.1-15 ms per
-    source at 18 publishers x 40 stories; `_complete` excludes QML) and are treated as the post-block backlog on a
-    97-100% CPU machine.
+  - [ ] No `UI_CALLBACK` / `FEED_GUI_DELIVERY` line exceeds a frame (the 166-240 ms lines of 6 Nov were not
+    reproduced offline: 0.1-15 ms per source; treated as post-block backlog on a 97-100% CPU machine).
   - [ ] The first `collect_ms` is small.
 - [ ] Side defect: a prefetch batch asked for before the optional image_prefetch child is ready fails as "not
   running" (a logged `[PREFETCH]` error); that batch is not retried.
 
 **Spline Curve (`devcurve`) "more alive while keeping the flow" (second cut 6 Nov; awaiting lead review)**
 
-Contract: guide section 13D -> DevCurve. Evidence and before/after WebPs (loud end and a quiet passage, P1/P6):
-`.artifacts/evidence/visualizers/devcurve/reactivity/20261105_reactivity/` (`PROGRESS.md`).
+Contract: guide section 13D -> DevCurve. Evidence: `.artifacts/evidence/visualizers/devcurve/reactivity/20261105_reactivity/`.
 
-- [~] Lead review of the second cut.
 - [~] Lead review on the rendered before/after WebPs (loud end and a quiet passage, P1/P6): the second cut reads
   more alive while keeping the flow.
 - [ ] Open: the strongest preset's bass stays ~18% below pre-work main's loud RMS (a smooth wave cannot
@@ -1448,11 +1427,9 @@ Lake runs 89 fps, Spectrum 90, Bubble 63, Extruded Bubble 5.9 ms / GIL 0.53 / 55
   the live cost is elsewhere: capture, packet build, field/strand/spark work). Offline ticks above ~16 ms are gen2
   GC (86-161 ms, about one per 5,500 ticks), not Waveform work.
 - [ ] Record the logical thread's own CPU time (`time.thread_time`) beside the tick's wall time in the live check,
-  so the wait share is a number. One invisible no-load P4 run (120 s, other processes' CPU 26%) measured a 7.49 ms
-  tick median (duty/GIL share 0.67, 51.7 fps, render-mode 10.9 ms); about 6 ms of each live tick is spent waiting,
-  most likely for the GIL held by the render/GUI threads' Python (each wait can last a 5 ms switch interval).
-  Switch-interval tuning stays banned by the Performance Optimization Contract.
-  Evidence `.artifacts/evidence/visualizers/waveform_ribbon/live_check/20261107_tick_cut2_p4_noload/` (main checkout).
+  so the wait share is a number (a no-load P4 run measured a 7.49 ms tick median; about 6 ms of each live tick is
+  likely spent waiting for the GIL held by the render/GUI threads). Switch-interval tuning stays banned by the
+  Performance Optimization Contract.
 - [ ] Cut what the profile names, with byte-identical output (Preset 4 bit-exact with tag
   `waveform-baseline-2026-11-05`).
 - The game60 re-measure of the two tick cuts is superseded on the default path: the tick runs in the engine
@@ -1461,8 +1438,8 @@ Lake runs 89 fps, Spectrum 90, Bubble 63, Extruded Bubble 5.9 ms / GIL 0.53 / 55
 
 **Widget/Settings material appearance: Awaiting Validation**
 
-Active density/composition work and native evidence: section 1A, items 1.7/1.9. Durable owners:
-`Docs/Architecture/Card_Surface_Materials.md` and `Docs/Architecture/Settings_Theme_Architecture.md`.
+Active work: section 1A, items 1.7/1.9. Owners: `Docs/Architecture/Card_Surface_Materials.md`,
+`Docs/Architecture/Settings_Theme_Architecture.md`.
 
 - [~] D1 run (1B.14 harness), lead review of grabbed frames, in the running app:
   - [ ] The inner rim.
@@ -1474,14 +1451,11 @@ Active density/composition work and native evidence: section 1A, items 1.7/1.9. 
 
 - [ ] Theme the Weather detail asset icons: they remain white and become faint on pale cards.
 
-**Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent); second pass
-done, awaiting the lead's review**
+**Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent)**
 
 The mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`. One preset only; the shared
-controls are each dormant at 0, so no other look changes: Ember Grain, Ember Band (Water), Lit Glass
-(Glass), Stream Lanes, Wake Tint (Bubbles). Details, numbers,
-reactivity and cost: `Docs/Reference/Extruded_Bubble/Investigation.md` sections 72-73; evidence
-`.artifacts/evidence/visualizers/extruded_bubble/deep_red_ocean_pass2/20261106_deep_red_ocean_pass2/`.
+controls (Ember Grain, Ember Band, Lit Glass, Stream Lanes, Wake Tint) are each dormant at 0, so no other look
+changes. Details: `Docs/Reference/Extruded_Bubble/Investigation.md` sections 72-73.
 
 - [~] Lead review of side-by-side sheets (mock | ours, full resolution plus crops) of Preset 9 against the mock.
 - [ ] Shells are paler and smoother inside than the mock's copper, busy-interior glass, and too many crowd together.
@@ -1538,13 +1512,12 @@ noise").
 **Display Settings capacity (physical hotplug)**
 
 - [ ] On a real monitor disconnect/return or explicit reauthoring, Settings' current-screen rows and
-  selections/bindings stay coherent (focused checks pass; hidden form evidence
-  `tmp/pytest_ux30_display/test_display_ui_rows_follow_to0/six_display_rows.png`).
+  selections/bindings stay coherent.
 
 **R38 hover display-transfer glyphs (physical topology)**
 
 - [ ] Watch glyph hit/tooltip/fade and transfer on unequal-DPI screens and monitor unplug/return (equal-DPR pair
-  passes; `tmp/ux30_actual_displays/receipt.json`).
+  passes).
 
 **Steam Games You Follow images**
 
@@ -1574,19 +1547,15 @@ Many update entries lack images. A generic game cover existing is not proof an i
 
 **15 s usage-sample hitch (unexplained, not reproduced)**
 
-31 Oct 19:28-19:33 MC run: a 95-121 ms freeze of the GUI, render and logical threads at every `--usage` sample (20 in
-5 min, `gui_stall_stacks.log` and frame trace agree). Each sample took ~95 ms because the sampled tree held 7
-processes / 233 threads (normal 3 / ~55, ~16-24 ms); the four extra descendants used the GPU (counters 17 -> 70),
-existed from the first sample and are unidentified. The next MC run (19:47) and an invisible live check on current
-code were normal. Not the Extruded Bubble chain fix (no processes, tick unchanged).
+31 Oct MC run: a 95-121 ms freeze of the GUI, render and logical threads at every `--usage` sample, because the
+sampled tree held 7 processes / 233 threads (normal 3 / ~55); the four extra descendants used the GPU and are
+unidentified. The next MC run and an invisible live check were normal.
 
 - [ ] On recurrence read the sampler's `[USAGE] topology added ... name= parent= threads=` lines (one per process
   entering the tree), identify the extra processes, then decide whether the sampler must exclude/outsource them.
-- [ ] Seen again 8 Nov with a normal tree (P2 gate 3's game60 pair, design doc step 6 "Gate 3 record"): every sample
-  in both runs stalled the render thread 71-106 ms in the scene render (13 of the worker path's 23 hitches, 14 of in
-  process's 39); `collect_ms` ~13 ms per process walked at 87% system CPU (58 ms for 4-5 processes with the engine
-  worker, 46 ms for 3-4 in process; 23 ms for 4 on an idle machine). Main-side on both paths; the engine worker adds
-  one process to the walk.
+- [ ] Seen again 8 Nov with a normal tree (design doc step 6 "Gate 3 record"): every sample stalled the render
+  thread 71-106 ms; `collect_ms` ~13 ms per process walked at 87% system CPU (23 ms for 4 on an idle machine).
+  Main-side on both paths; the engine worker adds one process to the walk.
 
 **Cross-display Media shortcuts**
 
@@ -1606,9 +1575,8 @@ rendering.
 
 **GitHub Remote builds (8 Nov, proven end to end; moved from section 2)**
 
-Build Runner's third tab and `tools/github_remote_build.py` compile Standard/Media Center on GitHub runners, validate and
-publish them, and compile opted-in installers locally (`Docs/Guides/GitHub_Remote_Build.md`). Installing a remote-built
-product on an ordinary user account is the "Installed builds" entry below; the frozen run of 1B.14 covers the artifact.
+`Docs/Guides/GitHub_Remote_Build.md`. Installing a remote-built product on an ordinary user account is the
+"Installed builds" entry below; the frozen run of 1B.14 covers the artifact.
 
 - [ ] Since checkpoint audit 11 (8 Nov) the tab's Linux job runs beside the Windows runs on its own process owner
   (never holding their retrieval) and a stop cancels its run even before it was followed; tested with fakes only, so
@@ -1616,18 +1584,15 @@ product on an ordinary user account is the "Installed builds" entry below; the f
 
 **Bubble / Extruded Bubble "terrible performance" reports (6 Nov log 10:32-10:35; moved from section 2)**
 
-That log was our load (97-100% system CPU from the agents' game60 checks), not the product: on the quiet machine
-Bubble P1 ran 65.9 fps, tick 1.47 ms, GIL 0.13, 3.9% late; Extruded Bubble 45-69 fps
-(`.artifacts/evidence/performance/live_check/20261106_live/`). Heavy load-generator runs are scheduled by the lead
-only.
+That log was our load (97-100% system CPU from game60 checks), not the product: on the quiet machine Bubble P1 ran
+65.9 fps (tick 1.47 ms, GIL 0.13) and Extruded Bubble 45-69 fps. Heavy load runs are the lead's only.
 
 - [ ] On a new report, read the log's system CPU first: a load-driven reading is not a product defect; otherwise
   reproduce on the quiet machine against those numbers.
 
 **Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; needs the machine's own screen timeout)**
 
-Contract: `Docs/Architecture/Compositor_Architecture.md` -> Display power (hardware findings 6 Nov are recorded
-there). Evidence `.artifacts/evidence/display/display_power/20261105_display_power/`.
+Contract: `Docs/Architecture/Compositor_Architecture.md` -> Display power.
 
 - [ ] When a heavy preset (Waveform Ribbon (`waveform_ribbon`) Preset 1 or Neon Lake (`shockwave_grid`)) is left
   overnight and Windows' screen timeout turns both displays off (not the panels' own buttons: an HDMI panel that
@@ -2124,11 +2089,9 @@ Evidence: `Docs/Historical_Bugs/R-170_Bubble_Shape_Dependent_Speed_And_Aspect_Mo
 
 **Particle glow (merged; awaiting the lead's review)**
 
-Emitted linear light with a hot core and a monotonic halo (no dark moat), no twinkle on drifting sub-pixel cores,
-cheaper ambient CPU pass. Evidence `.artifacts/evidence/visualizers/bubble/particle_glow/20261107_particle_glow/`
-(`before/` vs `after/` 4x crops, flicker strips).
-
-- [~] Lead review on the `before/` vs `after/` 4x crops and flicker strips (rendered): the particle glow.
+- [~] Lead review on the `before/` vs `after/` 4x crops and flicker strips of
+  `.artifacts/evidence/visualizers/bubble/particle_glow/20261107_particle_glow/`: hot core, monotonic halo (no dark
+  moat), no twinkle on drifting sub-pixel cores.
 
 ## 9. Studio for every visualizer (replaces the builders)
 
@@ -2225,8 +2188,7 @@ composition; preview-overlay backing stays cheap and scene colours stay independ
 
 **Studio drag lag fixed (6 Nov), awaiting the lead's drag check**
 
-Drags preview once per frame and re-show only the dragged key (`Docs/Reference/Visualizer_Studio.md` "Drags are
-batched"); evidence `.artifacts/evidence/studio/drag/20261106_drag/` (per move 56 ms -> 0.07 ms on Waveform).
+Contract: `Docs/Reference/Visualizer_Studio.md` "Drags are batched" (per move 56 ms -> 0.07 ms on Waveform).
 
 - [~] Studio run on D1 (1B.14 harness), drags posted by messages with `tools/studio_drag_profile.py`: the feel of
   drags (per move on the 0.07 ms scale of the evidence above).
@@ -2253,14 +2215,9 @@ Contract: `Docs/Reference/Visualizer_Studio.md` section 4 ("One transition out" 
 
 **Per-session memory growth in the Studio (side defect, 6 Nov; the clip caches ruled out 7 Nov)**
 
-Process memory grows about 2-3 MB per offscreen Extruded Bubble session (private bytes and USS, 16 sessions), the same
-with and without the controller-leak fix (`test_closed_studio_sessions_are_released_and_live_counts_stay_flat`). The
-sessions measured load no recorded clip, so the clip caches cannot be the cause; they are bounded now anyway (AC-06: 60
-Audio Analysis re-analyses grew 39.3 MB before, 15.5 MB after, flat at 120). Re-measured with `_sessions` (24 sessions,
-private bytes after `gc.collect()` per session): the first 4 sessions add ~85 MB (warm-up), then ~1 MB per session that
-flattens, but the series swings by +-70 MB run to run (main and branch alike), and tracemalloc sees only ~55 kB of
-Python growth per session (QML chrome objects, settings normalisation copies). What grows is native (Qt Quick / GL
-driver heaps), not Python.
+Process memory grows about 1-3 MB per offscreen Extruded Bubble session after an ~85 MB warm-up over the first 4
+sessions, but the series swings by +-70 MB run to run (main and branch alike); tracemalloc sees only ~55 kB of Python
+growth per session, and the clip caches are ruled out and bounded. What grows is native (Qt Quick / GL driver heaps).
 
 - [ ] A native heap comparison (UMDH or VMMap) across 30 sessions; bar: a trend, not run-to-run noise, before any
   fix.
@@ -2288,9 +2245,7 @@ Spec: `Docs/Reference/Visualizer_Studio.md` section 4 "Canonical save"; tests
 **Lead review: the Studio terrain brush**
 
 Brush button or B in the viewport toolbar; Raise, Lower, Flatten, Water; left-drag paints, right/middle drag pans.
-Evidence `.artifacts/evidence/studio/completion/20261106_completion/brush/`. Audio Analysis now moves the Spline
-Curve, Oscilloscope, Neon Lake, Bubble, Extruded Bubble and Voxel Sphere previews on recorded clips (sensitivity sheet
-`audio_analysis/`); Spline Curve normalises its body, so it barely shows, as live.
+Evidence `.artifacts/evidence/studio/completion/20261106_completion/brush/`.
 
 - [~] Studio run on D1 (1B.14 harness), strokes posted by messages, lead review of grabbed frames: the terrain brush
   in the Studio.
