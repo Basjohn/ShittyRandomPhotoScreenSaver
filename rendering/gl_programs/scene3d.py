@@ -112,6 +112,21 @@ def scene3d_samples(detail: Scene3DDetail, choice: object) -> int:
     return detail.samples
 
 
+def scene_samples(detail: Scene3DDetail | None, *, overlay_factor: int = 1, fixed: int | None = None,
+                  at_least: int = 0) -> int:
+    """The one owner of a Visualizer scene target's requested multisampling (N3.1, decision D14 point 7; a transition's
+    request is :func:`scene3d_samples`, its Antialiasing choice or the tier's): the tier's ``overlay_samples`` times
+    the mode's declared ``overlay_factor`` (Extruded Spectrum's Smooth Edges doubles it), or the mode's declared
+    ``fixed`` count (Waveform Ribbon's 4, the Oscilloscope's 1: kept as declared, choice D), at least ``at_least``.
+    This is the request; the native core clamps it to what the device supports (``scene_targets.h``), the Python
+    renderer's ``SceneTarget`` to the GL limits."""
+    if fixed is not None:
+        return max(int(at_least), int(fixed))
+    if detail is None:
+        raise ValueError("a tier-derived sample request needs the 3D Detail tier")
+    return max(int(at_least), int(detail.overlay_samples) * int(overlay_factor))
+
+
 def scene3d_post_effect(detail: Scene3DDetail, choice: object) -> bool:
     """Whether one post effect (Bloom, Motion Blur) runs: the transition's choice, or the tier's."""
     if choice == "On":

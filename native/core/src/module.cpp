@@ -30,6 +30,7 @@
 #include "mode_schema.h"
 #include "packet_reader.h"
 #include "process_counters.h"
+#include "scene_targets.h"
 #include "spectrum.h"
 #include "surfaces.h"
 #include "vulkan_context.h"
@@ -670,6 +671,15 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("backdrop_pyramids"), backdrops.pyramids);
     o.insert(QStringLiteral("backdrop_resources"), backdrops.resources);
     o.insert(QStringLiteral("backdrop_builds"), double(backdrops.builds));
+    // N3.1: the scene targets holding objects, their textures and bytes (every sample), the allocations and steps made,
+    // and the harness's readbacks QRhi has not completed.
+    const srpss_core::SceneTargetCounts scenes = srpss_core::sceneTargetCounts();
+    o.insert(QStringLiteral("scene_targets"), scenes.targets);
+    o.insert(QStringLiteral("scene_target_textures"), scenes.textures);
+    o.insert(QStringLiteral("scene_target_bytes"), double(scenes.bytes));
+    o.insert(QStringLiteral("scene_target_allocations"), double(scenes.allocations));
+    o.insert(QStringLiteral("scene_target_steps"), double(scenes.steps));
+    o.insert(QStringLiteral("scene_target_readbacks"), scenes.readbacksPending);
     return pyJson(o);
 }
 
@@ -1479,6 +1489,151 @@ PyObject *composite_mode_still(PyObject *, PyObject *args)
         return nullptr;
     }
     Py_RETURN_NONE;
+}
+
+// ---------------------------------------------------------------- scene targets (N3.1, D14)
+
+// An explicit-size target's size, with no new program (the allocation follows at the next record).
+PyObject *composite_mode_target_size(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *name = nullptr;
+    int width = 0;
+    int height = 0;
+    if (!PyArg_ParseTuple(args, "Ls(ii)", &handle, &name, &width, &height))
+        return nullptr;
+    srpss_core::ModeSource *source = modeOf(handle);
+    if (!source)
+        return nullptr;
+    QString error;
+    if (!source->setTargetSize(QByteArray(name), QSize(width, height), &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    compositeOf(handle)->update();
+    Py_RETURN_NONE;
+}
+
+// Harness: a readback of every scene target's readable texture at the next record.
+PyObject *composite_mode_target_read(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::ModeSource *source = modeOf(handle);
+    if (!source)
+        return nullptr;
+    source->requestTargetRead();
+    compositeOf(handle)->update();
+    Py_RETURN_NONE;
+}
+
+// Harness: the readback's pixels once QRhi completed it (None before), each {"name", "size", "content", "format",
+// "samples", "data"} (rows in the texture's memory order: the image's top first).
+PyObject *composite_mode_target_pixels(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::ModeSource *source = modeOf(handle);
+    if (!source)
+        return nullptr;
+    QList<srpss_core::SceneTargetPixels> pixels;
+    if (!source->takeTargetPixels(&pixels))
+        Py_RETURN_NONE;
+    PyObject *list = PyList_New(0);
+    if (!list)
+        return nullptr;
+    for (const srpss_core::SceneTargetPixels &p : pixels) {
+        PyObject *d = PyDict_New();
+        if (!d) {
+            Py_DECREF(list);
+            return nullptr;
+        }
+        put(d, "name", pyStr(p.name));
+        put(d, "size", Py_BuildValue("(ii)", p.size.width(), p.size.height()));
+        put(d, "content", Py_BuildValue("(ii)", p.content.width(), p.content.height()));
+        put(d, "format", pyStr(p.format));
+        put(d, "samples", PyLong_FromLong(p.samples));
+        put(d, "data", PyBytes_FromStringAndSize(p.data.constData(), Py_ssize_t(p.data.size())));
+        if (PyList_Append(list, d) < 0) {
+            Py_DECREF(d);
+            Py_DECREF(list);
+            return nullptr;
+        }
+        Py_DECREF(d);
+    }
+    return list;
+}
+
+// A sequence of ints (the limited API's calls only).
+bool intsArgument(PyObject *object, QList<int> *out, const char *what)
+{
+    if (!PySequence_Check(object)) {
+        PyErr_Format(PyExc_TypeError, "%s are a sequence of ints", what);
+        return false;
+    }
+    const Py_ssize_t n = PySequence_Size(object);
+    if (n < 0)
+        return false;
+    for (Py_ssize_t i = 0; i < n; ++i) {
+        PyObject *item = PySequence_GetItem(object, i); // a new reference
+        if (!item)
+            return false;
+        const long value = PyLong_AsLong(item);
+        Py_DECREF(item);
+        if (value == -1 && PyErr_Occurred())
+            return false;
+        out->append(int(value));
+    }
+    return true;
+}
+
+// Harness: the clamp's control (D14 point 7's negative control): sample counts taken out of every device's set.
+PyObject *scene_sample_counts_control(PyObject *, PyObject *args)
+{
+    PyObject *removed = nullptr;
+    if (!PyArg_ParseTuple(args, "O", &removed))
+        return nullptr;
+    QList<int> counts;
+    if (!intsArgument(removed, &counts, "the removed sample counts"))
+        return nullptr;
+    srpss_core::setRemovedSampleCounts(counts);
+    Py_RETURN_NONE;
+}
+
+// GPU-free: D14 point 2's allocation rule, ((w, h), reason) for a current allocation ((0, 0): none) and a needed size.
+PyObject *scene_target_next_allocation(PyObject *, PyObject *args)
+{
+    int cw = 0, ch = 0, nw = 0, nh = 0;
+    if (!PyArg_ParseTuple(args, "(ii)(ii)", &cw, &ch, &nw, &nh))
+        return nullptr;
+    QString reason;
+    const QSize next = srpss_core::nextAllocation(QSize(cw, ch), QSize(nw, nh), &reason);
+    return Py_BuildValue("((ii)N)", next.width(), next.height(), pyStr(reason));
+}
+
+// GPU-free: D14 point 2's content viewport (QRhi's x, y from the framebuffer's bottom-left, w, h).
+PyObject *scene_target_viewport(PyObject *, PyObject *args)
+{
+    int yUp = 0, aw = 0, ah = 0, cw = 0, ch = 0;
+    if (!PyArg_ParseTuple(args, "p(ii)(ii)", &yUp, &aw, &ah, &cw, &ch))
+        return nullptr;
+    const QRect v = srpss_core::contentViewport(yUp != 0, QSize(aw, ah), QSize(cw, ch));
+    return Py_BuildValue("(iiii)", v.x(), v.y(), v.width(), v.height());
+}
+
+// GPU-free: D14 point 7's clamp.
+PyObject *scene_target_clamp(PyObject *, PyObject *args)
+{
+    PyObject *supported = nullptr;
+    int requested = 1;
+    if (!PyArg_ParseTuple(args, "Oi", &supported, &requested))
+        return nullptr;
+    QList<int> counts;
+    if (!intsArgument(supported, &counts, "the supported sample counts"))
+        return nullptr;
+    return PyLong_FromLong(srpss_core::clampSamples(counts, requested));
 }
 
 PyObject *mode_blocks(PyObject *, PyObject *args)
@@ -2340,6 +2495,24 @@ PyMethodDef methods[] = {
       "(handle, still) -> None: N5.7a, the item draws as a still (no stream: its textures, settings and card are its "
       "frame; it records only when what it draws changed). ValueError while a stream is bound or when the program "
       "cannot be drawn so." },
+    { "composite_mode_target_size", composite_mode_target_size, METH_VARARGS,
+      "(handle, name, (w, h)) -> None: N3.1, an explicit-size scene target's size with no new program (Bubble's "
+      "ambient target follows its card). ValueError for a target the program does not declare with an explicit size." },
+    { "composite_mode_target_read", composite_mode_target_read, METH_VARARGS,
+      "(handle) -> None: N3.1, harness: a readback of every scene target's readable texture at the next record." },
+    { "composite_mode_target_pixels", composite_mode_target_pixels, METH_VARARGS,
+      "(handle) -> list | None: N3.1, harness: the readback once complete, each {name, size, content, format, samples, "
+      "data} (rows top first on every backend)." },
+    { "scene_sample_counts_control", scene_sample_counts_control, METH_VARARGS,
+      "([counts]) -> None: N3.1, harness: sample counts taken out of every device's supported set (the clamp's "
+      "negative control); [] restores them." },
+    { "scene_target_next_allocation", scene_target_next_allocation, METH_VARARGS,
+      "((current_w, current_h), (needed_w, needed_h)) -> ((w, h), reason): D14's allocation rule (GPU-free)." },
+    { "scene_target_viewport", scene_target_viewport, METH_VARARGS,
+      "(y_up_in_framebuffer, (alloc_w, alloc_h), (content_w, content_h)) -> (x, y, w, h): D14's content viewport in "
+      "QRhi's convention (GPU-free)." },
+    { "scene_target_clamp", scene_target_clamp, METH_VARARGS,
+      "([supported counts], requested) -> int: D14's sample clamp (GPU-free)." },
     { "mode_blocks", mode_blocks, METH_VARARGS,
       "(schema_json, program_json, packs, settings_json, record_bytes, card_json | None, (target_w, target_h)) -> "
       "([block bytes per pass], facts JSON str): what a generic mode uploads for this record (GPU-free); ValueError "

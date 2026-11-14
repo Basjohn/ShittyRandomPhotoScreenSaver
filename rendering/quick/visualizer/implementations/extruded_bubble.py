@@ -42,7 +42,7 @@ from rendering.gl_programs.extruded_bubble_scene import (
 )
 from core.settings.framed_camera import effective_aperture_scale
 from core.settings.visualizer_paths import admit_path, world_point
-from rendering.gl_programs.scene3d import scene3d_detail
+from rendering.gl_programs.scene3d import scene3d_detail, scene_samples
 from rendering.quick import gl_query
 from rendering.quick.scene3d.defocus import DefocusLayer
 from rendering.quick.scene3d.frame import item_pixel_rect, orient_visualizer_scene_frame
@@ -130,7 +130,7 @@ def _procedural_fill(parameters, level: float, emission: float) -> tuple[float, 
 
 def _scene_samples(parameters) -> int:
     """The card's multisampling: the tier's overlay samples (one sample when it has none)."""
-    return max(1, scene3d_detail(parameter(parameters, "scene3d_detail")).overlay_samples)
+    return scene_samples(scene3d_detail(parameter(parameters, "scene3d_detail")), at_least=1)
 
 
 class _ShaftTargets:

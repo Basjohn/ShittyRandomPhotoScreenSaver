@@ -27,6 +27,11 @@ from rendering.quick.scene3d.ribbon import GRADE_STOPS, RibbonPrimitive, ribbon_
 from rendering.quick.scene3d.ribbon_bursts import RibbonBurstRenderer
 from rendering.quick.scene3d.waveform_field import WaveformField
 from rendering.quick.scene3d.target import SceneTarget
+from rendering.gl_programs.scene3d import scene_samples
+
+# The scene target's multisampling: Waveform Ribbon's declared fixed request (N3.1, D14 choice D: 4 whatever the tier),
+# through the one sampling owner.
+SCENE_SAMPLES = scene_samples(None, fixed=4)
 ROOT=Path(__file__).resolve().parents[3]
 
 
@@ -374,7 +379,7 @@ class WaveformScene:
     def _draw_scene(self, flat, packet, draw, mvp, eye, view, ribbon_mvp, card, now, fogged):
         recipe, (width, height) = self.recipe, self.size
         environment = recipe.environment
-        with self.scene.scope(card, 4, self.resources, overlay=self._overlay, bloom=0. if flat else recipe.bloom,
+        with self.scene.scope(card, SCENE_SAMPLES, self.resources, overlay=self._overlay, bloom=0. if flat else recipe.bloom,
                               oit=True, hdr=None if flat or not recipe.bloom else recipe.exposure):
             gl.glViewport(0, 0, width, height)
             # The finite ground dissolves into the mist's far colour, including above its Perspective horizon.

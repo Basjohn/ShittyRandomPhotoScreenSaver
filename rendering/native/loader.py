@@ -46,7 +46,7 @@ from rendering.native.spectrum import NativeSpectrum, spectrum_block
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 16
+EXPECTED_ABI = 17
 HOST_KINDS = ("window", "hidden")
 
 
@@ -188,10 +188,35 @@ class NativeCore:
 
         return list(self.module.mode_core_values(str(name), _card(card), (int(target[0]), int(target[1]))))
 
-    def mode_program_layout(self, passes: Any) -> dict:
-        """The program's passes, blends, uv inputs, samplers and reflected blocks (GPU-free)."""
-        declared, packs = program_json(passes)
+    def mode_program_layout(self, passes: Any, targets: Any = ()) -> dict:
+        """The program's passes, blends, uv inputs, samplers and reflected blocks (GPU-free); N3.1: its scene targets
+        and each pass's target, attachments, depth and capture."""
+        declared, packs = program_json(passes, targets)
         return json.loads(self.module.mode_program_layout(declared, packs))
+
+    def scene_target_next_allocation(self, current: tuple[int, int], needed: tuple[int, int]) -> tuple[tuple[int, int],
+                                                                                                        str]:
+        """N3.1 (D14 point 2, GPU-free): a scene target's next allocation for ``needed`` pixels given ``current``
+        ((0, 0): none), and why it changed ("" when it did not)."""
+        (width, height), reason = self.module.scene_target_next_allocation(
+            (int(current[0]), int(current[1])), (int(needed[0]), int(needed[1])))
+        return (int(width), int(height)), str(reason)
+
+    def scene_target_viewport(self, y_up_in_framebuffer: bool, allocation: tuple[int, int],
+                              content: tuple[int, int]) -> tuple[int, int, int, int]:
+        """N3.1 (D14 point 2, GPU-free): QRhi's viewport of a content in its allocation on a backend whose framebuffer
+        is Y-up (OpenGL) or not."""
+        return tuple(int(v) for v in self.module.scene_target_viewport(
+            bool(y_up_in_framebuffer), (int(allocation[0]), int(allocation[1])), (int(content[0]), int(content[1]))))
+
+    def scene_target_clamp(self, supported: Any, requested: int) -> int:
+        """N3.1 (D14 point 7, GPU-free): the largest supported sample count not above ``requested`` (1 when none)."""
+        return int(self.module.scene_target_clamp([int(v) for v in supported], int(requested)))
+
+    def scene_sample_counts_control(self, removed: Any = ()) -> None:
+        """N3.1, harness only: sample counts taken out of every device's supported set (the clamp's negative control);
+        ``()`` restores them."""
+        self.module.scene_sample_counts_control([int(v) for v in removed])
 
     def program_block_pack(self, pack: bytes, block: str, values: Mapping[str, Any]) -> tuple[bytes, dict]:
         """One reflected block of ``pack`` packed from ``values`` by name, as the core packs every block (GPU-free):
