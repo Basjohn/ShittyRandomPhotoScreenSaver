@@ -74,7 +74,7 @@ from typing import Iterator
 from OpenGL import GL as gl
 
 from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
-from rendering.gl_programs.scene3d import Scene3DBlockLayout
+from rendering.gl_programs.scene3d import SCENE_OUTPUT_DITHER_GLSL, Scene3DBlockLayout
 from rendering.quick import gl_query
 
 from .frame import SceneFrame, item_pixel_rect, item_quad_vertex_source, scene_output_frame
@@ -219,7 +219,7 @@ OIT_PROGRAMS = (("scene_oit_resolve", FULLSCREEN_VERTEX_SOURCE, _OIT_RESOLVE_FRA
 OIT_SAMPLES_PROGRAMS = (("scene_oit_resolve_samples", FULLSCREEN_VERTEX_SOURCE, _OIT_RESOLVE_SAMPLES_FRAGMENT),)
 
 # An overlay with bloom: the scene premultiplied, its glow added, for a premultiplied blend.
-_OVERLAY_BLOOM_GLSL = """
+_OVERLAY_BLOOM_GLSL = SCENE_OUTPUT_DITHER_GLSL + """
 layout(binding = 1) uniform sampler2D uBloom;
 vec3 sceneToneMap(vec3 x) {
     x *= uHdrExposure;
@@ -234,6 +234,10 @@ vec4 sceneOverlayBloom(vec4 scene, ivec2 texel) {
         float cover = max(scene.a, 1e-4);
         light = sceneToneMap(light / cover) * cover;
     }
+    // The glow and shafts are smooth float light written to an 8-bit output: dark, slow gradients (a halo or a
+    // shaft fading over hundreds of pixels) stepped into visible contour bands. Triangular dither of one output
+    // step, from the exact integer hash (R-94), only where glow was added, so a pixel without glow is untouched.
+    if (max(glow.r, max(glow.g, glow.b)) >= SCENE_DITHER_FLOOR) light += sceneOutputDither(texel);
     return vec4(light * uOpacity, scene.a * uOpacity);
 }
 """
