@@ -22,6 +22,7 @@ from rendering.native.loader import (
     NativeCoreUnavailable,
     load,
 )
+from rendering.native.mode import PASS_BLENDS, ModePass, NativeMode, schema_table_entry
 from rendering.native.packet_reader import (
     READ_RESULTS,
     READER_CONTROLS,
@@ -32,7 +33,8 @@ from rendering.native.packet_reader import (
 from rendering.native.spectrum import SPECTRUM_PRESENTATION_KEYS, NativeSpectrum, spectrum_presentation
 
 __all__ = ["COMPOSITE_OPTIONS", "CompositeGeometry", "CompositeItem", "EXPECTED_ABI", "GPU_PASS_KINDS", "GpuSample",
-           "HOST_KINDS", "MODULE_NAME", "NativeFrame", "NativeSpectrum", "PROBE_OPTIONS", "PacketReader",
+           "HOST_KINDS", "MODULE_NAME", "ModePass", "NativeFrame", "NativeMode", "NativeSpectrum", "PASS_BLENDS",
+           "PROBE_OPTIONS", "PacketReader", "schema_table_entry",
            "READER_CONTROLS", "READ_RESULTS", "HiddenHost", "Host", "NativeCore", "NativeCoreUnavailable",
            "ProbeReadback", "QuickFrame", "SPECTRUM_PRESENTATION_KEYS", "SURFACE_PATTERNS", "SchemaTableMismatch",
            "WindowHost", "composite_geometry", "load", "spectrum_presentation", "write_to_frame_trace"]

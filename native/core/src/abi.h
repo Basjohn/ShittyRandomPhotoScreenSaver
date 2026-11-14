@@ -26,4 +26,7 @@
 // option (rgba8, rgba16f; N2.5 rule (a)). Round 4 never compiled (limited-API macros): round 5 is ABI 8's first build.
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 8
+// 9 (N2.9, generic mode content): composite_mode_bind/unbind/program/settings/drop/head/state/retire, mode_blocks,
+// mode_program_layout, program_block_pack; packet_reader_open's schema argument; composite_live's mode counts; the
+// Spectrum program refused when it does not take the current settings (audit 14 Nov, L4).
+#define SRPSS_NATIVE_CORE_ABI 9

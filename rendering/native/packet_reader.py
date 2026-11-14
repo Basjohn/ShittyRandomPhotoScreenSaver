@@ -48,31 +48,30 @@ class NativeFrame:
 def python_schema_table() -> dict:
     """This build's frame ABI version, mode codes and native schemas, in the shape ``frame_schemas()`` reports them."""
     from core.visualizer_engine import native_schema, packet_abi
+    from rendering.native.mode import schema_table_entry
 
-    schemas = []
-    for schema in sorted(native_schema.native_schemas().values(), key=lambda s: s.schema_id):
-        checks = {name: (kind, limit) for name, kind, limit in schema.checks}
-        rows = []
-        for name in schema.fields:
-            entry = schema.layout.field(name)
-            kind, limit = checks.get(name, ("", 0))
-            rows.append([name, entry.kind, entry.count, entry.offset, kind, limit])
-        schemas.append({
-            "schema_id": schema.schema_id, "mode_id": schema.mode_id, "mode_code": schema.mode_code,
-            "version": schema.version, "record_bytes": schema.layout.size,
-            "fingerprint": schema.layout.fingerprint(), "fields": rows,
-            "check_order": [schema.fields.index(name) for name, _kind, _limit in schema.checks],
-        })
+    schemas = [schema_table_entry(schema)
+               for schema in sorted(native_schema.native_schemas().values(), key=lambda s: s.schema_id)]
     return {"abi_version": packet_abi.ABI_VERSION, "mapping_prefix": packet_abi.FRAME_MAPPING_PREFIX,
             "mode_codes": dict(packet_abi.MODE_CODES), "schemas": schemas}
 
 
 def schema_table_differences(compiled: Mapping[str, Any], expected: Mapping[str, Any]) -> list[str]:
-    """What differs between the module's table and this build's (empty: the same layout)."""
+    """What differs between the module's table and this build's (empty: the same layout).
+
+    Mode codes are append-only (``packet_abi.MODE_CODES``): a module built before a mode was added knows a subset of
+    this build's codes, every one the same, and reads the new mode by the runtime schema its stream is bound with (N2.9),
+    so a new mode needs no module build. A code the module has and this build lacks, or a code that differs, is a
+    difference."""
     problems = []
-    for key in ("abi_version", "mapping_prefix", "mode_codes"):
+    for key in ("abi_version", "mapping_prefix"):
         if compiled.get(key) != expected.get(key):
             problems.append(f"{key}: module {compiled.get(key)!r}, this build {expected.get(key)!r}")
+    module_codes = dict(compiled.get("mode_codes") or {})
+    build_codes = dict(expected.get("mode_codes") or {})
+    differing = {mode: code for mode, code in module_codes.items() if build_codes.get(mode) != code}
+    if differing:
+        problems.append(f"mode_codes: module {differing!r} are not this build's ({build_codes!r})")
     by_id = {int(s["schema_id"]): s for s in compiled.get("schemas", ())}
     wanted = {int(s["schema_id"]): s for s in expected.get("schemas", ())}
     for schema_id in sorted(set(by_id) | set(wanted)):

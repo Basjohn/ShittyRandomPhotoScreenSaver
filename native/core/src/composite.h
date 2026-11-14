@@ -15,7 +15,8 @@
 //   (rendering/quick/visualizer/clip_host.py: a pixel is content when its centre's distance to the path is <= 0). An
 //   admitted overflow (Sphere's, Extruded Spectrum's, not held by the record) skips the term; Python decides which.
 // - Opacity is Qt's (the item's own and its ancestors'); the content is premultiplied.
-// - Content: the harness's pattern, or a mode's (N2.5: Spectrum, spectrum.h). With Spectrum bound, the node reads the
+// - Content: the harness's pattern, or a mode's (N2.5: Spectrum, spectrum.h; N2.9: a generic mode, mode_content.h,
+//   read and recorded by the same rules). With Spectrum bound, the node reads the
 //   item's stream at every sync on the render thread (the accept edge), releases the streams the item retired (the
 //   render-thread retire job, also run when Qt deletes the node), and its surface records only when a frame was
 //   accepted or dropped or the card changed.
@@ -25,6 +26,7 @@
 
 #include <QtCore/QJsonObject>
 #include <QtCore/QRectF>
+#include <QtCore/QSharedPointer>
 #include <QtCore/QString>
 #include <QtQuick/QQuickItem>
 
@@ -34,7 +36,10 @@ namespace srpss_core {
 
 class WindowSurfaces;
 class SpectrumSource;
+class ModeSource;
+class RuntimeSchema;
 struct CompositeStats;
+struct ModeProgram;
 struct PacketReaderConfig;
 struct SpectrumPresentation;
 
@@ -76,6 +81,16 @@ public:
     bool settingsSpectrum(const QJsonObject &settings, QString *error);
     SpectrumSource *spectrum() const { return m_spectrum.get(); }
 
+    // A generic mode (N2.9, mode_content.h), GUI thread: its stream with its schema, its program (with settings, or
+    // keeping the ones given before) and its settings by name. One content per item: a mode is refused on an item that
+    // draws Spectrum. mode() is null until a mode call.
+    bool bindMode(const QString &mappingName, const PacketReaderConfig &config,
+                  const QSharedPointer<const RuntimeSchema> &schema, QString *error);
+    void unbindMode();
+    bool programMode(const ModeProgram &program, const QJsonObject *settings, QString *error);
+    bool settingsMode(const QJsonObject &settings, QString *error);
+    ModeSource *mode() const { return m_mode.get(); }
+
     // Any thread: composite items alive in the process.
     static int liveItems();
 
@@ -88,6 +103,8 @@ private:
     std::shared_ptr<WindowSurfaces> m_surfaces; // the window's registry (GUI thread; copied by the node at sync)
     std::shared_ptr<CompositeStats> m_stats;
     std::shared_ptr<SpectrumSource> m_spectrum; // shared with the node, which holds it until Qt deletes the node
+    std::shared_ptr<ModeSource> m_mode;         // the same, for a generic mode
+    bool modeRefused(QString *error) const;
 };
 
 } // namespace srpss_core

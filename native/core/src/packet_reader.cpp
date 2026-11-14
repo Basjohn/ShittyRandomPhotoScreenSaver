@@ -80,7 +80,7 @@ inline quint16 read16(const uchar *p)
     return value;
 }
 
-bool knownMode(quint32 code)
+bool compiledMode(quint32 code)
 {
     for (const fa::ModeCode &mode : fa::kModeCodes) {
         if (mode.code == code)
@@ -233,6 +233,8 @@ QJsonObject PacketReaderConfig::toJson() const
     if (acceptAfterRetire)
         controls.append(QStringLiteral("accept_after_retire"));
     o.insert(QStringLiteral("controls"), controls);
+    o.insert(QStringLiteral("runtime_schema"),
+             runtimeSchema ? QJsonValue(double(runtimeSchema->schema().schemaId)) : QJsonValue());
     return o;
 }
 
@@ -261,6 +263,18 @@ const fa::Schema *PacketReader::schema(quint32 schemaId)
             return &schema;
     }
     return nullptr;
+}
+
+const fa::Schema *PacketReader::admittedSchema(quint32 schemaId) const
+{
+    if (m_config.runtimeSchema && m_config.runtimeSchema->schema().schemaId == schemaId)
+        return &m_config.runtimeSchema->schema();
+    return schema(schemaId);
+}
+
+bool PacketReader::knownMode(quint32 code) const
+{
+    return compiledMode(code) || (m_config.runtimeSchema && m_config.runtimeSchema->schema().modeCode == code);
 }
 
 PacketReader *PacketReader::open(const QString &name, const PacketReaderConfig &config, QString *error)
@@ -483,13 +497,15 @@ bool PacketReader::admit(const SlotHead &head, QString *cause, QString *reason) 
         *reason = QStringLiteral("schema %1 is for mode code %2, the slot's is %3").arg(hexText(schemaId)).arg(schemaMode).arg(mode);
         return false;
     }
-    const fa::Schema *found = schema(schemaId);
+    const fa::Schema *found = admittedSchema(schemaId);
     if (!found) {
         quint32 newest = 0;
         for (const fa::Schema &known : fa::kSchemas) {
             if (known.modeCode == schemaMode)
                 newest = qMax(newest, known.version);
         }
+        if (m_config.runtimeSchema && m_config.runtimeSchema->schema().modeCode == schemaMode)
+            newest = qMax(newest, m_config.runtimeSchema->schema().version);
         if (!newest) {
             *cause = QStringLiteral("schema");
             *reason = QStringLiteral("mode code %1 has no native schema in this build").arg(schemaMode);
@@ -657,7 +673,7 @@ ReadResult PacketReader::read()
         // The head alone, whole under its seqlock, decides admission before any payload byte is copied.
         if (!admit(head, &cause, &reason))
             return refuse(latest, cause, reason);
-        found = schema(head.payloadSchema);
+        found = admittedSchema(head.payloadSchema);
     }
     if (m_state.loadAcquire() != Open) { // D1: no copy starts once the stream is retiring
         ++m_readsWhileRetiring;

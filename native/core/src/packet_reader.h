@@ -40,15 +40,22 @@
 //
 // `controls` are the harness's negative controls (each disables one guard; the product never sets one).
 //
+// The runtime schema (N2.9, mode_schema.h): a generic mode's stream is read by the schema its owner hands over at bind
+// (`runtimeSchema`), beside the compiled-in table and by the same rules: its mode code is a known mode, its slots are
+// admitted by its id, version and size at the head, and its record's range rules hold after the copy. A slot of any
+// other schema is refused as before.
+//
 // Windows x64 only (the module's one target); no STL container, lock or function wrapper (README: msvcp140).
 #pragma once
 
 #include "frame_abi_generated.h"
+#include "mode_schema.h"
 
 #include <QtCore/QAtomicInteger>
 #include <QtCore/QByteArray>
 #include <QtCore/QJsonObject>
 #include <QtCore/QSemaphore>
+#include <QtCore/QSharedPointer>
 #include <QtCore/QString>
 
 namespace srpss_core {
@@ -91,6 +98,10 @@ struct PacketReaderConfig
     // copy started and before its bytes are read, until resume(); waitPaused() tells another thread it is there.
     bool pauseInCopy = false;
     bool acceptAfterRetire = false;   // negative control: a copy finished after the stream began retiring is accepted
+
+    // A generic mode's schema (N2.9), given by its owner at bind, never by the configuration JSON; null: the compiled
+    // table alone.
+    QSharedPointer<const RuntimeSchema> runtimeSchema;
 
     static bool fromJson(const QByteArray &json, PacketReaderConfig *out, QString *error);
     QJsonObject toJson() const;
@@ -155,6 +166,10 @@ private:
 
     PacketReader(const QString &name, const PacketReaderConfig &config);
     bool validate(QString *problem);
+    // The schema of this id the reader admits (the runtime schema's, else the compiled one), and whether a mode code is
+    // known (the compiled table's, or the runtime schema's).
+    const frame_abi::Schema *admittedSchema(quint32 schemaId) const;
+    bool knownMode(quint32 code) const;
     bool pin();
     void unpin();
     void unmap();

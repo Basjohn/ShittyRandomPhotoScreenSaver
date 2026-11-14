@@ -92,6 +92,8 @@ set(_sources
     src/surfaces.cpp
     src/composite.cpp
     src/spectrum.cpp
+    src/mode_schema.cpp
+    src/mode_content.cpp
     src/program_blocks.cpp
     src/packet_reader.cpp
     src/targets.cpp
