@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** Medium: 1B.10's fixes (checkpointed: the 8-bit glow dither landed on its branch; the near-lens fade, Aurora Fjord's lake lines and the Neon tests that pin shipped presets wait for the 17:00 UTC reset). Hero Shell removed. R-217 merged at ABI 13. High: free until the reset.
+**Now (in flight):** High: N3.8 (the async job service, its photo upload job and N4.a's leftovers; one build round at ABI 14). Medium: 1B.10's fixes (the near-lens fade, Aurora Fjord's lake lines, the Neon tests that read shipped presets, the painted-grid growth defect). Main at ABI 13.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
