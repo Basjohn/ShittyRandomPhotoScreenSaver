@@ -246,10 +246,6 @@ _RATCHET = {
         "rendering.gl_programs.neon_lake_basin_program.NEON_FRAGMENT_SOURCE",
         "rendering.gl_programs.neon_lake_basin_program.NEON_VERTEX_SOURCE",
     ),
-    "Extruded Spectrum": (
-        "rendering.gl_programs.extruded_spectrum_program.EXTRUDED_FRAGMENT_SOURCE",
-        "rendering.gl_programs.extruded_spectrum_program.EXTRUDED_VERTEX_SOURCE",
-    ),
     "Sphere": (
         "rendering.quick.visualizer.implementations.sphere_voxel._FRAGMENT_SOURCE",
         "rendering.quick.visualizer.implementations.sphere_voxel._SHADOW_FRAGMENT_SOURCE",
