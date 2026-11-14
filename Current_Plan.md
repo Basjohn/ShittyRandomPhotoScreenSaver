@@ -485,6 +485,18 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   backends (`.artifacts/evidence/native_core/n4_a/`).
 - [ ] N3.8 The async job service (D9), built to N0.7's verdict: the job thread, self-contained jobs, the latch,
   the in-frame form; first job: a photo's upload and mips.
+  - [ ] Read D9 and N0.7's proof (`Native_Core_P3_Decisions.md` D9; the spike's evidence) and write the service's
+    shape into D9's "as built" before code: one job thread per process, jobs that own every input they read
+    (no reference into a live frame), the latch that publishes a finished job at a frame edge, the in-frame form
+    on OpenGL (no second context), cancellation and the destruction barrier's view of in-flight jobs.
+  - [ ] The first job: a photo's upload and its GPU mips into a core-owned texture (N4.a's textures), async on
+    Vulkan, in-frame on OpenGL; the render thread's cost per image change measured both ways at 3840 x 2160.
+  - [ ] With N4.a's leftovers (the same files): a texture's owner told when its textures are lost (an edge, not
+    a state read), and the texture counts and in-flight jobs joined to the destruction barrier (the N2.5 audit's
+    L8).
+  - [ ] Proof on a harness (hidden host, both backends, validation): a sequence of real photos swapped while
+    drawing, no frame waits for an upload on Vulkan, nothing at rest, teardown with jobs in flight clean,
+    cancellation of a superseded image; a GPU-free unit test of the latch and cancellation.
   - [ ] D8 row 3's gate (the contention measurement under a heavy Visualizer frame, the one limit of N0.7's proof,
     D9 point 2): p99 frame time and late frames across image changes with a Visualizer running, async against
     in-frame (Vulkan only; OpenGL runs in-frame).
