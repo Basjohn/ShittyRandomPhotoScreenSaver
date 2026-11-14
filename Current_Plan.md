@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.9 round 2's audit fixes merged at ABI 12; main's module rebuilding (the ghost change in `spectrum.frag` postdates the build); then the lead reruns Display 1 for the Vulkan border break. Medium: 1C.2's Save stall at the store. High: free.
+**Now (in flight):** High: the native composite's diagonal seam on Vulkan (a build round at ABI 13). Medium: 1C.2's Save stall at the store. N2.9 round 2 merged at ABI 12 (f8fa0e49); main's module rebuilding.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -472,6 +472,11 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     into the window), the overscan placement, or the item's own quad. Next: the lead reruns on Display 1 with the
     ABI 12 module (round 2 changed the composite and `v_uv`); if it persists, the High extends the reproduction
     to the product's composite path and fixes it there.
+    - Rerun 14 Nov on ABI 12 (`display/d1_run/20261114_abi12_vulkan_border/`, wallpaper and music): it persists as
+      a thin diagonal seam from the card's bottom-left corner, the bars shifted about one pixel across it: the
+      composite quad's diagonal sampling neighbouring texels at the real window's fractional placement (window
+      at device (-2,-3) for overscan, 3840 x 2163). High in flight: reproduce with that placement, an exact
+      composite on both backends, rule (a)/(b) widened to offset windows and fractional origins.
   - H1 on a real window: done 14 Nov on Display 0 (the MSI at 150 %, operator's leave): the native Spectrum draws
     inside its card on Vulkan with crisp edges (`display/d1_run/20261114_d0_h1_vulkan_spectrum/`).
   - [ ] With no admitted mode renderable on the backend (before N2.5), the Visualizer card shows as a thin empty
