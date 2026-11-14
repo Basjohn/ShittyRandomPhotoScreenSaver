@@ -23,8 +23,18 @@ layout(std140, binding = 0) uniform buf {
     vec4 glassLegibility;
     vec4 panelLimits;
     float panelCeiling;   // dark ink: the panel's furthest lift toward white (SurfaceContrast.panelCeiling)
+    // The conventions include's values for this card's target (N1.4), set by MaterialSurface.qml from the window
+    // that owns the target: a ShaderEffect has only this block, so the include's own block cannot reach it.
+    vec4 srpssConventions;   // x 1 flips the fragment row (every backend but OpenGL); y, z, w unused here
+    vec2 targetPx;           // the render target's size in pixels
 };
 layout(binding = 1) uniform sampler2D source;
+
+// The conventions include's fragPixel (native/core/shaders/srpss_conventions.glsl), over this block's values: the
+// fragment's pixel centre in the row convention the grain was authored in (OpenGL's), never raw gl_FragCoord.
+vec2 fragPixel(vec2 targetSize) {
+    return vec2(gl_FragCoord.x, srpssConventions.x > 0.5 ? targetSize.y - gl_FragCoord.y : gl_FragCoord.y);
+}
 
 // SURFACE BEGIN (identical in surface_material.frag, text_legibility.frag and
 // text_legibility.vert; tests/test_surface_materials.py checks it)
@@ -62,7 +72,7 @@ float grain(vec2 pixel) {
 
 // The card surface at card-local point p (origin at the card centre), sampled through the
 // shared backdrop at this point's screen coordinate. rgb = surface, a = backdrop validity.
-// grainValue is the static grain at this pixel (grain(gl_FragCoord.xy)); 0.5 = none.
+// grainValue is the static grain at this pixel (grain(fragPixel(targetPx))); 0.5 = none.
 vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit, float grainValue) {
     vec2 halfSize = cardSize * 0.5;
     vec2 cardUnit = p / max(cardSize, vec2(1.0)) + vec2(0.5);
@@ -175,7 +185,7 @@ void main() {
     float d = roundedBox(p, halfSize, clamp(cornerRadius, 0.0, min(halfSize.x, halfSize.y)), n);
     float aa = max(fwidth(d), 0.001);
     float inside = 1.0 - smoothstep(-aa, aa, d);
-    vec4 surface = surfaceAt(p, itemSize, vScreen, backdropPerUnit(p, vScreen), grain(gl_FragCoord.xy));
+    vec4 surface = surfaceAt(p, itemSize, vScreen, backdropPerUnit(p, vScreen), grain(fragPixel(targetPx)));
     vec4 material = vec4(surface.rgb, 1.0);
     vec4 normal = normalColor;   // ShaderEffect passes colours premultiplied
     fragColor = mix(normal, material, surface.a) * (inside * qt_Opacity);

@@ -153,7 +153,9 @@ means = {}
 for name, (x0, y0, x1, y1) in REGIONS.items():
     pixels = [image.pixelColor(x, y) for y in range(y0, y1) for x in range(x0, x1)]
     means[name] = [sum(getattr(c, channel)() for c in pixels) / len(pixels) for channel in ("red", "green", "blue")]
-report = {"backend": chosen.api, "api": host.state().get("graphics_api"), "means": means}
+x0, y0, x1, y1 = REGIONS["material"]
+material = [[c.red(), c.green(), c.blue()] for c in (image.pixelColor(x, y) for y in range(y0, y1) for x in range(x0, x1))]
+report = {"backend": chosen.api, "api": host.state().get("graphics_api"), "means": means, "material": material}
 host.set_content(None)
 item.deleteLater()
 QTimer.singleShot(0, app.quit)
@@ -169,7 +171,7 @@ def _render(backend: str, state_dir: Path, qml_dir: Path) -> dict:
     assert completed.returncode == 0 and lines, completed.stdout + completed.stderr
     report = json.loads(lines[-1][len("PROBE "):])
     assert report["backend"] == report["api"] == backend
-    return report["means"]
+    return dict(report["means"], material_pixels=report["material"])
 
 
 def _distance(a, b) -> float:
@@ -185,8 +187,14 @@ def test_the_cards_draw_on_vulkan_as_on_opengl_and_not_without_spirv(tmp_path):
     for name in ("material", "glow", "plate"):
         assert _distance(on_opengl[name], on_opengl["background"]) > 8.0, name     # each element draws (OpenGL)
         assert _distance(on_vulkan[name], on_vulkan["background"]) > 8.0, name     # ... and on Vulkan
-        # The same pixels within the static grain, whose gl_FragCoord origin differs between the backends.
         assert _distance(on_vulkan[name], on_opengl[name]) < 1.0, name
+    # The card's static grain is read from the fragment's pixel in one row convention (N1.4's fragPixel), so the
+    # material matches pixel for pixel, not only on average. Raw gl_FragCoord (row origin differs by backend) put
+    # 2,547 of 2,704 card pixels up to 8 levels apart. A pixel whose hash sits at its fract's wrap may still flip
+    # between the two compilers (0.1%: the bound below; 0 in this region on 14 Nov).
+    pairs = list(zip(on_vulkan["material_pixels"], on_opengl["material_pixels"]))
+    level = [max(abs(a - b) for a, b in zip(vk, gl)) for vk, gl in pairs]
+    assert sum(d > 1 for d in level) <= len(level) // 1000, sorted(level)[-10:]
 
     # Negative control: the same QML with SPIR-V erased from its packs draws none of them on Vulkan.
     stripped = tmp_path / "qml"

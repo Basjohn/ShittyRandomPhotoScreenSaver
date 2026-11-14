@@ -76,7 +76,7 @@ float grain(vec2 pixel) {
 
 // The card surface at card-local point p (origin at the card centre), sampled through the
 // shared backdrop at this point's screen coordinate. rgb = surface, a = backdrop validity.
-// grainValue is the static grain at this pixel (grain(gl_FragCoord.xy)); 0.5 = none.
+// grainValue is the static grain at this pixel (grain(fragPixel(targetPx))); 0.5 = none.
 vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit, float grainValue) {
     vec2 halfSize = cardSize * 0.5;
     vec2 cardUnit = p / max(cardSize, vec2(1.0)) + vec2(0.5);
