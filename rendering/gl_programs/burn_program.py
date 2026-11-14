@@ -60,26 +60,33 @@ layout(std140, binding = 18) uniform BurnPass {
     int   u_ember_veins;    // 1 = glowing veins crawl through the char
     float u_time;           // wall-clock seconds
     float u_seed;           // per-transition random seed
+    vec2  u_target_px;      // the target's pixels (the viewport; the native core fills it by this name, N4.a)
 };
 
 // =====================================================================
-//  Noise primitives
+//  Noise primitives: an integer lattice hash (R-94's class; N5.2a), exact on every GPU, compiler and backend (the
+//  float hashes it replaced compiled to different values through SPIR-V and moved the burn front)
 // =====================================================================
-float hash21(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
+uint burnMix(uint x) {
+    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
+    return x;
+}
+
+float burnRandom(ivec2 cell, uint salt) {
+    uint key = uint(cell.x) * 0x9e3779b9u ^ burnMix(uint(cell.y) * 0x85ebca6bu + salt);
+    return float(burnMix(key)) * (1.0 / 4294967295.0);
 }
 
 float vnoise(vec2 p) {
     vec2 i = floor(p);
-    vec2 f = fract(p);
+    vec2 f = p - i;
     vec2 u = f * f * (3.0 - 2.0 * f);   // Hermite smoothstep
-    float a = hash21(i);
-    float b = hash21(i + vec2(1.0, 0.0));
-    float c = hash21(i + vec2(0.0, 1.0));
-    float d = hash21(i + vec2(1.0, 1.0));
-    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+    ivec2 c = ivec2(i);
+    float a = burnRandom(c, 0u);
+    float b = burnRandom(c + ivec2(1, 0), 0u);
+    float c2 = burnRandom(c + ivec2(0, 1), 0u);
+    float d = burnRandom(c + ivec2(1, 1), 0u);
+    return mix(mix(a, b, u.x), mix(c2, d, u.x), u.y);
 }
 
 // 4-octave FBM for richer edge detail
@@ -116,15 +123,20 @@ float burn_axis(vec2 uv) {
 // =====================================================================
 //  Spark / ember hash
 // =====================================================================
-float spark_hash(vec2 p, float s) {
-    return fract(sin(dot(p + s, vec2(127.1, 311.7))) * 43758.5453);
+// A whole cell's value for the seed (the seed's bits, so every seed is its own pattern) and a salt per use.
+float spark_hash(vec2 cell, uint salt) {
+    return burnRandom(ivec2(cell), burnMix(floatBitsToUint(u_seed) + salt));
 }
 
 // =====================================================================
 //  Main
 // =====================================================================
 void main() {
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+    // The pixel's own uv (N5.2a): the interpolated vUv differs in its last bits between renderers and backends, and
+    // the burn's thresholds flipped on it; the pixel's centre over the target's pixels does not differ. V flipped to
+    // match Qt's top-left image origin.
+    vec2 pixelUv = (floor(vUv * u_target_px) + 0.5) / u_target_px;
+    vec2 uv = vec2(pixelUv.x, 1.0 - pixelUv.y);
     float t = clamp(u_progress, 0.0, 1.0);
 
     // Hard guards — exact old/new at extremes (transition policy)
@@ -305,7 +317,7 @@ void main() {
             // Staggered grid with per-cell jitter for organic placement
             vec2 cell_size = vec2(120.0, 60.0);
             vec2 cell_id = floor(uv * cell_size);
-            float rnd = spark_hash(cell_id, u_seed);
+            float rnd = spark_hash(cell_id, 1u);
 
             // ~12% of cells have a spark at any moment
             if (rnd > 0.88) {
@@ -352,7 +364,7 @@ void main() {
             ash_uv.y -= u_time * 0.02;
             ash_uv.x += sin(u_time * 0.8 + uv.y * 15.0) * 0.003;
             vec2 ash_cell = floor(ash_uv * ash_cell_size);
-            float ash_rnd = spark_hash(ash_cell, u_seed + 77.0);
+            float ash_rnd = spark_hash(ash_cell, 2u);
 
             if (ash_rnd > (1.0 - u_ash_density * 0.15)) {
                 float ash_phase = fract(ash_rnd * 31.1 + u_time * 1.5);

@@ -138,7 +138,7 @@ class QuickBurnRenderer(FullscreenPassRenderer):
         "u_glow_color", "u_ember_color", "u_char_width", "u_smoke_enabled",
         "u_smoke_density", "u_ash_enabled", "u_ash_density",
         "u_flames", "u_ember_veins",
-        "u_time", "u_seed",
+        "u_time", "u_seed", "u_target_px",
     )
 
     def resolve(self, frame: QuickTransitionRenderFrame):
@@ -160,6 +160,7 @@ class QuickBurnRenderer(FullscreenPassRenderer):
             "u_ember_veins": 1 if params.ember_veins else 0,
             "u_time": _burn_effect_time_seconds(frame),
             "u_seed": params.seed,
+            "u_target_px": (float(frame.viewport[2]), float(frame.viewport[3])),
         }
 
 

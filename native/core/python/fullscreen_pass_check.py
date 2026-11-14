@@ -69,12 +69,30 @@ CHILD_TIMEOUT_S = 1500
 #: The seven transitions that draw one fragment between two pictures through ``FullscreenPassRenderer`` (their modules
 #: under ``rendering/quick/transitions/implementations``), the first consumers with N5.7a's presenter.
 FULLSCREEN_TRANSITIONS = ("crossfade", "burn", "particle", "ripple", "slide", "warp", "wipe")
-#: Drawn natively here: Crossfade's own fragment, and Burn with its own values.
-PROVED = ("crossfade", "burn")
-#: The widened values: each drawn transition's production defaults and, for Burn, every option on in a diagonal.
+#: Drawn natively here: all seven (N5.2a), each from its own product fragment with its own values.
+PROVED = FULLSCREEN_TRANSITIONS
+#: The widened values: each transition's production defaults and its options (a variant ``<id>_<label>`` lays its
+#: overrides over the production run's parameters; ``request_direction`` replaces the run's own direction).
 VARIANTS = {"crossfade": {}, "burn": {},
             "burn_options": {"direction": 4, "flames": True, "ember_veins": True, "smoke_enabled": True,
-                             "ash_enabled": True}}
+                             "ash_enabled": True},
+            "particle": {},
+            "particle_swirl": {"mode": 1, "swirl_order": 1, "use_3d_shading": True, "texture_mapping": True,
+                               "wobble": True},
+            "particle_converge": {"mode": 2, "direction": 9},
+            "ripple": {}, "ripple_options": {"ripple_count": 8},
+            "slide": {}, "slide_push": {"request_direction": "up", "motion_style": "Perspective Push"},
+            "slide_elastic": {"request_direction": "right", "motion_style": "Elastic"},
+            "warp": {},
+            "wipe": {}, "wipe_diagonal": {"request_direction": "diag_tr_bl"}}
+
+
+def variant_transition(variant: str) -> str:
+    """The transition a variant of ``VARIANTS`` draws."""
+    for transition_id in FULLSCREEN_TRANSITIONS:
+        if variant == transition_id or variant.startswith(transition_id + "_"):
+            return transition_id
+    raise ValueError(f"no transition draws the variant {variant!r}")
 PROGRESS = (0.0, 0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95, 1.0)
 DURATION_MS = 2400
 CARD = (640, 360)                # the item's logical size
@@ -277,16 +295,22 @@ def photos(paths, size: tuple[int, int]):
 
 def runs(capture, transition_id: str, overrides: Mapping[str, Any]):
     """The production run of ``transition_id`` with its parameters ``overrides`` laid over."""
-    from rendering.quick.transitions.state import TransitionRequest, TransitionRun
+    from rendering.quick.transitions.state import TransitionRun
 
-    run = capture.production_run(transition_id, duration_ms=DURATION_MS)
+    run = capture.production_run(renderer_class(transition_id).transition_id, duration_ms=DURATION_MS)
     if not overrides:
         return run
-    r = run.request
-    request = TransitionRequest(r.runtime_generation, r.transition_id, r.requested_name, r.selected_from_random,
-                                r.duration_ms, r.direction, {**r.parameter_dict(), **overrides}, r.source_image,
-                                r.destination_image)
-    return TransitionRun.start(run_id=run.run_id + 1, request=request, start_ns=0)
+    return TransitionRun.start(run_id=run.run_id + 1, request=overridden(run.request, overrides), start_ns=0)
+
+
+def overridden(r, overrides: Mapping[str, Any]):
+    """The request ``r`` with ``overrides`` laid over its parameters (``request_direction``: its direction)."""
+    from rendering.quick.transitions.state import TransitionRequest
+
+    parameters = {k: v for k, v in overrides.items() if k != "request_direction"}
+    return TransitionRequest(r.runtime_generation, r.transition_id, r.requested_name, r.selected_from_random,
+                             r.duration_ms, overrides.get("request_direction", r.direction),
+                             {**r.parameter_dict(), **parameters}, r.source_image, r.destination_image)
 
 
 def compare(native, reference) -> dict:
@@ -446,7 +470,7 @@ def python_frames(images, size: tuple[int, int], variants: Mapping[str, Mapping[
     out: dict = {}
     try:
         for variant, overrides in variants.items():
-            transition_id = "burn" if variant.startswith("burn") else variant
+            transition_id = variant_transition(variant)
             run = runs(capture, transition_id, overrides)
             renderer = renderer_class(transition_id)()
             for progress in PROGRESS:
@@ -531,7 +555,7 @@ def round_shape(core, folder: Path) -> dict:
     capture = TransitionCapture(target[0], target[1], *images)
     try:
         for variant, overrides in VARIANTS.items():
-            transition_id = "burn" if variant.startswith("burn") else variant
+            transition_id = variant_transition(variant)
             run = runs(capture, transition_id, overrides)
             values = renderer_class(transition_id)().block_values(capture.frame(run, 0.5))
             core_values, settings, record = split_values(transition_id, values)
@@ -570,7 +594,7 @@ def round_draw(core, engine, app, host, api: str, folder: Path, out: Path, photo
             scene.pictures(images)
             parity: dict = {}
             for variant, overrides in VARIANTS.items():
-                transition_id = "burn" if variant.startswith("burn") else variant
+                transition_id = variant_transition(variant)
                 mode_pass = transition_pass(transition_id, folder / f"{label}_{variant}")
                 capture_values = _values(transition_id, overrides, images, target, references, variant)
                 first = True
@@ -669,10 +693,10 @@ def _values(transition_id: str, overrides, images, target, references, variant) 
 def _run_without_gl(transition_id: str, overrides, images, target):
     """The production run ``TransitionCapture`` builds, without its GL target (the Vulkan child)."""
     from rendering.quick.image_state import PresentationImage
-    from rendering.quick.transitions.state import TransitionRequest, TransitionRun
+    from rendering.quick.transitions.state import TransitionRun
     from tools.transition_contact_sheet import production_transition_spec
 
-    spec = production_transition_spec(transition_id, DURATION_MS)
+    spec = production_transition_spec(renderer_class(transition_id).transition_id, DURATION_MS)
     w, h = target
     presented = [PresentationImage(str(index), "release_capture", (w, h), 1., (w, h), w * 4, image.tobytes())
                  for index, image in enumerate(images)]
@@ -680,11 +704,7 @@ def _run_without_gl(transition_id: str, overrides, images, target):
     run = TransitionRun.start(run_id=1, request=request, start_ns=0)
     if not overrides:
         return run
-    r = run.request
-    request = TransitionRequest(r.runtime_generation, r.transition_id, r.requested_name, r.selected_from_random,
-                                r.duration_ms, r.direction, {**r.parameter_dict(), **overrides}, r.source_image,
-                                r.destination_image)
-    return TransitionRun.start(run_id=2, request=request, start_ns=0)
+    return TransitionRun.start(run_id=2, request=overridden(run.request, overrides), start_ns=0)
 
 
 def round_textures(core, engine, app, host, folder: Path, photo_paths) -> dict:
@@ -839,7 +859,7 @@ def round_timing(core, engine, app, api: str, folder: Path, photo_paths) -> dict
         scene.pictures(images)
         host.set_gpu_timer(True)
         for variant in ("crossfade", "burn_options"):
-            transition_id = "burn" if variant.startswith("burn") else variant
+            transition_id = variant_transition(variant)
             values = _values(transition_id, VARIANTS[variant], images, TIMING_TARGET, {}, variant)
             scene.program(transition_id, transition_pass(transition_id, folder / f"timing_{variant}"),
                           split_values(transition_id, values[0.5])[1])
