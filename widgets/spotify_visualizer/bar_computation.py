@@ -130,6 +130,27 @@ def lane_strength_profile(np, sample_positions, notches, strengths: Mapping[str,
     return _build_lane_energy_profile(np, sample_positions, notches, strengths, 1.0, 1.0, 1.0)
 
 
+def kick_lane_bars(np, sample_positions, notches, count: int, mirrored: bool) -> list[int]:
+    """The bars the kick express lane boosts: the ``count`` bars whose lane position lies nearest the Bass lane's
+    (per half in a mirrored layout, each with its mirror ``bands - 1 - i``).
+
+    The lane axis is ``lane_sample_positions``'s (mirrored: 0 centre .. 1 edge), so the kick lands where the Bass lane
+    is authored: at the edges, at the centre, or anywhere between. With no Bass lane the kick has no lane to land in
+    and boosts nothing. A linear layout with Bass at its start boosts its first ``count`` bars, as it always did."""
+    positions = np.asarray(sample_positions, dtype="float64")
+    bands = int(positions.size)
+    bass = [float(frac) for frac, label in notches if str(label).strip().lower() == "bass"]
+    if not bass or bands <= 0 or count <= 0:
+        return []
+    target = max(0.0, min(1.0, bass[0]))
+    half = (bands + 1) // 2 if mirrored else bands
+    distance = np.abs(positions[:half] - target)
+    chosen = [int(i) for i in np.argsort(distance, kind="stable")[:min(int(count), half)]]
+    if mirrored:
+        chosen += [bands - 1 - i for i in chosen if bands - 1 - i != i]
+    return sorted(chosen)
+
+
 def get_zero_bars(worker: "SpotifyVisualizerAudioWorker") -> List[float]:
     """Return cached zero bars list to avoid per-call allocation."""
     if worker._zero_bars is None or len(worker._zero_bars) != worker._bar_count:
@@ -421,15 +442,8 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
             )
         _bass_end = max(1, getattr(worker, '_agc_bass_split', 4))
         _kick_boost = min(2.0, 1.0 + _t_bass * _kick_gain * _lane_mix)
-        for _ki in range(_bass_end):
-            if _ki < bands:
-                arr[_ki] = min(1.0, arr[_ki] * _kick_boost)
-        # Mirror kick boost to right-side bass bars in mirrored mode
-        if mirrored:
-            for _ki in range(_bass_end):
-                _ri = 2 * center - _ki
-                if 0 <= _ri < bands:
-                    arr[_ri] = min(1.0, arr[_ri] * _kick_boost)
+        for _ki in kick_lane_bars(np, sample_positions, active_notches, _bass_end, mirrored):
+            arr[_ki] = min(1.0, arr[_ki] * _kick_boost)
 
     # Scale
     scale = float(worker._base_output_scale) * float(worker._energy_boost)
