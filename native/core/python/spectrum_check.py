@@ -124,6 +124,11 @@ def capture_runs(sample_every: int) -> tuple[list[dict], list]:
         values["u_window_from_target_y"] = tuple(card["window_from_target"][3:])
         values["u_target_px"] = tuple(card["target_size"])
         flag = str(logical.mode_state.parameters["spectrum_pattern_shown"]) in SPECTRUM_FLAG_PATTERNS
+        card["settings"] = python_spectrum.spectrum_settings_values(
+            logical, presentation, item_size=card["item_size"], oriented_size=card["oriented_size"],
+            content_rotation_quarters=card["quarters"], content_rect=card["content_rect"],
+            item_from_window=card["item_from_window"], window_from_target=card["window_from_target"],
+            target_px=card["target_size"])
         entry = {"key": current["key"], "index": current["index"], "flag": flag, "card": card,
                  "record": spectrum_native_schema.encode(logical),
                  "python_block": pack_block(python_spectrum.SPECTRUM_BLOCK, values)}
@@ -152,6 +157,31 @@ _TYPE_BYTES_GLSL = {"float": 4, "int": 4, "uint": 4, "bool": 4, "vec2": 8, "ivec
                     "vec4": 16, "ivec4": 16, "mat4": 64}
 
 
+def spectrum_pack() -> bytes:
+    """The product's Spectrum pack (``tools/regen_qrc.py --shaders``): what the native item draws."""
+    from rendering.native.program_values import mode_fragment_pack
+
+    return mode_fragment_pack("spectrum")
+
+
+def _bare(card: dict) -> dict:
+    return {key: value for key, value in card.items() if key != "settings"}
+
+
+def _settings_for_card(card: dict) -> dict:
+    """The card's settings with its placement members following the card (a re-placed or re-scaled card)."""
+    settings = dict(card["settings"])
+    settings.update({
+        "uItemSize": tuple(card["item_size"]), "u_resolution": tuple(card["oriented_size"]),
+        "uContentRotationQuarters": int(card["quarters"]), "u_dpr": float(card["dpr"]),
+        "u_item_from_frag_x": tuple(card["item_from_window"][:3]),
+        "u_item_from_frag_y": tuple(card["item_from_window"][3:]),
+        "u_window_from_target_x": tuple(card["window_from_target"][:3]),
+        "u_window_from_target_y": tuple(card["window_from_target"][3:]),
+        "u_target_px": tuple(card["target_size"])})
+    return settings
+
+
 def round_block(core, records: list[dict]) -> dict:
     import struct
 
@@ -162,7 +192,9 @@ def round_block(core, records: list[dict]) -> dict:
     from rendering.quick.visualizer.implementations.spectrum import SPECTRUM_BLOCK
 
     bars_offset = spectrum_native_schema.LAYOUT.field("bars").offset
-    layout = core.spectrum_block_layout()
+    pack = spectrum_pack()
+    layout = core.spectrum_block_layout(pack)
+    unfilled: set = set()
     # The oracle is the Python packer's own std140 layout (never the module's reflection, which build round 1 showed
     # reporting a scalar array's stride as 0): every member's bytes, arrays whole.
     members = {}
@@ -180,7 +212,9 @@ def round_block(core, records: list[dict]) -> dict:
     compared = drawn_python_not_native = 0
     previous_differs = previous_compared = fade_differs = 0
     for entry in records:
-        block, facts = core.spectrum_block(entry["record"], entry["card"])
+        block, facts = core.spectrum_block(entry["record"], _bare(entry["card"]), pack,
+                                           entry["card"]["settings"])
+        unfilled.update(facts.get("unfilled", ()))
         expected = bytearray(entry["python_block"])
         if block is None:
             drawn_python_not_native += 1
@@ -203,11 +237,12 @@ def round_block(core, records: list[dict]) -> dict:
         mutated = bytearray(entry["record"])
         first_bar = struct.unpack_from("<d", mutated, bars_offset)[0]
         struct.pack_into("<d", mutated, bars_offset, first_bar + 0.25)
-        other, _ = core.spectrum_block(bytes(mutated), entry["card"])
+        other, _ = core.spectrum_block(bytes(mutated), _bare(entry["card"]), pack, entry["card"]["settings"])
         previous_compared += 1
         previous_differs += int(other != block)
-        nudged = dict(entry["card"], content_fade=entry["card"]["content_fade"] * 1.001 + 1e-3)
-        fade_block, _ = core.spectrum_block(entry["record"], nudged)
+        settings = entry["card"]["settings"]
+        nudged = dict(settings, u_fade=float(settings["u_fade"]) * 1.001 + 1e-3)
+        fade_block, _ = core.spectrum_block(entry["record"], _bare(entry["card"]), pack, nudged)
         fade_differs += int(fade_block != block)
     runs = sorted({entry["key"] for entry in records})
     checks = {
@@ -216,11 +251,13 @@ def round_block(core, records: list[dict]) -> dict:
         "module_layout_is_the_python_layout": not layout_differs and all(
             entry["python"] == entry["module"] for entry in array_strides.values()),
         "identical": not mismatched and not drawn_python_not_native,
+        # The standing port rule: every reflected member is filled by the settings or the core's frame members.
+        "every_member_filled": not unfilled,
         "control_mutated_record_differs": previous_compared > 0 and previous_differs == previous_compared,
         "control_fade_differs": fade_differs == compared,
     }
     return {"pass": all(checks.values()), "checks": checks, "runs": runs, "frames": len(records),
-            "compared": compared, "mismatched_members": mismatched, "first_mismatch": first_mismatch,
+            "compared": compared, "mismatched_members": mismatched, "unfilled": sorted(unfilled), "first_mismatch": first_mismatch,
             "drawn_by_python_not_native": drawn_python_not_native, "layout": layout,
             "layout_differs": layout_differs, "array_strides": array_strides,
             "controls": {"previous_compared": previous_compared, "previous_differs": previous_differs,
@@ -355,13 +392,15 @@ class Scene:
         self.content = self.root.findChild(QQuickItem, "contentHost")
         host.set_content(self.root)
         self.spectrum = core.spectrum(self.content)
+        self.spectrum.program(spectrum_pack())    # the product's pack, loaded at run time (N2.5 round 4)
 
     def place(self, card: dict) -> None:
         """The target on the item's own rect (no coverage: the Python reference draws the whole item too)."""
         width, height = card["item_size"]
         self.spectrum.composite.set(rect=[0.0, 0.0, width, height], coverage=None, quarters=int(card["quarters"]),
                                     visible=True)
-        self.spectrum.present_raw(card)
+        self.spectrum.present_raw(_bare(card))
+        self.spectrum.settings(_settings_for_card(card))
 
     def read(self, card: dict):
         from dataclasses import asdict

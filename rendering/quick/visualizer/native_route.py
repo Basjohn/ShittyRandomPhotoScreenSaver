@@ -54,6 +54,7 @@ class NativeVisualizerRoute:
         self._identity: Any = None
         self._code = 0
         self._card: dict | None = None
+        self._settings: dict | None = None
         self._placed: tuple | None = None
         self._snapshot: Any = None
         self.published = 0
@@ -92,11 +93,16 @@ class NativeVisualizerRoute:
                                             token=f"route{uuid.uuid4().hex[:10]}")
         self._writer = FramePacketWriter(self._memory.buf)
         if self._spectrum is None:
+            from rendering.native.program_values import mode_fragment_pack
+
             self._spectrum = self._core.spectrum(self._content_host)
+            # The product's own pack (tools/regen_qrc.py --shaders), loaded at run time: no module build for a shader
+            # change (N2.5's standing port rule).
+            self._spectrum.program(mode_fragment_pack(mode_id))
         self._spectrum.bind(self._memory.name, expect={**values, "mode_code": code})
         self._identity = identity
         self._code = code
-        self._card = self._placed = None
+        self._card = self._placed = self._settings = None
         self._snapshot = None
 
     def unbind(self) -> None:
@@ -105,7 +111,7 @@ class NativeVisualizerRoute:
             return
         self._identity = None
         self._snapshot = None
-        self._card = self._placed = None
+        self._card = self._placed = self._settings = None
         spectrum = self._spectrum
         if spectrum is not None:
             spectrum.unbind()
@@ -183,6 +189,10 @@ class NativeVisualizerRoute:
         if card != self._card:
             spectrum.present_raw(card)
             self._card = card
+        settings = self.settings(snapshot, card)
+        if settings != self._settings:
+            spectrum.settings(settings)          # by name; re-packed by the core only when they change
+            self._settings = settings
         logical = snapshot.logical
         self._writer.publish(spectrum_native_schema.encode(logical),
                              payload_schema=spectrum_native_schema.SCHEMA_ID,
@@ -209,6 +219,18 @@ class NativeVisualizerRoute:
         for key in ("content_rect", "viewport_extent", "visual_scale", "dpr", "content_fade", "expanded"):
             card[key] = drawn[key]
         return card
+
+    def settings(self, snapshot: Any, card: dict) -> dict:
+        """The Settings- and card-derived members of the drawn frame, by name (the Python renderer's own arithmetic,
+        ``spectrum_settings_values``)."""
+        from rendering.quick.visualizer.implementations.spectrum import spectrum_settings_values
+
+        return spectrum_settings_values(snapshot.logical, snapshot.presentation, item_size=card["item_size"],
+                                        oriented_size=card["oriented_size"],
+                                        content_rotation_quarters=card["quarters"],
+                                        content_rect=card["content_rect"], item_from_window=card["item_from_window"],
+                                        window_from_target=card["window_from_target"],
+                                        target_px=card["target_size"])
 
     def _hide(self) -> None:
         if self._spectrum is not None and self._placed is not None:

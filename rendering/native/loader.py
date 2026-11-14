@@ -135,13 +135,16 @@ class NativeCore:
             raise SchemaTableMismatch(f"{MODULE_NAME}'s frame schemas are not this build's: {'; '.join(differences)}")
         return NativeSpectrum(self.module, self.composite(parent))
 
-    def spectrum_block(self, record: bytes, card: Mapping[str, Any]) -> tuple[bytes | None, dict]:
-        """The SpectrumDraw block the native Spectrum uploads for ``record`` under ``card`` (GPU-free)."""
-        return spectrum_block(self.module, record, card)
+    def spectrum_block(self, record: bytes, card: Mapping[str, Any], pack: bytes | None,
+                       settings: Mapping[str, Any]) -> tuple[bytes | None, dict]:
+        """The SpectrumDraw block the native Spectrum uploads for ``record`` under ``card``, drawn by ``pack`` (None:
+        the compiled-in copy) with ``settings`` by name (GPU-free)."""
+        return spectrum_block(self.module, record, card, pack, settings)
 
-    def spectrum_block_layout(self) -> dict:
-        """SpectrumDraw as the module's baked ``spectrum.frag`` reflects it (size, binding, members)."""
-        return json.loads(self.module.spectrum_block_layout())
+    def spectrum_block_layout(self, pack: bytes | None = None) -> dict:
+        """SpectrumDraw as ``pack`` (None: the module's compiled-in copy) reflects it (size, binding, members) and
+        the members the core fills per frame."""
+        return json.loads(self.module.spectrum_block_layout(pack))
 
     def vulkan_instance(self, *, validation: bool = False) -> dict:
         """The process's Vulkan instance (D6 point 1), before any Vulkan host. ``validation`` (harness only) enables the

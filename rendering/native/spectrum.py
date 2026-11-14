@@ -174,6 +174,18 @@ class NativeSpectrum:
             raise ValueError(f"the Spectrum card misses {', '.join(missing)}")
         self._module.composite_spectrum_present(self._handle(), json.dumps(dict(card)))
 
+    def program(self, pack: bytes | None) -> None:
+        """The fragment pack the item draws (``rendering.native.program_values.mode_fragment_pack``; None: the
+        module's compiled-in copy, a harness control only). A new pack rebuilds the pipeline at the next record."""
+        self._module.composite_spectrum_program(self._handle(), None if pack is None else bytes(pack))
+
+    def settings(self, values: Mapping[str, Any]) -> None:
+        """The Settings- and card-derived members by name (``spectrum_settings_values``); refused (ValueError) on an
+        unknown name, a wrong size or a per-frame member. Unchanged settings record nothing."""
+        from rendering.native.program_values import settings_json
+
+        self._module.composite_spectrum_settings(self._handle(), settings_json(values))
+
     def update(self) -> None:
         """A frame of the item (the wake's present request)."""
         self._module.composite_update(self._handle())
@@ -196,10 +208,15 @@ class NativeSpectrum:
         self._module.composite_spectrum_resume(self._handle())
 
 
-def spectrum_block(module: ModuleType, record: bytes, card: Mapping[str, Any]) -> tuple[bytes | None, dict]:
-    """The SpectrumDraw block the native Spectrum uploads for ``record`` (a version-1 Spectrum record) under ``card``
-    (GPU-free), and its facts (``reason`` when nothing is drawn)."""
-    block, facts = module.spectrum_block(bytes(record), json.dumps(dict(card)))
+def spectrum_block(module: ModuleType, record: bytes, card: Mapping[str, Any], pack: bytes | None,
+                   settings: Mapping[str, Any]) -> tuple[bytes | None, dict]:
+    """The SpectrumDraw block the native Spectrum uploads for ``record`` (a version-1 Spectrum record) under ``card``,
+    drawn by ``pack`` with ``settings`` by name (GPU-free), and its facts (``reason`` when nothing is drawn;
+    ``unfilled``: the members neither side filled)."""
+    from rendering.native.program_values import settings_json
+
+    block, facts = module.spectrum_block(bytes(record), json.dumps(dict(card)),
+                                         None if pack is None else bytes(pack), settings_json(settings))
     return block, json.loads(facts)
 
 

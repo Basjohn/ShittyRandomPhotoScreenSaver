@@ -471,6 +471,66 @@ def create_visualizer_renderer() -> QuickSpectrumRenderer:
     return QuickSpectrumRenderer()
 
 
+#: The members the native core computes per frame from the record (``kSpectrumFrameMembers`` in
+#: ``native/core/src/spectrum.cpp``); every other member of SpectrumDraw is a setting (``spectrum_settings_values``).
+SPECTRUM_FRAME_MEMBERS = ("u_bars", "u_peaks", "u_bar_count", "u_bars_left", "u_bar_width_px", "u_bar_gap_px",
+                          "u_bar_span_px", "u_rainbow_hue_offset", "u_ghost_hue_offset", "u_time", "u_playing")
+
+
+def spectrum_settings_values(logical, presentation, *, item_size: Sequence[float], oriented_size: Sequence[float],
+                             content_rotation_quarters: int, content_rect: Sequence[float],
+                             item_from_window: Sequence[float], window_from_target: Sequence[float],
+                             target_px: Sequence[float]) -> dict[str, object]:
+    """Every SpectrumDraw member that comes from Settings or the card, by name, as ``QuickSpectrumRenderer.render``
+    writes it (the same helpers, the same arithmetic): the values the native core packs by reflected name (N2.5's
+    standing port rule; ``native/core/src/program_blocks.h``). ``presentation`` is the drawn one (the snapshot's);
+    the placement (``item_from_window`` rows x then y, ``window_from_target``, ``target_px``) and the item's sizes
+    are the card's. uMatrix is the Python quad's (zeros: the core draws its own triangle)."""
+    mode_state = logical.mode_state
+    style = read_style(logical.common.style)
+    inputs = _read_per_frame_parameters(mode_state.parameters)
+    scale = presentation.uniform_visual_scale
+    layout = compute_quick_spectrum_layout(local_content_rect=content_rect,
+                                           viewport_extent=presentation.logical_viewport_extent,
+                                           visual_scale=scale, bar_count=1, bar_gap=style["bar_gap"])
+    values: dict[str, object] = {
+        "uMatrix": (0.0,) * 16,
+        "uItemSize": tuple(float(v) for v in item_size),
+        "uContentRotationQuarters": int(content_rotation_quarters),
+        "u_resolution": tuple(float(v) for v in oriented_size),
+        "u_dpr": presentation.dpr,
+        "u_viewport_origin_px": (0.0, 0.0),
+        "u_quick_item_coords": 1,
+        "u_item_from_frag": 1,
+        "u_item_from_frag_x": tuple(item_from_window[:3]),
+        "u_item_from_frag_y": tuple(item_from_window[3:6]),
+        "u_window_from_target_x": tuple(window_from_target[:3]),
+        "u_window_from_target_y": tuple(window_from_target[3:6]),
+        "u_target_px": tuple(float(v) for v in target_px),
+        "u_content_rect": tuple(layout.content_rect),
+        "u_visual_scale": scale,
+        "u_segments": layout.segment_count,
+        "u_fill_color": tuple(rgba(style["fill_color"])),
+        "u_border_color": tuple(rgba(style["border_color"])),
+        "u_fade": presentation.content_fade,
+        "u_bar_height_scale": layout.height_scale,
+        "u_single_piece": 1 if bool(style["single_piece"]) else 0,
+        "u_border_radius": max(0.0, float(style["border_radius"])) * scale,
+        "u_ghost_alpha": (max(0.0, min(1.0, float(inputs["spectrum_ghost_alpha"])))
+                          if bool(inputs["spectrum_ghosting_enabled"]) else 0.0),
+        "u_spectrum_glow_enabled": 1 if bool(inputs["spectrum_glow_enabled"]) else 0,
+        "u_spectrum_glow_intensity": max(0.0, min(1.5, float(inputs["spectrum_glow_intensity"]))),
+        "u_spectrum_glow_color": tuple(rgba(inputs["spectrum_glow_color"])),
+        "u_rainbow_ghost": 1 if bool(inputs["spectrum_rainbow_ghost"]) else 0,
+        "u_rainbow_per_bar": 1 if bool(inputs["rainbow_per_bar"]) else 0,
+        "u_rainbow_fill": 1 if bool(inputs["spectrum_rainbow_fill"]) else 0,
+        "u_rainbow_border": 1 if bool(inputs["spectrum_rainbow_border"]) else 0,
+    }
+    for name, _kind, decor_values in resolve_spectrum_decor_uniforms(mode_state.parameters, scale):
+        values[name] = decor_values if len(decor_values) > 1 else decor_values[0]
+    return values
+
+
 __all__ = [
     "item_from_fragment",
     "resolve_spectrum_decor_uniforms",
