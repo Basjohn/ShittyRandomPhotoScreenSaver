@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** High: N2.9 with N2.3's leftovers and the N2.5 audit's fixes, one branch, built at ABI 9 (GitHub f030503e, compiled first time); harnesses running on the built module. Medium: derivatives after discard in Oscilloscope, Bubble and Spline Curve, with audit L5's guard shapes and 1B.10's interpolated-uv side defect (the same three shaders). N2.8 waits for two displays.
+**Now (in flight):** High: N2.9 round 2 on the ABI 9 branch (round 1 passed N23, N25, N29 on the GitHub build f030503e; the audit `Audit_2026-11-14_N29.md` found the generic pass refuses the product 2D shaders' shape: widened to `v_uv` plus one Draw block filled by name from conventions, settings and record; the schema registry split; M1-M4 and lows), then a build round and merge. Medium: derivatives after discard in Oscilloscope, Bubble and Spline Curve. N2.8 waits for two displays.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -481,6 +481,12 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     spec drawn natively on OpenGL and Vulkan; a change to its shader, spec or simulation shows with no module
     rebuild; GPU time per pass and nothing per frame at rest.
   - [ ] `native/core/README.md` and `Native_Core_P3_Decisions.md` (a decision record) say how a new mode is built.
+  - [ ] Audit 14 Nov (`Docs/Future_Work/Audit_2026-11-14_N29.md`) M5: the generic pass takes the product 2D shaders' shape
+    (`v_uv` from `mode.vert`; one Draw block filled by name from the core's conventions, the settings and the
+    record; samplers stay a primitive), so the N5 ports are data; Oscilloscope and Spline Curve admitted by `checkPass`,
+    Bubble refused only for its samplers. The Python schema registry split into compiled and runtime schemas.
+  - [ ] Audit M1-M4: the latch re-arms on any changed input and fades; one shared latch for both contents; binding 17
+    refused; a refused record keeps the last frame drawn. Lows L1 (framebuffer size from Qt's swapchain, not ctypes) to L11.
 - [ ] N2.8 Lead, Display 1: the first rehearsal (cards and Spectrum on Vulkan; no wallpaper yet).
   - Pre-check done 14 Nov (`.artifacts/evidence/display/d1_run/20261114_n27_vulkan_visible/`, displays on):
     the saver on Vulkan revealed on its first presented frame, every card drew with its material and text, and
