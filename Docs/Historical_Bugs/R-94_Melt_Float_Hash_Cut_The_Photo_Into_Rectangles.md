@@ -65,7 +65,13 @@ apply.
 - **Crumble**'s `stone()` noise is chunk-local (`vRock`) and only shades broken rock faces; it drives no
   geometry, so it is outside this rule.
 
-No shader was changed. No regression bar was added either: R-94's failure did not reproduce on this GPU even
+Superseded for the fullscreen transitions on 14 Nov 2026 (N5.2a, the lead's decision): Burn's lattice and spark/ash
+hashes, Particle's cell and pixel hashes and Ripple's `fract(sin())` hash compiled to different values through SPIR-V
+(native Vulkan against native OpenGL: up to 248 levels on Burn's front, 233 on Particle), so all three now hash integers
+(the `sceneMix` mix of a whole key, a salt and the seed's bits), and every fullscreen transition that reads its target's
+pixels takes its uv from the pixel (`floor(vUv * u_target_px)`); `tests/test_native_fullscreen_pass.py` holds both.
+
+No shader was changed then. No regression bar was added either: R-94's failure did not reproduce on this GPU even
 with the reconstructed chaotic hash placed in Burn's production shader or in a standalone field, so a new bar
 could not be shown to fail when the defect returns. If a seam is ever reported, render that field as above
 and move its hash to the exact integer lattice hash Melt uses.

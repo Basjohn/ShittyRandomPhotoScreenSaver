@@ -281,6 +281,8 @@ class BackgroundRenderItem(QQuickItem):
             self._cancel_warm_up()   # the run prepares whatever is left itself
         self._transition_run = run
         self.update()
+        if self._native_layer is not None:
+            self._native_layer.transition(run)   # N5.2a: the core draws the run on the native background's backend
 
     def schedule_warm_step(self, transition_id: str, parameters, reporter, ticket: int) -> bool:
         """GUI thread: one GL step with NoStage, with no rendering request.

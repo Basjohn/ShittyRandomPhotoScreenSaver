@@ -49,12 +49,14 @@ def test_every_quick_shader_pack_is_current_and_holds_every_target():
              if not status.current]
     assert not stale, "run tools/regen_qrc.py --shaders:\n" + "\n".join(stale)
     wanted = _target_names(regen_qrc.quick_shader_targets()) | {"SPIR-V 100"}
-    for source in sources:
-        dump = subprocess.run([str(qsb), "-d", str(source.with_name(source.name + ".qsb"))], capture_output=True,
-                              text=True, timeout=120).stdout
+    # N5.2a: the fullscreen transitions' packs (baked from their Python renderers' fragments) are among them.
+    transitions = [regen_qrc.transition_pack_path(tid) for tid in regen_qrc.transition_fragment_sources()]
+    assert transitions and all(p.is_file() for p in transitions)
+    for pack in [source.with_name(source.name + ".qsb") for source in sources] + transitions:
+        dump = subprocess.run([str(qsb), "-d", str(pack)], capture_output=True, text=True, timeout=120).stdout
         held = {line.split(":", 1)[1].split("[", 1)[0].strip() for line in dump.splitlines()
                 if line.startswith("  Shader ")}
-        assert wanted <= held, f"{source.name}: missing {sorted(wanted - held)}"
+        assert wanted <= held, f"{pack.name}: missing {sorted(wanted - held)}"
 
 
 def test_the_product_opengl_glsl_comes_first_and_the_shipped_targets_follow():
@@ -65,6 +67,24 @@ def test_the_product_opengl_glsl_comes_first_and_the_shipped_targets_follow():
     glsl = targets[targets.index("--glsl") + 1].split(",")
     assert glsl[0] == f"{QUICK_GLSL_VERSION[0]}{QUICK_GLSL_VERSION[1]:02d}"   # the variant OpenGL keeps drawing with
     assert _target_names(QSB_TARGETS) <= _target_names(targets)
+
+
+def test_a_transition_fragment_changed_without_a_bake_is_stale(monkeypatch):
+    """N5.2a: a fullscreen transition's pack is checked against its Python renderer's fragment (the one source)."""
+    qsb = _qsb()
+    sources = regen_qrc.transition_fragment_sources()
+    transition_id = sorted(sources)[0]
+    targets = regen_qrc.quick_shader_targets()
+    current = regen_qrc._transition_shader_status(qsb, targets, subprocess.run, bake=False)
+    assert all(status.current for status in current)
+    text = sources[transition_id]
+    start = text.index("void main()")
+    literal = re.search(r"\b\d+\.\d+\b", text[start:])
+    changed = text[:start + literal.start()] + f"{float(literal.group(0)) + 0.25:.4f}" + text[start + literal.end():]
+    monkeypatch.setattr(regen_qrc, "transition_fragment_sources", lambda: {**sources, transition_id: changed})
+    stale = {status.pack.name: status.current
+             for status in regen_qrc._transition_shader_status(qsb, targets, subprocess.run, bake=False)}
+    assert stale.pop(f"{transition_id}.frag.qsb") is False and all(stale.values())
 
 
 def test_a_source_changed_without_a_bake_is_stale_until_baked(tmp_path):

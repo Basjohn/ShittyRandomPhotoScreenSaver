@@ -90,17 +90,17 @@ const float MAX_RADIUS_NORM = 0.707;  // sqrt(0.5) - max distance from center to
 const float FINAL_BLEND_START = 0.95;  // When final crossfade begins
 const float FINAL_BLEND_END = 0.995;   // When transition is complete
 
-// Hash functions for procedural randomness
-float hash1(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
+// Procedural randomness: an integer hash (R-94's class; N5.2a) of a whole key (a particle's cell, or a pixel), a salt
+// per use and the seed's bits, exact on every GPU, compiler and backend (the float hashes it replaces turned a last-bit
+// difference of their argument into an unrelated value).
+const uint PIXEL_KEY = 0x80000000u;   // a pixel's key, apart from every cell's
+uint particleMix(uint x) {
+    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
+    return x;
 }
-
-vec2 hash2(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.xx + p3.yz) * p3.zy);
+float particleRandom(uvec2 key, uint salt, float seed) {
+    uint s = particleMix(floatBitsToUint(seed) * 0x85ebca6bu + salt);
+    return float(particleMix(key.x * 0x9e3779b9u ^ particleMix(key.y * 0x27d4eb2du ^ s))) * (1.0 / 4294967295.0);
 }
 
 // Smooth easing function
@@ -113,7 +113,7 @@ float easeInOutQuad(float t) {
 }
 
 // Get spawn direction vector based on direction setting
-vec2 getSpawnDirection(int dir, vec2 cellUV, float seed) {
+vec2 getSpawnDirection(int dir, uvec2 key, float seed) {
     // 0=L→R, 1=R→L, 2=T→B, 3=B→T, 4=TL→BR, 5=TR→BL, 6=BL→TR, 7=BR→TL
     // 8=Random direction (per-transition), 9=Random placement (per-particle)
     if (dir == 8) {
@@ -123,7 +123,7 @@ vec2 getSpawnDirection(int dir, vec2 cellUV, float seed) {
     }
     if (dir == 9) {
         // Random placement - each particle from random direction
-        float angle = hash1(cellUV * 100.0 + seed) * 2.0 * PI;
+        float angle = particleRandom(key, 1u, seed) * 2.0 * PI;
         return vec2(cos(angle), sin(angle));
     }
     if (dir == 0) return vec2(-1.0, 0.0);  // From left
@@ -137,8 +137,8 @@ vec2 getSpawnDirection(int dir, vec2 cellUV, float seed) {
 }
 
 // Calculate order key for stacking (determines when particle arrives)
-float getOrderKey(vec2 cellUV, int dir, float seed) {
-    float rand = hash1(cellUV * 100.0 + seed);
+float getOrderKey(vec2 cellUV, uvec2 key, int dir, float seed) {
+    float rand = particleRandom(key, 1u, seed);
     float jitter = rand * 0.12;  // Small randomness in arrival
     
     // Random direction/placement: use random order
@@ -158,14 +158,14 @@ float getOrderKey(vec2 cellUV, int dir, float seed) {
 }
 
 // Calculate swirl order key based on build order setting
-float getSwirlOrderKey(vec2 cellUV, float swirlTurns, float seed, int swirlOrder) {
+float getSwirlOrderKey(vec2 cellUV, uvec2 key, float swirlTurns, float seed, int swirlOrder) {
     vec2 center = vec2(0.5, 0.5);
     vec2 delta = cellUV - center;
     float r = length(delta);
     float theta = atan(delta.y, delta.x);
     float thetaNorm = (theta + PI) / TWO_PI;
     float rNorm = clamp(r / MAX_RADIUS_NORM, 0.0, 1.0);  // Normalize and clamp
-    float rand = hash1(cellUV * 100.0 + seed);
+    float rand = particleRandom(key, 1u, seed);
     
     if (swirlOrder == 1) {
         // Center Outward: predominantly radial with a gentle spiral hint.
@@ -181,9 +181,9 @@ float getSwirlOrderKey(vec2 cellUV, float swirlTurns, float seed, int swirlOrder
         float order = rNorm * 0.82 + spiralHint;
         
         // Heavy multi-frequency spatial noise to break rectangular grid
-        float n1 = hash1(cellUV * 7.3 + seed * 1.7);
-        float n2 = hash1(cellUV * 13.1 + seed * 3.1);
-        float n3 = hash1(cellUV * 29.7 + seed * 0.3);
+        float n1 = particleRandom(key, 2u, seed);
+        float n2 = particleRandom(key, 3u, seed);
+        float n3 = particleRandom(key, 4u, seed);
         float spatialNoise = (rand - 0.5) * 0.06
                            + (n1 - 0.5) * 0.05
                            + (n2 - 0.5) * 0.03
@@ -213,11 +213,11 @@ float getSwirlOrderKey(vec2 cellUV, float swirlTurns, float seed, int swirlOrder
 }
 
 // Calculate converge order key - all edges at once, converging to center
-float getConvergeOrderKey(vec2 cellUV, float seed) {
+float getConvergeOrderKey(vec2 cellUV, uvec2 key, float seed) {
     vec2 center = vec2(0.5, 0.5);
     float r = length(cellUV - center);
     float rNorm = clamp(r / MAX_RADIUS_NORM, 0.0, 1.0);  // Clamp to valid range
-    float rand = hash1(cellUV * 100.0 + seed);
+    float rand = particleRandom(key, 1u, seed);
     // Edges arrive first (low orderKey near 0), center arrives last (high orderKey near 0.9)
     // Use pow to make center particles arrive more gradually and later
     float centerBias = pow(1.0 - rNorm, 1.5);  // Center particles arrive much later
@@ -225,11 +225,9 @@ float getConvergeOrderKey(vec2 cellUV, float seed) {
 }
 
 // Get spawn position for a particle
-vec2 getSpawnPos(vec2 targetUV, int dir, int mode, float seed, float swirlStrength, int swirlOrder) {
-    // Use multiple hash calls for better randomization
-    vec2 rand1 = hash2(targetUV * 100.0 + seed);
-    vec2 rand2 = hash2(targetUV * 73.7 + seed * 1.3);
-    
+vec2 getSpawnPos(vec2 targetUV, uvec2 key, int dir, int mode, float seed, float swirlStrength, int swirlOrder) {
+    vec2 rand1 = vec2(particleRandom(key, 5u, seed), particleRandom(key, 6u, seed));
+
     if (mode == 1) {
         // Swirl mode - spawn position depends on swirl order
         vec2 center = vec2(0.5, 0.5);
@@ -278,7 +276,7 @@ vec2 getSpawnPos(vec2 targetUV, int dir, int mode, float seed, float swirlStreng
     }
     
     // Directional: spawn at screen edge for immediate visibility
-    vec2 spawnDir = getSpawnDirection(dir, targetUV, seed);
+    vec2 spawnDir = getSpawnDirection(dir, key, seed);
     // Spawn at edge (0.3-0.4) so particles enter screen immediately
     float spawnDist = 0.3 + rand1.x * 0.1;
     vec2 perpendicular = vec2(-spawnDir.y, spawnDir.x);
@@ -356,16 +354,16 @@ vec3 shade3DBall(vec2 localPos, vec3 baseColor) {
 }
 
 // Get the expected arrival time for a pixel based on its position and mode
-float getPixelArrivalTime(vec2 pixelUV, int mode, int dir, float swirlTurns, float seed, int swirlOrder) {
+float getPixelArrivalTime(vec2 pixelUV, uvec2 pixelKey, int mode, int dir, float swirlTurns, float seed,
+                          int swirlOrder) {
     float orderKey;
-    
+
     if (mode == 1) {
-        orderKey = getSwirlOrderKey(pixelUV, swirlTurns, seed, swirlOrder);
+        orderKey = getSwirlOrderKey(pixelUV, pixelKey, swirlTurns, seed, swirlOrder);
     } else if (mode == 2) {
-        orderKey = getConvergeOrderKey(pixelUV, seed);
+        orderKey = getConvergeOrderKey(pixelUV, pixelKey, seed);
     } else {
-        // For directional, use smoother orderKey without per-pixel randomness for blend
-        orderKey = getOrderKey(pixelUV, dir, seed * 0.01);  // Reduce randomness for smoother blend
+        orderKey = getOrderKey(pixelUV, pixelKey, dir, seed);
     }
     
     orderKey = clamp(orderKey, 0.0, 0.92);
@@ -374,7 +372,12 @@ float getPixelArrivalTime(vec2 pixelUV, int mode, int dir, float swirlTurns, flo
 }
 
 void main() {
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+    // The pixel's own uv (N5.2a): the interpolated vUv differs in its last bits between renderers and backends; the
+    // pixel's centre over the target's pixels does not (and the pixel is the per-pixel randomness's key).
+    vec2 pixel = floor(vUv * u_target_px);
+    vec2 pixelUv = (pixel + 0.5) / u_target_px;
+    vec2 uv = vec2(pixelUv.x, 1.0 - pixelUv.y);
+    uvec2 pixelKey = uvec2(ivec2(pixel)) | uvec2(PIXEL_KEY, 0u);
     float t = clamp(u_progress, 0.0, 1.0);
     
     vec4 oldColor = texture(uOldTex, uv);
@@ -412,7 +415,7 @@ void main() {
     
     // POSITION-AWARE BACKGROUND BLEND: Only blend background after particles should have arrived
     // This prevents the center from crossfading before particles reach it in Converge mode
-    float pixelArrival = getPixelArrivalTime(uv, mode, dir, u_swirl_turns, u_seed, int(u_swirl_order));
+    float pixelArrival = getPixelArrivalTime(uv, pixelKey, mode, dir, u_swirl_turns, u_seed, int(u_swirl_order));
     // Background starts blending ONLY AFTER particle arrives at this location
     // For Converge mode, delay center blend even more to ensure particles are visible
     float bgBlendStart = pixelArrival;
@@ -440,20 +443,21 @@ void main() {
             if (checkCell.x < 0.0 || checkCell.x >= cols) continue;
             if (checkCell.y < 0.0 || checkCell.y >= rows) continue;
             
-            // Cell center (target position)
+            // Cell center (target position); the cell is the particle's key
             vec2 targetUV = (checkCell + 0.5) * vec2(cellW, cellH);
-            
+            uvec2 cellKey = uvec2(ivec2(checkCell));
+
             // Per-particle random values for wobble
-            vec2 particleRand = hash2(targetUV * 50.0 + u_seed * 2.0);
-            
+            vec2 particleRand = vec2(particleRandom(cellKey, 7u, u_seed), particleRandom(cellKey, 8u, u_seed));
+
             // Get particle timing
             float orderKey;
             if (mode == 1) {
-                orderKey = getSwirlOrderKey(targetUV, u_swirl_turns, u_seed, int(u_swirl_order));
+                orderKey = getSwirlOrderKey(targetUV, cellKey, u_swirl_turns, u_seed, int(u_swirl_order));
             } else if (mode == 2) {
-                orderKey = getConvergeOrderKey(targetUV, u_seed);
+                orderKey = getConvergeOrderKey(targetUV, cellKey, u_seed);
             } else {
-                orderKey = getOrderKey(targetUV, dir, u_seed);
+                orderKey = getOrderKey(targetUV, cellKey, dir, u_seed);
             }
             
             // TIMING: Use global constants for consistent timing
@@ -468,7 +472,7 @@ void main() {
             if (tLocal <= 0.0) continue;
             
             // Get spawn position
-            vec2 spawnPos = getSpawnPos(targetUV, dir, mode, u_seed, u_swirl_strength, int(u_swirl_order));
+            vec2 spawnPos = getSpawnPos(targetUV, cellKey, dir, mode, u_seed, u_swirl_strength, int(u_swirl_order));
             
             // Interpolate position with easing
             float easedT = easeOutCubic(tLocal);

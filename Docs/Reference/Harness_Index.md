@@ -874,6 +874,13 @@ python native/core/python/background_layer_check.py --module-dir release/native_
 # Vulkan, Python on OpenGL), lifetime (destroy, host closed with a pyramid alive); Vulkan validated
 python native/core/python/backdrop_pyramid_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
     [--apis opengl vulkan] [--rounds levels cards cost rest route lifetime] [--label n57b_backdrop_pyramid]
+# N5.2a: the seven fullscreen transitions on the background layer (NativeBackgroundLayer.transition), hidden hosts only:
+# every variant of fullscreen_pass_check.VARIANTS from a dark to a bright PERSONALSET photo at nine progress values, dpr
+# 1 and 1.5, under the overscan placement; rule (a) OpenGL native equal to the Python renderer (TransitionCapture);
+# rule (b) Vulkan within 1 level; each run's end draws the destination with no upload and nothing at rest; the route
+# through BackgroundRenderItem.set_transition_run on Vulkan; Vulkan validated
+python native/core/python/transition_route_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan] [--variants burn burn_options ...] [--label n52a_transition_route]
 ```
 
 Tests: `tests/test_native_core_jobs.py` (the built module, GPU-free: the job service's latch, cancellation while

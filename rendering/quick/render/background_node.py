@@ -544,6 +544,7 @@ class BackgroundRenderNode(QSGRenderNode):
                     quad_vao=self._vao,
                     source_texture_id=textures.source_texture_id,
                     destination_texture_id=textures.destination_texture_id,
+                    device_pixel_ratio=self._device_pixel_ratio,
                 )
             )
             if first_run_render:

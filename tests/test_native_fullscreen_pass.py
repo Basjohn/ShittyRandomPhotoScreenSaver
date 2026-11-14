@@ -108,7 +108,7 @@ def test_the_harness_fills_every_member_once_from_the_renderers_own_values():
     from rendering.native.mode import MODE_CORE_MEMBERS
 
     for variant, overrides in check.VARIANTS.items():
-        transition_id = "burn" if variant.startswith("burn") else variant
+        transition_id = check.variant_transition(variant)
         values = _frame_values(transition_id, overrides)
         members = check.block_members(transition_id)
         for progress in check.PROGRESS:
@@ -126,6 +126,31 @@ def test_the_harness_fills_every_member_once_from_the_renderers_own_values():
     default = check.split_values("burn", _frame_values("burn")[0.5])[1]
     options = check.split_values("burn", _frame_values("burn", check.VARIANTS["burn_options"])[0.5])[1]
     assert default != options and options["u_flames"] == 1 and options["u_direction"] == 4
+
+
+#: The float hash idioms (R-94): a chaotic fract of a sine or of a scaled coordinate, which turns a last-bit difference
+#: of its argument (another compiler, SPIR-V) into an unrelated value.
+_FLOAT_HASH = re.compile(r"fract\s*\(\s*sin\s*\(|fract\s*\(\s*vec[234]\s*\(\s*\w+\.\w+\s*\)\s*\*|43758\.5453")
+
+
+def float_hashes(text: str) -> list[str]:
+    return _FLOAT_HASH.findall(_code(text))
+
+
+def test_no_fullscreen_transition_hashes_in_float_and_each_reads_its_pixels_uv():
+    """N5.2a (the lead's decision, 14 Nov): the seven hash only integers (R-94's class), and every one that reads its
+    target's pixels takes its uv from the pixel (``floor(vUv * u_target_px)``), not from the interpolated vUv, so the
+    Python renderer and the core draw the same pixels on every backend (rule (a) exact, rule (b) within one level)."""
+    for transition_id in check.FULLSCREEN_TRANSITIONS:
+        text = _code(check.renderer_class(transition_id).fragment_source)
+        assert float_hashes(text) == [], transition_id
+        if "u_target_px" in check.block_members(transition_id):
+            assert "floor(vUv * u_target_px)" in text, transition_id
+    # Negative controls: the float hashes the seven held before (Burn's spark hash, Particle's and Burn's lattice hash,
+    # Ripple's) are seen.
+    assert float_hashes("return fract(sin(dot(p + s, vec2(127.1, 311.7))) * 43758.5453);")
+    assert float_hashes("vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));")
+    assert float_hashes("return fract(sin(n) * 43758.5453123);")
 
 
 def test_the_harness_record_is_the_per_frame_members_and_its_mode_is_never_registered(monkeypatch):

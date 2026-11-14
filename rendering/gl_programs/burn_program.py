@@ -60,34 +60,48 @@ layout(std140, binding = 18) uniform BurnPass {
     int   u_ember_veins;    // 1 = glowing veins crawl through the char
     float u_time;           // wall-clock seconds
     float u_seed;           // per-transition random seed
+    vec2  u_target_px;      // the item's own pixels (its target in the native core, which fills it by this name)
 };
 
 // =====================================================================
-//  Noise primitives
+//  Noise primitives: an integer lattice hash (R-94's class; N5.2a), exact on every GPU, compiler and backend (the
+//  float hashes it replaced compiled to different values through SPIR-V and moved the burn front)
 // =====================================================================
-float hash21(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
+uint burnMix(uint x) {
+    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
+    return x;
+}
+
+float burnRandom(ivec2 cell, uint salt) {
+    uint key = uint(cell.x) * 0x9e3779b9u ^ burnMix(uint(cell.y) * 0x85ebca6bu + salt);
+    return float(burnMix(key)) * (1.0 / 4294967295.0);
 }
 
 float vnoise(vec2 p) {
     vec2 i = floor(p);
-    vec2 f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);   // Hermite smoothstep
-    float a = hash21(i);
-    float b = hash21(i + vec2(1.0, 0.0));
-    float c = hash21(i + vec2(0.0, 1.0));
-    float d = hash21(i + vec2(1.0, 1.0));
-    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+    vec2 f = p - i;
+    precise vec2 u = f * f * (3.0 - 2.0 * f);   // Hermite smoothstep
+    ivec2 c = ivec2(i);
+    float a = burnRandom(c, 0u);
+    float b = burnRandom(c + ivec2(1, 0), 0u);
+    float c2 = burnRandom(c + ivec2(0, 1), 0u);
+    float d = burnRandom(c + ivec2(1, 1), 0u);
+    precise float lower = a + (b - a) * u.x;
+    precise float upper = c2 + (d - c2) * u.x;
+    precise float value = lower + (upper - lower) * u.y;
+    return value;
 }
 
 // 4-octave FBM for richer edge detail
 float fbm4(vec2 p) {
-    float v = 0.0, a = 0.5;
+    // ``precise`` (here and in vnoise, the front and its distance): no fused multiply-add, so every compiler and
+    // backend computes the burn front bit for bit (a last-bit difference flipped a pixel between zones, N5.2a).
+    precise float v = 0.0;
+    precise vec2 x = p;
+    float a = 0.5;
     for (int i = 0; i < 4; i++) {
-        v += a * vnoise(p);
-        p = p * 2.03 + vec2(1.7, 9.2 + u_seed * 0.1);
+        v += a * vnoise(x);
+        x = x * 2.03 + vec2(1.7, 9.2 + u_seed * 0.1);
         a *= 0.5;
     }
     return v;
@@ -97,7 +111,8 @@ float fbm4(vec2 p) {
 float warped_fbm(vec2 p) {
     vec2 q = vec2(fbm4(p + vec2(0.0, 0.0)),
                   fbm4(p + vec2(5.2, 1.3)));
-    return fbm4(p + 3.0 * q);
+    precise vec2 warped = p + 3.0 * q;
+    return fbm4(warped);
 }
 
 // =====================================================================
@@ -116,15 +131,20 @@ float burn_axis(vec2 uv) {
 // =====================================================================
 //  Spark / ember hash
 // =====================================================================
-float spark_hash(vec2 p, float s) {
-    return fract(sin(dot(p + s, vec2(127.1, 311.7))) * 43758.5453);
+// A whole cell's value for the seed (the seed's bits, so every seed is its own pattern) and a salt per use.
+float spark_hash(vec2 cell, uint salt) {
+    return burnRandom(ivec2(cell), burnMix(floatBitsToUint(u_seed) + salt));
 }
 
 // =====================================================================
 //  Main
 // =====================================================================
 void main() {
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+    // The pixel's own uv (N5.2a): the interpolated vUv differs in its last bits between renderers and backends, and
+    // the burn's thresholds flipped on it; the pixel's centre over the target's pixels does not differ. V flipped to
+    // match Qt's top-left image origin.
+    vec2 pixelUv = (floor(vUv * u_target_px) + 0.5) / u_target_px;
+    vec2 uv = vec2(pixelUv.x, 1.0 - pixelUv.y);
     float t = clamp(u_progress, 0.0, 1.0);
 
     // Hard guards — exact old/new at extremes (transition policy)
@@ -143,17 +163,17 @@ void main() {
 
     // --- Domain-warped noise for jagged, organic burn edge ---
     // The noise field is 2D: perpendicular position + slow time drift
-    vec2 noise_coord = vec2(perp * 5.0 + u_seed * 0.13,
+    precise vec2 noise_coord = vec2(perp * 5.0 + u_seed * 0.13,
                             axis * 3.5 + move_t * 1.2);
     float edge_noise = warped_fbm(noise_coord);
 
     // Jaggedness controls how much the noise deforms the burn front
     // Range: 0.0 = nearly straight line, 1.0 = very wild/organic edge
     float jag_amount = u_jaggedness * 0.22;
-    float front = move_t * 1.35 - edge_noise * jag_amount;
+    precise float front = move_t * 1.35 - edge_noise * jag_amount;
 
     // Signed distance: positive = ahead of front (old), negative = behind (burned)
-    float sd = axis - front;
+    precise float sd = axis - front;
 
     // --- Heat distortion: warp UVs near the burn front ---
     float dist_strength = 0.006 * u_glow_intensity * glow_buildup;
@@ -305,7 +325,7 @@ void main() {
             // Staggered grid with per-cell jitter for organic placement
             vec2 cell_size = vec2(120.0, 60.0);
             vec2 cell_id = floor(uv * cell_size);
-            float rnd = spark_hash(cell_id, u_seed);
+            float rnd = spark_hash(cell_id, 1u);
 
             // ~12% of cells have a spark at any moment
             if (rnd > 0.88) {
@@ -352,7 +372,7 @@ void main() {
             ash_uv.y -= u_time * 0.02;
             ash_uv.x += sin(u_time * 0.8 + uv.y * 15.0) * 0.003;
             vec2 ash_cell = floor(ash_uv * ash_cell_size);
-            float ash_rnd = spark_hash(ash_cell, u_seed + 77.0);
+            float ash_rnd = spark_hash(ash_cell, 2u);
 
             if (ash_rnd > (1.0 - u_ash_density * 0.15)) {
                 float ash_phase = fract(ash_rnd * 31.1 + u_time * 1.5);

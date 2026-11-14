@@ -18,14 +18,24 @@ keeps. On OpenGL nothing here is created: production keeps the Python presenter 
   image node (``opaque``), and the frame driver records the layer before every other surface (``layer``, D5.2).
 - Fade, never vanish: the layer fades in with its first photo and out when the item's image goes or the core's content
   fails; a lost texture (a node made again) is sent again from the image the item keeps.
+- Transitions (N5.2a): the item's run is drawn by the core from the transition's own product fragment (its pack baked
+  from the Python renderer's text, ``transition_pack_path``), as data: the two photos are the item's two texture slots
+  (the destination uploaded into the other one by its job), every value is the Python renderer's own
+  (``FullscreenPassRenderer.block_values``) less the core's members, and the run's clock is the window's
+  ``afterAnimating`` while the run lasts (the frame Qt Quick is preparing, as the Python renderer samples the run at its
+  render): nothing is connected and nothing is drawn again at rest. A transition with no pass on the core is drawn as
+  Crossfade. At the run's end the slots swap and the background's pass draws the destination (the run's last frame is
+  the destination itself: no pop).
 
 GUI thread only. Events, never timers: the item's size changes, the window's ``afterSynchronizing`` (once, while the
-layer waits for its window's framebuffer) and ``afterRendering`` (once after a change, to read the core's verdict).
+layer waits for its window's framebuffer), ``afterRendering`` (once after a change, to read the core's verdict) and
+``afterAnimating`` (every frame of a run only).
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from core.logging.logger import get_logger
 
@@ -35,6 +45,17 @@ logger = get_logger(__name__)
 TEXTURE = "photo"
 PASS_NAME = "background_layer"
 SAMPLER = "uPhoto"
+#: N5.2a: the photo a transition reveals is held in the other slot; at the run's end the slots swap (the destination
+#: becomes the photo drawn, with no second upload). A transition's fragment samples the two by its own names.
+NEXT_TEXTURE = "photo_next"
+OLD_SAMPLER = "uOldTex"
+NEW_SAMPLER = "uNewTex"
+#: Drawn where a run's transition has no pass on the core (the backend's fallback, ``transition_registry``).
+FALLBACK_TRANSITION = "crossfade"
+
+
+def _other_slot(slot: str) -> str:
+    return NEXT_TEXTURE if slot == TEXTURE else TEXTURE
 
 
 def _fade_ms() -> int:
@@ -53,13 +74,54 @@ def background_layer_pack_path() -> Path:
     return quick_qml_root() / "shaders" / "background_layer.frag.qsb"
 
 
-def background_layer_program(pack: bytes | None = None) -> list:
-    """The layer's one pass: the photo over the whole target, replacing it (the photo is opaque), sampled linearly with
-    no mips and clamped, as the retained image node samples it."""
+def background_layer_program(pack: bytes | None = None, texture: str = TEXTURE) -> list:
+    """The layer's one pass: the photo (the item's texture ``texture``) over the whole target, replacing it (the photo
+    is opaque), sampled linearly with no mips and clamped, as the retained image node samples it."""
     from rendering.native.mode import ModePass, PassSampler
 
     data = background_layer_pack_path().read_bytes() if pack is None else bytes(pack)
-    return [ModePass(PASS_NAME, data, "replace", (PassSampler(SAMPLER, TEXTURE, "linear", "clamp", "none"),))]
+    return [ModePass(PASS_NAME, data, "replace", (PassSampler(SAMPLER, texture, "linear", "clamp", "none"),))]
+
+
+def transition_pack_path(transition_id: str) -> Path:
+    """A fullscreen transition's fragment pack, baked from its Python renderer's own fragment by ``tools/regen_qrc.py
+    --shaders`` (shipped with the QML folder)."""
+    from rendering.quick.bootstrap import quick_qml_root
+
+    return quick_qml_root() / "shaders" / "transitions" / f"{transition_id}.frag.qsb"
+
+
+def native_transition_renderer(transition_id: str) -> Any:
+    """The Python renderer whose values the core's pass reads, when the core draws ``transition_id`` (a one-fragment
+    pass, ``FullscreenPassRenderer``, with its pack shipped); None otherwise."""
+    from rendering.quick.transitions.fullscreen_pass import FullscreenPassRenderer
+    from rendering.quick.transitions.implementation_registry import resolve_quick_transition_renderer
+
+    if not transition_pack_path(transition_id).is_file():
+        return None
+    renderer = resolve_quick_transition_renderer(transition_id, enabled_transition_ids=frozenset({transition_id}))
+    return renderer if isinstance(renderer, FullscreenPassRenderer) else None
+
+
+def transition_program(transition_id: str, old: str, new: str, pack: bytes | None = None) -> list:
+    """The transition's one pass over the whole target (replace): its fragment's two pictures bound to the item's
+    textures ``old`` and ``new``, in the Python renderer's sampler state (linear, clamped, no mips)."""
+    from rendering.native.mode import ModePass, PassSampler
+
+    data = transition_pack_path(transition_id).read_bytes() if pack is None else bytes(pack)
+    return [ModePass(transition_id, data, "replace",
+                     (PassSampler(OLD_SAMPLER, old, "linear", "clamp", "none"),
+                      PassSampler(NEW_SAMPLER, new, "linear", "clamp", "none")))]
+
+
+def transition_settings(renderer: Any, run: Any, sample: Any, logical_size: tuple[float, float],
+                        device_pixel_ratio: float) -> dict:
+    """The pass's settings for this frame of ``run``: the Python renderer's own block values (its one owner,
+    ``FullscreenPassRenderer.block_values``), less the members the core fills from the item (its conventions)."""
+    from rendering.native.mode import MODE_CORE_MEMBERS
+
+    values = renderer.run_values(run, sample, logical_size, device_pixel_ratio)
+    return {name: value for name, value in values.items() if name not in MODE_CORE_MEMBERS}
 
 
 def background_layer_settings(pixel_size: tuple[int, int], logical_size: tuple[float, float]) -> dict:
@@ -67,6 +129,17 @@ def background_layer_settings(pixel_size: tuple[int, int], logical_size: tuple[f
     from rendering.quick.background_placement import background_placement
 
     return {"u_source_uv": list(background_placement(pixel_size, logical_size).source_uv)}
+
+
+def background_card(logical_size: tuple[float, float], ratio: float) -> dict:
+    """The layer's card (``rendering.native.mode.MODE_CARD_KEYS``): the display's background, upright, at ``ratio``,
+    its own rect as its target. A transition's pass reads ``uItemSize`` from it (N5.2a; the background's own pass reads
+    no card member); the maps are the item's own target's."""
+    width, height = (float(v) for v in logical_size)
+    ratio = float(ratio) if ratio > 0.0 else 1.0
+    return {"quarters": 0, "item_size": [width, height], "oriented_size": [width, height], "dpr": ratio,
+            "content_fade": 1.0, "border_width": 0.0, "window_from_target": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            "item_from_window": [1.0 / ratio, 0.0, 0.0, 0.0, 1.0 / ratio, 0.0]}
 
 
 def native_background_wanted(backend: str | None = None) -> bool:
@@ -82,11 +155,21 @@ class NativeBackgroundLayer:
     """One display's background layer: a native composite item in ``item`` (the ``BackgroundRenderItem``) drawing the
     photo the item hands it."""
 
-    def __init__(self, core: Any, item: Any) -> None:
+    def __init__(self, core: Any, item: Any, clock_ns: Callable[[], int] = time.monotonic_ns) -> None:
         self._core = core
         self._item = item
         self._mode: Any = None
         self._image: Any = None          # the PresentationImage drawn (the item keeps it; the core's copy goes)
+        self._slot = TEXTURE             # the item's texture that holds it
+        # N5.2a: the run drawn (its destination in the other slot) and the per-frame clock's edge.
+        self._run: Any = None
+        self._renderer: Any = None
+        self._next_image: Any = None
+        self._clock_ns = clock_ns
+        self._clock_window: Any = None
+        self._fallback_logged = False
+        self.runs = 0                    # runs the core drew
+        self.ticks = 0                   # frames of a run given their progress
         self._settings: dict | None = None
         self._placed: tuple | None = None
         self._shown = False
@@ -125,16 +208,130 @@ class NativeBackgroundLayer:
             self._fail(f"the background layer could not take the image: {exc}", exc)
 
     def _present(self, image: Any) -> None:
+        if self._run is not None:
+            if image is not None and self._next_image is not None and image.identity == self._next_image.identity:
+                return                                            # the run's destination: drawn at its end
+            self._end_run()                                       # another picture: the run gives way to it
         if image is None:
             self._image = None
             self._hide()
             return
         mode = self._ensure()
-        if image is not self._image:
-            mode.texture(TEXTURE, image.rgba8, image.pixel_size)
-            self._image = image
+        if self._image is None or image.identity != self._image.identity:   # the item's identity rule: one content
+            mode.texture(self._slot, image.rgba8, image.pixel_size)
             self.sent += 1
+        self._image = image
         self._sync(force=True)
+
+    # ---------------------------------------------------------------------------------------------- the transition
+
+    def transition(self, run: Any) -> None:
+        """The item's transition run changed (N5.2a; ``None``: it ended). A run is drawn by the core from its own
+        fragment over the photo drawn, its destination in the other slot, its progress given every frame by the
+        window's ``afterAnimating`` (the run's clock, ``tick``). At its end the destination is the photo drawn (the
+        slots swap; nothing is uploaded again). Never raises: a failure ends the run at once (the photo stays, then
+        the destination follows as the item hands it over)."""
+        if self.closed:
+            return
+        try:
+            if run is None:
+                self._end_run()
+            elif self._run is None or run.run_id != self._run.run_id:
+                self._start_run(run)
+        except Exception as exc:
+            logger.error("[BACKGROUND][NATIVE] The transition could not be drawn natively; it ends as a cut",
+                         exc_info=exc)
+            try:
+                self._end_run()
+            except Exception:
+                logger.debug("[BACKGROUND][NATIVE] ending the failed transition failed", exc_info=True)
+
+    def _start_run(self, run: Any) -> None:
+        if self._run is not None:
+            self._end_run()
+        request = run.request
+        renderer = native_transition_renderer(request.transition_id)
+        transition_id = request.transition_id
+        if renderer is None:
+            if not self._fallback_logged:
+                logger.warning("[BACKGROUND][NATIVE] %s has no pass on the core; drawn as %s", transition_id,
+                               FALLBACK_TRANSITION)
+                self._fallback_logged = True
+            transition_id, renderer = FALLBACK_TRANSITION, native_transition_renderer(FALLBACK_TRANSITION)
+        mode = self._ensure()
+        if self._image is None or request.source_image.identity != self._image.identity:
+            mode.texture(self._slot, request.source_image.rgba8, request.source_image.pixel_size)
+            self._image = request.source_image
+            self.sent += 1
+        other = _other_slot(self._slot)
+        destination = request.destination_image
+        mode.texture(other, destination.rgba8, destination.pixel_size)
+        self.sent += 1
+        self._run, self._renderer, self._next_image = run, renderer, destination
+        mode.program(transition_program(transition_id, self._slot, other), self._frame_settings())
+        self._settings = None                                     # the background's settings are given again at the end
+        self.runs += 1
+        self._connect_clock()
+        mode.update()
+
+    def _frame_settings(self) -> dict:
+        sample = self._run.sample(self._clock_ns())
+        logical = (float(self._item.width()), float(self._item.height()))
+        window = self._item.window()
+        ratio = float(window.effectiveDevicePixelRatio()) if window is not None else 1.0
+        return transition_settings(self._renderer, self._run, sample, logical, ratio)
+
+    def tick(self) -> None:
+        """The run's clock (the window's ``afterAnimating``, GUI thread, once per frame while a run is drawn): this
+        frame's progress and time, as the Python renderer samples the run at its render. Never raises."""
+        if self.closed or self._run is None or self._mode is None:
+            return
+        try:
+            self._mode.settings(self._frame_settings())
+            self._mode.update()
+            self.ticks += 1
+        except Exception as exc:
+            logger.error("[BACKGROUND][NATIVE] The transition's frame could not be given; it ends as a cut",
+                         exc_info=exc)
+            self._end_run()
+
+    def _end_run(self) -> None:
+        run, self._run = self._run, None
+        self._disconnect_clock()
+        self._renderer = None
+        if run is None or self._mode is None:
+            self._next_image = None
+            return
+        destination, self._next_image = self._next_image, None
+        previous = self._slot
+        if destination is not None:
+            self._slot, self._image = _other_slot(previous), destination
+        if self._image is None:
+            return
+        settings = background_layer_settings(self._image.pixel_size,
+                                             (float(self._item.width()), float(self._item.height())))
+        self._mode.program(background_layer_program(texture=self._slot), settings)
+        self._settings = settings
+        if destination is not None:
+            self._mode.remove_texture(previous)                   # the source goes once the destination is drawn
+        self._sync(force=True)
+
+    def _connect_clock(self) -> None:
+        window = self._item.window()
+        if window is None or self._clock_window is window:
+            return
+        self._disconnect_clock()
+        window.afterAnimating.connect(self.tick)
+        self._clock_window = window
+
+    def _disconnect_clock(self) -> None:
+        window, self._clock_window = self._clock_window, None
+        if window is None:
+            return
+        try:
+            window.afterAnimating.disconnect(self.tick)
+        except (RuntimeError, TypeError):
+            pass
 
     def geometry_changed(self) -> None:
         """The item's size changed (or its window's pixels): the layer is placed again. Never raises."""
@@ -153,13 +350,18 @@ class NativeBackgroundLayer:
         width, height = float(self._item.width()), float(self._item.height())
         changed = force
         settings = background_layer_settings(image.pixel_size, (width, height))
-        if settings != self._settings:
+        if self._run is None and settings != self._settings:      # a run's pass takes its own settings (tick)
             mode.settings(settings)
             self._settings = settings
             changed = True
         placed = (width, height, self._pixel_ratio())
         if placed != self._placed or force:
             changed = True
+            if width > 0.0 and height > 0.0:
+                window = self._item.window()
+                ratio = placed[2][0] if placed[2] is not None else (
+                    float(window.effectiveDevicePixelRatio()) if window is not None else 1.0)
+                mode.card(background_card((width, height), ratio))       # unchanged: records nothing
             config: dict = {"rect": [0.0, 0.0, width, height]}
             if placed[2] is not None:
                 config["pixel_ratio"] = list(placed[2])
@@ -219,11 +421,16 @@ class NativeBackgroundLayer:
 
     def _textures_lost(self, names: list[str]) -> None:
         """The core lost the photo's texture (a node made again): it is sent again from the image the item keeps."""
-        if self.closed or self._mode is None or self._image is None or TEXTURE not in names:
+        if self.closed or self._mode is None:
+            return
+        held = {self._slot: self._image, _other_slot(self._slot): self._next_image}
+        lost = [(name, held[name]) for name in names if held.get(name) is not None]
+        if not lost:
             return
         try:
-            self._mode.texture(TEXTURE, self._image.rgba8, self._image.pixel_size)
-            self.resent += 1
+            for name, image in lost:
+                self._mode.texture(name, image.rgba8, image.pixel_size)
+                self.resent += 1
             self._mode.update()
         except Exception as exc:
             self._fail(f"the background layer could not send its photo again: {exc}", exc)
@@ -257,6 +464,8 @@ class NativeBackgroundLayer:
         if self.closed:
             return
         self.closed = True
+        self._disconnect_clock()
+        self._run = self._renderer = self._next_image = None
         for edge in self._edges.values():
             try:
                 edge.disarm()
@@ -276,7 +485,9 @@ class NativeBackgroundLayer:
         if self._mode is None:
             return {"made": False, "closed": self.closed}
         return {"made": True, "closed": self.closed, "shown": self._shown, "failure": self._failure,
-                "sent": self.sent, "resent": self.resent, "composite": self._mode.composite.state(),
+                "sent": self.sent, "resent": self.resent, "slot": self._slot,
+                "run": None if self._run is None else self._run.run_id, "runs": self.runs, "ticks": self.ticks,
+                "clock_connected": self._clock_window is not None, "composite": self._mode.composite.state(),
                 "mode": self._mode.state()}
 
 
@@ -293,6 +504,8 @@ def attach_native_background(item: Any, backend: str | None = None) -> NativeBac
     return NativeBackgroundLayer(core, item)
 
 
-__all__ = ["NativeBackgroundLayer", "PASS_NAME", "SAMPLER", "TEXTURE", "attach_native_background",
-           "background_layer_pack_path", "background_layer_program", "background_layer_settings",
-           "native_background_wanted"]
+__all__ = ["FALLBACK_TRANSITION", "NEW_SAMPLER", "NEXT_TEXTURE", "NativeBackgroundLayer", "OLD_SAMPLER", "PASS_NAME",
+           "SAMPLER", "TEXTURE", "attach_native_background", "background_card", "background_layer_pack_path",
+           "background_layer_program",
+           "background_layer_settings", "native_background_wanted", "native_transition_renderer",
+           "transition_pack_path", "transition_program", "transition_settings"]

@@ -49,13 +49,22 @@ layout(std140, binding = 18) uniform RipplePass {
     float u_ripple_seed;  // per-transition random seed for position variety
 };
 
-float hash1(float n) {
-    return fract(sin(n) * 43758.5453123);
+// Integer hash (R-94's class; N5.2a): the ripple's index, a salt and the seed's bits, exact on every GPU, compiler and
+// backend (a float fract(sin()) hash of a seed-scaled argument compiles to different values through SPIR-V).
+uint rippleMix(uint x) {
+    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
+    return x;
+}
+float rippleRandom(uint index, uint salt) {
+    uint seed = floatBitsToUint(u_ripple_seed);
+    return float(rippleMix(index * 0x9e3779b9u ^ rippleMix(seed * 0x85ebca6bu + salt))) * (1.0 / 4294967295.0);
 }
 
 void main() {
-    // Flip V to match Qt's top-left image origin.
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+    // The pixel's own uv (N5.2a): the interpolated vUv differs in its last bits between renderers and backends; the
+    // pixel's centre over the target's pixels does not. V flipped to match Qt's top-left image origin.
+    vec2 pixelUv = (floor(vUv * u_target_px) + 0.5) / u_target_px;
+    vec2 uv = vec2(pixelUv.x, 1.0 - pixelUv.y);
 
     vec4 oldColor = texture(uOldTex, uv);
     vec4 newColor = texture(uNewTex, uv);
@@ -79,14 +88,13 @@ void main() {
             center = vec2(0.5, 0.5);
             timeOffset = 0.0;
         } else {
-            float fi = float(i);
-            float seed = u_ripple_seed;
+            uint index = uint(i);
             center = vec2(
-                0.15 + hash1(fi * 73.0 + 7.0 + seed * 127.1) * 0.7,
-                0.15 + hash1(fi * 91.0 + 13.0 + seed * 311.7) * 0.7
+                0.15 + rippleRandom(index, 1u) * 0.7,
+                0.15 + rippleRandom(index, 2u) * 0.7
             );
             // Stagger start times so ripples don't all fire at once.
-            timeOffset = hash1(fi * 37.0 + 3.0 + seed * 59.3) * 0.25;
+            timeOffset = rippleRandom(index, 3u) * 0.25;
         }
 
         vec2 centered = uv - center;

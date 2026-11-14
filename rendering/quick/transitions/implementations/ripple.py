@@ -42,7 +42,7 @@ class QuickRippleRenderer(FullscreenPassRenderer):
 
     def values(self, resolved, frame: QuickTransitionRenderFrame) -> dict[str, object]:
         count, seed = resolved
-        return {"u_target_px": (float(frame.viewport[2]), float(frame.viewport[3])),
+        return {"u_target_px": frame.item_pixels,
                 "u_ripple_count": count, "u_ripple_seed": seed}
 
 

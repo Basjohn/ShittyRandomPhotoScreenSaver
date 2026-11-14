@@ -48,8 +48,10 @@ layout(std140, binding = 18) uniform WarpPass {
 };
 
 void main() {
-    // Flip V to match Qt's top-left image origin.
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+    // The pixel's own uv (N5.2a): the interpolated vUv differs in its last bits between renderers and backends; the
+    // pixel's centre over the target's pixels does not. V flipped to match Qt's top-left image origin.
+    vec2 pixelUv = (floor(vUv * u_target_px) + 0.5) / u_target_px;
+    vec2 uv = vec2(pixelUv.x, 1.0 - pixelUv.y);
 
     vec4 newColor = texture(uNewTex, uv);
     vec4 oldColor = texture(uOldTex, uv);

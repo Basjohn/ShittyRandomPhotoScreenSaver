@@ -37,6 +37,7 @@ layout(std140, binding = 18) uniform SlidePass {
     float u_progress;
     vec2 u_direction;
     int u_motionStyle;
+    vec2 u_target_px;   // the item's own pixels (its target in the native core, which fills it by this name)
 };
 
 float settledSegment(float q) {
@@ -85,7 +86,10 @@ vec2 perspectivePushUv(vec2 localUv, vec2 direction, float t) {
 }
 
 void main() {
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+    // The pixel's own uv (N5.2a): the interpolated vUv differs in its last bits between renderers and backends; the
+    // pixel's centre over the target's pixels does not (the coverage partition's normalized pixel centres).
+    vec2 pixelUv = (floor(vUv * u_target_px) + 0.5) / u_target_px;
+    vec2 uv = vec2(pixelUv.x, 1.0 - pixelUv.y);
     float t = clamp(u_progress, 0.0, 1.0);
     if (t <= 0.0) {
         FragColor = texture(uOldTex, uv);
@@ -306,7 +310,7 @@ class QuickSlideRenderer(FullscreenPassRenderer):
     label = "Quick Slide"
     fragment_source = _SLIDE_FRAGMENT_SOURCE
     vertex_source, block = fullscreen_pass_parts(fragment_source, "SlidePass")
-    value_names = ("u_direction", "u_motionStyle")
+    value_names = ("u_direction", "u_motionStyle", "u_target_px")
 
     def resolve(self, frame: QuickTransitionRenderFrame) -> tuple[tuple[float, float], int]:
         direction = _slide_direction_vector(frame.run.request.direction)
@@ -315,7 +319,8 @@ class QuickSlideRenderer(FullscreenPassRenderer):
 
     def values(self, resolved, frame: QuickTransitionRenderFrame) -> dict[str, object]:
         direction, style = resolved
-        return {"u_direction": direction, "u_motionStyle": style}
+        return {"u_direction": direction, "u_motionStyle": style,
+                "u_target_px": frame.item_pixels}
 
 
 def create_transition_renderer() -> QuickSlideRenderer:
