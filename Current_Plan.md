@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** 1D.12 with 1D.11's fence-wait timing (Medium).
+**Now (in flight):** nothing (5-hour window at 81 %; N2.5 and N1.6's next mode start after its reset).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,10 +47,9 @@ at the size asked.
      ride with the next fitting dispatch.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. 1D.12 (two test isolation defects) with 1D.11's fence-wait timing.
-  2. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
+  1. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
      Sphere); a mode that cannot be made bit-identical in one dispatch converts at its port.
-  3. 1B.10.
+  2. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -1093,8 +1092,6 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 - [ ] Port note (N5.6): the beads program puts its probe sampler and its `EbMaterialDrift` storage buffer
   (`extruded_bubble_program.py:1441`) both at binding 6. That collides on Vulkan's single binding namespace;
   renumber at the port.
-- [ ] Time the pass-block ring's fence waits (`glClientWaitSync`, 50 to 198 per run after N1.6) on the paired
-  harness. Raise the ring's depth if any wait costs more than a negligible amount.
 - The traced glass converts at its port (N5.6): converted alone it differs by one 8-bit level on 1-2 pixels in
   14-26 of 549 frames (compiler rounding). Its probe geometry shader also stays on the ratchet (no HLSL for its
   layered `gl_Layer` write).
@@ -1122,18 +1119,6 @@ borderless fullscreen transfers working smoothly.
 - [ ] Tests: the operator's exact sequence (B2 on D1, move to A1 on D0, fullscreen, move to D1, leave fullscreen)
   lands at B2; an invalid remembered spot falls back; nothing else in the record changes (negative controls).
 - [ ] Lead D1 run with both displays: the sequence above, edges read.
-
-### 1D.12 Test isolation defects found by 1D.7 (14 Nov; Opus Medium)
-
-- [ ] `tests/test_neon_settings_lifecycle_and_editor.py` fails run alone
-  (`test_quick_runtime_callbacks_do_not_retain_retired_display_unit`): a test swaps
-  `core.settings.visualizer_mode_registry` for a stub, so a later import of `scene_controller` raises
-  `ImportError: VisualizerShellPolicy`. It passes only when another file imported `scene_controller` first. Scope the
-  stub (monkeypatch, restored) or import what it needs first; the file passes alone and in the suite.
-- [ ] `tests/test_widget_display_route_prompt.py`: 15 pass, then the process exits non-zero at interpreter teardown
-  (127 three times on 14 Nov; 0xC0000409 once). Find the object that outlives its owner at exit (a dialog or
-  QObject left alive, a Python callback into a deleted C++ object) and fix it at the owner or the test; the file
-  exits 0 alone.
 
 ### 1D.9 Linux credential encryption, port from the archived branch (Opus Medium, low priority; Linux is best effort)
 
