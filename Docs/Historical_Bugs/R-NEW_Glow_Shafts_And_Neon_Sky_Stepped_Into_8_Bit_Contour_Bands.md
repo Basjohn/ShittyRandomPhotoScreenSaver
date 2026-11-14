@@ -35,8 +35,9 @@ them and wrote the result to Quick's 8-bit target with no dither. The Neon sky w
 colour attachment the same way. In a dark, saturated colour a slow gradient changes one code value every 30-80
 pixels, and the eye reads each step as a contour line.
 
-Isolation, by rendering the preset with one feature off at a time (evidence:
-`.artifacts/evidence/visualizers/shockwave_grid/presets/20261114_round1/banding/`):
+Isolation, by rendering the preset with one feature off at a time and raising the frame's levels four times
+(`render_neon_evidence.py stills --preset 5 --look` with `{"sun_rays_enabled": false}` or
+`{"volumetric_clouds": false}`, in `.artifacts/evidence/visualizers/shockwave_grid/presets/20261114_round1/`):
 - Clouds off: unchanged.
 - Rays off: the stair-stepped block was gone and the halo rings remained.
 - The rays-only difference image: smooth light, cut into contour bands by the 8-bit write.
