@@ -54,10 +54,10 @@ def test_one_glow_bucket_has_canonical_closed_default_and_distinct_controls():
 def test_sky_is_composited_first_then_subtracted_by_exact_terrain_coverage():
     renderer=(ROOT/'rendering/quick/visualizer/implementations/shockwave_grid.py').read_text()
     terrain=(ROOT/'rendering/gl_programs/neon_lake_basin_program.py').read_text()
-    sky=renderer.index('gl.glUniform1i(sky_uniforms["uSkyPass"],0)')
-    prepass=renderer.index('gl.glUniform1i(uniforms["uDepthOnly"],1)')
-    colour=renderer.index('self._draw_scene(frame,uniforms')
-    body=renderer.index('gl.glUniform1i(sky_uniforms["uSkyPass"],2)')
+    sky=renderer.index('sky_values["uSkyPass"]=0')
+    prepass=renderer.index('values["uDepthOnly"]=1')
+    colour=renderer.index('self._draw_scene(frame,values')
+    body=renderer.index('sky_values["uSkyPass"]=2')
     assert sky < prepass < colour < body
     assert 'gl.GL_ONE_MINUS_SRC_ALPHA' in renderer
     assert 'gl.glBlendFuncSeparatei(1,gl.GL_ZERO' in renderer

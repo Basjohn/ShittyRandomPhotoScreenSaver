@@ -7,12 +7,14 @@ card target. Optional sky and bloom retire with this activation.
 from __future__ import annotations
 from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
 
-import ctypes
 import math
 import zlib
 from contextlib import contextmanager
+
+import numpy as np
 from OpenGL import GL as gl
 
+from rendering.gl_programs.portable import pack_block
 from rendering.gl_programs.scene3d import scene3d_detail, scene3d_grid_vertices
 from rendering.gl_programs.neon_lake_basin_mesh import (
     BASIN_MESH_FINE_ROWS, BASIN_MESH_SUBDIVISION, NO_EXTENT, basin_mesh_vertices, basin_mesh_points, upload_bytes,
@@ -21,11 +23,12 @@ from rendering.gl_programs.neon_starscape import starscape_beat_cells
 from rendering.quick import gl_query
 from rendering.gl_programs.neon_lake_basin_program import (
     NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE, NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE,
-    NEON_SKYLINE_VERTEX_SOURCE, NEON_SKYLINE_FRAGMENT_SOURCE,
+    NEON_SKYLINE_VERTEX_SOURCE, NEON_SKYLINE_FRAGMENT_SOURCE, NEON_BLOCK, NEON_DEFAULTS, NEON_HEIGHT_UNIT,
+    NEON_OVERLAY_UNIT, NEON_SAMPLERS, NEON_SKY_BLOCK, NEON_SKYLINE_BLOCK,
     basin_pixel_scale, basin_view,
 )
 from rendering.gl_programs.neon_celestial import basin_body_position, celestial_placement
-from rendering.gl_programs.neon_terrain_reaction import REACTION_SAMPLES, growth_cell_scale
+from rendering.gl_programs.neon_terrain_reaction import growth_cell_scale
 from rendering.gl_programs.neon_lake_basin_options import (
     BASIN_BODY_MODES, BASIN_GROWTH_REGIONS, BASIN_SURFACE_STYLES,
 )
@@ -45,28 +48,45 @@ from ..implementation_values import parameter, rgba
 from ..render_contract import QuickVisualizerRenderFrame
 from .spectrum import prepare_spectrum_shader_levels
 
-_EVENT_BINDING, _HEIGHT_UNIT, _OVERLAY_UNIT = 3, 4, 5
-_VIEW_UNIFORMS = ("uMatrix", "uField", "uEye", "uRight", "uUp", "uBack", "uTan")
-_REACTION_UNIFORMS = ("uReaction", "uReactionBands", "uReactionPhase", "uReactionMaximum", "uReactionLanes",
-                      "uReactionBias", "uReactionForms", "uReactionDrives", "uGrowthPlace")
-_CELESTIAL_UNIFORMS=("uBodyPosition","uBodySize","uBodyKind","uSunEnabled","uSunColor","uMoonColor",
-                     "uMoonPhase","uSkyEnabled","uSkyColor","uSkyStrength","uStarColor","uStarGlowColor",
-                     "uCloudColor","uHorizonColor","uClouds","uCloudDrift","uNebula","uNebulaTurn","uNebulaColorA","uNebulaColorB")
-_UNIFORMS = _VIEW_UNIFORMS + (
-    "uTerrainGrid", "uTerrainOrigin", "uHalfWidth", "uEventCount", "uWave", "uHorizon", "uIdle", "uBarCount", "uBars", "uHeightScale",
-    "uScroll", "uLineColor", "uCrestColor", "uWaterColor", "uFloor", "uGlow", "uEdgePx",
-    "uTerrain", "uTerrainDelta", "uTerrainSize", "uLand", "uTime", "uWaterDetail", "uWaterBankBand", "uReflection", "uPass", "uCurveCells",
-    "uWireDisplay", "uMarks", "uPointPx","uTerrainFillColor","uVertexColor","uVertexAccentColor",
-    "uVertexOutlineColor","uGlassTint","uGlass","uLightStrength","uSmoothGlass","uDepthOnly",
-    "uWaterLineGlowColor","uWaterLineGlow","uWaterShine","uDepthScale","uShoreGlow","uShoreGlowColor","uContourLines",
-    "uWaterGlint","uGlintLight","uWaterReact","uWaterLines",
-) + _CELESTIAL_UNIFORMS + _REACTION_UNIFORMS
-_SKY_UNIFORMS = _VIEW_UNIFORMS + _CELESTIAL_UNIFORMS + (
-    "uSkyPass","uShaftSpread","uMidband", "uBeatPulse", "uCelestialGlow", "uCelestialRimVertices", "uBeatStarCount", "uBeatStarCells", "uStarGlow",
-    "uTerrainGrid", "uTerrainOrigin", "uHalfWidth", "uLand")
-_SKYLINE_UNIFORMS = _VIEW_UNIFORMS + (
-    "uTerrainGrid", "uTerrainOrigin", "uHalfWidth", "uTerrain", "uTerrainDelta", "uTerrainSize", "uLand", "uEventCount",
-    "uCrestColor", "uGlow", "uMidband", "uOutlineLiftNdc", "uHorizonThickness", "uDepthScale") + _REACTION_UNIFORMS
+_EVENT_BINDING, _HEIGHT_UNIT, _OVERLAY_UNIT = 3, NEON_HEIGHT_UNIT, NEON_OVERLAY_UNIT
+# Each program's values are its pass block (N1.6): kept by name between draws as its uniforms held them
+# (``MeshResources.values``), packed for each draw.
+_BLOCKS = {"basin": NEON_BLOCK, "skyline": NEON_SKYLINE_BLOCK, "sky": NEON_SKY_BLOCK}
+# The programs that keep their loose uniforms until their port (see ``neon_lake_basin_program``): their values are
+# uploaded by name, by the layout they will pack then (and their samplers' units).
+_LOOSE = {"basin": tuple(name for name, _kind in NEON_BLOCK.fields) + tuple(NEON_SAMPLERS)}
+_VECTOR_SETTERS = {"vec2": lambda *a: gl.glUniform2f(*a), "vec3": lambda *a: gl.glUniform3f(*a),
+                   "vec4": lambda *a: gl.glUniform4f(*a)}
+
+
+def _program_values(resources, key: str) -> dict:
+    """Program ``key``'s values, starting from what its initialised uniforms read before any draw set them."""
+    values = resources.values(key)
+    if not values:
+        values.update(NEON_DEFAULTS)
+    return values
+
+
+def _set_array(values: dict, name: str, size: int, items, width: int = 1) -> None:
+    """``items`` (flat, ``width`` floats an element) over the first elements of the std140 array ``name``, the rest
+    kept as they stood (as ``glUniform*fv`` with fewer elements left them); the block takes the array's bytes."""
+    key = name + "#std140"
+    array = values.get(key)
+    if array is None:
+        array = values[key] = np.zeros((size, 4), np.float32)
+    data = np.asarray(items, np.float32).reshape(-1, width)
+    array[:len(data), :width] = data
+    values[name] = array.tobytes()
+
+
+def _array_size(layout, name: str) -> int:
+    kind = dict(layout.fields)[name]
+    return int(kind[kind.index("[") + 1:-1])
+
+
+_BARS_SIZE = _array_size(NEON_BLOCK, "uBars")
+_REACTION_SIZES = {name: _array_size(NEON_BLOCK, name) for name in ("uReactionBands", "uReactionLanes", "uReactionBias")}
+_BEAT_STAR_SIZE = _array_size(NEON_SKY_BLOCK, "uBeatStarCells")
 
 
 
@@ -98,7 +118,7 @@ class QuickShockwaveGridRenderer:
     mode_id = "shockwave_grid"
 
     def __init__(self) -> None:
-        self._resources = MeshResources("Neon Lake")
+        self._resources = MeshResources("Neon Lake", block_bytes=max(layout.size for layout in _BLOCKS.values()))
         self._target = SceneTarget("Neon Lake")
         self._stream = StreamRing("Neon Lake")
         self._heightfield = HeightfieldTexture("Neon Lake", components=2)
@@ -166,7 +186,7 @@ class QuickShockwaveGridRenderer:
 
     @staticmethod
     def _overlay_unit(terrain) -> int:
-        # An ungrown grid never reads the overlay: its sampler rests on the stored cells' unit.
+        # An ungrown grid never reads the overlay: the basin's loose sampler rests on the stored cells' unit.
         return _OVERLAY_UNIT if terrain.get("delta") is not None else _HEIGHT_UNIT
 
     @contextmanager
@@ -228,32 +248,33 @@ class QuickShockwaveGridRenderer:
             return False
         if not self._stream.warm():
             return False
+        if not r.pass_blocks.warm():          # the programs' pass blocks (N1.6)
+            return False
         return self._target.warm(item_pixel_rect(frame)[2:], samples, overlay=True, bloom=glow > 0.0,
                                  shafts=_rays_admitted(parameters))
 
-    def _bind_view(self, uniforms, frame, view):
-        if "uTerrainGrid" in uniforms:          # programs that read the terrain
-            gl.glUniform3f(uniforms["uTerrainGrid"], *self._terrain_grid)
-            gl.glUniform4f(uniforms["uTerrainOrigin"], *self._terrain_origin)
-        gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
-        gl.glUniform4f(uniforms["uField"], *view.field)
-        gl.glUniform3f(uniforms["uEye"], *view.eye)
-        gl.glUniform3f(uniforms["uRight"], *view.right)
-        gl.glUniform3f(uniforms["uUp"], *view.up)
-        gl.glUniform3f(uniforms["uBack"], *view.back)
-        gl.glUniform2f(uniforms["uTan"], *view.tan)
+    def _bind_view(self, values, frame, view):
+        values["uTerrainGrid"] = tuple(self._terrain_grid)
+        values["uTerrainOrigin"] = tuple(self._terrain_origin)
+        values["uMatrix"] = tuple(frame.matrix_values)
+        values["uField"] = tuple(view.field)
+        values["uEye"] = tuple(view.eye)
+        values["uRight"] = tuple(view.right)
+        values["uUp"] = tuple(view.up)
+        values["uBack"] = tuple(view.back)
+        values["uTan"] = tuple(view.tan)
 
     @staticmethod
-    def _bind_wave(uniforms, parameters, mode_state, half_width) -> None:
+    def _bind_wave(values, parameters, mode_state, half_width) -> None:
         """The lake's travelling waves and idle swell (``shockwaveHeight``)."""
-        gl.glUniform2f(uniforms["uWave"], shockwave_amplitude(float(parameter(parameters, "shockwave_grid_wave_height"))),
-                       shockwave_wave_speed(float(parameter(parameters, "shockwave_grid_wave_speed"))))
-        gl.glUniform2f(uniforms["uIdle"], *shockwave_idle(
+        values["uWave"] = (shockwave_amplitude(float(parameter(parameters, "shockwave_grid_wave_height"))),
+                           shockwave_wave_speed(float(parameter(parameters, "shockwave_grid_wave_speed"))))
+        values["uIdle"] = tuple(shockwave_idle(
             float(parameter(parameters, "shockwave_grid_wave_height")), float(parameter(parameters, "shockwave_grid_idle")),
             float(mode_state.animation_time), half_width))
 
     @staticmethod
-    def _bind_reaction(uniforms, parameters, mode_state, terrain) -> None:
+    def _bind_reaction(values, parameters, mode_state, terrain) -> None:
         """Terrain Reaction for a program sampling the land height: amounts, lane drives, phase, the
         shaper's baked elevation tables, and Growth / Indents with their drives (strength 0 turns the
         shader's reaction off; an amount of 0 its landforms)."""
@@ -262,56 +283,93 @@ class QuickShockwaveGridRenderer:
             # Nothing drives the land this frame (silence, no wave alive): every term is zero, so the shader is
             # told the reaction is off and skips its work per vertex instead of computing zeros.
             reaction = (0.0, *reaction[1:])
-        gl.glUniform4f(uniforms["uReaction"], *reaction)
-        gl.glUniform1fv(uniforms["uReactionBands"], len(mode_state.terrain_bands), mode_state.terrain_bands)
-        gl.glUniform1f(uniforms["uReactionPhase"], float(mode_state.terrain_phase))
-        gl.glUniform1f(uniforms["uReactionMaximum"], float(terrain["maximum"]))
+        values["uReaction"] = tuple(reaction)
+        _set_array(values, "uReactionBands", _REACTION_SIZES["uReactionBands"], mode_state.terrain_bands)
+        values["uReactionPhase"] = float(mode_state.terrain_phase)
+        values["uReactionMaximum"] = float(terrain["maximum"])
         lanes, bias = _reaction_tables(parameter(parameters, "shockwave_grid_terrain_shaper"))
-        gl.glUniform1fv(uniforms["uReactionLanes"], 5 * REACTION_SAMPLES, lanes)
-        gl.glUniform1fv(uniforms["uReactionBias"], REACTION_SAMPLES, bias)
-        gl.glUniform4f(uniforms["uReactionForms"],
-                       reaction[0] * float(parameter(parameters, "shockwave_grid_terrain_growth")),
-                       float(parameter(parameters, "shockwave_grid_terrain_growth_shape")),
-                       reaction[0] * float(parameter(parameters, "shockwave_grid_terrain_indents")), 0.0)
-        gl.glUniform2f(uniforms["uReactionDrives"], *mode_state.terrain_forms)
+        values["uReactionLanes"] = lanes
+        values["uReactionBias"] = bias
+        values["uReactionForms"] = (reaction[0] * float(parameter(parameters, "shockwave_grid_terrain_growth")),
+                                    float(parameter(parameters, "shockwave_grid_terrain_growth_shape")),
+                                    reaction[0] * float(parameter(parameters, "shockwave_grid_terrain_indents")), 0.0)
+        values["uReactionDrives"] = tuple(mode_state.terrain_forms)
         # Growth Density as the site cell's scale (1 at the usual) and Growth Region (0 everywhere: no weighting).
-        gl.glUniform2f(uniforms["uGrowthPlace"],
-                       growth_cell_scale(parameter(parameters, "shockwave_grid_terrain_growth_density")),
-                       float(BASIN_GROWTH_REGIONS.get(str(parameter(parameters, "shockwave_grid_terrain_growth_region")),
-                                                      0)))
+        values["uGrowthPlace"] = (
+            growth_cell_scale(parameter(parameters, "shockwave_grid_terrain_growth_density")),
+            float(BASIN_GROWTH_REGIONS.get(str(parameter(parameters, "shockwave_grid_terrain_growth_region")), 0)))
 
     @staticmethod
-    def _bind_celestial(uniforms,parameters,half_width,animation_time,view):
+    def _bind_celestial(values,parameters,half_width,animation_time,view):
         authored=basin_body_position(*(float(parameter(parameters,"shockwave_grid_sun_"+axis)) for axis in "xyz"),
                                      half_width,float(animation_time),bool(parameter(parameters,"shockwave_grid_sun_orbit_enabled")),
                                      float(parameter(parameters,"shockwave_grid_sun_orbit_speed")))
         # At infinity: a fixed direction and apparent size, whatever the camera does.
         position,size=celestial_placement(authored,float(parameter(parameters,"shockwave_grid_sun_size")),view.eye)
-        gl.glUniform3f(uniforms["uBodyPosition"],*position)
-        gl.glUniform1f(uniforms["uBodySize"],size)
-        gl.glUniform1i(uniforms["uBodyKind"],BASIN_BODY_MODES[str(parameter(parameters,"shockwave_grid_sun_mode"))])
-        gl.glUniform1i(uniforms["uSunEnabled"],int(bool(parameter(parameters,"shockwave_grid_sun_enabled"))))
-        gl.glUniform1f(uniforms["uMoonPhase"],float(parameter(parameters,"shockwave_grid_moon_phase")))
-        gl.glUniform1i(uniforms["uSkyEnabled"],int(bool(parameter(parameters,"shockwave_grid_sky_enabled"))))
-        gl.glUniform1f(uniforms["uSkyStrength"],float(parameter(parameters,"shockwave_grid_sky_strength")))
+        values["uBodyPosition"]=tuple(position)
+        values["uBodySize"]=size
+        values["uBodyKind"]=int(BASIN_BODY_MODES[str(parameter(parameters,"shockwave_grid_sun_mode"))])
+        values["uSunEnabled"]=int(bool(parameter(parameters,"shockwave_grid_sun_enabled")))
+        values["uMoonPhase"]=float(parameter(parameters,"shockwave_grid_moon_phase"))
+        values["uSkyEnabled"]=int(bool(parameter(parameters,"shockwave_grid_sky_enabled")))
+        values["uSkyStrength"]=float(parameter(parameters,"shockwave_grid_sky_strength"))
         for uniform,key in (("uSunColor","sun_color"),("uMoonColor","moon_color"),("uSkyColor","sky_color"),
                             ("uStarColor","star_color"),("uStarGlowColor","star_glow_color"),
                             ("uCloudColor","cloud_color"),("uHorizonColor","horizon_color"),
                             ("uNebulaColorA","nebula_color_a"),("uNebulaColorB","nebula_color_b")):
-            gl.glUniform4f(uniforms[uniform],*rgba(parameter(parameters,"shockwave_grid_"+key)))
+            values[uniform]=tuple(rgba(parameter(parameters,"shockwave_grid_"+key)))
         clouds=bool(parameter(parameters,"shockwave_grid_volumetric_clouds"))
-        gl.glUniform4f(uniforms["uClouds"],*(float(parameter(parameters,"shockwave_grid_cloud_"+part))
-                                             for part in ("coverage","softness","scale")),
-                       float(parameter(parameters,"shockwave_grid_cloud_opacity")) if clouds else 0.0)
+        values["uClouds"]=(*(float(parameter(parameters,"shockwave_grid_cloud_"+part))
+                             for part in ("coverage","softness","scale")),
+                           float(parameter(parameters,"shockwave_grid_cloud_opacity")) if clouds else 0.0)
         drift=0.03*float(parameter(parameters,"shockwave_grid_cloud_drift"))*float(animation_time)
-        gl.glUniform2f(uniforms["uCloudDrift"],drift,0.37*drift)
-        gl.glUniform4f(uniforms["uNebula"],float(parameter(parameters,"shockwave_grid_nebula_intensity"))
-                       if bool(parameter(parameters,"shockwave_grid_nebula_enabled")) else 0.0,
-                       *(float(parameter(parameters,"shockwave_grid_nebula_"+part))
-                         for part in ("scale","filaments","dust")))
-        gl.glUniform1f(uniforms["uNebulaTurn"],2.0*math.pi*float(parameter(parameters,"shockwave_grid_nebula_position"))
-                       +0.004*float(parameter(parameters,"shockwave_grid_nebula_drift"))*float(animation_time))
+        values["uCloudDrift"]=(drift,0.37*drift)
+        values["uNebula"]=(float(parameter(parameters,"shockwave_grid_nebula_intensity"))
+                           if bool(parameter(parameters,"shockwave_grid_nebula_enabled")) else 0.0,
+                           *(float(parameter(parameters,"shockwave_grid_nebula_"+part))
+                             for part in ("scale","filaments","dust")))
+        values["uNebulaTurn"]=(2.0*math.pi*float(parameter(parameters,"shockwave_grid_nebula_position"))
+                               +0.004*float(parameter(parameters,"shockwave_grid_nebula_drift"))*float(animation_time))
         return position,size
+
+    def _draw(self, key: str, values: dict, mode, first: int, count: int) -> None:
+        """One draw of program ``key`` (current) with its values packed into its pass block, or for a program that
+        keeps its loose uniforms (the basin) with its changed values uploaded as them."""
+        if key in _LOOSE:
+            self._upload_loose(key, values)
+            gl.glDrawArrays(mode, first, count)
+            return
+        with self._resources.pass_blocks.bound(pack_block(_BLOCKS[key], values)):
+            gl.glDrawArrays(mode, first, count)
+
+    def _upload_loose(self, key: str, values: dict) -> None:
+        """Program ``key``'s values (by its block layout's names and types, and its samplers' units) set as its loose
+        uniforms, each only when it changed since its last upload; a value never given keeps the uniform's own."""
+        layout = _BLOCKS[key]
+        locations = self._resources.uniforms(key, _LOOSE[key], required=False)
+        uploaded = values.setdefault("#uploaded", {})
+        for name, kind in layout.fields + tuple((name, "sampler") for name in NEON_SAMPLERS):
+            value = values.get(name)
+            if value is None or uploaded.get(name) == value:
+                continue
+            location = locations[name]
+            if kind in ("int", "sampler"):
+                gl.glUniform1i(location, int(value))
+            elif kind == "float":
+                gl.glUniform1f(location, value)
+            elif kind in _VECTOR_SETTERS:
+                _VECTOR_SETTERS[kind](location, *value)
+            elif kind == "mat4":
+                gl.glUniformMatrix4fv(location, 1, gl.GL_FALSE, value)
+            elif kind.startswith("float["):
+                floats = np.frombuffer(value, np.float32)[0::4].copy()
+                gl.glUniform1fv(location, len(floats), floats)
+            elif kind.startswith("vec4["):
+                floats = np.frombuffer(value, np.float32).copy()
+                gl.glUniform4fv(location, len(floats) // 4, floats)
+            else:
+                raise TypeError(f"Neon Lake {key}: no loose upload for {name} ({kind})")
+            uploaded[name] = value
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         frame = orient_visualizer_scene_frame(frame)
@@ -344,9 +402,9 @@ class QuickShockwaveGridRenderer:
         music_drive = shockwave_music_drive(mode_state.events) if water_amount > 0.0 else 0.0
         r = self._resources
         program = r.program("basin", NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE)
-        uniforms = r.uniforms("basin", _UNIFORMS)
+        values = _program_values(r, "basin")
         skyline_program = r.program("skyline", NEON_SKYLINE_VERTEX_SOURCE, NEON_SKYLINE_FRAGMENT_SOURCE)
-        skyline_uniforms = r.uniforms("skyline", _SKYLINE_UNIFORMS)
+        skyline_values = _program_values(r, "skyline")
         self._adopt_terrain(parameter(parameters, "shockwave_grid_terrain"))
         vao, vertices = self._mesh(cells)
         terrain = parameter(parameters, "shockwave_grid_terrain")
@@ -358,28 +416,25 @@ class QuickShockwaveGridRenderer:
             sky=None
             if _sky_admitted(parameters):
                 sky = r.program("sky", NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE)
-                sky_uniforms = r.uniforms("sky", _SKY_UNIFORMS)
+                sky_values = _program_values(r, "sky")
                 sky_vao, sky_count = r.mesh("sky", scene3d_grid_vertices(1, 1), (2,))
                 gl.glUseProgram(sky)
-                self._bind_view(sky_uniforms, frame, view)
-                body_position, body_size = self._bind_celestial(sky_uniforms,parameters,half_width,
+                self._bind_view(sky_values, frame, view)
+                body_position, body_size = self._bind_celestial(sky_values,parameters,half_width,
                                                                 mode_state.animation_time,view)
-                gl.glUniform1f(sky_uniforms["uMidband"],midband)
+                sky_values["uMidband"]=midband
                 # The horizon glow rises from the land's own horizon (basinHorizonElevation reads the distant land).
-                gl.glUniform1f(sky_uniforms["uHalfWidth"],half_width)
-                gl.glUniform2f(sky_uniforms["uLand"],float(parameter(parameters,"shockwave_grid_terrain_height")),
-                               float(parameter(parameters,"shockwave_grid_terrain_detail")))
-                gl.glUniform1i(sky_uniforms["uCelestialRimVertices"],
-                               int(bool(parameter(parameters,"shockwave_grid_celestial_rim_vertices"))))
-                gl.glUniform1f(sky_uniforms["uBeatPulse"],beat_pulse)
-                gl.glUniform2f(sky_uniforms["uCelestialGlow"],
-                               float(parameter(parameters,"shockwave_grid_celestial_glow_strength"))
-                               if bool(parameter(parameters,"shockwave_grid_celestial_glow_enabled")) else 0.0,
-                               float(parameter(parameters,"shockwave_grid_celestial_glow_reactivity")))
-                gl.glUniform3f(sky_uniforms["uStarGlow"],
-                               float(parameter(parameters,"shockwave_grid_star_glow_strength")),
-                               float(parameter(parameters,"shockwave_grid_star_glow_reactivity")),
-                               float(parameter(parameters,"shockwave_grid_star_size")))
+                sky_values["uHalfWidth"]=half_width
+                sky_values["uLand"]=(float(parameter(parameters,"shockwave_grid_terrain_height")),
+                                     float(parameter(parameters,"shockwave_grid_terrain_detail")))
+                sky_values["uCelestialRimVertices"]=int(bool(parameter(parameters,"shockwave_grid_celestial_rim_vertices")))
+                sky_values["uBeatPulse"]=beat_pulse
+                sky_values["uCelestialGlow"]=(float(parameter(parameters,"shockwave_grid_celestial_glow_strength"))
+                                              if bool(parameter(parameters,"shockwave_grid_celestial_glow_enabled")) else 0.0,
+                                              float(parameter(parameters,"shockwave_grid_celestial_glow_reactivity")))
+                sky_values["uStarGlow"]=(float(parameter(parameters,"shockwave_grid_star_glow_strength")),
+                                         float(parameter(parameters,"shockwave_grid_star_glow_reactivity")),
+                                         float(parameter(parameters,"shockwave_grid_star_size")))
                 star_bursts = starscape_beat_cells(
                     mode_state.events, view,
                     terrain=(terrain["size"],terrain["data"],half_width,
@@ -391,71 +446,71 @@ class QuickShockwaveGridRenderer:
                              ("moon_color" if str(parameter(parameters,"shockwave_grid_sun_mode"))=="Moon" else "sun_color")))[3]>0.0
                          else None,
                 ) if bool(parameter(parameters, "shockwave_grid_starscape_beat")) else ()
-                gl.glUniform1i(sky_uniforms["uBeatStarCount"], len(star_bursts))
+                sky_values["uBeatStarCount"]=len(star_bursts)
                 if star_bursts:
-                    gl.glUniform4fv(sky_uniforms["uBeatStarCells"], len(star_bursts),
-                                    tuple(value for item in star_bursts for value in item))
+                    _set_array(sky_values, "uBeatStarCells", _BEAT_STAR_SIZE,
+                               tuple(value for item in star_bursts for value in item), 4)
                 # Sky is composited AFTER a depth-only terrain admission. Otherwise
                 # transparent/glass terrain lets distant stars bleed through land.
             gl.glUseProgram(program)
-            self._bind_view(uniforms, frame, view)
-            self._bind_celestial(uniforms,parameters,half_width,mode_state.animation_time,view)
-            gl.glUniform1f(uniforms["uHalfWidth"], half_width)
-            gl.glUniform1i(uniforms["uEventCount"], len(events))
-            self._bind_wave(uniforms, parameters, mode_state, half_width)
-            gl.glUniform1f(uniforms["uHorizon"], SHOCKWAVE_MAX_RIDGE * float(parameter(parameters, "shockwave_grid_horizon")))
-            gl.glUniform1i(uniforms["uBarCount"], count)
+            self._bind_view(values, frame, view)
+            self._bind_celestial(values,parameters,half_width,mode_state.animation_time,view)
+            values["uHalfWidth"] = half_width
+            values["uEventCount"] = len(events)
+            self._bind_wave(values, parameters, mode_state, half_width)
+            values["uHorizon"] = SHOCKWAVE_MAX_RIDGE * float(parameter(parameters, "shockwave_grid_horizon"))
+            values["uBarCount"] = count
             if count:
-                gl.glUniform1fv(uniforms["uBars"], count, levels[:count])
-            gl.glUniform1f(uniforms["uHeightScale"], float(parameter(parameters, "spectrum_height_scale")))
-            gl.glUniform1f(uniforms["uScroll"], 0.6 * float(parameter(parameters, "shockwave_grid_scroll")) * float(mode_state.animation_time))
+                _set_array(values, "uBars", _BARS_SIZE, levels[:count])
+            values["uHeightScale"] = float(parameter(parameters, "spectrum_height_scale"))
+            values["uScroll"] = 0.6 * float(parameter(parameters, "shockwave_grid_scroll")) * float(mode_state.animation_time)
             for uniform, key in (("uLineColor", "line_color"), ("uCrestColor", "crest_color"), ("uWaterColor", "water_color")):
-                gl.glUniform4f(uniforms[uniform], *rgba(parameter(parameters, "shockwave_grid_" + key)))
-            gl.glUniform1f(uniforms["uFloor"], float(parameter(parameters, "shockwave_grid_floor")))
-            gl.glUniform1f(uniforms["uGlow"], glow)
-            gl.glUniform4f(uniforms["uWaterLineGlowColor"], *rgba(parameter(parameters, "shockwave_grid_water_line_glow_color")))
-            gl.glUniform1f(uniforms["uWaterLineGlow"], float(parameter(parameters, "shockwave_grid_water_line_glow")))
-            gl.glUniform1f(uniforms["uWaterShine"], float(parameter(parameters, "shockwave_grid_water_shine")))
+                values[uniform] = tuple(rgba(parameter(parameters, "shockwave_grid_" + key)))
+            values["uFloor"] = float(parameter(parameters, "shockwave_grid_floor"))
+            values["uGlow"] = glow
+            values["uWaterLineGlowColor"] = tuple(rgba(parameter(parameters, "shockwave_grid_water_line_glow_color")))
+            values["uWaterLineGlow"] = float(parameter(parameters, "shockwave_grid_water_line_glow"))
+            values["uWaterShine"] = float(parameter(parameters, "shockwave_grid_water_shine"))
             depth_scale = float(parameter(parameters, "shockwave_grid_depth_scale"))
-            gl.glUniform1f(uniforms["uDepthScale"], depth_scale)
-            gl.glUniform1f(uniforms["uShoreGlow"], float(parameter(parameters, "shockwave_grid_shore_glow")))
-            gl.glUniform4f(uniforms["uShoreGlowColor"], *rgba(parameter(parameters, "shockwave_grid_shore_glow_color")))
-            gl.glUniform1f(uniforms["uWaterGlint"], float(parameter(parameters, "shockwave_grid_water_glint")))
-            gl.glUniform1f(uniforms["uContourLines"], float(parameter(parameters, "shockwave_grid_contour_lines")))
+            values["uDepthScale"] = depth_scale
+            values["uShoreGlow"] = float(parameter(parameters, "shockwave_grid_shore_glow"))
+            values["uShoreGlowColor"] = tuple(rgba(parameter(parameters, "shockwave_grid_shore_glow_color")))
+            values["uWaterGlint"] = float(parameter(parameters, "shockwave_grid_water_glint"))
+            values["uContourLines"] = float(parameter(parameters, "shockwave_grid_contour_lines"))
             # The glint brightens with the halo's own musical drive (existing midband and onset envelope).
-            gl.glUniform4f(uniforms["uGlintLight"], *_halo_light(parameters), midband, beat_pulse)
+            values["uGlintLight"] = (*_halo_light(parameters), midband, beat_pulse)
             # Water Reaction reads the admitted waves (fixed real-music scale), not the pinned display bars.
-            gl.glUniform1f(uniforms["uWaterReact"], water_amount * music_drive)
+            values["uWaterReact"] = water_amount * music_drive
             # Water Lines: the face lines and the shoreline (with their glow) fade together; 0 skips them.
             water_lines = water_lines_amount(parameters)
-            gl.glUniform2f(uniforms["uWaterLines"], water_lines, water_lines)
+            values["uWaterLines"] = (water_lines, water_lines)
             # fwidth already measures physical fragments, including DPR/MSAA.
-            gl.glUniform1f(uniforms["uEdgePx"], 0.75)
-            gl.glUniform1f(uniforms["uCurveCells"], 12.0+40.0*float(parameter(parameters,"shockwave_grid_density")))
-            gl.glUniform1i(uniforms["uWireDisplay"],style)
-            gl.glUniform1i(uniforms["uMarks"],0)
+            values["uEdgePx"] = 0.75
+            values["uCurveCells"] = 12.0+40.0*float(parameter(parameters,"shockwave_grid_density"))
+            values["uWireDisplay"] = int(style)
+            values["uMarks"] = 0
             for uniform,key in (("uTerrainFillColor","terrain_fill_color"),("uVertexColor","vertex_color"),
                                 ("uVertexAccentColor","vertex_accent_color"),("uVertexOutlineColor","vertex_outline_color"),
                                 ("uGlassTint","glass_tint")):
-                gl.glUniform4f(uniforms[uniform],*rgba(parameter(parameters,"shockwave_grid_"+key)))
-            gl.glUniform2f(uniforms["uGlass"],float(parameter(parameters,"shockwave_grid_glass_strength")),
-                           float(parameter(parameters,"shockwave_grid_glass_roughness")))
-            gl.glUniform1i(uniforms["uSmoothGlass"],int(bool(style&4)
-                           and float(parameter(parameters,"shockwave_grid_glass_strength"))>0.0
-                           and rgba(parameter(parameters,"shockwave_grid_glass_tint"))[3]>0.0))
+                values[uniform] = tuple(rgba(parameter(parameters,"shockwave_grid_"+key)))
+            values["uGlass"] = (float(parameter(parameters,"shockwave_grid_glass_strength")),
+                                float(parameter(parameters,"shockwave_grid_glass_roughness")))
+            values["uSmoothGlass"] = int(bool(style&4)
+                                         and float(parameter(parameters,"shockwave_grid_glass_strength"))>0.0
+                                         and rgba(parameter(parameters,"shockwave_grid_glass_tint"))[3]>0.0)
             light_strength=float(parameter(parameters,"shockwave_grid_sun_rays_strength")) if _rays_admitted(parameters) else 0.0
-            gl.glUniform1f(uniforms["uLightStrength"],light_strength)
-            self._bind_reaction(uniforms, parameters, mode_state, terrain)
-            gl.glUniform1i(uniforms["uTerrain"], _HEIGHT_UNIT)
-            gl.glUniform1i(uniforms["uTerrainDelta"], self._overlay_unit(terrain))
-            gl.glUniform1i(uniforms["uTerrainSize"], terrain["size"])
-            gl.glUniform2f(uniforms["uLand"], float(parameter(parameters, "shockwave_grid_terrain_height")),
-                           float(parameter(parameters, "shockwave_grid_terrain_detail")))
-            gl.glUniform1f(uniforms["uTime"], float(mode_state.animation_time))
-            gl.glUniform1f(uniforms["uWaterDetail"], float(parameter(parameters, "shockwave_grid_water_detail")))
-            gl.glUniform1f(uniforms["uWaterBankBand"], basin_water_bank_band(cells))
+            values["uLightStrength"] = light_strength
+            self._bind_reaction(values, parameters, mode_state, terrain)
+            values["uTerrain"] = _HEIGHT_UNIT                     # the basin's samplers (loose until its port)
+            values["uTerrainDelta"] = self._overlay_unit(terrain)
+            values["uTerrainSize"] = int(terrain["size"])
+            values["uLand"] = (float(parameter(parameters, "shockwave_grid_terrain_height")),
+                               float(parameter(parameters, "shockwave_grid_terrain_detail")))
+            values["uTime"] = float(mode_state.animation_time)
+            values["uWaterDetail"] = float(parameter(parameters, "shockwave_grid_water_detail"))
+            values["uWaterBankBand"] = basin_water_bank_band(cells)
             reflection = float(parameter(parameters, "shockwave_grid_water_reflection"))
-            gl.glUniform1f(uniforms["uReflection"], reflection)
+            values["uReflection"] = reflection
             gl.glBindVertexArray(vao)
             gl.glEnable(gl.GL_DEPTH_TEST)
             with self._stream.bound(gl.GL_SHADER_STORAGE_BUFFER, _EVENT_BINDING, records):
@@ -467,65 +522,59 @@ class QuickShockwaveGridRenderer:
                         # entire card. The terrain prepass subtracts only its
                         # opaque coverage, smoothly across its outer fade.
                         gl.glUseProgram(sky)
-                        gl.glUniform1i(sky_uniforms["uSkyPass"],0)
+                        sky_values["uSkyPass"]=0
                         gl.glDisable(gl.GL_DEPTH_TEST)
                         gl.glDepthMask(gl.GL_FALSE)
                         gl.glBindVertexArray(sky_vao)
-                        gl.glDrawArrays(gl.GL_TRIANGLES,0,sky_count)
+                        self._draw("sky",sky_values,gl.GL_TRIANGLES,0,sky_count)
                         gl.glEnable(gl.GL_DEPTH_TEST)
                     if depth_prepared:
                         gl.glUseProgram(program)
-                        gl.glUniform1i(uniforms["uDepthOnly"],1)
-                        gl.glUniform1i(uniforms["uMarks"],0)
-                        gl.glUniform1i(uniforms["uPass"],1)
+                        values["uDepthOnly"]=1
+                        values["uMarks"]=0
+                        values["uPass"]=1
                         gl.glDepthFunc(gl.GL_LESS)
                         gl.glDepthMask(gl.GL_TRUE)
                         gl.glBindVertexArray(vao)
                         with _terrain_sky_occlusion_blend(glow > 0.0):
-                            gl.glDrawArrays(gl.GL_TRIANGLES,0,vertices)
+                            self._draw("basin",values,gl.GL_TRIANGLES,0,vertices)
                     gl.glUseProgram(program)
-                    gl.glUniform1i(uniforms["uDepthOnly"],0)
-                    self._draw_scene(frame,uniforms,vao,vertices,cells,style,
+                    values["uDepthOnly"]=0
+                    self._draw_scene(frame,values,vao,vertices,cells,style,
                                      reflection>0.0 and view.eye[1]>0.001,depth_prepared=depth_prepared,
                                      reflected_lines=water_lines>0.0)
                     # Screen-space displacement of the exact terrain triangles.
                     # The unshifted surface depth rejects internal colour, leaving
                     # a narrow ridge line against sky (never projected-column boxes).
                     gl.glUseProgram(skyline_program)
-                    self._bind_view(skyline_uniforms,frame,view)
-                    gl.glUniform1f(skyline_uniforms["uHalfWidth"],half_width)
-                    gl.glUniform1i(skyline_uniforms["uTerrain"],_HEIGHT_UNIT)
-                    gl.glUniform1i(skyline_uniforms["uTerrainDelta"],self._overlay_unit(terrain))
-                    gl.glUniform1i(skyline_uniforms["uTerrainSize"],terrain["size"])
-                    gl.glUniform2f(skyline_uniforms["uLand"],
-                                   float(parameter(parameters,"shockwave_grid_terrain_height")),
-                                   float(parameter(parameters,"shockwave_grid_terrain_detail")))
-                    gl.glUniform1i(skyline_uniforms["uEventCount"],len(events))
-                    self._bind_reaction(skyline_uniforms, parameters, mode_state, terrain)
-                    gl.glUniform4f(skyline_uniforms["uCrestColor"],
-                                   *rgba(parameter(parameters,"shockwave_grid_crest_color")))
-                    gl.glUniform1f(skyline_uniforms["uGlow"],glow)
-                    gl.glUniform1f(skyline_uniforms["uMidband"],
-                                   shockwave_ridge_breath(midband, music_drive, water_amount))
-                    gl.glUniform1f(skyline_uniforms["uOutlineLiftNdc"], 2.0 / max(frame.viewport[3],1))
-                    gl.glUniform1f(skyline_uniforms["uHorizonThickness"],
-                                   float(parameter(parameters,"shockwave_grid_horizon_thickness")))
-                    gl.glUniform1f(skyline_uniforms["uDepthScale"],depth_scale)
+                    self._bind_view(skyline_values,frame,view)
+                    skyline_values["uHalfWidth"]=half_width
+                    skyline_values["uTerrainSize"]=int(terrain["size"])
+                    skyline_values["uLand"]=(float(parameter(parameters,"shockwave_grid_terrain_height")),
+                                             float(parameter(parameters,"shockwave_grid_terrain_detail")))
+                    skyline_values["uEventCount"]=len(events)
+                    self._bind_reaction(skyline_values, parameters, mode_state, terrain)
+                    skyline_values["uCrestColor"]=tuple(rgba(parameter(parameters,"shockwave_grid_crest_color")))
+                    skyline_values["uGlow"]=glow
+                    skyline_values["uMidband"]=shockwave_ridge_breath(midband, music_drive, water_amount)
+                    skyline_values["uOutlineLiftNdc"]=2.0 / max(frame.viewport[3],1)
+                    skyline_values["uHorizonThickness"]=float(parameter(parameters,"shockwave_grid_horizon_thickness"))
+                    skyline_values["uDepthScale"]=depth_scale
                     gl.glEnable(gl.GL_DEPTH_TEST)
                     gl.glDepthFunc(gl.GL_LEQUAL)
                     gl.glDepthMask(gl.GL_FALSE)
                     gl.glBindVertexArray(vao)
-                    gl.glDrawArrays(gl.GL_TRIANGLES,0,vertices)
+                    self._draw("skyline",skyline_values,gl.GL_TRIANGLES,0,vertices)
                     if body_enabled:
                         # Translucent bodies and their antialiased limbs blend
                         # over the completed surface while retaining 3D depth.
                         gl.glUseProgram(sky)
-                        gl.glUniform1i(sky_uniforms["uSkyPass"],2)
+                        sky_values["uSkyPass"]=2
                         gl.glEnable(gl.GL_DEPTH_TEST)
                         gl.glDepthFunc(gl.GL_LEQUAL)
                         gl.glDepthMask(gl.GL_FALSE)
                         gl.glBindVertexArray(sky_vao)
-                        gl.glDrawArrays(gl.GL_TRIANGLES,0,sky_count)
+                        self._draw("sky",sky_values,gl.GL_TRIANGLES,0,sky_count)
                     if _rays_admitted(parameters):
                         light = _shaft_light(parameters, view,
                                              body_position)
@@ -533,18 +582,17 @@ class QuickShockwaveGridRenderer:
                             # The light's source, behind everything already drawn; the shared shafts
                             # pass turns it into rays at the end of the scope.
                             gl.glUseProgram(sky)
-                            gl.glUniform1i(sky_uniforms["uSkyPass"],3)
-                            gl.glUniform1f(sky_uniforms["uShaftSpread"],
-                                           float(parameter(parameters,"shockwave_grid_sun_rays_spread")))
+                            sky_values["uSkyPass"]=3
+                            sky_values["uShaftSpread"]=float(parameter(parameters,"shockwave_grid_sun_rays_spread"))
                             gl.glEnable(gl.GL_DEPTH_TEST)
                             gl.glDepthFunc(gl.GL_LEQUAL)
                             gl.glDepthMask(gl.GL_FALSE)
                             gl.glBindVertexArray(sky_vao)
                             with self._target.shaft_writes():
-                                gl.glDrawArrays(gl.GL_TRIANGLES,0,sky_count)
+                                self._draw("sky",sky_values,gl.GL_TRIANGLES,0,sky_count)
                             self._target.set_shaft_light(light)
 
-    def _draw_scene(self,frame,uniforms,vao,vertices,cells,style,reflections,*,depth_prepared=False,
+    def _draw_scene(self,frame,values,vao,vertices,cells,style,reflections,*,depth_prepared=False,
                     reflected_lines=True):
         points=self._points(cells) if style&2 else None
         if not style&2 and self._points_cells is not None:
@@ -557,7 +605,7 @@ class QuickShockwaveGridRenderer:
                 # Keep every authored mark. The item's actual projection owns
                 # physical scaling; whole-window/card ratios and population
                 # culling cannot thin the field or erase its emission.
-                gl.glUniform1f(uniforms["uPointPx"],diameter*basin_pixel_scale(frame.matrix_values,frame.viewport))
+                values["uPointPx"]=diameter*basin_pixel_scale(frame.matrix_values,frame.viewport)
             if reflections:
                 if depth_prepared:
                     # Mirrors are composed below the later visible surface,
@@ -567,35 +615,34 @@ class QuickShockwaveGridRenderer:
                 if reflected_lines:
                     # The mirrored surface draws only the water's lines (its fringe lines and the shoreline):
                     # with Water Lines at 0 there is nothing to draw, so the pass is skipped.
-                    gl.glUniform1i(uniforms["uPass"],0)
-                    gl.glDrawArrays(gl.GL_TRIANGLES,0,vertices)
+                    values["uPass"]=0
+                    self._draw("basin",values,gl.GL_TRIANGLES,0,vertices)
                 if points:
-                    self._draw_points(uniforms,points,0,depth_function=gl.GL_ALWAYS if depth_prepared else gl.GL_LEQUAL)
+                    self._draw_points(values,points,0,depth_function=gl.GL_ALWAYS if depth_prepared else gl.GL_LEQUAL)
             if depth_prepared:
                 gl.glDepthFunc(gl.GL_LEQUAL)
             elif points and reflections:
                 gl.glDepthFunc(gl.GL_LESS)
             gl.glDepthMask(gl.GL_TRUE)
-            gl.glUniform1i(uniforms["uMarks"],0)
-            gl.glUniform1i(uniforms["uPass"],1)
+            values["uMarks"]=0
+            values["uPass"]=1
             gl.glBindVertexArray(vao)
-            gl.glDrawArrays(gl.GL_TRIANGLES,0,vertices)
+            self._draw("basin",values,gl.GL_TRIANGLES,0,vertices)
             if points:
                 gl.glDepthMask(gl.GL_FALSE)
-                self._draw_points(uniforms,points,1)
+                self._draw_points(values,points,1)
         finally:
             if points:
                 gl.glDepthFunc(gl.GL_LESS)
                 if not point_size_enabled:
                     gl.glDisable(gl.GL_PROGRAM_POINT_SIZE)
 
-    @staticmethod
-    def _draw_points(uniforms,points,pass_id,*,depth_function=gl.GL_LEQUAL):
+    def _draw_points(self,values,points,pass_id,*,depth_function=gl.GL_LEQUAL):
         gl.glDepthFunc(depth_function)
-        gl.glUniform1i(uniforms["uMarks"],1)
-        gl.glUniform1i(uniforms["uPass"],pass_id)
+        values["uMarks"]=1
+        values["uPass"]=pass_id
         gl.glBindVertexArray(points[0])
-        gl.glDrawArrays(gl.GL_POINTS,0,points[1])
+        self._draw("basin",values,gl.GL_POINTS,0,points[1])
 
     def release_resources(self) -> None:
         errors = []
@@ -634,13 +681,21 @@ def _wire_display(parameters):
 _REACTION_TABLES: list = [None, None]
 
 
+def _std140_floats(values, size: int) -> bytes:
+    """A float array's std140 bytes (one float in each 16-byte element), ``size`` elements."""
+    array = np.zeros((size, 4), np.float32)
+    array[:len(values), 0] = np.asarray(values, np.float32)
+    return array.tobytes()
+
+
 def _reaction_tables(tables):
-    """The baked shaper tables as float arrays GL takes without converting them element by element: packed once
-    per baked tables (their lane tuple's identity), not on each of a frame's two uploads."""
+    """The baked shaper tables in their pass blocks' std140 form: packed once per baked tables (their lane tuple's
+    identity), not on each of a frame's two programs."""
     lanes = tables["lanes"]
     if _REACTION_TABLES[0] is not lanes:
         bias = tables["bias"]
-        _REACTION_TABLES[:] = [lanes, ((ctypes.c_float * len(lanes))(*lanes), (ctypes.c_float * len(bias))(*bias))]
+        _REACTION_TABLES[:] = [lanes, (_std140_floats(lanes, _REACTION_SIZES["uReactionLanes"]),
+                                       _std140_floats(bias, _REACTION_SIZES["uReactionBias"]))]
     return _REACTION_TABLES[1]
 
 

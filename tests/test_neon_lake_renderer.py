@@ -327,8 +327,7 @@ def test_maximum_moon_response_preserves_bright_face_ldr_headroom(target):
 def test_production_solid_moon_masks_stars_on_lit_and_shaded_hemispheres(target, monkeypatch):
     """A real beat star cannot punch through the solid Moon at any phase."""
     import math
-    from rendering.quick.visualizer.implementations.shockwave_grid import (
-        NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE, _SKY_UNIFORMS)
+    from rendering.quick.visualizer.implementations import shockwave_grid as module
 
     capture, host = target
     base = _snapshot(shockwave_grid_sun_mode='Moon', shockwave_grid_sun_x=0.,
@@ -341,12 +340,11 @@ def test_production_solid_moon_masks_stars_on_lit_and_shaded_hemispheres(target,
                      shockwave_grid_tilt=-.05, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
     capture.render(host, base)
     renderer = host._implementations['shockwave_grid']
-    program = renderer._resources.program('sky', NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE)
-    uniforms = renderer._resources.uniforms('sky', _SKY_UNIFORMS)
-    eye, position = np.zeros(3,np.float32), np.zeros(3,np.float32)
-    # The production eye and body the sky program actually drew with, not a hand-positioned screen dot.
-    gl.glGetUniformfv(program,uniforms['uEye'],eye)
-    gl.glGetUniformfv(program,uniforms['uBodyPosition'],position)
+    # The production eye and body the sky program actually drew with (its pass block's values, as the block holds
+    # them in float32), not a hand-positioned screen dot.
+    sky_values = renderer._resources.values('sky')
+    eye = np.asarray(sky_values['uEye'], np.float32)
+    position = np.asarray(sky_values['uBodyPosition'], np.float32)
     ray = position-eye
     ray /= np.linalg.norm(ray)
     def cell_at(offset):
@@ -355,14 +353,14 @@ def test_production_solid_moon_masks_stars_on_lit_and_shaded_hemispheres(target,
         return np.array([math.floor(math.atan2(offset_ray[0],-offset_ray[2])*420.),
                          math.floor(math.asin(offset_ray[1])*420.),1.,0.],dtype=np.float32)
     cell = [cell_at(0.)]
-    draw_count, draw_cells = gl.glUniform1i, gl.glUniform4fv
+    draw_with_values = renderer._draw
     enabled = [False]
-    def star_count(location,value):
-        if location == uniforms['uBeatStarCount'] and int(gl.glGetIntegerv(gl.GL_CURRENT_PROGRAM)) == program:
-            draw_cells(uniforms['uBeatStarCells'],1,cell[0])
-            value = int(enabled[0])
-        return draw_count(location,value)
-    monkeypatch.setattr(gl,'glUniform1i',star_count)
+    def star_count(key,values,*draw):
+        if key == 'sky':
+            module._set_array(values,'uBeatStarCells',module._BEAT_STAR_SIZE,tuple(cell[0]),4)
+            values['uBeatStarCount'] = int(enabled[0])
+        return draw_with_values(key,values,*draw)
+    monkeypatch.setattr(renderer,'_draw',star_count)
     def image(body,phase,star):
         enabled[0] = star
         return capture.render(host,_wire_frame(base,'Vertices',shockwave_grid_sun_enabled=body,
@@ -929,17 +927,15 @@ def test_production_point_fragment_rasterizes_round_marks(target, monkeypatch):
         shockwave_grid_terrain_detail=0., shockwave_grid_line_color=[255, 255, 255, 255]), 'Vertices')
     capture.render(host, snapshot)
     renderer = host._implementations['shockwave_grid']
-    from rendering.quick.visualizer.implementations.shockwave_grid import _UNIFORMS, NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE
-    basin_program = renderer._resources.program('basin', NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE)
-    point_uniform = renderer._resources.uniforms('basin', _UNIFORMS)['uPointPx']
-    uniform = gl.glUniform1f
-    def magnify(location, value):
+    basin_values = renderer._resources.values('basin')     # the basin program's pass block values (N1.6)
+    draw_with_values = renderer._draw
+    def magnify(key, values, mode, first, count):
         # Observe the same production gl_PointCoord coverage at enough pixels
         # to discriminate rounded marks from squares; no substitute shader.
-        if int(gl.glGetIntegerv(gl.GL_CURRENT_PROGRAM)) == basin_program:
-            value = 13. if location == point_uniform else value
-        return uniform(location, value)
-    monkeypatch.setattr(gl, 'glUniform1f', magnify)
+        if key == 'basin' and mode == gl.GL_POINTS:
+            values['uPointPx'] = 13.
+        return draw_with_values(key, values, mode, first, count)
+    monkeypatch.setattr(renderer, '_draw', magnify)
     actual_draw = gl.glDrawArrays
     from rendering.gl_programs.neon_lake_basin_mesh import basin_lattice
     xs, ys = basin_lattice(*renderer._points_cells)
@@ -956,9 +952,7 @@ def test_production_point_fragment_rasterizes_round_marks(target, monkeypatch):
     without_points = capture.render(host, snapshot)
     def separated_points(mode, first, count):
         if mode == gl.GL_POINTS:
-            observed = np.zeros(1, dtype=np.float32)
-            gl.glGetUniformfv(basin_program, point_uniform, observed)
-            assert observed[0] == 13.
+            assert basin_values['uPointPx'] == 13.
             # Select well separated indices from the actual uploaded lattice.
             # The full triangle surface and shared displacement remain intact.
             for row in selected_rows:

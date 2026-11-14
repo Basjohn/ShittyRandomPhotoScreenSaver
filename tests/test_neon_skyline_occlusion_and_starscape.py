@@ -75,10 +75,10 @@ def test_a_big_hit_lights_brighter_stars_than_a_small_one():
 def test_thick_glass_sky_and_body_use_existing_depth_surface():
     renderer=(ROOT/"rendering/quick/visualizer/implementations/shockwave_grid.py").read_text()
     program=(ROOT/"rendering/gl_programs/neon_lake_basin_program.py").read_text()
-    prepass=renderer.index('gl.glUniform1i(uniforms["uDepthOnly"],1)')
-    sky=renderer.index('gl.glUniform1i(sky_uniforms["uSkyPass"],0)')
-    land=renderer.index('self._draw_scene(frame,uniforms')
-    body=renderer.index('gl.glUniform1i(sky_uniforms["uSkyPass"],2)')
+    prepass=renderer.index('values["uDepthOnly"]=1')
+    sky=renderer.index('sky_values["uSkyPass"]=0')
+    land=renderer.index('self._draw_scene(frame,values')
+    body=renderer.index('sky_values["uSkyPass"]=2')
     # The sky stays continuous, then depth + fade erase its light from only
     # the covered terrain. Drawing sky after the prepass caused an opacity band.
     assert sky<prepass<land<body

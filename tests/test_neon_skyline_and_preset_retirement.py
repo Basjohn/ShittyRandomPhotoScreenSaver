@@ -49,4 +49,4 @@ def test_skyline_renders_actual_terrain_triangles_without_projected_column_maxim
     assert "vTerrainBase<0.035" in shader  # true continued land, no lake-edge duplication
     assert "bestScreen" not in shader
     assert "gl.GL_LINE_STRIP" not in renderer
-    assert 'gl.glDrawArrays(gl.GL_TRIANGLES,0,vertices)' in renderer
+    assert 'self._draw("skyline",skyline_values,gl.GL_TRIANGLES,0,vertices)' in renderer
