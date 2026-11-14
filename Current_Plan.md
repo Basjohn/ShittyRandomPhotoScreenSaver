@@ -458,14 +458,20 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     displays on): what the panel shows (DWM) is every card with its material and text and the native Spectrum
     drawing the recorded clip, black where the wallpaper will be; exit 0 through the terminal barrier. Rule (f)
     passes for Spectrum's first rehearsal; the Python renderer retires in the switch change.
-  - [ ] Defect (tool, from 667224c1): `d1_run.py`'s QRhi `grab` breaks what the saver presents on Vulkan: after
-    the first grab every later `screen` step is black, though the grabs themselves keep reading content
-    (`20261114_n28_vulkan_spectrum/`: grabs at 5, 15, 30 s have content, screens at 15 and 40 s are black; the
-    same run with screen steps only shows content). Root cause (the swap chain read back inside `afterRendering`
-    and `QRhi.finish` mid-frame are the suspects; check OpenGL too), fix, and a test that presents after a grab.
-  - [ ] H1 on a real window: at a fractional scale (the MSI at 150 %) the native Spectrum draws placed exactly,
-    the framebuffer size read from Qt's swapchain matching what Qt projects onto (N2.9 proved it in the hidden
-    host's redirect target only).
+  - Fixed 14 Nov (lead): `d1_run.py`'s QRhi grab called `QRhi.finish` inside a presented frame, and Vulkan then
+    presented black for the rest of the run; the read-back is now recorded without `finish` and read once Qt fills
+    it on a later frame (`Docs/Research/QRhi_Swapchain_Readback_2026-11-14.md`; screens after grabs keep their
+    content on Vulkan and OpenGL: `display/d1_run/20261114_n28_grab_fix_{vulkan,opengl}/`).
+  - [ ] Defect (operator, 14 Nov, Vulkan only): the native Spectrum's side borders break along one diagonal
+    across the card (a mirrored look with transparent fills and outlines; the same look on OpenGL is intact:
+    `20261114_n28_grab_fix_{vulkan,opengl}/frames/g15.png`). Suspect: a float32 shear in the native window/item
+    map making the border band's `floor()` flip along a slanted line; the real window is 3840 x 2163 (odd height
+    from the overscan), rule (a)/(b) ran 1920 x 1080 only. The Medium builds the hidden-host reproduction; the
+    High fixes it in the native route with that reproduction as its red/green test; rule (a)/(b) widened to odd
+    and fractional window sizes.
+  - H1 on a real window: done 14 Nov on Display 0 (the MSI at 150 %, operator's leave): the native Spectrum draws
+    inside its card on Vulkan with crisp edges (`display/d1_run/20261114_d0_h1_vulkan_spectrum/`).
+
   - [ ] With no admitted mode renderable on the backend (before N2.5), the Visualizer card shows as a thin empty
     purple frame beside Spotify. Find its owner and decide: a card with nothing to draw fades out, never sits as
     an empty frame. OpenGL unchanged.

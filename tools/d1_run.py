@@ -531,16 +531,19 @@ class RawFrame:
     y_up: bool                   # rows run bottom-up (OpenGL)
 
 
-def read_back_frame(window) -> RawFrame:
-    """Render thread, inside ``afterRendering``: the frame just rendered into the window's swap chain, through QRhi.
+def request_back_buffer_read(window):
+    """Render thread, inside ``afterRendering``: record a read-back of the frame just rendered into the window's swap
+    chain, through QRhi; returns the ``QRhiReadbackResult`` Qt fills when that frame's commands complete (a later
+    frame on the render thread; ``completed_frame`` reads it). The caller keeps it alive until then.
 
     Backend-neutral (OpenGL and Vulkan; N2.8): the read-back of the swap chain's current back buffer is recorded on
-    the frame's own command buffer after the scene's pass (``afterRendering`` is outside it), and ``QRhi.finish``
-    submits and waits for it, as Qt Quick's own ``grabWindow`` does on its render thread, without blocking the GUI
-    thread. Only the read-back runs here; turning the bytes into an image (copy, row flip) is ``frame_image``'s, on the
-    writer thread (1C.2: those copies on the render thread cost the other display a frame per 4K grab).
+    the frame's own command buffer after the scene's pass (``afterRendering`` is outside it). No ``QRhi.finish``: in
+    a frame that is then presented, it split the frame into two submissions and the window presented black for the
+    rest of the run on Vulkan (14 Nov; Qt Quick's own grab calls it only in an extra frame it never presents:
+    ``Docs/Research/QRhi_Swapchain_Readback_2026-11-14.md``). Nothing waits; turning the bytes into an image (copy,
+    row flip) is ``frame_image``'s, on the writer thread (1C.2: copies on the render thread cost the other display a
+    frame per 4K grab).
     """
-    from PySide6.QtCore import QByteArray
     from PySide6.QtGui import QRhiReadbackDescription, QRhiReadbackResult
 
     rhi, swap_chain = window.rhi(), window.swapChain()
@@ -552,10 +555,20 @@ def read_back_frame(window) -> RawFrame:
     result = QRhiReadbackResult()
     batch.readBackTexture(QRhiReadbackDescription(), result)   # no texture: the current swap chain's back buffer
     swap_chain.currentFrameCommandBuffer().resourceUpdate(batch)
-    rhi.finish()
+    return result
+
+
+def completed_frame(window, result) -> RawFrame | None:
+    """Render thread: the ``RawFrame`` of a read-back ``request_back_buffer_read`` recorded, once Qt has filled it
+    (PySide6 6.12 exposes no completion callback: a non-empty ``pixelSize`` is the edge), else None."""
+    from PySide6.QtCore import QByteArray
+
     size = result.pixelSize
+    if size.isEmpty():
+        return None
     # ``result.data`` wraps the member of ``result`` (gone with it): a QByteArray copy shares the bytes, no deep copy.
-    return RawFrame(QByteArray(result.data), result.format, size.width(), size.height(), rhi.isYUpInFramebuffer())
+    return RawFrame(QByteArray(result.data), result.format, size.width(), size.height(),
+                    window.rhi().isYUpInFramebuffer())
 
 
 def frame_image(frame):
@@ -605,11 +618,14 @@ class _FrameGrab:
 
         class Relay(QObject):
             ready = Signal(object)
+            again = Signal()
 
         self.window, self.on_done, self.pending = window, on_done, True
         self.render_thread_ms: float | None = None
+        self._readback = None                          # the QRhiReadbackResult Qt fills (kept alive here)
         self.relay = Relay()
         self.relay.ready.connect(self._deliver, Qt.ConnectionType.QueuedConnection)
+        self.relay.again.connect(window.update, Qt.ConnectionType.QueuedConnection)
         window.afterRendering.connect(self._after_rendering, Qt.ConnectionType.DirectConnection)
         QTimer.singleShot(timeout_ms, self.relay, self._timeout)
         window.update()
@@ -617,13 +633,20 @@ class _FrameGrab:
     def _after_rendering(self) -> None:                # render thread
         if not self.pending:
             return
-        self.pending = False
         began = time.perf_counter()
         try:
-            result = read_back_frame(self.window)
+            if self._readback is None:                 # this frame: record the read-back, then render on
+                self._readback = request_back_buffer_read(self.window)
+                result = None
+            else:                                      # a later frame: Qt has filled it once its frame completed
+                result = completed_frame(self.window, self._readback)
         except Exception as exc:                      # handed over and recorded as the step's failure
             result = exc
-        self.render_thread_ms = (time.perf_counter() - began) * 1000.0
+        self.render_thread_ms = (self.render_thread_ms or 0.0) + (time.perf_counter() - began) * 1000.0
+        if result is None:
+            self.relay.again.emit()                    # one more frame, from the GUI thread
+            return
+        self.pending = False
         self.relay.ready.emit(result)
 
     def _deliver(self, result) -> None:                # GUI thread
