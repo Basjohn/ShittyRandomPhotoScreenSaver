@@ -949,6 +949,27 @@ Crossfade there. Proved by `native/core/python/transition_route_check.py` (rule 
 options at nine progress values, dpr 1 and 1.5, under the overscan placement; rule (b) within 1 level; the route
 through `BackgroundRenderItem`; nothing at rest after a run) and `fullscreen_pass_check.py` widened to all seven.
 
+**As built (N5.2b, 14 Nov 2026; no C++, ABI 16).** Five of the six item-quad programs are one fragment between two
+pictures and join the seven as data: Chromatic Shear, Liquid Lens, Melt Drip, Surface Tension and VHS. The protocol is
+`NativeFragmentPass` (`rendering/quick/transitions/fullscreen_pass.py`: `fragment_source`, `block_values` reading no GL
+object, `run_values`); `FullscreenPassRenderer` derives from it, the five renderers implement it, and `regen_qrc` and
+`native_transition_renderer` discover it. Each renderer's `block_values` is the one owner its GL draw packs too. The
+frames a Python renderer draws as a plain picture (`draw_image`) are a block value, `uShow` (0 the effect, 1 the old
+picture, 2 the new), decided by the same function, that the fragment honours; Liquid Lens's run plan stays a CPU cache
+of a few numbers; Surface Tension's pool arrays reach the core flat (`transition_settings`). All five take their uv
+from the pixel; Chromatic Shear and Liquid Lens hash integers (their float `fract(sin())` hashes, a new look reviewed by
+the lead); VHS takes its signal line and tearing band from the pixel's row in integers (a row centred on a line's edge,
+every third row at 720, fell either way by backend: 253 levels) and its dropout grain key through `int` (a `uint()` of
+a negative float). **Beam is not ported:** its sparks are a second pass of their own geometry (900 instanced streaks
+from their own vertex stage, additive), which the core's full-card fragment passes cannot draw; it stays Crossfade on
+Vulkan until the core draws instanced geometry. Proved by `transition_route_check.py --topic n5_2b` (all 26 variants):
+rule (b) within 1 level except single pixels at 2 (Chromatic Shear's options at 0.50, Liquid Lens at 0.80); rule (a)
+not exact for three of the five: 1 level on up to 48 pixels (Liquid Lens, Melt Drip, Surface Tension) and one pixel
+in Surface Tension at 0.80 (a specular flip where pools pinch and the gradient vanishes), since the Python renderer
+compiles its GLSL source and the core the pack's (`precise` on the field and on the output changed nothing). The
+seven stay exact against the product's frame at dpr 1.5 (`product_capture`: the item's logical size, as the runtime
+gives it), which the reference now draws.
+
 ## D1, D2, D3 and the transport rule
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts"). The drafts, with every "today"
