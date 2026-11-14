@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.5 (High); N2.2's leftovers with N2.7's two exit checks and 1D.15 (Medium).
+**Now (in flight):** N2.5 (High). Medium is free (5-hour window at 80 %; next dispatch after its 07:00 UTC reset).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,8 +47,7 @@ at the size asked.
      ride with the next fitting dispatch.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. N2.2's leftovers (the hidden host created once, the `QT_DEFECTS` single source; N2.3's C++ control lows wait
-     for N2.5's merge: the same files), N2.7's two exit checks (the Studio window, the release's bound) and 1D.15.
+  1. N2.3's C++ control lows once N2.5 merges (the same files).
   2. 1D.14 (Spectrum's rim glow), once N2.5 has merged.
   3. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
@@ -417,13 +416,8 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 
 - [ ] N2.2 leftovers (N2.2 proved 12-13 Nov: `native/core/python/host_check.py`, N22 VERDICT PASS on all four
   backends; lifecycle facts J1 to J4 in `Native_Core_N06_N07_Qt_Facts.md`):
-  - [ ] An OpenGL hidden host is created once and kept (Qt's threaded render control keeps 2 handles and 1 USER
-    object per create and destroy, J1). The N2.7 backend owner and every hidden-host user hold this rule, with a
-    test that counts creations.
   - [ ] The hidden host's Qt Quick target keeps its contents between frames (defect B). A hidden host with
     transparent content must clear what Qt Quick does not cover; decide that when the first such host exists.
-  - [ ] The `QT_DEFECTS` rule is copied in `native/core/python/vk_validation.py` and the spike's `run_n06.py`:
-    one source, or both edited when defect A's excuse goes at the next Qt patch.
 - [ ] N2.3 leftovers (N2.3 proved 14 Nov: N23 VERDICT PASS on the GitHub-built ABI-5 module,
   `native/core/python/packet_reader_check.py`; evidence `.artifacts/evidence/native_core/n2_3/20261114_n23_reader/`):
   - [ ] A refused payload takes the normal failure path (reconfigure once, then in process for the run), but
@@ -441,21 +435,12 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 - [ ] N2.4 leftovers (N2.4 proved 13 Nov: `native/core/python/composite_check.py`, N24 VERDICT PASS on all four
   backends):
   - [ ] The Glass card material on the native composite; its contract read once Glass's own native path exists.
+    When the card material moves to the core, its grain takes an integer hash exact on every backend (today 2 frosted
+    pixels sit 12 levels apart on Vulkan where the float hash's `fract` wraps near 1.0; accepted 14 Nov).
 
 Order inside N2 (the numbers stay stable for the documents that cite them): N2.1 to N2.4, then N2.6, N2.7, then
 N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the Python renderer's retirement.
 
-- [ ] N2.7 leftovers (N2.7 merged 14 Nov: `--graphics-backend=vulkan`, the owner in `rendering/quick/bootstrap.py`,
-  `renderer_backends` in the registries, the remembered failed start; D10 "As built"):
-  - Merged 14 Nov (4183dc52): the exits that bypass the stop (R-209) and the card grain through the conventions
-    rule. The grain keeps 2 frosted pixels 12 levels apart on Vulkan where its hash's `fract` wraps near 1.0
-    (accepted by the lead; an integer hash, exact on every backend, replaces it when the material moves to the
-    core).
-  - [ ] The Studio's own Quick window (inside Settings) is not released by `release_quick_windows_then` on an exit;
-    check it on Vulkan (hidden run) and release it the same way if it crashes.
-  - [ ] `release_quick_windows_then` has no bound: if a window's `destroyed` never arrives, the exit never happens.
-    Prove which failure could block a `deleteLater` (the stuck-retirement route is proved clean), or give the
-    failure routes a bounded last resort (a timer is admitted here: the process is ending on a failure).
 - [ ] N2.5 Spectrum at parity on both backends (the port rule above; scheduled after N2.6 and N2.7, which its rule
   needs: (e) GPU time per pass is N2.6's timer, (f) the bounded Vulkan rehearsal is N2.7's path and N2.8's run).
   The Python renderer retires only after N2.8 passes. N1.6's Spectrum group is merged (`spectrum.frag` bakes);
@@ -1184,14 +1169,6 @@ borderless fullscreen transfers working smoothly.
 - [ ] Tests: the operator's exact sequence (B2 on D1, move to A1 on D0, fullscreen, move to D1, leave fullscreen)
   lands at B2; an invalid remembered spot falls back; nothing else in the record changes (negative controls).
 - [ ] Lead D1 run with both displays: the sequence above, edges read.
-
-### 1D.15 `test_settings_roundtrip_retired_generations.py` fails after other files (14 Nov; Opus Medium)
-
-- [ ] Red at HEAD when run after others ("3 retired display generation(s) ... still reachable"); alone it passes.
-  Reproduce: `pytest tests/test_logging_routing.py tests/test_logging_config.py tests/test_live_check_settings_roundtrip.py
-  tests/test_lifecycle_window.py tests/test_settings_roundtrip_retired_generations.py`. Find what an earlier file
-  leaves reachable (a logging handler or a live-check fixture holding a generation is likely) and fix it at the
-  owner if product, else in the tests; R-208's precedent.
 
 ### 1D.14 Spectrum's rim glow: a left-side bias, and Placement and Sharpness controls (operator, 14 Nov; Opus Medium, after N2.5 merges)
 
