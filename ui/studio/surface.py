@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from PySide6.QtCore import QObject, QRect, QSize, Qt, QUrl, Signal
-from PySide6.QtGui import QGuiApplication, QIcon
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 
@@ -164,18 +164,11 @@ class StudioWindowSurface(QObject):
         super().__init__()
         window = _StudioQuickWindow()
         window.setTitle(controller.adapter.title or "Studio")
-        # The QML titlebar's icon is artwork, not the native HWND/taskbar icon.
-        # Explicitly set the GUI application's icon on this standalone QQuickWindow.
-        app = QGuiApplication.instance()
-        icon = app.windowIcon() if app is not None else QIcon()
-        if icon.isNull():
-            # A frozen build ships the same file beside its entrypoint; source mode
-            # uses the repository root. No QtWidgets dependency in Studio/worker.
-            candidate = Path(__file__).resolve().parents[2] / "SRPSS.ico"
-            if candidate.is_file():
-                icon = QIcon(str(candidate))
-        if not icon.isNull():
-            window.setIcon(icon)
+        # The QML titlebar's icon is artwork, not the native HWND/taskbar icon: this standalone window carries the
+        # application icon from its one owner (ui/app_icon.py).
+        from ui.app_icon import apply_application_icon
+        if not apply_application_icon(window):
+            logger.warning("[STUDIO] No application icon: the taskbar shows the default icon")
         # Settings' chrome: frameless, with the shell's custom title bar and forged rounded edge. Under a Glass or
         # Acrylic Settings theme the window carries the same native material as Settings (an alpha surface the
         # theme's translucent roles let it through); Normal stays an opaque window with no backdrop at all.
@@ -221,6 +214,9 @@ class StudioWindowSurface(QObject):
     def show(self) -> None:
         self.window.setGeometry(initial_geometry(self._anchor))
         self.window.show()
+        from ui.app_icon import native_window_has_icon
+        if native_window_has_icon(self.window) is False:
+            logger.warning("[STUDIO] The native window has no icon: the taskbar shows the default icon")
         self.apply_backdrop()
         self.window.requestActivate()
 

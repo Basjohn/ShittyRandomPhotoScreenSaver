@@ -8,7 +8,8 @@ executable's icons. That trigger runs on the first ``import PySide6`` of any kin
 that imports only ``PySide6.QtCore`` also maps ``Qt6Gui.dll`` and ``Qt6Widgets.dll``: the Visualizer's engine worker
 (QtCore only by contract) and the image workers (QtCore and QtGui) carried them in the first frozen check (8 Nov 2026,
 ``Docs/Historical_Bugs/R-176_*``). Nuitka 4.2 has no option to turn it off. SRPSS does not need it: ``main.py`` sets the
-application icon from ``SRPSS.ico`` right after constructing ``QApplication``, before any window exists, and the
+application icon from its owner (``ui/app_icon.py``: ``SRPSS.ico``, else the executable's own icon resource) right
+after constructing ``QApplication``, before any window exists, and the
 executable's own icon resource (the ``.scr`` in Explorer) is written by Nuitka's post-processing, which this plugin
 does not touch.
 
