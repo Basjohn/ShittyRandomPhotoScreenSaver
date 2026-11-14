@@ -366,6 +366,7 @@ class Scene:
 
         import probe_rings
 
+        self.core = core
         self.host = host
         self.dpr = float(dpr)
         self.size = card
@@ -395,9 +396,20 @@ class Scene:
         else:
             self.mode.program([mode_pass], settings)
 
-    def pictures(self, images) -> None:
+    def pictures(self, images, *, settle: bool = True) -> None:
         for name, image in zip(TEXTURES.values(), images):
             self.mode.texture(name, image.tobytes(), image.size)
+        if settle:
+            self.settle()
+
+    def settle(self) -> None:
+        """The item's new images committed before the next frame is read (N3.8): one frame hands them over (on a
+        Vulkan device with a job service, to its upload jobs; elsewhere they are uploaded in that frame), then the jobs
+        are waited for, so the next record commits them. A harness's wait, never the product's."""
+        self.mode.update()
+        self.host.frames(1)
+        if not self.core.wait_jobs_idle(20000):
+            raise RuntimeError("the texture upload jobs did not finish within 20 s")
 
     def show(self, record: Mapping[str, Any]):
         self.stream.publish(record)
@@ -718,6 +730,7 @@ def round_textures(core, engine, app, host, folder: Path, photo_paths) -> dict:
                          "surface_passes": [surface_before, surface_after], "gpu_surface_samples": len(rest_samples)}
         # A replaced image of the same size: the same object, one upload.
         scene.mode.texture("old", images[1].tobytes(), images[1].size)
+        scene.settle()
         replaced = scene.show(record)
         state, counts = scene.mode.state(), live()
         checks["same_size_replaced_in_place"] = (state["texture_uploads"] == 3 and counts["mode_textures"] == 2
@@ -727,6 +740,7 @@ def round_textures(core, engine, app, host, folder: Path, photo_paths) -> dict:
         scene.mode.texture("old", half.tobytes(), half.size, mips=True)
         mip_pass = transition_pass("crossfade", folder / "mips", old_mips="linear")
         scene.program("crossfade", mip_pass, settings)
+        scene.settle()
         mipped = scene.show(record)
         state, counts = scene.mode.state(), live()
         expected = _levels_bytes(half.size) + target[0] * target[1] * 4
@@ -756,6 +770,7 @@ def round_textures(core, engine, app, host, folder: Path, photo_paths) -> dict:
         facts["removed"] = {"live": counts, "last_reason": state.get("last_reason")}
         checks["unknown_texture_removal_refused"] = "new" in _refused(lambda: scene.mode.remove_texture("new"))
         scene.mode.texture("new", images[1].tobytes(), images[1].size)
+        scene.settle()
         restored = scene.show(record)
         checks["sent_again_draws_again"] = compare(restored, base)["equal"]
         # A node made again (the item at no size, then back) has lost its textures: reported, nothing drawn, until sent.
@@ -781,7 +796,7 @@ def round_textures(core, engine, app, host, folder: Path, photo_paths) -> dict:
     # An item destroyed with images it never uploaded (no frame drawn): the core's copies go with it.
     scene = Scene(core, engine, host, 1.0)
     try:
-        scene.pictures(images)
+        scene.pictures(images, settle=False)
         held = live()
         checks["images_held_until_uploaded"] = (held["mode_texture_images"] == 2
                                                 and held["mode_texture_image_bytes"] == 2 * target[0] * target[1] * 4)

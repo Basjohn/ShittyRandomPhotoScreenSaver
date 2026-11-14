@@ -24,16 +24,18 @@ member, and an unbound, unknown or doubly bound sampler, each with its reason. A
 new pack, new settings or a new record: never C++.
 
 The textures (N4.a, :meth:`NativeMode.texture`): pixels Python holds (RGBA8, rows top first, tight) are copied once
-into the core, uploaded on the render thread at the next record (mips generated on the GPU when asked) and never again
-at rest; a removed texture is released on the render thread. A texture whose node was made again is reported in
-``state()["textures_lost"]``: its owner sends it again.
+into the core and uploaded once (mips generated on the GPU when asked), never again at rest; a removed texture is
+released on the render thread. N3.8 (D9): on a Vulkan device with a job service the upload is a job on the job queue,
+and the item's changed textures are drawn together once their jobs are published; elsewhere it is recorded in the
+frame. A texture whose node was made again is lost: the owner's :meth:`NativeMode.on_textures_lost` is called with its
+name (the edge; ``state()["textures_lost"]`` keeps the list), and it sends the image again.
 """
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
 from types import ModuleType
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from rendering.native.composite import CompositeItem
 from rendering.native.packet_reader import reader_config
@@ -207,12 +209,26 @@ class NativeMode:
         """The item as shown (``MODE_CARD_KEYS``; :func:`mode_card`); an unchanged card records nothing."""
         self._module.composite_mode_card(self._handle(), _card(card))
 
-    def texture(self, name: str, pixels: bytes, size: tuple[int, int], *, mips: bool = False) -> None:
+    def texture(self, name: str, pixels: bytes, size: tuple[int, int], *, mips: bool = False,
+                in_frame: bool = False) -> None:
         """The item's texture ``name`` (N4.a): ``pixels`` RGBA8, rows top first, tight, of ``size`` (width, height);
-        copied once into the core and uploaded at the next record; ``mips``: generated on the GPU. Refused
-        (ValueError) for a bad name, size or byte count, too many textures, or mips a sampler reads that it lacks."""
-        self._module.composite_mode_texture(self._handle(), str(name), (int(size[0]), int(size[1])), bytes(pixels),
-                                            bool(mips))
+        copied once into the core and uploaded from the next record; ``mips``: generated on the GPU. On a Vulkan device
+        with a job service the upload is a job (N3.8, D9): the item draws the textures it held until the job is
+        published, then every changed texture of the item at once. ``in_frame`` is the harness control of D9's in-frame
+        form (the measurement both ways). Refused (ValueError) for a bad name, size or byte count, too many textures, or
+        mips a sampler reads that it lacks."""
+        if in_frame:
+            self._module.composite_mode_texture(self._handle(), str(name), (int(size[0]), int(size[1])),
+                                                bytes(pixels), bool(mips), True)
+        else:
+            self._module.composite_mode_texture(self._handle(), str(name), (int(size[0]), int(size[1])),
+                                                bytes(pixels), bool(mips))
+
+    def on_textures_lost(self, callback: Callable[[list[str]], None] | None) -> None:
+        """The owner's lost-texture edge (N3.8, N4.a's leftover): ``callback`` is called on the GUI thread with the
+        names of textures found lost (a node made again, a texture that could not be created), once per loss; the
+        owner sends them again. None removes it."""
+        self._module.composite_mode_on_lost(self._handle(), callback)
 
     def remove_texture(self, name: str) -> None:
         """The texture goes; the render thread releases it at the next record (KeyError: no such texture)."""

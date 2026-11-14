@@ -45,7 +45,7 @@ from rendering.native.spectrum import NativeSpectrum, spectrum_block
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 13
+EXPECTED_ABI = 14
 HOST_KINDS = ("window", "hidden")
 
 
@@ -232,6 +232,41 @@ class NativeCore:
     def packet_reader_live(self) -> dict:
         """Packet readers alive, views mapped and handles: all zero once every reader is closed."""
         return json.loads(self.module.packet_reader_live())
+
+    def job_counts(self) -> dict:
+        """The job services' process-wide counts (N3.8, D9): ``job_services``, ``job_threads``, ``jobs_queued``,
+        ``jobs_running``, ``job_images`` and ``job_image_bytes`` (outputs held), ``job_releases_pending``,
+        ``job_wakeups``, and the windows' ``job_images_retiring``."""
+        return json.loads(self.module.job_counts())
+
+    def job_services_state(self, *, with_log: bool = False) -> dict:
+        """Every device's job service: its QRhi's facts, its counts and (``with_log``) the last jobs' times."""
+        return json.loads(self.module.job_services_state(bool(with_log)))
+
+    def wait_jobs_idle(self, timeout_ms: int = 5000) -> bool:
+        """A harness's wait (never the product's): until no job is queued, running or waiting for its release."""
+        return bool(self.module.job_services_wait_idle(int(timeout_ms)))
+
+    def job_service_self_test(self, script: list[dict]) -> dict:
+        """The job service's thread, latch, cancellation and teardown under a scripted backend, GPU-free (N3.8)."""
+        return json.loads(self.module.job_service_self_test(json.dumps(list(script))))
+
+    def pending_native_work(self) -> list[dict]:
+        """What a runtime destruction barrier waits for in the core (N3.8, the N2.5 audit's L8): jobs queued or running,
+        releases pending, job outputs held or retiring, the items' textures and the copies not yet uploaded. One entry
+        per kind that is not zero (``{"kind": ..., "count": ...}``); empty when nothing is pending."""
+        jobs = self.job_counts()
+        live = self.composite_live()
+        counts = {
+            "jobs_queued": jobs.get("jobs_queued", 0),
+            "jobs_running": jobs.get("jobs_running", 0),
+            "job_releases_pending": jobs.get("job_releases_pending", 0),
+            "job_images": jobs.get("job_images", 0),
+            "job_images_retiring": jobs.get("job_images_retiring", 0),
+            "mode_textures": live.get("mode_textures", 0),
+            "mode_texture_images": live.get("mode_texture_images", 0),
+        }
+        return [{"kind": f"native_{kind}", "count": int(count)} for kind, count in counts.items() if count]
 
     def gpu_timer_live(self) -> dict:
         """GPU timers alive in the process and the query objects they hold (``timers``, ``query_pools``,

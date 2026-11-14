@@ -230,6 +230,8 @@ std::unique_ptr<WindowHost> WindowHost::create(QObject *object, QString *error)
             record->device->applyTo(window);
             record->deviceFacts.insert(QStringLiteral("vk_device"), QString::number(record->device->device()));
             record->deviceFacts.insert(QStringLiteral("queue_family"), qint64(record->device->family()));
+            record->deviceFacts.insert(QStringLiteral("queues"), qint64(record->device->queues()));
+            record->deviceFacts.insert(QStringLiteral("job_service"), record->device->jobService() != nullptr);
             record->deviceFacts.insert(QStringLiteral("name"), record->device->deviceName());
         }
         // GUI thread, after Qt's render thread released the window's scene graph and QRhi (the window's destructor
@@ -447,6 +449,8 @@ std::unique_ptr<HiddenHost> HiddenHost::create(int width, int height, bool threa
         s.device->applyTo(s.window);
         s.deviceFacts.insert(QStringLiteral("vk_device"), QString::number(s.device->device()));
         s.deviceFacts.insert(QStringLiteral("queue_family"), qint64(s.device->family()));
+        s.deviceFacts.insert(QStringLiteral("queues"), qint64(s.device->queues()));
+        s.deviceFacts.insert(QStringLiteral("job_service"), s.device->jobService() != nullptr);
         s.deviceFacts.insert(QStringLiteral("name"), s.device->deviceName());
     }
     s.thread.reset(new RenderThread(threaded));

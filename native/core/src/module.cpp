@@ -23,6 +23,8 @@
 #include "abi.h"
 #include "composite.h"
 #include "host_adapter.h"
+#include "item_notifier.h"
+#include "job_service.h"
 #include "mode_content.h"
 #include "mode_schema.h"
 #include "packet_reader.h"
@@ -1115,7 +1117,8 @@ PyObject *composite_mode_texture(PyObject *, PyObject *args)
     int height = 0;
     PyObject *pixels = nullptr;
     int mips = 0;
-    if (!PyArg_ParseTuple(args, "Ls(ii)O|p", &handle, &name, &width, &height, &pixels, &mips))
+    int inFrame = 0; // N3.8, a harness control: the in-frame form where the device has a job service
+    if (!PyArg_ParseTuple(args, "Ls(ii)O|pp", &handle, &name, &width, &height, &pixels, &mips, &inFrame))
         return nullptr;
     srpss_core::CompositeItem *item = compositeOf(handle);
     if (!item)
@@ -1130,11 +1133,127 @@ PyObject *composite_mode_texture(PyObject *, PyObject *args)
         return nullptr;
     QString error;
     if (!item->textureMode(QByteArray(name), QByteArray(data, qsizetype(size)), QSize(width, height), mips != 0,
-                           &error)) {
+                           &error, inFrame != 0)) {
         PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
         return nullptr;
     }
     Py_RETURN_NONE;
+}
+
+// N3.8: the owner's side of the lost edge, a Python callable called on the GUI thread with the lost names. Held, called
+// and released on the GUI thread only (ItemNotifier), each time with the GIL taken there; never on the render or the job
+// thread (D5.4).
+class PyTexturesLostListener final : public srpss_core::TexturesLostListener
+{
+public:
+    explicit PyTexturesLostListener(PyObject *callable) : m_callable(callable) { Py_INCREF(m_callable); }
+    ~PyTexturesLostListener() override
+    {
+        if (!Py_IsInitialized())
+            return; // the interpreter went first: nothing of it may be touched
+        const PyGILState_STATE state = PyGILState_Ensure();
+        Py_DECREF(m_callable);
+        PyGILState_Release(state);
+    }
+    void texturesLost(const QStringList &names) override
+    {
+        if (!Py_IsInitialized())
+            return;
+        const PyGILState_STATE state = PyGILState_Ensure();
+        PyObject *list = PyList_New(Py_ssize_t(names.size()));
+        if (list) {
+            for (qsizetype i = 0; i < names.size(); ++i)
+                PyList_SetItem(list, Py_ssize_t(i), pyStr(names.at(i)));
+            PyObject *result = PyObject_CallFunctionObjArgs(m_callable, list, nullptr);
+            if (!result)
+                PyErr_WriteUnraisable(m_callable); // an owner's error never escapes into Qt's event loop
+            else
+                Py_DECREF(result);
+            Py_DECREF(list);
+        } else {
+            PyErr_Clear();
+        }
+        PyGILState_Release(state);
+    }
+
+private:
+    PyObject *m_callable;
+};
+
+PyObject *composite_mode_on_lost(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    PyObject *callable = nullptr;
+    if (!PyArg_ParseTuple(args, "LO", &handle, &callable))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    if (callable != Py_None && !PyCallable_Check(callable)) {
+        PyErr_SetString(PyExc_TypeError, "the lost-texture listener is a callable taking the list of names, or None");
+        return nullptr;
+    }
+    std::shared_ptr<srpss_core::TexturesLostListener> listener;
+    if (callable != Py_None)
+        listener = std::make_shared<PyTexturesLostListener>(callable);
+    QString error;
+    if (!item->texturesLostListener(listener, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+
+// ---------------------------------------------------------------- the job service (N3.8, D9)
+
+QJsonObject jobCountsObject()
+{
+    QJsonObject o = srpss_core::jobCountsJson();
+    o.insert(QStringLiteral("job_images_retiring"), srpss_core::WindowSurfaces::retiringTotal());
+    o.insert(QStringLiteral("job_images_left_to_services"), double(srpss_core::WindowSurfaces::leftToServicesTotal()));
+    return o;
+}
+
+PyObject *job_counts(PyObject *, PyObject *)
+{
+    return pyJson(jobCountsObject());
+}
+
+PyObject *job_services_state(PyObject *, PyObject *args)
+{
+    int withLog = 0;
+    if (!PyArg_ParseTuple(args, "|p", &withLog))
+        return nullptr;
+    QJsonObject o;
+    o.insert(QStringLiteral("services"), srpss_core::JobService::allStatesJson(withLog != 0));
+    o.insert(QStringLiteral("counts"), jobCountsObject());
+    return pyJson(o);
+}
+
+PyObject *job_services_wait_idle(PyObject *, PyObject *args)
+{
+    int timeoutMs = 5000;
+    if (!PyArg_ParseTuple(args, "|i", &timeoutMs))
+        return nullptr;
+    bool idle = false;
+    Py_BEGIN_ALLOW_THREADS
+    idle = srpss_core::JobService::waitAllIdle(qMax(0, timeoutMs));
+    Py_END_ALLOW_THREADS
+    return PyBool_FromLong(idle ? 1 : 0);
+}
+
+PyObject *job_service_self_test(PyObject *, PyObject *args)
+{
+    const char *script = nullptr;
+    Py_ssize_t length = 0;
+    if (!PyArg_ParseTuple(args, "s#", &script, &length))
+        return nullptr;
+    const QByteArray scriptJson(script, qsizetype(length));
+    QByteArray result;
+    Py_BEGIN_ALLOW_THREADS
+    result = srpss_core::jobServiceSelfTestJson(scriptJson);
+    Py_END_ALLOW_THREADS
+    return pyJson(result);
 }
 
 PyObject *composite_mode_texture_remove(PyObject *, PyObject *args)
@@ -1940,12 +2059,28 @@ PyMethodDef methods[] = {
       "(handle, card_json) -> None: the item as shown (rendering/native/mode.py mode_card), which the core's members "
       "read." },
     { "composite_mode_texture", composite_mode_texture, METH_VARARGS,
-      "(handle, name, (width, height), pixels_bytes, mips=False) -> None: the item's texture of that name (N4.a): RGBA8 "
-      "rows top first, tight, copied once into the core and uploaded at the next record (mips generated on the GPU); "
-      "ValueError for a bad name, size or byte count, too many textures, or mips the program samples that it lacks." },
+      "(handle, name, (width, height), pixels_bytes, mips=False, in_frame=False) -> None: the item's texture of that "
+      "name (N4.a): RGBA8 rows top first, tight, copied once into the core and uploaded from the next record (mips "
+      "generated on the GPU): by the device's job service where it has one (N3.8), else in the frame; in_frame is the "
+      "harness control of the in-frame form. ValueError for a bad name, size or byte count, too many textures, or mips "
+      "the program samples that it lacks." },
     { "composite_mode_texture_remove", composite_mode_texture_remove, METH_VARARGS,
       "(handle, name) -> None: the texture goes; the render thread releases it at the next record. KeyError when the "
       "item holds no such texture." },
+    { "composite_mode_on_lost", composite_mode_on_lost, METH_VARARGS,
+      "(handle, callable|None) -> None: N3.8, the owner's lost-texture edge: called on the GUI thread with the list of "
+      "names once each is found lost (a node made again, a texture that could not be created)." },
+    { "job_counts", job_counts, METH_NOARGS,
+      "() -> JSON str: N3.8, the job services' process-wide counts (services, threads, jobs queued and running, images "
+      "held and their bytes, releases pending, wake-ups) and the windows' retiring images." },
+    { "job_services_state", job_services_state, METH_VARARGS,
+      "(with_log=False) -> JSON str: every device's job service (its QRhi's facts, counts, and the last jobs' times)." },
+    { "job_services_wait_idle", job_services_wait_idle, METH_VARARGS,
+      "(timeout_ms=5000) -> bool: a harness's wait (GIL released) until every job service has nothing queued, running "
+      "or waiting for release." },
+    { "job_service_self_test", job_service_self_test, METH_VARARGS,
+      "(script_json) -> JSON str: N3.8's GPU-free test of the job service's thread, latch, cancellation and teardown "
+      "under a scripted backend (tests/test_native_core_jobs.py)." },
     { "mode_core_members", mode_core_members, METH_NOARGS,
       "() -> JSON str: the core's conventions, the members it fills for every mode ([name, components, from_card])." },
     { "mode_core_values", mode_core_values, METH_VARARGS,

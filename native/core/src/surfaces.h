@@ -30,6 +30,8 @@ class QRhiTexture;
 
 namespace srpss_core {
 
+class JobService;
+
 enum class SurfacePattern {
     TexelIdentity = 0, // r, g: the texel's x and y modulo 256; b: their high nibbles (x in the low four bits)
     White = 1,         // opaque white everywhere: content touching every edge and corner
@@ -134,11 +136,38 @@ private:
 // The surfaces of one Qt Quick window and the frame drivers connected to it. Entries are made on the GUI thread (a
 // composite item entering the window, a driver connecting); nodes add and remove their surfaces on the render thread;
 // the driver reads the dirty ones on its frame edge.
+//
+// The window's retire list (N3.8, D9 as built point 6): a job's output that this window's frames sampled is released
+// only once those frames completed. A content hands it over stamped with the frame edge of its last possible use; the
+// frame driver counts the window's edges and releases an entry at the edge `stamp + FramesInFlight` (Qt's beginFrame of
+// that frame waited for the stamped one), or every entry at once after QRhi::finish() outside a frame. An entry still
+// here when the registry goes (no driver released it) is left to its service, which destroys it when it stops, after
+// Qt's QRhi is gone. At rest the list is empty and the edge reads one atomic.
 class WindowSurfaces
 {
 public:
+    WindowSurfaces() = default;
+    ~WindowSurfaces();
+    WindowSurfaces(const WindowSurfaces &) = delete;
+    WindowSurfaces &operator=(const WindowSurfaces &) = delete;
+
     // GUI thread: the window's registry (a new one when the window at this address was destroyed).
     static std::shared_ptr<WindowSurfaces> forWindow(QQuickWindow *window);
+
+    // The frame edges (render thread): counted by the frame driver at each beforeRendering.
+    qint64 noteEdge() { return m_edges.fetchAndAddOrdered(1) + 1; }
+    qint64 edges() const { return m_edges.loadAcquire(); }
+    // Render thread: a job's output this window's frames may have sampled up to the current edge.
+    void retire(const std::shared_ptr<JobService> &service, quint64 output);
+    bool retiring() const { return m_retiring.loadAcquire() > 0; }
+    // Render thread, at the frame edge `edge`: the entries whose frames completed go to their services.
+    int releaseRetired(qint64 edge, int framesInFlight);
+    // Render thread, outside a frame, after QRhi::finish(): every entry goes.
+    int releaseAllRetired();
+    // Any thread: entries waiting in every window (the destruction barrier's reading), and the ones left to their
+    // services when a registry went.
+    static int retiringTotal();
+    static qint64 leftToServicesTotal();
 
     void driverAttached();
     void driverDetached();
@@ -151,9 +180,19 @@ public:
     QList<std::shared_ptr<Surface>> dirtySurfaces() const;
 
 private:
+    struct Retired
+    {
+        std::shared_ptr<JobService> service;
+        quint64 output = 0;
+        qint64 lastUse = 0; // the frame edge of its last possible use
+    };
+
     mutable QMutex m_mutex;
     QList<std::shared_ptr<Surface>> m_surfaces;
     int m_drivers = 0;
+    QAtomicInteger<qint64> m_edges { 0 };
+    QAtomicInteger<int> m_retiring { 0 };
+    QList<Retired> m_retired; // under m_mutex
 };
 
 } // namespace srpss_core
