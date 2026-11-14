@@ -539,3 +539,72 @@ emit(report)
     assert report["live_hosts"] == report["live_hosts_after"] == 1
     assert report["api"] == "opengl" and "created once and kept" in report["other_size"]
     assert report["closed_at_quit"] is True and report["live_hosts_at_exit"] == 0
+
+
+# Where a hidden host of the native core may be created (facts J1: every other user goes through the owner).
+_HIDDEN_HOST_OWNER = "rendering/quick/bootstrap.py"            # native_hidden_host: created once per process, kept
+_HIDDEN_HOST_PRIMITIVE = "rendering/native/loader.py"          # NativeCore.hidden_host itself
+# The core's own proof harnesses, each one bounded child process per backend, whose rounds measure a host's own
+# creation, timestamps setting or teardown (host_check's lifecycle rounds are how J1 was found).
+_HIDDEN_HOST_HARNESSES = frozenset({
+    "native/core/python/host_check.py",
+    "native/core/python/timer_check.py",
+    "native/core/python/composite_check.py",
+})
+_SKIPPED_DIRS = frozenset({"tests", "release", "build", "dist", "node_modules", "__pycache__"})
+
+
+def _hidden_host_creations(source: str) -> int:
+    """Calls in ``source`` that create a hidden host: ``<anything>.hidden_host(...)`` or ``host_attach("hidden", ...)``."""
+    import ast
+
+    count = 0
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
+            continue
+        name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+        if name == "hidden_host":
+            count += 1
+        elif name == "host_attach" and node.args and isinstance(node.args[0], ast.Constant) \
+                and node.args[0].value == "hidden":
+            count += 1
+    return count
+
+
+def _hidden_host_creators(root: Path) -> dict[str, int]:
+    found: dict[str, int] = {}
+    for folder, dirs, files in os.walk(root):
+        dirs[:] = [name for name in dirs if not name.startswith(".") and name not in _SKIPPED_DIRS]
+        for name in files:
+            if not name.endswith(".py"):
+                continue
+            path = Path(folder) / name
+            try:
+                count = _hidden_host_creations(path.read_text(encoding="utf-8"))
+            except (SyntaxError, UnicodeDecodeError):
+                continue
+            if count:
+                found[path.relative_to(root).as_posix()] = count
+    return found
+
+
+def test_every_hidden_host_user_goes_through_the_owner():
+    """Facts J1: outside the core's proof harnesses, the owner's ``native_hidden_host`` is the one place a hidden host
+    is created (once per process, counted by ``hidden_hosts_created``); a user creating its own would create one per
+    use. The test above counts the owner's creations."""
+    creators = _hidden_host_creators(ROOT)
+    assert creators.get(_HIDDEN_HOST_OWNER) == 1
+    unexpected = set(creators) - {_HIDDEN_HOST_OWNER, _HIDDEN_HOST_PRIMITIVE} - _HIDDEN_HOST_HARNESSES
+    assert not unexpected, f"hidden hosts created outside the owner (use bootstrap.native_hidden_host): {unexpected}"
+
+
+def test_the_creation_scan_finds_a_direct_hidden_host_negative_control(tmp_path):
+    (tmp_path / "rendering" / "quick").mkdir(parents=True)
+    (tmp_path / "rendering" / "quick" / "bootstrap.py").write_text("host = core.hidden_host(1, 1)\n", encoding="utf-8")
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "capture.py").write_text(
+        "def grab(core):\n    a = core.hidden_host(64, 48)\n    b = module.host_attach('hidden', 0, 1, 1)\n",
+        encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_x.py").write_text("core.hidden_host(1, 1)\n", encoding="utf-8")
+    assert _hidden_host_creators(tmp_path) == {"rendering/quick/bootstrap.py": 1, "tools/capture.py": 2}
