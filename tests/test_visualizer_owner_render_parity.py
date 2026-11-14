@@ -75,6 +75,53 @@ def test_the_worker_path_draws_the_in_process_pixels_at_non_default_settings(qt_
     assert verdict["identical"], summary
 
 
+@pytest.mark.qt
+@pytest.mark.skipif(sys.platform != "win32", reason="the hidden production scene needs the Windows QPA GL")
+def test_a_drawn_run_does_not_depend_on_the_wall_time_it_takes(qt_app, no_device, monkeypatch):
+    """Rule (a)'s run is the replay's, frame for frame, however long the machine takes to draw it (N2.5 leftovers, 14
+    Nov). The switch's target waits hidden for its prepared reveal on the replay's clock, while the owner's activation
+    deadline is wall time: a run slowed by load passed the deadline mid-wait and the target was failed and reloaded,
+    so every frame from there on moved (in process the owner read no progress from its own unshown scene; on the
+    worker none before the commit's reply). Here the deadline is shorter than the wait instead of the run slower: the
+    frames must equal a run under the product's deadline, and no activation fails. Red before the fix: the target
+    failed at the deadline and every later frame differed."""
+    import tools.expanded_visualizer_evidence as evidence
+    from tools.visualizer_replay import owner_render_parity as parity
+    from widgets.spotify_visualizer import engine_worker_link
+    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner_module
+
+    if qt_app.platformName().strip().lower() != "windows":
+        pytest.skip("the hidden production scene needs the Windows QPA GL")
+    mode = "spectrum"
+    script = parity.parity_script(evidence.shipped_clip(5.5).frames, mode)
+    settings = parity.section_settings(mode, "a")
+    failures: list = []
+    signal = owner_module.QuickDisplayVisualizerOwner._signal_transition_failure
+
+    def recording(self, reason):
+        failures.append(str(reason))
+        return signal(self, reason)
+
+    monkeypatch.setattr(owner_module.QuickDisplayVisualizerOwner, "_signal_transition_failure", recording)
+    with parity.single_sample_scene_targets():
+        reference = parity.drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings)
+        assert failures == []
+        # A window shorter than the target's hidden wait (its reveal is 1.5 s of the replay after a 0.25 s fade-out,
+        # ~150 drawn frames, several seconds drawn here) and longer than the fade-out's 22 frames.
+        monkeypatch.setattr(owner_module, "_ACTIVATION_TRANSACTION_DEADLINE_MS", 2500)
+        engine_worker_link.reset_run_state_for_testing()
+        hurried = parity.drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings)
+    assert failures == []
+    from tools.visualizer_replay.owner_worker_gate import PARTNER
+
+    assert reference["final_mode"] == hurried["final_mode"] == PARTNER[mode]
+    a =[entry["hash"] for entry in reference["pixels"]]
+    b = [entry["hash"] for entry in hurried["pixels"]]
+    assert len(a) == len(b) == reference["inputs"] > 300
+    assert [index for index, (x, y) in enumerate(zip(a, b)) if x != y] == []
+    assert reference["digests"] == hurried["digests"]
+
+
 def test_the_non_default_settings_move_every_ranged_control_and_differ_between_variants():
     """The gate's settings come from the canonical spec: every Slider and Range inside its admitted range, the two
     variants apart, the mode's Custom preset selected (no shipped preset's values are drawn)."""
