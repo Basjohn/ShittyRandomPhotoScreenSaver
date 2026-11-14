@@ -738,8 +738,10 @@ BASELINE_KEYS = ("frames_drawn", "native_frames", "differing_inputs", "differing
 
 
 def against_baseline(baseline: dict, report: dict) -> dict:
-    """``report`` (``run_native``'s) against an accepted ``baseline`` report: per run, the keys of ``BASELINE_KEYS``
-    that differ (a run on one side only differs). ``same``: every run of both, nothing differing."""
+    """``report`` (``run_native``'s) against an accepted ``baseline`` report: per run, what differs (a run on one side
+    only differs). Where both keep frame hashes, the native frames' hashes decide (``native_hashes``; whether the Python
+    reference's own frames moved is reported beside, ``python_same``); else the keys of ``BASELINE_KEYS``. ``same``:
+    every run of both, nothing differing."""
     old, new = dict(baseline.get("results") or {}), dict(report.get("results") or {})
     runs: dict = {}
     for key in sorted(set(old) | set(new)):
@@ -747,9 +749,17 @@ def against_baseline(baseline: dict, report: dict) -> dict:
         if a is None or b is None:
             runs[key] = {"same": False, "only_in": "this run" if a is None else "the baseline"}
             continue
+        if "native_hashes" in a and "native_hashes" in b:
+            changed = [i for i, (x, y) in enumerate(zip(a["native_hashes"], b["native_hashes"])) if x != y]
+            if len(a["native_hashes"]) != len(b["native_hashes"]):
+                changed.append("count")
+            runs[key] = {"same": not changed, "by": "native_hashes", "native_changed": changed[:40],
+                         "python_same": a.get("python_hashes") == b.get("python_hashes"),
+                         "max_level": b.get("max_level"), "native_frames": b.get("native_frames")}
+            continue
         differing = [name for name in BASELINE_KEYS
                      if name not in a or name not in b or json.loads(json.dumps(a[name])) != json.loads(json.dumps(b[name]))]
-        runs[key] = {"same": not differing, "differing": differing, "max_level": b.get("max_level"),
+        runs[key] = {"same": not differing, "by": "differences", "differing": differing, "max_level": b.get("max_level"),
                      "native_frames": b.get("native_frames")}
     return {"same": bool(runs) and all(entry["same"] for entry in runs.values()), "runs": runs}
 

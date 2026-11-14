@@ -124,3 +124,12 @@ def test_a_native_run_is_compared_with_its_accepted_baseline_run_by_run():
     del keyless["results"]["spectrum"]["differing_pixels_total"]
     assert parity.against_baseline(baseline, keyless)["same"] is False
     assert parity.against_baseline({"results": {}}, {"results": {}})["same"] is False      # nothing compared
+    # With frame hashes on both sides the native frames decide: a moved Python reference alone is no difference.
+    hashed = {"results": {"spectrum": dict(run, native_hashes=["n0", "n1"], python_hashes=["p0", "p1"])}}
+    drifted = copy.deepcopy(hashed)
+    drifted["results"]["spectrum"].update(python_hashes=["p0", "p9"], differing_pixels_total=8)
+    verdict = parity.against_baseline(hashed, drifted)
+    assert verdict["same"] is True and verdict["runs"]["spectrum"]["python_same"] is False
+    drifted["results"]["spectrum"]["native_hashes"] = ["n0", "n9"]                     # control: a native frame moved
+    verdict = parity.against_baseline(hashed, drifted)
+    assert verdict["same"] is False and verdict["runs"]["spectrum"]["native_changed"] == [1]
