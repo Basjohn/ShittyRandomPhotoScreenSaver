@@ -69,10 +69,12 @@ _PREPARED_REVEAL_DEADLINE_S = 1.5
 # It protects all transition phases, including no logical publication at all.
 # Actual prepared-reveal deadline above is shorter and remains unchanged.
 _ACTIVATION_TRANSACTION_DEADLINE_MS = 6000
-# A committed target is slow but alive when the render thread completed a preparation unit for it since the deadline
-# was armed (or last extended): one unit can be a multi-second driver link, and the GUI thread waits in Qt's sync for
-# it, so the overdue single-shot fires the moment the link returns (R-180). Such a deadline is extended, at most this
-# many times; a target with no render progress in a whole window fails as before (one fenced reconstruction).
+# A target is slow but alive when it made progress since the deadline was armed (or last extended): the render thread
+# completed a preparation unit for it (one unit can be a multi-second driver link, and the GUI thread waits in Qt's
+# sync for it, so the overdue single-shot fires the moment the link returns, R-180), or the engine published a newer
+# frame of its activation (on the worker also before the commit's reply arrives: the session applies the commit at
+# once and draws the target, a busy GUI or a loaded machine only delays the reply). Such a deadline is extended, at
+# most this many times; a target with no progress in a whole window fails as before (one fenced reconstruction).
 _SLOW_TARGET_DEADLINE_EXTENSIONS = 4
 
 
@@ -299,8 +301,9 @@ class QuickDisplayVisualizerOwner:
         self._preparing_activation: tuple[str, int] | None = None
         # (activation, its preparation units last seen, when they last advanced): the reveal's liveness bound.
         self._preparing_progress: tuple[tuple[str, int], int, float] | None = None
-        # (request serial, preparation units at the last deadline, extensions): slow-but-alive deadline state.
-        self._deadline_liveness: tuple[int | None, int, int] = (None, 0, 0)
+        # (request serial, the target's progress at the last deadline (preparation units, newest frame revision),
+        # extensions): slow-but-alive deadline state.
+        self._deadline_liveness: tuple[int | None, tuple[int, int], int] = (None, (0, 0), 0)
         self._waiting_target_since = 0.0
         # ``None`` until the owner first starts: any presentation resolved before
         # then is fully opaque (never hidden). Once armed, the authored scene
@@ -1691,10 +1694,11 @@ class QuickDisplayVisualizerOwner:
             # Hidden (or fading in) and still being prepared: keep the faded frame and wait, never reload.
             from core.threading.manager import ThreadManager
 
+            units, revision = self._deadline_liveness[1]
             logger.warning(
-                "[SPOTIFY_VIS] Activation slow but alive phase=%s mode=%s: the render thread completed %d "
-                "preparation unit(s); deadline extended (%d/%d)", phase, self._controller.mode_id,
-                self._deadline_liveness[1], self._deadline_liveness[2], _SLOW_TARGET_DEADLINE_EXTENSIONS,
+                "[SPOTIFY_VIS] Activation slow but alive phase=%s mode=%s: %d preparation unit(s) completed, newest "
+                "target frame revision %d; deadline extended (%d/%d)", phase, self._controller.mode_id,
+                units, revision, self._deadline_liveness[2], _SLOW_TARGET_DEADLINE_EXTENSIONS,
             )
             ThreadManager.single_shot(_ACTIVATION_TRANSACTION_DEADLINE_MS, self._on_transition_deadline, serial)
             return
@@ -1710,17 +1714,44 @@ class QuickDisplayVisualizerOwner:
         item = self._presentation_runtime.scene_controller.visualizer_item
         return int(item.renderer_preparation_progress(identity.mode_id, identity.activation_id))
 
+    def _target_frame_progress(self) -> int:
+        """The newest logical revision the engine produced for the activation's target (0 while none): its progress
+        edges. Bound (in process from the commit, on the worker from the commit's reply): the newest revision the render
+        bridge admitted for the bound identity (the bridge admits only that identity's frames). On the worker before
+        the reply: the session's newest frame, when it is the target mode's and not the outgoing activation's (the
+        session applied the commit at once and draws the target; a busy GUI or a loaded machine delays the reply)."""
+        controller = getattr(self, "_controller", None)
+        commit = getattr(self, "_worker_commit", None)
+        if getattr(self, "_worker", None) is not None and commit is not None:
+            peek = getattr(getattr(controller, "logical_mailbox", None), "peek", None)
+            publication = peek() if callable(peek) else None
+            state = getattr(publication, "state", None)
+            if state is None or str(getattr(state, "mode_id", "")) != str(commit.get("target")):
+                return 0
+            outgoing = getattr(self, "_worker_identity", None)
+            frame = (int(getattr(state, "engine_generation", -1)), int(getattr(state, "activation_id", -1)))
+            if outgoing is not None and frame == tuple(int(value) for value in outgoing):
+                return 0
+            return int(publication.revision)
+        identity = getattr(self, "_render_identity", None)
+        bridge = getattr(controller, "render_bridge", None)
+        if identity is None or bridge is None or bridge.identity != identity:
+            return 0
+        return int(bridge.last_revision)
+
     def _slow_target_alive(self, serial: int) -> bool:
-        """True (and the window's progress recorded) when the target's render advanced since the last deadline."""
-        seen_serial, seen, extensions = getattr(self, "_deadline_liveness", (None, 0, 0))
+        """True (and the window's progress recorded) when the target advanced since the last deadline: a preparation
+        unit its render completed, or a newer frame the engine published for it."""
+        seen_serial, seen, extensions = getattr(self, "_deadline_liveness", (None, (0, 0), 0))
         if seen_serial != serial:
-            seen, extensions = 0, 0
+            seen, extensions = (0, 0), 0
         try:
-            progress = self._target_preparation_progress()
+            progress = (self._target_preparation_progress(), self._target_frame_progress())
         except Exception:
-            logger.exception("[SPOTIFY_VIS] Could not read the target's render progress")
+            logger.exception("[SPOTIFY_VIS] Could not read the target's progress")
             return False
-        if progress <= seen or extensions >= _SLOW_TARGET_DEADLINE_EXTENSIONS:
+        advanced = any(now > before for now, before in zip(progress, seen))
+        if not advanced or extensions >= _SLOW_TARGET_DEADLINE_EXTENSIONS:
             return False
         self._deadline_liveness = (serial, progress, extensions + 1)
         return True
