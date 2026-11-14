@@ -43,6 +43,9 @@ from pathlib import Path
 ROUNDS = ("parity", "table", "stress", "d1", "d2", "reference")
 NATIVE_ROUNDS = ("parity", "table", "stress", "d1", "d2")
 STRESS_READS = 200_000
+#: The skip_seqlock control reads until its first mixed record, at most this many reads (build round 1: 4 mixed records
+#: in 200,000 reads, so a fixed count was a thin margin).
+CONTROL_READ_CAP = 5_000_000
 
 
 # ------------------------------------------------------------------------------------------------ the clip
@@ -349,7 +352,7 @@ def stress_round(core) -> dict:
 
     held = adversary.stress(lambda name: adversary.NativeReader(core, name), reads=STRESS_READS)
     control = adversary.stress(lambda name: adversary.NativeReader(core, name, controls=("skip_seqlock",)),
-                               reads=STRESS_READS)
+                               reads=CONTROL_READ_CAP, stop_on_mixed=True)
     passed = held["mixed"] == 0 and held["accepted"] > 0 and held["torn_reads"] > 0 and control["mixed"] > 0
     return {"pass": passed, "seqlock": held, "control_skip_seqlock": control}
 

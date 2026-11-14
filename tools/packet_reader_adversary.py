@@ -607,8 +607,11 @@ def inplace_writer(name: str, records: tuple[bytes, bytes], schema: int, started
         memory.close()
 
 
-def stress(make_reader: Callable[[str], Any], *, reads: int = 200_000) -> dict:
-    """The in-place writer races ``reads`` reads of one reader; every accepted record must be one variant whole."""
+def stress(make_reader: Callable[[str], Any], *, reads: int = 200_000, stop_on_mixed: bool = False) -> dict:
+    """The in-place writer races ``reads`` reads of one reader; every accepted record must be one variant whole.
+    ``stop_on_mixed`` (a negative control's run): stop at the first mixed record, ``reads`` then being the cap (a C++
+    copy is short, so a reader without its seqlock is caught mixing only a few times in 10^5 reads: build round 1 saw
+    4 in 200,000)."""
     import multiprocessing
 
     context = multiprocessing.get_context("spawn")
@@ -620,7 +623,7 @@ def stress(make_reader: Callable[[str], Any], *, reads: int = 200_000) -> dict:
     started, stop, written = context.Event(), context.Event(), context.Value("q", 0)
     process = context.Process(target=inplace_writer,
                               args=(memory.name, records, spectrum_schema_id(), started, stop, written), daemon=True)
-    accepted = mixed = 0
+    accepted = mixed = done = 0
     results: dict[str, int] = {}
     try:
         process.start()
@@ -628,6 +631,7 @@ def stress(make_reader: Callable[[str], Any], *, reads: int = 200_000) -> dict:
         if not started.wait(60):
             raise RuntimeError("the in-place writer never started")
         for _ in range(reads):
+            done += 1
             result = reader.read()
             results[result] = results.get(result, 0) + 1
             if result == "accepted":
@@ -635,6 +639,8 @@ def stress(make_reader: Callable[[str], Any], *, reads: int = 200_000) -> dict:
                 fields = reader.retained_fields()
                 if fields is None or not record_is_consistent(dict(fields)):
                     mixed += 1
+                    if stop_on_mixed:
+                        break
             elif result in ("refused", "failed"):
                 break
     finally:
@@ -645,7 +651,7 @@ def stress(make_reader: Callable[[str], Any], *, reads: int = 200_000) -> dict:
         adv.close()
         memory.close()
         memory.unlink()
-    return {"reads": reads, "results": results, "accepted": accepted, "mixed": mixed, "torn_reads": torn,
+    return {"reads": done, "read_cap": reads, "results": results, "accepted": accepted, "mixed": mixed, "torn_reads": torn,
             "writes": int(written.value), "writer_exit": process.exitcode}
 
 
