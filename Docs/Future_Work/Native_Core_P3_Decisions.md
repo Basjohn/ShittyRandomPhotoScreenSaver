@@ -634,6 +634,57 @@ slots first, then quiesces the job thread, then the device waits idle; a device'
 validation is on. Owed: the validated N0.6 device rerun with the prime-after-readback fix (N0.7 build round 4); the A
 excuse goes with the next Qt 6.12 patch release.
 
+**As built (N3.8, 14 Nov 2026; the service's shape, written before its code, `native/core/src/job_service.h`).** The
+first job is a photo's upload and its GPU mips into one of N4.a's core-owned textures (D13 point 4).
+1. *One job service per device.* The module's Vulkan device asks for two queues of Qt's graphics family when the family
+   has them (index 0 Qt's, index 1 the job's, priority 1.0 and 0.5, N0.6's layout); a family with one queue gets no
+   service, and every job runs in its in-frame form (D6 point 5). The service object exists from the device's creation;
+   its thread and its QRhi (on our `VkDevice`, the job queue, its own allocator: facts C1) are created at the first job,
+   so a device that never uploads a photo holds neither. One `QThread` without an event loop, parked on a
+   `QWaitCondition`: no polling, no timer, every return from the wait counted. A job QRhi that cannot be created fails
+   the service closed: every job then runs in its in-frame form.
+2. *Jobs own every input.* An upload job holds the image's pixels (N4.a's `TextureImage`, shared and immutable), its
+   size and whether it has mips; it reads nothing of a live frame, of the item or of Qt's QRhi. It creates its output in
+   the job QRhi, one new texture per image (never a slot a frame may be reading, so no queue writes what another reads),
+   records the upload and the mips, submits, drops the pixels, then waits for its own queue with `QRhi::finish()` on its
+   own thread.
+3. *The latch.* Each job is a ticket with one atomic state (queued, running, done, failed, cancelled, abandoned).
+   Publication is the job thread's compare-and-set from running to done, after the result (the native image and its
+   layout) is written; the job thread then asks the item for a frame (a queued `update()` on the GUI thread through the
+   item's notifier, never a call into the item from the job thread). The consumer reads its tickets at its record (the
+   frame edge, render thread). An item's textures commit together: one record swaps every changed texture of the item,
+   and only once every changed texture's job is done or failed (a transition never pairs a new picture with an old
+   one). Until then the textures it holds are drawn (the old picture stays; an item's first picture draws nothing until
+   its job is done, under the card's own fade). Qt's QRhi imports a done job's image with `createFrom` and the job's
+   layout. A frame never waits for a job.
+4. *The in-frame form always exists* (point 5): the same upload recorded into Qt's frame, N4.a's path. It runs on
+   OpenGL (no second context), on a Vulkan device without a second queue, for a job that failed (fail closed: the
+   ticket keeps the pixels until the job recorded them, and the commit uploads them in the frame), and under the
+   harness control `in_frame` (the measurement both ways). Both forms write the same texture; only when differs.
+5. *Cancellation.* A superseded image (a new one of the same name) or a removed texture cancels its ticket by
+   compare-and-set: a queued job never runs; a running one drops its output on its own thread after its GPU wait (Qt
+   never saw it); a job that published before the cancel landed hands its output to the consumer, which releases it at
+   once (never sampled).
+6. *Lifetime against Qt's frames.* A published image is released (on the job thread, by its own QRhi) only after the
+   last Qt frame that sampled it completed: the consumer hands the replaced image to its window's retire list stamped
+   with the frame edge of its last use, and the frame driver releases it at the edge `stamp + FramesInFlight` (Qt's
+   `beginFrame` of that frame waited for the stamped one), or at once after `QRhi::finish()` outside a frame (the scene
+   graph's invalidation, the driver's release). An entry no driver released stays held until the service stops, after
+   Qt's QRhi is gone. Releases wake the job thread once per image change, never at rest.
+7. *Teardown* (point 6, D1's barrier). The device's destruction quiesces the service first, on the thread that destroys
+   the device and never in the GUI's close: the job in flight is abandoned (dropped unpublished after its own GPU wait),
+   queued jobs are abandoned, every image the service still holds is destroyed, its QRhi is destroyed (its own queue
+   idle) and the thread joined; then `vkDeviceWaitIdle` and the device. A content released with jobs in flight (its node
+   deleted) cancels them; nothing waits on the render thread.
+8. *The destruction barrier sees them* (the N2.5 audit's L8): process-wide counts of jobs queued and running, the
+   services' images and bytes, images retiring and job threads, beside N4.a's texture counts, read by
+   `RuntimeDestructionBarrier` as pending native work; all zero once a retired generation's items are gone.
+9. *Lost textures are an edge.* When a content finds a sampled texture lost (a node made again, a texture that could
+   not be created), its item's owner is called once on the GUI thread with the names (`NativeMode.on_textures_lost`),
+   never left to a state read.
+10. *Nothing at rest.* No job, no wake-up, no retire entry and no record at rest; the frame edge's only addition is one
+    atomic read of the window's retire count.
+
 ## D10. The Vulkan rehearsal path and the flip gate (decided 12 Nov 2026)
 
 **The problem this solves.** One window has one backend, and a Vulkan window cannot host a Python OpenGL node.
