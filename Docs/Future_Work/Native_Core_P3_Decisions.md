@@ -717,7 +717,12 @@ stays selectable in Settings as the fallback.
   process end crashed it). The exits that bypass that stop (the barrier timeouts, the failed Settings, CUSTOM and
   monitor teardowns, a failed replacement) release their Quick windows first and end the loop from the last
   window's `destroyed` (`engine/runtime_destruction.release_quick_windows_then`), and a second exiting stop joins the
-  terminal drain instead of cancelling it (14 Nov, R-209).
+  terminal drain instead of cancelling it (14 Nov, R-209). That release is bounded: a deletion waits for the loop
+  level it was posted at, so a modal loop entered after it holds every `destroyed` until it ends; after
+  `_RELEASE_BOUND_MS` the exit runs anyway, logged critical (the one timer admitted there, since the process is ending
+  on a failure; `tests/test_quick_release_bound.py`). The Studio's own window needs no release of its own: the quit
+  edge closes it (`close_for_quit`) and the loop's end destroys it; on the core's device it would crash the exit if it
+  were left alive (`tests/test_studio_exit_vulkan.py`, its negative control).
 
 ## D11. The Qt version the core is built against (decided 12 Nov 2026)
 
