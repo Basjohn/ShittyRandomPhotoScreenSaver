@@ -77,6 +77,24 @@ QString surfacePatternName(SurfacePattern pattern)
     return pattern == SurfacePattern::White ? QStringLiteral("white") : QStringLiteral("texel_id");
 }
 
+bool parseSurfaceLayer(const QString &text, SurfaceLayer *out)
+{
+    if (text == QLatin1String("content")) {
+        *out = SurfaceLayer::Content;
+        return true;
+    }
+    if (text == QLatin1String("background")) {
+        *out = SurfaceLayer::Background;
+        return true;
+    }
+    return false;
+}
+
+QString surfaceLayerName(SurfaceLayer layer)
+{
+    return layer == SurfaceLayer::Background ? QStringLiteral("background") : QStringLiteral("content");
+}
+
 // ------------------------------------------------------------------------------------------------- Surface
 
 struct Surface::Resources
@@ -283,6 +301,11 @@ bool Surface::record(QRhi *rhi, QRhiCommandBuffer *cb, bool *recorded, QString *
             return false;
         }
         m_dirty.storeRelease(0);
+        if (m_content->keptTargetLastRecord()) {
+            // No pass: the target keeps the frame it holds (N5.7a, a still whose drawn inputs did not change).
+            m_kept.fetchAndAddRelaxed(1);
+            return true;
+        }
         m_targetClear = !m_content->holdsFrame(m_res->target); // what the content did not draw it cleared by a draw
         m_passes.fetchAndAddRelaxed(1);
         *recorded = true;
@@ -423,8 +446,13 @@ QList<std::shared_ptr<Surface>> WindowSurfaces::dirtySurfaces() const
 {
     QList<std::shared_ptr<Surface>> dirty;
     QMutexLocker lock(&m_mutex);
+    // D5.2's dependency order (N5.7a): the background layer first, then every other surface as it was added.
     for (const std::shared_ptr<Surface> &s : m_surfaces) {
-        if (s->dirty())
+        if (s->layer() == SurfaceLayer::Background && s->dirty())
+            dirty.append(s);
+    }
+    for (const std::shared_ptr<Surface> &s : m_surfaces) {
+        if (s->layer() != SurfaceLayer::Background && s->dirty())
             dirty.append(s);
     }
     return dirty;

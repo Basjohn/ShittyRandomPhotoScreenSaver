@@ -73,6 +73,14 @@
 // The stream, the admission, the retire job, the refused-frame rule and the failure latch are the shared ones
 // (stream_source.h). Nothing at rest: the surface records only when a frame was accepted or dropped, or the program, the
 // settings, the card or a texture changed; a texture is uploaded once per image.
+//
+// Stills (N5.7a, D7 point 1: the background layer's photo): an item set as a still draws with no stream. Its frame is
+// its textures, its settings and its card, so its program is checked against an empty schema (no record: every member
+// is the core's or a setting, else unfilled) and a stream is refused while it is one (and the still while a stream is
+// bound). It records only when one of those changed, and only when what it draws changed: a record that only hands a
+// new image to its upload job (the picture drawn is still the old front until the item's textures commit) keeps the
+// frame the target holds and records no pass (TextureReport::stillKept), so the layer's texture changes exactly once
+// per photo, at the commit's record (the frame edge the latch publishes at). At rest nothing is recorded.
 #pragma once
 
 #include "mode_schema.h"
@@ -267,6 +275,7 @@ struct TextureReport
     int jobsPending = 0;         // jobs in flight now
     qint64 retired = 0;          // job outputs handed to the window's retire list
     qint64 rebinds = 0;          // the passes' bindings made again over new texture objects (pipelines kept)
+    qint64 stillKept = 0;        // N5.7a: a still's records that kept the target (what it draws had not changed)
 };
 
 // One record that changed an image (N3.8's measurement: the render thread's cost per image change): its kind ("submit":
@@ -308,6 +317,9 @@ public:
     bool setProgram(const ModeProgram &program, const QJsonObject *settings, QString *error);
     bool setSettings(const QJsonObject &settings, QString *error);
     void setCard(const ModeCard &card);
+    // N5.7a, GUI thread: the item draws as a still (no stream: the header's "Stills") or not. Refused while a stream is
+    // bound, and when the program as it stands cannot be drawn so (the item stays as it was).
+    bool setStill(bool still, QString *error);
     // N4.a, GUI thread: a texture's image (RGBA8, `size`, rows top first, tight; `mips`: generated on the GPU), replacing
     // the one of that name; refused for a bad name, size or byte count, more than kMaxModeTextures, or mips the current
     // program samples that this texture lacks. removeTexture: false when there is no such texture. `inFrame` (N3.8, a
@@ -326,6 +338,7 @@ public:
     const ModeProgram &drawnProgram() const { return m_drawnProgram; }
     const QList<BlockValues> &drawnSettings() const { return m_drawnSettings; }
     const RuntimeSchema *drawnSchema() const { return m_drawnSchema.data(); }
+    bool drawnStill() const { return m_drawnStill; }
     const ModeCard &drawnCard() const { return m_drawnCard; }
     bool drawnReady() const { return m_drawnReady; }
     QString drawnWaiting() const { return m_drawnWaiting; }
@@ -356,6 +369,7 @@ private:
 
     // Under m_mutex.
     QSharedPointer<const RuntimeSchema> m_schema; // the current stream's
+    bool m_still = false;                       // N5.7a: drawn with no stream
     ModeProgram m_program;
     QJsonObject m_settings;
     bool m_hasSettings = false;
@@ -372,6 +386,7 @@ private:
     ModeProgram m_drawnProgram;
     QList<BlockValues> m_drawnSettings;
     QSharedPointer<const RuntimeSchema> m_drawnSchema;
+    bool m_drawnStill = false;
     ModeCard m_drawnCard;
     bool m_drawnReady = false;
     QString m_drawnWaiting;
@@ -395,6 +410,7 @@ public:
     bool keepsTarget(QRhi *rhi, ColorTarget &target) override;
     bool record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, QString *error) override;
     bool holdsFrame(const ColorTarget &target) const override;
+    bool keptTargetLastRecord() const override { return m_keptTarget; }
     void release() override;
     int liveResources() const override;
 
@@ -437,6 +453,8 @@ private:
     bool importOutput(QRhi *rhi, GpuTexture &gpu, const UploadJob &job);
     // Every texture the drawn program samples has a front.
     bool texturesReady() const;
+    // N5.7a: what a still draws, as bytes (its program, target, triangle, blocks and the fronts its passes sample).
+    QByteArray stillSignature(const ColorTarget &target, const float *triangle) const;
     GpuTexture *slot(const QByteArray &name);
     GpuTexture *front(const QByteArray &name);
     const GpuTexture *front(const QByteArray &name) const;
@@ -471,6 +489,8 @@ private:
     QJsonObject m_facts;
     const QRhiTexture *m_drawnTexture = nullptr;
     QSize m_drawnSize;
+    QByteArray m_stillSignature;             // N5.7a: what the still last drew (empty: nothing of a still's)
+    bool m_keptTarget = false;               // the last record kept the target (a still's unchanged frame)
 };
 
 } // namespace srpss_core

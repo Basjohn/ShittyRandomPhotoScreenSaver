@@ -42,6 +42,17 @@ enum class SurfacePattern {
 bool parseSurfacePattern(const QString &text, SurfacePattern *out);
 QString surfacePatternName(SurfacePattern pattern);
 
+// Where a surface lies in the frame's dependency order (D5.2: background layer, backdrop pyramid, Visualizer scene,
+// overlays). The frame driver records the window's background-layer surfaces before every other (N5.7a: what the
+// backdrop pyramid, N5.7b, will be built from must be drawn first in the frame).
+enum class SurfaceLayer {
+    Content = 0,    // a card's content (Spectrum, a generic mode)
+    Background = 1, // the display's background layer (the photo; later its transition)
+};
+
+bool parseSurfaceLayer(const QString &text, SurfaceLayer *out);
+QString surfaceLayerName(SurfaceLayer layer);
+
 // A mode's content of a surface (render thread only): it records its passes into the surface's target, which keeps its
 // contents (targets.h rule B: a content that must be cleared clears it with its first draw) and was primed for the
 // load (rule C) before record is called.
@@ -67,6 +78,9 @@ public:
         Q_UNUSED(target);
         return true;
     }
+    // After a record that returned true: whether it recorded no pass and the target keeps what it holds (N5.7a: a
+    // still whose drawn inputs did not change; its new image handed to its job). The surface then counts no pass.
+    virtual bool keptTargetLastRecord() const { return false; }
     // Every QRhi object of the content goes (the surface's release, or the content replaced).
     virtual void release() = 0;
     virtual int liveResources() const = 0;
@@ -94,6 +108,11 @@ public:
     // Render thread, at sync: the content's input changed (a frame, the card), so the next edge records.
     void markDirty() { m_dirty.storeRelease(1); }
     bool dirty() const { return m_dirty.loadAcquire() != 0; }
+    // Render thread, at sync: the surface's place in the frame's order (N5.7a). Any thread reads it.
+    void setLayer(SurfaceLayer layer) { m_layer.storeRelease(int(layer)); }
+    SurfaceLayer layer() const { return SurfaceLayer(m_layer.loadAcquire()); }
+    // Passes a content recorded whose target then kept its frame (N5.7a, keptTargetLastRecord): not counted as passes.
+    qint64 keptRecords() const { return m_kept.loadRelaxed(); }
 
     // Render thread, on beforeRendering (inside the frame, outside any pass): records the content pass when dirty,
     // nothing otherwise (`recorded` says which).
@@ -126,7 +145,9 @@ private:
     SurfacePattern m_pattern = SurfacePattern::TexelIdentity;
     bool m_targetClear = false;            // render thread: the target is known to be transparent (cleared by a draw)
     QAtomicInteger<int> m_dirty { 1 };
+    QAtomicInteger<int> m_layer { 0 };     // SurfaceLayer
     QAtomicInteger<qint64> m_passes { 0 };
+    QAtomicInteger<qint64> m_kept { 0 };
     QAtomicInteger<qint64> m_clears { 0 };
     QAtomicInteger<int> m_live { 0 };
     mutable QMutex m_mutex; // guards m_lastPrime (read from the GUI thread)
@@ -176,7 +197,7 @@ public:
     void add(const std::shared_ptr<Surface> &surface);
     void remove(const Surface *surface);
     int count() const;
-    // The surfaces with content to record this frame (empty at rest).
+    // The surfaces with content to record this frame (empty at rest), the background layer's first (D5.2's order).
     QList<std::shared_ptr<Surface>> dirtySurfaces() const;
 
 private:

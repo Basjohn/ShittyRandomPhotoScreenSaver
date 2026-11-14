@@ -110,6 +110,15 @@ QAtomicInteger<qint64> g_imageBytes { 0 };
 QAtomicInteger<qint64> g_textureUploads { 0 };
 QAtomicInteger<quint64> g_textureGenerations { 0 };
 
+// N5.7a: a still's schema (mode_content.h, "Stills"): no field, no record. Its program is checked against it exactly as
+// a stream's (a member the core and the settings do not fill is unfilled), and its frame is packed from it with an
+// empty record (the core's members and the settings alone).
+const fa::Schema &stillSchema()
+{
+    static const fa::Schema schema = { "still", 0u, 0u, 0u, 0u, "", nullptr, 0u, nullptr, 0u };
+    return schema;
+}
+
 // The core's triangle over the whole target, in clip space (as N2.9 drew it).
 constexpr float kFullTriangle[6] = { -1.0f, -1.0f, 3.0f, -1.0f, -1.0f, 3.0f };
 // Each vertex of the triangle: its clip position, the Visualizer quad's uv (v_uv: y down from the target's top row) and
@@ -970,7 +979,9 @@ bool ModeSource::admit(const ModeProgram &program, const QSharedPointer<const Ru
     packed->clear();
     if (!program.valid())
         return true;                          // nothing to check against yet
-    if (!program.check(schema ? &schema->schema() : nullptr, settings, ready, error))
+    // A still (N5.7a) is checked against its empty schema: no record, so every member is the core's or a setting.
+    const fa::Schema *checked = schema ? &schema->schema() : (m_still ? &stillSchema() : nullptr);
+    if (!program.check(checked, settings, ready, error))
         return false;
     // Packed now (the settings given, or none when the core and the record fill every member: audit L5).
     if (settings || *ready)
@@ -980,6 +991,10 @@ bool ModeSource::admit(const ModeProgram &program, const QSharedPointer<const Ru
 
 bool ModeSource::acceptStream(const PacketReaderConfig &config, QString *error)
 {
+    if (m_still) {
+        *error = QStringLiteral("a still draws no stream (N5.7a): its frame is its textures, settings and card");
+        return false;
+    }
     if (!config.runtimeSchema) {
         *error = QStringLiteral("a mode's stream is bound with its schema");
         return false;
@@ -1034,6 +1049,32 @@ bool ModeSource::setProgram(const ModeProgram &program, const QJsonObject *setti
         m_hasSettings = true;
     }
     m_program = program;
+    m_packedSettings = packed;
+    m_ready = ready;
+    ++m_generation;
+    ++m_buildGeneration;
+    return true;
+}
+
+bool ModeSource::setStill(bool still, QString *error)
+{
+    QMutexLocker lock(&m_mutex);
+    if (still == m_still)
+        return true;
+    if (still && (m_schema || m_current)) {
+        *error = QStringLiteral("a still draws no stream: the mode's stream is unbound first");
+        return false;
+    }
+    // The program as it stands is checked against what the item now draws from (the still's empty schema, or nothing
+    // until a stream is bound): refused, the item stays as it was.
+    m_still = still;
+    QList<BlockValues> packed;
+    bool ready = false;
+    if (!admit(m_program, m_schema, m_hasSettings ? &m_settings : nullptr, &packed, &ready, error)) {
+        m_still = !still;
+        *error = QStringLiteral("the program cannot be drawn as a still: %1").arg(*error);
+        return false;
+    }
     m_packedSettings = packed;
     m_ready = ready;
     ++m_generation;
@@ -1176,6 +1217,7 @@ bool ModeSource::sync()
             m_drawnProgram = m_program;
             m_drawnSettings = m_packedSettings;
             m_drawnSchema = m_schema;
+            m_drawnStill = m_still;
             m_drawnCard = m_card;
             m_drawnReady = m_ready;
             // The textures (N4.a): each image moves to the render thread once (the GUI side keeps none); an image of
@@ -1202,7 +1244,7 @@ bool ModeSource::sync()
                     missing = QStringLiteral("no texture '%1'").arg(QString::fromLatin1(name));
             }
             m_drawnWaiting = !m_program.valid()     ? QStringLiteral("no program")
-                : !m_schema                         ? QStringLiteral("no stream")
+                : (!m_schema && !m_still)           ? QStringLiteral("no stream")
                 : !m_ready                          ? QStringLiteral("no settings for this program")
                 : (m_program.needsCard() && !m_card.valid) ? QStringLiteral("no card")
                                                            : missing;
@@ -1223,6 +1265,7 @@ bool ModeSource::sync()
 void ModeSource::stateInto(QJsonObject &o) const
 {
     o.insert(QStringLiteral("schema"), m_schema ? QJsonValue(m_schema->toJson()) : QJsonValue());
+    o.insert(QStringLiteral("still"), m_still);
     o.insert(QStringLiteral("program"), m_program.toJson());
     o.insert(QStringLiteral("settings"), m_hasSettings ? QJsonValue(m_settings) : QJsonValue());
     o.insert(QStringLiteral("ready"), m_ready);
@@ -1260,6 +1303,7 @@ void ModeSource::stateInto(QJsonObject &o) const
     jobs.insert(QStringLiteral("retired"), double(r.retired));
     jobs.insert(QStringLiteral("rebinds"), double(r.rebinds));
     o.insert(QStringLiteral("texture_jobs"), jobs);
+    o.insert(QStringLiteral("still_kept"), double(r.stillKept));
     QJsonArray changes;
     for (const ImageChangeRecord &c : m_imageChanges) {
         QJsonObject e;
@@ -1366,6 +1410,8 @@ void ModeContent::releasePipelines()
 void ModeContent::release()
 {
     m_drawnTexture = nullptr;                 // the target goes (or the content is replaced): nothing of ours is held
+    m_stillSignature.clear();
+    m_keptTarget = false;
     releasePipelines();                       // first: their bindings name the textures
     for (GpuTexture &texture : m_textures) {
         dropCandidate(texture);               // N3.8: its job cancelled (nothing waits on this thread)
@@ -1707,6 +1753,24 @@ QString ModeContent::advanceTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates
     return kind;
 }
 
+QByteArray ModeContent::stillSignature(const ColorTarget &target, const float *triangle) const
+{
+    QByteArray s;
+    const auto put = [&s](quint64 value) { s.append(reinterpret_cast<const char *>(&value), qsizetype(sizeof(value))); };
+    put(m_source->drawnProgram().generation);
+    put(target.generation);
+    put(quint64(quintptr(target.texture.get())));
+    put(m_textureObjects);
+    for (const QByteArray &name : m_source->drawnProgram().sampledTextures()) {
+        const GpuTexture *texture = front(name);
+        put(texture ? texture->generation : 0);
+    }
+    for (const BlockValues &block : m_blocks)
+        s.append(block.bytes());
+    s.append(reinterpret_cast<const char *>(triangle), qsizetype(kTriangleFloats * sizeof(float)));
+    return s;
+}
+
 bool ModeContent::texturesReady() const
 {
     // Every sampled texture has a front: the item's textures as last committed (an older picture while a newer one is
@@ -1736,19 +1800,22 @@ void ModeContent::pack(const ColorTarget &target)
     m_draw = false;
     m_refused = false;
     m_facts = QJsonObject();
-    if (!source.hasFrame()) {
+    // A still (N5.7a) has no stream and no record: its frame is its textures, settings and card.
+    const bool still = source.drawnStill();
+    if (!still && !source.hasFrame()) {
         m_reason = QStringLiteral("no frame");
         return;
     }
     m_reason = source.drawnWaiting();
-    if (!m_reason.isEmpty() || !source.drawnSchema() || !target.texture)
+    if (!m_reason.isEmpty() || (!still && !source.drawnSchema()) || !target.texture)
         return;
     if (m_blocksGeneration != source.drawnGeneration()) {
         m_blocks = source.drawnSettings(); // the settings packed when they changed; overwritten per frame (L4)
         m_blocksGeneration = source.drawnGeneration();
     }
     const ModeProgram &program = source.drawnProgram();
-    if (!program.packFrame(source.drawnSchema()->schema(), source.frameRecord(), source.drawnCard(),
+    const fa::Schema &schema = still ? stillSchema() : source.drawnSchema()->schema();
+    if (!program.packFrame(schema, still ? QByteArray() : source.frameRecord(), source.drawnCard(),
                            target.texture->pixelSize(), m_blocks, &m_reason)) {
         m_refused = true;                     // a value with no defined conversion: the frame is refused (M4)
         m_blocksGeneration = 0;               // the next frame starts from the packed settings again
@@ -1774,8 +1841,9 @@ bool ModeContent::keepsTarget(QRhi *rhi, ColorTarget &target)
     reportTextures();
     if (!m_res && !m_latch.admit(latchKey(rhi, target)))
         return true;                          // latched (M2): nothing built or recorded again for the same inputs
-    // No stream (an unbind): the frame in the target stays for the card's fade-out (round 2, L3).
-    if (!m_source->streamBound() && holdsFrame(target))
+    // No stream (an unbind): the frame in the target stays for the card's fade-out (round 2, L3). A still has none by
+    // design (N5.7a): it records whenever its inputs changed.
+    if (!m_source->streamBound() && !m_source->drawnStill() && holdsFrame(target))
         return true;
     pack(target);
     if (m_refused && holdsFrame(target)) {
@@ -2016,6 +2084,32 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
     Resources &r = *m_res;
     float triangle[kTriangleFloats];
     fullTriangle(rhi, m_source->drawnCard(), target.texture->pixelSize(), triangle);
+    m_keptTarget = false;
+    if (draw && m_source->drawnStill()) {
+        // A still (N5.7a) draws again only when what it draws changed: its program, its blocks (settings and the core's
+        // members), its triangle (card and target), its target and the textures its passes sample. A record that only
+        // hands a new image to its job (the front, the picture drawn, unchanged until the commit) keeps the frame the
+        // target holds and records no pass: nothing is drawn again, and the commit's record draws the new picture.
+        const QByteArray signature = stillSignature(target, triangle);
+        if (signature == m_stillSignature && holdsFrame(target)) {
+            cb->resourceUpdate(updates);      // nothing to upload that a pass would read; the batch is handed back
+            m_keptTarget = true;
+            ++m_report.stillKept;
+            reportTextures();
+            if (!imageChange.isEmpty()) {
+                ImageChangeRecord change;
+                change.kind = imageChange;
+                change.recordNs = recordTimer.nsecsElapsed();
+                change.bytes = imageBytes;
+                change.edge = m_registry ? m_registry->edges() : 0;
+                m_source->noteImageChange(change);
+            }
+            return true;
+        }
+        m_stillSignature = signature;
+    } else {
+        m_stillSignature.clear();             // the next drawn frame of a still is recorded whatever it holds
+    }
     if (!r.triangleUploaded || std::memcmp(triangle, r.triangle, sizeof(triangle)) != 0) {
         std::memcpy(r.triangle, triangle, sizeof(triangle));
         updates->uploadStaticBuffer(r.vertices.get(), r.triangle);

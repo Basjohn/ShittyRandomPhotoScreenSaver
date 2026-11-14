@@ -205,6 +205,16 @@ public:
         // Premultiplied content blended by Qt; one node per draw (its block is its own, never merged with another's).
         setFlag(QSGMaterial::Blending | QSGMaterial::NoBatching);
     }
+    // N5.7a: an opaque content's node goes in Qt's opaque pass (no blending; Qt blends it anyway below full opacity).
+    // Returns whether the flag changed (the node then marks its material dirty, so Qt's renderer files it again).
+    bool setOpaque(bool opaque)
+    {
+        const bool blending = !opaque;
+        if (flags().testFlag(QSGMaterial::Blending) == blending)
+            return false;
+        setFlag(QSGMaterial::Blending, blending);
+        return true;
+    }
     QSGMaterialType *type() const override
     {
         static QSGMaterialType materialType;
@@ -470,6 +480,22 @@ bool CompositeConfig::update(const QByteArray &json, CompositeConfig *out, QStri
         }
         c.fadeMs = fade;
     }
+    if (o.contains(QStringLiteral("layer"))) {
+        SurfaceLayer layer;
+        c.layer = o.value(QStringLiteral("layer")).toString();
+        if (!parseSurfaceLayer(c.layer, &layer)) {
+            *error = QStringLiteral("unknown layer '%1' (content, background)").arg(c.layer);
+            return false;
+        }
+    }
+    if (o.contains(QStringLiteral("opaque"))) {
+        const QJsonValue opaque = o.value(QStringLiteral("opaque"));
+        if (!opaque.isBool()) {
+            *error = QStringLiteral("opaque is true or false");
+            return false;
+        }
+        c.opaque = opaque.toBool();
+    }
     if (o.contains(QStringLiteral("pixel_ratio"))) {
         const QJsonValue ratio = o.value(QStringLiteral("pixel_ratio"));
         if (ratio.isNull()) {
@@ -508,6 +534,8 @@ QJsonObject CompositeConfig::toJson() const
     o.insert(QStringLiteral("visible"), visible);
     o.insert(QStringLiteral("opacity"), opacity);
     o.insert(QStringLiteral("fade_ms"), fadeMs);
+    o.insert(QStringLiteral("layer"), layer);
+    o.insert(QStringLiteral("opaque"), opaque);
     if (pixelRatioX > 0.0)
         o.insert(QStringLiteral("pixel_ratio"), QJsonArray { pixelRatioX, pixelRatioY });
     else
@@ -626,6 +654,18 @@ bool CompositeItem::cardMode(const ModeCard &card, QString *error)
     if (modeRefused(error))
         return false;
     modeSource()->setCard(card);
+    update();
+    return true;
+}
+
+bool CompositeItem::stillMode(bool still, QString *error)
+{
+    if (modeRefused(error))
+        return false;
+    std::shared_ptr<ModeSource> source = currentOrNewMode();
+    if (!source->setStill(still, error))
+        return false;
+    m_mode = source;
     update();
     return true;
 }
@@ -831,6 +871,9 @@ QSGNode *CompositeItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *d
                                                                                                  : QRhiTexture::RGBA8;
         if (node->surface()->ensureTarget(rhi, texturePixels, &error, format)) {
             node->surface()->setPattern(pattern);
+            SurfaceLayer layer = SurfaceLayer::Content;
+            parseSurfaceLayer(m_config.layer, &layer);
+            node->surface()->setLayer(layer);   // N5.7a: the frame driver records a background layer first (D5.2)
             node->setSources(m_spectrum, m_mode);
             // Spectrum's sync (render thread, the GUI blocked): the retired streams released, the stream read at its
             // accept edge, the card taken; the surface records only when one of them changed what it draws. A generic
@@ -840,6 +883,7 @@ QSGNode *CompositeItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *d
             if (m_mode && m_mode->sync())
                 node->surface()->markDirty();
             CompositeMaterial &m = node->material();
+            m.setOpaque(m_config.opaque);       // N5.7a; markDirty(DirtyMaterial) below files it again in Qt's renderer
             m.coverageOn = m_config.coverage ? 1.0f : 0.0f;
             m.coverageRadius = float(m_config.coverageRadius * qMin(rx, ry));
             m.quarters = float(m_config.quarters);
@@ -863,6 +907,8 @@ QSGNode *CompositeItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *d
                                                                     m.coverageRadius })
                                            : QJsonValue());
             facts.insert(QStringLiteral("drawable"), node->drawable());
+            facts.insert(QStringLiteral("material_blending"), m.flags().testFlag(QSGMaterial::Blending));
+            facts.insert(QStringLiteral("layer"), surfaceLayerName(node->surface()->layer()));
         }
     }
     if (!error.isEmpty() && node) {
@@ -908,6 +954,8 @@ QJsonObject CompositeItem::stateJson() const
     QJsonObject s;
     if (surface) {
         s.insert(QStringLiteral("passes_recorded"), surface->passesRecorded());
+        s.insert(QStringLiteral("kept_records"), surface->keptRecords());
+        s.insert(QStringLiteral("layer"), surfaceLayerName(surface->layer()));
         s.insert(QStringLiteral("clears"), surface->clears());
         s.insert(QStringLiteral("live_resources"), surface->liveResources());
         s.insert(QStringLiteral("dirty"), surface->dirty());
