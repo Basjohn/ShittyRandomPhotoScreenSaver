@@ -32,6 +32,7 @@ uniform float uDetail;
 uniform float uDepth;
 uniform float uGloss;
 uniform float uOriginMode;
+uniform vec2 u_target_px;
 
 const float REACH=.60;   // latest melt start (farthest point from the origin)
 const float SPAN=.34;    // time for a melted region to sag, thin and fall away
@@ -115,7 +116,10 @@ float heightOf(float a,float drip){
 }
 
 void main(){
-    vec2 screen=vec2(vUv.x,1.-vUv.y);
+    // The pixel's own uv (N5.2a): the interpolated vUv differs in its last bits between
+    // renderers and backends; the pixel's centre over the item's own pixels does not.
+    vec2 pixelUv=(floor(vUv*u_target_px)+.5)/u_target_px;
+    vec2 screen=vec2(pixelUv.x,1.-pixelUv.y);
     if(uProgress<=0.){FragColor=texture(uOldTex,screen);return;}
     if(uProgress>=1.){FragColor=texture(uNewTex,screen);return;}
 

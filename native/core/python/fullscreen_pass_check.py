@@ -118,12 +118,13 @@ _ALLOWED_ENV: set[str] = set()
 # --------------------------------------------------------------------------------------------------- the transitions
 
 def renderer_class(transition_id: str):
-    """The transition's ``FullscreenPassRenderer`` subclass (the one its module defines)."""
-    from rendering.quick.transitions.fullscreen_pass import FullscreenPassRenderer
+    """The transition's ``NativeFragmentPass`` subclass (the one its module defines: a ``FullscreenPassRenderer`` for
+    the seven, N5.2b's item-quad renderers for theirs)."""
+    from rendering.quick.transitions.fullscreen_pass import NativeFragmentPass
 
     module = importlib.import_module(f"rendering.quick.transitions.implementations.{transition_id}")
     found = [value for value in vars(module).values()
-             if isinstance(value, type) and issubclass(value, FullscreenPassRenderer)
+             if isinstance(value, type) and issubclass(value, NativeFragmentPass)
              and value.__module__ == module.__name__]
     if len(found) != 1:
         raise ValueError(f"{transition_id} defines {len(found)} fullscreen pass renderers, not one")

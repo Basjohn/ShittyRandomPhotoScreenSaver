@@ -86,6 +86,7 @@ VHS_FRAGMENT_SOURCE = (
     "uniform sampler2D uOldTex;\nuniform sampler2D uNewTex;\nuniform vec2 uItemSize;\n"
     "uniform float uEnvelope;\nuniform float uRoll;\nuniform float uRollSign;\nuniform float uTime;\n"
     "uniform float uSeed;\nuniform float uTracking;\nuniform float uBleed;\nuniform float uNoise;\n"
+    "uniform vec2 u_target_px;\nuniform int uShow;\n"
     + ANALOG_SIGNAL_GLSL
     + f"""
 const float VHS_BAR = {VHS_BAR:.6f};
@@ -94,13 +95,22 @@ const float VHS_LINES = {VHS_LINES:.1f};
 const float VHS_FIELD_RATE = {VHS_FIELD_RATE:.1f};
 
 void main() {{
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+    // The pixel's own uv (N5.2a): the interpolated vUv differs in its last bits between renderers and backends; the
+    // pixel's centre over the item's own pixels does not.
+    vec2 pixelUv = (floor(vUv * u_target_px) + 0.5) / u_target_px;
+    vec2 uv = vec2(pixelUv.x, 1.0 - pixelUv.y);
+    if (uShow == 1) {{ FragColor = texture(uOldTex, uv); return; }}
+    if (uShow == 2) {{ FragColor = texture(uNewTex, uv); return; }}
     uint seed = uint(uSeed);
     float e = uEnvelope;
     float track = e * uTracking, bleed = e * uBleed, noise = e * uNoise;
     float field = floor(uTime * VHS_FIELD_RATE);
     uint fieldKey = uint(field);
-    float line = floor(uv.y * VHS_LINES);
+    // The signal's line and tearing band from the pixel's row in integers (N5.2b): floor(uv.y * VHS_LINES) of a pixel
+    // whose centre lies exactly on a line's edge (every third row at 720) fell either way by backend.
+    int rows = int(u_target_px.y);
+    int fromTop = rows - 1 - int(floor(vUv.y * u_target_px.y));
+    float line = float(((2 * fromTop + 1) * int(VHS_LINES)) / (2 * rows));
 
     // Where this row is on the rolled strip. While tracking is lost the picture jumps on some fields.
     float jump = signalRandom(fieldKey, 1u, seed) < 0.3 ? (signalRandom(fieldKey, 2u, seed) - 0.5) * 0.01 * track : 0.0;
@@ -113,7 +123,7 @@ void main() {{
     // Horizontal displacement. Rows near a frame's edges, where the roll's seam is, tear most.
     float seam = blank ? 1.0 : max(exp(-local / 0.09), exp(-(1.0 - local) / 0.09));
     float tear = track * signalTear(uv.y, uTime, mix(0.76, 0.6, seam), seed);
-    float band = floor(uv.y * 48.0);
+    float band = float(((2 * fromTop + 1) * 48) / (2 * rows));
     float dx = 0.003 * track * signalLineJitter(line, field, seed)
              + 0.004 * track * signalWobble(uv.y, uTime)
              + tear * (signalRandom(uint(band) + fieldKey * 97u, 3u, seed) - 0.3) * 0.06;

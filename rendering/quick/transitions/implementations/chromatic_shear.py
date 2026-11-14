@@ -16,6 +16,7 @@ from rendering.gl_programs.chromatic_shear_program import (
 )
 from rendering.gl_programs.portable import pack_block
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
+from ..fullscreen_pass import SHOW_EFFECT, SHOW_NEW, SHOW_OLD, NativeFragmentPass
 from ..render_contract import QuickTransitionRenderFrame
 
 
@@ -32,8 +33,18 @@ def chromatic_shear_parameters(parameters: Mapping[str, object]) -> tuple[float,
     return float(spread), slices, seed
 
 
-class QuickChromaticShearRenderer:
+def _shown(progress: float) -> int:
+    """What the frame shows: the old picture before the run, the new one at its end, else the effect."""
+    if progress <= 0.0:
+        return SHOW_OLD
+    if progress >= 1.0:
+        return SHOW_NEW
+    return SHOW_EFFECT
+
+
+class QuickChromaticShearRenderer(NativeFragmentPass):
     transition_id = "chromatic_shear"
+    fragment_source = CHROMATIC_SHEAR_FRAGMENT_SOURCE
 
     _SAMPLERS = ("uOldTex", "uNewTex")      # every other value is in CHROMATIC_SHEAR_BLOCK
 
@@ -44,20 +55,29 @@ class QuickChromaticShearRenderer:
     def has_resources(self) -> bool:
         return self._resources.has_resources
 
-    def render(self, frame: QuickTransitionRenderFrame) -> None:
+    def block_values(self, frame: QuickTransitionRenderFrame) -> dict[str, object]:
+        """Every value of the pass block for this frame (validated first; no GL): the one owner, packed by ``render``
+        and filled by the native core (N5.2b)."""
         progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
         axis = SHEAR_AXES.get(str(frame.run.request.direction))
         if axis is None:
             raise ValueError(f"unknown resolved Chromatic Shear axis: {frame.run.request.direction!r}")
         spread, slices, seed = chromatic_shear_parameters(frame.run.request.parameter_dict())
+        length = math.hypot(*axis)
+        return {"uMatrix": frame.matrix_values, "uItemSize": frame.logical_size, "u_target_px": frame.item_pixels,
+                "uShow": _shown(progress), "uProgress": progress, "uAxis": (axis[0] / length, axis[1] / length),
+                "uSpread": spread, "uSlices": float(slices), "uSeed": float(seed % 997)}
+
+    def render(self, frame: QuickTransitionRenderFrame) -> None:
+        values = self.block_values(frame)
         try:
-            if progress <= 0.0:
+            if values["uShow"] == SHOW_OLD:
                 self._resources.draw_image(frame, frame.source_texture_id)
                 return
-            if progress >= 1.0:
+            if values["uShow"] == SHOW_NEW:
                 self._resources.draw_image(frame, frame.destination_texture_id)
                 return
-            self._draw(frame, progress, axis, spread, slices, seed)
+            self._draw(frame, values)
         except Exception:
             self.release_resources()
             raise
@@ -75,20 +95,15 @@ class QuickChromaticShearRenderer:
     def park(self) -> None:
         """Nothing per run to drop; the programs stay warm."""
 
-    def _draw(self, frame, progress: float, axis, spread: float, slices: int, seed: int) -> None:
+    def _draw(self, frame, block: dict) -> None:
         r = self._resources
         program = r.program("chromatic_shear", CHROMATIC_SHEAR_VERTEX_SOURCE, CHROMATIC_SHEAR_FRAGMENT_SOURCE)
         uniforms = r.uniforms("chromatic_shear", self._SAMPLERS)
         values = r.values("chromatic_shear")
-        length = math.hypot(*axis)
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         bind_frame(program, uniforms, frame, values)
-        values["uProgress"] = progress
-        values["uAxis"] = (axis[0] / length, axis[1] / length)
-        values["uSpread"] = spread
-        values["uSlices"] = float(slices)
-        values["uSeed"] = float(seed % 997)
+        values.update(block)
         with r.pass_blocks.bound(pack_block(CHROMATIC_SHEAR_BLOCK, values)):
             gl.glBindVertexArray(frame.quad_vao)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)

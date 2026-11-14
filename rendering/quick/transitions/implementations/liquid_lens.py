@@ -18,6 +18,7 @@ from rendering.gl_programs.liquid_lens_program import (
 )
 from rendering.gl_programs.portable import pack_block
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
+from ..fullscreen_pass import SHOW_EFFECT, SHOW_NEW, SHOW_OLD, NativeFragmentPass
 from ..render_contract import QuickTransitionRenderFrame
 
 
@@ -37,8 +38,19 @@ def liquid_lens_parameters(parameters: Mapping[str, object]) -> tuple[float, flo
     return values[0], values[1], stops, seed
 
 
-class QuickLiquidLensRenderer:
+def _shown(progress: float) -> int:
+    """What the frame shows: the old picture before the run; the new one at its end, or once the water has flattened
+    out over a lens covering everything; else the effect."""
+    if progress <= 0.0:
+        return SHOW_OLD
+    if progress >= 1.0 or (progress > 0.9 and lens_height(progress) <= 0.0):
+        return SHOW_NEW
+    return SHOW_EFFECT
+
+
+class QuickLiquidLensRenderer(NativeFragmentPass):
     transition_id = "liquid_lens"
+    fragment_source = LIQUID_LENS_FRAGMENT_SOURCE
 
     _SAMPLERS = ("uOldTex", "uNewTex")      # every other value is in LIQUID_LENS_BLOCK
 
@@ -51,18 +63,38 @@ class QuickLiquidLensRenderer:
     def has_resources(self) -> bool:
         return self._resources.has_resources
 
-    def render(self, frame: QuickTransitionRenderFrame) -> None:
+    def block_values(self, frame: QuickTransitionRenderFrame) -> dict[str, object]:
+        """Every value of the pass block for this frame (validated first; no GL): the one owner, packed by ``render``
+        and filled by the native core (N5.2b). The run's plan is a few numbers, kept for the run."""
         progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
         refraction, dispersion, stops, seed = liquid_lens_parameters(frame.run.request.parameter_dict())
+        values: dict[str, object] = {"uMatrix": frame.matrix_values, "uItemSize": frame.logical_size,
+                                     "u_target_px": frame.item_pixels, "uShow": _shown(progress),
+                                     "uSeed": float(seed % 9973), "uRefraction": refraction,
+                                     "uDispersion": dispersion}
+        width, height = frame.logical_size
+        aspect = width / max(1e-6, height)
+        key = (frame.run.run_id, stops, seed, round(aspect, 6))
+        if key != self._plan_key:
+            self._plan_key, self._plan = key, lens_plan(stops, seed, aspect)
+        duration = frame.run.request.duration_ms / 1000.0
+        state = lens_state(self._plan, progress, duration)
+        values.update({"uTime": progress * duration, "uCentre": state.centre, "uRadius": state.radius,
+                       "uThick": state.thickness, "uReference": state.reference, "uEnvelope": state.envelope,
+                       "uRound": state.rounding, "uBulge": state.bulge, "uTwist": state.twist,
+                       "uRipple": state.ripple})
+        return values
+
+    def render(self, frame: QuickTransitionRenderFrame) -> None:
+        values = self.block_values(frame)
         try:
-            if progress <= 0.0:
+            if values["uShow"] == SHOW_OLD:
                 self._resources.draw_image(frame, frame.source_texture_id)
                 return
-            # The water has flattened out over a lens covering everything: the new picture.
-            if progress >= 1.0 or (progress > 0.9 and lens_height(progress) <= 0.0):
+            if values["uShow"] == SHOW_NEW:
                 self._resources.draw_image(frame, frame.destination_texture_id)
                 return
-            self._draw(frame, progress, refraction, dispersion, stops, seed)
+            self._draw(frame, values)
         except Exception:
             self.release_resources()
             raise
@@ -81,34 +113,15 @@ class QuickLiquidLensRenderer:
         """Forget the run's plan; the programs stay warm."""
         self._plan_key = self._plan = None
 
-    def _draw(self, frame, progress: float, refraction: float, dispersion: float, stops: int, seed: int) -> None:
+    def _draw(self, frame, block: dict) -> None:
         r = self._resources
         program = r.program("liquid_lens", LIQUID_LENS_VERTEX_SOURCE, LIQUID_LENS_FRAGMENT_SOURCE)
         uniforms = r.uniforms("liquid_lens", self._SAMPLERS)
         values = r.values("liquid_lens")
-        width, height = frame.logical_size
-        aspect = width / max(1e-6, height)
-        key = (frame.run.run_id, stops, seed, round(aspect, 6))
-        if key != self._plan_key:
-            self._plan_key, self._plan = key, lens_plan(stops, seed, aspect)
-        duration = frame.run.request.duration_ms / 1000.0
-        state = lens_state(self._plan, progress, duration)
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         bind_frame(program, uniforms, frame, values)
-        values["uTime"] = progress * duration
-        values["uSeed"] = float(seed % 9973)
-        values["uCentre"] = state.centre
-        values["uRadius"] = state.radius
-        values["uThick"] = state.thickness
-        values["uReference"] = state.reference
-        values["uEnvelope"] = state.envelope
-        values["uRound"] = state.rounding
-        values["uBulge"] = state.bulge
-        values["uTwist"] = state.twist
-        values["uRipple"] = state.ripple
-        values["uRefraction"] = refraction
-        values["uDispersion"] = dispersion
+        values.update(block)
         with r.pass_blocks.bound(pack_block(LIQUID_LENS_BLOCK, values)):
             gl.glBindVertexArray(frame.quad_vao)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)

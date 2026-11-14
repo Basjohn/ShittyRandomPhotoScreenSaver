@@ -48,7 +48,36 @@ def fullscreen_pass_parts(fragment_source: str, block_name: str):
     return item_quad_vertex_source(declaration), block_layout_from_glsl(declaration)
 
 
-class FullscreenPassRenderer:
+class NativeFragmentPass:
+    """A transition the native core can draw as one fragment between its two pictures (N5.2a, N5.2b): its
+    ``fragment_source`` (baked into its pack by ``tools/regen_qrc.py --shaders``) and ``block_values``, every value of
+    that fragment's pass block for a frame, by name, reading no GL object (the one owner of the values: the Python
+    renderer packs them, the core fills its block from them). A transition with a second pass, its own geometry or
+    state across frames is not one."""
+
+    transition_id: str = ""
+    fragment_source: str = ""
+
+    def block_values(self, frame: QuickTransitionRenderFrame) -> dict[str, object]:
+        raise NotImplementedError
+
+    def run_values(self, run, sample, logical_size: tuple[float, float],
+                   device_pixel_ratio: float) -> dict[str, object]:
+        """``block_values`` for a frame the native core draws (N5.2a: the item's own target, no GL object here): the
+        render frame's GL names are the contract's stand-ins, since ``block_values`` reads none of them."""
+        width, height = (max(1, round(float(v) * float(device_pixel_ratio))) for v in logical_size)
+        frame = QuickTransitionRenderFrame(run, sample, (0, 0, width, height),
+                                           (float(logical_size[0]), float(logical_size[1])), _IDENTITY_MATRIX,
+                                           1, 1, 2, device_pixel_ratio=float(device_pixel_ratio))
+        return self.block_values(frame)
+
+
+#: ``uShow`` (N5.2b): what an item-quad transition's fragment draws this frame: its effect, or one of its pictures
+#: exactly (the frames its Python renderer draws as the plain picture).
+SHOW_EFFECT, SHOW_OLD, SHOW_NEW = 0, 1, 2
+
+
+class FullscreenPassRenderer(NativeFragmentPass):
     transition_id: str = ""
     label: str = ""
     fragment_source: str = ""
@@ -84,16 +113,6 @@ class FullscreenPassRenderer:
                   "u_progress": float(frame.sample.eased_progress)}
         values.update(self.values(resolved, frame))
         return values
-
-    def run_values(self, run, sample, logical_size: tuple[float, float],
-                   device_pixel_ratio: float) -> dict[str, object]:
-        """``block_values`` for a frame the native core draws (N5.2a: the item's own target, no GL object here): the
-        render frame's GL names are the contract's stand-ins, since ``block_values`` reads none of them."""
-        width, height = (max(1, round(float(v) * float(device_pixel_ratio))) for v in logical_size)
-        frame = QuickTransitionRenderFrame(run, sample, (0, 0, width, height),
-                                           (float(logical_size[0]), float(logical_size[1])), _IDENTITY_MATRIX,
-                                           1, 1, 2, device_pixel_ratio=float(device_pixel_ratio))
-        return self.block_values(frame)
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         if not self._program:

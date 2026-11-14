@@ -112,7 +112,8 @@ vec4 signalDropout(float x, float line, float field, float rate, uint seed) {{
     if (at < 0.0 || at > 1.0) {{
         return vec4(0.0);
     }}
-    uint grainKey = key ^ uint(x * 1200.0) * 2654435761u;
+    // Through int: uint() of a negative float (a line displaced past the left edge) is undefined and differs by backend.
+    uint grainKey = key ^ uint(int(x * 1200.0)) * 2654435761u;
     float grain = signalRandom(grainKey, 38u, seed);
     vec3 colour = signalRandom(key, 39u, seed) < 0.35
         ? vec3(0.82 + 0.18 * grain)

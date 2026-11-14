@@ -259,13 +259,23 @@ LIQUID_LENS_FRAGMENT_SOURCE = (
     "uniform vec2 uCentre;\nuniform float uRadius;\nuniform float uThick;\nuniform float uReference;\n"
     "uniform float uEnvelope;\nuniform float uRound;\nuniform vec2 uBulge;\nuniform float uTwist;\n"
     "uniform float uRipple;\nuniform float uRefraction;\nuniform float uDispersion;\n"
+    "uniform vec2 u_target_px;\nuniform int uShow;\n"
     + REFRACTION_GLSL + LIQUID_LENS_GLSL
     + f"""
 const float IOR = {REFRACTION_IOR_WATER:.4f};
 const vec3 LIGHT = vec3(-0.45, 0.6, 1.0);
 float aspect, rim, plateau;
 
-float hash1(float n) {{ return fract(sin(n * 12.9898 + uSeed * 0.0137) * 43758.5453); }}
+// Integer hash of a small index and the seed (R-94's class; N5.2b): exact on every GPU, compiler and backend, where a
+// float fract(sin()) hash compiles to different values through SPIR-V.
+uint lensMix(uint x) {{
+    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
+    return x;
+}}
+float hash1(float n) {{
+    uint k = uint(int(n) + 65536);
+    return float(lensMix(k * 0x9e3779b9u ^ lensMix(uint(uSeed) * 0x85ebca6bu + 29u))) * (1.0 / 4294967295.0);
+}}
 
 // Signed distance-like value to the wobbling, stretched boundary (negative inside), the distance
 // to the centre and the boundary's own radius in that direction.
@@ -298,7 +308,12 @@ float waterHeight(vec2 p, out float dome) {{
 }}
 
 void main() {{
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+    // The pixel's own uv (N5.2a): the interpolated vUv differs in its last bits between renderers and backends; the
+    // pixel's centre over the item's own pixels does not.
+    vec2 pixelUv = (floor(vUv * u_target_px) + 0.5) / u_target_px;
+    vec2 uv = vec2(pixelUv.x, 1.0 - pixelUv.y);
+    if (uShow == 1) {{ FragColor = texture(uOldTex, uv); return; }}
+    if (uShow == 2) {{ FragColor = texture(uNewTex, uv); return; }}
     aspect = uItemSize.x / uItemSize.y;
     vec2 p = vec2((uv.x - 0.5) * aspect, 0.5 - uv.y);
     plateau = LENS_FILM * uEnvelope;

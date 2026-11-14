@@ -878,9 +878,11 @@ python native/core/python/backdrop_pyramid_check.py --module-dir release/native_
 # every variant of fullscreen_pass_check.VARIANTS from a dark to a bright PERSONALSET photo at nine progress values, dpr
 # 1 and 1.5, under the overscan placement; rule (a) OpenGL native equal to the Python renderer (TransitionCapture);
 # rule (b) Vulkan within 1 level; each run's end draws the destination with no upload and nothing at rest; the route
-# through BackgroundRenderItem.set_transition_run on Vulkan; Vulkan validated
+# through BackgroundRenderItem.set_transition_run on Vulkan; Vulkan validated. N5.2b widened it to the five item-quad
+# programs (N52B_VARIANTS: Chromatic Shear, Liquid Lens, Melt Drip, Surface Tension, VHS; --topic n5_2b), the reference
+# drawing the product's frame at the run's dpr (product_capture), the route on the first of ROUTE_VARIANTS drawn
 python native/core/python/transition_route_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
-    [--apis opengl vulkan] [--variants burn burn_options ...] [--label n52a_transition_route]
+    [--apis opengl vulkan] [--variants burn burn_options ...] [--topic n5_2a] [--label n52a_transition_route]
 ```
 
 Tests: `tests/test_native_core_jobs.py` (the built module, GPU-free: the job service's latch, cancellation while

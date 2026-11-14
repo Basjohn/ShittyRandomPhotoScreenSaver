@@ -44,7 +44,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
 at the size asked.
 - High: N5.7c, then N3. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers
   ride with the next fitting dispatch.
-- Medium: N5.2b.
+- Medium: 1D.12 (three chrome requests).
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -551,15 +551,10 @@ Slots (lead, 12 Nov): N5.2a, the first group on the shared fullscreen pass, goes
 whose primitive is ported with it (N4.c, N4.g, N4.i, N4.j, N4.l). After that, a group whose primitive is already
 native goes to Opus Medium, under the same parity proof and audit as the modes track.
 
-- [ ] N5.2b The six with their own item-quad programs: Beam, Chromatic Shear, Liquid Lens, Melt Drip, Surface
-  Tension, VHS.
-  - [ ] Read each one's Python renderer and program; say which fit N5.2a's path (one fragment between two
-    pictures on the shared pass, as data) and which need more (extra passes, their own geometry, state across
-    frames); the ones that need C++ stop and are reported, not built.
-  - [ ] Port the ones that fit as N5.2a did: the product fragment drawn by the core, integer hashes and uv from the
-    pixel where a float hash or interpolated uv would differ by driver (the lead reviews before/after stills).
-  - [ ] Proof per transition: rule (a) against its Python renderer at the widened progress values, rule (b) Vulkan
-    against OpenGL, dpr 1 and 1.5, overscan placement, nothing at rest; added to `transition_route_check.py`.
+- [ ] N5.2b leftover: Beam. Its sparks are a second pass of their own geometry (900 instanced additive streaks from
+  their own vertex stage), which the core's full-card fragment passes cannot draw; it stays Crossfade on Vulkan.
+  Port it with the instanced-quad primitive the Oscilloscope's beam and Bubble's sprites need (N5.1), under the same
+  proof in `transition_route_check.py`.
 - [ ] N5.2c Scene target and photo environment only (N4.j): Blinds, Cube Turn, Depth Cascade, Jigsaw.
 - [ ] N5.2d Motion blur and trails (N4.i): 3D Block Spins, Crumble, Glass Shatter, Pixel Accretion.
 - [ ] N5.2e Membrane, Page Curl, Exploding Tiles (N4.l).
@@ -1044,7 +1039,10 @@ preset values. Prove each item with a hidden-host test and a negative control.
   draws no frame (border width 0, content rect = visible rect; plan 01, section "Geometry"), so any visible band
   is a regression. The operator's screenshot shows a lavender line about 1 px wide down the left
   edge in Extruded Bubble, the border colour, with a faint notch about halfway down. Check the other three edges
-  too. Bisect it on the hidden host with `native/core/python/composite_check.py` (the
+  too. The operator adds that it varies: sometimes a side shows, sometimes the bottom, which
+  points at overscan or the window's placement against the visible rect. Compare the window's geometry, the scene
+  root's overscan offset and `display_size` on each entry. A frame that comes and goes means the card is not on
+  whole device pixels at that edge. Bisect it on the hidden host with `native/core/python/composite_check.py` (the
   `expanded_*` display-style cases) on OpenGL and on Vulkan. The suspects are today's merges that touch card
   placement: R-217's origin snap in `composite.vert` (81a14dda); the native background and backdrop routes (N5.7a
   07433be2, N5.7b 36096bf2, R-220); and the 1D.2 style binding at `VisualizerPresentation.qml` (about line 218).
