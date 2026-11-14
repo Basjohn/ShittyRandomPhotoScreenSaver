@@ -472,7 +472,24 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
 
 **N2b. The background layer, natively, and the first full rehearsal**
 
-- [ ] N4.a The fullscreen pass and image sampling as a primitive.
+- [ ] N4.a The fullscreen pass and image sampling as a primitive (lead, 14 Nov: extends N2.9's generic pass, never a
+  second pass layer; first consumers N5.7a's presenter and N5.2a's seven transitions, which draw one fragment
+  between two pictures through `rendering/quick/transitions/fullscreen_pass.py`; then Bubble's two textures).
+  - [ ] Root cause of the shape first: list what the product fullscreen fragments read (the transitions' block
+    and vertex outputs from `item_quad_vertex_source`, their samplers and units, Bubble's `u_ambient_texture` and
+    `u_ambient_light`) and make the core's vertex stage and block filling take that shape as N2.9 did for the 2D
+    modes (one rule; the product files unchanged unless a change is invisible and the Python path draws it too).
+  - [ ] Samplers as data: a pass names its samplers; each binds by name to a texture the core holds, with its
+    sampler state (filter, wrap, mips) declared beside it; an unbound, unknown or doubly bound sampler refused.
+  - [ ] Textures the core owns: uploaded from Python-held pixels (the harness and the first consumers; N3.8 makes
+    the photo upload asynchronous), mips generated on the GPU, released on the render thread through the retire
+    path; nothing uploaded again at rest; lifetime against the destruction barrier (the N2.5 audit's L8 class).
+  - [ ] Proof on the harness against the Python renderer: Crossfade's own fragment (and one transition with its
+    own values, e.g. Burn) drawn natively between two real photos at several progress values, never registered:
+    OpenGL equal to `FullscreenPassRenderer` at the widened values (rule (a)), Vulkan within 1 level (rule (b)),
+    GPU time per pass and nothing at rest (rule (e)), Vulkan validation clean; a shader or value change shows with
+    no rebuild (rule (g)).
+  - [ ] README and decision record: how a pass declares samplers and how a texture's lifetime runs.
 - [ ] N3.8 The async job service (D9), built to N0.7's verdict: the job thread, self-contained jobs, the latch,
   the in-frame form; first job: a photo's upload and mips.
   - [ ] D8 row 3's gate (the contention measurement under a heavy Visualizer frame, the one limit of N0.7's proof,
