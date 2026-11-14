@@ -124,11 +124,12 @@ vec3 _apply_rainbow(vec3 rgb) {
 }
 
 vec4 _draw_layer(float yCurve, vec4 color, vec4 outlineColor, int enabled, float alphaScale, float x, float y, float aa, float ow) {
-    if (enabled == 0) return vec4(0.0);
     // ``aa`` provides the minimum one-device-pixel vertical coverage.  The
     // derivative adds the horizontal contribution for steep curves without
-    // changing the authored outline width or normalized geometry.
+    // changing the authored outline width or normalized geometry. Taken before
+    // the return below: a derivative after a return is undefined (R-210).
     float edgeAA = max(aa, fwidth(y - yCurve));
+    if (enabled == 0) return vec4(0.0);
     // Fill below the curve (liquid body sits under the spline line).
     float inside = smoothstep(-edgeAA, edgeAA, y - yCurve);
     float edge = 1.0 - smoothstep(ow, ow + edgeAA, abs(y - yCurve));
@@ -221,9 +222,10 @@ float _quick_norm_y(float canonicalValue) {
     return canonicalValue * max(u_devcurve_normalized_scale.y, 1e-6);
 }
 
+// Called only for a slot whose amplitude is above 1e-4 (the caller's uniform test): the derivative below must not
+// follow a return (R-210).
 float _specular_lobe(vec2 uv, vec4 slot, int layerId, int sampleCount, float width, float yOffset, float crestBias, float aa) {
     float amp = clamp(slot.z, 0.0, 1.0);
-    if (amp <= 1e-4) return 0.0;
     float x = slot.x;
     float variant = clamp(slot.w, 0.0, 1.0);
     float r1 = _hash11(variant * 31.7 + 1.3);
@@ -283,21 +285,11 @@ void main() {
     float inner_radius = (u_quick_item_coords == 1)
         ? 0.0 : max(0.0, 8.0 - border_w);
     if (inner_w <= 0.0 || inner_h <= 0.0) { discard; }
-    if (fc.x < inner_x || fc.x > inner_x + inner_w ||
-        fc.y < inner_y || fc.y > inner_y + inner_h) { discard; }
-
-    if (inner_radius > 0.5) {
-        float ix = fc.x - inner_x;
-        float iy = fc.y - inner_y;
-        float r = inner_radius;
-        vec2 d = vec2(0.0);
-        bool in_corner = false;
-        if (ix < r && iy < r) { d = vec2(r - ix, r - iy); in_corner = true; }
-        else if (ix > inner_w - r && iy < r) { d = vec2(ix - (inner_w - r), r - iy); in_corner = true; }
-        else if (ix < r && iy > inner_h - r) { d = vec2(r - ix, iy - (inner_h - r)); in_corner = true; }
-        else if (ix > inner_w - r && iy > inner_h - r) { d = vec2(ix - (inner_w - r), iy - (inner_h - r)); in_corner = true; }
-        if (in_corner && (d.x * d.x + d.y * d.y) > r * r) { discard; }
-    }
+    // Every derivative is taken before the first discard a pixel can take alone (the content rect's, at the end): a
+    // derivative after one is undefined in GLSL (non-uniform control flow) and differs by driver: Vulkan's discard
+    // (SPIR-V OpKill) ends the lane (R-210), and on OpenGL the content edge's pixels moved once the derivative came
+    // first. The discard above reads uniforms only, so it ends every lane of a quad together.
+    // tests/test_shader_derivatives.py refuses a derivative after such a discard, or in a non-uniform branch.
 
     vec2 uv = vec2((fc.x - inner_x) / inner_w, (fc.y - inner_y) / inner_h);
     // fc/inner_h are already in logical pixels in both branches (the legacy
@@ -349,15 +341,41 @@ void main() {
             float specW = clamp(u_devcurve_foreground_specular_width, _quick_norm_x(0.002), _quick_norm_x(0.120));
             float yOffset = max(_quick_norm_y(0.010), clamp(u_devcurve_foreground_specular_offset, _quick_norm_y(-0.20), _quick_norm_y(0.20)));
             float crestBias = clamp(u_devcurve_foreground_specular_crest_bias, 0.0, 2.0);
-            float slot0 = _specular_lobe(uv, u_devcurve_specular_slot0, fgId, sampleCount, specW, yOffset, crestBias, aa);
-            float slot1 = _specular_lobe(uv, u_devcurve_specular_slot1, fgId, sampleCount, specW, yOffset, crestBias, aa);
-            float slot2 = _specular_lobe(uv, u_devcurve_specular_slot2, fgId, sampleCount, specW, yOffset, crestBias, aa);
+            float slot0 = 0.0;
+            float slot1 = 0.0;
+            float slot2 = 0.0;
+            if (u_devcurve_specular_slot0.z > 1e-4) {
+                slot0 = _specular_lobe(uv, u_devcurve_specular_slot0, fgId, sampleCount, specW, yOffset, crestBias, aa);
+            }
+            if (u_devcurve_specular_slot1.z > 1e-4) {
+                slot1 = _specular_lobe(uv, u_devcurve_specular_slot1, fgId, sampleCount, specW, yOffset, crestBias, aa);
+            }
+            if (u_devcurve_specular_slot2.z > 1e-4) {
+                slot2 = _specular_lobe(uv, u_devcurve_specular_slot2, fgId, sampleCount, specW, yOffset, crestBias, aa);
+            }
             float sparkleMask = max(max(slot0, slot1), slot2) * fgInside;
             float clearAt = max(_quick_norm_y(0.006), yOffset * 0.42);
             float clearanceMask = smoothstep(clearAt, clearAt + aa * 0.65, uv.y - yFg);
             float specA = sparkleMask * clearanceMask * clamp(u_devcurve_foreground_specular_alpha, 0.0, 1.0);
             col = _blend_over(col, vec4(vec3(1.0), specA));
         }
+    }
+
+    // ---------- No derivative below this line (main's opening comment). ----------
+    if (fc.x < inner_x || fc.x > inner_x + inner_w ||
+        fc.y < inner_y || fc.y > inner_y + inner_h) { discard; }
+
+    if (inner_radius > 0.5) {
+        float ix = fc.x - inner_x;
+        float iy = fc.y - inner_y;
+        float r = inner_radius;
+        vec2 d = vec2(0.0);
+        bool in_corner = false;
+        if (ix < r && iy < r) { d = vec2(r - ix, r - iy); in_corner = true; }
+        else if (ix > inner_w - r && iy < r) { d = vec2(ix - (inner_w - r), r - iy); in_corner = true; }
+        else if (ix < r && iy > inner_h - r) { d = vec2(r - ix, iy - (inner_h - r)); in_corner = true; }
+        else if (ix > inner_w - r && iy > inner_h - r) { d = vec2(ix - (inner_w - r), iy - (inner_h - r)); in_corner = true; }
+        if (in_corner && (d.x * d.x + d.y * d.y) > r * r) { discard; }
     }
 
     col.a *= u_fade;
