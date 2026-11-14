@@ -26,7 +26,6 @@ SHOCKWAVE_CAPACITY = 16           # events the water draws at once (the bounded 
 SHOCKWAVE_EVENT_MEMORY = 6.0
 SHOCKWAVE_EVENT_RING = 48
 SHOCKWAVE_MIN_GAP = 0.09          # seconds between two admitted onsets in the loudest passage
-SHOCKWAVE_MAX_BARS = 64
 SHOCKWAVE_GRID_CELLS = (180, 120)  # the displaced surface's tessellation (columns, rows)
 # Onset strength (``shockwave_strength``) follows the shared musical rule (``musical_weight``,
 # ``musical_emphasis`` in the transient bus): near-silence and quiet passages inside a loud track

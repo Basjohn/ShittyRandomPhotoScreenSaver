@@ -62,7 +62,7 @@ from rendering.gl_programs.spectrum_options import (
     SPECTRUM_PATTERNS, SPECTRUM_RIM_PLACEMENTS,
 )
 from rendering.gl_programs.neon_lake_basin_options import (
-    BASIN_BODY_MODES, BASIN_GROWTH_REGIONS, BASIN_SURFACE_STYLES,
+    BASIN_BODY_MODES, BASIN_GROWTH_REGIONS, BASIN_SURFACE_STYLES, NEON_LAKE_MAX_BANDS,
 )
 from core.constants.neon_lake_world import TILT_RANGE as NEON_TILT_RANGE, TURN_RANGE as NEON_TURN_RANGE
 # The Field of View sliders admit exactly their framed camera spec's lens range (one owner per mode).
@@ -736,6 +736,12 @@ _MIX_PRESENTATION = {
 }
 
 
+#: The most analysis bands a mode that only aggregates the bands admits.
+ANALYSIS_MAX_BANDS = 96
+#: Modes whose renderer reads the bands one by one into a fixed array: they admit no more bands than it holds.
+RENDERED_BAND_LIMITS = MappingProxyType({"shockwave_grid": NEON_LAKE_MAX_BANDS})
+
+
 def audio_analysis_entries(mode_id: str, *, block_size: int, agc: float) -> tuple[Control, ...]:
     """The mode's audio-analysis controls, one per technical key the registry says it owns (its suffix map, plus
     its transient mix keys), in Settings' order, in the non-body ``technical`` bucket. ``block_size`` and ``agc``
@@ -751,7 +757,9 @@ def audio_analysis_entries(mode_id: str, *, block_size: int, agc: float) -> tupl
         # A mode that draws one bar per band admits no more bands than its renderer draws (the one owner).
         bars = dict(label="Bar Count:", suffix=" bars", tooltip=_BAR_COUNT_TIP, high=SPECTRUM_MAX_BARS)
     else:
-        bars = dict(label="Analysis Bands:", suffix=" bands", tooltip=_ANALYSIS_BANDS_TIP, high=96)
+        # A mode whose renderer reads each band admits no more than it reads (its renderer's one owner).
+        bars = dict(label="Analysis Bands:", suffix=" bands", tooltip=_ANALYSIS_BANDS_TIP,
+                    high=RENDERED_BAND_LIMITS.get(mode_id, ANALYSIS_MAX_BANDS))
     candidates = {
         # The worker accepts any count of at least one; Settings, the Studio and the model admit 8 to ``bars["high"]``.
         "bar_count": lambda key: Slider(key, bars["label"], 8, bars["high"], bars["tooltip"], bucket=t, scale=1,

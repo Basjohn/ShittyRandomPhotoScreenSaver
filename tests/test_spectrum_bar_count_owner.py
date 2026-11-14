@@ -37,12 +37,15 @@ def test_bar_count_admits_no_more_bars_than_are_drawn(mode_id: str) -> None:
 
 
 def test_every_reader_takes_the_one_maximum() -> None:
+    from rendering.quick.visualizer import edit_content_envelope
     from rendering.quick.visualizer.implementations import extruded_spectrum, spectrum
     from widgets.spotify_visualizer.spectrum_display_bar_count import SPECTRUM_MAX_DISPLAY_BARS
     from widgets.spotify_visualizer.spectrum_frame_inputs import MAX_LEVELS
 
     assert MAX_LEVELS == SPECTRUM_MAX_DISPLAY_BARS == SPECTRUM_MAX_BARS
     assert spectrum._MAX_BARS == extruded_spectrum._MAX_BARS == SPECTRUM_MAX_BARS
+    # Extruded's Edit envelope matches its renderer's draw admission (it held a literal copy).
+    assert edit_content_envelope.SPECTRUM_MAX_BARS == SPECTRUM_MAX_BARS
 
 
 def test_the_shader_arrays_hold_the_maximum() -> None:

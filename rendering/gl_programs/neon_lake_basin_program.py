@@ -25,9 +25,10 @@ from rendering.gl_programs.heightfield_volume_glsl import HEIGHTFIELD_VOLUME_GLS
 from rendering.gl_programs.heightfield_glsl import HEIGHTFIELD_GLSL as _SKY_HEIGHTFIELD_GLSL
 from rendering.gl_programs.neon_celestial import NEON_CELESTIAL_GLSL
 from rendering.gl_programs.neon_terrain_reaction import REACTION_GLSL
+from rendering.gl_programs.neon_lake_basin_options import NEON_LAKE_MAX_BANDS
 from rendering.gl_programs.scene3d import SCENE3D_GLSL, SCENE3D_ORBIT_GLSL
 from rendering.gl_programs.shockwave_grid_program import (
-    SHOCKWAVE_DEPTH, SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_WAVE_GLSL, SHOCKWAVE_HALF_WIDTH,
+    SHOCKWAVE_DEPTH, SHOCKWAVE_EVENTS, SHOCKWAVE_WAVE_GLSL, SHOCKWAVE_HALF_WIDTH,
 )
 
 
@@ -168,7 +169,7 @@ uniform vec2 uTan;
 uniform float uHalfWidth;
 uniform float uHorizon;
 uniform int uBarCount;
-uniform float uBars[{SHOCKWAVE_MAX_BARS}];
+uniform float uBars[{NEON_LAKE_MAX_BANDS}];
 uniform float uHeightScale;
 """
 _POSE = """
