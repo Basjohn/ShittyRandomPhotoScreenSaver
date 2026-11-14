@@ -16,8 +16,13 @@ from core.logging.tags import (
 
 @pytest.fixture(autouse=True)
 def _close_process_logging_after_test(monkeypatch):
+    # setup_logging sets the root logger's level; left at DEBUG it makes pytest's log capture keep every later file's
+    # debug records, whose exc_info tracebacks pin their frames' locals (1D.15: a retired display generation).
+    root = logging.getLogger()
+    root_level = root.level
     yield
     logger_mod.flush_and_close_logging()
+    root.setLevel(root_level)
 
 
 def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):

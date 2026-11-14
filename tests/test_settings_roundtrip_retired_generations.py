@@ -15,6 +15,7 @@ comes during a session, and only an explicit one may reclaim anything. Structura
 from __future__ import annotations
 
 import gc
+import logging
 import uuid
 import weakref
 
@@ -61,6 +62,14 @@ def _cyclic_display_manager_class():
         def get_display_count(self) -> int:
             return 1
 
+        # The Settings handler calls these on the live manager; missing, each raised an AttributeError the handler
+        # logs with exc_info, and a DEBUG-level log capture kept that traceback (and this generation) alive (1D.15).
+        def cancel_custom_layout_session(self) -> bool:
+            return False
+
+        def wake_media_runtime(self) -> int:
+            return 0
+
         def collect_runtime_retirement_roots(self):
             return [self], []
 
@@ -74,7 +83,7 @@ def _cyclic_display_manager_class():
 
 
 @pytest.mark.qt
-def test_settings_round_trips_leave_no_retired_generation_reachable(monkeypatch, qt_app, qtbot, tmp_path):
+def test_settings_round_trips_leave_no_retired_generation_reachable(monkeypatch, qt_app, qtbot, tmp_path, caplog):
     from core.performance.gc_policy import RuntimeGCPolicy
     from core.settings import SettingsManager
     from engine import engine_handlers
@@ -112,6 +121,9 @@ def test_settings_round_trips_leave_no_retired_generation_reachable(monkeypatch,
     monkeypatch.setattr(SettingsDialog, "exec", _dialog_exec)
     monkeypatch.setattr(StyledPopup, "exec", lambda _popup: pytest.fail("a popup was raised"))
 
+    # Capture at DEBUG whatever ran before: a captured record's exc_info pins its frames, so the verdict must not
+    # depend on the root level an earlier file left behind (1D.15).
+    caplog.set_level(logging.DEBUG)
     was_enabled = gc.isenabled()
     gc.disable()
     policy.start()
