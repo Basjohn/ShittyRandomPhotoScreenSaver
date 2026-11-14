@@ -266,6 +266,7 @@ struct TextureReport
     qint64 importFailures = 0;   // a published output Qt's QRhi could not import (released, reported lost)
     int jobsPending = 0;         // jobs in flight now
     qint64 retired = 0;          // job outputs handed to the window's retire list
+    qint64 rebinds = 0;          // the passes' bindings made again over new texture objects (pipelines kept)
 };
 
 // One record that changed an image (N3.8's measurement: the render thread's cost per image change): its kind ("submit":
@@ -416,6 +417,8 @@ private:
     };
 
     bool ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
+    // N3.8: the passes' bindings over the current texture objects, the pipelines kept; false: build everything again.
+    bool rebindTextures();
     bool build(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
     void pack(const ColorTarget &target);
     // The QRhi objects of the passes only: a rebuild (a new program, a failed build) keeps the record of the frame in the
@@ -429,9 +432,9 @@ private:
     // item's textures commit together when every candidate is ready (uploads recorded into `updates`, outputs imported).
     // Returns the kind of image change this record made ("" when none) and the bytes it moved.
     QString advanceTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates, qint64 *bytes);
-    bool uploadInFrame(QRhi *rhi, QRhiResourceUpdateBatch *updates, GpuTexture &slot,
+    bool uploadInFrame(QRhi *rhi, QRhiResourceUpdateBatch *updates, GpuTexture &gpu,
                        const QSharedPointer<TextureImage> &image, quint64 generation);
-    bool importOutput(QRhi *rhi, GpuTexture &slot, const UploadJob &job);
+    bool importOutput(QRhi *rhi, GpuTexture &gpu, const UploadJob &job);
     // Every texture the drawn program samples has a front.
     bool texturesReady() const;
     GpuTexture *slot(const QByteArray &name);

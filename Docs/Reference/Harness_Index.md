@@ -843,7 +843,23 @@ Tests: `tests/test_native_fullscreen_pass.py` (no build: the seven transitions' 
 core's uv names against the Python quads' vertex sources, the harness's split of the renderer's own values, its record
 never registered, the face's sampler declaration, the harness's measures with controls, every harness shader baked) and
 `tests/test_native_core_mode.py` (the built module: the transitions' and Bubble's packs bound and unbound, the sampler
-refusals).
+refusals). Since N3.8 its `Scene.settle()` waits for a texture's upload jobs (a harness's wait) before the frame it reads.
+
+```powershell
+# N3.8, D9's job service: real 3840x2160 photos (PERSONALSET) swapped into a Crossfade item while it draws in a hidden
+# host, an OpenGL child (in-frame only) then a Vulkan child (the job route, and the in_frame control): swap (each photo
+# drawn exactly; job frames equal in-frame frames; the hand-over keeps the previous photo while frames go on; the render
+# thread's record time per image change both ways; a superseded image cancelled; nothing at rest; the lost edge; the job
+# thread's probe and its QRhi on the device's job queue; job latencies), lifetime (host closed with upload jobs in
+# flight: nothing left); Vulkan validated
+python native/core/python/job_service_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan] [--rounds swap lifetime] [--photos A.jpg B.jpg ...] [--label n38_job_service]
+```
+
+Tests: `tests/test_native_core_jobs.py` (the built module, GPU-free: the job service's latch, cancellation while
+queued, while running and after publishing, a failed job keeping its pixels, a service failing closed, stop abandoning
+and joining, no wake-up at rest; no build: the face's in_frame control and lost listener, the barrier's reading) and
+`tests/test_runtime_destruction_native_work.py` (the destruction barrier waits for the core's jobs and textures).
 
 Every window round of the three native-core harnesses starts with an environment control (an off-screen window with
 Qt alone must present at least 10 frames in 1 s on that API); D3D11 and D3D12 windows present nothing while the display

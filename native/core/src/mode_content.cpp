@@ -1258,6 +1258,7 @@ void ModeSource::stateInto(QJsonObject &o) const
     jobs.insert(QStringLiteral("import_failures"), double(r.importFailures));
     jobs.insert(QStringLiteral("pending"), r.jobsPending);
     jobs.insert(QStringLiteral("retired"), double(r.retired));
+    jobs.insert(QStringLiteral("rebinds"), double(r.rebinds));
     o.insert(QStringLiteral("texture_jobs"), jobs);
     QJsonArray changes;
     for (const ImageChangeRecord &c : m_imageChanges) {
@@ -1802,10 +1803,15 @@ LatchKey ModeContent::latchKey(QRhi *rhi, const ColorTarget &target) const
 bool ModeContent::ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error)
 {
     const ModeProgram &program = m_source->drawnProgram();
+    // N3.8: a texture object made or gone under the same program, pass and QRhi: only the passes' bindings are made
+    // again over the new objects (the pipelines stay: layout-compatible), the render thread's cost of an image change.
+    if (m_res && m_res->rhi == rhi && m_res->pass == target.renderPass.get() && m_res->generation == program.generation
+        && m_res->passesBuilt && withPasses && m_res->textureObjects != m_textureObjects && rebindTextures())
+        return true;
     if (m_res && (m_res->rhi != rhi || m_res->pass != target.renderPass.get() || m_res->generation != program.generation
                   || m_res->passesBuilt != withPasses
                   || (withPasses && m_res->textureObjects != m_textureObjects)))
-        releasePipelines(); // a new program, or a texture object made or gone: the pipelines and bindings again
+        releasePipelines(); // a new program, or bindings that could not be made again: the pipelines and bindings again
     if (m_res)
         return true;
     const LatchKey key = latchKey(rhi, target);
@@ -1821,6 +1827,48 @@ bool ModeContent::ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QStrin
     const qint64 failures = m_latch.failed(key, *error);
     m_source->noteFailure(*error, failures);
     return false;
+}
+
+bool ModeContent::rebindTextures()
+{
+    const ModeProgram &program = m_source->drawnProgram();
+    for (int i = 0; i < m_res->passCount; ++i) {
+        const ModePass &pass = program.passes.at(i);
+        if (pass.samplers.isEmpty())
+            continue;
+        Resources::Pass &p = m_res->passes[i];
+        if (!p.bindings || p.samplerCount != int(pass.samplers.size()))
+            return false;
+        // build()'s order exactly (the block, the conventions, the samplers): the same layout over new objects.
+        QList<QRhiShaderResourceBinding> bindings;
+        if (pass.block.valid()) {
+            if (!p.block)
+                return false;
+            bindings.append(QRhiShaderResourceBinding::uniformBuffer(pass.block.binding(),
+                                                                     QRhiShaderResourceBinding::FragmentStage,
+                                                                     p.block.get()));
+        }
+        if (pass.conventions) {
+            bindings.append(QRhiShaderResourceBinding::uniformBuffer(kConventionsBinding,
+                                                                     QRhiShaderResourceBinding::FragmentStage,
+                                                                     m_res->conventions.get()));
+        }
+        for (int s = 0; s < p.samplerCount; ++s) {
+            const PassSampler &declared = pass.samplers.at(s);
+            GpuTexture *texture = front(declared.texture);
+            if (!texture || !p.samplers[s])
+                return false;
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(declared.binding,
+                                                                      QRhiShaderResourceBinding::FragmentStage,
+                                                                      texture->texture.get(), p.samplers[s].get()));
+        }
+        p.bindings->setBindings(bindings.cbegin(), bindings.cend());
+        if (!p.bindings->create())
+            return false;                     // ensure() builds everything again
+    }
+    m_res->textureObjects = m_textureObjects;
+    ++m_report.rebinds;
+    return true;
 }
 
 bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error)

@@ -678,7 +678,7 @@ public:
 
     bool upload(UploadJob &job, quint64 id, QString *error) override
     {
-        const QSharedPointer<TextureImage> pixels = job.pixels();
+        QSharedPointer<TextureImage> pixels = job.pixels();
         if (!pixels) {
             *error = QStringLiteral("the job has no pixels");
             return false;
@@ -709,6 +709,7 @@ public:
             return false;
         }
         job.recordedNs = jobClockNs();
+        pixels.reset();
         job.dropPixels(); // the core's copy goes: the upload is in the staging buffer
         m_rhi->finish();  // the completion edge: this QRhi's own queue idle (facts C2)
         const QRhiTexture::NativeTexture native = texture->nativeTexture();
