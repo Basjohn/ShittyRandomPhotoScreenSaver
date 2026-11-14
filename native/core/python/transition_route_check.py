@@ -136,7 +136,7 @@ def production_run(variant: str, images, run_id: int):
     from tools.transition_contact_sheet import production_transition_spec
 
     transition_id = variant_transition(variant)
-    spec = production_transition_spec(transition_id, DURATION_MS)
+    spec = production_transition_spec(fsc.renderer_class(transition_id).transition_id, DURATION_MS)
     request = spec.build_request(runtime_generation=0, source_image=images[0], destination_image=images[1])
     overrides = VARIANTS[variant]
     if overrides:

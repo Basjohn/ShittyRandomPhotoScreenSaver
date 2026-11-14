@@ -368,6 +368,33 @@ def test_the_ported_transitions_are_exactly_those_the_core_draws():
     assert native_transition_renderer("no_such_transition") is None
 
 
+def test_an_item_quad_transition_gives_the_core_its_own_values_arrays_flat_and_its_plain_picture_frames():
+    """N5.2b: Surface Tension (an item-quad program, one fragment between two pictures) is drawn by the core from the
+    Python renderer's own block values: its pool arrays flat (the core packs them at the reflected stride), and the
+    frames the Python renderer draws as a plain picture (``uShow``) are the fragment's to draw the same way."""
+    from rendering.gl_programs.surface_tension_program import SURFACE_TENSION_BLOCK, TENSION_MAX_POOLS
+    from rendering.native.mode import MODE_CORE_MEMBERS
+    from rendering.quick.render import native_background as nb
+    from rendering.quick.transitions.fullscreen_pass import SHOW_EFFECT, SHOW_NEW, SHOW_OLD
+
+    renderer = nb.native_transition_renderer("surface_tension")
+    assert renderer is not None
+    run = _run("surface_tension", _image("a"), _image("b"))
+    members = {name for name, _kind in SURFACE_TENSION_BLOCK.fields}
+
+    def settings_at(fraction: float) -> dict:
+        sample = run.sample(run.start_ns + round(fraction * (run.end_ns - run.start_ns)))
+        return nb.transition_settings(renderer, run, sample, (8.0, 4.0), 1.0)
+
+    middle = settings_at(0.5)
+    # Every member the block holds is filled by the core or by these settings, and nothing else is given.
+    assert set(middle) | (members & set(MODE_CORE_MEMBERS)) == members
+    assert not set(middle) & set(MODE_CORE_MEMBERS)
+    assert len(middle["uPools"]) == 4 * TENSION_MAX_POOLS and len(middle["uDrift"]) == 2 * TENSION_MAX_POOLS
+    assert all(isinstance(v, (int, float)) for v in middle["uPools"] + middle["uDrift"])
+    assert [settings_at(f)["uShow"] for f in (0.0, 0.5, 1.0)] == [SHOW_OLD, SHOW_EFFECT, SHOW_NEW]
+
+
 def test_the_item_hands_its_runs_to_the_layer(qt_app, monkeypatch):
     from rendering.quick.render import background_item, native_background
 
