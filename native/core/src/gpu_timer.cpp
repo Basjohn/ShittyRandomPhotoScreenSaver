@@ -59,6 +59,8 @@ QString gpuPassKindName(GpuPassKind kind)
         return QStringLiteral("surface");
     case GpuPassKind::Load:
         return QStringLiteral("load");
+    case GpuPassKind::Backdrop:
+        return QStringLiteral("backdrop");
     }
     return QStringLiteral("unknown");
 }

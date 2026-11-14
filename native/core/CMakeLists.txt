@@ -91,6 +91,7 @@ set(_sources
     src/gpu_timer.cpp
     src/surfaces.cpp
     src/composite.cpp
+    src/backdrop.cpp
     src/spectrum.cpp
     src/stream_source.cpp
     src/mode_schema.cpp

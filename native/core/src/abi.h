@@ -60,6 +60,12 @@
 // textures_lost_listener (cleared by composite_mode_retire, L4); the frame driver state's window_retire_frame_requests
 // and window_retiring (M2); window edges counted once per frame (M1; window_edges_self_test); the job service's device-loss, thread-start and
 // briefJson rules (L1-L3), its self-test's lose_device, fail_thread_start and running_state; the commit's two phases (L5).
+// 16 (N5.7b, the backdrop pyramid; backdrop.h): backdrop_create/set/build/levels/state/destroy and
+// backdrop_pyramid_sizes; composite_live's backdrop_items, backdrop_pyramids, backdrop_resources and backdrop_builds;
+// the GPU timer's pass kind 4 (backdrop); the frame driver state's backdrop_builds and window_backdrops. Backward
+// compatible for every earlier caller: the surface's drawn generation and window placement and the frame driver's
+// backdrop step after the background layer are additions; primeForLoad transitions every mip level (one for every
+// single-level target, as before).
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 15
+#define SRPSS_NATIVE_CORE_ABI 16

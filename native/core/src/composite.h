@@ -39,6 +39,7 @@
 #include <memory>
 
 class QPropertyAnimation;
+class QQuickWindow;
 
 namespace srpss_core {
 
@@ -51,6 +52,11 @@ struct ModeCard;
 struct ModeProgram;
 struct PacketReaderConfig;
 struct SpectrumPresentation;
+
+// Render thread (or the GUI thread blocked in Qt's sync): the window's framebuffer in device pixels, from Qt's own
+// swapchain or redirect target (audit N29 L1); invalid when it has neither yet. The backdrop pyramid is sized from it
+// (N5.7b), as the Python pyramid is from Qt Quick's render target.
+QSize windowFramebufferPixels(QQuickWindow *window);
 
 struct CompositeConfig
 {

@@ -21,6 +21,7 @@
 #include <Python.h>
 
 #include "abi.h"
+#include "backdrop.h"
 #include "composite.h"
 #include "host_adapter.h"
 #include "item_notifier.h"
@@ -663,6 +664,12 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("mode_texture_images"), textures.images);
     o.insert(QStringLiteral("mode_texture_image_bytes"), double(textures.imageBytes));
     o.insert(QStringLiteral("mode_texture_uploads"), double(textures.uploads));
+    // N5.7b: the backdrop items, their pyramids and the pyramids' QRhi objects, and the builds recorded.
+    const srpss_core::BackdropCounts backdrops = srpss_core::backdropCounts();
+    o.insert(QStringLiteral("backdrop_items"), backdrops.items);
+    o.insert(QStringLiteral("backdrop_pyramids"), backdrops.pyramids);
+    o.insert(QStringLiteral("backdrop_resources"), backdrops.resources);
+    o.insert(QStringLiteral("backdrop_builds"), double(backdrops.builds));
     return pyJson(o);
 }
 
@@ -1995,6 +2002,182 @@ PyObject *frame_schemas(PyObject *, PyObject *)
     return pyJson(o);
 }
 
+// ---------------------------------------------------------------- the backdrop pyramid (N5.7b, backdrop.h)
+
+struct Backdrops
+{
+    qint64 next = 1;
+    QHash<qint64, QPointer<srpss_core::BackdropItem>> live;
+};
+
+Backdrops &backdrops()
+{
+    static Backdrops b;
+    return b;
+}
+
+srpss_core::BackdropItem *backdropOf(long long handle)
+{
+    if (!backdrops().live.contains(handle)) {
+        PyErr_Format(PyExc_KeyError, "no backdrop %lld (destroyed, or never created)", handle);
+        return nullptr;
+    }
+    srpss_core::BackdropItem *item = backdrops().live.value(handle).data();
+    if (!item)
+        PyErr_Format(PyExc_RuntimeError, "backdrop %lld was deleted with its parent item", handle);
+    return item;
+}
+
+PyObject *backdrop_create(PyObject *, PyObject *args)
+{
+    unsigned long long address = 0;
+    int parked = 0;
+    if (!PyArg_ParseTuple(args, "K|p", &address, &parked))
+        return nullptr;
+    auto *parent = qobject_cast<QQuickItem *>(reinterpret_cast<QObject *>(static_cast<quintptr>(address)));
+    if (!address || !parent) {
+        PyErr_SetString(PyExc_TypeError, "a backdrop is placed in a QQuickItem: pass its address");
+        return nullptr;
+    }
+    auto *item = new srpss_core::BackdropItem(parent); // owned by its parent item (QObject parent) and deletable here
+    if (parked)
+        item->setParked(true);
+    const qint64 handle = backdrops().next++;
+    backdrops().live.insert(handle, QPointer<srpss_core::BackdropItem>(item));
+    // The item's address, for the Python face's wrapper (shiboken6.wrapInstance as a QQuickItem: QML binds it as a
+    // card's backdrop, MaterialSurface's texture provider).
+    return Py_BuildValue("(LK)", handle, static_cast<unsigned long long>(quintptr(item)));
+}
+
+PyObject *backdrop_set(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *config = "";
+    Py_ssize_t length = 0;
+    if (!PyArg_ParseTuple(args, "Ls#", &handle, &config, &length))
+        return nullptr;
+    srpss_core::BackdropItem *item = backdropOf(handle);
+    if (!item)
+        return nullptr;
+    QJsonParseError parse;
+    const QJsonDocument document = QJsonDocument::fromJson(QByteArray(config, qsizetype(length)), &parse);
+    if (parse.error != QJsonParseError::NoError || !document.isObject()) {
+        PyErr_SetString(PyExc_ValueError, "the backdrop's configuration is a JSON object");
+        return nullptr;
+    }
+    const QJsonObject o = document.object();
+    for (auto it = o.constBegin(); it != o.constEnd(); ++it) {
+        if (it.key() != QLatin1String("parked") && it.key() != QLatin1String("dimming")) {
+            PyErr_Format(PyExc_ValueError, "unknown backdrop option '%s' (parked, dimming)",
+                         it.key().toUtf8().constData());
+            return nullptr;
+        }
+    }
+    if (o.contains(QStringLiteral("dimming"))) {
+        const double dimming = o.value(QStringLiteral("dimming")).toDouble(-1.0);
+        if (!(dimming >= 0.0 && dimming <= 1.0)) {
+            PyErr_SetString(PyExc_ValueError, "dimming is 0 to 1");
+            return nullptr;
+        }
+        item->setDimming(dimming);
+    }
+    if (o.contains(QStringLiteral("parked"))) {
+        const QJsonValue parked = o.value(QStringLiteral("parked"));
+        if (!parked.isBool()) {
+            PyErr_SetString(PyExc_ValueError, "parked is true or false");
+            return nullptr;
+        }
+        item->setParked(parked.toBool());
+    }
+    Py_RETURN_NONE;
+}
+
+PyObject *backdrop_build(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    int readback = 0;
+    if (!PyArg_ParseTuple(args, "L|p", &handle, &readback))
+        return nullptr;
+    srpss_core::BackdropItem *item = backdropOf(handle);
+    if (!item)
+        return nullptr;
+    if (readback)
+        item->requestReadback();
+    else
+        item->requestBuild();
+    Py_RETURN_NONE;
+}
+
+PyObject *backdrop_levels(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::BackdropItem *item = backdropOf(handle);
+    if (!item)
+        return nullptr;
+    QList<srpss_core::BackdropLevelPixels> levels;
+    if (!item->takeLevels(&levels))
+        Py_RETURN_NONE;
+    PyObject *list = PyList_New(0);
+    for (const srpss_core::BackdropLevelPixels &level : levels) {
+        const QByteArray name = level.name.toUtf8();
+        PyObject *entry = Py_BuildValue("(s#iiy#)", name.constData(), Py_ssize_t(name.size()), level.size.width(),
+                                        level.size.height(), level.rgba.constData(), Py_ssize_t(level.rgba.size()));
+        if (!entry) {
+            Py_DECREF(list);
+            return nullptr;
+        }
+        PyList_Append(list, entry);
+        Py_DECREF(entry);
+    }
+    return list;
+}
+
+PyObject *backdrop_state(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::BackdropItem *item = backdropOf(handle);
+    if (!item)
+        return nullptr;
+    return pyJson(item->stateJson());
+}
+
+PyObject *backdrop_destroy(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    if (!backdrops().live.contains(handle)) {
+        PyErr_Format(PyExc_KeyError, "no backdrop %lld (destroyed, or never created)", handle);
+        return nullptr;
+    }
+    QPointer<srpss_core::BackdropItem> item = backdrops().live.take(handle);
+    const bool deleted = !item.isNull();
+    delete item.data(); // GUI thread: Qt Quick releases its node (and the pyramid) on the render thread at the next sync
+    return PyBool_FromLong(deleted ? 1 : 0);
+}
+
+PyObject *backdrop_pyramid_sizes(PyObject *, PyObject *args)
+{
+    int width = 0;
+    int height = 0;
+    if (!PyArg_ParseTuple(args, "ii", &width, &height))
+        return nullptr;
+    QJsonArray sizes;
+    for (const QSize &s : srpss_core::backdropPyramidSizes(QSize(width, height)))
+        sizes.append(QJsonArray { s.width(), s.height() });
+    QJsonArray names;
+    for (int i = 0; i < int(srpss_core::BackdropLevel::Count); ++i)
+        names.append(srpss_core::backdropLevelName(srpss_core::BackdropLevel(i)));
+    QJsonObject o;
+    o.insert(QStringLiteral("sizes"), sizes);
+    o.insert(QStringLiteral("levels"), names);
+    return pyJson(o);
+}
+
 PyMethodDef methods[] = {
     { "runtime_info", runtime_info, METH_NOARGS,
       "() -> dict: version, ABI, the compiled and running Qt, the compiler, the loaded Qt and MSVC runtime DLLs." },
@@ -2199,6 +2382,21 @@ PyMethodDef methods[] = {
     { "frame_schemas", frame_schemas, METH_NOARGS,
       "() -> JSON str: the frame ABI version, the mode codes and every native schema compiled in (fields, offsets, "
       "range rules, fingerprints)." },
+    { "backdrop_create", backdrop_create, METH_VARARGS,
+      "(parent_address, parked=False) -> (handle, item_address): a backdrop pyramid's item (a texture provider) in the "
+      "QQuickItem at parent_address (N5.7b)." },
+    { "backdrop_set", backdrop_set, METH_VARARGS,
+      "(handle, json) -> None: {parked: bool (demand 0: every QRhi object goes), dimming: 0 to 1}." },
+    { "backdrop_build", backdrop_build, METH_VARARGS,
+      "(handle, readback=False) -> None: a build at the next frame (harness), with a readback of every level." },
+    { "backdrop_levels", backdrop_levels, METH_VARARGS,
+      "(handle) -> [(name, width, height, rgba bytes)] or None: the last readback's levels, once complete (taken)." },
+    { "backdrop_state", backdrop_state, METH_VARARGS,
+      "(handle) -> JSON str: parked, dimming, the node's last sync and the pyramid (builds, clears, reason, sizes)." },
+    { "backdrop_destroy", backdrop_destroy, METH_VARARGS,
+      "(handle) -> bool: deletes the item (its node and pyramid go on the render thread)." },
+    { "backdrop_pyramid_sizes", backdrop_pyramid_sizes, METH_VARARGS,
+      "(width, height) -> JSON str: the level sizes of a window (the Python pyramid_sizes) and the level names." },
     { nullptr, nullptr, 0, nullptr }
 };
 

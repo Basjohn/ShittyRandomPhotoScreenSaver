@@ -100,7 +100,9 @@ QString primeForLoad(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *texture)
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = reinterpret_cast<VkImage>(quintptr(native.object));
         barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        barrier.subresourceRange.levelCount = 1;
+        // Every level (N5.7b: the backdrop's output has mips, each level a target of its own; QRhi tracks one layout
+        // for the whole image, and setNativeLayout below names it for every level). One level for every other target.
+        barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
         barrier.subresourceRange.layerCount = 1;
         df->vkCmdPipelineBarrier(cbHandles->commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                                  VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1,
@@ -111,6 +113,57 @@ QString primeForLoad(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *texture)
         return QStringLiteral("no native command buffer");
     texture->setNativeLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     return QStringLiteral("primed from layout %1").arg(native.layout);
+}
+
+int primeForLoad(QRhi *rhi, QRhiCommandBuffer *cb, const QList<QRhiTexture *> &textures)
+{
+    if (!rhi || !cb || rhi->backend() != QRhi::Vulkan)
+        return 0;
+    QList<QRhiTexture *> due;
+    for (QRhiTexture *texture : textures) {
+        if (texture && texture->nativeTexture().layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+            due.append(texture);
+    }
+    if (due.isEmpty())
+        return 0;
+    const auto *handles = static_cast<const QRhiVulkanNativeHandles *>(rhi->nativeHandles());
+    if (!handles || !handles->inst || !handles->dev)
+        return 0;
+    QVulkanDeviceFunctions *df = handles->inst->deviceFunctions(handles->dev);
+    if (!df)
+        return 0;
+    cb->beginExternal();
+    const auto *cbHandles = static_cast<const QRhiVulkanCommandBufferNativeHandles *>(cb->nativeHandles());
+    const bool recorded = cbHandles && cbHandles->commandBuffer;
+    if (recorded) {
+        QList<VkImageMemoryBarrier> barriers;
+        barriers.reserve(due.size());
+        for (QRhiTexture *texture : due) {
+            const QRhiTexture::NativeTexture native = texture->nativeTexture();
+            VkImageMemoryBarrier barrier = {};
+            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            barrier.oldLayout = VkImageLayout(native.layout);
+            barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = reinterpret_cast<VkImage>(quintptr(native.object));
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+            barrier.subresourceRange.layerCount = 1;
+            barriers.append(barrier);
+        }
+        df->vkCmdPipelineBarrier(cbHandles->commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr,
+                                 uint32_t(barriers.size()), barriers.constData());
+    }
+    cb->endExternal();
+    if (!recorded)
+        return 0;
+    for (QRhiTexture *texture : due)
+        texture->setNativeLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    return int(due.size());
 }
 
 QString primeForLoadOutsideFrame(QRhi *rhi, QRhiTexture *texture)

@@ -50,6 +50,7 @@ enum class GpuPassKind : int {
     Probe = 1,   // the probe pass (probe_pass.h)
     Surface = 2, // a composited surface's content pass (surfaces.h)
     Load = 3,    // the harness's known-cost pass (load_pass.h)
+    Backdrop = 4, // a backdrop pyramid's build, every level (backdrop.h, N5.7b)
 };
 
 QString gpuPassKindName(GpuPassKind kind);

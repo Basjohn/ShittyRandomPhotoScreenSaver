@@ -1,5 +1,6 @@
 #include "frame_driver.h"
 
+#include "backdrop.h"
 #include "surfaces.h"
 
 #include <rhi/qrhi.h>
@@ -321,12 +322,17 @@ void FrameDriver::onBeforeRendering()
             m_timer.reset();
         }
     }
-    if (!pass && !load && surfaces.isEmpty())
+    // N5.7b: a backdrop pyramid that wants a build regardless of the layer (made, woken, resized, dimming) noted it at
+    // its sync; at rest the note is one atomic read.
+    const bool backdropWanted = m_surfaces && m_surfaces->takeBackdropWanted();
+    if (!pass && !load && surfaces.isEmpty() && !backdropWanted)
         return; // at rest: nothing to record, nothing recorded
     if (!cb)
         cb = m_source->commandBuffer();
     if (!rhi || !cb) {
         m_edgesWithoutCommandBuffer.fetchAndAddRelaxed(1);
+        if (backdropWanted)
+            m_surfaces->noteBackdropWanting(); // taken above, not served: kept for the next edge
         return;
     }
     // In dependency order (D5.2: background layer, backdrop pyramid, Visualizer scene, overlays): the probe and the
@@ -377,7 +383,21 @@ void FrameDriver::onBeforeRendering()
             m_passGeneration.fetchAndAddOrdered(1); // dropped at the next edge, never retried every frame
         }
     }
+    // The background layer's surfaces first (dirtySurfaces lists them first), then the backdrop pyramids built from it
+    // (N5.7b), then every other surface (D5.2's order).
+    bool backgroundRecorded = false;
+    bool backdropsDone = false;
+    auto recordBackdrops = [&]() {
+        backdropsDone = true;
+        if (!m_surfaces || !(backgroundRecorded || backdropWanted))
+            return;
+        if (recordBackdropPyramids(rhi, cb))
+            recorded = true;
+    };
     for (const std::shared_ptr<Surface> &surface : surfaces) {
+        const bool background = surface->layer() == SurfaceLayer::Background;
+        if (!background && !backdropsDone)
+            recordBackdrops();
         bool surfaceRecorded = false;
         QString error;
         const int scope = timerBegin(rhi, cb, GpuPassKind::Surface);
@@ -390,10 +410,38 @@ void FrameDriver::onBeforeRendering()
         if (surfaceRecorded) {
             recorded = true;
             m_surfacePassesRecorded.fetchAndAddRelaxed(1);
+            backgroundRecorded = backgroundRecorded || background;
         }
     }
+    if (!backdropsDone)
+        recordBackdrops();
     if (recorded)
         m_framesRecorded.fetchAndAddRelaxed(1);
+}
+
+bool FrameDriver::recordBackdropPyramids(QRhi *rhi, QRhiCommandBuffer *cb)
+{
+    const QList<std::shared_ptr<BackdropPyramid>> pyramids = m_surfaces->backdrops();
+    if (pyramids.isEmpty())
+        return false;
+    const std::shared_ptr<Surface> source = m_surfaces->backgroundSource();
+    bool any = false;
+    for (const std::shared_ptr<BackdropPyramid> &pyramid : pyramids) {
+        if (!pyramid->needsRecord(source.get()))
+            continue; // the layer recorded nothing new for it (a still's kept frame): nothing built, nothing timed
+        bool built = false;
+        QString error;
+        const int scope = timerBegin(rhi, cb, GpuPassKind::Backdrop);
+        const bool ok = pyramid->record(rhi, cb, source.get(), &built, &error);
+        timerEnd(rhi, cb, scope);
+        if (!ok)
+            setError(QStringLiteral("backdrop: ") + error);
+        if (built) {
+            any = true;
+            m_backdropBuilds.fetchAndAddRelaxed(1);
+        }
+    }
+    return any;
 }
 
 void FrameDriver::onSceneGraphInvalidated()
@@ -424,6 +472,8 @@ QJsonObject FrameDriver::stateJson() const
     o.insert(QStringLiteral("gpu_samples_appended"), m_samples->appended());
     o.insert(QStringLiteral("gpu_samples_dropped"), m_samples->dropped());
     o.insert(QStringLiteral("retired_outputs_released"), m_retiredReleased.loadRelaxed());
+    o.insert(QStringLiteral("backdrop_builds"), m_backdropBuilds.loadRelaxed());
+    o.insert(QStringLiteral("window_backdrops"), m_surfaces ? int(m_surfaces->backdrops().size()) : 0);
     o.insert(QStringLiteral("window_edges"), m_surfaces ? m_surfaces->edges() : 0);
     o.insert(QStringLiteral("window_retire_frame_requests"), m_surfaces ? m_surfaces->frameRequests() : 0);
     o.insert(QStringLiteral("window_retiring"), m_surfaces ? m_surfaces->retiring() : false);

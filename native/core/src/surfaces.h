@@ -17,6 +17,7 @@
 #include <QtCore/QAtomicInteger>
 #include <QtCore/QList>
 #include <QtCore/QMutex>
+#include <QtCore/QPoint>
 #include <QtCore/QSize>
 #include <QtCore/QString>
 #include <rhi/qrhi.h> // QRhiTexture::Format in a declaration needs the class (round 5's first compile)
@@ -30,6 +31,7 @@ class QRhiTexture;
 
 namespace srpss_core {
 
+class BackdropPyramid;
 class JobService;
 
 enum class SurfacePattern {
@@ -113,6 +115,20 @@ public:
     SurfaceLayer layer() const { return SurfaceLayer(m_layer.loadAcquire()); }
     // Passes a content recorded whose target then kept its frame (N5.7a, keptTargetLastRecord): not counted as passes.
     qint64 keptRecords() const { return m_kept.loadRelaxed(); }
+    // N5.7b, render thread: a process-unique number for the frame of its content the target holds, new at every content
+    // pass that drew one; 0 while the target holds none (never written, cleared, released or resized). The backdrop
+    // pyramid builds when it differs from the one it built from (backdrop.h).
+    quint64 drawnGeneration() const { return m_drawnGeneration; }
+    // N5.7b, render thread, at sync: where the target lies in its window, in the window framebuffer's device pixels
+    // (rows top-down: the item's scene origin times the window's ratio, on the pixel grid composite.vert snaps it to),
+    // and that framebuffer's size. The backdrop's seed reads the layer where it lies in the window.
+    void setPlacement(const QPoint &origin, const QSize &window)
+    {
+        m_origin = origin;
+        m_windowPixels = window;
+    }
+    QPoint origin() const { return m_origin; }
+    QSize windowPixels() const { return m_windowPixels; }
 
     // Render thread, on beforeRendering (inside the frame, outside any pass): records the content pass when dirty,
     // nothing otherwise (`recorded` says which).
@@ -144,6 +160,9 @@ private:
     std::shared_ptr<SurfaceContent> m_content;
     SurfacePattern m_pattern = SurfacePattern::TexelIdentity;
     bool m_targetClear = false;            // render thread: the target is known to be transparent (cleared by a draw)
+    quint64 m_drawnGeneration = 0;         // render thread (N5.7b): the content's frame the target holds, 0 for none
+    QPoint m_origin;                       // render thread (N5.7b): the target's place in its window
+    QSize m_windowPixels;
     QAtomicInteger<int> m_dirty { 1 };
     QAtomicInteger<int> m_layer { 0 };     // SurfaceLayer
     QAtomicInteger<qint64> m_passes { 0 };
@@ -215,6 +234,19 @@ public:
     // The surfaces with content to record this frame (empty at rest), the background layer's first (D5.2's order).
     QList<std::shared_ptr<Surface>> dirtySurfaces() const;
 
+    // N5.7b, the backdrop pyramids (backdrop.h; render thread): added by a backdrop node while its item is not parked,
+    // recorded by the frame driver after the background layer. A pyramid that wants a build regardless of the layer
+    // (made, woken, resized, dimming) notes it at its sync; the frame edge takes the note (one atomic at rest).
+    void addBackdrop(const std::shared_ptr<BackdropPyramid> &pyramid);
+    void removeBackdrop(const BackdropPyramid *pyramid);
+    QList<std::shared_ptr<BackdropPyramid>> backdrops() const;
+    void noteBackdropWanting() { m_backdropWanted.storeRelease(1); }
+    bool takeBackdropWanted() { return m_backdropWanted.testAndSetOrdered(1, 0); }
+    // The window's background layer the pyramid is built from: the last added background-layer surface holding a frame
+    // (a display generation's new layer is added after the one it replaces), else the last added one; null when the
+    // window has none.
+    std::shared_ptr<Surface> backgroundSource() const;
+
 private:
     struct Retired
     {
@@ -236,6 +268,8 @@ private:
     QAtomicInteger<int> m_frameCounted { 0 }; // this frame's edge is counted (M1); cleared at afterRendering
     QAtomicInteger<int> m_retiring { 0 };
     QList<Retired> m_retired; // under m_mutex
+    QList<std::shared_ptr<BackdropPyramid>> m_backdrops; // under m_mutex (N5.7b)
+    QAtomicInteger<int> m_backdropWanted { 0 };
 };
 
 } // namespace srpss_core

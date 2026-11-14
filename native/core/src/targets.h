@@ -9,6 +9,7 @@
 #pragma once
 
 #include <QtCore/QByteArray>
+#include <QtCore/QList>
 #include <QtCore/QSize>
 #include <QtCore/QString>
 // The whole QRhiTexture declaration, not a forward one: the target helpers name QRhiTexture::Format in their defaults.
@@ -55,8 +56,13 @@ bool createColorTarget(QRhi *rhi, const QSize &size, const QByteArray &name, Col
                        bool withDepthStencil = false, QRhiTexture::Format format = QRhiTexture::RGBA8);
 
 // Rule C: on Vulkan, when the texture is not in COLOR_ATTACHMENT_OPTIMAL, records the transition into `cb` (recording,
-// outside any pass) and tells QRhi the layout; elsewhere nothing. Returns what was done.
+// outside any pass) and tells QRhi the layout; elsewhere nothing. Returns what was done. Every mip level is transitioned
+// (N5.7b's mipmapped output; QRhi's layout is the whole image's).
 QString primeForLoad(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *texture);
+
+// Rule C for several textures in one external block (N5.7b: every target of a backdrop build): the ones not in
+// COLOR_ATTACHMENT_OPTIMAL, each over every level. Returns how many were primed (0 off Vulkan).
+int primeForLoad(QRhi *rhi, QRhiCommandBuffer *cb, const QList<QRhiTexture *> &textures);
 
 // The same for a texture outside any frame: an offscreen frame of its own, waited on (a target's creation edge before
 // any frame of the host exists, the hidden host's Quick target).

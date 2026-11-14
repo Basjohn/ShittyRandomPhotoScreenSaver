@@ -6,8 +6,15 @@ wallpaper and dimming (z 2) and below every widget, binds it to the widget host 
 the Context Menu, and forwards the controller's existing edges (image published,
 transition started/cleared, geometry changed, dimming changed) as backdrop refreshes.
 It has no timer, no frame request and no per-frame work of its own.
+
+Its source (Current_Plan.md N5.7b): on OpenGL the Python pyramid
+(``render.surface_backdrop.SurfaceBackdropSource``); on the native background's backend
+(Vulkan, with the native core loaded) the core's pyramid built from its background layer
+(``render.native_surface_backdrop``), whose item the same ``MaterialSurface`` samples.
 """
 from __future__ import annotations
+
+from typing import Any
 
 from PySide6.QtQuick import QQuickItem
 
@@ -19,29 +26,51 @@ from .widgets.surface_material import transition_refresh_interval_s
 BACKDROP_Z = 2.0
 
 
+def _make_source(root: QQuickItem, screen_index: int) -> tuple[Any, QQuickItem]:
+    """The display's backdrop source and its item: the core's on the native background's backend, else Python's."""
+    from .render.native_surface_backdrop import NativeSurfaceBackdropSource, native_backdrop_core
+
+    core = native_backdrop_core()
+    if core is not None:
+        source = NativeSurfaceBackdropSource(core, root)
+        return source, source.item
+    item = SurfaceBackdropSource(root, screen_index=screen_index)
+    return item, item
+
+
 class SurfaceBackdropOwner:
     """One display's backdrop item and its edge wiring; retire() removes all of it."""
 
     def __init__(self, root: QQuickItem, *, screen_index: int) -> None:
         self._root = root
-        item = SurfaceBackdropSource(root, screen_index=screen_index)
+        source, item = _make_source(root, int(screen_index))
         item.setZ(BACKDROP_Z)
         item.setEnabled(False)
         item.setWidth(root.width())
         item.setHeight(root.height())
         root.widthChanged.connect(self._on_geometry_changed)
         root.heightChanged.connect(self._on_geometry_changed)
-        self._item: SurfaceBackdropSource | None = item
+        self._source: Any = source
+        self._item: QQuickItem | None = item
         self._materials: frozenset[str] = frozenset()
         self._transition_active = False
-        item.request_refresh()
+        source.request_refresh()
 
     @property
-    def item(self) -> SurfaceBackdropSource:
+    def item(self) -> QQuickItem:
         item = self._item
         if item is None:
             raise RuntimeError("surface backdrop owner has retired")
         return item
+
+    @property
+    def source(self) -> Any:
+        """The Python ``SurfaceBackdropSource`` (the item itself) or the native source (N5.7b)."""
+        return self._source
+
+    @property
+    def native(self) -> bool:
+        return self._source is not None and self._source is not self._item
 
     @property
     def retired(self) -> bool:
@@ -49,7 +78,7 @@ class SurfaceBackdropOwner:
 
     @property
     def parked(self) -> bool:
-        return self._item is None or self._item.parked
+        return self._item is None or self._source.parked
 
     def park(self) -> None:
         """Every surface went Normal: free the GL and stop traversal (consumers unbound first).
@@ -59,41 +88,38 @@ class SurfaceBackdropOwner:
         with nothing.
         """
 
-        item = self._item
-        if item is None:
+        if self._item is None:
             return
         self._transition_active = False
-        item.set_parked(True)
+        self._source.set_parked(True)
 
     def wake(self) -> None:
-        item = self._item
-        if item is None:
+        if self._item is None:
             return
-        item.set_parked(False)
+        self._source.set_parked(False)
 
     def set_materials(self, materials: frozenset[str]) -> None:
         """The non-Normal materials in use; they set the transition refresh spacing."""
 
         self._materials = frozenset(materials)
         if self._transition_active and self._item is not None:
-            self._item.set_continuous(True, transition_refresh_interval_s(self._materials))
+            self._source.set_continuous(True, transition_refresh_interval_s(self._materials))
 
     def note_background_changed(self) -> None:
         """A new presentation image, dimming change or similar one-off edge."""
 
-        if self._item is not None and not self._item.parked:
-            self._item.request_refresh()
+        if self._item is not None and not self._source.parked:
+            self._source.request_refresh()
 
     def set_transition_active(self, active: bool) -> None:
         active = bool(active)
-        item = self._item
-        if item is None or item.parked or active == self._transition_active:
+        if self._item is None or self._source.parked or active == self._transition_active:
             return
         self._transition_active = active
-        item.set_continuous(active, transition_refresh_interval_s(self._materials))
+        self._source.set_continuous(active, transition_refresh_interval_s(self._materials))
         if not active:
             # The run's final frame and the adopted wallpaper that follows it.
-            item.request_refresh()
+            self._source.request_refresh()
 
     def _on_geometry_changed(self, *_args) -> None:
         item, root = self._item, self._root
@@ -101,12 +127,13 @@ class SurfaceBackdropOwner:
             return
         item.setWidth(root.width())
         item.setHeight(root.height())
-        if not item.parked:
-            item.request_refresh()
+        if not self._source.parked:
+            self._source.request_refresh()
 
     def retire(self) -> None:
-        """Scene retirement only: the item dies with the scene root (C++ owned)."""
-        item, root = self._item, self._root
+        """Scene retirement only: the Python item dies with the scene root (C++ owned); the native one is deleted
+        now (its consumers were unbound first), its pyramid released on the render thread at the next sync."""
+        item, root, source = self._item, self._root, self._source
         self._item = None
         self._root = None
         if root is not None:
@@ -115,8 +142,12 @@ class SurfaceBackdropOwner:
                     signal.disconnect(self._on_geometry_changed)
                 except (RuntimeError, TypeError):
                     pass
-        if item is not None and not item.parked:
-            item.set_parked(True)
+        if item is None:
+            return
+        if source is not item:
+            source.close()
+        elif not source.parked:
+            source.set_parked(True)
 
 
 __all__ = ["BACKDROP_Z", "SurfaceBackdropOwner"]
