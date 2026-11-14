@@ -673,6 +673,42 @@ def test_a_bar_fill_ghost_is_softer_than_a_plain_ghost(render):
 
 
 @pytest.mark.qt
+def test_a_bar_fill_ghost_is_a_soft_glow_gone_before_its_peak(render):
+    """1B.10: a Bar Fill ghost reads like a hue ghost (Preset 1's), never a dim column of the bar's colours. Over a
+    plain fill: in the upper half of every ghost its opacity is well below a Bar Colour ghost's (it falls as (1 - t)^2,
+    not the usual linear ramp), and high up its sides are feathered (a column a quarter of the bar in from a side
+    carries clearly less than the bar's centre column), while just above the bar it is still as wide as the bar.
+    Negative control: the Bar Colour ghost is a flat column across the bar at every height."""
+    import numpy as np
+    plain = render({"spectrum_ghost_color_source": "Bar Colour"})
+    soft = render({"spectrum_ghost_color_source": "Bar Fill"})
+    bare = render(ghosting=False)
+    ghost = _changed(plain, bare) & _is(render(bars=PEAKS, peaks=PEAKS, ghosting=False), FILL)
+    upper = np.zeros_like(ghost)
+    side_ratio, side_ratio_control, low_ratio = [], [], []
+    columns = np.unique(np.nonzero(ghost)[1])
+    runs = np.split(columns, np.nonzero(np.diff(columns) > 1)[0] + 1)     # one run of columns per bar
+    for run in runs:
+        if run.size < 12:
+            continue
+        rows = np.nonzero(ghost[:, run].any(axis=1))[0]
+        middle = rows[: rows.size // 2]                                     # the upper half (image rows grow down)
+        upper[np.ix_(middle, run)] = ghost[np.ix_(middle, run)]
+        high = rows[rows.size // 4: rows.size // 2]
+        near = rows[-3:]                                                    # just above the bar
+        centre, quarter = run[run.size // 2], run[run.size // 4]
+        side_ratio.append(soft[high, quarter, 3].mean() / max(1.0, soft[high, centre, 3].mean()))
+        side_ratio_control.append(plain[high, quarter, 3].mean() / max(1.0, plain[high, centre, 3].mean()))
+        low_ratio.append(soft[near, quarter, 3].mean() / max(1.0, soft[near, centre, 3].mean()))
+    assert len(side_ratio) >= COUNT // 2
+    assert upper.sum() > 500
+    assert soft[..., 3][upper].mean() < 0.4 * plain[..., 3][upper].mean()
+    assert max(side_ratio) < 0.85
+    assert min(low_ratio) > 0.9
+    assert min(side_ratio_control) > 0.97
+
+
+@pytest.mark.qt
 @pytest.mark.parametrize("radius", (0.0, 12.0), ids=("square", "rounded"))
 def test_a_bar_fill_ghost_meets_its_bar_without_a_dark_seam(render, radius):
     """Over a bar whose border is transparent (the flag presets), a Bar Fill ghost begins at the bar's fill top: the
