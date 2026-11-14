@@ -43,6 +43,7 @@ namespace srpss_core {
 class WindowSurfaces;
 class SpectrumSource;
 class ModeSource;
+class TexturesLostListener;
 struct CompositeStats;
 struct ModeCard;
 struct ModeProgram;
@@ -109,9 +110,13 @@ public:
     bool programMode(const ModeProgram &program, const QJsonObject *settings, QString *error);
     bool settingsMode(const QJsonObject &settings, QString *error);
     bool cardMode(const ModeCard &card, QString *error);
-    // N4.a: the item's textures (mode_content.h): an image by name (RGBA8, rows top first), or its removal.
-    bool textureMode(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips, QString *error);
+    // N4.a: the item's textures (mode_content.h): an image by name (RGBA8, rows top first), or its removal. `inFrame`
+    // (N3.8, a harness control): uploaded in the frame where the device has a job service.
+    bool textureMode(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips, QString *error,
+                     bool inFrame = false);
     bool removeTextureMode(const QByteArray &name, QString *error);
+    // N3.8: the owner's listener of the lost edge (null: none), called on the GUI thread (item_notifier.h).
+    bool texturesLostListener(const std::shared_ptr<TexturesLostListener> &listener, QString *error);
     ModeSource *mode() const { return m_mode.get(); }
 
     // Any thread: composite items alive in the process.
@@ -124,6 +129,10 @@ protected:
 private:
     bool modeRefused(QString *error) const;
     bool spectrumRefused(QString *error) const;
+    // The item's generic mode source, its notifier attached to this item (N3.8): the current one, or a new one the
+    // caller keeps only when its call succeeds; modeSource() keeps it at once.
+    std::shared_ptr<ModeSource> currentOrNewMode();
+    std::shared_ptr<ModeSource> modeSource();
 
     CompositeConfig m_config;
     std::shared_ptr<WindowSurfaces> m_surfaces; // the window's registry (GUI thread; copied by the node at sync)

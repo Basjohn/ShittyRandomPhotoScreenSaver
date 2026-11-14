@@ -435,6 +435,7 @@ class RuntimeDestructionBarrier:
             "global_subscriptions_pending": len(
                 self._remaining_global_subscriptions()
             ),
+            "native_work_pending": len(self._remaining_native_work()),
             "elapsed_ms": max(0.0, (time.monotonic() - self._created_ts) * 1000.0),
             "sealed": self._sealed,
             "complete": self._completed,
@@ -528,6 +529,31 @@ class RuntimeDestructionBarrier:
             )
             return ()
 
+    def _remaining_native_work(self) -> tuple[object, ...]:
+        """The native core's work for the retiring items (N3.8, the N2.5 audit's L8): jobs queued or running, job
+        outputs held or retiring, the items' textures and the copies not yet uploaded. Read only when the backend owner
+        loaded the core (never imported here); nothing native means nothing pending."""
+        if self.retiring_generation is None:
+            return ()
+        bootstrap = sys.modules.get("rendering.quick.bootstrap")
+        native_core = getattr(bootstrap, "native_core", None) if bootstrap is not None else None
+        if not callable(native_core):
+            return ()
+        try:
+            core = native_core()
+            if core is None:
+                return ()
+            return tuple(
+                {**entry, "runtime_generation": self.retiring_generation}
+                for entry in core.pending_native_work()
+            )
+        except Exception:
+            logger.debug(
+                "[LIFECYCLE_BARRIER] Native work query failed",
+                exc_info=True,
+            )
+            return ()
+
     def _remaining_global_subscriptions(self) -> tuple[object, ...]:
         if self.retiring_generation is None:
             return ()
@@ -581,7 +607,8 @@ class RuntimeDestructionBarrier:
         resources = self._remaining_generation_resources()
         thread_work = self._remaining_thread_work()
         global_subscriptions = self._remaining_global_subscriptions()
-        if resources or thread_work or global_subscriptions:
+        native_work = self._remaining_native_work()
+        if resources or thread_work or global_subscriptions or native_work:
             timer = self._resource_recheck_timer
             if timer is not None and not timer.isActive():
                 timer.start(_RESOURCE_RECHECK_MS)
@@ -609,6 +636,7 @@ class RuntimeDestructionBarrier:
             or self._remaining_generation_resources()
             or self._remaining_thread_work()
             or self._remaining_global_subscriptions()
+            or self._remaining_native_work()
         ):
             self._maybe_complete()
             return
@@ -695,6 +723,7 @@ class RuntimeDestructionBarrier:
         resources = self._remaining_generation_resources()
         thread_work = self._remaining_thread_work()
         global_subscriptions = self._remaining_global_subscriptions()
+        native_work = self._remaining_native_work()
         qobject_classes = dict(Counter(self._qobject_labels.values()))
         python_owner_classes = dict(Counter(self._python_labels.values()))
         resource_labels = [
@@ -710,7 +739,7 @@ class RuntimeDestructionBarrier:
         logger.critical(
             "[LIFECYCLE_BARRIER] timeout reason=%s retiring_generation=%s "
             "qobjects=%s python_owners=%s resources=%s thread_work=%s "
-            "global_subscriptions=%s",
+            "global_subscriptions=%s native_work=%s",
             self.reason,
             self.retiring_generation,
             qobject_classes,
@@ -718,6 +747,7 @@ class RuntimeDestructionBarrier:
             resource_labels,
             list(thread_work[:24]),
             list(global_subscriptions[:24]),
+            list(native_work[:24]),
         )
         # Preserve the ordinary timeout report/exit ordering, but commit the
         # existing fail-closed policy before any diagnostic graph query.

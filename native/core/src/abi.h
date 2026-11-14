@@ -50,6 +50,10 @@
 // 13 (N2.8, R-NEW: the Vulkan card's diagonal break): the composite's vertex stage puts the item's quad on whole pixels
 // of its render target wherever the item is placed (the block's viewport member); composite_state's origin_shift (the
 // last draw's shift of the item's origin, per axis, in target pixels).
+// 14 (N3.8, D9's job service): the Vulkan device's second queue and job service; composite_mode_texture's in_frame
+// control; composite_mode_on_lost (the lost edge); job_counts, job_services_state, job_services_wait_idle and
+// job_service_self_test; composite_mode_state's texture_jobs, image_changes and textures_lost_edges; the host state's
+// device queues and job_service; the frame driver state's retired_outputs_released and window_edges.
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 13
+#define SRPSS_NATIVE_CORE_ABI 14

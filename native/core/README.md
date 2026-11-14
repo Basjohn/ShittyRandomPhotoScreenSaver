@@ -97,7 +97,15 @@ never ships.
     and shows by a fade (`fade_ms`) and reports its window's framebuffer from Qt's own swapchain or redirect target
     (`window_pixels`), as its own synchronisation read it on the render thread: nothing before it, nothing while the
     window has been resized since (round 2, L1 and M3; the route waits on the window's `afterSynchronizing`).
-  - `vulkan_context.*`: D6, the process's Vulkan instance and one device per window, given to Qt Quick.
+  - `vulkan_context.*`: D6, the process's Vulkan instance and one device per window, given to Qt Quick; since N3.8 the
+    device's second queue of Qt's graphics family and its job service, stopped first by the device's destruction.
+  - `job_service.*` (N3.8, D9 "As built (N3.8)"): the async job service, one per Vulkan device: a thread and a QRhi on
+    the job queue made at the first job, parked on a wait condition at rest; upload jobs that own their pixels; the
+    ticket latch (published by compare-and-set, then a queued frame request to the item); cancellation; outputs released
+    by the job thread once Qt's frames that sampled them completed (`surfaces.*`' window retire list, stamped with frame
+    edges); teardown abandoning the job in flight. A scripted backend runs it GPU-free (`job_service_self_test`).
+  - `item_notifier.*` (N3.8): how the render and job threads reach an item on the GUI thread (a queued `update()`, the
+    owner's lost-texture edge) without ever touching a deleted item.
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
     loader's runtime rule); Qt's types instead.
@@ -129,6 +137,10 @@ never ships.
   fragments between two real photos against the production GL host at nine progress values, Vulkan against native
   OpenGL, the seven transitions' and Bubble's packs bound and unbound, every sampler refusal, the textures' lifetime,
   the pass's GPU time at 2560x1440, nothing at rest).
+- `python/job_service_check.py`: N3.8's proof of the job service (real 4K photos swapped while drawing in the hidden
+  host; the job route against the in-frame control on Vulkan, frames identical, the hand-over keeping the previous
+  photo, the render thread's cost per image change both ways, a superseded image cancelled, nothing at rest, the lost
+  edge, teardown with jobs in flight, the job thread's probe, validation).
 - `python/timer_check.py`: N2.6's proof (off is free by count, a known-cost pass scaled N times and its empty-bracket
   control, QRhi's frame figure, latched reads in a real window with the waiting read as control, the frame trace and
   its report, the two forms against each other, validation; `timer_analysis.py`).
@@ -186,18 +198,27 @@ How a texture's lifetime runs (`ModeSource` holds the item's textures, `ModeCont
    most 8 an item and 16384 a side. The core copies the pixels once (a new generation) and asks for a frame; a pixel
    copy not yet uploaded is counted (`composite_live`'s `mode_texture_images`).
 2. **Taken** (render thread, at the item's sync): the copy moves to the render thread; the GUI side keeps none.
-3. **Uploaded** (render thread, at the next record, before the passes): into the content's QRhiTexture (created at the
-   first image; the same object for an image of the same size and mips; recreated, and the bindings that name it built
+3. **Uploaded** (from the next record, before the passes): in the frame into the content's QRhiTexture (created at the
+   first image; the same object for an image of the same size and mips; recreated, and the bindings that name it made
    again, for another size or mips), mips generated on the GPU when the texture asks for them; then the core's copy is
-   dropped. Nothing is uploaded again until a new image (`texture_uploads` in the state; `mode_textures` and
-   `mode_texture_bytes`, every level counted, in `composite_live`).
+   dropped. N3.8 (D9): on a Vulkan device with a job service the render thread only hands the copy to an upload job
+   (the job thread uploads it and its mips on the job queue into a texture of its own and drops the copy); once the job
+   is published the content imports its output (`createFrom`) and the passes' bindings are made again over it (the
+   pipelines kept). An item's changed textures commit together, when every one's job is done or failed (a failed job's
+   copy is uploaded in the frame); until then the textures held are drawn. `in_frame=True` is the harness control of
+   the in-frame form. Nothing is uploaded again until a new image (`texture_uploads`, `texture_jobs` and
+   `image_changes` in the state; `mode_textures` and `mode_texture_bytes`, every level counted, in `composite_live`;
+   `job_counts` for the jobs).
 4. **Retired** (render thread): a removed texture (`NativeMode.remove_texture`) is released at the next record, and the
    pipelines that bound it are rebuilt; a pass whose texture is missing is not drawn (the state's `last_reason` names
    it) and the target is cleared. Every texture goes with the content when Qt deletes the item's node (the render
    thread, the QRhi alive), so an item destroyed with its textures leaves no QRhi object, byte or copy behind.
-5. **Lost**: a node made again (another QRhi, or the item at no size) has no copy to upload from; the state's
-   `textures_lost` names each texture, the item draws nothing, and its owner sends the images again. The product
-   owner of a texture (N5.7a's presenter, N5.2a's transitions) keeps its pixels for that.
+5. **Lost**: a node made again (another QRhi, or the item at no size) has no copy to upload from; the owner's
+   `NativeMode.on_textures_lost` callback is called once on the GUI thread with the names (N3.8: the edge; the state's
+   `textures_lost` keeps the list), the item draws nothing, and its owner sends the images again. The product owner of
+   a texture (N5.7a's presenter, N5.2a's transitions) keeps its pixels for that. A replaced or removed job output goes
+   to the window's retire list and back to its job thread once Qt's frames that sampled it completed; the destruction
+   barrier waits for jobs, outputs and textures (`NativeCore.pending_native_work`).
 
 A new GPU technique (sampling an earlier pass, depth, more targets, compute, a new resource) is a primitive with its own
 C++ and harness, then used by every mode as data (sampling an image is that primitive since N4.a). Hand-written C++ for

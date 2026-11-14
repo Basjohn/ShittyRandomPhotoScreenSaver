@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** High: N3.8 (the async job service; one build round at ABI 14). Medium: free (1B.10 landed, R-218, R-219). Main at ABI 13.
+**Now (in flight):** N3.8 merged at ABI 14; an audit of its threading and lifetime. High: next N2b step (N5.7a, the image presenter as the core's background layer). Medium idle (weekly budget).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -483,28 +483,15 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   beside them, textures upload once on the render thread with GPU mips and retire there. Crossfade equals the
   Python renderer exactly on OpenGL and Vulkan equals OpenGL; the core's `vUv` bits are identical on both
   backends (`.artifacts/evidence/native_core/n4_a/`).
-- [ ] N3.8 The async job service (D9), built to N0.7's verdict: the job thread, self-contained jobs, the latch,
-  the in-frame form; first job: a photo's upload and mips.
-  - [ ] Read D9 and N0.7's proof (`Native_Core_P3_Decisions.md` D9; the spike's evidence) and write the service's
-    shape into D9's "as built" before code: one job thread per process, jobs that own every input they read
-    (no reference into a live frame), the latch that publishes a finished job at a frame edge, the in-frame form
-    on OpenGL (no second context), cancellation and the destruction barrier's view of in-flight jobs.
-  - [ ] The first job: a photo's upload and its GPU mips into a core-owned texture (N4.a's textures), async on
-    Vulkan, in-frame on OpenGL; the render thread's cost per image change measured both ways at 3840 x 2160.
-  - [ ] With N4.a's leftovers (the same files): a texture's owner told when its textures are lost (an edge, not
-    a state read), and the texture counts and in-flight jobs joined to the destruction barrier (the N2.5 audit's
-    L8).
-  - [ ] Proof on a harness (hidden host, both backends, validation): a sequence of real photos swapped while
-    drawing, no frame waits for an upload on Vulkan, nothing at rest, teardown with jobs in flight clean,
-    cancellation of a superseded image; a GPU-free unit test of the latch and cancellation.
+- [ ] N3.8 leftovers (the async job service landed 14 Nov at ABI 14, D9 "As built (N3.8)": a 4K photo change costs
+  the Vulkan render thread 0.08 ms with the job against 4.5 ms in-frame; OpenGL stays in-frame by design, 7.9 ms a
+  frame; `.artifacts/evidence/native_core/n3_8/20261114_n38_job_service/`):
   - [ ] D8 row 3's gate (the contention measurement under a heavy Visualizer frame, the one limit of N0.7's proof,
     D9 point 2): p99 frame time and late frames across image changes with a Visualizer running, async against
     in-frame (Vulkan only; OpenGL runs in-frame).
   - [ ] D9 point 2, consumer (b), the warm-up class: warm-up jobs run on this service, scheduled with N3.6's
     gradual warm-up (one unit per spaced frame). Transition preparation (consumer (a)) is N5.2g's.
-- [ ] N4.a leftovers: a texture's owner is told when its textures are lost (today only `textures_lost` in the
-  state; the presenter and transitions need the edge); the texture counts join the destruction barrier (with
-  the N2.5 audit's L8).
+  - [ ] Audit of the job service's threading and lifetime (in flight).
 - [ ] N5.7a The image presenter and background as the core's background layer (D7 point 1): image ownership,
   covered-display admission and timing kept; the photo textures are the core's (the wrapped-texture bridge is
   OpenGL only and retires with the Python presenter); at rest nothing is drawn again. Proved in the hidden host

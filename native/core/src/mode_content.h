@@ -43,6 +43,15 @@
 // QRhi) has no copy to upload from: the texture is reported lost and the item draws nothing until its owner sends the
 // image again. Counted process-wide (modeTextureCounts) so a lifecycle proof sees every texture and copy released.
 //
+// The upload's two forms (N3.8, D9 as built, job_service.h): on a Vulkan device with a job service the render thread
+// only hands the image to an upload job (the job owns the pixels; its output is a texture of the job's QRhi), and the
+// content imports the job's output into Qt's QRhi (createFrom) once it is published; everywhere else (OpenGL, no second
+// queue, a failed job, the harness control in_frame) the upload is recorded in the frame as above. The item's textures
+// commit together: one record swaps every changed texture, only once every changed texture's job is done or failed;
+// until then the textures held are drawn. A replaced job output goes to the window's retire list (surfaces.h), released
+// once Qt's frames that sampled it completed. A superseded image cancels its job. A texture found lost is an edge to the
+// owner (item_notifier.h), not only a state entry.
+//
 // One rule fills the block, by member name, from exactly one of three sources:
 // 1. the core's conventions (kModeCoreMembers, one table for every mode: what the Python renderers compute per frame
 //    from the card and the target: the item's sizes and quarter turns, the dpr, the fade, the border width, the maps
@@ -89,6 +98,10 @@ namespace srpss_core {
 constexpr int kMaxModePasses = 8;
 
 struct ModeCard;
+class ItemNotifier;
+class JobService;
+class UploadJob;
+class WindowSurfaces;
 
 // The core's conventions: the members the core fills for every mode (name, components) and each one's values, on its
 // own row (audit N29 round 2, L6: a row is never filled by a separate list that zero-fills what it does not name).
@@ -209,8 +222,12 @@ bool modeBlocks(const RuntimeSchema &schema, const ModeProgram &program, const Q
 
 int modeContentObjects();
 
+// Every level's bytes of an RGBA8 texture (the base level only without mips): the one count of the core's and the job
+// service's textures.
+qint64 rgba8TextureBytes(const QSize &size, bool mips);
+
 // N4.a: a texture's pixels as the core holds them until the render thread uploads them (RGBA8, rows top first, tight).
-// Counted while alive (the copies the core holds).
+// Counted while alive (the copies the core holds). N3.8: an upload job owns one until it recorded the upload.
 struct TextureImage
 {
     const QByteArray pixels;
@@ -230,7 +247,37 @@ struct ModeTexture
     quint64 generation = 0;              // a new image (process-wide, never reused)
     QSize size;
     bool mips = false;
+    bool inFrame = false;                // N3.8, a harness control: the in-frame form where a job service exists
     QSharedPointer<TextureImage> image;  // the core's copy, until the render thread takes it for its upload
+};
+
+// The content's texture report (render thread writes, any thread reads; N4.a, N3.8).
+struct TextureReport
+{
+    qint64 uploads = 0;          // images committed (in-frame uploads and job outputs swapped in)
+    int resident = 0;            // textures the content holds
+    QStringList lost;            // lost textures (names, and creation failures with their reason)
+    QString route;               // "job": this device has a job service; "in_frame" otherwise
+    qint64 inFrameUploads = 0;   // in the frame (OpenGL, no service, the control, a failed job's fallback)
+    qint64 jobsSubmitted = 0;
+    qint64 jobsCommitted = 0;    // job outputs swapped in
+    qint64 jobsFellBack = 0;     // failed jobs whose pixels were uploaded in the frame
+    qint64 jobsCancelled = 0;    // superseded, removed or released before they were committed
+    qint64 importFailures = 0;   // a published output Qt's QRhi could not import (released, reported lost)
+    int jobsPending = 0;         // jobs in flight now
+    qint64 retired = 0;          // job outputs handed to the window's retire list
+    qint64 rebinds = 0;          // the passes' bindings made again over new texture objects (pipelines kept)
+};
+
+// One record that changed an image (N3.8's measurement: the render thread's cost per image change): its kind ("submit":
+// images handed to jobs; "commit_job": job outputs swapped in; "in_frame": uploads recorded in the frame; joined with
+// "+"), the record's CPU time on the render thread and the image bytes it moved.
+struct ImageChangeRecord
+{
+    QString kind;
+    qint64 recordNs = 0;
+    qint64 bytes = 0;
+    qint64 edge = 0;             // the window's frame edge
 };
 
 // The process's textures (lifecycle proofs and the destruction barrier's reading): the QRhiTextures the contents hold,
@@ -263,9 +310,14 @@ public:
     void setCard(const ModeCard &card);
     // N4.a, GUI thread: a texture's image (RGBA8, `size`, rows top first, tight; `mips`: generated on the GPU), replacing
     // the one of that name; refused for a bad name, size or byte count, more than kMaxModeTextures, or mips the current
-    // program samples that this texture lacks. removeTexture: false when there is no such texture.
-    bool setTexture(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips, QString *error);
+    // program samples that this texture lacks. removeTexture: false when there is no such texture. `inFrame` (N3.8, a
+    // harness control): upload it in the frame where a job service exists (the measurement both ways).
+    bool setTexture(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips, QString *error,
+                    bool inFrame = false);
     bool removeTexture(const QByteArray &name, QString *error);
+
+    // N3.8: the item's notifier (the job thread's frame request, the lost edge); the item attaches it.
+    const std::shared_ptr<ItemNotifier> &notifier() const { return m_notifier; }
 
     // Render thread, at the item's sync. True when the surface must record.
     bool sync();
@@ -284,7 +336,12 @@ public:
     // The image of the drawn texture `name` (its core copy moves to the caller; null when it was taken before).
     QSharedPointer<TextureImage> takeTextureImage(const QByteArray &name);
     // The content's texture report (render thread writes, any thread reads).
-    void noteTextures(qint64 uploads, int resident, const QStringList &lost);
+    void noteTextures(const TextureReport &report);
+    // N3.8: a record that changed an image (the last kImageChangeRecords are kept).
+    void noteImageChange(const ImageChangeRecord &record);
+    // N3.8: textures newly found lost: the owner's edge (queued to the GUI thread).
+    void texturesLost(const QStringList &names);
+    static constexpr int kImageChangeRecords = 64;
 
     static int liveSources();
 
@@ -319,17 +376,20 @@ private:
     bool m_drawnReady = false;
     QString m_drawnWaiting;
     QList<ModeTexture> m_drawnTextures;
+    quint64 m_takenJobsFinished = 0;            // N3.8: the notifier's count at the last sync
+
+    const std::shared_ptr<ItemNotifier> m_notifier;
 
     mutable QMutex m_textureReportMutex;        // guards the texture report
-    qint64 m_textureUploads = 0;
-    int m_texturesResident = 0;
-    QStringList m_texturesLost;
+    TextureReport m_textureReport;
+    QList<ImageChangeRecord> m_imageChanges;
 };
 
 class ModeContent final : public SurfaceContent
 {
 public:
-    explicit ModeContent(std::shared_ptr<ModeSource> source);
+    // `registry`: the window's (its frame edges and retire list, N3.8); null only in a content with no window.
+    ModeContent(std::shared_ptr<ModeSource> source, std::shared_ptr<WindowSurfaces> registry);
     ~ModeContent() override;
 
     bool keepsTarget(QRhi *rhi, ColorTarget &target) override;
@@ -340,41 +400,68 @@ public:
 
 private:
     struct Resources;
-    // N4.a: one texture the content owns (render thread).
+    // N4.a: one texture of the item (render thread), by name: the front the passes bind, and N3.8's candidate for the
+    // drawn image (a job in flight, or the pixels for the in-frame form) until the item's textures commit.
     struct GpuTexture
     {
-        QByteArray name;
-        quint64 generation = 0;              // the image uploaded into it
-        std::unique_ptr<QRhiTexture> texture;
+        QByteArray name;                     // empty: a free slot
+        quint64 generation = 0;              // the image the front holds
+        std::unique_ptr<QRhiTexture> texture; // the front: Qt's own texture, or its import of a job's output
         qint64 bytes = 0;
+        std::shared_ptr<JobService> frontService; // an imported front: its output's service and id
+        quint64 frontOutput = 0;
+        quint64 candidate = 0;               // the image the candidate carries (0: none)
+        std::shared_ptr<UploadJob> job;      // a job in flight for it
+        std::shared_ptr<JobService> jobService;
+        QSharedPointer<TextureImage> pixels; // or its pixels, for the in-frame form at the commit
     };
 
     bool ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
+    // N3.8: the passes' bindings over the current texture objects, the pipelines kept; false: build everything again.
+    bool rebindTextures();
     bool build(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
     void pack(const ColorTarget &target);
     // The QRhi objects of the passes only: a rebuild (a new program, a failed build) keeps the record of the frame in the
     // target, so a failure leaves that frame for the route to fade the card out over (round 2, M4).
     void releasePipelines();
     LatchKey latchKey(QRhi *rhi, const ColorTarget &target) const;
-    // The textures: a removed one released, a lost one named (keepsTarget, before anything is recorded).
+    // The textures: a removed one released, a lost one named and its owner told (keepsTarget, before anything is
+    // recorded).
     void retireTextures();
-    // Each drawn texture with a new image created or recreated and uploaded into `updates` (record).
-    void uploadTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates);
-    // Every texture the drawn program samples is uploaded at its drawn generation.
+    // Record: each drawn texture with a new image gets its candidate (a job submitted, or the pixels kept), then the
+    // item's textures commit together when every candidate is ready (uploads recorded into `updates`, outputs imported).
+    // Returns the kind of image change this record made ("" when none) and the bytes it moved.
+    QString advanceTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates, qint64 *bytes);
+    bool uploadInFrame(QRhi *rhi, QRhiResourceUpdateBatch *updates, GpuTexture &gpu,
+                       const QSharedPointer<TextureImage> &image, quint64 generation);
+    bool importOutput(QRhi *rhi, GpuTexture &gpu, const UploadJob &job);
+    // Every texture the drawn program samples has a front.
     bool texturesReady() const;
-    GpuTexture *gpuTexture(const QByteArray &name);
-    const GpuTexture *gpuTexture(const QByteArray &name) const;
-    void releaseTexture(GpuTexture &texture);
+    GpuTexture *slot(const QByteArray &name);
+    GpuTexture *front(const QByteArray &name);
+    const GpuTexture *front(const QByteArray &name) const;
+    GpuTexture *freeSlot();
+    // The front goes: an imported one to the window's retire list (Qt's frames may still sample it), Qt's own at once
+    // (QRhi defers its native release).
+    void releaseFront(GpuTexture &texture);
+    // The candidate goes: its job cancelled (an output it published first is released at once: never sampled).
+    void dropCandidate(GpuTexture &texture);
+    void clearSlotIfEmpty(GpuTexture &texture);
+    const std::shared_ptr<JobService> &jobService(QRhi *rhi);
     void reportTextures();
 
     std::shared_ptr<ModeSource> m_source;
+    std::shared_ptr<WindowSurfaces> m_registry;
     std::unique_ptr<Resources> m_res;
     ContentLatch m_latch;
     GpuTexture m_textures[kMaxModeTextures];
     quint64 m_textureObjects = 0;            // a texture object created or released: the bindings are rebuilt
-    qint64 m_textureUploads = 0;
     QStringList m_textureFailures;           // "<name> could not be created ...", until a new image of that name
     QStringList m_texturesLost;
+    QStringList m_lostNames;                 // the names last reported lost (the edge fires for a new one)
+    TextureReport m_report;
+    const QRhi *m_serviceRhi = nullptr;      // the QRhi the job service was looked up for
+    std::shared_ptr<JobService> m_service;
     // One block per pass, kept and overwritten per frame (audit L4); rebuilt from the settings when they change.
     QList<BlockValues> m_blocks;
     quint64 m_blocksGeneration = 0;

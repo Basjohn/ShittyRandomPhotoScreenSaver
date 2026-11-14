@@ -1,7 +1,7 @@
 // D6: the native module creates the Vulkan instance and the devices and gives them to Qt Quick (decided 12 Nov 2026,
 // proved by the N0.6 harness: Docs/Future_Work/Native_Core_P3_Decisions.md D6 "As proved"; the facts behind each step
 // are Docs/Future_Work/Native_Core_N06_N07_Qt_Facts.md section A and E). Ported from the harness (native/spike_p1
-// vk_n06.cpp), without its fact records and without the second queue (D9's job service, N3.8, adds it).
+// vk_n06.cpp), without its fact records; N3.8 added its second queue for D9's job service (job_service.h).
 //
 // - One instance for the process: our VkInstance at API 1.2 (route ii) with the surface extensions, QRhi's preferred
 //   instance extensions and VK_EXT_debug_utils; with validation and synchronisation validation in code when the caller
@@ -9,7 +9,9 @@
 //   QVulkanInstance adopts it with the exact lists and setApiVersion(1, 2). Our debug messenger counts every message
 //   per phase, with the calling thread and the caller's stack, so a harness can attribute it.
 // - One device per window (D6 point 4): the first discrete GPU (else the first), the first family with graphics and
-//   Win32 present support, one queue, QRhi's preferred imported-device extensions plus VK_EXT_device_fault where
+//   Win32 present support, Qt's queue (index 0) and, when the family has one, the job queue (index 1; the device's job
+//   service, created with it and stopped first by destroy()), QRhi's preferred imported-device extensions plus
+//   VK_EXT_device_fault where
 //   available, and Qt's feature set (every supported feature of the 1.0, 1.1 and 1.2 structures and of the enabled
 //   extensions' structures, robustBufferAccess off; facts A6.2).
 // - Teardown (facts A7): windows first (their QRhi is gone), then each device (vkDeviceWaitIdle, vkDestroyDevice,
@@ -27,6 +29,8 @@ class QQuickWindow;
 class QVulkanInstance;
 
 namespace srpss_core {
+
+class JobService;
 
 // Creates the process instance. validation: enable the Khronos layer and synchronisation validation when installed
 // (the JSON says whether it loaded; a harness that requires it fails closed on that). Returns one JSON object.
@@ -57,14 +61,20 @@ public:
     quint64 device() const { return m_device; }
     quint64 physicalDevice() const { return m_physicalDevice; }
     quint32 family() const { return m_family; }
+    quint32 queues() const { return m_queues; } // of Qt's family: 2 when the job queue exists (N3.8)
     QString deviceName() const { return m_name; }
+    // The device's job service (N3.8, D9; null without a second queue). Contents find it by the VkDevice
+    // (JobService::forDevice); destroy() stops it first.
+    const std::shared_ptr<JobService> &jobService() const { return m_jobs; }
 
 private:
     VulkanDevice() = default;
     quint64 m_device = 0;         // VkDevice
     quint64 m_physicalDevice = 0; // VkPhysicalDevice
     quint32 m_family = 0;
+    quint32 m_queues = 1;
     QString m_name;
+    std::shared_ptr<JobService> m_jobs;
 };
 
 } // namespace srpss_core

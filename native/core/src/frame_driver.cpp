@@ -216,8 +216,19 @@ void FrameDriver::applyPassChanges(QRhi *rhi, qint64 edge)
     m_appliedPassGeneration = generation;
 }
 
+void FrameDriver::releaseRetiredOutsideFrame(QRhi *rhi)
+{
+    // N3.8: outside a frame, the window's retired job outputs go at once, after Qt's queue is idle (QRhi::finish: the
+    // frames that sampled them completed). Nothing is waited for when nothing is retiring.
+    if (!m_surfaces || !m_surfaces->retiring() || !rhi)
+        return;
+    rhi->finish();
+    m_retiredReleased.fetchAndAddRelaxed(m_surfaces->releaseAllRetired());
+}
+
 void FrameDriver::releaseOutsideFrame(QRhi *rhi, const QString &reason)
 {
+    releaseRetiredOutsideFrame(rhi);
     if (m_released.loadAcquire())
         return;
     if (!releaseAll(rhi, true, reason)) {
@@ -263,6 +274,13 @@ void FrameDriver::onBeforeRendering()
     if (m_released.loadAcquire())
         return; // detached and released; the disconnection is under way
     QRhi *rhi = m_source->rhi();
+    if (m_surfaces) {
+        // N3.8: the window's frame count, and its retired job outputs whose frames completed (empty at rest: one read).
+        const qint64 windowEdge = m_surfaces->noteEdge();
+        if (m_surfaces->retiring() && rhi)
+            m_retiredReleased.fetchAndAddRelaxed(
+                m_surfaces->releaseRetired(windowEdge, rhi->resourceLimit(QRhi::FramesInFlight)));
+    }
     if (m_detach.loadAcquire()) {
         m_edgesAfterDetach.fetchAndAddRelaxed(1);
         if (rhi && releaseAll(rhi, false, QStringLiteral("detached: released at the frame edge"))) {
@@ -405,6 +423,8 @@ QJsonObject FrameDriver::stateJson() const
     o.insert(QStringLiteral("gpu_timer_edges"), m_timerEdges.loadRelaxed());
     o.insert(QStringLiteral("gpu_samples_appended"), m_samples->appended());
     o.insert(QStringLiteral("gpu_samples_dropped"), m_samples->dropped());
+    o.insert(QStringLiteral("retired_outputs_released"), m_retiredReleased.loadRelaxed());
+    o.insert(QStringLiteral("window_edges"), m_surfaces ? m_surfaces->edges() : 0);
     {
         QMutexLocker timerLock(&m_timerMutex);
         o.insert(QStringLiteral("gpu_timer"), m_timer ? QJsonValue(m_timer->stateJson()) : QJsonValue());

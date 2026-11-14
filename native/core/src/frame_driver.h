@@ -87,6 +87,7 @@ public:
     void onSceneGraphInvalidated();
 
 private:
+    void releaseRetiredOutsideFrame(QRhi *rhi);
     void applyProbeChange(QRhi *rhi, bool outsideFrame);
     void applyPassChanges(QRhi *rhi, qint64 edge);
     bool releaseAll(QRhi *rhi, bool outsideFrame, const QString &reason);
@@ -108,6 +109,7 @@ private:
     QAtomicInteger<qint64> m_passesRecorded { 0 };  // probe passes
     QAtomicInteger<qint64> m_surfacePassesRecorded { 0 };
     QAtomicInteger<qint64> m_edgesAfterDetach { 0 };
+    QAtomicInteger<qint64> m_retiredReleased { 0 }; // N3.8: retired job outputs handed back to their services
     QAtomicInteger<qint64> m_readbacksStarted { 0 };
     QAtomicInteger<int> m_detach { 0 };
     QAtomicInteger<int> m_released { 0 };

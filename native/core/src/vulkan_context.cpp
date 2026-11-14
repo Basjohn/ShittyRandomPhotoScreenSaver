@@ -1,5 +1,7 @@
 #include "vulkan_context.h"
 
+#include "job_service.h"
+
 #include <rhi/qrhi.h>
 #include <rhi/qrhi_platform.h>
 
@@ -683,12 +685,15 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
     getFeatures2(physDev, &f2);
     f2.features.robustBufferAccess = VK_FALSE;
 
-    const float priority = 1.0f;
+    // N3.8 (D9 as built point 1): Qt's queue (index 0, priority 1.0) and, when the family has a second queue, the job
+    // service's (index 1, priority 0.5: N0.6's layout, proved by N0.7). One queue: no service, every job in-frame.
+    const float priorities[2] = { 1.0f, 0.5f };
+    const uint32_t queueCount = families[family].queueCount >= 2 ? 2u : 1u;
     VkDeviceQueueCreateInfo queueInfo = {};
     queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queueInfo.queueFamilyIndex = family;
-    queueInfo.queueCount = 1;
-    queueInfo.pQueuePriorities = &priority;
+    queueInfo.queueCount = queueCount;
+    queueInfo.pQueuePriorities = priorities;
     const QList<const char *> extensionPtrs = pointers(extensions);
     VkDeviceCreateInfo dci = {};
     dci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -720,7 +725,20 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
     out->m_device = quint64(reinterpret_cast<quintptr>(device));
     out->m_physicalDevice = quint64(reinterpret_cast<quintptr>(physDev));
     out->m_family = family;
+    out->m_queues = queueCount;
     out->m_name = QString::fromUtf8(props.deviceName);
+    if (queueCount >= 2) {
+        // The job service (N3.8): an object now; its thread and its QRhi at the first job.
+        JobDevice jobDevice;
+        jobDevice.instance = inst->adopted.get();
+        jobDevice.physicalDevice = out->m_physicalDevice;
+        jobDevice.device = out->m_device;
+        jobDevice.family = family;
+        jobDevice.queueIndex = 1;
+        jobDevice.debugMarkers = inst->validationLoaded;
+        out->m_jobs = JobService::create(createRhiUploadBackend(jobDevice), out->m_device,
+                                         QStringLiteral("device %1").arg(out->m_device));
+    }
     ++inst->liveDevices;
     return out;
 }
@@ -752,6 +770,14 @@ QStringList VulkanDevice::destroy()
     QStringList steps;
     if (!m_device)
         return steps;
+    if (m_jobs) {
+        // D9 point 6 and D1's barrier: the job thread is quiesced first (its job in flight abandoned after its own GPU
+        // wait, every output destroyed, its QRhi gone), in the device's destruction, never in the GUI's close.
+        const QJsonObject stopped = m_jobs->stop();
+        steps << (QStringLiteral("job service stopped: ")
+                  + QString::fromUtf8(QJsonDocument(stopped).toJson(QJsonDocument::Compact)));
+        m_jobs.reset();
+    }
     const VkDevice device = reinterpret_cast<VkDevice>(quintptr(m_device));
     if (g_instance) {
         auto waitIdle = g_instance->loader.get<PFN_vkDeviceWaitIdle>(g_instance->instance, "vkDeviceWaitIdle");

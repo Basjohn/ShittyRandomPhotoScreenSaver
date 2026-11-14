@@ -555,6 +555,7 @@ _HIDDEN_HOST_HARNESSES = frozenset({
     "native/core/python/spectrum_check.py",
     "native/core/python/generic_mode_check.py",
     "native/core/python/fullscreen_pass_check.py",
+    "native/core/python/job_service_check.py",
 })
 _SKIPPED_DIRS = frozenset({"tests", "release", "build", "dist", "node_modules", "__pycache__"})
 
