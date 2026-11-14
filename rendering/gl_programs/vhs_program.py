@@ -106,7 +106,11 @@ void main() {{
     float track = e * uTracking, bleed = e * uBleed, noise = e * uNoise;
     float field = floor(uTime * VHS_FIELD_RATE);
     uint fieldKey = uint(field);
-    float line = floor(uv.y * VHS_LINES);
+    // The signal's line and tearing band from the pixel's row in integers (N5.2b): floor(uv.y * VHS_LINES) of a pixel
+    // whose centre lies exactly on a line's edge (every third row at 720) fell either way by backend.
+    int rows = int(u_target_px.y);
+    int fromTop = rows - 1 - int(floor(vUv.y * u_target_px.y));
+    float line = float(((2 * fromTop + 1) * int(VHS_LINES)) / (2 * rows));
 
     // Where this row is on the rolled strip. While tracking is lost the picture jumps on some fields.
     float jump = signalRandom(fieldKey, 1u, seed) < 0.3 ? (signalRandom(fieldKey, 2u, seed) - 0.5) * 0.01 * track : 0.0;
@@ -119,7 +123,7 @@ void main() {{
     // Horizontal displacement. Rows near a frame's edges, where the roll's seam is, tear most.
     float seam = blank ? 1.0 : max(exp(-local / 0.09), exp(-(1.0 - local) / 0.09));
     float tear = track * signalTear(uv.y, uTime, mix(0.76, 0.6, seam), seed);
-    float band = floor(uv.y * 48.0);
+    float band = float(((2 * fromTop + 1) * 48) / (2 * rows));
     float dx = 0.003 * track * signalLineJitter(line, field, seed)
              + 0.004 * track * signalWobble(uv.y, uTime)
              + tear * (signalRandom(uint(band) + fieldKey * 97u, 3u, seed) - 0.3) * 0.06;
