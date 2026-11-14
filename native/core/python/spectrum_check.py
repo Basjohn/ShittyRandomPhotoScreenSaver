@@ -767,18 +767,30 @@ def round_program(core, engine, app, host, records: list[dict]) -> dict:
     refused = ""
     try:
         with tempfile.TemporaryDirectory(prefix="srpss_program_") as folder:
-            scene.spectrum.program(tinted_pack(Path(folder)))
+            tinted = tinted_pack(Path(folder))
+        scene.spectrum.program(tinted)
         scene.place(card)
         scene.spectrum.bind(stream.name, expect=stream.expect)
-        for step, tint in enumerate((1.0, 0.0)):
-            scene.spectrum.settings(dict(_settings_for_card(card), u_test_tint=tint))
+
+        def drawn_magenta(step: int) -> int:
             stream.publish(base["record"], float(step))
             scene.spectrum.update()
-            pixels = scene.read(card)
-            rgb = pixels[..., :3].astype(int)
-            magenta[str(tint)] = int(((rgb[..., 0] > 200) & (rgb[..., 1] < 40) & (rgb[..., 2] > 200)).sum())
-        scene.spectrum.program(None)                      # the compiled-in copy: the old path
+            rgb = scene.read(card)[..., :3].astype(int)
+            return int(((rgb[..., 0] > 200) & (rgb[..., 1] < 40) & (rgb[..., 2] > 200)).sum())
+
+        for step, tint in enumerate((1.0, 0.0)):
+            scene.spectrum.settings(dict(_settings_for_card(card), u_test_tint=tint))
+            magenta[str(tint)] = drawn_magenta(step)
+        # Audit 14 Nov, L4: a second program call keeps the settings (the route never resends unchanged ones), so the
+        # tint set before it still draws with no settings call after it.
+        scene.spectrum.settings(dict(_settings_for_card(card), u_test_tint=1.0))
+        scene.spectrum.program(tinted)
+        magenta["kept_across_program"] = drawn_magenta(2)
         try:
+            # The compiled-in copy (the old path) keeps the current settings (audit 14 Nov, L4) and cannot take
+            # u_test_tint: the program itself is refused; were it taken, the settings would be refused by name.
+            scene.spectrum.settings(dict(_settings_for_card(card), u_test_tint=1.0))
+            scene.spectrum.program(None)
             scene.spectrum.settings(dict(_settings_for_card(card), u_test_tint=1.0))
         except ValueError as exc:
             refused = str(exc)
@@ -788,6 +800,7 @@ def round_program(core, engine, app, host, records: list[dict]) -> dict:
         host.frames(2)
         host_check._flush_deletes(app)
     checks = {"new_uniform_drawn": magenta.get("1.0", 0) > 1000, "zero_draws_no_tint": magenta.get("0.0", 1) == 0,
+              "settings_kept_across_a_program": magenta.get("kept_across_program", 0) > 1000,
               "control_compiled_in_refuses_the_name": "u_test_tint" in refused}
     return {"pass": all(checks.values()), "checks": checks, "magenta_pixels": magenta, "refused": refused}
 

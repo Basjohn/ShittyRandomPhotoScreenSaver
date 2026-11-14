@@ -322,6 +322,7 @@ bool SpectrumProgram::fromPack(const QByteArray &qsb, SpectrumProgram *out, QStr
         *error = QStringLiteral("the Spectrum fragment pack holds no SpectrumDraw block");
         return false;
     }
+    program.packed = BlockValues(program.layout);
     program.shaderGeneration = generations.fetchAndAddRelaxed(1) + 1;
     *out = program;
     return true;
@@ -343,6 +344,7 @@ bool SpectrumProgram::setSettings(const QJsonObject &values, QString *error)
         }
     }
     settings = values;
+    packed = check; // packed here, on the GUI thread, once; each record copies it (L3)
     return true;
 }
 
@@ -451,9 +453,8 @@ bool spectrumBlock(const QByteArray &bytes, const SpectrumPresentation &p, const
 
     // Every Settings- and card-derived member is the program's (resolved in Python, packed by name); the core fills
     // only what follows the frame.
-    BlockValues packed(program.layout);
-    if (!packed.setJson(program.settings, reason))
-        return false;
+    // Copied from the settings packed when they changed (audit 14 Nov, L3): no JSON is read per record.
+    BlockValues packed = program.packed;
     QString refused;
     const double barCount = double(count);
     const double playing = record.flag("playing") ? 1.0 : 0.0;
@@ -559,11 +560,18 @@ void SpectrumSource::setPresentation(const SpectrumPresentation &presentation)
     ++m_presentationGeneration;
 }
 
-void SpectrumSource::setProgram(const SpectrumProgram &program)
+bool SpectrumSource::setProgram(const SpectrumProgram &program, QString *error)
 {
     QMutexLocker lock(&m_mutex);
-    m_program = program;
+    SpectrumProgram taken = program;
+    // The settings given before stay (audit 14 Nov, L4): packed against the new block, or the program is refused.
+    if (!m_program.settings.isEmpty() && !taken.setSettings(m_program.settings, error)) {
+        *error = QStringLiteral("the new program does not take the current settings: %1").arg(*error);
+        return false;
+    }
+    m_program = taken;
     ++m_presentationGeneration;
+    return true;
 }
 
 bool SpectrumSource::setSettings(const QJsonObject &settings, QString *error)

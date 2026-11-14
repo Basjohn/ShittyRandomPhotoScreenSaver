@@ -1,8 +1,11 @@
 #include "program_blocks.h"
 
 #include <QtCore/QJsonArray>
+#include <QtCore/QVarLengthArray>
 #include <rhi/qshaderdescription.h>
 
+#include <cfloat>
+#include <cmath>
 #include <cstring>
 
 namespace srpss_core {
@@ -18,13 +21,42 @@ bool integerType(int type)
         || t == QShaderDescription::Bool2 || t == QShaderDescription::Bool3 || t == QShaderDescription::Bool4;
 }
 
+bool unsignedType(int type)
+{
+    const auto t = QShaderDescription::VariableType(type);
+    return t == QShaderDescription::Uint || t == QShaderDescription::Uint2 || t == QShaderDescription::Uint3
+        || t == QShaderDescription::Uint4 || t == QShaderDescription::Bool || t == QShaderDescription::Bool2
+        || t == QShaderDescription::Bool3 || t == QShaderDescription::Bool4;
+}
+
+// Whether `value` converts to the member's 4-byte component with defined behaviour (audit 14 Nov, L2): finite; for an
+// int its truncation within int32, for a uint or bool within uint32; for a float within float's range.
+bool scalarFits(int type, double value)
+{
+    if (!std::isfinite(value))
+        return false;
+    if (integerType(type)) {
+        const double whole = std::trunc(value);
+        return unsignedType(type) ? (whole >= 0.0 && whole <= 4294967295.0)
+                                  : (whole >= -2147483648.0 && whole <= 2147483647.0);
+    }
+    return std::fabs(value) <= double(FLT_MAX);
+}
+
+// `value` already passed scalarFits: ints truncate toward zero (as before for every in-range value), floats round to
+// nearest, as Python's struct.pack('<f') does.
 void writeScalar(char *at, int type, double value)
 {
     if (integerType(type)) {
-        const qint32 v = qint32(value);
-        std::memcpy(at, &v, 4);
+        if (unsignedType(type)) {
+            const quint32 v = quint32(std::trunc(value));
+            std::memcpy(at, &v, 4);
+        } else {
+            const qint32 v = qint32(std::trunc(value));
+            std::memcpy(at, &v, 4);
+        }
     } else {
-        const float v = float(value); // round to nearest, as Python's struct.pack('<f') does
+        const float v = float(value);
         std::memcpy(at, &v, 4);
     }
 }
@@ -33,6 +65,8 @@ void writeScalar(char *at, int type, double value)
 
 int BlockMember::components() const
 {
+    if (dimensions > 1)
+        return 0; // a multi-dimensional array is not packed (audit 14 Nov, L2): refused by set(), listed by unfilled()
     switch (QShaderDescription::VariableType(type)) {
     case QShaderDescription::Float:
     case QShaderDescription::Int:
@@ -79,6 +113,7 @@ BlockLayout BlockLayout::reflect(const QShader &shader, const QByteArray &blockN
             member.type = int(variable.type);
             member.offset = variable.offset;
             member.count = variable.arrayDims.isEmpty() ? 1 : variable.arrayDims.first();
+            member.dimensions = variable.arrayDims.isEmpty() ? 0 : int(variable.arrayDims.size());
             member.stride = variable.arrayStride;
             if (member.count > 1 && member.stride <= 0) {
                 // The baked shader reflects a scalar array's stride as 0 (N2.5 build round 1); std140 rounds every
@@ -144,13 +179,28 @@ bool BlockValues::set(const QByteArray &name, const double *values, int count, Q
                          .arg(QString::fromLatin1(name)).arg(whole).arg(count);
             return false;
         }
+        // Everything checked before any byte is written (audit 14 Nov, L2): a value without a defined conversion, or a
+        // write past the block, refuses the whole call and fills nothing.
+        for (int i = 0; i < count; ++i) {
+            if (!scalarFits(member.type, values[i])) {
+                *error = QStringLiteral("'%1' element %2 (%3) does not fit the member's type")
+                             .arg(QString::fromLatin1(name)).arg(i).arg(values[i]);
+                return false;
+            }
+        }
+        const qint64 last = qint64(member.offset) + qint64((count - 1) / components) * (array ? member.stride : 0)
+            + qint64((count - 1) % components) * 4 + 4;
+        if (member.offset < 0 || (array && member.stride < 4 * components) || last > qint64(m_bytes.size())) {
+            *error = QStringLiteral("'%1' does not fit the %2-byte block at its reflected offset and stride")
+                         .arg(QString::fromLatin1(name)).arg(m_bytes.size());
+            return false;
+        }
         char *data = m_bytes.data();
         for (int i = 0; i < count; ++i) {
             const int element = i / components;
             const int component = i % components;
             const int at = member.offset + element * (array ? member.stride : 0) + component * 4;
-            if (at + 4 <= m_bytes.size())
-                writeScalar(data + at, member.type, values[i]);
+            writeScalar(data + at, member.type, values[i]);
         }
         m_filled[index] = true;
         return true;
@@ -169,11 +219,12 @@ bool BlockValues::setJson(const QJsonObject &values, QString *error)
             numbers.append(it.value().isBool() ? (it.value().toBool() ? 1.0 : 0.0) : it.value().toDouble());
         } else if (it.value().isArray()) {
             for (const QJsonValue &item : it.value().toArray()) {
-                if (!item.isDouble()) {
+                if (!item.isDouble() && !item.isBool()) {
                     *error = QStringLiteral("'%1' holds a value that is not a number").arg(it.key());
                     return false;
                 }
-                numbers.append(item.toDouble());
+                // A boolean inside a list is 0 or 1, as a boolean scalar is (audit 14 Nov, L2).
+                numbers.append(item.isBool() ? (item.toBool() ? 1.0 : 0.0) : item.toDouble());
             }
         } else {
             *error = QStringLiteral("'%1' is not a number or a list of numbers").arg(it.key());
@@ -191,7 +242,7 @@ QStringList BlockValues::unfilled() const
     QStringList names;
     const QList<BlockMember> &members = m_layout.members();
     for (int index = 0; index < members.size(); ++index) {
-        if (!m_filled[index] && members.at(index).components() > 0)
+        if (!m_filled[index]) // an unpackable member is always unfilled (audit 14 Nov, L2)
             names.append(QString::fromLatin1(members.at(index).name));
     }
     return names;
@@ -206,6 +257,85 @@ QStringList BlockValues::filled() const
             names.append(QString::fromLatin1(members.at(index).name));
     }
     return names;
+}
+
+// ------------------------------------------------------------------------------- N2.9: the frame block by name
+
+namespace {
+
+const char *fieldKindName(frame_abi::FieldKind kind)
+{
+    switch (kind) {
+    case frame_abi::FieldKind::U32: return "u32";
+    case frame_abi::FieldKind::F64: return "f64";
+    case frame_abi::FieldKind::F64x4: return "f64x4";
+    }
+    return "?";
+}
+
+} // namespace
+
+QString recordFieldFits(const BlockMember &member, const frame_abi::Field &field)
+{
+    const auto type = QShaderDescription::VariableType(member.type);
+    bool typeFits = false;
+    switch (field.kind) {
+    case frame_abi::FieldKind::U32:
+        typeFits = type == QShaderDescription::Int || type == QShaderDescription::Uint
+            || type == QShaderDescription::Bool || type == QShaderDescription::Float;
+        break;
+    case frame_abi::FieldKind::F64:
+        typeFits = type == QShaderDescription::Float;
+        break;
+    case frame_abi::FieldKind::F64x4:
+        typeFits = type == QShaderDescription::Vec4;
+        break;
+    }
+    const QString name = QString::fromLatin1(member.name);
+    if (!typeFits) {
+        return QStringLiteral("'%1': the record's %2 does not fill the block's member of type %3")
+            .arg(name, QLatin1String(fieldKindName(field.kind))).arg(member.type);
+    }
+    if (quint32(member.count) != field.count) {
+        return QStringLiteral("'%1': the record holds %2 element(s), the block's member %3").arg(name)
+            .arg(field.count).arg(member.count);
+    }
+    return QString();
+}
+
+bool packRecordField(BlockValues &block, const frame_abi::Field &field, const QByteArray &record, QString *error)
+{
+    const BlockMember *member = block.layout().member(QByteArray(field.name));
+    if (!member) {
+        *error = QStringLiteral("'%1' is not a member of %2 (an unknown name is refused)")
+                     .arg(QLatin1String(field.name), QString::fromLatin1(block.layout().name()));
+        return false;
+    }
+    const QString fits = recordFieldFits(*member, field);
+    if (!fits.isEmpty()) {
+        *error = fits;
+        return false;
+    }
+    const int perElement = field.kind == frame_abi::FieldKind::F64x4 ? 4 : 1;
+    const quint32 elementBytes = field.kind == frame_abi::FieldKind::U32 ? 4u : 8u * quint32(perElement);
+    if (quint64(field.offset) + quint64(elementBytes) * field.count > quint64(record.size())) {
+        *error = QStringLiteral("'%1' ends past the %2-byte record").arg(QLatin1String(field.name)).arg(record.size());
+        return false;
+    }
+    QVarLengthArray<double, 256> numbers(qsizetype(field.count) * perElement);
+    const char *data = record.constData() + field.offset;
+    for (qsizetype i = 0; i < numbers.size(); ++i) {
+        if (field.kind == frame_abi::FieldKind::U32) {
+            quint32 value;
+            std::memcpy(&value, data + 4 * i, 4);
+            numbers[i] = double(value);
+        } else {
+            double value;
+            std::memcpy(&value, data + 8 * i, 8);
+            numbers[i] = value;
+        }
+    }
+    return block.set(QByteArray(field.name), numbers.constData(), int(numbers.size()), error);
 }
 
 } // namespace srpss_core

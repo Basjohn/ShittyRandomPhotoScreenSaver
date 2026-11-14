@@ -78,6 +78,7 @@ struct SpectrumProgram
     QShader fragment;
     BlockLayout layout;
     QJsonObject settings;
+    BlockValues packed;             // the settings packed into the block once, when they change (audit 14 Nov, L3)
     quint64 shaderGeneration = 0;   // the pipeline is rebuilt when it changes
     bool compiledIn = false;        // the module's own copy (the harness's negative control only)
 
@@ -119,8 +120,9 @@ public:
     void retireCurrent();
     void setPresentation(const SpectrumPresentation &presentation);
     // GUI thread: the program (a new pack rebuilds the pipeline at the next record) and its settings (re-packed only
-    // when they change: nothing per frame at rest).
-    void setProgram(const SpectrumProgram &program);
+    // when they change: nothing per frame at rest). A new program keeps the settings it was given before; it is
+    // refused when they no longer fit its block (audit 14 Nov, L4: the route sends unchanged settings only once).
+    bool setProgram(const SpectrumProgram &program, QString *error);
     bool setSettings(const QJsonObject &settings, QString *error);
     void dropRetainedFrame();                         // R-184's edge, applied by the next read
     bool readHead(SlotHead *out);                     // D2's head read of the current stream (consumes nothing)
