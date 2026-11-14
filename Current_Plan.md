@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** High: N2.9 round 2's audit fixes (M1-M6, lows; a build round). Medium: free (R-214 merged: the activation deadline's wall clock behind both N2.5 side defects). N2.8 waits for two displays.
+**Now (in flight):** High: N2.9 round 2's audit fixes (M1-M6, lows; a build round). Medium: 1B.10's Spectrum part (Bar Count's one maximum, the kick lane, ghosts, then the presets for the lead's review). R-214 merged (a6a91ccf). N2.8 waits for two displays.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,7 +47,9 @@ at the size asked.
      N2.5's and N2.9's leftovers ride with the next fitting dispatch.
   2. 1D.6 (design note first), then 1C.10, as defects between N steps.
 - Medium:
-  1. 1B.10.
+  1. 1C.2's Save stall at the store (the deepcopy) and d1_run's grab blanking Vulkan's presentation; the lead
+     proves both on the two displays.
+  2. 1B.10 (in flight: its Spectrum part).
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -452,9 +454,15 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   - [ ] The Oscilloscope's port: its Quick renderer draws an instanced beam from a storage buffer with its own scene
     target and bloom, not `oscilloscope.frag`, so its N5 port needs those primitives (or returns to the 2D shader).
 - [ ] N2.8 Lead, Display 1: the first rehearsal (cards and Spectrum on Vulkan; no wallpaper yet).
-  - Pre-check done 14 Nov (`.artifacts/evidence/display/d1_run/20261114_n27_vulkan_visible/`, displays on):
-    the saver on Vulkan revealed on its first presented frame, every card drew with its material and text, and
-    it exited 0 through the terminal barrier.
+  - Run 14 Nov on main at ABI 11 (`.artifacts/evidence/display/d1_run/20261114_n28_vulkan_screen_only/`, both
+    displays on): what the panel shows (DWM) is every card with its material and text and the native Spectrum
+    drawing the recorded clip, black where the wallpaper will be; exit 0 through the terminal barrier. Rule (f)
+    passes for Spectrum's first rehearsal; the Python renderer retires in the switch change.
+  - [ ] Defect (tool, from 667224c1): `d1_run.py`'s QRhi `grab` breaks what the saver presents on Vulkan: after
+    the first grab every later `screen` step is black, though the grabs themselves keep reading content
+    (`20261114_n28_vulkan_spectrum/`: grabs at 5, 15, 30 s have content, screens at 15 and 40 s are black; the
+    same run with screen steps only shows content). Root cause (the swap chain read back inside `afterRendering`
+    and `QRhi.finish` mid-frame are the suspects; check OpenGL too), fix, and a test that presents after a grab.
   - [ ] H1 on a real window: at a fractional scale (the MSI at 150 %) the native Spectrum draws placed exactly,
     the framebuffer size read from Qt's swapchain matching what Qt projects onto (N2.9 proved it in the hidden
     host's redirect target only).
@@ -941,7 +949,13 @@ arrangement change, a display added or removed, the owning display lost, Setting
   - Root cause fixed 14 Nov (R-212): a route-only widgets write derives its section from the store's remembered
     canonical one and the Save no longer copies the root three times; the settings part 39.1 -> 11.7 ms, saved
     bytes identical (`display/move_timing/20261114_save_cost/`).
-  - [ ] Lead, two displays: the hidden two-display `--diag gui-stall-stacks` before/after on the product.
+  - [ ] Not fixed in the product (lead, 14 Nov, both displays, the 12 Nov recipe:
+    `display/d1_run/20261114_1c2_move_hidden_stalls_after_r212/`): the hop's Save still stalls the GUI thread
+    58.6 ms (57.2 before), now inside `JsonSettingsStore.setValue`'s deepcopy of the whole widgets root
+    (`json_store.py:345`), inflated by the render threads' GIL like the rest. R-212's single-threaded 39 to 12 ms
+    does not show at the product. Next: the store takes ownership of the fresh canonical root the manager builds
+    (no deepcopy for a value no caller keeps), or the Save moves to the hop fade's end edge by event order (no
+    timer); proved with this recipe, the stall's GUI stack free of settings.
 - Visible move confirmed with both displays visible, 13 Nov (`d1_run.py --second-display-visible`): Extruded
   Bubble expanded TV -> MSI -> TV, each landed about 2 s after the press; the hop's Save measured 64-89 ms of GUI
   stall with both displays visible (the defect above). Evidence `display/d1_run/20261113_1c2_move_both_visible/`.
