@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** High: N2.9 round 2's audit fixes (M1-M6, lows; a build round). Medium: 1B.10's Spectrum part (Bar Count's one maximum, the kick lane, ghosts, then the presets for the lead's review). R-214 merged (a6a91ccf). N2.8 waits for two displays.
+**Now (in flight):** High: N2.9 round 2's audit fixes, proving on the ABI 12 module (GitHub 24a2d326). Medium: 1C.2's Save stall at the store (the deepcopy on the hop's path). 1B.10's Spectrum part merged (7b872b3a). N2.8 ran on Display 1; the native Spectrum's diagonal border break on Vulkan is open.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,9 +47,8 @@ at the size asked.
      N2.5's and N2.9's leftovers ride with the next fitting dispatch.
   2. 1D.6 (design note first), then 1C.10, as defects between N steps.
 - Medium:
-  1. 1C.2's Save stall at the store (the deepcopy) and d1_run's grab blanking Vulkan's presentation; the lead
-     proves both on the two displays.
-  2. 1B.10 (in flight: its Spectrum part).
+  1. 1C.2's Save stall at the store (in flight); the lead proves it on the two displays.
+  2. 1B.10's Extruded Bubble and Neon Lake parts.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -466,9 +465,13 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     across the card (a mirrored look with transparent fills and outlines; the same look on OpenGL is intact:
     `20261114_n28_grab_fix_{vulkan,opengl}/frames/g15.png`). Suspect: a float32 shear in the native window/item
     map making the border band's `floor()` flip along a slanted line; the real window is 3840 x 2163 (odd height
-    from the overscan), rule (a)/(b) ran 1920 x 1080 only. The Medium builds the hidden-host reproduction; the
-    High fixes it in the native route with that reproduction as its red/green test; rule (a)/(b) widened to odd
-    and fractional window sizes.
+    from the overscan), rule (a)/(b) ran 1920 x 1080 only. Not reproduced in the hidden host (Medium, 14 Nov:
+    `visualizers/spectrum/border_diagonal/20261114_repro/border_diagonal_repro.py`, GREEN at 3840 x 2163,
+    2560 x 1443 and 1920 x 1080 on both APIs; the map's shear terms are exactly 0, so not a float32 shear). The
+    breaks look like two frames meeting on a quad's diagonal: the real swap chain composite (the surface sampled
+    into the window), the overscan placement, or the item's own quad. Next: the lead reruns on Display 1 with the
+    ABI 12 module (round 2 changed the composite and `v_uv`); if it persists, the High extends the reproduction
+    to the product's composite path and fixes it there.
   - H1 on a real window: done 14 Nov on Display 0 (the MSI at 150 %, operator's leave): the native Spectrum draws
     inside its card on Vulkan with crisp edges (`display/d1_run/20261114_d0_h1_vulkan_spectrum/`).
   - [ ] With no admitted mode renderable on the backend (before N2.5), the Visualizer card shows as a thin empty
