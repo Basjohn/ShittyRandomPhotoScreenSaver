@@ -206,7 +206,8 @@ worked example (harness-only); a product mode does the same in the product's pla
    `"<target>.depth"` or `"<target>.capture_colour|capture_depth"`. The sample request comes from
    `rendering.gl_programs.scene3d.scene_samples`; an explicit size follows its card through `NativeMode.target_size`.
    Read a target by its own pixel or by a uv over its allocation (`textureSize`): the content sits at the allocation's
-   bottom rows, columns from 0.
+   bottom rows, columns from 0. A target whose depth is read or kept across a capture stays single-sampled until
+   multisampled depth is proved (D14's as-built).
 5. **What is refused, with its reason:** a setting or a record field no pass declares (unknown); a member no source
    fills (unfilled); a name with two owners (a setting or a field naming a core member, a setting naming a field); a
    value of the wrong size or without a defined conversion (a refused frame keeps the last drawn one); a sampler the
