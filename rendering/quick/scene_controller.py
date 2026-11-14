@@ -3685,6 +3685,10 @@ class QuickSceneController(QObject):
         if visualizer_item is not None and _qobject_is_alive(visualizer_item):
             # The native route's stream retires and its item goes while the content host and window still live.
             visualizer_item.close_native_route()
+        background_item = self._background_item
+        if background_item is not None and _qobject_is_alive(background_item):
+            # N5.7a: the native background layer's item goes while its window still lives (Vulkan only; else a no-op).
+            background_item.close_native_layer()
         root = self._scene_root
         context = self._context
         # Detach and queue the C++-owned root while every Python child wrapper

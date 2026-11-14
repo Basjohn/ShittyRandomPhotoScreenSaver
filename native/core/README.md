@@ -141,6 +141,11 @@ never ships.
   host; the job route against the in-frame control on Vulkan, frames identical, the hand-over keeping the previous
   photo, the render thread's cost per image change both ways, a superseded image cancelled, nothing at rest, the lost
   edge, teardown with jobs in flight, the job thread's probe, validation).
+- `python/background_layer_check.py`: N5.7a's proof of the display's background layer (the photo drawn as a still by
+  the fullscreen pass, through the product's route `rendering/quick/render/native_background.py`: OpenGL native equal to
+  the Python presenter's frames on real photos at dpr 1 and 1.5 under the overscan placement, Vulkan within 1 level,
+  photo changes through jobs with no pass at the hand-over, nothing at rest, the cost at rest against the protected
+  retained-background path, the lost edge and teardown in flight) and of the N3.8 audit's M1 and M2 on a real render.
 - `python/timer_check.py`: N2.6's proof (off is free by count, a known-cost pass scaled N times and its empty-bracket
   control, QRhi's frame figure, latched reads in a real window with the waiting read as control, the frame trace and
   its report, the two forms against each other, validation; `timer_analysis.py`).
@@ -209,6 +214,10 @@ How a texture's lifetime runs (`ModeSource` holds the item's textures, `ModeCont
    the in-frame form. Nothing is uploaded again until a new image (`texture_uploads`, `texture_jobs` and
    `image_changes` in the state; `mode_textures` and `mode_texture_bytes`, every level counted, in `composite_live`;
    `job_counts` for the jobs).
+3b. **A still** (N5.7a, `NativeMode.still()`): an item with no stream (the background layer's photo). Its frame is its
+   textures, settings and card; its program is checked against an empty schema (every member the core's or a setting);
+   it records only when what it draws changed, so the record that hands a new image to its job keeps the target
+   (`still_kept`; no pass) and the commit's record draws the new picture once.
 4. **Retired** (render thread): a removed texture (`NativeMode.remove_texture`) is released at the next record, and the
    pipelines that bound it are rebuilt; a pass whose texture is missing is not drawn (the state's `last_reason` names
    it) and the target is cleared. Every texture goes with the content when Qt deletes the item's node (the render
@@ -217,8 +226,11 @@ How a texture's lifetime runs (`ModeSource` holds the item's textures, `ModeCont
    `NativeMode.on_textures_lost` callback is called once on the GUI thread with the names (N3.8: the edge; the state's
    `textures_lost` keeps the list), the item draws nothing, and its owner sends the images again. The product owner of
    a texture (N5.7a's presenter, N5.2a's transitions) keeps its pixels for that. A replaced or removed job output goes
-   to the window's retire list and back to its job thread once Qt's frames that sampled it completed; the destruction
-   barrier waits for jobs, outputs and textures (`NativeCore.pending_native_work`).
+   to the window's retire list and back to its job thread once Qt's frames that sampled it completed; the list asks its
+   window for those frames itself (audit N38 M2), and the window's frame edges are counted once per frame whatever
+   number of drivers sees it (M1). The destruction barrier waits for work in flight only
+   (`NativeCore.pending_native_work`, `IN_FLIGHT_WORK`, M3): what live items hold is proved released by each item's own
+   destruction.
 
 A new GPU technique (sampling an earlier pass, depth, more targets, compute, a new resource) is a primitive with its own
 C++ and harness, then used by every mode as data (sampling an image is that primitive since N4.a). Hand-written C++ for

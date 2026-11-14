@@ -436,6 +436,77 @@ in the History file ("D7").
    rest at 2560 x 1440 against the protected retained-background path; the lost edge and teardown in flight; validation
    clean. Then the lead's Display 1 and Display 0 rehearsal with the wallpaper and music.
 
+### Point 1 as built (N5.7a, 14 Nov 2026): the image presenter and background as the core's background layer
+
+**Read first (box 1), the Python presenter as it is at 899c4475.**
+- *Image ownership.* The pixels a display shows are one immutable `PresentationImage` (`rendering/quick/image_state.py`:
+  RGBA8, rows top first, tight, its pixel size, logical size and dpr), detached from the image worker's processed
+  `QImage` by `display_image_route.presentation_image_from_processed_qimage` through `image_boundary.capture_qimage`
+  (one deep copy). Its owner in a display generation is the scene's `BackgroundRenderItem.presentation_image`
+  (`rendering/quick/render/background_item.py`): one identity, one content (an identity reused for other pixels is
+  refused). The retained node keeps the image for as long as its texture exists (`background_image_node.py`, PR-04
+  Stage B: the `QImage` wraps its bytes without a copy).
+- *The fit and crop.* The fit and crop to the display (FILL, FIT, SHRINK) is done before the presenter, in the image
+  worker process, at the display's device pixels (`display.get_target_size()`): `rendering/image_processor_async.py`
+  `AsyncImageProcessor.process_qimage` (Smooth) or `rendering/image_quality.process_image` (the Pillow filters); the
+  scaled cache keys it by size, mode, filter and dpr. The presenter's own part is one rule: the processed image's whole
+  pixel rect over the item's whole logical rect (`QSGImageNode.setSourceRect(0, 0, w, h)`, `setRect(0, 0, lw, lh)`,
+  linear, no mips, `TextureIsOpaque`, the opaque pixels labelled premultiplied); a size that does not match the item's
+  device pixels (a stale image after a resolution change) is stretched by that same rule. The item covers the scene
+  root, which lies at the monitor's exact rect inside the R-63 overscanned window, on whole device pixels
+  (`scene_controller._sync_root_*`, `device_geometry.py`).
+- *Covered-display admission.* Upstream of the presenter: `image_pipeline._leave_out_covered_destinations` reads
+  `DisplayManager.covered_image_destination_screens()` inside the batch admission; a covered display that shows an image
+  is left out of the batch through its omission receipt and keeps its image (history keeps its meta). The presenter is
+  simply not called for it.
+- *The timing and its edges.* `QuickDisplayRuntime.set_presentation_image` (refused during a run) publishes a new base;
+  a run starts against the current base (`start_transition` refuses another source) and announces the incoming image at
+  its start (`announce_incoming_image`); its finalization publishes the destination as the base, then
+  `transition_finalized`. The scene controller tells the backdrop owner (`note_background_changed`) and its one listener
+  on an identity change. The item's `update()` reaches the render thread at the next sync; the retained node uploads in
+  that frame (`createTextureFromImage`), or adopts the finished run's resident texture (PR-04, the wrapped-texture
+  bridge, OpenGL only).
+- *The protected retained-background path* (07486d83, in the lineage of ce07b991 and 985b9d53, which own the frame
+  pacer and the Visualizer's clip host and are not on this path): at rest a `QSGImageNode` under an opacity node,
+  retained by Qt's scene graph, with no Python per frame; the custom `BackgroundRenderNode` lives behind an opacity-0
+  node, drawn only for a run, a proof or a pixel oracle. On Vulkan (D10 point 2) neither exists: no background node
+  is created, the window shows black where the wallpaper will be.
+
+**As built (boxes 2 and 3, ABI 15; owed: its build round and `background_layer_check.py`).**
+1. *One owner of the fit and crop* (`rendering/quick/background_placement.py`): the worker's processed image's whole pixel
+   rect over the background item's whole logical rect. The Python presenter's `QSGImageNode` reads its source rect and
+   rect from it (the same values as before: the protected path is not retuned), and the native layer its pass's
+   `u_source_uv`. A test moves the owner and sees both paths move.
+2. *The layer is N4.a's fullscreen pass, as a still* (`mode_content.h`, "Stills"): a generic mode item with no stream,
+   its frame its textures, settings and card; its program is checked against an empty schema. It records only when what
+   it draws changed: the record that hands a new photo to its upload job keeps the target and records no pass (the
+   previous photo stays, never a blank), and the commit's record (the frame edge the job's latch publishes at) draws the
+   new one once. At rest nothing is recorded; Qt composites the retained target.
+3. *Its pass* is the product file `rendering/quick/qml/shaders/background_layer.frag` (baked by `tools/regen_qrc.py
+   --shaders`, shipped with the QML): the photo at `u_source_uv` over `vUv`, linear, clamped, no mips, as the retained
+   node samples it; replace.
+4. *The composite* takes two options: `layer` ("background": the frame driver records the window's background-layer
+   surfaces before every other, D5.2's order, so N5.7b builds its pyramid from a layer drawn first in the frame) and
+   `opaque` (the material without blending: Qt draws it in its opaque pass, as the retained image node it stands for, and
+   blends it while its opacity is below one).
+5. *The photo's textures are the core's*: the item's `PresentationImage` is copied once into the core (GUI thread) and
+   uploaded by N3.8's job service on a Vulkan device with a second queue (in the frame elsewhere). The wrapped-texture
+   bridge (PR-04) is OpenGL only and is not used; it retires with the Python presenter.
+6. *The route* (`rendering/quick/render/native_background.py`): on the native background's backend (Vulkan)
+   `BackgroundRenderItem` makes the layer, a composite item in itself, at its first image, and hands it every image at the
+   same edge the Python presenter takes it, so image ownership, the identity rule, covered-display admission and the
+   timing stay the item's and the runtime's. The layer fades in with its first photo and out when the image goes or the
+   core's content fails; a lost texture is sent again from the item's image; the scene's retirement closes it before
+   the root. On OpenGL nothing native is made. Known limit until N5.2a: on Vulkan a transition is not drawn (D10 point 2),
+   so the base photo changes at the run's end as a cut from one photo to the next, never through a blank.
+7. *What the build round must prove* (`native/core/python/background_layer_check.py`): rule (a) OpenGL native equal to
+   the Python presenter's frames on real photos (landscape, a FILL crop, portrait and a 3:1 aspect, FILL and FIT) at dpr
+   1 and 1.5 under the overscan placement; rule (b) Vulkan within 1 level; the route through `BackgroundRenderItem` on
+   Vulkan; photo changes through jobs (the hand-over keeps the previous photo and records no pass, the commit draws the
+   new one exactly, no fallback, the render thread's and the GUI thread's cost per change); nothing at rest; the cost at
+   rest at 2560 x 1440 against the protected retained-background path; the lost edge and teardown in flight; validation
+   clean. Then the lead's Display 1 and Display 0 rehearsal with the wallpaper and music.
+
 ## D8. What Parity+ means, and the ranked plus (decided 12 Nov 2026)
 
 **Parity is four things, each a gate at every port and again at the flip:**

@@ -1,7 +1,7 @@
 """The destruction barrier sees the native core's work (N3.8; the N2.5 audit's L8): a retiring generation is not
-complete while the core still has upload jobs queued or running, job outputs held or retiring, or item textures and
-their copies alive (``NativeCore.pending_native_work``). The core is read only when the backend owner loaded it
-(``rendering.quick.bootstrap.native_core``), never imported by the barrier."""
+complete while the core still has work in flight (``NativeCore.pending_native_work``: jobs queued or running, releases
+pending, replaced outputs retiring; audit N38 M3 took live items' textures out). The core is read only when the backend
+owner loaded it (``rendering.quick.bootstrap.native_core``), never imported by the barrier."""
 from __future__ import annotations
 
 import sys
@@ -31,7 +31,7 @@ class _Core:
     """The loaded core as the barrier reads it: its pending work, as the test sets it."""
 
     def __init__(self) -> None:
-        self.pending = [{"kind": "native_jobs_running", "count": 1}, {"kind": "native_job_images", "count": 2}]
+        self.pending = [{"kind": "native_jobs_running", "count": 1}, {"kind": "native_job_images_retiring", "count": 2}]
 
     def pending_native_work(self):
         return list(self.pending)

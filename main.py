@@ -52,7 +52,7 @@ if not importing_parents_main(__name__):
 
     from PySide6.QtWidgets import QApplication
     from PySide6.QtCore import QEvent, Qt, QTimer
-    from PySide6.QtGui import QImageReader, QIcon
+    from PySide6.QtGui import QImageReader
     from core.logging.logger import (
         clear_logs_for_fresh_start,
         flush_and_close_logging,
@@ -1159,14 +1159,18 @@ def main(*, entrypoint: str = "main"):
     except Exception:
         logger.debug("[MAIN] Failed to set application version")
 
-    # Apply application icon from SRPSS.ico when available so the
-    # taskbar/systray and dialogs share a consistent identity.
-    icon_path = Path(__file__).with_name("SRPSS.ico")
-    if icon_path.exists():
-        try:
-            app.setWindowIcon(QIcon(str(icon_path)))
-        except Exception:
-            logger.debug("Failed to set application icon from SRPSS.ico", exc_info=True)
+    # The application icon (ui/app_icon.py, its one owner) before any window exists, so the taskbar, the tray
+    # and every window share it: Qt never reads the executable's embedded icon by itself.
+    try:
+        from ui.app_icon import application_icon, application_icon_source
+        app_icon = application_icon()
+        if app_icon.isNull():
+            logger.warning("[ICON] No application icon found; windows show the default icon")
+        else:
+            app.setWindowIcon(app_icon)
+            logger.info("[ICON] Application icon from %s", application_icon_source())
+    except Exception:
+        logger.warning("[ICON] Failed to set the application icon", exc_info=True)
 
     # Increase Qt image allocation limit from 256MB to 1GB for high-res images
     # This is per-image when loaded, not total memory for all images

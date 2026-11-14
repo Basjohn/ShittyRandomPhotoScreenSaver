@@ -77,6 +77,24 @@ QString surfacePatternName(SurfacePattern pattern)
     return pattern == SurfacePattern::White ? QStringLiteral("white") : QStringLiteral("texel_id");
 }
 
+bool parseSurfaceLayer(const QString &text, SurfaceLayer *out)
+{
+    if (text == QLatin1String("content")) {
+        *out = SurfaceLayer::Content;
+        return true;
+    }
+    if (text == QLatin1String("background")) {
+        *out = SurfaceLayer::Background;
+        return true;
+    }
+    return false;
+}
+
+QString surfaceLayerName(SurfaceLayer layer)
+{
+    return layer == SurfaceLayer::Background ? QStringLiteral("background") : QStringLiteral("content");
+}
+
 // ------------------------------------------------------------------------------------------------- Surface
 
 struct Surface::Resources
@@ -283,6 +301,11 @@ bool Surface::record(QRhi *rhi, QRhiCommandBuffer *cb, bool *recorded, QString *
             return false;
         }
         m_dirty.storeRelease(0);
+        if (m_content->keptTargetLastRecord()) {
+            // No pass: the target keeps the frame it holds (N5.7a, a still whose drawn inputs did not change).
+            m_kept.fetchAndAddRelaxed(1);
+            return true;
+        }
         m_targetClear = !m_content->holdsFrame(m_res->target); // what the content did not draw it cleared by a draw
         m_passes.fetchAndAddRelaxed(1);
         *recorded = true;
@@ -367,8 +390,17 @@ std::shared_ptr<WindowSurfaces> WindowSurfaces::forWindow(QQuickWindow *window)
     std::shared_ptr<WindowSurfaces> surfaces = entry.surfaces.lock();
     if (!surfaces || entry.window.isNull()) {
         surfaces = std::make_shared<WindowSurfaces>();
+        surfaces->m_window = window;
         entry.window = window;
         entry.surfaces = surfaces;
+        // Audit N38 M1: the window's frame count opens again after every rendered frame, once per registry (a direct
+        // connection on the render thread; the window as context removes it with the window; a registry gone first
+        // leaves a lambda that does nothing).
+        const std::weak_ptr<WindowSurfaces> weak = surfaces;
+        QObject::connect(window, &QQuickWindow::afterRendering, window, [weak]() {
+            if (const std::shared_ptr<WindowSurfaces> live = weak.lock())
+                live->frameRendered();
+        }, Qt::DirectConnection);
     }
     return surfaces;
 }
@@ -423,8 +455,13 @@ QList<std::shared_ptr<Surface>> WindowSurfaces::dirtySurfaces() const
 {
     QList<std::shared_ptr<Surface>> dirty;
     QMutexLocker lock(&m_mutex);
+    // D5.2's dependency order (N5.7a): the background layer first, then every other surface as it was added.
     for (const std::shared_ptr<Surface> &s : m_surfaces) {
-        if (s->dirty())
+        if (s->layer() == SurfaceLayer::Background && s->dirty())
+            dirty.append(s);
+    }
+    for (const std::shared_ptr<Surface> &s : m_surfaces) {
+        if (s->layer() != SurfaceLayer::Background && s->dirty())
             dirty.append(s);
     }
     return dirty;
@@ -448,14 +485,27 @@ void WindowSurfaces::retire(const std::shared_ptr<JobService> &service, quint64 
 {
     if (!service || !output)
         return;
-    QMutexLocker lock(&m_mutex);
-    Retired r;
-    r.service = service;
-    r.output = output;
-    r.lastUse = m_edges.loadAcquire();
-    m_retired.append(r);
-    m_retiring.fetchAndAddOrdered(1);
-    g_retiring.fetchAndAddRelaxed(1);
+    {
+        QMutexLocker lock(&m_mutex);
+        Retired r;
+        r.service = service;
+        r.output = output;
+        r.lastUse = m_edges.loadAcquire();
+        m_retired.append(r);
+        m_retiring.fetchAndAddOrdered(1);
+        g_retiring.fetchAndAddRelaxed(1);
+    }
+    requestFrame(); // M2: the frames the release waits for are rendered even if nothing else changes
+}
+
+void WindowSurfaces::requestFrame()
+{
+    QQuickWindow *window = m_window;
+    if (!window)
+        return;
+    m_frameRequests.fetchAndAddRelaxed(1);
+    // Queued to the window's own thread with the window as context: dropped if the window is destroyed first.
+    QMetaObject::invokeMethod(window, [window]() { window->update(); }, Qt::QueuedConnection);
 }
 
 int WindowSurfaces::releaseRetired(qint64 edge, int framesInFlight)
@@ -472,6 +522,8 @@ int WindowSurfaces::releaseRetired(qint64 edge, int framesInFlight)
     g_retiring.fetchAndAddRelaxed(-int(due.size()));
     for (const Retired &r : due)
         r.service->release(r.output); // queued to the job thread (never waits)
+    if (retiring())
+        requestFrame();               // M2: the next frame, for the entries still waiting (an edge per frame)
     return int(due.size());
 }
 

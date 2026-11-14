@@ -854,6 +854,16 @@ refusals). Since N3.8 its `Scene.settle()` waits for a texture's upload jobs (a 
 # flight: nothing left); Vulkan validated
 python native/core/python/job_service_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
     [--apis opengl vulkan] [--rounds swap lifetime] [--photos A.jpg B.jpg ...] [--label n38_job_service]
+# N5.7a (D7 point 1): the display's background layer on the native core, through the product's route
+# (rendering/quick/render/native_background.py), hidden hosts only: draw (PERSONALSET photos processed by the worker's
+# own FILL/FIT at dpr 1 and 1.5 under the overscan placement; OpenGL native equal to the Python presenter's frames, rule
+# (a); Vulkan within 1 level of OpenGL native, rule (b); the route via BackgroundRenderItem on Vulkan), change (4K
+# photos through the job service: the hand-over keeps the previous photo and records no pass, the commit draws the new
+# one), rest (nothing at rest; the replaced output released with the retire list's own frame requests, audit N38 M2),
+# edges (audit M1), cost (QRhi frame GPU time at rest against the Python presenter's protected path), lifetime (the
+# lost edge, teardown in flight); Vulkan validated
+python native/core/python/background_layer_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan] [--rounds draw change rest edges cost lifetime] [--label n57a_background_layer]
 ```
 
 Tests: `tests/test_native_core_jobs.py` (the built module, GPU-free: the job service's latch, cancellation while

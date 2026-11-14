@@ -15,8 +15,22 @@ from ..transitions.state import TransitionRun
 from .background_image_node import RetainedBackgroundSceneNode
 from .background_node import BackgroundRenderNode, SlideProofState
 from .telemetry import RenderNodeTelemetry
+from core.logging.logger import get_logger
 from core.performance.frame_trace import FrameTraceEvent, current_frame_trace
 from rendering.transition_registry import background_family_available_on_backend
+
+logger = get_logger(__name__)
+
+
+def _native_background_wanted() -> bool:
+    """Whether the process's backend draws the background natively (N5.7a: Vulkan). Read once per item; a process whose
+    backend owner never ran (a test, a tool) reads OpenGL."""
+    from .native_background import native_background_wanted
+
+    try:
+        return native_background_wanted()
+    except Exception:
+        return False
 
 
 class _RenderNodeRetirement:
@@ -151,6 +165,11 @@ class BackgroundRenderItem(QQuickItem):
         # a backend without them (the Vulkan rehearsal) no background node is
         # ever created. Read once: the process's backend never changes.
         self._renderers_on_backend = background_family_available_on_backend()
+        # N5.7a (D7 point 1, D10 point 3): on the native background's backend (the Vulkan rehearsal) the photo is drawn
+        # by the native core's background layer, a composite item in this one, made at the first image. This item keeps
+        # owning the image, its identity rule and the timing of every change; on OpenGL nothing native is made.
+        self._native_layer = None
+        self._native_layer_wanted = (not self._renderers_on_backend) and _native_background_wanted()
         self._warm_up_cancel: threading.Event | None = None
         self._bound_window = None
         self.windowChanged.connect(self._bind_window_invalidation)
@@ -211,6 +230,45 @@ class BackgroundRenderItem(QQuickItem):
             return
         self._presentation_image = image
         self.update()
+        self._present_native(image)
+
+    @property
+    def native_layer(self):
+        """The native background layer (N5.7a) on its backend, once made; None elsewhere."""
+        return self._native_layer
+
+    def _present_native(self, image: PresentationImage | None) -> None:
+        """The native background layer takes the item's image at the same edge the Python presenter does (N5.7a)."""
+        if not self._native_layer_wanted:
+            return
+        if self._native_layer is None:
+            if image is None:
+                return
+            from .native_background import attach_native_background
+
+            try:
+                self._native_layer = attach_native_background(self)
+            except Exception:
+                self._native_layer_wanted = False   # failed closed: logged once, the window stays as before N5.7a
+                logger.error("[BACKGROUND][NATIVE] The native background layer could not be made", exc_info=True)
+                return
+            if self._native_layer is None:
+                self._native_layer_wanted = False
+                return
+            self.widthChanged.connect(self._native_geometry_changed)
+            self.heightChanged.connect(self._native_geometry_changed)
+        self._native_layer.present(image)
+
+    def _native_geometry_changed(self) -> None:
+        if self._native_layer is not None:
+            self._native_layer.geometry_changed()
+
+    def close_native_layer(self) -> None:
+        """The native background layer goes with the display generation, before its scene root (idempotent)."""
+        layer, self._native_layer = self._native_layer, None
+        self._native_layer_wanted = False
+        if layer is not None:
+            layer.close()
 
     def set_transition_run(self, run: TransitionRun | None) -> None:
         """Publish one immutable run for render-thread monotonic sampling."""

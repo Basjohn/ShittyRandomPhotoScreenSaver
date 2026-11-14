@@ -45,7 +45,7 @@ from rendering.native.spectrum import NativeSpectrum, spectrum_block
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 14
+EXPECTED_ABI = 15
 HOST_KINDS = ("window", "hidden")
 
 
@@ -251,21 +251,20 @@ class NativeCore:
         """The job service's thread, latch, cancellation and teardown under a scripted backend, GPU-free (N3.8)."""
         return json.loads(self.module.job_service_self_test(json.dumps(list(script))))
 
+    #: The work a runtime destruction barrier waits for (audit N38 M3): only work in flight, which ends by itself (a job
+    #: queued or running, a release queued to its job thread, a replaced output waiting for the frames that sampled it,
+    #: which the window renders on its own since M2). What a live item holds (its textures, a job output shown as a front,
+    #: a copy not yet uploaded) is not counted: the counts are process-wide, so a native item outside the retiring
+    #: generation (another display's background layer, a surviving window) would hold the barrier to its timeout, the
+    #: fail-closed exit. Each item's own resources are proved released by its destruction (``composite_live``).
+    IN_FLIGHT_WORK = ("jobs_queued", "jobs_running", "job_releases_pending", "job_images_retiring")
+
     def pending_native_work(self) -> list[dict]:
-        """What a runtime destruction barrier waits for in the core (N3.8, the N2.5 audit's L8): jobs queued or running,
-        releases pending, job outputs held or retiring, the items' textures and the copies not yet uploaded. One entry
-        per kind that is not zero (``{"kind": ..., "count": ...}``); empty when nothing is pending."""
+        """What a runtime destruction barrier waits for in the core (N3.8, the N2.5 audit's L8, narrowed by audit N38
+        M3 to ``IN_FLIGHT_WORK``). One entry per kind that is not zero (``{"kind": ..., "count": ...}``); empty when
+        nothing is in flight."""
         jobs = self.job_counts()
-        live = self.composite_live()
-        counts = {
-            "jobs_queued": jobs.get("jobs_queued", 0),
-            "jobs_running": jobs.get("jobs_running", 0),
-            "job_releases_pending": jobs.get("job_releases_pending", 0),
-            "job_images": jobs.get("job_images", 0),
-            "job_images_retiring": jobs.get("job_images_retiring", 0),
-            "mode_textures": live.get("mode_textures", 0),
-            "mode_texture_images": live.get("mode_texture_images", 0),
-        }
+        counts = {kind: jobs.get(kind, 0) for kind in self.IN_FLIGHT_WORK}
         return [{"kind": f"native_{kind}", "count": int(count)} for kind, count in counts.items() if count]
 
     def gpu_timer_live(self) -> dict:
