@@ -768,6 +768,13 @@ no waiting read outside the control, the trace and its report, the Python face).
 # time per pass); Vulkan validated, only Qt 6.12.0's recorded defects excused
 python native/core/python/spectrum_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
     [--apis opengl vulkan] [--rounds block item pixels] [--sample-every 40] [--label n25_spectrum]
+
+# Rule (a): the production owner in the hidden production scene drawn by the Python renderer, then through the product's
+# native route (NativeVisualizerRoute on the Visualizer item), frame for frame at dpr 1.5; per input rows split at the
+# mode switch (steady, fade), each card's window map checked against the Python renderer's own float32 rows, and every
+# pixel more than a level off classified (card-edge column, peak row, cap arc, fade frame, other); worst-frame crops
+python tools/visualizer_replay/owner_render_parity.py --native --module-dir release/native_module --offers --out <dir>
+    [--runs spectrum spectrum:b ...]
 ```
 
 The work folder beside its summary holds the captured frames and references; delete it once the run is judged. Tests:
