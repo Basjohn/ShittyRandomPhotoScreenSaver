@@ -298,6 +298,37 @@ def test_normal_is_exact_a_material_blurs_what_is_beneath_and_parking_restores_n
     card.item.deleteLater()
 
 
+def test_first_publish_draws_the_steady_blur(material_scene) -> None:
+    """R-NEW: the backdrop's first publish draws what a later refresh draws (Qt's one-time generateMips on the
+    wrapped texture overwrote the heavy level on the first card frame, which has no refresh of its own)."""
+    import numpy
+    from PySide6.QtGui import QColor
+    from rendering.quick.image_state import PresentationImage
+    from rendering.quick.widgets.host import OverlayCardStyle, OverlayWidgetGeometry
+
+    scene = material_scene
+    # A busy wallpaper (24 px blocks of random colour): the light level keeps the blocks, the heavy one does not.
+    blocks = numpy.random.default_rng(7).integers(0, 256, (360 // 24 + 1, 640 // 24 + 1, 4), dtype=numpy.uint8)
+    pixels = numpy.repeat(numpy.repeat(blocks, 24, axis=0), 24, axis=1)[:360, :640].copy()
+    pixels[..., 3] = 255
+    scene.set_wallpaper(PresentationImage("blocks", "blocks", (640.0, 360.0), 1.0, (640, 360), 640 * 4,
+                                          pixels.tobytes()))
+    card = scene.host.create_widget(object_name="card", model_identity="clock",
+                                    geometry=OverlayWidgetGeometry(170, 100, 300, 160),
+                                    card_style=OverlayCardStyle(background_color=QColor(20, 20, 20, 77),
+                                                                border_width=0.0, shadow_enabled=False))
+    scene.presentations = []
+    scene.set_material("acrylic")
+    scene.render(4)
+    first = numpy.asarray(scene.read(), numpy.int16)[110:250, 180:460]
+    scene.owner.item.request_refresh()
+    scene.render(3)
+    steady = numpy.asarray(scene.read(), numpy.int16)[110:250, 180:460]
+    assert scene.owner.item.texture_ready
+    assert numpy.abs(first - steady).max() <= 1
+    card.item.deleteLater()
+
+
 def test_material_follows_a_running_transition(material_scene) -> None:
     import numpy
     from PySide6.QtGui import QColor
