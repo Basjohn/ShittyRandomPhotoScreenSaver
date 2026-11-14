@@ -358,6 +358,10 @@ class NativeSceneMirror(SceneMirror):
     def attach(self, runtime: Any) -> None:
         super().attach(runtime)
         hidden = self.host.scene
+        # The window renders once before the owner exists, as the product's window has long before a Visualizer
+        # activates: the native item reads the window's framebuffer from Qt's own render target (audit N29 L1), which
+        # a window has only from its first frame (before it, the route waits a frame and input 0 would go undrawn).
+        self.host.render()
         self.window_host = self.core.attach_host(self.host.window)
         item = hidden._ensure_visualizer_items()
         self.route = _ParityRoute.make(self.core, item.parentItem(), self)
