@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N4.a merged at ABI 11. Medium: the N2.5 side defects (rule (a)'s fade-frame drift, the owner-parity wall-clock deadline). Audit: N2.9's round 2. N2.8 waits for two displays.
+**Now (in flight):** High: N2.9 round 2's audit fixes (M1-M6, lows; a build round). Medium: the N2.5 side defects (rule (a)'s fade-frame drift, the owner-parity wall-clock deadline). N4.a merged at ABI 11 (8394b992). N2.8 waits for two displays.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -483,6 +483,21 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     in-frame (Vulkan only; OpenGL runs in-frame).
   - [ ] D9 point 2, consumer (b), the warm-up class: warm-up jobs run on this service, scheduled with N3.6's
     gradual warm-up (one unit per spaced frame). Transition preparation (consumer (a)) is N5.2g's.
+- [ ] N2.9 round 2's audit (`Docs/Future_Work/Audit_2026-11-14_N29_round2.md`; no high, six medium, eight low), on
+  the native route Spectrum uses on Vulkan today:
+  - [ ] M1: `take_for_render` and `admit_at_sync` inside the frame's failure handling (a failure there hides the
+    Visualizer for the activation and later snapshots are never taken).
+  - [ ] M2: a card never shown fades in on recovery or a late first frame (`_faded_out` set only after placement).
+  - [ ] M3: an update dropped for want of a framebuffer is redone at the window's first frame; a resize corrects
+    the card at rest (no stale framebuffer size).
+  - [ ] M4: core build failures reach the route (the card fades out over a target never written, never shown over
+    undefined contents or a stale frame).
+  - [ ] M5: a refusal that persists fades the card out and logs once, instead of freezing the last frame.
+  - [ ] M6: `v_uv` spans the item, not the enlarged target (Spline Curve, Bubble and Oscilloscope compute
+    `v_uv * u_resolution`; off 1-2 device pixels at fractional scales and flipped on OpenGL), proved with origin,
+    rotation and an asymmetric pattern.
+  - [ ] Lows L1-L8 as the audit suggests (the swapchain query off the GUI thread; no per-frame JSON state; one fade
+    constant; latch keys; core members filled with no silent zero; test controls; `--against` hash-only).
 - [ ] N4.a leftovers: a texture's owner is told when its textures are lost (today only `textures_lost` in the
   state; the presenter and transitions need the edge); the texture counts join the destruction barrier (with
   the N2.5 audit's L8).
