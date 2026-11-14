@@ -422,6 +422,10 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     test that fails on the old code.
   - [ ] D1's "close during copy" with a paused copy has no test hook (the view's pinning is shown instead). Add the
     hook with N2.5's render-thread retire job, which is the reader's first user.
+  - [ ] Audit 14 Nov lows (`Docs/Future_Work/Audit_2026-11-14.md`): the x86-64 guard also admits ARM64EC (weakly
+    ordered: refuse it); `skip_seqlock` drops three guards at once, so split it so one control isolates the
+    re-read after the copy; D1's "retiring: no copy starts" gets a negative control; the drop's own watermark is
+    redundant with the accepted sequence (delete it, or show a case only it catches).
 - [ ] N2.4 leftovers (N2.4 proved 13 Nov: `native/core/python/composite_check.py`, N24 VERDICT PASS on all four
   backends):
   - [ ] The Glass card material on the native composite; its contract read once Glass's own native path exists.
@@ -435,6 +439,8 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     failures) still end the loop without waiting for the Quick windows, so on Vulkan they may still crash at exit
     (R-207 fixed every exiting stop). Prove it per route first (hidden Vulkan run); then each route releases its
     Quick windows before the loop ends (the barrier timeout cannot wait on its own barrier), with a test per route.
+    Same box (audit 14 Nov): a second exiting stop during the terminal drain cancels it and quits before the
+    windows retire.
   - [ ] `rendering/quick/qml/shaders/surface_material.frag:178` takes the card grain from raw `gl_FragCoord`,
     whose origin differs by backend: Vulkan and OpenGL differ by up to 8/255 inside the material card. Apply
     N1.4's `gl_FragCoord` rule, bake with `tools/regen_qrc.py --shaders`, OpenGL pixels unchanged.
@@ -461,6 +467,15 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     the native item.
   - [ ] Rule (e): GPU time per pass through N2.6's timer; nothing per frame at rest (`tools/overhead_baseline.py`).
   - [ ] N2.3's refusal leftover rides here if the item's route touches it (a refused payload fails closed).
+  - [ ] Audit 14 Nov, fix-soon 3: the reader is never deleted or unmapped before the render-thread retire job ran
+    (`packet_reader.cpp:239-247` unmaps in the destructor; `packet_reader_close` deletes on the caller's thread,
+    safe only under the GIL). A GUI close marks Retiring and hands ownership to the retire job; a test races a GUI
+    close with a render-thread read.
+  - [ ] Audit 14 Nov, fix-soon 2: the Studio's mode switcher (`ui/studio/settings_link.py:620-624`) lists modes
+    with no renderer on the running backend; picking one raises at `ui/tabs/visualizers_tab.py:443`. Filter it as
+    the Visualizers tab does, with a test.
+  - [ ] Lead decision 14 Nov (audit decision 1): a slot of another stream identity is counted foreign before its
+    schema is checked, in both readers, so a stale slot never fails a native stream; a test per reader.
   - The Python renderer is deleted only once N2.8 (rule (f)) passes, in the same change as the switch.
 - [ ] N2.8 Lead, Display 1: the first rehearsal (cards and Spectrum on Vulkan; no wallpaper yet).
   - Pre-check done 14 Nov (`.artifacts/evidence/display/d1_run/20261114_n27_vulkan_visible/`, displays on):
@@ -962,10 +977,6 @@ Contract: plan 01 M3c; evidence `.artifacts/evidence/visualizers/shared/expanded
 
 Records: R-188, R-191, R-192 (`Docs/Historical_Bugs/`), with the Display 1 and Display 0 evidence.
 
-- [ ] R-192's "Still open", recorded only in the bug entry: an axis with no exterior edge (the middle display of
-  three in a row; a display enclosed on all sides, which also takes R-63's top fallback into its neighbour) keeps
-  Qt Quick's stretch when its extent is not whole at its DPR. Decide: Watchlist with the layouts named, or the
-  scene laid out on a whole-logical sub-rectangle of the window on that axis.
 - [ ] The tests that open windows were not run on the merge (`test_qtquick_visualizer_clip_smoke.py`, Neon Lake's
   `actual_neon_qsg_pixels`): run them hidden at the next milestone run.
 
@@ -1298,8 +1309,8 @@ Watchlist entry (operator, 11 Nov).
   for taller-body authoring.
 - **Decision, expanded card's hover Edit lane (plan 01 M3c):** the lane (Restore Widget Size, the transfer arrows)
   stays withdrawn on the display-wide card outside Edit since M2, because each edits the ordinary card's layout,
-  which that view does not draw (the rotate glyph is in Fullscreen Edit). Return it, and what should each do while
-  expanded?
+  which that view does not draw (since 1D.7 its Rotate glyph turns the expanded card outside Edit and saves at
+  once). Return it, and what should each do while expanded?
 - **Decision, overlays on pause:** a pause does nothing to them (by the spec, not built): Now Playing is event-only
   and has already faded after its window; with Always Show it stays up by definition. Add a fade-out on pause?
 - **Decision, Audio Analysis group in the Spline Curve and Oscilloscope Studios (section 9):** keep it or hide it?
