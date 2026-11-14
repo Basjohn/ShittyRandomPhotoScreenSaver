@@ -1,5 +1,8 @@
 """N5.2a's proof of the seven fullscreen transitions on the display's background layer (Current_Plan.md section N2b;
-``rendering/quick/render/native_background.py``), in hidden hosts only (never a window on a screen).
+``rendering/quick/render/native_background.py``), in hidden hosts only (never a window on a screen), widened by N5.2b to
+the five item-quad programs that are one fragment between two pictures (``N52B_VARIANTS``: Chromatic Shear, Liquid
+Lens, Melt Drip, Surface Tension, VHS; ``--topic n5_2b``). The Python reference is the product's frame at the run's dpr
+(``product_capture``: the item's logical size over the display's device pixels, as the runtime gives it).
 
 A photo change runs the configured transition natively over N5.7a's background layer: the transition's own product
 pack (baked from the Python renderer's fragment, ``tools/regen_qrc.py --shaders``), its values the Python renderer's
@@ -57,8 +60,60 @@ PROGRESS = fsc.PROGRESS
 DURATION_MS = fsc.DURATION_MS
 VULKAN_TOLERANCE = 1
 REST_FRAMES = 4
-ROUTE_VARIANT = "burn_options"
+#: The variant driven through the product's route: the first of these the run drew (N5.2b's: arrays in its block).
+ROUTE_VARIANTS = ("burn_options", "surface_tension_options")
 _ALLOWED_ENV: set[str] = set()
+#: N5.2b: the item-quad programs that are one fragment between two pictures (``NativeFragmentPass``), at their
+#: production defaults and with their options (Beam is not one: its sparks are a second pass of their own geometry).
+N52B_TRANSITIONS = ("chromatic_shear", "liquid_lens", "melt_drip", "surface_tension", "vhs")
+N52B_VARIANTS = {
+    "chromatic_shear": {},
+    "chromatic_shear_options": {"request_direction": "diagonal", "spread": 1.0, "slices": 14},
+    "liquid_lens": {},
+    "liquid_lens_flood": {"stops": 1, "refraction": 1.0, "dispersion": 1.0},
+    "liquid_lens_stops": {"stops": 8, "refraction": 0.0, "dispersion": 0.0},
+    "melt_drip": {},
+    "melt_drip_center_in": {"request_direction": "center_in", "detail": 2.0, "depth": 1.0, "gloss": 1.0},
+    "melt_drip_top_left": {"request_direction": "top_left", "detail": 0.5, "depth": 0.0, "gloss": 0.0},
+    "surface_tension": {},
+    "surface_tension_options": {"pools": 20, "gloss": 1.0},
+    "vhs": {},
+    "vhs_options": {"request_direction": "down", "tracking": 1.0, "bleed": 1.0, "noise": 1.0},
+}
+TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS
+VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS}
+#: The variants a sheet shows (each transition's defaults and one with options).
+SHEET_VARIANTS = ("burn", "particle_swirl", "ripple", "slide_push", "warp", "wipe", "crossfade",
+                  *N52B_TRANSITIONS, "chromatic_shear_options", "liquid_lens_flood", "melt_drip_center_in",
+                  "surface_tension_options", "vhs_options")
+
+
+def variant_transition(variant: str) -> str:
+    """The transition a variant of ``VARIANTS`` draws (the longest id that names it)."""
+    for transition_id in sorted(TRANSITIONS, key=len, reverse=True):
+        if variant == transition_id or variant.startswith(transition_id + "_"):
+            return transition_id
+    raise ValueError(f"no transition draws the variant {variant!r}")
+
+
+def product_capture(width: int, height: int, old, new, dpr: float):
+    """The production GL host (``TransitionCapture``) drawing the product's frame at ``dpr``: the item's logical size
+    is the target's device pixels over ``dpr`` (its ``uItemSize``), its own pixels the target's (``item_pixels``), as
+    the runtime's render frame gives them on a window of that ratio."""
+    from tools.transition_contact_sheet import TransitionCapture
+
+    class _ProductFrameCapture(TransitionCapture):
+        def frame(self, run, progress: float):
+            from rendering.quick.transitions.render_contract import QuickTransitionRenderFrame
+
+            w, h = self.width, self.height
+            lw, lh = w / dpr, h / dpr
+            sample = run.sample(run.start_ns + round(progress * (run.end_ns - run.start_ns)))
+            return QuickTransitionRenderFrame(run, sample, (0, 0, w, h), (lw, lh),
+                                              (2 / lw, 0, 0, 0, 0, -2 / lh, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1),
+                                              self.vao, self.textures[0], self.textures[1], device_pixel_ratio=dpr)
+
+    return _ProductFrameCapture(width, height, old, new)
 
 
 class Clock:
@@ -80,10 +135,10 @@ def production_run(variant: str, images, run_id: int):
     from rendering.quick.transitions.state import TransitionRun
     from tools.transition_contact_sheet import production_transition_spec
 
-    transition_id = fsc.variant_transition(variant)
-    spec = production_transition_spec(fsc.renderer_class(transition_id).transition_id, DURATION_MS)
+    transition_id = variant_transition(variant)
+    spec = production_transition_spec(transition_id, DURATION_MS)
     request = spec.build_request(runtime_generation=0, source_image=images[0], destination_image=images[1])
-    overrides = fsc.VARIANTS[variant]
+    overrides = VARIANTS[variant]
     if overrides:
         request = fsc.overridden(request, overrides)
     return TransitionRun.start(run_id=run_id, request=request, start_ns=1_000_000_000)
@@ -91,15 +146,13 @@ def production_run(variant: str, images, run_id: int):
 
 def references(variants, photos, dpr: float) -> dict:
     """The Python renderer's frames (the production GL host) of each variant's run at each progress, at the display's
-    pixels."""
+    pixels, in the product's frame at ``dpr`` (``product_capture``)."""
     import numpy as np
     from PIL import Image
 
-    from tools.transition_contact_sheet import TransitionCapture
-
     pictures = [Image.fromarray(rows, "RGBA") for _image, rows in photos]
     width, height = blc.DISPLAY
-    capture = TransitionCapture(width, height, *pictures)
+    capture = product_capture(width, height, *pictures, dpr)
     out = {}
     try:
         for index, variant in enumerate(variants):
@@ -174,8 +227,7 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                 entry["nothing_at_rest"] = before == after
                 entry["rest"] = [before, after]
                 facts["variants"][f"{variant}@{dpr}"] = entry
-                if dpr == 1.0 and variant in ("burn", "particle_swirl", "ripple", "slide_push", "warp", "wipe",
-                                              "crossfade"):
+                if dpr == 1.0 and variant in SHEET_VARIANTS:
                     tiles.append([blc._tile(frames[f"dpr{dpr}_{variant}_{p:.2f}"]) for p in (0.2, 0.5, 0.8)])
             facts[f"layer_dpr_{dpr}"] = scene.layer.state()
         finally:
@@ -209,11 +261,15 @@ def _route_on_vulkan(core, engine, app, frames, facts) -> dict:
     owner.core, owner.backend = core, bootstrap.QuickBackend(api="vulkan", requested="vulkan")
     checks: dict = {}
     dpr = 1.5
+    route_variant = next((v for v in ROUTE_VARIANTS if f"dpr{dpr}_{v}_{PROGRESS[0]:.2f}" in frames), None)
+    if route_variant is None:
+        return {"route_variant_drawn": False}
+    facts["route_variant"] = route_variant
     host = blc._host(core, blc.WINDOW, dpr)
     scene = blc.Scene(core, engine, host, dpr, blc.DISPLAY, kind="python")
     try:
         photos = [blc.processed(path, "fill", blc.DISPLAY) for path in PHOTOS]
-        run = production_run(ROUTE_VARIANT, [image for image, _rows in photos], 1)
+        run = production_run(route_variant, [image for image, _rows in photos], 1)
         scene.present(photos[0][0])
         scene.settle()
         layer = scene.item.native_layer
@@ -228,7 +284,7 @@ def _route_on_vulkan(core, engine, app, frames, facts) -> dict:
             layer.tick()
             scene.frames(1)
             rows = scene.display_rows(scene.read())
-            same[f"{progress:.2f}"] = blc.compare(rows, frames[f"dpr{dpr}_{ROUTE_VARIANT}_{progress:.2f}"])
+            same[f"{progress:.2f}"] = blc.compare(rows, frames[f"dpr{dpr}_{route_variant}_{progress:.2f}"])
         scene.item.set_transition_run(None)
         scene.item.set_presentation_image(photos[1][0])
         scene.settle()
@@ -341,8 +397,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--module-dir", default="release/native_module")
     parser.add_argument("--repo", default=".", help="the repository root (default: the current directory)")
     parser.add_argument("--apis", nargs="+", default=list(APIS), choices=APIS)
-    parser.add_argument("--variants", nargs="+", default=list(fsc.VARIANTS), choices=list(fsc.VARIANTS))
+    parser.add_argument("--variants", nargs="+", default=list(VARIANTS), choices=list(VARIANTS))
     parser.add_argument("--label", default="n52a_transition_route")
+    parser.add_argument("--topic", default="n5_2a", help="the evidence topic (n5_2b for N5.2b's runs)")
     parser.add_argument("--layer-path", type=Path, default=None,
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")
     parser.add_argument("--require-validation", action="store_true",
@@ -370,7 +427,7 @@ def main(argv: list[str] | None = None) -> int:
     root = host_check._root(args.repo)
     from tools import artifact_paths
 
-    out = artifact_paths.evidence_dir("native_core", "n5_2a", args.label)
+    out = artifact_paths.evidence_dir("native_core", args.topic, args.label)
     out.mkdir(parents=True, exist_ok=True)
     environment = vk_validation.environment_record(_ALLOWED_ENV)
     results: dict = {}
