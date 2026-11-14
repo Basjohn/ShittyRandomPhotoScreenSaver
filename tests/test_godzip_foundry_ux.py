@@ -41,6 +41,8 @@ def test_button_ampersands_are_escaped_so_no_accidental_mnemonic() -> None:
 
 
 def _word_is_shouting(word: str) -> bool:
+    if word == "README":  # a file name, not shouting
+        return False
     letters = [c for c in word if c.isalpha()]
     return len(letters) > 3 and all(c.isupper() for c in letters)
 
