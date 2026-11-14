@@ -160,7 +160,7 @@ class QuickBurnRenderer(FullscreenPassRenderer):
             "u_ember_veins": 1 if params.ember_veins else 0,
             "u_time": _burn_effect_time_seconds(frame),
             "u_seed": params.seed,
-            "u_target_px": (float(frame.viewport[2]), float(frame.viewport[3])),
+            "u_target_px": frame.item_pixels,
         }
 
 

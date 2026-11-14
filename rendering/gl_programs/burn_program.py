@@ -60,7 +60,7 @@ layout(std140, binding = 18) uniform BurnPass {
     int   u_ember_veins;    // 1 = glowing veins crawl through the char
     float u_time;           // wall-clock seconds
     float u_seed;           // per-transition random seed
-    vec2  u_target_px;      // the target's pixels (the viewport; the native core fills it by this name, N4.a)
+    vec2  u_target_px;      // the item's own pixels (its target in the native core, which fills it by this name)
 };
 
 // =====================================================================
@@ -80,21 +80,28 @@ float burnRandom(ivec2 cell, uint salt) {
 float vnoise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = p - i;
-    vec2 u = f * f * (3.0 - 2.0 * f);   // Hermite smoothstep
+    precise vec2 u = f * f * (3.0 - 2.0 * f);   // Hermite smoothstep
     ivec2 c = ivec2(i);
     float a = burnRandom(c, 0u);
     float b = burnRandom(c + ivec2(1, 0), 0u);
     float c2 = burnRandom(c + ivec2(0, 1), 0u);
     float d = burnRandom(c + ivec2(1, 1), 0u);
-    return mix(mix(a, b, u.x), mix(c2, d, u.x), u.y);
+    precise float lower = a + (b - a) * u.x;
+    precise float upper = c2 + (d - c2) * u.x;
+    precise float value = lower + (upper - lower) * u.y;
+    return value;
 }
 
 // 4-octave FBM for richer edge detail
 float fbm4(vec2 p) {
-    float v = 0.0, a = 0.5;
+    // ``precise`` (here and in vnoise, the front and its distance): no fused multiply-add, so every compiler and
+    // backend computes the burn front bit for bit (a last-bit difference flipped a pixel between zones, N5.2a).
+    precise float v = 0.0;
+    precise vec2 x = p;
+    float a = 0.5;
     for (int i = 0; i < 4; i++) {
-        v += a * vnoise(p);
-        p = p * 2.03 + vec2(1.7, 9.2 + u_seed * 0.1);
+        v += a * vnoise(x);
+        x = x * 2.03 + vec2(1.7, 9.2 + u_seed * 0.1);
         a *= 0.5;
     }
     return v;
@@ -104,7 +111,8 @@ float fbm4(vec2 p) {
 float warped_fbm(vec2 p) {
     vec2 q = vec2(fbm4(p + vec2(0.0, 0.0)),
                   fbm4(p + vec2(5.2, 1.3)));
-    return fbm4(p + 3.0 * q);
+    precise vec2 warped = p + 3.0 * q;
+    return fbm4(warped);
 }
 
 // =====================================================================
@@ -155,17 +163,17 @@ void main() {
 
     // --- Domain-warped noise for jagged, organic burn edge ---
     // The noise field is 2D: perpendicular position + slow time drift
-    vec2 noise_coord = vec2(perp * 5.0 + u_seed * 0.13,
+    precise vec2 noise_coord = vec2(perp * 5.0 + u_seed * 0.13,
                             axis * 3.5 + move_t * 1.2);
     float edge_noise = warped_fbm(noise_coord);
 
     // Jaggedness controls how much the noise deforms the burn front
     // Range: 0.0 = nearly straight line, 1.0 = very wild/organic edge
     float jag_amount = u_jaggedness * 0.22;
-    float front = move_t * 1.35 - edge_noise * jag_amount;
+    precise float front = move_t * 1.35 - edge_noise * jag_amount;
 
     // Signed distance: positive = ahead of front (old), negative = behind (burned)
-    float sd = axis - front;
+    precise float sd = axis - front;
 
     // --- Heat distortion: warp UVs near the burn front ---
     float dist_strength = 0.006 * u_glow_intensity * glow_buildup;

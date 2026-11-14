@@ -37,7 +37,7 @@ layout(std140, binding = 18) uniform SlidePass {
     float u_progress;
     vec2 u_direction;
     int u_motionStyle;
-    vec2 u_target_px;   // the target's pixels (the viewport; the native core fills it by this name, N4.a)
+    vec2 u_target_px;   // the item's own pixels (its target in the native core, which fills it by this name)
 };
 
 float settledSegment(float q) {
@@ -320,7 +320,7 @@ class QuickSlideRenderer(FullscreenPassRenderer):
     def values(self, resolved, frame: QuickTransitionRenderFrame) -> dict[str, object]:
         direction, style = resolved
         return {"u_direction": direction, "u_motionStyle": style,
-                "u_target_px": (float(frame.viewport[2]), float(frame.viewport[3]))}
+                "u_target_px": frame.item_pixels}
 
 
 def create_transition_renderer() -> QuickSlideRenderer:

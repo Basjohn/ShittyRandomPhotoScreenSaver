@@ -240,8 +240,11 @@ def test_real_gl_elastic_peak_keeps_varied_destination_interior_texels(qt_app):
         request = TransitionRequest(1, "slide", "Slide", False, 1000, "left", (("motion_style", "Elastic"),), image, image)
         run = TransitionRun.start(run_id=1, request=request, start_ns=0)
         sample = TransitionSample(1, 1, peak, peak, False)
-        matrix = (2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1, 0, -1, -1, 0, 1)
-        renderer.render(QuickTransitionRenderFrame(run, sample, (0, 0, width, 1), (1.0, 1.0), matrix, vao, old_tex, new_tex))
+        # The item is the target's 8 x 1 pixels (dpr 1), as the product's frame describes it: the shader takes its
+        # pixel's uv from the item's own pixels (N5.2a, ``QuickTransitionRenderFrame.item_pixels``).
+        matrix = (2 / width, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1, 0, -1, -1, 0, 1)
+        renderer.render(QuickTransitionRenderFrame(run, sample, (0, 0, width, 1), (float(width), 1.0), matrix, vao,
+                                                   old_tex, new_tex))
         pixels = bytes(gl.glReadPixels(0, 0, width, 1, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE))
         observed = [tuple(pixels[index * 4 : index * 4 + 4]) for index in range(width)]
         overshoot = _slide_elastic_arrival(peak) - 1.0
