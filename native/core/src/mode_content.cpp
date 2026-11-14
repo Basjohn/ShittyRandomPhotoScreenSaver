@@ -413,22 +413,22 @@ bool ModeSource::bind(const QString &mappingName, const PacketReaderConfig &conf
         *error = QStringLiteral("pause_in_copy is the reader harness's and the Spectrum item's hook, not a mode's");
         return false;
     }
-    {
-        QMutexLocker lock(&m_mutex);
-        if (m_program.valid()) {
-            const QString problem = m_program.frameProblem(schema->schema());
-            if (!problem.isEmpty()) {
-                *error = problem;
-                return false;
-            }
-        }
-    }
     PacketReaderConfig withSchema = config;
     withSchema.runtimeSchema = schema;
     PacketReader *reader = PacketReader::open(mappingName, withSchema, error);
     if (!reader)
         return false;
     QMutexLocker lock(&m_mutex);
+    if (m_program.valid()) {
+        const QString problem = m_program.frameProblem(schema->schema());
+        if (!problem.isEmpty()) {
+            reader->retire(); // never read: no copy can be in progress on it
+            reader->release();
+            delete reader;
+            *error = problem;
+            return false;
+        }
+    }
     if (m_current) {
         m_current->retire(); // D1: Retiring at once; the render thread releases it at its next sync
         m_retiring.append(m_current);

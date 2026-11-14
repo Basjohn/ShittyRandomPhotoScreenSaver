@@ -206,6 +206,7 @@ def bake(text: str, name: str, folder: Path) -> bytes:
     marker), in ``folder``: no module build."""
     from tools import regen_qrc
 
+    Path(folder).mkdir(parents=True, exist_ok=True)
     source = Path(folder) / name
     source.write_text(text, encoding="utf-8")
     pack = source.with_name(name + ".qsb")
