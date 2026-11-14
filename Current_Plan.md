@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.3 C++ reader (High); 1D.7 (Medium).
+**Now (in flight):** N2.3 C++ reader (High); 1D.12 with 1D.11's fence-wait timing (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,7 +47,7 @@ at the size asked.
      leftovers ride with the next fitting dispatch.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. 1D.7 (Rotate without Edit), then 1D.11's fence-wait timing.
+  1. 1D.12 (two test isolation defects) with 1D.11's fence-wait timing.
   2. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
      Sphere); a mode that cannot be made bit-identical in one dispatch converts at its port.
   3. 1B.10.
@@ -1123,19 +1123,17 @@ borderless fullscreen transfers working smoothly.
   lands at B2; an invalid remembered spot falls back; nothing else in the record changes (negative controls).
 - [ ] Lead D1 run with both displays: the sequence above, edges read.
 
-### 1D.7 Rotate must not enter Edit (operator, 13 Nov: preferred across the application; Opus Medium)
+### 1D.12 Test isolation defects found by 1D.7 (14 Nov; Opus Medium)
 
-Cause: `engine/display_manager.py:2742` (`_route_hover_edit_glyph`'s Edit part) opens or joins the Edit session to
-run every hover glyph action. For Rotate it leaves that session open, so the user lands in Edit. The fullscreen
-path at `:2697` does the same through `_start_quick_custom_layout_session`.
-- Scope is Rotate only. Restore Size (widgets and the Visualizer) and Child Lock still enter Edit, as today
-  (operator, 14 Nov). Close and the transfers stay on their routes.
-- [ ] Rotate outside Edit runs as one committed change with no Edit chrome, on every surface that has it: through
-  the same owner and model action (no second path), then committed and closed at once. Inside Edit it stays an
-  undoable draft step.
-- [ ] Tests through the real display manager: Rotate outside Edit changes the record once, leaves no Edit session
-  and shows no Edit overlay; inside Edit it stays undoable; Restore Size and Child Lock still open Edit. Negative
-  controls on the old route.
+- [ ] `tests/test_neon_settings_lifecycle_and_editor.py` fails run alone
+  (`test_quick_runtime_callbacks_do_not_retain_retired_display_unit`): a test swaps
+  `core.settings.visualizer_mode_registry` for a stub, so a later import of `scene_controller` raises
+  `ImportError: VisualizerShellPolicy`. It passes only when another file imported `scene_controller` first. Scope the
+  stub (monkeypatch, restored) or import what it needs first; the file passes alone and in the suite.
+- [ ] `tests/test_widget_display_route_prompt.py`: 15 pass, then the process exits non-zero at interpreter teardown
+  (127 three times on 14 Nov; 0xC0000409 once). Find the object that outlives its owner at exit (a dialog or
+  QObject left alive, a Python callback into a deleted C++ object) and fix it at the owner or the test; the file
+  exits 0 alone.
 
 ### 1D.9 Linux credential encryption, port from the archived branch (Opus Medium, low priority; Linux is best effort)
 
