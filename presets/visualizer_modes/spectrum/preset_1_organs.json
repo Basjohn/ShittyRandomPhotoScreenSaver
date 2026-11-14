@@ -62,6 +62,8 @@
         ],
         "spectrum_glow_enabled": false,
         "spectrum_glow_intensity": 0.08,
+        "spectrum_glow_placement": "Both",
+        "spectrum_glow_sharpness": 0.0,
         "spectrum_input_gain": 1.1,
         "spectrum_kick_lane_gain": 1.75,
         "spectrum_lane_strengths_linear": {

@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** High: N4.a (the fullscreen pass and sampling on N2.9's generic pass). Medium: 1D.14 (Spectrum's rim glow, no build round). Audit of N2.9's round 2 (the shared StreamSource/ContentLatch, the product-shader shape) after the 12:00 UTC reset. N2.8 waits for two displays.
+**Now (in flight):** High: N4.a built at ABI 11 (GitHub f3c52faf); its harness runs after the 12:00 UTC reset, on a rebuild with main (1D.14's `spectrum.frag` changed the compiled-in copy). 1D.14 merged (R-213). The N2.9 round 2 audit after the reset. N2.8 waits for two displays.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,9 +47,8 @@ at the size asked.
      N2.5's and N2.9's leftovers ride with the next fitting dispatch.
   2. 1D.6 (design note first), then 1C.10, as defects between N steps.
 - Medium:
-  1. 1D.14 (Spectrum's rim glow; Settings-only, no build round: port rule (g)).
-  2. The N2.5 side defects (rule (a)'s fade-frame drift, the owner-parity wall-clock deadline).
-  3. 1B.10.
+  1. The N2.5 side defects (rule (a)'s fade-frame drift, the owner-parity wall-clock deadline).
+  2. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -819,9 +818,6 @@ count. The Spectrum features and the Bar Gap control are in `Docs/Reference/Visu
 - [ ] One showcase WebP per preset (`release_media.py`), reviewed by the lead before the operator sees them.
 - [ ] Side defect: Bar Count is admitted to 96 by the spec but `spectrum.py` clamps to 64 (`_MAX_BARS`, lines 28,
   105, 205): a higher count would draw only the first 64 bars. One owner for the maximum; render one frame at 96.
-- [ ] Side defect: the segment border ring is lopsided (`spectrum.frag:914`: `<=` on one side, `>=` on the
-  other): two border rows at the bottom and left against one at the top and right at card scale, and the fill
-  share changes with scale. Make it symmetric; before/after at 1x and 3x on a segmented look.
 - [ ] Side defect: the kick lane in mirrored layouts boosts the first bars and their mirror, which are the edge
   bars, wherever the Bass lane sits (`bar_computation.py:422-432`). It should follow the Bass lane's position.
 - [ ] Side defect: Rim Glow measures distance to the square edge (`spectrum.frag:783-785`), so it facets at
@@ -1136,25 +1132,6 @@ borderless fullscreen transfers working smoothly.
 - [ ] Tests: the operator's exact sequence (B2 on D1, move to A1 on D0, fullscreen, move to D1, leave fullscreen)
   lands at B2; an invalid remembered spot falls back; nothing else in the record changes (negative controls).
 - [ ] Lead D1 run with both displays: the sequence above, edges read.
-
-### 1D.14 Spectrum's rim glow: a left-side bias, and Placement and Sharpness controls (operator, 14 Nov; Opus Medium, after N2.5 merges)
-
-The operator sees bars glow, or show a gap, on their left side, and most looks glow too softly (Organs is right).
-`spectrum_rim_alpha` (`widgets/spotify_visualizer/shaders/spectrum.frag:455`) takes one `side_dist_px` (the nearer
-side) and a fixed core/falloff shape (`core_end = spread * 0.35`, smoothstep feathers widened by `fwidth`). Timed
-after N2.5's merge so its parity target does not move mid-port; N2.5 makes a settings-only `spectrum.frag` change
-need no native build round.
-- [ ] Root cause first: render bars at several bar widths and both backends, measure the rim on each side of a bar
-  (left against right, in device pixels), and say whether the left bias is the shader (the side distance, the
-  `fwidth` feather, a half-pixel bar origin) or the bar layout (gaps). A defect is fixed at its cause with a test
-  and a historical bug entry. Lead (14 Nov): N2.5 found the rim's `fwidth` taken after a non-uniform `discard`
-  (undefined, driver-dependent helper pixels at cap corners) and hoists it; measure the bias again after that
-  merge before looking further.
-- [ ] Two controls in the spec (`visualizer_mode_settings.py`, the appearance bucket, under Enable Rim Glow):
-  Rim Placement (Left, Right, Both) and Rim Sharpness (a slider over the core/falloff shape). Their defaults
-  reproduce today's look exactly (pixel-identical at the widened run set with the defaults); every preset gets them
-  by the repair fill. Studio shows them through the spec.
-- [ ] Renders for the lead: each placement and three sharpness values on real wallpapers.
 
 ### 1D.9 Linux credential encryption, port from the archived branch (Opus Medium, low priority; Linux is best effort)
 

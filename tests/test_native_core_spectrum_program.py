@@ -96,9 +96,13 @@ def test_a_settings_only_uniform_reaches_the_native_block_with_no_rebuild(core, 
     block, facts = core.spectrum_block(record, card, product_pack, settings)
     assert block is not None and facts["unfilled"] == [], facts
     assert set(product["frame_members"]).isdisjoint(settings)
-    # Negative control: the compiled-in copy (the old path) has no such member and refuses the name.
+    # Negative control: the compiled-in copy (the old path) has no such member and refuses the name. It is baked at
+    # build time, so it lacks any Settings-only member added since (1D.14's rim members until the next build): the
+    # control hands it only the settings it has, so the name it refuses is the test's.
+    compiled = {row[0] for row in core.spectrum_block_layout(None)["members"]}
     with pytest.raises(ValueError, match="u_test_tint"):
-        core.spectrum_block(record, card, None, dict(settings, u_test_tint=0.75))
+        core.spectrum_block(record, card, None, dict({k: v for k, v in settings.items() if k in compiled},
+                                                     u_test_tint=0.75))
 
 
 @pytest.mark.qt

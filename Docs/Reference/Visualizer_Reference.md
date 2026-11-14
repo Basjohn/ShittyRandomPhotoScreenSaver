@@ -159,6 +159,14 @@ Rules:
   passes through yellow, not olive; a grey, white or black end takes the other end's hue. Rim glow reaches at most
   30% of a bar's width in from each side, so on 37 narrow bars it stays a rim instead of recolouring the bar
   (`tests/test_spectrum_decor.py`, each with a negative control against the old rule).
+- **Rim Placement** (`spectrum_glow_placement`: Left, Right, Both; default Both) chooses the sides of each bar that
+  carry the rim; the top edge always does. The presentation owner turns it into one envelope per side
+  (`spectrum_decor`), so a side fades in or out when the placement changes. **Rim Sharpness**
+  (`spectrum_glow_sharpness`, 0 to 1, default 0) reshapes the rim from the long-standing soft ramp (0) to a solid band
+  with one feather at 80% of its reach (1). Both are Settings-only shader members: the native core packs them by name
+  (`spectrum_settings_values`), the record does not carry them. Their defaults draw the rim exactly as before
+  (`tests/test_spectrum_rim_glow.py`). The bar's side border is one band test on both edges (R-NEW): it used to be two
+  units on the left and one on the right, which hid the left rim's brightest columns.
 - Ghost Colour **Bar Fill** makes a ghost a soft, blurred, translucent trail of its own bar: inside the bar's border
   it shows the bar's own surface (Fill Gradient at that height, Rainbow Fill, a pattern or flag sheet, gloss)
   averaged over a box that grows from 0.08 to 0.2 of the field's height as the ghost rises (half as wide; 2 x 4

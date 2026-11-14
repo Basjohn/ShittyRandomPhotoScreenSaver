@@ -78,7 +78,7 @@ _PRIORITY = {PREFIX + key: rank for rank, key in enumerate((
     "ghost_color_source", "ghost_color", "ghost_color.3", "ghost_gradient", "ghost_tip_color", "ghost_tip_color.3",
     "pattern", "pattern_anchor", "pattern_color", "pattern_color.3", "pattern_scale", "pattern_strength", "fill_gradient",
     "fill_tip_color", "fill_tip_color.3", "gloss", "peak_caps", "peak_cap_color", "peak_cap_color.3",
-    "peak_cap_thickness", "glow_enabled", "glow_color", "glow_intensity", "mirrored", "wave_amplitude", "profile_floor", "drop_speed"))}
+    "peak_cap_thickness", "glow_enabled", "glow_color", "glow_intensity", "glow_placement", "glow_sharpness", "mirrored", "wave_amplitude", "profile_floor", "drop_speed"))}
 _ROW_ICONS = {"render_mode": "bars", "bar_fill_color": "colour", "bar_border_color": "colour",
               "glow_color": "colour", "rainbow_ghost": "sparkle", "ghosting_enabled": "sparkle",
               "rainbow_enabled": "gradient", "wave_amplitude": "bolt", "drop_speed": "height", "mirrored": "wave",

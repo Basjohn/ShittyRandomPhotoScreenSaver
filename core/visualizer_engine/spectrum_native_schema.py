@@ -2,7 +2,8 @@
 
 The record carries exactly what Spectrum's renderer reads from a logical frame: the field list is
 ``widgets/spotify_visualizer/spectrum_frame_inputs.SPECTRUM_FRAME_INPUTS`` (the renderer reads its style and
-parameters only through that declaration), laid out by ``native_schema.NativeLayout`` (explicit offsets,
+parameters only through that declaration) less its Settings-only inputs (``record=False``: the native core takes them
+by name with the other settings, N2.9), laid out by ``native_schema.NativeLayout`` (explicit offsets,
 little-endian, 16-byte aligned arrays and colours, the record a multiple of 16 bytes). What the native renderer gets
 from its host instead (the item matrix, viewport, device pixel ratio, content fade, visual scale) is not in it.
 
@@ -47,9 +48,14 @@ def _length_field(name: str) -> str:
     return f"{name}_len"
 
 
+#: The declared inputs the record carries (a Settings-only input, ``record=False``, reaches the native core by name
+#: with the other settings instead).
+_RECORDED = tuple(entry for entry in SPECTRUM_FRAME_INPUTS if entry.record)
+
+
 def _layout_entries() -> tuple[tuple[str, str, int], ...]:
     entries = []
-    for entry in SPECTRUM_FRAME_INPUTS:
+    for entry in _RECORDED:
         if entry.kind == "levels":
             entries.append((entry.name, "f64", MAX_LEVELS))
             entries.append((_length_field(entry.name), "u32", 1))
@@ -71,7 +77,7 @@ FIELD_NAMES = tuple(name for name, _kind, _count in _layout_entries())
 
 def _field_checks() -> tuple[tuple[str, str, int], ...]:
     checks = []
-    for entry in SPECTRUM_FRAME_INPUTS:
+    for entry in _RECORDED:
         if entry.kind == "levels":
             checks.append((_length_field(entry.name), "at_most", MAX_LEVELS))
         elif entry.kind == "bool":
@@ -131,7 +137,7 @@ def project(frame: Any) -> dict[str, object]:
     if getattr(frame, "mode_id", None) != MODE_ID:
         raise NativeSchemaError(f"Spectrum's native schema cannot carry a {getattr(frame, 'mode_id', None)!r} frame")
     values: dict[str, object] = {}
-    for entry in SPECTRUM_FRAME_INPUTS:
+    for entry in _RECORDED:
         value = _source(frame, entry)
         if entry.kind == "levels":
             kept = tuple(_real(entry.name, level) for level in tuple(value)[:MAX_LEVELS])

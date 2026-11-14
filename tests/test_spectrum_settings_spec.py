@@ -77,6 +77,7 @@ def test_spectrum_specs_reach_real_source_logical_presentation_and_capture_param
               "spectrum_rainbow_fill": False, "spectrum_rainbow_border": True,
               "spectrum_rainbow_ghost": True, "spectrum_glow_enabled": True,
               "spectrum_glow_color": [13, 47, 82, 123], "spectrum_glow_intensity": 1.27,
+              "spectrum_glow_placement": require_mode_settings("spectrum").control("spectrum_glow_placement").choices[0], "spectrum_glow_sharpness": 0.61,
               "spectrum_border_radius": 19.0, "spectrum_bar_gap": 3.5, "spectrum_ghosting_enabled": True,
               "spectrum_ghost_alpha": 0.37, "spectrum_ghost_decay": 0.46,
               "spectrum_wave_amplitude": 0.63, "spectrum_profile_floor": 0.21, "spectrum_drop_speed": 2.14,
