@@ -711,8 +711,25 @@ PyObject *composite_spectrum_present(PyObject *, PyObject *args)
         PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
         return nullptr;
     }
-    item->presentSpectrum(presentation);
+    if (!item->presentSpectrum(presentation, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
     Py_RETURN_NONE;
+}
+
+PyObject *composite_window_pixels(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    const QSize pixels = item->windowPixels();
+    if (!pixels.isValid())
+        Py_RETURN_NONE;
+    return Py_BuildValue("(ii)", pixels.width(), pixels.height());
 }
 
 // The pack argument: bytes (a .qsb tools/regen_qrc.py --shaders baked) or None (the module's compiled-in copy, the
@@ -854,9 +871,11 @@ PyObject *composite_spectrum_wait_paused(PyObject *, PyObject *args)
     int timeoutMs = 0;
     if (!PyArg_ParseTuple(args, "Li", &handle, &timeoutMs))
         return nullptr;
-    srpss_core::SpectrumSource *source = spectrumOf(handle);
-    if (!source)
+    if (!spectrumOf(handle))
         return nullptr;
+    // A shared owner for the wait (audit N29 L8): a composite destroyed from another thread meanwhile cannot free the
+    // source under it; its last owner may then be this thread, where no read is in progress.
+    std::shared_ptr<srpss_core::SpectrumSource> source = compositeOf(handle)->spectrumShared();
     bool paused = false;
     Py_BEGIN_ALLOW_THREADS
     paused = source->waitPaused(timeoutMs);
@@ -1041,14 +1060,55 @@ PyObject *composite_mode_bind(PyObject *, PyObject *args)
         PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
         return nullptr;
     }
-    const QSharedPointer<const srpss_core::RuntimeSchema> schema = schemaArgument(schemaJson, schemaLength);
-    if (!schema)
+    parsed.runtimeSchema = schemaArgument(schemaJson, schemaLength);
+    if (!parsed.runtimeSchema)
         return nullptr;
-    if (!item->bindMode(QString::fromUtf8(name), parsed, schema, &error)) {
+    if (!item->bindMode(QString::fromUtf8(name), parsed, &error)) {
         PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
         return nullptr;
     }
     Py_RETURN_NONE;
+}
+
+bool cardArgument(const char *json, Py_ssize_t length, srpss_core::ModeCard *out)
+{
+    QString error;
+    if (!srpss_core::ModeCard::fromJson(QByteArray(json, qsizetype(length)), out, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return false;
+    }
+    return true;
+}
+
+PyObject *composite_mode_card(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *json = "";
+    Py_ssize_t length = 0;
+    if (!PyArg_ParseTuple(args, "Ls#", &handle, &json, &length))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    srpss_core::ModeCard card;
+    if (!item || !cardArgument(json, length, &card))
+        return nullptr;
+    QString error;
+    if (!item->cardMode(card, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+
+PyObject *mode_core_members(PyObject *, PyObject *)
+{
+    QJsonArray rows;
+    for (int i = 0; i < srpss_core::kModeCoreMemberCount; ++i) {
+        const srpss_core::ModeCoreMember &member = srpss_core::kModeCoreMembers[i];
+        rows.append(QJsonArray { QLatin1String(member.name), member.components, member.fromCard });
+    }
+    QJsonObject o;
+    o.insert(QStringLiteral("members"), rows);
+    return pyJson(o);
 }
 
 PyObject *composite_mode_unbind(PyObject *, PyObject *args)
@@ -1168,36 +1228,39 @@ PyObject *mode_blocks(PyObject *, PyObject *args)
     Py_ssize_t settingsLength = 0;
     const char *record = nullptr;
     Py_ssize_t recordLength = 0;
-    if (!PyArg_ParseTuple(args, "s#s#Os#y#", &schemaJson, &schemaLength, &json, &length, &packs, &settingsJson,
-                          &settingsLength, &record, &recordLength))
+    const char *cardJson = nullptr;
+    Py_ssize_t cardLength = 0;
+    int targetWidth = 0;
+    int targetHeight = 0;
+    if (!PyArg_ParseTuple(args, "s#s#Os#y#z#(ii)", &schemaJson, &schemaLength, &json, &length, &packs, &settingsJson,
+                          &settingsLength, &record, &recordLength, &cardJson, &cardLength, &targetWidth, &targetHeight))
         return nullptr;
     const QSharedPointer<const srpss_core::RuntimeSchema> schema = schemaArgument(schemaJson, schemaLength);
     srpss_core::ModeProgram program;
     QJsonObject settings;
+    srpss_core::ModeCard card;
     if (!schema || !programArgument(json, length, packs, &program)
-        || !settingsArgument(settingsJson, settingsLength, &settings))
+        || !settingsArgument(settingsJson, settingsLength, &settings) || (cardJson && !cardArgument(cardJson, cardLength, &card)))
         return nullptr;
-    QList<QByteArray> settingsBlocks;
-    QList<QByteArray> frameBlocks;
+    QList<QByteArray> blocks;
     QJsonObject facts;
     QString reason;
-    if (!srpss_core::modeBlocks(*schema, program, settings, QByteArray(record, qsizetype(recordLength)),
-                                &settingsBlocks, &frameBlocks, &facts, &reason)) {
+    if (!srpss_core::modeBlocks(*schema, program, settings, card, QSize(targetWidth, targetHeight),
+                                QByteArray(record, qsizetype(recordLength)), &blocks, &facts, &reason)) {
         PyErr_SetString(PyExc_ValueError, reason.toUtf8().constData());
         return nullptr;
     }
     PyObject *list = PyList_New(0);
     if (!list)
         return nullptr;
-    for (int i = 0; i < settingsBlocks.size(); ++i) {
-        PyObject *pair = Py_BuildValue("(y#y#)", settingsBlocks.at(i).constData(), Py_ssize_t(settingsBlocks.at(i).size()),
-                                       frameBlocks.at(i).constData(), Py_ssize_t(frameBlocks.at(i).size()));
-        if (!pair || PyList_Append(list, pair) < 0) {
-            Py_XDECREF(pair);
+    for (const QByteArray &block : blocks) {
+        PyObject *bytes = PyBytes_FromStringAndSize(block.constData(), Py_ssize_t(block.size()));
+        if (!bytes || PyList_Append(list, bytes) < 0) {
+            Py_XDECREF(bytes);
             Py_DECREF(list);
             return nullptr;
         }
-        Py_DECREF(pair);
+        Py_DECREF(bytes);
     }
     facts.insert(QStringLiteral("program"), program.toJson());
     facts.insert(QStringLiteral("schema"), schema->toJson());
@@ -1774,6 +1837,13 @@ PyMethodDef methods[] = {
       "frame stream, admitted by the mode's schema (its table, handed over), read at the item's sync on the render "
       "thread; ValueError for a refused schema, a program that cannot draw its records, or a mapping that is not a "
       "frame buffer." },
+    { "composite_mode_card", composite_mode_card, METH_VARARGS,
+      "(handle, card_json) -> None: the item as shown (rendering/native/mode.py mode_card), which the core's members "
+      "read." },
+    { "mode_core_members", mode_core_members, METH_NOARGS,
+      "() -> JSON str: the core's conventions, the members it fills for every mode ([name, components, from_card])." },
+    { "composite_window_pixels", composite_window_pixels, METH_VARARGS,
+      "(handle) -> (width, height) | None: the item's window's framebuffer, from Qt's swapchain or redirect target." },
     { "composite_mode_unbind", composite_mode_unbind, METH_VARARGS,
       "(handle) -> None: the mode's stream retires at once; the render thread releases it at the next sync." },
     { "composite_mode_program", composite_mode_program, METH_VARARGS,
@@ -1791,9 +1861,10 @@ PyMethodDef methods[] = {
     { "composite_mode_retire", composite_mode_retire, METH_VARARGS,
       "(handle) -> None: the mode's stream stores Retiring at once (any thread; D1); unbind releases it." },
     { "mode_blocks", mode_blocks, METH_VARARGS,
-      "(schema_json, program_json, packs, settings_json, record_bytes) -> ([(settings_bytes, frame_bytes) per pass], "
-      "facts JSON str): what a generic mode uploads for this record (GPU-free); ValueError with the reason when "
-      "refused (an unknown or unfilled member, a field that does not fit)." },
+      "(schema_json, program_json, packs, settings_json, record_bytes, card_json | None, (target_w, target_h)) -> "
+      "([block bytes per pass], facts JSON str): what a generic mode uploads for this record (GPU-free); ValueError "
+      "with the reason when refused (an unknown or unfilled member, a name with two owners, a field that does not "
+      "fit, a value with no defined conversion)." },
     { "mode_program_layout", mode_program_layout, METH_VARARGS,
       "(program_json, packs) -> JSON str: the program's passes, blends and reflected ModeSettings and ModeFrame blocks." },
     { "program_block_pack", program_block_pack, METH_VARARGS,

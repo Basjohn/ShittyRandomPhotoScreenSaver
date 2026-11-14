@@ -253,6 +253,10 @@ bool Surface::record(QRhi *rhi, QRhiCommandBuffer *cb, bool *recorded, QString *
         return false;
     }
     if (m_content) {
+        if (m_content->keepsTarget(rhi, m_res->target)) {
+            m_dirty.storeRelease(0); // the target keeps what it holds; nothing primed, nothing recorded
+            return true;
+        }
         // A mode's content (N2.5): its own passes into the same target, primed for the load first (rule C).
         const QString prime = primeForLoad(rhi, cb, m_res->target.texture.get());
         if (!m_content->record(rhi, cb, m_res->target, error)) {

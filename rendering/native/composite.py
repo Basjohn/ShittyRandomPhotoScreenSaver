@@ -26,7 +26,8 @@ from types import ModuleType
 from typing import Any, Sequence
 
 #: The composite's options (``CompositeConfig`` in ``composite.h``).
-COMPOSITE_OPTIONS = ("rect", "coverage", "quarters", "pattern", "visible", "opacity", "surface_format", "pixel_ratio")
+COMPOSITE_OPTIONS = ("rect", "coverage", "quarters", "pattern", "visible", "opacity", "surface_format", "pixel_ratio",
+                     "fade_ms")
 #: The surface's texel formats (``surface_format``): rgba8 (the product's), or rgba16f (translucent content not rounded
 #: to 8 bits before the composite blends it). A harness switch: N2.5 round 5 measured no parity gain from rgba16f.
 SURFACE_FORMATS = ("rgba8", "rgba16f")
@@ -153,7 +154,7 @@ class CompositeItem:
     def set(self, **config: Any) -> None:
         """Updates the item (``COMPOSITE_OPTIONS``; missing ones keep their values): ``rect`` [x, y, w, h] in its
         parent, ``coverage`` {rect, radius} item-local or None (skipped), ``quarters``, ``pattern``
-        (``SURFACE_PATTERNS``), ``visible``, ``opacity``."""
+        (``SURFACE_PATTERNS``), ``visible``, ``opacity``, ``fade_ms`` (a change of ``visible`` fades over it)."""
         unknown = sorted(set(config) - set(COMPOSITE_OPTIONS))
         if unknown:
             raise ValueError(f"unknown composite option(s) {', '.join(unknown)} "
@@ -174,6 +175,12 @@ class CompositeItem:
         """The item's configuration, its node's last sync (device pixel ratio, sizes, coverage in device pixels),
         its draws, and its surface (passes recorded, live QRhi objects)."""
         return json.loads(self._module.composite_state(self._live()))
+
+    def window_pixels(self) -> tuple[int, int] | None:
+        """The item's window's framebuffer in device pixels, from Qt's own swapchain or redirect target (audit N29 L1:
+        what Qt's projection maps the window's logical rect onto); None before the window has either."""
+        pixels = self._module.composite_window_pixels(self._live())
+        return None if pixels is None else (int(pixels[0]), int(pixels[1]))
 
     def destroy(self) -> bool:
         """Deletes the item (Qt Quick releases its node on the render thread at the next sync). Idempotent; False

@@ -1,20 +1,24 @@
 """A generic mode's Python face (Current_Plan.md item 8b, N2.9; ``native/core/src/mode_content.h``).
 
-A Visualizer mode drawn by the native core from data alone, so a new mode iterates with no module build:
+A Visualizer mode drawn by the native core from data alone, so a new mode, or a port of a 2D mode, needs no per-mode
+C++ and no module build; the Python renderer and the core draw the same shader file:
 
 - its **simulation** runs in Python (the engine worker in the product), publishing one fixed-layout frame record per
   frame through the frame mapping (``core.visualizer_engine.packet_abi``);
 - its **schema** is the record's table (``core.visualizer_engine.native_schema.NativeSchema``), handed to the core when
-  the stream is bound (:func:`schema_table_entry`): the core's reader admits the mode's slots by it, and the frame block
-  is packed from it by name;
-- its **program** is one or more passes (:class:`ModePass`): a fragment pack each (baked by ``tools/regen_qrc.py``'s
-  baker, handed over as bytes) and a blend (``PASS_BLENDS``), drawn in order over the whole card;
-- its **settings** are every Settings- and card-derived value, resolved here from the spec and handed over by name.
+  the stream is bound (:func:`schema_table_entry`): the core's reader admits the mode's slots by it, and the record's
+  fields are packed by name;
+- its **program** is one or more passes (:class:`ModePass`): a fragment pack each (the product's ``.qsb``, baked by
+  ``tools/regen_qrc.py``'s baker, handed over as bytes) and a blend (``PASS_BLENDS``), drawn in order over the card;
+- its **settings** are every Settings- and mode-derived value, resolved here from the spec, by name; its **card**
+  (:func:`mode_card`) is the item as shown.
 
-Each pass declares two std140 blocks: ``ModeSettings`` (the settings) and ``ModeFrame`` (members named exactly as the
-record's fields). The core refuses an unknown name (a setting no pass declares, a record field no pass's ModeFrame
-declares) and an unfilled member (a ModeSettings member no setting fills, a ModeFrame member no field names), each with
-its reason. A shader, spec or simulation change is a new pack, new settings or a new record: never C++.
+The product 2D shader's shape: a pass declares one std140 block of its own (any name, any binding but 17), optionally
+the conventions block and ``in vec2 v_uv``. One rule fills the block by member name from exactly one of three sources:
+the core's conventions (``MODE_CORE_MEMBERS``: what the Python renderers compute per frame from the card and the
+target), the settings, and the record's fields. The core refuses an unknown name (a setting or a field no pass
+declares), a name with two owners (a setting or field naming a core member, a setting naming a field) and an unfilled
+member, each with its reason. A shader, spec or simulation change is a new pack, new settings or a new record: never C++.
 """
 from __future__ import annotations
 
@@ -28,9 +32,28 @@ from rendering.native.packet_reader import reader_config
 
 #: How a pass's colour meets the target (``PassBlend`` in ``mode_content.h``).
 PASS_BLENDS = ("replace", "alpha", "premultiplied", "add")
-#: The two blocks a pass may declare beside the conventions block.
-MODE_SETTINGS_BLOCK = "ModeSettings"
-MODE_FRAME_BLOCK = "ModeFrame"
+#: The core's conventions (``kModeCoreMembers`` in ``mode_content.cpp``; a test holds the two equal): name ->
+#: (components, read from the card). Every other member of a pass's block is a setting or a record field.
+MODE_CORE_MEMBERS = {
+    "uMatrix": (16, False),
+    "uItemSize": (2, True),
+    "uContentRotationQuarters": (1, True),
+    "u_resolution": (2, True),
+    "u_dpr": (1, True),
+    "u_viewport_origin_px": (2, False),
+    "u_quick_item_coords": (1, False),
+    "u_fade": (1, True),
+    "u_border_width": (1, True),
+    "u_item_from_frag": (1, False),
+    "u_item_from_frag_x": (3, True),
+    "u_item_from_frag_y": (3, True),
+    "u_window_from_target_x": (3, True),
+    "u_window_from_target_y": (3, True),
+    "u_target_px": (2, False),
+}
+#: The card's keys (``ModeCard::fromJson``).
+MODE_CARD_KEYS = ("quarters", "item_size", "oriented_size", "dpr", "content_fade", "border_width", "window_from_target",
+                  "item_from_window")
 
 
 def schema_table_entry(schema: Any) -> dict:
@@ -49,6 +72,20 @@ def schema_table_entry(schema: Any) -> dict:
         "fingerprint": schema.layout.fingerprint(), "fields": rows,
         "check_order": [schema.fields.index(name) for name, _kind, _limit in schema.checks],
     }
+
+
+def mode_card(presentation: Any, geometry: Any, *, window_size: tuple[float, float],
+              window_pixels: tuple[int, int]) -> dict:
+    """The card a generic mode's core members read: ``presentation`` (a ``ResolvedVisualizerPresentation``) through
+    its composite ``geometry`` in a window of ``window_size`` (logical) and ``window_pixels`` (its framebuffer, Qt's
+    own: ``CompositeItem.window_pixels``). The maps are the native Spectrum's (``spectrum_presentation``): the Python
+    renderers' own arithmetic."""
+    from rendering.native.spectrum import spectrum_presentation
+
+    card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels)
+    values = {key: card[key] for key in MODE_CARD_KEYS if key in card}
+    values["border_width"] = float(getattr(presentation, "border_width", 0.0) or 0.0)
+    return values
 
 
 @dataclass(frozen=True)
@@ -76,9 +113,16 @@ def _settings(values: Mapping[str, Any]) -> str:
     return settings_json(values)
 
 
+def _card(card: Mapping[str, Any]) -> str:
+    missing = [key for key in MODE_CARD_KEYS if key not in card]
+    if missing:
+        raise ValueError(f"the mode's card misses {', '.join(missing)}")
+    return json.dumps({key: card[key] for key in MODE_CARD_KEYS})
+
+
 class NativeMode:
-    """A generic mode on one composite item (``NativeCore.mode``): bound to a stream with its schema, given its program
-    and settings, destroyed with its composite. Every call is the GUI thread's and returns at once."""
+    """A generic mode on one composite item (``NativeCore.mode``): bound to a stream with its schema, given its
+    program, settings and card, destroyed with its composite. Every call is the GUI thread's and returns at once."""
 
     def __init__(self, module: ModuleType, composite: CompositeItem) -> None:
         self._module = module
@@ -102,8 +146,8 @@ class NativeMode:
         self._module.composite_mode_retire(self._handle())
 
     def program(self, passes: Sequence[ModePass], settings: Mapping[str, Any] | None = None) -> None:
-        """The passes; ``settings`` with them (a shader that adds a ModeSettings member comes with its value), else the
-        ones given before. Refused (ValueError), the drawn program kept, when they do not fit."""
+        """The passes; ``settings`` with them (a shader that adds a member comes with its value), else the ones given
+        before. Refused (ValueError), the drawn program kept, when they do not fit."""
         declared, packs = program_json(passes)
         if settings is None:
             self._module.composite_mode_program(self._handle(), declared, packs)
@@ -111,8 +155,12 @@ class NativeMode:
             self._module.composite_mode_program(self._handle(), declared, packs, _settings(settings))
 
     def settings(self, values: Mapping[str, Any]) -> None:
-        """The ModeSettings members by name; unchanged settings record nothing."""
+        """The settings by name; unchanged settings record nothing."""
         self._module.composite_mode_settings(self._handle(), _settings(values))
+
+    def card(self, card: Mapping[str, Any]) -> None:
+        """The item as shown (``MODE_CARD_KEYS``; :func:`mode_card`); an unchanged card records nothing."""
+        self._module.composite_mode_card(self._handle(), _card(card))
 
     def update(self) -> None:
         self._module.composite_update(self._handle())
@@ -128,14 +176,16 @@ class NativeMode:
 
 
 def mode_blocks(module: ModuleType, schema: Any, passes: Sequence[ModePass], settings: Mapping[str, Any],
-                record: bytes) -> tuple[list[tuple[bytes, bytes]], dict]:
-    """Each pass's (ModeSettings, ModeFrame) bytes the core uploads for ``record`` (GPU-free), and the facts (the
-    program's reflected blocks, the schema as the core holds it). ValueError with the reason when refused."""
+                record: bytes, card: Mapping[str, Any] | None, target: tuple[int, int]) -> tuple[list[bytes], dict]:
+    """Each pass's block bytes the core uploads for ``record`` under ``card`` into a ``target`` of these pixels
+    (GPU-free), and the facts (each pass's members by source, the program's reflected blocks, the schema as the core
+    holds it). ValueError with the reason when refused."""
     table = schema if isinstance(schema, Mapping) else schema_table_entry(schema)
     declared, packs = program_json(passes)
-    blocks, facts = module.mode_blocks(json.dumps(dict(table)), declared, packs, _settings(settings), bytes(record))
-    return [(bytes(s), bytes(f)) for s, f in blocks], json.loads(facts)
+    blocks, facts = module.mode_blocks(json.dumps(dict(table)), declared, packs, _settings(settings), bytes(record),
+                                       None if card is None else _card(card), (int(target[0]), int(target[1])))
+    return [bytes(block) for block in blocks], json.loads(facts)
 
 
-__all__ = ["MODE_FRAME_BLOCK", "MODE_SETTINGS_BLOCK", "ModePass", "NativeMode", "PASS_BLENDS", "mode_blocks",
+__all__ = ["MODE_CARD_KEYS", "MODE_CORE_MEMBERS", "ModePass", "NativeMode", "PASS_BLENDS", "mode_blocks", "mode_card",
            "program_json", "schema_table_entry"]

@@ -1,23 +1,21 @@
 #version 440
-// Probe Rings, pass "rings" (blend alpha): the harness-only mode of N2.9 (native/core/python/probe_rings). A generic
-// mode's pass: ModeSettings from the spec and the card, ModeFrame named as the record's fields (mode_content.h), the
-// target's pixel from fragPixel (the conventions include, spliced at the marker by the baker).
+// Probe Rings, pass "rings" (blend alpha): the harness-only mode of N2.9 (native/core/python/probe_rings), in the
+// product 2D shaders' shape (mode_content.h): one block of its own filled by name from the core's conventions
+// (u_target_px, u_fade), the settings (u_ring_color, u_thickness_px) and the record (rings, ring_alpha, ring_count,
+// pulse_color); the target's pixel from fragPixel (the conventions include, spliced at the marker by the baker).
 #define SRPSS_CONVENTIONS_FRAGMENT
 //@srpss_conventions
 layout(location = 0) out vec4 fragColor;
 
-layout(std140, binding = 1) uniform ModeSettings {
-    vec2 u_target_px;    // the surface's pixels
-    vec4 u_ring_color;   // the spec's colour, 0..1
-    float u_thickness_px;
-    float u_fade;
-};
-
-layout(std140, binding = 2) uniform ModeFrame {
-    float rings[8];      // radii, in half the card's shorter side
-    float ring_alpha[8];
-    int ring_count;
-    vec4 pulse_color;
+layout(std140, binding = 18) uniform ProbeRingsDraw {
+    vec2 u_target_px;    // core: the surface's pixels
+    float u_fade;        // core: the card's content fade
+    vec4 u_ring_color;   // setting: the spec's colour, 0..1
+    float u_thickness_px;// setting
+    float rings[8];      // record: radii, in half the card's shorter side
+    float ring_alpha[8]; // record
+    int ring_count;      // record
+    vec4 pulse_color;    // record
 };
 
 void main() {

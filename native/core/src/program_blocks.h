@@ -16,8 +16,9 @@
 // N2.9, the frame block by name: a generic mode's per-frame values come from its frame record, packed into its frame
 // block the same way (packRecordField): the block member named as the record's field takes the field's numbers (a u32
 // or an f64 one number an element, an f64x4 four), at the member's reflected offset, type and stride. A field fits a
-// member only exactly (recordFieldFits): an f64 a float, an f64x4 a vec4, a u32 an int, uint, bool or float, an array
-// the same length; nothing is truncated or padded.
+// member only exactly (recordFieldFits): an f64 a float, an f64x4 a vec4, a u32 a uint or bool, or an int or float
+// under a range rule that keeps it exact (at_most within int32 or 2^24, or boolean: audit N29 L7), an array the same
+// length; nothing is truncated or padded.
 #pragma once
 
 #include "frame_abi_generated.h"

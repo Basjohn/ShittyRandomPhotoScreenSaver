@@ -45,6 +45,15 @@ class SurfaceContent
 {
 public:
     virtual ~SurfaceContent() = default;
+    // Inside the frame, outside any pass, before the surface primes its target: true when the content records nothing
+    // now and the target keeps what it holds (a refused frame over a frame of its own, a latched failure: audit N29 M4,
+    // M2). The surface is then clean and reports no error.
+    virtual bool keepsTarget(QRhi *rhi, ColorTarget &target)
+    {
+        Q_UNUSED(rhi);
+        Q_UNUSED(target);
+        return false;
+    }
     // Inside the frame, outside any pass.
     virtual bool record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, QString *error) = 0;
     // Every QRhi object of the content goes (the surface's release, or the content replaced).

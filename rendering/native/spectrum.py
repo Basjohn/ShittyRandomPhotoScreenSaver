@@ -135,47 +135,22 @@ def spectrum_presentation(presentation: Any, geometry: CompositeGeometry, *, win
     }
 
 
-def _native_client_pixels(window: Any) -> tuple[int, int] | None:
-    """The window's native client area in device pixels (its swapchain's size) on the Windows platform plugin, or None
-    (another platform, no native window yet): the one exact source where the logical size is a rounded division."""
-    import sys
-
-    if sys.platform != "win32":
-        return None
-    try:
-        from PySide6.QtGui import QGuiApplication
-
-        if QGuiApplication.platformName() != "windows" or window.handle() is None:
-            return None
-        import ctypes
-        from ctypes import wintypes
-
-        rect = wintypes.RECT()
-        if not ctypes.windll.user32.GetClientRect(wintypes.HWND(int(window.winId())), ctypes.byref(rect)):
-            return None
-        width, height = int(rect.right - rect.left), int(rect.bottom - rect.top)
-    except (AttributeError, OSError, TypeError, ValueError):
-        return None
-    return (width, height) if width > 0 and height > 0 else None
-
-
-def framebuffer_pixels(window_size: tuple[float, float], dpr: float,
-                       native: tuple[int, int] | None = None) -> tuple[int, int]:
-    """A window's framebuffer pixels: its native client area when known, else its logical size times ``dpr``,
-    rounded (exact wherever that product is whole)."""
-    if native is not None:
-        return (int(native[0]), int(native[1]))
-    return (int(round(float(window_size[0]) * float(dpr))), int(round(float(window_size[1]) * float(dpr))))
-
-
-def window_metrics(item: Any, dpr: float) -> tuple[tuple[float, float], tuple[int, int]]:
-    """``item``'s window at the card's ``dpr``: its logical size and its framebuffer's pixels (the Python node's
-    render target, which Qt's projection maps ``QRectF(0, 0, window.size())`` onto)."""
+def window_metrics(item: Any, composite: Any) -> tuple[tuple[float, float], tuple[int, int]]:
+    """``item``'s window: its logical size and its framebuffer's pixels, the target Qt's projection maps
+    ``QRectF(0, 0, window.size())`` onto, as Qt's own swapchain or redirect target reports it through the native item
+    (``CompositeItem.window_pixels``; audit N29 L1: no platform call, no rounding of the logical size). Raises while the
+    window has none yet (not exposed): the route then waits for its next update."""
     window = item.window()
     if window is None:
-        raise RuntimeError("the native Spectrum's item has no window")
-    size = (float(window.width()), float(window.height()))
-    return size, framebuffer_pixels(size, dpr, _native_client_pixels(window))
+        raise WindowNotReady("the native item has no window")
+    pixels = composite.window_pixels()
+    if pixels is None:
+        raise WindowNotReady("the native item's window has no framebuffer yet")
+    return (float(window.width()), float(window.height())), pixels
+
+
+class WindowNotReady(RuntimeError):
+    """The native item's window is not there yet, or has no framebuffer yet (an ordinary startup state)."""
 
 
 class NativeSpectrum:
@@ -260,5 +235,5 @@ def spectrum_block(module: ModuleType, record: bytes, card: Mapping[str, Any], p
     return block, json.loads(facts)
 
 
-__all__ = ["NativeSpectrum", "SPECTRUM_PRESENTATION_KEYS", "framebuffer_pixels", "spectrum_block",
-           "spectrum_presentation", "window_metrics"]
+__all__ = ["NativeSpectrum", "SPECTRUM_PRESENTATION_KEYS", "WindowNotReady", "spectrum_block", "spectrum_presentation",
+           "window_metrics"]

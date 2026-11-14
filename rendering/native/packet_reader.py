@@ -49,12 +49,13 @@ class NativeFrame:
 
 
 def python_schema_table() -> dict:
-    """This build's frame ABI version, mode codes and native schemas, in the shape ``frame_schemas()`` reports them."""
+    """This build's frame ABI version, mode codes and the schemas the module compiles, in the shape ``frame_schemas()``
+    reports them. A runtime schema (a generic mode's) is never in it: the core receives it at bind (audit N29 M5.1)."""
     from core.visualizer_engine import native_schema, packet_abi
     from rendering.native.mode import schema_table_entry
 
     schemas = [schema_table_entry(schema)
-               for schema in sorted(native_schema.native_schemas().values(), key=lambda s: s.schema_id)]
+               for schema in sorted(native_schema.compiled_schemas().values(), key=lambda s: s.schema_id)]
     return {"abi_version": packet_abi.ABI_VERSION, "mapping_prefix": packet_abi.FRAME_MAPPING_PREFIX,
             "mode_codes": dict(packet_abi.MODE_CODES), "schemas": schemas}
 

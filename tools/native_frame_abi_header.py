@@ -154,7 +154,8 @@ def render() -> str:
         "};",
         "",
     ]
-    schemas = sorted(native_schema.native_schemas().values(), key=lambda schema: schema.schema_id)
+    # The compiled schemas only (a hand-written consumer's); a runtime schema reaches the core at bind (N2.9).
+    schemas = sorted(native_schema.compiled_schemas().values(), key=lambda schema: schema.schema_id)
     table_rows = []
     for schema in schemas:
         symbol = _camel(schema.mode_id) + f"V{schema.version}"

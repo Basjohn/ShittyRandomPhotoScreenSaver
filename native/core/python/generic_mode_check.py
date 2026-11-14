@@ -1,6 +1,6 @@
 """N2.9's proof of generic mode content (Current_Plan.md item 8b; ``native/core/src/mode_content.h``), through
 ``rendering.native``, on the harness-only mode Probe Rings (``native/core/python/probe_rings``: a Python simulation, two
-fragment shaders and a spec; never registered, never in Settings, no preset).
+fragment shaders in the product 2D shaders' shape and a spec; never registered, never in Settings, no preset).
 
 The module (``release/native_module``, built on GitHub) is loaded the product's way, in one child process per graphics
 API: OpenGL first, then Vulkan on the module's own instance and devices (D6). No window is ever visible: the item draws
@@ -8,32 +8,40 @@ into the module's hidden host.
 
 Rounds:
   blocks  (OpenGL child; GPU-free) what the core uploads, against an independent Python packer: for frames of the
-          simulation, each pass's ModeSettings and ModeFrame bytes from ``mode_blocks`` equal the settings and the
-          record's fields packed at the members' reflected offsets and strides (float32, int32), member by member.
-          Negative controls, each refused with its reason: a record field no pass declares (unknown), a ModeFrame member
-          no field names (unfilled), a setting left out (unfilled), a setting no pass declares (unknown), the tinted
-          shader with the base spec's settings (unfilled), the base shader with the tinted spec's settings (unknown);
-          the runtime schema refused for a wrong fingerprint, overlapping fields, a compiled schema's id and a mode id
-          that disagrees with the compiled mode table; a pass declaring a sampler; a pack count unlike the passes'.
+          simulation, each pass's block bytes from ``mode_blocks`` equal its members packed at their reflected offsets
+          and strides (float32, int32) from the three sources (the core's conventions from the card and the target, the
+          settings, the record), member by member. The core's conventions table equals the face's. Refusals, each with
+          its reason: a record field no pass declares and a setting no pass declares (unknown); a member no source fills
+          (unfilled, from the record and from the settings); a setting naming a core member or a record field (two
+          owners); the tinted shader with the base spec's settings and the reverse; a u32 into an int with no range
+          rule (L7); the runtime schema refused for a wrong fingerprint, overlapping fields, a compiled schema's id, a
+          compiled mode at another version (L6) and a mode id that disagrees with the compiled table; a pass declaring a
+          sampler, one with its block at binding 17 (M3), one with two blocks of its own; a pack count unlike the
+          passes'. The product's own packs (M5): Oscilloscope and Spline Curve admitted as they are; Bubble refused for
+          its samplers, and admitted once a copy of its source drops them (control).
   reader  (OpenGL child; GPU-free) the core's reader admits the mode's stream by the schema handed over: frames
           accepted, their fields decoded by the C++ table equal to the schema's own decode. Controls: the reader opened
           without the schema refuses the first slot (an unknown mode code); a record whose ring_count breaks its rule is
           refused after the copy.
   draw    (each API) the item in the hidden host: the drawn rings at the radii the record holds (the centre row's rings,
-          within 1.5 px); the glow pass adds light at the centre; nothing recorded at rest (records, surface passes and
-          GPU samples unchanged over idle frames); no Python thread state on the render thread. A change shows with no
-          module rebuild: a shader change (rings drawn green), a spec value (thickness 2 against 8: wider rings), a
-          shader and spec change together (a new ModeSettings member and the control that fills it: tinted), a
-          simulation change (twice the speed: the rings where the new record puts them). Controls on the live item: the
-          tinted program without its settings is refused (unfilled) and the drawn program stays; the base program
-          refuses the tinted settings (unknown); a stream whose schema carries a field no pass declares is refused at
-          bind. The surface's GPU time for the two passes, and for a third pass (each pass doubled), median and p90.
+          within 1.5 px) at dpr 1 and 1.5 (fragPixel at a fractional ratio, L11); the glow pass (v_uv) adds light at
+          the centre; a card change shows (the core's u_fade); nothing recorded at rest; no Python thread state on the
+          render thread. A change shows with no module rebuild: a shader change (rings drawn green), a spec value
+          (thickness 2 against 8), a shader and spec change together (a new member and the control that fills it), a
+          simulation change (twice the speed). A refused frame (a NaN in the record) keeps the last drawn frame, counted
+          once, and the next good frame draws (M4). An item with no program fails once and is not rebuilt per frame; a
+          program re-arms it (M2, L10). The item fades out, never vanishes (M1). Controls on the live item: the tinted
+          program without its settings is refused and the drawn program stays; the base program refuses the tinted
+          settings; a stream whose schema carries a field no pass declares is refused at bind. The surface's GPU time for
+          two passes and for a third (each pass doubled), median and p90.
+  framebuffer (each API) a 2560x1440 hidden host at 150 %: the window's framebuffer the native item reports (Qt's own
+          redirect target, L1) is 2560x1440, as against the logical size times the dpr.
 Then Vulkan's frames against OpenGL's (within VULKAN_TOLERANCE levels; both native).
 
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/generic_mode_check.py --module-dir release/native_module --require-validation
       --layer-path D:\\Temp\\Scratch\\SRPSS\\native_spike\\validation_layers\\extracted
-  [--apis opengl vulkan] [--rounds blocks reader draw] [--label n29_generic_mode]
+  [--apis opengl vulkan] [--rounds blocks reader draw framebuffer] [--label n29_generic_mode]
 Evidence: .artifacts/evidence/native_core/n2_9/<date>_<label>/ (summary.json; one PNG sheet per API). Exit 0 whenever
 the harness ran; the verdict is the last printed line ("N29 VERDICT PASS" or "N29 VERDICT FAIL: ...").
 """
@@ -41,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import struct
 import subprocess
 import sys
@@ -58,17 +67,20 @@ import vk_validation  # noqa: E402  (native/core/python)
 import host_check  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("blocks", "reader", "draw")
+ROUNDS = ("blocks", "reader", "draw", "framebuffer")
 CHILD_TIMEOUT_S = 900
 MARGIN = 8
-CARD = (480, 270)                # the item's logical size; drawn at DPR 1 (its target is CARD device pixels)
+CARD = (480, 270)                # the item's logical size
+DPRS = (1.0, 1.5)                # the draw round's ratios (1.5: fragPixel at a fractional ratio)
 REST_FRAMES = 3
 VULKAN_TOLERANCE = 1             # 8-bit levels, native Vulkan against native OpenGL
 SLOT_BYTES = 1024                # one Probe Rings record (208 bytes) per slot, with room
 IDENTITY = {"runtime_generation": 5, "engine_generation": 2, "activation_id": 9}
 RADIUS_TOLERANCE_PX = 1.5
 TIMED_FRAMES = 60
-INT_FIELDS = ("ring_count",)     # the record's u32 fields the shaders declare as int
+FADE_MS = 200                    # the draw round's fade (short: the harness pumps until it ends)
+FRAMEBUFFER_HOST = (2560, 1440, 1.5)
+INT_MEMBERS = ("ring_count",)    # the shaders' int members (every other one is float)
 _ALLOWED_ENV: set[str] = set()
 
 
@@ -84,18 +96,21 @@ def _mode():
     return probe_rings
 
 
-def _settings(**overrides) -> dict:
-    """The base spec's settings for the card, with stored values overridden (spec keys)."""
+def _settings(dpr: float = 1.0, **overrides) -> dict:
+    """The base spec's settings, with stored values overridden (spec keys)."""
     pr = _mode()
     stored = dict(pr.DEFAULTS)
     stored.update(overrides)
-    return pr.resolve_settings(stored, target_px=CARD, dpr=1.0)
+    return pr.resolve_settings(stored, dpr=dpr)
 
 
-def _tint_settings() -> dict:
+def _tint_settings(dpr: float = 1.0) -> dict:
     pr = _mode()
-    return pr.resolve_settings(dict(pr.TINT_DEFAULTS), target_px=CARD, dpr=1.0, spec=pr.TINT_SPEC,
-                               defaults=pr.TINT_DEFAULTS)
+    return pr.resolve_settings(dict(pr.TINT_DEFAULTS), dpr=dpr, spec=pr.TINT_SPEC, defaults=pr.TINT_DEFAULTS)
+
+
+def _target(dpr: float) -> tuple[int, int]:
+    return (int(round(CARD[0] * dpr)), int(round(CARD[1] * dpr)))
 
 
 def _frames(count: int, *, speed: float = 0.35, dt: float = 1.0 / 60.0) -> list[dict]:
@@ -112,12 +127,42 @@ def _table(**changes) -> dict:
     return table
 
 
+def _schema_with(entries, *, ruled: bool = True) -> dict:
+    """A runtime table of these ``(name, kind, count)`` entries (ring_count with its at_most rule unless not ``ruled``)."""
+    from core.visualizer_engine.native_schema import NativeLayout
+
+    pr = _mode()
+    layout = NativeLayout.build(list(entries))
+    rule = ruled and any(f.name == "ring_count" for f in layout.fields)
+    rows = [[f.name, f.kind, f.count, f.offset, "at_most" if (rule and f.name == "ring_count") else "",
+             pr.MAX_RINGS if (rule and f.name == "ring_count") else 0] for f in layout.fields[2:]]
+    names = [row[0] for row in rows]
+    return _table(record_bytes=layout.size, fingerprint=layout.fingerprint(), fields=rows,
+                  check_order=[names.index("ring_count")] if rule else [])
+
+
+def _base_entries():
+    return [(f.name, f.kind, f.count) for f in _mode().SCHEMA.layout.fields[2:]]
+
+
 # --------------------------------------------------------------------------------------------------- the packer
 
-def expected_block(members: list, values: dict, size: int) -> bytes:
+def core_values(card: dict, target: tuple[int, int]) -> dict:
+    """The core's conventions for this card and target, computed here from their definitions (``MODE_CORE_MEMBERS``),
+    never read from the core."""
+    window_from_target, item_from_window = card["window_from_target"], card["item_from_window"]
+    return {"uMatrix": [0.0] * 16, "uItemSize": card["item_size"], "uContentRotationQuarters": card["quarters"],
+            "u_resolution": card["oriented_size"], "u_dpr": card["dpr"], "u_viewport_origin_px": [0.0, 0.0],
+            "u_quick_item_coords": 1, "u_fade": card["content_fade"], "u_border_width": card["border_width"],
+            "u_item_from_frag": 1, "u_item_from_frag_x": item_from_window[:3], "u_item_from_frag_y": item_from_window[3:],
+            "u_window_from_target_x": window_from_target[:3], "u_window_from_target_y": window_from_target[3:],
+            "u_target_px": [float(target[0]), float(target[1])]}
+
+
+def expected_block(members: list, values: dict, size: int, ints=INT_MEMBERS) -> bytes:
     """``values`` (name -> number or numbers) packed at the reflected members' offsets and strides (rows ``[name,
-    type, offset, count, stride, inferred]``): float32, or int32 for ``INT_FIELDS``; zero elsewhere. The core's own
-    packing is never read to make it."""
+    type, offset, count, stride, inferred]``): float32, or int32 for ``ints``; zero elsewhere. The core's own packing
+    is never read to make it."""
     out = bytearray(size)
     for name, _type, offset, count, stride, _inferred in members:
         value = values[name]
@@ -126,118 +171,162 @@ def expected_block(members: list, values: dict, size: int) -> bytes:
         for index, number in enumerate(numbers):
             element, component = divmod(index, components)
             at = int(offset) + element * (int(stride) if int(count) > 1 else 0) + 4 * component
-            if name in INT_FIELDS:
+            if name in ints:
                 struct.pack_into("<i", out, at, int(number))
             else:
                 struct.pack_into("<f", out, at, number)
     return bytes(out)
 
 
+def _refused(call) -> str:
+    try:
+        call()
+    except ValueError as exc:
+        return str(exc)
+    return ""
+
+
 def round_blocks(core, folder: Path) -> dict:
+    from rendering.native.mode import MODE_CORE_MEMBERS, ModePass
+
     pr = _mode()
     passes = pr.passes(folder / "base")
     tinted = pr.passes(folder / "tint", rings_text=pr.shader_variant(tint=True))
     settings = _settings()
-    checks: dict = {}
+    card = pr.harness_card(CARD, 1.0)
+    target = _target(1.0)
+    checks: dict = {"core_table_is_the_faces": core.mode_core_members() == MODE_CORE_MEMBERS}
     facts: dict = {}
     compared = differing = 0
     first_difference = None
+    sources_seen: set = set()
     for index, values in enumerate(_frames(120)):
         if index % 10:
             continue
-        blocks, info = core.mode_blocks(pr.SCHEMA, passes, settings, pr.record(values))
-        for (settings_bytes, frame_bytes), program_pass in zip(blocks, info["program"]["passes"]):
-            for kind, data, source in (("settings", settings_bytes, settings), ("frame", frame_bytes, values)):
-                layout = program_pass[kind]
-                compared += 1
-                expected = expected_block(layout["members"], source, int(layout["size"]))
-                if data != expected:
-                    differing += 1
-                    first_difference = first_difference or {"frame": index, "pass": program_pass["name"],
-                                                            "block": kind}
+        blocks, info = core.mode_blocks(pr.SCHEMA, passes, settings, pr.record(values), card, target)
+        everything = {**core_values(card, target), **settings, **values}
+        for data, program_pass, sources in zip(blocks, info["program"]["passes"], info["passes"]):
+            layout = program_pass["block"]
+            compared += 1
+            sources_seen |= set(sources["sources"].values())
+            if data != expected_block(layout["members"], everything, int(layout["size"])):
+                differing += 1
+                first_difference = first_difference or {"frame": index, "pass": program_pass["name"]}
     checks["blocks_equal_the_independent_packer"] = compared > 0 and differing == 0
+    checks["every_source_fills_some_member"] = sources_seen == {"core", "settings", "record"}
     facts["blocks"] = {"compared": compared, "differing": differing, "first_difference": first_difference}
     record = pr.record(_frames(30)[-1])
 
-    def refused(call) -> str:
-        try:
-            call()
-        except ValueError as exc:
-            return str(exc)
-        return ""
+    def blocks(schema, program=passes, given=settings, given_card=card):
+        return core.mode_blocks(schema, program, given, record if schema is pr.SCHEMA else bytes(schema["record_bytes"]),
+                                given_card, target)
 
-    from core.visualizer_engine.native_schema import NativeLayout
-
-    def schema_with(entries) -> dict:
-        layout = NativeLayout.build(entries)
-        rows = [[f.name, f.kind, f.count, f.offset, "at_most" if f.name == "ring_count" else "",
-                 pr.MAX_RINGS if f.name == "ring_count" else 0] for f in layout.fields[2:]]
-        names = [row[0] for row in rows]
-        return _table(record_bytes=layout.size, fingerprint=layout.fingerprint(), fields=rows,
-                      check_order=[names.index("ring_count")] if "ring_count" in names else [])
-
-    base_entries = [(f.name, f.kind, f.count) for f in pr.SCHEMA.layout.fields[2:]]
-    spare = schema_with(base_entries + [("spare", "f64", 1)])
-    lacking = schema_with([entry for entry in base_entries if entry[0] != "time"])
+    spare = _schema_with(_base_entries() + [("spare", "f64", 1)])
+    lacking = _schema_with([entry for entry in _base_entries() if entry[0] != "time"])
+    unruled = _schema_with(_base_entries(), ruled=False)
+    compiled = next(row for row in _compiled_table()["schemas"] if row["mode_id"] == "spectrum")
+    shadow = _table(mode_id="spectrum", mode_code=compiled["mode_code"], version=compiled["version"] + 1,
+                    schema_id=((compiled["version"] + 1) << 16) | 0x100 | compiled["mode_code"])
     reasons = {
-        "unknown_record_field": refused(lambda: core.mode_blocks(spare, passes, settings, bytes(spare["record_bytes"]))),
-        "unfilled_frame_member": refused(lambda: core.mode_blocks(lacking, passes, settings,
-                                                                  bytes(lacking["record_bytes"]))),
-        "unfilled_setting": refused(lambda: core.mode_blocks(pr.SCHEMA, passes, {k: v for k, v in settings.items()
-                                                                                 if k != "u_glow"}, record)),
-        "unknown_setting": refused(lambda: core.mode_blocks(pr.SCHEMA, passes, dict(settings, u_spare=1.0), record)),
-        "tinted_shader_base_settings": refused(lambda: core.mode_blocks(pr.SCHEMA, tinted, settings, record)),
-        "base_shader_tinted_settings": refused(lambda: core.mode_blocks(pr.SCHEMA, passes, _tint_settings(), record)),
-        "schema_fingerprint": refused(lambda: core.mode_blocks(_table(fingerprint="0" * 16), passes, settings, record)),
-        "schema_overlap": refused(lambda: core.mode_blocks(
-            _table(fields=[[r[0], r[1], r[2], 16 if r[0] == "level" else r[3], r[4], r[5]]
-                           for r in _table()["fields"]]), passes, settings, record)),
-        "schema_compiled_id": refused(lambda: core.mode_blocks(_compiled_spectrum_table(), passes, settings, record)),
-        "schema_mode_table": refused(lambda: core.mode_blocks(_table(mode_id="spectrum"), passes, settings, record)),
-        "pass_with_a_sampler": refused(lambda: core.mode_blocks(pr.SCHEMA, _sampler_passes(folder, passes), settings,
-                                                                record)),
+        "unknown_record_field": _refused(lambda: blocks(spare)),
+        "unfilled_from_the_record": _refused(lambda: blocks(lacking)),
+        "unfilled_setting": _refused(lambda: blocks(pr.SCHEMA, given={k: v for k, v in settings.items()
+                                                                       if k != "u_glow"})),
+        "unknown_setting": _refused(lambda: blocks(pr.SCHEMA, given=dict(settings, u_spare=1.0))),
+        "setting_names_a_core_member": _refused(lambda: blocks(pr.SCHEMA, given=dict(settings, u_fade=1.0))),
+        "setting_names_a_record_field": _refused(lambda: blocks(pr.SCHEMA, given=dict(settings, level=1.0))),
+        "tinted_shader_base_settings": _refused(lambda: blocks(pr.SCHEMA, program=tinted)),
+        "base_shader_tinted_settings": _refused(lambda: blocks(pr.SCHEMA, given=_tint_settings())),
+        "u32_into_int_without_a_rule": _refused(lambda: blocks(unruled)),
+        "no_card": _refused(lambda: blocks(pr.SCHEMA, given_card=None)),
+        "schema_fingerprint": _refused(lambda: blocks(_table(fingerprint="0" * 16))),
+        "schema_overlap": _refused(lambda: blocks(
+            _table(fields=[[r[0], r[1], r[2], 16 if r[0] == "level" else r[3], r[4], r[5]] for r in _table()["fields"]]))),
+        "schema_compiled_id": _refused(lambda: blocks(compiled)),
+        "schema_compiled_mode_other_version": _refused(lambda: blocks(shadow)),
+        "schema_mode_table": _refused(lambda: blocks(_table(mode_id="spectrum"))),
+        "pass_with_a_sampler": _refused(lambda: core.mode_program_layout(_variant_pass(folder, "sampler"))),
+        "pass_block_at_binding_17": _refused(lambda: core.mode_program_layout(_variant_pass(folder, "binding17"))),
+        "pass_with_two_blocks": _refused(lambda: core.mode_program_layout(_variant_pass(folder, "two_blocks"))),
     }
-    expected_words = {"unknown_record_field": "spare", "unfilled_frame_member": "time", "unfilled_setting": "u_glow",
-                      "unknown_setting": "u_spare", "tinted_shader_base_settings": "u_tint",
-                      "base_shader_tinted_settings": "u_tint", "schema_fingerprint": "fingerprint",
-                      "schema_overlap": "overlaps", "schema_compiled_id": "compiled", "schema_mode_table": "spectrum",
-                      "pass_with_a_sampler": "primitive"}
+    expected_words = {"unknown_record_field": "spare", "unfilled_from_the_record": "time",
+                      "unfilled_setting": "u_glow", "unknown_setting": "u_spare",
+                      "setting_names_a_core_member": "core member", "setting_names_a_record_field": "record's field",
+                      "tinted_shader_base_settings": "u_tint", "base_shader_tinted_settings": "u_tint",
+                      "u32_into_int_without_a_rule": "range rule", "no_card": "card",
+                      "schema_fingerprint": "fingerprint", "schema_overlap": "overlaps",
+                      "schema_compiled_id": "compiled", "schema_compiled_mode_other_version": "compiled",
+                      "schema_mode_table": "spectrum", "pass_with_a_sampler": "primitive",
+                      "pass_block_at_binding_17": "17", "pass_with_two_blocks": "one block of its own"}
     for name, word in expected_words.items():
         checks[f"refused_{name}"] = word in reasons[name]
-    # The pack count: the program declares two passes and gets one pack.
-    try:
-        core.module.mode_program_layout(json.dumps({"passes": [{"name": "rings", "blend": "alpha"},
-                                                               {"name": "glow", "blend": "add"}]}),
-                                        [passes[0].pack])
-        reasons["pack_count"] = ""
-    except ValueError as exc:
-        reasons["pack_count"] = str(exc)
+    reasons["pack_count"] = _refused(lambda: core.module.mode_program_layout(
+        json.dumps({"passes": [{"name": "rings", "blend": "alpha"}, {"name": "glow", "blend": "add"}]}),
+        [passes[0].pack]))
     checks["refused_pack_count"] = "pack" in reasons["pack_count"]
+    # The product's own 2D packs (audit N29 M5): admitted as they are, Bubble refused for its samplers alone.
+    from rendering.native.program_values import mode_fragment_pack
+
+    product = {}
+    for mode_id in ("oscilloscope", "devcurve", "bubble"):
+        product[mode_id] = _refused(lambda m=mode_id: core.mode_program_layout([ModePass(m, mode_fragment_pack(m))]))
+    product["bubble_without_samplers"] = _refused(lambda: core.mode_program_layout(_bubble_without_samplers(folder)))
+    checks["product_oscilloscope_admitted"] = product["oscilloscope"] == ""
+    checks["product_devcurve_admitted"] = product["devcurve"] == ""
+    checks["product_bubble_refused_for_its_samplers"] = "sampler" in product["bubble"]
+    checks["control_bubble_without_samplers_admitted"] = product["bubble_without_samplers"] == ""
     facts["reasons"] = reasons
+    facts["product"] = product
     facts["layout"] = core.mode_program_layout(passes)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
-def _compiled_spectrum_table() -> dict:
-    """Spectrum's compiled schema handed over as a runtime one (refused: a compiled schema is never replaced)."""
+def _compiled_table() -> dict:
     from rendering.native.packet_reader import python_schema_table
 
-    return next(s for s in python_schema_table()["schemas"] if s["mode_id"] == "spectrum")
+    return python_schema_table()
 
 
 SAMPLER_LINE = "layout(binding = 3) uniform sampler2D u_probe_texture;\n"
+SECOND_BLOCK = "layout(std140, binding = 19) uniform ProbeSecond { float u_second; };\n"
 
 
-def _sampler_passes(folder: Path, passes):
-    """The glow pass with a sampler declared and read (a primitive's business, never pass data)."""
+def _variant_pass(folder: Path, kind: str):
+    """The glow pass changed to declare what a pass may not: a sampler (a primitive's business), its block at binding
+    17 (the conventions block's), or a second block of its own."""
     from rendering.native.mode import ModePass
 
     pr = _mode()
-    text = pr.shader_text("glow.frag").replace("void main() {", SAMPLER_LINE + "void main() {", 1)
-    text = text.replace("fragColor = vec4(pulse_color.rgb,", "fragColor = texture(u_probe_texture, p) + vec4(pulse_color.rgb,", 1)
-    sub = folder / "sampler"
-    sub.mkdir(parents=True, exist_ok=True)
-    return (passes[0], ModePass("glow", pr.bake(text, "glow.frag", sub), "add"))
+    text = pr.shader_text("glow.frag")
+    if kind == "sampler":
+        text = text.replace("void main() {", SAMPLER_LINE + "void main() {", 1).replace(
+            "fragColor = vec4(pulse_color.rgb,", "fragColor = texture(u_probe_texture, v_uv) + vec4(pulse_color.rgb,", 1)
+    elif kind == "binding17":
+        text = text.replace("binding = 18) uniform ProbeRingsDraw", "binding = 17) uniform ProbeRingsDraw", 1)
+    else:
+        text = text.replace("void main() {", SECOND_BLOCK + "void main() {", 1).replace(
+            "fragColor = vec4(pulse_color.rgb,", "fragColor = vec4(u_second) + vec4(pulse_color.rgb,", 1)
+    return [ModePass("glow", pr.bake(text, "glow.frag", folder / f"variant_{kind}"), "add")]
+
+
+def _bubble_without_samplers(folder: Path):
+    """A copy of the product's bubble.frag whose two samplers are taken out (their reads a constant): what is left of
+    Bubble's shape is admitted, so its samplers alone are refused."""
+    from rendering.native.mode import ModePass
+    from tools import regen_qrc
+
+    pr = _mode()
+    text = (regen_qrc.mode_shader_dir() / "bubble.frag").read_text(encoding="utf-8")
+    lines = []
+    for line in text.splitlines(keepends=True):
+        if "uniform sampler2D" in line:
+            continue
+        lines.append(line)
+    text = "".join(lines)
+    for sampler in ("u_ambient_texture", "u_ambient_light"):
+        text = text.replace(f"texture({sampler},", "srpssNoTexture(")
+    text = text.replace("void main()", "vec4 srpssNoTexture(vec2 uv) { return vec4(0.0 * uv.x); }\nvoid main()", 1)
+    return [ModePass("bubble", pr.bake(text, "bubble.frag", folder / "bubble_without_samplers"), "alpha")]
 
 
 # --------------------------------------------------------------------------------------------------- the stream
@@ -271,9 +360,6 @@ class Stream:
         return self.writer.publish(payload, payload_schema=pr.SCHEMA.schema_id, logical_timestamp=timestamp,
                                    flags=FLAG_PRESENT_FRAME, mode_code=pr.MODE_CODE, **IDENTITY)
 
-    def consumed(self) -> int:
-        return self.writer.consumed_sequence
-
     def close(self) -> None:
         if self.closed:
             return
@@ -305,7 +391,6 @@ def round_reader(core) -> dict:
                     {k: (list(v) if isinstance(v, tuple) else v) for k, v in decoded.items()}, sort_keys=True))
         checks["frames_accepted_and_decoded_by_the_schema"] = matched == len(frames)
         facts["matched"] = matched
-        # Control: without the schema the mode's code is unknown and the slot is refused at its head.
         blind = core.packet_reader(stream.name, expect=stream.expect)
         readers.append(blind)
         result = blind.read()
@@ -313,7 +398,6 @@ def round_reader(core) -> dict:
         checks["control_without_the_schema_refuses"] = (result == "refused"
                                                          and (state.get("refusal") or {}).get("cause") == "mode")
         facts["without_schema"] = {"result": result, "refusal": state.get("refusal")}
-        # A record that breaks its own rule (ring_count 9) is refused after the copy.
         broken = bytearray(pr.record(frames[-1]))
         struct.pack_into("<I", broken, pr.SCHEMA.layout.field("ring_count").offset, pr.MAX_RINGS + 1)
         stream.publish(bytes(broken), 99.0)
@@ -343,12 +427,13 @@ Rectangle {
 class Scene:
     """An opaque black display with one generic mode item at (MARGIN, MARGIN), its target on the item's own rect."""
 
-    def __init__(self, core, engine, host) -> None:
+    def __init__(self, core, engine, host, dpr: float) -> None:
         from PySide6.QtCore import QUrl
         from PySide6.QtQml import QQmlComponent
         from PySide6.QtQuick import QQuickItem
 
         self.host = host
+        self.dpr = float(dpr)
         self.component = QQmlComponent(engine)
         self.component.setData(SCENE_QML, QUrl())
         self.root = self.component.create()
@@ -359,6 +444,7 @@ class Scene:
         self.mode = core.mode(self.content)
         self.mode.composite.set(rect=[0.0, 0.0, float(CARD[0]), float(CARD[1])], coverage=None, quarters=0,
                                 visible=True)
+        self.mode.card(_mode().harness_card(CARD, self.dpr))
 
     def read(self):
         from dataclasses import asdict
@@ -366,7 +452,9 @@ class Scene:
         from composite_analysis import frame_rows
 
         rows = frame_rows(asdict(self.host.read()))
-        return rows[MARGIN:MARGIN + CARD[1], MARGIN:MARGIN + CARD[0]]
+        left = int(round(MARGIN * self.dpr))
+        width, height = _target(self.dpr)
+        return rows[left:left + height, left:left + width]
 
     def close(self, app) -> None:
         self.mode.composite.destroy()
@@ -392,27 +480,27 @@ def ring_runs(pixels, threshold: int = 24) -> list[tuple[float, int]]:
     return runs
 
 
-def visible_rings(values: dict, thickness: float) -> list[float] | None:
-    """The radii (pixels) of the rings bright enough to measure on the centre row, or None when two lie too close to
-    tell apart (that frame is not measured)."""
-    unit = 0.5 * min(CARD)
+def visible_rings(values: dict, thickness: float, size: tuple[int, int] = CARD) -> list[float] | None:
+    """The radii (pixels, in a target of ``size``) of the rings bright enough to measure on the centre row, or None when
+    two lie too close to tell apart (that frame is not measured)."""
+    unit = 0.5 * min(size)
     radii = sorted(r * unit for r, a in zip(values["rings"][:values["ring_count"]],
                                             values["ring_alpha"][:values["ring_count"]])
-                   if a > 0.25 and r * unit > thickness + 2.0 and r * unit + thickness < CARD[0] / 2.0 - 2.0)
+                   if a > 0.25 and r * unit > thickness + 2.0 and r * unit + thickness < size[0] / 2.0 - 2.0)
     if any(b - a < thickness + 6.0 for a, b in zip(radii, radii[1:])):
         return None
     return radii
 
 
-def _radii_match(pixels, values: dict, thickness: float) -> bool | None:
+def _radii_match(pixels, values: dict, thickness: float, size: tuple[int, int] = CARD) -> bool | None:
     """Every clearly visible ring of the record is drawn at its radius (within RADIUS_TOLERANCE_PX), and nothing is
     drawn on the centre row where the record has no ring at all (faint rings may or may not pass the threshold). None
     when the frame has nothing to measure."""
-    expected = visible_rings(values, thickness)
+    expected = visible_rings(values, thickness, size)
     if not expected:
         return None
     measured = [centre for centre, _w in ring_runs(pixels)]
-    unit = 0.5 * min(CARD)
+    unit = 0.5 * min(size)
     every = [r * unit for r in values["rings"][:values["ring_count"]]]
     found = all(any(abs(m - e) <= RADIUS_TOLERANCE_PX for m in measured) for e in expected)
     no_strays = all(any(abs(m - r) <= RADIUS_TOLERANCE_PX + thickness for r in every) for m in measured)
@@ -429,20 +517,61 @@ def _channel_means(pixels):
     return tuple(float(np.mean(rgb[..., c][lit])) for c in range(3))
 
 
+def _renamed(mode_pass, name: str):
+    from dataclasses import replace
+
+    return replace(mode_pass, name=name)
+
+
+def _measure_rings(core, engine, app, host, folder: Path, dpr: float, frames: dict) -> dict:
+    """The rings at their record's radii at ``dpr`` (glow off)."""
+    pr = _mode()
+    host.set_device_pixel_ratio(dpr)
+    scene = Scene(core, engine, host, dpr)
+    stream = Stream()
+    measured = []
+    try:
+        settings = _settings(dpr, probe_rings_glow=0.0)
+        scene.mode.program(pr.passes(folder / f"measure_{dpr}"), settings)
+        scene.mode.bind(stream.name, pr.SCHEMA, expect=stream.expect)
+        thickness = float(settings["u_thickness_px"])
+        size = _target(dpr)
+        for step, values in enumerate(_frames(150)):
+            stream.publish(pr.record(values), float(step))
+            scene.mode.update()
+            pixels = scene.read()
+            match = _radii_match(pixels, values, thickness, size)
+            if match is not None:
+                measured.append(match)
+                frames.setdefault(f"rings_dpr{dpr}", pixels)
+        state = scene.mode.state()
+    finally:
+        stream.close()
+        scene.close(app)
+        host.frames(2)
+        host_check._flush_deletes(app)
+    return {"frames": len(measured), "matched": sum(measured), "pass": len(measured) >= 20 and all(measured),
+            "accepted": state["accepted"], "last_reason": state["last_reason"]}
+
+
 def round_draw(core, engine, app, host, api: str, folder: Path, out: Path) -> dict:
     import numpy as np
 
     pr = _mode()
     checks: dict = {}
     facts: dict = {}
+    frames: dict = {}
+    for dpr in DPRS:
+        measured = _measure_rings(core, engine, app, host, folder, dpr, frames)
+        facts[f"rings_dpr{dpr}"] = measured
+        checks[f"rings_drawn_where_the_record_puts_them_dpr{dpr}"] = measured["pass"]
     host.set_device_pixel_ratio(1.0)
-    scene = Scene(core, engine, host)
+    scene = Scene(core, engine, host, 1.0)
     stream = Stream()
-    frames = {}
     step = [0]
 
-    def show(values: dict):
-        stream.publish(pr.record(values), float(step[0]))
+    def show(values: dict, raw: bytes | None = None):
+        stream.publish(raw if raw is not None else pr.record(values), float(step[0]))
         step[0] += 1
         scene.mode.update()
         return scene.read()
@@ -453,29 +582,25 @@ def round_draw(core, engine, app, host, api: str, folder: Path, out: Path) -> di
         scene.mode.program(base, no_glow)
         scene.mode.bind(stream.name, pr.SCHEMA, expect=stream.expect)
         thickness = float(no_glow["u_thickness_px"])
-        # The rings where the record puts them.
-        measured = []
-        for values in _frames(150):
-            pixels = show(values)
-            match = _radii_match(pixels, values, thickness)
-            if match is not None:
-                measured.append(match)
-                frames.setdefault("rings", pixels)
-        checks["rings_drawn_where_the_record_puts_them"] = len(measured) >= 20 and all(measured)
-        facts["rings_measured_frames"] = {"frames": len(measured), "matched": sum(measured)}
-        state = scene.mode.state()
-        checks["every_frame_accepted"] = state["accepted"] == 150 and state["last_reason"] == ""
-        # The glow pass adds light at the centre on a loud frame.
         loud = max(_frames(150), key=lambda v: v["level"])
         dark_centre = show(loud)[CARD[1] // 2, CARD[0] // 2, :3].astype(int)
         scene.mode.settings(_settings())
         lit = show(loud)
         frames["glow"] = lit
-        lit_centre = lit[CARD[1] // 2, CARD[0] // 2, :3].astype(int)
-        checks["glow_pass_adds_light"] = int(lit_centre.sum()) > int(dark_centre.sum()) + 60
-        # Nothing at rest.
+        checks["glow_pass_adds_light"] = int(lit[CARD[1] // 2, CARD[0] // 2, :3].astype(int).sum()) \
+            > int(dark_centre.sum()) + 60
         scene.mode.settings(no_glow)
-        show(loud)
+        sample = next(v for v in _frames(150) if visible_rings(v, thickness) and len(visible_rings(v, thickness)) >= 2)
+        reference = show(sample)
+        frames["reference"] = reference
+        # A card change shows: the core's u_fade from the card.
+        scene.mode.card(pr.harness_card(CARD, 1.0, fade=0.5))
+        halved = show(sample)
+        scene.mode.card(pr.harness_card(CARD, 1.0))
+        bright = lambda pixels: float(pixels[..., :3].astype(float).sum())   # noqa: E731
+        checks["card_change_shows"] = 0.35 * bright(reference) < bright(halved) < 0.65 * bright(reference)
+        # Nothing at rest.
+        show(sample)
         host.set_gpu_timer(True)
         host.frames(4)
         host.gpu_samples()
@@ -493,10 +618,10 @@ def round_draw(core, engine, app, host, api: str, folder: Path, out: Path) -> di
                          "surface_passes": [surface_before, surface_after], "gpu_surface_samples": len(rest_samples)}
         # GPU time: the two passes, then a third pass (each pass doubled).
         timing = {}
+        settings_on = _settings()
         programs = {"rings+glow": base,
                     "rings+rings+glow": (base[0], _renamed(base[0], "rings_again"), base[1]),
                     "rings+glow+glow": (base[0], base[1], _renamed(base[1], "glow_again"))}
-        settings_on = _settings()
         for label, program in programs.items():
             scene.mode.program(program, settings_on)
             for values in _frames(TIMED_FRAMES):
@@ -513,9 +638,19 @@ def round_draw(core, engine, app, host, api: str, folder: Path, out: Path) -> di
         facts["gpu"] = timing
         checks["gpu_time_recorded"] = all((entry["samples"] or 0) >= TIMED_FRAMES // 2 for entry in timing.values())
         scene.mode.program(base, no_glow)
-        sample = next(v for v in _frames(150) if visible_rings(v, thickness) and len(visible_rings(v, thickness)) >= 2)
         reference = show(sample)
-        frames["reference"] = reference
+        # A refused frame keeps the last drawn frame (M4): a NaN level; then the next good frame draws.
+        nan = bytearray(pr.record(sample))
+        struct.pack_into("<d", nan, pr.SCHEMA.layout.field("level").offset, math.nan)
+        refused_before = scene.mode.state().get("refused_frames", 0)
+        kept = show(sample, raw=bytes(nan))
+        state = scene.mode.state()
+        good = show(sample)
+        checks["refused_frame_keeps_the_card"] = (int(np.abs(kept.astype(int) - reference.astype(int)).max()) == 0
+                                                  and bright(kept) > 0)
+        checks["refused_frame_counted_with_its_reason"] = (state.get("refused_frames", 0) == refused_before + 1
+                                                           and "level" in str(state.get("last_refusal")))
+        checks["good_frame_after_a_refused_one_draws"] = int(np.abs(good.astype(int) - reference.astype(int)).max()) == 0
         # A shader change: the rings drawn green.
         green = pr.passes(folder / "draw_green", rings_text=pr.shader_variant(green=True))
         scene.mode.program(green)                                 # the settings given before stay
@@ -535,7 +670,7 @@ def round_draw(core, engine, app, host, api: str, folder: Path, out: Path) -> di
         checks["spec_change_shows"] = bool(thin and thick and float(np.median([w for _c, w in thick]))
                                            >= float(np.median([w for _c, w in thin])) + 4.0)
         facts["widths"] = {"thin": thin, "thick": thick}
-        # A shader and a spec change together: a new ModeSettings member and the control that fills it.
+        # A shader and a spec change together: a new member and the control that fills it.
         tinted = pr.passes(folder / "draw_tint", rings_text=pr.shader_variant(tint=True))
         refusals = {}
         try:
@@ -558,41 +693,46 @@ def round_draw(core, engine, app, host, api: str, folder: Path, out: Path) -> di
         checks["shader_and_spec_change_shows"] = g > 3.0 * max(r, b, 1.0)
         # A simulation change: twice the speed, the rings where its record puts them.
         scene.mode.program(base, no_glow)
-        fast = [v for v in _frames(150, speed=0.7) if visible_rings(v, thickness)]
         slow_radii = visible_rings(sample, thickness)
-        fast_sample = next((v for v in fast if visible_rings(v, thickness) != slow_radii), None)
+        fast_sample = next((v for v in _frames(150, speed=0.7)
+                            if visible_rings(v, thickness) and visible_rings(v, thickness) != slow_radii), None)
         drawn_fast = show(fast_sample) if fast_sample else None
         checks["simulation_change_shows"] = bool(fast_sample is not None
                                                  and _radii_match(drawn_fast, fast_sample, thickness))
         if drawn_fast is not None:
             frames["simulation_change"] = drawn_fast
         # A stream whose schema carries a field no pass declares is refused at bind.
-        from core.visualizer_engine.native_schema import NativeLayout
-
-        layout = NativeLayout.build([(f.name, f.kind, f.count) for f in pr.SCHEMA.layout.fields[2:]]
-                                    + [("spare", "f64", 1)])
-        rows = [[f.name, f.kind, f.count, f.offset, "at_most" if f.name == "ring_count" else "",
-                 pr.MAX_RINGS if f.name == "ring_count" else 0] for f in layout.fields[2:]]
-        spare = _table(record_bytes=layout.size, fingerprint=layout.fingerprint(), fields=rows,
-                       check_order=[[row[0] for row in rows].index("ring_count")])
+        spare = _schema_with(_base_entries() + [("spare", "f64", 1)])
         try:
             scene.mode.bind(stream.name, spare, expect=stream.expect)
         except ValueError as exc:
             refusals["schema_with_an_unknown_field"] = str(exc)
         checks["control_unknown_field_refused_at_bind"] = "spare" in refusals.get("schema_with_an_unknown_field", "")
         facts["refusals"] = refusals
-        # D5.4: the reads at the sync ran on the render thread, never holding a Python thread state.
         state = scene.mode.state()
         checks["no_python_thread_state_on_the_render_thread"] = bool(
             state.get("syncs_probed") and state.get("syncs_with_python_thread_state") == 0
             and state.get("syncs_on_gui_thread") == 0)
-        facts["state"] = {k: state.get(k) for k in ("syncs", "accepted", "records", "draws", "last_reason",
-                                                    "syncs_probed", "syncs_with_python_thread_state")}
+        facts["state"] = {k: state.get(k) for k in ("syncs", "accepted", "records", "draws", "refused_frames",
+                                                    "last_refusal", "last_reason", "syncs_probed",
+                                                    "syncs_with_python_thread_state")}
+        # The fade (M1): a hide fades the item out over fade_ms, never at once.
+        scene.mode.composite.set(visible=False, fade_ms=FADE_MS)
+        started = scene.mode.composite.state()
+        host_check._wait_until(app, lambda: not scene.mode.composite.state().get("fading"),
+                               timeout=10.0 * FADE_MS / 1000.0)
+        ended = scene.mode.composite.state()
+        checks["the_item_fades_out"] = (started.get("shown") is True and started.get("fading") is True
+                                        and ended.get("shown") is False and ended.get("fading") is False)
+        facts["fade"] = {"started": {k: started.get(k) for k in ("shown", "shown_opacity", "fading")},
+                         "ended": {k: ended.get(k) for k in ("shown", "shown_opacity", "fading")}}
     finally:
         stream.close()
         scene.close(app)
         host.frames(2)
         host_check._flush_deletes(app)
+    facts["failure"] = content_failure(core, engine, app, host, folder)
+    checks["content_failure_recorded_once_and_rearmed_by_a_program"] = facts["failure"]["held"]
     np.savez_compressed(_work(out) / f"native_{api}.npz", **{k: v for k, v in frames.items()})
     _sheet(out, api, frames)
     live = core.composite_live()
@@ -602,19 +742,78 @@ def round_draw(core, engine, app, host, api: str, folder: Path, out: Path) -> di
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
-def _renamed(mode_pass, name: str):
-    from dataclasses import replace
+def content_failure(core, engine, app, host, folder: Path, frames: int = 5) -> dict:
+    """Audit N29 M2 and L10: an item with a stream and a card but no program cannot build its content. The failure is
+    one edge (recorded once), the frames after it create nothing again (no QRhi object of the content stays alive),
+    and a program (a changed input) re-arms it: the next frame draws."""
+    pr = _mode()
+    scene = Scene(core, engine, host, 1.0)
+    stream = Stream()
+    states, live = [], []
+    drawn = None
+    try:
+        scene.mode.bind(stream.name, pr.SCHEMA, expect=stream.expect)
+        values = _frames(60)[-1]
+        for step in range(frames):
+            stream.publish(pr.record(values), float(step))
+            scene.mode.update()
+            host.frames(1)
+            states.append(scene.mode.state())
+            live.append(core.composite_live().get("mode_resources"))
+        scene.mode.program(pr.passes(folder / "failure"), _settings(probe_rings_glow=0.0))
+        stream.publish(pr.record(values), float(frames))
+        scene.mode.update()
+        host.frames(1)
+        drawn = scene.mode.state()
+    finally:
+        stream.close()
+        scene.close(app)
+        host.frames(2)
+        host_check._flush_deletes(app)
+    last = states[-1] if states else {}
+    held = (bool(states) and last.get("content_failures") == 1 and last.get("draws") == 0
+            and all(value == 0 for value in live) and drawn is not None and drawn.get("draws", 0) >= 1)
+    return {"held": held, "failures": [s.get("content_failures") for s in states], "records": [s.get("records")
+                                                                                              for s in states],
+            "mode_resources": live, "last_reason": last.get("last_reason"),
+            "after_program": None if drawn is None else {k: drawn.get(k) for k in ("draws", "last_reason")}}
 
-    return replace(mode_pass, name=name)
+
+def round_framebuffer(core, engine, app, api: str) -> dict:
+    """Audit N29 L1: the window's framebuffer the native item reports is Qt's own (the hidden host's redirect target:
+    2560x1440 at 150 %), not the logical size times the dpr."""
+    width, height, dpr = FRAMEBUFFER_HOST
+    host = core.hidden_host(width, height, dpr=dpr)
+    scene = None
+    try:
+        scene = Scene(core, engine, host, dpr)
+        host.frames(2)
+        pixels = scene.mode.composite.window_pixels()
+        window = scene.content.window()
+        logical = (window.width(), window.height())
+        sync = scene.mode.composite.state().get("sync", {})
+    finally:
+        if scene is not None:
+            scene.close(app)
+        host.frames(1)
+        host.close()
+        host_check._flush_deletes(app)
+    checks = {"window_pixels_are_the_framebuffer": pixels == (width, height),
+              "the_sync_reports_the_same": sync.get("window_pixels") == [width, height]}
+    return {"pass": all(checks.values()), "checks": checks,
+            "facts": {"window_pixels": pixels, "logical_size": logical,
+                      "logical_times_dpr": [round(logical[0] * dpr, 3), round(logical[1] * dpr, 3)]}}
 
 
 def _sheet(out: Path, api: str, frames: dict) -> None:
     import numpy as np
     from PIL import Image
 
-    order = ["rings", "glow", "shader_change", "spec_change", "shader_and_spec_change", "simulation_change"]
+    order = ["rings_dpr1.0", "glow", "shader_change", "spec_change", "shader_and_spec_change", "simulation_change"]
     tiles = [frames[k][..., :3] for k in order if k in frames]
     if tiles:
+        height = max(tile.shape[0] for tile in tiles)
+        tiles = [np.pad(tile, ((0, height - tile.shape[0]), (0, 0), (0, 0))) for tile in tiles]
         Image.fromarray(np.concatenate(tiles, axis=1), "RGB").save(out / f"probe_rings_{api}.png")
 
 
@@ -637,6 +836,11 @@ def vulkan_against_opengl(out: Path) -> dict:
 
 
 # --------------------------------------------------------------------------------------------------- the child
+
+def _host_size() -> tuple[int, int]:
+    largest = max(DPRS)
+    return (int(math.ceil((CARD[0] + 2 * MARGIN) * largest)), int(math.ceil((CARD[1] + 2 * MARGIN) * largest)))
+
 
 def child(args) -> dict:
     root = host_check._root(args.repo)
@@ -689,9 +893,11 @@ def child(args) -> dict:
                         record[name] = round_blocks(core, folder)
                     elif name == "reader":
                         record[name] = round_reader(core)
+                    elif name == "framebuffer":
+                        record[name] = round_framebuffer(core, engine, app, args.api)
                     else:
                         if host is None:
-                            host = core.hidden_host(CARD[0] + 2 * MARGIN, CARD[1] + 2 * MARGIN)
+                            host = core.hidden_host(*_host_size())
                         record[name] = round_draw(core, engine, app, host, args.api, folder, out)
                 except Exception:
                     record[name] = {"pass": False, "error": traceback.format_exc()}

@@ -300,6 +300,19 @@ QString recordFieldFits(const BlockMember &member, const frame_abi::Field &field
         return QStringLiteral("'%1': the record holds %2 element(s), the block's member %3").arg(name)
             .arg(field.count).arg(member.count);
     }
+    // Nothing truncated (audit N29 L7): a u32 fills an int only under a range rule within int32, and a float only under
+    // one within float's exact integers (2^24); a uint or a bool takes any u32. Checked at bind, never per frame.
+    if (field.kind == frame_abi::FieldKind::U32 && (type == QShaderDescription::Int || type == QShaderDescription::Float)) {
+        const quint32 bound = type == QShaderDescription::Int ? 2147483647u : 16777216u;
+        // (An enum admits its outside value 0xFFFFFFFF, so it never qualifies.)
+        const bool ruled = field.check == frame_abi::FieldCheck::Boolean
+            || (field.check == frame_abi::FieldCheck::AtMost && field.limit <= bound);
+        if (!ruled) {
+            return QStringLiteral("'%1': a u32 fills an %2 only under a range rule at most %3 (at_most or boolean)")
+                .arg(name, type == QShaderDescription::Int ? QStringLiteral("int") : QStringLiteral("float"))
+                .arg(bound);
+        }
+    }
     return QString();
 }
 

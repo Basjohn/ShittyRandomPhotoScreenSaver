@@ -165,10 +165,11 @@ QSharedPointer<const RuntimeSchema> RuntimeSchema::fromJson(const QJsonObject &o
             return {};
         }
     }
+    // A mode with a compiled schema, at any version, is a hand-written consumer's (audit N29 L6): never shadowed.
     for (const fa::Schema &compiled : fa::kSchemas) {
-        if (compiled.schemaId == schemaId) {
-            *error = QStringLiteral("schema 0x%1 is compiled in (a hand-written consumer's); it is not replaced at run "
-                                    "time").arg(schemaId, 0, 16);
+        if (compiled.schemaId == schemaId || compiled.modeCode == modeCode) {
+            *error = QStringLiteral("schema 0x%1: mode code %2 is compiled in (a hand-written consumer's); it is not "
+                                    "replaced at run time").arg(schemaId, 0, 16).arg(modeCode);
             return {};
         }
     }

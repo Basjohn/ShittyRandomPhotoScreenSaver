@@ -12,7 +12,9 @@
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QMutex>
+#include <QtCore/QPropertyAnimation>
 #include <QtQuick/QQuickWindow>
+#include <QtQuick/QSGRendererInterface>
 #include <QtQuick/QSGGeometry>
 #include <QtQuick/QSGMaterial>
 #include <QtQuick/QSGNode>
@@ -31,8 +33,9 @@ struct CompositeStats
     QAtomicInteger<qint64> dprMismatches { 0 };  // draws whose render-time device pixel ratio differed from the sync's
     QAtomicInteger<qint64> renderDprMicro { 0 }; // the last draw's device pixel ratio, in millionths
     QAtomicInteger<int> nodes { 0 };
-    mutable QMutex mutex; // guards the three below
+    mutable QMutex mutex; // guards the four below
     QJsonObject sync;     // the last sync's facts
+    QSize windowPixels;   // the window's framebuffer at the last sync (audit N29 L1)
     QString error;
     std::weak_ptr<Surface> surface; // the node's, while it lives
 };
@@ -40,6 +43,29 @@ struct CompositeStats
 namespace {
 
 QAtomicInteger<int> g_liveItems { 0 };
+
+// The window's framebuffer in device pixels: what Qt's scene graph renders into and projects the window's logical rect
+// onto (audit N29 L1): a shown window's swapchain (its current pixel size), or a redirected window's render target (the
+// hidden host's). Invalid when the window has neither yet.
+QSize framebufferPixels(QQuickWindow *window)
+{
+    if (!window || !window->rendererInterface())
+        return QSize();
+    QSGRendererInterface *ri = window->rendererInterface();
+    if (auto *swapchain = static_cast<QRhiSwapChain *>(
+            ri->getResource(window, QSGRendererInterface::RhiSwapchainResource))) {
+        const QSize size = swapchain->currentPixelSize();
+        if (size.isValid() && !size.isEmpty())
+            return size;
+    }
+    if (auto *target = static_cast<QRhiRenderTarget *>(
+            ri->getResource(window, QSGRendererInterface::RhiRedirectRenderTarget))) {
+        const QSize size = target->pixelSize();
+        if (size.isValid() && !size.isEmpty())
+            return size;
+    }
+    return QSize();
+}
 
 QShader shaderFrom(const unsigned char *data, unsigned int size)
 {
@@ -394,6 +420,14 @@ bool CompositeConfig::update(const QByteArray &json, CompositeConfig *out, QStri
         }
         c.opacity = opacity;
     }
+    if (o.contains(QStringLiteral("fade_ms"))) {
+        const double fade = o.value(QStringLiteral("fade_ms")).toDouble(-1.0);
+        if (!(fade >= 0.0 && fade <= 60000.0)) {
+            *error = QStringLiteral("fade_ms is 0 to 60000");
+            return false;
+        }
+        c.fadeMs = fade;
+    }
     if (o.contains(QStringLiteral("pixel_ratio"))) {
         const QJsonValue ratio = o.value(QStringLiteral("pixel_ratio"));
         if (ratio.isNull()) {
@@ -431,6 +465,7 @@ QJsonObject CompositeConfig::toJson() const
     o.insert(QStringLiteral("surface_format"), surfaceFormat);
     o.insert(QStringLiteral("visible"), visible);
     o.insert(QStringLiteral("opacity"), opacity);
+    o.insert(QStringLiteral("fade_ms"), fadeMs);
     if (pixelRatioX > 0.0)
         o.insert(QStringLiteral("pixel_ratio"), QJsonArray { pixelRatioX, pixelRatioY });
     else
@@ -466,13 +501,20 @@ bool CompositeItem::modeRefused(QString *error) const
     return true;
 }
 
-bool CompositeItem::bindMode(const QString &mappingName, const PacketReaderConfig &config,
-                             const QSharedPointer<const RuntimeSchema> &schema, QString *error)
+bool CompositeItem::spectrumRefused(QString *error) const
+{
+    if (!m_mode)
+        return false;
+    *error = QStringLiteral("this composite draws a generic mode: Spectrum takes an item of its own (audit N29 L3)");
+    return true;
+}
+
+bool CompositeItem::bindMode(const QString &mappingName, const PacketReaderConfig &config, QString *error)
 {
     if (modeRefused(error))
         return false;
     std::shared_ptr<ModeSource> source = m_mode ? m_mode : std::make_shared<ModeSource>();
-    if (!source->bind(mappingName, config, schema, error))
+    if (!source->bind(mappingName, config, error))
         return false;
     m_mode = source;
     update();
@@ -511,8 +553,21 @@ bool CompositeItem::settingsMode(const QJsonObject &settings, QString *error)
     return true;
 }
 
+bool CompositeItem::cardMode(const ModeCard &card, QString *error)
+{
+    if (modeRefused(error))
+        return false;
+    if (!m_mode)
+        m_mode = std::make_shared<ModeSource>();
+    m_mode->setCard(card);
+    update();
+    return true;
+}
+
 bool CompositeItem::bindSpectrum(const QString &mappingName, const PacketReaderConfig &config, QString *error)
 {
+    if (spectrumRefused(error))
+        return false;
     std::shared_ptr<SpectrumSource> source = m_spectrum ? m_spectrum : std::make_shared<SpectrumSource>();
     if (!source->bind(mappingName, config, error))
         return false;
@@ -529,16 +584,21 @@ void CompositeItem::unbindSpectrum()
     update(); // the next sync releases it on the render thread and draws nothing of it
 }
 
-void CompositeItem::presentSpectrum(const SpectrumPresentation &presentation)
+bool CompositeItem::presentSpectrum(const SpectrumPresentation &presentation, QString *error)
 {
+    if (spectrumRefused(error))
+        return false;
     if (!m_spectrum)
         m_spectrum = std::make_shared<SpectrumSource>();
     m_spectrum->setPresentation(presentation);
     update();
+    return true;
 }
 
 bool CompositeItem::programSpectrum(const QByteArray &qsb, QString *error)
 {
+    if (spectrumRefused(error))
+        return false;
     SpectrumProgram program;
     if (!SpectrumProgram::fromPack(qsb, &program, error))
         return false;
@@ -567,6 +627,17 @@ int CompositeItem::liveItems()
     return g_liveItems.loadRelaxed();
 }
 
+QSize CompositeItem::windowPixels() const
+{
+    // GUI thread. The last sync's (render thread) when there was one, else read now from the same source.
+    {
+        QMutexLocker lock(&m_stats->mutex);
+        if (m_stats->windowPixels.isValid())
+            return m_stats->windowPixels;
+    }
+    return framebufferPixels(window());
+}
+
 void CompositeItem::itemChange(ItemChange change, const ItemChangeData &value)
 {
     if (change == QQuickItem::ItemSceneChange)
@@ -578,13 +649,41 @@ void CompositeItem::itemChange(ItemChange change, const ItemChangeData &value)
 
 void CompositeItem::apply(const CompositeConfig &config)
 {
+    const bool shown = isVisible() && !m_fadingOut;
     m_config = config;
     setX(config.rect.x());
     setY(config.rect.y());
     setWidth(config.rect.width());
     setHeight(config.rect.height());
-    setVisible(config.visible);
-    setOpacity(config.opacity);
+    if (config.fadeMs > 0.0 && shown != config.visible) {
+        // A fade, never a vanish (audit N29 M1): Qt's animation of the item's opacity, driven by the window's own
+        // animation driver; a hide completes at the fade's end.
+        if (!m_fade) {
+            m_fade = new QPropertyAnimation(this, QByteArrayLiteral("opacity"), this);
+            QObject::connect(m_fade, &QPropertyAnimation::finished, this, [this]() {
+                m_fadingOut = false;
+                if (!m_config.visible)
+                    setVisible(false);
+            });
+        }
+        m_fade->stop();
+        if (config.visible) {
+            if (!isVisible())
+                setOpacity(0.0);
+            setVisible(true);
+        }
+        m_fadingOut = !config.visible;
+        m_fade->setDuration(int(std::lround(config.fadeMs)));
+        m_fade->setStartValue(opacity());
+        m_fade->setEndValue(config.visible ? config.opacity : 0.0);
+        m_fade->start();
+    } else if (!m_fade || m_fade->state() != QAbstractAnimation::Running) {
+        m_fadingOut = false;
+        setVisible(config.visible);
+        setOpacity(config.opacity);
+    } else if (config.visible && !m_fadingOut) {
+        m_fade->setEndValue(config.opacity); // a fade in progress goes on toward the new opacity
+    }
     update();
 }
 
@@ -668,8 +767,14 @@ QSGNode *CompositeItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *d
         node = nullptr;
     }
     facts.insert(QStringLiteral("node"), node != nullptr);
+    const QSize framebuffer = framebufferPixels(w);
+    facts.insert(QStringLiteral("window_pixels"),
+                 framebuffer.isValid() ? QJsonValue(QJsonArray { framebuffer.width(), framebuffer.height() })
+                                       : QJsonValue());
     QMutexLocker lock(&m_stats->mutex);
     m_stats->sync = facts;
+    if (framebuffer.isValid())
+        m_stats->windowPixels = framebuffer;
     if (!error.isEmpty())
         m_stats->error = error;
     return node;
@@ -680,6 +785,9 @@ QJsonObject CompositeItem::stateJson() const
     QJsonObject o;
     o.insert(QStringLiteral("config"), m_config.toJson());
     o.insert(QStringLiteral("in_window"), window() != nullptr);
+    o.insert(QStringLiteral("shown"), isVisible());      // the item as it is now (a fade in progress included)
+    o.insert(QStringLiteral("shown_opacity"), opacity());
+    o.insert(QStringLiteral("fading"), m_fade && m_fade->state() == QAbstractAnimation::Running);
     o.insert(QStringLiteral("syncs"), m_stats->syncs.loadRelaxed());
     o.insert(QStringLiteral("draws"), m_stats->draws.loadRelaxed());
     o.insert(QStringLiteral("dpr_mismatches"), m_stats->dprMismatches.loadRelaxed());

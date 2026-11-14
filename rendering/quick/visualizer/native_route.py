@@ -31,6 +31,9 @@ NATIVE_MODE_IDS = frozenset({"spectrum"})
 
 #: One slot of Spectrum's stream (the record is 1488 bytes; the slot shape rounds it).
 _SLOT_BYTES = 4096
+#: How long the native item fades in and out (fade, never vanish: audit N29 M1): the Visualizer's own activation fade
+#: (``quick_display_visualizer_owner._ACTIVATION_SCENE_FADE_DURATION_S``; a test holds them equal).
+FAILURE_FADE_MS = 1300
 
 
 def native_route_wanted(backend: str | None = None) -> bool:
@@ -136,15 +139,20 @@ class NativeVisualizerRoute:
         self._snapshot = None
         self._card = self._placed = self._settings = None
         spectrum = self._spectrum
-        if spectrum is not None:
-            spectrum.unbind()
-            spectrum.composite.set(visible=False)
         writer, self._writer = self._writer, None
         memory, self._memory = self._memory, None
-        if writer is not None:
-            writer.release()
-        if memory is not None:
-            _close_mapping(memory)
+        try:
+            if spectrum is not None:
+                spectrum.unbind()
+                spectrum.composite.set(visible=False, fade_ms=FAILURE_FADE_MS)
+        finally:
+            # The route's own mapping goes whatever the native item said (N29 L2): nothing of it outlives the unbind.
+            try:
+                if writer is not None:
+                    writer.release()
+            finally:
+                if memory is not None:
+                    _close_mapping(memory)
 
     def close(self) -> None:
         """Unbind and destroy the native item (before its content host retires). Idempotent."""
@@ -172,48 +180,69 @@ class NativeVisualizerRoute:
         """GUI thread, at an update request of the item: the take the Python item makes at its sync, published into
         the stream, and the native item asked for a frame. Returns whether a frame was published.
 
-        Never raises (audit 14 Nov, M1): a failure is logged once, the native item hidden, and nothing is tried again
-        until its inputs change (the identity, the window's size or framebuffer, the record's placement)."""
+        Never raises (audit 14 Nov, M1; N29 L2). A failure is logged once per run of failures and the native item fades
+        out (never vanishes: N29 M1). What is tried again (N29 M1): a failure of the setup (the bind, the program, the
+        window's map) when one of its inputs changes (the identity, the window's size or framebuffer, the record's
+        placement); a failure of a frame (its settings, card, take or publish) at the next new snapshot, whose settings
+        and card are new inputs too. A window that is not there yet is an ordinary state, logged at debug."""
         if self.closed:
             return False
         if identity is None:
             self._failure = None
-            self.unbind()
+            self._guarded(self.unbind)
             return False
         if presentation is None:
-            self._hide()
+            self._guarded(self._hide)
             return False
         try:
             metrics = self._window_metrics(presentation)
         except Exception as exc:  # no window yet, or none any more
-            return self._fail((identity, None, None), exc)
+            return self._fail((identity, None, None), exc, stage="setup")
         inputs = (identity, metrics, _placement_key(presentation))
         if self._failure is not None:
-            if inputs == self._failure:
+            failed_inputs, stage = self._failure
+            if stage == "setup" and inputs == failed_inputs:
                 return False                              # failed closed: nothing per update until an input changes
-            self._failure = None
         try:
-            return self._sync(bridge=bridge, identity=identity, presentation=presentation, authority=authority,
-                              metrics=metrics)
+            published = self._sync(bridge=bridge, identity=identity, presentation=presentation, authority=authority,
+                                   metrics=metrics)
+        except _FrameFailure as failure:
+            return self._fail(inputs, failure.cause, stage="frame")
         except Exception as exc:
-            return self._fail(inputs, exc)
+            return self._fail(inputs, exc, stage="setup")
+        if published and self._failure is not None:
+            self._failure = None                          # recovered: the next failure is logged again
+        return published
 
     def _window_metrics(self, presentation: Any) -> tuple:
         from rendering.native.spectrum import window_metrics
 
-        return window_metrics(self._content_host, float(presentation.dpr))
+        if self._spectrum is None:
+            self._spectrum = self._core.spectrum(self._content_host)
+            self._spectrum.composite.set(surface_format=self.surface_format)
+        return window_metrics(self._content_host, self._spectrum.composite)
 
-    def _fail(self, inputs: tuple, exc: BaseException) -> bool:
-        """The fail-closed state: logged once per failing inputs, the native item hidden, the frame not drawn."""
-        if inputs != self._failure:
-            self.failures += 1
-            logger.exception("[VISUALIZER][NATIVE] The native route failed (%s); the native item is hidden until its "
-                             "inputs change", exc)
-        self._failure = inputs
+    def _guarded(self, step) -> None:
+        """A teardown step that must not raise into the item's update (N29 L2): logged instead."""
         try:
-            self._hide()
-        except Exception:  # the item itself may be what failed
-            logger.debug("[VISUALIZER][NATIVE] Hiding the failed native item failed", exc_info=True)
+            step()
+        except Exception:
+            logger.debug("[VISUALIZER][NATIVE] A native route teardown step failed", exc_info=True)
+
+    def _fail(self, inputs: tuple, exc: BaseException, *, stage: str) -> bool:
+        """The fail-closed state: logged once per run of failures (a window not there yet at debug), the native item
+        faded out, the frame not drawn."""
+        from rendering.native.spectrum import WindowNotReady
+
+        if self._failure is None or self._failure[0] != inputs:
+            self.failures += 1
+            if isinstance(exc, WindowNotReady):
+                logger.debug("[VISUALIZER][NATIVE] The native route waits for its window: %s", exc)
+            elif self._failure is None:
+                logger.error("[VISUALIZER][NATIVE] The native route failed (%s); the native item fades out until it "
+                             "draws again", exc, exc_info=exc)
+        self._failure = (inputs, stage)
+        self._guarded(self._hide)
         return False
 
     @property
@@ -247,27 +276,32 @@ class NativeVisualizerRoute:
         origin = (float(presentation.outer_rect[0]), float(presentation.outer_rect[1]))
         placed = (geometry, origin)
         spectrum = self._spectrum
-        if placed != self._placed:
-            spectrum.composite.place(geometry, origin, visible=True)
-            self._placed = placed
         if snapshot is None:
             return False
-        card = self.card(presentation, snapshot, geometry, metrics)
-        if card != self._card:
-            spectrum.present_raw(card)
-            self._card = card
-        settings = self.settings(snapshot, card)
-        if settings != self._settings:
-            spectrum.settings(settings)          # by name; re-packed by the core only when they change
-            self._settings = settings
-        logical = snapshot.logical
-        self._writer.publish(spectrum_native_schema.encode(logical),
-                             payload_schema=spectrum_native_schema.SCHEMA_ID,
-                             logical_timestamp=float(logical.logical_timestamp or 0.0),
-                             flags=publication_flags(logical), mode_code=self._code,
-                             runtime_generation=int(identity.runtime_generation),
-                             engine_generation=int(identity.engine_generation),
-                             activation_id=int(identity.activation_id))
+        try:
+            # The frame's own inputs: a failure here is tried again at the next new snapshot (N29 M1).
+            card = self.card(presentation, snapshot, geometry, metrics)
+            if card != self._card:
+                spectrum.present_raw(card)
+                self._card = card
+            settings = self.settings(snapshot, card)
+            if settings != self._settings:
+                spectrum.settings(settings)          # by name; re-packed by the core only when they change
+                self._settings = settings
+            logical = snapshot.logical
+            self._writer.publish(spectrum_native_schema.encode(logical),
+                                 payload_schema=spectrum_native_schema.SCHEMA_ID,
+                                 logical_timestamp=float(logical.logical_timestamp or 0.0),
+                                 flags=publication_flags(logical), mode_code=self._code,
+                                 runtime_generation=int(identity.runtime_generation),
+                                 engine_generation=int(identity.engine_generation),
+                                 activation_id=int(identity.activation_id))
+        except Exception as exc:
+            raise _FrameFailure(exc) from exc
+        if placed != self._placed:
+            # Shown (fading in) once a frame of its own is published for it, never before.
+            spectrum.composite.place(geometry, origin, visible=True, fade_ms=FAILURE_FADE_MS)
+            self._placed = placed
         self._snapshot = snapshot
         self.published += 1
         spectrum.update()
@@ -301,8 +335,16 @@ class NativeVisualizerRoute:
 
     def _hide(self) -> None:
         if self._spectrum is not None and self._placed is not None:
-            self._spectrum.composite.set(visible=False)
             self._placed = None
+            self._spectrum.composite.set(visible=False, fade_ms=FAILURE_FADE_MS)   # fade, never vanish (N29 M1)
+
+
+class _FrameFailure(Exception):
+    """A failure of one frame's own inputs (its card, settings or publish): tried again at the next new snapshot."""
+
+    def __init__(self, cause: BaseException) -> None:
+        super().__init__(str(cause))
+        self.cause = cause
 
 
 def _close_mapping(memory: Any) -> None:

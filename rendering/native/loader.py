@@ -45,7 +45,7 @@ from rendering.native.spectrum import NativeSpectrum, spectrum_block
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 9
+EXPECTED_ABI = 10
 HOST_KINDS = ("window", "hidden")
 
 
@@ -156,10 +156,16 @@ class NativeCore:
             raise SchemaTableMismatch(f"{MODULE_NAME}'s frame schemas are not this build's: {'; '.join(differences)}")
         return NativeMode(self.module, self.composite(parent))
 
-    def mode_blocks(self, schema: Any, passes: Any, settings: Mapping[str, Any],
-                    record: bytes) -> tuple[list[tuple[bytes, bytes]], dict]:
-        """Each pass's (ModeSettings, ModeFrame) bytes a generic mode uploads for ``record`` (GPU-free)."""
-        return mode_blocks(self.module, schema, passes, settings, record)
+    def mode_blocks(self, schema: Any, passes: Any, settings: Mapping[str, Any], record: bytes,
+                    card: Mapping[str, Any] | None, target: tuple[int, int]) -> tuple[list[bytes], dict]:
+        """Each pass's block bytes a generic mode uploads for ``record`` under ``card`` into ``target`` pixels
+        (GPU-free)."""
+        return mode_blocks(self.module, schema, passes, settings, record, card, target)
+
+    def mode_core_members(self) -> dict:
+        """The core's conventions as compiled: name -> (components, read from the card)."""
+        rows = json.loads(self.module.mode_core_members())["members"]
+        return {str(name): (int(components), bool(from_card)) for name, components, from_card in rows}
 
     def mode_program_layout(self, passes: Any) -> dict:
         """The program's passes, blends and reflected ModeSettings and ModeFrame blocks (GPU-free)."""

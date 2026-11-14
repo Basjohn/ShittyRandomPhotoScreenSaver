@@ -357,8 +357,10 @@ bool SpectrumProgram::setSettings(const QJsonObject &values, QString *error)
 // ------------------------------------------------------------------------------------------------- the block
 
 bool spectrumBlock(const QByteArray &bytes, const SpectrumPresentation &p, const SpectrumProgram &program,
-                   QByteArray *block, QJsonObject *facts, QString *reason)
+                   QByteArray *block, QJsonObject *facts, QString *reason, bool *refusedFrame)
 {
+    if (refusedFrame)
+        *refusedFrame = false;
     const fa::Schema *schema = spectrumSchema();
     if (!program.layout.valid() || !schema) {
         *reason = QStringLiteral("no Spectrum program (its fragment pack) or no schema");
@@ -485,6 +487,8 @@ bool spectrumBlock(const QByteArray &bytes, const SpectrumPresentation &p, const
         || !setFrame(packed, "u_time", clock, &refused)
         || !setFrame(packed, "u_playing", playing, &refused)) {
         *reason = QStringLiteral("the pack's block refuses a frame member: %1").arg(refused);
+        if (refusedFrame)
+            *refusedFrame = true;              // a value with no defined conversion: the frame is refused (N29 M4)
         return false;
     }
     *block = packed.bytes();
@@ -505,7 +509,7 @@ bool spectrumBlock(const QByteArray &bytes, const SpectrumPresentation &p, const
     return true;
 }
 
-// ------------------------------------------------------------------------------------------------- the source
+/// ------------------------------------------------------------------------------------------------- the source
 
 SpectrumSource::SpectrumSource()
 {
@@ -514,61 +518,15 @@ SpectrumSource::SpectrumSource()
 
 SpectrumSource::~SpectrumSource()
 {
-    // The last owner: the node on the render thread, or the item when no node ever read (no read can be in progress).
+    // The last owner (the node on the render thread, the item when no node ever read, or a harness wait's holder):
+    // the retire job first, then the base releases what is left.
     releaseRetired();
-    for (PacketReader *reader : m_retiring) { // the last owner: nothing can wait on the source any more
-        reader->release();
-        delete reader;
-    }
-    m_retiring.clear();
-    if (m_current) {
-        m_current->retire();
-        m_current->release();
-        delete m_current;
-        m_current = nullptr;
-    }
     g_liveSources.fetchAndAddRelaxed(-1);
 }
 
 int SpectrumSource::liveSources()
 {
     return g_liveSources.loadRelaxed();
-}
-
-bool SpectrumSource::bind(const QString &mappingName, const PacketReaderConfig &config, QString *error)
-{
-    PacketReader *reader = PacketReader::open(mappingName, config, error);
-    if (!reader)
-        return false;
-    QMutexLocker lock(&m_mutex);
-    if (m_current) {
-        m_current->retire(); // D1: Retiring at once; the render thread releases it at its next sync
-        m_retiring.append(m_current);
-        ++m_retired;
-    }
-    m_current = reader;
-    m_mapping = mappingName;
-    ++m_binds;
-    return true;
-}
-
-void SpectrumSource::unbind()
-{
-    QMutexLocker lock(&m_mutex);
-    if (!m_current)
-        return;
-    m_current->retire();
-    m_retiring.append(m_current);
-    m_current = nullptr;
-    m_mapping.clear();
-    ++m_retired;
-}
-
-void SpectrumSource::retireCurrent()
-{
-    QMutexLocker lock(&m_mutex);
-    if (m_current)
-        m_current->retire();
 }
 
 void SpectrumSource::setPresentation(const SpectrumPresentation &presentation)
@@ -605,76 +563,13 @@ bool SpectrumSource::setSettings(const QJsonObject &settings, QString *error)
     return true;
 }
 
-void SpectrumSource::dropRetainedFrame()
-{
-    QMutexLocker lock(&m_mutex);
-    if (m_current)
-        m_current->dropRetainedFrame();
-}
-
-bool SpectrumSource::readHead(SlotHead *out)
-{
-    QMutexLocker lock(&m_mutex); // the current reader is never released while it is current
-    return m_current && m_current->readHead(out);
-}
-
-bool SpectrumSource::waitPaused(int timeoutMs)
-{
-    // The harness's pause_in_copy hook. The reader is waited on without the lock; while any wait is in progress the
-    // retire job keeps every retired reader alive (audit 14 Nov, L9: an unbind then a sync deleted it under the wait).
-    PacketReader *reader = nullptr;
-    {
-        QMutexLocker lock(&m_mutex);
-        reader = m_current;
-        if (!reader)
-            return false;
-        ++m_waiters;
-    }
-    const bool paused = reader->waitPaused(timeoutMs);
-    QMutexLocker lock(&m_mutex);
-    --m_waiters;
-    return paused;
-}
-
-void SpectrumSource::resume()
-{
-    QMutexLocker lock(&m_mutex);
-    if (m_current)
-        m_current->resume();
-    for (PacketReader *reader : m_retiring)
-        reader->resume();
-}
-
-void SpectrumSource::releaseRetired()
-{
-    QList<PacketReader *> retiring;
-    {
-        QMutexLocker lock(&m_mutex);
-        if (m_waiters > 0)
-            return; // a harness wait holds a reader: released at the first sync after it returns
-        retiring.swap(m_retiring);
-    }
-    for (PacketReader *reader : retiring) {
-        reader->release(); // the consumer's thread: its retained frame and its pin go; the last pin unmaps
-        const QJsonObject state = reader->stateJson();
-        delete reader;
-        QMutexLocker lock(&m_mutex);
-        ++m_released;
-        m_lastReader = state;
-    }
-}
-
 bool SpectrumSource::sync()
 {
-    m_syncProbe.hit(); // D5.4: the read's thread, and whether it held a Python thread state
-    releaseRetired(); // the render-thread retire job
-    PacketReader *current = nullptr;
     bool presentationTaken = false;
     SpectrumPresentation presentation;
     SpectrumProgram program;
     {
         QMutexLocker lock(&m_mutex);
-        current = m_current;
         if (m_presentationGeneration != m_takenGeneration) {
             m_takenGeneration = m_presentationGeneration;
             presentation = m_presentation;
@@ -682,105 +577,35 @@ bool SpectrumSource::sync()
             presentationTaken = true;
         }
     }
-    bool accepted = false;
-    bool rejected = false;
     bool changed = false;
     if (presentationTaken && presentation != m_drawn) {
         m_drawn = presentation;
+        ++m_drawnInputs;
         changed = true;
     }
     if (presentationTaken && (program.shaderGeneration != m_drawnProgram.shaderGeneration
                               || program.settings != m_drawnProgram.settings)) {
+        if (program.settings != m_drawnProgram.settings)
+            ++m_drawnInputs;
         m_drawnProgram = program; // a new pack or new settings: recorded once, nothing per frame at rest
         changed = true;
     }
-    QString result = QStringLiteral("unbound");
-    if (current) {
-        const ReadResult read = current->read(); // the accept edge (D2), on the render thread
-        result = QString::fromLatin1(readResultName(read));
-        SlotHead head;
-        const QByteArray *retained = nullptr;
-        const bool holds = current->retained(&head, &retained);
-        // render_contract.snapshot_is_render_admissible for Spectrum, a mode whose first visible reactive output must
-        // come from its tracked source (mode_capabilities.requires_authoritative_first_source): a frame that is not a
-        // present frame, or a playing one whose reactive source is not its own activation's, is not drawn and the last
-        // admitted frame stays (the Python node's rule). The bits are the slot head's (packet_abi FLAG_*).
-        const bool admissible = holds && (head.flags & fa::kFlagPresentFrame)
-            && (!(head.flags & fa::kFlagPlaying) || (head.flags & fa::kFlagSourceCurrent));
-        if (read == ReadResult::Accepted && holds && !admissible) {
-            rejected = true;
-        } else if (read == ReadResult::Accepted && holds) {
-            if (m_record.size() != retained->size())
-                m_record.resize(retained->size());
-            std::memcpy(m_record.data(), retained->constData(), size_t(retained->size()));
-            m_hasFrame = true;
-            accepted = true;
-            changed = true;
-        } else if (m_hasFrame && !holds) {
-            m_hasFrame = false; // dropped (R-184's edge), or another stream bound: nothing of the old one is drawn
-            changed = true;
-        }
-    } else if (m_hasFrame) {
-        m_hasFrame = false;
+    // The stream: the retire job, the read at its accept edge, the admission (StreamSource).
+    if (syncStream())
         changed = true;
-    }
-    QMutexLocker lock(&m_reportMutex);
-    ++m_syncs;
-    if (accepted)
-        ++m_accepted;
-    if (rejected)
-        ++m_admissionRejected;
-    m_lastResult = result;
-    m_reportedFrame = m_hasFrame;
     return changed;
 }
 
-void SpectrumSource::noteRecorded(bool drawn, const QString &reason, const QJsonObject &facts)
+void SpectrumSource::stateInto(QJsonObject &o) const
 {
-    QMutexLocker lock(&m_reportMutex);
-    ++m_records;
-    if (drawn)
-        ++m_draws;
-    m_lastReason = reason;
-    m_lastFacts = facts;
-}
-
-QJsonObject SpectrumSource::stateJson() const
-{
-    QJsonObject o;
-    {
-        QMutexLocker lock(&m_mutex);
-        o.insert(QStringLiteral("mapping"), m_mapping);
-        o.insert(QStringLiteral("binds"), double(m_binds));
-        o.insert(QStringLiteral("retired"), double(m_retired));
-        o.insert(QStringLiteral("released"), double(m_released));
-        o.insert(QStringLiteral("retiring"), int(m_retiring.size()));
-        o.insert(QStringLiteral("presentation"), m_presentation.toJson());
-        QJsonObject program;
-        program.insert(QStringLiteral("loaded"), m_program.layout.valid());
-        program.insert(QStringLiteral("compiled_in"), m_program.compiledIn);
-        program.insert(QStringLiteral("shader_generation"), double(m_program.shaderGeneration));
-        program.insert(QStringLiteral("settings"), m_program.settings);
-        program.insert(QStringLiteral("block"), m_program.layout.toJson());
-        o.insert(QStringLiteral("program"), program);
-        o.insert(QStringLiteral("reader"), m_current ? QJsonValue(m_current->stateJson()) : QJsonValue());
-        o.insert(QStringLiteral("last_released_reader"), m_lastReader.isEmpty() ? QJsonValue() : QJsonValue(m_lastReader));
-    }
-    QMutexLocker lock(&m_reportMutex);
-    o.insert(QStringLiteral("syncs"), double(m_syncs));
-    o.insert(QStringLiteral("accepted"), double(m_accepted));
-    o.insert(QStringLiteral("admission_rejected"), double(m_admissionRejected));
-    o.insert(QStringLiteral("syncs_probed"), double(m_syncProbe.calls.loadRelaxed()));
-    o.insert(QStringLiteral("syncs_on_gui_thread"), double(m_syncProbe.callsOnGuiThread.loadRelaxed()));
-    o.insert(QStringLiteral("syncs_with_python_thread_state"),
-             double(m_syncProbe.callsWithPythonThreadState.loadRelaxed()));
-    o.insert(QStringLiteral("has_frame"), m_reportedFrame);
-    o.insert(QStringLiteral("last_read"), m_lastResult);
-    o.insert(QStringLiteral("records"), double(m_records));
-    o.insert(QStringLiteral("draws"), double(m_draws));
-    o.insert(QStringLiteral("last_reason"), m_lastReason);
-    o.insert(QStringLiteral("last_facts"), m_lastFacts);
-    return o;
+    o.insert(QStringLiteral("presentation"), m_presentation.toJson());
+    QJsonObject program;
+    program.insert(QStringLiteral("loaded"), m_program.layout.valid());
+    program.insert(QStringLiteral("compiled_in"), m_program.compiledIn);
+    program.insert(QStringLiteral("shader_generation"), double(m_program.shaderGeneration));
+    program.insert(QStringLiteral("settings"), m_program.settings);
+    program.insert(QStringLiteral("block"), m_program.layout.toJson());
+    o.insert(QStringLiteral("program"), program);
 }
 
 // ------------------------------------------------------------------------------------------------- the content
@@ -815,6 +640,7 @@ int SpectrumContent::liveResources() const
 
 void SpectrumContent::release()
 {
+    m_drawnTexture = nullptr;
     if (!m_res)
         return;
     g_liveContentObjects.fetchAndAddRelaxed(-m_res->objects);
@@ -828,6 +654,35 @@ void SpectrumContent::release()
     m_res.reset();
 }
 
+void SpectrumContent::pack()
+{
+    const SpectrumSource &source = *m_source;
+    m_block.clear();
+    m_facts = QJsonObject();
+    m_reason = QStringLiteral("no frame");
+    m_refused = false;
+    m_draw = source.hasFrame()
+        && spectrumBlock(source.frameRecord(), source.drawnPresentation(), source.drawnProgram(), &m_block, &m_facts,
+                         &m_reason, &m_refused);
+}
+
+bool SpectrumContent::keepsTarget(QRhi *rhi, ColorTarget &target)
+{
+    // A latched failure (audit 14 Nov M2, N29 L10): nothing is built or recorded again for the same inputs, and no
+    // error is raised per frame; the state says why.
+    if (!m_res && !m_latch.mayBuild(rhi, target.renderPass.get(), m_source->drawnProgram().shaderGeneration,
+                                    m_source->drawnInputs()))
+        return true;
+    pack();
+    // A refused frame keeps the last frame drawn into this target (audit N29 M4): never a cleared card.
+    if (m_refused && target.texture && m_drawnTexture == target.texture.get()
+        && m_drawnSize == target.texture->pixelSize()) {
+        m_source->noteRefused(m_reason);
+        return true;
+    }
+    return false;
+}
+
 bool SpectrumContent::ensure(QRhi *rhi, ColorTarget &target, QString *error)
 {
     const SpectrumProgram &program = m_source->drawnProgram();
@@ -836,26 +691,19 @@ bool SpectrumContent::ensure(QRhi *rhi, ColorTarget &target, QString *error)
         release();                            // a new pack: its pipeline and block buffer are rebuilt
     if (m_res)
         return true;
-    if (m_failed && m_failedRhi == rhi && m_failedPass == target.renderPass.get()
-        && m_failedGeneration == program.shaderGeneration) {
-        *error = m_failedError;               // failed closed: nothing is created again for the same inputs (M2)
+    if (!m_latch.mayBuild(rhi, target.renderPass.get(), program.shaderGeneration, m_source->drawnInputs())) {
+        *error = m_latch.error();             // failed closed: nothing is created again for the same inputs (M2)
         return false;
     }
     if (build(rhi, target, error)) {
-        m_failed = false;
+        m_latch.succeeded();
         return true;
     }
-    // The failure edge: recorded once, reported through the source's state.
-    m_failed = true;
-    m_failedRhi = rhi;
-    m_failedPass = target.renderPass.get();
-    m_failedGeneration = program.shaderGeneration;
-    m_failedError = *error;
-    ++m_failures;
-    QJsonObject facts;
-    facts.insert(QStringLiteral("content_failed"), true);
-    facts.insert(QStringLiteral("content_failures"), double(m_failures));
-    m_source->noteRecorded(false, QStringLiteral("the content failed: %1").arg(*error), facts);
+    release();
+    // The failure edge: recorded once, reported through the source's state; re-armed by a changed input (L10).
+    const qint64 failures = m_latch.failed(rhi, target.renderPass.get(), program.shaderGeneration,
+                                           m_source->drawnInputs(), *error);
+    m_source->noteFailure(*error, failures);
     return false;
 }
 
@@ -946,13 +794,7 @@ bool SpectrumContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &targ
     }
     if (!ensure(rhi, target, error))
         return false;
-    const SpectrumSource &source = *m_source;
-    QByteArray block;
-    QJsonObject facts;
-    QString reason = QStringLiteral("no frame");
-    const bool draw = source.hasFrame()
-        && spectrumBlock(source.frameRecord(), source.drawnPresentation(), source.drawnProgram(), &block, &facts,
-                         &reason);
+    const bool draw = m_draw; // packed by keepsTarget for this record
     Resources &r = *m_res;
     QRhiResourceUpdateBatch *updates = rhi->nextResourceUpdateBatch();
     if (!r.staticUploaded) {
@@ -962,7 +804,7 @@ bool SpectrumContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &targ
         r.staticUploaded = true;
     }
     if (draw)
-        updates->updateDynamicBuffer(r.uniforms.get(), 0, quint32(block.size()), block.constData());
+        updates->updateDynamicBuffer(r.uniforms.get(), 0, quint32(m_block.size()), m_block.constData());
     const QSize size = target.texture->pixelSize();
     const QRhiViewport viewport(0, 0, float(size.width()), float(size.height()));
     const QRhiCommandBuffer::VertexInput input(r.vertices.get(), 0);
@@ -980,7 +822,15 @@ bool SpectrumContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &targ
         cb->draw(3);
     }
     cb->endPass();
-    m_source->noteRecorded(draw, reason, facts);
+    if (draw) {
+        m_drawnTexture = target.texture.get();
+        m_drawnSize = size;
+    } else {
+        m_drawnTexture = nullptr;             // cleared: a refused frame now has nothing of ours to keep
+    }
+    if (m_refused)
+        m_source->noteRefused(m_reason);
+    m_source->noteRecorded(draw, m_reason, m_facts);
     return true;
 }
 

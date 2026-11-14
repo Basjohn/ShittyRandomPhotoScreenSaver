@@ -9,14 +9,17 @@ Settings body, no preset): only ``native/core/python/generic_mode_check.py`` and
 - The schema (:data:`SCHEMA`): the record's fixed layout (``native_schema.NativeLayout``), its range rule on
   ``ring_count``. Its mode code (:data:`MODE_CODE`) lies outside the product's table, so nothing of it can reach a
   product stream.
-- The shaders (``rings.frag``, ``glow.frag``): each pass declares ``ModeSettings`` (from :func:`resolve_settings`) and
-  ``ModeFrame`` (members named as the record's fields); the rings pass blends ``alpha``, the glow pass ``add``.
+- The shaders (``rings.frag``, ``glow.frag``), in the product 2D shaders' shape: one block of its own per pass
+  (``ProbeRingsDraw``), filled by name from the core's conventions (``u_target_px``, ``u_fade``), the settings
+  (:func:`resolve_settings`) and the record's fields; the glow pass reads ``v_uv``. The rings pass blends ``alpha``,
+  the glow pass ``add``.
 - The spec (:data:`SPEC`): ordinary spec controls (``core.settings.visualizer_mode_settings``) with their defaults
   (:data:`DEFAULTS`), resolved to the shaders' settings by name (:data:`SETTING_UNIFORMS`).
+- The card (:func:`harness_card`): the item as shown, which the core's members read.
 
 Variants for the proof that a change needs no module build: :func:`shader_variant` (a shader change; with
-``tint=True`` it adds a ModeSettings member), :data:`TINT_SPEC` and :data:`TINT_DEFAULTS` (the spec change that fills
-it), and ``RingsSimulation(speed=...)`` (a simulation change).
+``tint=True`` it adds a member the settings fill), :data:`TINT_SPEC` and :data:`TINT_DEFAULTS` (the spec change that
+fills it), and ``RingsSimulation(speed=...)`` (a simulation change).
 """
 from __future__ import annotations
 
@@ -158,13 +161,13 @@ SETTING_UNIFORMS = {f"{MODE_ID}_color": "u_ring_color", f"{MODE_ID}_thickness": 
                     f"{MODE_ID}_glow": "u_glow", f"{MODE_ID}_tint": "u_tint"}
 
 
-def resolve_settings(stored: Mapping[str, Any], *, target_px: tuple[int, int], dpr: float, fade: float = 1.0,
-                     spec=None, defaults: Mapping[str, Any] | None = None) -> dict:
-    """Every ModeSettings member by name: each spec control's admitted value (colours 0-1, thickness in device
-    pixels), and the card's (``u_target_px``, ``u_fade``)."""
+def resolve_settings(stored: Mapping[str, Any], *, dpr: float, spec=None,
+                     defaults: Mapping[str, Any] | None = None) -> dict:
+    """Every setting by name: each spec control's admitted value (colours 0-1, thickness in device pixels). The card's
+    values (the target's pixels, the fade) are the core's members, never settings."""
     spec = SPEC if spec is None else spec
     defaults = DEFAULTS if defaults is None else defaults
-    values: dict[str, Any] = {"u_target_px": [float(target_px[0]), float(target_px[1])], "u_fade": float(fade)}
+    values: dict[str, Any] = {}
     for control in spec.controls:
         admitted = control.admit(stored.get(control.key, defaults[control.key]), defaults[control.key])
         member = SETTING_UNIFORMS[control.key]
@@ -177,10 +180,21 @@ def resolve_settings(stored: Mapping[str, Any], *, target_px: tuple[int, int], d
     return values
 
 
+def harness_card(size: tuple[float, float], dpr: float, *, fade: float = 1.0) -> dict:
+    """The card of the harness's item: its logical ``size`` at ``dpr``, upright, the item's own rect as its target (the
+    harness's shaders read only the fade and the target's pixels; the maps are the identity rows)."""
+    width, height = (float(v) for v in size)
+    return {"quarters": 0, "item_size": [width, height], "oriented_size": [width, height], "dpr": float(dpr),
+            "content_fade": float(fade), "border_width": 0.0,
+            "window_from_target": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            "item_from_window": [1.0 / float(dpr), 0.0, 0.0, 0.0, 1.0 / float(dpr), 0.0]}
+
+
 # ---------------------------------------------------------------------------------------------------- the shaders
 
 TINT_MEMBER = "    vec4 u_tint;         // the proof's spec change: a member the base spec does not fill\n"
 TINT_LINE = "    rgb *= u_tint.rgb;\n"
+_TINT_ANCHOR = "    float u_thickness_px;// setting\n"
 
 
 def shader_text(filename: str) -> str:
@@ -188,13 +202,12 @@ def shader_text(filename: str) -> str:
 
 
 def shader_variant(*, tint: bool = False, green: bool = False) -> str:
-    """``rings.frag`` changed: ``tint`` adds the ModeSettings member ``u_tint`` (multiplied into the colour); ``green``
+    """``rings.frag`` changed: ``tint`` adds the member ``u_tint`` (a setting, multiplied into the colour); ``green``
     draws the rings green (a change with no new member)."""
     text = shader_text("rings.frag")
     if tint:
-        anchor = "    float u_fade;\n"
-        assert text.count(anchor) == 1 and text.count("    //@colour\n") == 1
-        text = text.replace(anchor, anchor + TINT_MEMBER).replace("    //@colour\n", TINT_LINE)
+        assert text.count(_TINT_ANCHOR) == 1 and text.count("    //@colour\n") == 1
+        text = text.replace(_TINT_ANCHOR, _TINT_ANCHOR + TINT_MEMBER).replace("    //@colour\n", TINT_LINE)
     if green:
         assert text.count("    //@colour\n") <= 1
         text = text.replace("    //@colour\n", "    rgb = vec3(0.0, 1.0, 0.0);\n")
@@ -217,7 +230,7 @@ def bake(text: str, name: str, folder: Path) -> bytes:
 
 def passes(folder: Path, *, rings_text: str | None = None, only: tuple[str, ...] | None = None):
     """The program's passes (``rendering.native.mode.ModePass``), baked into ``folder``; ``rings_text`` replaces
-    ``rings.frag``; ``only`` keeps the named passes (the per-pass GPU time)."""
+    ``rings.frag``; ``only`` keeps the named passes."""
     from rendering.native.mode import ModePass
 
     built = []
@@ -230,5 +243,5 @@ def passes(folder: Path, *, rings_text: str | None = None, only: tuple[str, ...]
 
 
 __all__ = ["DEFAULTS", "MAX_RADIUS", "MAX_RINGS", "MODE_CODE", "MODE_ID", "PASSES", "RingsSimulation", "SCHEMA",
-           "SETTING_UNIFORMS", "SPEC", "TINT_DEFAULTS", "TINT_SPEC", "bake", "harness_level", "passes", "record",
-           "resolve_settings", "shader_text", "shader_variant"]
+           "SETTING_UNIFORMS", "SPEC", "TINT_DEFAULTS", "TINT_SPEC", "bake", "harness_card", "harness_level", "passes",
+           "record", "resolve_settings", "shader_text", "shader_variant"]

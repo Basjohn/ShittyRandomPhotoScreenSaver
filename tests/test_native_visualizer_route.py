@@ -143,15 +143,21 @@ class _Composite:
         self.log.append(("destroy", None))
         return True
 
+    def window_pixels(self):
+        return (2560, 1440)                    # Qt's own framebuffer of the 1707x960 window at 150 % (L1)
+
 
 class _Spectrum:
     """A stand-in NativeSpectrum: records what the route hands the native item."""
 
-    def __init__(self, log: list, *, fail_bind: int = 0, fail_program: int = 0) -> None:
+    def __init__(self, log: list, *, fail_bind: int = 0, fail_program: int = 0, fail_settings: int = 0,
+                 fail_unbind: int = 0) -> None:
         self.log = log
         self.composite = _Composite(log)
         self.fail_bind = fail_bind
         self.fail_program = fail_program
+        self.fail_settings = fail_settings
+        self.fail_unbind = fail_unbind
 
     def program(self, pack):
         self.log.append(("program", bool(pack)))
@@ -165,8 +171,20 @@ class _Spectrum:
             self.fail_bind -= 1
             raise ValueError("the reader refused the mapping")
 
+    def settings(self, values):
+        self.log.append(("settings", (values,)))
+        if self.fail_settings:
+            self.fail_settings -= 1
+            raise ValueError("a settings value the core refuses")
+
+    def unbind(self):
+        self.log.append(("unbind", ()))
+        if self.fail_unbind:
+            self.fail_unbind -= 1
+            raise BufferError("cannot close exported pointers exist")
+
     def __getattr__(self, name):
-        if name in ("unbind", "present_raw", "settings", "update", "drop_retained_frame"):
+        if name in ("present_raw", "update", "drop_retained_frame"):
             return lambda *args: self.log.append((name, args))
         raise AttributeError(name)
 
@@ -210,13 +228,11 @@ def route_world(monkeypatch):
     record and the settings arithmetic stubbed (both have their own parity tests)."""
     from core.visualizer_engine import spectrum_native_schema
     from rendering.native import program_values
-    from rendering.native import spectrum as face
     from rendering.quick.visualizer.implementations import spectrum as implementation
     from rendering.quick.visualizer.native_route import NativeVisualizerRoute
 
     window = SimpleNamespace(width=lambda: 1707, height=lambda: 960)
     host = SimpleNamespace(window=lambda: window)
-    monkeypatch.setattr(face, "_native_client_pixels", lambda _window: (2560, 1440), raising=False)
     monkeypatch.setattr(spectrum_native_schema, "encode", lambda logical: b"record %d" % logical.value)
     monkeypatch.setattr(program_values, "mode_fragment_pack", lambda _mode: b"pack")
     monkeypatch.setattr(implementation, "spectrum_settings_values",
@@ -274,8 +290,11 @@ def test_the_route_publishes_new_snapshots_and_sends_an_unchanged_card_once(rout
     bridge.snapshots = [_snapshot(presentation, 1)]
     assert _sync(route, bridge, identity, presentation) is True and not route.failed
     # H1 through the route: placed on the window's own ratio (2560 / 1707 across), the card's map whole pixels.
+    from rendering.quick.visualizer.native_route import FAILURE_FADE_MS
+
     place = next(entry for entry in core.log if entry[0] == "place")
-    assert place[1]["pixel_ratio"] == [2560 / 1707, 1440 / 960] and place[2] == {"visible": True}
+    assert place[1]["pixel_ratio"] == [2560 / 1707, 1440 / 960]
+    assert place[2] == {"visible": True, "fade_ms": FAILURE_FADE_MS}        # shown by a fade, never at once
     card = next(entry[1][0] for entry in core.log if entry[0] == "present_raw")
     assert all(value == round(value) for value in card["window_from_target"])
     # No new snapshot: nothing published, nothing sent.
@@ -357,6 +376,64 @@ def test_a_window_that_is_gone_fails_closed(route_world, monkeypatch):
     bridge.snapshots = [_snapshot(route_world.presentation, 1)]
     assert _sync(route, bridge, _identity("spectrum"), route_world.presentation) is False
     assert route.failed and route.published == 0
+
+
+def test_a_refused_frame_fades_the_card_out_and_the_next_new_snapshot_draws_again(route_world, monkeypatch):
+    # Audit N29 M1: a frame's own failure (here its settings, refused once) is not latched for the activation: the card
+    # fades out (never set invisible at once) and the next new snapshot, with its own settings, draws again.
+    from rendering.quick.visualizer.implementations import spectrum as implementation
+    from rendering.quick.visualizer.native_route import FAILURE_FADE_MS
+
+    route, core = route_world.make()
+    bridge = _Bridge()
+    identity = _identity("spectrum")
+    presentation = route_world.presentation
+    bridge.snapshots = [_snapshot(presentation, 1)]
+    assert _sync(route, bridge, identity, presentation) is True                 # placed and shown
+    monkeypatch.setattr(implementation, "spectrum_settings_values",
+                        lambda logical, presentation, **card: {"u_test": float(logical.value)})
+    core.made[0].fail_settings = 1
+    bridge.snapshots = [_snapshot(presentation, 2)]
+    assert _sync(route, bridge, identity, presentation) is False and route.failed and route.failures == 1
+    hide = [entry for entry in core.log if entry[0] == "set" and entry[1].get("visible") is False]
+    assert hide and all(entry[1].get("fade_ms") == FAILURE_FADE_MS for entry in hide)
+    bridge.snapshots = [_snapshot(presentation, 3)]
+    assert _sync(route, bridge, identity, presentation) is True and not route.failed
+    shown = [entry for entry in core.log if entry[0] == "place"]
+    assert len(shown) == 2 and shown[-1][2] == {"visible": True, "fade_ms": FAILURE_FADE_MS}   # faded in again
+    # Control: a setup failure (a refused bind) with the same inputs is not tried at the next snapshot.
+    latched, latched_core = route_world.make(fail_bind=1)
+    bridge.snapshots = [_snapshot(presentation, 4)]
+    assert _sync(latched, bridge, identity, presentation) is False and latched.failed
+    binds = sum(1 for entry in latched_core.log if entry[0] == "bind")
+    bridge.snapshots = [_snapshot(presentation, 5)]
+    assert _sync(latched, bridge, identity, presentation) is False
+    assert sum(1 for entry in latched_core.log if entry[0] == "bind") == binds
+
+
+def test_the_routes_teardown_branches_never_raise_and_a_missing_window_logs_at_debug(route_world, caplog):
+    # Audit N29 L2: unbind (here a mapping whose close raises) and the hide run guarded; a window that is not there yet
+    # is an ordinary startup state, logged at debug, never an error.
+    import logging
+
+    route, core = route_world.make(fail_unbind=1)
+    bridge = _Bridge()
+    bridge.snapshots = [_snapshot(route_world.presentation, 1)]
+    assert _sync(route, bridge, _identity("spectrum"), route_world.presentation) is True
+    assert route.sync(bridge=bridge, identity=None, presentation=route_world.presentation, authority=True) is False
+    waiting, _core = route_world.make()
+    waiting._content_host = SimpleNamespace(window=lambda: None)
+    with caplog.at_level(logging.DEBUG, logger="rendering.quick.visualizer.native_route"):
+        assert _sync(waiting, bridge, _identity("spectrum"), route_world.presentation) is False
+    native = [record for record in caplog.records if "native route" in record.getMessage().lower()]
+    assert native and all(record.levelno == logging.DEBUG for record in native)
+
+
+def test_the_routes_fade_is_the_visualizers_activation_fade():
+    from rendering.quick.visualizer.native_route import FAILURE_FADE_MS
+    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner
+
+    assert FAILURE_FADE_MS == round(owner._ACTIVATION_SCENE_FADE_DURATION_S * 1000.0)
 
 
 @pytest.mark.qt
