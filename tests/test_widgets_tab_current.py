@@ -22,7 +22,7 @@ from PySide6.QtWidgets import QToolButton
 
 from core.settings.widget_family_catalog import get_widget_family_descriptors
 from ui.tabs.widgets_tab import WidgetsTab
-from ui.tabs.shared_styles import SPINBOX_STYLE
+from ui.tabs import shared_styles
 from core.settings import SettingsManager
 from core.settings.defaults import get_default_settings
 from core.settings.default_contract import require_canonical_default
@@ -1410,8 +1410,10 @@ def test_spinbox_stylesheet_attached(qt_app, settings_manager):
     try:
         css = tab.styleSheet()
         assert css, "WidgetsTab stylesheet should not be empty"
-        # The shared skin itself, derived from its one source (never a selector's wording, which 1D.10 changed).
-        assert SPINBOX_STYLE.strip() in css
+        # The shared skin itself, derived from its one source (never a selector's wording, which 1D.10 changed). Read
+        # from the module now, not bound at import: a theme install (any earlier SettingsDialog in this process)
+        # rebuilds it, and the import-time value then failed whenever such a test ran first.
+        assert shared_styles.SPINBOX_STYLE.strip() in css
         assert "QSpinBox::up-button" in css
     finally:
         tab.deleteLater()
