@@ -183,6 +183,19 @@ def test_the_face_refuses_what_it_can_tell():
         ModePass("p", b"", depth_test="sometimes")
     with pytest.raises(ValueError):
         PassOutput(True, "screen")
+    with pytest.raises(ValueError):
+        TargetAttachment("lin", "r32f", resolve="median")
+    with pytest.raises(ValueError):
+        TargetAttachment("lin", "rgba16f", resolve="nearest")               # the minimum of one float channel
+
+
+def test_a_nearest_attachment_declares_its_resolve():
+    """D14 point 10 (b): an R32F attachment resolved to the nearest sample says so; the average is the default."""
+    target = ModeTarget("lin", (TargetAttachment("colour"), TargetAttachment("lin", "r32f", (1.0, 1.0, 1.0, 1.0),
+                                                                             resolve="nearest")), depth=True, samples=4)
+    colour, lin = target.declaration()["colour"]
+    assert "resolve" not in colour
+    assert lin == {"name": "lin", "format": "r32f", "clear": [1.0, 1.0, 1.0, 1.0], "resolve": "nearest"}
 
 
 # ------------------------------------------------------------------------------------------------- the built module
@@ -274,3 +287,20 @@ def test_the_admission_refuses_with_its_reasons(core, packs, qt_app):
         PassSampler("u_scene", "scene.velocity"), PassSampler("u_depth", "scene.depth"),
         PassSampler("u_cover", "ambient.coverage"), PassSampler("u_light", "ambient.light")))), (scene, ambient),
              "has no attachment")
+
+
+@built
+@pytest.mark.qt
+def test_the_nearest_resolve_is_admitted_where_it_applies(core, packs, qt_app):
+    """D14 point 10: the lin program (a nearest R32F attachment and a sampled depth) is admitted with both read; a
+    nearest attachment in first place (the capture's averaged colour) is refused with its reason."""
+    import scene_targets
+
+    passes, targets, _values = scene_targets.lin_program(packs, samples=4, mask_band=0.08)
+    (lin,) = core.mode_program_layout(passes, targets)["targets"]
+    assert lin["depth_read"] and lin["depth_sampled"]
+    assert lin["colour"][1]["read"] and lin["colour"][1]["resolve"] == "nearest"
+    assert not lin["colour"][0]["read"] and lin["colour"][0]["resolve"] == "average"
+    first = ModeTarget("lin", (TargetAttachment("lin", "r32f", resolve="nearest"), TargetAttachment("colour")),
+                       depth=True, samples=4)
+    _refused(core, passes[:1], (first,), "past the first")

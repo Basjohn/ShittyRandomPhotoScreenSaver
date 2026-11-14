@@ -502,12 +502,18 @@ private:
     QRhiTexture *samplerTexture(const QByteArray &name) const;
     // N3.1: a pass's bindings (its block, the conventions, its samplers; a capture's block and sources), in build()'s order.
     bool passBindings(const Resources &r, int index, QList<QRhiShaderResourceBinding> *out) const;
+    // D14 point 10: a nearest resolve's bindings (its block, the conventions, the multisampled source).
+    bool nearestBindings(const Resources &r, int target, int slot, QList<QRhiShaderResourceBinding> *out) const;
+    // D14 point 10: after a run of passes on `target` ending at pass `last`, the nearest resolves a later pass reads (or
+    // the readback, after the target's last run).
+    void recordNearest(QRhiCommandBuffer *cb, int target, int last, bool readback);
     // N3.1: the program's targets at this surface's size, allocated (every step, until N3.6 spaces them); false with the
     // reason (the content's failure).
     bool syncTargets(QRhi *rhi, const ColorTarget &target, QString *error);
-    // N3.1: the passes, the captures and the surface's opening(s) of one record (the surface cleared once at least).
+    // N3.1: the passes, the captures and the surface's opening(s) of one record (the surface cleared once at least);
+    // `readback`: the harness reads the targets after this record (their nearest resolves are made after the last run).
     void recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, QRhiResourceUpdateBatch *updates,
-                      bool draw);
+                      bool draw, bool readback);
     bool build(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
     void pack(const ColorTarget &target);
     // The QRhi objects of the passes only: a rebuild (a new program, a failed build) keeps the record of the frame in the

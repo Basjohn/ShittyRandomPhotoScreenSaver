@@ -133,13 +133,14 @@ int targetFormatBytes(TargetFormat format)
 
 bool TargetDeclaration::sameLayout(const TargetDeclaration &o) const
 {
-    if (name != o.name || depth != o.depth || depthRead != o.depthRead || samples != o.samples || capture != o.capture
-        || colour.size() != o.colour.size() || surfaceSized() != o.surfaceSized())
+    if (name != o.name || depth != o.depth || depthRead != o.depthRead || depthSampled != o.depthSampled
+        || samples != o.samples || capture != o.capture || colour.size() != o.colour.size()
+        || surfaceSized() != o.surfaceSized())
         return false;
     for (qsizetype i = 0; i < colour.size(); ++i) {
         const TargetAttachment &a = colour.at(i);
         const TargetAttachment &b = o.colour.at(i);
-        if (a.name != b.name || a.format != b.format || a.read != b.read)
+        if (a.name != b.name || a.format != b.format || a.read != b.read || a.nearest != b.nearest)
             return false;
         for (int c = 0; c < 4; ++c) {
             if (a.clear[c] != b.clear[c])
@@ -173,11 +174,13 @@ QJsonObject TargetDeclaration::toJson() const
         c.insert(QStringLiteral("format"), targetFormatName(a.format));
         c.insert(QStringLiteral("clear"), QJsonArray { a.clear[0], a.clear[1], a.clear[2], a.clear[3] });
         c.insert(QStringLiteral("read"), a.read);
+        c.insert(QStringLiteral("resolve"), a.nearest ? QStringLiteral("nearest") : QStringLiteral("average"));
         list.append(c);
     }
     o.insert(QStringLiteral("colour"), list);
     o.insert(QStringLiteral("depth"), depth);
     o.insert(QStringLiteral("depth_read"), depthRead);
+    o.insert(QStringLiteral("depth_sampled"), depthSampled);
     o.insert(QStringLiteral("samples"), samples);
     o.insert(QStringLiteral("capture"), capture);
     return o;
@@ -187,7 +190,8 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
 {
     const QString shape = QStringLiteral("a target is {\"name\": an identifier, \"size\": \"surface\" or [w, h], "
                                          "\"colour\": [{\"name\", \"format\": rgba8, rgba16f, r16f or r32f, "
-                                         "\"clear\"?: [r, g, b, a]}, 1 to %1], \"depth\"?: true or false, "
+                                         "\"clear\"?: [r, g, b, a], \"resolve\"?: average or nearest}, 1 to %1], "
+                                         "\"depth\"?: true or false, "
                                          "\"samples\"?: 1 to %2}").arg(kMaxTargetColour).arg(kMaxSceneSamples);
     if (!value.isObject()) {
         *error = shape;
@@ -235,10 +239,28 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
         TargetAttachment a;
         a.name = c.value(QStringLiteral("name")).toString().toLatin1();
         const bool withClear = c.contains(QStringLiteral("clear"));
-        if (!entry.isObject() || c.size() != (withClear ? 3 : 2) || !identifier(a.name)
+        const bool withResolve = c.contains(QStringLiteral("resolve"));
+        if (!entry.isObject() || c.size() != 2 + (withClear ? 1 : 0) + (withResolve ? 1 : 0) || !identifier(a.name)
             || !parseTargetFormat(c.value(QStringLiteral("format")).toString(), &a.format)) {
             *error = QStringLiteral("target '%1': an attachment is {\"name\": an identifier, \"format\": rgba8, "
-                                    "rgba16f, r16f or r32f, \"clear\"?: [r, g, b, a]}").arg(label);
+                                    "rgba16f, r16f or r32f, \"clear\"?: [r, g, b, a], \"resolve\"?: average or "
+                                    "nearest}").arg(label);
+            return false;
+        }
+        if (withResolve) {
+            const QString resolve = c.value(QStringLiteral("resolve")).toString();
+            if (resolve != QLatin1String("average") && resolve != QLatin1String("nearest")) {
+                *error = QStringLiteral("target '%1': attachment '%2''s resolve is average or nearest")
+                             .arg(label, QString::fromLatin1(a.name));
+                return false;
+            }
+            a.nearest = resolve == QLatin1String("nearest");
+        }
+        if (a.nearest && (a.format != TargetFormat::R32F || d.colour.isEmpty())) {
+            // D14 point 10 (b): the nearest resolve takes the minimum of one float channel; attachment 0 is the colour
+            // the capture copies, averaged.
+            *error = QStringLiteral("target '%1': attachment '%2' resolves to the nearest sample only as an r32f "
+                                    "attachment past the first").arg(label, QString::fromLatin1(a.name));
             return false;
         }
         if (a.name == "depth" || a.name == "capture_colour" || a.name == "capture_depth") {
@@ -364,6 +386,26 @@ void countDepthPrime()
     g_depthPrimes.fetchAndAddRelaxed(1);
 }
 
+namespace {
+QAtomicInteger<int> g_nearestFirstSample { 0 };
+QAtomicInteger<qint64> g_nearestResolves { 0 };
+} // namespace
+
+void setNearestFirstSample(bool firstOnly)
+{
+    g_nearestFirstSample.storeRelease(firstOnly ? 1 : 0);
+}
+
+bool nearestFirstSample()
+{
+    return g_nearestFirstSample.loadAcquire() != 0;
+}
+
+void countNearestResolve()
+{
+    g_nearestResolves.fetchAndAddRelaxed(1);
+}
+
 QList<int> supportedSampleCounts(QRhi *rhi)
 {
     QList<int> counts;
@@ -390,6 +432,7 @@ SceneTargetCounts sceneTargetCounts()
     c.steps = g_steps.loadRelaxed();
     c.readbacksPending = g_readbacksPending.loadRelaxed();
     c.depthPrimes = g_depthPrimes.loadRelaxed();
+    c.nearestResolves = g_nearestResolves.loadRelaxed();
     return c;
 }
 
@@ -404,7 +447,30 @@ QRhiTexture *SceneTargets::Target::readable(int colourIndex) const
 
 QRhiTexture *SceneTargets::Target::readableDepth() const
 {
-    return samples > 1 ? depthResolve.get() : depth.get();
+    return samples > 1 ? depthNearest.get() : depth.get();
+}
+
+bool SceneTargets::Target::nearestActive(int slot) const
+{
+    if (samples <= 1)
+        return false;
+    if (slot == kNearestDepthSlot)
+        return decl.depth && decl.depthRead;
+    return slot >= 0 && slot < int(decl.colour.size()) && decl.colour.at(slot).nearest && decl.colour.at(slot).read;
+}
+
+QRhiTexture *SceneTargets::Target::nearestSource(int slot) const
+{
+    if (!nearestActive(slot))
+        return nullptr;
+    return slot == kNearestDepthSlot ? depth.get() : colour[slot].get();
+}
+
+QRhiTexture *SceneTargets::Target::nearestDest(int slot) const
+{
+    if (!nearestActive(slot))
+        return nullptr;
+    return slot == kNearestDepthSlot ? depthNearest.get() : resolve[slot].get();
 }
 
 SceneTargets::SceneTargets() = default;
@@ -425,15 +491,20 @@ int SceneTargets::indexOf(const QByteArray &name) const
 
 void SceneTargets::releaseTarget(Target &t)
 {
-    // Reverse order of creation: the capture's target, its descriptor and textures; the target, its descriptor; the
-    // depth and its resolve; the colour attachments and their resolves.
+    // Reverse order of creation: the capture's target, its descriptor and textures; the nearest resolves' targets and
+    // descriptors; the target, its descriptor; the depth and its nearest resolve; the colour attachments and their
+    // resolves.
     t.captureTarget.reset();
     t.captureRenderPass.reset();
     t.captureDepth.reset();
     t.captureColour.reset();
+    for (int s = kNearestSlots - 1; s >= 0; --s) {
+        t.nearestTarget[s].reset();
+        t.nearestRenderPass[s].reset();
+    }
     t.renderTarget.reset();
     t.renderPass.reset();
-    t.depthResolve.reset();
+    t.depthNearest.reset();
     t.depth.reset();
     for (int i = kMaxTargetColour - 1; i >= 0; --i) {
         t.resolve[i].reset();
@@ -459,7 +530,6 @@ bool SceneTargets::sync(QRhi *rhi, const QList<TargetDeclaration> &declarations,
     }
     m_rhi = rhi;
     m_supported = supportedSampleCounts(rhi);
-    m_resolveDepth = rhi && rhi->isFeatureSupported(QRhi::ResolveDepthStencil);
     const int sizeMax = rhi ? rhi->resourceLimit(QRhi::TextureSizeMax) : 16384;
     if (declarations.size() > kMaxSceneTargets) {
         *error = QStringLiteral("a program declares at most %1 targets").arg(kMaxSceneTargets);
@@ -487,12 +557,6 @@ bool SceneTargets::sync(QRhi *rhi, const QList<TargetDeclaration> &declarations,
             return false;
         }
         const int samples = clampSamples(m_supported, d.samples);
-        if (samples > 1 && d.depthRead && !m_resolveDepth) {
-            // Choice E: QRhi's depth resolve or nothing (no workaround is built); the content fails with this reason.
-            *error = QStringLiteral("target '%1': a multisampled depth that is read needs QRhi::ResolveDepthStencil, which "
-                                    "this device does not report").arg(QString::fromLatin1(d.name));
-            return false;
-        }
         const bool layoutChanged = !t.decl.sameLayout(d) || samples != t.samples || !t.renderPass;
         QString reason;
         const QSize allocation = nextAllocation(layoutChanged ? QSize() : t.allocation, needed, &reason);
@@ -599,8 +663,9 @@ bool SceneTargets::step(Target &t, int index, QString *error)
     if (t.decl.depth) {
         if (k == next) {
             bool ok = make(t.depth, QRhiTexture::D32F, t.samples, QRhiTexture::RenderTarget, label + ".depth");
+            // D14 point 10: a read multisampled depth's nearest resolve (R32F window depth), written by the core's pass.
             if (ok && t.samples > 1 && t.decl.depthRead)
-                ok = make(t.depthResolve, QRhiTexture::D32F, 1, QRhiTexture::RenderTarget, label + ".depth resolve");
+                ok = make(t.depthNearest, QRhiTexture::R32F, 1, readableFlags, label + ".depth nearest");
             if (!ok)
                 *error = QStringLiteral("target '%1': its depth could not be created at %2 x %3 (%4 sample(s))")
                              .arg(QString::fromLatin1(t.decl.name)).arg(t.allocation.width())
@@ -615,17 +680,14 @@ bool SceneTargets::step(Target &t, int index, QString *error)
             QList<QRhiColorAttachment> attachments;
             for (int i = 0; i < colourCount; ++i) {
                 QRhiColorAttachment attachment(t.colour[i].get());
-                if (t.samples > 1)
-                    attachment.setResolveTexture(t.resolve[i].get());
+                if (t.samples > 1 && !t.decl.colour.at(i).nearest)
+                    attachment.setResolveTexture(t.resolve[i].get()); // QRhi's average (null: not read)
                 attachments.append(attachment);
             }
             QRhiTextureRenderTargetDescription description;
             description.setColorAttachments(attachments.cbegin(), attachments.cend());
-            if (t.depth) {
-                description.setDepthTexture(t.depth.get());
-                if (t.depthResolve)
-                    description.setDepthResolveTexture(t.depthResolve.get());
-            }
+            if (t.depth)
+                description.setDepthTexture(t.depth.get()); // never a depth resolve: the samples are stored (D14 10)
             QRhiTextureRenderTarget::Flags flags = QRhiTextureRenderTarget::PreserveColorContents;
             if (t.depth)
                 flags |= QRhiTextureRenderTarget::PreserveDepthStencilContents;
@@ -641,6 +703,29 @@ bool SceneTargets::step(Target &t, int index, QString *error)
                          .arg(QString::fromLatin1(t.decl.name)).arg(t.allocation.width()).arg(t.allocation.height());
             return false;
         }
+        // D14 point 10: each nearest resolve's render target (one R32F attachment, written whole: no load).
+        for (int s = 0; s < kNearestSlots; ++s) {
+            QRhiTexture *dest = t.nearestDest(s);
+            if (!dest) {
+                t.nearestTarget[s].reset();
+                t.nearestRenderPass[s].reset();
+                continue;
+            }
+            if (t.newLayout || !t.nearestTarget[s]) {
+                QRhiTextureRenderTargetDescription description { QRhiColorAttachment(dest) };
+                t.nearestTarget[s].reset(rhi->newTextureRenderTarget(description));
+                t.nearestTarget[s]->setName(label + QByteArrayLiteral(".nearest"));
+                t.nearestRenderPass[s].reset(t.nearestTarget[s]->newCompatibleRenderPassDescriptor());
+                t.nearestTarget[s]->setRenderPassDescriptor(t.nearestRenderPass[s].get());
+                ++m_layoutGeneration;
+            }
+            if (!t.nearestTarget[s]->create()) {
+                *error = QStringLiteral("target '%1': a nearest resolve's render target could not be created at %2 x %3")
+                             .arg(QString::fromLatin1(t.decl.name)).arg(t.allocation.width())
+                             .arg(t.allocation.height());
+                return false;
+            }
+        }
         if (!t.decl.capture) {
             // The last step: the counts follow the objects.
             qint64 bytes = 0;
@@ -649,8 +734,8 @@ bool SceneTargets::step(Target &t, int index, QString *error)
                 bytes += textureBytes(t.colour[i].get()) + textureBytes(t.resolve[i].get());
                 textures += (t.colour[i] ? 1 : 0) + (t.resolve[i] ? 1 : 0);
             }
-            bytes += textureBytes(t.depth.get()) + textureBytes(t.depthResolve.get());
-            textures += (t.depth ? 1 : 0) + (t.depthResolve ? 1 : 0);
+            bytes += textureBytes(t.depth.get()) + textureBytes(t.depthNearest.get());
+            textures += (t.depth ? 1 : 0) + (t.depthNearest ? 1 : 0);
             if (t.textures == 0 && t.bytes == 0)
                 g_targets.fetchAndAddRelaxed(1);
             g_textures.fetchAndAddRelaxed(textures - t.textures);
@@ -690,9 +775,9 @@ bool SceneTargets::step(Target &t, int index, QString *error)
         bytes += textureBytes(t.colour[i].get()) + textureBytes(t.resolve[i].get());
         textures += (t.colour[i] ? 1 : 0) + (t.resolve[i] ? 1 : 0);
     }
-    bytes += textureBytes(t.depth.get()) + textureBytes(t.depthResolve.get()) + textureBytes(t.captureColour.get())
+    bytes += textureBytes(t.depth.get()) + textureBytes(t.depthNearest.get()) + textureBytes(t.captureColour.get())
         + textureBytes(t.captureDepth.get());
-    textures += (t.depth ? 1 : 0) + (t.depthResolve ? 1 : 0) + 2;
+    textures += (t.depth ? 1 : 0) + (t.depthNearest ? 1 : 0) + 2;
     if (t.textures == 0 && t.bytes == 0)
         g_targets.fetchAndAddRelaxed(1);
     g_textures.fetchAndAddRelaxed(textures - t.textures);
@@ -741,6 +826,8 @@ int SceneTargets::liveObjects() const
             continue;
         objects += m_targets[i]->textures + (m_targets[i]->renderTarget ? 2 : 0)
             + (m_targets[i]->captureTarget ? 2 : 0);
+        for (int s = 0; s < kNearestSlots; ++s)
+            objects += m_targets[i]->nearestTarget[s] ? 2 : 0;
     }
     return objects;
 }
@@ -785,6 +872,8 @@ std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiResourceUpdateBat
             add(t, base + QLatin1Char('.') + QString::fromLatin1(t.decl.colour.at(c).name), t.readable(c),
                 targetFormatName(t.decl.colour.at(c).format));
         }
+        if (t.depthNearest)
+            add(t, base + QStringLiteral(".depth"), t.depthNearest.get(), QStringLiteral("r32f"));
         if (t.decl.capture) {
             add(t, base + QStringLiteral(".capture_colour"), t.captureColour.get(),
                 targetFormatName(t.decl.colour.at(0).format));
@@ -806,6 +895,8 @@ std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiResourceUpdateBat
             if (t.readable(c))
                 textures.append(t.readable(c));
         }
+        if (t.depthNearest)
+            textures.append(t.depthNearest.get());
         if (t.decl.capture) {
             if (t.captureColour)
                 textures.append(t.captureColour.get());
@@ -839,7 +930,9 @@ QJsonObject SceneTargets::stateJson(QRhi *rhi) const
     for (const int count : removedSampleCounts())
         removed.append(count);
     o.insert(QStringLiteral("removed_samples"), removed);
-    o.insert(QStringLiteral("resolve_depth_stencil"), m_resolveDepth);
+    // A fact only (D14 point 10: the core's nearest resolve replaces QRhi's depth resolve on every backend).
+    o.insert(QStringLiteral("resolve_depth_stencil"), rhi ? rhi->isFeatureSupported(QRhi::ResolveDepthStencil) : false);
+    o.insert(QStringLiteral("nearest_first_sample_control"), nearestFirstSample());
     o.insert(QStringLiteral("per_render_target_blending"),
              rhi ? rhi->isFeatureSupported(QRhi::PerRenderTargetBlending) : false);
     o.insert(QStringLiteral("multisample_texture"), rhi ? rhi->isFeatureSupported(QRhi::MultisampleTexture) : false);

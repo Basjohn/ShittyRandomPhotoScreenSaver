@@ -681,6 +681,7 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("scene_target_steps"), double(scenes.steps));
     o.insert(QStringLiteral("scene_target_readbacks"), scenes.readbacksPending);
     o.insert(QStringLiteral("scene_target_depth_primes"), double(scenes.depthPrimes));
+    o.insert(QStringLiteral("scene_target_nearest_resolves"), double(scenes.nearestResolves));
     return pyJson(o);
 }
 
@@ -1613,6 +1614,16 @@ PyObject *scene_depth_prime_control(PyObject *, PyObject *args)
     Py_RETURN_NONE;
 }
 
+// Harness: the nearest resolve's negative control (sample 0 instead of the minimum), read when a content builds.
+PyObject *scene_nearest_first_sample_control(PyObject *, PyObject *args)
+{
+    int firstOnly = 0;
+    if (!PyArg_ParseTuple(args, "p", &firstOnly))
+        return nullptr;
+    srpss_core::setNearestFirstSample(firstOnly != 0);
+    Py_RETURN_NONE;
+}
+
 // GPU-free: D14 point 2's allocation rule, ((w, h), reason) for a current allocation ((0, 0): none) and a needed size.
 PyObject *scene_target_next_allocation(PyObject *, PyObject *args)
 {
@@ -2520,6 +2531,9 @@ PyMethodDef methods[] = {
     { "scene_depth_prime_control", scene_depth_prime_control, METH_VARARGS,
       "(skip) -> None: N3.1, harness: the depth's rule C prime skipped (its negative control under synchronisation "
       "validation); False restores it." },
+    { "scene_nearest_first_sample_control", scene_nearest_first_sample_control, METH_VARARGS,
+      "(first_only) -> None: N3.1 (D14 point 10), harness: the nearest resolve takes sample 0 instead of the minimum "
+      "(its negative control) in contents built after the call; False restores it." },
     { "scene_target_next_allocation", scene_target_next_allocation, METH_VARARGS,
       "((current_w, current_h), (needed_w, needed_h)) -> ((w, h), reason): D14's allocation rule (GPU-free)." },
     { "scene_target_viewport", scene_target_viewport, METH_VARARGS,

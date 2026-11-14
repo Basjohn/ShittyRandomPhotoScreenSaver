@@ -762,8 +762,12 @@ Each foundation slice adds what it learned here.
   (SYNC-HAZARD-WRITE-AFTER-WRITE on Vulkan): make resolves only for what is read.
 - Multisampled depth through QRhi's depth resolve did not work in build round 1 on either backend (OpenGL: the resolved
   D32F read 0; Vulkan: values strided or garbage), and QRhi discards the multisampled depth itself once a depth resolve is
-  set, so a scene split by a capture cannot keep testing against its multisampled depth. Prove a multisampled depth
-  path on the harness before a mode relies on it.
+  set, so a scene split by a capture cannot keep testing against its multisampled depth. The lead's answer (D14 point
+  10): the core's own nearest resolve, a pass reading every sample; never set a depth resolve texture. A depth written
+  through `gl_FragDepth` is per fragment, so a scene drawn by fullscreen passes with `discard` has no partial coverage
+  at all: prove a per-sample rule with partial coverage made on purpose (`gl_SampleMask`).
+- A harness cost breakdown before a fix: the 4K four-sample time was mostly the capture split (with QRhi's depth
+  resolve at both runs), not the passes or a colour resolve; measure the parts (`cost_parts`) before redesigning one.
 
 ## Operator-triggered appearance review (reference checklist)
 

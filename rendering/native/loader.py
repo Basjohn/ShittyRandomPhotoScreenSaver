@@ -223,6 +223,11 @@ class NativeCore:
         validation) or restored."""
         self.module.scene_depth_prime_control(bool(skip))
 
+    def scene_nearest_first_sample_control(self, first_only: bool) -> None:
+        """N3.1 (D14 point 10), harness only: the nearest resolve takes sample 0 instead of the minimum (``True``: its
+        negative control) in contents built after the call, or the minimum again."""
+        self.module.scene_nearest_first_sample_control(bool(first_only))
+
     def program_block_pack(self, pack: bytes, block: str, values: Mapping[str, Any]) -> tuple[bytes, dict]:
         """One reflected block of ``pack`` packed from ``values`` by name, as the core packs every block (GPU-free):
         its bytes and facts (``layout``, ``unfilled``); ValueError when a value is refused."""

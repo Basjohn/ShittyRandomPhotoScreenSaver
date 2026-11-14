@@ -53,6 +53,8 @@ from rendering.native.packet_reader import reader_config
 PASS_BLENDS = ("replace", "alpha", "premultiplied", "add", "additive")  # N3.1: "additive" is ONE, ONE
 #: N3.1: a scene target's attachment formats (``TargetFormat`` in ``scene_targets.h``) and a pass's depth tests.
 TARGET_FORMATS = ("rgba8", "rgba16f", "r16f", "r32f")
+#: D14 points 8 and 10: a multisampled attachment's single-sampled copy (QRhi's average, or the core's nearest).
+TARGET_RESOLVES = ("average", "nearest")
 DEPTH_TESTS = ("none", "never", "less", "equal", "less_equal", "greater", "not_equal", "greater_equal", "always")
 #: N3.1: the most targets a program declares, attachments a target holds, samples a target requests.
 MAX_TARGETS = 4
@@ -146,22 +148,32 @@ class PassSampler:
 
 @dataclass(frozen=True)
 class TargetAttachment:
-    """N3.1: one colour attachment of a scene target: its name, its format and the value its clearing draw writes."""
+    """N3.1: one colour attachment of a scene target: its name, its format, the value its clearing draw writes and,
+    when the target is multisampled, how a sampler's single-sampled copy is made (D14 points 8 and 10): ``average``
+    (QRhi's resolve) or ``nearest`` (the core's minimum over the samples; an ``r32f`` attachment past the first, e.g. a
+    linear depth written beside the colour)."""
 
     name: str
     format: str = "rgba8"
     clear: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    resolve: str = "average"
 
     def __post_init__(self) -> None:
         if self.format not in TARGET_FORMATS:
             raise ValueError(f"unknown format {self.format!r} (the formats are {', '.join(TARGET_FORMATS)})")
         if len(self.clear) != 4:
             raise ValueError("a clear value is four numbers")
+        if self.resolve not in TARGET_RESOLVES:
+            raise ValueError(f"unknown resolve {self.resolve!r} (the resolves are {', '.join(TARGET_RESOLVES)})")
+        if self.resolve == "nearest" and self.format != "r32f":
+            raise ValueError("a nearest resolve takes an r32f attachment")
 
     def declaration(self) -> dict:
         entry: dict[str, Any] = {"name": self.name, "format": self.format}
         if tuple(self.clear) != (0.0, 0.0, 0.0, 0.0):
             entry["clear"] = [float(v) for v in self.clear]
+        if self.resolve != "average":
+            entry["resolve"] = self.resolve
         return entry
 
 
@@ -404,5 +416,5 @@ def mode_blocks(module: ModuleType, schema: Any, passes: Sequence[ModePass], set
 
 __all__ = ["CapturePass", "DEPTH_TESTS", "MAX_TARGETS", "MAX_TARGET_COLOUR", "MAX_TARGET_SAMPLES", "MODE_CARD_KEYS",
            "MODE_CORE_MEMBERS", "ModePass", "ModeTarget", "NativeMode", "PASS_BLENDS", "PassOutput", "PassSampler",
-           "SAMPLER_FILTERS", "SAMPLER_MIPS", "SAMPLER_WRAPS", "TARGET_FORMATS", "TargetAttachment", "mode_blocks",
+           "SAMPLER_FILTERS", "SAMPLER_MIPS", "SAMPLER_WRAPS", "TARGET_FORMATS", "TARGET_RESOLVES", "TargetAttachment", "mode_blocks",
            "mode_card", "program_json", "schema_table_entry"]

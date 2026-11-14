@@ -656,6 +656,7 @@ bool checkTargetSampler(const ModePass &pass, const PassSampler &s, QList<Target
             return false;
         }
         t.depthRead = true;
+        t.depthSampled = true;
         return true;
     }
     const int colour = t.colourIndex(attachment);
@@ -1776,6 +1777,16 @@ struct ModeContent::Resources
     int passCount = 0;
     TargetClear targetClears[kMaxSceneTargets]; // N3.1
     int targetClearCount = 0;
+    // D14 point 10: a target's nearest resolves (per slot: its block, sampler, bindings over the multisampled source,
+    // pipeline over the slot's render pass); null where the slot is not in use.
+    struct NearestResolve
+    {
+        std::unique_ptr<QRhiBuffer> block;
+        std::unique_ptr<QRhiSampler> sampler;
+        std::unique_ptr<QRhiShaderResourceBindings> bindings;
+        std::unique_ptr<QRhiGraphicsPipeline> pipeline;
+    };
+    NearestResolve nearest[kMaxSceneTargets][kNearestSlots];
     // The vertices uploaded: the card's triangle (fullTriangle for the drawn card and the surface), then (N3.1) the
     // triangle of an explicit-size target (its own uv, no card).
     float triangle[2 * kTriangleFloats] = {};
@@ -1836,6 +1847,13 @@ void ModeContent::releasePipelines()
         return;
     g_liveContentObjects.fetchAndAddRelaxed(-m_res->objects);
     for (int i = m_res->targetClearCount - 1; i >= 0; --i) {
+        for (int s = kNearestSlots - 1; s >= 0; --s) {
+            Resources::NearestResolve &n = m_res->nearest[i][s];
+            n.pipeline.reset();
+            n.bindings.reset();
+            n.sampler.reset();
+            n.block.reset();
+        }
         Resources::TargetClear &c = m_res->targetClears[i];
         c.pipeline.reset();
         c.bindings.reset();
@@ -2459,8 +2477,38 @@ bool ModeContent::passBindings(const Resources &r, int index, QList<QRhiShaderRe
     return true;
 }
 
+bool ModeContent::nearestBindings(const Resources &r, int target, int slot, QList<QRhiShaderResourceBinding> *out) const
+{
+    out->clear();
+    const SceneTargets::Target *t = m_targets.target(target);
+    const Resources::NearestResolve &n = r.nearest[target][slot];
+    QRhiTexture *source = t ? t->nearestSource(slot) : nullptr;
+    if (!source || !n.block || !n.sampler || !r.conventions)
+        return false;
+    out->append(QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::FragmentStage, n.block.get()));
+    out->append(QRhiShaderResourceBinding::uniformBuffer(kConventionsBinding, QRhiShaderResourceBinding::FragmentStage,
+                                                         r.conventions.get()));
+    out->append(QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, source,
+                                                          n.sampler.get()));
+    return true;
+}
+
 bool ModeContent::rebindTextures()
 {
+    // D14 point 10: the nearest resolves' bindings over the targets' new objects (a resize of the same layout).
+    for (int t = 0; t < m_res->targetClearCount; ++t) {
+        for (int s = 0; s < kNearestSlots; ++s) {
+            Resources::NearestResolve &n = m_res->nearest[t][s];
+            if (!n.bindings)
+                continue;
+            QList<QRhiShaderResourceBinding> bindings;
+            if (!nearestBindings(*m_res, t, s, &bindings))
+                return false;
+            n.bindings->setBindings(bindings.cbegin(), bindings.cend());
+            if (!n.bindings->create())
+                return false;
+        }
+    }
     const ModeProgram &program = m_source->drawnProgram();
     for (int i = 0; i < m_res->passCount; ++i) {
         const ModePass &pass = program.passes.at(i);
@@ -2504,6 +2552,8 @@ QShader sceneClearShader(int attachments)
 // N3.1: the clear values of a target's attachments (std140 vec4 uClear[4]) and a capture's block (int uHasDepth).
 constexpr quint32 kClearBlockBytes = 4 * 4 * sizeof(float);
 constexpr quint32 kCaptureBlockBytes = 16;
+// D14 point 10: a nearest resolve's block (int uSamples, int uFirstOnly).
+constexpr quint32 kNearestBlockBytes = 16;
 
 } // namespace
 
@@ -2517,8 +2567,9 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
     const QShader vs = shaderFrom(mode_vert_qsb, mode_vert_qsb_size); // the full-target triangle with both quads' uv
     const QShader clear = shaderFrom(clear_frag_qsb, clear_frag_qsb_size);
     const QShader capture = shaderFrom(scene_capture_frag_qsb, scene_capture_frag_qsb_size); // N3.1
-    if (!vs.isValid() || !clear.isValid() || !capture.isValid()) {
-        *error = QStringLiteral("the core's triangle, clear or capture shader does not load");
+    const QShader nearestShader = shaderFrom(scene_nearest_frag_qsb, scene_nearest_frag_qsb_size); // D14 point 10
+    if (!vs.isValid() || !clear.isValid() || !capture.isValid() || !nearestShader.isValid()) {
+        *error = QStringLiteral("the core's triangle, clear, capture or nearest resolve shader does not load");
         return false;
     }
     auto res = std::make_unique<Resources>();
@@ -2613,6 +2664,42 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
         c.pipeline->setShaderResourceBindings(c.bindings.get());
         c.pipeline->setRenderPassDescriptor(scene->renderPass.get());
         ok = ok && created(c.pipeline->create());
+        // D14 point 10: the target's nearest resolves (one R32F output, blending off, one sample).
+        for (int s = 0; ok && s < kNearestSlots; ++s) {
+            if (!scene->nearestActive(s))
+                continue;
+            if (!scene->nearestRenderPass[s]) {
+                ok = false;
+                reason = QStringLiteral("scene target '%1': a nearest resolve has no render target")
+                             .arg(QString::fromLatin1(scene->decl.name));
+                break;
+            }
+            Resources::NearestResolve &n = res->nearest[t][s];
+            const QByteArray nearestLabel = QByteArrayLiteral("srpss core scene target nearest ") + scene->decl.name;
+            n.block.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, kNearestBlockBytes));
+            n.block->setName(nearestLabel + QByteArrayLiteral(" block"));
+            ok = ok && created(n.block->create());
+            n.sampler.reset(rhi->newSampler(QRhiSampler::Nearest, QRhiSampler::Nearest, QRhiSampler::None,
+                                            QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+            n.sampler->setName(nearestLabel + QByteArrayLiteral(" sampler"));
+            ok = ok && created(n.sampler->create());
+            QList<QRhiShaderResourceBinding> bindings;
+            ok = ok && nearestBindings(*res, t, s, &bindings);
+            n.bindings.reset(rhi->newShaderResourceBindings());
+            n.bindings->setName(nearestLabel + QByteArrayLiteral(" bindings"));
+            n.bindings->setBindings(bindings.cbegin(), bindings.cend());
+            ok = ok && created(n.bindings->create());
+            n.pipeline.reset(rhi->newGraphicsPipeline());
+            n.pipeline->setName(nearestLabel);
+            n.pipeline->setTargetBlends({ QRhiGraphicsPipeline::TargetBlend() });
+            n.pipeline->setShaderStages({ { QRhiShaderStage::Vertex, vs },
+                                          { QRhiShaderStage::Fragment, nearestShader } });
+            n.pipeline->setVertexInputLayout(layout(PassUv::Down));
+            n.pipeline->setCullMode(QRhiGraphicsPipeline::None);
+            n.pipeline->setShaderResourceBindings(n.bindings.get());
+            n.pipeline->setRenderPassDescriptor(scene->nearestRenderPass[s].get());
+            ok = ok && created(n.pipeline->create());
+        }
     }
     res->passCount = withPasses ? int(program.passes.size()) : 0;
     for (int i = 0; ok && i < res->passCount; ++i) {
@@ -2742,8 +2829,57 @@ bool ModeContent::syncTargets(QRhi *rhi, const ColorTarget &target, QString *err
     return true;
 }
 
+void ModeContent::recordNearest(QRhiCommandBuffer *cb, int target, int last, bool readback)
+{
+    const SceneTargets::Target &t = *m_targets.target(target);
+    if (t.samples <= 1)
+        return;
+    const ModeProgram &program = m_source->drawnProgram();
+    Resources &r = *m_res;
+    // The slots a pass before the target's next run reads (the next run's resolve serves the passes after it): a
+    // capture of this target (its depth), a sampler naming the depth or a nearest attachment; after the target's last
+    // run, every slot in use when the harness reads the targets back.
+    bool needed[kNearestSlots] = {};
+    bool laterRun = false;
+    for (int j = last + 1; j < r.passCount; ++j) {
+        const ModePass &later = program.passes.at(j);
+        if (later.target == target && !later.capture) {
+            laterRun = true;
+            break;
+        }
+        if (later.capture && later.target == target)
+            needed[kNearestDepthSlot] = true;
+        for (const PassSampler &s : later.samplers) {
+            const qsizetype dot = s.texture.indexOf('.');
+            if (dot <= 0 || s.texture.left(dot) != t.decl.name)
+                continue;
+            const QByteArray attachment = s.texture.mid(dot + 1);
+            if (attachment == "depth")
+                needed[kNearestDepthSlot] = true;
+            const int colour = t.decl.colourIndex(attachment);
+            if (colour >= 0)
+                needed[colour] = true;
+        }
+    }
+    const QRhiViewport whole(0, 0, float(t.allocation.width()), float(t.allocation.height()));
+    const QRhiCommandBuffer::VertexInput input(r.vertices.get(), 0);
+    for (int s = 0; s < kNearestSlots; ++s) {
+        const Resources::NearestResolve &n = r.nearest[target][s];
+        if (!n.pipeline || !t.nearestTarget[s] || !(needed[s] || (readback && !laterRun)))
+            continue;
+        cb->beginPass(t.nearestTarget[s].get(), QColor(255, 0, 0, 255), { 1.0f, 0 });
+        cb->setGraphicsPipeline(n.pipeline.get());
+        cb->setViewport(whole);
+        cb->setShaderResources();
+        cb->setVertexInput(0, 1, &input);
+        cb->draw(3);
+        cb->endPass();
+        countNearestResolve();
+    }
+}
+
 void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, QRhiResourceUpdateBatch *updates,
-                               bool draw)
+                               bool draw, bool readback)
 {
     Resources &r = *m_res;
     const ModeProgram &program = m_source->drawnProgram();
@@ -2825,6 +2961,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                 cb->draw(3);
             }
             cb->endPass();
+            recordNearest(cb, pass.target, last, readback); // D14 point 10: what a later pass or the readback reads
         }
         i = last + 1;
     }
@@ -2922,6 +3059,12 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
                 std::memcpy(values + 4 * a, scene->decl.colour.at(a).clear, 4 * sizeof(float));
             if (r.targetClears[t].block)
                 updates->updateDynamicBuffer(r.targetClears[t].block.get(), 0, kClearBlockBytes, values);
+            // D14 point 10: the nearest resolves' blocks (the target's samples; the harness's sample-0 control).
+            const qint32 nearestBlock[4] = { scene ? scene->samples : 1, nearestFirstSample() ? 1 : 0, 0, 0 };
+            for (int s = 0; s < kNearestSlots; ++s) {
+                if (r.nearest[t][s].block)
+                    updates->updateDynamicBuffer(r.nearest[t][s].block.get(), 0, kNearestBlockBytes, nearestBlock);
+            }
         }
         const ModeProgram &program = m_source->drawnProgram();
         for (int i = 0; i < r.passCount; ++i) {
@@ -2941,7 +3084,7 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
                 updates->updateDynamicBuffer(r.passes[i].block.get(), 0, quint32(bytes.size()), bytes.constData());
         }
     }
-    recordPasses(rhi, cb, target, updates, draw);
+    recordPasses(rhi, cb, target, updates, draw, readback);
     const QSize size = target.texture->pixelSize();
     if (readback) {
         // N3.1, harness: every scene target's readable texture as this record left it.

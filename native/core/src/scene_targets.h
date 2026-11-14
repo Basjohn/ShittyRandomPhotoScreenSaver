@@ -22,8 +22,13 @@
 // descriptor (layoutGeneration: the pipelines are built again; the content releases them before the old descriptor goes).
 //
 // Multisampled targets resolve first (D14 point 8): every attachment a sampler or the capture reads gets a resolve
-// texture, and a read depth a depth resolve (QRhi::ResolveDepthStencil; refused with the reason where the device lacks
-// it: choice E, no workaround). Every target keeps its contents (targets.h rule B, depth too) and is cleared by a draw.
+// texture (QRhi's average). A read depth, and an R32F attachment declared "resolve": "nearest", get the core's own
+// per-sample nearest resolve instead (D14 point 10, the lead's decision after build round 2: QRhi's depth resolve gave
+// wrong values on both backends and dropped the multisampled depth): a fullscreen pass (shaders/scene_nearest.frag)
+// reads every sample of the multisampled texture and writes the minimum into a single-sampled R32F texture, which the
+// samplers and the capture read; nothing sets a depth resolve texture, so the multisampled depth is stored and loaded
+// across a capture. It runs after a run of passes on the target only when a later pass reads it (or a readback asks).
+// Every target keeps its contents (targets.h rule B, depth too) and is cleared by a draw.
 //
 // Render thread only, but the counts (any thread) and the readback's results (taken by the GUI thread through
 // SceneReadback's own lock).
@@ -65,8 +70,13 @@ struct TargetAttachment
     QByteArray name;
     TargetFormat format = TargetFormat::RGBA8;
     float clear[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    bool nearest = false; // "resolve": "nearest" (an R32F attachment past the first): the minimum over the samples
     bool read = false; // derived from the program: a sampler or the capture reads it (a resolve when multisampled)
 };
+
+// The nearest resolve's slots of a target: its colour attachments, then its depth.
+constexpr int kNearestDepthSlot = kMaxTargetColour;
+constexpr int kNearestSlots = kMaxTargetColour + 1;
 
 struct TargetDeclaration
 {
@@ -74,7 +84,8 @@ struct TargetDeclaration
     QSize size;                       // explicit pixels; empty: the surface's
     QList<TargetAttachment> colour;   // 1 to kMaxTargetColour
     bool depth = false;               // one D32F texture
-    bool depthRead = false;           // derived: a sampler or the capture reads the depth (a depth resolve when multisampled)
+    bool depthRead = false;           // derived: a sampler or the capture reads the depth (its nearest resolve when multisampled)
+    bool depthSampled = false;        // derived: a sampler reads the depth
     int samples = 1;                  // the request (1 to kMaxSceneSamples)
     bool capture = false;             // derived: a capture step reads this target
 
@@ -85,8 +96,8 @@ struct TargetDeclaration
     int colourIndex(const QByteArray &attachment) const;
 };
 
-// {"name", "size": "surface" | [w, h], "colour": [{"name", "format", "clear"?: [r, g, b, a]}, ...], "depth"?: bool,
-// "samples"?: n}; false with the reason.
+// {"name", "size": "surface" | [w, h], "colour": [{"name", "format", "clear"?: [r, g, b, a], "resolve"?: "average" |
+// "nearest"}, ...], "depth"?: bool, "samples"?: n}; false with the reason.
 bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QString *error);
 
 // D14 point 2, choice A (GPU-free): the bucket of a size, and the next allocation for `needed` given `current` (empty:
@@ -109,6 +120,11 @@ QList<int> supportedSampleCounts(QRhi *rhi);
 void setSkipDepthPrime(bool skip);
 bool skipDepthPrime();
 void countDepthPrime();
+// The harness's control of the nearest resolve (its negative control: sample 0 instead of the minimum), read when a
+// content builds its resolve passes; and the count of nearest resolves recorded (process-wide).
+void setNearestFirstSample(bool firstOnly);
+bool nearestFirstSample();
+void countNearestResolve();
 
 // The process's scene targets (lifecycle proofs, composite_live, the destruction barrier's reading).
 struct SceneTargetCounts
@@ -120,6 +136,7 @@ struct SceneTargetCounts
     qint64 steps = 0;      // allocation steps run
     int readbacksPending = 0;
     qint64 depthPrimes = 0; // depth transitions recorded by the core before a load (rule C for depth)
+    qint64 nearestResolves = 0; // nearest resolve passes recorded
 };
 SceneTargetCounts sceneTargetCounts();
 
@@ -127,7 +144,8 @@ SceneTargetCounts sceneTargetCounts();
 // texture's memory order (the image's top first on every backend: F1).
 struct SceneTargetPixels
 {
-    QString name;          // "<target>.<attachment>", "<target>.capture_colour", "<target>.capture_depth"
+    QString name;          // "<target>.<attachment>", "<target>.depth" (its nearest resolve, multisampled only),
+                           // "<target>.capture_colour", "<target>.capture_depth"
     QSize size;            // the allocation
     QSize content;         // the content's size inside it (image rows [H-h, H), columns [0, w))
     QString format;
@@ -139,7 +157,7 @@ struct SceneTargetPixels
 struct SceneReadback
 {
     QList<SceneTargetPixels> pixels;
-    QRhiReadbackResult results[kMaxSceneTargets * (kMaxTargetColour + 2)];
+    QRhiReadbackResult results[kMaxSceneTargets * (kMaxTargetColour + 3)];
     int count = 0;
     QAtomicInteger<int> pending { 0 };
     bool done() const { return pending.loadAcquire() == 0; }
@@ -155,11 +173,14 @@ public:
         QSize allocation;
         int samples = 1;      // effective (clamped)
         std::unique_ptr<QRhiTexture> colour[kMaxTargetColour];
-        std::unique_ptr<QRhiTexture> resolve[kMaxTargetColour];
+        std::unique_ptr<QRhiTexture> resolve[kMaxTargetColour]; // QRhi's average, or a nearest attachment's R32F
         std::unique_ptr<QRhiTexture> depth;
-        std::unique_ptr<QRhiTexture> depthResolve;
+        std::unique_ptr<QRhiTexture> depthNearest;              // the depth's nearest resolve (R32F window depth)
         std::unique_ptr<QRhiRenderPassDescriptor> renderPass;
         std::unique_ptr<QRhiTextureRenderTarget> renderTarget;
+        // The nearest resolves' render targets (slot: a colour attachment, or kNearestDepthSlot).
+        std::unique_ptr<QRhiRenderPassDescriptor> nearestRenderPass[kNearestSlots];
+        std::unique_ptr<QRhiTextureRenderTarget> nearestTarget[kNearestSlots];
         std::unique_ptr<QRhiTexture> captureColour;
         std::unique_ptr<QRhiTexture> captureDepth;
         std::unique_ptr<QRhiRenderPassDescriptor> captureRenderPass;
@@ -176,6 +197,10 @@ public:
         // The texture a sampler reads for this attachment: the resolve when multisampled.
         QRhiTexture *readable(int colourIndex) const;
         QRhiTexture *readableDepth() const;
+        // A nearest resolve slot in use (multisampled, and read): its multisampled source and its R32F destination.
+        bool nearestActive(int slot) const;
+        QRhiTexture *nearestSource(int slot) const;
+        QRhiTexture *nearestDest(int slot) const;
     };
 
     SceneTargets();
@@ -186,7 +211,7 @@ public:
     // Render thread, at the record: the program's targets and the surface's pixels. Decides each target's allocation
     // (D14 point 2) and effective samples; makes nothing yet (allocateStep does). `relayout`: a render-pass descriptor
     // will go, so the caller releases the pipelines built over it first. False with the reason for a target that cannot
-    // exist on this device (a read multisampled depth without QRhi::ResolveDepthStencil, a size past the device's limit).
+    // exist on this device (a size past the device's limit).
     bool sync(QRhi *rhi, const QList<TargetDeclaration> &declarations, const QSize &surface, bool *relayout,
               QString *error);
     // Render thread: one step of what sync left (one colour attachment with its resolve, the depth with its resolve, the
@@ -230,7 +255,6 @@ private:
     qint64 m_allocations = 0;
     qint64 m_steps = 0;
     QList<int> m_supported;
-    bool m_resolveDepth = false;
 };
 
 } // namespace srpss_core

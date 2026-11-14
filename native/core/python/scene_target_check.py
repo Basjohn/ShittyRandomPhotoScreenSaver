@@ -18,9 +18,12 @@ Rounds:
              attachment is masked where a pass writes none, the light holds its clear with nothing glowing. Then rule (a):
              native OpenGL against the Python reference (``SceneTarget`` with ``depth_texture``, ``background()`` and
              ``hdr``; a GL target with the ambient owner's states); rule (b): native Vulkan against native OpenGL.
-  msaa       (each API) the scene requested at 2x, 4x and 8x: the effective count reported, the frames repeat exactly,
-             they differ from single-sampled only at edges; ``QRhi::ResolveDepthStencil`` read on the backend (choice E:
-             a backend without it stops the work); the clamp's control (8 taken out: 8 drawn as 4, reported).
+  msaa       (each API) the scene requested at 2x, 4x and 8x: the effective count reported (the count created), the
+             frames repeat exactly; without partial coverage every resolve equals the single-sampled frame; with the
+             nearer plane's two bands of partial coverage (gl_SampleMask) the core's nearest resolve (D14 point 10:
+             the capture's depth, the depth a sampler reads, and an R32F attachment declared "nearest") is the analytic
+             nearest depth; the negative control (sample 0 alone) is wrong exactly in the first band; the clamp's
+             control (8 taken out: 8 drawn as 4, reported). ``QRhi::ResolveDepthStencil`` is recorded as a fact only.
   rest       (each API) nothing recorded and nothing allocated over frames at rest; control: a setting change records.
   resize     (each API) the card dragged 800 -> 1000 -> 800 px wide in 2 px steps: the scene's allocation after each
              step equals D14's rule (grown at once, shrunk only two buckets below), the reallocations counted against a
@@ -34,6 +37,14 @@ Rounds:
              budget, 0.3 ms at 2560x1440 and 0.6 ms at 4K); the light attachment's clear (the ambient target at 2048 x
              1152 with and without its light attachment, nothing glowing: choice F); the first frame's wall time with a
              new allocation against a steady one; the thread probe (no Python thread state on the render thread).
+Run alone (not in the default set):
+  prime_control  (--apis vulkan) rule C for depth's negative control: the scene with the depth prime skipped, then with
+             it, at one sample and at 4x; synchronisation validation shows read-after-write hazards on the depth load
+             only where it was skipped.
+  cost_parts (each API) where the four-sample time goes at 4K: a clearing draw and plane, three passes, a colour read,
+             the capture split; each at 1x and 4x.
+  python_cost (the reference child, OpenGL) the Python renderer's ``SceneTarget`` on the same load at 2560x1440 and 4K,
+             1x and 4x (the lead's measure for the native four-sample figure: accepted when no worse).
 
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/scene_target_check.py --module-dir release/native_module --require-validation
@@ -64,7 +75,9 @@ import host_check  # noqa: E402
 APIS = ("opengl", "vulkan")
 ROUNDS = ("parity", "msaa", "rest", "resize", "retire", "cost")
 # Run on its own (its skipped phase is expected to show hazards): --apis vulkan --rounds prime_control
-CONTROL_ROUNDS = ("prime_control",)
+CONTROL_ROUNDS = ("prime_control", "cost_parts")
+# The Python renderer's cost on the same load (the reference child, OpenGL): --rounds python_cost
+PYTHON_ROUNDS = ("python_cost",)
 CHILD_TIMEOUT_S = 1500
 MARGIN = 8
 CARD = (480, 270)                  # the item's logical size (parity, msaa, rest, retire)
@@ -81,6 +94,7 @@ COST_HOSTS = ((2560, 1440), (3840, 2160))
 COST_AMBIENT = (2048, 1152)
 COST_FRAMES = 240
 COST_MIN_SAMPLES = 30               # Qt's OpenGL backend reports a GPU time only for frames whose query was ready
+PYTHON_COST_FRAMES = 120            # the Python path's timed frames per size and count (python_cost)
 RESOLVE_BUDGET_MS = {(2560, 1440): 0.3, (3840, 2160): 0.6}   # choice G (D7's budgets, until the lead sets another)
 CLEAR_BUDGET_MS = 0.05             # choice F: "negligible" (the lead's word), stated here as 0.05 ms at 2048 x 1152
 _ALLOWED_ENV: set[str] = set()
@@ -347,54 +361,126 @@ def round_parity(core, engine, app, api: str, packs: dict, out: Path) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
-def round_msaa(core, engine, app, api: str, packs: dict) -> dict:
+MASK_BAND = 0.08                   # D14 point 10's proof: each partial-coverage band's height (vUv)
+MSAA_COUNTS = (2, 4, 8)
+
+
+def _nearest_expected(entry: dict, settings: dict, band: float):
+    """D14 point 10: the nearest window depth each content pixel must resolve to (analytic): the nearer plane where a
+    sample holds it and it is nearer (its half and, with ``band``, both partial-coverage bands), else the tilted
+    plane. Also the rows judged (rows whose centre lies within one row of an edge are left out) and the first band's
+    informative pixels (every sample but 0 covered, the nearer plane nearer: what sample 0 alone gets wrong)."""
     import numpy as np
 
+    width, height = entry["content"]
+    vx = (np.arange(width) + 0.5) / width
+    vy = 1.0 - (np.arange(height) + 0.5) / height                 # vUv.y per content row (top first)
+    plane = np.repeat((settings["u_near_depth"]
+                       + (settings["u_far_depth"] - settings["u_near_depth"]) * vx)[None, :], height, axis=0)
+    covered = (vy <= 0.5 + 2.0 * band)[:, None]
+    expected = np.where(covered, np.minimum(plane, settings["u_nearer_depth"]), plane)
+    guard = np.ones(height, bool)
+    for edge in [0.5] + ([0.5 + band, 0.5 + 2.0 * band] if band > 0 else []):
+        guard &= np.abs(vy - edge) > 1.0 / height
+    first_band = ((vy > 0.5) & (vy <= 0.5 + band))[:, None] & (settings["u_nearer_depth"] < plane)
+    return expected, guard, first_band
+
+
+def _depth_error(entry: dict, expected, guard) -> float:
+    import numpy as np
+
+    got = _content(entry).astype(np.float64)
+    return float(np.abs(got - expected)[guard].max())
+
+
+def round_msaa(core, engine, app, api: str, packs: dict) -> dict:
+    """The multisampled scene (D14 points 7, 8 and 10): the clamp and the count created; without partial coverage the
+    resolves equal the single-sampled frame (every sample of a pixel is the same); with the nearer plane's two bands
+    of partial coverage the nearest resolve (the capture's depth and the depth a sampler reads) is the analytic nearest
+    depth, by means (a) (the multisampled D32F read per sample) and (b) (an R32F attachment declared "nearest"); the
+    negative control (sample 0 alone) is wrong exactly in the first band; the clamp's control."""
+    st = _scene_module()
     host = core.hidden_host(*_host_size([CARD]))
     checks, facts = {}, {}
+    base = st.settings(ambient_size=AMBIENT)
+
+    def run(samples: int, band: float, lin: bool = False):
+        if lin:
+            passes, targets, values = st.lin_program(packs, samples=samples, mask_band=band)
+            scene = Scene(core, engine, host, CARD, 1.0, packs, passes=passes, targets=targets, settings=values)
+            changed = dict(values, u_far_depth=values["u_far_depth"] + 0.01)
+        else:
+            values = dict(base, u_mask_band=float(band))
+            scene = Scene(core, engine, host, CARD, 1.0, packs, samples=samples, settings=values)
+            changed = dict(values, u_hdr_gain=2.4)
+        try:
+            first = scene.targets(app)
+            scene.mode.settings(changed)
+            scene.targets(app)
+            scene.mode.settings(values)
+            second = scene.targets(app)
+            state = scene.mode.state()["scene_targets"]
+        finally:
+            scene.close(app)
+            host.frames(2)
+            host_check._flush_deletes(app)
+        return first, second, state, values
+
     try:
-        single = None
-        for samples in (1, 2, 4, 8):
-            scene = Scene(core, engine, host, CARD, 1.0, packs, samples=samples)
-            try:
-                first = scene.targets(app)
-                scene.mode.settings(dict(_scene_module().settings(ambient_size=AMBIENT), u_hdr_gain=2.4))
-                scene.targets(app)
-                scene.mode.settings(_scene_module().settings(ambient_size=AMBIENT))
-                second = scene.targets(app)
-                state = scene.mode.state()["scene_targets"]
-            finally:
-                scene.close(app)
-                host.frames(2)
-                host_check._flush_deletes(app)
+        single, _second, _state, _values = run(1, 0.0)
+        for samples in MSAA_COUNTS:
+            label = f"x{samples}"
+            first, second, state, _values = run(samples, 0.0)
             target = state["targets"][0]
-            facts[f"x{samples}"] = {"requested": target["requested_samples"], "effective": target["effective_samples"],
-                                    "supported": state["supported_samples"],
-                                    "resolve_depth_stencil": state["resolve_depth_stencil"]}
-            checks[f"x{samples}_resolve_depth_stencil_reported"] = bool(state["resolve_depth_stencil"])
-            checks[f"x{samples}_effective_is_the_clamp"] = target["effective_samples"] == max(
+            facts[label] = {"requested": target["requested_samples"], "effective": target["effective_samples"],
+                            "supported": state["supported_samples"],
+                            "resolve_depth_stencil": state["resolve_depth_stencil"]}
+            checks[f"{label}_effective_is_the_clamp"] = target["effective_samples"] == max(
                 [c for c in state["supported_samples"] if c <= samples] or [1])
             # QRhi rounds an unsupported count UP silently (research N3 Q1): the core hands it only a count in its own
             # supported list, so the count reported is the count created.
-            checks[f"x{samples}_effective_is_one_qrhi_lists"] = (target["effective_samples"] == 1
-                                                                 or target["effective_samples"]
-                                                                 in state["supported_samples"])
-            checks[f"x{samples}_repeats_exactly"] = all(compare(first[k], second[k])["exact"] for k in first)
-            if samples == 1:
-                single = first
-            else:
-                differing = {}
-                for key in ("scene.colour", "scene.capture_colour", "scene.capture_depth"):
-                    a, b = single[key]["array"], first[key]["array"]
-                    if a.shape != b.shape:
-                        differing[key] = None
-                        continue
-                    d = np.abs(a.astype(np.float64) - b.astype(np.float64))
-                    d = d.max(axis=2) if d.ndim == 3 else d
-                    differing[key] = float((d > 1e-3).mean())
-                facts[f"x{samples}"]["differs_from_single_sampled"] = differing
-                checks[f"x{samples}_differs_from_single_sampled_only_at_edges"] = all(
-                    v is not None and v < 0.02 for v in differing.values())
+            checks[f"{label}_effective_is_one_qrhi_lists"] = (target["effective_samples"] == 1
+                                                              or target["effective_samples"]
+                                                              in state["supported_samples"])
+            checks[f"{label}_repeats_exactly"] = all(compare(first[k], second[k])["exact"] for k in first)
+            # No partial coverage: every sample of a pixel holds the same values, so every resolve (QRhi's average,
+            # the core's nearest) equals the single-sampled frame.
+            same = {key: compare(single[key], first[key]) for key in ("scene.colour", "scene.capture_colour",
+                                                                       "scene.capture_depth")}
+            same["scene.depth"] = compare(single["scene.capture_depth"], first["scene.depth"]) \
+                if "scene.depth" in first else {"past": -1}
+            facts[label]["without_partial_coverage"] = same
+            checks[f"{label}_equals_single_sampled_without_partial_coverage"] = all(
+                c.get("past") == 0 for c in same.values())
+            # Partial coverage: the nearest resolve against the analytic depth, means (a) and (b).
+            banded, _second, _state, _values = run(samples, MASK_BAND)
+            expected, guard, first_band = _nearest_expected(banded["scene.capture_depth"], base, MASK_BAND)
+            errors = {key: _depth_error(banded[key], expected, guard) for key in ("scene.capture_depth",
+                                                                                  "scene.depth")}
+            lin, _second, _state, lin_values = run(samples, MASK_BAND, lin=True)
+            lin_expected, lin_guard, _band = _nearest_expected(lin["lin.lin"], lin_values, MASK_BAND)
+            errors.update({key: _depth_error(lin[key], lin_expected, lin_guard) for key in ("lin.lin", "lin.depth")})
+            facts[label]["nearest_max_error"] = errors
+            facts[label]["first_band_pixels"] = int(first_band[guard].sum())
+            checks[f"{label}_nearest_is_the_analytic_nearest_depth_a_and_b"] = (
+                all(e <= DEPTH_TOLERANCE for e in errors.values()) and int(first_band[guard].sum()) > 0)
+        # The negative control: sample 0 alone, wrong exactly where the first band left sample 0 on the far plane.
+        import numpy as np
+
+        core.scene_nearest_first_sample_control(True)
+        try:
+            control, _second, state, _values = run(4, MASK_BAND)
+        finally:
+            core.scene_nearest_first_sample_control(False)
+        expected, guard, first_band = _nearest_expected(control["scene.capture_depth"], base, MASK_BAND)
+        wrong = np.abs(_content(control["scene.capture_depth"]).astype(np.float64) - expected) > DEPTH_TOLERANCE
+        rows = guard[:, None] & np.ones_like(wrong)
+        facts["control_sample_0"] = {"wrong_pixels": int(wrong[rows].sum()),
+                                     "first_band_pixels": int(first_band[rows].sum()),
+                                     "control_reported": bool(state.get("nearest_first_sample_control"))}
+        checks["control_sample_0_is_wrong_exactly_in_the_first_band"] = (
+            bool(state.get("nearest_first_sample_control")) and int(first_band[rows].sum()) > 0
+            and bool((wrong[rows] == first_band[rows]).all()))
         # The clamp's control: 8 taken out of the supported set.
         core.scene_sample_counts_control([8])
         try:
@@ -597,15 +683,18 @@ def round_prime_control(core, engine, app, packs: dict) -> dict:
             core.scene_depth_prime_control(skip)
             before = core.composite_live()["scene_target_depth_primes"]
             try:
-                scene = Scene(core, engine, host, CARD, 1.0, packs)
-                try:
-                    scene.targets(app)
-                    scene.mode.settings(dict(_scene_module().settings(ambient_size=AMBIENT), u_hdr_gain=2.2))
-                    scene.targets(app)
-                finally:
-                    scene.close(app)
-                    host.frames(2)
-                    host_check._flush_deletes(app)
+                # One sample, and 4x: the multisampled depth is read by the nearest resolve before the capture and
+                # loaded after it (research N3 Q3: the same hazard class).
+                for samples in (1, 4):
+                    scene = Scene(core, engine, host, CARD, 1.0, packs, samples=samples)
+                    try:
+                        scene.targets(app)
+                        scene.mode.settings(dict(_scene_module().settings(ambient_size=AMBIENT), u_hdr_gain=2.2))
+                        scene.targets(app)
+                    finally:
+                        scene.close(app)
+                        host.frames(2)
+                        host_check._flush_deletes(app)
             finally:
                 core.scene_depth_prime_control(False)
             facts[label] = {"depth_primes": core.composite_live()["scene_target_depth_primes"] - before}
@@ -615,6 +704,46 @@ def round_prime_control(core, engine, app, packs: dict) -> dict:
     return {"pass": facts["skipped"]["depth_primes"] == 0 and facts["primed"]["depth_primes"] > 0, "facts": facts,
             "checks": {"the_control_records_no_prime_and_the_product_path_does":
                        facts["skipped"]["depth_primes"] == 0 and facts["primed"]["depth_primes"] > 0}}
+
+
+COST_PARTS = ("clear", "draws", "read", "capture")
+
+
+def round_cost_parts(core, engine, app, packs: dict) -> dict:
+    """Where the four-sample time goes at 4K (the lead, 15 Nov): each of ``scene_targets.cost_part_program``'s programs
+    single-sampled and at 4x, the surface's GPU time (median, p90); a part's 4x minus 1x against the part before it
+    says what that step adds (the clearing draw and plane; two more passes; a colour resolve and the surface pass; the
+    capture split with its depth read and second run)."""
+    st = _scene_module()
+    size = COST_HOSTS[-1]
+    facts = {}
+    host = core.hidden_host(size[0] + 2 * MARGIN, size[1] + 2 * MARGIN)
+    try:
+        for part in COST_PARTS:
+            timings = {}
+            for samples in (1, 4):
+                passes, targets, settings = st.cost_part_program(packs, part, samples=samples)
+                scene = Scene(core, engine, host, size, 1.0, packs, passes=passes, targets=targets, settings=settings)
+                try:
+                    host.frames(4)
+                    timings[f"x{samples}"] = _timed(host, scene, settings, COST_FRAMES)
+                    state = scene.mode.state()
+                    timings[f"x{samples}"]["effective_samples"] = state["scene_targets"]["targets"][0][
+                        "effective_samples"]
+                    if state.get("error") or state.get("failure"):
+                        timings[f"x{samples}"]["error"] = state.get("error") or state.get("failure")
+                finally:
+                    scene.close(app)
+                    host.frames(2)
+                    host_check._flush_deletes(app)
+            single, multi = timings["x1"]["median_ms"], timings["x4"]["median_ms"]
+            timings["four_minus_one_ms"] = None if single is None or multi is None else round(multi - single, 4)
+            facts[part] = timings
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    ok = all(facts[p]["four_minus_one_ms"] is not None for p in COST_PARTS)
+    return {"pass": ok, "facts": facts, "size": list(size)}
 
 
 def _ambient_cover_only(packs: dict, folder: Path):
@@ -773,7 +902,7 @@ def reference_frames(core, packs: dict, case_dpr: float, glow: float) -> dict:
     frames: dict = {}
     with target_gl.current():
         programs = {name: compile_program(REFERENCE_VERTEX, st.shader_text(file), label=f"n31 {name}")
-                    for name, file in st.FRAGMENTS if name != "show"}
+                    for name, file in st.FRAGMENTS if name in ("planes", "nearer", "after", "ambient")}
         blocks = {}
         names = {"planes": "ScenePlanes", "nearer": "SceneNearer", "after": "SceneAfter", "ambient": "AmbientLight"}
         for name, block in names.items():
@@ -880,6 +1009,107 @@ def reference_frames(core, packs: dict, case_dpr: float, glow: float) -> dict:
     return frames
 
 
+def python_cost(core, packs: dict, size: tuple[int, int], samples: int, frames: int) -> dict:
+    """The Python renderer's GPU time for the harness scene's load at ``size`` and ``samples`` (OpenGL, the
+    production owner ``SceneTarget``): begin, planes, nearer, ``background()``, after, ``end()`` (the overlay composite,
+    reading the samples when multisampled), timed with GL_TIME_ELAPSED around the whole scope, one query a frame."""
+    import ctypes
+    from types import SimpleNamespace
+
+    from OpenGL import GL as gl
+
+    from rendering.quick.render.gl_resources import compile_program, delete_program
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.scene3d.target import SceneTarget
+    from tools.labs.render_target import OffscreenRenderTarget
+
+    st = _scene_module()
+    width, height = size
+    settings = dict(st.settings(ambient_size=COST_AMBIENT, with_show=False), u_glow=1.0)
+    target_gl = OffscreenRenderTarget(width, height, label="n31-python-cost")
+    times: list[int] = []
+    with target_gl.current():
+        programs = {name: compile_program(REFERENCE_VERTEX, st.shader_text(file), label=f"n31 cost {name}")
+                    for name, file in st.FRAGMENTS if name in ("planes", "nearer", "after")}
+        blocks = {}
+        for name, block in (("planes", "ScenePlanes"), ("nearer", "SceneNearer"), ("after", "SceneAfter")):
+            members = {k: v for k, v in settings.items() if k in st.shader_text(dict(st.FRAGMENTS)[name])}
+            data, _facts = core.program_block_pack(packs[name], block, members)
+            buffer = (ctypes.c_uint * 1)()
+            gl.glCreateBuffers(1, buffer)
+            gl.glNamedBufferData(int(buffer[0]), len(data), data, gl.GL_STATIC_DRAW)
+            blocks[name] = int(buffer[0])
+
+        def draw(name: str) -> None:
+            gl.glUseProgram(programs[name])
+            gl.glBindBufferBase(gl.GL_UNIFORM_BUFFER, 18, blocks[name])
+            gl.glBindVertexArray(target_gl.vao)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+
+        resources, scene = MeshResources("n31 python cost"), SceneTarget("n31 python cost")
+        frame = SimpleNamespace(viewport=(0, 0, width, height), logical_size=(width, height),
+                                matrix_values=(2 / width, 0, 0, 0, 0, -2 / height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1),
+                                quad_vao=target_gl.vao)
+        query = (ctypes.c_uint * 1)()
+        gl.glGenQueries(1, query)
+        try:
+            for index in range(frames + 4):
+                gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target_gl.fbo)
+                gl.glBeginQuery(gl.GL_TIME_ELAPSED, int(query[0]))
+                scene.begin(frame, samples, overlay=1.0, emission=True, depth_texture=True, hdr=True)
+                gl.glEnable(gl.GL_DEPTH_TEST)
+                gl.glDepthMask(gl.GL_TRUE)
+                gl.glDisablei(gl.GL_BLEND, 0)
+                gl.glDepthFunc(gl.GL_ALWAYS)
+                with scene.emission_writes():
+                    draw("planes")
+                gl.glDepthFunc(gl.GL_LESS)
+                draw("nearer")
+                scene.background(frame, resources)
+                gl.glEnablei(gl.GL_BLEND, 0)
+                gl.glBlendEquationSeparatei(0, gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
+                gl.glBlendFuncSeparatei(0, gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA, gl.GL_ONE,
+                                        gl.GL_ONE_MINUS_SRC_ALPHA)
+                gl.glDepthFunc(gl.GL_LEQUAL)
+                gl.glDepthMask(gl.GL_FALSE)
+                draw("after")
+                gl.glDisablei(gl.GL_BLEND, 0)
+                scene.end(frame, resources)
+                gl.glDisable(gl.GL_DEPTH_TEST)
+                gl.glDepthMask(gl.GL_TRUE)
+                gl.glEndQuery(gl.GL_TIME_ELAPSED)
+                value = (ctypes.c_uint64 * 1)()
+                gl.glGetQueryObjectui64v(int(query[0]), gl.GL_QUERY_RESULT, value)
+                if index >= 4:                       # the allocation's and the programs' first frames left out
+                    times.append(int(value[0]))
+        finally:
+            gl.glDeleteQueries(1, query)
+            scene.release()
+            resources.release_resources()
+            for buffer in blocks.values():
+                gl.glDeleteBuffers(1, [buffer])
+            for program in programs.values():
+                delete_program(program)
+    target_gl.close()
+    times.sort()
+    return {"samples": len(times), "median_ms": round(times[len(times) // 2] / 1e6, 4) if times else None,
+            "p90_ms": round(times[int(len(times) * 0.9)] / 1e6, 4) if times else None}
+
+
+def round_python_cost(core, packs: dict) -> dict:
+    """The lead's measure for the 4K four-sample cost (15 Nov): the Python path's 4x minus 1x on the same load, OpenGL;
+    the native figure (the cost round's ``resolve_bound_ms``) is accepted when no worse."""
+    facts = {}
+    for size in COST_HOSTS:
+        label = f"{size[0]}x{size[1]}"
+        timings = {f"x{n}": python_cost(core, packs, size, n, PYTHON_COST_FRAMES) for n in (1, 4)}
+        single, multi = timings["x1"]["median_ms"], timings["x4"]["median_ms"]
+        timings["four_minus_one_ms"] = None if single is None or multi is None else round(multi - single, 4)
+        facts[label] = timings
+    ok = all(facts[f"{s[0]}x{s[1]}"]["four_minus_one_ms"] is not None for s in COST_HOSTS)
+    return {"pass": ok, "facts": facts}
+
+
 def round_reference(core, packs: dict, out: Path) -> dict:
     frames = {}
     for case, dpr, glow in PARITY_CASES:
@@ -982,7 +1212,13 @@ def child(args) -> dict:
         packs = _scene_module().bake_all(folder)
         try:
             if args.api == "reference":
-                record["reference"] = round_reference(core, packs, out)
+                if "parity" in args.rounds:
+                    record["reference"] = round_reference(core, packs, out)
+                if "python_cost" in args.rounds:
+                    try:
+                        record["python_cost"] = round_python_cost(core, packs)
+                    except Exception:
+                        record["python_cost"] = {"pass": False, "error": traceback.format_exc()}
             else:
                 for name in args.rounds:
                     if vulkan:
@@ -1002,6 +1238,8 @@ def child(args) -> dict:
                             record[name] = round_cost(core, engine, app, packs, folder)
                         elif name == "prime_control" and vulkan:
                             record[name] = round_prime_control(core, engine, app, packs)
+                        elif name == "cost_parts":
+                            record[name] = round_cost_parts(core, engine, app, packs)
                     except Exception:
                         record[name] = {"pass": False, "error": traceback.format_exc()}
         finally:
@@ -1019,7 +1257,7 @@ def child(args) -> dict:
                                         "attribution": summary["groups"]}
             del engine
     if args.api == "reference":
-        record["rounds"] = ["reference"]
+        record["rounds"] = [name for name in ("reference", "python_cost") if name in record]
     return record
 
 
@@ -1042,7 +1280,11 @@ def prime_control_validation(record: dict) -> dict:
 
 def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool, list[str]]:
     if api == "reference":
-        failed = [] if (record.get("reference") or {}).get("pass") else [f"reference: {record.get('error')}"]
+        rounds = [name for name in ("reference", "python_cost") if name in record]
+        failed = [f"{name}: {record[name].get('error') or 'failed'}"[:1500] for name in rounds
+                  if not record[name].get("pass")]
+        if not rounds:
+            failed.append(f"reference: {record.get('error')}")
         return not failed, failed
     ok, failed = host_check.api_verdict(api, record, require_validation)
     if api == "vulkan" and "prime_control" in (record.get("rounds") or []):
@@ -1065,7 +1307,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--module-dir", default="release/native_module")
     parser.add_argument("--repo", default=".", help="the repository root (default: the current directory)")
     parser.add_argument("--apis", nargs="+", default=list(APIS), choices=APIS)
-    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=(*ROUNDS, *CONTROL_ROUNDS))
+    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=(*ROUNDS, *CONTROL_ROUNDS, *PYTHON_ROUNDS))
     parser.add_argument("--label", default="n31_scene_targets")
     parser.add_argument("--layer-path", type=Path, default=None,
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")
@@ -1094,8 +1336,8 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     environment = vk_validation.environment_record(_ALLOWED_ENV)
     results: dict = {}
-    children = [a for a in APIS if a in args.apis]
-    if "parity" in args.rounds and "opengl" in args.apis:
+    children = [a for a in APIS if a in args.apis and set(args.rounds) - set(PYTHON_ROUNDS)]
+    if ("parity" in args.rounds and "opengl" in args.apis) or "python_cost" in args.rounds:
         children.append("reference")
     for api in children:
         child_json = out / f"child_{api}.json"

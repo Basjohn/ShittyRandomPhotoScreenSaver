@@ -1052,7 +1052,8 @@ to the GL limits.
    look and cost question for later, and blocks nothing.
 8. *Multisampled targets resolve first* (D5.6 row 7): each attachment a sampler reads gets a resolve texture
    (`QRhiColorAttachment::setResolveTexture`), and depth a depth resolve (`setDepthResolveTexture`, where the device
-   reports `QRhi::ResolveDepthStencil`; one sample's depth, not the nearest; choice E). The proof reads the flag on both
+   reports `QRhi::ResolveDepthStencil`; one sample's depth, not the nearest; choice E; **the depth half is superseded
+   by point 10**, the lead after build round 2). The proof reads the flag on both
    backends; a backend without it stops the work and is reported, with no workaround built. On Qt's OpenGL backend a
    resolve is a framebuffer blit (Qt source; the lesson's 0.5 ms at 1440p was a blit): accepted if measured within
    budget, the figure recorded (choice G; the budget the proof applies is D7's, 0.3 ms at 2560 x 1440 and 0.6 ms at 4K
@@ -1086,6 +1087,26 @@ to the GL limits.
   `emission_writes`, Bubble's ambient light).
 - *At most 16 passes a program* (8 before), so a 3D scene's passes and its captures fit.
 
+**The lead's decisions after build round 2 (15 Nov 2026), on the two stops below.**
+10. *Multisampled depth: the core's own per-sample nearest resolve* (D5.3's per-sample service, in QRhi form). QRhi's
+    depth resolve is out on both backends. A fullscreen pass (`shaders/scene_nearest.frag`) reads every sample of the
+    multisampled source and writes the minimum (the nearest under the project's depth convention) into a
+    single-sampled R32F texture; the samplers that read the depth and the capture bind that texture. Nothing sets
+    `setDepthResolveTexture`, so the multisampled depth is stored and loaded for the passes after a capture (rule C
+    primes it). Means in order: (a) the multisampled D32F read directly (`texelFetch` on a `sampler2DMS`) where QRhi
+    admits it on both backends; (b) failing that, the depth-writing passes also write a depth into a multisampled R32F
+    attachment declared `"resolve": "nearest"` (an attachment past the first), resolved by the same pass. The pass runs
+    after a run of passes on the target only when a later pass reads it (or the harness reads the targets back). The
+    proof is against the single-sampled analytic depth: equal where every sample is the same, the minimum at pixels
+    of partial coverage (the harness's two bands drawn with `gl_SampleMask`), and a negative control (sample 0 alone)
+    wrong exactly where sample 0 was not covered. This settles N1.8's open "nearest depth" A/B for Extruded Bubble:
+    its multisampled `background()` keeps the nearest depth, as the Python renderer does, with no look question left.
+11. *The four-sample cost at 4K*: D7's 0.6 ms applies to the substrate's overhead, not to the rasterisation a mode
+    already pays. The measure is the Python path's 4x minus 1x on the same load at 4K on OpenGL
+    (`scene_target_check.py --rounds python_cost`); the native figure is accepted when no worse, and a worse figure is
+    a defect whose time is found (`--rounds cost_parts`). Whether 4K defaults to fewer samples is the operator's look
+    call later; it blocks nothing.
+
 **As built (N3.1, 15 Nov 2026).** `native/core/src/scene_targets.*` holds the rules (`bucketPixels`, `nextAllocation`,
 `contentViewport`, `clampSamples`) and `SceneTargets`, the content's owner; `rendering/native/scene_targets.py` mirrors
 the rules for the GPU-free tests and `scene3d.scene_samples` is the one sampling request. The proof is
@@ -1096,20 +1117,25 @@ the rules for the GPU-free tests and `scene3d.scene_samples` is the one sampling
   emission masked where written off, light cleared when nothing glows), nothing at rest, the drag across bucket edges
   both ways (5 reallocations against the no-hysteresis control's 7, an explicit target never reallocated, content equal
   to a fresh target's), retirement with validation, no frame-thread work from Python.
-- `ResolveDepthStencil` reads true on both backends and the clamp reports the count created (8 forced away gives 4).
-  **Multisampled depth does not work through QRhi on this machine, either backend** (choice E's stop): with
-  `setDepthResolveTexture` the resolved D32F reads 0 everywhere on OpenGL and a strided pattern with NaNs on Vulkan,
-  and QRhi then stores no multisampled depth (`DontCare`), so a capture split cannot keep testing against it. The
-  colour resolve is right on both. Nothing that reads depth may declare `samples > 1` until the lead decides; no
-  workaround built.
+- The clamp reports the count created (8 forced away gives 4). QRhi's depth resolve (build rounds 1 and 2) gave wrong
+  values on both backends (the resolved D32F read 0 on OpenGL, a strided pattern with NaNs on Vulkan) and stored no
+  multisampled depth once set (`DontCare`), though `ResolveDepthStencil` read true on both: the stop that led to
+  point 10. Point 10's nearest resolve is built for build round 3 (`scene_nearest.frag`, `SceneTargets` nearest slots,
+  `ModeContent::recordNearest`); its proof is the msaa round's (evidence after the build).
 - Vulkan reported a write-after-write hazard on resolve textures no pass samples; resolves are made only for attachments
-  a sampler reads (round 2).
-- Cost (GPU medians, the harness scene's six passes, module 03a0ad8f, evidence `20261115_cost`): the light attachment's
-  clear at 2048 x 1152 adds 0.026 ms on OpenGL and 0.015 ms on Vulkan (choice F: negligible). Four samples minus one,
-  which bounds the resolves but also holds the four-sample rasterisation: OpenGL 0.28 ms at 2560 x 1440 and 1.66 ms at
-  4K, Vulkan 0.41 and 1.89 ms. Past D7's resolve budget at 4K on both backends, so reported (choice G's stop); OpenGL's
-  blit resolve costs no more than Vulkan's in-pass resolve here, so the excess is the multisampling, not Qt's blit.
-  Qt's OpenGL backend returned a GPU time for only 15 to 32 of 240 frames.
+  a sampler reads (round 2: the msaa round's validation is clean but for Qt's defect A).
+- Rule C for depth's negative control (round 2, `--rounds prime_control`, Vulkan): with the prime skipped, synchronisation
+  validation reports read-after-write hazards on the depth load (3); with it, none.
+- Cost (GPU medians, the harness scene's passes). The light attachment's clear at 2048 x 1152 adds 0.026 ms on OpenGL
+  and 0.015 ms on Vulkan (choice F: negligible). Four samples minus one at 4K: the Python renderer on the same load
+  0.34 ms (OpenGL, `python_cost`); native at round 2 (QRhi's depth resolve still set) Vulkan 1.25 ms, OpenGL 0.22 ms
+  (Qt's OpenGL backend returns a GPU time for only about one frame in twenty, so OpenGL's figure is loose). The
+  breakdown (`cost_parts`, Vulkan, 4x minus 1x): a clearing draw and a plane 0.26 ms, three passes 0.09 ms, a colour
+  read 0.17 ms, the capture split 0.98 ms. The split's 0.8 ms over a colour read holds QRhi's depth resolve at both
+  runs (gone with point 10), a second colour resolve and the capture; round 3's breakdown says how much was the depth
+  resolve. The clearing draw at four samples is the other candidate (rule B's clear by a draw writes every sample
+  where the Python renderer's `glClear` is a fast clear). The native figure after point 10 is measured at build round
+  3 against the Python one.
 
 ## D1, D2, D3 and the transport rule
 

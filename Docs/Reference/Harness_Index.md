@@ -888,9 +888,11 @@ python native/core/python/transition_route_check.py --module-dir release/native_
 # surface pass sampling both), hidden hosts only: parity (every readable texture read back; analytic depth, the depth
 # loaded across the capture, the HDR colour, masked attachments, the light's clear; rule (a) against SceneTarget and the
 # ambient owner's states driving the same fragments, rule (b) Vulkan against OpenGL), msaa (2x/4x/8x, the count created,
-# ResolveDepthStencil, the clamp's control), rest, resize (800 -> 1000 -> 800 px against D14's rule), retire, cost
-# (2560x1440 and 4K, 1x and 4x; the light attachment's clear); Vulkan validated. --rounds prime_control (Vulkan alone):
-# rule C for depth's negative control
+# resolves equal to single-sampled without partial coverage, D14 point 10's nearest resolve against the analytic depth
+# with gl_SampleMask bands, means (a) and (b), its sample-0 negative control, the clamp's control), rest, resize
+# (800 -> 1000 -> 800 px against D14's rule), retire, cost (2560x1440 and 4K, 1x and 4x; the light attachment's clear);
+# Vulkan validated. Alone: --rounds prime_control (--apis vulkan; rule C for depth's negative control, 1x and 4x),
+# cost_parts (where the 4K four-sample time goes), python_cost (the Python SceneTarget's 4x minus 1x on the same load)
 python native/core/python/scene_target_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
     [--apis opengl vulkan] [--rounds parity msaa rest resize retire cost] [--label n31_scene_targets]
 ```
