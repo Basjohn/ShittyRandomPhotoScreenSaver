@@ -3150,6 +3150,9 @@ of two recordings; regional metrics; showcase WebP; motion captures; cost).
 
 ## 73. Deep red ocean, second pass: lit glass, lanes, ember band, hero shell (6 November)
 
+*The Hero Shell (with Hero Across and Hero Height) was removed on 14 Nov 2026 at the operator's request ("a trash feature
+I never asked for"; no near-lens blobs, ever); its keys are retired. Every Hero Shell mention below is history.*
+
 Lead review of §72: keep the mood, water, shafts and ember hue; close, in order, the subject (large, clearly lit glass
 shells over dense chains of lit micro-bubbles in lanes), the embers (granular, in a band along the streams, top-middle
 dark), the foreground bokeh shell, then the faint surface and the cyan/violet wake strands. Evidence:
