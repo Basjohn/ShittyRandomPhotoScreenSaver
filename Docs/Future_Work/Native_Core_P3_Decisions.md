@@ -700,8 +700,10 @@ stays selectable in Settings as the fallback.
 - Facts J1 in the owner: `native_hidden_host` creates the process's one hidden host at the first request, keeps it,
   refuses another size, and closes it at the application's quit (a process ending with it alive did not exit).
 - Not yet on Vulkan, and so not in the rehearsal: the wallpaper, the card backdrop and every transition (the background
-  family), every Visualizer mode until N2.5, and each mode's Studio (`has_studio` answers False without the mode's
-  renderer: its preview is that renderer). Settings' Visualizers page keeps every mode listed (a selection there is a
+  family), every Visualizer mode but Spectrum (N2.5, 14 Nov: `renderer_backends` `("opengl", "vulkan")`, drawn by
+  the native core's item through `rendering/quick/visualizer/native_route.py`), and every mode's Studio: its preview
+  is the mode's Python renderer in an OpenGL render node, so `has_studio` answers False on a backend outside
+  `STUDIO_PREVIEW_BACKENDS` (`ui/studio/registry.py`, OpenGL only) until a native preview exists. Settings' Visualizers page keeps every mode listed (a selection there is a
   persisted choice; the runtime resolves it as above) and, since 14 Nov, greys a mode with no renderer on the running
   backend (its pill and admission checkbox, each with a one-line reason, and one line on Setup); on OpenGL nothing
   is greyed. Qt Quick's own `.qsb` shaders (`surface_material`,
