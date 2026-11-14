@@ -177,13 +177,16 @@ def test_the_slot_carries_the_nodes_admission(source, playing) -> None:
     assert "kFlagPresentFrame" in text and "kFlagSourceCurrent" in text
 
 
-def test_every_block_member_the_python_renderer_writes_is_set_by_the_port() -> None:
-    """The port names every member of SpectrumDraw the Python renderer writes (the block declared in spectrum.frag),
-    except the quad's matrix, which the core's full-target triangle does not read."""
-    from rendering.quick.visualizer.implementations.spectrum import SPECTRUM_BLOCK
+def test_the_port_sets_exactly_the_frame_members_by_name() -> None:
+    """Since round 4 (the standing port rule) the core's C++ sets only the per-frame members of SpectrumDraw, by name
+    (``setFrame``); every other member arrives from Python by name (``spectrum_settings_values``; its coverage of the
+    block is ``test_native_program_values``). The C++'s list, its writes and Python's ``SPECTRUM_FRAME_MEMBERS`` are
+    one set, all declared in the block."""
+    from rendering.quick.visualizer.implementations.spectrum import SPECTRUM_BLOCK, SPECTRUM_FRAME_MEMBERS
 
     text = (CORE / "src" / "spectrum.cpp").read_text(encoding="utf-8")
-    set_names = set(re.findall(r'values\.set\("(\w+)"', text)) | {"u_bars", "u_peaks"}
+    written = set(re.findall(r'setFrame\(packed, "(\w+)"', text))
+    listed = set(re.findall(r'"(u_\w+)"', text.split("kSpectrumFrameMembers[] = {", 1)[1].split("};", 1)[0]))
     declared = {name for name, _kind in SPECTRUM_BLOCK.fields}
-    assert declared - set_names == {"uMatrix"}
-    assert set_names <= declared
+    assert written and written == listed == set(SPECTRUM_FRAME_MEMBERS)
+    assert written <= declared
