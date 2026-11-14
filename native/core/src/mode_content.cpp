@@ -1284,6 +1284,7 @@ void ModeSource::stateInto(QJsonObject &o) const
     o.insert(QStringLiteral("textures"), textures);
     o.insert(QStringLiteral("textures_lost_edges"), double(m_notifier->lostEdges()));
     o.insert(QStringLiteral("textures_lost_delivered"), double(m_notifier->lostDelivered()));
+    o.insert(QStringLiteral("textures_lost_listener"), m_notifier->hasListener());
     o.insert(QStringLiteral("job_frame_requests"), double(m_notifier->frameRequests()));
     o.insert(QStringLiteral("jobs_finished"), double(m_notifier->jobsFinished()));
     QMutexLocker lock(&m_textureReportMutex);
@@ -1620,7 +1621,7 @@ bool ModeContent::uploadInFrame(QRhi *rhi, QRhiResourceUpdateBatch *updates, Gpu
     return true;
 }
 
-bool ModeContent::importOutput(QRhi *rhi, GpuTexture &gpu, const UploadJob &job)
+std::unique_ptr<QRhiTexture> ModeContent::importTexture(QRhi *rhi, GpuTexture &gpu, const UploadJob &job)
 {
     const QRhiTexture::Flags flags = job.mips ? (QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips)
                                               : QRhiTexture::Flags();
@@ -1629,13 +1630,17 @@ bool ModeContent::importOutput(QRhi *rhi, GpuTexture &gpu, const UploadJob &job)
     // Same queue family as the job queue: an exclusive image needs no ownership transfer (facts C3); Qt's QRhi knows only
     // the layout the job left it in (facts C2) and tracks it from here.
     if (!imported->createFrom({ job.nativeImage, job.nativeLayout })) {
-        if (gpu.jobService)
-            gpu.jobService->release(job.outputId); // never sampled
+        // The caller releases the output (never sampled) with every other of the item's commit (audit N38 L5).
         m_textureFailures.append(QStringLiteral("%1 could not be imported from its job at %2 x %3")
                                      .arg(QString::fromLatin1(gpu.name)).arg(job.size.width()).arg(job.size.height()));
         ++m_report.importFailures;
-        return false;
+        return nullptr;
     }
+    return imported;
+}
+
+void ModeContent::adoptImport(GpuTexture &gpu, std::unique_ptr<QRhiTexture> imported, const UploadJob &job)
+{
     releaseFront(gpu);                        // the picture it replaces: to the window's retire list, or Qt's own
     gpu.texture = std::move(imported);
     gpu.frontService = gpu.jobService;
@@ -1648,7 +1653,6 @@ bool ModeContent::importOutput(QRhi *rhi, GpuTexture &gpu, const UploadJob &job)
     ++m_report.uploads;
     ++m_report.jobsCommitted;
     g_textureUploads.fetchAndAddRelaxed(1);
-    return true;
 }
 
 QString ModeContent::advanceTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates, qint64 *bytes)
@@ -1714,16 +1718,59 @@ QString ModeContent::advanceTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates
     QString kind = submitted ? QStringLiteral("submit") : QString();
     if (!any || pending)
         return kind;
+    // 2a. Every published output imported first (audit N38 L5): the item's textures switch only when every import
+    //     succeeded. When one fails none of them switches: every published output is released (never sampled), every
+    //     candidate dropped, and the changed textures are reported lost together (the owner sends them again); the
+    //     fronts drawn meanwhile are all the old pictures, so a new picture is never paired with an old one.
+    std::unique_ptr<QRhiTexture> imported[kMaxModeTextures];
+    bool importFailed = false;
+    for (int i = 0; i < kMaxModeTextures; ++i) {
+        GpuTexture &gpu = m_textures[i];
+        if (!gpu.candidate || !gpu.job || gpu.job->state() != JobState::Done)
+            continue;
+        imported[i] = importTexture(rhi, gpu, *gpu.job);
+        importFailed = importFailed || !imported[i];
+    }
+    if (importFailed) {
+        for (int i = 0; i < kMaxModeTextures; ++i) {
+            GpuTexture &gpu = m_textures[i];
+            if (!gpu.candidate)
+                continue;
+            imported[i].reset();              // a wrapper only (createFrom owns nothing): nothing native goes with it
+            if (gpu.job && gpu.job->state() == JobState::Done) {
+                if (gpu.jobService)
+                    gpu.jobService->release(gpu.job->outputId); // never sampled
+            }
+            const QString label = QString::fromLatin1(gpu.name);
+            bool named = false;
+            for (const QString &failure : m_textureFailures)
+                named = named || failure.startsWith(label + QLatin1Char(' '));
+            if (!named) {
+                m_textureFailures.append(QStringLiteral("%1 was not switched: another texture of the item could not be "
+                                                        "imported (the item's textures switch together)").arg(label));
+            }
+            gpu.job.reset();
+            gpu.jobService.reset();
+            gpu.pixels.reset();
+            gpu.candidate = 0;
+            clearSlotIfEmpty(gpu);
+        }
+        m_report.jobsPending = 0;
+        return kind;
+    }
+    // 2b. Every candidate switches.
     bool committedJob = false;
     bool committedInFrame = false;
-    for (GpuTexture &gpu : m_textures) {
+    for (int i = 0; i < kMaxModeTextures; ++i) {
+        GpuTexture &gpu = m_textures[i];
         if (!gpu.candidate)
             continue;
         const quint64 generation = gpu.candidate;
         if (gpu.job) {
             const std::shared_ptr<UploadJob> job = gpu.job;
             if (job->state() == JobState::Done) {
-                committedJob = importOutput(rhi, gpu, *job) || committedJob;
+                adoptImport(gpu, std::move(imported[i]), *job);
+                committedJob = true;
             } else {
                 // Failed (or abandoned): the in-frame form from the pixels the job kept (fail closed).
                 const QSharedPointer<TextureImage> pixels = job->takePixels();
@@ -1732,8 +1779,12 @@ QString ModeContent::advanceTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates
                     committedInFrame = true;
                     *bytes += qint64(pixels->pixels.size());
                 } else if (!pixels) {
+                    // L5: an abandoned job (its service stopped) has its own reason, never an empty one.
+                    const QString why = job->state() == JobState::Abandoned
+                        ? QStringLiteral("its job was abandoned (the job service stopped)")
+                        : (job->error.isEmpty() ? QStringLiteral("its job failed") : job->error);
                     m_textureFailures.append(QStringLiteral("%1 could not be uploaded: %2")
-                                                 .arg(QString::fromLatin1(gpu.name), job->error));
+                                                 .arg(QString::fromLatin1(gpu.name), why));
                 }
             }
             gpu.job.reset();

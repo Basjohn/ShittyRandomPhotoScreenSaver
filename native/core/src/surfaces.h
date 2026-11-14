@@ -175,14 +175,29 @@ public:
     // GUI thread: the window's registry (a new one when the window at this address was destroyed).
     static std::shared_ptr<WindowSurfaces> forWindow(QQuickWindow *window);
 
-    // The frame edges (render thread): counted by the frame driver at each beforeRendering.
-    qint64 noteEdge() { return m_edges.fetchAndAddOrdered(1) + 1; }
+    // The frame edges (render thread): one per rendered frame of the window, whatever number of frame drivers is
+    // connected to it (audit N38 M1: a second driver, or one detached and not yet released, counted the frame again and
+    // released a retired image a frame early). The first driver's beforeRendering in a frame counts it; the window's
+    // afterRendering (one connection per registry, made by forWindow) opens the next frame's count. A driver connected
+    // in the middle of a frame whose count is taken counts from the next one (never twice; at worst one frame late).
+    qint64 noteEdge()
+    {
+        if (m_frameCounted.testAndSetOrdered(0, 1))
+            return m_edges.fetchAndAddOrdered(1) + 1;
+        return m_edges.loadAcquire();
+    }
+    void frameRendered() { m_frameCounted.storeRelease(0); }
     qint64 edges() const { return m_edges.loadAcquire(); }
-    // Render thread: a job's output this window's frames may have sampled up to the current edge.
+    // Render thread: a job's output this window's frames may have sampled up to the current edge. Asks the window for a
+    // frame (audit N38 M2): the frames its release waits for are rendered even when nothing else changes.
     void retire(const std::shared_ptr<JobService> &service, quint64 output);
     bool retiring() const { return m_retiring.loadAcquire() > 0; }
-    // Render thread, at the frame edge `edge`: the entries whose frames completed go to their services.
+    // Render thread, at the frame edge `edge`: the entries whose frames completed go to their services; while any is
+    // left the window is asked for the next frame (M2: one request per frame until the list is empty, an edge each,
+    // never a timer; at rest the list is empty and nothing is asked).
     int releaseRetired(qint64 edge, int framesInFlight);
+    // Frames the retire list asked the window for (M2's proof).
+    qint64 frameRequests() const { return m_frameRequests.loadRelaxed(); }
     // Render thread, outside a frame, after QRhi::finish(): every entry goes.
     int releaseAllRetired();
     // Any thread: entries waiting in every window (the destruction barrier's reading), and the ones left to their
@@ -208,10 +223,17 @@ private:
         qint64 lastUse = 0; // the frame edge of its last possible use
     };
 
+    // Render thread, inside one of the window's frames (the window is alive while it renders): a queued update() of the
+    // window on its own (GUI) thread, dropped by Qt if the window goes first.
+    void requestFrame();
+
+    QQuickWindow *m_window = nullptr; // set by forWindow; dereferenced only inside the window's own frames
+    QAtomicInteger<qint64> m_frameRequests { 0 };
     mutable QMutex m_mutex;
     QList<std::shared_ptr<Surface>> m_surfaces;
     int m_drivers = 0;
     QAtomicInteger<qint64> m_edges { 0 };
+    QAtomicInteger<int> m_frameCounted { 0 }; // this frame's edge is counted (M1); cleared at afterRendering
     QAtomicInteger<int> m_retiring { 0 };
     QList<Retired> m_retired; // under m_mutex
 };

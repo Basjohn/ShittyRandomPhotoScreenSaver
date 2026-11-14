@@ -425,6 +425,8 @@ QJsonObject FrameDriver::stateJson() const
     o.insert(QStringLiteral("gpu_samples_dropped"), m_samples->dropped());
     o.insert(QStringLiteral("retired_outputs_released"), m_retiredReleased.loadRelaxed());
     o.insert(QStringLiteral("window_edges"), m_surfaces ? m_surfaces->edges() : 0);
+    o.insert(QStringLiteral("window_retire_frame_requests"), m_surfaces ? m_surfaces->frameRequests() : 0);
+    o.insert(QStringLiteral("window_retiring"), m_surfaces ? m_surfaces->retiring() : false);
     {
         QMutexLocker timerLock(&m_timerMutex);
         o.insert(QStringLiteral("gpu_timer"), m_timer ? QJsonValue(m_timer->stateJson()) : QJsonValue());

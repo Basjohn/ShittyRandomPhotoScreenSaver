@@ -47,6 +47,12 @@ public:
     qint64 lostEdges() const { return m_lostEdges.loadRelaxed(); }
     qint64 lostDelivered() const { return m_lostDelivered.loadRelaxed(); }
     qint64 frameRequests() const { return m_frameRequests.loadRelaxed(); }
+    // Whether an owner's listener is set (audit N38 L4's proof: it goes with the owner's retire).
+    bool hasListener() const
+    {
+        QMutexLocker lock(&m_mutex);
+        return bool(m_listener);
+    }
 
 private:
     void deliverLost(const QStringList &names); // GUI thread

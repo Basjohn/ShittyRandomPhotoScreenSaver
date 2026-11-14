@@ -10,6 +10,7 @@
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QThread>
+#include <QtGui/QVulkanFunctions>
 #include <QtGui/QVulkanInstance>
 
 #ifndef VK_NO_PROTOTYPES
@@ -179,6 +180,17 @@ UploadJob::Cancelled UploadJob::cancel()
     }
 }
 
+QJsonObject UploadJob::briefJson() const
+{
+    QJsonObject o;
+    o.insert(QStringLiteral("name"), QString::fromLatin1(name));
+    o.insert(QStringLiteral("generation"), double(generation));
+    o.insert(QStringLiteral("size"), QJsonArray { size.width(), size.height() });
+    o.insert(QStringLiteral("mips"), mips);
+    o.insert(QStringLiteral("state"), jobStateName(state()));
+    return o;
+}
+
 QJsonObject UploadJob::toJson() const
 {
     QJsonObject o;
@@ -273,16 +285,34 @@ bool JobService::submit(const std::shared_ptr<UploadJob> &job)
     QMutexLocker lock(&m_mutex);
     if (m_quit)
         return false;
-    job->submittedNs = jobClockNs();
-    m_queue.append(job);
-    g_queued.fetchAndAddRelaxed(1);
     if (!m_started) {
         // The first job starts the thread (D9 as built point 1: a device that never uploads holds no thread).
         m_started = true;
-        m_thread->start();
+        if (!startThread()) {
+            // Audit N38 L3: Qt could not start the thread (it only warns). The service fails closed now: nothing is
+            // queued that no thread would run, this job and every later one run in their in-frame form, and a release
+            // is never queued (m_quit), so no count stays up for the destruction barrier.
+            m_failed.storeRelease(1);
+            m_quit = true;
+            m_setUpError = QStringLiteral("the job thread could not be started");
+            return false;
+        }
     }
+    job->submittedNs = jobClockNs();
+    m_queue.append(job);
+    g_queued.fetchAndAddRelaxed(1);
     m_wake.wakeOne();
     return true;
+}
+
+bool JobService::startThread()
+{
+    // Under m_mutex: the new thread's body takes it first, so it cannot run (or end) before this returns; a thread that
+    // is not running here was never started (Qt's start() sets running before it returns, and clears it on failure).
+    if (m_failThreadStart)
+        return false;                         // the self-test's control of a start that fails
+    m_thread->start();
+    return m_thread->isRunning();
 }
 
 void JobService::release(quint64 id)
@@ -406,6 +436,11 @@ void JobService::runJob(const std::shared_ptr<UploadJob> &job)
         if (!setUp)
             m_failed.storeRelease(1); // fails closed: every later job runs in its in-frame form
     }
+    if (setUp && m_backend->deviceLost()) {
+        // Audit N38 L1: a job queued behind the one that found the device lost never touches it again.
+        setUp = false;
+        setUpError = QStringLiteral("the device is lost");
+    }
     if (!setUp) {
         job->finishedNs = jobClockNs(); // every field before the state's edge (the consumer reads after it)
         job->fail(QStringLiteral("the job service failed: %1").arg(setUpError));
@@ -424,6 +459,13 @@ void JobService::runJob(const std::shared_ptr<UploadJob> &job)
     }
     QString error;
     if (!m_backend->upload(*job, id, &error)) {
+        if (m_backend->deviceLost()) {
+            // L1: the upload's completion edge found the device lost: no output is published (Qt would import an image
+            // whose upload never completed), and the service fails closed for every later job.
+            m_failed.storeRelease(1);
+            QMutexLocker lock(&m_mutex);
+            m_setUpError = QStringLiteral("the device is lost");
+        }
         job->finishedNs = jobClockNs();
         job->fail(error);
         {
@@ -532,7 +574,8 @@ QJsonObject JobService::stop()
     {
         QMutexLocker lock(&m_mutex);
         o.insert(QStringLiteral("queued_at_stop"), int(m_queue.size()));
-        o.insert(QStringLiteral("running_at_stop"), m_running ? QJsonValue(m_running->toJson()) : QJsonValue());
+        // L2: the job in flight's constant fields and state only (the job thread may be writing the rest).
+        o.insert(QStringLiteral("running_at_stop"), m_running ? QJsonValue(m_running->briefJson()) : QJsonValue());
         m_quit = true;
         m_abandon.storeRelease(1);
         started = m_started;
@@ -570,7 +613,7 @@ QJsonObject JobService::stateJson(bool withLog) const
     o.insert(QStringLiteral("set_up"), m_setUp);
     o.insert(QStringLiteral("set_up_error"), m_setUpError);
     o.insert(QStringLiteral("queued"), int(m_queue.size()));
-    o.insert(QStringLiteral("running"), m_running ? QJsonValue(m_running->toJson()) : QJsonValue());
+    o.insert(QStringLiteral("running"), m_running ? QJsonValue(m_running->briefJson()) : QJsonValue()); // L2
     o.insert(QStringLiteral("releases_pending"), int(m_releases.size()));
     o.insert(QStringLiteral("images"), int(m_images.size()));
     o.insert(QStringLiteral("wakeups"), double(m_wakeups));
@@ -693,8 +736,11 @@ public:
             return false;
         }
         QRhiCommandBuffer *cb = nullptr;
-        if (m_rhi->beginOffscreenFrame(&cb) != QRhi::FrameOpSuccess || !cb) {
+        const QRhi::FrameOpResult begun = m_rhi->beginOffscreenFrame(&cb);
+        if (begun != QRhi::FrameOpSuccess || !cb) {
             *error = QStringLiteral("beginOffscreenFrame failed on the job QRhi");
+            if (begun == QRhi::FrameOpDeviceLost || m_rhi->isDeviceLost())
+                noteDeviceLost(error);
             return false;
         }
         QRhiResourceUpdateBatch *updates = m_rhi->nextResourceUpdateBatch();
@@ -703,15 +749,28 @@ public:
         if (job.mips)
             updates->generateMips(texture.get());
         cb->resourceUpdate(updates); // the staging copy, on this thread
-        if (m_rhi->endOffscreenFrame() != QRhi::FrameOpSuccess) {
+        const QRhi::FrameOpResult ended = m_rhi->endOffscreenFrame();
+        if (ended != QRhi::FrameOpSuccess) {
             *error = QStringLiteral("endOffscreenFrame failed on the job QRhi");
-            m_rhi->finish();
+            if (ended == QRhi::FrameOpDeviceLost || m_rhi->isDeviceLost())
+                noteDeviceLost(error);
+            else
+                m_rhi->finish();
             return false;
         }
         job.recordedNs = jobClockNs();
         pixels.reset();
         job.dropPixels(); // the core's copy goes: the upload is in the staging buffer
-        m_rhi->finish();  // the completion edge: this QRhi's own queue idle (facts C2)
+        // The completion edge with its own result (audit N38 L1): QRhi::finish() waits for this QRhi's queue but drops
+        // the wait's result, so a device lost during the upload would publish an image whose upload never completed.
+        // A fence on the job queue (an empty submit after the upload's, waited for here) returns the loss.
+        if (!waitQueue(error) || m_rhi->isDeviceLost()) {
+            if (error->isEmpty())
+                *error = QStringLiteral("the device was lost during the upload");
+            texture.reset();          // never published
+            return false;
+        }
+        m_rhi->finish();  // this QRhi's own bookkeeping (its queue is idle: facts C2)
         const QRhiTexture::NativeTexture native = texture->nativeTexture();
         job.outputId = id;
         job.nativeImage = native.object;
@@ -747,11 +806,14 @@ public:
         m_tornDown = true;
     }
 
+    bool deviceLost() const override { return m_deviceLost.loadAcquire() != 0; }
+
     QJsonObject stateJson() const override
     {
         QMutexLocker lock(&m_factsMutex);
         QJsonObject o = m_facts;
         o.insert(QStringLiteral("kind"), QStringLiteral("qrhi_vulkan"));
+        o.insert(QStringLiteral("device_lost"), m_deviceLost.loadRelaxed() != 0);
         o.insert(QStringLiteral("uploads"), double(m_uploads));
         o.insert(QStringLiteral("torn_down"), m_tornDown);
         return o;
@@ -764,7 +826,44 @@ private:
         m_facts = facts;
     }
 
+    void noteDeviceLost(QString *error)
+    {
+        m_deviceLost.storeRelease(1);
+        *error = QStringLiteral("the device was lost (%1)").arg(*error);
+    }
+
+    // L1: waits for every submission on the job queue through a fence of our own and returns its result (false with the
+    // reason, the device marked lost on VK_ERROR_DEVICE_LOST). Job thread only: the job queue is this thread's alone.
+    bool waitQueue(QString *error)
+    {
+        const VkDevice dev = reinterpret_cast<VkDevice>(quintptr(m_device.device));
+        QVulkanDeviceFunctions *df = m_device.instance ? m_device.instance->deviceFunctions(dev) : nullptr;
+        if (!df) {
+            *error = QStringLiteral("no device functions for the job queue's fence");
+            return false;
+        }
+        VkQueue queue = VK_NULL_HANDLE;
+        df->vkGetDeviceQueue(dev, m_device.family, m_device.queueIndex, &queue);
+        VkFenceCreateInfo info = {};
+        info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        VkFence fence = VK_NULL_HANDLE;
+        VkResult result = df->vkCreateFence(dev, &info, nullptr, &fence);
+        if (result == VK_SUCCESS) {
+            result = df->vkQueueSubmit(queue, 0, nullptr, fence); // signalled once every earlier submission completed
+            if (result == VK_SUCCESS)
+                result = df->vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
+            df->vkDestroyFence(dev, fence, nullptr);
+        }
+        if (result == VK_SUCCESS)
+            return true;
+        *error = QStringLiteral("the job queue's completion returned VkResult %1").arg(int(result));
+        if (result == VK_ERROR_DEVICE_LOST)
+            noteDeviceLost(error);
+        return false;
+    }
+
     JobDevice m_device;
+    QAtomicInteger<int> m_deviceLost { 0 };
     std::unique_ptr<QRhi> m_rhi;                 // job thread only
     QHash<quint64, QRhiTexture *> m_textures;    // job thread only (owned)
     mutable QMutex m_factsMutex;                 // guards the report below (read from the GUI thread)
@@ -807,6 +906,14 @@ public:
                 m_failNext = false;
                 *error = QStringLiteral("scripted upload failure");
                 return false; // nothing submitted: the pixels stay
+            }
+            if (m_loseNext) {
+                // L1's control: the upload was submitted and its completion edge found the device lost.
+                m_loseNext = false;
+                m_lost = true;
+                job.dropPixels();
+                *error = QStringLiteral("the device was lost (scripted)");
+                return false;
             }
         }
         if (!job.pixels()) {
@@ -853,6 +960,17 @@ public:
     void stopping() override
     {
         hold(false); // the held "GPU wait" completes: the job in flight is then abandoned by the service
+    }
+
+    bool deviceLost() const override
+    {
+        QMutexLocker lock(&m_mutex);
+        return m_lost;
+    }
+    void loseNext()
+    {
+        QMutexLocker lock(&m_mutex);
+        m_loseNext = true;
     }
 
     QJsonObject stateJson() const override
@@ -904,6 +1022,8 @@ private:
     QWaitCondition m_changed;
     bool m_hold = false;
     bool m_failNext = false;
+    bool m_loseNext = false;
+    bool m_lost = false;
     bool m_failSetUp = false;
     int m_entered = 0;
     int m_setUps = 0;
@@ -965,6 +1085,14 @@ QByteArray jobServiceSelfTestJson(const QByteArray &scriptJson)
             backend->failNext();
         } else if (op == QLatin1String("fail_setup")) {
             backend->failSetUp();
+        } else if (op == QLatin1String("lose_device")) {
+            backend->loseNext();                 // audit N38 L1
+        } else if (op == QLatin1String("fail_thread_start")) {
+            service->failThreadStartForTest();   // audit N38 L3
+        } else if (op == QLatin1String("running_state")) {
+            // Audit N38 L2: the service's state while a job runs reports only its constant fields and state.
+            const QJsonObject running = service->stateJson(false).value(QStringLiteral("running")).toObject();
+            seen.insert(QStringLiteral("running_keys"), QJsonArray::fromStringList(running.keys()));
         } else if (op == QLatin1String("wait_entered")) {
             seen.insert(QStringLiteral("entered"), backend->waitEntered(step.value(QStringLiteral("count")).toInt(1),
                                                                         step.value(QStringLiteral("timeout_ms"))

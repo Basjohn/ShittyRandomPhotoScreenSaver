@@ -121,7 +121,12 @@ public:
     qint64 recordedNs = 0;
     qint64 completedNs = 0;
     qint64 finishedNs = 0;
+    // Every field: only once the job thread's own edge is set (done, failed, abandoned: written before it), or on the
+    // job thread itself.
     QJsonObject toJson() const;
+    // Audit N38 L2: what any thread may read while the job thread may be writing its fields (the job in flight): its
+    // constant fields and its atomic state only.
+    QJsonObject briefJson() const;
 
 private:
     QAtomicInteger<int> m_state { int(JobState::Queued) };
@@ -151,6 +156,9 @@ public:
     // The service's stop() was asked (any thread, before the join): the job in flight will be abandoned. The QRhi
     // backend has nothing to do (its GPU wait ends by itself); the scripted one opens its held "GPU wait".
     virtual void stopping() {}
+    // Audit N38 L1, job thread: the device was found lost (an upload's completion edge returned it). The service then
+    // fails closed: the job fails, every later job fails at once and its consumer runs the in-frame form.
+    virtual bool deviceLost() const { return false; }
     virtual QJsonObject stateJson() const = 0;
 };
 
@@ -215,9 +223,17 @@ public:
 
     // The job thread's body (JobThread::run).
     void threadMain();
+    // The self-test's control (GUI thread, before the first job): the thread's start fails (audit N38 L3).
+    void failThreadStartForTest()
+    {
+        QMutexLocker lock(&m_mutex);
+        m_failThreadStart = true;
+    }
 
 private:
     JobService(std::unique_ptr<JobBackend> backend, quint64 key, const QString &label);
+    // Under m_mutex: the thread started at the first job; false when it is not running (the service then fails closed).
+    bool startThread();
     void runJob(const std::shared_ptr<UploadJob> &job);
     void runReleases(const QList<quint64> &ids);
     void logJob(const UploadJob &job);
@@ -250,6 +266,7 @@ private:
     QJsonObject m_stopRecord;
 
     bool m_started = false;                      // the thread was started (at the first job)
+    bool m_failThreadStart = false;              // the self-test's control (L3)
 
     QAtomicInteger<int> m_failed { 0 };
     QAtomicInteger<int> m_stopped { 0 };

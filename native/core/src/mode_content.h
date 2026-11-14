@@ -450,7 +450,10 @@ private:
     QString advanceTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates, qint64 *bytes);
     bool uploadInFrame(QRhi *rhi, QRhiResourceUpdateBatch *updates, GpuTexture &gpu,
                        const QSharedPointer<TextureImage> &image, quint64 generation);
-    bool importOutput(QRhi *rhi, GpuTexture &gpu, const UploadJob &job);
+    // A published job output imported into Qt's QRhi (null on failure, recorded), then made the front (audit N38 L5:
+    // the item's commit imports every output before any front switches).
+    std::unique_ptr<QRhiTexture> importTexture(QRhi *rhi, GpuTexture &gpu, const UploadJob &job);
+    void adoptImport(GpuTexture &gpu, std::unique_ptr<QRhiTexture> imported, const UploadJob &job);
     // Every texture the drawn program samples has a front.
     bool texturesReady() const;
     // N5.7a: what a still draws, as bytes (its program, target, triangle, blocks and the fronts its passes sample).

@@ -1432,6 +1432,27 @@ PyObject *composite_mode_retire(PyObject *, PyObject *args)
     if (!source)
         return nullptr;
     source->retireCurrent();
+    // Audit N38 L4: the owner's lost-texture listener goes with its retire (GUI thread), so no lost edge reaches a
+    // retired owner and the core holds no reference to it until the item's deletion.
+    source->notifier()->setListener(nullptr);
+    Py_RETURN_NONE;
+}
+
+// N5.7a: the generic mode drawn as a still (no stream; mode_content.h "Stills"): the background layer's photo.
+PyObject *composite_mode_still(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    int still = 0;
+    if (!PyArg_ParseTuple(args, "Lp", &handle, &still))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    QString error;
+    if (!item->stillMode(still != 0, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
     Py_RETURN_NONE;
 }
 
@@ -2109,7 +2130,12 @@ PyMethodDef methods[] = {
     { "composite_mode_state", composite_mode_state, METH_VARARGS,
       "(handle) -> JSON str: the stream, its schema and reader, the program, the settings, syncs, records and draws." },
     { "composite_mode_retire", composite_mode_retire, METH_VARARGS,
-      "(handle) -> None: the mode's stream stores Retiring at once (any thread; D1); unbind releases it." },
+      "(handle) -> None: the mode's stream stores Retiring at once (D1); unbind releases it. The owner's lost-texture "
+      "listener goes with it (audit N38 L4; the GUI thread's call)." },
+    { "composite_mode_still", composite_mode_still, METH_VARARGS,
+      "(handle, still) -> None: N5.7a, the item draws as a still (no stream: its textures, settings and card are its "
+      "frame; it records only when what it draws changed). ValueError while a stream is bound or when the program "
+      "cannot be drawn so." },
     { "mode_blocks", mode_blocks, METH_VARARGS,
       "(schema_json, program_json, packs, settings_json, record_bytes, card_json | None, (target_w, target_h)) -> "
       "([block bytes per pass], facts JSON str): what a generic mode uploads for this record (GPU-free); ValueError "

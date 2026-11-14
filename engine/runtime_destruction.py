@@ -530,9 +530,9 @@ class RuntimeDestructionBarrier:
             return ()
 
     def _remaining_native_work(self) -> tuple[object, ...]:
-        """The native core's work for the retiring items (N3.8, the N2.5 audit's L8): jobs queued or running, job
-        outputs held or retiring, the items' textures and the copies not yet uploaded. Read only when the backend owner
-        loaded the core (never imported here); nothing native means nothing pending."""
+        """The native core's work in flight (N3.8, the N2.5 audit's L8; audit N38 M3: ``NativeCore.IN_FLIGHT_WORK``,
+        jobs queued or running, releases pending and replaced outputs retiring, never what live items hold). Read only
+        when the backend owner loaded the core (never imported here); nothing native means nothing pending."""
         if self.retiring_generation is None:
             return ()
         bootstrap = sys.modules.get("rendering.quick.bootstrap")

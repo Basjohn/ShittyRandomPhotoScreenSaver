@@ -390,8 +390,17 @@ std::shared_ptr<WindowSurfaces> WindowSurfaces::forWindow(QQuickWindow *window)
     std::shared_ptr<WindowSurfaces> surfaces = entry.surfaces.lock();
     if (!surfaces || entry.window.isNull()) {
         surfaces = std::make_shared<WindowSurfaces>();
+        surfaces->m_window = window;
         entry.window = window;
         entry.surfaces = surfaces;
+        // Audit N38 M1: the window's frame count opens again after every rendered frame, once per registry (a direct
+        // connection on the render thread; the window as context removes it with the window; a registry gone first
+        // leaves a lambda that does nothing).
+        const std::weak_ptr<WindowSurfaces> weak = surfaces;
+        QObject::connect(window, &QQuickWindow::afterRendering, window, [weak]() {
+            if (const std::shared_ptr<WindowSurfaces> live = weak.lock())
+                live->frameRendered();
+        }, Qt::DirectConnection);
     }
     return surfaces;
 }
@@ -476,14 +485,27 @@ void WindowSurfaces::retire(const std::shared_ptr<JobService> &service, quint64 
 {
     if (!service || !output)
         return;
-    QMutexLocker lock(&m_mutex);
-    Retired r;
-    r.service = service;
-    r.output = output;
-    r.lastUse = m_edges.loadAcquire();
-    m_retired.append(r);
-    m_retiring.fetchAndAddOrdered(1);
-    g_retiring.fetchAndAddRelaxed(1);
+    {
+        QMutexLocker lock(&m_mutex);
+        Retired r;
+        r.service = service;
+        r.output = output;
+        r.lastUse = m_edges.loadAcquire();
+        m_retired.append(r);
+        m_retiring.fetchAndAddOrdered(1);
+        g_retiring.fetchAndAddRelaxed(1);
+    }
+    requestFrame(); // M2: the frames the release waits for are rendered even if nothing else changes
+}
+
+void WindowSurfaces::requestFrame()
+{
+    QQuickWindow *window = m_window;
+    if (!window)
+        return;
+    m_frameRequests.fetchAndAddRelaxed(1);
+    // Queued to the window's own thread with the window as context: dropped if the window is destroyed first.
+    QMetaObject::invokeMethod(window, [window]() { window->update(); }, Qt::QueuedConnection);
 }
 
 int WindowSurfaces::releaseRetired(qint64 edge, int framesInFlight)
@@ -500,6 +522,8 @@ int WindowSurfaces::releaseRetired(qint64 edge, int framesInFlight)
     g_retiring.fetchAndAddRelaxed(-int(due.size()));
     for (const Retired &r : due)
         r.service->release(r.output); // queued to the job thread (never waits)
+    if (retiring())
+        requestFrame();               // M2: the next frame, for the entries still waiting (an edge per frame)
     return int(due.size());
 }
 
