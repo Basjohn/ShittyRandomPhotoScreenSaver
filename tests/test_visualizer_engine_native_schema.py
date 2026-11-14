@@ -441,3 +441,103 @@ def test_a_refused_payload_reaches_the_owner_as_the_sessions_end(qt_app):
     finally:
         link.close()
         sender.close()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("payload", ("native", "codec"))
+def test_a_real_worker_whose_payload_the_owner_refuses_ends_its_session(qt_app, monkeypatch, payload):
+    # The refusal path end to end with a real worker process (the test above writes the slot in process): the REAL
+    # owner (the host binding's rig, no window shown) on a real ``WorkerType.VISUALIZER`` process fed recorded PCM, whose
+    # session writes Spectrum's native schema; this process's reader is the Python codec reader, which refuses the
+    # first slot it reads at its head (D2: one consumer per stream, a native payload on a codec stream). The refused
+    # slot is never acknowledged, the stream fails, the link reports the session's end with the refusal as its reason,
+    # and the owner's failure path keeps the Visualizer drawing (the last recovery leaves it in process for the run).
+    # Control: the same worker writing the codec is read, never refused, and stays the owner's worker.
+    import os
+
+    from core.process.supervisor import ProcessSupervisor
+    from core.process.types import WorkerType
+    from core.visualizer_engine.engine_worker import EngineSession, visualizer_worker_main
+    from tests.test_visualizer_owner_engine_worker import _pump
+    from tools.visualizer_replay import owner_worker_gate as gate
+    from tools.visualizer_replay.live_engine_gate import paced_pcm
+    from widgets.spotify_visualizer import engine_worker_link
+    from widgets.spotify_visualizer.quick_display_visualizer_owner import QuickDisplayVisualizerOwner
+
+    def _device(_config=None):
+        raise AssertionError("a test opened an audio device")
+
+    monkeypatch.setattr("widgets.spotify_visualizer.audio_worker.create_audio_capture", _device)
+    monkeypatch.setattr(EngineSession, "LIVE_EDGE_TIMEOUT_S", 10.0)
+    engine_worker_link.reset_run_state_for_testing()
+    refusals: list[dict] = []
+    refuse = PacketMailbox._refuse
+    supervisor = ProcessSupervisor()
+
+    def recording_refusal(self, refusal):
+        # What the mapping says at the refusal (the reader has acknowledged nothing), and who wrote the slot.
+        worker = supervisor._workers.get(WorkerType.VISUALIZER)
+        refusals.append({"cause": refusal.cause, "consumed": struct.unpack_from("<Q", self._reader._view, 40)[0],
+                         "reason": str(refusal), "writer_pid": getattr(worker, "pid", None)})
+        return refuse(self, refusal)
+
+    lost: list[str] = []
+    on_lost = QuickDisplayVisualizerOwner._on_engine_worker_lost
+
+    def recording_lost(self, link, reason):
+        lost.append(str(reason))
+        return on_lost(self, link, reason)
+
+    monkeypatch.setattr(PacketMailbox, "_refuse", recording_refusal)
+    monkeypatch.setattr(QuickDisplayVisualizerOwner, "_on_engine_worker_lost", recording_lost)
+    pcm, rate = paced_pcm(3.0)
+    supervisor.register_worker_factory(WorkerType.VISUALIZER, visualizer_worker_main)
+    assert supervisor.start(WorkerType.VISUALIZER)
+    rig = gate.OwnerRig("spectrum", worker=True, supervisor=supervisor, cadence="thread")
+    try:
+        with engine_worker_link.recorded_capture_for_testing(pcm=pcm, pcm_rate=rate, payload=payload):
+            try:
+                owner = rig.build()
+            except RuntimeError as exc:
+                # The rig settles the configure's and start's replies before it returns; with a warm worker both
+                # refusals and the fall back in process can complete inside that settle, which the rig reports as a
+                # construction fallback. Here that is the outcome under test (asserted below), so take its owner.
+                if payload != "native" or "fell back in process" not in str(exc):
+                    raise
+                owner = rig.owner
+            if payload == "codec":
+                first = owner._worker
+                assert first is not None
+                worker_pid = supervisor._workers[WorkerType.VISUALIZER].pid
+                assert worker_pid and worker_pid != os.getpid()                     # a real process
+                _pump(rig, 2.0, until=lambda: first.configured and len(rig.published) > 30)
+                presented = len(rig.published)
+                _pump(rig, 0.5)
+                assert not refusals and not lost and owner._worker is first and first.configured
+                assert first.mailbox.refused_payloads == 0 and len(rig.published) > presented
+                return
+            _pump(rig, 30.0, until=lambda: bool(lost) and engine_worker_link.worker_disabled_for_run()
+                  and owner._mode_transition_phase == "idle")
+        assert refusals, lost
+        assert all(r["writer_pid"] and r["writer_pid"] != os.getpid() for r in refusals), refusals
+        assert all(r["cause"] == "schema" and r["consumed"] == 0 for r in refusals), refusals
+        assert "on a stream the Python codec consumes" in refusals[0]["reason"]
+        assert lost and lost[0].startswith("frame payload refused (schema, sequence "), lost
+        assert owner._worker is None and engine_worker_link.worker_disabled_for_run()
+        assert owner._mode_transition_phase == "idle"
+        drawn: list = []
+        publish = owner.controller.publish_render_snapshot
+
+        def recording(logical, presentation, *, logical_revision):
+            published = publish(logical, presentation, logical_revision=logical_revision)
+            if published:
+                drawn.append(logical)
+            return published
+
+        owner.controller.publish_render_snapshot = recording
+        _pump(rig, 0.5)
+        assert drawn                                                                # still drawn, in process
+    finally:
+        rig.close()
+        supervisor.shutdown()
+        engine_worker_link.reset_run_state_for_testing()

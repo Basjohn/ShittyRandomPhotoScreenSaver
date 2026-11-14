@@ -168,9 +168,11 @@ def recorded_capture_for_testing(**overrides: Any) -> Iterator[None]:
     """Tests only: every configure the link sends while this is entered carries ``overrides`` (a recorded-PCM source:
     ``pcm`` / ``pcm_rate`` with the worker's own cadence, or ``cadence="input"`` with ``order`` / ``seed`` for the
     identity gate, fed through ``EngineWorkerLink.feed_for_testing``). The session then refuses the device for its
-    life (``EngineSession``); production never enters this."""
+    life (``EngineSession``); production never enters this. ``payload="native"``: the session writes its mode's native
+    schema instead of the tagged codec, which this process's codec reader refuses at the first slot head (native core
+    N2.3: the refusal path end to end with a real worker)."""
     global _test_session_overrides
-    allowed = {"pcm", "pcm_rate", "cadence", "order", "seed", "interval_s"}
+    allowed = {"pcm", "pcm_rate", "cadence", "order", "seed", "interval_s", "payload"}
     unknown = set(overrides) - allowed
     if unknown:
         raise ValueError(f"not a recorded-capture override: {sorted(unknown)}")
