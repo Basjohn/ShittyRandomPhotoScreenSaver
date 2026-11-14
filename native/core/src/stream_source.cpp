@@ -51,10 +51,11 @@ bool StreamSource::bind(const QString &mappingName, const PacketReaderConfig &co
         ++m_retired;
     }
     {
-        // Its state at open, taken before the render thread can read it (nothing else touches it yet).
-        const QJsonObject opened = reader->stateJson();
+        // Its counters at open, copied before the render thread can read it (nothing else touches it yet).
+        const PacketReaderSnapshot opened = reader->snapshot();
         QMutexLocker report(&m_reportMutex);
-        m_readerState = opened;
+        m_readerSnapshot = opened;
+        m_snapshotOf = reader;
     }
     m_current = reader;
     m_mapping = mappingName;
@@ -154,8 +155,9 @@ bool StreamSource::syncStream()
     bool rejected = false;
     bool changed = false;
     QString result = QStringLiteral("unbound");
-    QJsonObject readerState;
+    PacketReaderSnapshot readerSnapshot;
     bool snapshot = false;
+    m_streamBound = current != nullptr;
     if (current) {
         const ReadResult read = current->read(); // the accept edge (D2), on the render thread
         result = QString::fromLatin1(readResultName(read));
@@ -181,15 +183,15 @@ bool StreamSource::syncStream()
             m_hasFrame = false; // dropped (R-184's edge), or another stream bound: nothing of the old one is drawn
             changed = true;
         }
-        // The reader's state, taken on its own thread when the read did something (audit L9), never per idle sync.
+        // The reader's counters, copied on its own thread when the read did something (audit L9), never per idle
+        // sync; a plain copy, no JSON (round 2, L2).
         if (read != ReadResult::Nothing) {
-            readerState = current->stateJson();
+            readerSnapshot = current->snapshot();
             snapshot = true;
         }
-    } else if (m_hasFrame) {
-        m_hasFrame = false;
-        changed = true;
     }
+    // No stream: the last admitted frame stays (round 2, L3), so the card's fade-out after an unbind fades a frame, not
+    // a cleared target. A new stream's first sync clears it above (it holds nothing yet).
     QMutexLocker lock(&m_reportMutex);
     ++m_syncs;
     if (accepted)
@@ -198,10 +200,12 @@ bool StreamSource::syncStream()
         ++m_admissionRejected;
     m_lastResult = result;
     m_reportedFrame = m_hasFrame;
-    if (snapshot)
-        m_readerState = readerState;
-    else if (!current)
-        m_readerState = QJsonObject();
+    if (snapshot) {
+        m_readerSnapshot = readerSnapshot;
+        m_snapshotOf = current;
+    } else if (!current) {
+        m_snapshotOf = nullptr;
+    }
     return changed;
 }
 
@@ -209,9 +213,11 @@ void StreamSource::noteRecorded(bool drawn, const QString &reason, const QJsonOb
 {
     QMutexLocker lock(&m_reportMutex);
     ++m_records;
+    m_failing = false;      // the content built and recorded (M4)
     if (drawn) {
         ++m_draws;
         m_refusing = false; // a run of refusals ends with a drawn frame
+        m_refusedRun = 0;
     }
     m_lastReason = reason;
     m_lastFacts = facts;
@@ -221,6 +227,7 @@ void StreamSource::noteRefused(const QString &reason)
 {
     QMutexLocker lock(&m_reportMutex);
     ++m_refusedFrames;
+    ++m_refusedRun;
     if (!m_refusing) {
         m_refusing = true;
         m_lastRefusal = reason; // once per run of refusals
@@ -231,6 +238,7 @@ void StreamSource::noteFailure(const QString &reason, qint64 failures)
 {
     QMutexLocker lock(&m_reportMutex);
     ++m_records;
+    m_failing = true;
     m_contentFailures = failures;
     m_contentFailure = reason;
     m_lastReason = QStringLiteral("the content failed: %1").arg(reason);
@@ -240,11 +248,34 @@ void StreamSource::noteFailure(const QString &reason, qint64 failures)
     m_lastFacts = facts;
 }
 
+ContentStatus StreamSource::status() const
+{
+    QMutexLocker lock(&m_reportMutex);
+    ContentStatus s;
+    s.draws = m_draws;
+    s.failures = m_contentFailures;
+    s.refusedRun = m_refusedRun;
+    s.failing = m_failing;
+    return s;
+}
+
 QJsonObject StreamSource::stateJson() const
 {
     QJsonObject o;
     {
-        QMutexLocker lock(&m_mutex);
+        QMutexLocker lock(&m_mutex); // the current reader lives while it is current
+        {
+            // The reader's state from the render thread's copy, built here (L2); only while it is of the current one.
+            PacketReaderSnapshot snapshot;
+            bool ofCurrent = false;
+            {
+                QMutexLocker report(&m_reportMutex);
+                ofCurrent = m_current && m_snapshotOf == m_current;
+                if (ofCurrent)
+                    snapshot = m_readerSnapshot;
+            }
+            o.insert(QStringLiteral("reader"), ofCurrent ? QJsonValue(m_current->stateJson(snapshot)) : QJsonValue());
+        }
         o.insert(QStringLiteral("mapping"), m_mapping);
         o.insert(QStringLiteral("binds"), double(m_binds));
         o.insert(QStringLiteral("retired"), double(m_retired));
@@ -255,7 +286,6 @@ QJsonObject StreamSource::stateJson() const
         stateInto(o);
     }
     QMutexLocker lock(&m_reportMutex);
-    o.insert(QStringLiteral("reader"), m_readerState.isEmpty() ? QJsonValue() : QJsonValue(m_readerState));
     o.insert(QStringLiteral("syncs"), double(m_syncs));
     o.insert(QStringLiteral("accepted"), double(m_accepted));
     o.insert(QStringLiteral("admission_rejected"), double(m_admissionRejected));
@@ -271,6 +301,8 @@ QJsonObject StreamSource::stateJson() const
     o.insert(QStringLiteral("last_refusal"), m_lastRefusal);
     o.insert(QStringLiteral("content_failures"), double(m_contentFailures));
     o.insert(QStringLiteral("content_failure"), m_contentFailure);
+    o.insert(QStringLiteral("content_failing"), m_failing);
+    o.insert(QStringLiteral("refused_run"), double(m_refusedRun));
     o.insert(QStringLiteral("last_reason"), m_lastReason);
     o.insert(QStringLiteral("last_facts"), m_lastFacts);
     return o;
@@ -278,20 +310,27 @@ QJsonObject StreamSource::stateJson() const
 
 // ------------------------------------------------------------------------------------------------ the latch
 
-bool ContentLatch::mayBuild(const QRhi *rhi, const QRhiRenderPassDescriptor *pass, quint64 program,
-                            quint64 inputs) const
+bool ContentLatch::admit(const LatchKey &key)
 {
-    return !(m_latched && m_rhi == rhi && m_pass == pass && m_program == program && m_inputs == inputs);
+    if (!m_latched || key != m_key || m_retryGranted)
+        return true;
+    if (++m_held >= kRetryEvery && m_retries < kRetries) {
+        m_held = 0;
+        ++m_retries;
+        m_retryGranted = true; // this record builds once more; its result latches again or clears the latch
+        return true;
+    }
+    return false;
 }
 
-qint64 ContentLatch::failed(const QRhi *rhi, const QRhiRenderPassDescriptor *pass, quint64 program, quint64 inputs,
-                            const QString &error)
+qint64 ContentLatch::failed(const LatchKey &key, const QString &error)
 {
+    if (!m_latched || key != m_key)
+        m_retries = 0;         // a new key starts its own retries
     m_latched = true;
-    m_rhi = rhi;
-    m_pass = pass;
-    m_program = program;
-    m_inputs = inputs;
+    m_retryGranted = false;
+    m_key = key;
+    m_held = 0;
     m_error = error;
     return ++m_failures;
 }

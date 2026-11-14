@@ -151,6 +151,40 @@ def test_the_cores_conventions_are_the_faces(core, qt_app):
     assert core.mode_core_members() == MODE_CORE_MEMBERS
 
 
+def _bumped(value):
+    if isinstance(value, list):
+        return [v + 1.25 for v in value]
+    if isinstance(value, int):
+        return (value + 1) % 4                       # the quarters
+    return value + 0.25
+
+
+def test_each_core_member_reads_its_own_values_and_moves_only_with_the_card_or_the_target(core, qt_app):
+    # Audit N29 round 2, L6: every row of the conventions carries its own values. A member read from the card moves
+    # with some key of the card and never with the target; a member of the core's own does not move with the card. A
+    # name the core does not fill is refused (KeyError), never read as zeros.
+    from rendering.native.mode import MODE_CARD_KEYS, MODE_CORE_MEMBERS
+
+    card = {"quarters": 1, "item_size": [300.0, 160.0], "oriented_size": [160.0, 300.0], "dpr": 1.5,
+            "content_fade": 0.5, "border_width": 2.0, "window_from_target": [0.0, 1.0, 10.0, -1.0, 0.0, 470.0],
+            "item_from_window": [0.0, 0.5, -3.0, -0.5, 0.0, 260.0]}
+    assert set(card) == set(MODE_CARD_KEYS)
+    target = (451, 243)
+    for name, (components, from_card) in MODE_CORE_MEMBERS.items():
+        base = core.mode_core_values(name, card, target)
+        assert len(base) == components, name
+        moved_by = {key for key in card
+                    if core.mode_core_values(name, {**card, key: _bumped(card[key])}, target) != base}
+        assert bool(moved_by) == from_card, (name, moved_by)
+        if from_card:
+            assert core.mode_core_values(name, card, (target[0] + 3, target[1] + 5)) == base, name
+    with pytest.raises(KeyError):
+        core.mode_core_values("u_not_a_core_member", card, target)
+    # Control: a card-derived member is not constant (the check above can see a row that zero-fills).
+    assert core.mode_core_values("u_fade", card, target) != core.mode_core_values("u_fade", {**card, "content_fade": 0.0},
+                                                                                     target)
+
+
 @pytest.mark.qt
 def test_the_product_2d_packs_are_admitted_and_bubble_with_its_samplers_bound(core, tmp_path, qt_app):
     # Audit N29 M5: the generic pass takes the product 2D shaders' shape, over their real .qsb packs. N4.a: Bubble's
@@ -167,10 +201,11 @@ def test_the_product_2d_packs_are_admitted_and_bubble_with_its_samplers_bound(co
         assert program_pass["uv"] == "v_uv" and program_pass["block"]["binding"] != 17
     with pytest.raises(ValueError, match="unbound"):
         core.mode_program_layout([ModePass("bubble", mode_fragment_pack("bubble"))])
-    bound = (PassSampler("u_ambient_texture", "ambient"), PassSampler("u_ambient_light", "ambient_light"))
+    declared = check.bubble_samplers()                      # Bubble's own names and bindings (round 2, L7)
+    bound = tuple(PassSampler(name, f"texture_{index}") for index, (name, _binding) in enumerate(declared))
     (bubble,) = core.mode_program_layout([ModePass("bubble", mode_fragment_pack("bubble"), samplers=bound)])["passes"]
-    assert {(s["name"], s["texture"], s["binding"]) for s in bubble["samplers"]} == {
-        ("u_ambient_texture", "ambient", 0), ("u_ambient_light", "ambient_light", 1)}
+    assert len(declared) == 2 and {(s["name"], s["texture"], s["binding"]) for s in bubble["samplers"]} == {
+        (name, f"texture_{index}", binding) for index, (name, binding) in enumerate(declared)}
     # Control: Bubble with its two samplers taken out is admitted with none bound (its samplers alone were refused).
     text = check.bubble_without_samplers_text((regen_qrc.mode_shader_dir() / "bubble.frag").read_text(encoding="utf-8"))
     stripped = pr.bake(text, "bubble.frag", tmp_path / "bubble")

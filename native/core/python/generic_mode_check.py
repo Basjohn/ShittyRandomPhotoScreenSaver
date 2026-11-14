@@ -67,7 +67,7 @@ import vk_validation  # noqa: E402  (native/core/python)
 import host_check  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("blocks", "reader", "draw", "framebuffer")
+ROUNDS = ("blocks", "reader", "draw", "framebuffer", "uv")
 CHILD_TIMEOUT_S = 900
 MARGIN = 8
 CARD = (480, 270)                # the item's logical size
@@ -292,7 +292,19 @@ SECOND_BLOCK = "layout(std140, binding = 19) uniform ProbeSecond { float u_secon
 
 
 VARIANTS = ("sampler", "binding17", "two_blocks")
-BUBBLE_SAMPLERS = ("u_ambient_texture", "u_ambient_light")
+
+
+def bubble_samplers(text: str | None = None) -> tuple[tuple[str, int], ...]:
+    """Bubble's samplers as its bubble.frag declares them, (name, binding) in declaration order: read from the shader,
+    never a copy of its names (audit N29 round 2, L7)."""
+    import re
+
+    if text is None:
+        from tools import regen_qrc
+
+        text = (regen_qrc.mode_shader_dir() / "bubble.frag").read_text(encoding="utf-8")
+    return tuple((name, int(binding)) for binding, name in re.findall(
+        r"layout\s*\(\s*binding\s*=\s*(\d+)\s*\)\s*uniform\s+sampler2D\s+(\w+)\s*;", text))
 
 
 def _replaced(text: str, old: str, new: str) -> str:
@@ -326,11 +338,12 @@ def _variant_pass(folder: Path, kind: str):
 def bubble_without_samplers_text(text: str) -> str:
     """The product's bubble.frag with its two samplers taken out (each read a constant): what is left of Bubble's
     shape, which the core admits, so its samplers alone are refused."""
+    samplers = [name for name, _binding in bubble_samplers(text)]
     kept = [line for line in text.splitlines(keepends=True) if "uniform sampler2D" not in line]
-    if len(kept) != len(text.splitlines()) - len(BUBBLE_SAMPLERS):
-        raise ValueError("bubble.frag does not declare its two samplers one per line")
+    if not samplers or len(kept) != len(text.splitlines()) - len(samplers):
+        raise ValueError("bubble.frag does not declare its samplers one per line")
     text = "".join(kept)
-    for sampler in BUBBLE_SAMPLERS:
+    for sampler in samplers:
         if f"texture({sampler}," not in text:
             raise ValueError(f"bubble.frag does not read {sampler}")
         text = text.replace(f"texture({sampler},", "srpssNoTexture(")
@@ -634,6 +647,7 @@ def round_draw(core, engine, app, host, api: str, folder: Path, out: Path) -> di
                          "surface_passes": [surface_before, surface_after], "gpu_surface_samples": len(rest_samples)}
         # GPU time: the two passes, then a third pass (each pass doubled).
         timing = {}
+        json_before = core.packet_reader_live().get("state_json_off_gui_thread")
         settings_on = _settings()
         programs = {"rings+glow": base,
                     "rings+rings+glow": (base[0], _renamed(base[0], "rings_again"), base[1]),
@@ -651,6 +665,10 @@ def round_draw(core, engine, app, host, api: str, folder: Path, out: Path) -> di
                              "median_ms": round(times[len(times) // 2] / 1e6, 4) if times else None,
                              "p90_ms": round(times[int(len(times) * 0.9)] / 1e6, 4) if times else None}
         host.set_gpu_timer(False)
+        json_after = core.packet_reader_live().get("state_json_off_gui_thread")
+        checks["no_reader_state_json_per_frame_on_the_render_thread"] = (json_before is not None
+                                                                           and json_after == json_before)
+        facts["reader_state_json_off_gui"] = [json_before, json_after]
         facts["gpu"] = timing
         checks["gpu_time_recorded"] = all((entry["samples"] or 0) >= TIMED_FRAMES // 2 for entry in timing.values())
         scene.mode.program(base, no_glow)
@@ -667,6 +685,23 @@ def round_draw(core, engine, app, host, api: str, folder: Path, out: Path) -> di
         checks["refused_frame_counted_with_its_reason"] = (state.get("refused_frames", 0) == refused_before + 1
                                                            and "level" in str(state.get("last_refusal")))
         checks["good_frame_after_a_refused_one_draws"] = int(np.abs(good.astype(int) - reference.astype(int)).max()) == 0
+        # A lasting run of refusals (N29 round 2, M5): each keeps the frame, and the status the route reads counts the
+        # run past its bound; the next good frame ends it.
+        from rendering.quick.visualizer.native_route import REFUSED_RUN_FADE
+
+        run_kept = None
+        for _ in range(REFUSED_RUN_FADE + 2):
+            run_kept = show(sample, raw=bytes(nan))
+        during = scene.mode.composite.content_status()
+        show(sample)
+        ended = scene.mode.composite.content_status()
+        checks["refusal_run_counted_past_the_routes_bound_with_the_frame_kept"] = bool(
+            during is not None and during.refused_run >= REFUSED_RUN_FADE and not during.failing
+            and int(np.abs(run_kept.astype(int) - reference.astype(int)).max()) == 0)
+        checks["refusal_run_ended_by_a_drawn_frame"] = bool(
+            ended is not None and during is not None and ended.refused_run == 0 and ended.draws > during.draws)
+        facts["refusal_run"] = {"during": None if during is None else during._asdict(),
+                                "ended": None if ended is None else ended._asdict()}
         # A shader change: the rings drawn green.
         green = pr.passes(folder / "draw_green", rings_text=pr.shader_variant(green=True))
         scene.mode.program(green)                                 # the settings given before stay
@@ -732,23 +767,59 @@ def round_draw(core, engine, app, host, api: str, folder: Path, out: Path) -> di
         facts["state"] = {k: state.get(k) for k in ("syncs", "accepted", "records", "draws", "refused_frames",
                                                     "last_refusal", "last_reason", "syncs_probed",
                                                     "syncs_with_python_thread_state")}
-        # The fade (M1): a hide fades the item out over fade_ms, never at once.
+        # An unbind keeps the last frame (N29 round 2, L3: the route's fade-out fades it, not a cleared target); a
+        # new stream's first synchronisation clears it (nothing of the old stream under the new one).
+        last = show(sample)
+        scene.mode.unbind()
+        scene.mode.update()
+        after_unbind = scene.read()
+        unbound = scene.mode.state()
+        fresh = Stream()
+        try:
+            scene.mode.bind(fresh.name, pr.SCHEMA, expect=fresh.expect)
+            scene.mode.update()
+            cleared = scene.read()
+        finally:
+            fresh.close()
+        scene.mode.bind(stream.name, pr.SCHEMA, expect=stream.expect)
+        checks["unbind_keeps_the_last_frame_for_the_fade"] = (
+            bright(last) > 0 and int(np.abs(after_unbind.astype(int) - last.astype(int)).max()) == 0
+            and unbound.get("bound") is False)
+        checks["a_new_stream_clears_the_frame_of_the_old_one"] = bright(cleared) == 0.0
+        # The fade (M1; round 2 L7: its pixels): a hide fades the item out through intermediate frames, never at once,
+        # and a show fades it back in to the frame it had.
+        shown = show(sample)
+        level = bright(shown)
         scene.mode.composite.set(visible=False, fade_ms=FADE_MS)
         started = scene.mode.composite.state()
-        host_check._wait_until(app, lambda: not scene.mode.composite.state().get("fading"),
-                               timeout=10.0 * FADE_MS / 1000.0)
+        out_levels = _fade_levels(app, scene, bright)
         ended = scene.mode.composite.state()
+        scene.mode.composite.set(visible=True, fade_ms=FADE_MS)
+        in_levels = _fade_levels(app, scene, bright)
+        back = scene.read()
+
+        def between(levels):
+            return any(0.05 * level < value < 0.95 * level for value in levels)
+
         checks["the_item_fades_out"] = (started.get("shown") is True and started.get("fading") is True
                                         and ended.get("shown") is False and ended.get("fading") is False)
+        checks["the_fade_out_passes_through_intermediate_frames"] = (level > 0 and between(out_levels)
+                                                                      and bool(out_levels) and out_levels[-1] == 0.0)
+        checks["the_fade_in_returns_the_frame"] = (between(in_levels)
+                                                   and int(np.abs(back.astype(int) - shown.astype(int)).max()) == 0)
         facts["fade"] = {"started": {k: started.get(k) for k in ("shown", "shown_opacity", "fading")},
-                         "ended": {k: ended.get(k) for k in ("shown", "shown_opacity", "fading")}}
+                         "ended": {k: ended.get(k) for k in ("shown", "shown_opacity", "fading")},
+                         "level": level, "out": [round(v / max(level, 1.0), 3) for v in out_levels],
+                         "in": [round(v / max(level, 1.0), 3) for v in in_levels]}
     finally:
         stream.close()
         scene.close(app)
         host.frames(2)
         host_check._flush_deletes(app)
-    facts["failure"] = content_failure(core, engine, app, host, folder)
+    facts["failure"] = content_failure(core, engine, app, host, folder, api)
     checks["content_failure_recorded_once_and_rearmed_by_a_program"] = facts["failure"]["held"]
+    checks["unwritten_target_cleared_and_the_failure_edge_moved"] = facts["failure"]["cleared"]
+    checks["failed_program_keeps_the_last_frame_with_the_edge_moved"] = facts["failure"]["kept"]
     np.savez_compressed(_work(out) / f"native_{api}.npz", **{k: v for k, v in frames.items()})
     _sheet(out, api, frames)
     live = core.composite_live()
@@ -758,15 +829,54 @@ def round_draw(core, engine, app, host, api: str, folder: Path, out: Path) -> di
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
-def content_failure(core, engine, app, host, folder: Path, frames: int = 5) -> dict:
+def _fade_levels(app, scene, bright, timeout_s: float = 10.0 * FADE_MS / 1000.0) -> list[float]:
+    """The card's brightness at each frame the harness renders while the composite fades (its animation runs on the
+    GUI thread's clock), through the frame after it ends."""
+    import time
+
+    levels: list[float] = []
+    deadline = time.perf_counter() + timeout_s
+    while True:
+        app.processEvents()
+        fading = bool(scene.mode.composite.state().get("fading"))
+        levels.append(bright(scene.read()))
+        if not fading or time.perf_counter() > deadline:
+            return levels
+
+
+def without_backend_variant(pack: bytes, api: str) -> bytes:
+    """``pack`` with every variant the backend ``api`` draws with taken out (SPIR-V on Vulkan, GLSL on OpenGL): its
+    reflection stays, so the program is admitted, and its pipeline cannot be built (N29 round 2, M4: a pack that lacks
+    the backend's variant)."""
+    from PySide6.QtCore import QByteArray
+    from PySide6.QtGui import QShader
+
+    shader = QShader.fromSerialized(QByteArray(pack))
+    source = QShader.Source.SpirvShader if api == "vulkan" else QShader.Source.GlslShader
+    for key in list(shader.availableShaders()):
+        if key.source() == source:
+            shader.removeShader(key)
+    return bytes(shader.serialized().data())
+
+
+def content_failure(core, engine, app, host, folder: Path, api: str, frames: int = 5) -> dict:
     """Audit N29 M2 and L10: an item with a stream and a card but no program cannot build its content. The failure is
     one edge (recorded once), the frames after it create nothing again (no QRhi object of the content stays alive),
-    and a program (a changed input) re-arms it: the next frame draws."""
+    and a program (a changed input) re-arms it: the next frame draws.
+
+    Round 2, M4: the target the content never wrote is cleared to transparent by the surface (never undefined texels)
+    and the status the route reads says failing; a later program whose build fails (its pack lacks the backend's
+    variant) keeps the last drawn frame for the route's fade, with the edge moved again; a good program draws again."""
+    import numpy as np
+    from rendering.native.mode import ModePass
+
     pr = _mode()
     scene = Scene(core, engine, host, 1.0)
     stream = Stream()
     states, live = [], []
     drawn = None
+    facts: dict = {}
+    bright = lambda pixels: float(pixels[..., :3].astype(float).sum())   # noqa: E731
     try:
         scene.mode.bind(stream.name, pr.SCHEMA, expect=stream.expect)
         values = _frames(60)[-1]
@@ -776,11 +886,34 @@ def content_failure(core, engine, app, host, folder: Path, frames: int = 5) -> d
             host.frames(1)
             states.append(scene.mode.state())
             live.append(core.composite_live().get("mode_resources"))
-        scene.mode.program(pr.passes(folder / "failure"), _settings(probe_rings_glow=0.0))
+        unwritten = scene.read()
+        status_none = scene.mode.composite.content_status()
+        surface = scene.mode.composite.state().get("surface") or {}
+        facts["no_program"] = {"status": None if status_none is None else status_none._asdict(),
+                               "clears": surface.get("clears"), "brightness": bright(unwritten)}
+        good = pr.passes(folder / "failure")
+        scene.mode.program(good, _settings(probe_rings_glow=0.0))
         stream.publish(pr.record(values), float(frames))
         scene.mode.update()
         host.frames(1)
         drawn = scene.mode.state()
+        drawn_pixels = scene.read()
+        status_drawn = scene.mode.composite.content_status()
+        broken = tuple(ModePass(p.name, without_backend_variant(p.pack, api), p.blend) for p in good)
+        scene.mode.program(broken)
+        stream.publish(pr.record(values), float(frames + 1))
+        scene.mode.update()
+        host.frames(1)
+        kept_pixels = scene.read()
+        status_broken = scene.mode.composite.content_status()
+        scene.mode.program(good)
+        stream.publish(pr.record(values), float(frames + 2))
+        scene.mode.update()
+        host.frames(1)
+        status_again = scene.mode.composite.content_status()
+        facts["broken_program"] = {"status": None if status_broken is None else status_broken._asdict(),
+                                   "after_a_good_one": None if status_again is None else status_again._asdict(),
+                                   "drawn_brightness": bright(drawn_pixels), "kept_brightness": bright(kept_pixels)}
     finally:
         stream.close()
         scene.close(app)
@@ -789,10 +922,18 @@ def content_failure(core, engine, app, host, folder: Path, frames: int = 5) -> d
     last = states[-1] if states else {}
     held = (bool(states) and last.get("content_failures") == 1 and last.get("draws") == 0
             and all(value == 0 for value in live) and drawn is not None and drawn.get("draws", 0) >= 1)
-    return {"held": held, "failures": [s.get("content_failures") for s in states], "records": [s.get("records")
-                                                                                              for s in states],
-            "mode_resources": live, "last_reason": last.get("last_reason"),
-            "after_program": None if drawn is None else {k: drawn.get(k) for k in ("draws", "last_reason")}}
+    cleared = bool(status_none is not None and status_none.failing and status_none.failures == 1
+                   and (surface.get("clears") or 0) >= 1 and bright(unwritten) == 0.0)
+    kept = bool(status_drawn is not None and not status_drawn.failing and status_broken is not None
+                and status_broken.failing and status_broken.failures == 2 and bright(drawn_pixels) > 0
+                and int(np.abs(kept_pixels.astype(int) - drawn_pixels.astype(int)).max()) == 0
+                and status_again is not None and not status_again.failing
+                and status_again.draws > status_broken.draws)
+    return {"held": held, "cleared": cleared, "kept": kept,
+            "failures": [s.get("content_failures") for s in states],
+            "records": [s.get("records") for s in states], "mode_resources": live,
+            "last_reason": last.get("last_reason"),
+            "after_program": None if drawn is None else {k: drawn.get(k) for k in ("draws", "last_reason")}, **facts}
 
 
 def round_framebuffer(core, engine, app, api: str) -> dict:
@@ -803,11 +944,18 @@ def round_framebuffer(core, engine, app, api: str) -> dict:
     scene = None
     try:
         scene = Scene(core, engine, host, dpr)
+        before_sync = scene.mode.composite.window_pixels()       # L1: never read on the GUI thread
         host.frames(2)
         pixels = scene.mode.composite.window_pixels()
         window = scene.content.window()
         logical = (window.width(), window.height())
         sync = scene.mode.composite.state().get("sync", {})
+        host.set_device_pixel_ratio(2.0)                          # the window's logical size changes (M3)
+        stale = scene.mode.composite.window_pixels()
+        scene.mode.composite.update()
+        host.frames(1)
+        resynced = scene.mode.composite.window_pixels()
+        host.set_device_pixel_ratio(dpr)
     finally:
         if scene is not None:
             scene.close(app)
@@ -815,10 +963,209 @@ def round_framebuffer(core, engine, app, api: str) -> dict:
         host.close()
         host_check._flush_deletes(app)
     checks = {"window_pixels_are_the_framebuffer": pixels == (width, height),
-              "the_sync_reports_the_same": sync.get("window_pixels") == [width, height]}
+              "the_sync_reports_the_same": sync.get("window_pixels") == [width, height],
+              "nothing_before_the_items_own_synchronisation": before_sync is None,
+              "stale_after_a_resize_until_the_items_next_synchronisation": stale is None and resynced == (width, height)}
     return {"pass": all(checks.values()), "checks": checks,
-            "facts": {"window_pixels": pixels, "logical_size": logical,
+            "facts": {"window_pixels": pixels, "before_sync": before_sync, "stale": stale, "resynced": resynced,
+                      "logical_size": logical,
                       "logical_times_dpr": [round(logical[0] * dpr, 3), round(logical[1] * dpr, 3)]}}
+
+
+# --------------------------------------------------------------------------------------------------- the item's v_uv
+
+#: Audit N29 round 2, M6: the product 2D shaders (devcurve.frag, bubble.frag, oscilloscope.frag) take the item's
+#: oriented logical coordinate as ``v_uv * u_resolution`` (the Python Visualizer quad's v_uv). The probe pass draws that
+#: coordinate as an asymmetric pattern: R and G its position inside a 16-logical-pixel cell (a device pixel is about 11
+#: levels at dpr 1.5), B the cell's index, so an offset, a scale or a flip shows.
+UV_PROBE_FRAG = """#version 440
+layout(location = 0) in vec2 v_uv;
+layout(location = 0) out vec4 fragColor;
+layout(std140, binding = 18) uniform UvProbeDraw {
+    vec2 u_resolution;   // core: the item's oriented logical size (the Python renderers' frame.oriented_logical_size)
+    float level;         // record (unused but declared: a record field is a member)
+};
+void main() {
+    vec2 fc = v_uv * u_resolution;
+    vec2 cell = floor(fc / 16.0);
+    fragColor = vec4(fract(fc / 16.0), fract(cell.x * 0.37 + cell.y * 0.11), 1.0 + 0.0 * level);
+}
+"""
+UV_HOST = (1200, 900, 1.5)                   # device pixels and dpr: an 800x600 logical window
+UV_ORIGIN = (37.0, 23.0)                     # the card's logical origin: 55.5 x 34.5 device pixels (snapped outward)
+UV_EXTENT = (300.0, 160.0)
+UV_TOLERANCE = 3                             # levels on R and G (one device pixel is about 11)
+UV_MODE_CODE = 252                           # outside packet_abi.MODE_CODES (a test holds it out)
+
+
+def uv_schema():
+    from dataclasses import dataclass
+
+    from core.visualizer_engine.native_schema import NativeLayout, NativeSchema
+
+    @dataclass(frozen=True, slots=True)
+    class UvSchema(NativeSchema):
+        code: int = 0
+
+        @property
+        def mode_code(self) -> int:
+            return self.code
+
+    layout = NativeLayout.build((("level", "f64", 1),))
+    holder: dict = {}
+
+    def encode(values) -> bytes:
+        return layout.pack(holder["schema"].schema_id, values)
+
+    def decode(payload: bytes) -> dict:
+        return {"level": layout.unpack(payload)["level"]}
+
+    schema = UvSchema(mode_id="uv_probe", version=1, layout=layout, encode=encode, decode=decode, fields=("level",),
+                      checks=(), code=UV_MODE_CODE)
+    holder["schema"] = schema
+    return schema
+
+
+def uv_presentation(quarters: int, window_size: tuple[float, float], dpr: float):
+    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+    from tests._visualizer_presentation import resolve_presentation
+
+    return resolve_presentation(policy=get_visualizer_presentation_policy("devcurve"), display_size=window_size,
+                                viewport_extent=UV_EXTENT, outer_origin=UV_ORIGIN, dpr=dpr,
+                                content_rotation_quarters=quarters)
+
+
+def uv_expected(card: dict, window_pixels: tuple[int, int]):
+    """Each window pixel's expected pattern (float RGB 0-255) and item coordinate, from the card's own map (the Python
+    renderer's ``item_from_fragment`` rows: the window's pixel centre, y up, to the item's oriented logical
+    coordinate); computed here, never read from the core."""
+    import numpy as np
+
+    width, height = window_pixels
+    rows = np.asarray(card["item_from_window"], dtype=np.float64).reshape(2, 3)
+    x = np.arange(width, dtype=np.float64) + 0.5
+    y = float(height) - (np.arange(height, dtype=np.float64) + 0.5)       # window rows top-down -> y up
+    gx, gy = np.meshgrid(x, y)
+    ix = rows[0, 0] * gx + rows[0, 1] * gy + rows[0, 2]
+    iy = rows[1, 0] * gx + rows[1, 1] * gy + rows[1, 2]
+    cell_x, cell_y = np.floor(ix / 16.0), np.floor(iy / 16.0)
+    pattern = np.stack([(ix / 16.0 - cell_x) * 255.0, (iy / 16.0 - cell_y) * 255.0,
+                        np.mod(cell_x * 0.37 + cell_y * 0.11, 1.0) * 255.0], axis=-1)
+    return pattern, ix, iy
+
+
+def uv_compare(pixels, card: dict, window_pixels: tuple[int, int]) -> dict:
+    """The drawn pattern against the expectation inside the card (an inset of 8 logical pixels; pixels within a
+    twentieth of a pixel of a cell edge, where fract wraps, left out): R and G within UV_TOLERANCE levels (circular),
+    B (the cell) exact within 2 levels."""
+    import numpy as np
+
+    expected, ix, iy = uv_expected(card, window_pixels)
+    width, height = (float(v) for v in card["oriented_size"])
+    inside = (ix > 8.0) & (ix < width - 8.0) & (iy > 8.0) & (iy < height - 8.0)
+    edge = (np.abs(np.mod(ix + 0.05, 16.0) - 0.05) < 0.05) | (np.abs(np.mod(iy + 0.05, 16.0) - 0.05) < 0.05)
+    mask = inside & ~edge
+    drawn = pixels[..., :3].astype(np.float64)
+    difference = np.abs(drawn - expected)
+    difference[..., :2] = np.minimum(difference[..., :2], 255.0 - difference[..., :2])   # R and G wrap per cell
+    worst_rg = float(difference[..., :2][mask].max()) if mask.any() else -1.0
+    worst_b = float(difference[..., 2][mask].max()) if mask.any() else -1.0
+    over = int(np.count_nonzero((difference[..., :2].max(axis=-1) > UV_TOLERANCE + 0.5) & mask))
+    return {"compared": int(mask.sum()), "over_tolerance": over, "worst_rg": round(worst_rg, 2),
+            "worst_cell": round(worst_b, 2), "pass": bool(mask.sum() > 1000 and over == 0 and worst_b <= 2.5)}
+
+
+SCENE_FULL_QML = b"""import QtQuick
+Rectangle {
+    color: "#000000"
+    Item { objectName: "contentHost"; x: 0; y: 0; width: 4; height: 4 }
+}
+"""
+
+
+def round_uv(core, engine, app, api: str, folder: Path, out: Path) -> dict:
+    """Audit N29 round 2, M6: v_uv spans the item, not the enlarged target, in every rotation, at a fractional ratio
+    and an odd card origin, on this API."""
+    from dataclasses import asdict
+
+    from PySide6.QtCore import QUrl
+    from PySide6.QtQml import QQmlComponent
+    from PySide6.QtQuick import QQuickItem
+
+    from composite_analysis import frame_rows
+    from core.visualizer_engine.packet_abi import FLAG_PRESENT_FRAME, FramePacketWriter, create_frame_mapping
+    from rendering.native.composite import composite_geometry, window_pixel_ratio
+    from rendering.native.mode import ModePass, mode_card
+
+    width, height, dpr = UV_HOST
+    host = core.hidden_host(width, height, dpr=dpr)
+    pack = _mode().bake(UV_PROBE_FRAG, "uv_probe.frag", folder / "uv_probe")
+    schema = uv_schema()
+    checks: dict = {}
+    facts: dict = {}
+    frames: dict = {}
+    try:
+        for quarters in range(4):
+            component = QQmlComponent(engine)
+            component.setData(SCENE_FULL_QML, QUrl())
+            root = component.create()
+            content = root.findChild(QQuickItem, "contentHost")
+            host.set_content(root)
+            mode = core.mode(content)
+            memory = create_frame_mapping(generation=IDENTITY["runtime_generation"], slot_bytes=SLOT_BYTES,
+                                          engine_generation=IDENTITY["engine_generation"],
+                                          activation_id=IDENTITY["activation_id"], mode_code=UV_MODE_CODE,
+                                          token=uuid.uuid4().hex[:12])
+            writer = FramePacketWriter(memory.buf)
+            try:
+                mode.composite.set(rect=[0.0, 0.0, 4.0, 4.0], coverage=None, visible=True)
+                host.frames(2)
+                window = content.window()
+                window_size = (float(window.width()), float(window.height()))
+                window_pixels = mode.composite.window_pixels()
+                presentation = uv_presentation(quarters, window_size, dpr)
+                geometry = composite_geometry(presentation, quad_aligned=True,
+                                              pixel_ratio=window_pixel_ratio(window_size, window_pixels))
+                mode.composite.place(geometry, (0.0, 0.0), visible=True)
+                card = mode_card(presentation, geometry, window_size=window_size, window_pixels=window_pixels)
+                mode.card(card)
+                mode.program([ModePass("uv_probe", pack, "replace")], {})
+                mode.bind(memory.name, schema, expect={**IDENTITY, "mode_code": UV_MODE_CODE})
+                writer.publish(schema.encode({"level": 0.5}), payload_schema=schema.schema_id, logical_timestamp=1.0,
+                               flags=FLAG_PRESENT_FRAME, mode_code=UV_MODE_CODE, **IDENTITY)
+                mode.update()
+                rows = frame_rows(asdict(host.read()))
+                result = uv_compare(rows, card, window_pixels)
+                target_rect = [round(v * dpr, 3) for v in geometry.rect]
+                result.update({"target_rect_device": target_rect,
+                               "item_rect_device": [round(v * dpr, 3) for v in presentation.outer_rect],
+                               "state_reason": mode.state().get("last_reason")})
+                facts[f"quarters{quarters}"] = result
+                checks[f"v_uv_is_the_items_quarters{quarters}"] = result["pass"]
+                frames[f"quarters{quarters}"] = rows
+                mode.unbind()
+            finally:
+                writer.release()
+                memory.close()
+                memory.unlink()
+                mode.composite.destroy()
+                host.set_content(None)
+                host_check._drop_item(app, root)
+                host.frames(2)
+                host_check._flush_deletes(app)
+        # The target really is larger than the item, off its origin (else this round proves nothing).
+        sample = facts["quarters0"]
+        checks["target_enlarged_beyond_the_item"] = sample["target_rect_device"] != sample["item_rect_device"]
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    import numpy as np
+    from PIL import Image
+
+    tiles = [frames[key][..., :3] for key in sorted(frames)]
+    if tiles:
+        Image.fromarray(np.concatenate(tiles, axis=1), "RGB").save(out / f"uv_probe_{api}.png")
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
 def _sheet(out: Path, api: str, frames: dict) -> None:
@@ -911,6 +1258,8 @@ def child(args) -> dict:
                         record[name] = round_reader(core)
                     elif name == "framebuffer":
                         record[name] = round_framebuffer(core, engine, app, args.api)
+                    elif name == "uv":
+                        record[name] = round_uv(core, engine, app, args.api, folder, out)
                     else:
                         if host is None:
                             host = core.hidden_host(*_host_size())

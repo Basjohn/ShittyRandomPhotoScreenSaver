@@ -58,6 +58,8 @@ MODE_CORE_MEMBERS = {
     "u_window_from_target_x": (3, True),
     "u_window_from_target_y": (3, True),
     "u_target_px": (2, False),
+    "uOriented": (2, True),
+    "uQuarters": (1, True),
 }
 #: The card's keys (``ModeCard::fromJson``).
 MODE_CARD_KEYS = ("quarters", "item_size", "oriented_size", "dpr", "content_fade", "border_width", "window_from_target",

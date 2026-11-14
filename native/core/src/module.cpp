@@ -1166,6 +1166,50 @@ PyObject *mode_core_members(PyObject *, PyObject *)
     return pyJson(o);
 }
 
+PyObject *mode_core_values(PyObject *, PyObject *args)
+{
+    const char *name = nullptr;
+    const char *cardJson = nullptr;
+    Py_ssize_t cardLength = 0;
+    int targetWidth = 0;
+    int targetHeight = 0;
+    if (!PyArg_ParseTuple(args, "ss#(ii)", &name, &cardJson, &cardLength, &targetWidth, &targetHeight))
+        return nullptr;
+    srpss_core::ModeCard card;
+    if (!cardArgument(cardJson, cardLength, &card))
+        return nullptr;
+    double values[16];
+    int count = 0;
+    if (!srpss_core::modeCoreValues(QByteArray(name), card, QSize(targetWidth, targetHeight), values, &count)) {
+        PyErr_Format(PyExc_KeyError, "'%s' is not a core member the core fills", name);
+        return nullptr;
+    }
+    PyObject *list = PyList_New(count);
+    if (!list)
+        return nullptr;
+    for (int i = 0; i < count; ++i)
+        PyList_SetItem(list, i, PyFloat_FromDouble(values[i]));
+    return list;
+}
+
+PyObject *composite_content_status(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    const srpss_core::StreamSource *source = item->spectrum();
+    if (!source)
+        source = item->mode();
+    if (!source)
+        Py_RETURN_NONE;
+    const srpss_core::ContentStatus s = source->status();
+    return Py_BuildValue("(LLLO)", (long long)s.draws, (long long)s.failures, (long long)s.refusedRun,
+                         s.failing ? Py_True : Py_False);
+}
+
 PyObject *composite_mode_unbind(PyObject *, PyObject *args)
 {
     long long handle = 0;
@@ -1904,6 +1948,13 @@ PyMethodDef methods[] = {
       "item holds no such texture." },
     { "mode_core_members", mode_core_members, METH_NOARGS,
       "() -> JSON str: the core's conventions, the members it fills for every mode ([name, components, from_card])." },
+    { "mode_core_values", mode_core_values, METH_VARARGS,
+      "(name, card_json, (target_w, target_h)) -> list of float: the core member's numbers for this card and target "
+      "(its own row's values); KeyError for a name the core does not fill." },
+    { "composite_content_status", composite_content_status, METH_VARARGS,
+      "(handle) -> (draws, failures, refused_run, failing) | None: the item's content health, read without JSON (the "
+      "route's failure edge, N29 round 2 M4 and M5): records that drew, build failures, frames refused since the last "
+      "drawn one, and whether a build failed with nothing recorded since. None when the item draws no mode." },
     { "composite_window_pixels", composite_window_pixels, METH_VARARGS,
       "(handle) -> (width, height) | None: the item's window's framebuffer, from Qt's swapchain or redirect target." },
     { "composite_mode_unbind", composite_mode_unbind, METH_VARARGS,

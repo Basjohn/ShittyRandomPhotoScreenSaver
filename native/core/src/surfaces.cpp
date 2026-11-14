@@ -170,11 +170,13 @@ bool Surface::ensureTarget(QRhi *rhi, const QSize &pixels, QString *error, QRhiT
             return false;
         m_res = std::move(res);
         setLive(kTargetObjects);
+        m_targetClear = false;                 // a new target's texels are not known to be anything
         m_dirty.storeRelease(1);
         return true;
     }
     if (m_res->target.texture->pixelSize() == pixels)
         return true;
+    m_targetClear = false;
     // The same objects at the new size (the render pass descriptor and the pipeline stay compatible: same format).
     m_res->target.texture->setPixelSize(pixels);
     if (!m_res->target.texture->create() || !m_res->target.renderTarget->create()) {
@@ -183,6 +185,7 @@ bool Surface::ensureTarget(QRhi *rhi, const QSize &pixels, QString *error, QRhiT
         release();
         return false;
     }
+    m_res->target.generation = nextTargetGeneration(); // another target for a content's latch (L4)
     m_dirty.storeRelease(1);
     return true;
 }
@@ -254,7 +257,12 @@ bool Surface::record(QRhi *rhi, QRhiCommandBuffer *cb, bool *recorded, QString *
     }
     if (m_content) {
         if (m_content->keepsTarget(rhi, m_res->target)) {
-            m_dirty.storeRelease(0); // the target keeps what it holds; nothing primed, nothing recorded
+            // The target keeps what it holds (a refused frame, a latched failure). A target holding nothing of the
+            // content's own (a first build that failed: never written, undefined on Vulkan; audit N29 round 2, M4) is
+            // cleared to transparent once by the surface's own pass, never shown as it is.
+            m_dirty.storeRelease(0);
+            if (!m_targetClear && !m_content->holdsFrame(m_res->target))
+                return clearTarget(rhi, cb, recorded, error);
             return true;
         }
         // A mode's content (N2.5): its own passes into the same target, primed for the load first (rule C).
@@ -262,16 +270,36 @@ bool Surface::record(QRhi *rhi, QRhiCommandBuffer *cb, bool *recorded, QString *
         if (!m_content->record(rhi, cb, m_res->target, error)) {
             // Not retried every frame (audit 14 Nov, M2): the surface records again only when its content's inputs
             // change (a new frame, card, program or settings marks it dirty), and the content fails fast meanwhile.
+            // A target with no frame of the content's in it is cleared once (M4); a frame of its own stays for the
+            // route to fade the card out over (fade, never vanish).
             m_dirty.storeRelease(0);
+            if (!m_targetClear && !m_content->holdsFrame(m_res->target)) {
+                QString ignored;
+                clearTarget(rhi, cb, recorded, &ignored);
+            }
             return false;
         }
         m_dirty.storeRelease(0);
+        m_targetClear = !m_content->holdsFrame(m_res->target); // what the content did not draw it cleared by a draw
         m_passes.fetchAndAddRelaxed(1);
         *recorded = true;
         QMutexLocker lock(&m_mutex);
         m_lastPrime = prime;
         return true;
     }
+    return recordPattern(rhi, cb, m_pattern, recorded, error);
+}
+
+bool Surface::clearTarget(QRhi *rhi, QRhiCommandBuffer *cb, bool *recorded, QString *error)
+{
+    if (!recordPattern(rhi, cb, SurfacePattern::Transparent, recorded, error))
+        return false;
+    m_clears.fetchAndAddRelaxed(1);
+    return true;
+}
+
+bool Surface::recordPattern(QRhi *rhi, QRhiCommandBuffer *cb, SurfacePattern pattern, bool *recorded, QString *error)
+{
     if (!ensurePass(error))
         return false;
     Resources &r = *m_res;
@@ -288,7 +316,7 @@ bool Surface::record(QRhi *rhi, QRhiCommandBuffer *cb, bool *recorded, QString *
     PatternBlock block = {};
     block.targetSize[0] = float(size.width());
     block.targetSize[1] = float(size.height());
-    block.pattern[0] = float(int(m_pattern));
+    block.pattern[0] = float(int(pattern));
     updates->updateDynamicBuffer(r.uniforms.get(), 0, sizeof(PatternBlock), &block);
     // The target keeps its contents (rule B): the triangle covers every texel with blending off, so nothing earlier
     // survives the pass.
@@ -301,6 +329,7 @@ bool Surface::record(QRhi *rhi, QRhiCommandBuffer *cb, bool *recorded, QString *
     cb->draw(3);
     cb->endPass();
     m_dirty.storeRelease(0);
+    m_targetClear = pattern == SurfacePattern::Transparent;
     m_passes.fetchAndAddRelaxed(1);
     *recorded = true;
     QMutexLocker lock(&m_mutex);
@@ -322,6 +351,7 @@ void Surface::release()
     m_res->target.reset();
     m_res.reset();
     setLive(0);
+    m_targetClear = false;
     m_dirty.storeRelease(1);
 }
 

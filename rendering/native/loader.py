@@ -45,7 +45,7 @@ from rendering.native.spectrum import NativeSpectrum, spectrum_block
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 11
+EXPECTED_ABI = 12
 HOST_KINDS = ("window", "hidden")
 
 
@@ -167,6 +167,13 @@ class NativeCore:
         """The core's conventions as compiled: name -> (components, read from the card)."""
         rows = json.loads(self.module.mode_core_members())["members"]
         return {str(name): (int(components), bool(from_card)) for name, components, from_card in rows}
+
+    def mode_core_values(self, name: str, card: Mapping[str, Any], target: tuple[int, int]) -> list[float]:
+        """One core member's numbers for ``card`` (``mode.mode_card``'s keys) and ``target`` pixels, from its own row
+        of the conventions (audit N29 round 2, L6); KeyError for a name the core does not fill (never zeros)."""
+        from rendering.native.mode import _card
+
+        return list(self.module.mode_core_values(str(name), _card(card), (int(target[0]), int(target[1]))))
 
     def mode_program_layout(self, passes: Any) -> dict:
         """The program's passes, blends, uv inputs, samplers and reflected blocks (GPU-free)."""

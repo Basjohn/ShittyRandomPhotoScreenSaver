@@ -271,34 +271,69 @@ def test_the_product_2d_shaders_have_one_block_of_their_own_and_bubble_two_sampl
         assert len(blocks) == 1 and blocks[0][1] != 17, (name, blocks)
         assert "layout(location = 0) in vec2 v_uv;" in text
     bubble = (folder / "bubble.frag").read_text(encoding="utf-8")
-    assert sorted(re.findall(r"uniform\s+sampler2D\s+(\w+)", bubble)) == ["u_ambient_light", "u_ambient_texture"]
+    samplers = re.findall(r"uniform\s+sampler2D\s+(\w+)", bubble)      # whatever Bubble names them (L7)
+    assert len(samplers) == len(set(samplers)) == 2
     # Negative control: a second block of its own is seen.
     assert len(own_blocks(text + "\nlayout(std140, binding = 19) uniform Second { float x; };\n")) == 2
 
 
-_FROM_THE_CARD = re.compile(r'values\["(\w+)"\] = (?:tuple\()?(?:frame\.\w+|presentation\.(?:dpr|border_width|'
-                            r'content_fade)\b|\(0\.0, 0\.0\)$|1$)', re.M)
+#: What a renderer reads from its presentation that is the card's (the rest of the presentation is its settings).
+_CARD_PRESENTATION = frozenset({"dpr", "border_width", "content_fade"})
 
 
 def card_members(source: str) -> set[str]:
     """The block members a Python 2D renderer fills from its frame (the card) rather than from its settings or its
-    mode state: what the core's conventions must cover (audit N29 M5)."""
-    return set(_FROM_THE_CARD.findall(source)) | ({"uContentRotationQuarters"}
-                                                  if 'values["uContentRotationQuarters"]' in source else set())
+    mode state: what the core's conventions must cover (audit N29 M5). Read from the source's syntax tree (round 2,
+    L7: any spelling of the assignment): each ``values["name"] = expression`` whose expression reads ``frame.<attr>``
+    (directly, or through a local that is ``frame.<attr>`` itself), the card's ``presentation.<dpr | border_width |
+    content_fade>``, or is a literal (the core's own constants)."""
+    import ast
+
+    tree = ast.parse(source)
+    aliases = {node.targets[0].id for node in ast.walk(tree)
+               if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+               and isinstance(node.value, ast.Attribute) and isinstance(node.value.value, ast.Name)
+               and node.value.value.id == "frame"}
+
+    def from_card(expression) -> bool:
+        if isinstance(expression, ast.Constant) or (isinstance(expression, ast.Tuple) and all(
+                isinstance(element, ast.Constant) for element in expression.elts)):
+            return True
+        for node in ast.walk(expression):
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+                if node.value.id == "frame" or (node.value.id == "presentation" and node.attr in _CARD_PRESENTATION):
+                    return True
+            if isinstance(node, ast.Name) and node.id in aliases:
+                return True
+        return False
+
+    taken = set()
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Assign) and len(node.targets) == 1):
+            continue
+        target = node.targets[0]
+        if (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name) and target.value.id == "values"
+                and isinstance(target.slice, ast.Constant) and isinstance(target.slice.value, str)
+                and from_card(node.value)):
+            taken.add(target.slice.value)
+    return taken
 
 
 def test_the_cores_conventions_cover_what_the_python_2d_renderers_take_from_the_card():
     from rendering.native.mode import MODE_CORE_MEMBERS
 
     folder = ROOT / "rendering" / "quick" / "visualizer" / "implementations"
-    for name in ("devcurve.py", "bubble.py"):
+    for name in ("devcurve.py", "bubble.py", "oscilloscope.py"):
         source = (folder / name).read_text(encoding="utf-8")
         taken = card_members(source)
-        assert {"uMatrix", "uItemSize", "u_resolution", "u_dpr", "u_fade"} <= taken, name
+        assert {"uMatrix"} < taken, name                                    # the scan sees each renderer's card
         assert taken <= set(MODE_CORE_MEMBERS), (name, taken - set(MODE_CORE_MEMBERS))
-    # Negative control: a new member taken from the frame is seen outside the table.
-    assert card_members('        values["u_frame_new"] = frame.logical_size\n') - set(MODE_CORE_MEMBERS) == {
-        "u_frame_new"}
+    # Negative controls: a new member taken from the frame is seen outside the table, in another spelling too (an
+    # alias of a frame attribute, a call around it).
+    assert card_members('values["u_frame_new"] = frame.logical_size\n') - set(MODE_CORE_MEMBERS) == {"u_frame_new"}
+    assert card_members('size = frame.logical_size\nvalues["u_frame_new"] = tuple(size)\n') == {"u_frame_new"}
+    assert card_members('values["u_frame_new"] = float(frame.logical_size[0])\n') == {"u_frame_new"}
+    assert card_members('values["u_setting"] = layout.scale\n') == set()                  # a setting is not
 
 
 def test_the_cores_conventions_table_is_the_faces():
@@ -306,13 +341,14 @@ def test_the_cores_conventions_table_is_the_faces():
 
     text = (SRC / "mode_content.cpp").read_text(encoding="utf-8")
     table = text.split("const ModeCoreMember kModeCoreMembers[] = {", 1)[1].split("};", 1)[0]
-    rows = re.findall(r'\{\s*"(\w+)",\s*(\d+),\s*(true|false)\s*\}', table)
+    rows = re.findall(r'\{\s*"(\w+)",\s*(\d+),\s*(true|false)\s*,\s*\w+\s*\}', table)   # each with its values (L6)
     assert {name: (int(n), flag == "true") for name, n, flag in rows} == MODE_CORE_MEMBERS
     assert [name for name, _n, _f in rows] == list(MODE_CORE_MEMBERS)      # one order
     # Negative control: a row changed in C++ only is seen.
-    changed = table.replace('{ "u_fade", 1, true }', '{ "u_fade", 2, true }')
-    assert {n: (int(c), f == "true") for n, c, f in re.findall(r'\{\s*"(\w+)",\s*(\d+),\s*(true|false)\s*\}',
-                                                                 changed)} != MODE_CORE_MEMBERS
+    changed = re.sub(r'\{ "u_fade", 1, true,', '{ "u_fade", 2, true,', table)
+    assert changed != table
+    assert {n: (int(c), f == "true") for n, c, f in re.findall(
+        r'\{\s*"(\w+)",\s*(\d+),\s*(true|false)\s*,\s*\w+\s*\}', changed)} != MODE_CORE_MEMBERS
 
 
 def test_probe_rings_shaders_bake_for_every_shipped_target_with_no_module_build(tmp_path):
@@ -341,11 +377,12 @@ def test_the_harness_refusal_shaders_declare_what_a_pass_may_not_and_bake(tmp_pa
     bubble = (regen_qrc.mode_shader_dir() / "bubble.frag").read_text(encoding="utf-8")
     stripped = check.bubble_without_samplers_text(bubble)
     code = re.sub(r"//[^\n]*", "", stripped)
-    assert "sampler2D" not in code and not any(f"texture({name}," in code for name in check.BUBBLE_SAMPLERS)
+    assert "sampler2D" not in code and not any(f"texture({name}," in code for name, _b in check.bubble_samplers(bubble))
     assert own_blocks(stripped) == own_blocks(bubble)                      # its own block untouched
     # Negative control: a shader that does not read its samplers as expected is refused, not silently passed.
+    last = check.bubble_samplers(bubble)[-1][0]
     with pytest.raises(ValueError):
-        check.bubble_without_samplers_text(bubble.replace("texture(u_ambient_light,", "texture( u_ambient_light,"))
+        check.bubble_without_samplers_text(bubble.replace(f"texture({last},", f"texture( {last},"))
     try:
         regen_qrc.quick_shader_baker(sys.executable)
     except regen_qrc.QrcRegenerationError as exc:

@@ -475,13 +475,15 @@ def round_shape(core, folder: Path) -> dict:
             and "u_resolution" not in members)
         checks[f"{transition_id}_refused_unbound"] = "unbound" in unbound
     bubble = mode_fragment_pack("bubble")
-    bound = (PassSampler("u_ambient_texture", "ambient"), PassSampler("u_ambient_light", "ambient_light"))
+    import generic_mode_check
+
+    declared = generic_mode_check.bubble_samplers()          # Bubble's own names and bindings (L7)
+    bound = tuple(PassSampler(name, f"texture_{index}") for index, (name, _binding) in enumerate(declared))
     facts["bubble_unbound"] = _refused(lambda: core.mode_program_layout([ModePass("bubble", bubble)]))
     (bubble_layout,) = core.mode_program_layout([ModePass("bubble", bubble, samplers=bound)])["passes"]
     checks["bubble_refused_unbound"] = "unbound" in facts["bubble_unbound"]
     checks["bubble_admitted_with_its_samplers_bound"] = (
-        {(s["name"], s["binding"]) for s in bubble_layout["samplers"]} == {("u_ambient_texture", 0),
-                                                                           ("u_ambient_light", 1)})
+        len(declared) == 2 and {(s["name"], s["binding"]) for s in bubble_layout["samplers"]} == set(declared))
     crossfade = transition_pass("crossfade", folder / "crossfade")
     old, new = crossfade.samplers
 

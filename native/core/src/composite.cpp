@@ -33,9 +33,11 @@ struct CompositeStats
     QAtomicInteger<qint64> dprMismatches { 0 };  // draws whose render-time device pixel ratio differed from the sync's
     QAtomicInteger<qint64> renderDprMicro { 0 }; // the last draw's device pixel ratio, in millionths
     QAtomicInteger<int> nodes { 0 };
-    mutable QMutex mutex; // guards the four below
+    mutable QMutex mutex; // guards the six below
     QJsonObject sync;     // the last sync's facts
     QSize windowPixels;   // the window's framebuffer at the last sync (audit N29 L1)
+    QSize windowLogical;  // the window's logical size at that sync (round 2, M3: a later resize makes it stale)
+    double windowDpr = 0.0; // the window's effective device pixel ratio at that sync
     QString error;
     std::weak_ptr<Surface> surface; // the node's, while it lives
 };
@@ -43,6 +45,10 @@ struct CompositeStats
 namespace {
 
 QAtomicInteger<int> g_liveItems { 0 };
+
+// A framebuffer that is the window's logical size times its device pixel ratio to within this many device pixels per
+// axis is the window's as it is (Qt rounds the product: 1707 x 1.5 is 2560; a platform's extent may differ by one).
+constexpr double kFramebufferSlack = 1.5;
 
 // The window's framebuffer in device pixels: what Qt's scene graph renders into and projects the window's logical rect
 // onto (audit N29 L1): a shown window's swapchain (its current pixel size), or a redirected window's render target (the
@@ -606,7 +612,7 @@ void CompositeItem::unbindSpectrum()
     if (!m_spectrum)
         return;
     m_spectrum->unbind();
-    update(); // the next sync releases it on the render thread and draws nothing of it
+    update(); // the next sync releases it on the render thread; its last frame stays for the card's fade (N29 r2 L3)
 }
 
 bool CompositeItem::presentSpectrum(const SpectrumPresentation &presentation, QString *error)
@@ -654,13 +660,20 @@ int CompositeItem::liveItems()
 
 QSize CompositeItem::windowPixels() const
 {
-    // GUI thread. The last sync's (render thread) when there was one, else read now from the same source.
-    {
-        QMutexLocker lock(&m_stats->mutex);
-        if (m_stats->windowPixels.isValid())
-            return m_stats->windowPixels;
-    }
-    return framebufferPixels(window());
+    // GUI thread. Only what the render thread read at the item's last sync (audit N29 round 2, L1: Qt's renderer
+    // interface is never queried from here), and only while it is the window's as it is now (M3): a window resized since
+    // that sync, or a framebuffer that is not the logical size times the device pixel ratio (to the pixel Qt rounds
+    // or the platform's extent differs by), is stale and reads invalid until the item's next sync.
+    QQuickWindow *w = window();
+    QMutexLocker lock(&m_stats->mutex);
+    const QSize pixels = m_stats->windowPixels;
+    if (!w || !pixels.isValid() || pixels.isEmpty() || m_stats->windowLogical != w->size())
+        return QSize();
+    const double dpr = m_stats->windowDpr;
+    if (!(dpr > 0.0) || std::abs(pixels.width() - m_stats->windowLogical.width() * dpr) > kFramebufferSlack
+        || std::abs(pixels.height() - m_stats->windowLogical.height() * dpr) > kFramebufferSlack)
+        return QSize();
+    return pixels;
 }
 
 void CompositeItem::itemChange(ItemChange change, const ItemChangeData &value)
@@ -803,8 +816,11 @@ QSGNode *CompositeItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *d
                                        : QJsonValue());
     QMutexLocker lock(&m_stats->mutex);
     m_stats->sync = facts;
-    if (framebuffer.isValid())
+    if (framebuffer.isValid() && w) {
         m_stats->windowPixels = framebuffer;
+        m_stats->windowLogical = w->size();
+        m_stats->windowDpr = dpr;
+    }
     if (!error.isEmpty())
         m_stats->error = error;
     return node;
@@ -830,6 +846,7 @@ QJsonObject CompositeItem::stateJson() const
     QJsonObject s;
     if (surface) {
         s.insert(QStringLiteral("passes_recorded"), surface->passesRecorded());
+        s.insert(QStringLiteral("clears"), surface->clears());
         s.insert(QStringLiteral("live_resources"), surface->liveResources());
         s.insert(QStringLiteral("dirty"), surface->dirty());
         s.insert(QStringLiteral("last_prime"), surface->lastPrime());

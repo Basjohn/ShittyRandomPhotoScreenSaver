@@ -124,6 +124,33 @@ enum class ReadResult : int {
 
 const char *readResultName(ReadResult result);
 
+// The consumer-thread part of a reader's state, copied on the consumer's thread (a plain copy: counters and two
+// implicitly shared strings, no JSON) so another thread can build the state from it (audit N29 round 2, L2: no JSON is
+// built per accepted frame on the render thread).
+struct PacketReaderSnapshot
+{
+    bool mapped = false;
+    qint64 reads = 0;
+    qint64 acceptedCount = 0;
+    quint64 accepted = 0;
+    qint64 acknowledged = 0;
+    quint64 acknowledgedSequence = 0;
+    qint64 torn = 0;
+    qint64 ambiguous = 0;
+    qint64 stale = 0;
+    qint64 foreign = 0;
+    qint64 refused = 0;
+    bool failed = false;
+    QString refusalCause;
+    QString refusalReason;
+    quint64 refusalSequence = 0;
+    bool retained = false;
+    quint64 retainedSequence = 0;
+    qint64 dropsApplied = 0;
+    qint64 readsWhileRetiring = 0;
+    qint64 copiesDiscarded = 0;
+};
+
 class PacketReader
 {
 public:
@@ -156,7 +183,16 @@ public:
     const frame_abi::Schema *retainedSchema() const { return m_hasFrame ? m_frameSchema : nullptr; }
 
     const QString &openError() const { return m_openError; }
+    // The consumer's thread: the whole state (the snapshot taken now).
     QJsonObject stateJson() const;
+    // The consumer's thread: its part of the state, copied (no JSON).
+    PacketReaderSnapshot snapshot() const;
+    // Any thread while the reader is alive: the state from a snapshot the consumer took (the rest is fixed at open or
+    // atomic). Counted per thread (jsonBuildsOffGuiThread) so a harness proves no frame builds it on the render thread.
+    QJsonObject stateJson(const PacketReaderSnapshot &snapshot) const;
+    // Process-wide: state JSON built on a thread other than the application's (a released reader's last state, once per
+    // stream; never per frame: L2).
+    static qint64 jsonBuildsOffGuiThread();
 
     // Process-wide: readers alive and views mapped (lifecycle proofs: both return to zero).
     static QJsonObject liveJson();

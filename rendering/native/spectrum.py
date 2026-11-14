@@ -138,19 +138,26 @@ def spectrum_presentation(presentation: Any, geometry: CompositeGeometry, *, win
 def window_metrics(item: Any, composite: Any) -> tuple[tuple[float, float], tuple[int, int]]:
     """``item``'s window: its logical size and its framebuffer's pixels, the target Qt's projection maps
     ``QRectF(0, 0, window.size())`` onto, as Qt's own swapchain or redirect target reports it through the native item
-    (``CompositeItem.window_pixels``; audit N29 L1: no platform call, no rounding of the logical size). Raises while the
-    window has none yet (not exposed): the route then waits for its next update."""
+    (``CompositeItem.window_pixels``; audit N29 L1: no platform call, no rounding of the logical size). Raises
+    ``WindowNotReady`` with no window, and ``FramebufferNotReady`` while the native item has not synchronised with the
+    window as it is now (not exposed yet, or resized since: round 2, M3): the route then waits for the window's next
+    synchronisation (an event edge)."""
     window = item.window()
     if window is None:
         raise WindowNotReady("the native item has no window")
     pixels = composite.window_pixels()
     if pixels is None:
-        raise WindowNotReady("the native item's window has no framebuffer yet")
+        raise FramebufferNotReady("the native item has not synchronised with its window's framebuffer yet")
     return (float(window.width()), float(window.height())), pixels
 
 
 class WindowNotReady(RuntimeError):
     """The native item's window is not there yet, or has no framebuffer yet (an ordinary startup state)."""
+
+
+class FramebufferNotReady(WindowNotReady):
+    """The window is there, but the native item has not synchronised with its framebuffer as it is now (before the
+    window's first frame, or after a resize): the window's next synchronisation brings it."""
 
 
 class NativeSpectrum:
@@ -235,5 +242,5 @@ def spectrum_block(module: ModuleType, record: bytes, card: Mapping[str, Any], p
     return block, json.loads(facts)
 
 
-__all__ = ["NativeSpectrum", "SPECTRUM_PRESENTATION_KEYS", "WindowNotReady", "spectrum_block", "spectrum_presentation",
+__all__ = ["FramebufferNotReady", "NativeSpectrum", "SPECTRUM_PRESENTATION_KEYS", "WindowNotReady", "spectrum_block", "spectrum_presentation",
            "window_metrics"]

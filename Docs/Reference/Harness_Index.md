@@ -777,9 +777,12 @@ python native/core/python/spectrum_check.py --module-dir release/native_module -
 # mode switch (steady, fade), each card's window map checked against the Python renderer's own float32 rows, and every
 # pixel more than a level off classified (card-edge column, peak row, cap arc, fade frame, other); worst-frame crops
 # --against <accepted native_render_parity.json>: after a build round, each run against the accepted one (the native
-# frames' hashes decide where both runs keep them, else every difference row and total); exit 0 only when all match
+# frames' hashes decide, "same"; where either run lacks them only the difference rows and totals compare, reported as
+# "difference_identical", never "same": N29 round 2 L8); exit 0 only when every run is "same"
+# --unprimed: the window is not rendered before the owner exists and the route is not prepared at attach (the product's
+# unprimed path, its first frame waiting on the window's afterSynchronizing: N29 round 2 M3); a reported case, not a gate
 python tools/visualizer_replay/owner_render_parity.py --native --module-dir release/native_module --offers --out <dir>
-    [--runs spectrum spectrum:b ...] [--against <accepted json>]
+    [--runs spectrum spectrum:b ...] [--against <accepted json>] [--unprimed]
 ```
 
 The work folder beside its summary holds the captured frames and references; delete it once the run is judged. Tests:
@@ -796,12 +799,17 @@ baked from the product's file, the port's constants and block members against th
 # block at binding 17, two blocks; the product's Oscilloscope and Spline Curve packs admitted, Bubble refused for its
 # samplers and admitted without them), reader (the core's reader admits the mode's slots by the schema handed over;
 # controls: no schema, a broken range rule), draw (rings at the record's radii at dpr 1 and 1.5, the glow pass by v_uv,
-# a card change, nothing at rest, a refused NaN frame keeping the card, a shader, spec, shader+spec and simulation change
-# shown with no module rebuild, refusals on the live item, the fade, the content latch and its re-arm, the surface's GPU
-# time for 2 and 3 passes; Vulkan against native OpenGL within 1 level), framebuffer (a 2560x1440 host at 150 %: the
-# window's framebuffer from Qt's own target); Vulkan validated
+# a card change, nothing at rest, a refused NaN frame keeping the card and a run of them counted past the route's bound,
+# a shader, spec, shader+spec and simulation change shown with no module rebuild, refusals on the live item, an unbind
+# keeping the frame and a new stream clearing it, the fade out and back in through intermediate frames, the content
+# latch and its re-arm, the surface's clear of a target never written, a program whose build fails keeping the frame
+# with the status' failure edge moved, no reader state JSON per frame on the render thread, the surface's GPU time for
+# 2 and 3 passes; Vulkan against native OpenGL within 1 level), framebuffer (a 2560x1440 host at 150 %: the window's
+# framebuffer from Qt's own target, nothing before the item's own sync, stale after a resize until its next), uv (N29
+# round 2 M6: the core's v_uv through an asymmetric probe at an odd card origin, dpr 1.5, four rotations, against the
+# card's own item_from_window rows); Vulkan validated
 python native/core/python/generic_mode_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
-    [--apis opengl vulkan] [--rounds blocks reader draw framebuffer] [--label n29_generic_mode]
+    [--apis opengl vulkan] [--rounds blocks reader draw framebuffer uv] [--label n29_generic_mode]
 ```
 
 Tests: `tests/test_native_mode_content.py` (no build: the runtime schema's row shape and fingerprint, appended mode codes,
