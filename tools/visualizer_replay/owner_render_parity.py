@@ -600,6 +600,10 @@ def classify_differences(native: dict, python: dict, switch_input: int) -> dict:
             labels[:] = "fade_frame"
         else:
             lit = reference[..., :3].max(axis=2) > _LIT_LEVEL
+            # The card's own frame (its border rows and columns, lit nearly edge to edge) is not a bar: without this
+            # every column's first lit row is the border's (the round-3 report's classes were taken that way).
+            lit[lit.mean(axis=1) > 0.8, :] = False
+            lit[:, lit.mean(axis=0) > 0.8] = False
             columns = numpy.nonzero(lit.any(axis=0))[0]
             edge = numpy.zeros(len(ys), dtype=bool)
             if len(columns):
