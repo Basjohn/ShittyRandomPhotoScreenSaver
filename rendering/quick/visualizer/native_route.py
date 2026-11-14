@@ -476,12 +476,27 @@ class NativeVisualizerRoute:
         from rendering.native.spectrum import spectrum_presentation
 
         window_size, window_pixels = metrics if metrics is not None else self._window_metrics(presentation)
-        card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels)
+        # The Python renderer's item lies in the content host (R-NEW): at the drawn card on the display, and wherever
+        # the display lies in the window (an R-63 overscan above it).
+        placement = {"host_origin": content_host_origin(presentation), "item_origin": self._host_window_origin()}
+        card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels,
+                                     **placement)
         drawn = spectrum_presentation(snapshot.presentation, geometry, window_size=window_size,
-                                      window_pixels=window_pixels)
+                                      window_pixels=window_pixels, **placement)
         for key in ("content_rect", "viewport_extent", "visual_scale", "dpr", "content_fade", "expanded"):
             card[key] = drawn[key]
         return card
+
+    def _host_window_origin(self) -> tuple[float, float] | None:
+        """The content host's top-left in its window, logical (Qt's own scene mapping); None for a host that is not a
+        Qt Quick item (the card then takes the display at the window's origin)."""
+        map_to_scene = getattr(self._content_host, "mapToScene", None)
+        if map_to_scene is None:
+            return None
+        from PySide6.QtCore import QPointF
+
+        point = map_to_scene(QPointF(0.0, 0.0))
+        return (float(point.x()), float(point.y()))
 
     def settings(self, snapshot: Any, card: dict) -> dict:
         """The Settings- and card-derived members of the drawn frame, by name (the Python renderer's own arithmetic,
