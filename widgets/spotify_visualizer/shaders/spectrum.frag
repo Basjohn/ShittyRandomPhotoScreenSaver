@@ -477,7 +477,10 @@ float spectrum_rim_alpha(float side_dist_px, float top_dist_px) {
     // derivatives.  In particular, do not impose a 1.5px authored core:
     // below that scale it exceeds ``spread`` and reverses smoothstep's edges,
     // which is undefined and can wash the entire black Organs fill white.
-    float coverage_px = max(fwidth(edge_dist), 0.0001);
+    // Fine derivatives, named: ``edge_dist`` is a min() of two distances, so a 2x2 quad's coarse difference differs
+    // from the per-pixel one at a bar's corner. OpenGL's ``fwidth`` is fine on the rig (identical frames at the
+    // widened run set, 14 Nov); Vulkan's was not (up to 15 levels at bar-top corners against native OpenGL, N2.5).
+    float coverage_px = max(fwidthFine(edge_dist), 0.0001);
     float core_end = spread * 0.35;
     float inner_core = 1.0 - smoothstep(0.0, max(core_end, coverage_px), edge_dist);
     float inner_falloff = 1.0 - smoothstep(core_end, spread + coverage_px, edge_dist);
