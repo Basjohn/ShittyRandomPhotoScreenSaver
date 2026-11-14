@@ -674,6 +674,8 @@ void main() {
         float lift = clamp((peak_height - active_height) / max(authored_scale, 1.0), 0.0, 1.0);
         float corner_ghost = 0.0;   // > 0: a bar top corner outside its arc, shown as the ghost's start
         float ghost_cover = 1.0;    // the ghost's own bottom corners fade out of their rounding with fill_k
+        // The rounded corners' inside test is computed `precise` (no fused multiply-add): a pixel centre on
+        // the arc decided otherwise by Vulkan's compiler than by OpenGL's (N2.5 rule (b)).
         float br_max = min(u_border_radius, bar_width * 0.5);
         if (br_max > 0.5 * authored_scale) {
             float bx_f = bar_local_x;
@@ -686,14 +688,18 @@ void main() {
                 if (br_bar > 0.5 * authored_scale && by_f > active_height - br_bar) {
                     bool outside = false;
                     if (bx_f < br_bar) {
-                        float dx = br_bar - bx_f;
-                        float dy = by_f - (active_height - br_bar);
-                        outside = outside || (dx * dx + dy * dy > br_bar * br_bar);
+                        precise float dx = br_bar - bx_f;
+                        precise float dy = by_f - (active_height - br_bar);
+                        precise float d2 = dx * dx + dy * dy;
+                        precise float r2 = br_bar * br_bar;
+                        outside = outside || (d2 > r2);
                     }
                     if (bx_f > bar_width - br_bar) {
-                        float dx = bx_f - (bar_width - br_bar);
-                        float dy = by_f - (active_height - br_bar);
-                        outside = outside || (dx * dx + dy * dy > br_bar * br_bar);
+                        precise float dx = bx_f - (bar_width - br_bar);
+                        precise float dy = by_f - (active_height - br_bar);
+                        precise float d2 = dx * dx + dy * dy;
+                        precise float r2 = br_bar * br_bar;
+                        outside = outside || (d2 > r2);
                     }
                     if (outside) {
                         if (!fill_ghost_above) discard;
@@ -708,14 +714,18 @@ void main() {
                     ? min(br_max, peak_height * 0.5) : br_max;
                 if (br_ghost > 0.5 * authored_scale && by_f > peak_height - br_ghost) {
                     if (bx_f < br_ghost) {
-                        float dx = br_ghost - bx_f;
-                        float dy = by_f - (peak_height - br_ghost);
-                        if (dx * dx + dy * dy > br_ghost * br_ghost) discard;
+                        precise float dx = br_ghost - bx_f;
+                        precise float dy = by_f - (peak_height - br_ghost);
+                        precise float d2 = dx * dx + dy * dy;
+                        precise float r2 = br_ghost * br_ghost;
+                        if (d2 > r2) discard;
                     }
                     if (bx_f > bar_width - br_ghost) {
-                        float dx = bx_f - (bar_width - br_ghost);
-                        float dy = by_f - (peak_height - br_ghost);
-                        if (dx * dx + dy * dy > br_ghost * br_ghost) discard;
+                        precise float dx = bx_f - (bar_width - br_ghost);
+                        precise float dy = by_f - (peak_height - br_ghost);
+                        precise float d2 = dx * dx + dy * dy;
+                        precise float r2 = br_ghost * br_ghost;
+                        if (d2 > r2) discard;
                     }
                 }
                 // Round ghost BOTTOM corners where ghost meets bar top
@@ -724,17 +734,21 @@ void main() {
                         ? min(br_max, active_height * 0.5) : br_max;
                     if (br_bot > 0.5 * authored_scale && by_f < active_height + br_bot) {
                         if (bx_f < br_bot) {
-                            float dx = br_bot - bx_f;
-                            float dy = (active_height + br_bot) - by_f;
-                            if (dx * dx + dy * dy > br_bot * br_bot) {
+                            precise float dx = br_bot - bx_f;
+                            precise float dy = (active_height + br_bot) - by_f;
+                            precise float d2 = dx * dx + dy * dy;
+                            precise float r2 = br_bot * br_bot;
+                            if (d2 > r2) {
                                 if (fill_k <= 0.0) discard;
                                 ghost_cover = fill_k;
                             }
                         }
                         if (bx_f > bar_width - br_bot) {
-                            float dx = bx_f - (bar_width - br_bot);
-                            float dy = (active_height + br_bot) - by_f;
-                            if (dx * dx + dy * dy > br_bot * br_bot) {
+                            precise float dx = bx_f - (bar_width - br_bot);
+                            precise float dy = (active_height + br_bot) - by_f;
+                            precise float d2 = dx * dx + dy * dy;
+                            precise float r2 = br_bot * br_bot;
+                            if (d2 > r2) {
                                 if (fill_k <= 0.0) discard;
                                 ghost_cover = fill_k;
                             }
@@ -864,27 +878,35 @@ void main() {
         float by_f = seg_local_y;
         // Bottom-left corner
         if (bx_f < br_seg && by_f < br_seg) {
-            float dx = br_seg - bx_f;
-            float dy = br_seg - by_f;
-            if (dx * dx + dy * dy > br_seg * br_seg) discard;
+            precise float dx = br_seg - bx_f;
+            precise float dy = br_seg - by_f;
+            precise float d2 = dx * dx + dy * dy;
+            precise float r2 = br_seg * br_seg;
+            if (d2 > r2) discard;
         }
         // Bottom-right corner
         if (bx_f > bar_width - br_seg && by_f < br_seg) {
-            float dx = bx_f - (bar_width - br_seg);
-            float dy = br_seg - by_f;
-            if (dx * dx + dy * dy > br_seg * br_seg) discard;
+            precise float dx = bx_f - (bar_width - br_seg);
+            precise float dy = br_seg - by_f;
+            precise float d2 = dx * dx + dy * dy;
+            precise float r2 = br_seg * br_seg;
+            if (d2 > r2) discard;
         }
         // Top-left corner
         if (bx_f < br_seg && by_f > seg_height - br_seg) {
-            float dx = br_seg - bx_f;
-            float dy = by_f - (seg_height - br_seg);
-            if (dx * dx + dy * dy > br_seg * br_seg) discard;
+            precise float dx = br_seg - bx_f;
+            precise float dy = by_f - (seg_height - br_seg);
+            precise float d2 = dx * dx + dy * dy;
+            precise float r2 = br_seg * br_seg;
+            if (d2 > r2) discard;
         }
         // Top-right corner
         if (bx_f > bar_width - br_seg && by_f > seg_height - br_seg) {
-            float dx = bx_f - (bar_width - br_seg);
-            float dy = by_f - (seg_height - br_seg);
-            if (dx * dx + dy * dy > br_seg * br_seg) discard;
+            precise float dx = bx_f - (bar_width - br_seg);
+            precise float dy = by_f - (seg_height - br_seg);
+            precise float d2 = dx * dx + dy * dy;
+            precise float r2 = br_seg * br_seg;
+            if (d2 > r2) discard;
         }
     }
 
