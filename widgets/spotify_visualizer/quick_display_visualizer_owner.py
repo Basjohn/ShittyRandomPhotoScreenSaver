@@ -328,9 +328,10 @@ class QuickDisplayVisualizerOwner:
         # display-wide ones, reach the controller, so the ordinary geometry round-trips untouched).
         self._expanded_display = False
         self._takeover: _TakeoverFade | None = None
-        # A neighbouring display prepared ahead of Edit's hop or a hover transfer arrow (1C.2): (runtime, scene), from
-        # the edge that begins it (``prepare_display``) to the edge that ends it or the hop that adopts it.
-        self._neighbour_prewarm: tuple[Any, Any] | None = None
+        # A neighbouring display prepared ahead of Edit's hop or a hover transfer arrow (1C.2): (runtime, scene,
+        # prepared), from the edge that begins it (``prepare_display``) to the edge that ends it or the hop that adopts
+        # it; ``prepared`` from the publication that found its renderer prepared (no more feeding).
+        self._neighbour_prewarm: tuple[Any, Any, bool] | None = None
         self._expanded_source: Any = None
         # The full-display overlays (plan 01 §G, M3b) exist only while the display-wide card is drawn and the displays
         # are on; the last value projected to the scene, so it is written at its edges only.
@@ -619,9 +620,17 @@ class QuickDisplayVisualizerOwner:
                 "fresh visualizer publication has no retained presentation item"
             )
         neighbour = self._neighbour_prewarm
-        if neighbour is not None:
-            # A prepared neighbour (1C.2) draws the snapshot just published, so its render thread keeps preparing.
-            neighbour[1].feed_visualizer_prewarm(self._controller.render_bridge.peek())
+        if neighbour is not None and not neighbour[2]:
+            # A preparing neighbour (1C.2) draws the snapshot just published, so its render thread keeps preparing,
+            # until its renderer reports prepared: from that edge it is fed nothing and redraws nothing (the renderer
+            # is kept) until the hop, which binds the live source and draws its newest frame, or the release.
+            identity = self._render_identity
+            if identity is not None and neighbour[1].visualizer_prewarm_prepared(identity):
+                self._neighbour_prewarm = (neighbour[0], neighbour[1], True)
+                logger.info("[SPOTIFY_VIS] Neighbouring display prepared; it rests until the hop screen=%s",
+                            getattr(neighbour[0], "screen_index", "?"))
+            else:
+                neighbour[1].feed_visualizer_prewarm(self._controller.render_bridge.peek())
 
     def set_playing(
         self,
@@ -777,7 +786,7 @@ class QuickDisplayVisualizerOwner:
         record = self._move_target_presentation(target_runtime, False)
         if record is None or not begin(identity, record):
             return False
-        self._neighbour_prewarm = (target_runtime, scene)
+        self._neighbour_prewarm = (target_runtime, scene, False)
         scene.feed_visualizer_prewarm(self._controller.render_bridge.peek())
         logger.info("[SPOTIFY_VIS] Neighbouring display prepared screen=%s -> %s",
                     getattr(self._presentation_runtime, "screen_index", "?"),
