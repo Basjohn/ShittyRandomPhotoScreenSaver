@@ -1410,10 +1410,9 @@ def test_spinbox_stylesheet_attached(qt_app, settings_manager):
     try:
         css = tab.styleSheet()
         assert css, "WidgetsTab stylesheet should not be empty"
-        assert "QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox" in css
+        # The shared skin itself, derived from its one source (never a selector's wording, which 1D.10 changed).
+        assert SPINBOX_STYLE.strip() in css
         assert "QSpinBox::up-button" in css
-        expected_token = "background-color: #282828"
-        assert SPINBOX_STYLE.strip() in css or expected_token in css
     finally:
         tab.deleteLater()
 
