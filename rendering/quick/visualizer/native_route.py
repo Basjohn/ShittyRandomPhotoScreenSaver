@@ -11,6 +11,10 @@ engine worker path reaches the same bridge, so both paths draw through one strea
 read with no Python copy, is a later step: the owner's presentation and reveal decisions would then read the slot
 head instead of the bridge).
 
+Two kinds of native item (N5.1): Spectrum's hand-written one (N2.5) and one generic item (D12) on which every generic
+mode (Spline Curve first) is drawn from its own fragment pack, its settings function (``GENERIC_MODE_SETTINGS``) and
+its runtime schema's record; the route makes both at attach and retargets the generic item's program between modes.
+
 The route's stream is created at bind (the identity's mapping), retired at unbind (the reader stores Retiring at once
 and is released on the render thread at the item's next sync, D1; the name is unlinked at once, the reader's own
 view stays mapped until then) and the composite goes with the route's close (before the content host retires).
@@ -36,11 +40,29 @@ from widgets.spotify_visualizer.quick_display_visualizer_owner import ACTIVATION
 
 logger = get_logger(__name__)
 
-#: The modes the native core draws (D10: a mode offers ``vulkan`` once its port passes; see
-#: ``visualizer_mode_registry`` ``renderer_backends``).
-NATIVE_MODE_IDS = frozenset({"spectrum"})
+def _devcurve_settings(snapshot: Any, card: dict) -> dict:
+    """Spline Curve's Settings- and card-derived members of the drawn frame (N5.1): the Python renderer's own
+    ``devcurve_settings_values`` under the card's content rect (its ``frame.logical_content_rect``)."""
+    from rendering.quick.visualizer.implementations.devcurve import (
+        devcurve_presentation_layout,
+        devcurve_settings_values,
+    )
 
-#: One slot of Spectrum's stream (the record is 1488 bytes; the slot shape rounds it).
+    layout = devcurve_presentation_layout(snapshot.presentation, card["content_rect"])
+    return devcurve_settings_values(snapshot.logical, layout)
+
+
+#: The generic modes the core draws from data alone (D12, ``rendering.native.mode``): mode id -> its settings function
+#: ``(snapshot, card) -> members by name``. Its program is its own fragment pack (one pass, straight alpha over, as the
+#: Python render host blends), its record its runtime schema (``native_schema.schema_for_mode``).
+GENERIC_MODE_SETTINGS: dict[str, Callable[[Any, dict], dict]] = {
+    "devcurve": _devcurve_settings,
+}
+#: The modes the native core draws (D10: a mode offers ``vulkan`` once its port passes; see
+#: ``visualizer_mode_registry`` ``renderer_backends``): Spectrum's hand-written item (N2.5) and the generic modes.
+NATIVE_MODE_IDS = frozenset({"spectrum", *GENERIC_MODE_SETTINGS})
+
+#: One slot of a native mode's stream (Spectrum's record is 1488 bytes, Spline Curve's 3200; the slot shape rounds it).
 _SLOT_BYTES = 4096
 #: How long the native item fades in and out (fade, never vanish: audit N29 M1): the Visualizer's own activation fade,
 #: read from its owner (round 2, L5).
@@ -71,7 +93,10 @@ class NativeVisualizerRoute:
     def __init__(self, core: Any, content_host: Any) -> None:
         self._core = core
         self._content_host = content_host
-        self._spectrum: Any = None
+        # One native item per kind (``_content_kind``): Spectrum's own, and one generic item every generic mode is
+        # drawn on (its program retargeted, never a new item). ``_content`` is the bound identity's.
+        self._contents: dict[str, Any] = {}
+        self._content: Any = None
         self._memory: Any = None
         self._writer: Any = None
         self._identity: Any = None
@@ -80,7 +105,6 @@ class NativeVisualizerRoute:
         self._settings: dict | None = None
         self._placed: tuple | None = None
         self._snapshot: Any = None
-        self._programmed = False      # the mode's pack is loaded into the native item
         self._faded_out = False       # faded out within an activation: its next showing fades back in
         self._late: Any = None        # the identity whose first frame comes late (a failure, a wait): it fades in (M2)
         self._failure: tuple | None = None   # the inputs a failed sync had (nothing is retried until they change)
@@ -102,21 +126,26 @@ class NativeVisualizerRoute:
 
     @property
     def spectrum(self) -> Any:
-        return self._spectrum
+        """The native Spectrum item (None until made)."""
+        content = self._contents.get("spectrum")
+        return None if content is None else content.item
+
+    @property
+    def native_item(self) -> Any:
+        """The bound identity's native item (None while nothing is bound)."""
+        return None if self._content is None else self._content.item
 
     def prepare(self) -> None:
-        """At attach (long before an activation): the native item made and its synchronisation asked for, so it has read
-        its window's framebuffer by the first activation (round 2, L1: only its own synchronisation reads it). Never
-        raises; a failure is retried at the first sync."""
+        """At attach (long before an activation): each kind's native item made and its synchronisation asked for, so it
+        has read its window's framebuffer by the first activation of any native mode (round 2, L1: only its own
+        synchronisation reads it). Never raises; a failure is retried at the first sync."""
         if self.closed:
             return
+        for kind in _CONTENT_KINDS:
+            def make(kind=kind) -> None:
+                self._content_of(kind).composite.update()
 
-        def make() -> None:
-            if self._spectrum is None:
-                self._make_native_item()
-            self._spectrum.composite.update()
-
-        self._guarded(make)
+            self._guarded(make)
 
     def set_update_request(self, request: Callable[[], Any] | None) -> None:
         """The item's update (a bound method, held weakly): what a window edge re-runs (round 2, M3, M4)."""
@@ -143,15 +172,8 @@ class NativeVisualizerRoute:
 
         # The native item and its program first: a failure there leaves no mapping behind (audit 14 Nov, M1), and a
         # program that did not load is loaded again at the next bind rather than drawn without.
-        if self._spectrum is None:
-            self._make_native_item()
-        if not self._programmed:
-            from rendering.native.program_values import mode_fragment_pack
-
-            # The product's own pack (tools/regen_qrc.py --shaders), loaded at run time: no module build for a shader
-            # change (N2.5's standing port rule).
-            self._spectrum.program(mode_fragment_pack(mode_id))
-            self._programmed = True
+        content = self._content_of(_content_kind(mode_id))
+        content.load(mode_id)
         code = mode_code(mode_id)
         values = {"runtime_generation": int(identity.runtime_generation),
                   "engine_generation": int(identity.engine_generation),
@@ -163,7 +185,7 @@ class NativeVisualizerRoute:
         writer = None
         try:
             writer = FramePacketWriter(memory.buf)
-            self._spectrum.bind(memory.name, expect={**values, "mode_code": code})
+            content.bind(mode_id, memory.name, {**values, "mode_code": code})
         except BaseException:
             # Nothing of the failed bind stays: the mapping is released, closed and unlinked here.
             if writer is not None:
@@ -172,6 +194,7 @@ class NativeVisualizerRoute:
             raise
         self._memory, self._writer = memory, writer
         self._identity = identity
+        self._content = content
         self._code = code
         self._card = self._placed = self._settings = None
         self._snapshot = None
@@ -191,14 +214,14 @@ class NativeVisualizerRoute:
         self._card = self._placed = self._settings = None
         self._core_failure = None
         self._disarm_edges()
-        spectrum = self._spectrum
+        content, self._content = self._content, None
         writer, self._writer = self._writer, None
         memory, self._memory = self._memory, None
         try:
-            if spectrum is not None:
+            if content is not None:
                 # The hide first, on its own (L3); at once, as the Python item (rule (a)).
-                self._guarded(lambda: spectrum.composite.set(visible=False, fade_ms=0))
-                spectrum.unbind()
+                self._guarded(lambda: content.composite.set(visible=False, fade_ms=0))
+                content.unbind()
         finally:
             # The route's own mapping goes whatever the native item said (N29 L2): nothing of it outlives the unbind.
             try:
@@ -215,17 +238,17 @@ class NativeVisualizerRoute:
         self.unbind()
         self.closed = True
         self._disarm_edges()
-        spectrum, self._spectrum = self._spectrum, None
-        if spectrum is not None:
-            spectrum.composite.destroy()
+        contents, self._contents = list(self._contents.values()), {}
+        for content in contents:
+            content.composite.destroy()
 
     # ---------------------------------------------------------------------------------------------- the edges
 
     def drop(self) -> None:
         """The retained frame is no longer drawn; the stream stays bound (the item's drop edge)."""
         self._snapshot = None
-        if self._spectrum is not None and self._identity is not None:
-            self._spectrum.drop_retained_frame()
+        if self._content is not None and self._identity is not None:
+            self._content.drop()
 
     def retained_snapshot(self, identity: Any) -> Any:
         """The snapshot last published for ``identity`` (the Python node's ``retained_snapshot``)."""
@@ -255,7 +278,7 @@ class NativeVisualizerRoute:
         from rendering.native.spectrum import FramebufferNotReady
 
         try:
-            metrics = self._window_metrics(presentation)
+            metrics = self._window_metrics(presentation, str(identity.mode_id))
         except FramebufferNotReady as exc:
             return self._wait_for_framebuffer(identity, exc)
         except Exception as exc:  # no window yet, or none any more
@@ -276,19 +299,23 @@ class NativeVisualizerRoute:
             self._failure = None                          # recovered: the next failure is logged again
         return published
 
-    def _window_metrics(self, presentation: Any) -> tuple:
+    def _window_metrics(self, presentation: Any, mode_id: str = "spectrum") -> tuple:
+        """The window's metrics as ``mode_id``'s native item read them at its own synchronisation."""
         from rendering.native.spectrum import window_metrics
 
-        if self._spectrum is None:
-            self._make_native_item()
-        return window_metrics(self._content_host, self._spectrum.composite)
+        return window_metrics(self._content_host, self._content_of(_content_kind(mode_id)).composite)
 
-    def _make_native_item(self) -> None:
-        """The native item, hidden until its first frame is placed: a placement that fades in (a late first frame, M2)
-        then fades from nothing (an item made shown would pop in, its fade a no-op: ABI 12 build round, --unprimed)."""
-        spectrum = self._core.spectrum(self._content_host)
-        self._spectrum = spectrum
-        spectrum.composite.set(surface_format=self.surface_format, visible=False)
+    def _content_of(self, kind: str) -> Any:
+        """``kind``'s native item, made on first use, hidden until its first frame is placed: a placement that fades in
+        (a late first frame, M2) then fades from nothing (an item made shown would pop in, its fade a no-op: ABI 12
+        build round, --unprimed)."""
+        content = self._contents.get(kind)
+        if content is None:
+            content = _SpectrumContent(self._core, self._content_host) if kind == "spectrum" else \
+                _ModeContent(self._core, self._content_host)
+            self._contents[kind] = content
+            content.composite.set(surface_format=self.surface_format, visible=False)
+        return content
 
     def _guarded(self, step) -> None:
         """A teardown step that must not raise into the item's update (N29 L2): logged instead."""
@@ -325,8 +352,9 @@ class NativeVisualizerRoute:
         if self._placed is None:
             self._late = identity
         self._arm("afterSynchronizing")
-        if self._spectrum is not None:
-            self._guarded(self._spectrum.composite.update)
+        content = self._contents.get(_content_kind(str(identity.mode_id)))
+        if content is not None:
+            self._guarded(content.composite.update)
         return False
 
     @property
@@ -392,7 +420,6 @@ class NativeVisualizerRoute:
             self.bind(identity)
         if bridge is None:
             return False
-        from core.visualizer_engine import spectrum_native_schema
         from core.visualizer_engine.packet_mailbox import publication_flags
         from rendering.native.composite import composite_geometry, window_pixel_ratio
 
@@ -406,7 +433,7 @@ class NativeVisualizerRoute:
         # record's exact outer origin, half a device pixel away from it at most).
         origin = content_host_origin(presentation)
         placed = (geometry, origin)
-        spectrum = self._spectrum
+        content = self._content
         recheck, self._recheck = self._recheck, False
         sent = False
         try:
@@ -423,28 +450,29 @@ class NativeVisualizerRoute:
             drawn = snapshot if snapshot is not None else self._snapshot
             if drawn is None:
                 return False
-            card = self.card(presentation, drawn, geometry, metrics)
+            full = self.card(presentation, drawn, geometry, metrics)
+            card = content.shown_card(full, drawn)
             if snapshot is None and card == self._card and placed == self._placed and not recheck:
                 return False
             if card != self._card:
-                spectrum.present_raw(card)
+                content.present(card)
                 self._card = card
                 sent = True
-            settings = self.settings(drawn, card)
+            settings = self.settings(drawn, full)
             if settings != self._settings:
-                spectrum.settings(settings)          # by name; re-packed by the core only when they change
+                content.settings(settings)           # by name; re-packed by the core only when they change
                 self._settings = settings
                 sent = True
             if snapshot is not None:
                 logical = snapshot.logical
-                self._writer.publish(spectrum_native_schema.encode(logical),
-                                     payload_schema=spectrum_native_schema.SCHEMA_ID,
+                payload, payload_schema = content.encode(logical)
+                self._writer.publish(payload, payload_schema=payload_schema,
                                      logical_timestamp=float(logical.logical_timestamp or 0.0),
                                      flags=publication_flags(logical), mode_code=self._code,
                                      runtime_generation=int(identity.runtime_generation),
                                      engine_generation=int(identity.engine_generation),
                                      activation_id=int(identity.activation_id))
-            healthy = self._core_verdict(spectrum.composite.content_status())
+            healthy = self._core_verdict(content.composite.content_status())
         except Exception as exc:
             raise _FrameFailure(exc) from exc
         if healthy and placed != self._placed:
@@ -453,7 +481,7 @@ class NativeVisualizerRoute:
             # frame shows at once, its fade-in the card's own content fade (the Python renderer's: rule (a) holds
             # from the first frame).
             fade = FAILURE_FADE_MS if self._faded_out or self._late == identity else 0
-            spectrum.composite.place(geometry, origin, visible=True, fade_ms=fade)
+            content.composite.place(geometry, origin, visible=True, fade_ms=fade)
             self._placed = placed
             self._faded_out = False
             self._late = None
@@ -466,7 +494,7 @@ class NativeVisualizerRoute:
             # What the core builds from (the card, the settings, a new target) is recorded at the next frame: its
             # verdict is read once that frame has rendered, with no new frame needed (M4).
             self._arm("afterRendering")
-        spectrum.update()
+        content.update()
         return snapshot is not None
 
     def card(self, presentation: Any, snapshot: Any, geometry: Any, metrics: tuple | None = None) -> dict:
@@ -499,8 +527,12 @@ class NativeVisualizerRoute:
         return (float(point.x()), float(point.y()))
 
     def settings(self, snapshot: Any, card: dict) -> dict:
-        """The Settings- and card-derived members of the drawn frame, by name (the Python renderer's own arithmetic,
-        ``spectrum_settings_values``)."""
+        """The Settings- and card-derived members of the drawn frame, by name (the Python renderer's own arithmetic:
+        ``spectrum_settings_values``, or the generic mode's ``GENERIC_MODE_SETTINGS`` function). ``card``: the route's
+        whole card (``card``)."""
+        generic = None if self._identity is None else GENERIC_MODE_SETTINGS.get(str(self._identity.mode_id))
+        if generic is not None:
+            return generic(snapshot, card)
         from rendering.quick.visualizer.implementations.spectrum import spectrum_settings_values
 
         return spectrum_settings_values(snapshot.logical, snapshot.presentation, item_size=card["item_size"],
@@ -511,11 +543,146 @@ class NativeVisualizerRoute:
                                         target_px=card["target_size"])
 
     def _hide(self, *, fade_back_in: bool = True) -> None:
-        if self._spectrum is not None and self._placed is not None:
+        if self._content is not None and self._placed is not None:
             self._placed = None
             if fade_back_in:
                 self._faded_out = True
-            self._spectrum.composite.set(visible=False, fade_ms=FAILURE_FADE_MS)   # fade, never vanish (N29 M1)
+            self._content.composite.set(visible=False, fade_ms=FAILURE_FADE_MS)   # fade, never vanish (N29 M1)
+
+
+#: The native items a route holds, one per kind: Spectrum's hand-written item and the generic modes' item.
+_CONTENT_KINDS = ("spectrum", "mode")
+
+
+def _content_kind(mode_id: str) -> str:
+    """The kind of native item that draws ``mode_id``; a mode the route does not draw is refused (ValueError)."""
+    if mode_id == "spectrum":
+        return "spectrum"
+    if mode_id in GENERIC_MODE_SETTINGS:
+        return "mode"
+    raise ValueError(f"the native Visualizer route draws {sorted(NATIVE_MODE_IDS)}, not {mode_id!r} "
+                     "(D10: a mode without a renderer on this backend is never offered)")
+
+
+class _SpectrumContent:
+    """The native Spectrum (N2.5, ``rendering.native.spectrum.NativeSpectrum``): its program loaded once, its stream
+    bound at the route's bind, the route's whole card handed over."""
+
+    def __init__(self, core: Any, host: Any) -> None:
+        self.item = core.spectrum(host)
+        self.composite = self.item.composite
+        self._programmed = False      # the mode's pack is loaded into the native item
+
+    def load(self, mode_id: str) -> None:
+        if not self._programmed:
+            from rendering.native.program_values import mode_fragment_pack
+
+            # The product's own pack (tools/regen_qrc.py --shaders), loaded at run time: no module build for a shader
+            # change (N2.5's standing port rule).
+            self.item.program(mode_fragment_pack(mode_id))
+            self._programmed = True
+
+    def bind(self, mode_id: str, mapping_name: str, expect: dict) -> None:
+        self.item.bind(mapping_name, expect=expect)
+
+    def unbind(self) -> None:
+        self.item.unbind()
+
+    def shown_card(self, card: dict, snapshot: Any) -> dict:
+        return card
+
+    def present(self, card: dict) -> None:
+        self.item.present_raw(card)
+
+    def settings(self, values: dict) -> None:
+        self.item.settings(values)
+
+    def encode(self, logical: Any) -> tuple[bytes, int]:
+        from core.visualizer_engine import spectrum_native_schema
+
+        return spectrum_native_schema.encode(logical), spectrum_native_schema.SCHEMA_ID
+
+    def drop(self) -> None:
+        self.item.drop_retained_frame()
+
+    def update(self) -> None:
+        self.item.update()
+
+
+class _ModeContent:
+    """The generic modes' native item (D12, ``rendering.native.mode.NativeMode``), retargeted between them by its
+    program. Its program is the mode's own fragment pack, one pass blended as the Python render host blends (straight
+    alpha over the transparent target). A program is admitted against its settings, so the stream is bound with the
+    first settings of an activation: the program first when the item draws another mode (with those settings), else
+    the settings; then the stream with its runtime schema (``native_schema.schema_for_mode``)."""
+
+    def __init__(self, core: Any, host: Any) -> None:
+        self.item = core.mode(host)
+        self.composite = self.item.composite
+        self._pack: tuple[str, bytes] | None = None       # the bound mode's fragment pack, read at its bind
+        self._program_mode: str | None = None             # the mode whose program the item holds
+        self._pending: tuple[str, str, dict] | None = None   # (mode, mapping name, expect): bound at its first settings
+        self._bound = False
+
+    def load(self, mode_id: str) -> None:
+        if self._pack is None or self._pack[0] != mode_id:
+            from rendering.native.program_values import mode_fragment_pack
+
+            self._pack = (mode_id, mode_fragment_pack(mode_id))
+
+    def bind(self, mode_id: str, mapping_name: str, expect: dict) -> None:
+        self._pending = (mode_id, mapping_name, dict(expect))
+
+    def unbind(self) -> None:
+        self._pending = None
+        if self._bound:
+            self._bound = False
+            self.item.unbind()
+
+    def shown_card(self, card: dict, snapshot: Any) -> dict:
+        """The core members' card (``MODE_CARD_KEYS``): the route's card with the drawn border width (the Python
+        renderer's ``presentation.border_width``)."""
+        from rendering.native.mode import MODE_CARD_KEYS
+
+        shown = {key: card[key] for key in MODE_CARD_KEYS if key in card}
+        shown["border_width"] = float(getattr(snapshot.presentation, "border_width", 0.0) or 0.0)
+        return shown
+
+    def present(self, card: dict) -> None:
+        self.item.card(card)
+
+    def settings(self, values: dict) -> None:
+        pending = self._pending
+        if pending is None:
+            self.item.settings(values)
+            return
+        mode_id, mapping_name, expect = pending
+        if self._program_mode != mode_id:
+            from rendering.native.mode import ModePass
+
+            if self._pack is None or self._pack[0] != mode_id:
+                self.load(mode_id)
+            self.item.program([ModePass(mode_id, self._pack[1], "alpha")], values)
+            self._program_mode = mode_id
+        else:
+            self.item.settings(values)
+        from core.visualizer_engine.native_schema import schema_for_mode
+
+        self.item.bind(mapping_name, schema_for_mode(mode_id), expect=expect)
+        self._bound = True
+        self._pending = None
+
+    def encode(self, logical: Any) -> tuple[bytes, int]:
+        from core.visualizer_engine.native_schema import schema_for_mode
+
+        schema = schema_for_mode(getattr(logical, "mode_id", None))
+        return schema.encode(logical), schema.schema_id
+
+    def drop(self) -> None:
+        self.item.drop_retained_frame()
+
+    def update(self) -> None:
+        self.item.update()
 
 
 class _WindowEdge:
@@ -620,5 +787,5 @@ def attach_native_route(item: Any, content_host: Any, backend: str | None = None
     return route
 
 
-__all__ = ["NATIVE_MODE_IDS", "NativeVisualizerRoute", "attach_native_route", "content_host_origin",
+__all__ = ["GENERIC_MODE_SETTINGS", "NATIVE_MODE_IDS", "NativeVisualizerRoute", "attach_native_route", "content_host_origin",
            "native_route_wanted"]
