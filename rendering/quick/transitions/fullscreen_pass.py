@@ -37,6 +37,8 @@ from rendering.quick.scene3d.uniforms import PassBlocks
 from .render_contract import QuickTransitionRenderFrame
 
 COMMON_VALUES = ("uMatrix", "uItemSize", "u_progress")
+#: The native core's frame (``run_values``): ``uMatrix`` is a core member there (its triangle reads none).
+_IDENTITY_MATRIX = (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)
 
 
 def fullscreen_pass_parts(fragment_source: str, block_name: str):
@@ -82,6 +84,16 @@ class FullscreenPassRenderer:
                   "u_progress": float(frame.sample.eased_progress)}
         values.update(self.values(resolved, frame))
         return values
+
+    def run_values(self, run, sample, logical_size: tuple[float, float],
+                   device_pixel_ratio: float) -> dict[str, object]:
+        """``block_values`` for a frame the native core draws (N5.2a: the item's own target, no GL object here): the
+        render frame's GL names are the contract's stand-ins, since ``block_values`` reads none of them."""
+        width, height = (max(1, round(float(v) * float(device_pixel_ratio))) for v in logical_size)
+        frame = QuickTransitionRenderFrame(run, sample, (0, 0, width, height),
+                                           (float(logical_size[0]), float(logical_size[1])), _IDENTITY_MATRIX,
+                                           1, 1, 2, device_pixel_ratio=float(device_pixel_ratio))
+        return self.block_values(frame)
 
     def render(self, frame: QuickTransitionRenderFrame) -> None:
         if not self._program:

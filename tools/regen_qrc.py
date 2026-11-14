@@ -11,7 +11,8 @@ every ``.vert``/``.frag`` there, discovered, its ``.qsb`` beside it, committed) 
 same toolchain's ``qsb``, for every target the product ships: SPIR-V (Vulkan), the GLSL
 of the product's OpenGL 4.6 context, and the shipped targets of
 ``tools/vulkan_shader_readiness.py`` (GLSL 430, HLSL 5.0, MSL 1.2). ``--shaders --check``
-fails when a committed pack is not what its source bakes to.
+fails when a committed pack is not what its source bakes to. The fullscreen transitions' fragments (their Python
+renderers' own text, N5.2a) are baked the same way into ``rendering/quick/qml/shaders/transitions/<id>.frag.qsb``.
 """
 from __future__ import annotations
 
@@ -424,6 +425,63 @@ def mode_shader_dir(repo_root: Path = ROOT) -> Path:
     return repo_root / "widgets" / "spotify_visualizer" / "shaders"
 
 
+def transition_shader_dir(repo_root: Path = ROOT) -> Path:
+    """Where the fullscreen transitions' fragment packs are committed (N5.2a: the native core draws them on Vulkan;
+    shipped with the QML folder). Their sources are the Python renderers' own fragment text."""
+    return quick_shader_dir(repo_root) / "transitions"
+
+
+def transition_fragment_sources() -> dict[str, str]:
+    """Every fullscreen transition's fragment (a ``FullscreenPassRenderer`` subclass, discovered in
+    ``rendering/quick/transitions/implementations``, never listed): its stable id -> the fragment text its Python
+    renderer compiles (the one source; its pack ``<id>.frag.qsb`` is baked from it)."""
+    import importlib
+
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from rendering.quick.transitions import implementations
+    from rendering.quick.transitions.fullscreen_pass import FullscreenPassRenderer
+
+    found: dict[str, str] = {}
+    for path in sorted(Path(implementations.__file__).parent.glob("*.py")):
+        if "FullscreenPassRenderer" not in path.read_text(encoding="utf-8"):
+            continue
+        module = importlib.import_module(f"{implementations.__name__}.{path.stem}")
+        for value in vars(module).values():
+            if (isinstance(value, type) and issubclass(value, FullscreenPassRenderer)
+                    and value.__module__ == module.__name__):
+                found[value.transition_id] = value.fragment_source
+    return found
+
+
+def transition_pack_path(transition_id: str, repo_root: Path = ROOT) -> Path:
+    return transition_shader_dir(repo_root) / f"{transition_id}.frag.qsb"
+
+
+def _transition_shader_status(qsb: Path, targets: Sequence[str], run, *, bake: bool) -> list[QuickShaderStatus]:
+    """Whether each fullscreen transition's committed pack is what its fragment bakes to; ``bake``: a stale one is
+    replaced by the fresh bake."""
+    import tempfile
+
+    statuses = []
+    with tempfile.TemporaryDirectory(prefix="srpss_transition_qsb_") as folder:
+        for transition_id, text in sorted(transition_fragment_sources().items()):
+            source = Path(folder) / f"{transition_id}.frag"
+            source.write_text(text, encoding="utf-8")
+            fresh = Path(folder) / f"{transition_id}.frag.qsb"
+            _bake_quick_shader(qsb, source, fresh, targets, run)
+            pack = transition_pack_path(transition_id)
+            current = pack.is_file() and pack.read_bytes() == fresh.read_bytes()
+            if not current and bake:
+                pack.parent.mkdir(parents=True, exist_ok=True)
+                pack.write_bytes(fresh.read_bytes())
+                current = True
+            reason = "current" if current else ("the pack is missing" if not pack.is_file()
+                                                else "the pack is not what its fragment bakes to for every target")
+            statuses.append(QuickShaderStatus(Path(f"{transition_id} (fullscreen transition)"), pack, current, reason))
+    return statuses
+
+
 def quick_shader_sources(shader_dir: Path | None = None) -> tuple[Path, ...]:
     """Every shader source the product bakes (discovered, never listed): the Qt Quick ``ShaderEffect`` sources and
     the Visualizer modes' fragment shaders; ``shader_dir``: one folder's instead."""
@@ -531,6 +589,8 @@ def quick_shader_status(
                                                   "the pack is not what its source bakes to for every target"))
             else:
                 statuses.append(QuickShaderStatus(source, pack, True, "current"))
+    if shader_dir is None:
+        statuses += _transition_shader_status(qsb, targets, run, bake=False)
     return tuple(statuses)
 
 
@@ -543,8 +603,10 @@ def bake_quick_shaders(
 ) -> tuple[QuickShaderStatus, ...]:
     """Bake every stale pack beside its source (a temporary file replaced into place); returns the final status."""
     targets = tuple(quick_shader_targets() if targets is None else targets)
+    if shader_dir is None:
+        _transition_shader_status(qsb, targets, run, bake=True)
     for status in quick_shader_status(qsb=qsb, shader_dir=shader_dir, targets=targets, run=run):
-        if status.current:
+        if status.current or not status.source.is_file():
             continue
         temporary = status.pack.with_name(f".{status.pack.name}.{os.getpid()}.tmp")
         try:

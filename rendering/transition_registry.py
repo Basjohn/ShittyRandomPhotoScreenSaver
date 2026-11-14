@@ -39,10 +39,15 @@ class TransitionDescriptor:
         return self.section_key or self.stable_id
 
 
+# N5.2a: the fullscreen transitions the native core draws from their own fragment over the background layer
+# (``rendering/quick/render/native_background.py``) on the Vulkan rehearsal path.
+_ON_THE_CORE: tuple[str, ...] = ("opengl", "vulkan")
+
 _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Ripple",
         stable_id="ripple",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
         random_pool_name="Ripple",
@@ -51,6 +56,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Wipe",
         stable_id="wipe",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.QUAD_IN_OUT,
     ),
     TransitionDescriptor(
@@ -63,6 +69,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Slide",
         stable_id="slide",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.SINE_IN_OUT,
     ),
     TransitionDescriptor(
@@ -176,11 +183,13 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Crossfade",
         stable_id="crossfade",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.QUAD_IN_OUT,
     ),
     TransitionDescriptor(
         setting_name="Warp Dissolve",
         stable_id="warp_dissolve",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
@@ -199,12 +208,14 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Particle",
         stable_id="particle",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
         setting_name="Burn",
         stable_id="burn",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
