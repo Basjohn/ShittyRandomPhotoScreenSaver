@@ -451,16 +451,24 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   N1.4's raw `gl_FragCoord` in it is not. Bar coverage keeps R-197's rule: one continuous coordinate from the
   target's own pixel (`fragPixel`), and the diagonal-seam test runs on the native item. Boxes (one High dispatch;
   C++ goes through the lead's build rounds):
-  - [ ] Read first: D5 (the core's shape), D10 (the backend switch and when the native item replaces the Python
-    one), the composite node (N2.4), the frame driver (N2.2), the GPU timer (N2.6), the packet reader (N2.3) and
-    `rendering/quick/visualizer/implementations/spectrum*` with its owner. Write the item's route into the plan
-    item before code: which node draws, where the reader is retired, how D10 selects it.
-  - [ ] `spectrum.frag` through the conventions include (N1.4's raw `gl_FragCoord` gone), `fragPixel` per R-197,
-    OpenGL pixels unchanged at the widened run set, baked for every target.
-  - [ ] The native Spectrum item: the C++ renderer on the composite node, fed by the N2.3 reader on the render
-    thread (its first user): the render-thread retire job, and the D1 "close during copy" hook N2.3 left.
+  - Route (agent, 14 Nov; branch `worktree-agent-ac07545e5cda02f94` until merge): N2.4's composite draws a
+    `SpectrumContent` (`native/core/src/spectrum.*`) on the card's whole-device-pixel rect, recorded at
+    `beforeRendering` only on an accepted or dropped frame or a card change (nothing at rest), bracketed by N2.6's
+    timer; the product's `spectrum.frag` is the one fragment source. The N2.3 reader is opened on the GUI thread,
+    read only at the item's sync on the render thread (D2's accept edge), marked Retiring on unbind or destruction
+    and released by the render-thread retire job (D1). D10: Spectrum's `renderer_backends` gains `"vulkan"` only
+    once rules (a) to (e) pass; the scene then attaches `NativeVisualizerRoute` on Vulkan. OpenGL keeps the Python
+    renderer until N2.8. Built and proved at module rounds 1 and 2: `spectrum.frag` through the conventions include
+    (18 runs identical), the item's contract on both backends, the seam test on the native item, rule (c), box 7's
+    route, box 9 (a refused payload fails closed), the audit's reader lifetime, Studio switcher and
+    foreign-before-schema.
   - [ ] Rule (a): pixel parity on OpenGL against the Python renderer at the widened run set (Spectrum: both
-    variants plus 16 Choice offers; its 12 patterns among them).
+    variants plus 16 Choice offers). Round 2: segment mode within 1 level; bars mode up to 196 levels, with full-height
+    columns at the outermost bars' outer edges and peak caps one device row off (worst frame input 328, with and
+    without the mapping control). Lead decision 14 Nov: bit-exact, not a tolerance. The shader rebuilds the window
+    coordinate (the item passes its target's origin in window device pixels and Python's own float32 map), so
+    nothing moves at the switch. Round 3 carries it with the fine derivative. Steady frames reach at most 1 level;
+    fade frames are reported apart for the lead's decision.
   - [ ] Rule (b): the same runs on Vulkan in the hidden host against native OpenGL, within a stated tolerance.
   - [ ] Rule (c): frame trace and render-thread figures beside the Python path's; zero calls holding a Python
     thread state.
