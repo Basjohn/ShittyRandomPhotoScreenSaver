@@ -191,7 +191,8 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
 
 **Standing rules of this item (not boxes):**
 - A port is done when it has (a) single-sampled pixel parity on OpenGL against the Python renderer it replaces
-  (`tools/visualizer_replay/owner_render_parity.py`), (b) the same scene on Vulkan in the hidden host against the
+  (`tools/visualizer_replay/owner_render_parity.py`) at the widened run set (variants `a` and `b` and every Choice
+  offer: `tools/conventions_identity.py` `mode_runs(mode, offers=True)`; never presets), (b) the same scene on Vulkan in the hidden host against the
   native OpenGL result, within a tolerance the port states, (c) the frame trace and render-thread figures beside
   the Python path's with zero calls holding a Python thread state, (d) Settings, Studio and engine-worker parity
   and the mode's own tests green, (e) GPU time per pass and nothing per frame at rest, (f) one bounded Vulkan
@@ -450,7 +451,26 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   needs: (e) GPU time per pass is N2.6's timer, (f) the bounded Vulkan rehearsal is N2.7's path and N2.8's run).
   The Python renderer retires only after N2.8 passes. N1.6's Spectrum group is merged (`spectrum.frag` bakes);
   N1.4's raw `gl_FragCoord` in it is not. Bar coverage keeps R-197's rule: one continuous coordinate from the
-  target's own pixel (`fragPixel`), and the diagonal-seam test runs on the native item.
+  target's own pixel (`fragPixel`), and the diagonal-seam test runs on the native item. Boxes (one High dispatch;
+  C++ goes through the lead's build rounds):
+  - [ ] Read first: D5 (the core's shape), D10 (the backend switch and when the native item replaces the Python
+    one), the composite node (N2.4), the frame driver (N2.2), the GPU timer (N2.6), the packet reader (N2.3) and
+    `rendering/quick/visualizer/implementations/spectrum*` with its owner. Write the item's route into the plan
+    item before code: which node draws, where the reader is retired, how D10 selects it.
+  - [ ] `spectrum.frag` through the conventions include (N1.4's raw `gl_FragCoord` gone), `fragPixel` per R-197,
+    OpenGL pixels unchanged at the widened run set, baked for every target.
+  - [ ] The native Spectrum item: the C++ renderer on the composite node, fed by the N2.3 reader on the render
+    thread (its first user): the render-thread retire job, and the D1 "close during copy" hook N2.3 left.
+  - [ ] Rule (a): pixel parity on OpenGL against the Python renderer at the widened run set (Spectrum: both
+    variants plus 16 Choice offers; its 12 patterns among them).
+  - [ ] Rule (b): the same runs on Vulkan in the hidden host against native OpenGL, within a stated tolerance.
+  - [ ] Rule (c): frame trace and render-thread figures beside the Python path's; zero calls holding a Python
+    thread state.
+  - [ ] Rule (d): Settings, Studio and engine-worker parity; Spectrum's own tests green; the diagonal-seam test on
+    the native item.
+  - [ ] Rule (e): GPU time per pass through N2.6's timer; nothing per frame at rest (`tools/overhead_baseline.py`).
+  - [ ] N2.3's refusal leftover rides here if the item's route touches it (a refused payload fails closed).
+  - The Python renderer is deleted only once N2.8 (rule (f)) passes, in the same change as the switch.
 - [ ] N2.8 Lead, Display 1: the first rehearsal (cards and Spectrum on Vulkan; no wallpaper yet).
   - Pre-check done 14 Nov (`.artifacts/evidence/display/d1_run/20261114_n27_vulkan_visible/`, displays on):
     the saver on Vulkan revealed on its first presented frame, every card drew with its material and text, and
