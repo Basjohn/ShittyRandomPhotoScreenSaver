@@ -714,7 +714,10 @@ stays selectable in Settings as the fallback.
   background renderer's intentional base frame and the first authored wallpaper.
 - The exit (14 Nov, R-207): every exiting stop arms the terminal destruction barrier, whatever its reason, so
   `--exit-after` and a failed start wait for their Quick windows to retire before the quit (a Vulkan window alive at
-  process end crashed it). The bare `QCoreApplication.exit(1)` routes are still open (the N2.7 leftovers box).
+  process end crashed it). The exits that bypass that stop (the barrier timeouts, the failed Settings, CUSTOM and
+  monitor teardowns, a failed replacement) release their Quick windows first and end the loop from the last
+  window's `destroyed` (`engine/runtime_destruction.release_quick_windows_then`), and a second exiting stop joins the
+  terminal drain instead of cancelling it (14 Nov, R-NEW).
 
 ## D11. The Qt version the core is built against (decided 12 Nov 2026)
 

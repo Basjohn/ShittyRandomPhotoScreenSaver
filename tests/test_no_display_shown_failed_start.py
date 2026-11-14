@@ -91,6 +91,8 @@ def test_every_display_refused_ends_as_a_failed_start(two_monitor_engine, qtbot)
         stops_after_init = list(stops)
         # The staggered show is refused as well: nothing is on screen.
         _wait_until(qtbot, lambda: stops != [])
+        # The exiting stop quits once its terminal barrier has drained (R-207), a later turn than the stop itself.
+        _wait_until(qtbot, lambda: quits != [])
     finally:
         reached = _take_guard_record()
     assert reached, "precondition: the shows reached the display-window guard"

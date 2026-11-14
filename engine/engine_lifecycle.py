@@ -575,10 +575,20 @@ def stop(
     engine._pending_custom_layout_reload_intent = None
 
     if exit_app:
-        engine._terminal_shutdown_requested = True
         pending_barrier = getattr(
             engine, "_pending_runtime_destruction_barrier", None
         )
+        if bool(getattr(pending_barrier, "is_terminal", False)) and not bool(
+            getattr(pending_barrier, "is_complete", True)
+        ):
+            # An earlier exiting stop's drain is in progress and its continuation is the quit. Cancelling it here
+            # (as a pending replacement barrier is cancelled) quit before the Quick windows retired.
+            logger.info(
+                "[LIFECYCLE] Exiting stop ignored: the terminal drain is in progress reason=%s",
+                reason,
+            )
+            return
+        engine._terminal_shutdown_requested = True
         cancel_barrier = getattr(
             pending_barrier, "cancel_for_terminal_shutdown", None
         )

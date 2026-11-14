@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections import Counter
 from functools import partial
+import sys
 import time
 from typing import Callable
 import weakref
@@ -80,6 +81,85 @@ def request_application_quit(reason: str) -> bool:
     return bool(
         QMetaObject.invokeMethod(app, "quit", Qt.ConnectionType.QueuedConnection)
     )
+
+
+def _live_quick_display_windows() -> list[QObject]:
+    """Every product display window still alive (none when the Quick window module was never imported)."""
+
+    module = sys.modules.get("rendering.quick.window")
+    window_class = getattr(module, "QuickDisplayWindow", None)
+    if window_class is None:
+        return []
+    from PySide6.QtGui import QGuiApplication
+
+    if not isinstance(QCoreApplication.instance(), QGuiApplication):
+        return []
+    return [
+        window
+        for window in QGuiApplication.allWindows()
+        if isinstance(window, window_class) and _qobject_is_valid(window)
+    ]
+
+
+def release_quick_windows_then(reason: str, continuation: Callable[[], None]) -> int:
+    """Release every live Quick display window, then run ``continuation`` (the loop's end) from the last one's
+    ``destroyed``; with none alive it runs at once.
+
+    For the exits that cannot wait on a destruction barrier, because the barrier is what failed or none was armed:
+    on Vulkan a window alive at interpreter exit, its device the native core's, crashes the process (0xC0000005).
+    Each window's close is queued and its deletion requested; the running loop processes both (never Python here),
+    so no timer and no wait. Returns the number of windows released.
+    """
+
+    windows = _live_quick_display_windows()
+    if not windows:
+        continuation()
+        return 0
+    logger.warning(
+        "[LIFECYCLE] Releasing %d live Quick window(s) before the loop ends reason=%s",
+        len(windows),
+        reason,
+    )
+    pending = {id(window) for window in windows}
+
+    def _released(token: int, *_args: object) -> None:
+        pending.discard(token)
+        if not pending:
+            logger.info("[LIFECYCLE] Quick windows released reason=%s", reason)
+            continuation()
+
+    for window in windows:
+        window.destroyed.connect(partial(_released, id(window)))
+        queue_close = getattr(window, "queue_close", None)
+        if callable(queue_close):
+            try:
+                queue_close()
+            except Exception:
+                logger.debug("[LIFECYCLE] Quick window close could not be queued", exc_info=True)
+        window.deleteLater()
+    return len(windows)
+
+
+def exit_application_after_quick_release(
+    code: int,
+    reason: str,
+    *,
+    engine: object | None = None,
+) -> int:
+    """A failing lifecycle route's exit (the replacement barrier's timeout, a failed Settings, CUSTOM or monitor
+    teardown, a failed replacement): ``QCoreApplication.exit(code)`` once every live Quick display window is
+    destroyed (:func:`release_quick_windows_then`). These routes used to exit at once, the windows still alive at
+    interpreter exit. ``engine`` (when given) is marked terminal first, so no replacement starts while the windows
+    go. Returns the number of windows released (0: the exit was requested at once).
+    """
+
+    if engine is not None:
+        try:
+            engine._terminal_shutdown_requested = True
+        except AttributeError:
+            pass
+    logger.critical("[LIFECYCLE] Exiting with code=%s reason=%s", code, reason)
+    return release_quick_windows_then(reason, lambda: QCoreApplication.exit(code))
 
 
 def qt_replacement_may_run(engine: object | None) -> bool:
@@ -235,6 +315,11 @@ class RuntimeDestructionBarrier:
     @property
     def is_complete(self) -> bool:
         return self._completed
+
+    @property
+    def is_terminal(self) -> bool:
+        """A terminal-purpose barrier: an exiting stop's drain, whose continuation is the quit."""
+        return self._is_terminal
 
     def watch_qobject(self, obj: QObject, *, label: str | None = None) -> None:
         if self._sealed:
@@ -557,7 +642,9 @@ class RuntimeDestructionBarrier:
                         exc_info=True,
                     )
             else:
-                QCoreApplication.exit(1)
+                exit_application_after_quick_release(
+                    1, "replacement_continuation_failed", engine=self._engine_ref()
+                )
 
     def _on_timeout(self) -> None:
         if self._completed:
@@ -611,10 +698,14 @@ class RuntimeDestructionBarrier:
             self._completed = True
             self._completion_scheduled = False
             self._dispose_timers()
-            self._run_continuation()
+            # The windows this drain waited for may be the ones still alive: they go before the quit.
+            release_quick_windows_then("terminal_barrier_timeout", self._run_continuation)
         else:
+            # The exit cannot wait on this barrier (it just failed): it waits on the windows themselves.
             self.cancel_for_terminal_shutdown()
-            QCoreApplication.exit(1)
+            exit_application_after_quick_release(
+                1, "replacement_barrier_timeout", engine=self._engine_ref()
+            )
         diagnostic_owner_referrers, diagnostic_trace_metadata = (
             self._capture_diagnostic_python_owner_referrers(
                 pending_python_owner_refs
