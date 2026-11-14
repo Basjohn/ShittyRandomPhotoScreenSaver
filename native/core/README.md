@@ -73,21 +73,30 @@ never ships.
     alone, in the product fullscreen shaders' shape. `ModeProgram`: one to eight full-target passes, each a fragment
     pack, a blend (replace, alpha, premultiplied, add) and its samplers, drawn in order after a clearing draw with the
     core's triangle (`shaders/mode.vert`). A pass declares one std140 block of its own (any name, any binding but 17),
-    optionally the conventions block, a vec2 at location 0 named `v_uv` (the Visualizer quad's uv, y down) or `vUv`
-    (the item quad's, y up: the fullscreen transitions), and `sampler2D`s, each bound by name to one of the item's
-    textures (N4.a, "Samplers and textures" below); anything else is refused. One rule fills the block by member name
-    from exactly one of three sources: the core's conventions (`kModeCoreMembers`, mirrored as `MODE_CORE_MEMBERS`: what
-    the Python renderers take from the card per frame, read from the item's card and the target), the settings, and the
-    record's fields.
+    optionally the conventions block, a vec2 at location 0 named `v_uv` (the Visualizer quad's uv, y down: the ITEM's
+    oriented uv, from the card's `window_from_target` and `item_from_window` rows per vertex, so the product 2D shaders'
+    `fc = v_uv * u_resolution` is the Python renderer's at any origin, ratio, rotation and backend; the target's uv only
+    with no card: audit N29 round 2, M6) or `vUv` (the item quad's, y up, over the target: the fullscreen transitions),
+    and `sampler2D`s, each bound by name to one of the item's textures (N4.a, "Samplers and textures" below); anything
+    else is refused. One rule fills the block by member name from exactly one of three sources: the core's conventions
+    (`kModeCoreMembers`, mirrored as `MODE_CORE_MEMBERS`: what the Python renderers take from the card per frame, read
+    from the item's card and the target, each row with its own values: round 2, L6), the settings, and the record's
+    fields.
   - `stream_source.*` (N2.9 round 2): what every mode item shares. `StreamSource`: the bound stream (bind, retire,
     the render-thread retire job, the accept edge with the admission rule, the state report) under `SpectrumSource` and
-    `ModeSource`. `ContentLatch`: a content whose pipelines fail to build fails closed for the same inputs (recorded
-    once, nothing created again) and is tried once more when an input changes (the program, the settings, the card,
-    the stream, the target). A refused frame (a value with no defined conversion) never blanks the card: the last
-    drawn frame stays and the refusal is counted with its reason.
+    `ModeSource`. `ContentLatch`: a content whose pipelines fail to build fails closed for the same key (recorded once,
+    nothing created again) and is tried again when the key changes (the QRhi, the target's generation, the program,
+    the settings and the stream; not the card, which no pipeline reads) or, bounded, after a run of held records
+    (round 2, L4). A target the content never wrote is cleared to transparent by the surface (never undefined texels);
+    a frame it did draw stays through a failure, for the route's fade (round 2, M4). A refused frame (a value with no
+    defined conversion) never blanks the card: the last drawn frame stays and the refusal is counted with its reason.
+    An unbound stream keeps its last frame for the fade; a new stream clears it (round 2, L3). The status
+    (`composite_content_status`: draws, failures, the run of refused frames, failing) is the route's failure edge
+    (M4, M5); the reader's state is copied, never built as JSON, on the render thread (L2).
   - Python faces: `rendering/native/mode.py` (`NativeMode`), `rendering/native/spectrum.py`; a composite item hides
     and shows by a fade (`fade_ms`) and reports its window's framebuffer from Qt's own swapchain or redirect target
-    (`window_pixels`).
+    (`window_pixels`), as its own synchronisation read it on the render thread: nothing before it, nothing while the
+    window has been resized since (round 2, L1 and M3; the route waits on the window's `afterSynchronizing`).
   - `vulkan_context.*`: D6, the process's Vulkan instance and one device per window, given to Qt Quick.
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
@@ -113,7 +122,9 @@ never ships.
   sources against an independent packer with every refusal, the product's Oscilloscope and Spline Curve packs admitted
   and Bubble refused for its samplers alone, the reader by the runtime schema, the draw on OpenGL and Vulkan at dpr 1
   and 1.5 with shader, spec and simulation changes and no rebuild, a refused frame keeping the card, the content
-  latch, the fade, nothing at rest, GPU time per pass, the framebuffer at 2560x1440 at 150 %).
+  latch, the fade, nothing at rest, GPU time per pass, the framebuffer at 2560x1440 at 150 %; round 2: the item's
+  v_uv at an odd origin in four rotations at dpr 1.5, the surface's clear of an unwritten target, a failing program
+  keeping the frame, a run of refusals, an unbind keeping the frame, the fade's pixels).
 - `python/fullscreen_pass_check.py`: N4.a's proof of the fullscreen pass and image sampling (Crossfade's and Burn's own
   fragments between two real photos against the production GL host at nine progress values, Vulkan against native
   OpenGL, the seven transitions' and Bubble's packs bound and unbound, every sampler refusal, the textures' lifetime,

@@ -1,5 +1,6 @@
 #include "targets.h"
 
+#include <QtCore/QAtomicInteger>
 #include <rhi/qrhi.h>
 #include <rhi/qrhi_platform.h>
 
@@ -13,6 +14,15 @@
 
 namespace srpss_core {
 
+namespace {
+QAtomicInteger<quint64> g_targetGenerations { 0 };
+}
+
+quint64 nextTargetGeneration()
+{
+    return g_targetGenerations.fetchAndAddRelaxed(1) + 1;
+}
+
 ColorTarget::ColorTarget() = default;
 ColorTarget::~ColorTarget() = default;
 ColorTarget::ColorTarget(ColorTarget &&) noexcept = default;
@@ -24,6 +34,7 @@ void ColorTarget::reset()
     renderPass.reset();
     depthStencil.reset();
     texture.reset();
+    generation = 0;
 }
 
 bool createColorTarget(QRhi *rhi, const QSize &size, const QByteArray &name, ColorTarget *out, QString *error,
@@ -58,6 +69,7 @@ bool createColorTarget(QRhi *rhi, const QSize &size, const QByteArray &name, Col
         out->reset();
         return false;
     }
+    out->generation = nextTargetGeneration();
     return true;
 }
 

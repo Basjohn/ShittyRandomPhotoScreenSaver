@@ -41,6 +41,12 @@
 // (samplers: [{name, texture, filter, wrap, mips}]); its location-0 input named v_uv or vUv (mode_program_layout's "uv"
 // is that name); composite_mode_texture and composite_mode_texture_remove; composite_live's mode_texture counts;
 // composite_mode_state's textures, texture_uploads, textures_resident, textures_lost.
+// 12 (N2.9 round 2's audit): v_uv is the item's oriented uv from the card (M6; vUv unchanged); composite_content_status
+// (M4, M5: draws, failures, refused_run, failing); the surface clears a target its content never wrote (M4; the
+// state's surface clears); composite_window_pixels only from the item's last sync, invalid when stale (L1, M3);
+// an unbound stream keeps its last frame (L3); the content latch keyed on the target's generation, the program and the
+// settings, not the card, with a bounded retry (L4); mode_core_values (L6); the states' content_failing, refused_run
+// and the reader live JSON's state_json_off_gui_thread (L2).
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 11
+#define SRPSS_NATIVE_CORE_ABI 12

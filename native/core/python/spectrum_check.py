@@ -19,7 +19,7 @@ Rounds:
   item    (each API) the item's contract in the module's hidden host: frames of a native stream accepted at the sync on
           the render thread (one record per accepted frame, nothing recorded at rest), D2's head read consumes nothing,
           the drop edge clears the card and a newer frame draws again, an unbind releases the reader on the render
-          thread, and D1's "close during copy": the reader paused inside a copy (the pause_in_copy hook) while another
+          thread and keeps the last drawn frame for the route's fade (N29 round 2, L3), and D1's "close during copy": the reader paused inside a copy (the pause_in_copy hook) while another
           thread closes and unlinks the mapping and retires the stream; the copy completes against the pinned view, the
           frame is discarded and nothing is acknowledged, and the retire call returns at once. Negative control:
           accept_after_retire accepts that frame. A refused frame (a NaN bar) keeps the drawn frame, counted once with
@@ -512,13 +512,18 @@ def round_item(core, engine, app, host, records: list[dict]) -> dict:
         checks["control_no_bars_clears_the_card"] = int(scene.read(card)[..., :3].max()) == 0
         facts["refused_frame"] = {"refused_frames": [refused_before, refusal.get("refused_frames")],
                                   "last_refusal": refusal.get("last_refusal")}
-        # Unbind: the reader goes on the render thread at the next sync.
+        # Unbind: the reader goes on the render thread at the next sync, and the last drawn frame stays for the route's
+        # fade-out (N29 round 2, L3: never a fade over a cleared card; the drop above still clears it).
+        stream.publish(chosen[11]["record"], 14.0)
+        scene.spectrum.update()
+        last = scene.read(card)
         live_bound = core.packet_reader_live()
         scene.spectrum.unbind()
-        cleared = scene.read(card)
+        after_unbind = scene.read(card)
         state = scene.spectrum.state()
         live_unbound = core.packet_reader_live()
-        checks["unbind_clears_the_card"] = int(cleared[..., :3].max()) == 0
+        checks["unbind_keeps_the_last_frame_for_the_fade"] = (int(last[..., :3].max()) > 0
+                                                               and bool((after_unbind == last).all()))
         checks["unbind_released_on_the_render_thread"] = (state["released"] >= 1 and state["retiring"] == 0
                                                           and live_unbound["views"] == live_bound["views"] - 1)
         facts["live"] = {"bound": live_bound, "unbound": live_unbound}
@@ -865,7 +870,9 @@ def content_failure(core, engine, app, host, card: dict, record: bytes, frames: 
     """Audit 14 Nov, M2: an item with no program cannot build its content. Its failure is one edge (recorded once,
     reported in the source's state), and the frames after it create nothing again: the same failure is not rebuilt
     every frame, and no QRhi object of the content stays alive. (Before the fix nothing was recorded and the content's
-    buffers and bindings were created and freed every frame.)"""
+    buffers and bindings were created and freed every frame.) N29 round 2, L4: a card change (a fade's step) does not
+    re-arm the latch (no pipeline reads the card); a new target (the item resized) does, once; and the target the
+    content never wrote is cleared by the surface (M4)."""
     scene = Scene(core, engine, host, program=False)
     stream = Stream()
     states = []
@@ -880,11 +887,19 @@ def content_failure(core, engine, app, host, card: dict, record: bytes, frames: 
             scene.spectrum.update()
             host.frames(1)
             states.append(scene.spectrum.state())
-        # Audit N29 L10: a changed input (here the card's fade) re-arms the latch: tried once more, then held again.
+        # N29 round 2, L4: the card's fade changing re-arms nothing (held: no build tried per step of a fade) ...
         changed_fade = 0.25 if float(card["content_fade"]) == 0.5 else 0.5
         scene.spectrum.present_raw(_bare(dict(card, content_fade=changed_fade)))
-        rearmed = []
+        faded = []
         for step in range(frames, frames + 3):
+            stream.publish(record, float(step))
+            scene.spectrum.update()
+            host.frames(1)
+            faded.append(scene.spectrum.state())
+        # ... and a new target (the item two logical pixels wider: another size) re-arms it: tried once more, then held.
+        scene.spectrum.composite.set(rect=[0.0, 0.0, width + 2.0, height])
+        rearmed = []
+        for step in range(frames + 3, frames + 6):
             stream.publish(record, float(step))
             scene.spectrum.update()
             host.frames(1)
@@ -900,13 +915,17 @@ def content_failure(core, engine, app, host, card: dict, record: bytes, frames: 
     held = (bool(states) and facts.get("content_failed") is True and facts.get("content_failures") == 1
             and last.get("records") == 1 and last.get("draws") == 0
             and "content failed" in str(last.get("last_reason", "")) and last.get("accepted", 0) >= 1)
+    fade_held = bool(faded) and all(s.get("content_failures") == 1 and s.get("records") == 1 for s in faded)
     again = rearmed[-1] if rearmed else {}
     rearmed_once = (bool(rearmed) and again.get("content_failures") == 2 and again.get("records") == 2
                     and again.get("draws") == 0)
-    return {"held": held and rearmed_once, "held_first": held, "rearmed_once": rearmed_once,
-            "records": [s.get("records") for s in states + rearmed],
-            "failures": [s.get("content_failures") for s in states + rearmed], "last_reason": last.get("last_reason"),
-            "last_facts": facts, "composite_surface": composite.get("surface")}
+    surface = composite.get("surface") or {}
+    cleared = (surface.get("clears") or 0) >= 1
+    return {"held": held and fade_held and rearmed_once and cleared, "held_first": held,
+            "card_change_held": fade_held, "rearmed_once_by_a_new_target": rearmed_once, "unwritten_target_cleared": cleared,
+            "records": [s.get("records") for s in states + faded + rearmed],
+            "failures": [s.get("content_failures") for s in states + faded + rearmed],
+            "last_reason": last.get("last_reason"), "last_facts": facts, "composite_surface": surface}
 
 
 def vulkan_against_opengl(out: Path) -> dict:

@@ -122,11 +122,11 @@ public:
     // presentation taken. True when the surface must record (a frame accepted or dropped, the presentation changed).
     bool sync();
 
-    // Render thread, while recording: what was synchronised last, and the inputs' generation (the card's and the
-    // settings' changes: a latched content failure is retried when it moves, audit N29 L10).
+    // Render thread, while recording: what was synchronised last, and the settings' generation (a latched content
+    // failure is retried when it moves, audit N29 L10; the card is not in the latch's key: round 2, L4).
     const SpectrumPresentation &drawnPresentation() const { return m_drawn; }
     const SpectrumProgram &drawnProgram() const { return m_drawnProgram; }
-    quint64 drawnInputs() const { return m_drawnInputs; }
+    quint64 drawnSettingsGeneration() const { return m_drawnSettingsGeneration; }
 
     static int liveSources();
 
@@ -142,7 +142,7 @@ private:
     quint64 m_takenGeneration = 0;
     SpectrumPresentation m_drawn;
     SpectrumProgram m_drawnProgram;
-    quint64 m_drawnInputs = 0;
+    quint64 m_drawnSettingsGeneration = 0;
 };
 
 // The surface content that draws Spectrum: its pipelines and buffers live on the render thread with the surface.
@@ -154,12 +154,17 @@ public:
 
     bool keepsTarget(QRhi *rhi, ColorTarget &target) override;
     bool record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, QString *error) override;
+    bool holdsFrame(const ColorTarget &target) const override;
     void release() override;
     int liveResources() const override;
     const SpectrumSource *source() const { return m_source.get(); }
 
 private:
     struct Resources;
+    // The QRhi objects only: a rebuild (a new pack, a failed build) keeps the record of the frame in the target, so a
+    // failure leaves that frame for the route to fade the card out over (round 2, M4).
+    void releaseObjects();
+    LatchKey latchKey(QRhi *rhi, const ColorTarget &target) const;
     bool ensure(QRhi *rhi, ColorTarget &target, QString *error);
     bool build(QRhi *rhi, ColorTarget &target, QString *error);
     void pack();

@@ -33,6 +33,8 @@ namespace srpss_core {
 enum class SurfacePattern {
     TexelIdentity = 0, // r, g: the texel's x and y modulo 256; b: their high nibbles (x in the low four bits)
     White = 1,         // opaque white everywhere: content touching every edge and corner
+    Transparent = 2,   // every texel transparent: the surface's own clear of a target a content never wrote (N29 r2 M4;
+                       // never a configuration's pattern)
 };
 
 bool parseSurfacePattern(const QString &text, SurfacePattern *out);
@@ -56,6 +58,13 @@ public:
     }
     // Inside the frame, outside any pass.
     virtual bool record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, QString *error) = 0;
+    // Whether `target` holds a frame the content drew into it (audit N29 round 2, M4): when a content keeps the target
+    // or fails while it holds none, the surface clears it to transparent once instead of showing what it holds.
+    virtual bool holdsFrame(const ColorTarget &target) const
+    {
+        Q_UNUSED(target);
+        return true;
+    }
     // Every QRhi object of the content goes (the surface's release, or the content replaced).
     virtual void release() = 0;
     virtual int liveResources() const = 0;
@@ -91,6 +100,7 @@ public:
     QRhiTexture *texture() const;
     QSize pixelSize() const;
     qint64 passesRecorded() const { return m_passes.loadRelaxed(); }
+    qint64 clears() const { return m_clears.loadRelaxed(); } // the surface's own clears of an unwritten target (M4)
     int liveResources() const { return m_live.loadRelaxed(); }
     QString lastPrime() const;
 
@@ -105,13 +115,17 @@ public:
 private:
     struct Resources;
     bool ensurePass(QString *error);
+    bool recordPattern(QRhi *rhi, QRhiCommandBuffer *cb, SurfacePattern pattern, bool *recorded, QString *error);
+    bool clearTarget(QRhi *rhi, QRhiCommandBuffer *cb, bool *recorded, QString *error);
     void setLive(int count);
 
     std::unique_ptr<Resources> m_res;
     std::shared_ptr<SurfaceContent> m_content;
     SurfacePattern m_pattern = SurfacePattern::TexelIdentity;
+    bool m_targetClear = false;            // render thread: the target is known to be transparent (cleared by a draw)
     QAtomicInteger<int> m_dirty { 1 };
     QAtomicInteger<qint64> m_passes { 0 };
+    QAtomicInteger<qint64> m_clears { 0 };
     QAtomicInteger<int> m_live { 0 };
     mutable QMutex m_mutex; // guards m_lastPrime (read from the GUI thread)
     QString m_lastPrime;

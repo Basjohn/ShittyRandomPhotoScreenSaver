@@ -23,7 +23,7 @@ import json
 import math
 from dataclasses import dataclass
 from types import ModuleType
-from typing import Any, Sequence
+from typing import Any, NamedTuple, Sequence
 
 #: The composite's options (``CompositeConfig`` in ``composite.h``).
 COMPOSITE_OPTIONS = ("rect", "coverage", "quarters", "pattern", "visible", "opacity", "surface_format", "pixel_ratio",
@@ -36,6 +36,15 @@ SURFACE_PATTERNS = ("texel_id", "white")
 _GRID_TOLERANCE = 1e-6   # device pixels: a coordinate this close to a whole pixel is on it
 
 Rect = tuple[float, float, float, float]
+
+
+class ContentStatus(NamedTuple):
+    """A composite's content health (``composite_content_status``; N29 round 2, M4 and M5)."""
+
+    draws: int          # records that drew a frame
+    failures: int       # build failures
+    refused_run: int    # frames refused since the last drawn one
+    failing: bool       # a build failed and nothing has recorded since
 
 
 def _on_device_grid(rect: Sequence[float], ratio: float | tuple[float, float], *, quad_aligned: bool = False) -> Rect:
@@ -178,9 +187,22 @@ class CompositeItem:
 
     def window_pixels(self) -> tuple[int, int] | None:
         """The item's window's framebuffer in device pixels, from Qt's own swapchain or redirect target (audit N29 L1:
-        what Qt's projection maps the window's logical rect onto); None before the window has either."""
+        what Qt's projection maps the window's logical rect onto), as the render thread read it at the item's last
+        synchronisation; None before that, or while it is stale (the window resized since: round 2, L1 and M3)."""
         pixels = self._module.composite_window_pixels(self._live())
         return None if pixels is None else (int(pixels[0]), int(pixels[1]))
+
+    def update(self) -> None:
+        """Asks Qt for a synchronisation of the item (its node then reads the window's framebuffer)."""
+        self._module.composite_update(self._live())
+
+    def content_status(self) -> ContentStatus | None:
+        """The item's content health, read without JSON (round 2, M4 and M5): records that drew, build failures, frames
+        refused since the last drawn one, and whether a build failed with nothing recorded since. None when the item
+        draws no mode."""
+        status = self._module.composite_content_status(self._live())
+        return None if status is None else ContentStatus(int(status[0]), int(status[1]), int(status[2]),
+                                                          bool(status[3]))
 
     def destroy(self) -> bool:
         """Deletes the item (Qt Quick releases its node on the render thread at the next sync). Idempotent; False
@@ -191,5 +213,5 @@ class CompositeItem:
         return bool(self._module.composite_destroy(self._handle))
 
 
-__all__ = ["COMPOSITE_OPTIONS", "CompositeGeometry", "CompositeItem", "SURFACE_FORMATS", "SURFACE_PATTERNS",
+__all__ = ["COMPOSITE_OPTIONS", "CompositeGeometry", "CompositeItem", "ContentStatus", "SURFACE_FORMATS", "SURFACE_PATTERNS",
            "composite_geometry", "window_pixel_ratio"]

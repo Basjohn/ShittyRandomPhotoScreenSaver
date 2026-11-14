@@ -88,12 +88,16 @@ namespace srpss_core {
 
 constexpr int kMaxModePasses = 8;
 
-// The core's conventions: the members the core fills for every mode (name, components). The values: modeCoreValues.
+struct ModeCard;
+
+// The core's conventions: the members the core fills for every mode (name, components) and each one's values, on its
+// own row (audit N29 round 2, L6: a row is never filled by a separate list that zero-fills what it does not name).
 struct ModeCoreMember
 {
     const char *name;
     int components;
     bool fromCard;   // false: the core's own (a constant, or the target's pixels)
+    void (*values)(const ModeCard &card, const QSize &target, double *out); // `components` numbers into `out`
 };
 extern const ModeCoreMember kModeCoreMembers[];
 extern const int kModeCoreMemberCount;
@@ -118,7 +122,8 @@ struct ModeCard
     bool operator!=(const ModeCard &other) const { return !(*this == other); }
 };
 
-// The core member's numbers for this card and target (false: the member is not a core member).
+// The core member's numbers for this card and target (false: the member is not a core member, or its row has no
+// values: never zeros for a name it does not know).
 bool modeCoreValues(const QByteArray &name, const ModeCard &card, const QSize &target, double *out, int *count);
 
 enum class PassBlend { Replace = 0, Alpha = 1, Premultiplied = 2, Add = 3 };
@@ -273,6 +278,8 @@ public:
     bool drawnReady() const { return m_drawnReady; }
     QString drawnWaiting() const { return m_drawnWaiting; }
     quint64 drawnGeneration() const { return m_takenGeneration; }
+    // Everything a build reads but the card (the content's latch key, round 2 L4: a fade's card steps retry nothing).
+    quint64 drawnBuildGeneration() const { return m_drawnBuildGeneration; }
     const QList<ModeTexture> &drawnTextures() const { return m_drawnTextures; }
     // The image of the drawn texture `name` (its core copy moves to the caller; null when it was taken before).
     QSharedPointer<TextureImage> takeTextureImage(const QByteArray &name);
@@ -300,9 +307,11 @@ private:
     ModeCard m_card;
     QList<ModeTexture> m_textures;              // N4.a: the item's textures, their images until taken
     quint64 m_generation = 0;                   // a stream, program, settings, card or texture change
+    quint64 m_buildGeneration = 0;              // the same but the card
 
     // Render thread.
     quint64 m_takenGeneration = 0;
+    quint64 m_drawnBuildGeneration = 0;
     ModeProgram m_drawnProgram;
     QList<BlockValues> m_drawnSettings;
     QSharedPointer<const RuntimeSchema> m_drawnSchema;
@@ -325,6 +334,7 @@ public:
 
     bool keepsTarget(QRhi *rhi, ColorTarget &target) override;
     bool record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, QString *error) override;
+    bool holdsFrame(const ColorTarget &target) const override;
     void release() override;
     int liveResources() const override;
 
@@ -342,7 +352,10 @@ private:
     bool ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
     bool build(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
     void pack(const ColorTarget &target);
+    // The QRhi objects of the passes only: a rebuild (a new program, a failed build) keeps the record of the frame in the
+    // target, so a failure leaves that frame for the route to fade the card out over (round 2, M4).
     void releasePipelines();
+    LatchKey latchKey(QRhi *rhi, const ColorTarget &target) const;
     // The textures: a removed one released, a lost one named (keepsTarget, before anything is recorded).
     void retireTextures();
     // Each drawn texture with a new image created or recreated and uploaded into `updates` (record).

@@ -1,10 +1,12 @@
 // The packet reader (N2.3): packet_reader.h has the contract.
 #include "packet_reader.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonParseError>
 #include <QtCore/QStringList>
+#include <QtCore/QThread>
 
 #include <cmath>
 #include <cstddef>
@@ -29,6 +31,7 @@ namespace {
 
 QAtomicInt g_readers { 0 };
 QAtomicInt g_views { 0 };
+QAtomicInteger<qint64> g_jsonBuildsOffGuiThread { 0 }; // stateJson off the GUI thread (L2)
 
 static_assert(sizeof(SlotHead) == fa::kSlotPayloadOffset, "the slot head is the payload's offset long");
 static_assert(offsetof(SlotHead, sequence) == fa::kSlotSequenceBegin, "slot head layout");
@@ -761,51 +764,95 @@ bool PacketReader::retained(SlotHead *head, const QByteArray **record) const
 
 QJsonObject PacketReader::stateJson() const
 {
+    return stateJson(snapshot());
+}
+
+PacketReaderSnapshot PacketReader::snapshot() const
+{
+    PacketReaderSnapshot s;
+    s.mapped = m_unmapped.loadAcquire() == 0 && m_base != nullptr;
+    s.reads = m_reads;
+    s.acceptedCount = m_acceptedCount;
+    s.accepted = m_accepted;
+    s.acknowledged = m_acknowledged;
+    s.acknowledgedSequence = m_acknowledgedSequence;
+    s.torn = m_torn;
+    s.ambiguous = m_ambiguous;
+    s.stale = m_stale;
+    s.foreign = m_foreign;
+    s.refused = m_refused;
+    s.failed = m_failed;
+    if (m_failed) {
+        s.refusalCause = m_refusalCause;
+        s.refusalReason = m_refusalReason;
+        s.refusalSequence = m_refusalSequence;
+    }
+    s.retained = m_hasFrame;
+    s.retainedSequence = m_hasFrame ? m_frameHead.sequence : 0;
+    s.dropsApplied = m_dropsApplied;
+    s.readsWhileRetiring = m_readsWhileRetiring;
+    s.copiesDiscarded = m_copiesDiscarded;
+    return s;
+}
+
+QJsonObject PacketReader::stateJson(const PacketReaderSnapshot &s) const
+{
+    QCoreApplication *app = QCoreApplication::instance();
+    if (!app || QThread::currentThread() != app->thread())
+        g_jsonBuildsOffGuiThread.fetchAndAddRelaxed(1);
     static const char *states[] = { "open", "retiring", "retired" };
     QJsonObject o;
+    // Fixed at open (any thread may read them while the reader lives).
     o.insert(QStringLiteral("mapping"), m_name);
-    o.insert(QStringLiteral("state"), QLatin1String(states[qBound(0, m_state.loadAcquire(), 2)]));
     o.insert(QStringLiteral("open_error"), m_openError.isEmpty() ? QJsonValue() : QJsonValue(m_openError));
     o.insert(QStringLiteral("config"), m_config.toJson());
-    o.insert(QStringLiteral("mapped"), m_unmapped.loadAcquire() == 0 && m_base != nullptr);
     o.insert(QStringLiteral("slot_bytes"), double(m_slotBytes));
     o.insert(QStringLiteral("capacity"), double(m_capacity));
     QJsonArray identity;
     for (quint32 value : m_headerIdentity)
         identity.append(double(value));
     o.insert(QStringLiteral("header_identity"), identity);
-    o.insert(QStringLiteral("reads"), double(m_reads));
-    o.insert(QStringLiteral("accepted"), double(m_acceptedCount));
-    o.insert(QStringLiteral("accepted_sequence"), double(m_accepted));
-    o.insert(QStringLiteral("acknowledged"), double(m_acknowledged));
-    o.insert(QStringLiteral("acknowledged_sequence"), double(m_acknowledgedSequence));
-    o.insert(QStringLiteral("torn_reads"), double(m_torn));
-    o.insert(QStringLiteral("ambiguous_slots"), double(m_ambiguous));
-    o.insert(QStringLiteral("stale_reads"), double(m_stale));
-    o.insert(QStringLiteral("foreign_reads"), double(m_foreign));
-    o.insert(QStringLiteral("refused"), double(m_refused));
-    o.insert(QStringLiteral("failed"), m_failed);
-    if (m_failed) {
-        QJsonObject refusal;
-        refusal.insert(QStringLiteral("cause"), m_refusalCause);
-        refusal.insert(QStringLiteral("reason"), m_refusalReason);
-        refusal.insert(QStringLiteral("sequence"), double(m_refusalSequence));
-        o.insert(QStringLiteral("refusal"), refusal);
-    } else {
-        o.insert(QStringLiteral("refusal"), QJsonValue());
-    }
-    o.insert(QStringLiteral("retained"), m_hasFrame);
-    o.insert(QStringLiteral("retained_sequence"), m_hasFrame ? double(m_frameHead.sequence) : 0.0);
-    o.insert(QStringLiteral("drops_applied"), double(m_dropsApplied));
+    // Atomic.
+    o.insert(QStringLiteral("state"), QLatin1String(states[qBound(0, m_state.loadAcquire(), 2)]));
     o.insert(QStringLiteral("head_reads"), double(m_headReads.loadAcquire()));
-    o.insert(QStringLiteral("reads_while_retiring"), double(m_readsWhileRetiring));
     // D1's per-stream liveness block.
     o.insert(QStringLiteral("copies_started"), double(m_copiesStarted.loadAcquire()));
     o.insert(QStringLiteral("copies_finished"), double(m_copiesFinished.loadAcquire()));
     o.insert(QStringLiteral("last_accepted_sequence"), double(m_lastAccepted.loadAcquire()));
-    o.insert(QStringLiteral("copies_discarded"), double(m_copiesDiscarded));
     o.insert(QStringLiteral("pauses"), double(m_pauses.loadAcquire()));
+    // The consumer's, from its snapshot.
+    o.insert(QStringLiteral("mapped"), s.mapped);
+    o.insert(QStringLiteral("reads"), double(s.reads));
+    o.insert(QStringLiteral("accepted"), double(s.acceptedCount));
+    o.insert(QStringLiteral("accepted_sequence"), double(s.accepted));
+    o.insert(QStringLiteral("acknowledged"), double(s.acknowledged));
+    o.insert(QStringLiteral("acknowledged_sequence"), double(s.acknowledgedSequence));
+    o.insert(QStringLiteral("torn_reads"), double(s.torn));
+    o.insert(QStringLiteral("ambiguous_slots"), double(s.ambiguous));
+    o.insert(QStringLiteral("stale_reads"), double(s.stale));
+    o.insert(QStringLiteral("foreign_reads"), double(s.foreign));
+    o.insert(QStringLiteral("refused"), double(s.refused));
+    o.insert(QStringLiteral("failed"), s.failed);
+    if (s.failed) {
+        QJsonObject refusal;
+        refusal.insert(QStringLiteral("cause"), s.refusalCause);
+        refusal.insert(QStringLiteral("reason"), s.refusalReason);
+        refusal.insert(QStringLiteral("sequence"), double(s.refusalSequence));
+        o.insert(QStringLiteral("refusal"), refusal);
+    } else {
+        o.insert(QStringLiteral("refusal"), QJsonValue());
+    }
+    o.insert(QStringLiteral("retained"), s.retained);
+    o.insert(QStringLiteral("retained_sequence"), double(s.retainedSequence));
+    o.insert(QStringLiteral("drops_applied"), double(s.dropsApplied));
+    o.insert(QStringLiteral("reads_while_retiring"), double(s.readsWhileRetiring));
+    o.insert(QStringLiteral("copies_discarded"), double(s.copiesDiscarded));
     return o;
+}
+
+qint64 PacketReader::jsonBuildsOffGuiThread()
+{
+    return g_jsonBuildsOffGuiThread.loadRelaxed();
 }
 
 QJsonObject PacketReader::liveJson()
@@ -813,6 +860,7 @@ QJsonObject PacketReader::liveJson()
     QJsonObject o;
     o.insert(QStringLiteral("readers"), g_readers.loadAcquire());
     o.insert(QStringLiteral("views"), g_views.loadAcquire());
+    o.insert(QStringLiteral("state_json_off_gui_thread"), double(g_jsonBuildsOffGuiThread.loadRelaxed()));
     return o;
 }
 

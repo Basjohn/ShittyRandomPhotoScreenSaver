@@ -291,6 +291,10 @@ class SceneMirror:
 
 #: ``--surface-format``: the native item's surface texels for this run (None: the route's own choice).
 NATIVE_SURFACE_FORMAT: str | None = None
+#: ``--unprimed``: the window is not rendered before the owner exists and the route is not prepared at attach (audit
+#: N29 round 2, M3: the product's unprimed path, its first frame waiting on the window's edge), a reported case, not a
+#: gate.
+NATIVE_UNPRIMED = False
 
 
 class _ParityRoute:
@@ -358,14 +362,16 @@ class NativeSceneMirror(SceneMirror):
     def attach(self, runtime: Any) -> None:
         super().attach(runtime)
         hidden = self.host.scene
-        # The window renders once before the owner exists, as the product's window has long before a Visualizer
-        # activates: the native item reads the window's framebuffer from Qt's own render target (audit N29 L1), which
-        # a window has only from its first frame (before it, the route waits a frame and input 0 would go undrawn).
-        self.host.render()
         self.window_host = self.core.attach_host(self.host.window)
         item = hidden._ensure_visualizer_items()
         self.route = _ParityRoute.make(self.core, item.parentItem(), self)
         item.attach_native_route(self.route)
+        if not NATIVE_UNPRIMED:
+            # As the product: the route is prepared at attach (``attach_native_route``) and the window renders long
+            # before a Visualizer activates, so the native item has read the window's framebuffer at its own
+            # synchronisation (audit N29 L1, round 2 L1) by the first input. ``--unprimed`` runs without both.
+            self.route.prepare()
+            self.host.render()
 
     def frame(self, index: int) -> dict:
         if self.route is not None and self.route.identity is not None:
@@ -744,8 +750,10 @@ BASELINE_KEYS = ("frames_drawn", "native_frames", "differing_inputs", "differing
 def against_baseline(baseline: dict, report: dict) -> dict:
     """``report`` (``run_native``'s) against an accepted ``baseline`` report: per run, what differs (a run on one side
     only differs). Where both keep frame hashes, the native frames' hashes decide (``native_hashes``; whether the Python
-    reference's own frames moved is reported beside, ``python_same``); else the keys of ``BASELINE_KEYS``. ``same``:
-    every run of both, nothing differing."""
+    reference's own frames moved is reported beside, ``python_same``): ``same`` is bit-identical native frames. Else
+    only the keys of ``BASELINE_KEYS`` are compared, which proves equal difference rows, never equal frames (audit N29
+    round 2, L8): such a run is ``difference_identical`` at best and never ``same``. ``same``: every run of both
+    compared by hashes, nothing differing; ``difference_identical``: every run's differences equal, by either."""
     old, new = dict(baseline.get("results") or {}), dict(report.get("results") or {})
     runs: dict = {}
     for key in sorted(set(old) | set(new)):
@@ -763,9 +771,12 @@ def against_baseline(baseline: dict, report: dict) -> dict:
             continue
         differing = [name for name in BASELINE_KEYS
                      if name not in a or name not in b or json.loads(json.dumps(a[name])) != json.loads(json.dumps(b[name]))]
-        runs[key] = {"same": not differing, "by": "differences", "differing": differing, "max_level": b.get("max_level"),
-                     "native_frames": b.get("native_frames")}
-    return {"same": bool(runs) and all(entry["same"] for entry in runs.values()), "runs": runs}
+        runs[key] = {"same": False, "difference_identical": not differing, "by": "differences",
+                     "differing": differing, "max_level": b.get("max_level"), "native_frames": b.get("native_frames")}
+    return {"same": bool(runs) and all(entry["same"] for entry in runs.values()),
+            "difference_identical": bool(runs) and all(entry.get("difference_identical", entry["same"])
+                                                        for entry in runs.values()),
+            "runs": runs}
 
 
 def _write_stills(out: Path, name: str, script, worker: dict, in_process: dict, paths: dict) -> None:
@@ -860,6 +871,9 @@ def main(argv=None) -> int:
     parser.add_argument("--runs", nargs="*", default=(), help="with --native: only these run keys (spectrum[:...])")
     parser.add_argument("--surface-format", choices=("rgba8", "rgba16f"), default=None,
                         help="with --native: the native item's surface texels (default: the route's own)")
+    parser.add_argument("--unprimed", action="store_true",
+                        help="with --native: no render before the owner exists and no route prepare at attach (the "
+                             "product's unprimed path, N29 round 2 M3; reported, not a gate)")
     parser.add_argument("--against", type=Path, default=None,
                         help="with --native: an accepted native_render_parity.json; the run passes when every run's "
                              "differences equal it (bit-identical native frames)")
@@ -880,8 +894,9 @@ def main(argv=None) -> int:
     app = QApplication(["owner-render-parity"])
     try:
         if args.native:
-            global NATIVE_SURFACE_FORMAT
+            global NATIVE_SURFACE_FORMAT, NATIVE_UNPRIMED
             NATIVE_SURFACE_FORMAT = args.surface_format
+            NATIVE_UNPRIMED = bool(args.unprimed)
             report = run_native(args.out, module_dir=args.module_dir.resolve(), offers=args.offers,
                                 seconds=args.seconds, only=tuple(args.runs),
                                 against=None if args.against is None else args.against.resolve())

@@ -580,13 +580,12 @@ bool SpectrumSource::sync()
     bool changed = false;
     if (presentationTaken && presentation != m_drawn) {
         m_drawn = presentation;
-        ++m_drawnInputs;
         changed = true;
     }
     if (presentationTaken && (program.shaderGeneration != m_drawnProgram.shaderGeneration
                               || program.settings != m_drawnProgram.settings)) {
         if (program.settings != m_drawnProgram.settings)
-            ++m_drawnInputs;
+            ++m_drawnSettingsGeneration;
         m_drawnProgram = program; // a new pack or new settings: recorded once, nothing per frame at rest
         changed = true;
     }
@@ -640,7 +639,27 @@ int SpectrumContent::liveResources() const
 
 void SpectrumContent::release()
 {
-    m_drawnTexture = nullptr;
+    m_drawnTexture = nullptr; // the target goes (or the content is replaced): nothing of ours is held any more
+    releaseObjects();
+}
+
+bool SpectrumContent::holdsFrame(const ColorTarget &target) const
+{
+    return target.texture && m_drawnTexture == target.texture.get() && m_drawnSize == target.texture->pixelSize();
+}
+
+LatchKey SpectrumContent::latchKey(QRhi *rhi, const ColorTarget &target) const
+{
+    LatchKey key;
+    key.rhi = rhi;
+    key.target = target.generation;
+    key.program = m_source->drawnProgram().shaderGeneration;
+    key.settings = m_source->drawnSettingsGeneration();
+    return key;
+}
+
+void SpectrumContent::releaseObjects()
+{
     if (!m_res)
         return;
     g_liveContentObjects.fetchAndAddRelaxed(-m_res->objects);
@@ -669,14 +688,15 @@ void SpectrumContent::pack()
 bool SpectrumContent::keepsTarget(QRhi *rhi, ColorTarget &target)
 {
     // A latched failure (audit 14 Nov M2, N29 L10): nothing is built or recorded again for the same inputs, and no
-    // error is raised per frame; the state says why.
-    if (!m_res && !m_latch.mayBuild(rhi, target.renderPass.get(), m_source->drawnProgram().shaderGeneration,
-                                    m_source->drawnInputs()))
+    // error is raised per frame; the state says why (a held record may be the latch's bounded retry: round 2, L4).
+    if (!m_res && !m_latch.admit(latchKey(rhi, target)))
+        return true;
+    // No stream (an unbind): the frame in the target stays for the card's fade-out (round 2, L3).
+    if (!m_source->streamBound() && holdsFrame(target))
         return true;
     pack();
     // A refused frame keeps the last frame drawn into this target (audit N29 M4): never a cleared card.
-    if (m_refused && target.texture && m_drawnTexture == target.texture.get()
-        && m_drawnSize == target.texture->pixelSize()) {
+    if (m_refused && holdsFrame(target)) {
         m_source->noteRefused(m_reason);
         return true;
     }
@@ -688,10 +708,11 @@ bool SpectrumContent::ensure(QRhi *rhi, ColorTarget &target, QString *error)
     const SpectrumProgram &program = m_source->drawnProgram();
     if (m_res && (m_res->rhi != rhi || m_res->pass != target.renderPass.get()
                   || m_res->shaderGeneration != program.shaderGeneration))
-        release();                            // a new pack: its pipeline and block buffer are rebuilt
+        releaseObjects();                     // a new pack: its pipeline and block buffer are rebuilt
     if (m_res)
         return true;
-    if (!m_latch.mayBuild(rhi, target.renderPass.get(), program.shaderGeneration, m_source->drawnInputs())) {
+    const LatchKey key = latchKey(rhi, target);
+    if (!m_latch.mayBuild(key)) {
         *error = m_latch.error();             // failed closed: nothing is created again for the same inputs (M2)
         return false;
     }
@@ -699,10 +720,10 @@ bool SpectrumContent::ensure(QRhi *rhi, ColorTarget &target, QString *error)
         m_latch.succeeded();
         return true;
     }
-    release();
-    // The failure edge: recorded once, reported through the source's state; re-armed by a changed input (L10).
-    const qint64 failures = m_latch.failed(rhi, target.renderPass.get(), program.shaderGeneration,
-                                           m_source->drawnInputs(), *error);
+    releaseObjects();                         // the frame in the target stays (M4): the route fades the card over it
+    // The failure edge: recorded once, reported through the source's state and status; re-armed by a changed input
+    // (L10) or the latch's bounded retry (round 2, L4).
+    const qint64 failures = m_latch.failed(key, *error);
     m_source->noteFailure(*error, failures);
     return false;
 }

@@ -262,6 +262,9 @@ class VisualizerRenderItem(QQuickItem):
             raise RuntimeError("a native route is attached once, before the item has a render source")
         self._native_route = route
         self.setFlag(QQuickItem.Flag.ItemHasContents, False)     # never a Python render node
+        request = getattr(route, "set_update_request", None)
+        if request is not None:
+            request(self.update)                  # what the window's edges re-run (N29 round 2, M3 and M4)
 
     @property
     def native_route(self):

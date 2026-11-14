@@ -39,7 +39,13 @@ struct ColorTarget
     ColorTarget &operator=(ColorTarget &&) noexcept;
     void reset();
     bool isValid() const { return texture && renderTarget && renderPass; }
+    // A process-unique number per creation of the target (createColorTarget) and per change of its size (a content's
+    // latch keys on it, never on an address that can repeat: audit N29 round 2, L4). 0 for none.
+    quint64 generation = 0;
 };
+
+// The next target generation (any thread).
+quint64 nextTargetGeneration();
 
 // An RGBA8 target the core owns: a render target, read back as a transfer source, keeping its contents (rule B).
 // `withDepthStencil`: a depth-stencil buffer beside it, which Qt Quick needs when it renders into the target (its opaque

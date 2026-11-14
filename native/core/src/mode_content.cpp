@@ -20,26 +20,77 @@ namespace srpss_core {
 
 namespace fa = frame_abi;
 
+namespace {
+
+// Each core member's values (L6): one function per row of the table below.
+void valueZeros(const ModeCard &, const QSize &, double *) {}  // its numbers are zeros by definition (uMatrix, the origin)
+void valueOne(const ModeCard &, const QSize &, double *out) { out[0] = 1.0; }
+void valueItemSize(const ModeCard &card, const QSize &, double *out)
+{
+    out[0] = card.itemSize[0];
+    out[1] = card.itemSize[1];
+}
+void valueQuarters(const ModeCard &card, const QSize &, double *out) { out[0] = card.quarters; }
+void valueOrientedSize(const ModeCard &card, const QSize &, double *out)
+{
+    out[0] = card.orientedSize[0];
+    out[1] = card.orientedSize[1];
+}
+void valueDpr(const ModeCard &card, const QSize &, double *out) { out[0] = card.dpr; }
+void valueContentFade(const ModeCard &card, const QSize &, double *out) { out[0] = card.contentFade; }
+void valueBorderWidth(const ModeCard &card, const QSize &, double *out) { out[0] = card.borderWidth; }
+void valueItemFromFragX(const ModeCard &card, const QSize &, double *out)
+{
+    for (int i = 0; i < 3; ++i)
+        out[i] = card.itemFromWindow[i];
+}
+void valueItemFromFragY(const ModeCard &card, const QSize &, double *out)
+{
+    for (int i = 0; i < 3; ++i)
+        out[i] = card.itemFromWindow[3 + i];
+}
+void valueWindowFromTargetX(const ModeCard &card, const QSize &, double *out)
+{
+    for (int i = 0; i < 3; ++i)
+        out[i] = card.windowFromTarget[i];
+}
+void valueWindowFromTargetY(const ModeCard &card, const QSize &, double *out)
+{
+    for (int i = 0; i < 3; ++i)
+        out[i] = card.windowFromTarget[3 + i];
+}
+void valueTargetPixels(const ModeCard &, const QSize &target, double *out)
+{
+    out[0] = target.width();
+    out[1] = target.height();
+}
+
+} // namespace
+
 // The core's conventions (mode_content.h): the members the Python renderers of Spectrum, Spline Curve and Bubble compute
 // per frame from the card and their target (implementations/spectrum.py spectrum_settings_values, devcurve.py and
-// bubble.py render), the minimum that covers them. A mode's own layout arithmetic (u_content_rect, u_visual_scale, ...)
-// is its settings, resolved in Python.
+// bubble.py render), the minimum that covers them, each with its values. A mode's own layout arithmetic
+// (u_content_rect, u_visual_scale, ...) is its settings, resolved in Python.
 const ModeCoreMember kModeCoreMembers[] = {
-    { "uMatrix", 16, false },                 // the Python quad's item matrix: zeros (the core draws its own triangle)
-    { "uItemSize", 2, true },                 // the item's logical size
-    { "uContentRotationQuarters", 1, true },
-    { "u_resolution", 2, true },              // the item's logical size in the content's orientation
-    { "u_dpr", 1, true },
-    { "u_viewport_origin_px", 2, false },     // (0, 0): the target is the card's own
-    { "u_quick_item_coords", 1, false },      // 1: item-local coordinates
-    { "u_fade", 1, true },                    // the content fade
-    { "u_border_width", 1, true },
-    { "u_item_from_frag", 1, false },         // 1: the item coordinate from fragPixel through the rows below
-    { "u_item_from_frag_x", 3, true },        // the window's pixel -> the oriented item coordinate (rows x, y)
-    { "u_item_from_frag_y", 3, true },
-    { "u_window_from_target_x", 3, true },    // the target's pixel -> the window's (rows x, y; whole-pixel, exact)
-    { "u_window_from_target_y", 3, true },
-    { "u_target_px", 2, false },              // the target's pixels (the core's own)
+    { "uMatrix", 16, false, valueZeros },                     // the Python quad's item matrix: zeros (the core's triangle)
+    { "uItemSize", 2, true, valueItemSize },                  // the item's logical size
+    { "uContentRotationQuarters", 1, true, valueQuarters },
+    { "u_resolution", 2, true, valueOrientedSize },           // the item's logical size in the content's orientation
+    { "u_dpr", 1, true, valueDpr },
+    { "u_viewport_origin_px", 2, false, valueZeros },         // (0, 0): the target is the card's own
+    { "u_quick_item_coords", 1, false, valueOne },            // 1: item-local coordinates
+    { "u_fade", 1, true, valueContentFade },                  // the content fade
+    { "u_border_width", 1, true, valueBorderWidth },
+    { "u_item_from_frag", 1, false, valueOne },               // 1: the item coordinate from fragPixel through the rows below
+    { "u_item_from_frag_x", 3, true, valueItemFromFragX },    // the window's pixel -> the oriented item coordinate (rows x, y)
+    { "u_item_from_frag_y", 3, true, valueItemFromFragY },
+    { "u_window_from_target_x", 3, true, valueWindowFromTargetX }, // the target's pixel -> the window's (whole-pixel, exact)
+    { "u_window_from_target_y", 3, true, valueWindowFromTargetY },
+    { "u_target_px", 2, false, valueTargetPixels },           // the target's pixels (the core's own)
+    // The Oscilloscope renderer's own names for two of the card's numbers (its program, oscilloscope_program.py; round
+    // 2 L7's scan of implementations/oscilloscope.py).
+    { "uOriented", 2, true, valueOrientedSize },          // the item's logical size in the content's orientation
+    { "uQuarters", 1, true, valueQuarters },              // the content's quarter turns
 };
 const int kModeCoreMemberCount = int(sizeof(kModeCoreMembers) / sizeof(kModeCoreMembers[0]));
 
@@ -68,12 +119,22 @@ constexpr const char kUvDownName[] = "v_uv"; // rendering/quick/visualizer/rende
 constexpr const char kUvUpName[] = "vUv";    // rendering/gl_programs/item_quad.py
 
 // The triangle's vertices on this backend. The target's top row (texel row 0: conventions.h, F1) lies at the clip y the
-// target correction maps the OpenGL-form top (y = +1) to (-1 on OpenGL and Vulkan, +1 on D3D and Metal), so each
-// vertex's uv is the exact value the Python quads interpolate there: x = 0.5 x + 0.5; v_uv's y grows from 0 at the top
-// row, vUv's y = 1 - v_uv's. On OpenGL and Vulkan v_uv is N2.9's position * 0.5 + 0.5, value for value.
-void fullTriangle(QRhi *rhi, float *out)
+// target correction maps the OpenGL-form top (y = +1) to (-1 on OpenGL and Vulkan, +1 on D3D and Metal). Each vertex
+// carries two uv:
+// - vUv (the item quad's, y up: N4.a's transitions) is the target's own: x = 0.5 x + 0.5, y = 1 - its row from the top;
+// - v_uv (the Visualizer quad's, y down: the product 2D shaders' fc = v_uv * u_resolution) is the ITEM's (audit N29
+//   round 2, M6): the vertex's target pixel (top-left origin, the content's orientation) through the card's
+//   window_from_target and item_from_window rows (the Python renderer's own float32 item_from_fragment), over the item's
+//   oriented logical size, composed in double. The map is affine, so the one triangle interpolates it exactly; the
+//   target's outward snapping to whole device pixels and the backend's clip orientation do not reach it. With no card
+//   it is the target's uv (the harness's probes that set none).
+void fullTriangle(QRhi *rhi, const ModeCard &card, const QSize &target, float *out)
 {
     const float topClipY = targetCorrection(rhi).map(QVector3D(0.0f, 1.0f, 0.0f)).y();
+    const bool fromCard = card.valid && card.orientedSize[0] > 0.0 && card.orientedSize[1] > 0.0 && target.width() > 0
+        && target.height() > 0;
+    const double *w = card.windowFromTarget;
+    const double *m = card.itemFromWindow;
     for (int i = 0; i < 3; ++i) {
         const float x = kFullTriangle[2 * i];
         const float y = kFullTriangle[2 * i + 1];
@@ -84,6 +145,14 @@ void fullTriangle(QRhi *rhi, float *out)
         v[1] = y;
         v[2] = u;
         v[3] = down;
+        if (fromCard) {
+            const double px = double(u) * target.width();
+            const double py = double(down) * target.height();
+            const double wx = w[0] * px + w[1] * py + w[2];
+            const double wy = w[3] * px + w[4] * py + w[5];
+            v[2] = float((m[0] * wx + m[1] * wy + m[2]) / card.orientedSize[0]);
+            v[3] = float((m[3] * wx + m[4] * wy + m[5]) / card.orientedSize[1]);
+        }
         v[4] = u;
         v[5] = 1.0f - down;
     }
@@ -405,40 +474,13 @@ bool isModeCoreMember(const QByteArray &name)
 bool modeCoreValues(const QByteArray &name, const ModeCard &card, const QSize &target, double *out, int *count)
 {
     const ModeCoreMember *member = coreMember(name);
-    if (!member)
-        return false;
+    if (!member || !member->values)
+        return false;                         // never zeros for a name the table does not fill (L6)
     *count = member->components;
     for (int i = 0; i < member->components; ++i)
         out[i] = 0.0;
-    if (name == "uItemSize") {
-        out[0] = card.itemSize[0];
-        out[1] = card.itemSize[1];
-    } else if (name == "uContentRotationQuarters") {
-        out[0] = card.quarters;
-    } else if (name == "u_resolution") {
-        out[0] = card.orientedSize[0];
-        out[1] = card.orientedSize[1];
-    } else if (name == "u_dpr") {
-        out[0] = card.dpr;
-    } else if (name == "u_quick_item_coords" || name == "u_item_from_frag") {
-        out[0] = 1.0;
-    } else if (name == "u_fade") {
-        out[0] = card.contentFade;
-    } else if (name == "u_border_width") {
-        out[0] = card.borderWidth;
-    } else if (name == "u_item_from_frag_x" || name == "u_item_from_frag_y") {
-        const int row = name.endsWith("_x") ? 0 : 3;
-        for (int i = 0; i < 3; ++i)
-            out[i] = card.itemFromWindow[row + i];
-    } else if (name == "u_window_from_target_x" || name == "u_window_from_target_y") {
-        const int row = name.endsWith("_x") ? 0 : 3;
-        for (int i = 0; i < 3; ++i)
-            out[i] = card.windowFromTarget[row + i];
-    } else if (name == "u_target_px") {
-        out[0] = target.width();
-        out[1] = target.height();
-    }
-    return true;                              // uMatrix, u_viewport_origin_px: zeros
+    member->values(card, target, out);
+    return true;
 }
 
 // ------------------------------------------------------------------------------------------------- the card
@@ -948,6 +990,7 @@ bool ModeSource::acceptStream(const PacketReaderConfig &config, QString *error)
     m_packedSettings = packed;
     m_ready = ready;
     ++m_generation;
+    ++m_buildGeneration;
     return true;
 }
 
@@ -958,6 +1001,7 @@ void ModeSource::streamUnbound()
     m_schema.reset();
     m_ready = false;
     ++m_generation;
+    ++m_buildGeneration;
 }
 
 bool ModeSource::setProgram(const ModeProgram &program, const QJsonObject *settings, QString *error)
@@ -987,6 +1031,7 @@ bool ModeSource::setProgram(const ModeProgram &program, const QJsonObject *setti
     m_packedSettings = packed;
     m_ready = ready;
     ++m_generation;
+    ++m_buildGeneration;
     return true;
 }
 
@@ -1008,6 +1053,7 @@ bool ModeSource::setSettings(const QJsonObject &settings, QString *error)
     m_packedSettings = packed;
     m_ready = ready;
     ++m_generation;
+    ++m_buildGeneration;
     return true;
 }
 
@@ -1017,7 +1063,7 @@ void ModeSource::setCard(const ModeCard &card)
     if (card == m_card)
         return;
     m_card = card;
-    ++m_generation;
+    ++m_generation;                           // not the build's (L4): no pipeline reads the card
 }
 
 bool ModeSource::setTexture(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips,
@@ -1062,6 +1108,7 @@ bool ModeSource::setTexture(const QByteArray &name, const QByteArray &pixels, co
     slot->mips = mips;
     slot->image = QSharedPointer<TextureImage>::create(pixels, size, mips); // the one it replaces (if not taken) goes
     ++m_generation;
+    ++m_buildGeneration;
     return true;
 }
 
@@ -1072,6 +1119,7 @@ bool ModeSource::removeTexture(const QByteArray &name, QString *error)
         if (m_textures.at(i).name == name) {
             m_textures.removeAt(i);           // its image (if not taken) goes; its QRhiTexture at the next record
             ++m_generation;
+            ++m_buildGeneration;
             return true;
         }
     }
@@ -1106,6 +1154,7 @@ bool ModeSource::sync()
         QMutexLocker lock(&m_mutex);
         if (m_generation != m_takenGeneration) {
             m_takenGeneration = m_generation;
+            m_drawnBuildGeneration = m_buildGeneration;
             m_drawnProgram = m_program;
             m_drawnSettings = m_packedSettings;
             m_drawnSchema = m_schema;
@@ -1192,7 +1241,8 @@ struct ModeContent::Resources
     std::unique_ptr<QRhiGraphicsPipeline> clearPipeline;
     Pass passes[kMaxModePasses];
     int passCount = 0;
-    float triangle[kTriangleFloats] = {};
+    float triangle[kTriangleFloats] = {}; // the vertices uploaded (fullTriangle for the drawn card and target)
+    bool triangleUploaded = false;
     bool staticUploaded = false;
     int objects = 0;
     quint64 generation = 0;     // the program the pipelines were built from
@@ -1240,7 +1290,6 @@ int ModeContent::liveResources() const
 
 void ModeContent::releasePipelines()
 {
-    m_drawnTexture = nullptr;
     if (!m_res)
         return;
     g_liveContentObjects.fetchAndAddRelaxed(-m_res->objects);
@@ -1261,6 +1310,7 @@ void ModeContent::releasePipelines()
 
 void ModeContent::release()
 {
+    m_drawnTexture = nullptr;                 // the target goes (or the content is replaced): nothing of ours is held
     releasePipelines();                       // first: their bindings name the textures
     for (GpuTexture &texture : m_textures) {
         if (texture.texture)
@@ -1460,16 +1510,32 @@ bool ModeContent::keepsTarget(QRhi *rhi, ColorTarget &target)
 {
     retireTextures();                         // the retire path runs whatever is recorded next
     reportTextures();
-    const ModeProgram &program = m_source->drawnProgram();
-    if (!m_res && !m_latch.mayBuild(rhi, target.renderPass.get(), program.generation, m_source->drawnGeneration()))
+    if (!m_res && !m_latch.admit(latchKey(rhi, target)))
         return true;                          // latched (M2): nothing built or recorded again for the same inputs
+    // No stream (an unbind): the frame in the target stays for the card's fade-out (round 2, L3).
+    if (!m_source->streamBound() && holdsFrame(target))
+        return true;
     pack(target);
-    if (m_refused && target.texture && m_drawnTexture == target.texture.get()
-        && m_drawnSize == target.texture->pixelSize()) {
+    if (m_refused && holdsFrame(target)) {
         m_source->noteRefused(m_reason);      // the last drawn frame stays (M4)
         return true;
     }
     return false;
+}
+
+bool ModeContent::holdsFrame(const ColorTarget &target) const
+{
+    return target.texture && m_drawnTexture == target.texture.get() && m_drawnSize == target.texture->pixelSize();
+}
+
+LatchKey ModeContent::latchKey(QRhi *rhi, const ColorTarget &target) const
+{
+    LatchKey key;
+    key.rhi = rhi;
+    key.target = target.generation;
+    key.program = m_source->drawnProgram().generation;
+    key.settings = m_source->drawnBuildGeneration(); // everything a build reads but the card (round 2, L4)
+    return key;
 }
 
 bool ModeContent::ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error)
@@ -1481,7 +1547,8 @@ bool ModeContent::ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QStrin
         releasePipelines(); // a new program, or a texture object made or gone: the pipelines and bindings again
     if (m_res)
         return true;
-    if (!m_latch.mayBuild(rhi, target.renderPass.get(), program.generation, m_source->drawnGeneration())) {
+    const LatchKey key = latchKey(rhi, target);
+    if (!m_latch.mayBuild(key)) {
         *error = m_latch.error();
         return false;
     }
@@ -1489,9 +1556,8 @@ bool ModeContent::ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QStrin
         m_latch.succeeded();
         return true;
     }
-    releasePipelines();
-    const qint64 failures = m_latch.failed(rhi, target.renderPass.get(), program.generation,
-                                           m_source->drawnGeneration(), *error);
+    releasePipelines();                       // the frame in the target stays (M4): the route fades the card over it
+    const qint64 failures = m_latch.failed(key, *error);
     m_source->noteFailure(*error, failures);
     return false;
 }
@@ -1515,7 +1581,6 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
     res->generation = program.generation;
     res->passesBuilt = withPasses;
     res->textureObjects = m_textureObjects;
-    fullTriangle(rhi, res->triangle);
     int objects = 0;
     // Counted as each is created, so a failure part-way releases (and uncounts) exactly what exists.
     auto created = [&objects](bool ok) {
@@ -1530,7 +1595,8 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
             *error = QStringLiteral("the mode's buffers, samplers, bindings or pipelines could not be created");
         return ok;
     };
-    res->vertices.reset(rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(res->triangle)));
+    // Static: uploaded again when the card or the target moves its numbers (M6), never per frame at rest.
+    res->vertices.reset(rhi->newBuffer(QRhiBuffer::Static, QRhiBuffer::VertexBuffer, sizeof(res->triangle)));
     res->conventions.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(ConventionsBlock)));
     res->vertices->setName(QByteArrayLiteral("srpss core mode vertices"));
     res->conventions->setName(QByteArrayLiteral("srpss core mode conventions block"));
@@ -1631,8 +1697,14 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
                        .arg(m_texturesLost.join(QStringLiteral(", ")));
     }
     Resources &r = *m_res;
-    if (!r.staticUploaded) {
+    float triangle[kTriangleFloats];
+    fullTriangle(rhi, m_source->drawnCard(), target.texture->pixelSize(), triangle);
+    if (!r.triangleUploaded || std::memcmp(triangle, r.triangle, sizeof(triangle)) != 0) {
+        std::memcpy(r.triangle, triangle, sizeof(triangle));
         updates->uploadStaticBuffer(r.vertices.get(), r.triangle);
+        r.triangleUploaded = true;
+    }
+    if (!r.staticUploaded) {
         const ConventionsBlock conventions = targetConventions(rhi); // F1, F2: a target the core owns
         updates->updateDynamicBuffer(r.conventions.get(), 0, sizeof(ConventionsBlock), &conventions);
         r.staticUploaded = true;

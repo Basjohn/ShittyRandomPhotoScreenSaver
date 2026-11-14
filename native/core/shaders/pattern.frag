@@ -11,11 +11,15 @@ layout(location = 0) out vec4 fragColor;
 
 layout(std140, binding = 0) uniform Pattern {
     vec4 targetSize;   // xy: the target in pixels
-    vec4 pattern;      // x: 0 the texel's index, 1 opaque white
+    vec4 pattern;      // x: 0 the texel's index, 1 opaque white, 2 transparent (the surface's clear, N29 round 2 M4)
 };
 
 void main()
 {
+    if (pattern.x > 1.5) {
+        fragColor = vec4(0.0);
+        return;
+    }
     if (pattern.x > 0.5) {
         fragColor = vec4(1.0);
         return;
