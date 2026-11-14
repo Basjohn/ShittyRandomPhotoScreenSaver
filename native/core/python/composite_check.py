@@ -17,8 +17,10 @@ Rounds (each per API, at 100 %, 125 % and 150 % on one hidden host of HOST_PIXEL
             nothing changes outside the coverage (composite_analysis.py), for the card off the device-pixel grid, under
             pixel shift (whole logical pixels, off the device grid at 125 and 150 %), under uniform CUSTOM scales, at each
             quarter turn and for a frameless shell; the surface records once per change and nothing at rest; the node's
-            device pixel ratio is Qt's at render time. Negative controls: the item at the record's raw (unsnapped) rect
-            under a CUSTOM scale, and a turned frame read as unturned, both fail.
+            device pixel ratio is Qt's at render time. The item at the record's raw (unsnapped) rect under a CUSTOM
+            scale draws the decided pixels (ABI 13, R-217: the composite puts its quad on the nearest whole pixels; it
+            was the negative control before). Negative controls: the item a whole device pixel off its decided rect,
+            and a turned frame read as unturned, both fail.
   contract  plan 1C.4's clip contract (tools/card_clip_contract.py, the reading tests/test_visualizer_card_clip_contract.py
             makes of the Python node) on the native item: the steady card, pixel shift, a CUSTOM scale and the
             display-wide card in each display style (1D.2: Default, Borders To Edge, Hide Borders); white content and the
@@ -306,11 +308,24 @@ def round_texels(core, engine, app, api: str, host, out: Path) -> dict:
         card_rect = scene.show_card(presentation)
         decided = geometry_px(geometry.rect, geometry.pixel_size, geometry.coverage, geometry.quarters, dpr)
         raw = tuple(presentation.outer_rect)
+        # The record's raw rect under a CUSTOM scale lies off the device grid by less than half a pixel (its origin
+        # fraction here is 0.375). Before ABI 13 that item drew off the decided pixels and was this round's negative
+        # control; since R-217 the composite's vertex stage puts the quad on the nearest whole pixels, which here are
+        # the decided ones: it is a positive check of that snap now.
         unsnapped = scene.reads(geometry, card_rect, raw_rect=raw)
-        control = analyse_texels(unsnapped["texel_id"], unsnapped["hidden"], decided)
-        record["negative_unsnapped_rect"] = dict(control, raw_rect=list(raw),
-                                                 raw_device_size=[raw[2] * dpr, raw[3] * dpr])
-        checks["negative_control_unsnapped_rect_fails"] = not control["pass"]
+        snapped = analyse_texels(unsnapped["texel_id"], unsnapped["hidden"], decided)
+        record["unsnapped_rect_snapped"] = dict(snapped, raw_rect=list(raw),
+                                                raw_device_origin=[raw[0] * dpr, raw[1] * dpr],
+                                                raw_device_size=[raw[2] * dpr, raw[3] * dpr],
+                                                origin_shift=_item_state(scene).get("origin_shift"))
+        checks["unsnapped_rect_drawn_on_the_decided_pixels"] = snapped["pass"]
+        # The negative control the snap cannot absorb: the item a whole device pixel right of and below its decided
+        # rect (a whole-pixel offset is kept as it is) must fail the one-to-one reading.
+        off = (geometry.rect[0] + 1.0 / dpr, geometry.rect[1] + 1.0 / dpr, geometry.rect[2], geometry.rect[3])
+        moved = scene.reads(geometry, card_rect, raw_rect=off)
+        control = analyse_texels(moved["texel_id"], moved["hidden"], decided)
+        record["negative_one_pixel_off"] = dict(control, rect=list(off))
+        checks["negative_control_one_pixel_off_fails"] = not control["pass"]
         turned = _card_record(dpr, logical=scene.logical, quarters=1)
         geometry = composite_geometry(turned)
         card_rect = scene.show_card(turned)
