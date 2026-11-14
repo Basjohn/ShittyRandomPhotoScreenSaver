@@ -452,17 +452,76 @@ def round_item(core, engine, app, host, records: list[dict]) -> dict:
         checks["control_accepts_after_retire"] = bool(n.get("paused") and n.get("discarded") == 0
                                                       and n.get("accepted_after") == n.get("accepted_before") + 1)
         facts["state"] = scene.spectrum.state()
+        # D5.4 (rule (c)): the reads at the sync and the recording edges ran on the render thread, never holding a
+        # Python thread state.
+        state = facts["state"]
+        edges = _find_key(host.state(), "edges_with_python_thread_state")
+        facts["thread_probe"] = {"syncs": state.get("syncs_probed"),
+                                 "syncs_with_python_thread_state": state.get("syncs_with_python_thread_state"),
+                                 "syncs_on_gui_thread": state.get("syncs_on_gui_thread"),
+                                 "edges_with_python_thread_state": edges}
+        checks["no_python_thread_state_on_the_render_thread"] = bool(
+            state.get("syncs_probed") and state.get("syncs_with_python_thread_state") == 0
+            and state.get("syncs_on_gui_thread") == 0 and edges and all(value == 0 for value in edges))
     finally:
         stream.close()
         scene.close(app)
         host.frames(2)
         host_check._flush_deletes(app)
+    # The probe's negative control: the same item on a hidden host rendering on the calling (GUI, Python) thread.
+    facts["thread_probe_control"] = _gui_thread_probe(core, engine, app, card, chosen)
+    checks["control_gui_thread_host_counts_python_thread_states"] = bool(
+        (facts["thread_probe_control"].get("syncs_with_python_thread_state") or 0) > 0)
     facts["live_at_end"] = {"readers": core.packet_reader_live(), "composites": core.composite_live()}
     live = facts["live_at_end"]
     checks["nothing_left"] = (live["readers"]["readers"] == 0 and live["readers"]["views"] == 0
                               and live["composites"]["spectrum_sources"] == 0
                               and live["composites"]["spectrum_resources"] == 0)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def _find_key(value, key: str) -> list:
+    """Every value stored under ``key`` anywhere in a JSON-like structure."""
+    found = []
+    if isinstance(value, dict):
+        for name, inner in value.items():
+            if name == key:
+                found.append(inner)
+            else:
+                found += _find_key(inner, key)
+    elif isinstance(value, list):
+        for inner in value:
+            found += _find_key(inner, key)
+    return found
+
+
+def _gui_thread_probe(core, engine, app, card: dict, chosen: list[dict]) -> dict:
+    """A small hidden host whose render control works on the calling thread (threaded=False, host_check's control):
+    the item's syncs there hold the GUI thread's Python thread state, so the probe must count them."""
+    host = core.hidden_host(640, 480, threaded=False)
+    result: dict = {}
+    try:
+        host.set_device_pixel_ratio(float(card["dpr"]))
+        scene = Scene(core, engine, host)
+        stream = Stream()
+        try:
+            small = dict(card)
+            scene.place(small)
+            scene.spectrum.bind(stream.name, expect=stream.expect)
+            stream.publish(chosen[0]["record"], 0.0)
+            scene.spectrum.update()
+            host.frames(2)
+            state = scene.spectrum.state()
+            result = {key: state.get(key) for key in ("syncs_probed", "syncs_with_python_thread_state",
+                                                      "syncs_on_gui_thread")}
+        finally:
+            stream.close()
+            scene.close(app)
+            host.frames(1)
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    return result
 
 
 def close_during_copy(scene, card: dict, chosen: list[dict], controls: tuple[str, ...]) -> dict:

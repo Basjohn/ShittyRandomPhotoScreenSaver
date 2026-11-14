@@ -762,6 +762,7 @@ void SpectrumSource::releaseRetired()
 
 bool SpectrumSource::sync()
 {
+    m_syncProbe.hit(); // D5.4: the read's thread, and whether it held a Python thread state
     releaseRetired(); // the render-thread retire job
     PacketReader *current = nullptr;
     bool presentationTaken = false;
@@ -851,6 +852,10 @@ QJsonObject SpectrumSource::stateJson() const
     o.insert(QStringLiteral("syncs"), double(m_syncs));
     o.insert(QStringLiteral("accepted"), double(m_accepted));
     o.insert(QStringLiteral("admission_rejected"), double(m_admissionRejected));
+    o.insert(QStringLiteral("syncs_probed"), double(m_syncProbe.calls.loadRelaxed()));
+    o.insert(QStringLiteral("syncs_on_gui_thread"), double(m_syncProbe.callsOnGuiThread.loadRelaxed()));
+    o.insert(QStringLiteral("syncs_with_python_thread_state"),
+             double(m_syncProbe.callsWithPythonThreadState.loadRelaxed()));
     o.insert(QStringLiteral("has_frame"), m_reportedFrame);
     o.insert(QStringLiteral("last_read"), m_lastResult);
     o.insert(QStringLiteral("records"), double(m_records));

@@ -28,6 +28,7 @@
 
 #include "packet_reader.h"
 #include "surfaces.h"
+#include "thread_probe.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QJsonObject>
@@ -148,6 +149,8 @@ private:
     qint64 m_retired = 0;
     qint64 m_released = 0;
     QJsonObject m_lastReader;               // the last released reader's state
+
+    ThreadProbe m_syncProbe;                // D5.4 at the accept edge: the threads the syncs (the reads) ran on
 
     // Render thread.
     quint64 m_takenGeneration = 0;
