@@ -418,10 +418,21 @@ def quick_shader_dir(repo_root: Path = ROOT) -> Path:
     return repo_root / "rendering" / "quick" / "qml" / "shaders"
 
 
+def mode_shader_dir(repo_root: Path = ROOT) -> Path:
+    """Where the Visualizer modes' fragment shaders live (the Python renderers compile them there; the native core
+    loads their packs at run time, N2.5's standing port rule): each pack (``<source>.qsb``) committed beside it."""
+    return repo_root / "widgets" / "spotify_visualizer" / "shaders"
+
+
 def quick_shader_sources(shader_dir: Path | None = None) -> tuple[Path, ...]:
-    """Every Qt Quick shader source (discovered, never listed)."""
-    folder = quick_shader_dir() if shader_dir is None else Path(shader_dir)
-    return tuple(sorted(path for path in folder.iterdir() if path.suffix in QUICK_SHADER_SUFFIXES))
+    """Every shader source the product bakes (discovered, never listed): the Qt Quick ``ShaderEffect`` sources and
+    the Visualizer modes' fragment shaders; ``shader_dir``: one folder's instead."""
+    if shader_dir is not None:
+        folders = (Path(shader_dir),)
+    else:
+        folders = (quick_shader_dir(), mode_shader_dir())
+    return tuple(sorted(path for folder in folders for path in folder.iterdir()
+                        if path.suffix in QUICK_SHADER_SUFFIXES))
 
 
 def quick_shader_targets() -> tuple[str, ...]:
@@ -459,6 +470,23 @@ def quick_shader_baker(
     return qsb
 
 
+def _composed_shader(source: Path, folder: Path) -> Path:
+    """``source`` as it compiles (its ``#include`` lines and conventions marker expanded,
+    ``widgets.spotify_visualizer.shaders.compose_shader_source``), written into ``folder`` under its own name: qsb
+    has no include path. A source with neither is baked as it is."""
+    text = source.read_text(encoding="utf-8")
+    if "//@srpss_conventions" not in text and "#include" not in text:
+        return source
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from widgets.spotify_visualizer.shaders import compose_shader_source
+
+    composed = Path(folder) / "composed" / source.name
+    composed.parent.mkdir(parents=True, exist_ok=True)
+    composed.write_text(compose_shader_source(source), encoding="utf-8")
+    return composed
+
+
 def _bake_quick_shader(
     qsb: Path,
     source: Path,
@@ -466,9 +494,13 @@ def _bake_quick_shader(
     targets: Sequence[str],
     run: Callable[..., subprocess.CompletedProcess[str]],
 ) -> None:
+    import tempfile
+
     output.unlink(missing_ok=True)
-    completed = run([str(qsb), *targets, str(source), "-o", str(output)], cwd=str(ROOT), check=False,
-                    capture_output=True, text=True)
+    with tempfile.TemporaryDirectory(prefix="srpss_compose_") as folder:
+        baked = _composed_shader(source, Path(folder))
+        completed = run([str(qsb), *targets, str(baked), "-o", str(output)], cwd=str(ROOT), check=False,
+                        capture_output=True, text=True)
     if completed.returncode != 0 or not output.is_file() or output.stat().st_size <= 0:
         detail = "\n".join(part.strip() for part in (completed.stdout, completed.stderr) if part and part.strip())
         raise QrcRegenerationError(f"qsb failed for {source.name} (exit {completed.returncode})"
@@ -534,7 +566,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", type=Path, help="binary .rcc output for --qrc")
     parser.add_argument("--check", action="store_true", help="fail if regeneration is needed")
     parser.add_argument("--shaders", action="store_true",
-                        help="the Qt Quick shader packs (rendering/quick/qml/shaders) instead of the .rcc packs")
+                        help="the shader packs (rendering/quick/qml/shaders and the Visualizer modes' "
+                             "widgets/spotify_visualizer/shaders) instead of the .rcc packs")
     return parser.parse_args(argv)
 
 

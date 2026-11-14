@@ -1189,6 +1189,8 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT, *, iscc_override:
         repo_root / "rendering" / "quick" / "qml" / "MaterialSurface.qml",
         repo_root / "rendering" / "quick" / "qml" / "shaders" / "surface_material.vert.qsb",
         repo_root / "rendering" / "quick" / "qml" / "shaders" / "surface_material.frag.qsb",
+        # The native core loads a Visualizer mode's fragment pack at run time (N2.5's standing port rule).
+        repo_root / "widgets" / "spotify_visualizer" / "shaders" / "spectrum.frag.qsb",
         # PyInstaller toolchain pins for the (default-selected) Reddit Helper job.
         repo_root / "build_deps" / "requirements_helper.txt",
     )
