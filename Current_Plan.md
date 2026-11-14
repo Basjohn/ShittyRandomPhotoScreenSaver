@@ -44,7 +44,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
 at the size asked.
 - High:
   1. N2.5 (Spectrum at parity; the reader's first user), then N2.8; N2.3's and N2.7's leftovers
-     leftovers ride with the next fitting dispatch.
+     ride with the next fitting dispatch.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
   1. 1D.12 (two test isolation defects) with 1D.11's fence-wait timing.
