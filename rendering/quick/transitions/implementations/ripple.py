@@ -34,7 +34,7 @@ class QuickRippleRenderer(FullscreenPassRenderer):
     label = "Quick Ripple"
     fragment_source = raindrops_program.fragment_source
     vertex_source, block = fullscreen_pass_parts(fragment_source, "RipplePass")
-    value_names = ("u_resolution", "u_ripple_count", "u_ripple_seed")
+    value_names = ("u_target_px", "u_ripple_count", "u_ripple_seed")
 
     def resolve(self, frame: QuickTransitionRenderFrame) -> tuple[int, float]:
         parameters = frame.run.request.parameter_dict()
@@ -42,7 +42,7 @@ class QuickRippleRenderer(FullscreenPassRenderer):
 
     def values(self, resolved, frame: QuickTransitionRenderFrame) -> dict[str, object]:
         count, seed = resolved
-        return {"u_resolution": (float(frame.viewport[2]), float(frame.viewport[3])),
+        return {"u_target_px": (float(frame.viewport[2]), float(frame.viewport[3])),
                 "u_ripple_count": count, "u_ripple_seed": seed}
 
 

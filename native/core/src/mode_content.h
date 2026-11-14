@@ -11,16 +11,37 @@
 // - its settings (every Settings- and mode-derived value, resolved in Python from the spec, by name) and its card (the
 //   item as shown: ModeCard, resolved by Python from the presentation and the composite's geometry).
 //
-// The product 2D shader's shape (lead's decision on audit N29 M5, binding): a pass declares
-// - one std140 block of its own, any name (`OscilloscopeDraw`, `DevCurveDraw`, ...), at any binding but 17;
+// The product fullscreen shaders' shape (lead's decision on audit N29 M5, binding; N4.a widened it to the fullscreen
+// transitions and Bubble's samplers): a pass declares
+// - one std140 block of its own, any name (`OscilloscopeDraw`, `DevCurveDraw`, `CrossfadePass`, ...), at any binding
+//   but 17;
 // - optionally the conventions block (`SrpssConventions`, binding 17: fragPixel gives the target's pixel on every
 //   backend);
-// - optionally `in vec2 v_uv` at location 0 (the core's triangle, shaders/mode.vert, gives it: position * 0.5 + 0.5 as
-//   the native Spectrum's vertex stage, so its row orientation is the backend's clip space; a pass that needs the pixel
-//   takes fragPixel);
+// - optionally one vec2 input at location 0, filled by its NAME from the core's triangle (shaders/mode.vert), the same on
+//   every backend (N4.a):
+//   - `v_uv`: the Visualizer quad's uv (rendering/quick/visualizer/render_contract.py: x right, y DOWN from the
+//     target's top row; the 2D modes);
+//   - `vUv`: the item quad's uv (rendering/gl_programs/item_quad.py: x right, y UP, 1 at the target's top row; the
+//     fullscreen transitions, which sample their pictures at (vUv.x, 1 - vUv.y));
+//   the core's triangle carries both at each vertex (exact values) and a pass's pipeline reads the one it names, so the
+//   pass sees the Python quad's convention without a matrix or a uniform; any other input is refused;
+// - optionally combined image samplers (`sampler2D` only), each bound BY NAME in the program's declaration to a texture
+//   the item holds, with its sampler state declared beside it (PassSampler, N4.a: the sampling primitive); an unbound,
+//   unknown or doubly bound sampler is refused, as is one at binding 17 or at its block's binding;
 // - one vec4 output at location 0.
-// Anything else is refused: a texture, a sampler, storage, a push constant, a second block of its own, another input.
-// Sampling an earlier pass or an image, depth, more targets or compute are primitives with their own C++ and harness.
+// Anything else is refused: a separate texture or sampler, storage, a push constant, a second block of its own.
+// Sampling an earlier pass, depth, more targets or compute are primitives with their own C++ and harness.
+//
+// The textures (N4.a): an item holds up to kMaxModeTextures named textures (ModeTexture), each uploaded from pixels
+// Python holds (RGBA8, rows top first) and owned by the core: the GUI thread stores the image (a new generation); the
+// render thread takes it at the item's sync and uploads it once, at the next record, into a QRhiTexture the content
+// owns (mips generated on the GPU when the texture asks for them), then drops the core's copy. Nothing is uploaded
+// again at rest. A replaced image of the same size and mips is uploaded into the same QRhiTexture; another size
+// recreates it in place (Qt's bindings follow its generation). A removed texture's QRhiTexture is released on the render
+// thread at the next record (the retire path) and the pipelines that bound it are rebuilt; every texture goes with the
+// content (the node's destruction, on the render thread, the QRhi alive). A content made again (a new node, another
+// QRhi) has no copy to upload from: the texture is reported lost and the item draws nothing until its owner sends the
+// image again. Counted process-wide (modeTextureCounts) so a lifecycle proof sees every texture and copy released.
 //
 // One rule fills the block, by member name, from exactly one of three sources:
 // 1. the core's conventions (kModeCoreMembers, one table for every mode: what the Python renderers compute per frame
@@ -37,11 +58,12 @@
 // The passes (ModeContent): the surface's target is cleared by a draw (targets.h rule B), then every pass draws one
 // triangle over the whole target, in order, blended as it says (PassBlend): replace, alpha (straight alpha over:
 // Spectrum's), premultiplied, add (light added, the target's alpha kept). The conventions block is bound only to a pass
-// that declares it.
+// that declares it. A pass whose textures are not all uploaded (missing, or lost) is not drawn: the target is cleared
+// and the state says which texture it waits for.
 //
 // The stream, the admission, the retire job, the refused-frame rule and the failure latch are the shared ones
 // (stream_source.h). Nothing at rest: the surface records only when a frame was accepted or dropped, or the program, the
-// settings or the card changed.
+// settings, the card or a texture changed; a texture is uploaded once per image.
 #pragma once
 
 #include "mode_schema.h"
@@ -56,6 +78,7 @@
 #include <QtCore/QSharedPointer>
 #include <QtCore/QSize>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 #include <rhi/qrhi.h>
 #include <rhi/qshader.h>
 
@@ -102,6 +125,34 @@ enum class PassBlend { Replace = 0, Alpha = 1, Premultiplied = 2, Add = 3 };
 bool parsePassBlend(const QString &text, PassBlend *out);
 QString passBlendName(PassBlend blend);
 
+// The vec2 a pass reads at location 0 (by its name, the header): none, the Visualizer quad's (v_uv, y down) or the item
+// quad's (vUv, y up).
+enum class PassUv { None = 0, Down = 1, Up = 2 };
+QString passUvName(PassUv uv);
+
+constexpr int kMaxPassSamplers = 8;
+constexpr int kMaxModeTextures = 8;
+constexpr int kMaxTextureSide = 16384;
+
+// A sampler's state, declared beside it (N4.a): the filter (min and mag), the wrap (both axes) and the mip filter
+// (none: the base level only).
+enum class SamplerFilter { Nearest = 0, Linear = 1 };
+enum class SamplerWrap { Clamp = 0, Repeat = 1, Mirror = 2 };
+enum class SamplerMips { None = 0, Nearest = 1, Linear = 2 };
+
+// One combined image sampler of a pass, bound by name to a texture of the item.
+struct PassSampler
+{
+    QByteArray name;      // the shader's sampler2D
+    QByteArray texture;   // the item's texture it reads (ModeTexture::name)
+    int binding = -1;     // reflected from the pack
+    SamplerFilter filter = SamplerFilter::Linear;
+    SamplerWrap wrap = SamplerWrap::Clamp;
+    SamplerMips mips = SamplerMips::None;
+
+    QJsonObject toJson() const;
+};
+
 struct ModePass
 {
     QByteArray name;
@@ -109,7 +160,8 @@ struct ModePass
     QShader fragment;
     BlockLayout block;        // the pass's own block (not valid: the pass declares none)
     bool conventions = false; // the pass declares SrpssConventions
-    bool uv = false;          // the pass reads v_uv
+    PassUv uv = PassUv::None; // the quad uv the pass reads at location 0
+    QList<PassSampler> samplers;
 };
 
 struct ModeProgram
@@ -117,13 +169,19 @@ struct ModeProgram
     QList<ModePass> passes;
     quint64 generation = 0; // a new program rebuilds the pipelines at the next record
 
-    // The program from its declaration ({"passes": [{"name", "blend"}, ...]}) and one fragment pack per pass, in order;
-    // false with `error` when a pack does not load or a pass declares what a pass may not (the header).
+    // The program from its declaration ({"passes": [{"name", "blend", "samplers"?: [{"name", "texture", "filter",
+    // "wrap", "mips"}, ...]}, ...]}) and one fragment pack per pass, in order; false with `error` when a pack does not
+    // load or a pass declares what a pass may not (the header), or a sampler is unbound, unknown or doubly bound.
     static bool fromJson(const QByteArray &json, const QList<QByteArray> &packs, ModeProgram *out, QString *error);
     bool valid() const { return !passes.isEmpty(); }
     QJsonObject toJson() const;
     bool declares(const QByteArray &member) const;
     bool needsCard() const;
+    // The item's textures the passes sample (each once, in first-use order).
+    QList<QByteArray> sampledTextures() const;
+    // Why a texture of these mips cannot be sampled by this program (empty: it can): a sampler that reads mips of a
+    // texture set without them.
+    QString textureFits(const QByteArray &texture, bool mips) const;
 
     // The one rule (the header) for what is known: `schema` and `settings` may be null (not given yet). False with the
     // reason (unknown, unfilled, a field that does not fit, a name with two owners). `ready`: everything a draw needs
@@ -146,6 +204,42 @@ bool modeBlocks(const RuntimeSchema &schema, const ModeProgram &program, const Q
 
 int modeContentObjects();
 
+// N4.a: a texture's pixels as the core holds them until the render thread uploads them (RGBA8, rows top first, tight).
+// Counted while alive (the copies the core holds).
+struct TextureImage
+{
+    const QByteArray pixels;
+    const QSize size;
+    const bool mips = false;
+
+    TextureImage(const QByteArray &pixels, const QSize &size, bool mips);
+    ~TextureImage();
+    TextureImage(const TextureImage &) = delete;
+    TextureImage &operator=(const TextureImage &) = delete;
+};
+
+// One named texture of an item, as its source holds it.
+struct ModeTexture
+{
+    QByteArray name;
+    quint64 generation = 0;              // a new image (process-wide, never reused)
+    QSize size;
+    bool mips = false;
+    QSharedPointer<TextureImage> image;  // the core's copy, until the render thread takes it for its upload
+};
+
+// The process's textures (lifecycle proofs and the destruction barrier's reading): the QRhiTextures the contents hold,
+// their bytes (every level), the CPU copies the core holds, and the uploads done.
+struct ModeTextureCounts
+{
+    int textures = 0;
+    qint64 textureBytes = 0;
+    int images = 0;
+    qint64 imageBytes = 0;
+    qint64 uploads = 0;
+};
+ModeTextureCounts modeTextureCounts();
+
 // The stream, the schema, the program, the settings and the card a generic mode item draws: shared by the item (GUI
 // thread) and its node (render thread).
 class ModeSource final : public StreamSource
@@ -162,6 +256,11 @@ public:
     bool setProgram(const ModeProgram &program, const QJsonObject *settings, QString *error);
     bool setSettings(const QJsonObject &settings, QString *error);
     void setCard(const ModeCard &card);
+    // N4.a, GUI thread: a texture's image (RGBA8, `size`, rows top first, tight; `mips`: generated on the GPU), replacing
+    // the one of that name; refused for a bad name, size or byte count, more than kMaxModeTextures, or mips the current
+    // program samples that this texture lacks. removeTexture: false when there is no such texture.
+    bool setTexture(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips, QString *error);
+    bool removeTexture(const QByteArray &name, QString *error);
 
     // Render thread, at the item's sync. True when the surface must record.
     bool sync();
@@ -174,11 +273,17 @@ public:
     bool drawnReady() const { return m_drawnReady; }
     QString drawnWaiting() const { return m_drawnWaiting; }
     quint64 drawnGeneration() const { return m_takenGeneration; }
+    const QList<ModeTexture> &drawnTextures() const { return m_drawnTextures; }
+    // The image of the drawn texture `name` (its core copy moves to the caller; null when it was taken before).
+    QSharedPointer<TextureImage> takeTextureImage(const QByteArray &name);
+    // The content's texture report (render thread writes, any thread reads).
+    void noteTextures(qint64 uploads, int resident, const QStringList &lost);
 
     static int liveSources();
 
 protected:
     bool acceptStream(const PacketReaderConfig &config, QString *error) override;
+    void streamUnbound() override;
     void stateInto(QJsonObject &o) const override;
 
 private:
@@ -193,7 +298,8 @@ private:
     QList<BlockValues> m_packedSettings;
     bool m_ready = false;
     ModeCard m_card;
-    quint64 m_generation = 0;                   // a stream, program, settings or card change
+    QList<ModeTexture> m_textures;              // N4.a: the item's textures, their images until taken
+    quint64 m_generation = 0;                   // a stream, program, settings, card or texture change
 
     // Render thread.
     quint64 m_takenGeneration = 0;
@@ -203,6 +309,12 @@ private:
     ModeCard m_drawnCard;
     bool m_drawnReady = false;
     QString m_drawnWaiting;
+    QList<ModeTexture> m_drawnTextures;
+
+    mutable QMutex m_textureReportMutex;        // guards the texture report
+    qint64 m_textureUploads = 0;
+    int m_texturesResident = 0;
+    QStringList m_texturesLost;
 };
 
 class ModeContent final : public SurfaceContent
@@ -218,13 +330,38 @@ public:
 
 private:
     struct Resources;
-    bool ensure(QRhi *rhi, ColorTarget &target, QString *error);
-    bool build(QRhi *rhi, ColorTarget &target, QString *error);
+    // N4.a: one texture the content owns (render thread).
+    struct GpuTexture
+    {
+        QByteArray name;
+        quint64 generation = 0;              // the image uploaded into it
+        std::unique_ptr<QRhiTexture> texture;
+        qint64 bytes = 0;
+    };
+
+    bool ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
+    bool build(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
     void pack(const ColorTarget &target);
+    void releasePipelines();
+    // The textures: a removed one released, a lost one named (keepsTarget, before anything is recorded).
+    void retireTextures();
+    // Each drawn texture with a new image created or recreated and uploaded into `updates` (record).
+    void uploadTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates);
+    // Every texture the drawn program samples is uploaded at its drawn generation.
+    bool texturesReady() const;
+    GpuTexture *gpuTexture(const QByteArray &name);
+    const GpuTexture *gpuTexture(const QByteArray &name) const;
+    void releaseTexture(GpuTexture &texture);
+    void reportTextures();
 
     std::shared_ptr<ModeSource> m_source;
     std::unique_ptr<Resources> m_res;
     ContentLatch m_latch;
+    GpuTexture m_textures[kMaxModeTextures];
+    quint64 m_textureObjects = 0;            // a texture object created or released: the bindings are rebuilt
+    qint64 m_textureUploads = 0;
+    QStringList m_textureFailures;           // "<name> could not be created ...", until a new image of that name
+    QStringList m_texturesLost;
     // One block per pass, kept and overwritten per frame (audit L4); rebuilt from the settings when they change.
     QList<BlockValues> m_blocks;
     quint64 m_blocksGeneration = 0;

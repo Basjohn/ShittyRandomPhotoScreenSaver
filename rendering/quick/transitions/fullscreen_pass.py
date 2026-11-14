@@ -73,14 +73,20 @@ class FullscreenPassRenderer:
         """The transition's own block values (beyond the common ones) for this frame."""
         return {}
 
-    def render(self, frame: QuickTransitionRenderFrame) -> None:
-        if not self._program:
-            self._initialize()
+    def block_values(self, frame: QuickTransitionRenderFrame) -> dict[str, object]:
+        """Every value of the pass block for this frame, by name: the common ones and the transition's own (validated
+        by ``resolve`` first). The one owner of the values: ``render`` packs them, and the native core's fullscreen pass
+        (N4.a, ``native/core/python/fullscreen_pass_check.py``) fills its block from the same dict."""
         resolved = self.resolve(frame)
         values = {"uMatrix": frame.matrix_values, "uItemSize": frame.logical_size,
                   "u_progress": float(frame.sample.eased_progress)}
         values.update(self.values(resolved, frame))
-        data = pack_block(self._layout, values)
+        return values
+
+    def render(self, frame: QuickTransitionRenderFrame) -> None:
+        if not self._program:
+            self._initialize()
+        data = pack_block(self._layout, self.block_values(frame))
         gl.glUseProgram(self._program)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_2D, frame.source_texture_id)

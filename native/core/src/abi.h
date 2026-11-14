@@ -37,6 +37,10 @@
 // framebuffer, L1); the composite's fade_ms option (M1) and its shown/shown_opacity/fading state; a Spectrum call on an
 // item that draws a mode is refused (L3), composite_spectrum_present included; the states' refused_frames,
 // last_refusal, content_failures (M2, M4).
+// 11 (N4.a, the fullscreen pass and image sampling): a pass's samplers bound by name in its program's declaration
+// (samplers: [{name, texture, filter, wrap, mips}]); its location-0 input named v_uv or vUv (mode_program_layout's "uv"
+// is that name); composite_mode_texture and composite_mode_texture_remove; composite_live's mode_texture counts;
+// composite_mode_state's textures, texture_uploads, textures_resident, textures_lost.
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 10
+#define SRPSS_NATIVE_CORE_ABI 11

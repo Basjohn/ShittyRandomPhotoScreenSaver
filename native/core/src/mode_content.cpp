@@ -11,6 +11,7 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonParseError>
 #include <QtGui/QColor>
+#include <QtGui/QVector3D>
 
 #include <cmath>
 #include <cstring>
@@ -46,9 +47,88 @@ namespace {
 
 QAtomicInteger<int> g_liveSources { 0 };
 QAtomicInteger<int> g_liveContentObjects { 0 };
+// N4.a: the textures (modeTextureCounts).
+QAtomicInteger<int> g_liveTextures { 0 };
+QAtomicInteger<qint64> g_textureBytes { 0 };
+QAtomicInteger<int> g_liveImages { 0 };
+QAtomicInteger<qint64> g_imageBytes { 0 };
+QAtomicInteger<qint64> g_textureUploads { 0 };
+QAtomicInteger<quint64> g_textureGenerations { 0 };
 
+// The core's triangle over the whole target, in clip space (as N2.9 drew it).
 constexpr float kFullTriangle[6] = { -1.0f, -1.0f, 3.0f, -1.0f, -1.0f, 3.0f };
+// Each vertex of the triangle: its clip position, the Visualizer quad's uv (v_uv: y down from the target's top row) and
+// the item quad's (vUv: y up), so a pass reads the one it names (mode_content.h) through its own vertex input layout.
+constexpr int kVertexFloats = 6;
+constexpr int kTriangleFloats = 3 * kVertexFloats;
+constexpr quint32 kUvDownOffset = 2 * sizeof(float);
+constexpr quint32 kUvUpOffset = 4 * sizeof(float);
 constexpr const char kConventionsBlock[] = "SrpssConventions";
+constexpr const char kUvDownName[] = "v_uv"; // rendering/quick/visualizer/render_contract.py
+constexpr const char kUvUpName[] = "vUv";    // rendering/gl_programs/item_quad.py
+
+// The triangle's vertices on this backend. The target's top row (texel row 0: conventions.h, F1) lies at the clip y the
+// target correction maps the OpenGL-form top (y = +1) to (-1 on OpenGL and Vulkan, +1 on D3D and Metal), so each
+// vertex's uv is the exact value the Python quads interpolate there: x = 0.5 x + 0.5; v_uv's y grows from 0 at the top
+// row, vUv's y = 1 - v_uv's. On OpenGL and Vulkan v_uv is N2.9's position * 0.5 + 0.5, value for value.
+void fullTriangle(QRhi *rhi, float *out)
+{
+    const float topClipY = targetCorrection(rhi).map(QVector3D(0.0f, 1.0f, 0.0f)).y();
+    for (int i = 0; i < 3; ++i) {
+        const float x = kFullTriangle[2 * i];
+        const float y = kFullTriangle[2 * i + 1];
+        const float u = 0.5f * x + 0.5f;
+        const float down = topClipY > 0.0f ? 0.5f - 0.5f * y : 0.5f + 0.5f * y;
+        float *v = out + i * kVertexFloats;
+        v[0] = x;
+        v[1] = y;
+        v[2] = u;
+        v[3] = down;
+        v[4] = u;
+        v[5] = 1.0f - down;
+    }
+}
+
+const char *const kFilterNames[] = { "nearest", "linear" };
+const char *const kWrapNames[] = { "clamp", "repeat", "mirror" };
+const char *const kMipsNames[] = { "none", "nearest", "linear" };
+
+int nameIndex(const QString &text, const char *const *names, int count)
+{
+    for (int i = 0; i < count; ++i) {
+        if (text == QLatin1String(names[i]))
+            return i;
+    }
+    return -1;
+}
+
+// A shader's sampler name (GLSL identifier) and an item's texture name (lower-case identifier).
+bool shaderIdentifier(const QByteArray &name)
+{
+    if (name.isEmpty() || name.size() > 64 || (name.at(0) >= '0' && name.at(0) <= '9'))
+        return false;
+    for (const char c : name) {
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'))
+            return false;
+    }
+    return true;
+}
+
+// Every level's bytes of an RGBA8 texture (the base level only without mips).
+qint64 textureBytes(const QSize &size, bool mips)
+{
+    qint64 bytes = 0;
+    int w = size.width();
+    int h = size.height();
+    for (;;) {
+        bytes += qint64(w) * qint64(h) * 4;
+        if (!mips || (w == 1 && h == 1))
+            break;
+        w = qMax(1, w / 2);
+        h = qMax(1, h / 2);
+    }
+    return bytes;
+}
 
 QShader shaderFrom(const unsigned char *data, unsigned int size)
 {
@@ -131,8 +211,50 @@ QJsonArray numbersJson(const double *values, int count)
     return array;
 }
 
+// A pass's declared samplers ({"name", "texture", "filter", "wrap", "mips"} each, mode_content.h), before the pack is
+// read: a sampler named twice is doubly bound.
+bool parseSamplers(const QJsonValue &value, ModePass &pass, QString *error)
+{
+    const QString passLabel = QString::fromLatin1(pass.name);
+    if (value.isUndefined())
+        return true;
+    if (!value.isArray() || value.toArray().size() > kMaxPassSamplers) {
+        *error = QStringLiteral("pass '%1': samplers is a list of at most %2 {\"name\", \"texture\", \"filter\", "
+                                "\"wrap\", \"mips\"}").arg(passLabel).arg(kMaxPassSamplers);
+        return false;
+    }
+    for (const QJsonValue &entry : value.toArray()) {
+        const QJsonObject o = entry.toObject();
+        PassSampler s;
+        s.name = o.value(QStringLiteral("name")).toString().toLatin1();
+        s.texture = o.value(QStringLiteral("texture")).toString().toLatin1();
+        const int filter = nameIndex(o.value(QStringLiteral("filter")).toString(), kFilterNames, 2);
+        const int wrap = nameIndex(o.value(QStringLiteral("wrap")).toString(), kWrapNames, 3);
+        const int mips = nameIndex(o.value(QStringLiteral("mips")).toString(), kMipsNames, 3);
+        if (!entry.isObject() || o.size() != 5 || !shaderIdentifier(s.name) || !passName(s.texture) || filter < 0
+            || wrap < 0 || mips < 0) {
+            *error = QStringLiteral("pass '%1': a sampler is {\"name\": the shader's sampler2D, \"texture\": an item "
+                                    "texture's name (a-z, 0-9, _), \"filter\": nearest or linear, \"wrap\": clamp, "
+                                    "repeat or mirror, \"mips\": none, nearest or linear}").arg(passLabel);
+            return false;
+        }
+        s.filter = SamplerFilter(filter);
+        s.wrap = SamplerWrap(wrap);
+        s.mips = SamplerMips(mips);
+        for (const PassSampler &earlier : pass.samplers) {
+            if (earlier.name == s.name) {
+                *error = QStringLiteral("pass '%1': the sampler '%2' is bound twice (doubly bound)")
+                             .arg(passLabel, QString::fromLatin1(s.name));
+                return false;
+            }
+        }
+        pass.samplers.append(s);
+    }
+    return true;
+}
+
 // What a pass may declare (mode_content.h): one block of its own at any binding but 17, the conventions block at 17,
-// v_uv, one vec4 output.
+// a vec2 at location 0 named v_uv or vUv, sampler2Ds each bound by name, one vec4 output.
 bool checkPass(ModePass &pass, QString *error)
 {
     const QString name = QString::fromLatin1(pass.name);
@@ -142,6 +264,7 @@ bool checkPass(ModePass &pass, QString *error)
     }
     const QShaderDescription d = pass.fragment.description();
     QByteArray own;
+    int ownBinding = -1;
     for (const QShaderDescription::UniformBlock &block : d.uniformBlocks()) {
         if (block.blockName == kConventionsBlock) {
             if (block.binding != kConventionsBinding) {
@@ -164,22 +287,73 @@ bool checkPass(ModePass &pass, QString *error)
             return false;
         }
         own = block.blockName;
+        ownBinding = block.binding;
     }
-    if (!d.combinedImageSamplers().isEmpty() || !d.separateImages().isEmpty() || !d.separateSamplers().isEmpty()
-        || !d.storageBlocks().isEmpty() || !d.storageImages().isEmpty() || !d.pushConstantBlocks().isEmpty()) {
-        *error = QStringLiteral("pass '%1' declares a texture, sampler, storage or push constant: that is a "
-                                "primitive with its own C++, not pass data").arg(name);
+    if (!d.separateImages().isEmpty() || !d.separateSamplers().isEmpty() || !d.storageBlocks().isEmpty()
+        || !d.storageImages().isEmpty() || !d.pushConstantBlocks().isEmpty()) {
+        *error = QStringLiteral("pass '%1' declares a separate texture or sampler, storage or a push constant: that is "
+                                "a primitive with its own C++, not pass data").arg(name);
         return false;
     }
-    const QList<QShaderDescription::InOutVariable> inputs = d.inputVariables();
-    for (const QShaderDescription::InOutVariable &input : inputs) {
-        if (input.location != 0 || input.type != QShaderDescription::Vec2) {
-            *error = QStringLiteral("pass '%1' reads the input '%2': the core's triangle gives v_uv (vec2, location 0) "
-                                    "only").arg(name, QString::fromLatin1(input.name));
+    // The samplers (N4.a): every sampler2D the pack declares bound by name to an item texture, every binding named
+    // in the pack, each binding once and clear of the blocks'.
+    const QList<QShaderDescription::InOutVariable> images = d.combinedImageSamplers();
+    for (PassSampler &s : pass.samplers) {
+        const QShaderDescription::InOutVariable *image = nullptr;
+        for (const QShaderDescription::InOutVariable &candidate : images) {
+            if (candidate.name == s.name)
+                image = &candidate;
+        }
+        if (!image) {
+            *error = QStringLiteral("unknown: pass '%1' binds the sampler '%2', which its shader does not declare")
+                         .arg(name, QString::fromLatin1(s.name));
+            return false;
+        }
+        if (image->type != QShaderDescription::Sampler2D) {
+            *error = QStringLiteral("pass '%1': the sampler '%2' is not a sampler2D (the sampling primitive reads 2D "
+                                    "textures)").arg(name, QString::fromLatin1(s.name));
+            return false;
+        }
+        if (image->binding < 0 || image->binding == kConventionsBinding || image->binding == ownBinding) {
+            *error = QStringLiteral("pass '%1': the sampler '%2' is at binding %3 (17 is the conventions block's; %4 "
+                                    "its own block's)").arg(name, QString::fromLatin1(s.name)).arg(image->binding)
+                         .arg(ownBinding);
+            return false;
+        }
+        for (const PassSampler &other : pass.samplers) {
+            if (&other != &s && other.binding == image->binding) {
+                *error = QStringLiteral("pass '%1': the samplers '%2' and '%3' share binding %4 (doubly bound)")
+                             .arg(name, QString::fromLatin1(other.name), QString::fromLatin1(s.name))
+                             .arg(image->binding);
+                return false;
+            }
+        }
+        s.binding = image->binding;
+    }
+    for (const QShaderDescription::InOutVariable &image : images) {
+        bool bound = false;
+        for (const PassSampler &s : pass.samplers)
+            bound = bound || s.name == image.name;
+        if (!bound) {
+            *error = QStringLiteral("unbound: pass '%1' samples '%2' (binding %3), which its program binds to no "
+                                    "texture: a sampler binds by name to an item's texture (the sampling primitive)")
+                         .arg(name, QString::fromLatin1(image.name)).arg(image.binding);
             return false;
         }
     }
-    pass.uv = !inputs.isEmpty();
+    const QList<QShaderDescription::InOutVariable> inputs = d.inputVariables();
+    pass.uv = PassUv::None;
+    for (const QShaderDescription::InOutVariable &input : inputs) {
+        const bool down = input.name == kUvDownName;
+        const bool up = input.name == kUvUpName;
+        if (input.location != 0 || input.type != QShaderDescription::Vec2 || (!down && !up)) {
+            *error = QStringLiteral("pass '%1' reads the input '%2': the core's triangle gives a vec2 at location 0 "
+                                    "named v_uv (the Visualizer quad's uv, y down) or vUv (the item quad's, y up)")
+                         .arg(name, QString::fromLatin1(input.name));
+            return false;
+        }
+        pass.uv = up ? PassUv::Up : PassUv::Down;
+    }
     const QList<QShaderDescription::InOutVariable> outputs = d.outputVariables();
     if (outputs.size() != 1 || outputs.first().location != 0 || outputs.first().type != QShaderDescription::Vec4) {
         *error = QStringLiteral("pass '%1' writes one vec4 at location 0 (the surface's colour)").arg(name);
@@ -349,6 +523,49 @@ QString passBlendName(PassBlend blend)
     return QLatin1String(names[qBound(0, int(blend), 3)]);
 }
 
+QString passUvName(PassUv uv)
+{
+    return uv == PassUv::Down ? QLatin1String(kUvDownName) : uv == PassUv::Up ? QLatin1String(kUvUpName) : QString();
+}
+
+QJsonObject PassSampler::toJson() const
+{
+    QJsonObject o;
+    o.insert(QStringLiteral("name"), QString::fromLatin1(name));
+    o.insert(QStringLiteral("texture"), QString::fromLatin1(texture));
+    o.insert(QStringLiteral("binding"), binding);
+    o.insert(QStringLiteral("filter"), QLatin1String(kFilterNames[int(filter)]));
+    o.insert(QStringLiteral("wrap"), QLatin1String(kWrapNames[int(wrap)]));
+    o.insert(QStringLiteral("mips"), QLatin1String(kMipsNames[int(mips)]));
+    return o;
+}
+
+// ------------------------------------------------------------------------------------------------- the textures (N4.a)
+
+TextureImage::TextureImage(const QByteArray &pixelsIn, const QSize &sizeIn, bool mipsIn)
+    : pixels(pixelsIn), size(sizeIn), mips(mipsIn)
+{
+    g_liveImages.fetchAndAddRelaxed(1);
+    g_imageBytes.fetchAndAddRelaxed(qint64(pixels.size()));
+}
+
+TextureImage::~TextureImage()
+{
+    g_liveImages.fetchAndAddRelaxed(-1);
+    g_imageBytes.fetchAndAddRelaxed(-qint64(pixels.size()));
+}
+
+ModeTextureCounts modeTextureCounts()
+{
+    ModeTextureCounts c;
+    c.textures = g_liveTextures.loadRelaxed();
+    c.textureBytes = g_textureBytes.loadRelaxed();
+    c.images = g_liveImages.loadRelaxed();
+    c.imageBytes = g_imageBytes.loadRelaxed();
+    c.uploads = g_textureUploads.loadRelaxed();
+    return c;
+}
+
 // ------------------------------------------------------------------------------------------------- the program
 
 bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &packs, ModeProgram *out, QString *error)
@@ -372,12 +589,15 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
         const QJsonObject o = declared.at(i).toObject();
         ModePass pass;
         pass.name = o.value(QStringLiteral("name")).toString().toLatin1();
-        if (o.size() != 2 || !passName(pass.name)
+        const bool withSamplers = o.contains(QStringLiteral("samplers"));
+        if (o.size() != (withSamplers ? 3 : 2) || !passName(pass.name)
             || !parsePassBlend(o.value(QStringLiteral("blend")).toString(), &pass.blend)) {
             *error = QStringLiteral("pass %1 is {\"name\": an identifier, \"blend\": replace, alpha, premultiplied or "
-                                    "add}").arg(i);
+                                    "add, \"samplers\" (optional): [...]}").arg(i);
             return false;
         }
+        if (!parseSamplers(o.value(QStringLiteral("samplers")), pass, error))
+            return false;
         for (const ModePass &earlier : program.passes) {
             if (earlier.name == pass.name) {
                 *error = QStringLiteral("two passes are named '%1'").arg(QString::fromLatin1(pass.name));
@@ -410,11 +630,41 @@ QJsonObject ModeProgram::toJson() const
         p.insert(QStringLiteral("blend"), passBlendName(pass.blend));
         p.insert(QStringLiteral("block"), pass.block.valid() ? QJsonValue(pass.block.toJson()) : QJsonValue());
         p.insert(QStringLiteral("conventions"), pass.conventions);
-        p.insert(QStringLiteral("uv"), pass.uv);
+        p.insert(QStringLiteral("uv"), passUvName(pass.uv));
+        QJsonArray samplers;
+        for (const PassSampler &s : pass.samplers)
+            samplers.append(s.toJson());
+        p.insert(QStringLiteral("samplers"), samplers);
         list.append(p);
     }
     o.insert(QStringLiteral("passes"), list);
     return o;
+}
+
+QList<QByteArray> ModeProgram::sampledTextures() const
+{
+    QList<QByteArray> names;
+    for (const ModePass &pass : passes) {
+        for (const PassSampler &s : pass.samplers) {
+            if (!names.contains(s.texture))
+                names.append(s.texture);
+        }
+    }
+    return names;
+}
+
+QString ModeProgram::textureFits(const QByteArray &texture, bool mips) const
+{
+    for (const ModePass &pass : passes) {
+        for (const PassSampler &s : pass.samplers) {
+            if (s.texture == texture && s.mips != SamplerMips::None && !mips) {
+                return QStringLiteral("pass '%1': the sampler '%2' reads the mips of texture '%3', which is set without "
+                                      "them").arg(QString::fromLatin1(pass.name), QString::fromLatin1(s.name),
+                                                  QString::fromLatin1(texture));
+            }
+        }
+    }
+    return QString();
 }
 
 bool ModeProgram::declares(const QByteArray &member) const
@@ -701,9 +951,25 @@ bool ModeSource::acceptStream(const PacketReaderConfig &config, QString *error)
     return true;
 }
 
+void ModeSource::streamUnbound()
+{
+    // Under m_mutex. With no stream there is no schema for a program to meet: a program (another transition's, say)
+    // given before the next bind is checked against that bind's schema, not the stream that went (N4.a).
+    m_schema.reset();
+    m_ready = false;
+    ++m_generation;
+}
+
 bool ModeSource::setProgram(const ModeProgram &program, const QJsonObject *settings, QString *error)
 {
     QMutexLocker lock(&m_mutex);
+    for (const ModeTexture &texture : m_textures) {
+        const QString fits = program.textureFits(texture.name, texture.mips);
+        if (!fits.isEmpty()) {
+            *error = QStringLiteral("the program does not take the item's textures: %1").arg(fits);
+            return false;
+        }
+    }
     const QJsonObject *kept = settings ? settings : (m_hasSettings ? &m_settings : nullptr);
     QList<BlockValues> packed;
     bool ready = false;
@@ -754,6 +1020,85 @@ void ModeSource::setCard(const ModeCard &card)
     ++m_generation;
 }
 
+bool ModeSource::setTexture(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips,
+                            QString *error)
+{
+    if (!passName(name)) {
+        *error = QStringLiteral("a texture's name is an identifier (a-z, 0-9, _; at most 64)");
+        return false;
+    }
+    if (size.width() < 1 || size.height() < 1 || size.width() > kMaxTextureSide || size.height() > kMaxTextureSide) {
+        *error = QStringLiteral("texture '%1': its size is 1 to %2 pixels a side").arg(QString::fromLatin1(name))
+                     .arg(kMaxTextureSide);
+        return false;
+    }
+    if (qint64(pixels.size()) != qint64(size.width()) * qint64(size.height()) * 4) {
+        *error = QStringLiteral("texture '%1': %2 bytes are not %3 x %4 RGBA8 pixels, rows top first and tight")
+                     .arg(QString::fromLatin1(name)).arg(pixels.size()).arg(size.width()).arg(size.height());
+        return false;
+    }
+    QMutexLocker lock(&m_mutex);
+    const QString fits = m_program.textureFits(name, mips);
+    if (!fits.isEmpty()) {
+        *error = fits;
+        return false;
+    }
+    ModeTexture *slot = nullptr;
+    for (ModeTexture &texture : m_textures) {
+        if (texture.name == name)
+            slot = &texture;
+    }
+    if (!slot) {
+        if (m_textures.size() >= kMaxModeTextures) {
+            *error = QStringLiteral("an item holds at most %1 textures").arg(kMaxModeTextures);
+            return false;
+        }
+        m_textures.append(ModeTexture());
+        slot = &m_textures.last();
+        slot->name = name;
+    }
+    slot->generation = g_textureGenerations.fetchAndAddRelaxed(1) + 1;
+    slot->size = size;
+    slot->mips = mips;
+    slot->image = QSharedPointer<TextureImage>::create(pixels, size, mips); // the one it replaces (if not taken) goes
+    ++m_generation;
+    return true;
+}
+
+bool ModeSource::removeTexture(const QByteArray &name, QString *error)
+{
+    QMutexLocker lock(&m_mutex);
+    for (int i = 0; i < m_textures.size(); ++i) {
+        if (m_textures.at(i).name == name) {
+            m_textures.removeAt(i);           // its image (if not taken) goes; its QRhiTexture at the next record
+            ++m_generation;
+            return true;
+        }
+    }
+    *error = QStringLiteral("the item holds no texture '%1'").arg(QString::fromLatin1(name));
+    return false;
+}
+
+QSharedPointer<TextureImage> ModeSource::takeTextureImage(const QByteArray &name)
+{
+    for (ModeTexture &texture : m_drawnTextures) {
+        if (texture.name == name) {
+            QSharedPointer<TextureImage> image = texture.image;
+            texture.image.reset();
+            return image;
+        }
+    }
+    return QSharedPointer<TextureImage>();
+}
+
+void ModeSource::noteTextures(qint64 uploads, int resident, const QStringList &lost)
+{
+    QMutexLocker lock(&m_textureReportMutex);
+    m_textureUploads = uploads;
+    m_texturesResident = resident;
+    m_texturesLost = lost;
+}
+
 bool ModeSource::sync()
 {
     bool changed = false;
@@ -766,12 +1111,35 @@ bool ModeSource::sync()
             m_drawnSchema = m_schema;
             m_drawnCard = m_card;
             m_drawnReady = m_ready;
+            // The textures (N4.a): each image moves to the render thread once (the GUI side keeps none); an image of
+            // the same generation taken at an earlier sync and not uploaded yet stays.
+            QList<ModeTexture> drawn;
+            for (ModeTexture &texture : m_textures) {
+                ModeTexture taken = texture;
+                if (!taken.image) {
+                    for (const ModeTexture &before : m_drawnTextures) {
+                        if (before.name == texture.name && before.generation == texture.generation)
+                            taken.image = before.image;
+                    }
+                }
+                texture.image.reset();
+                drawn.append(taken);
+            }
+            m_drawnTextures = drawn;
+            QString missing;
+            for (const QByteArray &name : m_program.sampledTextures()) {
+                bool held = false;
+                for (const ModeTexture &texture : m_textures)
+                    held = held || texture.name == name;
+                if (!held && missing.isEmpty())
+                    missing = QStringLiteral("no texture '%1'").arg(QString::fromLatin1(name));
+            }
             m_drawnWaiting = !m_program.valid()     ? QStringLiteral("no program")
                 : !m_schema                         ? QStringLiteral("no stream")
                 : !m_ready                          ? QStringLiteral("no settings for this program")
                 : (m_program.needsCard() && !m_card.valid) ? QStringLiteral("no card")
-                                                           : QString();
-            changed = true;           // a stream, a program, settings or the card: recorded once, nothing at rest
+                                                           : missing;
+            changed = true;  // a stream, a program, settings, the card or a texture: recorded once, nothing at rest
         }
     }
     if (syncStream())
@@ -786,6 +1154,21 @@ void ModeSource::stateInto(QJsonObject &o) const
     o.insert(QStringLiteral("settings"), m_hasSettings ? QJsonValue(m_settings) : QJsonValue());
     o.insert(QStringLiteral("ready"), m_ready);
     o.insert(QStringLiteral("card"), m_card.toJson());
+    QJsonArray textures;
+    for (const ModeTexture &texture : m_textures) {
+        QJsonObject t;
+        t.insert(QStringLiteral("name"), QString::fromLatin1(texture.name));
+        t.insert(QStringLiteral("generation"), double(texture.generation));
+        t.insert(QStringLiteral("size"), QJsonArray { texture.size.width(), texture.size.height() });
+        t.insert(QStringLiteral("mips"), texture.mips);
+        t.insert(QStringLiteral("image_held"), !texture.image.isNull()); // not yet taken by the render thread
+        textures.append(t);
+    }
+    o.insert(QStringLiteral("textures"), textures);
+    QMutexLocker lock(&m_textureReportMutex);
+    o.insert(QStringLiteral("texture_uploads"), double(m_textureUploads));
+    o.insert(QStringLiteral("textures_resident"), m_texturesResident);
+    o.insert(QStringLiteral("textures_lost"), QJsonArray::fromStringList(m_texturesLost));
 }
 
 // ------------------------------------------------------------------------------------------------- the content
@@ -795,6 +1178,8 @@ struct ModeContent::Resources
     struct Pass
     {
         std::unique_ptr<QRhiBuffer> block;    // the pass's own block (null: it declares none)
+        std::unique_ptr<QRhiSampler> samplers[kMaxPassSamplers];
+        int samplerCount = 0;
         std::unique_ptr<QRhiShaderResourceBindings> bindings;
         std::unique_ptr<QRhiGraphicsPipeline> pipeline;
     };
@@ -807,10 +1192,36 @@ struct ModeContent::Resources
     std::unique_ptr<QRhiGraphicsPipeline> clearPipeline;
     Pass passes[kMaxModePasses];
     int passCount = 0;
+    float triangle[kTriangleFloats] = {};
     bool staticUploaded = false;
     int objects = 0;
-    quint64 generation = 0; // the program the pipelines were built from
+    quint64 generation = 0;     // the program the pipelines were built from
+    bool passesBuilt = false;   // false: the clear only (a sampled texture was not uploaded yet)
+    quint64 textureObjects = 0; // the texture objects the passes' bindings name
 };
+
+namespace {
+
+QRhiSampler::Filter rhiFilter(SamplerFilter filter)
+{
+    return filter == SamplerFilter::Nearest ? QRhiSampler::Nearest : QRhiSampler::Linear;
+}
+
+QRhiSampler::Filter rhiMipFilter(SamplerMips mips)
+{
+    return mips == SamplerMips::None ? QRhiSampler::None
+        : mips == SamplerMips::Nearest ? QRhiSampler::Nearest
+                                       : QRhiSampler::Linear;
+}
+
+QRhiSampler::AddressMode rhiWrap(SamplerWrap wrap)
+{
+    return wrap == SamplerWrap::Repeat ? QRhiSampler::Repeat
+        : wrap == SamplerWrap::Mirror  ? QRhiSampler::Mirror
+                                       : QRhiSampler::ClampToEdge;
+}
+
+} // namespace
 
 ModeContent::ModeContent(std::shared_ptr<ModeSource> source) : m_source(std::move(source)) {}
 
@@ -821,10 +1232,13 @@ ModeContent::~ModeContent()
 
 int ModeContent::liveResources() const
 {
-    return m_res ? m_res->objects : 0;
+    int textures = 0;
+    for (const GpuTexture &texture : m_textures)
+        textures += texture.texture ? 1 : 0;
+    return (m_res ? m_res->objects : 0) + textures;
 }
 
-void ModeContent::release()
+void ModeContent::releasePipelines()
 {
     m_drawnTexture = nullptr;
     if (!m_res)
@@ -834,6 +1248,8 @@ void ModeContent::release()
         Resources::Pass &p = m_res->passes[i];
         p.pipeline.reset();
         p.bindings.reset();
+        for (int s = p.samplerCount - 1; s >= 0; --s)
+            p.samplers[s].reset();
         p.block.reset();
     }
     m_res->clearPipeline.reset();
@@ -842,6 +1258,165 @@ void ModeContent::release()
     m_res->vertices.reset();
     m_res.reset();
 }
+
+void ModeContent::release()
+{
+    releasePipelines();                       // first: their bindings name the textures
+    for (GpuTexture &texture : m_textures) {
+        if (texture.texture)
+            releaseTexture(texture);
+    }
+    m_texturesLost.clear();
+    m_textureFailures.clear();
+}
+
+// ------------------------------------------------------------------------------------------------- the textures (N4.a)
+
+ModeContent::GpuTexture *ModeContent::gpuTexture(const QByteArray &name)
+{
+    for (GpuTexture &texture : m_textures) {
+        if (texture.texture && texture.name == name)
+            return &texture;
+    }
+    return nullptr;
+}
+
+const ModeContent::GpuTexture *ModeContent::gpuTexture(const QByteArray &name) const
+{
+    for (const GpuTexture &texture : m_textures) {
+        if (texture.texture && texture.name == name)
+            return &texture;
+    }
+    return nullptr;
+}
+
+void ModeContent::releaseTexture(GpuTexture &texture)
+{
+    g_liveTextures.fetchAndAddRelaxed(-1);
+    g_textureBytes.fetchAndAddRelaxed(-texture.bytes);
+    texture.texture.reset();                  // QRhi releases the native object after the frames in flight
+    texture.name.clear();
+    texture.generation = 0;
+    texture.bytes = 0;
+    ++m_textureObjects;
+}
+
+void ModeContent::retireTextures()
+{
+    const QList<ModeTexture> &drawn = m_source->drawnTextures();
+    // The retire path: a texture the item no longer holds goes now, on the render thread.
+    for (GpuTexture &texture : m_textures) {
+        if (!texture.texture)
+            continue;
+        bool held = false;
+        for (const ModeTexture &d : drawn)
+            held = held || d.name == texture.name;
+        if (!held)
+            releaseTexture(texture);
+    }
+    // Lost: a sampled texture whose image this content never uploaded and no longer has (a content made again after
+    // the upload, or a texture that could not be created). Its owner sends it again; nothing is drawn meanwhile.
+    QStringList lost;
+    for (const QByteArray &name : m_source->drawnProgram().sampledTextures()) {
+        for (const ModeTexture &d : drawn) {
+            if (d.name != name)
+                continue;
+            const GpuTexture *gpu = gpuTexture(name);
+            if ((!gpu || gpu->generation != d.generation) && !d.image)
+                lost.append(QString::fromLatin1(name));
+        }
+    }
+    lost.append(m_textureFailures);           // a creation failure (with its reason) stays until a new image
+    m_texturesLost = lost;
+}
+
+void ModeContent::uploadTextures(QRhi *rhi, QRhiResourceUpdateBatch *updates)
+{
+    for (const ModeTexture &drawn : m_source->drawnTextures()) {
+        GpuTexture *gpu = gpuTexture(drawn.name);
+        if (gpu && gpu->generation == drawn.generation)
+            continue;                         // uploaded: nothing again at rest
+        const QSharedPointer<TextureImage> image = m_source->takeTextureImage(drawn.name);
+        if (!image)
+            continue;                         // lost (retireTextures named it)
+        const QString label = QString::fromLatin1(drawn.name);
+        for (int i = m_textureFailures.size() - 1; i >= 0; --i) {
+            if (m_textureFailures.at(i).startsWith(label + QLatin1Char(' ')))
+                m_textureFailures.removeAt(i); // a new image re-arms a failed one
+        }
+        const QString failure = QStringLiteral("%1 could not be created at %2 x %3").arg(label)
+                                    .arg(image->size.width()).arg(image->size.height());
+        const QRhiTexture::Flags flags = image->mips ? (QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips)
+                                                     : QRhiTexture::Flags();
+        if (!gpu) {
+            for (GpuTexture &slot : m_textures) {
+                if (!slot.texture) {
+                    gpu = &slot;
+                    break;
+                }
+            }
+            if (!gpu)
+                continue;                     // never: an item holds at most kMaxModeTextures, removed ones go first
+            gpu->texture.reset(rhi->newTexture(QRhiTexture::RGBA8, image->size, 1, flags));
+            gpu->texture->setName(QByteArrayLiteral("srpss core mode texture ") + drawn.name);
+            if (!gpu->texture->create()) {
+                gpu->texture.reset();
+                m_textureFailures.append(failure);
+                continue;
+            }
+            gpu->name = drawn.name;
+            gpu->bytes = 0;
+            g_liveTextures.fetchAndAddRelaxed(1);
+            ++m_textureObjects;
+        } else if (gpu->texture->pixelSize() != image->size || gpu->texture->flags() != flags) {
+            // Another size or mips: the same object recreated, and the bindings that name it made again.
+            gpu->texture->setPixelSize(image->size);
+            gpu->texture->setFlags(flags);
+            ++m_textureObjects;
+            if (!gpu->texture->create()) {
+                releaseTexture(*gpu);
+                m_textureFailures.append(failure);
+                continue;
+            }
+        }
+        const qint64 bytes = textureBytes(image->size, image->mips);
+        g_textureBytes.fetchAndAddRelaxed(bytes - gpu->bytes);
+        gpu->bytes = bytes;
+        // The pixels are implicitly shared with the batch (no copy); the core's copy goes once the batch is done.
+        const QRhiTextureSubresourceUploadDescription level(image->pixels);
+        updates->uploadTexture(gpu->texture.get(), QRhiTextureUploadDescription(QRhiTextureUploadEntry(0, 0, level)));
+        if (image->mips)
+            updates->generateMips(gpu->texture.get());
+        gpu->generation = drawn.generation;
+        ++m_textureUploads;
+        g_textureUploads.fetchAndAddRelaxed(1);
+    }
+}
+
+bool ModeContent::texturesReady() const
+{
+    const QList<ModeTexture> &drawn = m_source->drawnTextures();
+    for (const QByteArray &name : m_source->drawnProgram().sampledTextures()) {
+        bool ready = false;
+        for (const ModeTexture &d : drawn) {
+            const GpuTexture *gpu = d.name == name ? gpuTexture(name) : nullptr;
+            ready = ready || (gpu && gpu->generation == d.generation);
+        }
+        if (!ready)
+            return false;
+    }
+    return true;
+}
+
+void ModeContent::reportTextures()
+{
+    int resident = 0;
+    for (const GpuTexture &texture : m_textures)
+        resident += texture.texture ? 1 : 0;
+    m_source->noteTextures(m_textureUploads, resident, m_texturesLost);
+}
+
+// ------------------------------------------------------------------------------------------------- the passes
 
 void ModeContent::pack(const ColorTarget &target)
 {
@@ -873,6 +1448,7 @@ void ModeContent::pack(const ColorTarget &target)
         p.insert(QStringLiteral("name"), QString::fromLatin1(program.passes.at(i).name));
         p.insert(QStringLiteral("blend"), passBlendName(program.passes.at(i).blend));
         p.insert(QStringLiteral("bytes"), int(m_blocks.at(i).bytes().size()));
+        p.insert(QStringLiteral("samplers"), int(program.passes.at(i).samplers.size()));
         passes.append(p);
     }
     m_facts.insert(QStringLiteral("passes"), passes);
@@ -882,6 +1458,8 @@ void ModeContent::pack(const ColorTarget &target)
 
 bool ModeContent::keepsTarget(QRhi *rhi, ColorTarget &target)
 {
+    retireTextures();                         // the retire path runs whatever is recorded next
+    reportTextures();
     const ModeProgram &program = m_source->drawnProgram();
     if (!m_res && !m_latch.mayBuild(rhi, target.renderPass.get(), program.generation, m_source->drawnGeneration()))
         return true;                          // latched (M2): nothing built or recorded again for the same inputs
@@ -894,36 +1472,38 @@ bool ModeContent::keepsTarget(QRhi *rhi, ColorTarget &target)
     return false;
 }
 
-bool ModeContent::ensure(QRhi *rhi, ColorTarget &target, QString *error)
+bool ModeContent::ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error)
 {
     const ModeProgram &program = m_source->drawnProgram();
-    if (m_res && (m_res->rhi != rhi || m_res->pass != target.renderPass.get() || m_res->generation != program.generation))
-        release();                            // a new program: its pipelines and buffers are rebuilt
+    if (m_res && (m_res->rhi != rhi || m_res->pass != target.renderPass.get() || m_res->generation != program.generation
+                  || m_res->passesBuilt != withPasses
+                  || (withPasses && m_res->textureObjects != m_textureObjects)))
+        releasePipelines(); // a new program, or a texture object made or gone: the pipelines and bindings again
     if (m_res)
         return true;
     if (!m_latch.mayBuild(rhi, target.renderPass.get(), program.generation, m_source->drawnGeneration())) {
         *error = m_latch.error();
         return false;
     }
-    if (build(rhi, target, error)) {
+    if (build(rhi, target, withPasses, error)) {
         m_latch.succeeded();
         return true;
     }
-    release();
+    releasePipelines();
     const qint64 failures = m_latch.failed(rhi, target.renderPass.get(), program.generation,
                                            m_source->drawnGeneration(), *error);
     m_source->noteFailure(*error, failures);
     return false;
 }
 
-bool ModeContent::build(QRhi *rhi, ColorTarget &target, QString *error)
+bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error)
 {
     const ModeProgram &program = m_source->drawnProgram();
     if (!program.valid()) {
         *error = QStringLiteral("the mode has no program");
         return false;
     }
-    const QShader vs = shaderFrom(mode_vert_qsb, mode_vert_qsb_size); // the full-target triangle with v_uv
+    const QShader vs = shaderFrom(mode_vert_qsb, mode_vert_qsb_size); // the full-target triangle with both quads' uv
     const QShader clear = shaderFrom(clear_frag_qsb, clear_frag_qsb_size);
     if (!vs.isValid() || !clear.isValid()) {
         *error = QStringLiteral("the core's triangle or clear shader does not load");
@@ -933,6 +1513,9 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, QString *error)
     res->rhi = rhi;
     res->pass = target.renderPass.get();
     res->generation = program.generation;
+    res->passesBuilt = withPasses;
+    res->textureObjects = m_textureObjects;
+    fullTriangle(rhi, res->triangle);
     int objects = 0;
     // Counted as each is created, so a failure part-way releases (and uncounts) exactly what exists.
     auto created = [&objects](bool ok) {
@@ -944,10 +1527,10 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, QString *error)
         g_liveContentObjects.fetchAndAddRelaxed(objects);
         m_res = std::move(res);
         if (!ok)
-            *error = QStringLiteral("the mode's buffers, bindings or pipelines could not be created");
+            *error = QStringLiteral("the mode's buffers, samplers, bindings or pipelines could not be created");
         return ok;
     };
-    res->vertices.reset(rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(kFullTriangle)));
+    res->vertices.reset(rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(res->triangle)));
     res->conventions.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(ConventionsBlock)));
     res->vertices->setName(QByteArrayLiteral("srpss core mode vertices"));
     res->conventions->setName(QByteArrayLiteral("srpss core mode conventions block"));
@@ -955,19 +1538,25 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, QString *error)
     res->clearBindings.reset(rhi->newShaderResourceBindings());
     res->clearBindings->setName(QByteArrayLiteral("srpss core mode clear bindings"));
     ok = ok && created(res->clearBindings->create());
-    QRhiVertexInputLayout input;
-    input.setBindings({ { quint32(2 * sizeof(float)) } });
-    input.setAttributes({ { 0, 0, QRhiVertexInputAttribute::Float2, 0 } });
+    // One vertex buffer; each pipeline reads the position and the uv its fragment names (v_uv, or vUv).
+    const auto layout = [](PassUv uv) {
+        QRhiVertexInputLayout input;
+        input.setBindings({ { quint32(kVertexFloats * sizeof(float)) } });
+        input.setAttributes({ { 0, 0, QRhiVertexInputAttribute::Float2, 0 },
+                              { 0, 1, QRhiVertexInputAttribute::Float2,
+                                uv == PassUv::Up ? kUvUpOffset : kUvDownOffset } });
+        return input;
+    };
     res->clearPipeline.reset(rhi->newGraphicsPipeline());
     res->clearPipeline->setName(QByteArrayLiteral("srpss core mode clear"));
     res->clearPipeline->setTargetBlends({ QRhiGraphicsPipeline::TargetBlend() });
     res->clearPipeline->setShaderStages({ { QRhiShaderStage::Vertex, vs }, { QRhiShaderStage::Fragment, clear } });
-    res->clearPipeline->setVertexInputLayout(input);
+    res->clearPipeline->setVertexInputLayout(layout(PassUv::Down));
     res->clearPipeline->setCullMode(QRhiGraphicsPipeline::None);
     res->clearPipeline->setShaderResourceBindings(res->clearBindings.get());
     res->clearPipeline->setRenderPassDescriptor(res->pass);
     ok = ok && created(res->clearPipeline->create());
-    res->passCount = int(program.passes.size());
+    res->passCount = withPasses ? int(program.passes.size()) : 0;
     for (int i = 0; ok && i < res->passCount; ++i) {
         const ModePass &pass = program.passes.at(i);
         Resources::Pass &p = res->passes[i];
@@ -986,6 +1575,25 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, QString *error)
                                                                      QRhiShaderResourceBinding::FragmentStage,
                                                                      res->conventions.get()));
         }
+        // The samplers (N4.a): each with its declared state, over the item's texture it names (texturesReady: every
+        // one exists at its drawn generation).
+        p.samplerCount = int(pass.samplers.size());
+        for (int s = 0; ok && s < p.samplerCount; ++s) {
+            const PassSampler &declared = pass.samplers.at(s);
+            GpuTexture *texture = gpuTexture(declared.texture);
+            if (!texture) {
+                ok = false;
+                break;
+            }
+            p.samplers[s].reset(rhi->newSampler(rhiFilter(declared.filter), rhiFilter(declared.filter),
+                                                rhiMipFilter(declared.mips), rhiWrap(declared.wrap),
+                                                rhiWrap(declared.wrap)));
+            p.samplers[s]->setName(label + QByteArrayLiteral(" sampler ") + declared.name);
+            ok = ok && created(p.samplers[s]->create());
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(declared.binding,
+                                                                      QRhiShaderResourceBinding::FragmentStage,
+                                                                      texture->texture.get(), p.samplers[s].get()));
+        }
         p.bindings.reset(rhi->newShaderResourceBindings());
         p.bindings->setName(label + QByteArrayLiteral(" bindings"));
         p.bindings->setBindings(bindings.cbegin(), bindings.cend());
@@ -994,7 +1602,7 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, QString *error)
         p.pipeline->setName(label);
         p.pipeline->setTargetBlends({ targetBlend(pass.blend) });
         p.pipeline->setShaderStages({ { QRhiShaderStage::Vertex, vs }, { QRhiShaderStage::Fragment, pass.fragment } });
-        p.pipeline->setVertexInputLayout(input);
+        p.pipeline->setVertexInputLayout(layout(pass.uv));
         p.pipeline->setCullMode(QRhiGraphicsPipeline::None);
         p.pipeline->setShaderResourceBindings(p.bindings.get());
         p.pipeline->setRenderPassDescriptor(res->pass);
@@ -1009,13 +1617,22 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
         *error = QStringLiteral("the mode's surface has no target");
         return false;
     }
-    if (!ensure(rhi, target, error))
-        return false;
-    const bool draw = m_draw; // packed by keepsTarget for this record
-    Resources &r = *m_res;
     QRhiResourceUpdateBatch *updates = rhi->nextResourceUpdateBatch();
+    uploadTextures(rhi, updates);             // N4.a: each new image once, before the passes that sample it
+    reportTextures();
+    const bool withPasses = texturesReady();
+    if (!ensure(rhi, target, withPasses, error)) {
+        cb->resourceUpdate(updates);          // the uploads stand (their images are taken): nothing is lost
+        return false;
+    }
+    const bool draw = m_draw && withPasses;   // packed by keepsTarget for this record
+    if (m_draw && !withPasses) {
+        m_reason = QStringLiteral("lost: %1 (the owner sends the image again)")
+                       .arg(m_texturesLost.join(QStringLiteral(", ")));
+    }
+    Resources &r = *m_res;
     if (!r.staticUploaded) {
-        updates->uploadStaticBuffer(r.vertices.get(), kFullTriangle);
+        updates->uploadStaticBuffer(r.vertices.get(), r.triangle);
         const ConventionsBlock conventions = targetConventions(rhi); // F1, F2: a target the core owns
         updates->updateDynamicBuffer(r.conventions.get(), 0, sizeof(ConventionsBlock), &conventions);
         r.staticUploaded = true;

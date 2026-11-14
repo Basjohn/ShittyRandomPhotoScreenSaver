@@ -72,6 +72,7 @@ void StreamSource::unbind()
     m_current = nullptr;
     m_mapping.clear();
     ++m_retired;
+    streamUnbound();
 }
 
 void StreamSource::retireCurrent()

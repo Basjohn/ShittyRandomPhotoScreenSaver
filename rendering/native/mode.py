@@ -13,12 +13,20 @@ C++ and no module build; the Python renderer and the core draw the same shader f
 - its **settings** are every Settings- and mode-derived value, resolved here from the spec, by name; its **card**
   (:func:`mode_card`) is the item as shown.
 
-The product 2D shader's shape: a pass declares one std140 block of its own (any name, any binding but 17), optionally
-the conventions block and ``in vec2 v_uv``. One rule fills the block by member name from exactly one of three sources:
+The product fullscreen shaders' shape: a pass declares one std140 block of its own (any name, any binding but 17),
+optionally the conventions block, a vec2 at location 0 named ``v_uv`` (the Visualizer quad's uv, y down) or ``vUv``
+(the item quad's, y up; the fullscreen transitions), and ``sampler2D`` s, each bound by name to one of the item's
+textures (:class:`PassSampler`, N4.a). One rule fills the block by member name from exactly one of three sources:
 the core's conventions (``MODE_CORE_MEMBERS``: what the Python renderers compute per frame from the card and the
 target), the settings, and the record's fields. The core refuses an unknown name (a setting or a field no pass
-declares), a name with two owners (a setting or field naming a core member, a setting naming a field) and an unfilled
-member, each with its reason. A shader, spec or simulation change is a new pack, new settings or a new record: never C++.
+declares), a name with two owners (a setting or field naming a core member, a setting naming a field), an unfilled
+member, and an unbound, unknown or doubly bound sampler, each with its reason. A shader, spec or simulation change is a
+new pack, new settings or a new record: never C++.
+
+The textures (N4.a, :meth:`NativeMode.texture`): pixels Python holds (RGBA8, rows top first, tight) are copied once
+into the core, uploaded on the render thread at the next record (mips generated on the GPU when asked) and never again
+at rest; a removed texture is released on the render thread. A texture whose node was made again is reported in
+``state()["textures_lost"]``: its owner sends it again.
 """
 from __future__ import annotations
 
@@ -88,13 +96,42 @@ def mode_card(presentation: Any, geometry: Any, *, window_size: tuple[float, flo
     return values
 
 
+#: A sampler's state (``PassSampler`` in ``mode_content.h``): its filter, its wrap and its mip filter.
+SAMPLER_FILTERS = ("nearest", "linear")
+SAMPLER_WRAPS = ("clamp", "repeat", "mirror")
+SAMPLER_MIPS = ("none", "nearest", "linear")
+
+
+@dataclass(frozen=True)
+class PassSampler:
+    """One ``sampler2D`` of a pass (by its name in the shader) bound to one of the item's textures (by its name), with
+    its sampler state declared beside it (N4.a)."""
+
+    name: str
+    texture: str
+    filter: str = "linear"
+    wrap: str = "clamp"
+    mips: str = "none"
+
+    def __post_init__(self) -> None:
+        for value, allowed, what in ((self.filter, SAMPLER_FILTERS, "filter"), (self.wrap, SAMPLER_WRAPS, "wrap"),
+                                     (self.mips, SAMPLER_MIPS, "mips")):
+            if value not in allowed:
+                raise ValueError(f"unknown {what} {value!r} (the {what} values are {', '.join(allowed)})")
+
+    def declaration(self) -> dict:
+        return {"name": self.name, "texture": self.texture, "filter": self.filter, "wrap": self.wrap,
+                "mips": self.mips}
+
+
 @dataclass(frozen=True)
 class ModePass:
-    """One full-card pass: its name, its fragment pack (bytes of a ``.qsb``) and its blend."""
+    """One full-card pass: its name, its fragment pack (bytes of a ``.qsb``), its blend and its samplers."""
 
     name: str
     pack: bytes
     blend: str = "alpha"
+    samplers: tuple[PassSampler, ...] = ()
 
     def __post_init__(self) -> None:
         if self.blend not in PASS_BLENDS:
@@ -102,9 +139,15 @@ class ModePass:
 
 
 def program_json(passes: Sequence[ModePass]) -> tuple[str, list[bytes]]:
-    """The program's declaration and its packs, in pass order."""
-    declared = {"passes": [{"name": p.name, "blend": p.blend} for p in passes]}
-    return json.dumps(declared), [bytes(p.pack) for p in passes]
+    """The program's declaration and its packs, in pass order (a pass with samplers declares them; one without has no
+    ``samplers`` key, N2.9's declaration as it was)."""
+    declared = []
+    for p in passes:
+        entry: dict[str, Any] = {"name": p.name, "blend": p.blend}
+        if p.samplers:
+            entry["samplers"] = [s.declaration() for s in p.samplers]
+        declared.append(entry)
+    return json.dumps({"passes": declared}), [bytes(p.pack) for p in passes]
 
 
 def _settings(values: Mapping[str, Any]) -> str:
@@ -162,6 +205,17 @@ class NativeMode:
         """The item as shown (``MODE_CARD_KEYS``; :func:`mode_card`); an unchanged card records nothing."""
         self._module.composite_mode_card(self._handle(), _card(card))
 
+    def texture(self, name: str, pixels: bytes, size: tuple[int, int], *, mips: bool = False) -> None:
+        """The item's texture ``name`` (N4.a): ``pixels`` RGBA8, rows top first, tight, of ``size`` (width, height);
+        copied once into the core and uploaded at the next record; ``mips``: generated on the GPU. Refused
+        (ValueError) for a bad name, size or byte count, too many textures, or mips a sampler reads that it lacks."""
+        self._module.composite_mode_texture(self._handle(), str(name), (int(size[0]), int(size[1])), bytes(pixels),
+                                            bool(mips))
+
+    def remove_texture(self, name: str) -> None:
+        """The texture goes; the render thread releases it at the next record (KeyError: no such texture)."""
+        self._module.composite_mode_texture_remove(self._handle(), str(name))
+
     def update(self) -> None:
         self._module.composite_update(self._handle())
 
@@ -187,5 +241,6 @@ def mode_blocks(module: ModuleType, schema: Any, passes: Sequence[ModePass], set
     return [bytes(block) for block in blocks], json.loads(facts)
 
 
-__all__ = ["MODE_CARD_KEYS", "MODE_CORE_MEMBERS", "ModePass", "NativeMode", "PASS_BLENDS", "mode_blocks", "mode_card",
-           "program_json", "schema_table_entry"]
+__all__ = ["MODE_CARD_KEYS", "MODE_CORE_MEMBERS", "ModePass", "NativeMode", "PASS_BLENDS", "PassSampler",
+           "SAMPLER_FILTERS", "SAMPLER_MIPS", "SAMPLER_WRAPS", "mode_blocks", "mode_card", "program_json",
+           "schema_table_entry"]

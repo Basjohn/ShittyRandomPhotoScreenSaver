@@ -44,7 +44,7 @@ layout(std140, binding = 18) uniform WarpPass {
     mat4 uMatrix;
     vec2 uItemSize;
     float u_progress;
-    vec2 u_resolution;
+    vec2 u_target_px;   // the target's pixels (the viewport; the native core fills it by this name, N4.a)
 };
 
 void main() {
@@ -57,7 +57,7 @@ void main() {
     float t = clamp(u_progress, 0.0, 1.0);
 
     // Normalised, aspect-corrected coordinates around the image centre.
-    float aspect = u_resolution.x / max(u_resolution.y, 1.0);
+    float aspect = u_target_px.x / max(u_target_px.y, 1.0);
     vec2 centered = uv - vec2(0.5, 0.5);
     centered.x *= aspect;
 

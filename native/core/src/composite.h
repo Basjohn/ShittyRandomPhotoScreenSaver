@@ -24,6 +24,7 @@
 // GUI thread for the item; its node lives on the render thread.
 #pragma once
 
+#include <QtCore/QByteArray>
 #include <QtCore/QJsonObject>
 #include <QtCore/QRectF>
 #include <QtCore/QSize>
@@ -105,6 +106,9 @@ public:
     bool programMode(const ModeProgram &program, const QJsonObject *settings, QString *error);
     bool settingsMode(const QJsonObject &settings, QString *error);
     bool cardMode(const ModeCard &card, QString *error);
+    // N4.a: the item's textures (mode_content.h): an image by name (RGBA8, rows top first), or its removal.
+    bool textureMode(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips, QString *error);
+    bool removeTextureMode(const QByteArray &name, QString *error);
     ModeSource *mode() const { return m_mode.get(); }
 
     // Any thread: composite items alive in the process.

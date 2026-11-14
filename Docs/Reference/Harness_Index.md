@@ -811,6 +811,30 @@ and filling each member from one source, its shaders and the refusal shaders bak
 controls) and `tests/test_native_core_mode.py` (the built module: packing by name from the three sources, the
 refusals, the product packs' admission, M3, the program-block edges of audit 14 Nov L2).
 
+### The fullscreen pass and image sampling (N4.a)
+
+```powershell
+# The product's fullscreen fragments on N2.9's generic pass (never registered), between two real photos (PERSONALSET)
+# the item holds as its textures, an OpenGL child then a Vulkan child: shape (GPU-free: the seven fullscreen
+# transitions admitted with uOldTex and uNewTex bound and refused unbound; Bubble's pack admitted bound; an unknown,
+# doubly bound, binding-17 or block-binding sampler refused; the harness's settings, record and core members fill every
+# block member once and agree with FullscreenPassRenderer.block_values), draw (Crossfade and Burn, defaults and every
+# option on, at nine progress values at dpr 1 and 1.5: OpenGL equal to the production GL host's frame, rule (a), with
+# its control; the same frame hash-identical; a value and a shader change with no rebuild, rule (g); no upload per frame),
+# textures (once per image, nothing at rest, same-size replace in place, another size with mips, a mip sampler over no
+# mips refused, a removed texture released and waited for, a rebuilt node's textures lost and re-sent, nothing left
+# after destroy with uploaded or pending images), timing (the pass's GPU time at 2560x1440, nothing at rest); Vulkan
+# against native OpenGL within 1 level, rule (b); Vulkan validated
+python native/core/python/fullscreen_pass_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan] [--rounds shape draw textures timing] [--photos A.png B.png] [--label n4a_fullscreen_pass]
+```
+
+Tests: `tests/test_native_fullscreen_pass.py` (no build: the seven transitions' shape and no core-member clash, the
+core's uv names against the Python quads' vertex sources, the harness's split of the renderer's own values, its record
+never registered, the face's sampler declaration, the harness's measures with controls, every harness shader baked) and
+`tests/test_native_core_mode.py` (the built module: the transitions' and Bubble's packs bound and unbound, the sampler
+refusals).
+
 Every window round of the three native-core harnesses starts with an environment control (an off-screen window with
 Qt alone must present at least 10 frames in 1 s on that API); D3D11 and D3D12 windows present nothing while the display
 is off (facts J5), and the verdict then says so first. To rerun only the window rounds on D3D once the display is on:

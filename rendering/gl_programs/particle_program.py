@@ -63,7 +63,7 @@ layout(std140, binding = 18) uniform ParticlePass {
     mat4 uMatrix;
     vec2 uItemSize;
     float u_progress;
-    vec2 u_resolution;
+    vec2 u_target_px;   // the target's pixels (the viewport; the native core fills it by this name, N4.a)
     float u_seed;
     float u_mode;           // 0=Directional, 1=Swirl, 2=Converge
     float u_direction;      // 0-7=directions, 8=random, 9=random placement
@@ -397,15 +397,15 @@ void main() {
     float cellSizePx = radiusPx * 2.0 - overlapPx;
     
     // Grid dimensions
-    float cols = ceil(u_resolution.x / cellSizePx);
-    float rows = ceil(u_resolution.y / cellSizePx);
+    float cols = ceil(u_target_px.x / cellSizePx);
+    float rows = ceil(u_target_px.y / cellSizePx);
     float cellW = 1.0 / cols;
     float cellH = 1.0 / rows;
     
     // Particle radius in UV space (consistent calculation)
     // Use separate X and Y radii to handle aspect ratio properly
-    float radiusUVx = radiusPx / u_resolution.x;
-    float radiusUVy = radiusPx / u_resolution.y;
+    float radiusUVx = radiusPx / u_target_px.x;
+    float radiusUVy = radiusPx / u_target_px.y;
     
     int mode = int(u_mode);
     int dir = int(u_direction);
@@ -547,7 +547,7 @@ void main() {
                 if (proj > 0.0 && proj < trailLen) {
                     // Perpendicular distance to trail line
                     vec2 perpVec = toPixel - (-velNorm) * proj;
-                    perpVec.x *= u_resolution.x / u_resolution.y;
+                    perpVec.x *= u_target_px.x / u_target_px.y;
                     float perpDist = length(perpVec);
                     
                     // Trail width tapers

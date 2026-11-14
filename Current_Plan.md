@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** High: N4.a's proof on its ABI 11 module (GitHub b0fd7714). Medium: the N2.5 side defects (rule (a)'s fade-frame drift, the owner-parity wall-clock deadline). Audit: N2.9's round 2. 1D.14 merged (R-213). N2.8 waits for two displays.
+**Now (in flight):** N4.a merged at ABI 11. Medium: the N2.5 side defects (rule (a)'s fade-frame drift, the owner-parity wall-clock deadline). Audit: N2.9's round 2. N2.8 waits for two displays.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -471,24 +471,11 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
 
 **N2b. The background layer, natively, and the first full rehearsal**
 
-- [ ] N4.a The fullscreen pass and image sampling as a primitive (lead, 14 Nov: extends N2.9's generic pass, never a
-  second pass layer; first consumers N5.7a's presenter and N5.2a's seven transitions, which draw one fragment
-  between two pictures through `rendering/quick/transitions/fullscreen_pass.py`; then Bubble's two textures).
-  - [ ] Root cause of the shape first: list what the product fullscreen fragments read (the transitions' block
-    and vertex outputs from `item_quad_vertex_source`, their samplers and units, Bubble's `u_ambient_texture` and
-    `u_ambient_light`) and make the core's vertex stage and block filling take that shape as N2.9 did for the 2D
-    modes (one rule; the product files unchanged unless a change is invisible and the Python path draws it too).
-  - [ ] Samplers as data: a pass names its samplers; each binds by name to a texture the core holds, with its
-    sampler state (filter, wrap, mips) declared beside it; an unbound, unknown or doubly bound sampler refused.
-  - [ ] Textures the core owns: uploaded from Python-held pixels (the harness and the first consumers; N3.8 makes
-    the photo upload asynchronous), mips generated on the GPU, released on the render thread through the retire
-    path; nothing uploaded again at rest; lifetime against the destruction barrier (the N2.5 audit's L8 class).
-  - [ ] Proof on the harness against the Python renderer: Crossfade's own fragment (and one transition with its
-    own values, e.g. Burn) drawn natively between two real photos at several progress values, never registered:
-    OpenGL equal to `FullscreenPassRenderer` at the widened values (rule (a)), Vulkan within 1 level (rule (b)),
-    GPU time per pass and nothing at rest (rule (e)), Vulkan validation clean; a shader or value change shows with
-    no rebuild (rule (g)).
-  - [ ] README and decision record: how a pass declares samplers and how a texture's lifetime runs.
+- Landed: N4.a the fullscreen pass and sampling (merged 14 Nov, ABI 11, on N2.9's generic pass; decision D13):
+  the core's triangle carries `v_uv` and `vUv`, samplers bind by name to core-owned textures with their state
+  beside them, textures upload once on the render thread with GPU mips and retire there. Crossfade equals the
+  Python renderer exactly on OpenGL and Vulkan equals OpenGL; the core's `vUv` bits are identical on both
+  backends (`.artifacts/evidence/native_core/n4_a/`).
 - [ ] N3.8 The async job service (D9), built to N0.7's verdict: the job thread, self-contained jobs, the latch,
   the in-frame form; first job: a photo's upload and mips.
   - [ ] D8 row 3's gate (the contention measurement under a heavy Visualizer frame, the one limit of N0.7's proof,
@@ -496,6 +483,9 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     in-frame (Vulkan only; OpenGL runs in-frame).
   - [ ] D9 point 2, consumer (b), the warm-up class: warm-up jobs run on this service, scheduled with N3.6's
     gradual warm-up (one unit per spaced frame). Transition preparation (consumer (a)) is N5.2g's.
+- [ ] N4.a leftovers: a texture's owner is told when its textures are lost (today only `textures_lost` in the
+  state; the presenter and transitions need the edge); the texture counts join the destruction barrier (with
+  the N2.5 audit's L8).
 - [ ] N5.7a The image presenter and background as the core's background layer (D7 point 1): image ownership,
   covered-display admission and timing kept; the photo textures are the core's (the wrapped-texture bridge is
   OpenGL only and retires with the Python presenter); at rest nothing is drawn again. Proved in the hidden host
@@ -506,6 +496,15 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   fail closed to Normal. Cost against D7's budgets at 2560 x 1440 and 4K; stills of each material beside today's.
 - [ ] N5.2a The seven transitions on the shared fullscreen pass (Crossfade, Burn, Particle, Ripple, Slide, Warp,
   Wipe) at parity on both backends.
+  - [ ] The per-frame transition clock (`u_progress`, `u_time`) gets its product owner (N4.a's harness carries it on
+    a record outside the product's mode codes).
+  - [ ] Burn (lead's decision, 14 Nov): its float hashes (value noise, `fract(sin())` sparks and ash) compile
+    differently through SPIR-V (rule (b): 10-20 % of mid-progress pixels up to 248 levels, the burn front only),
+    and its thresholds flip on last-bit `vUv` differences (rule (a): 1-41 pixels per frame at 1 level, one frame
+    22 pixels at 127). Replace the hashes with integer hashes (R-94's class) and take its uv from the pixel, on both
+    renderers, so the Python renderer's new frames are the reference; before/after stills on real photos for the
+    lead's look review; then rule (a) exact and rule (b) within 1 level. The same check for every other
+    transition that hashes in float.
 - [ ] N5.7c Lead, Display 1: the first full rehearsal (wallpaper, a transition, cards on each material, Spectrum,
   a Settings round trip, exit, sleep and wake).
 

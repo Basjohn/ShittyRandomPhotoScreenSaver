@@ -826,7 +826,7 @@ generic mode content").
    alone (`u_ambient_texture`, the water-decoration underlay, and `u_ambient_light`, the glowing particles' linear
    light, both from its offscreen ambient render). Reading an earlier pass or an image, depth, more targets, compute or
    a new resource is a primitive with its own C++ and harness, used by every mode as data afterwards: Bubble's two
-   textures wait for the sampling primitive (plan N4.a). Oscilloscope's Quick renderer no longer draws
+   textures wait for the sampling primitive (plan N4.a; superseded for samplers and the `vUv` input by D13). Oscilloscope's Quick renderer no longer draws
    `oscilloscope.frag` (an instanced beam from a storage buffer, its own scene target and bloom): its port needs those
    primitives too, whatever this pass admits.
 4. *A program keeps its settings.* A new program is packed against the settings given with it, else the current ones,
@@ -859,6 +859,60 @@ runtime schema, the draw on OpenGL and Vulkan at dpr 1 and 1.5 with shader, spec
 changes and no rebuild, a refused frame keeping the card, the latch, the fade, nothing at rest, GPU time per pass, the
 framebuffer at 2560x1440 at 150 % on both backends, Vulkan within 1 level of OpenGL, validation clean), with N2.3's,
 N2.5's and rule (a)'s harnesses unchanged.
+
+## D13. The fullscreen pass and image sampling as a primitive (N4.a, 14 Nov 2026; proposed by the High agent)
+
+Supersedes D12 point 3's refusal of samplers and its "v_uv only" input; the rest of D12 stands.
+
+**The problem.** The first consumers of the background layer (N5.7a's presenter, N5.2a's seven transitions: Crossfade,
+Burn, Particle, Ripple, Slide, Warp Dissolve, Wipe) each draw one fragment between two pictures through
+`rendering/quick/transitions/fullscreen_pass.py`, and Bubble samples two textures from its ambient render. N2.9's pass
+refused every sampler and gave only `v_uv`, so none of them could be drawn without a second pass layer. What the
+product fullscreen fragments read (the root cause of the shape, from their baked packs' reflection):
+- the transitions: `layout(location = 0) in vec2 vUv` (the item quad's uv, `rendering/gl_programs/item_quad.py`: y up,
+  1 at the item's top; each fragment samples at `(vUv.x, 1 - vUv.y)`), `uOldTex` at binding 0 and `uNewTex` at binding
+  1 (linear, clamp to edge, no mips: `tools/transition_contact_sheet.py` and the presenter's textures), one pass block
+  at binding 18 opening with `uMatrix`, `uItemSize` (only the Python vertex stage reads them), `u_progress`, then the
+  transition's own values; Particle, Ripple and Warp Dissolve also `u_resolution`, meaning the viewport's pixels;
+- the 2D modes: `v_uv` (the Visualizer quad's uv, `render_contract.py`: y down) and one block; Bubble also
+  `u_ambient_texture` (binding 0) and `u_ambient_light` (binding 1).
+
+**The decision.**
+1. *The location-0 input is filled by its name.* The core's triangle carries both quads' uv at each vertex (exact
+   values, from the one target correction: `conventions.h`), and each pass's pipeline feeds the one its fragment names
+   (`v_uv`, or `vUv`) to `shaders/mode.vert`. Any other input is refused. On OpenGL and Vulkan `v_uv` is N2.9's value
+   for value. No matrix or uniform carries the convention, and the product files are unchanged.
+2. *A core member means one thing.* The core's `u_resolution` is the logical size (the 2D modes'); the three
+   transitions that meant the viewport's pixels now name them `u_target_px`, the core's member for the target's pixels
+   (an invisible change, drawn hash-identical on real photos at nine progress values:
+   `.artifacts/evidence/native_core/n4_a/20261114_rename_identity/`).
+3. *Samplers are data.* A pass names its samplers in the program's declaration, each bound by name to one of the item's
+   textures with its sampler state beside it (filter, wrap, mip filter); the binding is the pack's own. Refused with
+   the reason: unbound, unknown, doubly bound (by name or binding), at binding 17 or at the pass block's binding, not a
+   `sampler2D`, a mip sampler over a texture without mips. Separate textures and samplers, storage and push constants
+   stay refused.
+4. *Textures are the core's.* Up to 8 named textures an item, RGBA8 from pixels Python holds, copied once and uploaded
+   once on the render thread at the next record (mips generated on the GPU on request), the copy then dropped; the same
+   object for an image of the same size; released on the render thread at the next record when removed, and with the
+   content when Qt deletes the node. A node made again reports its textures lost and draws nothing until they are sent
+   again (the owner keeps its pixels). Counted process-wide for the lifecycle proofs and the destruction barrier's
+   reading (`composite_live`: `mode_textures`, `mode_texture_bytes`, `mode_texture_images`). N3.8 moves the upload to
+   the job thread; the presenter's photo upload is its first job.
+5. *The per-frame values of a transition* (`u_progress`, `u_time`) ride on a record in the harness (a runtime schema
+   outside `MODE_CODES`); every other value is a setting, packed when it changes, and the Python renderer's
+   `FullscreenPassRenderer.block_values` is the one owner of them all. Where the product's transition clock lives
+   (a record from the GUI thread, or the progress computed by the core from the run's start and duration) is N5.2a's.
+6. *An unbound stream forgets its schema*, so a program for another schema can be given before the next bind (found
+   writing the harness: switching transition on one item was refused both ways).
+
+**Rejected.** A second pass layer for images (the rule this replaces). Rewriting the transitions' fragments to
+`v_uv` or to a texture block of the core's (both shapes would differ from the Python renderer's file). A placeholder
+texture bound while a picture is missing (draws a wrong picture instead of none). Keeping the core's copy of every
+photo to survive a rebuilt node (twice the memory of every displayed photo for a rare event).
+
+**As proved.** Owed: the build round of ABI 11, then `native/core/python/fullscreen_pass_check.py` (rule (a): OpenGL
+equal to the production GL host; rule (b): Vulkan within 1 level; rule (e): GPU time and nothing at rest; rule (g);
+the textures' lifetime; Vulkan validation clean), with N2.9's `generic_mode_check.py` unchanged in its verdict.
 
 ## D1, D2, D3 and the transport rule
 

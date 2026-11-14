@@ -564,6 +564,31 @@ bool CompositeItem::cardMode(const ModeCard &card, QString *error)
     return true;
 }
 
+bool CompositeItem::textureMode(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips,
+                                QString *error)
+{
+    if (modeRefused(error))
+        return false;
+    std::shared_ptr<ModeSource> source = m_mode ? m_mode : std::make_shared<ModeSource>();
+    if (!source->setTexture(name, pixels, size, mips, error))
+        return false;
+    m_mode = source;
+    update();
+    return true;
+}
+
+bool CompositeItem::removeTextureMode(const QByteArray &name, QString *error)
+{
+    if (!m_mode) {
+        *error = QStringLiteral("this composite holds no texture '%1'").arg(QString::fromLatin1(name));
+        return false;
+    }
+    if (!m_mode->removeTexture(name, error))
+        return false;
+    update();
+    return true;
+}
+
 bool CompositeItem::bindSpectrum(const QString &mappingName, const PacketReaderConfig &config, QString *error)
 {
     if (spectrumRefused(error))

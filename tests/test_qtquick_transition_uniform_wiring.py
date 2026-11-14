@@ -4,8 +4,10 @@ These are renderer-boundary WIRING tests. A recording/fake GL uniform sink is
 the correct level of evidence here: it proves each authored request field is
 uploaded to its intended uniform (since N1.6 a member of the program's std140
 pass block, read back from the bytes the draw binds) with the intended value, that boolean/integer
-encodings are preserved, that Particle's ``u_resolution`` carries the physical
-framebuffer size, and that Burn's ``u_time`` derives from the immutable run
+encodings are preserved, that Particle's and Ripple's ``u_target_px`` (named
+``u_resolution`` before N4.a: the native core fills ``u_resolution`` with the
+logical size, so the target's pixels take the core's own name) carries the
+physical framebuffer size, and that Burn's ``u_time`` derives from the immutable run
 clock. The separately-required real-GL harnesses still own actual rendering;
 this file must never become a substitute for them.
 """
@@ -228,7 +230,7 @@ def test_ripple_request_parameters_reach_intended_uniforms(monkeypatch):
 
     assert recorder.uniforms["u_ripple_count"] == 6
     assert recorder.uniforms["u_ripple_seed"] == pytest.approx(123.5)
-    assert recorder.uniforms["u_resolution"] == (1920.0, 1080.0)
+    assert recorder.uniforms["u_target_px"] == (1920.0, 1080.0)
     assert recorder.uniforms["u_progress"] == pytest.approx(frame.sample.eased_progress)
 
 
@@ -289,9 +291,9 @@ def test_particle_covers_every_authored_control_uniform(monkeypatch):
     }
     for name, value in expected.items():
         assert recorder.uniforms[name] == pytest.approx(value), name
-    # Physical framebuffer resolution semantics: u_resolution is the viewport
+    # Physical framebuffer resolution semantics: u_target_px is the viewport
     # (physical) size, not the logical item size.
-    assert recorder.uniforms["u_resolution"] == (1920.0, 1080.0)
+    assert recorder.uniforms["u_target_px"] == (1920.0, 1080.0)
 
 
 def test_particle_boolean_controls_toggle_their_uniforms(monkeypatch):

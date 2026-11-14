@@ -12,10 +12,10 @@ class QuickWarpRenderer(FullscreenPassRenderer):
     label = "Quick Warp Dissolve"
     fragment_source = warp_program.fragment_source
     vertex_source, block = fullscreen_pass_parts(fragment_source, "WarpPass")
-    value_names = ("u_resolution",)
+    value_names = ("u_target_px",)
 
     def values(self, resolved, frame: QuickTransitionRenderFrame) -> dict[str, object]:
-        return {"u_resolution": (float(frame.viewport[2]), float(frame.viewport[3]))}
+        return {"u_target_px": (float(frame.viewport[2]), float(frame.viewport[3]))}
 
 
 def create_transition_renderer() -> QuickWarpRenderer:

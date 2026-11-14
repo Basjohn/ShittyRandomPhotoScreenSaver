@@ -119,7 +119,7 @@ class QuickParticleRenderer(FullscreenPassRenderer):
     fragment_source = particle_program.fragment_source
     vertex_source, block = fullscreen_pass_parts(fragment_source, "ParticlePass")
     value_names = (
-        "u_resolution", "u_seed", "u_mode", "u_direction",
+        "u_target_px", "u_seed", "u_mode", "u_direction",
         "u_particle_radius", "u_overlap", "u_trail_length",
         "u_trail_strength", "u_swirl_strength", "u_swirl_turns",
         "u_use_3d", "u_texture_map", "u_wobble", "u_gloss_size",
@@ -131,7 +131,7 @@ class QuickParticleRenderer(FullscreenPassRenderer):
 
     def values(self, params: _ParticleParameters, frame: QuickTransitionRenderFrame) -> dict[str, object]:
         return {
-            "u_resolution": (float(frame.viewport[2]), float(frame.viewport[3])),
+            "u_target_px": (float(frame.viewport[2]), float(frame.viewport[3])),
             "u_seed": params.seed,
             "u_mode": float(params.mode),
             "u_direction": float(params.direction),

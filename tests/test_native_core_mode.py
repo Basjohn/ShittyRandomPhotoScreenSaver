@@ -6,8 +6,12 @@ is ``native/core/python/generic_mode_check.py`` (its ``blocks`` round holds the 
 - ``mode_blocks``: Probe Rings' core members (from the card and the target), settings and record packed by name into
   each pass's one block; a setting left out, an unknown one, one naming a core member, no card, a value without a
   defined conversion (NaN, an int beyond int32) are refused. The core's conventions table is the face's.
-- The product 2D packs (audit N29 M5): Oscilloscope and Spline Curve admitted, Bubble refused for its samplers alone;
-  a block at binding 17 (M3), a second block and a sampler refused.
+- The product 2D packs (audit N29 M5): Oscilloscope and Spline Curve admitted, Bubble refused while its samplers are
+  unbound and admitted with them bound (N4.a); a block at binding 17 (M3), a second block and an unbound sampler
+  refused.
+- N4.a: the seven fullscreen transitions' own packs admitted with uOldTex and uNewTex bound (vUv, one pass block), each
+  refused unbound; an unknown, doubly bound, conventions-binding or block-binding sampler and an unknown mip filter
+  refused.
 - ``program_block_pack`` (L2): a mat3 and a multi-dimensional array are never packed and always listed unfilled (setting
   one is refused); an int beyond int32 or a negative uint is refused, not wrapped; a uint above int32's range is stored
   exactly; booleans inside a list read as 0 and 1; a scalar array's elements land at their stride.
@@ -119,7 +123,8 @@ def test_a_mode_is_packed_by_name_and_its_unknown_and_unfilled_members_refused(c
         assert struct.unpack_from("<2f", data, rows["u_target_px"][2]) == (720.0, 405.0)   # the target's pixels
         assert struct.unpack_from("<f", data, rows["u_fade"][2])[0] == 0.75                # the card's fade
         assert sources["sources"]["pulse_color"] == "record"
-    assert facts["program"]["passes"][1]["uv"] is True and facts["program"]["passes"][0]["conventions"] is True
+    assert facts["program"]["passes"][1]["uv"] == "v_uv" and facts["program"]["passes"][0]["conventions"] is True
+    assert facts["program"]["passes"][0]["uv"] == ""                                     # rings reads no uv
     rows = {row[0]: row for row in facts["program"]["passes"][0]["block"]["members"]}
     assert struct.unpack_from("<i", blocks[0], rows["ring_count"][2])[0] == values["ring_count"]
     assert struct.unpack_from("<f", blocks[0], rows["u_thickness_px"][2])[0] == settings["u_thickness_px"]
@@ -147,24 +152,75 @@ def test_the_cores_conventions_are_the_faces(core, qt_app):
 
 
 @pytest.mark.qt
-def test_the_product_2d_packs_are_admitted_and_bubble_refused_for_its_samplers(core, tmp_path, qt_app):
-    # Audit N29 M5: the generic pass takes the product 2D shaders' shape, over their real .qsb packs.
+def test_the_product_2d_packs_are_admitted_and_bubble_with_its_samplers_bound(core, tmp_path, qt_app):
+    # Audit N29 M5: the generic pass takes the product 2D shaders' shape, over their real .qsb packs. N4.a: Bubble's
+    # two samplers are refused unbound and admitted bound by name to the item's textures.
     import generic_mode_check as check
     import probe_rings as pr
-    from rendering.native.mode import ModePass
+    from rendering.native.mode import ModePass, PassSampler
     from rendering.native.program_values import mode_fragment_pack
     from tools import regen_qrc
 
     for mode_id in ("oscilloscope", "devcurve"):
         layout = core.mode_program_layout([ModePass(mode_id, mode_fragment_pack(mode_id))])
         (program_pass,) = layout["passes"]
-        assert program_pass["uv"] is True and program_pass["block"]["binding"] != 17
-    with pytest.raises(ValueError, match="sampler"):
+        assert program_pass["uv"] == "v_uv" and program_pass["block"]["binding"] != 17
+    with pytest.raises(ValueError, match="unbound"):
         core.mode_program_layout([ModePass("bubble", mode_fragment_pack("bubble"))])
-    # Control: Bubble with its two samplers taken out is admitted (its samplers alone were refused).
+    bound = (PassSampler("u_ambient_texture", "ambient"), PassSampler("u_ambient_light", "ambient_light"))
+    (bubble,) = core.mode_program_layout([ModePass("bubble", mode_fragment_pack("bubble"), samplers=bound)])["passes"]
+    assert {(s["name"], s["texture"], s["binding"]) for s in bubble["samplers"]} == {
+        ("u_ambient_texture", "ambient", 0), ("u_ambient_light", "ambient_light", 1)}
+    # Control: Bubble with its two samplers taken out is admitted with none bound (its samplers alone were refused).
     text = check.bubble_without_samplers_text((regen_qrc.mode_shader_dir() / "bubble.frag").read_text(encoding="utf-8"))
     stripped = pr.bake(text, "bubble.frag", tmp_path / "bubble")
     assert core.mode_program_layout([ModePass("bubble", stripped)])["passes"][0]["block"]["name"] == "BubbleDraw"
+
+
+@pytest.mark.qt
+def test_the_fullscreen_transitions_are_admitted_with_their_pictures_bound(core, tmp_path, qt_app):
+    # N4.a: the seven fullscreen transitions' own fragments (vUv, one pass block, uOldTex and uNewTex), as they are.
+    import fullscreen_pass_check as check
+    from rendering.native.mode import ModePass
+
+    for transition_id in check.FULLSCREEN_TRANSITIONS:
+        program = check.transition_pass(transition_id, tmp_path / transition_id)
+        (layout,) = core.mode_program_layout([program])["passes"]
+        assert layout["uv"] == "vUv" and layout["block"]["binding"] == 18, transition_id
+        assert {(s["name"], s["texture"]) for s in layout["samplers"]} == {("uOldTex", "old"), ("uNewTex", "new")}
+        members = {row[0] for row in layout["block"]["members"]}
+        assert "u_resolution" not in members, transition_id          # the core member's meaning differs: u_target_px
+        # Control: the same pack with no samplers bound is refused.
+        with pytest.raises(ValueError, match="unbound"):
+            core.mode_program_layout([ModePass(program.name, program.pack, program.blend)])
+
+
+@pytest.mark.qt
+def test_an_unknown_doubly_bound_or_misplaced_sampler_is_refused(core, tmp_path, qt_app):
+    import fullscreen_pass_check as check
+    from rendering.native.mode import ModePass, PassSampler
+
+    program = check.transition_pass("crossfade", tmp_path / "crossfade")
+    old, new = program.samplers
+
+    def layout(samplers, pack=program.pack):
+        return core.mode_program_layout([ModePass(program.name, pack, program.blend, samplers=tuple(samplers))])
+
+    with pytest.raises(ValueError, match="unknown"):
+        layout([old, new, PassSampler("uMissing", "old")])
+    with pytest.raises(ValueError, match="doubly bound"):
+        layout([old, new, PassSampler("uOldTex", "new")])
+    with pytest.raises(ValueError, match="unbound"):
+        layout([old])
+    for kind, word in (("binding17", "17"), ("block_binding", "own block"), ("shared_binding", "doubly bound")):
+        with pytest.raises(ValueError, match=word):
+            layout([old, new], pack=check.bake(check.sampler_variant_text(kind), f"{kind}.frag", tmp_path / kind))
+    with pytest.raises(ValueError, match="mips"):
+        core.module.mode_program_layout(json.dumps({"passes": [{"name": "x", "blend": "replace", "samplers": [
+            {"name": "uOldTex", "texture": "old", "filter": "linear", "wrap": "clamp", "mips": "trilinear"}]}]}),
+            [program.pack])
+    # Control: both bound, as declared, are admitted.
+    assert [s["binding"] for s in layout([old, new])["passes"][0]["samplers"]] == [0, 1]
 
 
 @pytest.mark.qt
