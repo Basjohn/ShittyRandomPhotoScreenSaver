@@ -756,6 +756,24 @@ python native/core/python/timer_check.py --module-dir release/native_module --re
 Tests: `tests/test_native_core_timer.py` (no build: the judgements and their controls, every recorded pass bracketed,
 no waiting read outside the control, the trace and its report, the Python face).
 
+### Native Spectrum (N2.5)
+
+```powershell
+# The native Spectrum item, an OpenGL child then a Vulkan child: block (OpenGL; the production owner draws Spectrum in
+# process through the widened run set, every drawn frame's SpectrumDraw values against the module's spectrum_block,
+# byte for byte; controls: the previous record and a nudged fade differ), item (frames accepted at the sync on the render
+# thread, nothing recorded at rest, the head read consumes nothing, the drop edge, an unbind released on the render
+# thread, D1's close during copy with its accept_after_retire control), pixels (sampled frames drawn by the native item
+# against the Python renderer's own draw on OpenGL, and Vulkan against native OpenGL within 1 level; the surface's GPU
+# time per pass); Vulkan validated, only Qt 6.12.0's recorded defects excused
+python native/core/python/spectrum_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan] [--rounds block item pixels] [--sample-every 40] [--label n25_spectrum]
+```
+
+The work folder beside its summary holds the captured frames and references; delete it once the run is judged. Tests:
+`tests/test_native_core_spectrum.py` (no build: the card's target map at every quarter turn, the Python face, the shader
+baked from the product's file, the port's constants and block members against the Python renderer).
+
 Every window round of the three native-core harnesses starts with an environment control (an off-screen window with
 Qt alone must present at least 10 frames in 1 s on that API); D3D11 and D3D12 windows present nothing while the display
 is off (facts J5), and the verdict then says so first. To rerun only the window rounds on D3D once the display is on:

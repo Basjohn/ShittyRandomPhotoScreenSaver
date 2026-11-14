@@ -32,8 +32,14 @@ never ships.
     of the named mapping (retire never waits; the last pin unmaps), the accept-edge acknowledgement, the non-consuming
     head read, the drop edge's watermark, the transport rule's refusal at the slot head. `frame_abi_generated.h` is its
     layout, mode codes and record tables, generated from `core/visualizer_engine/packet_abi.py` and `native_schema.py`
-    by `tools/native_frame_abi_header.py` (never edited by hand). Not yet opened by the product (N2.5's Spectrum is
-    its first consumer, on the render thread).
+    by `tools/native_frame_abi_header.py` (never edited by hand). Its first consumer is N2.5's Spectrum, at the item's
+    sync on the render thread; `pause_in_copy` is D1's "close during copy" hook (a harness's only).
+  - `spectrum.*` (N2.5): Spectrum on a composite's surface. The fragment shader is the product's own
+    `widgets/spotify_visualizer/shaders/spectrum.frag` (baked from that path by `CMakeLists.txt`; `shaders/spectrum.vert`
+    and `shaders/clear.frag` are the core's), its SpectrumDraw block packed at the reflected offsets with the Python
+    renderer's arithmetic ported line for line (`spectrum_block`, GPU-free, for the byte-for-byte test). The stream is
+    bound by its mapping name from the GUI thread, read at the item's sync on the render thread, and a retired stream is
+    released there (the render-thread retire job, also at the node's deletion). Python face: `rendering/native/spectrum.py`.
   - `vulkan_context.*`: D6, the process's Vulkan instance and one device per window, given to Qt Quick.
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
@@ -50,6 +56,9 @@ never ships.
   `tools/card_clip_contract.py`, the contract's one reading).
 - `python/packet_reader_check.py`: N2.3's proof (bit-for-bit parity with the reference decoder on the shipped clip,
   the adversarial table with each case's negative controls, the in-place race, D1 and D2; GPU-free).
+- `python/spectrum_check.py`: N2.5's proof of the native Spectrum item (uniform parity with the Python renderer at the
+  widened run set, the item's contract with D1's close during copy, pixels against the Python renderer on OpenGL and
+  against native OpenGL on Vulkan).
 - `python/timer_check.py`: N2.6's proof (off is free by count, a known-cost pass scaled N times and its empty-bracket
   control, QRhi's frame figure, latched reads in a real window with the waiting read as control, the frame trace and
   its report, the two forms against each other, validation; `timer_analysis.py`).
