@@ -702,11 +702,10 @@ def test_a_lasting_run_of_refused_frames_fades_the_card_out(route_world):
     assert _places(core)[-1][2] == {"visible": True, "fade_ms": FAILURE_FADE_MS}
 
 
-def test_an_unbind_fades_the_card_out_even_when_the_native_unbind_raises(route_world):
-    # L3: the fade is its own step, before the stream retires (the core keeps the last frame for it); a raising native
-    # unbind still leaves the card fading out, never shown with its last frame.
-    from rendering.quick.visualizer.native_route import FAILURE_FADE_MS
-
+def test_an_unbind_hides_the_card_even_when_the_native_unbind_raises(route_world):
+    # L3: the hide is its own step, before the stream retires; a raising native unbind still leaves the card hidden,
+    # never shown with its last frame. At once, as the Python item stops drawing the activation at this edge (the
+    # owner's fades have run; rule (a) on the ABI 12 build round: a fade of the route's own drew the last frame on).
     route, core = route_world.make(fail_unbind=1)
     bridge = _Bridge()
     bridge.snapshots = [_snapshot(route_world.presentation, 1)]
@@ -715,7 +714,7 @@ def test_an_unbind_fades_the_card_out_even_when_the_native_unbind_raises(route_w
     hides = [index for index, entry in enumerate(core.log) if entry[0] == "set" and entry[1].get("visible") is False]
     unbinds = [index for index, entry in enumerate(core.log) if entry[0] == "unbind"]
     assert hides and unbinds and hides[0] < unbinds[0]
-    assert core.log[hides[0]][1]["fade_ms"] == FAILURE_FADE_MS
+    assert core.log[hides[0]][1]["fade_ms"] == 0
 
 
 def test_a_card_hidden_with_its_presentation_returns_without_a_second_fade(route_world):

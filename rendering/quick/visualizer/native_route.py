@@ -16,10 +16,11 @@ and is released on the render thread at the item's next sync, D1; the name is un
 view stays mapped until then) and the composite goes with the route's close (before the content host retires).
 GUI thread only; nothing runs at rest (a frame is published only when the bridge hands a new one).
 
-Fade, never vanish (audit N29 M1, round 2 M2 to M5, L3): the native item fades out on any failure (the route's own,
-or the core's: a content build that failed or a run of refused frames, read from the item's status) and fades back in
-when it draws again; an activation whose first frame comes late (after a failure or a wait for the window) fades in; an
-unbind fades the item out over its last frame (the core keeps it). The route waits on the window's own edges, never a
+Fade, never vanish (audit N29 M1, round 2 M2 to M5): the native item fades out on any failure (the route's own, or
+the core's: a content build that failed or a run of refused frames, read from the item's status) and fades back in
+when it draws again; an activation whose first frame comes late (after a failure or a wait for the window) fades in.
+An activation's end is the owner's to fade (its scene and content fades): the unbind hides the item at that edge, as
+the Python item stops drawing there (rule (a)). The route waits on the window's own edges, never a
 timer: ``afterSynchronizing`` once the native item has read the window's framebuffer (before the first frame, after a
 resize), ``afterRendering`` once the core has recorded what the route just changed (so a failed build is seen with no
 new frame). Each is armed for one firing and re-runs the item's update.
@@ -179,8 +180,12 @@ class NativeVisualizerRoute:
         self._faded_out = False       # a new activation: its card's content fade brings it in
 
     def unbind(self) -> None:
-        """The bound stream retires (never waits, D1) and the native item fades out over its last frame (the core keeps
-        it while no stream is bound: round 2, L3)."""
+        """The bound stream retires (never waits, D1) and the native item is hidden at this edge, as the Python item
+        stops drawing the activation at it: the owner's own fades (the scene's, the card's content fade) have run
+        before an activation ends, so a fade of the route's own on top would draw the last frame on past the
+        Python renderer's (rule (a), ABI 12 build round: 1.3 s of the last frame after a mode switch, up to 9 levels).
+        The hide is its own guarded step before the stream retires (round 2, L3): a stream that cannot retire never
+        leaves the card shown. The core keeps the frame while no stream is bound."""
         if self._identity is None:
             return
         self._identity = None
@@ -193,8 +198,8 @@ class NativeVisualizerRoute:
         memory, self._memory = self._memory, None
         try:
             if spectrum is not None:
-                # The fade first, on its own (L3): a stream that cannot retire never leaves the card shown.
-                self._guarded(lambda: spectrum.composite.set(visible=False, fade_ms=FAILURE_FADE_MS))
+                # The hide first, on its own (L3); at once, as the Python item (rule (a)).
+                self._guarded(lambda: spectrum.composite.set(visible=False, fade_ms=0))
                 spectrum.unbind()
         finally:
             # The route's own mapping goes whatever the native item said (N29 L2): nothing of it outlives the unbind.
