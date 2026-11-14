@@ -21,9 +21,12 @@ READ_RESULTS = ("nothing", "accepted", "torn", "stale", "foreign", "refused", "f
 #: The negative controls a harness may switch on (``PacketReaderConfig`` in ``packet_reader.h``); the product never does.
 #: ``pause_in_copy`` is not a negative control but D1's test hook "close during copy": each read pauses inside its copy
 #: until another thread resumes it (``wait_paused``, ``resume``). ``accept_after_retire`` is that test's negative control
-#: (a copy finished after the stream began retiring is accepted).
-READER_CONTROLS = ("skip_head_check", "skip_seqlock", "accept_unordered", "acknowledge_refused", "head_resets_watermark",
-                   "skip_identity", "pause_in_copy", "accept_after_retire")
+#: (a copy finished after the stream began retiring is accepted), ``copy_while_retiring`` the "no copy starts once
+#: retiring" check's. The seqlock has two: ``skip_head_seqlock`` (an odd latest, the end check, the head's begin) and
+#: ``skip_copy_reread`` (the begin re-read after the payload copy, alone).
+READER_CONTROLS = ("skip_head_check", "skip_head_seqlock", "skip_copy_reread", "accept_unordered", "acknowledge_refused",
+                   "head_resets_watermark", "skip_identity", "pause_in_copy", "accept_after_retire",
+                   "copy_while_retiring")
 _IDENTITY_KEYS = ("runtime_generation", "engine_generation", "activation_id", "mode_code")
 
 

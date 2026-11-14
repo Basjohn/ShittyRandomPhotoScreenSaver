@@ -499,8 +499,8 @@ def _foreign_before_schema(adv: Adversary, reader) -> list[Check]:
 def cases() -> list[Case]:
     table = [
         Case("a whole slot is accepted and acknowledged", _whole, naive_fails=False),
-        Case("torn: the latest sequence is odd", _latest_odd, ("skip_seqlock",)),
-        Case("torn: the slot's end is behind its begin", _end_behind, ("skip_seqlock",)),
+        Case("torn: the latest sequence is odd", _latest_odd, ("skip_head_seqlock",)),
+        Case("torn: the slot's end is behind its begin", _end_behind, ("skip_head_seqlock",)),
         Case("torn: the writer died mid-publish, then a replacement", _writer_died_mid_publish),
         Case("duplicate: the accepted sequence republished", _duplicate, ("head_resets_watermark",)),
         Case("stale: the latest sequence rewound", _stale, ("accept_unordered",)),

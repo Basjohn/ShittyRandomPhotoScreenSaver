@@ -103,6 +103,26 @@ def test_the_reader_keeps_the_modules_runtime_rule_and_is_built():
     assert "src/packet_reader.cpp" in sources.split()
 
 
+def _target_guard_refuses(text: str, *, defined: set[str]) -> bool:
+    """Whether the reader's ``#if ... #error`` target guard fires for a compiler defining ``defined``."""
+    condition = re.search(r"^#if (.+)\n#error \"the packet reader's seqlock", text, re.M).group(1)
+    python = re.sub(r"defined\((\w+)\)", lambda m: str(m.group(1) in defined), condition)
+    python = python.replace("!", " not ").replace("||", " or ").replace("&&", " and ")
+    return bool(eval(python, {"__builtins__": {}}, {}))
+
+
+def test_the_seqlock_target_guard_admits_x64_only():
+    # Audit 14 Nov, low 1: MSVC defines _M_X64 for ARM64EC too, a weakly ordered target where the compiler-barrier
+    # seqlock is not enough. The guard admits x64 and refuses ARM64EC and ARM64.
+    cpp = (SRC / "packet_reader.cpp").read_text(encoding="utf-8")
+    assert not _target_guard_refuses(cpp, defined={"_M_X64", "_M_AMD64"})
+    assert _target_guard_refuses(cpp, defined={"_M_X64", "_M_AMD64", "_M_ARM64EC"})
+    assert _target_guard_refuses(cpp, defined={"_M_ARM64"})
+    # Negative control: the guard before the fix (x64 alone) admits ARM64EC.
+    old = cpp.replace("#if !defined(_M_X64) || defined(_M_ARM64EC)\n", "#if !defined(_M_X64)\n")
+    assert old != cpp and not _target_guard_refuses(old, defined={"_M_X64", "_M_ARM64EC"})
+
+
 def _module_entries(text: str) -> set[str]:
     return set(re.findall(r'\{ "(\w+)", \1, METH_', text))
 
