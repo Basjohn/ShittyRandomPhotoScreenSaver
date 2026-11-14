@@ -127,6 +127,73 @@ def test_the_module_is_built_without_the_fh4_exception_handler():
         assert removed != text and fh4_problems(removed), flag
 
 
+#: CPython's non-limited-API accessor macros (the module builds against the limited API: N2.5 build round 4 failed on
+#: PyBytes_AS_STRING / PyBytes_GET_SIZE). Their function forms (PyBytes_AsString, PyBytes_Size, ...) are fine.
+_NON_LIMITED_MACRO = re.compile(r"\bPy\w+_(?:AS_[A-Z_]+|GET_[A-Z_]+|SET_[A-Z_]+)\s*\("
+                                r"|\bPyUnicode_(?:DATA|KIND|READ|WRITE|READ_CHAR|GET_LENGTH)\s*\("
+                                r"|\bPySequence_Fast_GET_\w+\s*\(")
+
+
+def non_limited_macros(text: str) -> list[str]:
+    code = re.sub(r"//[^\n]*", "", text)
+    return [match.group(0) for match in _NON_LIMITED_MACRO.finditer(code)]
+
+
+def test_the_module_sources_use_only_the_limited_apis_function_forms():
+    found = {path.name: non_limited_macros(path.read_text(encoding="utf-8"))
+             for path in sorted((CORE / "src").glob("*.cpp")) + sorted((CORE / "src").glob("*.h"))}
+    assert not {name: hits for name, hits in found.items() if hits}, found
+    # Negative control: round 4's failing line is caught.
+    assert non_limited_macros("*out = QByteArray(PyBytes_AS_STRING(o), qsizetype(PyBytes_GET_SIZE(o)));") == [
+        "PyBytes_AS_STRING(", "PyBytes_GET_SIZE("]
+
+
+#: The STL containers the core never uses (their growth paths import std::_Xlength_error from msvcp140.dll, whose copy in
+#: the process is shiboken6's, older than the compiler: P1 risk 4; N2.5 round 5's module was refused by the import
+#: check for program_blocks' std::vector). Qt containers (QList, QByteArray, QHash, QString) instead.
+_STL_CONTAINER = re.compile(r"\bstd::(?:vector|string|wstring|map|multimap|set|multiset|deque|list|forward_list|"
+                            r"unordered_\w+)\b|#\s*include\s*<(?:vector|string|map|set|deque|list|forward_list|"
+                            r"unordered_map|unordered_set)>")
+
+
+def _code(text: str) -> str:
+    return re.sub(r"/\*.*?\*/", "", re.sub(r"//[^\n]*", "", text), flags=re.S)
+
+
+def stl_containers(text: str) -> list[str]:
+    return [match.group(0) for match in _STL_CONTAINER.finditer(_code(text))]
+
+
+def test_the_core_uses_no_stl_container():
+    found = {path.name: stl_containers(path.read_text(encoding="utf-8"))
+             for path in sorted((CORE / "src").glob("*.cpp")) + sorted((CORE / "src").glob("*.h"))}
+    assert not {name: hits for name, hits in found.items() if hits}, found
+    # Negative control: round 5's offending lines are caught.
+    assert stl_containers("#include <vector>\n    std::vector<bool> m_filled;") == ["#include <vector>", "std::vector"]
+
+
+#: A header naming a QRhi class's member (``QRhiTexture::Format``, ``QRhiGraphicsPipeline::TargetBlend``) needs the
+#: class's definition, so it includes <rhi/qrhi.h> itself (round 5's first compile failed: targets.h and surfaces.h
+#: named QRhiTexture::Format with only a forward declaration).
+_QRHI_MEMBER = re.compile(r"\bQRhi\w*::\w+")
+
+
+def qrhi_member_without_include(text: str) -> list[str]:
+    code = _code(text)
+    if re.search(r"#\s*include\s*<rhi/qrhi\.h>", code):
+        return []
+    return [match.group(0) for match in _QRHI_MEMBER.finditer(code)]
+
+
+def test_a_header_naming_a_qrhi_member_includes_qrhi():
+    found = {path.name: qrhi_member_without_include(path.read_text(encoding="utf-8"))
+             for path in sorted((CORE / "src").glob("*.h"))}
+    assert not {name: hits for name, hits in found.items() if hits}, found
+    # Negative control: the slip of round 5's first compile.
+    assert qrhi_member_without_include("class QRhiTexture;\nbool f(QRhiTexture::Format format = "
+                                       "QRhiTexture::RGBA8);") == ["QRhiTexture::Format", "QRhiTexture::RGBA8"]
+
+
 # ----------------------------------------------------------------------------------------------- the build script
 
 

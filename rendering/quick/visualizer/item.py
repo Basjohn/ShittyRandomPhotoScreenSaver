@@ -242,6 +242,9 @@ class VisualizerRenderItem(QQuickItem):
         self._diag_bubble_geometry_last_ts = 0.0
         self._diag_bubble_geometry_burst_remaining = 0
         self._frame_trace = current_frame_trace()
+        # The native route (N2.5, D10 point 4: Vulkan): set, this item never makes a render node and each update
+        # request is the route's GUI-thread take (``rendering.quick.visualizer.native_route``).
+        self._native_route = None
         super().__init__(parent)
         self.setFlag(QQuickItem.Flag.ItemHasContents, True)
         self.windowChanged.connect(self._bind_window_invalidation)
@@ -251,6 +254,56 @@ class VisualizerRenderItem(QQuickItem):
     def telemetry(self) -> VisualizerRenderNodeTelemetry:
         return self._telemetry
 
+    # ------------------------------------------------------------------------------------- the native route
+
+    def attach_native_route(self, route) -> None:
+        """GUI thread, once, before any render source: this item's frames are drawn by ``route`` (N2.5)."""
+        if self._native_route is not None or self._identity is not None:
+            raise RuntimeError("a native route is attached once, before the item has a render source")
+        self._native_route = route
+        self.setFlag(QQuickItem.Flag.ItemHasContents, False)     # never a Python render node
+
+    @property
+    def native_route(self):
+        return self._native_route
+
+    def close_native_route(self) -> None:
+        """GUI thread, before the content host retires: the route's stream retires and its native item goes."""
+        route = self._native_route
+        if route is not None:
+            route.close()
+
+    def _native_drawn(self) -> bool:
+        """Whether the native route draws now: attached, and the bound (or prewarming) activation is a native mode's
+        (another mode's draws through this item's own node: D10 point 4's mixed window, OpenGL only)."""
+        route = self._native_route
+        if route is None:
+            return False
+        from rendering.quick.visualizer.native_route import NATIVE_MODE_IDS
+
+        identity = self._identity if self._identity is not None else self._prewarm_identity
+        return identity is None or str(identity.mode_id) in NATIVE_MODE_IDS
+
+    def update(self) -> None:
+        """A sync request. On the native route it is the route's take, at once (GUI thread); otherwise Qt's."""
+        route = self._native_route
+        native = self._native_drawn()
+        if route is not None and bool(self.flags() & QQuickItem.Flag.ItemHasContents) == native:
+            self.setFlag(QQuickItem.Flag.ItemHasContents, not native)
+        if not native:
+            if route is not None:
+                route.unbind()                    # a native stream of an earlier activation retires
+            super().update()
+            return
+        if self._drop_retained:
+            self._drop_retained = False
+            route.drop()
+        expected, self._expected_carryover = self._expected_carryover, None
+        if expected is not None:
+            expected.close()                      # a native mode keeps no renderer history to carry over
+        route.sync(bridge=self._bridge, identity=self._identity, presentation=self._presentation,
+                   authority=self._custom_layout_presentation_authority)
+
     def render_host_lifecycle_snapshot(
         self,
     ) -> VisualizerRenderHostLifecycleSnapshot | None:
@@ -258,11 +311,16 @@ class VisualizerRenderItem(QQuickItem):
         return self._retirement.render_host_lifecycle_snapshot()
 
     def renderer_prepared(self, mode_id: str, activation_id: int) -> bool:
-        """GUI thread: whether the render thread has prepared this activation's renderer."""
+        """GUI thread: whether the render thread has prepared this activation's renderer. The native route has no
+        Python preparation units: its renderer is the core's, built at its first draw."""
+        if self._native_route is not None and self._native_drawn():
+            return True
         return self._retirement.renderer_prepared(mode_id, activation_id)
 
     def renderer_preparation_progress(self, mode_id: str, activation_id: int) -> int:
         """GUI thread: how many preparation units the render thread has completed for this activation."""
+        if self._native_route is not None and self._native_drawn():
+            return 0
         return self._retirement.renderer_preparation_progress(mode_id, activation_id)
 
     @property
@@ -277,6 +335,8 @@ class VisualizerRenderItem(QQuickItem):
         """
         if identity is None or self._identity != identity or self._presentation is None:
             return None
+        if self._native_route is not None and self._native_drawn():
+            return self._native_route.retained_snapshot(identity)
         return self._retirement.retained_snapshot(identity)
 
     @property
@@ -443,6 +503,8 @@ class VisualizerRenderItem(QQuickItem):
         old_node: QSGNode | None,
         _update_data: QQuickItem.UpdatePaintNodeData,
     ) -> QSGNode:
+        if self._native_drawn():
+            return None                           # the native item draws (no render node; ItemHasContents off)
         trace = self._frame_trace
         sync_item_entry_ns = time.perf_counter_ns() if trace is not None else None
         node = (

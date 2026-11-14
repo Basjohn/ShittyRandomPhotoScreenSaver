@@ -229,6 +229,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         spectrum_ghost_controls=True,
         # Expanded Visualizer (operator, 7 Nov). Until its bar-count milestone (plan 01 M2b) the bars widen.
         supports_expanded_display=True,
+        # N2.5: the native core draws it on Vulkan (rendering.quick.visualizer.native_route), at parity with the
+        # Python renderer (rules (a), (b), (c), (e): Current_Plan.md item 8b).
+        renderer_backends=("opengl", "vulkan"),
     ),
     VisualizerModeDescriptor(
         "oscilloscope",

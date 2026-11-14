@@ -39,11 +39,12 @@ from rendering.native.packet_reader import (
     reader_config,
     schema_table_differences,
 )
+from rendering.native.spectrum import NativeSpectrum, spectrum_block
 
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 5
+EXPECTED_ABI = 8
 HOST_KINDS = ("window", "hidden")
 
 
@@ -122,8 +123,28 @@ class NativeCore:
         return CompositeItem(self.module, self.module.composite_create(shiboken6.getCppPointer(parent)[0]))
 
     def composite_live(self) -> dict:
-        """Composite items, surfaces and their QRhi objects alive in the process (lifecycle proofs)."""
+        """Composite items, surfaces and their QRhi objects alive in the process, and the native Spectrum's sources and
+        QRhi objects (lifecycle proofs)."""
         return json.loads(self.module.composite_live())
+
+    def spectrum(self, parent: Any) -> NativeSpectrum:
+        """The native Spectrum (N2.5) on a new composite item in ``parent``; place the composite and bind a stream.
+        Refused while the module's compiled-in frame schemas differ from this build's (``SchemaTableMismatch``)."""
+        differences = schema_table_differences(self.frame_schemas(), python_schema_table())
+        if differences:
+            raise SchemaTableMismatch(f"{MODULE_NAME}'s frame schemas are not this build's: {'; '.join(differences)}")
+        return NativeSpectrum(self.module, self.composite(parent))
+
+    def spectrum_block(self, record: bytes, card: Mapping[str, Any], pack: bytes | None,
+                       settings: Mapping[str, Any]) -> tuple[bytes | None, dict]:
+        """The SpectrumDraw block the native Spectrum uploads for ``record`` under ``card``, drawn by ``pack`` (None:
+        the compiled-in copy) with ``settings`` by name (GPU-free)."""
+        return spectrum_block(self.module, record, card, pack, settings)
+
+    def spectrum_block_layout(self, pack: bytes | None = None) -> dict:
+        """SpectrumDraw as ``pack`` (None: the module's compiled-in copy) reflects it (size, binding, members) and
+        the members the core fills per frame."""
+        return json.loads(self.module.spectrum_block_layout(pack))
 
     def vulkan_instance(self, *, validation: bool = False) -> dict:
         """The process's Vulkan instance (D6 point 1), before any Vulkan host. ``validation`` (harness only) enables the

@@ -438,9 +438,44 @@ def test_a_refused_payload_reaches_the_owner_as_the_sessions_end(qt_app):
             if lost:
                 break
         assert len(lost) == 1 and lost[0].startswith("frame payload refused (schema")
+        assert link.payload_failure_report["cause"] == "schema"
     finally:
         link.close()
         sender.close()
+
+
+@pytest.mark.qt
+def test_a_refused_payload_fails_closed_without_recovery_or_in_process_fallback(qt_app, monkeypatch, caplog):
+    # N2.3's leftover (N2.5 box 9): a refusal means the writer and the reader disagree on the stream's contract, which
+    # neither a reconfigure nor the in-process path cures, so the owner holds the activation failed as the capacity
+    # violation does (``test_capacity_violation_fails_closed_without_recovery_or_in_process_fallback``). The real
+    # owner on an in-process session whose writer stamps Spectrum's native schema on the codec stream this owner reads.
+    # Negative control (seen 14 Nov): the owner before the change took the session's failure path (a recovery).
+    from tests.test_visualizer_owner_engine_worker import _InProcessSupervisor, _pump
+    from tools.visualizer_replay import owner_worker_gate as gate
+    from tools.visualizer_replay.live_engine_gate import paced_pcm
+    from widgets.spotify_visualizer import engine_worker_link
+
+    supervisor = _InProcessSupervisor()
+    rig = gate.OwnerRig("spectrum", worker=True, supervisor=supervisor, cadence="thread")
+    attempts: list[str] = []
+    try:
+        pcm, rate = paced_pcm(1.0)
+        with engine_worker_link.recorded_capture_for_testing(pcm=pcm, pcm_rate=rate):
+            owner = rig.build()
+            link = owner._worker
+            monkeypatch.setattr(owner, "_fall_back_in_process", lambda *a, **k: attempts.append("fallback"))
+            monkeypatch.setattr(owner, "_on_engine_worker_failed", lambda *a, **k: attempts.append("recovery"))
+            supervisor.worker._session.mailbox._payload = "native"      # the writer's side of the disagreement
+            _pump(rig, 3.0, until=lambda: owner._mode_transition_phase == "failed" or bool(attempts))
+        assert link.payload_failure_report is not None and link.payload_failure_report["cause"] == "schema"
+        assert owner._mode_transition_phase == "failed" and not attempts, attempts
+        assert link.closed or link._stopping                                                 # retired
+        assert "Frame payload REFUSED" in caplog.text
+    finally:
+        rig.close()
+        supervisor.close()
+        engine_worker_link.reset_run_state_for_testing()
 
 
 @pytest.mark.qt
@@ -451,8 +486,9 @@ def test_a_real_worker_whose_payload_the_owner_refuses_ends_its_session(qt_app, 
     # session writes Spectrum's native schema; this process's reader is the Python codec reader, which refuses the
     # first slot it reads at its head (D2: one consumer per stream, a native payload on a codec stream). The refused
     # slot is never acknowledged, the stream fails, the link reports the session's end with the refusal as its reason,
-    # and the owner's failure path keeps the Visualizer drawing (the last recovery leaves it in process for the run).
-    # Control: the same worker writing the codec is read, never refused, and stays the owner's worker.
+    # and the owner fails closed (N2.5 box 9: no reconfigure, no fall back in process; the session retired and the
+    # activation held failed, as a capacity violation is). Control: the same worker writing the codec is read, never
+    # refused, and stays the owner's worker.
     import os
 
     from core.process.supervisor import ProcessSupervisor
@@ -496,15 +532,8 @@ def test_a_real_worker_whose_payload_the_owner_refuses_ends_its_session(qt_app, 
     rig = gate.OwnerRig("spectrum", worker=True, supervisor=supervisor, cadence="thread")
     try:
         with engine_worker_link.recorded_capture_for_testing(pcm=pcm, pcm_rate=rate, payload=payload):
-            try:
-                owner = rig.build()
-            except RuntimeError as exc:
-                # The rig settles the configure's and start's replies before it returns; with a warm worker both
-                # refusals and the fall back in process can complete inside that settle, which the rig reports as a
-                # construction fallback. Here that is the outcome under test (asserted below), so take its owner.
-                if payload != "native" or "fell back in process" not in str(exc):
-                    raise
-                owner = rig.owner
+            owner = rig.build()                     # a refusal never falls back in process, even inside the settle
+            link = owner._worker
             if payload == "codec":
                 first = owner._worker
                 assert first is not None
@@ -516,27 +545,17 @@ def test_a_real_worker_whose_payload_the_owner_refuses_ends_its_session(qt_app, 
                 assert not refusals and not lost and owner._worker is first and first.configured
                 assert first.mailbox.refused_payloads == 0 and len(rig.published) > presented
                 return
-            _pump(rig, 30.0, until=lambda: bool(lost) and engine_worker_link.worker_disabled_for_run()
-                  and owner._mode_transition_phase == "idle")
+            _pump(rig, 30.0, until=lambda: bool(lost) and owner._mode_transition_phase == "failed")
         assert refusals, lost
         assert all(r["writer_pid"] and r["writer_pid"] != os.getpid() for r in refusals), refusals
         assert all(r["cause"] == "schema" and r["consumed"] == 0 for r in refusals), refusals
         assert "on a stream the Python codec consumes" in refusals[0]["reason"]
-        assert lost and lost[0].startswith("frame payload refused (schema, sequence "), lost
-        assert owner._worker is None and engine_worker_link.worker_disabled_for_run()
-        assert owner._mode_transition_phase == "idle"
-        drawn: list = []
-        publish = owner.controller.publish_render_snapshot
-
-        def recording(logical, presentation, *, logical_revision):
-            published = publish(logical, presentation, logical_revision=logical_revision)
-            if published:
-                drawn.append(logical)
-            return published
-
-        owner.controller.publish_render_snapshot = recording
-        _pump(rig, 0.5)
-        assert drawn                                                                # still drawn, in process
+        assert len(lost) == 1 and lost[0].startswith("frame payload refused (schema, sequence "), lost
+        # Failed closed: the same (retired) session, held failed; no recovery took the run's slot and nothing in
+        # process asked for an engine.
+        assert owner._worker is link and (link.closed or link._stopping)
+        assert owner._mode_transition_phase == "failed" and owner._worker_failures == 0
+        assert not engine_worker_link.worker_disabled_for_run()
     finally:
         rig.close()
         supervisor.shutdown()

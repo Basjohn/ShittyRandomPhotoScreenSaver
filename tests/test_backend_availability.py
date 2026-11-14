@@ -129,14 +129,19 @@ def test_an_activation_request_for_a_mode_without_a_renderer_is_refused(on_vulka
     assert request() is True and owner._pending_mode_activation["mode"] == target
 
 
-def test_a_studio_is_offered_only_where_its_mode_has_a_renderer(monkeypatch):
+def test_a_studio_is_offered_only_where_its_mode_has_a_renderer_and_its_preview_draws(monkeypatch):
     from rendering.quick import bootstrap
+    from ui.studio import registry
     from ui.studio.registry import has_studio, studio_modes
 
     with_studio = [entry.mode_id for entry in studio_modes()]
     assert with_studio and all(has_studio(mode_id) for mode_id in with_studio)                 # control: OpenGL
     monkeypatch.setattr(bootstrap, "quick_backend_api", lambda: "vulkan")
     _ported_modes(monkeypatch, {with_studio[0]})
+    # The Studio's preview is an OpenGL render node: a ported mode's Studio is not offered on Vulkan (N2.5 rule (d)).
+    assert [mode_id for mode_id in with_studio if has_studio(mode_id)] == []
+    # Once the preview draws on Vulkan, exactly the ported mode's Studio is.
+    monkeypatch.setattr(registry, "STUDIO_PREVIEW_BACKENDS", ("opengl", "vulkan"))
     assert [mode_id for mode_id in with_studio if has_studio(mode_id)] == [with_studio[0]]
 
 

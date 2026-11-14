@@ -35,11 +35,27 @@ def _active_shader_files() -> Dict[str, str]:
     }
 
 
-def _load_shader_source(path: Path, *, include_stack: tuple[Path, ...] = ()) -> str:
-    """Load a shader and expand local ``#include`` directives.
+#: The line a shader file writes where the conventions include goes (N1.4; ``rendering.gl_programs.conventions``). The
+#: native core's bake splices the same text at the same line (``native/core/cmake/compose_shader.cmake``), so a file
+#: both renderers draw is one source.
+CONVENTIONS_MARKER = "//@srpss_conventions"
 
-    The include expander stays deliberately local-only and rejects cycles.
+
+def compose_shader_source(path: Path) -> str:
+    """The text a shader compiles as: ``path`` with its local ``#include`` lines (its own folder only) and its
+    conventions marker expanded (``_load_shader_source``). The OpenGL path compiles it; ``tools/regen_qrc.py
+    --shaders`` bakes it into the ``.qsb`` the native core loads at run time (N2.5's standing port rule)."""
+    return _load_shader_source(Path(path), base_dir=Path(path).resolve().parent)
+
+
+def _load_shader_source(path: Path, *, include_stack: tuple[Path, ...] = (), base_dir: Path | None = None) -> str:
+    """Load a shader and expand local ``#include`` directives and the conventions marker.
+
+    The include expander stays deliberately local-only and rejects cycles. A line ``//@srpss_conventions`` becomes the
+    conventions include's text (``SRPSS_CONVENTIONS_GLSL``; the file defines ``SRPSS_CONVENTIONS_FRAGMENT`` before it
+    for ``fragPixel``), exactly as the native core's bake splices it.
     """
+    folder = (_SHADER_DIR if base_dir is None else Path(base_dir)).resolve()
     resolved = path.resolve()
     if resolved in include_stack:
         chain = " -> ".join(item.name for item in (*include_stack, resolved))
@@ -48,6 +64,11 @@ def _load_shader_source(path: Path, *, include_stack: tuple[Path, ...] = ()) -> 
     expanded: list[str] = []
     for line in source.splitlines(keepends=True):
         stripped = line.strip()
+        if stripped == CONVENTIONS_MARKER:
+            from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_GLSL
+
+            expanded.append(SRPSS_CONVENTIONS_GLSL)
+            continue
         if not stripped.startswith("#include "):
             expanded.append(line)
             continue
@@ -56,10 +77,10 @@ def _load_shader_source(path: Path, *, include_stack: tuple[Path, ...] = ()) -> 
             raise RuntimeError(f"Invalid shader include in {resolved.name}: {line.strip()}")
         include_name = token[1:-1]
         include_path = (resolved.parent / include_name).resolve()
-        if include_path.parent != _SHADER_DIR.resolve():
+        if include_path.parent != folder:
             raise RuntimeError(f"Shader include escapes source directory: {include_name}")
         expanded.append(
-            _load_shader_source(include_path, include_stack=(*include_stack, resolved))
+            _load_shader_source(include_path, include_stack=(*include_stack, resolved), base_dir=folder)
         )
     return "".join(expanded)
 

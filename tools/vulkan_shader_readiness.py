@@ -163,14 +163,15 @@ def _nested(prefix: str, value, depth: int = 0):
 
 
 def _file_sources() -> list[ShaderSource]:
-    from widgets.spotify_visualizer.shaders import _load_shader_source
+    from widgets.spotify_visualizer.shaders import CONVENTIONS_MARKER, _load_shader_source
     found = []
     for package in SOURCE_PACKAGES:
         for path in sorted((ROOT / package).rglob("*")):
             if path.suffix not in SHADER_SUFFIXES:
                 continue
             text = path.read_text(encoding="utf-8")
-            if "#include" in text and path.parent.name == "shaders":
+            # A shader file's local includes and its conventions marker, expanded as its loader draws it.
+            if ("#include" in text or CONVENTIONS_MARKER in text) and path.parent.name == "shaders":
                 text = _load_shader_source(path)
             relative = path.relative_to(ROOT).as_posix()
             found.append(ShaderSource(relative, path.suffix[1:], text, relative))

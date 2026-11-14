@@ -620,8 +620,11 @@ def open_mode_studio(tab, mode_id: str, *, adapter=None, surface_factory=None, p
     def modes():
         from ui.studio.registry import studio_modes
         enabled = set(getattr(getattr(tab, "_vis_body_host", None), "enabled_modes", ()) or ())
+        # The modes the Visualizers tab greys on the running backend (D10 point 2) have no selectable page there, so
+        # the switcher never offers them (audit 14 Nov: picking one raised in _select_mode_page).
+        greyed = set(getattr(tab, "_modes_without_renderer", {}) or {})
         return tuple((entry.mode_id, entry.title) for entry in studio_modes()
-                     if not enabled or entry.mode_id in enabled)
+                     if (not enabled or entry.mode_id in enabled) and entry.mode_id not in greyed)
 
     controller = StudioController(adapter or studio_adapter(mode_id), store, presence, surface_factory,
                                   theme_provider=studio_theme, mode_switcher=switcher, modes=modes,

@@ -256,6 +256,7 @@ class EngineWorkerLink:
         self.label_namespace = 0
         self.mapping_name: str | None = None
         self.capacity_failure_report: dict | None = None
+        self.payload_failure_report: dict | None = None   # the reader refused a slot at its head (N2.3)
         self._capacity_candidates: tuple[str, ...] = ()
         self.configured = False                   # the configure's reply arrived
         self.bar_count: int | None = None         # the session's bar count, from its configure and commit replies
@@ -825,6 +826,7 @@ class EngineWorkerLink:
         if not self._stopping:
             refused = getattr(self._mailbox, 'payload_failure', None)
             if refused is not None:
+                self.payload_failure_report = refused
                 self._emit('ended', f"frame payload refused ({refused['cause']}, sequence {refused['sequence']}): "
                                     f"{refused['reason']}")
                 return

@@ -8,8 +8,8 @@
 // the window's frame costs only Qt's own composite draw. On Vulkan it is primed before every pass that loads it (rule
 // C): Qt Quick samples it between passes, which leaves it in a shader-read layout.
 //
-// Content today is the harness's pattern pass alone (N2.4's proof): every texel's own index, or opaque white. A mode's
-// renderer (N2.5 on) draws into the same target.
+// Content is the harness's pattern pass (N2.4's proof: every texel's own index, or opaque white) unless a mode's content
+// is set (SurfaceContent; N2.5's Spectrum, spectrum.h), which then records into the same target.
 #pragma once
 
 #include "targets.h"
@@ -19,6 +19,7 @@
 #include <QtCore/QMutex>
 #include <QtCore/QSize>
 #include <QtCore/QString>
+#include <rhi/qrhi.h> // QRhiTexture::Format in a declaration needs the class (round 5's first compile)
 
 #include <memory>
 
@@ -37,6 +38,20 @@ enum class SurfacePattern {
 bool parseSurfacePattern(const QString &text, SurfacePattern *out);
 QString surfacePatternName(SurfacePattern pattern);
 
+// A mode's content of a surface (render thread only): it records its passes into the surface's target, which keeps its
+// contents (targets.h rule B: a content that must be cleared clears it with its first draw) and was primed for the
+// load (rule C) before record is called.
+class SurfaceContent
+{
+public:
+    virtual ~SurfaceContent() = default;
+    // Inside the frame, outside any pass.
+    virtual bool record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, QString *error) = 0;
+    // Every QRhi object of the content goes (the surface's release, or the content replaced).
+    virtual void release() = 0;
+    virtual int liveResources() const = 0;
+};
+
 class Surface
 {
 public:
@@ -47,9 +62,17 @@ public:
 
     // Render thread, at sync: the target at this size on this QRhi. A new size recreates the same QRhi objects (Qt's
     // QQuickRhiItem pattern, so Qt Quick's bindings follow the texture's generation); either change makes it dirty.
-    bool ensureTarget(QRhi *rhi, const QSize &pixels, QString *error);
+    // `format`: the target's texel format (RGBA8; RGBA16F for content whose translucent pixels must not be rounded to
+    // 8 bits before the composite blends them, N2.5): a change recreates every QRhi object of the surface.
+    bool ensureTarget(QRhi *rhi, const QSize &pixels, QString *error, QRhiTexture::Format format = QRhiTexture::RGBA8);
     // Render thread, at sync: the content; a change makes it dirty.
     void setPattern(SurfacePattern pattern);
+    // Render thread, at sync: a mode's content in place of the pattern (null: the pattern again); the one it replaces
+    // releases its QRhi objects now. A change makes it dirty.
+    void setContent(const std::shared_ptr<SurfaceContent> &content);
+    const std::shared_ptr<SurfaceContent> &content() const { return m_content; }
+    // Render thread, at sync: the content's input changed (a frame, the card), so the next edge records.
+    void markDirty() { m_dirty.storeRelease(1); }
     bool dirty() const { return m_dirty.loadAcquire() != 0; }
 
     // Render thread, on beforeRendering (inside the frame, outside any pass): records the content pass when dirty,
@@ -76,6 +99,7 @@ private:
     void setLive(int count);
 
     std::unique_ptr<Resources> m_res;
+    std::shared_ptr<SurfaceContent> m_content;
     SurfacePattern m_pattern = SurfacePattern::TexelIdentity;
     QAtomicInteger<int> m_dirty { 1 };
     QAtomicInteger<qint64> m_passes { 0 };

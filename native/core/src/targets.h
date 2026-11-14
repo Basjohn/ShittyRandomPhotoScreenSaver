@@ -11,6 +11,8 @@
 #include <QtCore/QByteArray>
 #include <QtCore/QSize>
 #include <QtCore/QString>
+// The whole QRhiTexture declaration, not a forward one: the target helpers name QRhiTexture::Format in their defaults.
+#include <rhi/qrhi.h>
 
 #include <memory>
 
@@ -44,7 +46,7 @@ struct ColorTarget
 // items are drawn front to back against the depth buffer and its clips use the stencil; Qt creates none for a target
 // handed over with QQuickRenderTarget::fromRhiRenderTarget). Not preserved: Qt Quick clears it at every pass.
 bool createColorTarget(QRhi *rhi, const QSize &size, const QByteArray &name, ColorTarget *out, QString *error,
-                       bool withDepthStencil = false);
+                       bool withDepthStencil = false, QRhiTexture::Format format = QRhiTexture::RGBA8);
 
 // Rule C: on Vulkan, when the texture is not in COLOR_ATTACHMENT_OPTIMAL, records the transition into `cb` (recording,
 // outside any pass) and tells QRhi the layout; elsewhere nothing. Returns what was done.

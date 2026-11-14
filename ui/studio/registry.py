@@ -55,12 +55,20 @@ def studio_modes() -> tuple[StudioEntry, ...]:
     return tuple(_ENTRIES.values())
 
 
-def has_studio(mode_id: str) -> bool:
-    """Whether ``mode_id`` offers its Studio: it has an adapter, and its mode a renderer on the process's graphics
-    backend (D10 point 2: the Studio's preview draws the mode's renderer; every mode has one on OpenGL)."""
-    from core.settings.visualizer_mode_registry import is_mode_available_on_backend
+#: The graphics backends the Studio's preview draws on. The preview is the mode's Python renderer in an OpenGL render
+#: node (``ui/studio/viewport.py``), not the native core's item, so a mode the native core draws on Vulkan (N2.5) has
+#: no Studio there until a native preview exists.
+STUDIO_PREVIEW_BACKENDS = ("opengl",)
 
-    return mode_id in _ENTRIES and is_mode_available_on_backend(mode_id)
+
+def has_studio(mode_id: str) -> bool:
+    """Whether ``mode_id`` offers its Studio: it has an adapter, its mode a renderer on the process's graphics backend
+    (D10 point 2), and the Studio's preview draws there (``STUDIO_PREVIEW_BACKENDS``)."""
+    from core.settings.visualizer_mode_registry import is_mode_available_on_backend
+    from rendering.quick.bootstrap import quick_backend_api
+
+    return (mode_id in _ENTRIES and is_mode_available_on_backend(mode_id)
+            and str(quick_backend_api()) in STUDIO_PREVIEW_BACKENDS)
 
 
 def create_adapter(mode_id: str):

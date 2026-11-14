@@ -289,6 +289,95 @@ class SceneMirror:
         host.close()
 
 
+#: ``--surface-format``: the native item's surface texels for this run (None: the route's own choice).
+NATIVE_SURFACE_FORMAT: str | None = None
+
+
+class _ParityRoute:
+    """``NativeVisualizerRoute`` for the parity runs. With the mapping check, each card's window map is compared with
+    the Python renderer's own rows of the same frame (``_python_mappings_run``), as float32 (what the GPU reads)."""
+
+    @staticmethod
+    def make(core, content_host, mirror):
+        import struct
+
+        from rendering.quick.visualizer.native_route import NativeVisualizerRoute
+
+        def f32(values):
+            return struct.pack(f"<{len(values)}f", *values)
+
+        class Route(NativeVisualizerRoute):
+            def card(self, presentation, snapshot, geometry):
+                card = super().card(presentation, snapshot, geometry)
+                mappings = mirror.python_mappings
+                if mappings is not None and self.published < len(mappings):
+                    row_x, row_y, _height = mappings[self.published]
+                    mirror.mapping_compared += 1
+                    mirror.mapping_identical += int(f32(card["item_from_window"]) == f32((*row_x, *row_y)))
+                return card
+
+        route = Route(core, content_host)
+        if NATIVE_SURFACE_FORMAT is not None:
+            route.surface_format = NATIVE_SURFACE_FORMAT      # rule (a)'s target-format measurement (round 5)
+            spectrum = core.spectrum                           # checked on the first item the route creates
+
+            def checked(parent, _make=spectrum):
+                item = _make(parent)
+                item.composite.set(surface_format=NATIVE_SURFACE_FORMAT)
+                held = item.composite.state()["config"].get("surface_format", "rgba8")
+                if held != NATIVE_SURFACE_FORMAT:
+                    raise RuntimeError(f"the module draws its surface as {held}: build round 5")
+                return item
+
+            route._core = type("Core", (), {"spectrum": staticmethod(checked)})()
+        return route
+
+
+class NativeSceneMirror(SceneMirror):
+    """``SceneMirror`` whose hidden production scene draws Spectrum through the product's native route (N2.5 rule (a),
+    D10 point 4): the module's frame driver attached to its window and a ``NativeVisualizerRoute`` attached to its
+    Visualizer item, as ``QuickSceneController`` attaches one on Vulkan. The item's own update requests are the
+    route's takes (``VisualizerRenderItem.update``); another mode's activation draws through the item's Python node
+    (the mixed window)."""
+
+    def __init__(self, core) -> None:
+        super().__init__()
+        self.core = core
+        self.window_host = None
+        self.route = None
+        self.native_frames = 0
+        # The mapping control: the Python renderer's window-pixel map per drawn frame (``_python_mappings_run``).
+        self.python_mappings: list | None = None
+        self.mapping_compared = 0
+        self.mapping_identical = 0
+
+    @property
+    def native_published(self) -> int:
+        return 0 if self.route is None else self.route.published
+
+    def attach(self, runtime: Any) -> None:
+        super().attach(runtime)
+        hidden = self.host.scene
+        self.window_host = self.core.attach_host(self.host.window)
+        item = hidden._ensure_visualizer_items()
+        self.route = _ParityRoute.make(self.core, item.parentItem(), self)
+        item.attach_native_route(self.route)
+
+    def frame(self, index: int) -> dict:
+        if self.route is not None and self.route.identity is not None:
+            self.native_frames += 1
+        return super().frame(index)
+
+    def close(self) -> None:
+        if self.host is not None and self.route is not None:
+            self.route.close()
+            self.host.render()                           # Qt deletes the node: the reader goes on its thread
+            if self.window_host is not None:
+                self.window_host.close()
+                self.window_host = None
+        super().close()
+
+
 def _pixels(run: dict, index: int):
     import numpy
 
@@ -404,6 +493,231 @@ def rendered_parity(mode: str, variant: str, clip_frames, supervisor: Any, *, sa
     return verdict
 
 
+def native_drawn_run(mode: str, script, *, settings: dict, core, python_mappings: list | None = None) -> dict:
+    """``drawn_run`` in process with the native Spectrum drawing Spectrum's activations (``NativeSceneMirror``)."""
+    from tools.visualizer_replay import owner_worker_gate as gate
+
+    mirror = NativeSceneMirror(core)
+    mirror.python_mappings = python_mappings
+    report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings,
+                               scene_mirror=mirror)
+    report["lit"] = mirror.lit
+    report["frames"] = mirror.frames
+    report["native_frames"] = mirror.native_frames
+    report["native_published"] = mirror.native_published
+    report["mapping"] = {"compared": mirror.mapping_compared, "identical": mirror.mapping_identical}
+    return report
+
+
+def frame_differences(a: dict, b: dict) -> list[dict]:
+    """Every input whose drawn region differs: its pixel count, largest 8-bit level and the differing pixels' bounding
+    box (left, top, right, bottom in the region's device pixels)."""
+    import numpy
+
+    rows = []
+    for index, (x, y) in enumerate(zip(a["pixels"], b["pixels"])):
+        if x["hash"] == y["hash"] or x["region"] != y["region"]:
+            continue
+        delta = numpy.abs(_pixels(a, index).astype(numpy.int16) - _pixels(b, index)).max(axis=2)
+        ys, xs = numpy.nonzero(delta)
+        if not len(xs):
+            continue
+        rows.append({"input": index, "pixels": int(len(xs)), "max_level": int(delta.max()),
+                     "bbox": [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())],
+                     "levels": {str(level): int((delta == level).sum()) for level in sorted(set(delta[delta > 0].tolist()))[:8]}})
+    return rows
+
+
+def _write_native_crops(out: Path, name: str, native: dict, python: dict, row: dict) -> list[str]:
+    """The worst differing input's crops (the differing pixels' box with 12 px around it, 4x nearest): Python, native
+    and the difference x64; plus the whole region of each."""
+    import numpy
+    from PIL import Image
+
+    out.mkdir(parents=True, exist_ok=True)
+    index = row["input"]
+    a, b = _pixels(python, index), _pixels(native, index)
+    left, top, right, bottom = row["bbox"]
+    pad = 12
+    box = (max(0, left - pad), max(0, top - pad), min(a.shape[1], right + pad + 1), min(a.shape[0], bottom + pad + 1))
+    written = []
+    for label, image in (("python", a[..., :3]), ("native", b[..., :3]),
+                         ("difference_x64", numpy.clip(numpy.abs(a[..., :3].astype(numpy.int16) - b[..., :3]) * 64,
+                                                       0, 255).astype(numpy.uint8))):
+        crop = image[box[1]:box[3], box[0]:box[2]]
+        path = out / f"{name}_input{index}_{label}_crop_x4.png"
+        Image.fromarray(numpy.ascontiguousarray(crop), "RGB").resize(
+            (crop.shape[1] * 4, crop.shape[0] * 4), Image.NEAREST).save(path)
+        written.append(str(path))
+        whole = out / f"{name}_input{index}_{label}.png"
+        Image.fromarray(numpy.ascontiguousarray(image), "RGB").save(whole)
+        written.append(str(whole))
+    return written
+
+
+def _split_rows(rows: list[dict], switch_input: int) -> dict:
+    """The per-input rows split at the mode switch: ``steady`` (Spectrum shown) and ``fade`` (its fade-out and the
+    next mode's arrival); for each, the inputs that differ, the largest level, and the pixels differing by more
+    than one level."""
+    def summary(part: list[dict]) -> dict:
+        above_one = sum(count for row in part for level, count in row["levels"].items() if int(level) > 1)
+        return {"differing_inputs": len(part), "max_level": max((row["max_level"] for row in part), default=0),
+                "pixels": sum(row["pixels"] for row in part), "pixels_above_one_level": above_one,
+                "inputs_above_one_level": sum(1 for row in part if row["max_level"] > 1)}
+    return {"steady": summary([row for row in rows if row["input"] < switch_input]),
+            "fade": summary([row for row in rows if row["input"] >= switch_input])}
+
+
+def _python_mappings_run(mode: str, script, settings: dict) -> tuple[dict, list]:
+    """``drawn_run`` in process, also recording the Python Spectrum renderer's own window-pixel map per drawn frame
+    (``u_item_from_frag_x``/``_y`` and its target's height): the input of the mapping control."""
+    from rendering.quick.visualizer.implementations import spectrum as python_spectrum
+
+    mappings: list = []
+    renderer = python_spectrum.QuickSpectrumRenderer
+    original = renderer.render
+
+    def recording(self, frame):
+        original(self, frame)
+        if int(frame.snapshot.logical.common.bar_count) > 0 and self._values.get("u_item_from_frag") == 1:
+            mappings.append((tuple(self._values["u_item_from_frag_x"]), tuple(self._values["u_item_from_frag_y"]),
+                             float(frame.viewport[3])))
+
+    renderer.render = recording
+    try:
+        run = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings)
+    finally:
+        renderer.render = original
+    return run, mappings
+
+
+#: Lit: a pixel whose brightest channel is this far above the card's dark fill (the classification's mask).
+_LIT_LEVEL = 40
+
+
+def classify_differences(native: dict, python: dict, switch_input: int) -> dict:
+    """Every pixel more than one level off, by class (the lead's rule (a) reading, 14 Nov): ``fade_frame`` (an input
+    at or after the mode switch), ``card_edge_column`` (within 2 device columns of the frame's leftmost or rightmost
+    lit column: the outermost bars' outer edges), ``peak_row`` (within a row of a column's topmost lit run when a
+    gap separates it from the bar below: the peak marker), ``cap_arc`` (the top 4 rows of the bar's own run in that
+    column: its rounded cap), ``other``. Each class: its pixel count and largest level."""
+    import numpy
+
+    classes = {name: {"pixels": 0, "max_level": 0, "inputs": 0} for name in
+               ("card_edge_column", "peak_row", "cap_arc", "fade_frame", "other")}
+    for index, (a, b) in enumerate(zip(native["pixels"], python["pixels"])):
+        if a["hash"] == b["hash"] or a["region"] != b["region"]:
+            continue
+        drawn, reference = _pixels(native, index), _pixels(python, index)
+        delta = numpy.abs(drawn.astype(numpy.int16) - reference).max(axis=2)
+        ys, xs = numpy.nonzero(delta > 1)
+        if not len(ys):
+            continue
+        labels = numpy.full(len(ys), "other", dtype=object)
+        if index >= switch_input:
+            labels[:] = "fade_frame"
+        else:
+            lit = reference[..., :3].max(axis=2) > _LIT_LEVEL
+            # The card's own frame (its border rows and columns, lit nearly edge to edge) is not a bar: without this
+            # every column's first lit row is the border's (the round-3 report's classes were taken that way).
+            lit[lit.mean(axis=1) > 0.8, :] = False
+            lit[:, lit.mean(axis=0) > 0.8] = False
+            columns = numpy.nonzero(lit.any(axis=0))[0]
+            edge = numpy.zeros(len(ys), dtype=bool)
+            if len(columns):
+                edge = (numpy.abs(xs - columns[0]) <= 2) | (numpy.abs(xs - columns[-1]) <= 2)
+            for k in range(len(ys)):
+                if edge[k]:
+                    labels[k] = "card_edge_column"
+                    continue
+                column = lit[:, xs[k]]
+                runs = numpy.flatnonzero(numpy.diff(numpy.concatenate(([0], column.view(numpy.int8), [0]))))
+                starts, ends = runs[0::2], runs[1::2]          # lit runs [start, end) from the top
+                if not len(starts):
+                    continue
+                y = ys[k]
+                if len(starts) > 1 and starts[0] - 1 <= y <= ends[0]:
+                    labels[k] = "peak_row"
+                    continue
+                bar = 1 if len(starts) > 1 else 0
+                if starts[bar] - 1 <= y < starts[bar] + 4:
+                    labels[k] = "cap_arc"
+        levels = delta[ys, xs]
+        for name in classes:
+            chosen = labels == name
+            if chosen.any():
+                entry = classes[name]
+                entry["pixels"] += int(chosen.sum())
+                entry["max_level"] = max(entry["max_level"], int(levels[chosen].max()))
+                entry["inputs"] += 1
+    return classes
+
+
+def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path) -> dict:
+    """Rule (a) of the port (N2.5): the owner in process drawn by the Python renderer and by the native item, single-
+    sampled, frame for frame over the card's region and its margin. Each native card's window map is checked against
+    the Python renderer's own rows of the same frame (``mapping``), and every pixel more than a level off is
+    classified (``classes``)."""
+    script = parity_script(clip_frames, mode)
+    with single_sample_scene_targets():
+        python, mappings = _python_mappings_run(mode, script, settings)
+        native = native_drawn_run(mode, script, settings=settings, core=core, python_mappings=mappings)
+    paths = pair_difference(native, python)
+    rows = frame_differences(native, python)
+    switch_at = next(i for i, (kind, _v) in enumerate(script) if kind == "mode")
+    switch_input = sum(1 for kind, _value in script[:switch_at] if kind == "input")
+    verdict = {"mode": mode, "run": f"{mode}{suffix}", "inputs": python["inputs"],
+               "frames_drawn": [len(python["pixels"]), len(native["pixels"])],
+               "native_frames": native["native_frames"], "native_published": native["native_published"],
+               "switch_input": switch_input, "paths": paths, "differing_inputs": len(rows),
+               "differing_pixels_total": sum(row["pixels"] for row in rows),
+               "max_level": max((row["max_level"] for row in rows), default=0),
+               "differences": rows[:200], "region": python["pixels"][0]["region"] if python["pixels"] else None,
+               "digests_identical": python["digests"] == native["digests"]}
+    verdict["identical"] = bool(paths["first"] is None and verdict["digests_identical"]
+                                and verdict["native_published"] > 0)
+    verdict["split"] = _split_rows(rows, switch_input)
+    verdict["mapping"] = dict(native["mapping"], python_frames=len(mappings))
+    verdict["classes"] = classify_differences(native, python, switch_input)
+    if rows:
+        worst = max(rows, key=lambda row: (row["max_level"], row["pixels"]))
+        verdict["worst"] = worst
+        verdict["crops"] = _write_native_crops(Path(out), f"{mode}{suffix.replace(':', '_').replace('=', '-')}",
+                                               native, python, worst)
+    return verdict
+
+
+def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = ()) -> dict:
+    """``native_parity`` over Spectrum's widened run set (``conventions_identity.mode_runs``); the report."""
+    import tools.expanded_visualizer_evidence as evidence
+    from rendering.native import load
+    from tools import conventions_identity
+    from widgets.spotify_visualizer import engine_worker_link
+
+    core = load(module_dir)
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    clip = evidence.shipped_clip(seconds)
+    report: dict = {"mode": "spectrum", "offers": offers, "seconds": seconds, "display": list(DISPLAY), "results": {}}
+    started = time.perf_counter()
+    try:
+        for suffix, settings in conventions_identity.mode_runs("spectrum", offers):
+            if only and f"spectrum{suffix}" not in only:
+                continue
+            engine_worker_link.reset_run_state_for_testing()
+            verdict = native_parity(core, "spectrum", suffix, settings, clip.frames, out)
+            report["results"][f"spectrum{suffix}"] = verdict
+            print(f"[NATIVE] spectrum{suffix:40s} {verdict['frames_drawn']} frames, native {verdict['native_published']}"
+                  f" published; differing inputs {verdict['differing_inputs']}, pixels "
+                  f"{verdict['differing_pixels_total']}, max level {verdict['max_level']}; "
+                  f"{'IDENTICAL' if verdict['identical'] else 'DIFFERENT'}", flush=True)
+    finally:
+        report["elapsed_s"] = round(time.perf_counter() - started, 1)
+        report["identical"] = bool(report["results"]) and all(v["identical"] for v in report["results"].values())
+        (out / "native_render_parity.json").write_text(json.dumps(report, indent=1), encoding="utf-8")
+    return report
+
+
 def _write_stills(out: Path, name: str, script, worker: dict, in_process: dict, paths: dict) -> None:
     """One sheet per run: three of the worker path's frames side by side (half size). When the paths differ, both
     paths' frames of the first differing input and an amplified difference map as well."""
@@ -487,6 +801,15 @@ def main(argv=None) -> int:
     parser.add_argument("--sampling", nargs="*", default=list(SAMPLINGS), choices=SAMPLINGS)
     parser.add_argument("--seconds", type=float, default=5.5)
     parser.add_argument("--skip-controls", action="store_true")
+    parser.add_argument("--native", action="store_true",
+                        help="rule (a) of N2.5: Spectrum drawn by the native item against the Python renderer, in "
+                             "process, single-sampled (needs --module-dir)")
+    parser.add_argument("--module-dir", type=Path, default=Path("release/native_module"))
+    parser.add_argument("--offers", action="store_true",
+                        help="with --native: the widened run set (both variants and every Choice offer)")
+    parser.add_argument("--runs", nargs="*", default=(), help="with --native: only these run keys (spectrum[:...])")
+    parser.add_argument("--surface-format", choices=("rgba8", "rgba16f"), default=None,
+                        help="with --native: the native item's surface texels (default: the route's own)")
     args = parser.parse_args(argv)
     # The stills (contact sheets, difference maps) and the report are written into owner scratch and published to
     # ``--out`` by the evidence publisher (``tools/evidence_media.py``); stills stay PNG, lossless.
@@ -503,8 +826,14 @@ def main(argv=None) -> int:
 
     app = QApplication(["owner-render-parity"])
     try:
-        report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
-                     seconds=args.seconds, controls=not args.skip_controls)
+        if args.native:
+            global NATIVE_SURFACE_FORMAT
+            NATIVE_SURFACE_FORMAT = args.surface_format
+            report = run_native(args.out, module_dir=args.module_dir.resolve(), offers=args.offers,
+                                seconds=args.seconds, only=tuple(args.runs))
+        else:
+            report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
+                         seconds=args.seconds, controls=not args.skip_controls)
     except BaseException:
         evidence_media.finish(1)                # a run that broke: its scratch is kept and its path printed
         raise

@@ -1102,3 +1102,78 @@ def test_real_gl_bar_edges_keep_one_x_on_both_sides_of_the_quads_diagonal(qt_app
     finally:
         target.release()
     assert not stepped, stepped
+
+
+@pytest.mark.qt
+def test_spectrum_reads_its_pixel_through_the_conventions_include(_real_spectrum_gl) -> None:
+    """N2.5 (N1.4's rule): spectrum.frag takes the fragment's pixel from ``fragPixel``, so the conventions block decides
+    its row convention. With the block's row flip set (x = 1, what a bottom-up target the native core does not own
+    would need) the same frame is drawn exactly mirrored top to bottom; with it clear (this renderer's value) the frame
+    is unchanged. A shader reading raw ``gl_FragCoord`` ignores the block and draws the same pixels both times."""
+    import ctypes
+    import dataclasses
+    import numpy as np
+    from OpenGL import GL as gl
+    from PySide6.QtGui import QOpenGLContext
+
+    from core.settings.models import SpotifyVisualizerSettings
+    from rendering.gl_programs.conventions import conventions_block
+    from rendering.quick.render import gl_resources
+    from tests._visualizer_frozen_settings import frozen_visualizer_settings
+    from widgets.spotify_visualizer.config_applier import _populate_shared_visualizer_extras
+
+    controller = VisualizerRuntimeController(runtime_generation=2, initial_mode="spectrum")
+    apply_presentation_vis_mode_kwargs(controller.presentation_state, asdict(SpotifyVisualizerSettings.from_mapping(
+        frozen_visualizer_settings("spectrum"), apply_preset_overlay=False)))
+    parameters: dict[str, object] = {}
+    _populate_shared_visualizer_extras(parameters, SimpleNamespace(
+        presentation_config_host=controller.presentation_state,
+        _spectrum_ghosting_enabled=True, _spectrum_ghost_decay=0.18,
+        _osc_ghosting_enabled=False, _osc_ghost_intensity=0.4, _osc_ghost_decay=0.4,
+    ))
+    parameters.update(_spectrum_capture_parameters(controller.presentation_state))
+    count = 12
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("spectrum"),
+        display_size=(1380.0, 280.0), viewport_extent=(1380.0, 280.0),
+        border_width=0.0, corner_radius=0.0,
+    )
+    logical = _logical(playing=True, source_generation=5, source_activation_id=7,
+                       bars=tuple(0.1 + 0.07 * index for index in range(count)), peaks=(0.95,) * count)
+    logical = dataclasses.replace(
+        logical,
+        common=dataclasses.replace(logical.common, style=freeze_render_fields({
+            "fill_color": (10, 220, 80, 255), "border_color": (245, 245, 255, 255),
+            "single_piece": True, "border_radius": 0.0,
+        })),
+        mode_state=dataclasses.replace(logical.mode_state, parameters=freeze_render_fields(parameters)),
+    )
+    snapshot = compose_visualizer_render_snapshot(logical, presentation, logical_revision=1)
+
+    def drawn():
+        return np.frombuffer(_real_spectrum_gl(snapshot), dtype=np.uint8).reshape(280, 1380, 4)
+
+    plain = drawn()
+    assert int((plain[..., 3] > 0).sum()) > 1000                 # bars drawn, not an empty frame
+    assert not np.array_equal(plain, plain[::-1])                # the frame is not its own mirror image
+    entry = gl_resources._conventions.get(gl_resources._native(QOpenGLContext.currentContext()))
+    assert entry is not None, "Spectrum's program does not hold the conventions block"
+
+    def write_block(values) -> None:
+        # The block's buffer is immutable storage (gl_resources): its values are copied in from a buffer of their own.
+        data = conventions_block(values)
+        name = (ctypes.c_uint * 1)()
+        gl.glCreateBuffers(1, name)
+        try:
+            gl.glNamedBufferStorage(int(name[0]), len(data), data, 0)
+            gl.glCopyNamedBufferSubData(int(name[0]), entry[0], 0, 0, len(data))
+        finally:
+            gl.glDeleteBuffers(1, name)
+
+    try:
+        write_block((1.0, 0.0, 0.0, 0.0))
+        flipped = drawn()
+    finally:
+        write_block((0.0, 0.0, 0.0, 0.0))
+    assert np.array_equal(flipped, plain[::-1])
+    assert np.array_equal(drawn(), plain)

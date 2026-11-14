@@ -3187,6 +3187,10 @@ class QuickSceneController(QObject):
         item.set_custom_layout_presentation_authority(
             self._custom_layout_session is not None
         )
+        # D10 point 4 (N2.5): on Vulkan the native core's item draws the Visualizer's frames in this content host.
+        from rendering.quick.visualizer.native_route import attach_native_route
+
+        attach_native_route(item, content_host)
         self._visualizer_root = root
         self._window.watch_plain_orbit_card(root)
         root.setProperty(
@@ -3677,6 +3681,10 @@ class QuickSceneController(QObject):
         self._custom_layout_display_origin = QPoint()
         self._custom_layout_session = None
         self._custom_layout_visualizer_baseline = None
+        visualizer_item = self._visualizer_item
+        if visualizer_item is not None and _qobject_is_alive(visualizer_item):
+            # The native route's stream retires and its item goes while the content host and window still live.
+            visualizer_item.close_native_route()
         root = self._scene_root
         context = self._context
         # Detach and queue the C++-owned root while every Python child wrapper

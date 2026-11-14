@@ -130,7 +130,10 @@ def test_the_composite_rounds_pass_on_opengl(tmp_path):
         entry = record[name]
         assert entry["pass"], {k: v for k, v in entry.get("checks", {}).items() if not v} or entry.get("error")
     assert record["live_hosts_at_end"] == 0
-    assert record["composites_at_end"] == {"items": 0, "surfaces": 0, "surface_resources": 0, "handles": 0}
+    # Every count composite_live reports (N2.5 added the Spectrum sources and their QRhi objects) is back to zero.
+    live = record["composites_at_end"]
+    assert {"items", "surfaces", "surface_resources", "handles", "spectrum_sources", "spectrum_resources"} <= set(live)
+    assert all(value == 0 for value in live.values()), live
 
 
 def test_the_import_check_passes_the_built_module(core, tmp_path, monkeypatch):

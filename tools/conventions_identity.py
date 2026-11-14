@@ -75,7 +75,8 @@ def _check_conventions_binding(tally: dict) -> None:
     from rendering.quick.render import gl_resources
 
     context = QOpenGLContext.currentContext()
-    entry = gl_resources._conventions.get(id(context)) if context is not None else None
+    # The registry is keyed by the context's native pointer (R-198), never id() of a wrapper.
+    entry = gl_resources._conventions.get(gl_resources._native(context)) if context is not None else None
     if entry is None:
         return
     value = (ctypes.c_int * 1)()

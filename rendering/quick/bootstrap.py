@@ -482,6 +482,12 @@ def quick_backend_api() -> str:
     return _owner.backend.api
 
 
+def native_core() -> Any:
+    """The process's native core (``rendering.native.NativeCore``) once the owner loaded it (the Vulkan start, or the
+    first hidden host); None before. The Visualizer's native route draws through it (N2.5)."""
+    return _owner.core
+
+
 def reset_quick_backend_for_testing() -> None:
     """Forget the owner's choice (tests of the owner only; a process chooses once)."""
     global _owner

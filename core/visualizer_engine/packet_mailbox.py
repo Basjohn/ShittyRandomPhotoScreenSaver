@@ -43,6 +43,7 @@ from core.visualizer_engine.packet_abi import (
     FLAG_MODE_REVEAL_READY,
     FLAG_PLAYING,
     FLAG_PRESENT_FRAME,
+    FLAG_SOURCE_CURRENT,
     FramePacketReader,
     FramePacketWriter,
     create_frame_mapping,
@@ -66,12 +67,20 @@ def _identity(value: int) -> int:
 
 
 def publication_flags(state: Any) -> int:
-    """The slot's ``flags``: the publication's changed / present / mode-reveal-ready / playing bits."""
+    """The slot's ``flags``: the publication's changed / present / mode-reveal-ready / playing bits, and whether its
+    reactive source is its own activation's (``FLAG_SOURCE_CURRENT``: the native renderer's admission, N2.5)."""
     flags = 0
     for name, bit in (("changed", FLAG_CHANGED), ("present_frame", FLAG_PRESENT_FRAME),
                       ("mode_reveal_ready", FLAG_MODE_REVEAL_READY), ("playing", FLAG_PLAYING)):
         if getattr(state, name, False):
             flags |= bit
+    source_generation = int(getattr(state, "source_generation", -1))
+    source_activation = int(getattr(state, "source_activation_id", -1))
+    # render_contract.snapshot_has_current_reactive_source, from the frame alone.
+    if (source_generation >= 0 and source_activation >= 0
+            and source_generation == int(getattr(state, "engine_generation", -2))
+            and source_activation == int(getattr(state, "activation_id", -2))):
+        flags |= FLAG_SOURCE_CURRENT
     return flags
 
 

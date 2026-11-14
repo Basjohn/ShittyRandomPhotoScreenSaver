@@ -2536,7 +2536,7 @@ class QuickDisplayVisualizerOwner:
         completed fade-out drew it at 0, so nothing flashes back)."""
         if commit is not self._worker_commit:
             return
-        if commit['link'] is self._worker and self._fail_closed_on_worker_capacity(commit['link']):
+        if commit['link'] is self._worker and self._fail_closed_on_worker_contract(commit['link']):
             return
         logger.error("[SPOTIFY_VIS][ENGINE_WORKER] Hidden %s activation FAILED source=%s target=%s: %s",
                      commit["kind"], commit["outgoing"], commit["target"], failure)
@@ -2569,7 +2569,7 @@ class QuickDisplayVisualizerOwner:
         anything later is the session's failure path."""
         if link is not self._worker or self._retired:
             return
-        if self._fail_closed_on_worker_capacity(link):
+        if self._fail_closed_on_worker_contract(link):
             return
         if not link.configured and self._worker_failures == 0:
             logger.warning("[SPOTIFY_VIS][ENGINE_WORKER] Configure failed (%s); this activation runs in process "
@@ -2578,16 +2578,26 @@ class QuickDisplayVisualizerOwner:
             return
         self._on_engine_worker_failed(reason)
 
-    def _fail_closed_on_worker_capacity(self, link: Any) -> bool:
-        """A violated admission envelope cannot be cured by retry or a different execution path."""
+    def _fail_closed_on_worker_contract(self, link: Any) -> bool:
+        """A broken frame contract cannot be cured by retry or a different execution path: a violated admission
+        envelope (capacity), or a payload the reader refused at its slot head (N2.3: the writer and the reader disagree
+        on the stream's schema). Either retires the session and holds the activation failed; no reconfigure, no fall
+        back in process."""
         mailbox = getattr(link, 'mailbox', None)
         failure = (getattr(link, 'capacity_failure_report', None)
                    or getattr(mailbox, 'capacity_failure', None))
-        if failure is None:
+        refused = (getattr(link, 'payload_failure_report', None)
+                   or getattr(mailbox, 'payload_failure', None))
+        if failure is not None:
+            logger.error('[SPOTIFY_VIS][ENGINE_WORKER] Frame capacity contract FAILED mode=%s actual_bytes=%d '
+                         'capacity_bytes=%d; session retired, activation held failed', self._controller.mode_id,
+                         failure['actual_bytes'], failure['capacity_bytes'])
+        elif refused is not None:
+            logger.error('[SPOTIFY_VIS][ENGINE_WORKER] Frame payload REFUSED mode=%s cause=%s sequence=%s: %s; '
+                         'session retired, activation held failed', self._controller.mode_id, refused['cause'],
+                         refused['sequence'], refused['reason'])
+        else:
             return False
-        logger.error('[SPOTIFY_VIS][ENGINE_WORKER] Frame capacity contract FAILED mode=%s actual_bytes=%d '
-                     'capacity_bytes=%d; session retired, activation held failed', self._controller.mode_id,
-                     failure['actual_bytes'], failure['capacity_bytes'])
         self._abandon_worker_commit()
         self._mode_transition_phase = 'failed'
         self._worker_identity = None
@@ -2598,7 +2608,7 @@ class QuickDisplayVisualizerOwner:
         """GUI thread: the first session's ``VIS_START`` failed; this activation runs in process (logged once, not
         counted for the run)."""
         if link is self._worker and not self._retired:
-            if self._fail_closed_on_worker_capacity(link):
+            if self._fail_closed_on_worker_contract(link):
                 return
             self._fall_back_in_process(f"start failed: {failure}", count_for_run=False)
 

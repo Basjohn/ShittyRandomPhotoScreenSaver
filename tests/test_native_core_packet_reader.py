@@ -22,6 +22,19 @@ ROOT = Path(__file__).resolve().parents[1]
 MODULE_DIR = ROOT / "release" / "native_module"
 BUILT = os.name == "nt" and (MODULE_DIR / f"{loader.MODULE_NAME}.pyd").is_file()
 
+
+class _NothingLive:
+    """``packet_reader_live()`` with every count zero (readers, views, handles, and from ABI 6 the closing handles)."""
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, dict) and {"readers", "views", "handles"} <= set(other) and not any(other.values())
+
+    def __repr__(self) -> str:
+        return "every count zero"
+
+
+NOTHING_LIVE = _NothingLive()
+
 pytestmark = pytest.mark.skipif(
     not BUILT,
     reason=f"the native core is not built in this checkout: no release/native_module/{loader.MODULE_NAME}.pyd (only "
@@ -71,7 +84,7 @@ def test_the_reader_refuses_what_is_not_a_frame_mapping(core):
         memory.unlink()
     with pytest.raises(ValueError, match="unknown packet reader controls"):
         core.packet_reader("srpss_viz_x", controls=("not_a_control",))
-    assert core.packet_reader_live() == {"readers": 0, "views": 0, "handles": 0}
+    assert core.packet_reader_live() == NOTHING_LIVE
 
 
 def test_the_adversarial_table_holds_and_every_negative_control_fails_it(core):
@@ -81,7 +94,7 @@ def test_the_adversarial_table_holds_and_every_negative_control_fails_it(core):
     unseen = {row["case"]: control for row in table["cases"] for control, seen in row["controls"].items()
               if not seen["failed"]}
     assert not unseen, unseen
-    assert table["live_after"] == {"readers": 0, "views": 0, "handles": 0}
+    assert table["live_after"] == NOTHING_LIVE
 
 
 def test_the_in_place_writer_never_gets_a_mixed_record_past_the_seqlock(harness, core):
@@ -101,6 +114,45 @@ def test_d2_the_head_read_one_consumer_and_the_drop_edge(harness, core):
 
 
 @pytest.mark.qt
+def test_a_close_racing_a_read_never_unmaps_under_the_copy(core):
+    """Audit fix-soon 3 (14 Nov): a close on one thread while another thread's read is inside its copy (the
+    pause_in_copy hook) only retires the reader and drops the handle's reference; the reading thread finishes the copy
+    against its pinned view, presents nothing of it, and releases and deletes the reader itself. The mapping is closed
+    and unlinked by its owner meanwhile. Control: a close with no read in progress releases on the closing thread."""
+    import threading
+
+    memory = adversary.create_mapping()
+    adv = adversary.Adversary(memory.name)
+    reader = core.packet_reader(memory.name, expect=adversary.EXPECTED_IDENTITY, controls=("pause_in_copy",))
+    adv.publish(adversary.valid_record(1))
+    result: dict = {}
+    thread = threading.Thread(target=lambda: result.setdefault("read", reader.read()), name="render-thread stand-in")
+    thread.start()
+    try:
+        assert reader.wait_paused(10000)
+        closed = reader.close()                               # the GUI's close, during the copy
+        adv.close()
+        memory.close()
+        memory.unlink()                                       # the owner's close and unlink, during the copy
+        live = core.packet_reader_live()
+    finally:
+        core.module.packet_reader_resume(reader.handle)       # the closed handle stays resumable while held
+        thread.join(30)
+    assert closed["released_by"] == "the reading thread" and closed["state"] == "retiring"
+    assert live["readers"] == 1 and live["views"] == 1 and live["closing"] == 1 and live["handles"] == 0
+    assert not thread.is_alive() and result["read"] == "retiring"
+    assert core.packet_reader_live() == NOTHING_LIVE
+    # Control: nothing in progress, so the close itself releases.
+    memory = adversary.create_mapping()
+    try:
+        idle = core.packet_reader(memory.name, expect=adversary.EXPECTED_IDENTITY)
+        assert idle.close()["released_by"] == "the closing thread"
+    finally:
+        memory.close()
+        memory.unlink()
+    assert core.packet_reader_live() == NOTHING_LIVE
+
+
 def test_the_reader_matches_the_reference_decoder_bit_for_bit_on_the_shipped_clip(harness, core, qt_app):
     frames = harness.spectrum_frames(1.5, "growing_pains")
     assert len(frames) > 30

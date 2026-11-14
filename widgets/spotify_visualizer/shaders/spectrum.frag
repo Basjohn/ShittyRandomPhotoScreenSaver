@@ -1,4 +1,8 @@
 #version 460 core
+// The conventions include (N1.4; spliced at the marker by the loader here and by the native core's bake): the fragment's
+// pixel comes from fragPixel, never raw gl_FragCoord, so both renderers read it in their target's row convention.
+#define SRPSS_CONVENTIONS_FRAGMENT
+//@srpss_conventions
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 fragColor;
 
@@ -12,20 +16,27 @@ layout(std140, binding = 18) uniform SpectrumDraw {
     int uContentRotationQuarters;
     vec2 u_resolution;            // logical size in QWidget coordinates
     float u_dpr;                  // device pixel ratio of the backing FBO
-    // Framebuffer-pixel origin of this visualizer's viewport. gl_FragCoord is WINDOW space, so when the compositor
+    // Framebuffer-pixel origin of this visualizer's viewport. The fragment's pixel is WINDOW space, so when the compositor
     // draws the visualizer into the whole-display framebuffer at a non-zero viewport origin the raw value is not
     // card-local. Subtracting this origin restores card-local pixels. A card-sized, origin-zero target passes (0, 0).
     vec2 u_viewport_origin_px;
     // Qt Quick uses interpolated item-local coordinates. The old compositor keeps the framebuffer-coordinate branch
     // until Phase-I deletion.
     int u_quick_item_coords;
-    // 1: item-local coordinates from gl_FragCoord through the item's affine map (rows x and y of a 2 x 3 matrix,
-    // resolved by the renderer from its matrix, viewport and rotation). One continuous coordinate over the whole
-    // full-field quad: the interpolated v_uv is rounded differently in its two triangles, so a bar edge on a pixel
-    // centre stepped by a pixel along their shared diagonal. 0: the interpolated v_uv (a matrix that is not affine).
+    // 1: item-local coordinates from the fragment's pixel (fragPixel) through the item's affine map (rows x and y of a
+    // 2 x 3 matrix, resolved by the renderer from its matrix, viewport and rotation, R-197). One continuous coordinate
+    // over the whole full-field quad: the interpolated v_uv is rounded differently in its two triangles, so a bar edge
+    // on a pixel centre stepped by a pixel along their shared diagonal. 0: the interpolated v_uv (a matrix that is not
+    // affine). The rows map the WINDOW's pixel: a target that is not the window (the native core's composite) first
+    // rebuilds it through u_window_from_target (whole-pixel offsets and a sign: exact), so the bar, cap and peak
+    // arithmetic runs in the Python renderer's own space and precision (N2.5). The Python renderer's target is the
+    // window: identity rows.
     int u_item_from_frag;
     vec3 u_item_from_frag_x;
     vec3 u_item_from_frag_y;
+    vec3 u_window_from_target_x;
+    vec3 u_window_from_target_y;
+    vec2 u_target_px;             // the render target's size in pixels (fragPixel's row convention)
     vec4 u_content_rect;          // item-local x, y, width, height
     float u_visual_scale;
     int u_bar_count;
@@ -452,7 +463,7 @@ float spectrum_cap_coverage(float y, float top, float scale) {
     return clamp((min(y + 0.5 * px, high) - max(y - 0.5 * px, low)) / px, 0.0, 1.0);
 }
 
-float spectrum_rim_alpha(float side_dist_px, float top_dist_px) {
+float spectrum_rim_alpha_at(float side_dist_px, float top_dist_px, float coverage_px) {
     if (u_spectrum_glow_enabled != 1) return 0.0;
     float glow_strength = clamp(u_spectrum_glow_intensity, 0.0, 1.5);
     if (glow_strength <= 0.001) return 0.0;
@@ -471,13 +482,23 @@ float spectrum_rim_alpha(float side_dist_px, float top_dist_px) {
     // derivatives.  In particular, do not impose a 1.5px authored core:
     // below that scale it exceeds ``spread`` and reverses smoothstep's edges,
     // which is undefined and can wash the entire black Organs fill white.
-    float coverage_px = max(fwidth(edge_dist), 0.0001);
+    // ``coverage_px`` is that feather (spectrum_rim_coverage, taken in main's prologue).
     float core_end = spread * 0.35;
     float inner_core = 1.0 - smoothstep(0.0, max(core_end, coverage_px), edge_dist);
     float inner_falloff = 1.0 - smoothstep(core_end, spread + coverage_px, edge_dist);
     float rim = max(inner_core * 0.90, inner_falloff * 0.55);
     float color_alpha = clamp(u_spectrum_glow_color.a, 0.0, 1.0);
     return rim * clamp(color_alpha * (0.55 + glow_strength * 0.40), 0.0, 0.95);
+}
+
+// The rim's coverage feather: the fine derivative of its edge distance (a min() of two distances, so a 2x2 quad's
+// coarse difference differs from the per-pixel one at a bar's corner; named Fine for Vulkan, OpenGL's is fine on the
+// rig). Called only from main's prologue: derivatives must be taken before any discard (or return), while every lane
+// of the quad is alive. A discarded neighbour is a helper on OpenGL but ended on Vulkan (SPIR-V OpKill), so the
+// feather taken after the discards differed by up to 15 levels beside every discarded corner pixel (N2.5 rule (b):
+// all 5,652 Vulkan pixels more than a level off shared a quad with a discarded one).
+float spectrum_rim_coverage(float side_dist_px, float top_dist_px) {
+    return max(fwidthFine(min(side_dist_px, top_dist_px)), 0.0001);
 }
 
 vec4 blend_spectrum_rim_glow(vec4 base_color, float rim_alpha) {
@@ -495,30 +516,30 @@ vec4 blend_spectrum_rim_glow(vec4 base_color, float rim_alpha) {
 }
 
 void main() {
-    if (u_fade <= 0.0 || u_bar_count <= 0 || u_segments <= 0) {
-        discard;
-    }
-
+    // Every derivative is taken in this prologue, before the first discard or return: a derivative after one is
+    // undefined in GLSL (non-uniform control flow) and differs by driver. OpenGL keeps a discarded neighbour running
+    // as a helper; Vulkan's discard (SPIR-V OpKill) ends it, so the rim's feather differed by up to 15 levels beside
+    // every discarded corner pixel (N2.5 rule (b)). The prologue computes the geometry the derivatives read for every
+    // pixel, in the bar field or not (array reads clamped); the discards after it are the original tests, in order.
+    // tests/test_shader_derivatives.py refuses a derivative after a discard or a return in main.
     float width = u_resolution.x;
     float height = u_resolution.y;
-    if (width <= 0.0 || height <= 0.0) {
-        discard;
-    }
 
     // Derive logical fragment coordinates from the physical framebuffer
     // position. QOpenGLWidget renders into a device-pixel-scaled FBO, so we
-    // map gl_FragCoord (physical) back into QWidget logical space using the
+    // map the fragment's pixel (physical) back into QWidget logical space using the
     // current device pixel ratio.
     vec2 fragCoord;
     if (u_quick_item_coords == 1 && u_item_from_frag == 1) {
-        vec3 window = vec3(gl_FragCoord.xy, 1.0);
+        vec3 target = vec3(fragPixel(u_target_px), 1.0);
+        vec3 window = vec3(dot(u_window_from_target_x, target), dot(u_window_from_target_y, target), 1.0);
         fragCoord = vec2(dot(u_item_from_frag_x, window), dot(u_item_from_frag_y, window));
     } else if (u_quick_item_coords == 1) {
         fragCoord = v_uv * u_resolution;
     } else {
         float dpr = (u_dpr <= 0.0) ? 1.0 : u_dpr;
         float fb_height = height * dpr;
-        vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
+        vec2 localFrag = fragPixel(u_target_px) - u_viewport_origin_px;
         fragCoord = vec2(localFrag.x / dpr, (fb_height - localFrag.y) / dpr);
     }
     g_px_x = max(abs(dFdx(fragCoord.x)) + abs(dFdy(fragCoord.x)), 1e-4);
@@ -538,51 +559,21 @@ void main() {
     float inner_bottom = inner_top + inner_height;
     g_field_h = 0.95 * inner_height;
 
-    if (inner_height <= 0.0) {
-        discard;
-    }
-
-    // Discard anything outside the bar field vertically so we don't fill
-    // the entire card when active_segments is high.
-    if (fragCoord.y < inner_top || fragCoord.y > inner_bottom) {
-        discard;
-    }
-
     int bar_count_int = max(u_bar_count, 1);
     float bar_count = float(bar_count_int);
     float bar_width = u_bar_width_px;
-    if (bar_width < authored_scale) {
-        discard;
-    }
     float span = u_bar_span_px;
     float bars_left = u_bars_left;
-    if (bars_left < 0.0 || span <= 0.0 || gap < 0.0) {
-        discard;
-    }
-
     float x_rel = fragCoord.x - bars_left;
-    if (x_rel < 0.0) {
-        discard;
-    }
-    if (x_rel >= span) {
-        discard;
-    }
-
     float step_x = bar_width + gap;
     int bar_index = int(floor(x_rel / step_x));
-    if (bar_index < 0 || bar_index >= u_bar_count) {
-        discard;
-    }
-
-    // Local X coordinate within the bar; discard the explicit gap region.
-    // Use a half-open range [0, bar_width) so that we never classify the
-    // gap pixel as part of the bar due to floating-point rounding.
+    // Local X coordinate within the bar (the gap region is discarded below).
     float bar_local_x = x_rel - float(bar_index) * step_x;
-    if (bar_local_x < 0.0 || bar_local_x >= bar_width) {
-        discard;
-    }
+    // The bar read: a pixel outside the bar field (discarded below) reads its nearest bar, so its derivative lanes
+    // never index out of range.
+    int bar_slot = clamp(bar_index, 0, bar_count_int - 1);
 
-    float value = u_bars[bar_index];
+    float value = u_bars[bar_slot];
     if (value < 0.0) {
         value = 0.0;
     }
@@ -590,7 +581,7 @@ void main() {
         value = 1.0;
     }
 
-    float peak = u_peaks[bar_index];
+    float peak = u_peaks[bar_slot];
     if (peak < 0.0) {
         peak = 0.0;
     }
@@ -618,23 +609,69 @@ void main() {
         boosted_peak = 0.95;
     }
 
+    float y_rel = inner_bottom - fragCoord.y;
+    // Single piece: the bar's and its ghost's heights.
+    float active_height = boosted * inner_height;
+    float peak_height = boosted_peak * inner_height;
+    bool is_bar = (y_rel < active_height);
+    // Suppress ghost when bar is silent (active_height < 1px) to prevent
+    // a white border flash from a decaying peak on a zero-height bar.
+    bool is_ghost = (!is_bar && active_height >= authored_scale && peak_height > active_height && y_rel < peak_height);
+    // Segmented: the segment grid.
+    float total_seg_gap = seg_gap * float(u_segments - 1);
+    float seg_height = (inner_height - total_seg_gap) / float(u_segments);
+    seg_height = floor(seg_height / authored_scale) * authored_scale;
+    float step_y = seg_height + seg_gap;
+    int seg_index = int(floor(y_rel / step_y));
+    float seg_local_y = y_rel - float(seg_index) * step_y;
+    // The rim's distances and its derivative (spectrum_rim_coverage), from every lane of the quad.
+    float rim_side_dist_px = min(bar_local_x, bar_width - bar_local_x);
+    float rim_top_dist_px = (u_single_piece == 1)
+        ? abs((is_ghost ? peak_height : active_height) - y_rel) : abs(seg_height - seg_local_y);
+    float rim_coverage_px = spectrum_rim_coverage(rim_side_dist_px, rim_top_dist_px);
+
+    // ---------- No derivative below this line (the prologue's comment). ----------
+    if (u_fade <= 0.0 || u_bar_count <= 0 || u_segments <= 0) {
+        discard;
+    }
+    if (width <= 0.0 || height <= 0.0) {
+        discard;
+    }
+    if (inner_height <= 0.0) {
+        discard;
+    }
+    // Discard anything outside the bar field vertically so we don't fill
+    // the entire card when active_segments is high.
+    if (fragCoord.y < inner_top || fragCoord.y > inner_bottom) {
+        discard;
+    }
+    if (bar_width < authored_scale) {
+        discard;
+    }
+    if (bars_left < 0.0 || span <= 0.0 || gap < 0.0) {
+        discard;
+    }
+    if (x_rel < 0.0) {
+        discard;
+    }
+    if (x_rel >= span) {
+        discard;
+    }
+    if (bar_index < 0 || bar_index >= u_bar_count) {
+        discard;
+    }
+    // The explicit gap region. Use a half-open range [0, bar_width) so that we never classify the
+    // gap pixel as part of the bar due to floating-point rounding.
+    if (bar_local_x < 0.0 || bar_local_x >= bar_width) {
+        discard;
+    }
+
     // ========== SINGLE PIECE MODE ==========
     // Render solid continuous bars with no segment gaps.
     if (u_single_piece == 1) {
-        float base_bottom = inner_bottom;
-        float y_rel = base_bottom - fragCoord.y;
         if (y_rel < 0.0) {
             discard;
         }
-
-        float active_height = boosted * inner_height;
-        float peak_height = boosted_peak * inner_height;
-
-
-        bool is_bar = (y_rel < active_height);
-        // Suppress ghost when bar is silent (active_height < 1px) to prevent
-        // a white border flash from a decaying peak on a zero-height bar.
-        bool is_ghost = (!is_bar && active_height >= authored_scale && peak_height > active_height && y_rel < peak_height);
 
         if (!is_bar && !is_ghost) {
             if (u_peak_cap_mix > 0.0) {
@@ -659,6 +696,8 @@ void main() {
         float lift = clamp((peak_height - active_height) / max(authored_scale, 1.0), 0.0, 1.0);
         float corner_ghost = 0.0;   // > 0: a bar top corner outside its arc, shown as the ghost's start
         float ghost_cover = 1.0;    // the ghost's own bottom corners fade out of their rounding with fill_k
+        // The rounded corners' inside test is computed `precise` (no fused multiply-add): a pixel centre on
+        // the arc decided otherwise by Vulkan's compiler than by OpenGL's (N2.5 rule (b)).
         float br_max = min(u_border_radius, bar_width * 0.5);
         if (br_max > 0.5 * authored_scale) {
             float bx_f = bar_local_x;
@@ -671,14 +710,18 @@ void main() {
                 if (br_bar > 0.5 * authored_scale && by_f > active_height - br_bar) {
                     bool outside = false;
                     if (bx_f < br_bar) {
-                        float dx = br_bar - bx_f;
-                        float dy = by_f - (active_height - br_bar);
-                        outside = outside || (dx * dx + dy * dy > br_bar * br_bar);
+                        precise float dx = br_bar - bx_f;
+                        precise float dy = by_f - (active_height - br_bar);
+                        precise float d2 = dx * dx + dy * dy;
+                        precise float r2 = br_bar * br_bar;
+                        outside = outside || (d2 > r2);
                     }
                     if (bx_f > bar_width - br_bar) {
-                        float dx = bx_f - (bar_width - br_bar);
-                        float dy = by_f - (active_height - br_bar);
-                        outside = outside || (dx * dx + dy * dy > br_bar * br_bar);
+                        precise float dx = bx_f - (bar_width - br_bar);
+                        precise float dy = by_f - (active_height - br_bar);
+                        precise float d2 = dx * dx + dy * dy;
+                        precise float r2 = br_bar * br_bar;
+                        outside = outside || (d2 > r2);
                     }
                     if (outside) {
                         if (!fill_ghost_above) discard;
@@ -693,14 +736,18 @@ void main() {
                     ? min(br_max, peak_height * 0.5) : br_max;
                 if (br_ghost > 0.5 * authored_scale && by_f > peak_height - br_ghost) {
                     if (bx_f < br_ghost) {
-                        float dx = br_ghost - bx_f;
-                        float dy = by_f - (peak_height - br_ghost);
-                        if (dx * dx + dy * dy > br_ghost * br_ghost) discard;
+                        precise float dx = br_ghost - bx_f;
+                        precise float dy = by_f - (peak_height - br_ghost);
+                        precise float d2 = dx * dx + dy * dy;
+                        precise float r2 = br_ghost * br_ghost;
+                        if (d2 > r2) discard;
                     }
                     if (bx_f > bar_width - br_ghost) {
-                        float dx = bx_f - (bar_width - br_ghost);
-                        float dy = by_f - (peak_height - br_ghost);
-                        if (dx * dx + dy * dy > br_ghost * br_ghost) discard;
+                        precise float dx = bx_f - (bar_width - br_ghost);
+                        precise float dy = by_f - (peak_height - br_ghost);
+                        precise float d2 = dx * dx + dy * dy;
+                        precise float r2 = br_ghost * br_ghost;
+                        if (d2 > r2) discard;
                     }
                 }
                 // Round ghost BOTTOM corners where ghost meets bar top
@@ -709,17 +756,21 @@ void main() {
                         ? min(br_max, active_height * 0.5) : br_max;
                     if (br_bot > 0.5 * authored_scale && by_f < active_height + br_bot) {
                         if (bx_f < br_bot) {
-                            float dx = br_bot - bx_f;
-                            float dy = (active_height + br_bot) - by_f;
-                            if (dx * dx + dy * dy > br_bot * br_bot) {
+                            precise float dx = br_bot - bx_f;
+                            precise float dy = (active_height + br_bot) - by_f;
+                            precise float d2 = dx * dx + dy * dy;
+                            precise float r2 = br_bot * br_bot;
+                            if (d2 > r2) {
                                 if (fill_k <= 0.0) discard;
                                 ghost_cover = fill_k;
                             }
                         }
                         if (bx_f > bar_width - br_bot) {
-                            float dx = bx_f - (bar_width - br_bot);
-                            float dy = (active_height + br_bot) - by_f;
-                            if (dx * dx + dy * dy > br_bot * br_bot) {
+                            precise float dx = bx_f - (bar_width - br_bot);
+                            precise float dy = (active_height + br_bot) - by_f;
+                            precise float d2 = dx * dx + dy * dy;
+                            precise float r2 = br_bot * br_bot;
+                            if (d2 > r2) {
                                 if (fill_k <= 0.0) discard;
                                 ghost_cover = fill_k;
                             }
@@ -797,9 +848,7 @@ void main() {
             sp_is_border = on_border;
             sp_color = on_border ? border : fill;
         }
-        float side_dist_px = min(bar_local_x, bar_width - bar_local_x);
-        float top_dist_px = abs((is_ghost ? peak_height : active_height) - y_rel);
-        float rim_alpha = spectrum_rim_alpha(side_dist_px, top_dist_px) * u_fade;
+        float rim_alpha = spectrum_rim_alpha_at(rim_side_dist_px, rim_top_dist_px, rim_coverage_px) * u_fade;
         if (!sp_is_border) {
             sp_color = blend_spectrum_rim_glow(sp_color, rim_alpha);
         }
@@ -816,28 +865,17 @@ void main() {
     }
 
     // ========== SEGMENTED MODE ==========
-    float total_seg_gap = seg_gap * float(u_segments - 1);
-    float seg_height = (inner_height - total_seg_gap) / float(u_segments);
-    seg_height = floor(seg_height / authored_scale) * authored_scale;
+    // (The segment grid is the prologue's.)
     if (seg_height < authored_scale) {
         discard;
     }
-
-    float base_bottom = inner_bottom;
-    float step_y = seg_height + seg_gap;
-    float y_rel = base_bottom - fragCoord.y;
     if (y_rel < 0.0) {
         discard;
     }
-
-    int seg_index = int(floor(y_rel / step_y));
     if (seg_index < 0) {
         discard;
     }
-
-    // Local Y coordinate within the segment; discard the vertical gap
-    // region using a half-open range [0, seg_height).
-    float seg_local_y = y_rel - float(seg_index) * step_y;
+    // Discard the vertical gap region using a half-open range [0, seg_height).
     if (seg_local_y < 0.0 || seg_local_y >= seg_height) {
         discard;
     }
@@ -849,27 +887,35 @@ void main() {
         float by_f = seg_local_y;
         // Bottom-left corner
         if (bx_f < br_seg && by_f < br_seg) {
-            float dx = br_seg - bx_f;
-            float dy = br_seg - by_f;
-            if (dx * dx + dy * dy > br_seg * br_seg) discard;
+            precise float dx = br_seg - bx_f;
+            precise float dy = br_seg - by_f;
+            precise float d2 = dx * dx + dy * dy;
+            precise float r2 = br_seg * br_seg;
+            if (d2 > r2) discard;
         }
         // Bottom-right corner
         if (bx_f > bar_width - br_seg && by_f < br_seg) {
-            float dx = bx_f - (bar_width - br_seg);
-            float dy = br_seg - by_f;
-            if (dx * dx + dy * dy > br_seg * br_seg) discard;
+            precise float dx = bx_f - (bar_width - br_seg);
+            precise float dy = br_seg - by_f;
+            precise float d2 = dx * dx + dy * dy;
+            precise float r2 = br_seg * br_seg;
+            if (d2 > r2) discard;
         }
         // Top-left corner
         if (bx_f < br_seg && by_f > seg_height - br_seg) {
-            float dx = br_seg - bx_f;
-            float dy = by_f - (seg_height - br_seg);
-            if (dx * dx + dy * dy > br_seg * br_seg) discard;
+            precise float dx = br_seg - bx_f;
+            precise float dy = by_f - (seg_height - br_seg);
+            precise float d2 = dx * dx + dy * dy;
+            precise float r2 = br_seg * br_seg;
+            if (d2 > r2) discard;
         }
         // Top-right corner
         if (bx_f > bar_width - br_seg && by_f > seg_height - br_seg) {
-            float dx = bx_f - (bar_width - br_seg);
-            float dy = by_f - (seg_height - br_seg);
-            if (dx * dx + dy * dy > br_seg * br_seg) discard;
+            precise float dx = bx_f - (bar_width - br_seg);
+            precise float dy = by_f - (seg_height - br_seg);
+            precise float d2 = dx * dx + dy * dy;
+            precise float r2 = br_seg * br_seg;
+            if (d2 > r2) discard;
         }
     }
 
@@ -973,9 +1019,7 @@ void main() {
         seg_is_border = on_border;
         out_color = on_border ? border : fill;
     }
-    float seg_side_dist_px = min(bar_local_x, bar_width - bar_local_x);
-    float seg_top_dist_px = abs(seg_height - seg_local_y);
-    float seg_rim_alpha = spectrum_rim_alpha(seg_side_dist_px, seg_top_dist_px) * u_fade;
+    float seg_rim_alpha = spectrum_rim_alpha_at(rim_side_dist_px, rim_top_dist_px, rim_coverage_px) * u_fade;
     if (!seg_is_border) {
         out_color = blend_spectrum_rim_glow(out_color, seg_rim_alpha);
     }

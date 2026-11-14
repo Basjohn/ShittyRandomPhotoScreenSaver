@@ -152,6 +152,20 @@ def test_the_adversarial_table_holds_on_the_python_reference_and_its_naive_contr
     assert set(adversary.HEAD_REFUSALS.values()) == {"schema", "mode", "version", "size"}
 
 
+def test_the_python_reference_counts_another_streams_slot_foreign_before_its_schema():
+    """Lead's decision (14 Nov): a slot whose stream identity differs is foreign before its schema is checked, so a
+    stale slot of another stream never fails this one (the C++ reader's same case runs in the native table). Control:
+    the reference opened without its expected identity refuses that slot by its head and the stream fails."""
+    case = next(c for c in adversary.cases() if c.name.startswith("identity: another stream's slot with a schema"))
+    assert case.reference and case.expect is not None
+    held = adversary.run_case(case, lambda name, c: adversary.ReferenceReader(name, expect=c.expect),
+                              reader_name="reference")
+    assert held.held, held.failures()
+    blind = adversary.run_case(case, lambda name, c: adversary.ReferenceReader(name), reader_name="reference",
+                               control="no identity")
+    assert not blind.held and any("refused" in failure for failure in blind.failures()), blind.failures()
+
+
 def test_every_native_case_names_a_control_or_says_why_not():
     # Each case of the C++ table carries the negative controls that must fail it (run with the built module); the two
     # without one are the baseline and the replacement writer, whose naive control is the reference's.

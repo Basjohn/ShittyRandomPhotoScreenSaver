@@ -20,7 +20,7 @@ _SOURCE_ROOTS = (
     "utils", "weather", "widgets", "presets", "themes", "resources",
 )
 _SOURCE_SUFFIXES = frozenset({
-    ".py", ".qml", ".js", ".json", ".qrc", ".rcc", ".frag", ".vert",
+    ".py", ".qml", ".js", ".json", ".qrc", ".rcc", ".frag", ".vert", ".qsb",
     ".geom", ".glsl", ".png", ".svg", ".jpg", ".jpeg", ".webp",
     ".ogg", ".mp3", ".ico", ".ttf", ".otf", ".wav", ".xml",
 })
