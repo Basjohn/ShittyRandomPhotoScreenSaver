@@ -4,7 +4,7 @@
 card-material backdrop), D8 (what Parity+ means), D9 (async GPU jobs), D10 (the Vulkan rehearsal path and the flip
 gate) and D11 (the Qt version) were decided by the one-off architectural audit of 12 Nov 2026 (Fable 5.2, at the
 lead's request, answering the operator's direction of 11 and 12 Nov). D12 and D13 (14 Nov) were proposed by the High
-agent for N2.9 and N4.a. They bind until the lead or the operator supersedes one in writing here. D1 to D3 and the
+agent for N2.9 and N4.a, and D14 (15 Nov, scene targets) for N3.1 with the lead's answers. They bind until the lead or the operator supersedes one in writing here. D1 to D3 and the
 transport rule, the rest of D5 (N0.5), N0.3 and N0.4 (D5.5) were drafted as proposals and accepted by the lead on
 12 Nov; this file states each as decided, with the lead's answers folded in. What each decision built is under its
 "As built" or "As proved" record. The ordered work is `Current_Plan.md`, item 8b.
@@ -977,10 +977,10 @@ edge): invisible and transient, while making them exact would mean the Python re
 which retires with it in N5.2h anyway. N5.2a's seven stay exact under rule (a) and within 1 level everywhere under
 rule (b). `transition_route_check.py` encodes this (`TIE_PIXELS`, `_is_fragment_pass`).
 
-## N3.1 draft: scene targets (15 Nov 2026; proposed by the High agent, not decided)
+## D14. Scene targets (N3.1, decided 15 Nov 2026; proposed by the High agent, choices A to G answered by the lead)
 
-*A proposal for the lead; nothing here binds until the lead answers the open choices below. The plan's N3.1 boxes
-carry the steps.*
+*The draft of 15 Nov became this decision with the lead's answers folded in (the list at the end). The plan's N3.1
+boxes carry the steps.*
 
 **The oracle, read at de68ede75.** `rendering/quick/scene3d/target.py` `SceneTarget`: colour (RGBA8, RGBA16F with
 `hdr`), depth (a depth24 renderbuffer, or a DEPTH_COMPONENT32F texture with `depth_texture`), opt-in emission,
@@ -997,7 +997,7 @@ come from six places: transitions' `scene3d_samples` (the tier or the transition
 Waveform (`waveform.py:377`) and a fixed 1 in the Oscilloscope (`oscilloscope.py:165`); `SceneTarget._allocate` clamps
 to the GL limits.
 
-**Proposed.**
+**The decision.**
 1. *Targets are data, a primitive used by every consumer* (D12 point 3's rule, as D13 did for samplers). A program
    declares its targets beside its passes: a name; a size (the surface's device pixels, or explicit pixels from Python,
    Bubble's ambient size); colour attachments (at most 4, named; RGBA8, RGBA16F, R16F or R32F); a depth (none, or one
@@ -1007,11 +1007,15 @@ to the GL limits.
    name (`<target>.<attachment>`), reading its single-sample texture or its resolve. One target is one QRhi render
    target with all its attachments; a pass writing fewer attachments masks the others (Python's `emission_writes` and
    `shaft_writes` are masks too), so no pass switches render pass to change outputs. Refusals, with the reason, as D12's.
-2. *Allocation per size.* One `SceneTargets` owner per content (render thread; surface scope: the content already
-   lives and dies with its node, and with one Visualizer per window a window registry would add nothing). An allocation
-   is keyed by (bucketed size, effective samples, the declaration); it is made only when the key changes, one
-   attachment per step (N3.6 schedules the steps as warm-up units; until then the first record makes them), never per
-   frame. The content sits at image rows [H-h, H) and columns [0, w) of a bucketed allocation, the Python renderer's GL
+2. *Allocation per size.* One `SceneTargets` owner per content (render thread; surface scope, choice B: the content
+   already lives and dies with its node, and with one Visualizer per window a window registry would add nothing). An
+   allocation is keyed by (allocated size, effective samples, the declaration), its size in 64 px buckets (choice A):
+   it grows at once, to the needed size's buckets, whenever the needed size passes the allocation on either axis; it
+   shrinks, to the needed size's buckets, only when the needed size falls two or more buckets below the allocation on
+   either axis, so a drag across one bucket boundary does not reallocate back and forth. Both are decided at the size
+   edge (a new card or explicit size reaching the item's sync), never by a timer or a settle poll. An allocation is
+   made one attachment per step (N3.6 schedules the steps as warm-up units; until then the first record makes them),
+   never per frame. The content sits at image rows [H-h, H) and columns [0, w) of a bucketed allocation, the Python renderer's GL
    bottom-left, so a linear read past the content's edge (refraction, a blur) reads what Python's reads. One function in
    `conventions.h` turns that rect into QRhi's viewport and scissor per backend: QRhi's viewport origin is the
    framebuffer's bottom-left, which on the core's OpenGL targets (F1's flip) is the image's top. A single-sample target
@@ -1043,31 +1047,35 @@ to the GL limits.
    (Waveform 4, the Oscilloscope 1); every caller listed above calls it and the Python pixels do not move (N1's last box
    is closed by it). The request travels as the target's `samples`; the core's clamp is the only place it meets a device:
    the largest of `QRhi::supportedSampleCounts()` not above it, 1 when the device offers no other. The effective count
-   is reported in the content's state. The Python renderer keeps its GL clamp until it retires.
+   is reported in the content's state. The Python renderer keeps its GL clamp until it retires. Waveform's 4 and the
+   Oscilloscope's 1 stay declared fixed requests (choice D: no pixel moves); whether they follow the tier is an operator
+   look and cost question for later, and blocks nothing.
 8. *Multisampled targets resolve first* (D5.6 row 7): each attachment a sampler reads gets a resolve texture
    (`QRhiColorAttachment::setResolveTexture`), and depth a depth resolve (`setDepthResolveTexture`, where the device
-   reports `QRhi::ResolveDepthStencil`; one sample's depth, not the nearest). On Qt's OpenGL backend a resolve is a
-   framebuffer blit (Qt source, to be measured: the lesson's 0.5 ms at 1440p was a blit). Multisampled output is judged
-   repeat-relative (D8 point 1).
+   reports `QRhi::ResolveDepthStencil`; one sample's depth, not the nearest; choice E). The proof reads the flag on both
+   backends; a backend without it stops the work and is reported, with no workaround built. On Qt's OpenGL backend a
+   resolve is a framebuffer blit (Qt source; the lesson's 0.5 ms at 1440p was a blit): accepted if measured within
+   budget, the figure recorded (choice G; the budget the proof applies is D7's, 0.3 ms at 2560 x 1440 and 0.6 ms at 4K
+   for a frame's resolves, until the lead sets another); past it the work stops and is reported with the measurement.
+   Multisampled output is judged repeat-relative (D8 point 1).
 9. *Not built here.* Velocity (motion blur, with D5.3's formats box), OIT's second target sharing the scene's depth,
    bloom and the tone map (N3.4); geometry (N3.2); the warm-up schedule (N3.6). The declaration keeps room for a target
    that borrows another's depth (N3.4's OIT) without a contract change.
 
-**Open choices, with the recommendation.**
-- A. Bucket: 64 px reallocated at any bucket change, growing or shrinking (recommended: a drag reallocates at bucket
-  crossings only, a settled card holds under 64 px of slack); Python's grow-only (a card shrunk from 4K keeps its 4K
-  targets until retirement); or exact size (every resize step reallocates, and reads past the edge differ from Python's).
-- B. Owner: the content (recommended) or the window registry of D5's table.
-- C. Depth: one D32F texture always (recommended) or a renderbuffer when unsampled.
-- D. Waveform's 4 and the Oscilloscope's 1 stay declared fixed requests (recommended: no pixel moves now); moving them
-  onto the tier is a look and cost decision for the lead.
-- E. Multisampled depth: QRhi's depth resolve now, with N1.8's background A/B and the per-sample service deciding the
-  nearest depth for Extruded Bubble at its port (recommended); or hold multisampled capture until N1.8 lands.
-- F. Bubble's light: made with the target, cleared when nothing glows (recommended: at most 32 MB at 2048 a side, and no
-  render target rebuilt when glow flickers); or only while glowing, as Python (a pass and its pipelines rebuilt at
-  every toggle).
-- G. QRhi's OpenGL resolve cost: accept it if the harness measures it inside the budget; past it, D5.3's per-sample
-  service's OpenGL form (the shader average the Python renderer uses) is proposed with the measurement.
+**The lead's answers (15 Nov 2026), folded in above.**
+- A. 64 px buckets; grow at once whenever the needed size passes the allocation; shrink only with hysteresis, when
+  the needed size falls two or more buckets below the allocation on either axis; decided at the size edge only, no
+  timer and no settle polling.
+- B. The content owns its targets (surface scope).
+- C. Always one D32F texture.
+- D. Waveform's 4 and the Oscilloscope's 1 stay declared fixed requests; following the tier is a later operator look
+  and cost question that blocks nothing.
+- E. QRhi's depth resolve now; the proof checks `ResolveDepthStencil` on both backends; a backend without it stops the
+  work and is reported, no workaround.
+- F. The light attachment is made with Bubble's target and cleared when nothing glows; the proof confirms the clear's
+  cost is negligible.
+- G. QRhi's OpenGL resolve is accepted if measured within budget, the figure recorded; past budget the work stops and
+  is reported with the measurement.
 
 ## D1, D2, D3 and the transport rule
 
