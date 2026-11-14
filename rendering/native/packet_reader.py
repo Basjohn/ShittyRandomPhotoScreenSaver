@@ -19,8 +19,10 @@ from typing import Any, Mapping
 #: What ``read`` returns (``readResultName`` in ``packet_reader.cpp``).
 READ_RESULTS = ("nothing", "accepted", "torn", "stale", "foreign", "refused", "failed", "retiring", "retired")
 #: The negative controls a harness may switch on (``PacketReaderConfig`` in ``packet_reader.h``); the product never does.
+#: ``pause_in_copy`` is not a negative control but D1's test hook "close during copy": each read pauses inside its copy
+#: until another thread resumes it (``wait_paused``, ``resume``).
 READER_CONTROLS = ("skip_head_check", "skip_seqlock", "accept_unordered", "acknowledge_refused", "head_resets_watermark",
-                   "skip_identity")
+                   "skip_identity", "pause_in_copy")
 _IDENTITY_KEYS = ("runtime_generation", "engine_generation", "activation_id", "mode_code")
 
 
@@ -131,6 +133,14 @@ class PacketReader:
 
     def drop_retained_frame(self) -> None:
         self._module.packet_reader_drop(self._live())
+
+    def wait_paused(self, timeout_ms: int) -> bool:
+        """The ``pause_in_copy`` hook (another thread than the reading one): a read is paused inside its copy."""
+        return bool(self._module.packet_reader_wait_paused(self._live(), int(timeout_ms)))
+
+    def resume(self) -> None:
+        """The ``pause_in_copy`` hook: the paused read goes on."""
+        self._module.packet_reader_resume(self._live())
 
     def retire(self) -> None:
         self._module.packet_reader_retire(self._live())

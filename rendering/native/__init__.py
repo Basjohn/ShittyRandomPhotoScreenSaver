@@ -29,9 +29,10 @@ from rendering.native.packet_reader import (
     PacketReader,
     SchemaTableMismatch,
 )
+from rendering.native.spectrum import SPECTRUM_PRESENTATION_KEYS, NativeSpectrum, spectrum_presentation
 
 __all__ = ["COMPOSITE_OPTIONS", "CompositeGeometry", "CompositeItem", "EXPECTED_ABI", "GPU_PASS_KINDS", "GpuSample",
-           "HOST_KINDS", "MODULE_NAME", "NativeFrame", "PROBE_OPTIONS", "PacketReader", "READER_CONTROLS",
-           "READ_RESULTS", "HiddenHost", "Host", "NativeCore", "NativeCoreUnavailable", "ProbeReadback", "QuickFrame",
-           "SURFACE_PATTERNS", "SchemaTableMismatch", "WindowHost", "composite_geometry", "load",
-           "write_to_frame_trace"]
+           "HOST_KINDS", "MODULE_NAME", "NativeFrame", "NativeSpectrum", "PROBE_OPTIONS", "PacketReader",
+           "READER_CONTROLS", "READ_RESULTS", "HiddenHost", "Host", "NativeCore", "NativeCoreUnavailable",
+           "ProbeReadback", "QuickFrame", "SPECTRUM_PRESENTATION_KEYS", "SURFACE_PATTERNS", "SchemaTableMismatch",
+           "WindowHost", "composite_geometry", "load", "spectrum_presentation", "write_to_frame_trace"]

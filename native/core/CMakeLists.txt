@@ -53,9 +53,13 @@ file(GLOB _shader_sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.vert"
     "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.frag"
     "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.comp")
+# The product's own shader files a native renderer draws, baked from where the Python renderer reads them (one source
+# for both; N2.5): embedded like the core's, not staged as separate .qsb files (the staging covers shaders/ only).
+set(_product_shader_sources
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../widgets/spotify_visualizer/shaders/spectrum.frag")
 set(_shader_headers)
 set(_shader_includes "#pragma once\n")
-foreach(_src ${_shader_sources})
+foreach(_src ${_shader_sources} ${_product_shader_sources})
     get_filename_component(_file "${_src}" NAME)
     string(MAKE_C_IDENTIFIER "${_file}_qsb" _symbol)
     set(_composed "${_gen}/composed/${_file}")
@@ -87,6 +91,7 @@ set(_sources
     src/gpu_timer.cpp
     src/surfaces.cpp
     src/composite.cpp
+    src/spectrum.cpp
     src/packet_reader.cpp
     src/targets.cpp
     src/conventions.cpp

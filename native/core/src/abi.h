@@ -13,6 +13,9 @@
 // hidden host's QRhi timestamps (host_attach's seventh argument).
 // 5 (N2.3): the packet reader (packet_reader_open/read/head/frame/drop/retire/release/state/close, packet_reader_live)
 // and the compiled-in frame schemas (frame_schemas).
+// 6 (N2.5): Spectrum on a composite (composite_spectrum_bind/unbind/present/drop/head/state/wait_paused/resume,
+// composite_update, spectrum_block, spectrum_block_layout; composite_live's Spectrum counts), the packet reader's
+// pause_in_copy hook (packet_reader_wait_paused/resume) and its post-copy retiring check.
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 5
+#define SRPSS_NATIVE_CORE_ABI 6

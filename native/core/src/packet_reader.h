@@ -47,6 +47,7 @@
 #include <QtCore/QAtomicInteger>
 #include <QtCore/QByteArray>
 #include <QtCore/QJsonObject>
+#include <QtCore/QSemaphore>
 #include <QtCore/QString>
 
 namespace srpss_core {
@@ -85,6 +86,9 @@ struct PacketReaderConfig
     bool acknowledgeRefused = false;  // a refused slot is acknowledged
     bool headResetsWatermark = false; // a head read resets the accepted watermark (the drop's resurrection)
     bool skipIdentity = false;        // the expected identity is not compared
+    // The D1 test hook "close during copy" (harness only, never a guard): the reader pauses inside each copy, after the
+    // copy started and before its bytes are read, until resume(); waitPaused() tells another thread it is there.
+    bool pauseInCopy = false;
 
     static bool fromJson(const QByteArray &json, PacketReaderConfig *out, QString *error);
     QJsonObject toJson() const;
@@ -123,6 +127,12 @@ public:
     void retire();             // any thread: Retiring, at once
     void release();            // the consumer's thread (the render thread's retire job): Retired, the view's pin goes
     void dropRetainedFrame();  // any thread: applied by the next read()
+
+    // The pause_in_copy hook (any thread other than the reader's): true once a read is paused inside its copy (within
+    // `timeoutMs`); resume() lets it go on.
+    bool waitPaused(int timeoutMs);
+    void resume();
+    bool pausesInCopy() const { return m_config.pauseInCopy; }
 
     // The retained frame (the consumer's thread): its head and its record (owned by the reader, valid until its next
     // read, drop or release), or false when none is retained. Its schema is null only under skipHeadCheck.
@@ -168,6 +178,10 @@ private:
     bool m_ownPin = false;            // the reader holds its own pin (a mapped view, not yet released)
     QAtomicInt m_unmapped { 0 };
     QAtomicInt m_dropRequested { 0 };
+    QSemaphore m_paused;              // the pause_in_copy hook: released when a read is paused, ...
+    QSemaphore m_resume;              // ... acquired by it until resume()
+    QAtomicInteger<qint64> m_pauses { 0 };
+    qint64 m_copiesDiscarded = 0;     // copies finished after the stream began retiring (D1: nothing of them presented)
 
     // Consumer-thread state.
     quint64 m_accepted = 0;        // the accepted watermark

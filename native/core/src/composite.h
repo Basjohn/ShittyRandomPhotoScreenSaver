@@ -15,6 +15,10 @@
 //   (rendering/quick/visualizer/clip_host.py: a pixel is content when its centre's distance to the path is <= 0). An
 //   admitted overflow (Sphere's, Extruded Spectrum's, not held by the record) skips the term; Python decides which.
 // - Opacity is Qt's (the item's own and its ancestors'); the content is premultiplied.
+// - Content: the harness's pattern, or a mode's (N2.5: Spectrum, spectrum.h). With Spectrum bound, the node reads the
+//   item's stream at every sync on the render thread (the accept edge), releases the streams the item retired (the
+//   render-thread retire job, also run when Qt deletes the node), and its surface records only when a frame was
+//   accepted or dropped or the card changed.
 //
 // GUI thread for the item; its node lives on the render thread.
 #pragma once
@@ -29,7 +33,10 @@
 namespace srpss_core {
 
 class WindowSurfaces;
+class SpectrumSource;
 struct CompositeStats;
+struct PacketReaderConfig;
+struct SpectrumPresentation;
 
 struct CompositeConfig
 {
@@ -57,6 +64,13 @@ public:
     const CompositeConfig &config() const { return m_config; }
     QJsonObject stateJson() const;
 
+    // Spectrum (N2.5), GUI thread. bindSpectrum opens the stream (the previous one retires); unbindSpectrum retires it
+    // (never waits); presentSpectrum sets the card as shown; each asks Qt for a frame. spectrum() is null until bound.
+    bool bindSpectrum(const QString &mappingName, const PacketReaderConfig &config, QString *error);
+    void unbindSpectrum();
+    void presentSpectrum(const SpectrumPresentation &presentation);
+    SpectrumSource *spectrum() const { return m_spectrum.get(); }
+
     // Any thread: composite items alive in the process.
     static int liveItems();
 
@@ -68,6 +82,7 @@ private:
     CompositeConfig m_config;
     std::shared_ptr<WindowSurfaces> m_surfaces; // the window's registry (GUI thread; copied by the node at sync)
     std::shared_ptr<CompositeStats> m_stats;
+    std::shared_ptr<SpectrumSource> m_spectrum; // shared with the node, which holds it until Qt deletes the node
 };
 
 } // namespace srpss_core

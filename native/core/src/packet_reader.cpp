@@ -188,6 +188,8 @@ bool PacketReaderConfig::fromJson(const QByteArray &json, PacketReaderConfig *ou
                 c.headResetsWatermark = true;
             else if (name == QLatin1String("skip_identity"))
                 c.skipIdentity = true;
+            else if (name == QLatin1String("pause_in_copy"))
+                c.pauseInCopy = true;
             else {
                 *error = QStringLiteral("unknown packet reader control '%1'").arg(name);
                 return false;
@@ -224,6 +226,8 @@ QJsonObject PacketReaderConfig::toJson() const
         controls.append(QStringLiteral("head_resets_watermark"));
     if (skipIdentity)
         controls.append(QStringLiteral("skip_identity"));
+    if (pauseInCopy)
+        controls.append(QStringLiteral("pause_in_copy"));
     o.insert(QStringLiteral("controls"), controls);
     return o;
 }
@@ -390,6 +394,16 @@ void PacketReader::release()
 void PacketReader::dropRetainedFrame()
 {
     m_dropRequested.storeRelease(1);
+}
+
+bool PacketReader::waitPaused(int timeoutMs)
+{
+    return m_paused.tryAcquire(1, timeoutMs);
+}
+
+void PacketReader::resume()
+{
+    m_resume.release();
 }
 
 void PacketReader::applyDrop()
@@ -647,6 +661,13 @@ ReadResult PacketReader::read()
     const quint32 size = qMin(head.payloadBytes, m_capacity);
     m_staging.resize(qsizetype(size));
     m_copiesStarted.ref();
+    if (m_config.pauseInCopy) {
+        // The D1 hook (harness only): paused inside the copy, its view pinned, until another thread resumes it (after
+        // closing and unlinking the mapping, or retiring the stream).
+        m_pauses.ref();
+        m_paused.release();
+        m_resume.acquire();
+    }
     std::memcpy(m_staging.data(), base + fa::kSlotPayloadOffset, size);
     barrier();
     const quint64 begin = loadAcquire64(base + fa::kSlotSequenceBegin);
@@ -654,6 +675,13 @@ ReadResult PacketReader::read()
     if (strict && (begin != latest || head.payloadBytes > m_capacity)) {
         ++m_torn; // a write began during the copy: the previous frame stays
         return ReadResult::Torn;
+    }
+    if (m_state.loadAcquire() != Open) {
+        // D1: the stream began retiring during the copy; the copy completed against the pinned view, and nothing of it
+        // is presented or acknowledged.
+        ++m_readsWhileRetiring;
+        ++m_copiesDiscarded;
+        return ReadResult::Retiring;
     }
     if (found && !checkRecord(found, m_staging, &cause, &reason))
         return refuse(latest, cause, reason);
@@ -747,6 +775,8 @@ QJsonObject PacketReader::stateJson() const
     o.insert(QStringLiteral("copies_started"), double(m_copiesStarted.loadAcquire()));
     o.insert(QStringLiteral("copies_finished"), double(m_copiesFinished.loadAcquire()));
     o.insert(QStringLiteral("last_accepted_sequence"), double(m_lastAccepted.loadAcquire()));
+    o.insert(QStringLiteral("copies_discarded"), double(m_copiesDiscarded));
+    o.insert(QStringLiteral("pauses"), double(m_pauses.loadAcquire()));
     return o;
 }
 

@@ -139,6 +139,16 @@ void Surface::setPattern(SurfacePattern pattern)
     m_dirty.storeRelease(1);
 }
 
+void Surface::setContent(const std::shared_ptr<SurfaceContent> &content)
+{
+    if (content == m_content)
+        return;
+    if (m_content)
+        m_content->release();
+    m_content = content;
+    m_dirty.storeRelease(1);
+}
+
 bool Surface::ensureTarget(QRhi *rhi, const QSize &pixels, QString *error)
 {
     if (!rhi || pixels.width() < 1 || pixels.height() < 1) {
@@ -239,6 +249,18 @@ bool Surface::record(QRhi *rhi, QRhiCommandBuffer *cb, bool *recorded, QString *
         *error = QStringLiteral("the surface is recorded on another QRhi, or with no command buffer");
         return false;
     }
+    if (m_content) {
+        // A mode's content (N2.5): its own passes into the same target, primed for the load first (rule C).
+        const QString prime = primeForLoad(rhi, cb, m_res->target.texture.get());
+        if (!m_content->record(rhi, cb, m_res->target, error))
+            return false;
+        m_dirty.storeRelease(0);
+        m_passes.fetchAndAddRelaxed(1);
+        *recorded = true;
+        QMutexLocker lock(&m_mutex);
+        m_lastPrime = prime;
+        return true;
+    }
     if (!ensurePass(error))
         return false;
     Resources &r = *m_res;
@@ -277,6 +299,8 @@ bool Surface::record(QRhi *rhi, QRhiCommandBuffer *cb, bool *recorded, QString *
 
 void Surface::release()
 {
+    if (m_content)
+        m_content->release(); // the content stays set: a later target records it again
     if (!m_res)
         return;
     m_res->pipeline.reset();

@@ -10,9 +10,10 @@
 // the surfaces the frame driver records for it (surfaces.h). N2.6: the per-pass GPU timer in the frame driver
 // (gpu_timer.h) and its known-cost pass (load_pass.h). N2.3: the packet reader, the core's one consuming reader of a
 // Visualizer frame stream (packet_reader.h), with the frame ABI and the native schemas generated from the Python modules
-// (frame_abi_generated.h). The product's one caller of the module is the backend owner, rendering.quick.bootstrap
-// (N2.7), on the Vulkan rehearsal path and for its one kept hidden host; nothing in the product opens a packet reader
-// yet (N2.5's Spectrum does).
+// (frame_abi_generated.h). N2.5: Spectrum on a composite (spectrum.h), its stream read by a packet reader at the
+// item's sync on the render thread. The product's one caller of the module is the backend owner,
+// rendering.quick.bootstrap (N2.7), on the Vulkan rehearsal path and for its one kept hidden host; the native Spectrum
+// is reached from the harnesses until the port's rules pass (D10).
 //
 // Every entry runs on the GUI thread (a packet reader's entries on the thread that owns it). The ones that wait for the
 // hidden host's render thread release the GIL while they wait; the render thread itself never takes it (D5.4).
@@ -24,6 +25,7 @@
 #include "host_adapter.h"
 #include "packet_reader.h"
 #include "process_counters.h"
+#include "spectrum.h"
 #include "surfaces.h"
 #include "vulkan_context.h"
 
@@ -645,7 +647,194 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("surfaces"), srpss_core::Surface::liveSurfaces());
     o.insert(QStringLiteral("surface_resources"), srpss_core::Surface::liveResourcesTotal());
     o.insert(QStringLiteral("handles"), int(composites().live.size()));
+    o.insert(QStringLiteral("spectrum_sources"), srpss_core::SpectrumSource::liveSources());
+    o.insert(QStringLiteral("spectrum_resources"), srpss_core::spectrumContentObjects());
     return pyJson(o);
+}
+
+// ---------------------------------------------------------------- Spectrum on a composite (N2.5)
+
+PyObject *composite_spectrum_bind(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *name = nullptr;
+    const char *config = "";
+    Py_ssize_t length = 0;
+    if (!PyArg_ParseTuple(args, "Ls|s#", &handle, &name, &config, &length))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    srpss_core::PacketReaderConfig parsed;
+    QString error;
+    if (length && !srpss_core::PacketReaderConfig::fromJson(QByteArray(config, qsizetype(length)), &parsed, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    if (!item->bindSpectrum(QString::fromUtf8(name), parsed, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+
+PyObject *composite_spectrum_unbind(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    item->unbindSpectrum();
+    Py_RETURN_NONE;
+}
+
+PyObject *composite_spectrum_present(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *config = "";
+    Py_ssize_t length = 0;
+    if (!PyArg_ParseTuple(args, "Ls#", &handle, &config, &length))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    srpss_core::SpectrumPresentation presentation;
+    QString error;
+    if (!srpss_core::SpectrumPresentation::fromJson(QByteArray(config, qsizetype(length)), &presentation, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    item->presentSpectrum(presentation);
+    Py_RETURN_NONE;
+}
+
+srpss_core::SpectrumSource *spectrumOf(long long handle)
+{
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    srpss_core::SpectrumSource *source = item->spectrum();
+    if (!source)
+        PyErr_Format(PyExc_RuntimeError, "composite %lld has no Spectrum bound", handle);
+    return source;
+}
+
+PyObject *composite_spectrum_drop(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::SpectrumSource *source = spectrumOf(handle);
+    if (!source)
+        return nullptr;
+    source->dropRetainedFrame();
+    compositeOf(handle)->update();
+    Py_RETURN_NONE;
+}
+
+PyObject *composite_update(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    item->update();
+    Py_RETURN_NONE;
+}
+
+PyObject *slotHeadDict(const srpss_core::SlotHead &head);
+
+PyObject *composite_spectrum_head(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::SpectrumSource *source = spectrumOf(handle);
+    if (!source)
+        return nullptr;
+    srpss_core::SlotHead head;
+    if (!source->readHead(&head))
+        Py_RETURN_NONE;
+    return slotHeadDict(head);
+}
+
+PyObject *composite_spectrum_state(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::SpectrumSource *source = spectrumOf(handle);
+    if (!source)
+        return nullptr;
+    return pyJson(source->stateJson());
+}
+
+PyObject *composite_spectrum_wait_paused(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    int timeoutMs = 0;
+    if (!PyArg_ParseTuple(args, "Li", &handle, &timeoutMs))
+        return nullptr;
+    srpss_core::SpectrumSource *source = spectrumOf(handle);
+    if (!source)
+        return nullptr;
+    bool paused = false;
+    Py_BEGIN_ALLOW_THREADS
+    paused = source->waitPaused(timeoutMs);
+    Py_END_ALLOW_THREADS
+    return PyBool_FromLong(paused ? 1 : 0);
+}
+
+PyObject *composite_spectrum_resume(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::SpectrumSource *source = spectrumOf(handle);
+    if (!source)
+        return nullptr;
+    source->resume();
+    Py_RETURN_NONE;
+}
+
+PyObject *spectrum_block(PyObject *, PyObject *args)
+{
+    const char *record = nullptr;
+    Py_ssize_t recordLength = 0;
+    const char *config = "";
+    Py_ssize_t length = 0;
+    if (!PyArg_ParseTuple(args, "y#s#", &record, &recordLength, &config, &length))
+        return nullptr;
+    srpss_core::SpectrumPresentation presentation;
+    QString error;
+    if (!srpss_core::SpectrumPresentation::fromJson(QByteArray(config, qsizetype(length)), &presentation, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    QByteArray block;
+    QJsonObject facts;
+    QString reason;
+    const bool drawn = srpss_core::spectrumBlock(QByteArray(record, qsizetype(recordLength)), presentation, &block,
+                                                 &facts, &reason);
+    facts.insert(QStringLiteral("reason"), reason);
+    PyObject *bytes = nullptr;
+    if (drawn) {
+        bytes = PyBytes_FromStringAndSize(block.constData(), Py_ssize_t(block.size()));
+    } else {
+        Py_INCREF(Py_None);
+        bytes = Py_None;
+    }
+    PyObject *result = Py_BuildValue("(NN)", bytes, pyJson(facts));
+    return result;
+}
+
+PyObject *spectrum_block_layout(PyObject *, PyObject *)
+{
+    return pyJson(srpss_core::SpectrumBlockLayout::instance().toJson());
 }
 
 // ---------------------------------------------------------------- the packet reader (N2.3: D1, D2, the transport rule)
@@ -805,7 +994,44 @@ PyObject *packet_reader_read(PyObject *, PyObject *args)
     srpss_core::PacketReader *reader = readerOf(handle);
     if (!reader)
         return nullptr;
-    return PyUnicode_FromString(srpss_core::readResultName(reader->read()));
+    srpss_core::ReadResult result = srpss_core::ReadResult::Nothing;
+    if (reader->pausesInCopy()) {
+        // The D1 hook holds the read until another Python thread resumes it (that thread never closes this handle).
+        Py_BEGIN_ALLOW_THREADS
+        result = reader->read();
+        Py_END_ALLOW_THREADS
+    } else {
+        result = reader->read();
+    }
+    return PyUnicode_FromString(srpss_core::readResultName(result));
+}
+
+PyObject *packet_reader_wait_paused(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    int timeoutMs = 0;
+    if (!PyArg_ParseTuple(args, "Li", &handle, &timeoutMs))
+        return nullptr;
+    srpss_core::PacketReader *reader = readerOf(handle);
+    if (!reader)
+        return nullptr;
+    bool paused = false;
+    Py_BEGIN_ALLOW_THREADS
+    paused = reader->waitPaused(timeoutMs);
+    Py_END_ALLOW_THREADS
+    return PyBool_FromLong(paused ? 1 : 0);
+}
+
+PyObject *packet_reader_resume(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::PacketReader *reader = readerOf(handle);
+    if (!reader)
+        return nullptr;
+    reader->resume();
+    Py_RETURN_NONE;
 }
 
 PyObject *packet_reader_head(PyObject *, PyObject *args)
@@ -1019,7 +1245,33 @@ PyMethodDef methods[] = {
     { "composite_destroy", composite_destroy, METH_VARARGS,
       "(handle) -> bool: deletes the item (False when its parent deleted it first)." },
     { "composite_live", composite_live, METH_NOARGS,
-      "() -> JSON str: composite items, surfaces and their QRhi objects alive in the process." },
+      "() -> JSON str: composite items, surfaces and their QRhi objects alive in the process, Spectrum sources and "
+      "their QRhi objects." },
+    { "composite_update", composite_update, METH_VARARGS,
+      "(handle) -> None: asks Qt for a frame of the item (a wake's present request)." },
+    { "composite_spectrum_bind", composite_spectrum_bind, METH_VARARGS,
+      "(handle, mapping_name, reader_config_json='') -> None: the item draws Spectrum from this frame stream, read at "
+      "its sync on the render thread (the previous stream retires); ValueError for a mapping that is not a frame "
+      "buffer." },
+    { "composite_spectrum_unbind", composite_spectrum_unbind, METH_VARARGS,
+      "(handle) -> None: the stream retires at once; the render thread releases it at the next sync." },
+    { "composite_spectrum_present", composite_spectrum_present, METH_VARARGS,
+      "(handle, presentation_json) -> None: the card as shown (rendering/native/spectrum.py spectrum_presentation)." },
+    { "composite_spectrum_drop", composite_spectrum_drop, METH_VARARGS,
+      "(handle) -> None: the drop edge (R-184), applied by the next read." },
+    { "composite_spectrum_head", composite_spectrum_head, METH_VARARGS,
+      "(handle) -> dict | None: the bound stream's newest whole slot head; consumes nothing (D2's head read)." },
+    { "composite_spectrum_state", composite_spectrum_state, METH_VARARGS,
+      "(handle) -> JSON str: the stream, its reader, the card, syncs, accepted frames, records and draws." },
+    { "composite_spectrum_wait_paused", composite_spectrum_wait_paused, METH_VARARGS,
+      "(handle, timeout_ms) -> bool: the pause_in_copy hook: the bound reader is paused inside a copy." },
+    { "composite_spectrum_resume", composite_spectrum_resume, METH_VARARGS,
+      "(handle) -> None: the pause_in_copy hook: the paused read goes on." },
+    { "spectrum_block", spectrum_block, METH_VARARGS,
+      "(record_bytes, presentation_json) -> (bytes | None, facts JSON str): the SpectrumDraw block the native "
+      "Spectrum uploads for this record and card (GPU-free; None when nothing is drawn, with the reason)." },
+    { "spectrum_block_layout", spectrum_block_layout, METH_NOARGS,
+      "() -> JSON str: SpectrumDraw as the baked spectrum.frag reflects it (size, binding, members)." },
     { "packet_reader_open", packet_reader_open, METH_VARARGS,
       "(mapping_name, config_json='') -> int handle: the core's reader of a frame stream on its own view of the named "
       "mapping (D1); config: expect (the stream's identity), controls (negative controls). A name that does not open "
@@ -1027,6 +1279,11 @@ PyMethodDef methods[] = {
     { "packet_reader_read", packet_reader_read, METH_VARARGS,
       "(handle) -> str: the consuming read at the frame edge (nothing, accepted, torn, stale, foreign, refused, failed, "
       "retiring, retired); an accepted frame is retained and acknowledged (D2)." },
+    { "packet_reader_wait_paused", packet_reader_wait_paused, METH_VARARGS,
+      "(handle, timeout_ms) -> bool: the pause_in_copy hook (D1's close during copy): a read is paused inside its "
+      "copy." },
+    { "packet_reader_resume", packet_reader_resume, METH_VARARGS,
+      "(handle) -> None: the pause_in_copy hook: the paused read goes on." },
     { "packet_reader_head", packet_reader_head, METH_VARARGS,
       "(handle) -> dict | None: the newest whole slot's head; consumes nothing (D2's head read)." },
     { "packet_reader_frame", packet_reader_frame, METH_VARARGS,
