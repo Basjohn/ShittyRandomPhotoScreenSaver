@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** nothing; N2.5 merged (b8457c3c). Main's module rebuilds at ABI 8; then the lead's N2.8 rehearsal on Display 1. Dispatches resume after the 07:00 UTC reset.
+**Now (in flight):** nothing; N2.5 merged (b8457c3c), main's module rebuilt at ABI 8 (31 native tests pass). N2.8 waits for two displays (14 Nov 05:40 UTC: only the LG TV present, as primary). Dispatches resume after the 07:00 UTC reset.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
