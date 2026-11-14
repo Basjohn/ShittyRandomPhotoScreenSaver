@@ -41,7 +41,7 @@ from types import SimpleNamespace
 from typing import Any, Callable, Iterable, Literal, Sequence
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
 
 ModeName = Literal["normal", "venv", "github"]
@@ -320,6 +320,72 @@ class JobResult:
     output_path: Path
     aborted: bool = False
     evidence_path: Path | None = None
+
+
+def format_elapsed(seconds: float) -> str:
+    """``mm:ss`` (``h:mm:ss`` from an hour) for a per-row build clock."""
+    total = max(0, int(seconds))
+    hours, rest = divmod(total, 3600)
+    minutes, secs = divmod(rest, 60)
+    return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes:02d}:{secs:02d}"
+
+
+def elapsed_status_text(base: str, started: float | None, now: float) -> str:
+    """The row status with its running clock appended; no clock before the job started."""
+    return base if started is None else f"{base}  {format_elapsed(now - started)}"
+
+
+def start_blocked_reason(result: PreflightResult | None) -> str:
+    """Why Start must stay disabled: the first pre-flight error, or "" when only warnings (or nothing) remain."""
+    if result is None or not result.errors:
+        return ""
+    return str(result.errors[0])
+
+
+def job_failure_note(job_name: str, result: JobResult) -> str | None:
+    """The readable reason for a failed job (the headless printer already shows it); None when it did not fail."""
+    if result.returncode == 0 or result.aborted:
+        return None
+    detail = (result.detail or "").strip() or f"exit code {result.returncode}"
+    return f"{job_name}: {detail}"
+
+
+def footer_with_failures(message: str, notes: Sequence[str]) -> str:
+    return f"{message}  {'  ·  '.join(notes)}" if notes else message
+
+
+class Tooltip:
+    """A hover tip for widgets whose text changes; shown on enter, hidden on leave (no timers)."""
+
+    def __init__(self, *widgets: tk.Misc) -> None:
+        self.text = ""
+        self._tip: tk.Toplevel | None = None
+        for widget in widgets:
+            widget.bind("<Enter>", self._show, add="+")
+            widget.bind("<Leave>", self._hide, add="+")
+
+    def set_text(self, text: str) -> None:
+        self.text = text
+
+    def _show(self, event: tk.Event) -> None:
+        if not self.text or self._tip is not None:
+            return
+        tip = tk.Toplevel(event.widget)
+        tip.wm_overrideredirect(True)
+        tip.wm_geometry(f"+{event.x_root + 12}+{event.y_root + 16}")
+        tk.Label(
+            tip, text=self.text, justify="left", wraplength=520, bg=COLORS["panel_alt"], fg=COLORS["text"],
+            font=("Segoe UI", 9), padx=8, pady=4, highlightthickness=1, highlightbackground=COLORS["border"],
+        ).pack()
+        self._tip = tip
+
+    def _hide(self, _event: tk.Event | None = None) -> None:
+        if self._tip is not None:
+            try:
+                self._tip.destroy()
+            except tk.TclError:
+                pass
+            self._tip = None
 
 
 class _WindowsBuildJob:
@@ -2052,6 +2118,7 @@ class JobWidgets:
     output_link: LinkLabel
     evidence_link: LinkLabel
     run_link: LinkLabel
+    tip: Tooltip | None = None
 
 
 class BuildRunnerApp:
@@ -2071,6 +2138,10 @@ class BuildRunnerApp:
         self._preflight = PreflightResult()
         self._jobs: tuple[Job, ...] = ()
         self._job_widgets: dict[str, JobWidgets] = {}
+        self._job_started: dict[str, float] = {}
+        self._job_base_text: dict[str, str] = {}
+        self._job_shown_text: dict[str, str] = {}
+        self._failure_notes: list[str] = []
         self._progress_total = 0
         self._progress_completed = 0
         self._preferences = load_preferences()
@@ -2472,7 +2543,7 @@ class BuildRunnerApp:
             font=("Segoe UI", 8, "bold"),
         ).pack(side="left", padx=(0, 10))
         self._mode_buttons: list[tk.Radiobutton] = []
-        for label, mode in (("NORMAL", "normal"), ("REPO VENV", "venv"), ("GITHUB REMOTE", "github")):
+        for label, mode in (("Normal", "normal"), ("Repo Venv", "venv"), ("GitHub Remote", "github")):
             button = tk.Radiobutton(
                 controls,
                 text=label,
@@ -2605,14 +2676,14 @@ class BuildRunnerApp:
         self._auto_close_checkbox.pack(side="right", padx=(10, 0))
         self._start_button = ttk.Button(
             actions,
-            text="START SELECTED",
+            text="Start Selected",
             command=self._on_start,
             style="Primary.TButton",
         )
         self._start_button.pack(side="right", padx=(10, 0))
         self._emergency_stop_button = ttk.Button(
             actions,
-            text="EMERGENCY STOP",
+            text="Emergency Stop",
             command=self._on_emergency_stop,
             style="Foundry.TButton",
         )
@@ -2758,7 +2829,7 @@ class BuildRunnerApp:
         hint.pack(fill="x", pady=(8, 12))
         buttons = tk.Frame(frame, bg=COLORS["panel"])
         buttons.pack(fill="x")
-        ttk.Button(buttons, text="CANCEL", command=dialog.destroy, style="Foundry.TButton").pack(side="right")
+        ttk.Button(buttons, text="Cancel", command=dialog.destroy, style="Foundry.TButton").pack(side="right")
 
         def apply_and_restart() -> None:
             selected = id_by_name.get(theme_var.get())
@@ -2780,7 +2851,7 @@ class BuildRunnerApp:
                 return
             self._root.destroy()
 
-        ttk.Button(buttons, text="APPLY & RESTART", command=apply_and_restart, style="Primary.TButton").pack(side="right", padx=(0, 8))
+        ttk.Button(buttons, text="Apply & Restart", command=apply_and_restart, style="Primary.TButton").pack(side="right", padx=(0, 8))
 
     @staticmethod
     def _is_drag_surface(widget: tk.Misc) -> bool:
@@ -2907,8 +2978,24 @@ class BuildRunnerApp:
     def _minimize(self) -> None:
         self._root.iconify()
 
+    def _confirm_stop_and_close(self) -> bool:
+        """Closing during a build stops it and cancels its GitHub runs: ask first, default No."""
+        return bool(
+            messagebox.askyesno(
+                "Build Foundry",
+                "A build is running. Stop it, cancel any GitHub runs, and close Build Foundry?",
+                icon="warning",
+                default="no",
+                parent=self._root,
+            )
+        )
+
     def _request_close(self) -> None:
         if self._running:
+            if self._shutdown_requested:
+                return  # already stopping; a second close must not ask again
+            if not self._confirm_stop_and_close():
+                return
             self._shutdown_requested = True
             if self._process_owner is not None:
                 self._process_owner.shutdown()
@@ -2975,6 +3062,9 @@ class BuildRunnerApp:
         for child in self._jobs_panel.winfo_children():
             child.destroy()
         self._job_widgets.clear()
+        self._job_started.clear()
+        self._job_base_text.clear()
+        self._job_shown_text.clear()
 
         helper_status = helper_build_status(mode)
         for index, job in enumerate(self._jobs, start=1):
@@ -3025,7 +3115,7 @@ class BuildRunnerApp:
             bg=COLORS["panel"],
             fg=COLORS["muted"] if selected else COLORS["green"],
             font=("Segoe UI", 9, "bold"),
-            width=13,
+            width=17,
             anchor="e",
         )
         status.pack(side="right")
@@ -3050,6 +3140,7 @@ class BuildRunnerApp:
             output_link,
             evidence_link,
             run_link,
+            Tooltip(frame, status),
         )
 
     def _preflight_worker(self, mode: ModeName) -> None:
@@ -3081,6 +3172,13 @@ class BuildRunnerApp:
 
         self._running = True
         self._shutdown_requested = False
+        self._job_started.clear()
+        self._job_base_text.clear()
+        self._job_shown_text.clear()
+        self._failure_notes.clear()
+        for widgets in self._job_widgets.values():
+            if widgets.tip is not None:
+                widgets.tip.set_text("")
         self._process_owner = BuildProcessOwner()
         self._progress_total = len(selected)
         self._progress_completed = 0
@@ -3123,7 +3221,10 @@ class BuildRunnerApp:
         state = ["!disabled"] if enabled else ["disabled"]
         for widgets in self._job_widgets.values():
             widgets.checkbox.state(state)
-        self._start_button.state(state)
+        # Re-enabling must not defeat the pre-flight gate: errors keep Start off.
+        self._start_button.state(
+            ["disabled"] if enabled and start_blocked_reason(self._preflight) else state
+        )
         self._select_all_button.state(state)
         self._select_none_button.state(state)
         self._auto_close_checkbox.state(state)
@@ -3370,10 +3471,37 @@ class BuildRunnerApp:
             pass
         if self._destroyed:
             return
+        self._tick_job_clocks()
         try:
             self._root.after(100, self._poll_events)
         except tk.TclError:
             self._destroyed = True
+
+    def _set_job_status(self, key: str, base: str, fg: str | None = None, now: float | None = None) -> None:
+        """Write a running row's status with its clock; the clock starts with the first status or running event."""
+        now = time.monotonic() if now is None else now
+        self._job_started.setdefault(key, now)
+        self._job_base_text[key] = base
+        text = elapsed_status_text(base, self._job_started[key], now)
+        self._job_shown_text[key] = text
+        options = {"text": text} if fg is None else {"text": text, "fg": fg}
+        self._job_widgets[key].status.configure(**options)
+
+    def _tick_job_clocks(self, now: float | None = None) -> None:
+        """Advance every running row's clock from the existing 100 ms poll; a label is touched only when its text changes."""
+        if not self._job_started:
+            return
+        now = time.monotonic() if now is None else now
+        for key, started in self._job_started.items():
+            text = elapsed_status_text(self._job_base_text.get(key, "Running…"), started, now)
+            if self._job_shown_text.get(key) != text:
+                self._job_shown_text[key] = text
+                self._job_widgets[key].status.configure(text=text)
+
+    def _end_job_clock(self, key: str) -> None:
+        self._job_started.pop(key, None)
+        self._job_base_text.pop(key, None)
+        self._job_shown_text.pop(key, None)
 
     def _dispatch_event(self, event: tuple) -> None:
         kind = event[0]
@@ -3394,7 +3522,13 @@ class BuildRunnerApp:
                     widgets.checkbox.state(["disabled"])
                     widgets.variable.set(False)
                     widgets.status.configure(text="Unavailable", fg=COLORS["red"])
-            self._start_button.state(["!disabled"])
+            blocker = start_blocked_reason(result)
+            if blocker:
+                # Errors keep Start off, with the reason on screen; warnings leave it live.
+                self._start_button.state(["disabled"])
+                self._footer_status.configure(text=f"Start is disabled: {blocker}", fg=COLORS["red"])
+            else:
+                self._start_button.state(["!disabled"])
             return
 
         if kind == "footer":
@@ -3404,8 +3538,7 @@ class BuildRunnerApp:
 
         if kind == "job_running":
             key = event[1]
-            widgets = self._job_widgets[key]
-            widgets.status.configure(text="Running…", fg=COLORS["amber"])
+            self._set_job_status(key, "Running…", COLORS["amber"])
             job_name = next(job.name for job in self._jobs if job.key == key)
             self._progress_bar.stop()
             self._progress_bar.configure(mode="indeterminate", maximum=100, value=0)
@@ -3421,8 +3554,7 @@ class BuildRunnerApp:
         if kind == "job_status":
             # GitHub Remote progress: the short state on the row, the running step in the progress line.
             _, key, text = event
-            widgets = self._job_widgets[key]
-            widgets.status.configure(text=str(text).split(" · ")[0], fg=COLORS["amber"])
+            self._set_job_status(key, str(text).split(" · ")[0], COLORS["amber"])
             job_name = next(job.name for job in self._jobs if job.key == key)
             self._progress_detail.configure(text=f"{job_name} · {text}")
             return
@@ -3436,11 +3568,13 @@ class BuildRunnerApp:
 
         if kind == "job_skipped":
             widgets = self._job_widgets[event[1]]
+            self._end_job_clock(event[1])
             widgets.status.configure(text="Skipped", fg=COLORS["faint"])
             return
 
         if kind == "job_cancelled":
             widgets = self._job_widgets[event[1]]
+            self._end_job_clock(event[1])
             widgets.status.configure(text="Cancelled", fg=COLORS["red"])
             return
 
@@ -3448,6 +3582,17 @@ class BuildRunnerApp:
             _, key, result = event
             widgets = self._job_widgets[key]
             success = result.returncode == 0
+            self._end_job_clock(key)
+            job_name = next(job.name for job in self._jobs if job.key == key)
+            note = job_failure_note(job_name, result)
+            if note is not None:
+                # The readable reason (what the headless printer shows) reaches the row tooltip and the footer.
+                self._failure_notes.append(note)
+                if widgets.tip is not None:
+                    widgets.tip.set_text(note.split(": ", 1)[-1])
+                self._footer_status.configure(
+                    text=footer_with_failures("Build failed.", self._failure_notes), fg=COLORS["red"]
+                )
             self._progress_completed += 1
             self._progress_bar.stop()
             self._progress_bar.configure(
@@ -3489,7 +3634,7 @@ class BuildRunnerApp:
             )
             self._set_controls_enabled(True)
             self._footer_status.configure(
-                text=message,
+                text=message if success else footer_with_failures(message, self._failure_notes),
                 fg=COLORS["green"] if success else COLORS["red"],
             )
             if self._shutdown_requested:
@@ -3618,7 +3763,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--run",
         action="store_true",
-        help="GitHub Remote only: run the pipeline without the window (Ctrl+C cancels the GitHub runs)",
+        help="run the GitHub Remote pipeline without the window; implies --mode github (Ctrl+C cancels the GitHub runs)",
     )
     parser.add_argument(
         "--select",
@@ -3638,7 +3783,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Print the window's DPI awareness mode when the Build Foundry window opens",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.run and args.mode is None:
+        args.mode = "github"  # --run is the GitHub Remote pipeline; spelling the mode too stays valid
+    return args
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -3651,7 +3799,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0 if payload["success"] else 1
     if args.run:
         if args.mode != "github":
-            print("--run is for --mode github; local builds run from the Build Foundry window")
+            print(f"--run is the GitHub Remote pipeline; it cannot be combined with --mode {args.mode}")
             return 2
         return run_headless(args.select, iscc_override=args.iscc)
 
