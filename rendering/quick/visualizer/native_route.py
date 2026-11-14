@@ -113,8 +113,7 @@ class NativeVisualizerRoute:
 
         def make() -> None:
             if self._spectrum is None:
-                self._spectrum = self._core.spectrum(self._content_host)
-                self._spectrum.composite.set(surface_format=self.surface_format)
+                self._make_native_item()
             self._spectrum.composite.update()
 
         self._guarded(make)
@@ -145,8 +144,7 @@ class NativeVisualizerRoute:
         # The native item and its program first: a failure there leaves no mapping behind (audit 14 Nov, M1), and a
         # program that did not load is loaded again at the next bind rather than drawn without.
         if self._spectrum is None:
-            self._spectrum = self._core.spectrum(self._content_host)
-            self._spectrum.composite.set(surface_format=self.surface_format)
+            self._make_native_item()
         if not self._programmed:
             from rendering.native.program_values import mode_fragment_pack
 
@@ -282,9 +280,15 @@ class NativeVisualizerRoute:
         from rendering.native.spectrum import window_metrics
 
         if self._spectrum is None:
-            self._spectrum = self._core.spectrum(self._content_host)
-            self._spectrum.composite.set(surface_format=self.surface_format)
+            self._make_native_item()
         return window_metrics(self._content_host, self._spectrum.composite)
+
+    def _make_native_item(self) -> None:
+        """The native item, hidden until its first frame is placed: a placement that fades in (a late first frame, M2)
+        then fades from nothing (an item made shown would pop in, its fade a no-op: ABI 12 build round, --unprimed)."""
+        spectrum = self._core.spectrum(self._content_host)
+        self._spectrum = spectrum
+        spectrum.composite.set(surface_format=self.surface_format, visible=False)
 
     def _guarded(self, step) -> None:
         """A teardown step that must not raise into the item's update (N29 L2): logged instead."""

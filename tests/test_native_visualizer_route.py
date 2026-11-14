@@ -429,7 +429,7 @@ def test_a_refused_frame_fades_the_card_out_and_the_next_new_snapshot_draws_agai
     core.made[0].fail_settings = 1
     bridge.snapshots = [_snapshot(presentation, 2)]
     assert _sync(route, bridge, identity, presentation) is False and route.failed and route.failures == 1
-    hide = [entry for entry in core.log if entry[0] == "set" and entry[1].get("visible") is False]
+    hide = _hides(core)
     assert hide and all(entry[1].get("fade_ms") == FAILURE_FADE_MS for entry in hide)
     bridge.snapshots = [_snapshot(presentation, 3)]
     assert _sync(route, bridge, identity, presentation) is True and not route.failed
@@ -497,7 +497,9 @@ def _places(core) -> list:
 
 
 def _hides(core) -> list:
-    return [entry for entry in core.log if entry[0] == "set" and entry[1].get("visible") is False]
+    """The hides of a made native item (its creation, made hidden, is not one)."""
+    return [entry for entry in core.log if entry[0] == "set" and entry[1].get("visible") is False
+            and "surface_format" not in entry[1]]
 
 
 def _wired(route, bridge, identity, presentation_of):
@@ -560,6 +562,10 @@ def test_a_card_never_shown_fades_in_when_its_first_frame_comes_late(route_world
     bridge.snapshots = [_snapshot(moved, 2)]
     assert _sync(route, bridge, identity, moved) is True and not route.failed
     assert [entry[2] for entry in _places(core)] == [{"visible": True, "fade_ms": FAILURE_FADE_MS}]
+    # The native item was made hidden, so that fade-in fades from nothing (an item made shown pops in whatever the
+    # placement's fade_ms says: the --unprimed rule (a) run on the ABI 12 build).
+    made = [entry[1] for entry in core.log if entry[0] == "set" and "surface_format" in entry[1]]
+    assert made and made[0].get("visible") is False
     # Control: an activation whose first frame is on time shows at once (its fade-in is the card's content fade).
     on_time, on_time_core = route_world.make()
     bridge.snapshots = [_snapshot(route_world.presentation, 3)]
@@ -711,7 +717,8 @@ def test_an_unbind_hides_the_card_even_when_the_native_unbind_raises(route_world
     bridge.snapshots = [_snapshot(route_world.presentation, 1)]
     assert _sync(route, bridge, _identity("spectrum"), route_world.presentation) is True
     route.sync(bridge=bridge, identity=None, presentation=route_world.presentation, authority=True)
-    hides = [index for index, entry in enumerate(core.log) if entry[0] == "set" and entry[1].get("visible") is False]
+    hides = [index for index, entry in enumerate(core.log) if entry[0] == "set" and entry[1].get("visible") is False
+             and "surface_format" not in entry[1]]
     unbinds = [index for index, entry in enumerate(core.log) if entry[0] == "unbind"]
     assert hides and unbinds and hides[0] < unbinds[0]
     assert core.log[hides[0]][1]["fade_ms"] == 0
