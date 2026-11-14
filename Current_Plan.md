@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N5.7a merged at ABI 15; the lead's wallpaper rehearsal on both displays; the decisions doc consolidation merging next; a GitHub product build for the operator (today's OpenGL fixes and the icon owner). High and Medium free.
+**Now (in flight):** a GitHub product build for the operator (today's OpenGL fixes and the icon owner; the lead checks the Studio icon in its log). N5.7a rehearsed on both displays; the decisions doc consolidated. Next High: N5.7b (the backdrop pyramid) or N5.2a (the seven transitions). Main at ABI 15.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -499,8 +499,9 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
 - [ ] N5.7a leftovers (the core's background layer landed 14 Nov at ABI 15, D7 "Point 1 as built (N5.7a)": OpenGL
   native equals the Python presenter pixel for pixel, Vulkan equal to it, photo changes through N3.8's jobs, nothing
   drawn at rest; the N3.8 audit's M1-M3 and L1-L5 fixed with it; evidence `native_core/n5_7a/`):
-  - [ ] Lead, Display 1 and Display 0: the rehearsal with the wallpaper and recorded music on Vulkan (the
-    replaced 4K photo released at rest in a real window, M2).
+  - Rehearsed 14 Nov on Display 1 and Display 0 (150 %) on Vulkan with the wallpaper and recorded music: the
+    native wallpaper behind every card, the native Spectrum, exit 0 (`display/d1_run/20261114_n57a_vulkan_wallpaper_d{0,1}/`).
+    The release of a replaced photo at rest is proved in the hidden host only.
   - Until N5.2a a photo change on Vulkan cuts at the end of the transition's duration (rehearsal only).
 - [ ] N5.7b The native backdrop pyramid (D7 points 2 to 6): from the background layer, only when it changed, only
   while demand is above zero; the full chain of levels; a texture provider `MaterialSurface` samples unchanged;
