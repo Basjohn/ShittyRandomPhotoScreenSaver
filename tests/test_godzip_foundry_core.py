@@ -745,3 +745,77 @@ def test_foundry_header_exposes_waitable_current_plan_diff_workflow() -> None:
     # The original cmd.exe/start launcher could report success while opening
     # nothing. File association launch now belongs to ShellExecuteEx directly.
     assert 'start "" /wait' not in source
+
+
+def _readme_pair(tmp_path: Path) -> tuple[Path, Path]:
+    """A bare origin, a seed that edits it (as GitHub does) and a clone, all with a README.md."""
+    _remote, seed, local = _remote_pair(tmp_path)
+    (seed / "README.md").write_text("readme v1\n", encoding="utf-8")
+    _git(seed, "add", ".")
+    _git(seed, "commit", "-m", "readme")
+    _git(seed, "push")
+    _git(local, "pull", "--ff-only")
+    return seed, local
+
+
+def _remote_edit(seed: Path, files: dict[str, str]) -> None:
+    for name, text in files.items():
+        (seed / name).write_text(text, encoding="utf-8")
+    _git(seed, "add", "-A")
+    _git(seed, "commit", "-m", "remote edit")
+    _git(seed, "push")
+
+
+def test_pull_readme_fast_forwards_when_it_can(tmp_path: Path) -> None:
+    seed, local = _readme_pair(tmp_path)
+    _remote_edit(seed, {"README.md": "readme v2\n"})
+    (local / "scratch.txt").write_text("unrelated local edit\n", encoding="utf-8")
+    message = core.pull_readme(local)
+    assert "ast-forward" in message
+    assert core.git_head(local) == _git(local, "rev-parse", "origin/main")
+    assert (local / "README.md").read_text(encoding="utf-8") == "readme v2\n"
+    assert (local / "scratch.txt").read_text(encoding="utf-8") == "unrelated local edit\n"
+
+
+def test_pull_readme_overwrites_only_readme_when_the_branch_has_local_commits(tmp_path: Path) -> None:
+    seed, local = _readme_pair(tmp_path)
+    (local / "local.txt").write_text("local commit\n", encoding="utf-8")
+    core.git_commit_all(local, "local commit")
+    head = core.git_head(local)
+    _remote_edit(seed, {"README.md": "readme v2\n", "other.txt": "remote only\n"})
+    message = core.pull_readme(local)
+    assert "README.md" in message and "pull" in message
+    assert core.git_head(local) == head, "no commit, no merge"
+    assert (local / "README.md").read_text(encoding="utf-8") == "readme v2\n"
+    assert not (local / "other.txt").exists()
+    assert (local / "local.txt").read_text(encoding="utf-8") == "local commit\n"
+    assert (local / "change.txt").read_text(encoding="utf-8") == "base\n"
+
+
+def test_pull_readme_overwrites_a_locally_edited_readme_and_leaves_other_files(tmp_path: Path) -> None:
+    seed, local = _readme_pair(tmp_path)
+    _remote_edit(seed, {"README.md": "readme v2\n"})
+    (local / "README.md").write_text("my local edit\n", encoding="utf-8")
+    (local / "keep.txt").write_text("my other edit\n", encoding="utf-8")
+    head = core.git_head(local)
+    message = core.pull_readme(local)
+    assert "overwritten" in message
+    assert (local / "README.md").read_text(encoding="utf-8") == "readme v2\n"
+    assert (local / "keep.txt").read_text(encoding="utf-8") == "my other edit\n"
+    assert core.git_head(local) == head
+
+
+def test_pull_readme_reports_already_up_to_date(tmp_path: Path) -> None:
+    _seed, local = _readme_pair(tmp_path)
+    head = core.git_head(local)
+    assert core.pull_readme(local) == "Already up to date."
+    assert core.git_head(local) == head
+    assert core.git_changes(local) == []
+
+
+def test_pull_readme_failure_goes_to_the_status_line(tmp_path: Path) -> None:
+    _seed, local = _readme_pair(tmp_path)
+    _git(local, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    assert core.pull_readme(local).startswith("Pull README failed")
+    _git(local, "remote", "remove", "origin")
+    assert core.pull_readme(local).startswith("Pull README failed")

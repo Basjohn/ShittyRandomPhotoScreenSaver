@@ -262,6 +262,7 @@ from godzip_foundry_core import (  # noqa: E402
     git_head,
     git_identity,
     git_pull_ff_only,
+    pull_readme,
     git_push_current,
     inspect_godzip,
     is_generated_qrc_python,
@@ -3174,9 +3175,12 @@ class PullTab(QWidget):
         self.sync_button.setObjectName("dangerButton")
         self.pull_button = QPushButton("Pull All (FF-Only)")
         self.pull_button.setObjectName("primaryButton")
+        self.readme_button = QPushButton("Pull README")
         self.sync_button.clicked.connect(self.selective_sync)
         self.pull_button.clicked.connect(self.pull_all)
+        self.readme_button.clicked.connect(self.pull_readme_now)
         line.addWidget(self.summary, 1)
+        line.addWidget(self.readme_button)
         line.addWidget(self.sync_button)
         line.addWidget(self.pull_button)
         layout.addWidget(footer)
@@ -3273,6 +3277,23 @@ class PullTab(QWidget):
             lambda: git_pull_ff_only(self.repo_root, inspection),
             completed,
             error_title="Pull failed",
+        )
+
+    def pull_readme_now(self) -> None:
+        """One press, no prompt: the core fast-forwards when it can, else copies only README.md from origin."""
+
+        def completed(message: str) -> None:
+            self.window.refresh_repo_header()
+            self.refresh(
+                on_loaded=lambda: (self.window.create_tab.mark_stale(), self.window.set_status(message))
+            )
+            self.window.set_status(message)
+
+        self.window.run_task(
+            "Pulling README…",
+            lambda: pull_readme(self.repo_root),
+            completed,
+            error_title="Pull README failed",
         )
 
     def selective_sync(self) -> None:

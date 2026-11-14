@@ -1672,6 +1672,67 @@ def git_pull_ff_only(repo_root: Path, inspection: PullInspection) -> str:
     return (result.stdout or result.stderr).strip()
 
 
+README_PATH = "README.md"
+
+
+def pull_readme(repo_root: Path) -> str:
+    """One-press README refresh; returns the single status line (failures are returned, never raised).
+
+    The README is edited on GitHub, so the local copy is the file most often out of date. Fetches the current
+    branch from origin, then either fast-forwards (no local commits missing from origin and every incoming path
+    free of local edits: history stays linear) or copies just ``README.md`` from ``origin/<branch>``, overwriting
+    local edits to it without asking. No other file is touched and nothing is committed.
+    """
+    try:
+        return _pull_readme(repo_root.resolve())
+    except GodzipError as exc:
+        return f"Pull README failed: {exc}"
+
+
+def _pull_readme(repo_root: Path) -> str:
+    branch = git_branch(repo_root)
+    if branch == "DETACHED":
+        raise GodzipError("detached HEAD, there is no branch to pull from")
+    remotes = [line.strip() for line in _run_git_text(repo_root, "remote").stdout.splitlines() if line.strip()]
+    if "origin" not in remotes:
+        raise GodzipError("no 'origin' remote is configured")
+    _run_git_text(repo_root, "fetch", "origin", branch, timeout=180)
+    remote_ref = f"origin/{branch}"
+    probe = _run_git(repo_root, "rev-parse", "--verify", remote_ref, check=False)
+    if probe.returncode != 0:
+        raise GodzipError(f"{remote_ref} does not exist after the fetch")
+    remote_head = probe.stdout.decode("utf-8", errors="replace").strip()
+    local_head = git_head(repo_root)
+
+    def is_ancestor(older: str, newer: str) -> bool:
+        return _run_git(repo_root, "merge-base", "--is-ancestor", older, newer, check=False).returncode == 0
+
+    behind = local_head != remote_head and is_ancestor(local_head, remote_head)
+    missing_here = local_head != remote_head and not is_ancestor(remote_head, local_head)  # origin has commits we lack
+    statuses = git_status_map(repo_root)
+
+    if behind:
+        incoming = [
+            raw.decode("utf-8", errors="replace")
+            for raw in _run_git(repo_root, "diff", "--name-only", "-z", local_head, remote_head).stdout.split(b"\0")
+            if raw
+        ]
+        if not any(statuses.get(path, "") for path in incoming):
+            _run_git_text(repo_root, "merge", "--ff-only", remote_ref, timeout=180)
+            count = _run_git_text(repo_root, "rev-list", "--count", f"{local_head}..{remote_head}").stdout.strip()
+            return f"Fast-forwarded to {remote_ref} ({count or '?'} commit(s))."
+
+    readme_differs = (
+        _run_git(repo_root, "diff", "--quiet", remote_ref, "--", README_PATH, check=False).returncode != 0
+    )
+    note = " The branch is behind origin: a later push will need a pull." if missing_here else ""
+    if not readme_differs:
+        return (f"{README_PATH} already matches origin.{note}") if missing_here else "Already up to date."
+    edited = " Local edits to it were overwritten." if statuses.get(README_PATH, "") else ""
+    _run_git_text(repo_root, "checkout", remote_ref, "--", README_PATH)
+    return f"{README_PATH} updated from {remote_ref}; no other file touched, nothing committed.{edited}{note}"
+
+
 def _git_blob_bytes(repo_root: Path, remote_head: str, path: str) -> bytes:
     result = _run_git(repo_root, "show", f"{remote_head}:{path}", check=False)
     if result.returncode != 0:
@@ -2404,6 +2465,7 @@ __all__ = [
     "git_dirty",
     "git_head",
     "git_pull_ff_only",
+    "pull_readme",
     "git_push_current",
     "git_status_map",
     "git_upstream",
