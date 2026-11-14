@@ -1608,12 +1608,24 @@ Active density/composition work and native evidence: section 1A, items 1.7/1.9. 
 
 - [ ] Theme the Weather detail asset icons: they remain white and become faint on pale cards.
 
+**Extruded Bubble: remove Hero Shell (operator, 14 Nov: "hero shell is a trash feature I never asked for"; "We never
+ever want near lens blobs")**
+
+- [ ] Remove the Hero Shell and its Hero Across and Hero Height controls end to end: the spec rows
+  (`core/settings/visualizer_mode_settings.py`, Lens bucket), defaults, the renderer's hero-shell path
+  (`rendering/quick/visualizer/implementations/extruded_bubble.py`, `rendering/gl_programs/extruded_bubble_scene.py`),
+  the Studio rows, every preset's keys, the docs (`Docs/Reference/Extruded_Bubble/Target.md`, `Investigation.md`,
+  `Docs/Reference/Transitions.md`), and its test. The persisted keys become retired keys
+  (`core/settings/visualizer_retired_modes.py` `_RETIRED_VISUALIZER_KEYS`, as earlier retirements), so a saved
+  profile drops them quietly. Proof: every Extruded Bubble look renders identically before and after (Hero Shell
+  is 0 in every preset); nothing else in the mode moves; no reference to it is left outside the historical record.
+
 **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent); second pass
 done, awaiting the lead's review**
 
 The mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`. One preset only; the shared
 controls are each dormant at 0, so no other look changes: Ember Grain, Ember Band (Water), Lit Glass
-(Glass), Stream Lanes, Wake Tint (Bubbles), Hero Shell with Hero Across/Height (Lens). Details, numbers,
+(Glass), Stream Lanes, Wake Tint (Bubbles). Details, numbers,
 reactivity and cost: `Docs/Reference/Extruded_Bubble/Investigation.md` sections 72-73; evidence
 `.artifacts/evidence/visualizers/extruded_bubble/deep_red_ocean_pass2/20261106_deep_red_ocean_pass2/`.
 
@@ -1622,7 +1634,6 @@ reactivity and cost: `Docs/Reference/Extruded_Bubble/Investigation.md` sections 
 - [ ] Embers are partly along-stream strokes rather than torn debris.
 - [ ] The lower right is far too busy (the mock's band fades out there).
 - [ ] The shaft corner lacks its bright glittering core.
-- [ ] The Hero Shell reads as a soft ring rather than a shell full of bokeh discs.
 - [ ] Faint surface ripples at the top.
 - [ ] Side defect: the near (defocus) layer stair-steps the rim of a large near shell on some frames (seen with Lit
   Glass off as well).
