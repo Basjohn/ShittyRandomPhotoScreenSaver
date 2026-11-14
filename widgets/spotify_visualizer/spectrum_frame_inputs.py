@@ -28,10 +28,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from rendering.gl_programs.spectrum_options import SPECTRUM_PATTERN_ANCHORS, SPECTRUM_PATTERNS
+from rendering.gl_programs.spectrum_options import SPECTRUM_MAX_BARS, SPECTRUM_PATTERN_ANCHORS, SPECTRUM_PATTERNS
 
-#: The most bars the renderer draws (``spectrum.frag``'s ``u_bars[64]``); a longer sequence is cut there.
-MAX_LEVELS = 64
+#: The most bars the renderer draws (``spectrum_options.SPECTRUM_MAX_BARS``, the size of ``spectrum.frag``'s
+#: ``u_bars``); a longer sequence is cut there.
+MAX_LEVELS = SPECTRUM_MAX_BARS
 #: The space between bars in px at scale 1 when the style does not carry one (the long-standing fixed value).
 DEFAULT_BAR_GAP = 2.0
 

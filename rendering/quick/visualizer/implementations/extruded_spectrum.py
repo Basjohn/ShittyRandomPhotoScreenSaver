@@ -19,6 +19,7 @@ from core.logging.logger import get_logger, is_geometry_logging_enabled, is_viz_
 from core.settings.visualizer_mode_registry import EXTRUDED_CAST_SHADOW_AVAILABLE
 
 from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
+from rendering.gl_programs.spectrum_options import SPECTRUM_MAX_BARS
 from rendering.gl_programs.extruded_spectrum_program import (
     EXTRUDED_BLOCK,
     EXTRUDED_FRAGMENT_SOURCE,
@@ -45,7 +46,7 @@ from ..implementation_values import parameter, rgba
 from ..render_contract import QuickVisualizerRenderFrame
 from .spectrum import compute_quick_spectrum_layout, prepare_spectrum_shader_levels
 
-_MAX_BARS = 64
+_MAX_BARS = SPECTRUM_MAX_BARS
 _BAR_BINDING = 3
 logger = get_logger(__name__)
 

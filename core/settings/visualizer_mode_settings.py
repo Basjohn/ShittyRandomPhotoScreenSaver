@@ -58,8 +58,8 @@ from typing import Union
 
 from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
 from rendering.gl_programs.spectrum_options import (
-    SPECTRUM_GEOMETRIC_PATTERNS, SPECTRUM_GHOST_COLOUR_SOURCES, SPECTRUM_PATTERN_ANCHORS, SPECTRUM_PATTERNS,
-    SPECTRUM_RIM_PLACEMENTS,
+    SPECTRUM_GEOMETRIC_PATTERNS, SPECTRUM_GHOST_COLOUR_SOURCES, SPECTRUM_MAX_BARS, SPECTRUM_PATTERN_ANCHORS,
+    SPECTRUM_PATTERNS, SPECTRUM_RIM_PLACEMENTS,
 )
 from rendering.gl_programs.neon_lake_basin_options import (
     BASIN_BODY_MODES, BASIN_GROWTH_REGIONS, BASIN_SURFACE_STYLES,
@@ -748,12 +748,14 @@ def audio_analysis_entries(mode_id: str, *, block_size: int, agc: float) -> tupl
     name = descriptor.display_name
     t = TECHNICAL_BUCKET
     if descriptor.draws_bars:
-        bars = dict(label="Bar Count:", suffix=" bars", tooltip=_BAR_COUNT_TIP)
+        # A mode that draws one bar per band admits no more bands than its renderer draws (the one owner).
+        bars = dict(label="Bar Count:", suffix=" bars", tooltip=_BAR_COUNT_TIP, high=SPECTRUM_MAX_BARS)
     else:
-        bars = dict(label="Analysis Bands:", suffix=" bands", tooltip=_ANALYSIS_BANDS_TIP)
+        bars = dict(label="Analysis Bands:", suffix=" bands", tooltip=_ANALYSIS_BANDS_TIP, high=96)
     candidates = {
-        # The worker accepts any count of at least one; Settings, the Studio and the model admit 8-96.
-        "bar_count": lambda key: Slider(key, bars["label"], 8, 96, bars["tooltip"], bucket=t, scale=1, decimals=0,
+        # The worker accepts any count of at least one; Settings, the Studio and the model admit 8 to ``bars["high"]``.
+        "bar_count": lambda key: Slider(key, bars["label"], 8, bars["high"], bars["tooltip"], bucket=t, scale=1,
+                                        decimals=0,
                                         integer=True, truncate=True, suffix=bars["suffix"], runtime_low=1),
         "audio_block_size": lambda key: Choice(
             key, "Audio Block Size:", tuple(size for size, _label in _BLOCK_SIZES),

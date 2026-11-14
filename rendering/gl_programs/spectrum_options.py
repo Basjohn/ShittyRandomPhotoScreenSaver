@@ -6,6 +6,12 @@ tuples, so the order is part of the shader contract (append; never reorder).
 
 from __future__ import annotations
 
+# The most bars a bar-drawing mode (Spectrum, Extruded Spectrum) draws: the one owner of that maximum. The spec's Bar
+# Count admits up to it, the renderers and ``spectrum_frame_inputs.MAX_LEVELS`` read it, and ``spectrum.frag``'s
+# ``u_bars`` / ``u_peaks`` arrays and the native core's ``kMaxBars`` are sized to it (tests hold both to this value;
+# raising it means resizing the shader arrays and rebuilding the native core).
+SPECTRUM_MAX_BARS = 64
+
 # Where the falling peak ghosts take their colour while Rainbow Ghost is off. Bar Colour: the bar border colour.
 # Custom: their own colour. Bar Fill: the bar's own fill surface where the ghost is (fill and its gradient, Rainbow
 # Fill, a pattern or flag sheet, gloss), so a ghost continues its bar's own colours and fades out.

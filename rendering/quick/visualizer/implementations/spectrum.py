@@ -227,7 +227,7 @@ def compute_quick_spectrum_layout(
     if min(content_width, content_height, extent_height, scale) <= 0.0:
         raise ValueError("Spectrum layout geometry must be positive")
     if count <= 0 or count > _MAX_BARS:
-        raise ValueError("Spectrum bar count must be in [1, 64]")
+        raise ValueError(f"Spectrum bar count must be in [1, {_MAX_BARS}]")
 
     margin = 8.0 * scale
     left_inset = 1.0 * scale
