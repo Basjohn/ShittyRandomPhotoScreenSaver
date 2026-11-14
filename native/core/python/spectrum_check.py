@@ -457,11 +457,12 @@ class Scene:
         return self.reads(card)[0]
 
     def reads(self, card: dict) -> list:
-        """The item's pixels where the composite drew its quad: its origin moved onto whole pixels by the reported
-        shift (a module without the shift, ABI 12, drew it unmoved: read at the nearest whole pixel, the half rounding
-        up). On an axis whose origin lies within a hundredth of a pixel of a half, the GPU's own float rounding may
-        have taken the other corner: the neighbouring readings follow the first, all from the one rendered frame (the
-        caller keeps the one that matches its reference)."""
+        """The item's pixels where the composite drew its quad: its origin moved onto the nearest whole pixel (R-217).
+        The reported shift is not added: its y is measured along the backend's own framebuffer rows (bottom-up on
+        OpenGL, top-down on Vulkan, ABI 13 build round), so only its size is backend-free (``origin_shift`` checks it).
+        On an axis whose origin lies within a hundredth of a pixel of a half, the GPU's own float rounding may have
+        taken the other corner: the neighbouring readings follow the first, all from the one rendered frame (the caller
+        keeps the one that matches its reference)."""
         from dataclasses import asdict
 
         from composite_analysis import frame_rows
@@ -472,8 +473,7 @@ class Scene:
         if self.origin is None:
             left = top = int(round(MARGIN * dpr))
             return [rows[top:top + height, left:left + width]]
-        shift = self.spectrum.composite.state().get("origin_shift") or (0.0, 0.0)
-        corner = [self.origin[axis] + float(shift[axis]) for axis in (0, 1)]
+        corner = [float(self.origin[axis]) for axis in (0, 1)]
         steps = [(0, -1, 1) if abs(self.origin[axis] % 1.0 - 0.5) < 0.01 else (0,) for axis in (0, 1)]
         found = []
         for dy in steps[1]:
