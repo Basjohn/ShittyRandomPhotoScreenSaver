@@ -1,4 +1,4 @@
-# R-NEW | Bubble, Spline Curve and Oscilloscope took derivatives after a discard (undefined at the content edge on OpenGL too)
+# R-211 | Bubble, Spline Curve and Oscilloscope took derivatives after a discard (undefined at the content edge on OpenGL too)
 
 **Status:** fixed 14 Nov 2026 (N2.5 leftover "Derivatives after a `discard`", with audit 14 Nov N25 L5). The three
 shaders take every derivative before the first discard a pixel can take alone, in uniform control flow:
