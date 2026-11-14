@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.5 (High); N1.6 Neon Lake, then Extruded Spectrum and Sphere (Medium); the audit of 14 Nov's merges and the core doc sweep (Audit).
+**Now (in flight):** N2.5 (High); 1D.13, then N1.6 Extruded Spectrum and Sphere (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,8 +47,8 @@ at the size asked.
      ride with the next fitting dispatch.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
-     Sphere); a mode that cannot be made bit-identical in one dispatch converts at its port.
+  1. 1D.13 (a test process dies at exit 127 in a larger file set), then N1.6's Extruded Spectrum and Sphere, one
+     per commit where it stays bit-identical at the widened run set; a program that cannot converts at its port.
   2. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
@@ -377,8 +377,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     every Choice offer (129 runs for all modes; `tests/test_conventions_identity_runs.py`); every N1.6 merge
     (611ae065, 1d1816d8, 0a508242, 580cedc1, a5648806) re-proved ALL IDENTICAL at that set, first parent against
     merge (`.artifacts/evidence/native_core/n16_reprove/20261114/`). New conversions and ports prove at that set.
-  - [ ] Neon Lake; Extruded Spectrum and Sphere (Medium, in flight 14 Nov). Extruded Bubble's traced glass
-    converts at its port.
+  - [ ] Extruded Spectrum, then Sphere (Medium). Neon Lake merged 14 Nov (114bfbcd, ratchet 24 to 17); its basin
+    (`NEON_VERTEX_SOURCE`/`NEON_FRAGMENT_SOURCE`, one 8-bit level on 2-6 pixels with Glass on its block) and
+    Extruded Bubble's traced glass convert at their ports (`NEON_BLOCK` is kept as the basin's layout).
   - `rendering/gl_programs/lighting.py` belongs to N4.m: it is not a product shader (no `#version`; only its test
     draws it), and a program that includes it converts it (a 3088-byte block, about 3 KB of resources).
 - [ ] D5.3's formats service, its one listed use: the scene target's multisampled velocity attachment
@@ -1156,6 +1157,20 @@ borderless fullscreen transfers working smoothly.
 - [ ] Tests: the operator's exact sequence (B2 on D1, move to A1 on D0, fullscreen, move to D1, leave fullscreen)
   lands at B2; an invalid remembered spot falls back; nothing else in the record changes (negative controls).
 - [ ] Lead D1 run with both displays: the sequence above, edges read.
+
+### 1D.13 A pytest process dies with exit 127 in larger file sets (14 Nov; Opus Medium)
+
+- [ ] Seen twice on 14 Nov, both before and after Neon Lake's merge (the agent reproduced it on cfbdb129):
+  - the lead's 8-file run (`test_qtquick_shockwave_grid`, `test_neon_lake_renderer`, `test_neon_scene_materials`,
+    `test_vulkan_shader_readiness`, `test_qtquick_visualizer_all_modes`, `test_visualizer_prepared_reveal`,
+    `test_scene3d_quality_settings`, `test_conventions_identity_runs`) dies right after
+    `test_a_transition_request_carries_the_tier_resolved_from_the_3d_settings`, inside or at
+    `test_the_tab_writes_only_its_own_level_and_shows_what_resolves` (a `Scene3DTab`);
+  - a 31-file Neon run dies in `tests/test_scene3d_target.py` after `test_the_composite_respects_an_inherited_scissor`.
+  - Each file passes alone, and the quality-settings file passes beside either of its two neighbours.
+  Find the object or GL state that outlives its owner (R-208's class: a slot or callback keeping a dead object,
+  a context or window left current), fix it at the owner if product, else in the tests; both runs exit 0, three
+  times. A historical bug entry if a product path is at fault.
 
 ### 1D.9 Linux credential encryption, port from the archived branch (Opus Medium, low priority; Linux is best effort)
 
