@@ -19,7 +19,7 @@
 //   field no pass's ModeFrame declares (unknown) are refused when the program meets the schema, at bind or at program.
 // - `SrpssConventions` at binding 17 (the conventions include; fragPixel gives the target's pixel on every backend).
 // Nothing else: a pass that declares a texture, a sampler, a storage buffer or image, a push constant, another block, or
-// an input other than the core's v_uv (location 0) is refused. Sampling an earlier pass, depth, more targets or compute
+// any input is refused (the core's triangle, shaders/mode.vert, gives none: a pass's pixel is fragPixel). Sampling an earlier pass, depth, more targets or compute
 // are primitives, each with its own C++ and harness (Current_Plan.md port rule (g) and N2.9), never pass data.
 //
 // The passes (ModeContent): the surface's target is cleared by a draw (targets.h rule B), then every pass draws one
