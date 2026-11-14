@@ -448,6 +448,18 @@ Item {
         blocking: false
     }
 
+    // The card's one dwell fade for its hover glyphs: the row's and the Edit glyphs' (plan 1D.12 B). It multiplies
+    // their drawing only (glyphRow's opacity, the Edit glyphs' dwellLevel), never a glyph's own opacity or enabled.
+    HoverGlyphReveal {
+        id: visualizerGlyphReveal
+        objectName: "visualizerHoverGlyphReveal"
+        cardHovered: visualizerPresentationRoot.alwaysShowGlyphs
+            && visualizerPresentationRoot.widgetGlowAdmitted
+            && (cameraResetHover.hovered || visualizerInteractionHover.hovered)
+        glyphHovered: glyphRowHover.hovered
+            || (visualizerHoverGlyphLoader.item !== null && visualizerHoverGlyphLoader.item.glyphHovered)
+    }
+
     // One-shot hover animation for the camera reset glyph. No Timer/polling;
     // the first 1008ms are entirely invisible, independent of card hover glow.
     property real cameraResetTipProgress: 0.0
@@ -491,6 +503,15 @@ Item {
         scale: visualizerPresentationRoot.glyphRowScale
         transformOrigin: Item.BottomRight
         z: 12
+        opacity: visualizerGlyphReveal.level
+
+        // Any member under the pointer holds the whole set in (its own hit area is never faded out).
+        HoverHandler {
+            id: glyphRowHover
+            objectName: "visualizerGlyphRowHover"
+            enabled: visualizerPresentationRoot.alwaysShowGlyphs && visualizerPresentationRoot.widgetGlowAdmitted
+            blocking: false
+        }
 
         // In the row outside Edit (Edit draws its own steps in its continuation of the row).
         Item {
@@ -947,6 +968,7 @@ Item {
     }
 
     Loader {
+        id: visualizerHoverGlyphLoader
         objectName: "visualizerHoverGlyphLoader"
         anchors.fill: parent
         z: 11
@@ -961,6 +983,7 @@ Item {
             anchors.fill: parent
             admitted: true
             hovered: visualizerInteractionHover.hovered
+            dwellLevel: visualizerGlyphReveal.level
             canRestore: true
             canRotate: false
             canTransferLeft: visualizerPresentationRoot.displayTransferLeftAvailable
