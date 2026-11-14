@@ -45,7 +45,7 @@ from rendering.native.spectrum import NativeSpectrum, spectrum_block
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 10
+EXPECTED_ABI = 11
 HOST_KINDS = ("window", "hidden")
 
 
@@ -124,8 +124,9 @@ class NativeCore:
         return CompositeItem(self.module, self.module.composite_create(shiboken6.getCppPointer(parent)[0]))
 
     def composite_live(self) -> dict:
-        """Composite items, surfaces and their QRhi objects alive in the process, and the native Spectrum's sources and
-        QRhi objects (lifecycle proofs)."""
+        """Composite items, surfaces and their QRhi objects alive in the process, the native Spectrum's and the generic
+        modes' sources and QRhi objects, and the items' textures (``mode_textures``, ``mode_texture_bytes``, the core's
+        copies not yet uploaded ``mode_texture_images``, ``mode_texture_uploads``; lifecycle proofs)."""
         return json.loads(self.module.composite_live())
 
     def spectrum(self, parent: Any) -> NativeSpectrum:
@@ -168,7 +169,7 @@ class NativeCore:
         return {str(name): (int(components), bool(from_card)) for name, components, from_card in rows}
 
     def mode_program_layout(self, passes: Any) -> dict:
-        """The program's passes, blends and reflected ModeSettings and ModeFrame blocks (GPU-free)."""
+        """The program's passes, blends, uv inputs, samplers and reflected blocks (GPU-free)."""
         declared, packs = program_json(passes)
         return json.loads(self.module.mode_program_layout(declared, packs))
 

@@ -654,6 +654,13 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("spectrum_resources"), srpss_core::spectrumContentObjects());
     o.insert(QStringLiteral("mode_sources"), srpss_core::ModeSource::liveSources());
     o.insert(QStringLiteral("mode_resources"), srpss_core::modeContentObjects());
+    // N4.a: the items' textures (QRhiTextures and their bytes), the core's copies not yet uploaded, the uploads done.
+    const srpss_core::ModeTextureCounts textures = srpss_core::modeTextureCounts();
+    o.insert(QStringLiteral("mode_textures"), textures.textures);
+    o.insert(QStringLiteral("mode_texture_bytes"), double(textures.textureBytes));
+    o.insert(QStringLiteral("mode_texture_images"), textures.images);
+    o.insert(QStringLiteral("mode_texture_image_bytes"), double(textures.imageBytes));
+    o.insert(QStringLiteral("mode_texture_uploads"), double(textures.uploads));
     return pyJson(o);
 }
 
@@ -1094,6 +1101,54 @@ PyObject *composite_mode_card(PyObject *, PyObject *args)
     QString error;
     if (!item->cardMode(card, &error)) {
         PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+
+// N4.a: an item's texture from pixels Python holds (RGBA8, rows top first, tight); copied once into the core.
+PyObject *composite_mode_texture(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *name = nullptr;
+    int width = 0;
+    int height = 0;
+    PyObject *pixels = nullptr;
+    int mips = 0;
+    if (!PyArg_ParseTuple(args, "Ls(ii)O|p", &handle, &name, &width, &height, &pixels, &mips))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    if (!PyBytes_Check(pixels)) {
+        PyErr_SetString(PyExc_TypeError, "a texture's pixels are bytes (RGBA8, rows top first, tight)");
+        return nullptr;
+    }
+    const char *data = PyBytes_AsString(pixels);
+    const Py_ssize_t size = PyBytes_Size(pixels);
+    if (!data || size < 0)
+        return nullptr;
+    QString error;
+    if (!item->textureMode(QByteArray(name), QByteArray(data, qsizetype(size)), QSize(width, height), mips != 0,
+                           &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+
+PyObject *composite_mode_texture_remove(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *name = nullptr;
+    if (!PyArg_ParseTuple(args, "Ls", &handle, &name))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    QString error;
+    if (!item->removeTextureMode(QByteArray(name), &error)) {
+        PyErr_SetString(PyExc_KeyError, error.toUtf8().constData());
         return nullptr;
     }
     Py_RETURN_NONE;
@@ -1840,6 +1895,13 @@ PyMethodDef methods[] = {
     { "composite_mode_card", composite_mode_card, METH_VARARGS,
       "(handle, card_json) -> None: the item as shown (rendering/native/mode.py mode_card), which the core's members "
       "read." },
+    { "composite_mode_texture", composite_mode_texture, METH_VARARGS,
+      "(handle, name, (width, height), pixels_bytes, mips=False) -> None: the item's texture of that name (N4.a): RGBA8 "
+      "rows top first, tight, copied once into the core and uploaded at the next record (mips generated on the GPU); "
+      "ValueError for a bad name, size or byte count, too many textures, or mips the program samples that it lacks." },
+    { "composite_mode_texture_remove", composite_mode_texture_remove, METH_VARARGS,
+      "(handle, name) -> None: the texture goes; the render thread releases it at the next record. KeyError when the "
+      "item holds no such texture." },
     { "mode_core_members", mode_core_members, METH_NOARGS,
       "() -> JSON str: the core's conventions, the members it fills for every mode ([name, components, from_card])." },
     { "composite_window_pixels", composite_window_pixels, METH_VARARGS,
@@ -1847,8 +1909,10 @@ PyMethodDef methods[] = {
     { "composite_mode_unbind", composite_mode_unbind, METH_VARARGS,
       "(handle) -> None: the mode's stream retires at once; the render thread releases it at the next sync." },
     { "composite_mode_program", composite_mode_program, METH_VARARGS,
-      "(handle, program_json, packs, settings_json=None) -> None: the passes ({\"passes\": [{name, blend}]}) and one "
-      "fragment pack each; with settings (else the ones given before) packed by name; ValueError when refused." },
+      "(handle, program_json, packs, settings_json=None) -> None: the passes ({\"passes\": [{name, blend, samplers?: "
+      "[{name, texture, filter, wrap, mips}]}]}) and one fragment pack each; with settings (else the ones given "
+      "before) packed by name; ValueError when refused (an unbound, unknown or doubly bound sampler among the "
+      "reasons)." },
     { "composite_mode_settings", composite_mode_settings, METH_VARARGS,
       "(handle, settings_json) -> None: the ModeSettings members by name; ValueError on an unknown name, a wrong size or "
       "an unfilled member." },
@@ -1866,7 +1930,7 @@ PyMethodDef methods[] = {
       "with the reason when refused (an unknown or unfilled member, a name with two owners, a field that does not "
       "fit, a value with no defined conversion)." },
     { "mode_program_layout", mode_program_layout, METH_VARARGS,
-      "(program_json, packs) -> JSON str: the program's passes, blends and reflected ModeSettings and ModeFrame blocks." },
+      "(program_json, packs) -> JSON str: the program's passes, blends, uv inputs, samplers and reflected blocks." },
     { "program_block_pack", program_block_pack, METH_VARARGS,
       "(qsb_bytes, block_name, values_json) -> (bytes, facts JSON str): one reflected block packed by name (GPU-free; "
       "facts: layout, unfilled); ValueError when a value is refused." },

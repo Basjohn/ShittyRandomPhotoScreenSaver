@@ -78,6 +78,9 @@ public:
 protected:
     // GUI thread, under m_mutex: a subclass's refusal of a stream (the generic mode's schema against its program).
     virtual bool acceptStream(const PacketReaderConfig &config, QString *error);
+    // GUI thread, under m_mutex: the current stream was unbound (the generic mode forgets its schema, so a program
+    // given before the next bind is not checked against the stream that went: N4.a).
+    virtual void streamUnbound() {}
     // Render thread, at the item's sync after the subclass took its inputs: the retired readers released, the current
     // stream read at its accept edge and admitted. True when the drawn frame changed (accepted, dropped, unbound).
     bool syncStream();
