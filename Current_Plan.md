@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N3.8 merged at ABI 14; an audit of its threading and lifetime. High: next N2b step (N5.7a, the image presenter as the core's background layer). Medium idle (weekly budget).
+**Now (in flight):** High: N5.7a (the core's background layer; one build round at ABI 15). Audit: N3.8's threading and lifetime. Medium idle (weekly budget: 49 % used with six days left). Main at ABI 14.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -491,7 +491,14 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     in-frame (Vulkan only; OpenGL runs in-frame).
   - [ ] D9 point 2, consumer (b), the warm-up class: warm-up jobs run on this service, scheduled with N3.6's
     gradual warm-up (one unit per spaced frame). Transition preparation (consumer (a)) is N5.2g's.
-  - [ ] Audit of the job service's threading and lifetime (in flight).
+  - [ ] Audit 14 Nov (`Docs/Future_Work/Audit_2026-11-14_N38.md`; no high), with N5.7a's build round (High):
+    M2 a retired job image is released only while the window renders (a 4K photo with mips, about 44 MB, held at
+    rest after a change): request the frames the release needs; M1 frame edges counted per frame driver, not per
+    window (a retired image freed a frame early with two drivers on one window): one count per window; M3 the
+    destruction barrier counts process-wide native work, not the retiring generation's (any live native item
+    stalls teardown to its timeout): count per item or wait on in-flight work only; lows L1-L5 (device loss fails
+    closed, the job's fields read under its lock, a failed thread start falls back in-frame, the lost-texture
+    listener cleared at retire, a failed import switches none of the item's textures).
 - [ ] N5.7a The image presenter and background as the core's background layer (D7 point 1): image ownership,
   covered-display admission and timing kept; the photo textures are the core's (the wrapped-texture bridge is
   OpenGL only and retires with the Python presenter); at rest nothing is drawn again. Proved in the hidden host
