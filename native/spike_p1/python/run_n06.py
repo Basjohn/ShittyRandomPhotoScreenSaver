@@ -143,51 +143,24 @@ def message_groups(messages: dict) -> list:
 
 # Validation findings that are Qt 6.12.0's, attributed in N0.7 (callers, both devices, Qt source); the record and the
 # native core's route: Docs/Future_Work/Native_Core_N06_N07_Qt_Facts.md section I. A finding is excused only where
-# the harness cannot avoid it and says so; everything else counts.
-QT_DEFECTS = {
-    "A": "VUID-VkImageCreateInfo-initialLayout-12478: QVkTexture::create (qtbase v6.12.0, src/gui/rhi/qrhivulkan.cpp) "
-         "creates every texture image with initialLayout PREINITIALIZED and tiling OPTIMAL (prepareCreate tracks "
-         "PREINITIALIZED); the 6.12 branch head has UNDEFINED. Every QRhi texture on Vulkan; excused everywhere.",
-    "B": "SYNC-HAZARD-WRITE-AFTER-WRITE at vkCmdBeginRenderPass: QRhiVulkan::createOffscreenRenderPass gives a "
-         "texture target without PreserveColorContents initialLayout UNDEFINED and no VK_SUBPASS_EXTERNAL dependency, "
-         "so the pass's layout transition is unordered against the previous frame's storeOp. Excused only in the "
-         "'discard' evidence phases (the hosts that do not preserve); every other host preserves.",
-    "C": "SYNC-HAZARD-READ-AFTER-WRITE at vkCmdBeginRenderPass (loadOp LOAD): QRhiVulkan's pass resource tracker "
-         "transitions a colour target with dstAccessMask COLOR_ATTACHMENT_WRITE only (TexColorOutput), so a loading "
-         "pass reads after an unordered layout transition. Never excused: the harness records the first transition "
-         "itself (quick_offscreen.cpp primeColorTargetForLoad).",
-    "D": "SYNC-HAZARD-WRITE-AFTER-PRESENT / WRITE-AFTER-READ / UNASSIGNED-non-acquired-swapchain-image-used: Qt "
-         "Quick's grabWindow on a Vulkan window (qtdeclarative QSGRhiSupport::grabAndBlockInCurrentFrame calls "
-         "QRhi::finish() inside the swapchain frame; in qtbase v6.12.0 QRhiVulkan::finish submits that frame's "
-         "command buffer, which renders into the acquired image, with no wait semaphore at all, so the acquire "
-         "semaphore is never waited on before the image is written). Excused only in the translucent round's grab "
-         "phases.",
-}
+# the harness cannot avoid it and says so; everything else counts. The rule has one source, the native core's
+# (native/core/python/vk_validation.py): the descriptions, the classification and where each is excused.
+_CORE_PYTHON = REPO_ROOT / "native" / "core" / "python"
+if str(_CORE_PYTHON) not in sys.path:
+    sys.path.append(str(_CORE_PYTHON))       # last: the spike's own frozen_probe/import_check keep their names
+import vk_validation  # noqa: E402
+
+QT_DEFECTS = vk_validation.QT_DEFECTS
 
 
 def classify_group(g: dict) -> str | None:
-    """Which recorded Qt 6.12.0 defect (QT_DEFECTS) a message group is, by its id, text and Qt caller; None when it
-    is none of them."""
-    gid, msg, callers = g.get("id") or "", g.get("message") or "", g.get("caller_modules") or []
-    qt_call = "Qt6Gui.dll" in callers[:2]
-    if gid == "VUID-VkImageCreateInfo-initialLayout-12478" and callers[:1] == ["Qt6Gui.dll"]:
-        return "A"
-    if (gid == "SYNC-HAZARD-WRITE-AFTER-WRITE" and qt_call and "vkCmdBeginRenderPass" in msg
-            and "oldLayout VK_IMAGE_LAYOUT_UNDEFINED" in msg and "attachment storeOp" in msg):
-        return "B"
-    if (gid == "SYNC-HAZARD-READ-AFTER-WRITE" and qt_call and "VK_ATTACHMENT_LOAD_OP_LOAD" in msg
-            and "layout transition initiated by vkCmdPipelineBarrier" in msg):
-        return "C"
-    if (gid in ("SYNC-HAZARD-WRITE-AFTER-PRESENT", "SYNC-HAZARD-WRITE-AFTER-READ",
-                "UNASSIGNED-non-acquired-swapchain-image-used") and qt_call and "Qt6Quick.dll" in callers[:3]):
-        return "D"
-    return None
+    """The core's rule (``vk_validation.classify_group``), read at each call."""
+    return vk_validation.classify_group(g)
 
 
 def _excused(g: dict) -> bool:
-    phase = g.get("phase") or ""
-    return (g.get("qt_defect") == "A" or (g.get("qt_defect") == "B" and "discard" in phase)
-            or (g.get("qt_defect") == "D" and "grab" in phase))
+    """The core's rule (``vk_validation.excused``), read at each call."""
+    return vk_validation.excused(g)
 
 
 def validation_summary(messages: dict) -> dict:

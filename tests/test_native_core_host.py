@@ -389,6 +389,31 @@ def test_the_validation_rule_excuses_only_qts_recorded_defects():
     assert validation.validation_summary(dropped)["clean"] is False
 
 
+def test_the_n06_spike_reads_the_cores_validation_rule(monkeypatch):
+    """One source for the ``QT_DEFECTS`` rule: the spike's ``run_n06.py`` reads the core's ``vk_validation`` at each
+    call, so the edit that drops A's excuse at the next Qt patch drops it in both (its copy had to be edited twice)."""
+    import vk_validation as validation
+
+    spike = str(ROOT / "native" / "spike_p1" / "python")
+    if spike not in sys.path:
+        sys.path.append(spike)
+    import run_n06
+
+    def summary_of_a(module) -> dict:
+        entry = {"phase": "hidden", "source": "our_instance", "severity": "error", "count": 3, "message": "",
+                 "id": "VUID-VkImageCreateInfo-initialLayout-12478",
+                 "stack": ["VkLayer_khronos_validation.dll+0x10", "Qt6Gui.dll+0x20"]}
+        return module.validation_summary({"errors": 1, "entries": [entry]})
+
+    assert run_n06.QT_DEFECTS is validation.QT_DEFECTS
+    assert summary_of_a(run_n06)["clean"] is True and summary_of_a(validation)["clean"] is True
+    # The upgrade's one edit: A is no longer excused. Both harnesses now count it.
+    real = validation.excused
+    monkeypatch.setattr(validation, "excused", lambda g: g.get("qt_defect") != "A" and real(g))
+    assert summary_of_a(validation)["clean"] is False
+    assert summary_of_a(run_n06)["clean"] is False
+
+
 def test_the_loaders_warnings_are_skipped_and_its_errors_counted():
     """Audit 13 Nov, low 1: a "Loader Message" group was skipped at any severity, so a loader error was never
     unexplained. Its warnings stay out (not validation findings); its errors count, even beside a warning."""
