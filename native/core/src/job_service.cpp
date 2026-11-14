@@ -764,9 +764,12 @@ public:
         // The completion edge with its own result (audit N38 L1): QRhi::finish() waits for this QRhi's queue but drops
         // the wait's result, so a device lost during the upload would publish an image whose upload never completed.
         // A fence on the job queue (an empty submit after the upload's, waited for here) returns the loss.
-        if (!waitQueue(error) || m_rhi->isDeviceLost()) {
+        const bool completed = waitQueue(error);
+        if (!completed || m_rhi->isDeviceLost()) {
             if (error->isEmpty())
-                *error = QStringLiteral("the device was lost during the upload");
+                *error = QStringLiteral("the upload's completion failed");
+            if (m_rhi->isDeviceLost() && !deviceLost())
+                noteDeviceLost(error);
             texture.reset();          // never published
             return false;
         }

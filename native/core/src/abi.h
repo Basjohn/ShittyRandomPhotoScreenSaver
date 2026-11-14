@@ -58,7 +58,7 @@
 // composite_set's layer (content, background: recorded first) and opaque (Qt's opaque pass); composite_state's surface
 // kept_records and layer, its sync's material_blending and layer; composite_mode_state's still, still_kept and
 // textures_lost_listener (cleared by composite_mode_retire, L4); the frame driver state's window_retire_frame_requests
-// and window_retiring (M2); window edges counted once per frame (M1); the job service's device-loss, thread-start and
+// and window_retiring (M2); window edges counted once per frame (M1; window_edges_self_test); the job service's device-loss, thread-start and
 // briefJson rules (L1-L3), its self-test's lose_device, fail_thread_start and running_state; the commit's two phases (L5).
 #pragma once
 

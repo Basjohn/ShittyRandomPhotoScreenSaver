@@ -498,6 +498,41 @@ everything else at the flip.
   node, drawn only for a run, a proof or a pixel oracle. On Vulkan (D10 point 2) neither exists: no background node
   is created, the window shows black where the wallpaper will be.
 
+**As built (boxes 2 and 3, ABI 15; owed: its build round and `background_layer_check.py`).**
+1. *One owner of the fit and crop* (`rendering/quick/background_placement.py`): the worker's processed image's whole pixel
+   rect over the background item's whole logical rect. The Python presenter's `QSGImageNode` reads its source rect and
+   rect from it (the same values as before: the protected path is not retuned), and the native layer its pass's
+   `u_source_uv`. A test moves the owner and sees both paths move.
+2. *The layer is N4.a's fullscreen pass, as a still* (`mode_content.h`, "Stills"): a generic mode item with no stream,
+   its frame its textures, settings and card; its program is checked against an empty schema. It records only when what
+   it draws changed: the record that hands a new photo to its upload job keeps the target and records no pass (the
+   previous photo stays, never a blank), and the commit's record (the frame edge the job's latch publishes at) draws the
+   new one once. At rest nothing is recorded; Qt composites the retained target.
+3. *Its pass* is the product file `rendering/quick/qml/shaders/background_layer.frag` (baked by `tools/regen_qrc.py
+   --shaders`, shipped with the QML): the photo at `u_source_uv` over `vUv`, linear, clamped, no mips, as the retained
+   node samples it; replace.
+4. *The composite* takes two options: `layer` ("background": the frame driver records the window's background-layer
+   surfaces before every other, D5.2's order, so N5.7b builds its pyramid from a layer drawn first in the frame) and
+   `opaque` (the material without blending: Qt draws it in its opaque pass, as the retained image node it stands for, and
+   blends it while its opacity is below one).
+5. *The photo's textures are the core's*: the item's `PresentationImage` is copied once into the core (GUI thread) and
+   uploaded by N3.8's job service on a Vulkan device with a second queue (in the frame elsewhere). The wrapped-texture
+   bridge (PR-04) is OpenGL only and is not used; it retires with the Python presenter.
+6. *The route* (`rendering/quick/render/native_background.py`): on the native background's backend (Vulkan)
+   `BackgroundRenderItem` makes the layer, a composite item in itself, at its first image, and hands it every image at the
+   same edge the Python presenter takes it, so image ownership, the identity rule, covered-display admission and the
+   timing stay the item's and the runtime's. The layer fades in with its first photo and out when the image goes or the
+   core's content fails; a lost texture is sent again from the item's image; the scene's retirement closes it before
+   the root. On OpenGL nothing native is made. Known limit until N5.2a: on Vulkan a transition is not drawn (D10 point 2),
+   so the base photo changes at the run's end as a cut from one photo to the next, never through a blank.
+7. *What the build round must prove* (`native/core/python/background_layer_check.py`): rule (a) OpenGL native equal to
+   the Python presenter's frames on real photos (landscape, a FILL crop, portrait and a 3:1 aspect, FILL and FIT) at dpr
+   1 and 1.5 under the overscan placement; rule (b) Vulkan within 1 level; the route through `BackgroundRenderItem` on
+   Vulkan; photo changes through jobs (the hand-over keeps the previous photo and records no pass, the commit draws the
+   new one exactly, no fallback, the render thread's and the GUI thread's cost per change); nothing at rest; the cost at
+   rest at 2560 x 1440 against the protected retained-background path; the lost edge and teardown in flight; validation
+   clean. Then the lead's Display 1 and Display 0 rehearsal with the wallpaper and music.
+
 ## D8. What Parity+ means, and the ranked plus (decided 12 Nov 2026)
 
 **Parity is four things, each a gate at every port and again at the flip:**
@@ -720,6 +755,17 @@ first job is a photo's upload and its GPU mips into one of N4.a's core-owned tex
    never left to a state read.
 10. *Nothing at rest.* No job, no wake-up, no retire entry and no record at rest; the frame edge's only addition is one
     atomic read of the window's retire count.
+
+*Amended by the N3.8 audit (`Docs/Future_Work/Audit_2026-11-14_N38.md`, fixed in ABI 15 with N5.7a).* Point 6: a
+window's frame edges are counted once per rendered frame whatever number of drivers sees it (M1: the first driver's
+`beforeRendering` counts, the window's `afterRendering` opens the next count), and the retire list asks its window for
+the frames its release waits for (M2: a queued `update()` per frame while an entry is left; before, a window at rest
+after a photo change held the replaced 4K output). Point 8: the barrier waits for work in flight only (M3: jobs queued or
+running, releases pending, outputs retiring; textures and fronts that live items hold are process-wide and are proved
+released by each item's destruction). Point 4 and 1: an upload's completion is fenced on the job queue and a lost device
+fails the service closed (L1); a thread that does not start fails it closed too (L3). Point 3: a failed import switches
+none of the item's textures (L5, two phases). The running job is read by its constant fields only (L2); the lost
+listener goes with the owner's retire (L4).
 
 ## D10. The Vulkan rehearsal path and the flip gate (decided 12 Nov 2026)
 

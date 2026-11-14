@@ -223,6 +223,14 @@ def test_the_state_reads_only_the_running_jobs_constant_fields(core):
 
 
 @needs_module
+def test_a_windows_frame_is_counted_once_whatever_number_of_drivers_sees_it(core):
+    # Audit N38 M1: two drivers on one window (a second host, or one detached and not yet released) counted each frame
+    # twice, and a retired image was released a frame early ([1, 2, 3, 4] before the fix).
+    result = json.loads(core.module.window_edges_self_test())
+    assert result == {"edges": [1, 1, 2, 2], "total": 2}
+
+
+@needs_module
 def test_the_lost_texture_listener_goes_with_the_owners_retire(core, qt_app):
     # Audit N38 L4: no lost edge reaches a retired owner, and the core holds no reference to it after its retire.
     from PySide6.QtQuick import QQuickItem

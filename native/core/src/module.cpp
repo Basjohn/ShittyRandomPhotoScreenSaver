@@ -1214,6 +1214,24 @@ QJsonObject jobCountsObject()
     return o;
 }
 
+// Audit N38 M1, GPU-free: a window's frame count with two drivers' edges in one frame (a second host on the window, or
+// one detached and not yet released), as WindowSurfaces counts them: frame 1 (two edges), frame 2 (two edges).
+PyObject *window_edges_self_test(PyObject *, PyObject *)
+{
+    srpss_core::WindowSurfaces surfaces;
+    QJsonArray edges;
+    edges.append(double(surfaces.noteEdge())); // frame 1, the first driver
+    edges.append(double(surfaces.noteEdge())); // frame 1, the second driver
+    surfaces.frameRendered();                  // the window's afterRendering
+    edges.append(double(surfaces.noteEdge())); // frame 2
+    edges.append(double(surfaces.noteEdge()));
+    surfaces.frameRendered();
+    QJsonObject o;
+    o.insert(QStringLiteral("edges"), edges);
+    o.insert(QStringLiteral("total"), double(surfaces.edges()));
+    return pyJson(o);
+}
+
 PyObject *job_counts(PyObject *, PyObject *)
 {
     return pyJson(jobCountsObject());
@@ -2091,6 +2109,9 @@ PyMethodDef methods[] = {
     { "composite_mode_on_lost", composite_mode_on_lost, METH_VARARGS,
       "(handle, callable|None) -> None: N3.8, the owner's lost-texture edge: called on the GUI thread with the list of "
       "names once each is found lost (a node made again, a texture that could not be created)." },
+    { "window_edges_self_test", window_edges_self_test, METH_NOARGS,
+      "() -> JSON str: audit N38 M1, GPU-free: a window's frame count with two drivers' edges in each of two frames "
+      "(edges seen, total): one per frame." },
     { "job_counts", job_counts, METH_NOARGS,
       "() -> JSON str: N3.8, the job services' process-wide counts (services, threads, jobs queued and running, images "
       "held and their bytes, releases pending, wake-ups) and the windows' retiring images." },
