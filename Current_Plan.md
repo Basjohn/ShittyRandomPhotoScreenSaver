@@ -222,11 +222,11 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
   the Python substrate and is therefore a port is listed in `Docs/Reference/Scene3D_Resources.md` ("Shared
   Scene3D capability inventory").
 
-**State, 13 Nov (audit):** N0's contracts are decided, and N0.3, N0.6 and N0.7 are proved (D6 and D9 accepted). N1.6
-is merged to ratchet 40 (the 3D modes are open). N2.1 (the product module's build), N2.2 (hosts and frame driver),
-N2.4 (the composite node) and N2.6 (the GPU timer) are merged and proved (ABI 4; the D3D window rounds with the
-displays on); the Python half of N2.3 (Spectrum's native schema, the `payload_schema` check) is merged and its C++
-reader is open. N2.7 and its first leftovers are merged (14 Nov); N2.8's Vulkan run is next.
+**State, 14 Nov (audit):** N0's contracts are decided, and N0.3, N0.6 and N0.7 are proved (D6 and D9 accepted). N1.6
+is merged to ratchet 24 (Neon Lake, Extruded Spectrum and Sphere open). N2.1 (the product module's build), N2.2 (hosts
+and frame driver), N2.4 (the composite node) and N2.6 (the GPU timer) are merged and proved (the D3D window rounds with
+the displays on); N2.3 (Spectrum's native schema and the C++ packet reader) is merged and proved at module ABI 5. N2.7
+and its first leftovers are merged; N2.8's pre-check on Display 1 is done; N2.5 is in flight.
 
 **Order.** N0 and N1 now. Then N2 (the substrate and Spectrum), N2b (the background layer and the first full
 rehearsal), N3 (the 3D substrate). From there two ordered tracks, one High slot each: the **modes track** (N5.1,
@@ -370,8 +370,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   its port instead. Order: by first consumer on the ladder, not N5's order. Merged 12 Nov (ratchet 197 to 95): the
   substrate step, Spectrum, the seven fullscreen transitions, the item-quad transition families, the Quick hosts and
   Waveform Ribbon; 13 Nov (ratchet 95 to 40): the motion and trail family and its transitions, `bind_frame`'s loose
-  branch deleted, Waveform's fog, and the 2D modes (the substrate was already done on 12 Nov). Open (this is the
-  one home of the remainder; ratchet 40):
+  branch deleted, Waveform's fog, and the 2D modes (the substrate was already done on 12 Nov); 13 Nov (ratchet 40 to
+  24, a5648806): Extruded Bubble's defocus layer, probe prefilter, fullscreen passes, particles and wake trails.
+  Open (this is the one home of the remainder; ratchet 24):
   - The coverage gap is closed (14 Nov): `conventions_identity` records variants `a` and `b` and, with `--offers`,
     every Choice offer (129 runs for all modes; `tests/test_conventions_identity_runs.py`); every N1.6 merge
     (611ae065, 1d1816d8, 0a508242, 580cedc1, a5648806) re-proved ALL IDENTICAL at that set, first parent against

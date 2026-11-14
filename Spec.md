@@ -66,7 +66,8 @@ POSIX (source-level only there); no control message registers a descriptor with 
 Contract: `Docs/Contracts.md` "Process path".
 
 The dependency floor is PySide6/Qt 6.12.0 (pinned in `requirements.txt`; bumped from 6.11.2 on 12 Nov 2026, commit 655b04bf). Production requests OpenGL 4.6 Core and uses GLSL 460 core;
-OpenGL is the sole production graphics API. The existing render-context initialization boundary records actual
+OpenGL is the sole production graphics API (the `--graphics-backend=vulkan` switch is the lead's diagnostic rehearsal
+path until the flip: `Docs/Future_Work/Native_Core_P3_Decisions.md` D10). The existing render-context initialization boundary records actual
 GL/GLSL, vendor, renderer and required capabilities, and rejects unsupported contexts. Validation is scoped to
 context lifetime, with no steady-frame driver queries. The accepted swap interval remains zero.
 Maintained render/capture diagnostics reuse `rendering.quick.bootstrap`; owned offscreen shader contexts request
@@ -743,7 +744,10 @@ disabled. `Docs/Future_Work/Native_Core_P2_Engine_Design.md` owns capacity, ABI,
 
 Visualizer geometry is capability-driven. Modes using the shared reflowing card policy use the canonical 1.5 baseline aspect.
 Every mode except Sphere offers content quarter-turns through the existing CUSTOM presentation owner in ordinary
-Edit and, where supported, Fullscreen Edit. Scene3D rotates its logical viewport and existing final composite at
+Edit and, where supported, Fullscreen Edit. Outside Edit the hover Rotate glyph commits one turn at once through
+the same owner (the card through the direct session and its Save, the expanded card through Fullscreen Edit's turn
+and Save in one call), promoted live with no Edit chrome; inside Edit it is an undoable draft step. Restore Size and
+Child Lock still open Edit (operator, 14 Nov 2026). Scene3D rotates its logical viewport and existing final composite at
 uniform pixel scale while preserving the camera and physical stage. Fullscreen's Now Playing offers the shared Media transport bar or
 floating glyphs and uses ordinary Media's metadata fitting/wrapping primitive; its detailed overlay contract is in
 `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md` §G.

@@ -43,6 +43,8 @@ never ships.
   production conventions include (`rendering/gl_programs/conventions.py`), spliced in at `//@srpss_conventions` by
   `cmake/compose_shader.cmake` before the bake.
 - `python/import_check.py`: the GPU-free check the workflow runs after the compile, through `rendering.native`.
+- `python/frozen_probe.py`: N2.1's frozen probe, the entry of a separate Nuitka build
+  (`scripts/venv/build_native_core_probe.ps1`) that loads the module the way the frozen product will.
 - `python/host_check.py`: N2.2's proof (hosts, frame driver, probe, lifecycle, validation; `probe_analysis.py`,
   `vk_validation.py`). `Docs/Reference/Harness_Index.md` has the command.
 - `python/composite_check.py`: N2.4's proof (texels one to one, plan 1C.4's clip contract on the native item in every

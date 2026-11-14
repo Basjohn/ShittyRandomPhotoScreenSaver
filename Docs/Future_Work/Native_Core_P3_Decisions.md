@@ -708,6 +708,13 @@ stays selectable in Settings as the fallback.
   `widget_glow`, `text_legibility`) carried SPIR-V from the first (qsb always bakes it) beside GLSL 460; since 14 Nov
   `tools/regen_qrc.py --shaders` bakes them for every shipped target (GLSL 460 kept first, so OpenGL draws with the
   same variant), and `tests/test_quick_shader_packs.py` proves they draw on Vulkan in the hidden host.
+- The reveal (14 Nov, 41671a42): with no background renderer on the backend no wallpaper frame can draw, so a
+  display reveals on its first presented frame (`DisplayManager._startup_reveal_admits`, the one rule for both
+  backends; `QuickSceneReadiness.frame_presented` is published only there); on OpenGL the reveal still waits for the
+  background renderer's intentional base frame and the first authored wallpaper.
+- The exit (14 Nov, R-207): every exiting stop arms the terminal destruction barrier, whatever its reason, so
+  `--exit-after` and a failed start wait for their Quick windows to retire before the quit (a Vulkan window alive at
+  process end crashed it). The bare `QCoreApplication.exit(1)` routes are still open (the N2.7 leftovers box).
 
 ## D11. The Qt version the core is built against (decided 12 Nov 2026)
 
@@ -1079,6 +1086,29 @@ generic decode accepts the frame. (b) A control message carrying a sharer-backed
 name or a target-process duplicate and leaves no handle behind after the target dies before decoding (handle count
 before and after). Negative control: send it through a queue with the sharer. (c) The codec namespace: assert no
 native schema id equals `frame_codec.CODEC_SCHEMA` and that the Python decoder refuses a native schema's payload.
+
+**As built (N2.3, merged 14 Nov 2026, 8dff805e; module ABI 5; N23 VERDICT PASS on the GitHub-built module).**
+- Rules 3 to 5 hold on both readers: `payload_schema` is now read. The numbering of rule 4 is the one shipped
+  (`native_schema.native_schema_id`: `(version << 16) | 0x100 | mode_code`); `native_schema.admit_slot_head` is the
+  Python reference's head admission and `PacketReader::admit` its C++ twin, check for check. Spectrum's record
+  (`spectrum_native_schema.py`) is the only native schema; production still writes the tagged codec (nothing
+  configures a native stream before N2.5).
+- One table for both readers: `native/core/src/frame_abi_generated.h` is generated from `packet_abi.py` and
+  `native_schema.py` by `tools/native_frame_abi_header.py` (`--check` in `tests/test_native_packet_reader_sources.py`);
+  `NativeCore.packet_reader` refuses a module whose compiled-in table differs (`SchemaTableMismatch`).
+- D1 as built: the reader maps its own view by name (`OpenFileMappingW` and `MapViewOfFile`; a name that no longer
+  opens is a retired reader), the three states are one atomic, every read and head read pins the view and the last
+  pin unmaps it, and the liveness counters (`copies_started`, `copies_finished`, `last_accepted_sequence`) are in the
+  reader's state. The render-thread retire job and the "close during copy" hook are not built: they come with the
+  reader's first user (N2.5).
+- D2 as built: `read()` is the one consuming read and acknowledges at the accept edge (the slot whole under its
+  seqlock, admitted by its head, the expected identity, the record's range rules held), with the frame's
+  protected-edge mask retained for the frame; `readHead()` moves nothing; the drop edge clears the retained frame
+  and no sequence at or below the watermark is accepted again. The seqlock's loads rely on x86-64 load order and a
+  compiler barrier (no `<atomic>`: the module's runtime rule).
+- The P3.0 adversarial table (`tools/packet_reader_adversary.py`) runs on the Python reference with its naive
+  control and on the C++ reader with a named negative control per case; the in-place writer's race gave 0 mixed
+  records in 200,000 reads, and the `skip_seqlock` control read until its first mixed record.
 
 ### Questions for the lead (D1 to D3 and the transport rule)
 
