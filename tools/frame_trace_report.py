@@ -94,7 +94,7 @@ EVENT_NAMES = {
 # The native core's GPU timer (N2.6): auxiliary = GPU nanoseconds, logical_timestamp_ns = the kind
 # (rendering/native/gpu_timing.py GPU_PASS_KINDS; tests/test_native_core_timer.py holds the two equal).
 GPU_EVENT_IDS = (77, 78)
-GPU_PASS_KIND_NAMES = {0: "frame", 1: "probe", 2: "surface", 3: "load"}
+GPU_PASS_KIND_NAMES = {0: "frame", 1: "probe", 2: "surface", 3: "load", 4: "backdrop"}
 
 # Startup/teardown windows are not stall points (core/diagnostics/lifecycle_window.py):
 # frames inside them are reported apart; only frames just after one count as poisoning.

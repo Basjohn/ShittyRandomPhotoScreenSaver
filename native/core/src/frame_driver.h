@@ -96,6 +96,8 @@ private:
     void setError(const QString &error);
     int timerBegin(QRhi *rhi, QRhiCommandBuffer *cb, GpuPassKind kind);
     void timerEnd(QRhi *rhi, QRhiCommandBuffer *cb, int scope);
+    // N5.7b: the window's backdrop pyramids after its background layer (each timed whole); true when one built.
+    bool recordBackdropPyramids(QRhi *rhi, QRhiCommandBuffer *cb);
 
     std::shared_ptr<const HostFrameSource> m_source;
     std::shared_ptr<WindowSurfaces> m_surfaces; // the window's composited surfaces (set once, at connectTo)
@@ -110,6 +112,7 @@ private:
     QAtomicInteger<qint64> m_surfacePassesRecorded { 0 };
     QAtomicInteger<qint64> m_edgesAfterDetach { 0 };
     QAtomicInteger<qint64> m_retiredReleased { 0 }; // N3.8: retired job outputs handed back to their services
+    QAtomicInteger<qint64> m_backdropBuilds { 0 };  // N5.7b: backdrop pyramid builds recorded
     QAtomicInteger<qint64> m_readbacksStarted { 0 };
     QAtomicInteger<int> m_detach { 0 };
     QAtomicInteger<int> m_released { 0 };

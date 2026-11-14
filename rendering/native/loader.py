@@ -30,6 +30,7 @@ from types import ModuleType
 from typing import Any, Mapping
 
 from rendering.native import runtime_check
+from rendering.native.backdrop import NativeBackdrop
 from rendering.native.composite import CompositeItem
 from rendering.native.hosts import HiddenHost, WindowHost
 from rendering.native.packet_reader import (
@@ -45,7 +46,7 @@ from rendering.native.spectrum import NativeSpectrum, spectrum_block
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 15
+EXPECTED_ABI = 16
 HOST_KINDS = ("window", "hidden")
 
 
@@ -122,6 +123,18 @@ class NativeCore:
         if not isinstance(parent, QQuickItem) or not shiboken6.isValid(parent):
             raise TypeError(f"a composite is placed in a live QQuickItem, not {type(parent).__name__}")
         return CompositeItem(self.module, self.module.composite_create(shiboken6.getCppPointer(parent)[0]))
+
+    def backdrop(self, parent: Any, *, parked: bool = False) -> NativeBackdrop:
+        """The card-material backdrop pyramid (N5.7b, ``rendering.native.backdrop``) as an item in the Qt Quick item
+        ``parent``: built from the background layer of the parent's window by a frame driver attached to it; ``item``
+        is the texture provider ``MaterialSurface`` samples. ``parked``: made with no demand (nothing built)."""
+        from PySide6.QtQuick import QQuickItem
+        import shiboken6
+
+        if not isinstance(parent, QQuickItem) or not shiboken6.isValid(parent):
+            raise TypeError(f"a backdrop is placed in a live QQuickItem, not {type(parent).__name__}")
+        handle, address = self.module.backdrop_create(shiboken6.getCppPointer(parent)[0], bool(parked))
+        return NativeBackdrop(self.module, handle, address)
 
     def composite_live(self) -> dict:
         """Composite items, surfaces and their QRhi objects alive in the process, the native Spectrum's and the generic

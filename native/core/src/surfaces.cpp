@@ -33,6 +33,12 @@ QAtomicInteger<int> g_liveSurfaces { 0 };
 QAtomicInteger<int> g_liveResources { 0 };
 QAtomicInteger<int> g_retiring { 0 };          // N3.8: retire entries in every window
 QAtomicInteger<qint64> g_leftToServices { 0 }; // entries a registry left to their services when it went
+QAtomicInteger<quint64> g_drawnGenerations { 0 }; // N5.7b: a surface's drawn frames, process-unique
+
+quint64 nextDrawnGeneration()
+{
+    return g_drawnGenerations.fetchAndAddRelaxed(1) + 1;
+}
 
 QShader shaderFrom(const unsigned char *data, unsigned int size)
 {
@@ -192,12 +198,14 @@ bool Surface::ensureTarget(QRhi *rhi, const QSize &pixels, QString *error, QRhiT
         m_res = std::move(res);
         setLive(kTargetObjects);
         m_targetClear = false;                 // a new target's texels are not known to be anything
+        m_drawnGeneration = 0;
         m_dirty.storeRelease(1);
         return true;
     }
     if (m_res->target.texture->pixelSize() == pixels)
         return true;
     m_targetClear = false;
+    m_drawnGeneration = 0;
     // The same objects at the new size (the render pass descriptor and the pipeline stay compatible: same format).
     m_res->target.texture->setPixelSize(pixels);
     if (!m_res->target.texture->create() || !m_res->target.renderTarget->create()) {
@@ -298,6 +306,8 @@ bool Surface::record(QRhi *rhi, QRhiCommandBuffer *cb, bool *recorded, QString *
                 QString ignored;
                 clearTarget(rhi, cb, recorded, &ignored);
             }
+            if (!m_content->holdsFrame(m_res->target))
+                m_drawnGeneration = 0;
             return false;
         }
         m_dirty.storeRelease(0);
@@ -307,6 +317,7 @@ bool Surface::record(QRhi *rhi, QRhiCommandBuffer *cb, bool *recorded, QString *
             return true;
         }
         m_targetClear = !m_content->holdsFrame(m_res->target); // what the content did not draw it cleared by a draw
+        m_drawnGeneration = m_targetClear ? 0 : nextDrawnGeneration(); // N5.7b: a new frame for the backdrop
         m_passes.fetchAndAddRelaxed(1);
         *recorded = true;
         QMutexLocker lock(&m_mutex);
@@ -356,6 +367,7 @@ bool Surface::recordPattern(QRhi *rhi, QRhiCommandBuffer *cb, SurfacePattern pat
     cb->endPass();
     m_dirty.storeRelease(0);
     m_targetClear = pattern == SurfacePattern::Transparent;
+    m_drawnGeneration = m_targetClear ? 0 : nextDrawnGeneration();
     m_passes.fetchAndAddRelaxed(1);
     *recorded = true;
     QMutexLocker lock(&m_mutex);
@@ -378,6 +390,7 @@ void Surface::release()
     m_res.reset();
     setLive(0);
     m_targetClear = false;
+    m_drawnGeneration = 0;
     m_dirty.storeRelease(1);
 }
 
@@ -465,6 +478,54 @@ QList<std::shared_ptr<Surface>> WindowSurfaces::dirtySurfaces() const
             dirty.append(s);
     }
     return dirty;
+}
+
+// ------------------------------------------------------------------------------------------------- backdrops (N5.7b)
+
+void WindowSurfaces::addBackdrop(const std::shared_ptr<BackdropPyramid> &pyramid)
+{
+    if (!pyramid)
+        return;
+    QMutexLocker lock(&m_mutex);
+    for (const std::shared_ptr<BackdropPyramid> &p : m_backdrops) {
+        if (p == pyramid)
+            return;
+    }
+    m_backdrops.append(pyramid);
+}
+
+void WindowSurfaces::removeBackdrop(const BackdropPyramid *pyramid)
+{
+    QMutexLocker lock(&m_mutex);
+    for (qsizetype i = 0; i < m_backdrops.size(); ++i) {
+        if (m_backdrops.at(i).get() == pyramid) {
+            m_backdrops.removeAt(i);
+            return;
+        }
+    }
+}
+
+QList<std::shared_ptr<BackdropPyramid>> WindowSurfaces::backdrops() const
+{
+    QMutexLocker lock(&m_mutex);
+    return m_backdrops;
+}
+
+std::shared_ptr<Surface> WindowSurfaces::backgroundSource() const
+{
+    // Render thread (drawnGeneration is the render thread's). The newest layer holding a frame; else the newest layer.
+    QMutexLocker lock(&m_mutex);
+    std::shared_ptr<Surface> newest;
+    for (qsizetype i = m_surfaces.size() - 1; i >= 0; --i) {
+        const std::shared_ptr<Surface> &s = m_surfaces.at(i);
+        if (s->layer() != SurfaceLayer::Background)
+            continue;
+        if (s->drawnGeneration() != 0)
+            return s;
+        if (!newest)
+            newest = s;
+    }
+    return newest;
 }
 
 // ------------------------------------------------------------------------------------------------- the retire list (N3.8)

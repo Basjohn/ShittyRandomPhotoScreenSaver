@@ -407,6 +407,11 @@ private:
 
 } // namespace
 
+QSize windowFramebufferPixels(QQuickWindow *window)
+{
+    return framebufferPixels(window);
+}
+
 // ------------------------------------------------------------------------------------------------- CompositeConfig
 
 bool CompositeConfig::update(const QByteArray &json, CompositeConfig *out, QString *error)
@@ -874,6 +879,12 @@ QSGNode *CompositeItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *d
             SurfaceLayer layer = SurfaceLayer::Content;
             parseSurfaceLayer(m_config.layer, &layer);
             node->surface()->setLayer(layer);   // N5.7a: the frame driver records a background layer first (D5.2)
+            // N5.7b: where the target lies in the window's framebuffer (the backdrop's seed reads the layer there), on
+            // the pixel grid composite.vert snaps the item's origin to.
+            const QPointF sceneOrigin = mapToScene(QPointF(0.0, 0.0));
+            node->surface()->setPlacement(QPoint(int(std::floor(sceneOrigin.x() * rx + 0.5)),
+                                                 int(std::floor(sceneOrigin.y() * ry + 0.5))),
+                                          framebufferPixels(w));
             node->setSources(m_spectrum, m_mode);
             // Spectrum's sync (render thread, the GUI blocked): the retired streams released, the stream read at its
             // accept edge, the card taken; the surface records only when one of them changed what it draws. A generic

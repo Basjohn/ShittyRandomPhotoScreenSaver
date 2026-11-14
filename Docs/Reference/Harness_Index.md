@@ -864,6 +864,16 @@ python native/core/python/job_service_check.py --module-dir release/native_modul
 # lost edge, teardown in flight); Vulkan validated
 python native/core/python/background_layer_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
     [--apis opengl vulkan] [--rounds draw change rest edges cost lifetime] [--label n57a_background_layer]
+# N5.7b (D7 points 2 to 6): the card-material backdrop pyramid on the native core, hidden hosts only: levels (every
+# level read back against the Python pyramid's on OpenGL, rule (a) within 1 level; Vulkan against OpenGL native, rule
+# (b); a dark and a bright PERSONALSET photo at dpr 1 and 1.5 under the overscan placement and the product's R-63
+# placement; a dimmed case as a fact), cards (each material's MaterialSurface.qml card over both photos: today's Python
+# pyramid, the native one on OpenGL and on Vulkan; sheets for the look review), cost (the build's GPU time, timer kind 4,
+# at 2560x1440 and 3840x2160 against 0.3 / 0.6 ms), rest (nothing at rest; one build per photo commit and per dimming
+# change; Normal before the first photo; parked: no QRhi object, no build), route (SurfaceBackdropOwner: native on
+# Vulkan, Python on OpenGL), lifetime (destroy, host closed with a pyramid alive); Vulkan validated
+python native/core/python/backdrop_pyramid_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan] [--rounds levels cards cost rest route lifetime] [--label n57b_backdrop_pyramid]
 # N5.2a: the seven fullscreen transitions on the background layer (NativeBackgroundLayer.transition), hidden hosts only:
 # every variant of fullscreen_pass_check.VARIANTS from a dark to a bright PERSONALSET photo at nine progress values, dpr
 # 1 and 1.5, under the overscan placement; rule (a) OpenGL native equal to the Python renderer (TransitionCapture);

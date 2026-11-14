@@ -440,6 +440,59 @@ unchanged; 865 tests on the merge. Still owed: the lead's Display 1 and Display 
    rest at 2560 x 1440 against the protected retained-background path; the lost edge and teardown in flight; validation
    clean. Then the lead's Display 1 and Display 0 rehearsal with the wallpaper and music.
 
+### Points 2 to 6 as built (N5.7b, 14 Nov 2026; written before its build round at ABI 16)
+
+`native/core/src/backdrop.{h,cpp}`, shaders `backdrop.vert`, `backdrop_seed.frag`, `backdrop_down.frag`,
+`backdrop_up.frag`; the route `rendering/quick/render/native_surface_backdrop.py`; the proof
+`native/core/python/backdrop_pyramid_check.py`.
+1. *Level for level the Python pyramid* (point 4): 1/2 to 1/32, the heavy chain's one 1/16 scratch, the output's light
+   (level 0, 1/4) and heavy (level 1, 1/8) levels, from the Python constants and its `_DOWN`/`_UP` term for term
+   (`tests/test_native_backdrop.py` holds both). The output is one QRhi texture with mips; MaterialSurface's lod runs 0
+   to 1, so the levels past 1 are never sampled. "The full chain" is the Python chain to 1/32; a continuous radius past
+   level 1 would change the materials' look and is not built.
+2. *The seed reads the layer where it lies in the window* (the blit's position, black outside the display, rows in the
+   window framebuffer's order so the output is sampled in screen space as the Python texture is). Emulated on OpenGL
+   before the build (the core's shader files against the Python blit, two PERSONALSET photos): at the exact halving the
+   interior is equal and a few outermost texels differ by 1 level; at the product's R-63 placement (one pixel of
+   overscan, an odd window) about 4 % of the first level's texels differ by 1 level (the blit's own coordinate
+   arithmetic), at most 1 level on the outputs (single first-level texels on a sharp edge reach 2). Rule (a) is
+   therefore proved on the outputs within 1 level and on every level within 2, exactness recorded as a fact.
+3. *Dimming in the seed, not at sample time* (a deviation from point 5, the lead's call): point 6 and the plan keep
+   MaterialSurface unchanged, so the pyramid carries the dimming as the Python one does (the layer times one minus the
+   dimming, one rounding instead of the window's blend and the blit's); a dimming change is one build, as it is one
+   refresh today. Moving it to sample time later is a change to `surface_material.frag` on both routes.
+4. *When it builds* (points 2 and 3): at the frame edge right after the background layer (D5.2's order), only when the
+   layer's surface drew a frame the pyramid has not built from (`Surface::drawnGeneration`, new per drawn content
+   frame: a still's kept hand-over frame builds nothing), or once when made, woken, resized, the dimming changed or a
+   harness asks; never otherwise (one atomic at rest). No minimum interval: every layer frame is followed (point 3's
+   budget measured by the proof's cost round).
+5. *Demand and failure* (points 2 and 6): the owner's demand 0 parks the item (every QRhi object released and the
+   pyramid unregistered at the next sync); the provider hands out the output only once a record wrote it, and the output
+   is transparent when made and whenever the window holds no layer frame, so cards show their Normal fill. A build whose
+   QRhi object cannot be made leaves the output as it was (transparent until a first build).
+6. *The route*: `SurfaceBackdropOwner` takes the core's item on the native background's backend with the core loaded
+   (Vulkan); OpenGL keeps the Python pyramid. The owner's one-shot edges hand the core only the dimming; a photo, a
+   resize and a transition frame reach the pyramid through the layer itself. Limits: the layer's own fade-in opacity is
+   not in the backdrop (the cards see the full photo while the layer fades in with its first photo); point 7 (true glass
+   over the Visualizer) is not built.
+
+*As proved (ABI 16 build, round 1; `.artifacts/evidence/native_core/n5_7b/20261114_n57b_round1*/`).* N57B PASS on
+OpenGL and Vulkan with validation (Qt 6.12.0's excused defect A only). Levels: the OpenGL native levels equal the
+emulation before the build (the outputs within 1 level of the Python pyramid; at the product's R-63 placement one
+first-level texel at 2); Vulkan within 1 level of OpenGL. Cards: the five materials' cards on the dark and the bright
+wallpaper, native on OpenGL equal to today's and Vulkan equal to OpenGL but for a handful of grain-hash pixels (the
+look-review sheets `cards_review_{dark,bright}.png`). Cost per build (p90, the core's GPU timer): Vulkan 0.033 ms at
+2560 x 1440 and 0.050 ms at 3840 x 2160, OpenGL 0.038 and 0.059 ms, against the 0.3 and 0.6 ms budgets; the render
+thread 0.04 ms (Vulkan). Nothing at rest; one build per photo commit (none at the Vulkan hand-over) and per dimming
+change; cards exactly Normal before the first photo; parked: no QRhi object and no build. A Crossfade drawn on the layer
+(N5.2a): one build per layer frame (6 of 6), the glass card following every step, nothing after. The route, teardown and the
+regression harnesses (N57A, N38, N25, N52A) pass on the same module.
+Found on the way, today's OpenGL path (not the native one): after the Python backdrop's first publish its heavy level
+(level 1) is overwritten once before the next refresh (consistent with Qt generating the wrapped texture's mips from
+level 0, `surface_backdrop.py` `_publish_texture`), so Acrylic, Frosted, Mica and Smoked show a sharper blur than
+designed until the next refresh (up to 19 levels on the bright photo); the proof's cards round records it
+(`todays_first_publish_against_steady`) and compares against today's steady state.
+
 ## D8. What Parity+ means, and the ranked plus (decided 12 Nov 2026)
 
 **Parity is four things, each a gate at every port and again at the flip:**

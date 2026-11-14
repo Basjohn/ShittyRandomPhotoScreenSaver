@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 #: The figure kinds (``GpuPassKind`` in ``gpu_timer.h``); the frame trace's ``logical_timestamp_ns`` field carries them.
-GPU_PASS_KINDS = {0: "frame", 1: "probe", 2: "surface", 3: "load"}
+GPU_PASS_KINDS = {0: "frame", 1: "probe", 2: "surface", 3: "load", 4: "backdrop"}
 #: The timer's options (``GpuTimerConfig``): ``keep_when_off`` and ``wait_for_results`` are negative controls.
 TIMER_OPTIONS = ("enabled", "keep_when_off", "wait_for_results")
 #: The known-cost pass's options (``LoadConfig`` in ``load_pass.h``); ``timing="before"`` is a negative control.
