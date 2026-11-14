@@ -441,8 +441,14 @@ N2.8, whose rehearsal closes N2.5's rule (f) and releases the Python renderer's 
   - [ ] The first frame's pipeline build cost when a run switches program, and the 4K cost (not measured).
   - [ ] Side defect (C++): the core refusing a still for "no card" draws black silently and `content_status`
     reports no failure, so the layer's fade-out on failure would not trigger; report it and fail closed.
-- [ ] N5.7c Lead, Display 1: the first full rehearsal (wallpaper, a transition, cards on each material, Spectrum,
-  a Settings round trip, exit, sleep and wake).
+- [ ] N5.7c leftovers (the D1 rehearsal on Vulkan, 15 Nov, covered wallpaper, cards on all five materials, Spectrum,
+  live Settings changes, a transition and a clean exit):
+  - [ ] Sleep and wake through Windows' console display state (`[DISPLAY_POWER]` off, then on). The operator's power
+    cycle of the TV during the run raised no display-power event and rendering carried on; a real monitor sleep
+    remains unexercised.
+  - [ ] `[STARTUP_REVEAL]` still says "the vulkan backend has no background renderer, so no wallpaper frame is awaited
+    (D10)". Since N5.7a, Vulkan draws the native wallpaper, so the reveal should wait for its first wallpaper frame as
+    OpenGL does. Fix the reveal gate, or show that the first presented frame already holds the wallpaper.
 
 **N3. The 3D substrate core (C++; harness scenes, no mode yet)**
 
