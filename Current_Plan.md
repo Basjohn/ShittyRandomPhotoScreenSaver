@@ -47,7 +47,9 @@ at the size asked.
      N2.5's and N2.9's leftovers ride with the next fitting dispatch.
   2. 1D.6 (design note first), then 1C.10, as defects between N steps.
 - Medium:
-  1. 1B.10.
+  1. 1C.2's Save stall at the store (the deepcopy) and d1_run's grab blanking Vulkan's presentation; the lead
+     proves both on the two displays.
+  2. 1B.10 (in flight: its Spectrum part).
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
