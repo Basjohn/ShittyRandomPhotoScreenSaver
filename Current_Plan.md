@@ -804,6 +804,9 @@ The operator's taste for Spectrum (11 Nov, on five of round 1: "are all ghastly 
 capsule, grid-on-block and dark-fill looks fail; fine luminous gradients pass; fewer good presets beat a full slot
 count. The Spectrum features and the Bar Gap control are in `Docs/Reference/Visualizer_Reference.md`.
 
+Every 3D look (operator, 14 Nov): never a near-lens blob (a defocused shell or bubble in front of the camera);
+the lead rejects any still or showcase frame that shows one.
+
 - Spectrum part landed 14 Nov (lead's review on a dark and a bright wallpaper, the real card): Bar Count's one
   maximum (64), the kick lane follows the Bass lane (R-215), soft Bar Fill ghosts, two looks re-authored so none
   repeat (`visualizers/spectrum/presets/20261114_round3/`).
