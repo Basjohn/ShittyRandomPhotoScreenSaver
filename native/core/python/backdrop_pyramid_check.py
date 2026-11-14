@@ -505,8 +505,8 @@ def round_cards(core, engine, app, api: str, work: Path, out: Path) -> dict:
                 scene.refresh_python()
                 scene.frames(2)
                 if kind == "python":
-                    # Today's steady backdrop: a second refresh. The first publish's heavy level is overwritten once
-                    # by Qt (side defect of the Python path, reported with N5.7b), recorded here as a fact.
+                    # Today's steady backdrop: a second refresh. The first publish against it is a fact (Qt's one-time
+                    # generateMips overwrote the heavy level until R-NEW's fix; 0 levels since).
                     first = scene.read()
                     scene.refresh_python()
                     scene.frames(2)

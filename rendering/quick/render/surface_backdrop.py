@@ -525,6 +525,7 @@ class _BackdropRenderNode(QSGRenderNode):
         texture.setMipmapFiltering(QSGTexture.Filtering.Linear)
         texture.setHorizontalWrapMode(QSGTexture.WrapMode.ClampToEdge)
         texture.setVerticalWrapMode(QSGTexture.WrapMode.ClampToEdge)
+        self._claim_mip_levels(texture, window)
         with self._shared.lock:
             self._shared.texture = texture
         provider = self._provider_ref()
@@ -534,6 +535,27 @@ class _BackdropRenderNode(QSGRenderNode):
             except RuntimeError:
                 pass
         return True
+
+    @staticmethod
+    def _claim_mip_levels(texture: QSGTexture, window: QQuickWindow) -> None:
+        """The pipeline writes both output levels itself; Qt must never regenerate them.
+
+        A wrapped texture with mipmap filtering (``QSGPlainTexture``) queues ``generateMips`` once, on its first
+        ``commitTextureOperations``: the first frame a card samples it, which follows the refresh that published it
+        and has no refresh of its own, so ``glGenerateMipmap`` replaced the heavy level with a box downsample of the
+        light one until the next refresh. That one-time generation is consumed here into a batch that is released,
+        never submitted; no GL work, and later commits of a clean texture queue nothing.
+        """
+        rhi = window.rhi()
+        if rhi is None:
+            raise RuntimeError("surface backdrop window has no QRhi")
+        batch = rhi.nextResourceUpdateBatch()
+        if batch is None:
+            raise RuntimeError("surface backdrop: no QRhi resource update batch")
+        try:
+            texture.commitTextureOperations(rhi, batch)
+        finally:
+            batch.release()
 
     def park(self) -> None:
         """Render thread (sync), context current: free every GL object; the node stays.
