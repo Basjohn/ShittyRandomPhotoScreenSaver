@@ -11,7 +11,9 @@ Each overlay's placement is its anchor corner plus an offset and a scale relativ
 overlay's size; zero offset and unit scale are the defaults). Now Playing's artwork size has one carrier, its ``artwork``
 child record (plan 1B.7d; the retired ``artwork_scale`` / ``artwork_width`` / ``artwork_height`` load into it). Fullscreen Edit (M3c)
 edits exactly these placement values: the offsets, the scales and the single-axis extents below. The corner is Settings'
-(the anchor); changing it rebases the offset (:func:`rebase_offset_for_corner`).
+(the anchor); changing it rebases the offset (:func:`rebase_offset_for_corner`). An overlay Fullscreen Edit has moved
+(:func:`overlay_placement_moved`) reads CUSTOM in Settings' Corner choice; choosing a corner there clears its placement
+(:func:`clear_overlay_placement`, the one reset owner; plan 1D.12 A2).
 
 Single-axis sizing (Fullscreen Edit's side handles, ordinary Edit's content box; plan 1B.7b, 1C.3): each overlay's
 parent edits its box in ems of its font size (``0`` = natural), as the Media card's content extent reflows its content.
@@ -355,6 +357,52 @@ def rebase_offset_for_corner(options: Mapping[str, Any], corner: str) -> dict[st
     return result
 
 
+def overlay_placement_moved(options: Mapping[str, Any], overlay: str, application: str | None = None) -> bool:
+    """True when Fullscreen Edit has moved ``overlay`` off its bare corner (plan 1D.12 A2).
+
+    Moved means any member Fullscreen Edit writes (:data:`PLACEMENT_KEYS`: the offset, the scale, the box extents, Now
+    Playing's ``base_width`` and child records) differs from the canonical default, which is the overlay drawn at its
+    corner at its natural size. A Restore Size that returned the size members leaves only the offset to decide.
+    """
+
+    canonical = canonical_fullscreen_overlays(application).get(overlay)
+    if not isinstance(canonical, Mapping) or not isinstance(options, Mapping):
+        return False
+    for key in PLACEMENT_KEYS.get(overlay, ()):
+        default = canonical.get(key)
+        value = options.get(key, default)
+        if key == CHILD_GEOMETRY_KEY:
+            if normalize_now_playing_children(value) != normalize_now_playing_children(default):
+                return True
+            continue
+        try:
+            if abs(float(value) - float(default)) > 1e-9:
+                return True
+        except (TypeError, ValueError):
+            return True
+    return False
+
+
+def clear_overlay_placement(options: Mapping[str, Any], overlay: str, corner: str | None = None,
+                            application: str | None = None) -> dict[str, Any]:
+    """``overlay``'s options with its Fullscreen Edit placement cleared (the one reset owner, plan 1D.12 A2).
+
+    Every :data:`PLACEMENT_KEYS` member returns to its canonical default, so the overlay sits at its corner at its
+    natural size, as an ordinary widget leaves its CUSTOM geometry for a named position. ``corner`` (one of
+    :data:`CORNERS`) becomes its anchor when given. Every other option is unchanged. Pure.
+    """
+
+    result = dict(options)
+    canonical = canonical_fullscreen_overlays(application).get(overlay)
+    if isinstance(canonical, Mapping):
+        for key in PLACEMENT_KEYS.get(overlay, ()):
+            if key in canonical:
+                result[key] = deepcopy(canonical[key])
+    if corner is not None and str(corner) in CORNERS:
+        result["corner"] = str(corner)
+    return result
+
+
 def volume_osd_anchor(authored: tuple[float, float, float, float], scale: float) -> tuple[float, float]:
     """Where the Volume OSD's top-left sits at a zero offset: its ordinary rectangle scaled about its own centre."""
 
@@ -413,6 +461,8 @@ __all__ = [
     "RETIRED_TEXT_ROLES",
     "VOLUME_OSD_ID",
     "canonical_fullscreen_overlays",
+    "clear_overlay_placement",
+    "overlay_placement_moved",
     "normalize_display_style",
     "normalize_fullscreen_overlays",
     "normalize_now_playing_children",

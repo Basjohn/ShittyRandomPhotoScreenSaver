@@ -14,6 +14,12 @@ Item {
     readonly property color buttonSurface: "#d51b1e23"
     readonly property color buttonBorder: "#c0777d86"
     readonly property color buttonInk: "#f2f4f7"
+    // The card's shared dwell fade (HoverGlyphReveal.level, plan 1D.12 B): it multiplies the glyphs' drawing only,
+    // never this item's opacity, so a faded glyph's hit area stays live and hovering it brings the set back.
+    property real dwellLevel: 1.0
+    // The pointer is over one of these glyphs (the card's reveal owner reads it).
+    property int hoveredGlyphCount: 0
+    readonly property bool glyphHovered: hoveredGlyphCount > 0
     signal actionRequested(string action)
     // The pointer entered or left a transfer arrow: an edge the owner uses to prepare the display a click moves to.
     signal transferHoverChanged(string action, bool hovered)
@@ -66,6 +72,7 @@ Item {
         anchors.leftMargin: 10  // 2 px farther inside the actual card
         anchors.bottomMargin: 8
         spacing: 5
+        opacity: chrome.dwellLevel
         Repeater {
             // Stable delegate identities: eligibility changes without rebuilding
             // the Repeater model or losing native QObject/action hit targets.
@@ -150,6 +157,8 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     enabled: chrome.enabled && parent.visible
+                    onContainsMouseChanged: chrome.hoveredGlyphCount += containsMouse ? 1 : -1
+                    Component.onDestruction: if (containsMouse) chrome.hoveredGlyphCount -= 1
                     onEntered: {
                         chrome.activeTip = String(tipText)
                         chrome.tipX = actions.x + parent.x + parent.width / 2
@@ -182,6 +191,7 @@ Item {
             readonly property string tipText: modelData < 0 ? "MOVE TO PREVIOUS DISPLAY" : "MOVE TO NEXT DISPLAY"
             objectName: "hoverEditGlyph-" + actionKind
             visible: modelData < 0 ? chrome.canTransferLeft : chrome.canTransferRight
+            opacity: chrome.dwellLevel
             width: 24
             height: 24
             radius: width / 2
@@ -221,7 +231,11 @@ Item {
                 propagateComposedEvents: false
                 readonly property bool preparing: containsMouse && enabled
                 onPreparingChanged: chrome.transferHoverChanged(actionKind, preparing)
-                Component.onDestruction: if (preparing) chrome.transferHoverChanged(actionKind, false)
+                onContainsMouseChanged: chrome.hoveredGlyphCount += containsMouse ? 1 : -1
+                Component.onDestruction: {
+                    if (preparing) chrome.transferHoverChanged(actionKind, false)
+                    if (containsMouse) chrome.hoveredGlyphCount -= 1
+                }
                 onEntered: {
                     chrome.activeTip = tipText
                     chrome.tipX = parent.x + parent.width / 2

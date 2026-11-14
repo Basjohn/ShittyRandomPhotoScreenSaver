@@ -44,7 +44,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
 at the size asked.
 - High: N5.7c, then N3. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers
   ride with the next fitting dispatch.
-- Medium: 1D.12 (three chrome requests).
+- Medium: N5.1 Spline Curve.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -468,11 +468,45 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   the binding access types, no readback in the product.
 - [ ] N3.4 Transparency and post-processing as shared stages, each opt-in and absent from a mode that does not use
   it: depth-aware order-independent transparency, bloom and the HDR resolve, the defocus layer.
+  Decided by the lead, 15 Nov, from `Docs/Future_Work/Native_Core_QRhi_Research_N3.md` sections 3, 8 and 9:
+  - [ ] Per-attachment blending: the core creates its own Vulkan device, so it enables `independentBlend` there
+    whenever the physical device reports it. OpenGL 4.0+ has it already. The OIT stage is admitted only where
+    `PerRenderTargetBlending` is true; elsewhere a mode's transparency falls back to its sorted path, recorded once.
+  - [ ] One clear value for all attachments: revealage is stored inverted as coverage (clear 0, output alpha, blend
+    ONE / ONE_MINUS_SRC_COLOR with the fragment alpha written to the single channel, read back as 1 - coverage), so accumulation and coverage share the clear to 0 with no
+    clearing draw. The harness proves it equal to the textbook revealage form on a known stack of layers.
+  - [ ] Blendable formats: QRhi does not check them, so the core checks RGBA16F and R16F for
+    `COLOR_ATTACHMENT_BLEND` at device creation (Vulkan format features; GL 4.6 guarantees both). A device without
+    them falls back as above.
+  - [ ] The transparent pass loads the opaque depth, so it goes through N3.1's `primeDepthForLoad`.
+  - [ ] Bloom and HDR chains: one texture per level, never levels of one texture (QRhi tracks a whole texture, so
+    rendering one level while sampling another is rejected). The chain is allocated with N3.1's bucket rule,
+    downsampled by our own shader with `textureLod(…, 0)`, never `generateMips`, whose linear blit is not the
+    designed filter.
 - [ ] N3.6 Lifetime: lazy creation on first use, release at retirement and at a mode switch, device loss rebuilt
   from the last packet, every state combination a pipeline built ahead and warmed gradually (Qt's pipeline cache
   file on Qt's pipelines; the core's own cache for raw ones); the working-set and GPU-memory readings of the P2
   audit rerun on it. On a lost device the Vulkan backend's `VK_EXT_device_fault` detail (vendor fault codes and
   addresses, Qt 6.12) is logged once, so a lost device on a user's machine is diagnosable.
+  Decided by the lead, 15 Nov, from the research doc's sections 10 to 12:
+  - [ ] Pipeline cache: pipelines the core builds on Qt's QRhi share Qt Quick's cache file, so they need nothing of
+    their own. The job thread's QRhi and any raw Vulkan pipelines get one core file beside Qt's
+    (`<CacheLocation>/qtpipelinecache-<abi>/srpss_core_<backend>`) with the same header check (driver version,
+    vendor, device, cache UUID). A mismatch is a silent recompile. It is loaded at creation and saved at orderly
+    shutdown, written to a temporary file and renamed, so two windows or processes never leave a torn file. The last
+    writer wins, as with Qt's.
+  - [ ] Device loss: the core owns the `VkDevice` Qt adopts, and Qt's recovery re-adopts the same device. So on
+    `sceneGraphInvalidated` after a loss (`FrameOpDeviceLost` or `VK_ERROR_DEVICE_LOST`), the core destroys its dead
+    device and hands the window a new one before Qt's next frame. Then it rebuilds every core object from the last
+    packet. Settle the threading of `setGraphicsDevice` from that slot in the harness first. The proof is a
+    harness-only module entry that forces the lost path (no env flag), on a hidden host, followed by a frame equal to
+    one before the loss. On OpenGL the loss is detected only through a failed `makeCurrent`; the same rebuild
+    applies.
+  - [ ] Release timing: retirement calls `deleteLater` at once. The two-frame lag on Vulkan, and one frame on
+    OpenGL, is accepted. Where no frame will follow (window retired, saver exit), the core calls `QRhi::finish()`
+    at that edge, outside any frame; never mid-frame, which blanked Vulkan presentation in d1_run on 14 Nov.
+    Raw Vulkan objects go to a deferred-delete queue keyed to their frame slot's fence, drained at device idle on
+    teardown.
 - [ ] N3.7 The orientation and quarter-turn contract (the scene frame's rotation in the composite) and the
   Expanded Visualizer's display-size targets at 4K (the M6 budget).
 - [ ] N3.9 A display move keeps a mode's GPU-held history (1C.2, plan 01 M3c "Display moves retarget the live
@@ -535,7 +569,24 @@ are measured above a handful per frame, one pipeline and one indirect call with 
 (`gl_DrawID`, `gl_BaseInstance`, `gl_BaseVertex`) replaces a draw per batch; the port records which backends report
 the feature (D3D11 is not stated).
 
-- [ ] N5.1 Spline Curve (a fullscreen strip only).
+- [ ] N5.1 Spline Curve (`devcurve`; a fullscreen strip only; Opus Medium; N2.9's generic mode content, no C++
+  expected; Spectrum's N2.5 port and `native/core/README.md` "How a new mode is built" are the pattern):
+  - [ ] Classify first: read the Python renderer (`rendering/quick/visualizer/implementations/devcurve.py`), its
+    shader and its worker record. Classify every `DevcurveDraw` member as Settings-derived, card-derived, from the
+    frame record, or computed per frame in the Python renderer. A per-frame computation the record cannot carry
+    would need C++: stop and report it, do not build it.
+  - [ ] The record: its runtime `NativeSchema` carries what the renderer reads per frame (its `MODE_CODES` entry if
+    missing). Bound to the core at bind; no module table changes.
+  - [ ] The Settings values: one function by name from the spec and the card, with the Python renderer's own
+    arithmetic, sent when it changes and never per frame at rest.
+  - [ ] The route: Spline Curve drawn by the core on Vulkan through `rendering/quick/visualizer/native_route.py` as
+    Spectrum is; OpenGL keeps the Python renderer until the switch.
+  - [ ] The proof (port rules a to e and g): native OpenGL against the Python renderer frame by frame on recorded
+    music, byte for byte (otherwise to the lead with the figures); Vulkan against OpenGL within 1 level; dpr 1 and
+    1.5; nothing at rest; no Python thread state on the render thread; Settings and Studio parity; no rebuild for a
+    Settings or Studio change. The negative controls are seen failing.
+  - [ ] Docs: D12's "as built" line for Spline Curve, the README's mode list, the Harness Index.
+  - [ ] Lead: the Display 1 rehearsal on Vulkan with recorded music (rule f).
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
@@ -995,56 +1046,13 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
 
-### 1D.12 Three small chrome requests (operator, 14 Nov; one Opus Medium agent after the reset, in this order)
-
-No timers, no polling and no env flags: every reveal and fade is an edge-started QML animation that runs only while it
-animates, so nothing is added at rest. Fade, never vanish. Tests assert behaviour and structure, never wording or
-preset values. Prove each item with a hidden-host test and a negative control.
-
-**A. Now Playing in custom geometry reads CUSTOM in its position dropdown.**
-- [ ] Root cause first. `ui/tabs/widgets_tab.py` (about line 495) already enables the CUSTOM entry from
-  `has_saved_custom_layout_for_widget` for every descriptor with `supports_custom_position_slot`. Find why the Media
-  widget's `tab.media_position` (`ui/tabs/widgets_tab_media.py:347`) does not show CUSTOM once Now Playing is moved
-  into custom geometry. Check two things: whether the move, from Edit, Arrange or a drag, persists `position` as the
-  CUSTOM label; and whether the load path at `widgets_tab_media.py:904` falls back because the media descriptor's
-  effective position key differs from the key the move saves under.
-- [ ] Fix it at that owner, so the dropdown selects CUSTOM whenever the saved geometry is custom: on load, and live after
-  an Edit Save while Settings is open. Choosing a named position afterwards still leaves custom geometry the way other
-  widgets do.
-- [ ] Test it on the real SettingsDialog, not a stub host. Negative control: a widget with no saved custom layout never
-  offers CUSTOM.
-
-**B. Glyphs fade out over time; hovering any glyph fades them all back in.**
-- [ ] The scope is the hover glyph set governed by Show Glyphs (`alwaysShowGlyphs`): `OverlayWidget.qml` (about
-  lines 354 and 373), `VisualizerPresentation.qml` (preset arrows, Reset Camera, Rotate, display arrows; about lines
-  271, 446, 508, 611, 705, 776 and 954), and `WidgetHoverEditGlyphs.qml`.
-- [ ] Copy the existing Now Playing fade, so find its owner first. Card hover reveals the glyphs gently. After a dwell
-  with no glyph under the pointer, they fade out slowly while the card is still hovered. Pointer over any one glyph
-  fades the whole set back in, and it stays in while a glyph is hovered. Leaving the card keeps today's fade-out.
-- [ ] Build one shared reveal owner, one per card, that every glyph binds its opacity to. No per-glyph timers. Use the
-  control hint's edge-started `SequentialAnimation` with a `PauseAnimation` (`VisualizerPresentation.qml` about
-  line 1010) as the model.
-- [ ] A faded glyph's hit area stays live, so hovering where it sits brings the set back. Tooltips keep their present
-  one-second dwell. Edit chrome is unchanged.
-
-**C. The WASD control hint shows once per session per mode.**
-- [ ] Today `controlHintVisitStarted` resets on every card leave (`VisualizerPresentation.qml` about lines 176-190 and
-  998), so each new visit replays the five-second hint.
-- [ ] Record "shown" per Visualizer mode id for the life of the process, outside the lazy QML root, which is rebuilt.
-  A plain Python set on the SceneController or the input owner, projected to QML as a bool at mode change and admission
-  edges, is enough. Nothing is persisted to settings. The first eligible visit in a mode plays the hint; later visits in
-  that mode do not. A new saver session starts fresh.
-- [ ] Check that mode switches, display moves and Expanded/fullscreen re-admission do not reset the set. Turning Show 3D
-  Control Hints off and on again may reset it.
-- [ ] Test it hidden-host: two visits in one mode give one reveal; a switch to another 3D mode gives one more reveal.
-  Negative control: with the set bypassed, the second visit reveals again.
-
 ### 1D.13 Side defects found at its merge (15 Nov; Opus Medium when a slot is free of native work)
 
 - [ ] Two tests fail only inside one long same-process pytest run (2,413 tests over 14 minutes), and pass alone:
   `tests/test_waveform_pulse_rim.py::test_pulse_rim_off_is_pixel_identical_to_the_light_pass_without_it` and
   `tests/test_qtquick_ordinary_widget_host.py::test_refresh_transition_clock_coalesces_arbitrary_simultaneous_consumers`.
-  Find the leaked state or ordering they depend on, and make each test own its preconditions.
+  A third, `tests/test_qtquick_startup_reveal.py::test_startup_reveal_primes_zero_then_completes_at_one_once`,
+  failed the same way in the 1D.12 merge run (4,407 tests over 33 minutes). Find the leaked state or ordering they depend on, and make each test own its preconditions.
 - [ ] Lead, Display 1: confirm R-221 in the product, Fullscreen Hide Borders with pixel shift stepping, and check
   whether the operator's lavender edge colour came from the shift.
 
