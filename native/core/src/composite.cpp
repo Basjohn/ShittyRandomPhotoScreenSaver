@@ -443,6 +443,30 @@ void CompositeItem::presentSpectrum(const SpectrumPresentation &presentation)
     update();
 }
 
+bool CompositeItem::programSpectrum(const QByteArray &qsb, QString *error)
+{
+    SpectrumProgram program;
+    if (!SpectrumProgram::fromPack(qsb, &program, error))
+        return false;
+    if (!m_spectrum)
+        m_spectrum = std::make_shared<SpectrumSource>();
+    m_spectrum->setProgram(program);
+    update();
+    return true;
+}
+
+bool CompositeItem::settingsSpectrum(const QJsonObject &settings, QString *error)
+{
+    if (!m_spectrum) {
+        *error = QStringLiteral("the Spectrum settings come after its program");
+        return false;
+    }
+    if (!m_spectrum->setSettings(settings, error))
+        return false;
+    update();
+    return true;
+}
+
 int CompositeItem::liveItems()
 {
     return g_liveItems.loadRelaxed();

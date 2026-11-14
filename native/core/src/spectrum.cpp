@@ -181,115 +181,16 @@ private:
     const char *m_data;
 };
 
-// ---- the block's values by name, packed at the reflected offsets ---------------------------------------------------
+// ---- the per-frame members, set by name on the program's block (program_blocks.h) ---------------------------------
 
-class Values
+bool setFrame(BlockValues &block, const char *name, const double *values, int count, QString *error)
 {
-public:
-    void set(const char *name, double a) { put(name, 1, a, 0.0, 0.0, 0.0); }
-    void set(const char *name, double a, double b) { put(name, 2, a, b, 0.0, 0.0); }
-    void set(const char *name, double a, double b, double c) { put(name, 3, a, b, c, 0.0); }
-    void set(const char *name, const double v[4]) { put(name, 4, v[0], v[1], v[2], v[3]); }
-    const double *find(const QByteArray &name, int *count) const
-    {
-        for (int i = 0; i < m_count; ++i) {
-            if (name == m_items[i].name) {
-                *count = m_items[i].count;
-                return m_items[i].v;
-            }
-        }
-        return nullptr;
-    }
-
-    double bars[kMaxBars] = {};
-    double peaks[kMaxBars] = {};
-
-private:
-    struct Item
-    {
-        const char *name = nullptr;
-        double v[4] = {};
-        int count = 0;
-    };
-    void put(const char *name, int count, double a, double b, double c, double d)
-    {
-        for (int i = 0; i < m_count; ++i) {
-            if (std::strcmp(m_items[i].name, name) == 0) {
-                m_items[i] = Item { name, { a, b, c, d }, count };
-                return;
-            }
-        }
-        if (m_count < kCapacity)
-            m_items[m_count++] = Item { name, { a, b, c, d }, count };
-    }
-    static constexpr int kCapacity = 80;
-    Item m_items[kCapacity];
-    int m_count = 0;
-};
-
-int componentsOf(int type)
-{
-    switch (QShaderDescription::VariableType(type)) {
-    case QShaderDescription::Float:
-    case QShaderDescription::Int:
-    case QShaderDescription::Uint:
-    case QShaderDescription::Bool:
-        return 1;
-    case QShaderDescription::Vec2:
-    case QShaderDescription::Int2:
-        return 2;
-    case QShaderDescription::Vec3:
-    case QShaderDescription::Int3:
-        return 3;
-    case QShaderDescription::Vec4:
-    case QShaderDescription::Int4:
-        return 4;
-    default:
-        return 0; // matrices (uMatrix: the Python quad's, unread by the core's triangle) stay zero
-    }
+    return block.set(QByteArray(name), values, count, error);
 }
 
-bool integerType(int type)
+bool setFrame(BlockValues &block, const char *name, double value, QString *error)
 {
-    const auto t = QShaderDescription::VariableType(type);
-    return t == QShaderDescription::Int || t == QShaderDescription::Int2 || t == QShaderDescription::Int3
-        || t == QShaderDescription::Int4 || t == QShaderDescription::Uint || t == QShaderDescription::Bool;
-}
-
-void writeScalar(char *at, int type, double value)
-{
-    if (integerType(type)) {
-        const qint32 v = qint32(value);
-        std::memcpy(at, &v, 4);
-    } else {
-        const float v = float(value); // round to nearest, as Python's struct.pack('<f') does
-        std::memcpy(at, &v, 4);
-    }
-}
-
-void pack(const SpectrumBlockLayout &layout, const Values &values, QByteArray *block)
-{
-    block->fill('\0', layout.size());
-    char *data = block->data();
-    for (const SpectrumBlockLayout::Member &member : layout.members()) {
-        if (member.name == QByteArrayLiteral("u_bars") || member.name == QByteArrayLiteral("u_peaks")) {
-            const double *source = member.name == QByteArrayLiteral("u_bars") ? values.bars : values.peaks;
-            for (int i = 0; i < member.count && i < kMaxBars; ++i) {
-                if (member.offset + i * member.stride + 4 <= block->size())
-                    writeScalar(data + member.offset + i * member.stride, member.type, source[i]);
-            }
-            continue;
-        }
-        int count = 0;
-        const double *value = values.find(member.name, &count);
-        const int components = componentsOf(member.type);
-        if (!value || !components)
-            continue; // never set: zero, as a never-set uniform reads (rendering.gl_programs.portable.pack_block)
-        for (int c = 0; c < components && c < count; ++c) {
-            if (member.offset + c * 4 + 4 <= block->size())
-                writeScalar(data + member.offset + c * 4, member.type, value[c]);
-        }
-    }
+    return block.set(QByteArray(name), &value, 1, error);
 }
 
 bool readNumbers(const QJsonObject &o, const char *key, double *out, int count, QString *error)
@@ -401,65 +302,58 @@ bool SpectrumPresentation::operator==(const SpectrumPresentation &o) const
 
 // ------------------------------------------------------------------------------------------------- the block layout
 
-SpectrumBlockLayout::SpectrumBlockLayout()
+const char *const kSpectrumFrameMembers[] = {
+    "u_bars", "u_peaks", "u_bar_count", "u_bars_left", "u_bar_width_px", "u_bar_gap_px", "u_bar_span_px",
+    "u_rainbow_hue_offset", "u_ghost_hue_offset", "u_time", "u_playing", nullptr };
+
+bool SpectrumProgram::fromPack(const QByteArray &qsb, SpectrumProgram *out, QString *error)
 {
-    const QShader shader = shaderFrom(spectrum_frag_qsb, spectrum_frag_qsb_size);
-    if (!shader.isValid())
-        return;
-    const QList<QShaderDescription::UniformBlock> blocks = shader.description().uniformBlocks();
-    for (const QShaderDescription::UniformBlock &block : blocks) {
-        if (block.blockName != QByteArrayLiteral("SpectrumDraw"))
-            continue;
-        m_size = block.size;
-        m_binding = block.binding;
-        for (const QShaderDescription::BlockVariable &variable : block.members) {
-            Member member;
-            member.name = variable.name;
-            member.type = int(variable.type);
-            member.offset = variable.offset;
-            member.count = variable.arrayDims.isEmpty() ? 1 : variable.arrayDims.first();
-            member.stride = variable.arrayStride;
-            if (member.count > 1 && member.stride <= 0) {
-                // Build round 1: the baked shader reflects a scalar array's stride as 0, which packed all 64 bars at
-                // one offset. std140 rounds every array element up to a vec4 (16 bytes), so the stride is that.
-                const int bytes = 4 * (componentsOf(member.type) > 0 ? componentsOf(member.type) : 1);
-                member.stride = ((bytes + 15) / 16) * 16;
-                member.strideInferred = true;
-            }
-            m_members.append(member);
+    static QAtomicInteger<quint64> generations { 0 };
+    SpectrumProgram program;
+    program.compiledIn = qsb.isEmpty();
+    program.fragment = program.compiledIn ? shaderFrom(spectrum_frag_qsb, spectrum_frag_qsb_size)
+                                          : QShader::fromSerialized(qsb);
+    if (!program.fragment.isValid()) {
+        *error = QStringLiteral("the Spectrum fragment pack does not load (a .qsb from tools/regen_qrc.py --shaders)");
+        return false;
+    }
+    program.layout = BlockLayout::reflect(program.fragment, QByteArrayLiteral("SpectrumDraw"));
+    if (!program.layout.valid() || program.layout.binding() < 0) {
+        *error = QStringLiteral("the Spectrum fragment pack holds no SpectrumDraw block");
+        return false;
+    }
+    program.shaderGeneration = generations.fetchAndAddRelaxed(1) + 1;
+    *out = program;
+    return true;
+}
+
+bool SpectrumProgram::setSettings(const QJsonObject &values, QString *error)
+{
+    if (!layout.valid()) {
+        *error = QStringLiteral("the Spectrum settings come after its fragment pack");
+        return false;
+    }
+    BlockValues check(layout);
+    if (!check.setJson(values, error))
+        return false;
+    for (const char *const *name = kSpectrumFrameMembers; *name; ++name) {
+        if (values.contains(QLatin1String(*name))) {
+            *error = QStringLiteral("'%1' is computed per frame by the core, not a setting").arg(QLatin1String(*name));
+            return false;
         }
     }
-}
-
-const SpectrumBlockLayout &SpectrumBlockLayout::instance()
-{
-    static const SpectrumBlockLayout layout;
-    return layout;
-}
-
-QJsonObject SpectrumBlockLayout::toJson() const
-{
-    QJsonObject o;
-    o.insert(QStringLiteral("size"), m_size);
-    o.insert(QStringLiteral("binding"), m_binding);
-    QJsonArray members;
-    for (const Member &member : m_members) {
-        members.append(QJsonArray { QString::fromLatin1(member.name), member.type, member.offset, member.count,
-                                    member.stride, member.strideInferred });
-    }
-    o.insert(QStringLiteral("members"), members);
-    return o;
+    settings = values;
+    return true;
 }
 
 // ------------------------------------------------------------------------------------------------- the block
 
-bool spectrumBlock(const QByteArray &bytes, const SpectrumPresentation &p, QByteArray *block, QJsonObject *facts,
-                   QString *reason)
+bool spectrumBlock(const QByteArray &bytes, const SpectrumPresentation &p, const SpectrumProgram &program,
+                   QByteArray *block, QJsonObject *facts, QString *reason)
 {
-    const SpectrumBlockLayout &layout = SpectrumBlockLayout::instance();
     const fa::Schema *schema = spectrumSchema();
-    if (!layout.valid() || !schema) {
-        *reason = QStringLiteral("the module has no Spectrum shader or schema");
+    if (!program.layout.valid() || !schema) {
+        *reason = QStringLiteral("no Spectrum program (its fragment pack) or no schema");
         return false;
     }
     if (!p.valid) {
@@ -504,7 +398,7 @@ bool spectrumBlock(const QByteArray &bytes, const SpectrumPresentation &p, QByte
         }
     }
     // prepare_spectrum_shader_levels
-    Values values;
+    struct { double bars[kMaxBars] = {}; double peaks[kMaxBars] = {}; } values;
     for (int i = 0; i < count; ++i) {
         const double bar = i < barsLength ? logicalBars[i] : 0.0;
         values.bars[i] = bar;
@@ -545,12 +439,6 @@ bool spectrumBlock(const QByteArray &bytes, const SpectrumPresentation &p, QByte
     const double barsLeft = contentX + margin + leftInset;
     const double barHeightScale = heightScale(extentHeight);
 
-    double fill[4];
-    double border[4];
-    double glow[4];
-    record.rgba("fill_color", fill);
-    record.rgba("border_color", border);
-    record.rgba("spectrum_glow_color", glow);
     const bool rainbowEnabled = record.flag("rainbow_enabled");
     const bool rainbowPerBar = record.flag("rainbow_per_bar");
     const double rainbowSpeed = pyMax(0.01, pyMin(5.0, record.f64("rainbow_speed")));
@@ -561,78 +449,31 @@ bool spectrumBlock(const QByteArray &bytes, const SpectrumPresentation &p, QByte
     else if (rainbowPerBar)
         hue = safeHue(animationTime * 0.05);
 
-    values.set("uItemSize", p.itemSize[0], p.itemSize[1]);
-    values.set("uContentRotationQuarters", double(p.quarters));
-    values.set("u_resolution", p.orientedSize[0], p.orientedSize[1]);
-    values.set("u_dpr", p.dpr);
-    values.set("u_viewport_origin_px", 0.0, 0.0);
-    values.set("u_quick_item_coords", 1.0);
-    values.set("u_item_from_frag", 1.0);
-    values.set("u_window_from_target_x", p.windowFromTarget[0], p.windowFromTarget[1], p.windowFromTarget[2]);
-    values.set("u_window_from_target_y", p.windowFromTarget[3], p.windowFromTarget[4], p.windowFromTarget[5]);
-    values.set("u_item_from_frag_x", p.itemFromWindow[0], p.itemFromWindow[1], p.itemFromWindow[2]);
-    values.set("u_item_from_frag_y", p.itemFromWindow[3], p.itemFromWindow[4], p.itemFromWindow[5]);
-    values.set("u_target_px", p.targetSize[0], p.targetSize[1]);
-    const double contentRect[4] = { contentX, contentY, contentWidth, contentHeight };
-    values.set("u_content_rect", contentRect);
-    values.set("u_visual_scale", scale);
-    values.set("u_bar_count", double(count));
-    values.set("u_segments", double(segments));
-    values.set("u_fill_color", fill);
-    values.set("u_border_color", border);
-    values.set("u_fade", p.contentFade);
-    values.set("u_bar_height_scale", barHeightScale);
-    values.set("u_single_piece", record.flag("single_piece") ? 1.0 : 0.0);
-    values.set("u_border_radius", pyMax(0.0, record.f64("border_radius")) * scale);
-    const double ghostAlpha = record.f64("spectrum_ghost_alpha");
-    values.set("u_ghost_alpha", record.flag("spectrum_ghosting_enabled") ? pyMax(0.0, pyMin(1.0, ghostAlpha)) : 0.0);
-    values.set("u_spectrum_glow_enabled", record.flag("spectrum_glow_enabled") ? 1.0 : 0.0);
-    values.set("u_spectrum_glow_intensity", pyMax(0.0, pyMin(1.5, record.f64("spectrum_glow_intensity"))));
-    values.set("u_spectrum_glow_color", glow);
-    values.set("u_rainbow_hue_offset", hue);
-    values.set("u_rainbow_ghost", record.flag("spectrum_rainbow_ghost") ? 1.0 : 0.0);
-    values.set("u_ghost_hue_offset", safeHue(animationTime * rainbowSpeed * 0.1));
-    values.set("u_rainbow_per_bar", rainbowPerBar ? 1.0 : 0.0);
-    values.set("u_rainbow_fill", record.flag("spectrum_rainbow_fill") ? 1.0 : 0.0);
-    values.set("u_rainbow_border", record.flag("spectrum_rainbow_border") ? 1.0 : 0.0);
-    // Only a flag sheet's wave reads the clock (the Python renderer writes it only then; the value is the same).
-    values.set("u_time", pyMod(animationTime, 3600.0));
-    values.set("u_bars_left", barsLeft);
-    values.set("u_bar_width_px", barWidth);
-    values.set("u_bar_gap_px", gap);
-    values.set("u_bar_span_px", span);
-
-    // resolve_spectrum_decor_uniforms
-    double colour[4];
-    values.set("u_ghost_custom_mix", unit(record.f64("spectrum_ghost_custom_mix")));
-    record.rgba("spectrum_ghost_color", colour);
-    values.set("u_ghost_color", colour);
-    values.set("u_ghost_fill_mix", unit(record.f64("spectrum_ghost_fill_mix")));
-    values.set("u_ghost_gradient_mix", unit(record.f64("spectrum_ghost_gradient_mix")));
-    record.rgba("spectrum_ghost_tip_color", colour);
-    values.set("u_ghost_tip_color", colour);
-    values.set("u_gloss", unit(record.f64("spectrum_gloss")));
-    values.set("u_fill_gradient_mix", unit(record.f64("spectrum_fill_gradient_mix")));
-    record.rgba("spectrum_fill_tip_color", colour);
-    values.set("u_fill_tip_color", colour);
-    values.set("u_peak_cap_mix", unit(record.f64("spectrum_peak_caps_mix")));
-    record.rgba("spectrum_peak_cap_color", colour);
-    values.set("u_peak_cap_color", colour);
-    values.set("u_peak_cap_thickness",
-               pyMax(1.0, pyMin(6.0, record.f64("spectrum_peak_cap_thickness"))) * pyMax(0.01, scale));
-    const quint32 pattern = record.u32("spectrum_pattern_shown");
-    const int patternIndex = pattern == fa::kEnumOutside ? 0 : int(pattern);
-    values.set("u_pattern", double(patternIndex));
-    values.set("u_pattern_shared", record.u32("spectrum_pattern_anchor_shown") == 1u ? 1.0 : 0.0);
-    values.set("u_pattern_mix", patternIndex ? unit(record.f64("spectrum_pattern_mix"))
-                                                   * unit(record.f64("spectrum_pattern_strength"))
-                                             : 0.0);
-    record.rgba("spectrum_pattern_color", colour);
-    values.set("u_pattern_color", colour);
-    values.set("u_pattern_scale", pyMax(0.25, pyMin(4.0, record.f64("spectrum_pattern_scale"))));
-    values.set("u_playing", record.flag("playing") ? 1.0 : 0.0);
-
-    pack(layout, values, block);
+    // Every Settings- and card-derived member is the program's (resolved in Python, packed by name); the core fills
+    // only what follows the frame.
+    BlockValues packed(program.layout);
+    if (!packed.setJson(program.settings, reason))
+        return false;
+    QString refused;
+    const double barCount = double(count);
+    const double playing = record.flag("playing") ? 1.0 : 0.0;
+    const double ghostHue = safeHue(animationTime * rainbowSpeed * 0.1);
+    const double clock = pyMod(animationTime, 3600.0);
+    if (!setFrame(packed, "u_bars", values.bars, count, &refused)
+        || !setFrame(packed, "u_peaks", values.peaks, count, &refused)
+        || !setFrame(packed, "u_bar_count", barCount, &refused)
+        || !setFrame(packed, "u_bars_left", barsLeft, &refused)
+        || !setFrame(packed, "u_bar_width_px", barWidth, &refused)
+        || !setFrame(packed, "u_bar_gap_px", gap, &refused)
+        || !setFrame(packed, "u_bar_span_px", span, &refused)
+        || !setFrame(packed, "u_rainbow_hue_offset", hue, &refused)
+        || !setFrame(packed, "u_ghost_hue_offset", ghostHue, &refused)
+        || !setFrame(packed, "u_time", clock, &refused)
+        || !setFrame(packed, "u_playing", playing, &refused)) {
+        *reason = QStringLiteral("the pack's block refuses a frame member: %1").arg(refused);
+        return false;
+    }
+    *block = packed.bytes();
     if (facts) {
         facts->insert(QStringLiteral("bar_count"), count);
         facts->insert(QStringLiteral("segments"), segments);
@@ -643,6 +484,8 @@ bool spectrumBlock(const QByteArray &bytes, const SpectrumPresentation &p, QByte
         facts->insert(QStringLiteral("height_scale"), barHeightScale);
         facts->insert(QStringLiteral("hue"), hue);
         facts->insert(QStringLiteral("block_bytes"), block->size());
+        facts->insert(QStringLiteral("unfilled"), QJsonArray::fromStringList(packed.unfilled()));
+        facts->insert(QStringLiteral("compiled_in"), program.compiledIn);
     }
     reason->clear();
     return true;
@@ -716,6 +559,26 @@ void SpectrumSource::setPresentation(const SpectrumPresentation &presentation)
     ++m_presentationGeneration;
 }
 
+void SpectrumSource::setProgram(const SpectrumProgram &program)
+{
+    QMutexLocker lock(&m_mutex);
+    m_program = program;
+    ++m_presentationGeneration;
+}
+
+bool SpectrumSource::setSettings(const QJsonObject &settings, QString *error)
+{
+    QMutexLocker lock(&m_mutex);
+    SpectrumProgram program = m_program;
+    if (!program.setSettings(settings, error))
+        return false;
+    if (program.settings == m_program.settings)
+        return true;                          // unchanged: nothing is recorded
+    m_program = program;
+    ++m_presentationGeneration;
+    return true;
+}
+
 void SpectrumSource::dropRetainedFrame()
 {
     QMutexLocker lock(&m_mutex);
@@ -772,12 +635,14 @@ bool SpectrumSource::sync()
     PacketReader *current = nullptr;
     bool presentationTaken = false;
     SpectrumPresentation presentation;
+    SpectrumProgram program;
     {
         QMutexLocker lock(&m_mutex);
         current = m_current;
         if (m_presentationGeneration != m_takenGeneration) {
             m_takenGeneration = m_presentationGeneration;
             presentation = m_presentation;
+            program = m_program;
             presentationTaken = true;
         }
     }
@@ -786,6 +651,11 @@ bool SpectrumSource::sync()
     bool changed = false;
     if (presentationTaken && presentation != m_drawn) {
         m_drawn = presentation;
+        changed = true;
+    }
+    if (presentationTaken && (program.shaderGeneration != m_drawnProgram.shaderGeneration
+                              || program.settings != m_drawnProgram.settings)) {
+        m_drawnProgram = program; // a new pack or new settings: recorded once, nothing per frame at rest
         changed = true;
     }
     QString result = QStringLiteral("unbound");
@@ -850,6 +720,13 @@ QJsonObject SpectrumSource::stateJson() const
         o.insert(QStringLiteral("released"), double(m_released));
         o.insert(QStringLiteral("retiring"), int(m_retiring.size()));
         o.insert(QStringLiteral("presentation"), m_presentation.toJson());
+        QJsonObject program;
+        program.insert(QStringLiteral("loaded"), m_program.layout.valid());
+        program.insert(QStringLiteral("compiled_in"), m_program.compiledIn);
+        program.insert(QStringLiteral("shader_generation"), double(m_program.shaderGeneration));
+        program.insert(QStringLiteral("settings"), m_program.settings);
+        program.insert(QStringLiteral("block"), m_program.layout.toJson());
+        o.insert(QStringLiteral("program"), program);
         o.insert(QStringLiteral("reader"), m_current ? QJsonValue(m_current->stateJson()) : QJsonValue());
         o.insert(QStringLiteral("last_released_reader"), m_lastReader.isEmpty() ? QJsonValue() : QJsonValue(m_lastReader));
     }
@@ -885,6 +762,7 @@ struct SpectrumContent::Resources
     std::unique_ptr<QRhiGraphicsPipeline> pipeline;
     bool staticUploaded = false;
     int objects = 0;
+    quint64 shaderGeneration = 0; // the program pack the pipeline was built from
 };
 
 SpectrumContent::SpectrumContent(std::shared_ptr<SpectrumSource> source) : m_source(std::move(source)) {}
@@ -916,21 +794,24 @@ void SpectrumContent::release()
 
 bool SpectrumContent::ensure(QRhi *rhi, ColorTarget &target, QString *error)
 {
-    if (m_res && (m_res->rhi != rhi || m_res->pass != target.renderPass.get()))
-        release();
+    const SpectrumProgram &program = m_source->drawnProgram();
+    if (m_res && (m_res->rhi != rhi || m_res->pass != target.renderPass.get()
+                  || m_res->shaderGeneration != program.shaderGeneration))
+        release();                            // a new pack: its pipeline and block buffer are rebuilt
     if (m_res)
         return true;
-    const SpectrumBlockLayout &layout = SpectrumBlockLayout::instance();
+    const BlockLayout &layout = program.layout;
     const QShader vs = shaderFrom(spectrum_vert_qsb, spectrum_vert_qsb_size);
-    const QShader fs = shaderFrom(spectrum_frag_qsb, spectrum_frag_qsb_size);
+    const QShader &fs = program.fragment;
     const QShader clear = shaderFrom(clear_frag_qsb, clear_frag_qsb_size);
     if (!vs.isValid() || !fs.isValid() || !clear.isValid() || !layout.valid()) {
-        *error = QStringLiteral("Spectrum's baked shaders or its reflected block are not valid");
+        *error = QStringLiteral("Spectrum has no program (its fragment pack) or its block is not valid");
         return false;
     }
     auto res = std::make_unique<Resources>();
     res->rhi = rhi;
     res->pass = target.renderPass.get();
+    res->shaderGeneration = program.shaderGeneration;
     res->vertices.reset(rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(kFullTriangle)));
     res->uniforms.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, quint32(layout.size())));
     res->conventions.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(ConventionsBlock)));
@@ -1008,7 +889,8 @@ bool SpectrumContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &targ
     QJsonObject facts;
     QString reason = QStringLiteral("no frame");
     const bool draw = source.hasFrame()
-        && spectrumBlock(source.frameRecord(), source.drawnPresentation(), &block, &facts, &reason);
+        && spectrumBlock(source.frameRecord(), source.drawnPresentation(), source.drawnProgram(), &block, &facts,
+                         &reason);
     Resources &r = *m_res;
     QRhiResourceUpdateBatch *updates = rhi->nextResourceUpdateBatch();
     if (!r.staticUploaded) {

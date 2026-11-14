@@ -711,6 +711,71 @@ PyObject *composite_spectrum_present(PyObject *, PyObject *args)
     Py_RETURN_NONE;
 }
 
+// The pack argument: bytes (a .qsb tools/regen_qrc.py --shaders baked) or None (the module's compiled-in copy, the
+// harness's negative control only).
+bool packArgument(PyObject *object, QByteArray *out)
+{
+    if (object == Py_None) {
+        out->clear();
+        return true;
+    }
+    if (!PyBytes_Check(object)) {
+        PyErr_SetString(PyExc_TypeError, "a shader pack is bytes (a .qsb) or None");
+        return false;
+    }
+    *out = QByteArray(PyBytes_AS_STRING(object), qsizetype(PyBytes_GET_SIZE(object)));
+    return true;
+}
+
+bool settingsArgument(const char *json, Py_ssize_t length, QJsonObject *out)
+{
+    QJsonParseError parse;
+    const QJsonDocument document = QJsonDocument::fromJson(QByteArray(json, qsizetype(length)), &parse);
+    if (parse.error != QJsonParseError::NoError || !document.isObject()) {
+        PyErr_SetString(PyExc_ValueError, "the settings are a JSON object of name -> number or list of numbers");
+        return false;
+    }
+    *out = document.object();
+    return true;
+}
+
+PyObject *composite_spectrum_program(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    PyObject *pack = nullptr;
+    if (!PyArg_ParseTuple(args, "LO", &handle, &pack))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    QByteArray qsb;
+    if (!item || !packArgument(pack, &qsb))
+        return nullptr;
+    QString error;
+    if (!item->programSpectrum(qsb, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+
+PyObject *composite_spectrum_settings(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *json = "";
+    Py_ssize_t length = 0;
+    if (!PyArg_ParseTuple(args, "Ls#", &handle, &json, &length))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    QJsonObject settings;
+    if (!item || !settingsArgument(json, length, &settings))
+        return nullptr;
+    QString error;
+    if (!item->settingsSpectrum(settings, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+
 srpss_core::SpectrumSource *spectrumOf(long long handle)
 {
     srpss_core::CompositeItem *item = compositeOf(handle);
@@ -820,7 +885,11 @@ PyObject *spectrum_block(PyObject *, PyObject *args)
     Py_ssize_t recordLength = 0;
     const char *config = "";
     Py_ssize_t length = 0;
-    if (!PyArg_ParseTuple(args, "y#s#", &record, &recordLength, &config, &length))
+    PyObject *pack = nullptr;
+    const char *settingsJson = "";
+    Py_ssize_t settingsLength = 0;
+    if (!PyArg_ParseTuple(args, "y#s#Os#", &record, &recordLength, &config, &length, &pack, &settingsJson,
+                          &settingsLength))
         return nullptr;
     srpss_core::SpectrumPresentation presentation;
     QString error;
@@ -828,11 +897,20 @@ PyObject *spectrum_block(PyObject *, PyObject *args)
         PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
         return nullptr;
     }
+    QByteArray qsb;
+    QJsonObject settings;
+    if (!packArgument(pack, &qsb) || !settingsArgument(settingsJson, settingsLength, &settings))
+        return nullptr;
+    srpss_core::SpectrumProgram program;
+    if (!srpss_core::SpectrumProgram::fromPack(qsb, &program, &error) || !program.setSettings(settings, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
     QByteArray block;
     QJsonObject facts;
     QString reason;
-    const bool drawn = srpss_core::spectrumBlock(QByteArray(record, qsizetype(recordLength)), presentation, &block,
-                                                 &facts, &reason);
+    const bool drawn = srpss_core::spectrumBlock(QByteArray(record, qsizetype(recordLength)), presentation, program,
+                                                 &block, &facts, &reason);
     facts.insert(QStringLiteral("reason"), reason);
     PyObject *bytes = nullptr;
     if (drawn) {
@@ -845,9 +923,26 @@ PyObject *spectrum_block(PyObject *, PyObject *args)
     return result;
 }
 
-PyObject *spectrum_block_layout(PyObject *, PyObject *)
+PyObject *spectrum_block_layout(PyObject *, PyObject *args)
 {
-    return pyJson(srpss_core::SpectrumBlockLayout::instance().toJson());
+    PyObject *pack = Py_None;
+    if (!PyArg_ParseTuple(args, "|O", &pack))
+        return nullptr;
+    QByteArray qsb;
+    if (!packArgument(pack, &qsb))
+        return nullptr;
+    srpss_core::SpectrumProgram program;
+    QString error;
+    if (!srpss_core::SpectrumProgram::fromPack(qsb, &program, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    QJsonObject layout = program.layout.toJson();
+    QJsonArray frame;
+    for (const char *const *name = srpss_core::kSpectrumFrameMembers; *name; ++name)
+        frame.append(QString::fromLatin1(*name));
+    layout.insert(QStringLiteral("frame_members"), frame);
+    return pyJson(layout);
 }
 
 // ---------------------------------------------------------------- the packet reader (N2.3: D1, D2, the transport rule)
@@ -1332,6 +1427,12 @@ PyMethodDef methods[] = {
       "(handle) -> None: the stream retires at once; the render thread releases it at the next sync." },
     { "composite_spectrum_present", composite_spectrum_present, METH_VARARGS,
       "(handle, presentation_json) -> None: the card as shown (rendering/native/spectrum.py spectrum_presentation)." },
+    { "composite_spectrum_program", composite_spectrum_program, METH_VARARGS,
+      "(handle, qsb_bytes | None) -> None: the fragment pack (tools/regen_qrc.py --shaders; None: the compiled-in "
+      "copy, a harness control); ValueError when it does not load or holds no SpectrumDraw." },
+    { "composite_spectrum_settings", composite_spectrum_settings, METH_VARARGS,
+      "(handle, settings_json) -> None: the Settings- and card-derived members by name; ValueError on an unknown name, "
+      "a wrong size or a per-frame member." },
     { "composite_spectrum_drop", composite_spectrum_drop, METH_VARARGS,
       "(handle) -> None: the drop edge (R-184), applied by the next read." },
     { "composite_spectrum_head", composite_spectrum_head, METH_VARARGS,
@@ -1345,10 +1446,12 @@ PyMethodDef methods[] = {
     { "composite_spectrum_resume", composite_spectrum_resume, METH_VARARGS,
       "(handle) -> None: the pause_in_copy hook: the paused read goes on." },
     { "spectrum_block", spectrum_block, METH_VARARGS,
-      "(record_bytes, presentation_json) -> (bytes | None, facts JSON str): the SpectrumDraw block the native "
-      "Spectrum uploads for this record and card (GPU-free; None when nothing is drawn, with the reason)." },
-    { "spectrum_block_layout", spectrum_block_layout, METH_NOARGS,
-      "() -> JSON str: SpectrumDraw as the baked spectrum.frag reflects it (size, binding, members)." },
+      "(record_bytes, presentation_json, qsb_bytes | None, settings_json) -> (bytes | None, facts JSON str): the "
+      "SpectrumDraw block the native Spectrum uploads for this record, card and program (GPU-free; None when nothing "
+      "is drawn, with the reason; facts' 'unfilled' names members no side filled)." },
+    { "spectrum_block_layout", spectrum_block_layout, METH_VARARGS,
+      "(qsb_bytes | None = None) -> JSON str: SpectrumDraw as the pack reflects it (size, binding, members) and the "
+      "members the core fills per frame ('frame_members')." },
     { "packet_reader_open", packet_reader_open, METH_VARARGS,
       "(mapping_name, config_json='') -> int handle: the core's reader of a frame stream on its own view of the named "
       "mapping (D1); config: expect (the stream's identity), controls (negative controls). A name that does not open "

@@ -20,6 +20,9 @@
 // the schema.
 // 7 (N2.5 rule (a)): the Spectrum card's window maps (window_from_target, item_from_window replace item_from_target):
 // the target's pixel is rebuilt as the window's and mapped by the Python renderer's own float32 rows.
+// 8 (N2.5 round 4, the standing port rule): the Spectrum program (composite_spectrum_program: the fragment pack loaded
+// at run time; composite_spectrum_settings: Settings-derived members by name, packed by program_blocks.h);
+// spectrum_block takes the pack and the settings; spectrum_block_layout takes a pack.
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 7
+#define SRPSS_NATIVE_CORE_ABI 8

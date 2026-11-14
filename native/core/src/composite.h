@@ -69,6 +69,10 @@ public:
     bool bindSpectrum(const QString &mappingName, const PacketReaderConfig &config, QString *error);
     void unbindSpectrum();
     void presentSpectrum(const SpectrumPresentation &presentation);
+    // The program (N2.5's standing port rule): the fragment pack's bytes (empty: the module's compiled-in copy, the
+    // harness's negative control) and the Settings-derived values by name; false with `error` when refused.
+    bool programSpectrum(const QByteArray &qsb, QString *error);
+    bool settingsSpectrum(const QJsonObject &settings, QString *error);
     SpectrumSource *spectrum() const { return m_spectrum.get(); }
 
     // Any thread: composite items alive in the process.

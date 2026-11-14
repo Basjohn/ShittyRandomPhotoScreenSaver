@@ -28,6 +28,7 @@
 #pragma once
 
 #include "packet_reader.h"
+#include "program_blocks.h"
 #include "surfaces.h"
 #include "thread_probe.h"
 
@@ -67,38 +68,35 @@ struct SpectrumPresentation
     bool operator!=(const SpectrumPresentation &other) const { return !(*this == other); }
 };
 
-// SpectrumDraw as the baked fragment shader reflects it.
-class SpectrumBlockLayout
+
+// The program a native Spectrum draws (N2.5's standing port rule, program_blocks.h): the product's fragment pack
+// loaded at run time (tools/regen_qrc.py --shaders bakes it; Python hands the bytes over), its reflected SpectrumDraw
+// block, and the Settings- and card-derived values Python resolved (name -> value). The C++ fills only the per-frame
+// members (kSpectrumFrameMembers) from the record.
+struct SpectrumProgram
 {
-public:
-    struct Member
-    {
-        QByteArray name;
-        int type = 0;     // QShaderDescription::VariableType
-        int offset = 0;
-        int count = 1;    // array length (1: not an array)
-        int stride = 0;   // array stride
-        bool strideInferred = false; // the reflection gave 0: std140's rule (a vec4 per element) was applied
-    };
+    QShader fragment;
+    BlockLayout layout;
+    QJsonObject settings;
+    quint64 shaderGeneration = 0;   // the pipeline is rebuilt when it changes
+    bool compiledIn = false;        // the module's own copy (the harness's negative control only)
 
-    static const SpectrumBlockLayout &instance(); // reflected once from the embedded shader
-    bool valid() const { return m_size > 0 && m_binding >= 0; }
-    int size() const { return m_size; }
-    int binding() const { return m_binding; }
-    const QList<Member> &members() const { return m_members; }
-    QJsonObject toJson() const;
-
-private:
-    SpectrumBlockLayout();
-    QList<Member> m_members;
-    int m_size = 0;
-    int m_binding = -1;
+    // The program for `qsb` (the serialized pack; empty: the module's compiled-in copy); false with `error` when it
+    // does not load or holds no SpectrumDraw block.
+    static bool fromPack(const QByteArray &qsb, SpectrumProgram *out, QString *error);
+    // The settings checked against the block (every name a member, every size right) before they are kept.
+    bool setSettings(const QJsonObject &settings, QString *error);
 };
 
-// The block for one record under one presentation, as QuickSpectrumRenderer.render computes it. False when nothing is
-// drawn (no bars, a layout the renderer refuses) with the reason; `facts` carries the derived values a test reads.
-bool spectrumBlock(const QByteArray &record, const SpectrumPresentation &presentation, QByteArray *block,
-                   QJsonObject *facts, QString *reason);
+// The members the C++ computes per frame (bars, peaks, the bar layout that follows the bar count, the clock's hues,
+// the play state); every other reflected member comes from the program's settings.
+extern const char *const kSpectrumFrameMembers[];
+
+// The block for one record under one presentation and program, as QuickSpectrumRenderer.render computes it. False when
+// nothing is drawn (no bars, a layout the renderer refuses, a refused value) with the reason; `facts` carries the
+// derived values a test reads and "unfilled": the reflected members neither side filled (a harness error).
+bool spectrumBlock(const QByteArray &record, const SpectrumPresentation &presentation, const SpectrumProgram &program,
+                   QByteArray *block, QJsonObject *facts, QString *reason);
 
 // Any thread: the QRhi objects every Spectrum content holds in the process (lifecycle proofs).
 int spectrumContentObjects();
@@ -120,6 +118,10 @@ public:
     // presented) and stays bound until unbind() moves it to the render thread's release.
     void retireCurrent();
     void setPresentation(const SpectrumPresentation &presentation);
+    // GUI thread: the program (a new pack rebuilds the pipeline at the next record) and its settings (re-packed only
+    // when they change: nothing per frame at rest).
+    void setProgram(const SpectrumProgram &program);
+    bool setSettings(const QJsonObject &settings, QString *error);
     void dropRetainedFrame();                         // R-184's edge, applied by the next read
     bool readHead(SlotHead *out);                     // D2's head read of the current stream (consumes nothing)
     // The D1 hook (the pause_in_copy control only): wait until the current reader is paused inside a copy; resume it.
@@ -136,6 +138,7 @@ public:
     bool hasFrame() const { return m_hasFrame; }
     const QByteArray &frameRecord() const { return m_record; }
     const SpectrumPresentation &drawnPresentation() const { return m_drawn; }
+    const SpectrumProgram &drawnProgram() const { return m_drawnProgram; }
 
     // The content's report (render thread writes, any thread reads).
     void noteRecorded(bool drawn, const QString &reason, const QJsonObject &facts);
@@ -148,7 +151,8 @@ private:
     PacketReader *m_current = nullptr;      // read only on the render thread; replaced on the GUI thread
     QList<PacketReader *> m_retiring;       // retired, waiting for the render thread's release
     SpectrumPresentation m_presentation;    // the GUI's latest
-    quint64 m_presentationGeneration = 0;
+    SpectrumProgram m_program;              // the GUI's latest program and settings
+    quint64 m_presentationGeneration = 0;   // the presentation's or the program's change
     QString m_mapping;
     qint64 m_binds = 0;
     qint64 m_retired = 0;
@@ -160,6 +164,7 @@ private:
     // Render thread.
     quint64 m_takenGeneration = 0;
     SpectrumPresentation m_drawn;
+    SpectrumProgram m_drawnProgram;
     QByteArray m_record;
     bool m_hasFrame = false;
 
