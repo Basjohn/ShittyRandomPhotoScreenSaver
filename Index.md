@@ -86,7 +86,8 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | build execution owners / canonical Python 3.14 workers | `Spec.md` → Build control and products; `Docs/Guides/Python314_Cutover.md`; `Docs/Guides/GitHub_Remote_Build.md` |
 | immutable Qt resources, editable assets and automatic regeneration | `Spec.md` → Settings themes / native backdrop; `Docs/Guides/10_WIDGET_GUIDELINES.md` → asset ownership |
 | rules every dispatched agent follows (worktree environment, tests, forbidden actions, report shape) | `Docs/Guardrails/Agent_Worktree_Rules.md` |
-| native core P3 decisions before any C++ (D4: the Extruded Bubble drift solver without 64-bit shader floats, for Vulkan as the primary backend) | `Docs/Future_Work/Native_Core_P3_Decisions.md` |
+| native core P3 decisions (D1 to D11: the packet reader's contracts and the transport rule, D4's drift solver without 64-bit shader floats, the core's shape, Vulkan device ownership, card materials, Parity+, async jobs, the Vulkan rehearsal path and flip gate, the Qt version), with each "As built" / "As proved" record | `Docs/Future_Work/Native_Core_P3_Decisions.md` |
+| the native core module `_srpss_native_core` (what it holds, its ABI, its proofs, how the lead builds it) | `native/core/README.md`; `rendering/native/` (the one Python importer); `Current_Plan.md` item 8b |
 | presentation/cadence renderer preflight | `Docs/Guardrails/Presentation_Change_Preflight.md` |
 | Visualizer presentation invariants | `Docs/Guardrails/Visualizer_Presentation.md` |
 | Fullscreen controls, metadata fitting and overlay editing | `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md` §G; `core/settings/fullscreen_overlays.py` |

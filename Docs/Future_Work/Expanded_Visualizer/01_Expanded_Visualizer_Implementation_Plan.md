@@ -1278,7 +1278,7 @@ can most geometry normally."
     `BeginTransfer.end_expanded` (the user's "full display there" persists at the transfer's commit);
     `QuickSceneController.begin_visualizer_prewarm` (the target card at 0.002 opacity, content at zero, the render
     host's own preparation units); `VisualizerRenderCarryover` and `DriftSolver.export` / `adopt`. Tests
-    `tests/test_visualizer_display_move_retarget.py`, `tests/test_visualizer_display_move_gpu.py`; R-NEW.
+    `tests/test_visualizer_display_move_retarget.py`, `tests/test_visualizer_display_move_gpu.py`; R-194.
   - **The other paths that move or re-admit the Visualizer (1C.2 box 6, audited 12 Nov):**
     - *Edit's display hop* (the arrows and a drag across the seam): retargets. Same owner, controller, session and
       render identity (Edit's hop + Save requested nothing even before 1C.2), and the scene transfer now carries
