@@ -14,12 +14,21 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
   fixed question and a brief that names the few documents it may edit (the decision documents and the plan,
   never product code, tests or builds); nobody else edits the plan while it runs; nothing else runs on Fable.
   Its decisions are written with their reasons where the brief says, and the lead reviews and merges the branch.
-- **Agent slots, the cap** (operator, 12 Nov 2026 evening; agents were dying to usage limits before delivering):
-  - one Opus 5.5 High for complex or architecturally sensitive work;
-  - one Opus 5.5 High for audits, including document and plan audits;
-  - one Opus 5.5 Medium for general work (bounded repairs, tests, presets);
-  - one Sonnet 5.5 Medium for research and documents only, never product code or tests;
-  - plus the lead.
+- **Agent slots, the cap** (operator, 12 Nov 2026 evening; agents were dying to usage limits before delivering;
+  brand-neutral alternatives added 14 Nov). Each slot is a role; the model is whichever provider runs it:
+
+  | Slot | Claude (Agent tool) | Codex (`codex_delegate`) |
+  |---|---|---|
+  | Complex or architecturally sensitive work | Opus 5.5 High | Sol 6.1 High |
+  | General work (bounded repairs, tests, presets) | Opus 5.5 Medium | Sol 6.1 Medium |
+  | Audits, including document and plan audits | Opus 5.5 High | Terra 6.1 High (a Codex audit always uses Terra 6.1 High) |
+  | Research, documents, and large writing with little deduction (much code, simple logic: mechanical ports, bulk test or doc writing to a decided design) | Sonnet 5.5 Medium | Terra 6.1 Medium |
+  | Milestone audit (rare, below) | Fable 5.2 High | none: Opus 5.5 High when Fable is unavailable |
+
+  Plus the lead. The research and writing slot never decides design, never touches architecture-sensitive code,
+  and its output is reviewed like any other branch. Codex jobs run only from the repository root (no worktrees),
+  never block the lead, and are paused whenever the operator has disabled Codex delegation (out of quota);
+  their CLI and setup are in `C:\Users\Basjohn\.local\share\codex-claude-bridge\README.md`.
 
   Normally one high-end task, one medium task and one audit run at once, unless the operator changes the cap.
   The cap counts agents running at once. When it shrinks, nobody busy is stopped: they finish, or hand over safely
@@ -104,6 +113,30 @@ Agents can stop at any moment, and **an agent of an earlier session cannot be re
 - The tool also lists agent branches that are not merged into `main` and have no worktree any more, so a branch
   left behind by an automatic worktree clean-up is never forgotten.
 - Never delete a worktree or branch before its work is merged or deliberately abandoned (say which in the plan).
+
+### 5a. Getting information from agents, live and dead
+
+**A live agent** (started in this session, running or stopped):
+- Ask it: `SendMessage` to its id resumes it with its whole transcript (a stopped agent restarts; a running one
+  reads the message at its next tool call). Ask specific questions; it answers from what it read and measured.
+- Its state without disturbing it: `tools/agent_handover.py <worktree>` (journal, commits, uncommitted files, live
+  processes), `git log main..worktree-agent-<id>`, `<worktree>/.artifacts/handover/JOURNAL.md`, its evidence under
+  `<worktree>/.artifacts/evidence/`.
+- Never read its task output file (the `output_file` the Agent tool returns): it is the full JSONL transcript and
+  floods the lead's context. Its final report arrives as the completion notice.
+- A Codex job: `wait_for_job` returns its final response; a follow-up is a new `start_job` with `previous_job_id`.
+
+**A dead agent** (an earlier session, or killed): it cannot be resumed (SendMessage fails with "no transcript").
+What survives, in order of value:
+1. Its branch's commits and its uncommitted files: `tools/agent_handover.py --commit` saves the latter as a
+   "WIP (handover)" commit; the tool also lists merged-nowhere branches whose worktree is gone.
+2. Its journal (`<worktree>/.artifacts/handover/JOURNAL.md`): the next step and the numbers it measured.
+3. Its evidence under `<worktree>/.artifacts/` (scripts, JSON, stills).
+4. Its transcript: `~/.claude/projects/<project>/<session-id>/subagents/*.jsonl`. Search it (grep for a file
+   name, an error, a figure), never load it whole; `mcp__ccd_session_mgmt__search_session_transcripts` searches
+   whole sessions. Use it to recover a finding the journal lacks, not to replay the work.
+A successor's brief starts with "run `git merge <branch>` first, then read the journal and the branch's last
+commits; check that what it marked done really is" (section 5).
 
 ## 6. Merging
 
