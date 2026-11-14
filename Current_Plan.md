@@ -210,7 +210,12 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
   foundation lessons (`Docs/Reference/Transitions.md`) before a 3D slice and append after it.
 - A native route beside QRhi is one of D5.3's services, wins a measurement first and ships its OpenGL twin.
 - No new 3D primitive is built in the Python OpenGL renderer unless an open defect needs it; new modes are built
-  on the native core only (was N1.5).
+  on the native core only (was N1.5), through its generic mode content (N2.9): a new mode is a Python simulation in
+  the engine worker (off the render thread, publishing its frame record), its shaders loaded at runtime and its
+  spec, with no C++ and no build round while it is iterated to its mock and reactivity goals. Hand-written C++
+  for a mode is an optimisation admitted only after those goals are met and a measurement shows the hot path; a
+  new GPU technique is a primitive, built and proved once in C++ and then used by every mode as data (lead,
+  14 Nov, from the operator's question).
 - High-potential primitives are built without a consumer, low-potential ones only when a consumer is admitted
   (operator, 12 Nov: "High potential primitives should be built regardless, low potential only when a consumer.
   We can always improve."). The lead classifies; the class is written at each item. When one lands it gets one
@@ -493,6 +498,17 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   - [ ] Lead decision 14 Nov (audit decision 1): a slot of another stream identity is counted foreign before its
     schema is checked, in both readers, so a stale slot never fails a native stream; a test per reader.
   - The Python renderer is deleted only once N2.8 (rule (f)) passes, in the same change as the switch.
+- [ ] N2.9 Generic mode content: a mode drawn by the core from data alone, so new modes iterate with no build
+  round (after N2.5's round 4, which builds the settings half: runtime `.qsb` and the settings block packed by
+  name).
+  - [ ] The frame block packed by name from the mode's frame record the same way (the record's fields named in
+    the mode's schema, the same table the readers use); an unknown or unfilled member refused as for settings.
+  - [ ] Passes declared as data for what the 2D modes need (one or more full-card passes over the composite
+    surface, their blend, their order); anything beyond that is a primitive with its own C++ and harness.
+  - [ ] Proof on a harness-only mode (never registered, never in Settings): a Python simulation, a shader and a
+    spec drawn natively on OpenGL and Vulkan; a change to its shader, spec or simulation shows with no module
+    rebuild; GPU time per pass and nothing per frame at rest.
+  - [ ] `native/core/README.md` and `Native_Core_P3_Decisions.md` (a decision record) say how a new mode is built.
 - [ ] N2.8 Lead, Display 1: the first rehearsal (cards and Spectrum on Vulkan; no wallpaper yet).
   - Pre-check done 14 Nov (`.artifacts/evidence/display/d1_run/20261114_n27_vulkan_visible/`, displays on):
     the saver on Vulkan revealed on its first presented frame, every card drew with its material and text, and
