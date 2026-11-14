@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.5 (High); N2.2 and N2.3 leftovers with N2.7's two exit checks and 1D.15 (Medium).
+**Now (in flight):** N2.5 (High); N2.2's leftovers with N2.7's two exit checks and 1D.15 (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,8 +47,8 @@ at the size asked.
      ride with the next fitting dispatch.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. N2.2's and N2.3's leftovers (the hidden host created once, the `QT_DEFECTS` single source, the reader's control
-     lows), N2.7's two exit checks (the Studio window, the release's bound) and 1D.15.
+  1. N2.2's leftovers (the hidden host created once, the `QT_DEFECTS` single source; N2.3's C++ control lows wait
+     for N2.5's merge: the same files), N2.7's two exit checks (the Studio window, the release's bound) and 1D.15.
   2. 1D.14 (Spectrum's rim glow), once N2.5 has merged.
   3. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
