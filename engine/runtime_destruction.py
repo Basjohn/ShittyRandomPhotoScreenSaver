@@ -29,6 +29,8 @@ logger = get_logger(__name__)
 
 _DEFAULT_TIMEOUT_MS = 8000
 _RESOURCE_RECHECK_MS = 25
+# How long a failing route's exit waits for its Quick windows' destruction (release_quick_windows_then).
+_RELEASE_BOUND_MS = 5000
 
 
 def _qobject_is_valid(obj: QObject) -> bool:
@@ -108,7 +110,9 @@ def release_quick_windows_then(reason: str, continuation: Callable[[], None]) ->
     For the exits that cannot wait on a destruction barrier, because the barrier is what failed or none was armed:
     on Vulkan a window alive at interpreter exit, its device the native core's, crashes the process (0xC0000005).
     Each window's close is queued and its deletion requested; the running loop processes both (never Python here),
-    so no timer and no wait. Returns the number of windows released.
+    and no wait. Bounded: if the windows are not all destroyed within ``_RELEASE_BOUND_MS`` (a modal loop entered
+    after this call holds their deletion) the continuation runs anyway, logged critical; the only timer of this kind,
+    admitted because the process is ending on a failure. Returns the number of windows released.
     """
 
     windows = _live_quick_display_windows()
@@ -121,13 +125,43 @@ def release_quick_windows_then(reason: str, continuation: Callable[[], None]) ->
         reason,
     )
     pending = {id(window) for window in windows}
+    finished = False
+    # The one bounded last resort (Current_Plan.md item 8b, N2.7 leftovers): a deletion posted here waits for the
+    # loop level it was posted at, so a modal loop entered after this call (a popup's or a dialog's exec()) holds every
+    # ``destroyed`` until it ends, unbounded when nobody is at the screen. These routes end the process on a failure,
+    # so after the bound the exit runs anyway, with the windows still alive, and says so; ``QCoreApplication.exit``
+    # leaves every loop, and the main loop's end still processes the deletions posted at its level.
+    bound = QTimer()
+    bound.setSingleShot(True)
+
+    def _finish(how: str) -> None:
+        nonlocal finished
+        if finished:
+            return
+        finished = True
+        bound.stop()
+        try:
+            bound.timeout.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+        if how == "released":
+            logger.info("[LIFECYCLE] Quick windows released reason=%s", reason)
+        else:
+            logger.critical(
+                "[LIFECYCLE] %d Quick window(s) not destroyed within %d ms; exiting anyway reason=%s",
+                len(pending),
+                _RELEASE_BOUND_MS,
+                reason,
+            )
+        continuation()
 
     def _released(token: int, *_args: object) -> None:
         pending.discard(token)
         if not pending:
-            logger.info("[LIFECYCLE] Quick windows released reason=%s", reason)
-            continuation()
+            _finish("released")
 
+    bound.timeout.connect(lambda: _finish("bound"))
+    bound.start(_RELEASE_BOUND_MS)
     for window in windows:
         window.destroyed.connect(partial(_released, id(window)))
         queue_close = getattr(window, "queue_close", None)

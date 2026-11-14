@@ -3,9 +3,10 @@
 The module's messenger (``native/core/src/vulkan_context.cpp``) keeps every Vulkan validation error and warning with its
 phase, thread and the caller's stack. A message is clean only when it is none of these; Qt 6.12.0's own recorded
 defects are excused by their id, text and Qt caller, each only where the harness cannot avoid it
-(``Docs/Future_Work/Native_Core_N06_N07_Qt_Facts.md`` section I has the record and the owners). Carried over from the
-N0.6 harness (``native/spike_p1/python/run_n06.py``, evidence only, never imported here); the excuse for A goes when the
-project takes the Qt patch release that fixes it (the plan's N0.6 box).
+(``Docs/Future_Work/Native_Core_N06_N07_Qt_Facts.md`` section I has the record and the owners). This is the rule's
+one source (``QT_DEFECTS``, ``classify_group``, ``excused``): the N0.6 harness it came from
+(``native/spike_p1/python/run_n06.py``, evidence only, never imported here) imports it from here, so the excuse for A
+goes in one edit when the project takes the Qt patch release that fixes it (the plan's N0.6 box).
 
 Also the environment rule: no variable that changes what Qt or the Vulkan loader does may be set, except
 ``VK_ADD_LAYER_PATH`` when the lead passes ``--layer-path`` (the validation layer is installed outside the registry).
@@ -23,16 +24,21 @@ RECORDED_PREFIXES = CONTAMINATING_PREFIXES + ("QT_QPA", "QT_OPENGL", "QT_D3D", "
 
 QT_DEFECTS = {
     "A": "VUID-VkImageCreateInfo-initialLayout-12478: QVkTexture::create (qtbase v6.12.0, src/gui/rhi/qrhivulkan.cpp) "
-         "creates every texture image with initialLayout PREINITIALIZED and tiling OPTIMAL; the 6.12 branch head has "
-         "UNDEFINED. Every QRhi texture on Vulkan; excused everywhere.",
+         "creates every texture image with initialLayout PREINITIALIZED and tiling OPTIMAL (prepareCreate tracks "
+         "PREINITIALIZED); the 6.12 branch head has UNDEFINED. Every QRhi texture on Vulkan; excused everywhere.",
     "B": "SYNC-HAZARD-WRITE-AFTER-WRITE at vkCmdBeginRenderPass: QRhiVulkan::createOffscreenRenderPass gives a texture "
-         "target without PreserveColorContents initialLayout UNDEFINED and no VK_SUBPASS_EXTERNAL dependency. Excused "
-         "only in phases named 'discard'; every core target preserves (native/core/src/targets.h).",
-    "C": "SYNC-HAZARD-READ-AFTER-WRITE at vkCmdBeginRenderPass (loadOp LOAD): QRhiVulkan's tracker transitions a colour "
-         "target with dstAccessMask COLOR_ATTACHMENT_WRITE only. Never excused: the core primes its targets "
-         "(native/core/src/targets.cpp primeForLoad).",
+         "target without PreserveColorContents initialLayout UNDEFINED and no VK_SUBPASS_EXTERNAL dependency, so the "
+         "pass's layout transition is unordered against the previous frame's storeOp. Excused only in phases named "
+         "'discard' (the evidence hosts that do not preserve); every core target preserves (native/core/src/targets.h).",
+    "C": "SYNC-HAZARD-READ-AFTER-WRITE at vkCmdBeginRenderPass (loadOp LOAD): QRhiVulkan's pass resource tracker "
+         "transitions a colour target with dstAccessMask COLOR_ATTACHMENT_WRITE only (TexColorOutput), so a loading "
+         "pass reads after an unordered layout transition. Never excused: the core primes its targets "
+         "(native/core/src/targets.cpp primeForLoad; the N0.6 spike, quick_offscreen.cpp primeColorTargetForLoad).",
     "D": "SYNC-HAZARD-WRITE-AFTER-PRESENT / WRITE-AFTER-READ / UNASSIGNED-non-acquired-swapchain-image-used: Qt Quick's "
-         "grabWindow on a Vulkan window. Excused only in phases named 'grab'; the core never grabs a window.",
+         "grabWindow on a Vulkan window (qtdeclarative QSGRhiSupport::grabAndBlockInCurrentFrame calls QRhi::finish() "
+         "inside the swapchain frame; in qtbase v6.12.0 QRhiVulkan::finish submits that frame's command buffer, which "
+         "renders into the acquired image, with no wait semaphore at all). Excused only in phases named 'grab' (the "
+         "spike's translucent round); the core never grabs a window.",
 }
 
 # Frames of the layer, the loader and the messenger callback sit on top of the caller's stack in a message entry.
@@ -72,7 +78,8 @@ def classify_group(g: dict) -> str | None:
     return None
 
 
-def _excused(g: dict) -> bool:
+def excused(g: dict) -> bool:
+    """Whether a classified group is excused where it is: A everywhere, B in 'discard' phases, D in 'grab' phases."""
     phase = g.get("phase") or ""
     return (g.get("qt_defect") == "A" or (g.get("qt_defect") == "B" and "discard" in phase)
             or (g.get("qt_defect") == "D" and "grab" in phase))
@@ -122,7 +129,7 @@ def validation_summary(messages: dict) -> dict:
     for g in groups:
         if g.get("id") == "Loader Message" and g.get("severity") != "error":
             continue  # the loader's general warnings are not validation findings; a loader error is counted
-        g["excused"] = _excused(g)
+        g["excused"] = excused(g)
         if g["excused"]:
             recorded[g["qt_defect"]] = recorded.get(g["qt_defect"], 0) + g["count"]
         elif g.get("severity") == "error":
