@@ -886,6 +886,20 @@ changes and no rebuild, a refused frame keeping the card, the latch, the fade, n
 framebuffer at 2560x1440 at 150 % on both backends, Vulkan within 1 level of OpenGL, validation clean), with N2.3's,
 N2.5's and rule (a)'s harnesses unchanged.
 
+**As built: Spline Curve (N5.1, ABI 16, no C++).** The first product mode on this content. Its record is a runtime
+schema (`core/visualizer_engine/devcurve_native_schema.py`: the four curves, the three specular slots, the specular
+alpha under the play/pause ramp and the rainbow hue, each named as its DevCurveDraw member); every other member is the
+core's or a setting from `devcurve_settings_values` (the draw order and the foreground layer follow the layer Settings;
+the foreground id can be -1, so it is a setting, never a u32 field; the three members the Python renderer never writes
+are settings at 0). The Python renderer calls the same two functions (`devcurve_settings_values`,
+`devcurve_frame_values`), so both renderers share one arithmetic. The route (`native_route.py`) draws every generic mode
+on one generic item per Visualizer item beside Spectrum's, its program retargeted by mode and bound with the first
+settings of an activation; a mode that animates by itself has its frames admitted without a current source, as the
+Python node admits them (`_admission_flags`). Proved by `native/core/python/devcurve_check.py` (blocks byte for byte
+over 1,795 frames of the widened run set; the item's contract; Vulkan within 1 level of OpenGL at dpr 1 and 1.5) and
+`tools/visualizer_replay/owner_render_parity.py --native --mode devcurve`; rule (a) is not byte for byte (every frame
+one level off over the translucent fill: the lead's call, Current_Plan.md item 8b).
+
 ## D13. The fullscreen pass and image sampling as a primitive (N4.a, 14 Nov 2026; proposed by the High agent)
 
 Supersedes D12 point 3's refusal of samplers and its "v_uv only" input; the rest of D12 stands.

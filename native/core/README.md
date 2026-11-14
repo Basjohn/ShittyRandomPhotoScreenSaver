@@ -93,6 +93,9 @@ never ships.
     An unbound stream keeps its last frame for the fade; a new stream clears it (round 2, L3). The status
     (`composite_content_status`: draws, failures, the run of refused frames, failing) is the route's failure edge
     (M4, M5); the reader's state is copied, never built as JSON, on the render thread (L2).
+  - The product modes on it: Spline Curve (`devcurve`, N5.1; its record `core/visualizer_engine/devcurve_native_schema.py`,
+    its settings `devcurve_settings_values`), drawn through the Visualizer's route (`native_route.py`
+    `GENERIC_MODE_SETTINGS`: one generic item per Visualizer item, its program retargeted by mode).
   - Python faces: `rendering/native/mode.py` (`NativeMode`), `rendering/native/spectrum.py`; a composite item hides
     and shows by a fade (`fade_ms`) and reports its window's framebuffer from Qt's own swapchain or redirect target
     (`window_pixels`), as its own synchronisation read it on the render thread: nothing before it, nothing while the
@@ -137,6 +140,10 @@ never ships.
   latch, the fade, nothing at rest, GPU time per pass, the framebuffer at 2560x1440 at 150 %; round 2: the item's
   v_uv at an odd origin in four rotations at dpr 1.5, the surface's clear of an unwritten target, a failing program
   keeping the frame, a run of refusals, an unbind keeping the frame, the fade's pixels).
+- `python/devcurve_check.py`: N5.1's proof of Spline Curve (`devcurve`), the first product mode on the generic mode
+  content (the module's blocks against the Python renderer's over the widened run set, byte for byte; the item's
+  contract with nothing at rest and no Python thread state on the render thread; Settings and record changes on the
+  same program; pixels against the Python renderer on OpenGL at dpr 1 and 1.5 and Vulkan against native OpenGL).
 - `python/fullscreen_pass_check.py`: N4.a's proof of the fullscreen pass and image sampling (Crossfade's and Burn's own
   fragments between two real photos against the production GL host at nine progress values, Vulkan against native
   OpenGL, the seven transitions' and Bubble's packs bound and unbound, every sampler refusal, the textures' lifetime,
@@ -196,6 +203,9 @@ worked example (harness-only); a product mode does the same in the product's pla
    texture or sampler, storage, a push constant, a second block of its own, a block at binding 17 or an input other
    than `v_uv` or `vUv`; a schema that is not a valid fixed layout or names a compiled mode. A program that does not
    take the current settings or textures is refused and the drawn one stays.
+6. **Its route** (a product mode, N5.1): its settings function in `rendering/quick/visualizer/native_route.py`
+   `GENERIC_MODE_SETTINGS` (`(snapshot, card) -> members`) and `"vulkan"` in its descriptor's `renderer_backends`; the
+   route encodes its record by its runtime schema and admits its frames by the Python node's rule (`_admission_flags`).
 
 ### Samplers and textures (N4.a; decision D13 in `Native_Core_P3_Decisions.md`)
 
