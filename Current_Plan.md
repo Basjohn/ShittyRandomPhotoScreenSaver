@@ -471,7 +471,6 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     and fractional window sizes.
   - H1 on a real window: done 14 Nov on Display 0 (the MSI at 150 %, operator's leave): the native Spectrum draws
     inside its card on Vulkan with crisp edges (`display/d1_run/20261114_d0_h1_vulkan_spectrum/`).
-
   - [ ] With no admitted mode renderable on the backend (before N2.5), the Visualizer card shows as a thin empty
     purple frame beside Spotify. Find its owner and decide: a card with nothing to draw fades out, never sits as
     an empty frame. OpenGL unchanged.
