@@ -11,6 +11,8 @@
 #include <QtCore/QByteArray>
 #include <QtCore/QSize>
 #include <QtCore/QString>
+// The whole QRhiTexture declaration, not a forward one: the target helpers name QRhiTexture::Format in their defaults.
+#include <rhi/qrhi.h>
 
 #include <memory>
 
