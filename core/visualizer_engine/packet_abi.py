@@ -76,6 +76,10 @@ FRAME_MAPPING_PREFIX = "srpss_viz_"
 FIRST_SEQUENCE = 2
 
 FLAG_CHANGED, FLAG_PRESENT_FRAME, FLAG_MODE_REVEAL_READY, FLAG_PLAYING = 1, 2, 4, 8
+#: The frame's reactive source is its own activation's (``render_contract.snapshot_has_current_reactive_source``):
+#: with ``FLAG_PRESENT_FRAME`` and ``FLAG_PLAYING`` it is what a native renderer's admission reads (N2.5), the node's
+#: ``snapshot_is_render_admissible`` without the frame. A bit appended to ``flags``: no field moved, the ABI stays 2.
+FLAG_SOURCE_CURRENT = 16
 
 #: The header's ``mode_code``: one stable number per canonical mode id, append-only (a code is never reused or
 #: renumbered; a new mode takes the next one). 0 means no mode. C readers carry the same table.

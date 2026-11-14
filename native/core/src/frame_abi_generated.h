@@ -50,6 +50,7 @@ constexpr quint32 kFlagChanged = 1;
 constexpr quint32 kFlagPresentFrame = 2;
 constexpr quint32 kFlagModeRevealReady = 4;
 constexpr quint32 kFlagPlaying = 8;
+constexpr quint32 kFlagSourceCurrent = 16;
 
 // The payload_schema namespace (native_schema.py, transport rule 4).
 constexpr quint32 kCodecSchema = 1;

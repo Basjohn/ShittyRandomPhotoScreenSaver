@@ -105,6 +105,7 @@ def render() -> str:
         f"constexpr quint32 kFlagPresentFrame = {packet_abi.FLAG_PRESENT_FRAME};",
         f"constexpr quint32 kFlagModeRevealReady = {packet_abi.FLAG_MODE_REVEAL_READY};",
         f"constexpr quint32 kFlagPlaying = {packet_abi.FLAG_PLAYING};",
+        f"constexpr quint32 kFlagSourceCurrent = {packet_abi.FLAG_SOURCE_CURRENT};",
         "",
         "// The payload_schema namespace (native_schema.py, transport rule 4).",
         f"constexpr quint32 kCodecSchema = {CODEC_SCHEMA};",

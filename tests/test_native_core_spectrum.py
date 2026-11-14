@@ -130,6 +130,35 @@ def test_the_ports_constants_are_the_python_renderers() -> None:
     assert _cpp_constant("kMaxBarGap") == MAX_BAR_GAP
 
 
+@pytest.mark.parametrize("source, playing", [((5, 7), True), ((5, 8), True), ((-1, -1), True), ((4, 7), False)])
+def test_the_slot_carries_the_nodes_admission(source, playing) -> None:
+    """The native item cannot see a frame's source identity (not in the record), so the writer states it in the slot:
+    FLAG_SOURCE_CURRENT is set exactly when render_contract.snapshot_has_current_reactive_source holds, and the item's
+    admission (spectrum.cpp) is snapshot_is_render_admissible over the head's bits, for a mode that requires its tracked
+    source (Spectrum does; the item hard-codes that, so this holds it to mode_capabilities)."""
+    from types import SimpleNamespace
+
+    from core.visualizer_engine.packet_abi import FLAG_PLAYING, FLAG_PRESENT_FRAME, FLAG_SOURCE_CURRENT
+    from core.visualizer_engine.packet_mailbox import publication_flags
+    from rendering.quick.visualizer.render_contract import (
+        snapshot_has_current_reactive_source,
+        snapshot_is_render_admissible,
+    )
+    from widgets.spotify_visualizer import mode_capabilities
+
+    assert mode_capabilities.requires_authoritative_first_source("spectrum")
+    logical = SimpleNamespace(mode_id="spectrum", present_frame=True, playing=playing, changed=True,
+                              mode_reveal_ready=False, source_generation=source[0], source_activation_id=source[1],
+                              engine_generation=5, activation_id=7)
+    snapshot = SimpleNamespace(logical=logical)
+    flags = publication_flags(logical)
+    assert bool(flags & FLAG_SOURCE_CURRENT) == snapshot_has_current_reactive_source(snapshot)
+    native = bool(flags & FLAG_PRESENT_FRAME) and (not flags & FLAG_PLAYING or bool(flags & FLAG_SOURCE_CURRENT))
+    assert native == snapshot_is_render_admissible(snapshot)
+    text = (CORE / "src" / "spectrum.cpp").read_text(encoding="utf-8")
+    assert "kFlagPresentFrame" in text and "kFlagSourceCurrent" in text
+
+
 def test_every_block_member_the_python_renderer_writes_is_set_by_the_port() -> None:
     """The port names every member of SpectrumDraw the Python renderer writes (the block declared in spectrum.frag),
     except the quad's matrix, which the core's full-target triangle does not read."""

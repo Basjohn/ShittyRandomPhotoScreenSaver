@@ -72,6 +72,7 @@ public:
         int offset = 0;
         int count = 1;    // array length (1: not an array)
         int stride = 0;   // array stride
+        bool strideInferred = false; // the reflection gave 0: std140's rule (a vec4 per element) was applied
     };
 
     static const SpectrumBlockLayout &instance(); // reflected once from the embedded shader
@@ -157,6 +158,7 @@ private:
     mutable QMutex m_reportMutex;           // guards the report
     qint64 m_syncs = 0;
     qint64 m_accepted = 0;
+    qint64 m_admissionRejected = 0;         // accepted frames the node's admission rule does not draw
     bool m_reportedFrame = false;
     qint64 m_records = 0;
     qint64 m_draws = 0;

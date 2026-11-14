@@ -143,8 +143,9 @@ def capture_runs(sample_every: int) -> tuple[list[dict], list]:
     return records, samples
 
 
-#: Bytes of one reflected member by QShaderDescription::VariableType (Float, Vec2, Vec3, Vec4, Mat4, Int, Int2-4).
-_TYPE_BYTES = {1: 4, 2: 8, 3: 12, 4: 16, 11: 64, 14: 4, 15: 8, 16: 12, 17: 16}
+#: Bytes of one non-array member by its GLSL type.
+_TYPE_BYTES_GLSL = {"float": 4, "int": 4, "uint": 4, "bool": 4, "vec2": 8, "ivec2": 8, "vec3": 12, "ivec3": 12,
+                    "vec4": 16, "ivec4": 16, "mat4": 64}
 
 
 def round_block(core, records: list[dict]) -> dict:
@@ -153,10 +154,22 @@ def round_block(core, records: list[dict]) -> dict:
     from core.visualizer_engine import spectrum_native_schema
     from tools import conventions_identity
 
+    from rendering.gl_programs.scene3d import _std140_type
+    from rendering.quick.visualizer.implementations.spectrum import SPECTRUM_BLOCK
+
     bars_offset = spectrum_native_schema.LAYOUT.field("bars").offset
     layout = core.spectrum_block_layout()
-    members = {name: (offset, count * stride if count > 1 else _TYPE_BYTES.get(kind, 4))
-               for name, kind, offset, count, stride in layout["members"]}
+    # The oracle is the Python packer's own std140 layout (never the module's reflection, which build round 1 showed
+    # reporting a scalar array's stride as 0): every member's bytes, arrays whole.
+    members = {}
+    for (name, glsl_type), offset in zip(SPECTRUM_BLOCK.fields, SPECTRUM_BLOCK.offsets):
+        _element, count, _alignment, stride = _std140_type(glsl_type)
+        members[name] = (offset, count * stride if "[" in glsl_type else _TYPE_BYTES_GLSL.get(glsl_type, 4))
+    reflected = {row[0]: (row[2], row[3], row[4]) for row in layout["members"]}
+    layout_differs = {name: {"python": members[name][0], "module": reflected.get(name)}
+                      for name in members if reflected.get(name, (None,))[0] != members[name][0]}
+    array_strides = {name: {"python": _std140_type(glsl_type)[3], "module": (reflected.get(name) or (0, 0, 0))[2]}
+                     for name, glsl_type in SPECTRUM_BLOCK.fields if "[" in glsl_type}
     time_offset = members.get("u_time", (None,))[0]
     mismatched: dict[str, int] = {}
     first_mismatch = None
@@ -196,6 +209,8 @@ def round_block(core, records: list[dict]) -> dict:
     checks = {
         "every_run_drew": len(runs) == len(conventions_identity.mode_runs("spectrum", True)),
         "frames_compared": compared > 0 and compared == len(records),
+        "module_layout_is_the_python_layout": not layout_differs and all(
+            entry["python"] == entry["module"] for entry in array_strides.values()),
         "identical": not mismatched and not drawn_python_not_native,
         "control_mutated_record_differs": previous_compared > 0 and previous_differs == previous_compared,
         "control_fade_differs": fade_differs == compared,
@@ -203,6 +218,7 @@ def round_block(core, records: list[dict]) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "runs": runs, "frames": len(records),
             "compared": compared, "mismatched_members": mismatched, "first_mismatch": first_mismatch,
             "drawn_by_python_not_native": drawn_python_not_native, "layout": layout,
+            "layout_differs": layout_differs, "array_strides": array_strides,
             "controls": {"previous_compared": previous_compared, "previous_differs": previous_differs,
                          "fade_differs": fade_differs}}
 

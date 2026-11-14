@@ -416,6 +416,13 @@ SpectrumBlockLayout::SpectrumBlockLayout()
             member.offset = variable.offset;
             member.count = variable.arrayDims.isEmpty() ? 1 : variable.arrayDims.first();
             member.stride = variable.arrayStride;
+            if (member.count > 1 && member.stride <= 0) {
+                // Build round 1: the baked shader reflects a scalar array's stride as 0, which packed all 64 bars at
+                // one offset. std140 rounds every array element up to a vec4 (16 bytes), so the stride is that.
+                const int bytes = 4 * (componentsOf(member.type) > 0 ? componentsOf(member.type) : 1);
+                member.stride = ((bytes + 15) / 16) * 16;
+                member.strideInferred = true;
+            }
             m_members.append(member);
         }
     }
@@ -435,7 +442,7 @@ QJsonObject SpectrumBlockLayout::toJson() const
     QJsonArray members;
     for (const Member &member : m_members) {
         members.append(QJsonArray { QString::fromLatin1(member.name), member.type, member.offset, member.count,
-                                    member.stride });
+                                    member.stride, member.strideInferred });
     }
     o.insert(QStringLiteral("members"), members);
     return o;
@@ -769,6 +776,7 @@ bool SpectrumSource::sync()
         }
     }
     bool accepted = false;
+    bool rejected = false;
     bool changed = false;
     if (presentationTaken && presentation != m_drawn) {
         m_drawn = presentation;
@@ -781,7 +789,15 @@ bool SpectrumSource::sync()
         SlotHead head;
         const QByteArray *retained = nullptr;
         const bool holds = current->retained(&head, &retained);
-        if (read == ReadResult::Accepted && holds) {
+        // render_contract.snapshot_is_render_admissible for Spectrum, a mode whose first visible reactive output must
+        // come from its tracked source (mode_capabilities.requires_authoritative_first_source): a frame that is not a
+        // present frame, or a playing one whose reactive source is not its own activation's, is not drawn and the last
+        // admitted frame stays (the Python node's rule). The bits are the slot head's (packet_abi FLAG_*).
+        const bool admissible = holds && (head.flags & fa::kFlagPresentFrame)
+            && (!(head.flags & fa::kFlagPlaying) || (head.flags & fa::kFlagSourceCurrent));
+        if (read == ReadResult::Accepted && holds && !admissible) {
+            rejected = true;
+        } else if (read == ReadResult::Accepted && holds) {
             if (m_record.size() != retained->size())
                 m_record.resize(retained->size());
             std::memcpy(m_record.data(), retained->constData(), size_t(retained->size()));
@@ -800,6 +816,8 @@ bool SpectrumSource::sync()
     ++m_syncs;
     if (accepted)
         ++m_accepted;
+    if (rejected)
+        ++m_admissionRejected;
     m_lastResult = result;
     m_reportedFrame = m_hasFrame;
     return changed;
@@ -832,6 +850,7 @@ QJsonObject SpectrumSource::stateJson() const
     QMutexLocker lock(&m_reportMutex);
     o.insert(QStringLiteral("syncs"), double(m_syncs));
     o.insert(QStringLiteral("accepted"), double(m_accepted));
+    o.insert(QStringLiteral("admission_rejected"), double(m_admissionRejected));
     o.insert(QStringLiteral("has_frame"), m_reportedFrame);
     o.insert(QStringLiteral("last_read"), m_lastResult);
     o.insert(QStringLiteral("records"), double(m_records));
