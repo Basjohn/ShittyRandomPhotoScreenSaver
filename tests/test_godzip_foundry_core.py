@@ -730,7 +730,7 @@ def test_current_plan_edit_diff_is_exact_and_silent_when_unchanged() -> None:
 def test_foundry_header_exposes_waitable_current_plan_diff_workflow() -> None:
     source = (TOOLS_DIR / "godzip_foundry.py").read_text(encoding="utf-8")
     for marker in (
-        'QPushButton("OPEN CP & DIFF")',
+        'QPushButton("Open CP && Diff")',
         'self.current_plan_button.clicked.connect(self.open_current_plan_and_diff)',
         'generate_text_edit_diff("Current_Plan.md", before, after)',
         '_shell_open_associated_document(plan_path)',
@@ -739,7 +739,7 @@ def test_foundry_header_exposes_waitable_current_plan_diff_workflow() -> None:
         'os.startfile(str(path))',
         'bridge.opened.emit({"waitable": bool(process_handle)})',
         'DiffResultDialog(self, "CURRENT PLAN DIFF"',
-        'self.current_plan_button.setText("CHECK CP DIFF")',
+        'self.current_plan_button.setText("Check CP Diff")',
     ):
         assert marker in source
     # The original cmd.exe/start launcher could report success while opening

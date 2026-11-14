@@ -41,6 +41,30 @@ def _early_repo_root() -> Path:
     return Path.cwd().resolve()
 
 
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="SRPSS GODZIP Foundry")
+    parser.add_argument(
+        "--repo",
+        type=Path,
+        default=_early_repo_root(),
+        help="repository root to work on (default: the checkout this script lives in)",
+    )
+    parser.add_argument(
+        "--open",
+        dest="initial_zip",
+        type=Path,
+        metavar="INITIAL_ZIP",
+        help="open this GODZIP on the Apply tab at start",
+    )
+    return parser
+
+
+if __name__ == "__main__" and any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+    # Help must print without the Qt stack: the imports below need the resource packs a fresh checkout lacks.
+    _build_parser().print_help()
+    raise SystemExit(0)
+
+
 def enable_windows_dpi_awareness() -> str:
     """Mirror Build Foundry's strongest-available per-monitor DPI setup."""
     if sys.platform != "win32":
@@ -913,7 +937,7 @@ class FoundryConfirmDialog(FoundryPopupDialog):
         message: str,
         parent: QWidget | None = None,
         *,
-        confirm_text: str = "CONTINUE",
+        confirm_text: str = "Continue",
         danger: bool = False,
     ) -> None:
         super().__init__(title, parent)
@@ -974,7 +998,7 @@ class FoundrySettingsDialog(FoundryPopupDialog):
         self.theme_combo.currentIndexChanged.connect(self._theme_changed)
         row.addWidget(self.theme_combo, 1)
 
-        close_button = QPushButton("CLOSE")
+        close_button = QPushButton("Close")
         close_button.clicked.connect(self.close)
         footer = QHBoxLayout()
         layout.addLayout(footer)
@@ -1070,7 +1094,7 @@ class CreateTab(QWidget):
         foot.addLayout(action)
         self.summary = QLabel()
         self.summary.setObjectName("muted")
-        self.create_button = QPushButton("CREATE GOD ZIP")
+        self.create_button = QPushButton("Create God Zip")
         self.create_button.setObjectName("primaryButton")
         self.create_button.clicked.connect(self.create_archive)
         action.addWidget(self.summary, 1)
@@ -1199,7 +1223,7 @@ class CreateTab(QWidget):
                 "Replace existing archive?",
                 f"{output.name} already exists. Replace it?",
                 start,
-                confirm_text="REPLACE",
+                confirm_text="Replace",
                 danger=True,
             )
             return
@@ -1332,7 +1356,7 @@ class ApplyTab(QWidget):
         refresh_found.setToolTip("Refresh discovered ZIPs")
         refresh_found.clicked.connect(lambda: self.refresh_discovered_zips(force=True))
         chooser_row.addWidget(refresh_found)
-        browse = QPushButton("BROWSE GOD ZIP…")
+        browse = QPushButton("Browse God Zip…")
         browse.setToolTip("Choose a GODZIP from another folder")
         browse.clicked.connect(self.browse)
         chooser_row.addWidget(browse)
@@ -1394,7 +1418,7 @@ class ApplyTab(QWidget):
         legend = QLabel("Orange = timestamp-old · Red = timestamp-old + Git-old · Violet = local dirty")
         legend.setObjectName("faint")
         legend_row.addWidget(legend, 1)
-        self.compact_apply_button = QPushButton("APPLY")
+        self.compact_apply_button = QPushButton("Apply")
         self.compact_apply_button.setObjectName("primaryButton")
         self.compact_apply_button.setFixedHeight(30)
         self.compact_apply_button.setMinimumWidth(92)
@@ -1450,7 +1474,7 @@ class ApplyTab(QWidget):
         self.summary = QLabel("")
         self.summary.setObjectName("muted")
         row.addWidget(self.summary, 1)
-        self.apply_button = QPushButton("APPLY SELECTED")
+        self.apply_button = QPushButton("Apply Selected")
         self.apply_button.setObjectName("primaryButton")
         self.apply_button.setEnabled(False)
         self.apply_button.clicked.connect(self.apply_selected)
@@ -1896,7 +1920,7 @@ class ApplyTab(QWidget):
             "Apply GODZIP?",
             "\n\n".join(lines),
             lambda: self._apply_selected_now(inspection, selected, debris),
-            confirm_text="APPLY",
+            confirm_text="Apply",
             danger=True,
         )
 
@@ -1999,7 +2023,7 @@ class DebrisTab(QWidget):
             b.clicked.connect(handler)
             row.addWidget(b)
         row.addStretch(1)
-        self.clean_mode_button = QPushButton("GODZIP CLEAN")
+        self.clean_mode_button = QPushButton("Godzip Clean")
         self.clean_mode_button.setObjectName("cleanModeButton")
         self.clean_mode_button.clicked.connect(lambda: self.set_clean_mode(True))
         row.addWidget(self.clean_mode_button)
@@ -2024,7 +2048,7 @@ class DebrisTab(QWidget):
         bl.setContentsMargins(14, 12, 14, 12)
         self.summary = QLabel("No debris queued.")
         self.summary.setObjectName("muted")
-        self.move_button = QPushButton("MOVE CHECKED TO /DELETEME")
+        self.move_button = QPushButton("Move Checked To /deleteme")
         self.move_button.setObjectName("dangerButton")
         self.move_button.clicked.connect(self.move_checked)
         self.move_button.setEnabled(False)
@@ -2041,20 +2065,20 @@ class DebrisTab(QWidget):
         clean_controls = QHBoxLayout()
         clean_layout.addLayout(clean_controls)
         for label, handler in (
-            ("GODZIPS", lambda: self._clean_select_kind("GODZIP")),
-            ("LOGZIPS", lambda: self._clean_select_kind("LOGZIP")),
-            ("ALL", lambda: self._clean_select_all(True)),
-            ("NONE", lambda: self._clean_select_all(False)),
-            ("ALL BUT LATEST", self._clean_select_all_but_latest),
-            ("REFRESH", self.refresh_clean_archives),
+            ("Godzips", lambda: self._clean_select_kind("GODZIP")),
+            ("Logzips", lambda: self._clean_select_kind("LOGZIP")),
+            ("All", lambda: self._clean_select_all(True)),
+            ("None", lambda: self._clean_select_all(False)),
+            ("All But Latest", self._clean_select_all_but_latest),
+            ("Refresh", self.refresh_clean_archives),
         ):
             button = QPushButton(label)
-            if label == "ALL BUT LATEST":
+            if label == "All But Latest":
                 button.setObjectName("primaryButton")
             button.clicked.connect(handler)
             clean_controls.addWidget(button)
         clean_controls.addStretch(1)
-        back = QPushButton("BACK TO DEBRIS")
+        back = QPushButton("Back To Debris")
         back.setObjectName("cleanModeButton")
         back.clicked.connect(lambda: self.set_clean_mode(False))
         clean_controls.addWidget(back)
@@ -2079,7 +2103,7 @@ class DebrisTab(QWidget):
         cbl.setContentsMargins(14, 12, 14, 12)
         self.clean_summary = QLabel("Not scanned yet.")
         self.clean_summary.setObjectName("muted")
-        self.clean_recycle_button = QPushButton("RECYCLE CHECKED ARCHIVES")
+        self.clean_recycle_button = QPushButton("Recycle Checked Archives")
         self.clean_recycle_button.setObjectName("dangerButton")
         self.clean_recycle_button.setEnabled(False)
         self.clean_recycle_button.clicked.connect(self.recycle_clean_archives)
@@ -2503,7 +2527,7 @@ class DebrisTab(QWidget):
             "Move debris?",
             f"Move {len(existing)} checked path(s) to /deleteme?\n\nNothing is permanently deleted.",
             lambda: self._move_checked_now(existing),
-            confirm_text="MOVE",
+            confirm_text="Move",
             danger=True,
         )
 
@@ -2556,7 +2580,7 @@ class ConfirmFileListDialog(FoundryPopupDialog):
         layout.addWidget(self.ack)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         ok = buttons.button(QDialogButtonBox.StandardButton.Ok)
-        ok.setText("CONFIRM")
+        ok.setText("Confirm")
         ok.setEnabled(False)
         self.ack.toggled.connect(ok.setEnabled)
         buttons.accepted.connect(self.accept)
@@ -2632,7 +2656,7 @@ class LogzipTab(QWidget):
         self.destination.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         summary_box.addWidget(self.summary)
         summary_box.addWidget(self.destination)
-        self.button = QPushButton("CREATE LOGZIP")
+        self.button = QPushButton("Create Logzip")
         self.button.setObjectName("primaryButton")
         self.button.clicked.connect(self.create)
         self.button.setEnabled(False)
@@ -2749,10 +2773,10 @@ class DiffResultDialog(FoundryPopupDialog):
         layout.addWidget(self.text, 1)
         buttons = QHBoxLayout()
         layout.addLayout(buttons)
-        copy = QPushButton("COPY TO CLIPBOARD")
+        copy = QPushButton("Copy To Clipboard")
         copy.setObjectName("primaryButton")
         copy.clicked.connect(self.copy_all)
-        close = QPushButton("CLOSE")
+        close = QPushButton("Close")
         close.clicked.connect(self.accept)
         buttons.addStretch(1)
         buttons.addWidget(copy)
@@ -2809,7 +2833,7 @@ class DiffTab(QWidget):
         refresh = QPushButton("↻")
         refresh.clicked.connect(lambda: self.refresh(force=True))
         row.addWidget(refresh)
-        browse = QPushButton("BROWSE…")
+        browse = QPushButton("Browse…")
         browse.clicked.connect(self.browse)
         row.addWidget(browse)
         self.selected = QLabel("No baseline selected")
@@ -2839,7 +2863,7 @@ class DiffTab(QWidget):
         fl.setContentsMargins(14, 12, 14, 12)
         self.summary = QLabel("Choose a GODZIP baseline.")
         self.summary.setObjectName("muted")
-        self.button = QPushButton("GENERATE DIFF")
+        self.button = QPushButton("Generate Diff")
         self.button.setObjectName("primaryButton")
         self.button.setEnabled(False)
         self.button.clicked.connect(self.generate)
@@ -2972,10 +2996,10 @@ class PushTab(QWidget):
         msgrow.addWidget(self.message, 1)
         buttons = QHBoxLayout()
         bl.addLayout(buttons)
-        self.commit_button = QPushButton("COMMIT")
-        self.commit_push_button = QPushButton("COMMIT & PUSH")
+        self.commit_button = QPushButton("Commit")
+        self.commit_push_button = QPushButton("Commit && Push")
         self.commit_push_button.setObjectName("primaryButton")
-        self.push_button = QPushButton("PUSH EXISTING COMMITS")
+        self.push_button = QPushButton("Push Existing Commits")
         self.commit_button.clicked.connect(lambda: self.commit(push=False))
         self.commit_push_button.clicked.connect(lambda: self.commit(push=True))
         self.push_button.clicked.connect(self.push)
@@ -3067,7 +3091,7 @@ class PushTab(QWidget):
             "Push current branch?",
             f"Push branch {branch} at HEAD {head}?\n\nNo force-push is permitted.",
             self._push_now,
-            confirm_text="PUSH",
+            confirm_text="Push",
             danger=True,
         )
 
@@ -3116,7 +3140,7 @@ class PullTab(QWidget):
         layout.addWidget(intro)
         row = QHBoxLayout()
         layout.addLayout(row)
-        refresh = QPushButton("FETCH / REFRESH")
+        refresh = QPushButton("Fetch / Refresh")
         refresh.setObjectName("primaryButton")
         refresh.clicked.connect(self.refresh)
         all_b = QPushButton("All")
@@ -3146,9 +3170,9 @@ class PullTab(QWidget):
         fl.addLayout(line)
         self.summary = QLabel("No remote inspection yet.")
         self.summary.setObjectName("muted")
-        self.sync_button = QPushButton("SELECTIVE SYNC CHECKED")
+        self.sync_button = QPushButton("Selective Sync Checked")
         self.sync_button.setObjectName("dangerButton")
-        self.pull_button = QPushButton("PULL ALL (FF-ONLY)")
+        self.pull_button = QPushButton("Pull All (FF-Only)")
         self.pull_button.setObjectName("primaryButton")
         self.sync_button.clicked.connect(self.selective_sync)
         self.pull_button.clicked.connect(self.pull_all)
@@ -3794,9 +3818,9 @@ class CommandTab(QWidget):
         shells = QHBoxLayout()
         panel_l.addLayout(shells)
         for label, kind in (
-            ("POWERSHELL", "powershell"),
+            ("PowerShell", "powershell"),
             ("CMD", "cmd"),
-            ("BASH", "bash"),
+            ("Bash", "bash"),
         ):
             button = QPushButton(label)
             button.setObjectName("primaryButton" if kind == "powershell" else "")
@@ -3806,11 +3830,11 @@ class CommandTab(QWidget):
 
         utility = QHBoxLayout()
         panel_l.addLayout(utility)
-        explorer = QPushButton("OPEN REPO IN EXPLORER")
+        explorer = QPushButton("Open Repo In Explorer")
         explorer.clicked.connect(
             lambda: self.window.open_folder(self.repo_root, label="repository")
         )
-        copy_path = QPushButton("COPY REPO PATH")
+        copy_path = QPushButton("Copy Repo Path")
         copy_path.clicked.connect(self._copy_path)
         utility.addWidget(explorer)
         utility.addWidget(copy_path)
@@ -3855,19 +3879,19 @@ class CommandTab(QWidget):
         options.addStretch(1)
         actions = QHBoxLayout()
         body.addLayout(actions)
-        self.script_run_button = QPushButton("RUN SCRIPT")
+        self.script_run_button = QPushButton("Run Script")
         self.script_run_button.setObjectName("primaryButton")
         self.script_run_button.clicked.connect(self._run_script)
-        self.script_paste_button = QPushButton("CLEAR & PASTE")
+        self.script_paste_button = QPushButton("Clear && Paste")
         self.script_paste_button.setToolTip("Replace the script editor with plain text from the clipboard; never executes it")
         self.script_paste_button.clicked.connect(self._clear_and_paste)
-        self.script_suite_button = QPushButton("RUN CHUNKED SUITE")
+        self.script_suite_button = QPushButton("Run Chunked Suite")
         self.script_suite_button.setToolTip(
             CHUNKED_SUITE_COMMAND + "\nOne click: run the whole chunked suite in captured PowerShell. "
             "Replaces the editor contents with the exact command and uses the existing Stop Run/results flow."
         )
         self.script_suite_button.clicked.connect(self._run_chunked_suite)
-        self.script_stop_button = QPushButton("STOP RUN")
+        self.script_stop_button = QPushButton("Stop Run")
         self.script_stop_button.setEnabled(False)
         self.script_stop_button.clicked.connect(self._stop_run)
         self.script_result_badge = QLabel()
@@ -3895,13 +3919,13 @@ class CommandTab(QWidget):
         results_body.addWidget(self.script_output)
         results = QHBoxLayout()
         results_body.addLayout(results)
-        self.script_copy = QPushButton("COPY RESULTS")
+        self.script_copy = QPushButton("Copy Results")
         self.script_copy.setEnabled(False)
         self.script_copy.clicked.connect(self._copy_results)
-        self.script_show_results = QPushButton("OPEN RESULTS")
+        self.script_show_results = QPushButton("Open Results")
         self.script_show_results.setEnabled(False)
         self.script_show_results.clicked.connect(self._show_results)
-        self.script_zip = QPushButton("ZIP RUN + NEW LOGS")
+        self.script_zip = QPushButton("Zip Run + New Logs")
         self.script_zip.setEnabled(False)
         self.script_zip.clicked.connect(self._zip_results)
         results.addWidget(self.script_copy)
@@ -4043,7 +4067,7 @@ class CommandTab(QWidget):
         self.script_run_button.setEnabled(False)
         self.script_suite_button.setEnabled(False)
         self.script_stop_button.setEnabled(True)
-        self.script_stop_button.setText("STOP RUN")
+        self.script_stop_button.setText("Stop Run")
         self.script_status.setText(f"Running {shell} in {self.repo_root}. Transcript: {run_dir / 'output.txt'}")
         process.start(str(executable), args)
 
@@ -4145,7 +4169,7 @@ class CommandTab(QWidget):
         # taskkill itself failed or returned before Qt observed the target exit.
         # Restore an explicit escape instead of disabling the only stop control.
         detail = error or f"taskkill exit code {returncode}"
-        self.script_stop_button.setText("KILL RUN")
+        self.script_stop_button.setText("Kill Run")
         self.script_stop_button.setEnabled(True)
         self.script_status.setText(
             f"Process-tree stop did not finish the run ({detail}). Press KILL RUN to kill the captured host."
@@ -4199,7 +4223,7 @@ class CommandTab(QWidget):
             return
         self._run_stopped = True
 
-        if self.script_stop_button.text() == "KILL RUN":
+        if self.script_stop_button.text() == "Kill Run":
             self._process.kill()
             self.script_stop_button.setEnabled(False)
             self.script_status.setText("Killing the captured run host…")
@@ -4214,7 +4238,7 @@ class CommandTab(QWidget):
                 try:
                     self._start_windows_tree_kill(pid)
                 except OSError as exc:
-                    self.script_stop_button.setText("KILL RUN")
+                    self.script_stop_button.setText("Kill Run")
                     self.script_stop_button.setEnabled(True)
                     self.script_status.setText(
                         f"Could not start process-tree stop ({exc}). Press KILL RUN to kill the captured host."
@@ -4225,8 +4249,8 @@ class CommandTab(QWidget):
                 return
 
         self._process.terminate()
-        self.script_stop_button.setText("KILL RUN")
-        self.script_status.setText("Stop requested. If the command does not exit, press KILL RUN.")
+        self.script_stop_button.setText("Kill Run")
+        self.script_status.setText("Stop requested. If the command does not exit, press Kill Run.")
 
     def has_active_capture(self) -> bool:
         return self._running
@@ -4262,9 +4286,9 @@ class CommandTab(QWidget):
         body.addWidget(output, 1)
         buttons = QHBoxLayout()
         body.addLayout(buttons)
-        copy = QPushButton("COPY RESULTS")
+        copy = QPushButton("Copy Results")
         copy.clicked.connect(self._copy_results)
-        close = QPushButton("CLOSE")
+        close = QPushButton("Close")
         close.clicked.connect(dialog.accept)
         buttons.addWidget(copy)
         buttons.addStretch(1)
@@ -4422,10 +4446,10 @@ class FoundriesTab(QWidget):
         rule.setFrameShape(QFrame.Shape.HLine)
         divider.addWidget(rule, 1)
         self._add_launchers(layout, (
-            ("MUSIC CLIP RECORDER\n60-second clips · full waveforms + events", "music_recorder.py", False),
-            ("VISUALIZER PRESET REPAIR\nReview and repair preset / SST files", "visualizer_preset_repair.py", False),
-            ("BORDER STUDIO\nWebP/PNG borders · lossless timing checks", "srpss_border_studio.py", False),
-            ("VISUALIZER CAPTURE STUDIO\nOffscreen visualizers · recorded music → WebP", "visualizer_capture_studio.py", False),
+            ("Music Clip Recorder\n60-second clips · full waveforms + events", "music_recorder.py", False),
+            ("Visualizer Preset Repair\nReview and repair preset / SST files", "visualizer_preset_repair.py", False),
+            ("Border Studio\nWebP/PNG borders · lossless timing checks", "srpss_border_studio.py", False),
+            ("Visualizer Capture Studio\nOffscreen visualizers · recorded music → WebP", "visualizer_capture_studio.py", False),
         ))
         layout.addStretch(1)
 
@@ -4484,6 +4508,7 @@ class GodzipFoundryWindow(QMainWindow):
         self._floating_dialogs: set[QDialog] = set()
         self._settings_dialog: FoundrySettingsDialog | None = None
         self._task_active = False
+        self._status_tab: QWidget | None = None
         self._task_bridge: _TaskBridge | None = None
         self._task_thread: threading.Thread | None = None
         self._task_read_only = False
@@ -4585,7 +4610,7 @@ class GodzipFoundryWindow(QMainWindow):
                     GodzipError(f"Desktop shell refused file: {plan_path}"),
                 )
                 return
-            self.current_plan_button.setText("CHECK CP DIFF")
+            self.current_plan_button.setText("Check CP Diff")
             self.set_status(
                 "Opened Current_Plan.md. Automatic editor-close detection is unavailable here; "
                 "click CHECK CP DIFF after saving."
@@ -4595,7 +4620,7 @@ class GodzipFoundryWindow(QMainWindow):
         bridge = _PlanEditBridge(self)
         self._plan_edit_bridge = bridge
         self._plan_edit_waiting = True
-        self.current_plan_button.setText("CP OPEN…")
+        self.current_plan_button.setText("CP Open…")
         bridge.opened.connect(self._on_current_plan_editor_opened)
         bridge.finished.connect(self._on_current_plan_editor_finished)
         bridge.failed.connect(self._on_current_plan_editor_failed)
@@ -4632,7 +4657,7 @@ class GodzipFoundryWindow(QMainWindow):
                 "Opened Current_Plan.md; close/save the editor to generate a diff if it changed."
             )
         else:
-            self.current_plan_button.setText("CHECK CP DIFF")
+            self.current_plan_button.setText("Check CP Diff")
             self.set_status(
                 "Opened Current_Plan.md in an existing/single-instance editor; "
                 "save it, then click CHECK CP DIFF."
@@ -4662,7 +4687,7 @@ class GodzipFoundryWindow(QMainWindow):
         # Keep the snapshot armed: the associated application may still have
         # opened even when the waitable launcher failed. The button becomes an
         # explicit CHECK action rather than silently discarding the comparison.
-        self.current_plan_button.setText("CHECK CP DIFF")
+        self.current_plan_button.setText("Check CP Diff")
         self.set_status("Could not track editor lifetime; Current Plan snapshot remains armed for manual diff.")
         if isinstance(error, Exception):
             self.show_error("Current Plan editor tracking failed", error)
@@ -4675,7 +4700,7 @@ class GodzipFoundryWindow(QMainWindow):
     ) -> None:
         before = self._plan_edit_snapshot
         if before is None:
-            self.current_plan_button.setText("OPEN CP & DIFF")
+            self.current_plan_button.setText("Open CP && Diff")
             return
         plan_path = self.repo_root / "Current_Plan.md"
         try:
@@ -4692,19 +4717,19 @@ class GodzipFoundryWindow(QMainWindow):
                 # A manual check may happen before the operator has saved; keep
                 # the original snapshot alive so a later click still sees the
                 # complete session delta.
-                self.current_plan_button.setText("CHECK CP DIFF")
+                self.current_plan_button.setText("Check CP Diff")
                 self.set_status(
                     "No saved Current_Plan.md changes yet; diff snapshot remains armed. "
                     "This also covers editors that hand the file to an existing process."
                 )
                 return
             self._plan_edit_snapshot = None
-            self.current_plan_button.setText("OPEN CP & DIFF")
+            self.current_plan_button.setText("Open CP && Diff")
             self.set_status("Current_Plan.md closed with no changes; no diff generated.")
             return
 
         self._plan_edit_snapshot = None
-        self.current_plan_button.setText("OPEN CP & DIFF")
+        self.current_plan_button.setText("Open CP && Diff")
         summary = "Current_Plan.md changed · exact pre-open snapshot → saved file"
         dialog = DiffResultDialog(self, "CURRENT PLAN DIFF", diff_text, summary)
         self._track_dialog(dialog)
@@ -4777,7 +4802,7 @@ class GodzipFoundryWindow(QMainWindow):
             "SRPSS is still running. Closing GODZIP Foundry will abandon the pending automatic LOGZIP.\n\n"
             "SRPSS will continue running normally, and Foundry will not remain open in the background.",
             self,
-            confirm_text="CLOSE FOUNDRY",
+            confirm_text="Close Foundry",
             danger=True,
         )
         self._auto_logzip_close_dialog = dialog
@@ -4899,7 +4924,7 @@ class GodzipFoundryWindow(QMainWindow):
         subtitle.setObjectName("subtitle")
         subtitle.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         titles.addWidget(subtitle)
-        self.current_plan_button = QPushButton("OPEN CP & DIFF")
+        self.current_plan_button = QPushButton("Open CP && Diff")
         self.current_plan_button.setObjectName("toolTitlePlanButton")
         self.current_plan_button.setFixedHeight(34)
         self.current_plan_button.setToolTip(
@@ -4994,7 +5019,7 @@ class GodzipFoundryWindow(QMainWindow):
         self.cmd_tab_button.setFixedHeight(38)
         self.cmd_tab_button.clicked.connect(lambda: self.tabs.setCurrentWidget(self.command_tab))
         right_nav_layout.addWidget(self.cmd_tab_button)
-        self.foundries_tab_button = QPushButton("FOUNDRIES")
+        self.foundries_tab_button = QPushButton("Foundries")
         self.foundries_tab_button.setObjectName("cmdTabButton")
         self.foundries_tab_button.setCheckable(True)
         self.foundries_tab_button.setFixedHeight(38)
@@ -5024,6 +5049,7 @@ class GodzipFoundryWindow(QMainWindow):
 
     def _tab_changed(self, _index: int) -> None:
         current = self.tabs.currentWidget()
+        self._clear_tab_status(current)
         if hasattr(self, "run_tab_button"):
             self.run_tab_button.setChecked(current is self.run_tab)
         if hasattr(self, "cmd_tab_button"):
@@ -5071,14 +5097,25 @@ class GodzipFoundryWindow(QMainWindow):
             self.dirty_badge.style().unpolish(self.dirty_badge)
             self.dirty_badge.style().polish(self.dirty_badge)
         except Exception as exc:
-            self.set_status(f"Git header refresh failed: {exc}")
+            self.set_status(f"Git header refresh failed: {exc}", tab_bound=False)
 
     def theme_qcolor(self, token: str) -> QColor:
         value = self.theme_resolution.theme.color(token)
         return QColor(value.r, value.g, value.b, value.a)
 
-    def set_status(self, text: str) -> None:
+    def set_status(self, text: str, *, tab_bound: bool = True) -> None:
+        """Show ``text``; a tab-bound message (the default) is cleared when the tab changes."""
         self.status_label.setText(text)
+        tabs = getattr(self, "tabs", None)
+        self._status_tab = tabs.currentWidget() if tab_bound and tabs is not None else None
+
+    def _clear_tab_status(self, current: QWidget | None) -> None:
+        """Drop a status message that belongs to another tab; a running task keeps its progress line."""
+        bound = getattr(self, "_status_tab", None)
+        if bound is None or bound is current or self._task_active:
+            return
+        self.status_label.setText("Ready")
+        self._status_tab = None
 
     def set_busy(self, busy: bool, text: str = "") -> None:
         """Expose progress without freezing the GUI or replacing the cursor."""
@@ -5103,7 +5140,7 @@ class GodzipFoundryWindow(QMainWindow):
         message: str,
         on_confirm: Callable[[], None],
         *,
-        confirm_text: str = "CONTINUE",
+        confirm_text: str = "Continue",
         danger: bool = False,
     ) -> None:
         dialog = FoundryConfirmDialog(
@@ -5305,10 +5342,7 @@ class GodzipFoundryWindow(QMainWindow):
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="SRPSS GODZIP Foundry")
-    parser.add_argument("--repo", type=Path, default=_early_repo_root())
-    parser.add_argument("--open", dest="initial_zip", type=Path)
-    return parser.parse_args()
+    return _build_parser().parse_args()
 
 
 def main() -> int:
