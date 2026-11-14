@@ -781,6 +781,25 @@ The work folder beside its summary holds the captured frames and references; del
 `tests/test_native_core_spectrum.py` (no build: the card's target map at every quarter turn, the Python face, the shader
 baked from the product's file, the port's constants and block members against the Python renderer).
 
+### Generic mode content (N2.9)
+
+```powershell
+# The harness-only mode Probe Rings (native/core/python/probe_rings: a Python simulation, two passes, a spec; never
+# registered), an OpenGL child then a Vulkan child: blocks (GPU-free: each pass's ModeSettings and ModeFrame bytes
+# against an independent packer at the reflected offsets; the unknown and unfilled refusals, the runtime schema's and a
+# pass's), reader (the core's reader admits the mode's slots by the schema handed over; controls: no schema, a broken
+# range rule), draw (rings at the record's radii, the glow pass, nothing at rest, a shader, spec, shader+spec and
+# simulation change shown with no module rebuild, refusals on the live item, the surface's GPU time for 2 and 3 passes;
+# Vulkan against native OpenGL within 1 level); Vulkan validated
+python native/core/python/generic_mode_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan] [--rounds blocks reader draw] [--label n29_generic_mode]
+```
+
+Tests: `tests/test_native_mode_content.py` (no build: the runtime schema's row shape and fingerprint, appended mode codes,
+the registered entries, Probe Rings never registered and declaring its record and spec by name, its shaders baked, the
+harness's own measures with controls) and `tests/test_native_core_mode.py` (the built module: packing by name, the
+refusals, the program-block edges of audit 14 Nov L2).
+
 Every window round of the three native-core harnesses starts with an environment control (an off-screen window with
 Qt alone must present at least 10 frames in 1 s on that API); D3D11 and D3D12 windows present nothing while the display
 is off (facts J5), and the verdict then says so first. To rerun only the window rounds on D3D once the display is on:
