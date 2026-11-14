@@ -881,6 +881,21 @@ photo to survive a rebuilt node (twice the memory of every displayed photo for a
 equal to the production GL host; rule (b): Vulkan within 1 level; rule (e): GPU time and nothing at rest; rule (g);
 the textures' lifetime; Vulkan validation clean), with N2.9's `generic_mode_check.py` unchanged in its verdict.
 
+**As built (N5.2a, 14 Nov 2026; no C++, ABI 15).** The seven are data on this pass over N5.7a's background layer
+(`rendering/quick/render/native_background.py`): each transition's pack is baked from its Python renderer's own fragment
+by `tools/regen_qrc.py --shaders` into `rendering/quick/qml/shaders/transitions/<id>.frag.qsb` (checked current by
+`tests/test_quick_shader_packs.py`); its two pictures are the layer's two texture slots (the destination uploaded by
+its job; the slots swap at the run's end, nothing uploaded again); its values are `FullscreenPassRenderer.block_values`
+(`run_values`) less the core's members, all of them settings. Point 5's clock: the product owner is the layer's `tick`
+on the window's `afterAnimating` (GUI thread, connected only while a run is drawn), sampling the run as the Python
+renderer does at its render; no record or schema. The layer gives the core a card (`background_card`: `uItemSize`).
+`u_target_px` is the item's own pixels on both renderers (`QuickTransitionRenderFrame.item_pixels`), and every
+transition that reads it takes its uv from the pixel (`floor(vUv * u_target_px)`); Burn, Particle and Ripple hash
+integers (R-94's class) and Burn's front is `precise`. The seven carry `renderer_backends` Vulkan; others still run as
+Crossfade there. Proved by `native/core/python/transition_route_check.py` (rule (a) exact on all seven with their
+options at nine progress values, dpr 1 and 1.5, under the overscan placement; rule (b) within 1 level; the route
+through `BackgroundRenderItem`; nothing at rest after a run) and `fullscreen_pass_check.py` widened to all seven.
+
 ## D1, D2, D3 and the transport rule
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts"). The drafts, with every "today"

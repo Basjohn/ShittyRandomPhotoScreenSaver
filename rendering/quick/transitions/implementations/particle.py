@@ -131,7 +131,7 @@ class QuickParticleRenderer(FullscreenPassRenderer):
 
     def values(self, params: _ParticleParameters, frame: QuickTransitionRenderFrame) -> dict[str, object]:
         return {
-            "u_target_px": (float(frame.viewport[2]), float(frame.viewport[3])),
+            "u_target_px": frame.item_pixels,
             "u_seed": params.seed,
             "u_mode": float(params.mode),
             "u_direction": float(params.direction),

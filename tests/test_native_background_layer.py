@@ -139,6 +139,12 @@ class _Mode:
     def texture(self, name, pixels, size, **_kwargs) -> None:
         self.calls.append(("texture", name, tuple(size), len(pixels)))
 
+    def remove_texture(self, name) -> None:
+        self.calls.append(("remove_texture", name))
+
+    def card(self, card) -> None:
+        self.calls.append(("card", card))
+
     def settings(self, values) -> None:
         self.calls.append(("settings", values))
 
@@ -236,6 +242,164 @@ def test_a_lost_photo_is_sent_again_from_the_items_image_and_the_close_retires(l
     assert calls[-2:] == [("retire",), ("destroy",)]
     made.present(_image("b"))                                 # closed: nothing more
     assert len([c for c in calls if c[0] == "texture"]) == 2
+
+
+# --------------------------------------------------------------------------------------------- the transitions (N5.2a)
+
+
+class _Signal:
+    def __init__(self) -> None:
+        self.slots: list = []
+
+    def connect(self, slot) -> None:
+        self.slots.append(slot)
+
+    def disconnect(self, slot) -> None:
+        self.slots.remove(slot)
+
+
+class _ClockWindow:
+    def __init__(self) -> None:
+        self.afterAnimating = _Signal()
+
+    def effectiveDevicePixelRatio(self) -> float:  # noqa: N802
+        return 1.0
+
+    def size(self):
+        return SimpleNamespace(width=lambda: 8, height=lambda: 4)
+
+
+def _run(transition_id: str, source, destination, run_id: int = 1):
+    from tools.transition_contact_sheet import production_transition_spec
+    from rendering.quick.transitions.state import TransitionRun
+
+    spec = production_transition_spec(transition_id, 1000)
+    request = spec.build_request(runtime_generation=0, source_image=source, destination_image=destination)
+    return TransitionRun.start(run_id=run_id, request=request, start_ns=1_000)
+
+
+@pytest.fixture
+def clocked_layer(monkeypatch):
+    from rendering.quick.render import native_background
+
+    calls: list = []
+    mode = _Mode(calls)
+    core = SimpleNamespace(mode=lambda _item: mode)
+    monkeypatch.setattr(native_background, "_fade_ms", lambda: 250)
+    window = _ClockWindow()
+    item = _Item()
+    item.window = lambda: window
+    monkeypatch.setattr(native_background.NativeBackgroundLayer, "_arm", lambda self, signal: None)
+    now = {"ns": 0}
+    made = native_background.NativeBackgroundLayer(core, item, clock_ns=lambda: now["ns"])
+    return made, mode, calls, window, now
+
+
+def test_a_run_is_drawn_by_the_core_from_its_own_pack_and_the_python_renderers_values(clocked_layer):
+    from rendering.native.mode import MODE_CORE_MEMBERS
+    from rendering.quick.render import native_background as nb
+
+    made, _mode, calls, window, now = clocked_layer
+    source, destination = _image("a", value=40), _image("b", value=200)
+    made.present(source)
+    run = _run("burn", source, destination)
+    now["ns"] = run.start_ns + (run.end_ns - run.start_ns) // 2
+    del calls[:]
+    made.transition(run)
+    # The destination into the other slot, once; the source (already drawn) not again.
+    assert [c for c in calls if c[0] == "texture"] == [("texture", nb.NEXT_TEXTURE, (8, 4), 8 * 4 * 4)]
+    (program,) = [c for c in calls if c[0] == "program"]
+    (one_pass,) = program[1]
+    assert one_pass.name == "burn" and one_pass.blend == "replace"
+    assert one_pass.pack == nb.transition_pack_path("burn").read_bytes()
+    assert [(s.name, s.texture) for s in one_pass.samplers] == [(nb.OLD_SAMPLER, nb.TEXTURE),
+                                                                (nb.NEW_SAMPLER, nb.NEXT_TEXTURE)]
+    # Its settings: the Python renderer's own block values at the clock's progress, less the core's members.
+    renderer = nb.native_transition_renderer("burn")
+    expected = renderer.run_values(run, run.sample(now["ns"]), (8.0, 4.0), 1.0)
+    settings = program[2]
+    assert settings == {k: v for k, v in expected.items() if k not in MODE_CORE_MEMBERS}
+    assert settings["u_progress"] == pytest.approx(0.5) and "u_target_px" not in settings
+    # The clock: one connection while the run lasts; each tick gives the frame's progress.
+    assert window.afterAnimating.slots == [made.tick]
+    now["ns"] = run.start_ns + (run.end_ns - run.start_ns) * 3 // 4
+    window.afterAnimating.slots[0]()
+    assert calls[-2][0] == "settings" and calls[-2][1]["u_progress"] == pytest.approx(0.75) and made.ticks == 1
+    # The end: the slots swap (no upload), the background's pass samples the destination, the source goes, the clock
+    # is disconnected; the destination handed over afterwards uploads nothing.
+    del calls[:]
+    made.transition(None)
+    made.present(destination)
+    assert [c for c in calls if c[0] == "texture"] == []
+    (program,) = [c for c in calls if c[0] == "program"]
+    assert program[1][0].name == nb.PASS_NAME and program[1][0].samplers[0].texture == nb.NEXT_TEXTURE
+    assert ("remove_texture", nb.TEXTURE) in calls and window.afterAnimating.slots == []
+    # Negative control: a tick after the end gives nothing.
+    made.tick()
+    assert made.ticks == 1
+
+
+def test_a_transition_without_a_pass_on_the_core_is_drawn_as_crossfade(clocked_layer, monkeypatch):
+    from rendering.quick.render import native_background as nb
+
+    made, _mode, calls, _window, _now = clocked_layer
+    source = _image("a")
+    made.present(source)
+    monkeypatch.setattr(nb, "transition_pack_path",
+                        lambda tid, real=nb.transition_pack_path: real(tid) if tid == "crossfade" else real("none"))
+    made.transition(_run("burn", source, _image("b")))
+    (program,) = [c for c in calls if c[0] == "program" and c[1][0].name != nb.PASS_NAME]
+    assert program[1][0].name == nb.FALLBACK_TRANSITION
+
+
+def test_the_ported_transitions_are_exactly_those_the_core_draws():
+    """D10: a transition is offered on Vulkan (its ``renderer_backends``) only where the core draws it: a one-fragment
+    pass whose pack is shipped and current (``tests/test_quick_shader_packs.py``)."""
+    from rendering.quick.render.native_background import native_transition_renderer, transition_pack_path
+    from rendering.transition_registry import iter_transition_descriptors
+    from tools import regen_qrc
+
+    on_vulkan = {d.stable_id for d in iter_transition_descriptors() if "vulkan" in d.renderer_backends}
+    drawn = {d.stable_id for d in iter_transition_descriptors() if native_transition_renderer(d.stable_id) is not None}
+    assert on_vulkan and on_vulkan == drawn
+    assert set(regen_qrc.transition_fragment_sources()) == drawn
+    assert all(transition_pack_path(tid) == regen_qrc.transition_pack_path(tid) for tid in drawn)
+    # Negative control: a transition with no shipped pack is not drawn.
+    assert native_transition_renderer("no_such_transition") is None
+
+
+def test_the_item_hands_its_runs_to_the_layer(qt_app, monkeypatch):
+    from rendering.quick.render import background_item, native_background
+
+    runs: list = []
+
+    class _Layer:
+        def present(self, image) -> None:
+            pass
+
+        def transition(self, run) -> None:
+            runs.append(run)
+
+        def geometry_changed(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(native_background, "attach_native_background", lambda _item, backend=None: _Layer())
+    monkeypatch.setattr(background_item, "background_family_available_on_backend", lambda: False)
+    monkeypatch.setattr(background_item, "_native_background_wanted", lambda: True)
+    item = background_item.BackgroundRenderItem()
+    source, destination = _image("a"), _image("b")
+    run = _run("crossfade", source, destination)
+    item.set_transition_run(run)                      # before any image: no layer, nothing handed
+    assert runs == []
+    item.set_presentation_image(source)
+    item.set_transition_run(None)
+    item.set_transition_run(run)
+    item.set_transition_run(None)
+    assert runs == [None, run, None]
+    item.close_native_layer()
 
 
 # --------------------------------------------------------------------------------------------- the item's route

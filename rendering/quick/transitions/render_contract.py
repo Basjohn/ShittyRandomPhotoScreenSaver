@@ -21,6 +21,16 @@ class QuickTransitionRenderFrame:
     quad_vao: int
     source_texture_id: int
     destination_texture_id: int
+    #: The window's device pixel ratio (the item's logical size times it is the item's own pixels).
+    device_pixel_ratio: float = 1.0
+
+    @property
+    def item_pixels(self) -> tuple[float, float]:
+        """The item's own device pixels (``u_target_px``, N5.2a): the grid a transition takes its pixel's uv from. The
+        render target can be larger (the window under the overscan placement); the native core draws into the item's
+        own target, of exactly these pixels."""
+        ratio = float(self.device_pixel_ratio)
+        return (float(max(1, round(self.logical_size[0] * ratio))), float(max(1, round(self.logical_size[1] * ratio))))
 
     def __post_init__(self) -> None:
         if self.sample.run_id != self.run.run_id:

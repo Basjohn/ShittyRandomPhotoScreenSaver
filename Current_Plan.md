@@ -524,26 +524,14 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     each material's card stills beside today's OpenGL ones on the dark and a bright wallpaper; cost against D7's
     budgets at 2560 x 1440 and 4K; nothing at rest; demand 0 builds nothing; then the lead's rehearsal on both
     displays.
-- [ ] N5.2a The seven transitions on the shared fullscreen pass (Crossfade, Burn, Particle, Ripple, Slide, Warp,
-  Wipe) at parity on both backends.
-  - [ ] Read first: N4.a's as built (D13), `rendering/quick/transitions/fullscreen_pass.py` and the seven
-    implementations, the transition runtime that drives them (progress, duration, the two pictures), and how a
-    transition that is not ported falls back to Crossfade on Vulkan.
-  - [ ] The per-frame transition clock (`u_progress`, `u_time`) gets its product owner (N4.a's harness carries it on
-    a record outside the product's mode codes).
-  - [ ] Each transition on Vulkan drawn by the core from its own product fragment (data: its pass, its values,
-    the two photos as N4.a textures from N3.8's jobs), with no C++ unless a measured need appears (then stop and
-    report); OpenGL keeps the Python renderers until N5.2h.
-  - [ ] Proof: each transition against its Python renderer at the widened progress values (rule (a)) and Vulkan
-    against OpenGL (rule (b)), on real photos, at dpr 1 and 1.5 and under the overscan placement; nothing at rest
-    after a transition; then the lead's rehearsal with a photo change on both displays.
-  - [ ] Burn (lead's decision, 14 Nov): its float hashes (value noise, `fract(sin())` sparks and ash) compile
-    differently through SPIR-V (rule (b): 10-20 % of mid-progress pixels up to 248 levels, the burn front only),
-    and its thresholds flip on last-bit `vUv` differences (rule (a): 1-41 pixels per frame at 1 level, one frame
-    22 pixels at 127). Replace the hashes with integer hashes (R-94's class) and take its uv from the pixel, on both
-    renderers, so the Python renderer's new frames are the reference; before/after stills on real photos for the
-    lead's look review; then rule (a) exact and rule (b) within 1 level. The same check for every other
-    transition that hashes in float.
+- [ ] N5.2a leftovers (the seven transitions landed 14 Nov with no C++ at ABI 15: each drawn on Vulkan from its own
+  product fragment over the background layer, exact against its Python renderer on OpenGL, Vulkan within 1 level;
+  Burn, Particle and Ripple on integer hashes and every target-reading transition's uv from the pixel, the lead
+  judged the new patterns as the same character; `native_core/n5_2a/`):
+  - [ ] Lead: the rehearsal with a photo change on both displays (and the first frame's pipeline build cost when a
+    run switches program; 4K cost).
+  - [ ] Side defect (C++): the core refusing a still for "no card" draws black silently and `content_status`
+    reports no failure, so the layer's fade-out on failure would not trigger; report it and fail closed.
 - [ ] N5.7c Lead, Display 1: the first full rehearsal (wallpaper, a transition, cards on each material, Spectrum,
   a Settings round trip, exit, sleep and wake).
 
