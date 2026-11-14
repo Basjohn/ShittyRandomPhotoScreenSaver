@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.5 (High); 1D.13, then N1.6 Extruded Spectrum and Sphere (Medium).
+**Now (in flight):** N2.5 (High); N2.7's exit and grain leftovers with N2b's legacy program side defect (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,8 +47,8 @@ at the size asked.
      ride with the next fitting dispatch.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. 1D.13 (a test process dies at exit 127 in a larger file set), then N1.6's Extruded Spectrum and Sphere, one
-     per commit where it stays bit-identical at the widened run set; a program that cannot converts at its port.
+  1. N2.7's leftovers (the exits that bypass the stop, the card grain's raw `gl_FragCoord`) with N2b's side defect
+     (the legacy program classes' unused `render()`/`cache_uniforms()`).
   2. 1D.14 (Spectrum's rim glow), once N2.5 has merged.
   3. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
@@ -384,14 +384,13 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   Waveform Ribbon; 13 Nov (ratchet 95 to 40): the motion and trail family and its transitions, `bind_frame`'s loose
   branch deleted, Waveform's fog, and the 2D modes (the substrate was already done on 12 Nov); 13 Nov (ratchet 40 to
   24, a5648806): Extruded Bubble's defocus layer, probe prefilter, fullscreen passes, particles and wake trails.
-  Open (this is the one home of the remainder; ratchet 24):
+  14 Nov (ratchet 24 to 12): Neon Lake 114bfbcd, Extruded Spectrum and Sphere 49f7b022. Remainder (ratchet 12):
   - The coverage gap is closed (14 Nov): `conventions_identity` records variants `a` and `b` and, with `--offers`,
     every Choice offer (129 runs for all modes; `tests/test_conventions_identity_runs.py`); every N1.6 merge
     (611ae065, 1d1816d8, 0a508242, 580cedc1, a5648806) re-proved ALL IDENTICAL at that set, first parent against
     merge (`.artifacts/evidence/native_core/n16_reprove/20261114/`). New conversions and ports prove at that set.
-  - [ ] Extruded Spectrum, then Sphere (Medium). Neon Lake merged 14 Nov (114bfbcd, ratchet 24 to 17); its basin
-    (`NEON_VERTEX_SOURCE`/`NEON_FRAGMENT_SOURCE`, one 8-bit level on 2-6 pixels with Glass on its block) and
-    Extruded Bubble's traced glass convert at their ports (`NEON_BLOCK` is kept as the basin's layout).
+  - Converts at its port, not here: Neon Lake's basin (`NEON_VERTEX_SOURCE`/`NEON_FRAGMENT_SOURCE`, one 8-bit level
+    on 2-6 pixels with Glass on its block; `NEON_BLOCK` is kept as its layout) and Extruded Bubble's traced glass.
   - `rendering/gl_programs/lighting.py` belongs to N4.m: it is not a product shader (no `#version`; only its test
     draws it), and a program that includes it converts it (a 3088-byte block, about 3 KB of resources).
 - [ ] D5.3's formats service, its one listed use: the scene target's multisampled velocity attachment
@@ -1205,20 +1204,6 @@ need no native build round.
   reproduce today's look exactly (pixel-identical at the widened run set with the defaults); every preset gets them
   by the repair fill. Studio shows them through the spec.
 - [ ] Renders for the lead: each placement and three sharpness values on real wallpapers.
-
-### 1D.13 A pytest process dies with exit 127 in larger file sets (14 Nov; Opus Medium)
-
-- [ ] Seen twice on 14 Nov, both before and after Neon Lake's merge (the agent reproduced it on cfbdb129):
-  - the lead's 8-file run (`test_qtquick_shockwave_grid`, `test_neon_lake_renderer`, `test_neon_scene_materials`,
-    `test_vulkan_shader_readiness`, `test_qtquick_visualizer_all_modes`, `test_visualizer_prepared_reveal`,
-    `test_scene3d_quality_settings`, `test_conventions_identity_runs`) dies right after
-    `test_a_transition_request_carries_the_tier_resolved_from_the_3d_settings`, inside or at
-    `test_the_tab_writes_only_its_own_level_and_shows_what_resolves` (a `Scene3DTab`);
-  - a 31-file Neon run dies in `tests/test_scene3d_target.py` after `test_the_composite_respects_an_inherited_scissor`.
-  - Each file passes alone, and the quality-settings file passes beside either of its two neighbours.
-  Find the object or GL state that outlives its owner (R-208's class: a slot or callback keeping a dead object,
-  a context or window left current), fix it at the owner if product, else in the tests; both runs exit 0, three
-  times. A historical bug entry if a product path is at fault.
 
 ### 1D.9 Linux credential encryption, port from the archived branch (Opus Medium, low priority; Linux is best effort)
 
