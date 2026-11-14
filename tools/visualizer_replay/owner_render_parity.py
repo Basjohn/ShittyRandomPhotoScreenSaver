@@ -289,152 +289,67 @@ class SceneMirror:
         host.close()
 
 
-class NativeSceneMirror(SceneMirror):
-    """``SceneMirror`` with the native Spectrum (N2.5, rule (a)) in place of the Python node while the activation is
-    Spectrum's: the same hidden production scene, the module's frame driver attached to its window, a composite in the
-    Visualizer's content host placed from the committed record (``composite_geometry``), fed by a native frame stream
-    (Spectrum's fixed-layout record, ``spectrum_native_schema.encode``) that the item's packet reader reads at its sync.
+class _ParityRoute:
+    """``NativeVisualizerRoute`` for the parity runs: counts what it publishes, and for the mapping control hands the
+    native item the Python renderer's own window-pixel map frame by frame."""
 
-    The mirror takes each frame from the owner's render bridge exactly as the Python item would at its sync
-    (``admit_at_sync``, ``take_for_render`` under the committed record) and publishes it into the stream with the
-    publication's slot flags; the Python item is left unbound meanwhile, so the mirror is the bridge's one consumer.
-    Another mode's activation goes to the Python item as before (the mixed window of D10 point 4)."""
+    @staticmethod
+    def make(core, content_host, mirror):
+        from rendering.quick.visualizer.native_route import NativeVisualizerRoute
+
+        class Route(NativeVisualizerRoute):
+            def card(self, presentation, snapshot, geometry):
+                card = super().card(presentation, snapshot, geometry)
+                mappings = mirror.python_mappings
+                if mappings is not None and self.published < len(mappings):
+                    # The Python renderer's map from its window pixel (x right, q up from the window's bottom) to
+                    # the item, rewritten for the target's pixel (u right, v down from the target's top-left).
+                    (x0, x1, x2), (y0, y1, y2), window_height = mappings[self.published]
+                    left, top = geometry.rect[0] * geometry.dpr, geometry.rect[1] * geometry.dpr
+                    card["item_from_target"] = [x0, -x1, x0 * left + x1 * (window_height - top) + x2,
+                                                y0, -y1, y0 * left + y1 * (window_height - top) + y2]
+                return card
+
+        return Route(core, content_host)
+
+
+class NativeSceneMirror(SceneMirror):
+    """``SceneMirror`` whose hidden production scene draws Spectrum through the product's native route (N2.5 rule (a),
+    D10 point 4): the module's frame driver attached to its window and a ``NativeVisualizerRoute`` attached to its
+    Visualizer item, as ``QuickSceneController`` attaches one on Vulkan. The item's own update requests are the
+    route's takes (``VisualizerRenderItem.update``); another mode's activation draws through the item's Python node
+    (the mixed window)."""
 
     def __init__(self, core) -> None:
         super().__init__()
         self.core = core
         self.window_host = None
-        self.spectrum = None
-        self._stream = None
-        self._bridge = None
-        self._identity = None
-        self._card = None
-        self._placed = None
+        self.route = None
         self.native_frames = 0
-        self.native_published = 0
+        # The mapping control: the Python renderer's window-pixel map per drawn frame (``_python_mappings_run``).
+        self.python_mappings: list | None = None
+
+    @property
+    def native_published(self) -> int:
+        return 0 if self.route is None else self.route.published
 
     def attach(self, runtime: Any) -> None:
         super().attach(runtime)
         hidden = self.host.scene
         self.window_host = self.core.attach_host(self.host.window)
-        bind_python = hidden.set_visualizer_render_source
-        drop_python = hidden.drop_visualizer_retained_frame
-        present_python = hidden.request_visualizer_present
-
-        def bind(bridge, identity):
-            if identity.mode_id == "spectrum":
-                self._bind_native(bridge, identity)
-                return None
-            self._unbind_native()
-            return bind_python(bridge, identity)
-
-        def drop():
-            if self._identity is not None:
-                self.spectrum.drop_retained_frame()
-                return True
-            return drop_python()
-
-        def present():
-            if self._identity is not None:
-                self.spectrum.update()
-                return True
-            return present_python()
-
-        hidden.set_visualizer_render_source = bind
-        hidden.drop_visualizer_retained_frame = drop
-        hidden.request_visualizer_present = present
-
-    def _content_host(self):
-        return self.host.scene._ensure_visualizer_items().parentItem()
-
-    def _bind_native(self, bridge, identity) -> None:
-        import sys as _sys
-        from pathlib import Path as _Path
-
-        here = _Path(__file__).resolve().parents[2] / "native" / "core" / "python"
-        if str(here) not in _sys.path:
-            _sys.path.insert(0, str(here))
-        from spectrum_check import Stream
-
-        item = self.host.scene._ensure_visualizer_items()
-        if item.render_identity is not None:
-            item.clear_render_source()                   # the Python node draws nothing of a Spectrum activation
-        if self.spectrum is None:
-            self.spectrum = self.core.spectrum(self._content_host())
-        self._unbind_native()
-        identity_values = {"runtime_generation": int(identity.runtime_generation),
-                           "engine_generation": int(identity.engine_generation),
-                           "activation_id": int(identity.activation_id)}
-        self._stream = Stream(identity=identity_values)
-        self.spectrum.bind(self._stream.name, expect=self._stream.expect)
-        self.spectrum.composite.set(visible=True)
-        self._bridge, self._identity = bridge, identity
-
-    def _unbind_native(self) -> None:
-        if self._identity is None:
-            return
-        self.spectrum.unbind()                           # retiring at once; released at the item's next sync
-        self.spectrum.composite.set(visible=False)
-        self._stream.close()                             # the owner's close and unlink (D1: never waits)
-        self._stream = self._bridge = self._identity = None
-        self._card = self._placed = None
-
-    def _take(self) -> None:
-        """What the Python item does at its sync (``VisualizerRenderItem.updatePaintNode``), into the stream."""
-        from core.visualizer_engine import spectrum_native_schema
-        from core.visualizer_engine.packet_mailbox import publication_flags
-        from PySide6.QtCore import QPointF
-        from rendering.native.composite import composite_geometry
-        from rendering.native.spectrum import spectrum_presentation
-
-        item = self.host.scene._visualizer_item
-        committed = None if item is None else item.presentation
-        identity = self._identity
-        if committed is None or identity is None:
-            return
-        authority = bool(item._custom_layout_presentation_authority)
-        if not authority:
-            self._bridge.admit_at_sync()
-        snapshot = self._bridge.take_for_render(
-            runtime_generation=identity.runtime_generation, engine_generation=identity.engine_generation,
-            activation_id=identity.activation_id, mode_id=identity.mode_id, required_presentation=committed,
-            allow_presentation_rebase=authority)
-        geometry = composite_geometry(committed)
-        origin = self._content_host().mapToScene(QPointF(0.0, 0.0))
-        placed = (geometry, round(origin.x(), 6), round(origin.y(), 6))
-        if placed != self._placed:
-            self.spectrum.composite.place(geometry, (origin.x(), origin.y()))
-            self._placed = placed
-        if snapshot is None:
-            return
-        # The card: the item's own size from the committed record (the Python node's size), the drawn inputs from the
-        # snapshot's (the Python renderer's frame), as the Python path splits them.
-        card = spectrum_presentation(committed, geometry)
-        drawn = spectrum_presentation(snapshot.presentation, geometry)
-        for key in ("content_rect", "viewport_extent", "visual_scale", "dpr", "content_fade", "expanded"):
-            card[key] = drawn[key]
-        if card != self._card:
-            self.spectrum.present_raw(card)
-            self._card = card
-        logical = snapshot.logical
-        self._stream.publish(spectrum_native_schema.encode(logical), float(logical.logical_timestamp or 0.0),
-                             flags=publication_flags(logical))
-        self.native_published += 1
-        self.spectrum.update()
+        item = hidden._ensure_visualizer_items()
+        self.route = _ParityRoute.make(self.core, item.parentItem(), self)
+        item.attach_native_route(self.route)
 
     def frame(self, index: int) -> dict:
-        if self._identity is not None:
-            self._take()
+        if self.route is not None and self.route.identity is not None:
             self.native_frames += 1
         return super().frame(index)
 
     def close(self) -> None:
-        if self.host is not None:
-            self._unbind_native()
-            if self.spectrum is not None:
-                self.spectrum.composite.destroy()
-                self.spectrum = None
-                self.host.render()                       # Qt deletes the node: the reader goes on its thread
+        if self.host is not None and self.route is not None:
+            self.route.close()
+            self.host.render()                           # Qt deletes the node: the reader goes on its thread
             if self.window_host is not None:
                 self.window_host.close()
                 self.window_host = None
@@ -556,11 +471,12 @@ def rendered_parity(mode: str, variant: str, clip_frames, supervisor: Any, *, sa
     return verdict
 
 
-def native_drawn_run(mode: str, script, *, settings: dict, core) -> dict:
+def native_drawn_run(mode: str, script, *, settings: dict, core, python_mappings: list | None = None) -> dict:
     """``drawn_run`` in process with the native Spectrum drawing Spectrum's activations (``NativeSceneMirror``)."""
     from tools.visualizer_replay import owner_worker_gate as gate
 
     mirror = NativeSceneMirror(core)
+    mirror.python_mappings = python_mappings
     report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings,
                                scene_mirror=mirror)
     report["lit"] = mirror.lit
@@ -616,13 +532,57 @@ def _write_native_crops(out: Path, name: str, native: dict, python: dict, row: d
     return written
 
 
-def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path) -> dict:
+def _split_rows(rows: list[dict], switch_input: int) -> dict:
+    """The per-input rows split at the mode switch: ``steady`` (Spectrum shown) and ``fade`` (its fade-out and the
+    next mode's arrival); for each, the inputs that differ, the largest level, and the pixels differing by more
+    than one level."""
+    def summary(part: list[dict]) -> dict:
+        above_one = sum(count for row in part for level, count in row["levels"].items() if int(level) > 1)
+        return {"differing_inputs": len(part), "max_level": max((row["max_level"] for row in part), default=0),
+                "pixels": sum(row["pixels"] for row in part), "pixels_above_one_level": above_one,
+                "inputs_above_one_level": sum(1 for row in part if row["max_level"] > 1)}
+    return {"steady": summary([row for row in rows if row["input"] < switch_input]),
+            "fade": summary([row for row in rows if row["input"] >= switch_input])}
+
+
+def _python_mappings_run(mode: str, script, settings: dict) -> tuple[dict, list]:
+    """``drawn_run`` in process, also recording the Python Spectrum renderer's own window-pixel map per drawn frame
+    (``u_item_from_frag_x``/``_y`` and its target's height): the input of the mapping control."""
+    from rendering.quick.visualizer.implementations import spectrum as python_spectrum
+
+    mappings: list = []
+    renderer = python_spectrum.QuickSpectrumRenderer
+    original = renderer.render
+
+    def recording(self, frame):
+        original(self, frame)
+        if int(frame.snapshot.logical.common.bar_count) > 0 and self._values.get("u_item_from_frag") == 1:
+            mappings.append((tuple(self._values["u_item_from_frag_x"]), tuple(self._values["u_item_from_frag_y"]),
+                             float(frame.viewport[3])))
+
+    renderer.render = recording
+    try:
+        run = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings)
+    finally:
+        renderer.render = original
+    return run, mappings
+
+
+def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path, *,
+                  mapping_control: bool = False) -> dict:
     """Rule (a) of the port (N2.5): the owner in process drawn by the Python renderer and by the native item, single-
-    sampled, frame for frame over the card's region and its margin."""
+    sampled, frame for frame over the card's region and its margin. ``mapping_control``: a third run whose native
+    card carries the Python renderer's own window-pixel map (Qt's float32 item matrix, inverted), frame by frame."""
     script = parity_script(clip_frames, mode)
     with single_sample_scene_targets():
-        python = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings)
+        if mapping_control:
+            python, mappings = _python_mappings_run(mode, script, settings)
+        else:
+            python, mappings = drawn_run(mode, script, worker=False, supervisor=None, namespace=None,
+                                         settings=settings), None
         native = native_drawn_run(mode, script, settings=settings, core=core)
+        control = (native_drawn_run(mode, script, settings=settings, core=core, python_mappings=mappings)
+                   if mapping_control else None)
     paths = pair_difference(native, python)
     rows = frame_differences(native, python)
     switch_at = next(i for i, (kind, _v) in enumerate(script) if kind == "mode")
@@ -637,6 +597,12 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
                "digests_identical": python["digests"] == native["digests"]}
     verdict["identical"] = bool(paths["first"] is None and verdict["digests_identical"]
                                 and verdict["native_published"] > 0)
+    verdict["split"] = _split_rows(rows, switch_input)
+    if control is not None:
+        control_rows = frame_differences(control, python)
+        verdict["mapping_control"] = {"mappings": len(mappings), "native_published": control["native_published"],
+                                      "split": _split_rows(control_rows, switch_input),
+                                      "max_level": max((row["max_level"] for row in control_rows), default=0)}
     if rows:
         worst = max(rows, key=lambda row: (row["max_level"], row["pixels"]))
         verdict["worst"] = worst
@@ -645,7 +611,8 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     return verdict
 
 
-def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = ()) -> dict:
+def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
+               mapping_control: bool = False) -> dict:
     """``native_parity`` over Spectrum's widened run set (``conventions_identity.mode_runs``); the report."""
     import tools.expanded_visualizer_evidence as evidence
     from rendering.native import load
@@ -663,7 +630,8 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
             if only and f"spectrum{suffix}" not in only:
                 continue
             engine_worker_link.reset_run_state_for_testing()
-            verdict = native_parity(core, "spectrum", suffix, settings, clip.frames, out)
+            verdict = native_parity(core, "spectrum", suffix, settings, clip.frames, out,
+                                    mapping_control=mapping_control)
             report["results"][f"spectrum{suffix}"] = verdict
             print(f"[NATIVE] spectrum{suffix:40s} {verdict['frames_drawn']} frames, native {verdict['native_published']}"
                   f" published; differing inputs {verdict['differing_inputs']}, pixels "
@@ -766,6 +734,9 @@ def main(argv=None) -> int:
     parser.add_argument("--offers", action="store_true",
                         help="with --native: the widened run set (both variants and every Choice offer)")
     parser.add_argument("--runs", nargs="*", default=(), help="with --native: only these run keys (spectrum[:...])")
+    parser.add_argument("--mapping-control", action="store_true",
+                        help="with --native: a third run whose native card carries the Python renderer's own "
+                             "window-pixel map (the control for bar edges lying on pixel centres)")
     args = parser.parse_args(argv)
     # The stills (contact sheets, difference maps) and the report are written into owner scratch and published to
     # ``--out`` by the evidence publisher (``tools/evidence_media.py``); stills stay PNG, lossless.
@@ -784,7 +755,7 @@ def main(argv=None) -> int:
     try:
         if args.native:
             report = run_native(args.out, module_dir=args.module_dir.resolve(), offers=args.offers,
-                                seconds=args.seconds, only=tuple(args.runs))
+                                seconds=args.seconds, only=tuple(args.runs), mapping_control=args.mapping_control)
         else:
             report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
                          seconds=args.seconds, controls=not args.skip_controls)

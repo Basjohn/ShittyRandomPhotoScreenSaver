@@ -14,7 +14,8 @@ expanded record, the device pixel ratio) and the map from the target's pixel to 
 (``u_item_from_frag``: the target is the card's drawn rect on whole device pixels, already in the content's
 orientation, its texel (0, 0) at the top-left on every backend, N0.3 F1).
 
-Nothing in the product creates one yet (D10: the mode offers ``vulkan`` once the port's rules pass).
+The product creates one through the Visualizer's native route on Vulkan (``rendering.quick.visualizer.native_route``);
+the mode is offered there once the port's rules pass (D10: its ``renderer_backends`` gains ``vulkan``).
 """
 from __future__ import annotations
 
