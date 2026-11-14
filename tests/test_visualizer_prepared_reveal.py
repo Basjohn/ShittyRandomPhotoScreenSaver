@@ -362,6 +362,96 @@ def test_an_uncommitted_worker_target_is_never_counted_alive(monkeypatch):
     assert failures == ["deadline:waiting_target"]
 
 
+class _Mailbox:
+    """The session's frame mailbox as the owner reads it: its newest publication."""
+
+    def __init__(self) -> None:
+        self.publication = None
+
+    def publish(self, revision, *, mode_id, generation, activation):
+        state = SimpleNamespace(mode_id=mode_id, engine_generation=generation, activation_id=activation)
+        self.publication = SimpleNamespace(state=state, revision=revision)
+
+    def peek(self):
+        return self.publication
+
+
+def _worker_deadline_owner(item, failures):
+    owner = _deadline_owner(item, failures)
+    owner._worker = object()
+    owner._worker_identity = (1, 6)                        # the outgoing activation, bound until the reply
+    owner._worker_commit = {"target": "shockwave_grid"}
+    owner._controller.logical_mailbox = _Mailbox()
+    return owner
+
+
+def test_a_worker_target_publishing_before_its_commit_reply_is_slow_but_alive(monkeypatch):
+    # The Spline Curve owner-parity run under concurrent load (14 Nov): the session applied the switch to Neon Lake and
+    # drew it, but the commit's reply had not reached the busy GUI when the 6 s deadline ran ("deadline:waiting_target",
+    # a reload of a live target). The session's frames of the new activation are the target's progress: extended while
+    # they advance, failed after a whole window without one. Red before the fix (no progress read before the reply).
+    from core.threading.manager import ThreadManager
+
+    rearmed: list = []
+    monkeypatch.setattr(ThreadManager, "single_shot",
+                        staticmethod(lambda ms, func, *args: rearmed.append((ms, func, args))))
+    failures: list = []
+    owner = _worker_deadline_owner(_Item(), failures)
+    mailbox = owner._controller.logical_mailbox
+    mailbox.publish(40, mode_id="shockwave_grid", generation=1, activation=7)
+    owner._on_transition_deadline(3)
+    assert failures == [] and owner._mode_transition_phase == "waiting_target" and len(rearmed) == 1
+    mailbox.publish(52, mode_id="shockwave_grid", generation=1, activation=7)      # slow, but still drawing
+    owner._on_transition_deadline(3)
+    assert failures == [] and len(rearmed) == 2
+    owner._on_transition_deadline(3)                       # no newer frame in the whole window: silent, fail
+    assert failures == ["deadline:waiting_target"]
+
+
+@pytest.mark.parametrize("frame", ({"mode_id": "devcurve", "generation": 1, "activation": 6},
+                                   {"mode_id": "shockwave_grid", "generation": 1, "activation": 6}))
+def test_the_outgoing_activations_frames_are_not_the_worker_targets_progress(monkeypatch, frame):
+    # Before the reply the session may still publish the outgoing activation (another mode, or a preset change's own
+    # mode at its old activation): those frames say nothing about the target, so the deadline fails as before.
+    from core.threading.manager import ThreadManager
+
+    monkeypatch.setattr(ThreadManager, "single_shot", staticmethod(lambda ms, func, *args: None))
+    failures: list = []
+    owner = _worker_deadline_owner(_Item(), failures)
+    owner._controller.logical_mailbox.publish(40, **frame)
+    owner._on_transition_deadline(3)
+    assert failures == ["deadline:waiting_target"]
+
+
+class _Bridge:
+    def __init__(self, identity) -> None:
+        self.identity = identity
+        self.last_revision = 0
+
+
+def test_a_bound_target_whose_frames_advance_is_slow_but_alive(monkeypatch):
+    # After the commit (in process at once, on the worker at the reply) the render bridge admits only the bound
+    # identity's frames: a newer admitted revision is the target's progress even when its render reports no
+    # preparation unit (a renderer that does not prepare, or a scene that has not drawn yet). Red before the fix.
+    from core.threading.manager import ThreadManager
+
+    monkeypatch.setattr(ThreadManager, "single_shot", staticmethod(lambda ms, func, *args: None))
+    failures: list = []
+    owner = _deadline_owner(_Item(), failures)
+    bridge = _Bridge(owner._render_identity)
+    owner._controller.render_bridge = bridge
+    bridge.last_revision = 300
+    owner._on_transition_deadline(3)
+    assert failures == []
+    bridge.last_revision = 301
+    owner._on_transition_deadline(3)
+    assert failures == []
+    bridge.identity = SimpleNamespace(mode_id="devcurve", activation_id=6)   # control: another identity's frames
+    bridge.last_revision = 302
+    owner._on_transition_deadline(3)
+    assert failures == ["deadline:waiting_target"]
+
+
 def test_a_target_that_does_not_prepare_reveals_at_once():
     clock, item = SimpleNamespace(now=5.0), _Item()
     owner = _owner(clock, item)

@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** High: N2.9 round 2's audit fixes (M1-M6, lows; a build round). Medium: the N2.5 side defects (rule (a)'s fade-frame drift, the owner-parity wall-clock deadline). N4.a merged at ABI 11 (8394b992). N2.8 waits for two displays.
+**Now (in flight):** High: N2.9 round 2's audit fixes (M1-M6, lows; a build round). Medium: free (R-214 merged: the activation deadline's wall clock behind both N2.5 side defects). N2.8 waits for two displays.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,8 +47,7 @@ at the size asked.
      N2.5's and N2.9's leftovers ride with the next fitting dispatch.
   2. 1D.6 (design note first), then 1C.10, as defects between N steps.
 - Medium:
-  1. The N2.5 side defects (rule (a)'s fade-frame drift, the owner-parity wall-clock deadline).
-  2. 1B.10.
+  1. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -439,15 +438,9 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     settings owner (today the guard compares one frozen setup).
   - [ ] Audit lows: L6 the native pipeline joins the gradual warm-up (`renderer_prepared` is True at once on the
     native route, `item.py:316-323`); L8 the destruction barrier sees the native objects.
-  - [ ] Side defect (14 Nov): rule (a)'s accepted run `n2_5/20261114_rule_a_round5_full` no longer reproduces from
-    its own commit (b8457c3c rerun the same day with the same module: a handful of level-1 pixels move in the fade
-    frames of 16 of 18 runs). Find the fade frames' time source in `owner_render_parity` and make the run
-    deterministic (two runs of one commit hash-identical), with a test; until then N2.9 was judged against the
-    same-day rerun (`n2_5/20261114_n25_round2/rule_a_n25_rerun_hashed/`).
-  - [ ] Side defect (14 Nov): the Spline Curve owner-parity test failed once under concurrent load with
-    `deadline:waiting_target` for Neon Lake on the worker path (a 6 s wall-clock deadline with no slow-but-alive
-    extension until the worker commits the target); passed 7 of 7 since. Replace the wall-clock deadline with the
-    worker's progress edges, or show the deadline is the right bound, with a test.
+  - [ ] Side defect (R-214's sibling, low): the activation deadline's fading-out phase has no slow-but-alive
+    extension (cancels the switch after 6 s; only reached at about 270 ms a frame). Same rule as R-214 when the
+    owner is next touched.
   - Surface format: RGBA8 (RGBA16F gave rule (a) no gain at twice the memory; quad alignment fixed it).
     `surface_format` stays a harness-only switch.
 - Landed: N2.9 generic mode content (merged 14 Nov at ABI 10; N29, N23, N25 PASS, rule (a) hash-identical to N2.5's

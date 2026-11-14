@@ -68,6 +68,12 @@ class VisualizerSnapshotBridge:
             return self._identity is not None
 
     @property
+    def last_revision(self) -> int:
+        """The newest logical revision admitted for the current identity (0 until one is, or while closed)."""
+        with self._lock:
+            return self._last_revision
+
+    @property
     def superseded_count(self) -> int:
         with self._lock:
             return self._superseded_count
