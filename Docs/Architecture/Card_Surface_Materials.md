@@ -292,7 +292,7 @@ mute button its gradient) meanwhile. On Normal it is an inactive `Loader` and th
   the lane; the bound covers saved and reflowed geometry (a later taller card shrinks the lane's headroom). Edit's child
   resize starts from the drawn height, not the saved scale: the track exposes its drawn/requested ratio
   (`customEditSizeCompensationHeight`) and the owner folds it into the scale on the first real sample, so a saved
-  scale above the lane shrinks on the first step (R-NEW, no dead zone).
+  scale above the lane shrinks on the first step (R-193, no dead zone).
 - The volume's level (the adjustable part inside the track) is material too (operator, 8 Nov: it "does not inherit
   surfaces"): its own `ChildMaterialSurface` tinted by the fill colour at full strength, no darker panel, so it reads
   above the track's 40 % tint; it drops its flat colour while the material is active and keeps it on Normal

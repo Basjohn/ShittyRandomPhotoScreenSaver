@@ -399,7 +399,7 @@ organic fills (Capillary Bloom, Surface Tension Merge).
 `rendering/quick/scene3d/propagation_field.py` derives, once per run, the cheapest cost-weighted arrival from a few
 sources over a consumer's GLSL cost function (`propagationCost`): a seed stage (cost plus a straight-line upper bound),
 192 relaxation passes over a 16-neighbour stencil, each reading one arrival field and writing the other (ping-pong,
-so the result is bit-repeatable; relaxing in place read texels other workgroups were writing, R-NEW) and a
+so the result is bit-repeatable; relaxing in place read texels other workgroups were writing, R-203) and a
 one-workgroup reduction to the largest arrival in a 1x1 texture consumers read with `texelFetch`. Four R32F textures,
 three of them 256 px on the longer side (about 0.44 MB at 16:9), allocated and built by the consumer's gradual warm-up in bounded steps
 (48 passes per step) because the cost depends only on the run's seed and the render's aspect, and dropped at its

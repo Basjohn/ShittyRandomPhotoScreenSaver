@@ -60,21 +60,22 @@ consumer below (the unconsumed ones on the primitives track)"). An N4 item whose
 background track therefore moves with that consumer; an unconsumed one (the N4.c, N4.h, N4.m high-potential items,
 and N4.d's wet-surface masks) runs on the primitives track. N6 runs only on the primitives track, native only.
 
-Status today (item 8b, "State" paragraph, 12 Nov): N0's contracts decided; **N0.6 and N0.7 proved** (D6 and D9
-accepted); the rest of N1 in flight; **N2.1** (the product module's build) and the Python half of **N2.3**
-(Spectrum's native schema) in flight (both merged later on 12 Nov; N1.6 merged to ratchet 95 the same evening);
-N2.2 and N2.4 wait for N0.3's scenes. Every box of N2, N2b, N3, N4, N5, NF
-and N6 is open (unticked); no native primitive exists in C++ yet. `native/spike_p1` is evidence, never
-a shipped renderer (item 8b, N2's heading). Step by step:
+Status today (item 8b, "State" paragraph, 14 Nov): N0's contracts decided; **N0.3, N0.6 and N0.7 proved** (D6 and D9
+accepted); N1.6 merged to ratchet 24 (Neon Lake, Extruded Spectrum and Sphere in flight; Extruded Bubble's traced
+glass converts at its port); **N2.1, N2.2, N2.4 and N2.6** merged and proved; **N2.3** (Spectrum's native schema and
+the C++ packet reader, module ABI 5) merged and proved 14 Nov; **N2.7** (the backend owner) and its first leftovers
+merged; N2.5 in flight; N2.8's Vulkan pre-check done. Every box of N2b, N3, N4, N5, NF and N6 is open; no N4 or N6
+primitive exists in C++ yet (the module holds the host adapter, frame driver, composite node, GPU timer and packet
+reader). `native/spike_p1` is evidence, never a shipped renderer (item 8b, N2's heading). Step by step:
 
-| Step | State (plan, 12 Nov) | Primitive relevance |
+| Step | State (plan, 14 Nov) | Primitive relevance |
 |---|---|---|
-| N0.3 conventions, three scenes | decided; scenes owed (N0.3's three-scenes box) | the conventions include is proved on OpenGL only until they run |
+| N0.3 conventions, three scenes | proved 12 Nov on Vulkan, OpenGL, D3D11 and D3D12 (Metal on the Watchlist) | the conventions include is proved on every backend we ship |
 | N0.4 camera | decided (D5.5); remainder built with N5.4 then N5.6 (N0.4's remainder box) | one camera owner, see section 7 |
 | N0.6 Vulkan device | proved; validation clean apart from Qt 6.12.0 defects A, B, D (N0.6's box) | the device the core runs on |
 | N0.7 async jobs | proved; verdict "jobs for compute on this vendor, and uploads" (Decisions line 569-612) | D9 service; AMD and Intel unmeasured (N0.7's box) |
-| N1 portable shaders | in flight: D4 landed; N1.4 include remainder, N1.6 uniform blocks, N1.8 resolve-first all open (the N1 boxes) | what makes existing primitives bakeable |
-| N2.1 to N2.8 | N2.1 and N2.3 (Python half) in flight; N2.6 timer and N2.7 backend owner open (the N2 boxes) | host adapter, frame driver, timer, rehearsal path |
+| N1 portable shaders | in flight: D4 landed; N1.6 at ratchet 24 (the 3D modes left); N1.4 include remainder and N1.8 resolve-first open (the N1 boxes) | what makes existing primitives bakeable |
+| N2.1 to N2.8 | N2.1 to N2.4, N2.6 and N2.7 merged (leftover boxes open); N2.5 in flight; N2.8 open (the N2 boxes) | host adapter, frame driver, packet reader, composite, timer, rehearsal path |
 | N2b: N4.a, N3.8 jobs, N5.7a/b/c | open (the N2b boxes) | fullscreen pass, job service, background layer, backdrop pyramid |
 | N3.1 to N3.9 | open (the N3 boxes); there is no N3.5 in the plan (numbering skips from N3.4 to N3.6) | targets, meshes, compute, post stages, lifetime, orientation, display move |
 | N4.b to N4.m | open (the N4 boxes) | ported with first consumer, or on the primitives track |
@@ -381,17 +382,19 @@ bridge is a GL-only seam that cannot survive the flip.
 
 ## 4. Shared services of the native core
 
-None of these exists in C++ yet; "decided" means the decisions document fixes the design, "proved" means a harness
-round (`native/spike_p1`) verified it.
+"Decided" means the decisions document fixes the design, "proved" means a harness round (`native/spike_p1`, or the
+product module's `native/core/python/*_check.py` on a GitHub build) verified it; `native/core/README.md` lists what
+the product module holds today.
 
-| Service | Source | Status (12 Nov) | What it enables |
+| Service | Source | Status (14 Nov) | What it enables |
 |---|---|---|---|
-| **Host adapter** (D5.1) | Decisions line 168-176 | decided; built in N2.2 (N2.2's box) | the core never names Qt Quick's frame; a second window kind or a Qt upgrade changes one small file. Hosts: the Qt Quick window, the hidden host, a reserved swapchain-owning host |
-| **Frame driver** (D5.2) | Decisions line 178-204 | decided; N2.2 | all core work recorded in dependency order on `beforeRendering` through a C++ connection (no Python slot) |
-| **Texture-node composite** (D5.2) | line 185-199; N2.4 (N2.4's box) | decided; owed proof: one-to-one texels, the 1C.4 clip contract as the coverage term | each surface reaches the window as a texture provider a `ShaderEffect` can sample at no cost; Qt applies clip, opacity, batching |
+| **Host adapter** (D5.1) | Decisions line 168-176 | built and proved in N2.2 (`native/core/src/host_adapter.*`, `host_check.py`) | the core never names Qt Quick's frame; a second window kind or a Qt upgrade changes one small file. Hosts: the Qt Quick window, the hidden host, a reserved swapchain-owning host |
+| **Frame driver** (D5.2) | Decisions line 178-204 | built and proved in N2.2 (`frame_driver.*`) | all core work recorded in dependency order on `beforeRendering` through a C++ connection (no Python slot) |
+| **Texture-node composite** (D5.2) | line 185-199; N2.4 | built and proved 13 Nov (`composite.*`, `composite_check.py`: texels one to one, the 1C.4 clip contract) | each surface reaches the window as a texture provider a `ShaderEffect` can sample at no cost; Qt applies clip, opacity, batching |
+| **Packet reader** (D1, D2, transport rule) | Decisions "D1, D2, D3 and the transport rule"; N2.3 | built and proved 14 Nov (`packet_reader.*`, `frame_abi_generated.h`, `packet_reader_check.py`; module ABI 5); its first user is N2.5 | the core reads a Visualizer stream on its own view of the mapping, refuses an unknown payload at the slot head, and is its one consumer |
 | **No Python on the core's threads** (D5.4) | line 232-234 | decided; rechecked at every port | frame pacing independent of the GIL (D8 plus 1) |
-| **Module location** (D5.7) | line 236-238 | decided; `native/core/`, module `_srpss_native_core`; N2.1 in flight | exact-Qt import guard, one Python importer (`rendering/native/`) |
-| **GPU timer per pass** (D5.3 row 1) | line 217; N2.6 (N2.6's box) | built 13 Nov (`native/core/src/gpu_timer.*`, `rendering/native/gpu_timing.py`), proof owed to the build round (`timer_check.py`) | per-pass figures in the frame trace; off means no query objects; every later port measured per pass |
+| **Module location** (D5.7) | line 236-238 | built: `native/core/`, module `_srpss_native_core` (N2.1) | exact-Qt import guard, one Python importer (`rendering/native/`) |
+| **GPU timer per pass** (D5.3 row 1) | line 217; N2.6 | built and proved 13 Nov (`native/core/src/gpu_timer.*`, `rendering/native/gpu_timing.py`, `timer_check.py`) | per-pass figures in the frame trace; off means no query objects; every later port measured per pass |
 | **Stream ring service** (D5.3 row 2) | line 218; N3.2 | built only if it wins by 0.05 ms | larger histories and denser strands at one copy per frame |
 | **Indirect and count draws** (D5.3 row 3) | line 219 | **retired 12 Nov**: QRhi 6.12 has `drawIndirect` and `DrawIndirectMulti`; N4.c queries support at runtime (N4.c's box) | GPU-driven populations of 10^5 to 10^6 without a raw service |
 | **Per-sample reads** (D5.3 row 4) | line 220; N1.8 | built only if resolve-first fails a mode's look or cost | Extruded Bubble's nearest-depth `background()` if the A/B fails |
@@ -399,11 +402,11 @@ round (`native/spike_p1`) verified it.
 | **Async GPU jobs** (D9, row 6) | line 498-622; N3.8 (N3.8's box) | **proved N0.7** (second QRhi on our VkDevice, queue index 1 of family 0; latched publication; in-frame form always exists); built in N3.8 | no late frame at an image change or a transition's preparation while a Visualizer runs (4K edge-field build in frame: 40 late of 1200, as a job: 0 late) |
 | **Vulkan device ownership** (D6) | line 240+ | **proved N0.6** (our instance and device host Qt Quick pixel-identical; teardown, resize, second queue) | one device per window; Vulkan by default at NF |
 | **Backdrop pyramid** (D7) | line 383+; N5.7b | decided; unbuilt | materials that follow a transition frame; true glass over the Visualizer (N5.9) |
-| **Conventions include** `srpss_conventions.glsl` (N0.3) | `rendering/gl_programs/conventions.py`; Decisions line 1358-1371 | built in Python (N1.4: OpenGL values make it an identity); three backend scenes owed (N0.3's three-scenes box) | the only place a shader learns a backend convention: `fragPixel/fragTexel/fragUv`, `ndcToUv/uvToNdc`, `viewDepthFromDepthTexture`; `SrpssConventions` block at binding 17, written once per context |
+| **Conventions include** `srpss_conventions.glsl` (N0.3) | `rendering/gl_programs/conventions.py`; Decisions line 1358-1371 | built in Python (N1.4: OpenGL values make it an identity); the three backend scenes proved 12 Nov (Vulkan, OpenGL, D3D11, D3D12; Metal on the Watchlist) | the only place a shader learns a backend convention: `fragPixel/fragTexel/fragUv`, `ndcToUv/uvToNdc`, `viewDepthFromDepthTexture`; `SrpssConventions` block at binding 17, written once per context |
 | **Portable programs / pass blocks** (N1.6) | `rendering/gl_programs/portable.py`; `scene3d/uniforms.py` `PassBlocks` | built, converting group by group; `LEGACY_GL_ONLY` was 16 after D4 (N1.6's box) | loose uniforms become one std140 block at binding 18, samplers get `binding = unit`, varyings get locations; arithmetic untouched so OpenGL pixels are identical (`tools/conventions_identity.py`) |
 | **Shader readiness ratchet** | `tests/test_vulkan_shader_readiness.py`; `qsb` bakes | active; "discovers compute sources and bakes every target" (N1.6's box) | no non-bakeable shader can be added silently |
 | **Pipeline and warm-up policy** (N3.6) | N3.6's box | decided; unbuilt | every state combination is a pre-built pipeline warmed gradually; `VK_EXT_device_fault` logged once |
-| **Rehearsal path** (D10, N2.7) | line 624+; N2.7's box | decided; unbuilt | a diagnostic switch for Vulkan on Display 1 before the flip; unported modes not offered |
+| **Rehearsal path** (D10, N2.7) | D10 "As built"; the N2.7 leftovers box | built 13-14 Nov (`rendering/quick/bootstrap.py`, `--graphics-backend=vulkan`; reveal on the first presented frame; Settings greys unported modes); N2.8's lead runs on Display 1 | a diagnostic switch for Vulkan on Display 1 before the flip; unported modes not offered |
 | **Framed camera** (D5.5, N0.4) | `core/settings/framed_camera.py`; Decisions line 1466+ | decided; the worker publishes the finished camera, built with N5.4 then N5.6 (N0.4's remainder box) | one camera for every framed 3D mode (section 7) |
 
 Quick-side services that stay as they are until the native presenter replaces them: the program cache (E27), the
@@ -540,47 +543,18 @@ registered in `core/settings/visualizer_mode_registry.py:400,441,473`. Perspecti
 removed 5 Nov 2026). The horizontal view is capped at 90 degrees by reducing the vertical view, never stretching edge
 content (`framed_camera.py:32`). No per-mode cameras and no copied controllers (memory "Framed camera standard";
 `Scene3D_Resources.md:16-25`). The native core takes one camera owner: the worker publishes the finished camera and
-the renderer builds none (D5.5; N0.4's remainder N0.4's remainder box; test "no perspective or tangent construction in the native
+the renderer builds none (D5.5; N0.4's remainder box; test "no perspective or tangent construction in the native
 sources").
 
-### Open point for the lead
-The plan's standing rule (`Current_Plan.md` item 8b, standing rules) puts the per-primitive "what this makes possible" note in
-`Scene3D_Resources.md`. That wording sits inside a standing-rule bullet, not a checkbox, but it is the plan's own text,
-so this agent did not edit `Current_Plan.md`. Suggested rewording for the lead: "...and a 'what this makes possible'
-note in `Docs/Reference/Primitives.md` (resource detail stays in `Scene3D_Resources.md`)."
+### Stale text still open
 
-### Contradictions and stale text found while writing (each to be settled by the lead)
-
-Settled by the night audit of 12 Nov (`Docs/Future_Work/Audit_2026-11-12_Night.md`): 1 (the plan says S3D-1/S3D-5), 2
-(the registry boxes were removed with R-198), 3 (D8 row 6 now lists N4.d's wet-surface masks), 4
-(`Scene3D_Resources.md` names all three framed-camera consumers), 5 (the decisions document says five), 6 (the plan
-explains N3.5 and N3.8 once under N3), 7 (`Index.md` points at item 8b), 9 (R-94's entry restored with its index
-row); the "Open point for the lead" above too (the standing rule now names this catalogue). 8 stays open until the
-flip. The catalogue cites the plan by item and box name (line numbers were replaced on 12 Nov night because they drift).
-1. `Current_Plan.md` section 7.1's "Chosen first" line says Waveform Ribbon is the first consumer of S3D-1/S3D-2/S3D-5; S3D-2 is N4.c
-   (populations, item 8b, standing rules), and N5.4 states Waveform uses "not populations" (N5.4's box); the code agrees (Waveform imports
-   no `population`).
-2. `Current_Plan.md` item 8b, N1's boxes (now removed) still lists the conventions-buffer registry defect (and its guard and R-NEW boxes) as open,
-   but `rendering/quick/render/gl_resources.py:147-196` keys by `shiboken6.getCppPointer` and connects
-   `aboutToBeDestroyed`, and `Docs/Historical_Bugs.md:127` plus
-   `Docs/Historical_Bugs/R-198_Conventions_Buffer_Registry_Keyed_By_A_Wrapper_That_Did_Not_Live.md` exist.
-3. `Docs/Future_Work/Native_Core_P3_Decisions.md:483` (D8 row 6) lists the high-potential unconsumed primitives as N4.c,
-   N4.h, N4.k, N4.m, N6.1 to N6.3; `Current_Plan.md` N4.d's box also calls N4.d's wet-surface masks "high potential".
-4. `Scene3D_Resources.md:20` names Neon Lake and Extruded Bubble as the framed-camera consumers; the registry also
-   declares it for Waveform Ribbon (`core/settings/visualizer_mode_registry.py:473`, `core/waveform_ribbon_scene.py:10`),
-   and `Scene3D_Resources.md:508` says Neon Lake, Sphere and Extruded Spectrum orbit through the view-orbit
-   declarations (a related but different owner).
-5. The decisions document calls D5.3 "the closed list of six services" (Decisions line 1226-1227, and "closed" at
-   line 213); with the indirect-draw service retired on 12 Nov (line 219) five remain.
-6. `Current_Plan.md` item 8b has N4.a through N4.m and N3 has no N3.5 (numbering jumps from N3.4 to N3.6);
-   N3.8 sits under the N2b heading (N3.8's box) rather than under N3.
-7. `Index.md:150` and `Scene3D_Resources.md` historical notes cite "`Current_Plan.md` §6" as the live checklist; §6
-   is a pointer stub (`Current_Plan.md` section 6); the live items are in 8b.
-8. `Scene3D_Resources.md:3-5` ("All admitted operations require the validated OpenGL 4.6 context") and the opening
-   "retained Quick transition and visualizer hosts remain their scenes' render owners" describe the Python path only;
-   the native core's host adapter (D5.1) changes that at N2.2, so the sentence needs a "today" qualifier at the flip.
-9. R-94 is cited as the integer-hash entry (`Transitions.md:142,205`) but has no `Docs/Historical_Bugs/R-94_*.md`
-   file or index row (glob and grep of `Docs/Historical_Bugs.md`, 12 Nov).
+The contradictions this catalogue found on 12 Nov were settled by the night audit of 12 Nov
+(`Docs/Future_Work/Audit_2026-11-12_Night.md`); the catalogue cites the plan by item and box name (line numbers
+drift). One stays open until the flip:
+- `Scene3D_Resources.md:3-5` ("All admitted operations require the validated OpenGL 4.6 context") and the opening
+  "retained Quick transition and visualizer hosts remain their scenes' render owners" describe the Python path
+  only; the native core's host adapter (D5.1) changes that, so the sentence needs a "today" qualifier at the
+  flip.
 
 ### Unverified in this catalogue
 - Whether every "consumer" list is complete: it comes from import greps of `rendering/` (12 Nov); consumers through

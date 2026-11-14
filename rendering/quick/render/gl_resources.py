@@ -142,7 +142,7 @@ def delete_program(program: int) -> None:
 # A context is identified by its native QOpenGLContext pointer, never by ``id()`` of the Python wrapper: for a context
 # Qt created in C++ (Qt Quick's render-thread context) PySide makes a new wrapper per ``currentContext()`` call
 # whenever Python holds none, so ``id()`` changed between two calls in one context and was reused across contexts
-# (R-NEW: one buffer per link, none released, another context left unbound at the block's binding). The native pointer
+# (R-198: one buffer per link, none released, another context left unbound at the block's binding). The native pointer
 # lives exactly as long as the context and is never kept alive by the registry (holding the wrapper would extend the
 # life of a context Python owns). Its ``aboutToBeDestroyed`` is connected once per context (the connection is Qt's and
 # outlives any wrapper) and forgets the context's entry, so a pointer reused by a later context starts clean. Buffer
