@@ -626,6 +626,11 @@ Port-readiness rules bind all new GPU code now (the backend decision). Expanded 
   track meanwhile finishes what is open and stays on the primitives track of item 8b.
 - [ ] New modes (Reactive Liquid / Melt Pool, Concrete Rain, Usu Moonscape; section 7, lab first) are built on
   the native core only, after it.
+- [ ] Very low priority, after the native core and its new primitives (operator, 14 Nov): Extruded Bubble's arctic
+  look is flat, with "nothing icey about it": no ice, frost or anything inventive. Rework it once the native
+  primitives give it real material tools (frost and ice surfaces, refraction, a sparkle field), not with today's
+  parameters alone. Presets are authored content: the work is new EB capabilities, plus authoring that preset with
+  them. The lead judges it on showcase WebPs over bright and dark wallpapers.
 
 ## 1B. Operator defects and requests (11 Nov; run first, in this order)
 
@@ -1032,6 +1037,22 @@ preset values. Prove each item with a hidden-host test and a negative control.
   Control Hints off and on again may reset it.
 - [ ] Test it hidden-host: two visits in one mode give one reveal; a switch to another 3D mode gives one more reveal.
   Negative control: with the set bypassed, the second visit reveals again.
+
+### 1D.13 Fullscreen Visualizer edges (operator, 14 Nov; one Opus Medium agent, root cause first)
+
+- [ ] Defect, first: Fullscreen (Hide Borders) now shows a border, although it was edge-perfect before. Fullscreen
+  draws no frame (border width 0, content rect = visible rect; plan 01, section "Geometry"), so any visible band
+  is a regression. Bisect it on the hidden host with `native/core/python/composite_check.py` (the
+  `expanded_*` display-style cases) on OpenGL and on Vulkan. The suspects are today's merges that touch card
+  placement: R-217's origin snap in `composite.vert` (81a14dda); the native background and backdrop routes (N5.7a
+  07433be2, N5.7b 36096bf2, R-220); and the 1D.2 style binding at `VisualizerPresentation.qml` (about line 218).
+  Name the commit and the mechanism before fixing. Prove with zero frame pixels on all four display edges at dpr 1
+  and 1.5, plus a negative control on the pre-regression parent. Then write an R-NNN entry.
+- [ ] Very low priority, only in an open low slot or after the native core: Borders To Edge sizes its frame unevenly,
+  thicker on some display edges than others. The likely cause is plan 01's named open risk: R-192's "Still open", an
+  axis with no exterior edge whose extent is not whole at its DPR, keeps Qt Quick's stretch. Measure each edge's
+  frame width in device pixels on both displays (2560 x 1440 and 3840 x 2160, both at 150 %). Fix it so all four
+  edges come out the same whole device width.
 
 ### 1D.10 Audit of 13 Nov: what is left after its merge (14 Nov)
 
