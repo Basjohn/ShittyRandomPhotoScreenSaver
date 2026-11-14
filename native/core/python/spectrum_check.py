@@ -53,6 +53,7 @@ import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[2]                 # the repository (native/core/python -> root)
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
@@ -60,7 +61,7 @@ import vk_validation  # noqa: E402  (native/core/python)
 import host_check  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("block", "item", "pixels", "seam")
+ROUNDS = ("block", "item", "pixels", "seam", "program")
 CHILD_TIMEOUT_S = 1800
 MARGIN = 8                       # logical pixels between the display's corner and the item
 REST_FRAMES = 3
@@ -740,6 +741,52 @@ def round_seam(core, engine, app, host, records: list[dict]) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "stepped": {str(k): v for k, v in stepped.items()}}
 
 
+def round_program(core, engine, app, host, records: list[dict]) -> dict:
+    """N2.5 round 4's drawn proof of the standing port rule: a copy of spectrum.frag with a Settings-only uniform
+    (``u_test_tint``: above 0.5 every drawn pixel is magenta) baked by regen_qrc's baker and handed over at run time;
+    the item draws the value with no module rebuild (tint 1: magenta where the bars are; tint 0: none). Control: the
+    module's compiled-in copy refuses the name. Uses tests/test_native_core_spectrum_program.py's copy."""
+    import tempfile
+
+    import numpy as np
+
+    sys.path.insert(0, str(ROOT))
+    from tests.test_native_core_spectrum_program import tinted_pack
+
+    base = next(entry for entry in records if entry["key"] == "spectrum")
+    card = _card_for_item(base["card"])
+    host.set_device_pixel_ratio(float(card["dpr"]))
+    scene = Scene(core, engine, host)
+    stream = Stream()
+    magenta = {}
+    refused = ""
+    try:
+        with tempfile.TemporaryDirectory(prefix="srpss_program_") as folder:
+            scene.spectrum.program(tinted_pack(Path(folder)))
+        scene.place(card)
+        scene.spectrum.bind(stream.name, expect=stream.expect)
+        for step, tint in enumerate((1.0, 0.0)):
+            scene.spectrum.settings(dict(_settings_for_card(card), u_test_tint=tint))
+            stream.publish(base["record"], float(step))
+            scene.spectrum.update()
+            pixels = scene.read(card)
+            rgb = pixels[..., :3].astype(int)
+            magenta[str(tint)] = int(((rgb[..., 0] > 200) & (rgb[..., 1] < 40) & (rgb[..., 2] > 200)).sum())
+        scene.spectrum.program(None)                      # the compiled-in copy: the old path
+        try:
+            scene.spectrum.settings(dict(_settings_for_card(card), u_test_tint=1.0))
+        except ValueError as exc:
+            refused = str(exc)
+    finally:
+        stream.close()
+        scene.close(app)
+        host.frames(2)
+        host_check._flush_deletes(app)
+    checks = {"new_uniform_drawn": magenta.get("1.0", 0) > 1000, "zero_draws_no_tint": magenta.get("0.0", 1) == 0,
+              "control_compiled_in_refuses_the_name": "u_test_tint" in refused}
+    return {"pass": all(checks.values()), "checks": checks, "magenta_pixels": magenta, "refused": refused}
+
+
 def vulkan_against_opengl(out: Path) -> dict:
     """Rule (b)'s first form: the Vulkan frames against the native OpenGL frames of the same samples."""
     import numpy as np
@@ -862,6 +909,8 @@ def child(args) -> dict:
                     record[name] = round_item(core, engine, app, host, records)
                 elif name == "seam":
                     record[name] = round_seam(core, engine, app, host, records)
+                elif name == "program":
+                    record[name] = round_program(core, engine, app, host, records)
                 else:
                     record[name] = round_pixels(core, engine, app, host, args.api, records, references, out)
             except Exception:
