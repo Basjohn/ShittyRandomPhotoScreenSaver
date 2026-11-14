@@ -59,6 +59,7 @@ import argparse
 import contextlib
 import hashlib
 import json
+import math
 import sys
 import time
 import zlib
@@ -194,13 +195,17 @@ class SceneMirror:
         self._region: tuple[int, int, int, int] | None = None
         self._scene: Any = None
         self._saved: dict = {}
+        #: The first committed record's outer origin (display-logical): what the run's placement put the card at.
+        self.first_outer_origin: tuple[float, float] | None = None
 
     def attach(self, runtime: Any) -> None:
         import tools.expanded_visualizer_evidence as evidence
 
         scene = runtime.scene_controller
         dpr = float(runtime.window.devicePixelRatio())
-        self.host = evidence.HiddenDisplayHost(DISPLAY[0], DISPLAY[1], dpr=dpr)
+        _PLACED["dpr"] = dpr                      # the owner built next places its card on this grid (card_placement)
+        overscan = OVERSCAN_ROWS if _PLACED["name"] == "overscan" else 0
+        self.host = evidence.HiddenDisplayHost(DISPLAY[0], DISPLAY[1], dpr=dpr, overscan_rows=overscan)
         hidden = self.host.scene
         self._scene = scene
         mirror = self
@@ -228,6 +233,10 @@ class SceneMirror:
         if abs(float(presentation.dpr) - dpr) > 1e-9:
             raise RuntimeError(f"the owner resolved its card at DPR {presentation.dpr}, the hidden scene draws at {dpr}")
         x, y, width, height = presentation.outer_rect
+        # The display's own place in the window (an overscan above it, ``card_placement``), logical.
+        x, y = x + self.host.scene_offset[0], y + self.host.scene_offset[1]
+        if self.first_outer_origin is None:
+            self.first_outer_origin = tuple(float(v) for v in presentation.outer_rect[:2])
         full_w, full_h = self.host.pixels
         left = max(0, int(x * dpr) - REGION_MARGIN)
         top = max(0, int(y * dpr) - REGION_MARGIN)
@@ -287,6 +296,45 @@ class SceneMirror:
             host._gl.glDeleteFramebuffers(1, [self._fbo])
             self._fbo = 0
         host.close()
+
+
+#: Where a rule (a) run puts the card (N2.8, R-NEW). "display": the rig's own (the owner's origin at the display's
+#: corner, the window exactly the display). "overscan": Display 1's R-63 window, the display ``OVERSCAN_ROWS`` logical
+#: rows down inside a taller window, and the card's authored origin half a device pixel off the grid on both axes:
+#: the record's outer origin at k + 0.5 device pixels, so the scene draws the card on the nearest whole pixels and
+#: every renderer must place its content with the drawn card (the native item once sat half a pixel off it, and the
+#: composite's quad broke the bars along its diagonal on Vulkan).
+PLACEMENTS = ("display", "overscan")
+OVERSCAN_ROWS = 2                       # logical rows above the display: Display 1's 3 device rows at 150 %
+#: The runs of the widened set drawn at the "overscan" placement too (each a whole rule (a) run): variants a and b.
+OVERSCAN_RUNS = ("", ":b")
+_PLACED: dict = {"name": "display", "dpr": 1.0}
+
+
+@contextlib.contextmanager
+def card_placement(name: str):
+    """The runs inside are drawn at placement ``name`` (``PLACEMENTS``): the hidden window's overscan
+    (``SceneMirror.attach``) and, for "overscan", every authored origin the host binding gives an owner
+    (``set_authored_outer_origin``) moved half a device pixel past its own whole pixel on both axes, on the grid of
+    the dpr the mirror attached at."""
+    if name not in PLACEMENTS:
+        raise ValueError(f"unknown placement {name!r} (the placements are {', '.join(PLACEMENTS)})")
+    from widgets.spotify_visualizer.quick_display_visualizer_owner import QuickDisplayVisualizerOwner
+
+    authored = QuickDisplayVisualizerOwner.set_authored_outer_origin
+
+    def placed(self, x: float, y: float) -> bool:
+        dpr = float(_PLACED["dpr"])
+        return authored(self, (math.floor(float(x) * dpr) + 0.5) / dpr, (math.floor(float(y) * dpr) + 0.5) / dpr)
+
+    _PLACED["name"] = name
+    if name == "overscan":
+        QuickDisplayVisualizerOwner.set_authored_outer_origin = placed
+    try:
+        yield
+    finally:
+        QuickDisplayVisualizerOwner.set_authored_outer_origin = authored
+        _PLACED["name"] = "display"
 
 
 #: ``--surface-format``: the native item's surface texels for this run (None: the route's own choice).
@@ -516,6 +564,7 @@ def native_drawn_run(mode: str, script, *, settings: dict, core, python_mappings
     report["native_frames"] = mirror.native_frames
     report["native_published"] = mirror.native_published
     report["mapping"] = {"compared": mirror.mapping_compared, "identical": mirror.mapping_identical}
+    report["outer_origin"] = mirror.first_outer_origin
     return report
 
 
@@ -663,20 +712,26 @@ def classify_differences(native: dict, python: dict, switch_input: int) -> dict:
     return classes
 
 
-def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path) -> dict:
+def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path,
+                  placement: str = "display") -> dict:
     """Rule (a) of the port (N2.5): the owner in process drawn by the Python renderer and by the native item, single-
     sampled, frame for frame over the card's region and its margin. Each native card's window map is checked against
     the Python renderer's own rows of the same frame (``mapping``), and every pixel more than a level off is
-    classified (``classes``)."""
+    classified (``classes``). ``placement``: where both runs put the card (``PLACEMENTS``)."""
     script = parity_script(clip_frames, mode)
-    with single_sample_scene_targets():
+    with single_sample_scene_targets(), card_placement(placement):
         python, mappings = _python_mappings_run(mode, script, settings)
         native = native_drawn_run(mode, script, settings=settings, core=core, python_mappings=mappings)
     paths = pair_difference(native, python)
     rows = frame_differences(native, python)
     switch_at = next(i for i, (kind, _v) in enumerate(script) if kind == "mode")
     switch_input = sum(1 for kind, _value in script[:switch_at] if kind == "input")
-    verdict = {"mode": mode, "run": f"{mode}{suffix}", "inputs": python["inputs"],
+    run = f"{mode}{suffix}" if placement == "display" else f"{mode}{suffix}@{placement}"
+    origin = native.get("outer_origin")
+    dpr = float(_PLACED["dpr"])
+    fraction = None if origin is None else [round((v * dpr) % 1.0, 4) for v in origin]
+    verdict = {"mode": mode, "run": run, "inputs": python["inputs"], "placement": placement,
+               "outer_origin": origin, "outer_origin_device_fraction": fraction, "dpr": dpr,
                "frames_drawn": [len(python["pixels"]), len(native["pixels"])],
                "native_frames": native["native_frames"], "native_published": native["native_published"],
                "switch_input": switch_input, "paths": paths, "differing_inputs": len(rows),
@@ -696,15 +751,16 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     if rows:
         worst = max(rows, key=lambda row: (row["max_level"], row["pixels"]))
         verdict["worst"] = worst
-        verdict["crops"] = _write_native_crops(Path(out), f"{mode}{suffix.replace(':', '_').replace('=', '-')}",
+        verdict["crops"] = _write_native_crops(Path(out), run.replace(":", "_").replace("=", "-").replace("@", "_at_"),
                                                native, python, worst)
     return verdict
 
 
 def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
-               against: Path | None = None) -> dict:
-    """``native_parity`` over Spectrum's widened run set (``conventions_identity.mode_runs``); the report. ``against``:
-    an accepted report this one is compared with (``against_baseline``)."""
+               against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS) -> dict:
+    """``native_parity`` over Spectrum's widened run set (``conventions_identity.mode_runs``) at the rig's own
+    placement, and ``OVERSCAN_RUNS`` again at each other placement of ``placements`` (keyed ``run@placement``); the
+    report. ``against``: an accepted report this one is compared with (``against_baseline``)."""
     baseline = json.loads(Path(against).read_text(encoding="utf-8")) if against is not None else None
     import tools.expanded_visualizer_evidence as evidence
     from rendering.native import load
@@ -717,16 +773,22 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
     clip = evidence.shipped_clip(seconds)
     report: dict = {"mode": "spectrum", "offers": offers, "seconds": seconds, "display": list(DISPLAY), "results": {}}
     started = time.perf_counter()
+    runs = conventions_identity.mode_runs("spectrum", offers)
+    planned = [(suffix, settings, "display") for suffix, settings in runs] if "display" in placements else []
+    planned += [(suffix, settings, placement) for placement in placements if placement != "display"
+                for suffix, settings in runs if suffix in OVERSCAN_RUNS]
     try:
-        for suffix, settings in conventions_identity.mode_runs("spectrum", offers):
-            if only and f"spectrum{suffix}" not in only:
+        for suffix, settings, placement in planned:
+            key = f"spectrum{suffix}" if placement == "display" else f"spectrum{suffix}@{placement}"
+            if only and key not in only:
                 continue
             engine_worker_link.reset_run_state_for_testing()
-            verdict = native_parity(core, "spectrum", suffix, settings, clip.frames, out)
-            report["results"][f"spectrum{suffix}"] = verdict
-            print(f"[NATIVE] spectrum{suffix:40s} {verdict['frames_drawn']} frames, native {verdict['native_published']}"
+            verdict = native_parity(core, "spectrum", suffix, settings, clip.frames, out, placement=placement)
+            report["results"][key] = verdict
+            print(f"[NATIVE] {key:48s} {verdict['frames_drawn']} frames, native {verdict['native_published']}"
                   f" published; differing inputs {verdict['differing_inputs']}, pixels "
-                  f"{verdict['differing_pixels_total']}, max level {verdict['max_level']}; "
+                  f"{verdict['differing_pixels_total']}, max level {verdict['max_level']}; card origin "
+                  f"{verdict['outer_origin']} (device fraction {verdict['outer_origin_device_fraction']}); "
                   f"{'IDENTICAL' if verdict['identical'] else 'DIFFERENT'}", flush=True)
     finally:
         report["elapsed_s"] = round(time.perf_counter() - started, 1)
@@ -874,6 +936,9 @@ def main(argv=None) -> int:
     parser.add_argument("--unprimed", action="store_true",
                         help="with --native: no render before the owner exists and no route prepare at attach (the "
                              "product's unprimed path, N29 round 2 M3; reported, not a gate)")
+    parser.add_argument("--placements", nargs="+", default=list(PLACEMENTS), choices=PLACEMENTS,
+                        help="with --native: the card's placements (display: the rig's own; overscan: Display 1's R-63 "
+                             "window with the card's origin half a device pixel off the grid, variants a and b)")
     parser.add_argument("--against", type=Path, default=None,
                         help="with --native: an accepted native_render_parity.json; the run passes when every run's "
                              "differences equal it (bit-identical native frames)")
@@ -899,7 +964,8 @@ def main(argv=None) -> int:
             NATIVE_UNPRIMED = bool(args.unprimed)
             report = run_native(args.out, module_dir=args.module_dir.resolve(), offers=args.offers,
                                 seconds=args.seconds, only=tuple(args.runs),
-                                against=None if args.against is None else args.against.resolve())
+                                against=None if args.against is None else args.against.resolve(),
+                                placements=tuple(args.placements))
         else:
             report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
                          seconds=args.seconds, controls=not args.skip_controls)

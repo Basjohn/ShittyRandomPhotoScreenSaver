@@ -29,8 +29,13 @@ Rounds:
           the item's own rect, over an opaque black display) against the Python renderer's own draw of the same frame
           into a transparent target of the item's size (OpenGL child; premultiplied over black is the same colour):
           equal byte for byte on OpenGL (rule (a)'s first form, before the owner-level run); on Vulkan, against the
-          native OpenGL frames within VULKAN_TOLERANCE levels (rule (b)'s first form). The per-pass GPU time of the
-          surface is recorded beside (N2.6's timer).
+          native OpenGL frames within VULKAN_TOLERANCE levels (rule (b)'s first form). Every sample is drawn at each
+          placement of PLACEMENTS (N2.8, R-NEW): on whole device pixels, and between them in a scene under Display
+          1's overscan, where Vulkan once broke the card along its composite quad's diagonal; the composite's
+          reported origin_shift proves each placement is what it says. The per-pass GPU time of the surface is
+          recorded beside (N2.6's timer).
+  seam    R-197 (rule (d)): full-height bars at every count from 8 to 64, every row the same bar edges, at each
+          placement of PLACEMENTS.
 
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/spectrum_check.py --module-dir release/native_module --require-validation
@@ -45,6 +50,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import math
 import subprocess
 import sys
 import threading
@@ -66,6 +72,15 @@ ROUNDS = ("block", "item", "pixels", "seam", "program")
 SURFACE_FORMAT = ["rgba8"]             # --surface-format (the child's), read by Scene
 CHILD_TIMEOUT_S = 1800
 MARGIN = 8                       # logical pixels between the display's corner and the item
+OVERSCAN_DEVICE = 3              # device rows above the scene: Display 1's R-63 window (3840 x 2163, its monitor 3 down)
+#: Where the item lies in the window (N2.8, R-NEW): (name, device rows of overscan above the scene, the item origin's
+#: fraction of a device pixel per axis). "margin" is the item on whole device pixels at (MARGIN, MARGIN), as before.
+#: The others move the scene down by the overscan and put the item between device pixels: at the half (the threshold
+#: case that broke the Vulkan card's bars along its quad's diagonal on Display 1) and at a quarter and three quarters.
+#: The composite puts its quad on whole pixels (``origin_shift``), so every placement draws the reference's pixels.
+PLACEMENTS = (("margin", 0, (0.0, 0.0)), ("overscan_half", OVERSCAN_DEVICE, (0.5, 0.5)),
+              ("overscan_quarter", OVERSCAN_DEVICE, (0.25, 0.75)))
+HOST_PIXELS = (1920 + 2 * MARGIN, 1080 + 2 * MARGIN)   # the hidden host's device pixels
 REST_FRAMES = 3
 VULKAN_TOLERANCE = 1             # 8-bit levels, native Vulkan against native OpenGL (rule (b)'s stated tolerance)
 SLOT_BYTES = 4096                # one Spectrum record (1488 bytes) per slot, with room
@@ -373,13 +388,17 @@ class Stream:
 SCENE_QML = b"""import QtQuick
 Rectangle {
     color: "#000000"
-    Item { objectName: "contentHost"; x: %(margin)d; y: %(margin)d; width: 4; height: 4 }
+    Item {
+        objectName: "sceneRoot"
+        Item { objectName: "contentHost"; x: %(margin)d; y: %(margin)d; width: 4; height: 4 }
+    }
 }
 """ % {b"margin": MARGIN}
 
 
 class Scene:
-    """An opaque black display with one native Spectrum at (MARGIN, MARGIN), its target on the item's own rect."""
+    """An opaque black display with one native Spectrum at (MARGIN, MARGIN), its target on the item's own rect;
+    ``set_placement`` moves it to one of ``PLACEMENTS``."""
 
     def __init__(self, core, engine, host, *, program: bool = True) -> None:
         from PySide6.QtCore import QUrl
@@ -393,6 +412,9 @@ class Scene:
         if self.root is None:
             raise RuntimeError(f"the scene did not load: {self.component.errorString()}")
         self.content = self.root.findChild(QQuickItem, "contentHost")
+        self.scene_root = self.root.findChild(QQuickItem, "sceneRoot")
+        self.placement = PLACEMENTS[0]
+        self.origin: tuple[float, float] | None = None     # the item's window origin in device pixels when placed
         host.set_content(self.root)
         self.spectrum = core.spectrum(self.content)
         if program:                               # (False: the content-failure check's item with no program)
@@ -410,16 +432,60 @@ class Scene:
         self.spectrum.present_raw(_bare(card))
         self.spectrum.settings(_settings_for_card(card))
 
+    def set_placement(self, placement: tuple, pixels: tuple[int, int]) -> None:
+        """The item at ``placement`` (one of ``PLACEMENTS``) in a window of ``pixels`` device pixels: the scene moved
+        down by its overscan and the content host between device pixels by its fractions, on the window's own grid
+        (its framebuffer over its logical size). Only the items move: the item's node keeps its geometry."""
+        if self.scene_root is None:
+            raise RuntimeError("this scene has no sceneRoot item to place the content host in")
+        self.placement = placement
+        name, overscan, (fx, fy) = placement
+        if name == PLACEMENTS[0][0]:
+            self.scene_root.setY(0.0)
+            self.content.setX(float(MARGIN))
+            self.content.setY(float(MARGIN))
+            self.origin = None
+            return
+        rx = float(pixels[0]) / float(self.root.width())
+        ry = float(pixels[1]) / float(self.root.height())
+        self.scene_root.setY(overscan / ry)
+        self.content.setX((round(MARGIN * rx) + fx) / rx)
+        self.content.setY((round(MARGIN * ry) + fy) / ry)
+        self.origin = (round(MARGIN * rx) + fx, overscan + round(MARGIN * ry) + fy)
+
     def read(self, card: dict):
+        return self.reads(card)[0]
+
+    def reads(self, card: dict) -> list:
+        """The item's pixels where the composite drew its quad: its origin moved onto whole pixels by the reported
+        shift (a module without the shift, ABI 12, drew it unmoved: read at the nearest whole pixel, the half rounding
+        up). On an axis whose origin lies within a hundredth of a pixel of a half, the GPU's own float rounding may
+        have taken the other corner: the neighbouring readings follow the first, all from the one rendered frame (the
+        caller keeps the one that matches its reference)."""
         from dataclasses import asdict
 
         from composite_analysis import frame_rows
 
         rows = frame_rows(asdict(self.host.read()))
         dpr = float(card["dpr"])
-        left = top = int(round(MARGIN * dpr))
         width, height = (int(round(v * dpr)) for v in card["item_size"])
-        return rows[top:top + height, left:left + width]
+        if self.origin is None:
+            left = top = int(round(MARGIN * dpr))
+            return [rows[top:top + height, left:left + width]]
+        shift = self.spectrum.composite.state().get("origin_shift") or (0.0, 0.0)
+        corner = [self.origin[axis] + float(shift[axis]) for axis in (0, 1)]
+        steps = [(0, -1, 1) if abs(self.origin[axis] % 1.0 - 0.5) < 0.01 else (0,) for axis in (0, 1)]
+        found = []
+        for dy in steps[1]:
+            for dx in steps[0]:
+                left = int(math.floor(corner[0] + 0.5)) + dx
+                top = int(math.floor(corner[1] + 0.5)) + dy
+                found.append(rows[top:top + height, left:left + width])
+        return found
+
+    def origin_shift(self) -> list[float] | None:
+        shift = self.spectrum.composite.state().get("origin_shift")
+        return None if shift is None else [float(shift[0]), float(shift[1])]
 
     def close(self, app) -> None:
         self.spectrum.composite.destroy()
@@ -643,15 +709,20 @@ def close_during_copy(scene, card: dict, chosen: list[dict], controls: tuple[str
     return result
 
 
+def _frame_key(index: int, placement: tuple) -> str:
+    """A drawn frame's key in the frame sets: the sample's index, and its placement past the first (``PLACEMENTS``)."""
+    return str(index) if placement[0] == PLACEMENTS[0][0] else f"{index}@{placement[0]}"
+
+
 def round_pixels(core, engine, app, host, api: str, records: list[dict], references: list, out: Path) -> dict:
-    """The sampled frames drawn by the native item against the references (see the module docstring)."""
+    """The sampled frames drawn by the native item against the references (see the module docstring), at every
+    placement of ``PLACEMENTS`` (N2.8, R-NEW: the item between device pixels in a scene under an overscan)."""
     import numpy as np
 
     scene = None
     stream = Stream()
-    compared = differing = 0
-    max_level = 0
-    worst = None
+    by_placement = {name: {"compared": 0, "differing": 0, "max_level": 0, "worst": None, "origin_shift": None}
+                    for name, _overscan, _fraction in PLACEMENTS}
     native_frames = {}
     timings = []
     try:
@@ -663,24 +734,36 @@ def round_pixels(core, engine, app, host, api: str, records: list[dict], referen
                 scene = Scene(core, engine, host)
                 scene.spectrum.bind(stream.name, expect=stream.expect)
                 host.set_gpu_timer(True)
+            scene.set_placement(PLACEMENTS[0], HOST_PIXELS)
             scene.place(card)
             stream.publish(entry["record"], float(step))
             scene.spectrum.update()
-            drawn = scene.read(card)
-            native_frames[index] = drawn
-            if drawn.shape[:2] != reference.shape[:2]:
-                differing += 1
-                worst = worst or {"index": index, "shape": [list(drawn.shape), list(reference.shape)]}
-                continue
-            compared += 1
-            delta = np.abs(drawn[..., :3].astype(np.int16) - reference[..., :3]).max()
-            if delta:
-                differing += 1
-                if int(delta) > max_level:
-                    max_level = int(delta)
-                    worst = {"index": index, "key": entry["key"], "frame": entry["index"], "level": int(delta),
-                             "pixels": int((np.abs(drawn[..., :3].astype(np.int16) - reference[..., :3]).max(axis=2)
-                                            > 0).sum())}
+            for placement in PLACEMENTS:
+                # The same frame at each placement: only the items move, so the surface is not recorded again.
+                scene.set_placement(placement, HOST_PIXELS)
+                read = scene.reads(card)
+                readings = [r for r in read if r.shape[:2] == reference.shape[:2]] or read[:1]
+                drawn = min(readings, key=lambda r: int(np.abs(r[..., :3].astype(np.int16) - reference[..., :3]).max())
+                            if r.shape[:2] == reference.shape[:2] else 1 << 16)
+                stats = by_placement[placement[0]]
+                if stats["origin_shift"] is None:
+                    stats["origin_shift"] = scene.origin_shift()
+                native_frames[_frame_key(index, placement)] = drawn
+                if drawn.shape[:2] != reference.shape[:2]:
+                    stats["differing"] += 1
+                    stats["worst"] = stats["worst"] or {"index": index,
+                                                        "shape": [list(drawn.shape), list(reference.shape)]}
+                    continue
+                stats["compared"] += 1
+                delta = np.abs(drawn[..., :3].astype(np.int16) - reference[..., :3]).max()
+                if delta:
+                    stats["differing"] += 1
+                    if int(delta) > stats["max_level"]:
+                        stats["max_level"] = int(delta)
+                        stats["worst"] = {"index": index, "key": entry["key"], "frame": entry["index"],
+                                          "level": int(delta),
+                                          "pixels": int((np.abs(drawn[..., :3].astype(np.int16)
+                                                                - reference[..., :3]).max(axis=2) > 0).sum())}
         timings = [sample.nanoseconds for sample in host.gpu_samples() if sample.kind == 2]
         host.set_gpu_timer(False)
     finally:
@@ -689,17 +772,29 @@ def round_pixels(core, engine, app, host, api: str, records: list[dict], referen
             scene.close(app)
         host.frames(2)
         host_check._flush_deletes(app)
-    np.savez_compressed(_work(out) / f"native_{api}.npz", **{str(k): v for k, v in native_frames.items()})
-    _sheet(out, api, references[:4], native_frames)
+    np.savez_compressed(_work(out) / f"native_{api}.npz", **native_frames)
+    for placement in PLACEMENTS:
+        _sheet(out, api, references[:4], {index: native_frames.get(_frame_key(index, placement))
+                                          for index, _reference, _q in references[:4]},
+               "" if placement[0] == PLACEMENTS[0][0] else f"_{placement[0]}")
     ordered = sorted(timings)
     gpu = {"surface_passes": len(ordered),
            "median_ms": round(ordered[len(ordered) // 2] / 1e6, 4) if ordered else None,
            "p90_ms": round(ordered[int(len(ordered) * 0.9)] / 1e6, 4) if ordered else None}
-    checks = {"samples_compared": compared > 0 and compared == len(references)}
+    first = by_placement[PLACEMENTS[0][0]]
+    checks = {"samples_compared": all(stats["compared"] == len(references) > 0 for stats in by_placement.values())}
     if api == "opengl":
-        checks["equal_to_the_python_renderer"] = differing == 0
-    return {"pass": all(checks.values()), "checks": checks, "compared": compared, "differing": differing,
-            "max_level": max_level, "worst": worst, "gpu": gpu}
+        checks["equal_to_the_python_renderer"] = all(stats["differing"] == 0 for stats in by_placement.values())
+    # The placements are what they say (the class is exercised): the item on whole pixels is shifted by float rounding
+    # only, one between pixels by its fraction's distance to the nearest pixel corner.
+    for name, _overscan, fraction in PLACEMENTS:
+        shift = by_placement[name]["origin_shift"]
+        expected = [round(f) - f for f in fraction]
+        checks[f"origin_shift_{name}"] = shift is not None and all(
+            abs(abs(s) - abs(e)) < 0.01 for s, e in zip(shift, expected))
+    return {"pass": all(checks.values()), "checks": checks, "compared": first["compared"],
+            "differing": first["differing"], "max_level": max(s["max_level"] for s in by_placement.values()),
+            "worst": first["worst"], "placements": by_placement, "gpu": gpu}
 
 
 #: Record fields set for the seam round (the decorations off, so a row's colour depends on the bar coverage alone).
@@ -747,7 +842,9 @@ def _seam_record(base: bytes, count: int) -> bytes:
 
 def round_seam(core, engine, app, host, records: list[dict]) -> dict:
     """R-197 on the native item (rule (d)): 1B.10's scene (the card at 2x, full-height bars at every count from 8 to 64,
-    so edges land on pixel centres): in the band every bar covers, every row has the same bar edges."""
+    so edges land on pixel centres): in the band every bar covers, every row has the same bar edges. At every placement
+    of ``PLACEMENTS`` (N2.8, R-NEW: the item between device pixels under an overscan broke the rows along the
+    composite quad's diagonal on Vulkan)."""
     import numpy as np
 
     base = next(entry for entry in records if entry["key"] == "spectrum")
@@ -762,23 +859,28 @@ def round_seam(core, engine, app, host, records: list[dict]) -> dict:
         scene.spectrum.bind(stream.name, expect=stream.expect)
         for step, count in enumerate(range(8, 65)):
             stream.publish(_seam_record(base["record"], count), float(step))
+            scene.set_placement(PLACEMENTS[0], HOST_PIXELS)
             scene.spectrum.update()
-            pixels = scene.read(card)
-            height = pixels.shape[0]
-            band = pixels[height // 4:3 * height // 4, :, :3].max(axis=2) > 0
-            edges = [tuple(np.flatnonzero(np.diff(row.astype(np.int8)))) for row in band]
-            if len(edges[0]) < 2 * count - 1:
-                stepped[count] = f"only {len(edges[0])} edges"
-                continue
-            counts += 1
-            if any(row != edges[0] for row in edges):
-                stepped[count] = sorted(set(edges[0]) ^ {x for row in edges for x in row})[:20]
+            for placement in PLACEMENTS:
+                scene.set_placement(placement, HOST_PIXELS)
+                key = count if placement[0] == PLACEMENTS[0][0] else f"{count}@{placement[0]}"
+                pixels = scene.read(card)
+                height = pixels.shape[0]
+                band = pixels[height // 4:3 * height // 4, :, :3].max(axis=2) > 0
+                edges = [tuple(np.flatnonzero(np.diff(row.astype(np.int8)))) for row in band]
+                if len(edges[0]) < 2 * count - 1:
+                    stepped[key] = f"only {len(edges[0])} edges"
+                    continue
+                counts += 1
+                if any(row != edges[0] for row in edges):
+                    stepped[key] = sorted(set(edges[0]) ^ {x for row in edges for x in row})[:20]
     finally:
         stream.close()
         scene.close(app)
         host.frames(2)
         host_check._flush_deletes(app)
-    checks = {"every_count_drawn": not any(isinstance(v, str) for v in stepped.values()) and counts == 57,
+    checks = {"every_count_drawn": not any(isinstance(v, str) for v in stepped.values())
+              and counts == 57 * len(PLACEMENTS),
               "one_x_per_edge_in_every_row": not stepped}
     return {"pass": all(checks.values()), "checks": checks, "stepped": {str(k): v for k, v in stepped.items()}}
 
@@ -938,19 +1040,30 @@ def vulkan_against_opengl(out: Path) -> dict:
         return {"pass": False, "error": "a native frame set is missing"}
     gl, vk = np.load(gl_path), np.load(vk_path)
     compared = differing = max_level = 0
+    by_placement: dict = {}
     for key in gl.files:
+        placement = key.split("@", 1)[1] if "@" in key else PLACEMENTS[0][0]
+        stats = by_placement.setdefault(placement, {"compared": 0, "differing": 0, "max_level": 0, "missing": 0})
         if key not in vk.files or gl[key].shape != vk[key].shape:
             differing += 1
+            stats["missing"] += 1
             continue
         compared += 1
+        stats["compared"] += 1
         level = int(np.abs(gl[key][..., :3].astype(np.int16) - vk[key][..., :3]).max())
         differing += int(level > 0)
+        stats["differing"] += int(level > 0)
         max_level = max(max_level, level)
-    return {"pass": compared > 0 and max_level <= VULKAN_TOLERANCE, "compared": compared, "differing": differing,
-            "max_level": max_level, "tolerance": VULKAN_TOLERANCE}
+        stats["max_level"] = max(stats["max_level"], level)
+    # Every placement is compared (N2.8, R-NEW: the item between device pixels, where Vulkan broke along the quad's
+    # diagonal while OpenGL did not).
+    placed = all(by_placement.get(name, {}).get("compared", 0) > 0 for name, _o, _f in PLACEMENTS)
+    return {"pass": compared > 0 and placed and max_level <= VULKAN_TOLERANCE,
+            "compared": compared, "differing": differing, "max_level": max_level, "tolerance": VULKAN_TOLERANCE,
+            "placements": by_placement}
 
 
-def _sheet(out: Path, api: str, references, native_frames) -> None:
+def _sheet(out: Path, api: str, references, native_frames, suffix: str = "") -> None:
     import numpy as np
     from PIL import Image
 
@@ -964,7 +1077,7 @@ def _sheet(out: Path, api: str, references, native_frames) -> None:
     if rows:
         width = max(row.shape[1] for row in rows)
         sheet = np.concatenate([np.pad(row, ((0, 4), (0, width - row.shape[1]), (0, 0))) for row in rows], axis=0)
-        Image.fromarray(sheet, "RGB").save(out / f"pixels_{api}_python_native_difference_x64.png")
+        Image.fromarray(sheet, "RGB").save(out / f"pixels_{api}{suffix}_python_native_difference_x64.png")
 
 
 # --------------------------------------------------------------------------------------------------------- the child
@@ -1043,7 +1156,7 @@ def child(args) -> dict:
     engine = QQmlEngine()
     host = None
     try:
-        host = core.hidden_host(1920 + 2 * MARGIN, 1080 + 2 * MARGIN)
+        host = core.hidden_host(*HOST_PIXELS)
         for name in [n for n in args.rounds if n != "block"]:
             if vulkan:
                 core.set_vulkan_phase(f"n25 {name}")
