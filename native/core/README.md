@@ -69,13 +69,16 @@ never ships.
     non-overlapping fields inside the record, range rules on u32 scalars only), its fingerprint recomputed, never
     replacing a compiled schema. The packet reader admits it beside `frame_abi_generated.h`'s table, which keeps only
     the schemas a hand-written consumer reads.
-  - `mode_content.*` (N2.9): **generic mode content**, a mode drawn from data alone, in the product 2D shaders' shape.
-    `ModeProgram`: one to eight full-target passes, each a fragment pack and a blend (replace, alpha, premultiplied,
-    add), drawn in order after a clearing draw with the core's triangle (`shaders/mode.vert`, which gives `v_uv`). A
-    pass declares one std140 block of its own (any name, any binding but 17), optionally the conventions block and
-    `in vec2 v_uv`; anything else is refused. One rule fills the block by member name from exactly one of three sources:
-    the core's conventions (`kModeCoreMembers`, mirrored as `MODE_CORE_MEMBERS`: what the Python 2D renderers take
-    from the card per frame, read from the item's card and the target), the settings, and the record's fields.
+  - `mode_content.*` (N2.9, widened by N4.a): **generic mode content**, a mode or a fullscreen pass drawn from data
+    alone, in the product fullscreen shaders' shape. `ModeProgram`: one to eight full-target passes, each a fragment
+    pack, a blend (replace, alpha, premultiplied, add) and its samplers, drawn in order after a clearing draw with the
+    core's triangle (`shaders/mode.vert`). A pass declares one std140 block of its own (any name, any binding but 17),
+    optionally the conventions block, a vec2 at location 0 named `v_uv` (the Visualizer quad's uv, y down) or `vUv`
+    (the item quad's, y up: the fullscreen transitions), and `sampler2D`s, each bound by name to one of the item's
+    textures (N4.a, "Samplers and textures" below); anything else is refused. One rule fills the block by member name
+    from exactly one of three sources: the core's conventions (`kModeCoreMembers`, mirrored as `MODE_CORE_MEMBERS`: what
+    the Python renderers take from the card per frame, read from the item's card and the target), the settings, and the
+    record's fields.
   - `stream_source.*` (N2.9 round 2): what every mode item shares. `StreamSource`: the bound stream (bind, retire,
     the render-thread retire job, the accept edge with the admission rule, the state report) under `SpectrumSource` and
     `ModeSource`. `ContentLatch`: a content whose pipelines fail to build fails closed for the same inputs (recorded
@@ -111,6 +114,10 @@ never ships.
   and Bubble refused for its samplers alone, the reader by the runtime schema, the draw on OpenGL and Vulkan at dpr 1
   and 1.5 with shader, spec and simulation changes and no rebuild, a refused frame keeping the card, the content
   latch, the fade, nothing at rest, GPU time per pass, the framebuffer at 2560x1440 at 150 %).
+- `python/fullscreen_pass_check.py`: N4.a's proof of the fullscreen pass and image sampling (Crossfade's and Burn's own
+  fragments between two real photos against the production GL host at nine progress values, Vulkan against native
+  OpenGL, the seven transitions' and Bubble's packs bound and unbound, every sampler refusal, the textures' lifetime,
+  the pass's GPU time at 2560x1440, nothing at rest).
 - `python/timer_check.py`: N2.6's proof (off is free by count, a known-cost pass scaled N times and its empty-bracket
   control, QRhi's frame figure, latched reads in a real window with the waiting read as control, the frame trace and
   its report, the two forms against each other, validation; `timer_analysis.py`).
@@ -129,8 +136,9 @@ worked example (harness-only); a product mode does the same in the product's pla
    knows it and the core receives it at bind (`NativeMode.bind(mapping, schema)`), so it never makes a built module's
    table differ. `_SCHEMA_MODULES` is for the schemas the module compiles (a hand-written consumer's); a mode is in one
    registry only.
-3. **Its passes.** One fragment shader per pass in the product 2D shaders' shape (GLSL 440; `in vec2 v_uv` and/or
-   `#define SRPSS_CONVENTIONS_FRAGMENT` with `//@srpss_conventions` and the pixel from `fragPixel`), each declaring one
+3. **Its passes.** One fragment shader per pass in the product fullscreen shaders' shape (GLSL 440; `in vec2 v_uv`, or
+   `in vec2 vUv` for the item quad's convention, and/or `#define SRPSS_CONVENTIONS_FRAGMENT` with `//@srpss_conventions`
+   and the pixel from `fragPixel`; `sampler2D`s bound by name to the item's textures, step 4b), each declaring one
    std140 block of its own (any name, any binding but 17). Its members are filled by name: the core's conventions
    (`MODE_CORE_MEMBERS`: `uMatrix`, `uItemSize`, `uContentRotationQuarters`, `u_resolution`, `u_dpr`,
    `u_viewport_origin_px`, `u_quick_item_coords`, `u_fade`, `u_border_width`, `u_item_from_frag*`,
@@ -142,17 +150,48 @@ worked example (harness-only); a product mode does the same in the product's pla
    Python function giving every other member by name from the spec, sent with the program
    (`NativeMode.program(passes, settings)`) and again when Settings change (`NativeMode.settings`); the item as shown
    (`NativeMode.card(mode_card(...))`) whenever it changes.
+4b. **Its textures** (N4.a, when a pass samples an image): see "Samplers and textures" below.
 5. **What is refused, with its reason:** a setting or a record field no pass declares (unknown); a member no source
    fills (unfilled); a name with two owners (a setting or a field naming a core member, a setting naming a field); a
-   value of the wrong size or without a defined conversion (a refused frame keeps the last drawn one); a pass that
-   declares a texture, a sampler, storage, a push constant, a second block of its own, a block at binding 17 or an input
-   other than `v_uv`; a schema that is not a valid fixed layout or names a compiled mode. A program that does not take
-   the current settings is refused and the drawn one stays.
+   value of the wrong size or without a defined conversion (a refused frame keeps the last drawn one); a sampler the
+   shader declares that the program binds to no texture (unbound), one the program binds that the shader does not
+   declare (unknown), one bound twice or sharing a binding (doubly bound), one at binding 17 or at its block's binding,
+   one that is not a `sampler2D`, a mip sampler over a texture set without mips; a pass that declares a separate
+   texture or sampler, storage, a push constant, a second block of its own, a block at binding 17 or an input other
+   than `v_uv` or `vUv`; a schema that is not a valid fixed layout or names a compiled mode. A program that does not
+   take the current settings or textures is refused and the drawn one stays.
+
+### Samplers and textures (N4.a; decision D13 in `Native_Core_P3_Decisions.md`)
+
+How a pass declares its samplers: in the program's declaration, beside its name and blend,
+`"samplers": [{"name": <the shader's sampler2D>, "texture": <the item's texture>, "filter": nearest|linear,
+"wrap": clamp|repeat|mirror, "mips": none|nearest|linear}]` (`rendering/native/mode.py` `PassSampler` on a `ModePass`).
+Every `sampler2D` of the pack is bound exactly once; its binding is the pack's own (reflected), so the product shader
+is unchanged. The fullscreen transitions bind `uOldTex` to `old` and `uNewTex` to `new` (linear, clamp, no mips: the
+Python renderer's state); Bubble binds `u_ambient_texture` and `u_ambient_light`.
+
+How a texture's lifetime runs (`ModeSource` holds the item's textures, `ModeContent` their QRhi objects):
+1. **Sent** (GUI thread): `NativeMode.texture(name, pixels, (w, h), mips=False)`: RGBA8, rows top first, tight, at
+   most 8 an item and 16384 a side. The core copies the pixels once (a new generation) and asks for a frame; a pixel
+   copy not yet uploaded is counted (`composite_live`'s `mode_texture_images`).
+2. **Taken** (render thread, at the item's sync): the copy moves to the render thread; the GUI side keeps none.
+3. **Uploaded** (render thread, at the next record, before the passes): into the content's QRhiTexture (created at the
+   first image; the same object for an image of the same size and mips; recreated, and the bindings that name it built
+   again, for another size or mips), mips generated on the GPU when the texture asks for them; then the core's copy is
+   dropped. Nothing is uploaded again until a new image (`texture_uploads` in the state; `mode_textures` and
+   `mode_texture_bytes`, every level counted, in `composite_live`).
+4. **Retired** (render thread): a removed texture (`NativeMode.remove_texture`) is released at the next record, and the
+   pipelines that bound it are rebuilt; a pass whose texture is missing is not drawn (the state's `last_reason` names
+   it) and the target is cleared. Every texture goes with the content when Qt deletes the item's node (the render
+   thread, the QRhi alive), so an item destroyed with its textures leaves no QRhi object, byte or copy behind.
+5. **Lost**: a node made again (another QRhi, or the item at no size) has no copy to upload from; the state's
+   `textures_lost` names each texture, the item draws nothing, and its owner sends the images again. The product
+   owner of a texture (N5.7a's presenter, N5.2a's transitions) keeps its pixels for that.
 
 A new GPU technique (sampling an earlier pass, depth, more targets, compute, a new resource) is a primitive with its own
-C++ and harness, then used by every mode as data (Bubble's `u_ambient_texture` and `u_ambient_light`, its offscreen
-ambient render's underlay and linear particle light, wait for the sampling primitive: plan N4.a). Hand-written C++ for a mode's simulation is admitted only after its
-goals are met and a measurement shows the hot path (Transitions.md, "Where a mode's work lives on the native core").
+C++ and harness, then used by every mode as data (sampling an image is that primitive since N4.a). Hand-written C++ for
+a mode's simulation is admitted only after its goals are met and a measurement shows the hot path (Transitions.md,
+"Where a mode's work lives on the native core").
 
 The guards: CMake refuses a Qt SDK other than `requirements.txt`'s PySide6 pin; the module refuses to import under
 any Qt but the one it was compiled for; `rendering.native` refuses a module whose Qt, ABI or MSVC runtime arrangement
