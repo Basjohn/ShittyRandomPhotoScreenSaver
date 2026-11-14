@@ -1023,11 +1023,35 @@ def child(args) -> dict:
     return record
 
 
+def prime_control_validation(record: dict) -> dict:
+    """The depth prime's negative control read from the run's validation: synchronisation hazards on the depth load
+    where the prime was skipped, none where it ran, and nothing else unexplained (Qt's recorded defects excused)."""
+    groups = (record.get("validation") or {}).get("attribution") or []
+
+    def hazards(phase: str) -> int:
+        return sum(int(g.get("count", 0)) for g in groups
+                   if g.get("phase") == phase and str(g.get("id", "")).startswith("SYNC-HAZARD"))
+
+    other = sorted({str(g.get("id")) for g in groups if g.get("severity") == "error" and not g.get("qt_defect")
+                    and g.get("phase") != "n31 prime skipped"})
+    skipped, primed = hazards("n31 prime skipped"), hazards("n31 prime primed")
+    return {"hazards_with_the_prime_skipped": skipped, "hazards_with_the_prime": primed,
+            "other_unexplained_errors": other, "pass": skipped > 0 and primed == 0 and not other
+            and bool((record.get("validation") or {}).get("layer_loaded"))}
+
+
 def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool, list[str]]:
     if api == "reference":
         failed = [] if (record.get("reference") or {}).get("pass") else [f"reference: {record.get('error')}"]
         return not failed, failed
     ok, failed = host_check.api_verdict(api, record, require_validation)
+    if api == "vulkan" and "prime_control" in (record.get("rounds") or []):
+        # The negative control is expected to make validation unclean in its skipped phase, and only there.
+        control = prime_control_validation(record)
+        record.setdefault("prime_control", {})["validation_control"] = control
+        failed = [reason for reason in failed if not reason.startswith(f"{api}: validation not clean")]
+        if not control["pass"]:
+            failed.append(f"{api} prime control: {json.dumps(control)}")
     if record.get("module_loaded") and (api != "vulkan" or record.get("instance_created")):
         live = record.get("composites_at_end") or {}
         if any(live.get(key) for key in ("items", "surfaces", "surface_resources", "mode_sources", "mode_resources",
