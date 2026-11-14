@@ -1,4 +1,4 @@
-"""The deep red ocean controls (Lit Glass, Stream Lanes, Ember Band, Wake Tint, Hero Shell): each reaches the native
+"""The deep red ocean controls (Lit Glass, Stream Lanes, Ember Band, Wake Tint): each reaches the native
 pixels when raised and is dormant at 0. Inputs are test-owned (a short simulation run on synthetic music); no preset
 values and no pixel goldens. HEAD pixel identity of the accepted presets is recorded evidence
 (Extruded_Bubble/Investigation.md section 73), not a golden here."""
@@ -62,22 +62,6 @@ def test_stream_lanes_zero_leaves_the_population_exactly_as_it_was_and_one_gathe
     assert spread(_run(dataclasses.replace(plain, stream_lanes=1.0))) < 0.8 * spread(_run(plain))
 
 
-def test_hero_shell_sits_where_authored_in_the_frame_in_front_of_the_focus():
-    view_to_world, world_to_view, eye, tan, _projection = scene.physical_camera(0.1, 0.05, 16 / 9)
-    state = type("State", (), {"motion_phase": 0.0, "sustain": 0.5})()
-    knobs = {"hero_shell": 0.5, "hero_at": (-0.7, -0.5), "focus": scene.focal_depth(0.6)}
-    row = scene.hero_shell_instance(knobs, state, view_to_world, eye, tan)
-    assert row.shape == (1, scene.SHELL_FLOATS)
-    rel = row[0, :3] - np.asarray(eye)
-    axes = np.asarray(view_to_world).reshape(3, 3)              # rows: right, up, back
-    x, y, z = axes @ rel
-    assert -z < knobs["focus"]                                  # nearer than focus: the near layer defocuses it
-    assert (x / -z / tan[0], y / -z / tan[1]) == pytest.approx((-0.7, -0.5), abs=0.04)
-    assert row[0, 5] == 0.0 and row[0, 6] == 1.0                # an ordinary, fully present shell
-    bigger = scene.hero_shell_instance({**knobs, "hero_shell": 1.0}, state, view_to_world, eye, tan)
-    assert bigger[0, 3] == pytest.approx(2 * row[0, 3])
-
-
 @pytest.fixture
 def target(qt_app):
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
@@ -132,19 +116,17 @@ def test_each_control_reaches_the_pixels_and_is_dormant_where_it_has_nothing_to_
     for _ in range(2):                                          # warm: the first frames compile
         base = render()
     assert _same(render(), base)                       # the same inputs draw the same pixels
-    for key, value in (("lit_glass", 1.0), ("stream_lanes", 1.0), ("ember_band", 1.0), ("wake_tint", 1.0),
-                       ("hero_shell", 0.6)):
+    for key, value in (("lit_glass", 1.0), ("stream_lanes", 1.0), ("ember_band", 1.0), ("wake_tint", 1.0)):
         changed = render(**{f"extruded_bubble_{key}": value})
         assert np.abs(changed - base).mean() > 0.05, key
     # Lit Glass only adds light to the glass: the frame brightens, nothing is darkened beyond noise.
     lit = render(extruded_bubble_lit_glass=1.0)
     assert (lit - base)[..., :3].mean() > 0.1 and np.percentile(lit - base, 0.5) > -2.0
-    # Each control acts only on its own subject: none where that subject is absent, and Hero position nothing at 0.
+    # Each control acts only on its own subject: none where that subject is absent.
     assert _same(render(extruded_bubble_dust=0.0, extruded_bubble_ember_band=1.0),
                           render(extruded_bubble_dust=0.0))
     assert _same(render(extruded_bubble_wake_trails=0.0, extruded_bubble_wake_tint=1.0),
                           render(extruded_bubble_wake_trails=0.0))
-    assert _same(render(extruded_bubble_hero_across=0.4, extruded_bubble_hero_height=0.3), base)
 
 
 @pytest.mark.qt

@@ -2,7 +2,8 @@
 // The composite's fragment stage (Current_Plan.md item 8b, N2.4; native/core/src/composite.h).
 //
 // One to one: the fragment's device pixel inside the item is the integer floor(uv x the item's device size), whose
-// thresholds lie on pixel edges, never on a centre (R-197). The content is read whole with texelFetch at that pixel,
+// thresholds lie on pixel edges, never on a centre (R-197; the vertex stage puts the quad on whole pixels wherever the
+// item is placed, R-NEW). The content is read whole with texelFetch at that pixel,
 // turned by the quarter turn (widgets/spotify_visualizer/presentation_orientation.py logical_uv_from_physical_uv:
 // physical (u, v) reads logical (v, 1 - u) for one clockwise turn).
 //
@@ -22,6 +23,7 @@ layout(std140, binding = 0) uniform buf {
     float quarters;
     vec4 coverageRect;
     vec4 sizes;
+    vec4 viewport;
 };
 
 layout(binding = 1) uniform sampler2D content;

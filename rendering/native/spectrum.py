@@ -76,10 +76,16 @@ def compose_window_from_target(window_rows, target_origin: tuple[float, float],
 
 
 def spectrum_presentation(presentation: Any, geometry: CompositeGeometry, *, window_size: tuple[float, float],
-                          window_pixels: tuple[int, int]) -> dict:
+                          window_pixels: tuple[int, int], host_origin: tuple[float, float] | None = None,
+                          item_origin: tuple[float, float] | None = None) -> dict:
     """The card as the native Spectrum draws it: ``presentation`` (a ``ResolvedVisualizerPresentation``) through its
     composite ``geometry``, in a window of ``window_size`` (logical) and ``window_pixels`` (its framebuffer). The item
-    is the card's outer rect (display-logical), as the Python renderer's item is.
+    is the Python renderer's: the card's outer size, its content placed against the outer rect, the item itself lying
+    at ``host_origin`` (display-logical: the content host, where the scene draws the card, ``native_route.
+    content_host_origin``; None: the outer rect's origin) and at ``item_origin`` in the window (window-logical: the
+    display's own place in the window added, an R-63 overscan above it; None: ``host_origin``, the display at the
+    window's origin). R-NEW: an item taken at the outer origin while the host lies at the drawn card put the native
+    content half a device pixel off the Python renderer's.
 
     The pixel arithmetic is the Python renderer's own (N2.5 rule (a), lead 14 Nov): ``window_from_target`` rebuilds the
     window's pixel (x right, y up from the window's bottom: the Python renderer's ``gl_FragCoord``) from the target's
@@ -99,10 +105,12 @@ def spectrum_presentation(presentation: Any, geometry: CompositeGeometry, *, win
         return tuple(float(v) for v in logical_rect_from_physical_rect(
             rect, physical_size=item_size, content_rotation_quarters=quarters))   # type: ignore[return-value]
 
+    host_x, host_y = (outer_x, outer_y) if host_origin is None else (float(host_origin[0]), float(host_origin[1]))
+    window_x, window_y = (host_x, host_y) if item_origin is None else (float(item_origin[0]), float(item_origin[1]))
     content_x, content_y, content_width, content_height = (float(v) for v in presentation.content_rect)
     content = oriented((content_x - outer_x, content_y - outer_y, content_width, content_height))
     target_x, target_y, target_width, target_height = geometry.rect
-    target = oriented((target_x - outer_x, target_y - outer_y, target_width, target_height))
+    target = oriented((target_x - host_x, target_y - host_y, target_width, target_height))
     # The rect's device pixels are counted with the window's own ratio per window axis; the oriented item's x is the
     # window's y under an odd quarter turn.
     ratio_x, ratio_y = geometry.ratio
@@ -111,7 +119,7 @@ def spectrum_presentation(presentation: Any, geometry: CompositeGeometry, *, win
     viewport = (0, 0, int(window_pixels[0]), int(window_pixels[1]))
     rows = {}
     for single in (True, False):
-        mapping = item_from_fragment(_ortho_item_matrix(window_size, (outer_x, outer_y), single=single), viewport,
+        mapping = item_from_fragment(_ortho_item_matrix(window_size, (window_x, window_y), single=single), viewport,
                                      item_size, quarters, oriented_size)
         if mapping is None:
             raise ValueError("the card's window map is degenerate")

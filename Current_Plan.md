@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** High: the native composite's diagonal seam on Vulkan (a build round at ABI 13). Medium: free (1C.2's Save stall merged, R-216). Main's module rebuilt at ABI 12.
+**Now (in flight):** Medium: 1B.10's fixes (checkpointed: the 8-bit glow dither landed on its branch; the near-lens fade, Aurora Fjord's lake lines and the Neon tests that pin shipped presets wait for the 17:00 UTC reset). Hero Shell removed. R-217 merged at ABI 13. High: free until the reset.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -460,22 +460,16 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     presented black for the rest of the run; the read-back is now recorded without `finish` and read once Qt fills
     it on a later frame (`Docs/Research/QRhi_Swapchain_Readback_2026-11-14.md`; screens after grabs keep their
     content on Vulkan and OpenGL: `display/d1_run/20261114_n28_grab_fix_{vulkan,opengl}/`).
-  - [ ] Defect (operator, 14 Nov, Vulkan only): the native Spectrum's side borders break along one diagonal
-    across the card (a mirrored look with transparent fills and outlines; the same look on OpenGL is intact:
-    `20261114_n28_grab_fix_{vulkan,opengl}/frames/g15.png`). Suspect: a float32 shear in the native window/item
-    map making the border band's `floor()` flip along a slanted line; the real window is 3840 x 2163 (odd height
-    from the overscan), rule (a)/(b) ran 1920 x 1080 only. Not reproduced in the hidden host (Medium, 14 Nov:
-    `visualizers/spectrum/border_diagonal/20261114_repro/border_diagonal_repro.py`, GREEN at 3840 x 2163,
-    2560 x 1443 and 1920 x 1080 on both APIs; the map's shear terms are exactly 0, so not a float32 shear). The
-    breaks look like two frames meeting on a quad's diagonal: the real swap chain composite (the surface sampled
-    into the window), the overscan placement, or the item's own quad. Next: the lead reruns on Display 1 with the
-    ABI 12 module (round 2 changed the composite and `v_uv`); if it persists, the High extends the reproduction
-    to the product's composite path and fixes it there.
-    - Rerun 14 Nov on ABI 12 (`display/d1_run/20261114_abi12_vulkan_border/`, wallpaper and music): it persists as
-      a thin diagonal seam from the card's bottom-left corner, the bars shifted about one pixel across it: the
-      composite quad's diagonal sampling neighbouring texels at the real window's fractional placement (window
-      at device (-2,-3) for overscan, 3840 x 2163). High in flight: reproduce with that placement, an exact
-      composite on both backends, rule (a)/(b) widened to offset windows and fractional origins.
+  - Fixed 14 Nov (R-217, ABI 13): the native Spectrum's diagonal seam on Vulkan (operator). The route placed the
+    item at the record's outer origin while its content host sits at the drawn card (snapped up to half a device
+    pixel), so at x.5 each triangle of the composite's quad rounded to its own side; the route now places against
+    the host, the card model takes the host's scene position, and `composite.vert` snaps the item's origin to the
+    target's pixel grid on every backend. Rule (a)/(b) and the seam round now draw whole-, half- and quarter-pixel
+    placements under an overscan. Clean on Display 1 and Display 0 (the MSI at 150 %) with the wallpaper and music
+    (`display/d1_run/20261114_d0_abi13_seam/`).
+  - [ ] Side defect: N29's `control_a_drawn_surface_is_timed` (OpenGL, attached round) failed once with another
+    GPU harness running (no GL timer sample within 6 frames) and passed alone: bound the control by the timer's
+    own result edge, not a frame count, with a test.
   - H1 on a real window: done 14 Nov on Display 0 (the MSI at 150 %, operator's leave): the native Spectrum draws
     inside its card on Vulkan with crisp edges (`display/d1_run/20261114_d0_h1_vulkan_spectrum/`).
   - [ ] With no admitted mode renderable on the backend (before N2.5), the Visualizer card shows as a thin empty
@@ -809,6 +803,9 @@ this item describes looks, and nothing here or anywhere names, counts or pins th
 The operator's taste for Spectrum (11 Nov, on five of round 1: "are all ghastly ugly"): wide glossy, chrome,
 capsule, grid-on-block and dark-fill looks fail; fine luminous gradients pass; fewer good presets beat a full slot
 count. The Spectrum features and the Bar Gap control are in `Docs/Reference/Visualizer_Reference.md`.
+
+Every 3D look (operator, 14 Nov): never a near-lens blob (a defocused shell or bubble in front of the camera);
+the lead rejects any still or showcase frame that shows one.
 
 - Spectrum part landed 14 Nov (lead's review on a dark and a bright wallpaper, the real card): Bar Count's one
   maximum (64), the kick lane follows the Bass lane (R-215), soft Bar Fill ghosts, two looks re-authored so none
@@ -1613,7 +1610,7 @@ done, awaiting the lead's review**
 
 The mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`. One preset only; the shared
 controls are each dormant at 0, so no other look changes: Ember Grain, Ember Band (Water), Lit Glass
-(Glass), Stream Lanes, Wake Tint (Bubbles), Hero Shell with Hero Across/Height (Lens). Details, numbers,
+(Glass), Stream Lanes, Wake Tint (Bubbles). Details, numbers,
 reactivity and cost: `Docs/Reference/Extruded_Bubble/Investigation.md` sections 72-73; evidence
 `.artifacts/evidence/visualizers/extruded_bubble/deep_red_ocean_pass2/20261106_deep_red_ocean_pass2/`.
 
@@ -1622,7 +1619,6 @@ reactivity and cost: `Docs/Reference/Extruded_Bubble/Investigation.md` sections 
 - [ ] Embers are partly along-stream strokes rather than torn debris.
 - [ ] The lower right is far too busy (the mock's band fades out there).
 - [ ] The shaft corner lacks its bright glittering core.
-- [ ] The Hero Shell reads as a soft ring rather than a shell full of bokeh discs.
 - [ ] Faint surface ripples at the top.
 - [ ] Side defect: the near (defocus) layer stair-steps the rim of a large near shell on some frames (seen with Lit
   Glass off as well).

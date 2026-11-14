@@ -75,6 +75,40 @@ def test_the_card_maps_the_targets_pixel_to_the_items_oriented_coordinate(quarte
         assert mapped == pytest.approx((oriented[0] + u / dpr, oriented[1] + v / dpr), abs=1e-3)
 
 
+def test_the_cards_window_pixel_is_where_the_composite_shows_the_target_pixel() -> None:
+    """R-NEW: the card's item is the Python renderer's, which lies in the content host at the drawn card, the display
+    itself two logical rows down its window (Display 1's R-63 overscan at 150 %). Each target pixel's window pixel (the
+    Python renderer's gl_FragCoord) is where the composite, placed in that host, shows it. Control: the card taken at
+    the record's outer origin with the display at the window's origin (before the fix) maps it elsewhere."""
+    from rendering.native.composite import composite_geometry, window_pixel_ratio
+    from rendering.native.spectrum import spectrum_presentation
+    from rendering.quick.visualizer.native_route import content_host_origin
+
+    presentation = _presentation(display_size=(1920.0, 1080.0), viewport_extent=(820.0, 210.0),
+                                 outer_origin=(37.0, 21.0))       # 55.5, 31.5 device pixels: half a pixel off
+    window_size, window_pixels, display = (1920.0, 1082.0), (2880, 1623), (0.0, 2.0)
+    ratio = window_pixel_ratio(window_size, window_pixels)
+    geometry = composite_geometry(presentation, quad_aligned=True, pixel_ratio=ratio)
+    host = content_host_origin(presentation)
+    assert host != tuple(presentation.outer_rect[:2])               # the case: the drawn card is off the outer origin
+    item = (display[0] + host[0], display[1] + host[1])
+    # The composite's item in the host at rect - host (CompositeGeometry.item_config): its top-left device pixel.
+    placed = geometry.item_config(host)["rect"]
+    left, top = (item[0] + placed[0]) * ratio[0], (item[1] + placed[1]) * ratio[1]
+
+    def window_pixel(card: dict, u: float, v: float) -> tuple[float, float]:
+        rows = card["window_from_target"]
+        return (rows[0] * u + rows[1] * v + rows[2], rows[3] * u + rows[4] * v + rows[5])
+
+    card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels,
+                                 host_origin=host, item_origin=item)
+    for u, v in ((0.5, 0.5), (card["target_size"][0] - 0.5, card["target_size"][1] - 0.5)):
+        expected = (left + u, window_pixels[1] - (top + v))           # y up from the window's bottom
+        assert window_pixel(card, u, v) == pytest.approx(expected, abs=1e-6)
+    before = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels)
+    assert window_pixel(before, 0.5, 0.5) != pytest.approx((left + 0.5, window_pixels[1] - (top + 0.5)), abs=0.25)
+
+
 #: Displays whose logical window size times the scale is not the framebuffer (Qt rounds the logical size): 2560x1440
 #: at 150 % is a 1707x960 window, 3840x2160 at 175 % a 2194x1234 one (audit 14 Nov, H1).
 FRACTIONAL_DISPLAYS = (((2560, 1440), 1.5), ((3840, 2160), 1.75))

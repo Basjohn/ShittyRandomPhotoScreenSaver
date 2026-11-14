@@ -655,6 +655,7 @@ Each foundation slice adds what it learned here.
   as populations moved.
 
 **Lit Glass, Stream Lanes, Ember Band, Hero Shell (EB deep red ocean, second pass, 2026-11-06)**
+*(The Hero Shell was removed on 14 Nov 2026 at the operator's request; the lessons below stand.)*
 - Size a shell's rim in screen pixels in from the silhouette, `(1 - sqrt(1 - facing^2)) * radiusPx`, never as a
   band of the facing cosine: a facing band of `k / radiusPx` is about `k^2 / (2 radiusPx)` px wide, sub-pixel on a
   large shell, and read as a dotted hairline.

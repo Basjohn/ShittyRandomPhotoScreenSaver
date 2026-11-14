@@ -38,7 +38,7 @@ from core.constants.extruded_bubble_world import WAKE_STRIDE, SNOW_FULL
 from rendering.gl_programs.extruded_bubble_scene import (
     CLUSTER_FLOATS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, bubble_instances, camera,
     SPECKS_FULL, cluster_instances, wake_instances, parameter_camera, speck_amount,
-    glint_proxies, hero_shell_instance, light_on_screen, ray_motion, ray_strength, scene_knobs, screen_streak,
+    glint_proxies, light_on_screen, ray_motion, ray_strength, scene_knobs, screen_streak,
 )
 from core.settings.framed_camera import effective_aperture_scale
 from core.settings.visualizer_paths import admit_path, world_point
@@ -86,7 +86,7 @@ _PROGRAM_ROWS = tuple((key, (key, vertex, fragment)) for key, vertex, fragment i
 _PROBE_SIZE = {"High": 256, "Balanced": 256, "Performance": 128, "KAK": 64}
 _BLOOM = 0.55
 _NEAR_SPREAD = 22.0 * 1.6       # the widest circle the near layer spreads a giant over (pixels)
-_SHELL_CAPACITY = MAX_BUBBLES + 1   # the simulation's bubbles and the authored Hero Shell
+_SHELL_CAPACITY = MAX_BUBBLES   # the simulation's bubbles
 _CLUSTER_CAPACITY = MAX_BUBBLES // 2
 _UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE = 4, 5, 6
 # Procedural small bubbles: chains per step of the Bead Chains range, beads a chain, and marine snow motes (both
@@ -543,10 +543,7 @@ class QuickExtrudedBubbleRenderer:
         pixel = 2.0 * tan[1] / height
         # A single physical population; close bubbles enter the existing defocus pass by real camera depth.
         shells = bubble_instances(state.bubbles)
-        drawn = shells
-        if float(knobs.get("hero_shell", 0.0)) > 0.0:
-            drawn = np.vstack([shells, hero_shell_instance(knobs, state, view_to_world, eye, tan)])
-        shell_count = self._shells.upload(drawn)
+        shell_count = self._shells.upload(shells)
         wake_count = self._wakes.upload(wake_instances(state.wakes))
         # Every logical drift step not yet applied, integrated on the GPU into the layout the draws read.
         drift_layout = self._drift.update(r, state.drift_families, state.drift_steps, state.drift_knots)
@@ -559,7 +556,7 @@ class QuickExtrudedBubbleRenderer:
         self._uniforms.set(programs['beads'],drift_uniforms)
         self._uniforms.set(programs['specks'],drift_uniforms)
         cluster_count = self._clusters.upload(cluster_instances(state.bubbles, state.clusters))
-        proxy_count = self._proxies.upload(glint_proxies(drawn, knobs["sun_below"],
+        proxy_count = self._proxies.upload(glint_proxies(shells,knobs["sun_below"],
                                                          float(knobs["proxy_power"]),
                                                          light_source=(knobs["light_source"] if knobs["mode"] == "deep"
                                                                        else None)))

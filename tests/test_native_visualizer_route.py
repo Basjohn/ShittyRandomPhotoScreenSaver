@@ -347,6 +347,39 @@ def test_the_route_publishes_new_snapshots_and_sends_an_unchanged_card_once(rout
     assert {"place", "present_raw", "update"} <= {entry[0] for entry in core.log[mark:]}
 
 
+def test_the_native_item_lies_on_whole_window_pixels_in_the_drawn_card_host(route_world):
+    """R-NEW: the scene puts the content host at the drawn card (``resolve_card_drawn_rect``, the loader's place in
+    ``QuickSceneController._apply_visualizer_presentation_items``), so the item's rect is relative to that origin and
+    lands on whole window pixels even when the record's outer origin is half a device pixel off them (803 x 1.5 here).
+    Before the fix the rect was relative to the outer origin: the item sat half a pixel off and the composite's quad
+    broke the bars along its diagonal."""
+    from rendering.native.composite import composite_geometry
+    from widgets.spotify_visualizer.presentation_geometry import resolve_card_drawn_rect
+
+    route, core = route_world.make()
+    bridge = _Bridge()
+    moved = 0
+    for origin in ((803.0, 517.0), (32.3333333, 318.6667), (27.3, 301.9)):
+        presentation = _route_presentation((1707.0, 960.0), 1.5, outer_origin=origin)
+        # The drawn card is off the record's own origin here (what makes the test see the old placement).
+        moved += int(any(abs(a - b) > 1e-3 for a, b in zip(resolve_card_drawn_rect(presentation)[:2],
+                                                              presentation.outer_rect[:2])))
+        bridge.snapshots = [_snapshot(presentation, 1)]
+        mark = len(core.log)
+        identity = _identity("spectrum")
+        assert _sync(route, bridge, identity, presentation) is True and not route.failed
+        place = next(entry for entry in core.log[mark:] if entry[0] == "place")
+        ratio = place[1]["pixel_ratio"]
+        host = resolve_card_drawn_rect(presentation)[:2]
+        geometry = composite_geometry(presentation, quad_aligned=True, pixel_ratio=ratio)
+        for axis in (0, 1):
+            device = (host[axis] + place[1]["rect"][axis]) * ratio[axis]
+            assert device == pytest.approx(round(device), abs=1e-6), (origin, axis, device)
+            assert device == pytest.approx(geometry.rect[axis] * ratio[axis], abs=1e-6)
+        route.unbind()
+    assert moved == 3
+
+
 def test_unbind_closes_and_unlinks_the_mapping_and_close_destroys_the_composite(route_world):
     route, core = route_world.make()
     bridge = _Bridge()
