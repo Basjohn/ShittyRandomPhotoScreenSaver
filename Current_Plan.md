@@ -1039,28 +1039,14 @@ preset values. Prove each item with a hidden-host test and a negative control.
 - [ ] Test it hidden-host: two visits in one mode give one reveal; a switch to another 3D mode gives one more reveal.
   Negative control: with the set bypassed, the second visit reveals again.
 
-### 1D.13 Fullscreen Visualizer edges (operator, 14 Nov; one Opus Medium agent, root cause first)
+### 1D.13 Side defects found at its merge (15 Nov; Opus Medium when a slot is free of native work)
 
-- [ ] Defect, first: Fullscreen (Hide Borders) now shows a border, although it was edge-perfect before. Fullscreen
-  draws no frame (border width 0, content rect = visible rect; plan 01, section "Geometry"), so any visible band
-  is a regression. The operator's screenshot shows a lavender line about 1 px wide down the left
-  edge in Extruded Bubble, the border colour, with a faint notch about halfway down. Check the other three edges
-  too. The operator adds that it varies: sometimes a side shows, sometimes the bottom, which
-  points at overscan or the window's placement against the visible rect. Compare the window's geometry, the scene
-  root's overscan offset and `display_size` on each entry. A frame that comes and goes means the card is not on
-  whole device pixels at that edge. The overscan window itself is protected (operator, 15 Nov): it is the only measure that
-  stopped flicker and artefacts while the window initialises. Fix the card's placement inside it; never remove or
-  reshape the overscan. Bisect it on the hidden host with `native/core/python/composite_check.py` (the
-  `expanded_*` display-style cases) on OpenGL and on Vulkan. The suspects are today's merges that touch card
-  placement: R-217's origin snap in `composite.vert` (81a14dda); the native background and backdrop routes (N5.7a
-  07433be2, N5.7b 36096bf2, R-220); and the 1D.2 style binding at `VisualizerPresentation.qml` (about line 218).
-  Name the commit and the mechanism before fixing. Prove with zero frame pixels on all four display edges at dpr 1
-  and 1.5, plus a negative control on the pre-regression parent. Then write an R-NNN entry.
-- [ ] Very low priority, only in an open low slot or after the native core: Borders To Edge sizes its frame unevenly,
-  thicker on some display edges than others. The likely cause is plan 01's named open risk: R-192's "Still open", an
-  axis with no exterior edge whose extent is not whole at its DPR, keeps Qt Quick's stretch. Measure each edge's
-  frame width in device pixels on both displays (2560 x 1440 and 3840 x 2160, both at 150 %). Fix it so all four
-  edges come out the same whole device width.
+- [ ] Two tests fail only inside one long same-process pytest run (2,413 tests over 14 minutes), and pass alone:
+  `tests/test_waveform_pulse_rim.py::test_pulse_rim_off_is_pixel_identical_to_the_light_pass_without_it` and
+  `tests/test_qtquick_ordinary_widget_host.py::test_refresh_transition_clock_coalesces_arbitrary_simultaneous_consumers`.
+  Find the leaked state or ordering they depend on, and make each test own its preconditions.
+- [ ] Lead, Display 1: confirm R-221 in the product, Fullscreen Hide Borders with pixel shift stepping, and check
+  whether the operator's lavender edge colour came from the shift.
 
 ### 1D.10 Audit of 13 Nov: what is left after its merge (14 Nov)
 
