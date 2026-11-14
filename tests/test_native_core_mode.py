@@ -3,8 +3,11 @@
 The module is compiled only on GitHub; without ``release/native_module`` these tests skip and say so. The drawn proof
 is ``native/core/python/generic_mode_check.py`` (its ``blocks`` round holds the full refusal table).
 
-- ``mode_blocks``: Probe Rings' record and settings packed by name into each pass's blocks; a record field no pass
-  declares, a setting left out, a value without a defined conversion (NaN, an int beyond int32) are refused.
+- ``mode_blocks``: Probe Rings' core members (from the card and the target), settings and record packed by name into
+  each pass's one block; a setting left out, an unknown one, one naming a core member, no card, a value without a
+  defined conversion (NaN, an int beyond int32) are refused. The core's conventions table is the face's.
+- The product 2D packs (audit N29 M5): Oscilloscope and Spline Curve admitted, Bubble refused for its samplers alone;
+  a block at binding 17 (M3), a second block and a sampler refused.
 - ``program_block_pack`` (L2): a mat3 and a multi-dimensional array are never packed and always listed unfilled (setting
   one is refused); an int beyond int32 or a negative uint is refused, not wrapped; a uint above int32's range is stored
   exactly; booleans inside a list read as 0 and 1; a scalar array's elements land at their stride.
@@ -100,24 +103,86 @@ def test_a_mode_is_packed_by_name_and_its_unknown_and_unfilled_members_refused(c
     import probe_rings as pr
 
     passes = pr.passes(tmp_path)
-    settings = pr.resolve_settings({}, target_px=(480, 270), dpr=1.0)
+    settings = pr.resolve_settings({}, dpr=1.5)
+    card = pr.harness_card((480, 270), 1.5, fade=0.75)
+    target = (720, 405)
     simulation = pr.RingsSimulation()
     values = [simulation.step(1.0 / 60.0) for _ in range(60)][-1]
-    blocks, facts = core.mode_blocks(pr.SCHEMA, passes, settings, pr.record(values))
+    record = pr.record(values)
+    blocks, facts = core.mode_blocks(pr.SCHEMA, passes, settings, record, card, target)
     assert [p["name"] for p in facts["program"]["passes"]] == ["rings", "glow"] and len(blocks) == 2
-    frame_rows = {row[0]: row for p in facts["program"]["passes"] for row in p["frame"]["members"]}
-    rings_frame = blocks[0][1]
-    assert struct.unpack_from("<i", rings_frame, frame_rows["ring_count"][2])[0] == values["ring_count"]
-    glow_frame = blocks[1][1]
-    assert struct.unpack_from("<f", glow_frame, frame_rows["level"][2])[0] == struct.unpack(
-        "<f", struct.pack("<f", values["level"]))[0]
+    # One block of its own per pass, each member filled by name from one source (audit N29 M5).
+    for program_pass, sources, data in zip(facts["program"]["passes"], facts["passes"], blocks):
+        rows = {row[0]: row for row in program_pass["block"]["members"]}
+        assert program_pass["block"]["name"] == "ProbeRingsDraw" and program_pass["block"]["binding"] == 18
+        assert sources["sources"]["u_target_px"] == "core" and sources["sources"]["u_fade"] == "core"
+        assert struct.unpack_from("<2f", data, rows["u_target_px"][2]) == (720.0, 405.0)   # the target's pixels
+        assert struct.unpack_from("<f", data, rows["u_fade"][2])[0] == 0.75                # the card's fade
+        assert sources["sources"]["pulse_color"] == "record"
+    assert facts["program"]["passes"][1]["uv"] is True and facts["program"]["passes"][0]["conventions"] is True
+    rows = {row[0]: row for row in facts["program"]["passes"][0]["block"]["members"]}
+    assert struct.unpack_from("<i", blocks[0], rows["ring_count"][2])[0] == values["ring_count"]
+    assert struct.unpack_from("<f", blocks[0], rows["u_thickness_px"][2])[0] == settings["u_thickness_px"]
     with pytest.raises(ValueError, match="u_glow"):
-        core.mode_blocks(pr.SCHEMA, passes, {k: v for k, v in settings.items() if k != "u_glow"}, pr.record(values))
+        core.mode_blocks(pr.SCHEMA, passes, {k: v for k, v in settings.items() if k != "u_glow"}, record, card, target)
     with pytest.raises(ValueError, match="u_spare"):
-        core.mode_blocks(pr.SCHEMA, passes, dict(settings, u_spare=1.0), pr.record(values))
+        core.mode_blocks(pr.SCHEMA, passes, dict(settings, u_spare=1.0), record, card, target)
+    with pytest.raises(ValueError, match="core member"):
+        core.mode_blocks(pr.SCHEMA, passes, dict(settings, u_fade=1.0), record, card, target)
+    with pytest.raises(ValueError, match="card"):
+        core.mode_blocks(pr.SCHEMA, passes, settings, record, None, target)
     for name, bad in (("level", float("nan")), ("ring_count", 3_000_000_000)):
-        broken = bytearray(pr.record(values))
+        broken = bytearray(record)
         field = pr.SCHEMA.layout.field(name)
         struct.pack_into("<d" if field.kind == "f64" else "<I", broken, field.offset, bad)
         with pytest.raises(ValueError, match=name):
-            core.mode_blocks(pr.SCHEMA, passes, settings, bytes(broken))
+            core.mode_blocks(pr.SCHEMA, passes, settings, bytes(broken), card, target)
+
+
+@pytest.mark.qt
+def test_the_cores_conventions_are_the_faces(core, qt_app):
+    from rendering.native.mode import MODE_CORE_MEMBERS
+
+    assert core.mode_core_members() == MODE_CORE_MEMBERS
+
+
+@pytest.mark.qt
+def test_the_product_2d_packs_are_admitted_and_bubble_refused_for_its_samplers(core, tmp_path, qt_app):
+    # Audit N29 M5: the generic pass takes the product 2D shaders' shape, over their real .qsb packs.
+    import generic_mode_check as check
+    import probe_rings as pr
+    from rendering.native.mode import ModePass
+    from rendering.native.program_values import mode_fragment_pack
+    from tools import regen_qrc
+
+    for mode_id in ("oscilloscope", "devcurve"):
+        layout = core.mode_program_layout([ModePass(mode_id, mode_fragment_pack(mode_id))])
+        (program_pass,) = layout["passes"]
+        assert program_pass["uv"] is True and program_pass["block"]["binding"] != 17
+    with pytest.raises(ValueError, match="sampler"):
+        core.mode_program_layout([ModePass("bubble", mode_fragment_pack("bubble"))])
+    # Control: Bubble with its two samplers taken out is admitted (its samplers alone were refused).
+    text = check.bubble_without_samplers_text((regen_qrc.mode_shader_dir() / "bubble.frag").read_text(encoding="utf-8"))
+    stripped = pr.bake(text, "bubble.frag", tmp_path / "bubble")
+    assert core.mode_program_layout([ModePass("bubble", stripped)])["passes"][0]["block"]["name"] == "BubbleDraw"
+
+
+@pytest.mark.qt
+def test_a_pass_block_at_the_conventions_binding_or_a_second_block_is_refused(core, tmp_path, qt_app):
+    # Audit N29 M3: binding 17 is the conventions block's whether or not the pass declares it.
+    import generic_mode_check as check
+    import probe_rings as pr
+    from rendering.native.mode import ModePass
+
+    def layout(kind):
+        return core.mode_program_layout([ModePass("glow", pr.bake(check.variant_text(kind), "glow.frag",
+                                                                  tmp_path / kind), "add")])
+
+    with pytest.raises(ValueError, match="17 is the conventions block's"):
+        layout("binding17")
+    with pytest.raises(ValueError, match="one block of its own"):
+        layout("two_blocks")
+    with pytest.raises(ValueError, match="primitive"):
+        layout("sampler")
+    # Control: the glow pass as it is, at binding 18, is admitted.
+    assert core.mode_program_layout(pr.passes(tmp_path / "base", only=("glow",)))["passes"][0]["block"]["binding"] == 18

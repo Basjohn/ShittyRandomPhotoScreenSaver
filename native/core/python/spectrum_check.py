@@ -496,6 +496,21 @@ def round_item(core, engine, app, host, records: list[dict]) -> dict:
         scene.spectrum.update()
         again = scene.read(card)
         checks["newer_frame_draws_after_drop"] = int(again[..., :3].max()) > 0
+        # A refused frame (a NaN bar: no defined conversion) never blanks the card: the drawn frame stays, the refusal
+        # is counted once with its reason (audit N29 M4). Control: a frame with no bars, not refused, clears it.
+        refused_before = int(scene.spectrum.state().get("refused_frames", 0))
+        stream.publish(_record_with(chosen[12]["record"], first_bar=float("nan")), 12.0)
+        scene.spectrum.update()
+        kept = scene.read(card)
+        refusal = scene.spectrum.state()
+        checks["refused_frame_keeps_the_card"] = bool((kept == again).all()) and int(kept[..., :3].max()) > 0
+        checks["refused_frame_counted_once_with_its_reason"] = (
+            int(refusal.get("refused_frames", 0)) == refused_before + 1 and "u_bars" in str(refusal.get("last_refusal")))
+        stream.publish(_record_with(chosen[12]["record"], bar_count=0), 13.0)
+        scene.spectrum.update()
+        checks["control_no_bars_clears_the_card"] = int(scene.read(card)[..., :3].max()) == 0
+        facts["refused_frame"] = {"refused_frames": [refused_before, refusal.get("refused_frames")],
+                                  "last_refusal": refusal.get("last_refusal")}
         # Unbind: the reader goes on the render thread at the next sync.
         live_bound = core.packet_reader_live()
         scene.spectrum.unbind()
@@ -689,6 +704,21 @@ _SEAM_REALS = {"border_radius": 0.0, "spectrum_gloss": 0.0, "spectrum_fill_gradi
                "spectrum_peak_caps_mix": 0.0, "spectrum_pattern_mix": 0.0, "spectrum_ghost_fill_mix": 0.0}
 
 
+def _record_with(base: bytes, *, first_bar: float | None = None, bar_count: int | None = None) -> bytes:
+    """``base`` with its first bar or its bar count changed (the item round's refused frame and its control)."""
+    import struct
+
+    from core.visualizer_engine import spectrum_native_schema
+
+    layout = spectrum_native_schema.LAYOUT
+    record = bytearray(base)
+    if first_bar is not None:
+        struct.pack_into("<d", record, layout.field("bars").offset, first_bar)
+    if bar_count is not None:
+        struct.pack_into("<I", record, layout.field("bar_count").offset, bar_count)
+    return bytes(record)
+
+
 def _seam_record(base: bytes, count: int) -> bytes:
     import struct
 
@@ -849,6 +879,15 @@ def content_failure(core, engine, app, host, card: dict, record: bytes, frames: 
             scene.spectrum.update()
             host.frames(1)
             states.append(scene.spectrum.state())
+        # Audit N29 L10: a changed input (here the card's fade) re-arms the latch: tried once more, then held again.
+        changed_fade = 0.25 if float(card["content_fade"]) == 0.5 else 0.5
+        scene.spectrum.present_raw(_bare(dict(card, content_fade=changed_fade)))
+        rearmed = []
+        for step in range(frames, frames + 3):
+            stream.publish(record, float(step))
+            scene.spectrum.update()
+            host.frames(1)
+            rearmed.append(scene.spectrum.state())
         composite = scene.spectrum.composite.state()
     finally:
         stream.close()
@@ -860,7 +899,12 @@ def content_failure(core, engine, app, host, card: dict, record: bytes, frames: 
     held = (bool(states) and facts.get("content_failed") is True and facts.get("content_failures") == 1
             and last.get("records") == 1 and last.get("draws") == 0
             and "content failed" in str(last.get("last_reason", "")) and last.get("accepted", 0) >= 1)
-    return {"held": held, "records": [s.get("records") for s in states], "last_reason": last.get("last_reason"),
+    again = rearmed[-1] if rearmed else {}
+    rearmed_once = (bool(rearmed) and again.get("content_failures") == 2 and again.get("records") == 2
+                    and again.get("draws") == 0)
+    return {"held": held and rearmed_once, "held_first": held, "rearmed_once": rearmed_once,
+            "records": [s.get("records") for s in states + rearmed],
+            "failures": [s.get("content_failures") for s in states + rearmed], "last_reason": last.get("last_reason"),
             "last_facts": facts, "composite_surface": composite.get("surface")}
 
 

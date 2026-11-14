@@ -87,13 +87,13 @@ def test_the_card_maps_at_a_fractional_scale_with_the_windows_own_ratio(display,
     window's own device pixels (framebuffer over logical size, per axis) and the card's window map is whole pixels.
     Control: the same card placed on dpr's grid (the code before the fix) raises."""
     from rendering.native.composite import composite_geometry, window_pixel_ratio
-    from rendering.native.spectrum import framebuffer_pixels, spectrum_presentation
+    from rendering.native.spectrum import spectrum_presentation
     from widgets.spotify_visualizer.presentation_orientation import logical_rect_from_physical_rect
 
     (device_width, device_height), dpr = display
     window_size = (float(round(device_width / dpr)), float(round(device_height / dpr)))
-    window_pixels = framebuffer_pixels(window_size, dpr, native=(device_width, device_height))
-    assert window_pixels == (device_width, device_height)
+    # The framebuffer as Qt's own swapchain or redirect target reports it (CompositeItem.window_pixels, audit N29 L1).
+    window_pixels = (device_width, device_height)
     ratio = window_pixel_ratio(window_size, window_pixels)
     assert ratio != (dpr, dpr)                                     # the case: the two ratios differ
     # A card well away from the window's left and top edge (the offset error grows with the distance).

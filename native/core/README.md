@@ -69,12 +69,22 @@ never ships.
     non-overlapping fields inside the record, range rules on u32 scalars only), its fingerprint recomputed, never
     replacing a compiled schema. The packet reader admits it beside `frame_abi_generated.h`'s table, which keeps only
     the schemas a hand-written consumer reads.
-  - `mode_content.*` (N2.9): **generic mode content**, a mode drawn from data alone. `ModeProgram`: one to eight
-    full-target passes, each a fragment pack and a blend (replace, alpha, premultiplied, add), drawn in order after a
-    clearing draw with the core's input-free triangle (`shaders/mode.vert`). A pass declares `ModeSettings` (packed
-    when the settings change), `ModeFrame` (packed from the record by name per accepted frame) and the conventions
-    block; anything else is refused. `ModeSource` and `ModeContent` follow Spectrum's stream, admission and rest rules
-    on a composite item (one content per item). Python face: `rendering/native/mode.py`.
+  - `mode_content.*` (N2.9): **generic mode content**, a mode drawn from data alone, in the product 2D shaders' shape.
+    `ModeProgram`: one to eight full-target passes, each a fragment pack and a blend (replace, alpha, premultiplied,
+    add), drawn in order after a clearing draw with the core's triangle (`shaders/mode.vert`, which gives `v_uv`). A
+    pass declares one std140 block of its own (any name, any binding but 17), optionally the conventions block and
+    `in vec2 v_uv`; anything else is refused. One rule fills the block by member name from exactly one of three sources:
+    the core's conventions (`kModeCoreMembers`, mirrored as `MODE_CORE_MEMBERS`: what the Python 2D renderers take
+    from the card per frame, read from the item's card and the target), the settings, and the record's fields.
+  - `stream_source.*` (N2.9 round 2): what every mode item shares. `StreamSource`: the bound stream (bind, retire,
+    the render-thread retire job, the accept edge with the admission rule, the state report) under `SpectrumSource` and
+    `ModeSource`. `ContentLatch`: a content whose pipelines fail to build fails closed for the same inputs (recorded
+    once, nothing created again) and is tried once more when an input changes (the program, the settings, the card,
+    the stream, the target). A refused frame (a value with no defined conversion) never blanks the card: the last
+    drawn frame stays and the refusal is counted with its reason.
+  - Python faces: `rendering/native/mode.py` (`NativeMode`), `rendering/native/spectrum.py`; a composite item hides
+    and shows by a fade (`fade_ms`) and reports its window's framebuffer from Qt's own swapchain or redirect target
+    (`window_pixels`).
   - `vulkan_context.*`: D6, the process's Vulkan instance and one device per window, given to Qt Quick.
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
@@ -96,9 +106,11 @@ never ships.
 - `python/spectrum_check.py`: N2.5's proof of the native Spectrum item (uniform parity with the Python renderer at the
   widened run set, the item's contract with D1's close during copy, pixels against the Python renderer on OpenGL and
   against native OpenGL on Vulkan).
-- `python/generic_mode_check.py`: N2.9's proof on the harness-only mode `python/probe_rings/` (blocks against an
-  independent packer with the unknown and unfilled refusals, the reader by the runtime schema, the draw on OpenGL and
-  Vulkan with shader, spec and simulation changes and no rebuild, nothing at rest, GPU time per pass).
+- `python/generic_mode_check.py`: N2.9's proof on the harness-only mode `python/probe_rings/` (blocks from the three
+  sources against an independent packer with every refusal, the product's Oscilloscope and Spline Curve packs admitted
+  and Bubble refused for its samplers alone, the reader by the runtime schema, the draw on OpenGL and Vulkan at dpr 1
+  and 1.5 with shader, spec and simulation changes and no rebuild, a refused frame keeping the card, the content
+  latch, the fade, nothing at rest, GPU time per pass, the framebuffer at 2560x1440 at 150 %).
 - `python/timer_check.py`: N2.6's proof (off is free by count, a known-cost pass scaled N times and its empty-bracket
   control, QRhi's frame figure, latched reads in a real window with the waiting read as control, the frame trace and
   its report, the two forms against each other, validation; `timer_analysis.py`).
@@ -113,26 +125,33 @@ worked example (harness-only); a product mode does the same in the product's pla
    and the face tolerates codes appended after it (`schema_table_differences`).
 2. **Its simulation and record.** A Python simulation in the engine worker publishing one fixed-layout record per frame
    (`native_schema.NativeLayout.build` of `(name, kind, count)`; kinds u32, f64, f64x4; range rules on u32 fields).
-   Its `NativeSchema` is handed to the core at bind (`NativeMode.bind(mapping, schema)`); it is never added to the
-   compiled table (`native_schema._SCHEMA_MODULES` is for schemas a hand-written consumer reads).
-3. **Its passes.** One fragment shader per pass (GLSL 440, `#define SRPSS_CONVENTIONS_FRAGMENT` and
-   `//@srpss_conventions`; the pixel from `fragPixel`, no input), each declaring `ModeSettings` and `ModeFrame`
-   (std140, any bindings but 17). Every record field is a `ModeFrame` member of some pass, named exactly as the field
-   (an f64 a float, an f64x4 a vec4, a u32 an int, uint, bool or float, an array the same length). Baked by
-   `tools/regen_qrc.py --shaders` beside the source (the harness bakes with the same baker at run time), handed over as
-   bytes with the pass's blend (`ModePass`).
-4. **Its spec and settings.** The controls in its spec (`core/settings/visualizer_mode_settings.py`), and one Python
-   function giving every `ModeSettings` member by name from the spec and the card (target size, fade, ...), sent with
-   the program (`NativeMode.program(passes, settings)`) and again when Settings or the card change
-   (`NativeMode.settings`).
-5. **What is refused, with its reason:** a setting no pass declares and a record field no pass's `ModeFrame` declares
-   (unknown); a `ModeSettings` member no setting fills and a `ModeFrame` member no field names (unfilled); a value of the
-   wrong size or without a defined conversion; a pass that declares a texture, a sampler, storage, a push constant,
-   another block or an input; a schema that is not a valid fixed layout. A program that does not take the current
-   settings is refused and the drawn one stays.
+   Its `NativeSchema` goes in the runtime registry (`native_schema._RUNTIME_SCHEMA_MODULES`): the Python transport
+   knows it and the core receives it at bind (`NativeMode.bind(mapping, schema)`), so it never makes a built module's
+   table differ. `_SCHEMA_MODULES` is for the schemas the module compiles (a hand-written consumer's); a mode is in one
+   registry only.
+3. **Its passes.** One fragment shader per pass in the product 2D shaders' shape (GLSL 440; `in vec2 v_uv` and/or
+   `#define SRPSS_CONVENTIONS_FRAGMENT` with `//@srpss_conventions` and the pixel from `fragPixel`), each declaring one
+   std140 block of its own (any name, any binding but 17). Its members are filled by name: the core's conventions
+   (`MODE_CORE_MEMBERS`: `uMatrix`, `uItemSize`, `uContentRotationQuarters`, `u_resolution`, `u_dpr`,
+   `u_viewport_origin_px`, `u_quick_item_coords`, `u_fade`, `u_border_width`, `u_item_from_frag*`,
+   `u_window_from_target*`, `u_target_px`), every record field named exactly as the field (an f64 a float, an f64x4 a
+   vec4, a u32 an int or float under a range rule that fits it, a uint or a bool, an array the same length), and the
+   settings. Baked by `tools/regen_qrc.py --shaders` beside the source (the harness bakes with the same baker at run
+   time), handed over as bytes with the pass's blend (`ModePass`).
+4. **Its spec, settings and card.** The controls in its spec (`core/settings/visualizer_mode_settings.py`) and one
+   Python function giving every other member by name from the spec, sent with the program
+   (`NativeMode.program(passes, settings)`) and again when Settings change (`NativeMode.settings`); the item as shown
+   (`NativeMode.card(mode_card(...))`) whenever it changes.
+5. **What is refused, with its reason:** a setting or a record field no pass declares (unknown); a member no source
+   fills (unfilled); a name with two owners (a setting or a field naming a core member, a setting naming a field); a
+   value of the wrong size or without a defined conversion (a refused frame keeps the last drawn one); a pass that
+   declares a texture, a sampler, storage, a push constant, a second block of its own, a block at binding 17 or an input
+   other than `v_uv`; a schema that is not a valid fixed layout or names a compiled mode. A program that does not take
+   the current settings is refused and the drawn one stays.
 
 A new GPU technique (sampling an earlier pass, depth, more targets, compute, a new resource) is a primitive with its own
-C++ and harness, then used by every mode as data. Hand-written C++ for a mode's simulation is admitted only after its
+C++ and harness, then used by every mode as data (Bubble's `u_ambient_texture` and `u_ambient_light`, its offscreen
+ambient render's underlay and linear particle light, wait for the sampling primitive: plan N4.a). Hand-written C++ for a mode's simulation is admitted only after its
 goals are met and a measurement shows the hot path (Transitions.md, "Where a mode's work lives on the native core").
 
 The guards: CMake refuses a Qt SDK other than `requirements.txt`'s PySide6 pin; the module refuses to import under

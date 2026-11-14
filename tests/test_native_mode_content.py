@@ -54,7 +54,7 @@ def test_a_runtime_schema_is_the_compiled_tables_row_shape_and_its_fingerprint_i
     from rendering.native.packet_reader import python_schema_table
 
     compiled = python_schema_table()["schemas"]
-    assert compiled == [schema_table_entry(s) for s in sorted(native_schema.native_schemas().values(),
+    assert compiled == [schema_table_entry(s) for s in sorted(native_schema.compiled_schemas().values(),
                                                                  key=lambda s: s.schema_id)]
     for entry in [*compiled, schema_table_entry(pr.SCHEMA)]:
         assert fingerprint_by_offsets(entry) == entry["fingerprint"], entry["mode_id"]
@@ -83,6 +83,43 @@ def test_a_mode_code_appended_after_the_module_was_built_is_tolerated():
     assert face.schema_table_differences(renumbered, table)
     extra = dict(table, mode_codes=dict(table["mode_codes"], a_later_mode=99))
     assert face.schema_table_differences(extra, table)
+
+
+def test_a_runtime_schema_never_makes_the_module_table_differ_and_a_compiled_one_does(monkeypatch):
+    # Audit N29 M5.1: the schemas the module compiles (compared with a built module's table) and the runtime schemas
+    # (known to the Python transport, handed to the core at bind) are two registries.
+    import types
+
+    from core.visualizer_engine import native_schema
+    from core.visualizer_engine.native_schema import NativeLayout, NativeSchema
+    from rendering.native import packet_reader as face
+
+    module_table = face.python_schema_table()          # a module built before the new mode's schema existed
+    layout = NativeLayout.build((("level", "f64", 1),))
+    schema = NativeSchema(mode_id="oscilloscope", version=1, layout=layout, encode=lambda values: b"",
+                          decode=lambda payload: {}, fields=("level",))
+    fake = types.ModuleType("srpss_test_runtime_schema")
+    fake.SCHEMAS = (schema,)
+    monkeypatch.setitem(sys.modules, fake.__name__, fake)
+    monkeypatch.setattr(native_schema, "_runtime_ids", native_schema._runtime_ids)
+    compiled = dict(native_schema._SCHEMA_MODULES)
+
+    def registered(compiled_modules, runtime_modules):
+        monkeypatch.setattr(native_schema, "_SCHEMA_MODULES", compiled_modules)
+        monkeypatch.setattr(native_schema, "_RUNTIME_SCHEMA_MODULES", runtime_modules)
+        monkeypatch.setattr(native_schema, "_schemas", None)
+        return face.schema_table_differences(module_table, face.python_schema_table())
+
+    assert registered(compiled, {"oscilloscope": fake.__name__}) == []
+    assert schema.schema_id in native_schema.runtime_schemas() and schema.schema_id in native_schema.native_schemas()
+    assert schema.schema_id not in native_schema.compiled_schemas()
+    # Control: the same schema in the compiled registry is a difference (the module would raise SchemaTableMismatch).
+    differences = registered({**compiled, "oscilloscope": fake.__name__}, {})
+    assert differences and any("not in the module" in line for line in differences)
+    # A mode in both registries is refused.
+    with pytest.raises(RuntimeError, match="both schema registries"):
+        registered({**compiled, "oscilloscope": fake.__name__}, {"oscilloscope": fake.__name__})
+    monkeypatch.setattr(native_schema, "_schemas", None)
 
 
 # --------------------------------------------------------------------------------------------- the sources
@@ -162,29 +199,104 @@ def _block_members(text: str, block: str) -> list[str]:
     return [name for name, _kind in block_layout_from_glsl(block_declaration(text, block)).fields]
 
 
-def _declared(texts) -> tuple[set[str], set[str]]:
-    settings, frame = set(), set()
+_UNIFORM_BLOCK = re.compile(r"layout\s*\(\s*std140\s*,\s*binding\s*=\s*(\d+)\s*\)\s*uniform\s+(\w+)\s*\{")
+
+
+def own_blocks(text: str) -> list[tuple[str, int]]:
+    """A shader's uniform blocks other than the conventions block, (name, binding), as the core's checkPass reads its
+    reflection: the product 2D shape has exactly one, at any binding but 17."""
+    return [(name, int(binding)) for binding, name in _UNIFORM_BLOCK.findall(re.sub(r"//[^\n]*", "", text))
+            if name != "SrpssConventions"]
+
+
+def _sources(texts) -> dict[str, set[str]]:
+    """Each pass's own block's members by the source that fills them (mode_content.h's one rule)."""
+    from rendering.native.mode import MODE_CORE_MEMBERS
+
+    by_source: dict[str, set[str]] = {"core": set(), "record": set(), "settings": set()}
     for text in texts:
-        settings |= set(_block_members(text, "ModeSettings"))
-        frame |= set(_block_members(text, "ModeFrame"))
-    return settings, frame
+        (block, _binding), = own_blocks(text)
+        for name in _block_members(text, block):
+            source = ("core" if name in MODE_CORE_MEMBERS else "record" if name in pr.SCHEMA.fields else "settings")
+            by_source[source].add(name)
+    return by_source
 
 
-def test_probe_rings_passes_declare_its_record_and_its_spec_by_name():
+def test_probe_rings_is_in_the_product_2d_shape_and_fills_each_member_from_one_source():
     base = [pr.shader_text(filename) for _name, filename, _blend in pr.PASSES]
-    settings, frame = _declared(base)
-    assert frame == set(pr.SCHEMA.fields)                 # every record field a member, every member a field
-    resolved = pr.resolve_settings({}, target_px=(480, 270), dpr=1.0)
-    assert settings == set(resolved)
+    assert all(own_blocks(text) == [("ProbeRingsDraw", 18)] for text in base)
+    assert "in vec2 v_uv;" in pr.shader_text("glow.frag")      # the core's triangle gives v_uv (M5)
+    sources = _sources(base)
+    assert sources["record"] == set(pr.SCHEMA.fields)          # every record field a member, every member a field
+    assert sources["core"] == {"u_target_px", "u_fade"}
+    assert sources["settings"] == set(pr.resolve_settings({}, dpr=1.0))
     assert set(pr.SETTING_UNIFORMS) >= {control.key for control in pr.TINT_SPEC.controls}
     # The proof's change: the tinted shader declares a member the base spec does not fill (the core's unfilled
     # refusal), which the tinted spec fills.
-    tinted_settings, tinted_frame = _declared([pr.shader_variant(tint=True), base[1]])
-    assert tinted_frame == frame and tinted_settings - settings == {"u_tint"}
-    tinted = pr.resolve_settings({}, target_px=(480, 270), dpr=1.0, spec=pr.TINT_SPEC, defaults=pr.TINT_DEFAULTS)
-    assert tinted_settings == set(tinted)
-    assert pr.shader_variant(green=True) != base[0] and "u_tint" not in _block_members(pr.shader_variant(green=True),
-                                                                                        "ModeSettings")
+    tinted = _sources([pr.shader_variant(tint=True), base[1]])
+    assert tinted["record"] == sources["record"] and tinted["settings"] - sources["settings"] == {"u_tint"}
+    assert tinted["settings"] == set(pr.resolve_settings({}, dpr=1.0, spec=pr.TINT_SPEC, defaults=pr.TINT_DEFAULTS))
+    assert pr.shader_variant(green=True) != base[0] and "u_tint" not in _sources([pr.shader_variant(green=True)])[
+        "settings"]
+    # The thickness is a setting in device pixels: the dpr scales it, never the shader.
+    assert pr.resolve_settings({}, dpr=1.5)["u_thickness_px"] == 1.5 * pr.resolve_settings({}, dpr=1.0)["u_thickness_px"]
+
+
+def test_the_product_2d_shaders_have_one_block_of_their_own_and_bubble_two_samplers():
+    # Audit N29 M5: the generic pass takes the product 2D shaders' shape. Oscilloscope and Spline Curve declare v_uv and
+    # one block of their own; Bubble also two samplers (the sampling primitive's, plan N4.a). Proved over the real
+    # .qsb packs by checkPass in tests/test_native_core_mode.py and the harness's blocks round.
+    from tools import regen_qrc
+
+    folder = regen_qrc.mode_shader_dir()
+    for name in ("oscilloscope.frag", "devcurve.frag", "bubble.frag"):
+        text = (folder / name).read_text(encoding="utf-8")
+        blocks = own_blocks(text)
+        assert len(blocks) == 1 and blocks[0][1] != 17, (name, blocks)
+        assert "layout(location = 0) in vec2 v_uv;" in text
+    bubble = (folder / "bubble.frag").read_text(encoding="utf-8")
+    assert sorted(re.findall(r"uniform\s+sampler2D\s+(\w+)", bubble)) == ["u_ambient_light", "u_ambient_texture"]
+    # Negative control: a second block of its own is seen.
+    assert len(own_blocks(text + "\nlayout(std140, binding = 19) uniform Second { float x; };\n")) == 2
+
+
+_FROM_THE_CARD = re.compile(r'values\["(\w+)"\] = (?:tuple\()?(?:frame\.\w+|presentation\.(?:dpr|border_width|'
+                            r'content_fade)\b|\(0\.0, 0\.0\)$|1$)', re.M)
+
+
+def card_members(source: str) -> set[str]:
+    """The block members a Python 2D renderer fills from its frame (the card) rather than from its settings or its
+    mode state: what the core's conventions must cover (audit N29 M5)."""
+    return set(_FROM_THE_CARD.findall(source)) | ({"uContentRotationQuarters"}
+                                                  if 'values["uContentRotationQuarters"]' in source else set())
+
+
+def test_the_cores_conventions_cover_what_the_python_2d_renderers_take_from_the_card():
+    from rendering.native.mode import MODE_CORE_MEMBERS
+
+    folder = ROOT / "rendering" / "quick" / "visualizer" / "implementations"
+    for name in ("devcurve.py", "bubble.py"):
+        source = (folder / name).read_text(encoding="utf-8")
+        taken = card_members(source)
+        assert {"uMatrix", "uItemSize", "u_resolution", "u_dpr", "u_fade"} <= taken, name
+        assert taken <= set(MODE_CORE_MEMBERS), (name, taken - set(MODE_CORE_MEMBERS))
+    # Negative control: a new member taken from the frame is seen outside the table.
+    assert card_members('        values["u_frame_new"] = frame.logical_size\n') - set(MODE_CORE_MEMBERS) == {
+        "u_frame_new"}
+
+
+def test_the_cores_conventions_table_is_the_faces():
+    from rendering.native.mode import MODE_CORE_MEMBERS
+
+    text = (SRC / "mode_content.cpp").read_text(encoding="utf-8")
+    table = text.split("const ModeCoreMember kModeCoreMembers[] = {", 1)[1].split("};", 1)[0]
+    rows = re.findall(r'\{\s*"(\w+)",\s*(\d+),\s*(true|false)\s*\}', table)
+    assert {name: (int(n), flag == "true") for name, n, flag in rows} == MODE_CORE_MEMBERS
+    assert [name for name, _n, _f in rows] == list(MODE_CORE_MEMBERS)      # one order
+    # Negative control: a row changed in C++ only is seen.
+    changed = table.replace('{ "u_fade", 1, true }', '{ "u_fade", 2, true }')
+    assert {n: (int(c), f == "true") for n, c, f in re.findall(r'\{\s*"(\w+)",\s*(\d+),\s*(true|false)\s*\}',
+                                                                 changed)} != MODE_CORE_MEMBERS
 
 
 def test_probe_rings_shaders_bake_for_every_shipped_target_with_no_module_build(tmp_path):
@@ -201,6 +313,30 @@ def test_probe_rings_shaders_bake_for_every_shipped_target_with_no_module_build(
         folder = tmp_path / label
         folder.mkdir()
         assert pr.bake(text, "rings.frag", folder)
+
+
+def test_the_harness_refusal_shaders_declare_what_a_pass_may_not_and_bake(tmp_path):
+    import generic_mode_check as check
+    from tools import regen_qrc
+
+    assert own_blocks(check.variant_text("binding17")) == [("ProbeRingsDraw", 17)]
+    assert sorted(own_blocks(check.variant_text("two_blocks"))) == [("ProbeRingsDraw", 18), ("ProbeSecond", 19)]
+    assert "uniform sampler2D u_probe_texture" in check.variant_text("sampler")
+    bubble = (regen_qrc.mode_shader_dir() / "bubble.frag").read_text(encoding="utf-8")
+    stripped = check.bubble_without_samplers_text(bubble)
+    code = re.sub(r"//[^\n]*", "", stripped)
+    assert "sampler2D" not in code and not any(f"texture({name}," in code for name in check.BUBBLE_SAMPLERS)
+    assert own_blocks(stripped) == own_blocks(bubble)                      # its own block untouched
+    # Negative control: a shader that does not read its samplers as expected is refused, not silently passed.
+    with pytest.raises(ValueError):
+        check.bubble_without_samplers_text(bubble.replace("texture(u_ambient_light,", "texture( u_ambient_light,"))
+    try:
+        regen_qrc.quick_shader_baker(sys.executable)
+    except regen_qrc.QrcRegenerationError as exc:
+        pytest.skip(f"no qsb: {exc}")
+    for kind in check.VARIANTS:                                            # every one compiles: refused by checkPass
+        assert pr.bake(check.variant_text(kind), "glow.frag", tmp_path / kind)
+    assert pr.bake(stripped, "bubble.frag", tmp_path / "bubble")
 
 
 def test_probe_rings_simulation_is_deterministic_and_its_record_round_trips():

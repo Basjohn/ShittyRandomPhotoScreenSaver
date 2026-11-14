@@ -177,7 +177,7 @@ def render() -> str:
             f'    {{ "{schema.mode_id}", {schema.mode_code}, {schema.version}, 0x{schema.schema_id:X}u, '
             f'{schema.layout.size}, "{schema.layout.fingerprint()}", k{symbol}Fields, '
             f'quint32(sizeof(k{symbol}Fields) / sizeof(Field)), k{symbol}CheckOrder, {len(order)} }},')
-    lines.append("// Every native schema this build knows (native_schema.native_schemas()).")
+    lines.append("// Every schema the module compiles (native_schema.compiled_schemas(); a runtime schema comes at bind).")
     lines.append("constexpr Schema kSchemas[] = {")
     lines += table_rows
     lines += ["};", "", "} // namespace srpss_core::frame_abi", ""]

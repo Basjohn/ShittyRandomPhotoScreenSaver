@@ -148,7 +148,7 @@ constexpr Field kSpectrumV1Fields[] = {
 };
 constexpr quint32 kSpectrumV1CheckOrder[] = { 0, 5, 7, 11, 14, 15, 17, 19, 21, 22, 23, 35, 36 };
 
-// Every native schema this build knows (native_schema.native_schemas()).
+// Every schema the module compiles (native_schema.compiled_schemas(); a runtime schema comes at bind).
 constexpr Schema kSchemas[] = {
     { "spectrum", 1, 1, 0x10101u, 1488, "b98ca5a1be307b36", kSpectrumV1Fields, quint32(sizeof(kSpectrumV1Fields) / sizeof(Field)), kSpectrumV1CheckOrder, 13 },
 };

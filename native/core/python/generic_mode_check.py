@@ -291,42 +291,58 @@ SAMPLER_LINE = "layout(binding = 3) uniform sampler2D u_probe_texture;\n"
 SECOND_BLOCK = "layout(std140, binding = 19) uniform ProbeSecond { float u_second; };\n"
 
 
-def _variant_pass(folder: Path, kind: str):
+VARIANTS = ("sampler", "binding17", "two_blocks")
+BUBBLE_SAMPLERS = ("u_ambient_texture", "u_ambient_light")
+
+
+def _replaced(text: str, old: str, new: str) -> str:
+    if text.count(old) != 1:
+        raise ValueError(f"{old!r} is in the shader {text.count(old)} times, not once")
+    return text.replace(old, new)
+
+
+def variant_text(kind: str) -> str:
     """The glow pass changed to declare what a pass may not: a sampler (a primitive's business), its block at binding
-    17 (the conventions block's), or a second block of its own."""
+    17 (the conventions block's), or a second block of its own (``VARIANTS``)."""
+    text = _mode().shader_text("glow.frag")
+    if kind == "sampler":
+        text = _replaced(text, "void main() {", SAMPLER_LINE + "void main() {")
+        return _replaced(text, "fragColor = vec4(pulse_color.rgb,",
+                         "fragColor = texture(u_probe_texture, v_uv) + vec4(pulse_color.rgb,")
+    if kind == "binding17":
+        return _replaced(text, "binding = 18) uniform ProbeRingsDraw", "binding = 17) uniform ProbeRingsDraw")
+    if kind == "two_blocks":
+        text = _replaced(text, "void main() {", SECOND_BLOCK + "void main() {")
+        return _replaced(text, "fragColor = vec4(pulse_color.rgb,", "fragColor = vec4(u_second) + vec4(pulse_color.rgb,")
+    raise ValueError(f"unknown variant {kind!r} ({', '.join(VARIANTS)})")
+
+
+def _variant_pass(folder: Path, kind: str):
     from rendering.native.mode import ModePass
 
-    pr = _mode()
-    text = pr.shader_text("glow.frag")
-    if kind == "sampler":
-        text = text.replace("void main() {", SAMPLER_LINE + "void main() {", 1).replace(
-            "fragColor = vec4(pulse_color.rgb,", "fragColor = texture(u_probe_texture, v_uv) + vec4(pulse_color.rgb,", 1)
-    elif kind == "binding17":
-        text = text.replace("binding = 18) uniform ProbeRingsDraw", "binding = 17) uniform ProbeRingsDraw", 1)
-    else:
-        text = text.replace("void main() {", SECOND_BLOCK + "void main() {", 1).replace(
-            "fragColor = vec4(pulse_color.rgb,", "fragColor = vec4(u_second) + vec4(pulse_color.rgb,", 1)
-    return [ModePass("glow", pr.bake(text, "glow.frag", folder / f"variant_{kind}"), "add")]
+    return [ModePass("glow", _mode().bake(variant_text(kind), "glow.frag", folder / f"variant_{kind}"), "add")]
+
+
+def bubble_without_samplers_text(text: str) -> str:
+    """The product's bubble.frag with its two samplers taken out (each read a constant): what is left of Bubble's
+    shape, which the core admits, so its samplers alone are refused."""
+    kept = [line for line in text.splitlines(keepends=True) if "uniform sampler2D" not in line]
+    if len(kept) != len(text.splitlines()) - len(BUBBLE_SAMPLERS):
+        raise ValueError("bubble.frag does not declare its two samplers one per line")
+    text = "".join(kept)
+    for sampler in BUBBLE_SAMPLERS:
+        if f"texture({sampler}," not in text:
+            raise ValueError(f"bubble.frag does not read {sampler}")
+        text = text.replace(f"texture({sampler},", "srpssNoTexture(")
+    return _replaced(text, "void main()", "vec4 srpssNoTexture(vec2 uv) { return vec4(0.0 * uv.x); }\nvoid main()")
 
 
 def _bubble_without_samplers(folder: Path):
-    """A copy of the product's bubble.frag whose two samplers are taken out (their reads a constant): what is left of
-    Bubble's shape is admitted, so its samplers alone are refused."""
     from rendering.native.mode import ModePass
     from tools import regen_qrc
 
-    pr = _mode()
-    text = (regen_qrc.mode_shader_dir() / "bubble.frag").read_text(encoding="utf-8")
-    lines = []
-    for line in text.splitlines(keepends=True):
-        if "uniform sampler2D" in line:
-            continue
-        lines.append(line)
-    text = "".join(lines)
-    for sampler in ("u_ambient_texture", "u_ambient_light"):
-        text = text.replace(f"texture({sampler},", "srpssNoTexture(")
-    text = text.replace("void main()", "vec4 srpssNoTexture(vec2 uv) { return vec4(0.0 * uv.x); }\nvoid main()", 1)
-    return [ModePass("bubble", pr.bake(text, "bubble.frag", folder / "bubble_without_samplers"), "alpha")]
+    text = bubble_without_samplers_text((regen_qrc.mode_shader_dir() / "bubble.frag").read_text(encoding="utf-8"))
+    return [ModePass("bubble", _mode().bake(text, "bubble.frag", folder / "bubble_without_samplers"), "alpha")]
 
 
 # --------------------------------------------------------------------------------------------------- the stream
