@@ -639,15 +639,8 @@ ReadResult PacketReader::read()
         ++m_torn;
         return ReadResult::Torn;
     }
-    const fa::Schema *found = nullptr;
-    QString cause;
-    QString reason;
-    if (!m_config.skipHeadCheck) {
-        // The head alone, whole under its seqlock, decides admission before any payload byte is copied.
-        if (!admit(head, &cause, &reason))
-            return refuse(latest, cause, reason);
-        found = schema(head.payloadSchema);
-    }
+    // Identity first (lead, 14 Nov): a slot of another stream is foreign whatever its schema says, so a stale slot never
+    // fails this stream; only this stream's own slots are admitted by their head.
     if (m_config.expectIdentity && !m_config.skipIdentity
         && (head.runtimeGeneration != m_config.runtimeGeneration || head.engineGeneration != m_config.engineGeneration
             || head.activationId != m_config.activationId || head.modeCode != m_config.modeCode)) {
@@ -656,6 +649,15 @@ ReadResult PacketReader::read()
             m_lastForeign = latest;
         }
         return ReadResult::Foreign;
+    }
+    const fa::Schema *found = nullptr;
+    QString cause;
+    QString reason;
+    if (!m_config.skipHeadCheck) {
+        // The head alone, whole under its seqlock, decides admission before any payload byte is copied.
+        if (!admit(head, &cause, &reason))
+            return refuse(latest, cause, reason);
+        found = schema(head.payloadSchema);
     }
     if (m_state.loadAcquire() != Open) { // D1: no copy starts once the stream is retiring
         ++m_readsWhileRetiring;

@@ -186,3 +186,20 @@ def test_a_mode_switch_never_evaluates_a_shell_with_studio_missing(settings_tab,
     _drain()
     errors = warnings.type_errors()
     assert errors == [], f"{len(errors)} TypeErrors by (window, phase) {warnings.summary()}; first: {errors[:3]}"
+
+
+@pytest.mark.parametrize("greyed", [False, True])
+def test_the_switcher_never_offers_a_mode_the_tab_greys_on_its_backend(settings_tab, native_calls_recorded,
+                                                                      no_gl_checks, greyed):
+    """Audit 14 Nov (D10 point 2): on a backend where a mode has no renderer, the Visualizers tab greys its pill and
+    refuses to select its page, so the Studio's mode picker must not list it (picking it raised ValueError). The greyed
+    set is the tab's own (``_modes_without_renderer``), here given the second mode as the Vulkan rehearsal would.
+    Control: with nothing greyed (OpenGL) the second mode is offered."""
+    if greyed:
+        settings_tab._modes_without_renderer = {SECOND: "No Vulkan renderer yet."}
+    controller, _made = _open(settings_tab, QmlWarnings())
+    offered = [mode["id"] for mode in controller.bridge.modes]
+    assert FIRST in offered
+    assert (SECOND in offered) is (not greyed)
+    controller.close()
+    _drain()

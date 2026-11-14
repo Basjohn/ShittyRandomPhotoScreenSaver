@@ -275,7 +275,8 @@ class FramePacketReader:
     (``refused``), never accepted and never acknowledged, the refusal is raised to the caller, and the reader is
     failed from then on (``refusal``: it reads nothing more, the stream reports failed). None: no head check."""
 
-    def __init__(self, buffer, *, admit: Callable[[int, int, int], None] | None = None) -> None:
+    def __init__(self, buffer, *, admit: Callable[[int, int, int], None] | None = None,
+                 expect: tuple[int, int, int, int] | None = None) -> None:
         self._view = memoryview(buffer)
         fields = _validate(self._view)
         self._slot_bytes = fields[7]
@@ -286,6 +287,13 @@ class FramePacketReader:
         self._admit = admit
         self.refused = 0
         self.refusal: PacketAbiError | None = None
+        # The stream's expected slot identity (runtime generation, engine generation, activation id, mode code, as
+        # stored: u32) or None. A whole slot of another identity is not this stream's frame: counted foreign (once per
+        # sequence), never accepted, and decided BEFORE its schema is checked, so a stale slot never fails the stream
+        # (lead, 14 Nov; the C++ reader's order too).
+        self._expect = None if expect is None else tuple(_u32(value) for value in expect)
+        self.foreign = 0
+        self._last_foreign = 0
 
     def read_identity(self) -> tuple[int, int, int, int]:
         """The header's configure-time identity: (runtime generation, engine generation, activation id, mode code)."""
@@ -317,6 +325,14 @@ class FramePacketReader:
                 break
             # ``identity_and_stamp``: the slot's four identity fields, then publish_ns (FramePacket's last fields).
             head, size, schema, logical, source, flags, edges, *identity_and_stamp = _SLOT_HEAD.unpack_from(view, base)
+            if self._expect is not None:
+                if head != latest or _U64.unpack_from(view, base)[0] != latest or latest % 2:
+                    break
+                if tuple(identity_and_stamp[:4]) != self._expect:
+                    if latest != self._last_foreign:
+                        self.foreign += 1
+                        self._last_foreign = latest
+                    return None
             if self._admit is not None:
                 # The head alone, whole under its seqlock, decides admission before any payload byte is copied.
                 if head != latest or _U64.unpack_from(view, base)[0] != latest or latest % 2:

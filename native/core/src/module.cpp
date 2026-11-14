@@ -33,6 +33,7 @@
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#include <QtCore/QMutex>
 #include <QtCore/QObject>
 #include <QtCore/QPointer>
 #include <QtCore/QString>
@@ -851,10 +852,24 @@ PyObject *spectrum_block_layout(PyObject *, PyObject *)
 
 // ---------------------------------------------------------------- the packet reader (N2.3: D1, D2, the transport rule)
 
+// A reader behind a handle is owned by its references: the handle's own and one per read in progress (a read with the
+// pause_in_copy hook runs with the GIL released, so another Python thread may close the handle meanwhile). A close only
+// retires the reader and drops the handle's reference; whoever drops the last one (the reading thread, when a read was
+// in progress) releases and deletes it there, so a close never unmaps a view a read is copying (audit, 14 Nov:
+// fix-soon 3; the render-thread retire job is the bound stream's form of the same rule, spectrum.h).
+struct ReaderEntry
+{
+    srpss_core::PacketReader *reader = nullptr;
+    qint64 handle = 0;
+    QAtomicInt refs { 1 };
+};
+
 struct Readers
 {
     qint64 next = 1;
-    QHash<qint64, srpss_core::PacketReader *> live;
+    QHash<qint64, ReaderEntry *> live;     // the handles Python holds (the GIL guards them)
+    QMutex closingMutex;                   // guards `closing` (the last reference may drop without the GIL)
+    QHash<qint64, ReaderEntry *> closing;  // closed while a read held them: reachable only for the hook's resume
 };
 
 Readers &readers()
@@ -863,12 +878,33 @@ Readers &readers()
     return r;
 }
 
+ReaderEntry *entryOf(long long handle)
+{
+    ReaderEntry *entry = readers().live.value(handle, nullptr);
+    if (!entry)
+        PyErr_Format(PyExc_KeyError, "no packet reader %lld (closed, or never created)", handle);
+    return entry;
+}
+
 srpss_core::PacketReader *readerOf(long long handle)
 {
-    srpss_core::PacketReader *reader = readers().live.value(handle, nullptr);
-    if (!reader)
-        PyErr_Format(PyExc_KeyError, "no packet reader %lld (closed, or never created)", handle);
-    return reader;
+    ReaderEntry *entry = entryOf(handle);
+    return entry ? entry->reader : nullptr;
+}
+
+// Drops one reference; the last one releases the reader on this thread (its consumer's) and deletes it.
+void dropReference(ReaderEntry *entry)
+{
+    if (entry->refs.deref())
+        return;
+    {
+        QMutexLocker lock(&readers().closingMutex);
+        readers().closing.remove(entry->handle);
+    }
+    entry->reader->retire();
+    entry->reader->release();
+    delete entry->reader;
+    delete entry;
 }
 
 PyObject *pyU32(quint32 value)
@@ -994,7 +1030,10 @@ PyObject *packet_reader_open(PyObject *, PyObject *args)
         return nullptr;
     }
     const qint64 handle = readers().next++;
-    readers().live.insert(handle, reader);
+    auto *entry = new ReaderEntry;
+    entry->reader = reader;
+    entry->handle = handle;
+    readers().live.insert(handle, entry);
     return PyLong_FromLongLong(handle);
 }
 
@@ -1003,9 +1042,11 @@ PyObject *packet_reader_read(PyObject *, PyObject *args)
     long long handle = 0;
     if (!PyArg_ParseTuple(args, "L", &handle))
         return nullptr;
-    srpss_core::PacketReader *reader = readerOf(handle);
-    if (!reader)
+    ReaderEntry *entry = entryOf(handle);
+    if (!entry)
         return nullptr;
+    entry->refs.ref(); // the read's own reference: a close meanwhile leaves the release to this thread
+    srpss_core::PacketReader *reader = entry->reader;
     srpss_core::ReadResult result = srpss_core::ReadResult::Nothing;
     if (reader->pausesInCopy()) {
         // The D1 hook holds the read until another Python thread resumes it (that thread never closes this handle).
@@ -1015,6 +1056,7 @@ PyObject *packet_reader_read(PyObject *, PyObject *args)
     } else {
         result = reader->read();
     }
+    dropReference(entry);
     const char *name = srpss_core::readResultName(result);
     return PyUnicode_FromString(name);
 }
@@ -1040,11 +1082,20 @@ PyObject *packet_reader_resume(PyObject *, PyObject *args)
     long long handle = 0;
     if (!PyArg_ParseTuple(args, "L", &handle))
         return nullptr;
-    srpss_core::PacketReader *reader = readerOf(handle);
-    if (!reader)
-        return nullptr;
-    reader->resume();
-    Py_RETURN_NONE;
+    if (ReaderEntry *entry = readers().live.value(handle, nullptr)) {
+        entry->reader->resume();
+        Py_RETURN_NONE;
+    }
+    {
+        // A handle closed while its read was paused: still resumable until that read lets go of it.
+        QMutexLocker lock(&readers().closingMutex);
+        if (ReaderEntry *entry = readers().closing.value(handle, nullptr)) {
+            entry->reader->resume();
+            Py_RETURN_NONE;
+        }
+    }
+    PyErr_Format(PyExc_KeyError, "no packet reader %lld (closed, or never created)", handle);
+    return nullptr;
 }
 
 PyObject *packet_reader_head(PyObject *, PyObject *args)
@@ -1144,15 +1195,24 @@ PyObject *packet_reader_close(PyObject *, PyObject *args)
     long long handle = 0;
     if (!PyArg_ParseTuple(args, "L", &handle))
         return nullptr;
-    srpss_core::PacketReader *reader = readers().live.take(handle);
-    if (!reader) {
+    ReaderEntry *entry = readers().live.take(handle);
+    if (!entry) {
         PyErr_Format(PyExc_KeyError, "no packet reader %lld (closed, or never created)", handle);
         return nullptr;
     }
-    reader->retire();
-    reader->release();
-    const QJsonObject state = reader->stateJson();
-    delete reader;
+    // Retiring at once (no copy starts after it); the release is the last reference's (a read in progress keeps it).
+    entry->reader->retire();
+    QJsonObject state = entry->reader->stateJson();
+    bool readInProgress = false;
+    {
+        QMutexLocker lock(&readers().closingMutex);
+        readInProgress = entry->refs.loadAcquire() > 1;
+        if (readInProgress)
+            readers().closing.insert(entry->handle, entry);
+    }
+    state.insert(QStringLiteral("released_by"), readInProgress ? QStringLiteral("the reading thread")
+                                                               : QStringLiteral("the closing thread"));
+    dropReference(entry);
     return pyJson(state);
 }
 
@@ -1160,6 +1220,8 @@ PyObject *packet_reader_live(PyObject *, PyObject *)
 {
     QJsonObject o = srpss_core::PacketReader::liveJson();
     o.insert(QStringLiteral("handles"), int(readers().live.size()));
+    QMutexLocker lock(&readers().closingMutex);
+    o.insert(QStringLiteral("closing"), int(readers().closing.size()));
     return pyJson(o);
 }
 

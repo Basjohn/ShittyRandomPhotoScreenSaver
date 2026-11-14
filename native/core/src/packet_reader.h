@@ -17,8 +17,9 @@
 // - per-stream liveness: copies_started, copies_finished and the last accepted sequence, readable without a lock.
 //
 // D2, one consumer: read() is the only consuming read. It acknowledges a sequence (consumed_sequence in the mapping)
-// at the accept edge: the slot whole under its seqlock, admitted by its head (schema, mode code, version, size), the
-// expected identity, the payload copied whole and the record's own range rules held; the frame's protected-edge mask is
+// at the accept edge: the slot whole under its seqlock, the expected identity (a slot of another identity is foreign
+// before its schema is looked at, so a stale slot never fails the stream), admitted by its head (schema, mode code,
+// version, size), the payload copied whole and the record's own range rules held; the frame's protected-edge mask is
 // then the retained frame's, and the acknowledgement is written before read() returns. Nothing else writes
 // consumed_sequence. readHead() returns the newest whole slot's head and moves nothing (not accepted, not
 // consumed_sequence).

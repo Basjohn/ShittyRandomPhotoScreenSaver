@@ -172,7 +172,10 @@ class ReferenceReader:
         from core.visualizer_engine.packet_abi import FramePacketReader
 
         self.memory = SharedMemory(name=mapping_name)
-        self._reader = FramePacketReader(self.memory.buf, admit=partial(admit_slot_head, accept="native"))
+        identity = None if expect is None else tuple(int(expect[key]) for key in (
+            "runtime_generation", "engine_generation", "activation_id", "mode_code"))
+        self._reader = FramePacketReader(self.memory.buf, admit=partial(admit_slot_head, accept="native"),
+                                         expect=identity)
         self.naive = naive
         self._retained: tuple[int, bytes, dict | None] | None = None
         self._cause: str | None = None
@@ -187,11 +190,14 @@ class ReferenceReader:
         view = self.memory.buf
         latest = _U64.unpack_from(view, _LATEST)[0]
         torn = self._reader.torn_reads
+        foreign = self._reader.foreign
         try:
             packet = self._reader.read_latest()
             if packet is None:
                 if self._reader.torn_reads > torn:
                     return "torn"
+                if self._reader.foreign > foreign:
+                    return "foreign"
                 return "stale" if latest < self._reader.accepted else "nothing"
             fields = decode_native_payload(packet.payload_schema, packet.payload)
         except PayloadRefused as refusal:
@@ -478,6 +484,18 @@ def _foreign(adv: Adversary, reader) -> list[Check]:
             ("retained", reader.retained_sequence(), own)]
 
 
+def _foreign_before_schema(adv: Adversary, reader) -> list[Check]:
+    # Lead's decision (14 Nov): identity is decided before the schema. A stale slot of another stream whose head this
+    # build would refuse is counted foreign and never fails the stream; the stream's own next frame is accepted.
+    schema, mode, payload = bad_slot("newer version")
+    adv.publish(payload, schema=schema, mode=mode, identity=(IDENTITY[0], IDENTITY[1] + 1, IDENTITY[2]))
+    first = reader.read()
+    consumed = adv.consumed()
+    own = adv.publish(valid_record(2))
+    return [("result", first, "foreign"), ("consumed", consumed, 0), ("refusal", reader.refusal_cause(), None),
+            ("after", reader.read(), "accepted"), ("retained", reader.retained_sequence(), own)]
+
+
 def cases() -> list[Case]:
     table = [
         Case("a whole slot is accepted and acknowledged", _whole, naive_fails=False),
@@ -487,8 +505,9 @@ def cases() -> list[Case]:
         Case("duplicate: the accepted sequence republished", _duplicate, ("head_resets_watermark",)),
         Case("stale: the latest sequence rewound", _stale, ("accept_unordered",)),
         Case("oversize: payload_bytes beyond the slot", _oversize, ("skip_head_check", "acknowledge_refused")),
-        Case("identity: another engine generation's slot", _foreign, ("skip_identity",), reference=False,
-             expect=EXPECTED_IDENTITY),
+        Case("identity: another engine generation's slot", _foreign, ("skip_identity",), expect=EXPECTED_IDENTITY),
+        Case("identity: another stream's slot with a schema this build refuses is foreign, not refused",
+             _foreign_before_schema, ("skip_identity",), expect=EXPECTED_IDENTITY),
     ]
     for name in HEAD_REFUSALS:
         table.append(Case(f"refused at the head: {name}", _head_refusal(name),
@@ -539,9 +558,9 @@ def run_reference_table() -> dict:
     for case in cases():
         if not case.reference:
             continue
-        held = run_case(case, lambda name, _case: ReferenceReader(name), reader_name="reference")
-        naive = run_case(case, lambda name, _case: ReferenceReader(name, naive=True), reader_name="naive",
-                         control="naive")
+        held = run_case(case, lambda name, case_: ReferenceReader(name, expect=case_.expect), reader_name="reference")
+        naive = run_case(case, lambda name, case_: ReferenceReader(name, naive=True, expect=case_.expect),
+                         reader_name="naive", control="naive")
         rows.append({"case": case.name, "held": held.held, "failures": held.failures(),
                      "naive_fails": case.naive_fails, "naive_failed": not naive.held})
     passed = all(row["held"] and (row["naive_failed"] or not row["naive_fails"]) for row in rows)
