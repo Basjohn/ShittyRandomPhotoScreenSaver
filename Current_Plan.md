@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** High: N2.9 (generic mode content). Medium: N2.3's C++ lows with the stale compiled-in `spectrum.frag` (one C++ round; the lead builds). Audit: the N2.5 merge (b8457c3c). N2.8 waits for two displays (14 Nov 05:40 UTC: only the LG TV present, as primary).
+**Now (in flight):** High: N2.9 with N2.3's leftovers and the N2.5 audit's fixes, one branch, built at ABI 9 (GitHub f030503e, compiled first time); harnesses running on the built module. Medium: derivatives after discard in Oscilloscope, Bubble and Spline Curve, with audit L5's guard shapes and 1B.10's interpolated-uv side defect (the same three shaders). N2.8 waits for two displays.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
