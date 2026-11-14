@@ -79,7 +79,8 @@ DRAG = (800, 1000, 2)              # the resize round's widths (start, end, step
 DRAG_HEIGHT = 400
 COST_HOSTS = ((2560, 1440), (3840, 2160))
 COST_AMBIENT = (2048, 1152)
-COST_FRAMES = 60
+COST_FRAMES = 240
+COST_MIN_SAMPLES = 30               # Qt's OpenGL backend reports a GPU time only for frames whose query was ready
 RESOLVE_BUDGET_MS = {(2560, 1440): 0.3, (3840, 2160): 0.6}   # choice G (D7's budgets, until the lead sets another)
 CLEAR_BUDGET_MS = 0.05             # choice F: "negligible" (the lead's word), stated here as 0.05 ms at 2048 x 1152
 _ALLOWED_ENV: set[str] = set()
@@ -686,7 +687,7 @@ def round_cost(core, engine, app, packs: dict, folder: Path) -> dict:
             single, multi = timings["x1"]["median_ms"], timings["x4"]["median_ms"]
             bound = None if single is None or multi is None else round(multi - single, 4)
             facts[label]["resolve_bound_ms"] = bound
-            checks[f"{label}_timed"] = all(t["samples"] >= COST_FRAMES // 2 for t in timings.values())
+            checks[f"{label}_timed"] = all(timings[key]["samples"] >= COST_MIN_SAMPLES for key in ("x1", "x4"))
             checks[f"{label}_4x_minus_1x_within_the_resolve_budget"] = bound is not None and bound <= RESOLVE_BUDGET_MS[
                 size]
         finally:
