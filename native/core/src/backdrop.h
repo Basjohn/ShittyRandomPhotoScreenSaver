@@ -203,13 +203,14 @@ public:
 
     static int liveItems();
 
+    // Shared by the item (GUI thread), its node and its provider (render thread); backdrop.cpp. Public: the node and
+    // the provider are file-local classes in backdrop.cpp that hold it (MSVC C2248 when it was protected).
+    struct Shared;
+
 protected:
     QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *data) override;
     void itemChange(ItemChange change, const ItemChangeData &value) override;
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
-
-    // Shared by the item (GUI thread), its node and its provider (render thread); backdrop.cpp.
-    struct Shared;
 
 private:
     std::shared_ptr<Shared> m_shared;
