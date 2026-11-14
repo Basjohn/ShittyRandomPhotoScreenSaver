@@ -455,7 +455,8 @@ unchanged; 865 tests on the merge. Still owed: the lead's Display 1 and Display 
    before the build (the core's shader files against the Python blit, two PERSONALSET photos): at the exact halving the
    interior is equal and a few outermost texels differ by 1 level; at the product's R-63 placement (one pixel of
    overscan, an odd window) about 4 % of the first level's texels differ by 1 level (the blit's own coordinate
-   arithmetic), at most 1 level everywhere. Rule (a) is therefore proved within 1 level, exactness recorded as a fact.
+   arithmetic), at most 1 level on the outputs (single first-level texels on a sharp edge reach 2). Rule (a) is
+   therefore proved on the outputs within 1 level and on every level within 2, exactness recorded as a fact.
 3. *Dimming in the seed, not at sample time* (a deviation from point 5, the lead's call): point 6 and the plan keep
    MaterialSurface unchanged, so the pyramid carries the dimming as the Python one does (the layer times one minus the
    dimming, one rounding instead of the window's blend and the blit's); a dimming change is one build, as it is one
@@ -474,6 +475,23 @@ unchanged; 865 tests on the merge. Still owed: the lead's Display 1 and Display 
    resize and a transition frame reach the pyramid through the layer itself. Limits: the layer's own fade-in opacity is
    not in the backdrop (the cards see the full photo while the layer fades in with its first photo); point 7 (true glass
    over the Visualizer) is not built.
+
+*As proved (ABI 16 build, round 1; `.artifacts/evidence/native_core/n5_7b/20261114_n57b_round1*/`).* N57B PASS on
+OpenGL and Vulkan with validation (Qt 6.12.0's excused defect A only). Levels: the OpenGL native levels equal the
+emulation before the build (the outputs within 1 level of the Python pyramid; at the product's R-63 placement one
+first-level texel at 2); Vulkan within 1 level of OpenGL. Cards: the five materials' cards on the dark and the bright
+wallpaper, native on OpenGL equal to today's and Vulkan equal to OpenGL but for a handful of grain-hash pixels (the
+look-review sheets `cards_review_{dark,bright}.png`). Cost per build (p90, the core's GPU timer): Vulkan 0.033 ms at
+2560 x 1440 and 0.050 ms at 3840 x 2160, OpenGL 0.038 and 0.059 ms, against the 0.3 and 0.6 ms budgets; the render
+thread 0.04 ms (Vulkan). Nothing at rest; one build per photo commit (none at the Vulkan hand-over) and per dimming
+change; cards exactly Normal before the first photo; parked: no QRhi object and no build. A Crossfade drawn on the layer
+(N5.2a): one build per layer frame (6 of 6), the glass card following every step, nothing after. The route, teardown and the
+regression harnesses (N57A, N38, N25, N52A) pass on the same module.
+Found on the way, today's OpenGL path (not the native one): after the Python backdrop's first publish its heavy level
+(level 1) is overwritten once before the next refresh (consistent with Qt generating the wrapped texture's mips from
+level 0, `surface_backdrop.py` `_publish_texture`), so Acrylic, Frosted, Mica and Smoked show a sharper blur than
+designed until the next refresh (up to 19 levels on the bright photo); the proof's cards round records it
+(`todays_first_publish_against_steady`) and compares against today's steady state.
 
 ## D8. What Parity+ means, and the ranked plus (decided 12 Nov 2026)
 

@@ -24,6 +24,8 @@ Rounds (one child process per API; OpenGL first, its levels and stills kept for 
             hand-over frame builds nothing); a dimming change builds once, the same dimming none; before any photo the
             cards are exactly Normal (fail closed); parked (demand 0): no QRhi object, no build on a photo change, the
             frame driver sees no pyramid; woken: one build.
+  transition D7 point 3: a Crossfade drawn on the layer (N5.2a), its clock held: one build per layer frame, the glass
+            card changing with every step, nothing after the run.
   route     ``SurfaceBackdropOwner`` on the product route: native on Vulkan (its item draws a card's material over the
             native layer), Python on OpenGL; retire destroys the native item.
   lifetime  the item destroyed (its pyramid released on the render thread), and the host closed with a pyramid alive
@@ -54,7 +56,7 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("levels", "cards", "cost", "rest", "route", "lifetime")
+ROUNDS = ("levels", "cards", "cost", "rest", "transition", "route", "lifetime")
 CHILD_TIMEOUT_S = 1800
 PHOTO_FOLDER = Path(r"C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET")
 PHOTOS = (("dark", "Usu_Underwater_Lab_1440p.png"), ("bright", "670483.jpg"))
@@ -752,6 +754,63 @@ def round_rest(core, engine, app, api: str) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
+# --------------------------------------------------------------------------------------------------- transition
+
+
+TRANSITION_PROGRESS = (0.15, 0.3, 0.45, 0.6, 0.75, 0.9)
+
+
+def round_transition(core, engine, app, api: str) -> dict:
+    """D7 point 3: the pyramid follows every frame the layer draws of a transition (N5.2a's Crossfade on the layer,
+    its clock held by the harness): one build per layer pass, the backdrop changing with the picture, nothing after."""
+    import background_layer_check as blc
+    import numpy as np
+    import transition_route_check as trc
+
+    checks: dict = {}
+    facts: dict = {}
+    photos = [_photos(blc.DISPLAY)[label] for label, _n in PHOTOS]
+    host = _host(core, blc.WINDOW, 1.0)
+    scene = BackdropScene(core, engine, host, 1.0, blc.DISPLAY, background="layer", backdrop="native")
+    try:
+        scene.add_cards()
+        layer = scene.base.layer
+        scene.present(photos[0][0])
+        scene.settle()
+        clock = trc.Clock()
+        run = trc.production_run("crossfade", [photos[0][0], photos[1][0]], 1)
+        clock.at(run, 0.0)
+        scene.present(photos[0][0])
+        layer = scene.base.layer
+        layer._clock_ns = clock
+        layer.transition(run)
+        scene.settle()                                   # the destination's upload committed
+        before = (_builds(scene), int((scene.base.composite_state().get("surface") or {}).get("passes_recorded", 0)))
+        cards = []
+        for progress in TRANSITION_PROGRESS:
+            clock.at(run, progress)
+            layer.tick()
+            scene.frames(1)
+            cards.append(scene.card_regions(scene.read())["glass"][..., :3].astype(int))
+        after = (_builds(scene), int((scene.base.composite_state().get("surface") or {}).get("passes_recorded", 0)))
+        builds, passes = after[0] - before[0], after[1] - before[1]
+        facts["during_run"] = {"builds": builds, "layer_passes": passes, "progress_steps": len(TRANSITION_PROGRESS)}
+        checks["one_build_per_layer_frame"] = builds == passes and passes >= len(TRANSITION_PROGRESS)
+        steps = [float(np.abs(a - b).mean()) for a, b in zip(cards, cards[1:])]
+        facts["glass_card_mean_change_per_step"] = [round(s, 2) for s in steps]
+        checks["cards_follow_the_transition"] = all(s > 0.5 for s in steps)
+        layer.transition(None)
+        scene.present(photos[1][0])
+        scene.settle()
+        rest = _builds(scene)
+        scene.frames(REST_FRAMES)
+        checks["nothing_after_the_run"] = _builds(scene) == rest
+    finally:
+        scene.close(app)
+        facts["host_close"] = _close_host(app, host)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
 # --------------------------------------------------------------------------------------------------- route
 
 
@@ -913,6 +972,8 @@ def child(args) -> dict:
                     record[name] = round_cost(core, engine, app, args.api)
                 elif name == "rest":
                     record[name] = round_rest(core, engine, app, args.api)
+                elif name == "transition":
+                    record[name] = round_transition(core, engine, app, args.api)
                 elif name == "route":
                     record[name] = round_route(core, engine, app, args.api)
                 else:
