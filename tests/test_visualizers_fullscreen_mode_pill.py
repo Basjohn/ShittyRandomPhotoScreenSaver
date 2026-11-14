@@ -19,12 +19,16 @@ from core.animation import AnimationManager
 from core.settings.capability_activation import set_widget_family_activated
 from core.settings.default_contract import require_canonical_default
 from core.settings.fullscreen_overlays import (
+    CHILD_GEOMETRY_KEY,
     CORNERS,
     FULLSCREEN_OVERLAYS_KEY,
     OVERLAY_IDS,
+    PLACEMENT_KEYS,
     canonical_fullscreen_overlays,
+    normalize_fullscreen_overlays,
     rebase_offset_for_corner,
 )
+from rendering.widget_descriptors import CUSTOM_POSITION_OPTION_LABEL
 from core.settings.settings_manager import SettingsManager
 from core.settings.visualizer_mode_registry import build_visualizer_mode_activation, iter_visualizer_mode_descriptors
 
@@ -119,25 +123,108 @@ def test_every_control_writes_the_one_canonical_value_and_keeps_what_it_does_not
         check.click()
         _flush(tab)
         assert _stored(manager)[overlay][key] is (not canonical[overlay][key]), (overlay, key)
+    page.font_size.setValue(page.font_size.value() + 1)
+    _flush(tab)
+    assert _stored(manager)["font_size"] == canonical["font_size"] + 1
+    # Nothing the page does not show was touched: every save kept Fullscreen Edit's placement (1D.12 A2: saving
+    # while CUSTOM is shown never wipes it).
+    stored = _stored(manager)
+    assert stored["font_family"] == canonical["font_family"]
+    normal = normalize_fullscreen_overlays(seeded)
+    for overlay in OVERLAY_IDS:
+        assert {key: stored[overlay][key] for key in PLACEMENT_KEYS[overlay]} == {
+            key: normal[overlay][key] for key in PLACEMENT_KEYS[overlay]}, overlay
+    # Each moved overlay reads CUSTOM; a corner chosen from it clears the placement (plan 1D.12 A2).
     for overlay, combo in (("preset", page.preset_corner), ("now_playing", page.now_playing_corner)):
-        assert [combo.itemData(index) for index in range(combo.count())] == list(CORNERS)
+        assert [combo.itemData(index) for index in range(len(CORNERS))] == list(CORNERS)
+        assert combo.currentText() == CUSTOM_POSITION_OPTION_LABEL
         other = next(corner for corner in CORNERS if corner != canonical[overlay]["corner"])
         combo.setCurrentIndex(combo.findData(other))
         _flush(tab)
         assert _stored(manager)[overlay]["corner"] == other
-    page.font_size.setValue(page.font_size.value() + 1)
-    _flush(tab)
-    assert _stored(manager)["font_size"] == canonical["font_size"] + 1
-    # Nothing the page does not show was touched, except the offset the new corner rebased.
+        assert combo.currentData() == other
     stored = _stored(manager)
-    assert stored["font_family"] == canonical["font_family"]
     for overlay in OVERLAY_IDS:
-        rebased = rebase_offset_for_corner(seeded[overlay], stored[overlay]["corner"])
-        assert (stored[overlay]["offset_x"], stored[overlay]["offset_y"]) == (rebased["offset_x"],
-                                                                              rebased["offset_y"])
-        assert stored[overlay]["scale"] == 1.25
-    assert stored["now_playing"]["child_geometry"]["artwork"]["width_scale"] == 1.5
+        assert {key: stored[overlay][key] for key in PLACEMENT_KEYS[overlay]} == {
+            key: canonical[overlay][key] for key in PLACEMENT_KEYS[overlay]}, overlay
     _destroy(dialog)
+
+
+def _custom_item(combo):
+    index = combo.findText(CUSTOM_POSITION_OPTION_LABEL)
+    assert index >= 0
+    return index, combo.model().item(index)
+
+
+@pytest.mark.parametrize("overlay", OVERLAY_IDS)
+@pytest.mark.parametrize("member", ["offset", "scale", "extent", "children"])
+def test_an_overlay_moved_in_fullscreen_edit_reads_custom_until_a_corner_clears_it(manager, overlay, member):
+    """1D.12 A2: moved = any Fullscreen Edit placement member off its canonical default."""
+    canonical = canonical_fullscreen_overlays()
+    if member == "children" and CHILD_GEOMETRY_KEY not in PLACEMENT_KEYS[overlay]:
+        pytest.skip("the preset toast has no parts")
+    seeded = deepcopy(canonical)
+    seeded[overlay].update({
+        "offset": {"offset_x": 0.125},
+        "scale": {"scale": 1.25},
+        "extent": {"text_width": 4.0},
+        "children": {CHILD_GEOMETRY_KEY: {"artwork": {"width_scale": 1.5, "height_scale": 1.5,
+                                                      "x_offset": 0.0, "y_offset": 0.0}}},
+    }[member])
+    manager.set(FULLSCREEN_OVERLAYS_KEY, seeded)
+    dialog, tab = _dialog(manager)
+    try:
+        page = tab._fullscreen_page
+        tab._fullscreen_pill.click()
+        combo = page.preset_corner if overlay == "preset" else page.now_playing_corner
+        other_combo = page.now_playing_corner if overlay == "preset" else page.preset_corner
+        index, item = _custom_item(combo)
+        assert combo.currentIndex() == index and item.isEnabled()
+        # The other overlay was never moved: CUSTOM is offered there but disabled, its corner shown.
+        other_index, other_item = _custom_item(other_combo)
+        assert other_combo.currentIndex() != other_index and not other_item.isEnabled()
+        # Saving another control while CUSTOM is shown keeps the placement.
+        page.font_size.setValue(page.font_size.value() + 1)
+        _flush(tab)
+        stored = _stored(manager)
+        assert {key: stored[overlay][key] for key in PLACEMENT_KEYS[overlay]} == {
+            key: normalize_fullscreen_overlays(seeded)[overlay][key] for key in PLACEMENT_KEYS[overlay]}
+        assert combo.currentIndex() == index
+        # A corner chosen from CUSTOM clears the placement; CUSTOM is then disabled.
+        corner = seeded[overlay]["corner"]
+        combo.setCurrentIndex(combo.findData(corner))
+        _flush(tab)
+        stored = _stored(manager)
+        assert stored[overlay]["corner"] == corner
+        assert {key: stored[overlay][key] for key in PLACEMENT_KEYS[overlay]} == {
+            key: canonical[overlay][key] for key in PLACEMENT_KEYS[overlay]}
+        assert {k: v for k, v in stored[overlay].items() if k not in PLACEMENT_KEYS[overlay]} == {
+            k: v for k, v in seeded[overlay].items() if k not in PLACEMENT_KEYS[overlay]}
+        assert combo.currentData() == corner and not item.isEnabled()
+        tab.load_from_settings()
+        assert combo.currentData() == corner and not item.isEnabled()
+    finally:
+        _destroy(dialog)
+
+
+def test_an_unmoved_overlay_never_offers_custom(manager):
+    """Negative control: the canonical placement shows its corner with CUSTOM disabled, and a new corner is just a
+    corner (the rebase rule, nothing cleared)."""
+    canonical = canonical_fullscreen_overlays()
+    dialog, tab = _dialog(manager)
+    try:
+        page = tab._fullscreen_page
+        for overlay, combo in (("preset", page.preset_corner), ("now_playing", page.now_playing_corner)):
+            index, item = _custom_item(combo)
+            assert combo.currentData() == canonical[overlay]["corner"] and not item.isEnabled()
+            other = next(corner for corner in CORNERS if corner != canonical[overlay]["corner"])
+            combo.setCurrentIndex(combo.findData(other))
+            _flush(tab)
+            expected = rebase_offset_for_corner(canonical[overlay], other)
+            assert _stored(manager)[overlay] == expected
+            assert combo.currentData() == other and not item.isEnabled()
+    finally:
+        _destroy(dialog)
 
 
 def test_a_reload_shows_the_stored_value(manager):
