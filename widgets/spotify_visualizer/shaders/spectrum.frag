@@ -501,6 +501,16 @@ float spectrum_rim_coverage(float side_dist_px, float top_dist_px) {
     return max(fwidthFine(min(side_dist_px, top_dist_px)), 0.0001);
 }
 
+// The border band of a bar (x) or a segment (y): one authored unit in from each edge, never under one logical pixel
+// (the bar top's stroke rule: a narrower band holds no pixel centre at small visual scales), on the continuous
+// coordinate the fragment's pixel centre has, the same test on both edges (``local`` is half-open, [0, extent)). The
+// old test floored the coordinate and took ``<=`` on the low edge: two units on the left and bottom against one plus
+// the extent's fraction on the right and top, so the left border covered the rim glow's brightest columns (1D.14).
+bool spectrum_in_border_band(float local, float extent, float scale) {
+    float band = max(scale, 1.0);
+    return local < band || local >= extent - band;
+}
+
 vec4 blend_spectrum_rim_glow(vec4 base_color, float rim_alpha) {
     if (rim_alpha <= 0.001) return base_color;
     vec3 glow_rgb = u_spectrum_glow_color.rgb;
@@ -787,7 +797,7 @@ void main() {
         fill = spectrum_fill_gradient(fill, y_rel / (0.95 * inner_height));
 
         float bw_px = floor(bar_width);
-        float bx = floor(bar_local_x);
+        bool in_side_band = spectrum_in_border_band(bar_local_x, bar_width, authored_scale);
 
         vec4 sp_color;
         bool sp_is_border = false;
@@ -796,7 +806,7 @@ void main() {
         // fill and its ghost. ``band_ghost`` is that stroke's share of the ghost (0 with no Bar Fill ghost above).
         float band_ghost = 0.0;
         if (is_bar && corner_ghost <= 0.0 && fill_ghost_above && bw_px > 2.0 * authored_scale
-                && !(bx <= authored_scale || bx >= bw_px - authored_scale) && y_rel >= authored_scale
+                && !in_side_band && y_rel >= authored_scale
                 && y_rel >= active_height - max(authored_scale, 1.0)) {
             band_ghost = fill_k * lift;
         }
@@ -812,8 +822,7 @@ void main() {
             float ghost_factor = mix(1.0, 0.15, t);
             // Ghost visibility is owned by its opacity, not border alpha. An
             // author may deliberately use fully transparent or black borders.
-            bool ghost_side = (bw_px <= 2.0 * authored_scale) || bx <= authored_scale
-                || bx >= bw_px - authored_scale;
+            bool ghost_side = (bw_px <= 2.0 * authored_scale) || in_side_band;
             vec4 ghost_base = spectrum_ghost_tip(spectrum_ghost_fill(spectrum_ghost_colour(bar_index, u_fade), fill,
                 ghost_side, bar_index, bar_local_x, bar_width, y_rel, x_rel, authored_scale, t), t);
             ghost_base.a *= ghost_alpha * ghost_factor * ghost_cover;
@@ -834,7 +843,7 @@ void main() {
             if (bw_px <= 2.0 * authored_scale) {
                 on_border = true;
             } else {
-                bool on_side = (bx <= authored_scale || bx >= bw_px - authored_scale);
+                bool on_side = in_side_band;
                 // The moving horizontal cap is finished pixel chrome, not world
                 // thickness. A sub-pixel interval can contain no fragment centre
                 // at some fractional bar heights, which is the observed top-edge
@@ -966,15 +975,14 @@ void main() {
 
     float bw_px = floor(bar_width);
     float sh_px = floor(seg_height);
-    float bx = floor(bar_local_x);
-    float by = floor(seg_local_y);
 
     bool on_border = false;
     if (is_bar_frag || is_ghost_frag) {
         if (bw_px <= 2.0 * authored_scale || sh_px <= 2.0 * authored_scale) {
             on_border = true;
         } else {
-            if (bx <= authored_scale || bx >= bw_px - authored_scale || by <= authored_scale || by >= sh_px - authored_scale) {
+            if (spectrum_in_border_band(bar_local_x, bar_width, authored_scale)
+                    || spectrum_in_border_band(seg_local_y, seg_height, authored_scale)) {
                 on_border = true;
             }
         }
