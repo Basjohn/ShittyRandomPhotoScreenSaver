@@ -38,13 +38,13 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.5 (High). Medium is free (5-hour window at 80 %; next dispatch after its 07:00 UTC reset).
+**Now (in flight):** nothing; N2.5 merged (b8457c3c). Main's module rebuilds at ABI 8; then the lead's N2.8 rehearsal on Display 1. Dispatches resume after the 07:00 UTC reset.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
 - High:
-  1. N2.5 (Spectrum at parity; the reader's first user), then N2.8; N2.3's and N2.7's leftovers
-     ride with the next fitting dispatch.
+  1. N2.9 (generic mode content: new modes iterate with no build round), then N2b; the lead runs N2.8 on Display 1
+     between them. N2.3's and N2.5's leftovers ride with the next fitting dispatch.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
   1. N2.3's C++ control lows once N2.5 merges (the same files).
@@ -441,47 +441,22 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
 Order inside N2 (the numbers stay stable for the documents that cite them): N2.1 to N2.4, then N2.6, N2.7, then
 N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the Python renderer's retirement.
 
-- [ ] N2.5 Spectrum at parity on both backends (the port rule above; scheduled after N2.6 and N2.7, which its rule
-  needs: (e) GPU time per pass is N2.6's timer, (f) the bounded Vulkan rehearsal is N2.7's path and N2.8's run).
-  The Python renderer retires only after N2.8 passes. N1.6's Spectrum group is merged (`spectrum.frag` bakes);
-  N1.4's raw `gl_FragCoord` in it is not. Bar coverage keeps R-197's rule: one continuous coordinate from the
-  target's own pixel (`fragPixel`), and the diagonal-seam test runs on the native item. Boxes (one High dispatch;
-  C++ goes through the lead's build rounds):
-  - Route (agent, 14 Nov; branch `worktree-agent-ac07545e5cda02f94` until merge): N2.4's composite draws a
-    `SpectrumContent` (`native/core/src/spectrum.*`) on the card's whole-device-pixel rect, recorded at
-    `beforeRendering` only on an accepted or dropped frame or a card change (nothing at rest), bracketed by N2.6's
-    timer; the product's `spectrum.frag` is the one fragment source. The N2.3 reader is opened on the GUI thread,
-    read only at the item's sync on the render thread (D2's accept edge), marked Retiring on unbind or destruction
-    and released by the render-thread retire job (D1). D10: Spectrum's `renderer_backends` gains `"vulkan"` only
-    once rules (a) to (e) pass; the scene then attaches `NativeVisualizerRoute` on Vulkan. OpenGL keeps the Python
-    renderer until N2.8. Built and proved at module rounds 1 and 2: `spectrum.frag` through the conventions include
-    (18 runs identical), the item's contract on both backends, the seam test on the native item, rule (c), box 7's
-    route, box 9 (a refused payload fails closed), the audit's reader lifetime, Studio switcher and
-    foreign-before-schema.
-  - [ ] Rule (a): pixel parity on OpenGL against the Python renderer at the widened run set (Spectrum: both
-    variants plus 16 Choice offers). Round 2: segment mode within 1 level; bars mode up to 196 levels, with full-height
-    columns at the outermost bars' outer edges and peak caps one device row off (worst frame input 328, with and
-    without the mapping control). Lead decision 14 Nov: bit-exact, not a tolerance. The shader rebuilds the window
-    coordinate (the item passes its target's origin in window device pixels and Python's own float32 map), so
-    nothing moves at the switch. Round 3 carries it with the fine derivative. Steady frames reach at most 1 level;
-    fade frames are reported apart for the lead's decision.
-  - [ ] Rule (b): the same runs on Vulkan in the hidden host against native OpenGL, within a stated tolerance.
-  - [ ] Rule (c): frame trace and render-thread figures beside the Python path's; zero calls holding a Python
-    thread state.
-  - [ ] Rule (d): Settings, Studio and engine-worker parity; Spectrum's own tests green; the diagonal-seam test on
-    the native item.
-  - [ ] Rule (e): GPU time per pass through N2.6's timer; nothing per frame at rest (`tools/overhead_baseline.py`).
-  - [ ] N2.3's refusal leftover rides here if the item's route touches it (a refused payload fails closed).
-  - [ ] Audit 14 Nov, fix-soon 3: the reader is never deleted or unmapped before the render-thread retire job ran
-    (`packet_reader.cpp:239-247` unmaps in the destructor; `packet_reader_close` deletes on the caller's thread,
-    safe only under the GIL). A GUI close marks Retiring and hands ownership to the retire job; a test races a GUI
-    close with a render-thread read.
-  - [ ] Audit 14 Nov, fix-soon 2: the Studio's mode switcher (`ui/studio/settings_link.py:620-624`) lists modes
-    with no renderer on the running backend; picking one raises at `ui/tabs/visualizers_tab.py:443`. Filter it as
-    the Visualizers tab does, with a test.
-  - [ ] Lead decision 14 Nov (audit decision 1): a slot of another stream identity is counted foreign before its
-    schema is checked, in both readers, so a stale slot never fails a native stream; a test per reader.
-  - The Python renderer is deleted only once N2.8 (rule (f)) passes, in the same change as the switch.
+- [ ] N2.5 leftovers (N2.5 merged 14 Nov, b8457c3c, ABI 8: rules (a), (b), (c), (e) and (g) proved; route,
+  figures and decisions in the merge message and `.artifacts/evidence/native_core/n2_5/`; the Python renderer
+  retires only after N2.8 passes, in the switch change):
+  - [ ] Studio on Vulkan: Spectrum's Studio preview is the Python renderer in an OpenGL node, so `has_studio` is
+    OpenGL-only (`STUDIO_PREVIEW_BACKENDS`). A native Studio preview (the same native item in the Studio's scene)
+    before the flip (NF) or before Vulkan becomes a default, whichever is first.
+  - [ ] The two-block split (port rule (g)'s preferred shape): a settings block packed on change and a frame block
+    per frame, removing the 980 to 995 Python calls a frame on the OpenGL path; OpenGL bit-identical at the
+    widened run set.
+  - [ ] Derivatives after a `discard` (R-210's class) remain in Oscilloscope (12), Bubble (2) and Spline Curve (8)
+    (`tests/test_shader_derivatives.py` lists them; `guard_control.txt` in the evidence): each fixed before its N5
+    port admits it, the guard then binding that mode.
+  - [ ] The module's compiled-in `spectrum.frag` copy (the program round's negative control) predates the hoist;
+    refreshed at the next C++ round.
+  - Surface format: RGBA8 (RGBA16F gave rule (a) no gain at twice the memory; quad alignment fixed it).
+    `surface_format` stays a harness-only switch.
 - [ ] N2.9 Generic mode content: a mode drawn by the core from data alone, so new modes iterate with no build
   round (after N2.5's round 4, which builds the settings half: runtime `.qsb` and the settings block packed by
   name).
