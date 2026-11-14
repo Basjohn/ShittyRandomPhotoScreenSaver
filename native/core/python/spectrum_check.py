@@ -111,13 +111,17 @@ def capture_runs(sample_every: int) -> tuple[list[dict], list]:
             return
         presentation = snapshot.presentation
         geometry = composite_geometry(presentation)
-        card = spectrum_presentation(presentation, geometry)
+        dpr = float(presentation.dpr)
+        pixels = (int(frame.viewport[2]), int(frame.viewport[3]))
+        card = spectrum_presentation(presentation, geometry, window_size=(pixels[0] / dpr, pixels[1] / dpr),
+                                     window_pixels=pixels)
         values = dict(self._values)
+        # The target's own members (the native composite's, not the window's); the window map stays the Python
+        # renderer's own, so the comparison proves the card's rows are the Python renderer's float32 rows.
         values["uMatrix"] = (0.0,) * 16
         values["uItemSize"] = tuple(card["item_size"])
-        values["u_item_from_frag"] = 1
-        values["u_item_from_frag_x"] = tuple(card["item_from_target"][:3])
-        values["u_item_from_frag_y"] = tuple(card["item_from_target"][3:])
+        values["u_window_from_target_x"] = tuple(card["window_from_target"][:3])
+        values["u_window_from_target_y"] = tuple(card["window_from_target"][3:])
         values["u_target_px"] = tuple(card["target_size"])
         flag = str(logical.mode_state.parameters["spectrum_pattern_shown"]) in SPECTRUM_FLAG_PATTERNS
         entry = {"key": current["key"], "index": current["index"], "flag": flag, "card": card,
@@ -262,7 +266,7 @@ def python_references(samples) -> list:
             gl.glClearColor(0.0, 0.0, 0.0, 0.0)
             gl.glClear(gl.GL_COLOR_BUFFER_BIT)
             w, h = logical_size
-            matrix = (2.0 / w, 0.0, 0.0, 0.0, 0.0, -2.0 / h, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0)
+            matrix = _reference_matrix(w, h)
             host.render(snapshot=snapshot, viewport=(0, 0, width, height), logical_size=(float(w), float(h)),
                         matrix_values=matrix)
             gl.glPixelStorei(gl.GL_PACK_ALIGNMENT, 1)
@@ -376,14 +380,27 @@ class Scene:
         host_check._drop_item(app, self.root)
 
 
+def _reference_matrix(width: float, height: float) -> tuple:
+    """The Python reference's item matrix (``python_references``): the item is the whole target, Y down."""
+    return (2.0 / width, 0.0, 0.0, 0.0, 0.0, -2.0 / height, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0)
+
+
 def _card_for_item(card: dict) -> dict:
-    """The card with its target on the item's own rect (offset 0)."""
+    """The card with its target on the item's own rect (offset 0), mapped as the Python reference maps its own target
+    (the reference's window is the item: its rows, and the target's pixel rebuilt as that window's)."""
+    from rendering.native.spectrum import compose_window_from_target
+    from rendering.quick.visualizer.implementations.spectrum import item_from_fragment
+
     dpr = float(card["dpr"])
     width, height = card["item_size"]
     quarters = int(card["quarters"])
-    target = [height * dpr, width * dpr] if quarters % 2 else [width * dpr, height * dpr]
-    return dict(card, item_from_target=[1.0 / dpr, 0.0, 0.0, 0.0, 1.0 / dpr, 0.0],
-                target_size=[float(round(v)) for v in target])
+    pixels = (int(round(width * dpr)), int(round(height * dpr)))
+    target = [pixels[1], pixels[0]] if quarters % 2 else list(pixels)
+    rows = item_from_fragment(_reference_matrix(width, height), (0, 0, *pixels), (width, height), quarters,
+                              card["oriented_size"])
+    return dict(card, item_from_window=[*rows[0], *rows[1]],
+                window_from_target=compose_window_from_target(rows, (0.0, 0.0), dpr),
+                target_size=[float(v) for v in target])
 
 
 def round_item(core, engine, app, host, records: list[dict]) -> dict:

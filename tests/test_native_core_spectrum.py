@@ -37,9 +37,15 @@ def test_the_card_maps_the_targets_pixel_to_the_items_oriented_coordinate(quarte
     from rendering.native.spectrum import SPECTRUM_PRESENTATION_KEYS, spectrum_presentation
     from widgets.spotify_visualizer.presentation_orientation import logical_rect_from_physical_rect
 
+    import struct
+
+    from rendering.native.spectrum import _ortho_item_matrix
+    from rendering.quick.visualizer.implementations.spectrum import item_from_fragment
+
     presentation = _presentation(content_rotation_quarters=quarters)
     geometry = composite_geometry(presentation)
-    card = spectrum_presentation(presentation, geometry)
+    window_size, window_pixels = (1920.0, 1080.0), (2880, 1620)
+    card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels)
     assert set(card) == set(SPECTRUM_PRESENTATION_KEYS)
     json.dumps(card)                                                    # plain data for the module
     outer = tuple(float(v) for v in presentation.outer_rect)
@@ -49,12 +55,24 @@ def test_the_card_maps_the_targets_pixel_to_the_items_oriented_coordinate(quarte
     oriented = target if quarters == 0 else tuple(logical_rect_from_physical_rect(
         target, physical_size=item, content_rotation_quarters=quarters))
     dpr = float(presentation.dpr)
-    assert card["item_from_target"] == pytest.approx([1 / dpr, 0.0, oriented[0], 0.0, 1 / dpr, oriented[1]])
     assert card["target_size"] == [float(v) for v in geometry.texture_size]
-    # The far corner of the target lands on the oriented target rect's far corner.
-    far = (card["target_size"][0] * card["item_from_target"][0] + card["item_from_target"][2],
-           card["target_size"][1] * card["item_from_target"][4] + card["item_from_target"][5])
-    assert far == pytest.approx((oriented[0] + oriented[2], oriented[1] + oriented[3]))
+    # The window map is the Python renderer's own: item_from_fragment of Qt's float32 item matrix, bit for bit as
+    # float32 (what the GPU reads).
+    python_rows = item_from_fragment(_ortho_item_matrix(window_size, outer[:2], single=True), (0, 0, *window_pixels),
+                                     item, quarters, card["oriented_size"])
+    f32 = lambda values: struct.pack(f"<{len(values)}f", *values)                     # noqa: E731
+    assert f32(card["item_from_window"]) == f32((*python_rows[0], *python_rows[1]))
+    # The target's pixel is rebuilt as the window's by whole pixels and signs only (exact in float32)...
+    rebuild = card["window_from_target"]
+    assert all(value == round(value) for value in rebuild)
+    assert sorted(abs(v) for v in (rebuild[0], rebuild[1], rebuild[3], rebuild[4])) == [0.0, 0.0, 1.0, 1.0]
+    # ...and lands, through the window map, where the target's pixel lies in the oriented item (both corners).
+    for u, v in ((0.5, 0.5), (card["target_size"][0] - 0.5, card["target_size"][1] - 0.5)):
+        x = rebuild[0] * u + rebuild[1] * v + rebuild[2]
+        y = rebuild[3] * u + rebuild[4] * v + rebuild[5]
+        mapped = (card["item_from_window"][0] * x + card["item_from_window"][1] * y + card["item_from_window"][2],
+                  card["item_from_window"][3] * x + card["item_from_window"][4] * y + card["item_from_window"][5])
+        assert mapped == pytest.approx((oriented[0] + u / dpr, oriented[1] + v / dpr), abs=1e-3)
 
 
 def test_the_face_speaks_the_modules_entries(monkeypatch) -> None:

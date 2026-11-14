@@ -200,10 +200,12 @@ class NativeVisualizerRoute:
         """The card handed to the native item: the item's own size from the committed record, the drawn inputs from
         the snapshot's (the Python node's split: its item is the record's outer rect, its renderer draws the
         snapshot's presentation)."""
-        from rendering.native.spectrum import spectrum_presentation
+        from rendering.native.spectrum import spectrum_presentation, window_metrics
 
-        card = spectrum_presentation(presentation, geometry)
-        drawn = spectrum_presentation(snapshot.presentation, geometry)
+        window_size, window_pixels = window_metrics(self._content_host, float(presentation.dpr))
+        card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels)
+        drawn = spectrum_presentation(snapshot.presentation, geometry, window_size=window_size,
+                                      window_pixels=window_pixels)
         for key in ("content_rect", "viewport_extent", "visual_scale", "dpr", "content_fade", "expanded"):
             card[key] = drawn[key]
         return card

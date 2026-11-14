@@ -361,6 +361,9 @@ class QuickSpectrumRenderer:
                 values["u_item_from_frag_y"] = mapping[1]
             # fragPixel's target (the window's framebuffer here; its row flip is 0 in this renderer, N1.4).
             values["u_target_px"] = (float(frame.viewport[2]), float(frame.viewport[3]))
+            # The target is the window: its pixel is the window's (identity rows; the native composite's are not).
+            values["u_window_from_target_x"] = (1.0, 0.0, 0.0)
+            values["u_window_from_target_y"] = (0.0, 1.0, 0.0)
             self._last_placement = placement
         values["u_content_rect"] = tuple(layout.content_rect)
         values["u_visual_scale"] = presentation.uniform_visual_scale
@@ -448,7 +451,7 @@ class QuickSpectrumRenderer:
             raise RuntimeError("canonical Spectrum shader is unavailable")
         written = ("uMatrix", "uItemSize", "uContentRotationQuarters", "u_resolution", "u_dpr",
                    "u_viewport_origin_px", "u_quick_item_coords", "u_item_from_frag", "u_item_from_frag_x",
-                   "u_item_from_frag_y", "u_target_px", "u_content_rect", "u_visual_scale", "u_bar_count", "u_segments", "u_bars",
+                   "u_item_from_frag_y", "u_window_from_target_x", "u_window_from_target_y", "u_target_px", "u_content_rect", "u_visual_scale", "u_bar_count", "u_segments", "u_bars",
                    "u_peaks", "u_fill_color", "u_border_color", "u_fade", "u_ghost_alpha", "u_bar_height_scale",
                    "u_single_piece", "u_border_radius", "u_spectrum_glow_enabled", "u_spectrum_glow_intensity",
                    "u_spectrum_glow_color", "u_rainbow_hue_offset", "u_rainbow_ghost", "u_ghost_hue_offset",

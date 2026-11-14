@@ -24,13 +24,18 @@ layout(std140, binding = 18) uniform SpectrumDraw {
     // until Phase-I deletion.
     int u_quick_item_coords;
     // 1: item-local coordinates from the fragment's pixel (fragPixel) through the item's affine map (rows x and y of a
-    // 2 x 3 matrix, resolved by the renderer from its matrix, viewport and rotation; the native core's from its target's
-    // place in the item, R-197). One continuous coordinate over the whole
-    // full-field quad: the interpolated v_uv is rounded differently in its two triangles, so a bar edge on a pixel
-    // centre stepped by a pixel along their shared diagonal. 0: the interpolated v_uv (a matrix that is not affine).
+    // 2 x 3 matrix, resolved by the renderer from its matrix, viewport and rotation, R-197). One continuous coordinate
+    // over the whole full-field quad: the interpolated v_uv is rounded differently in its two triangles, so a bar edge
+    // on a pixel centre stepped by a pixel along their shared diagonal. 0: the interpolated v_uv (a matrix that is not
+    // affine). The rows map the WINDOW's pixel: a target that is not the window (the native core's composite) first
+    // rebuilds it through u_window_from_target (whole-pixel offsets and a sign: exact), so the bar, cap and peak
+    // arithmetic runs in the Python renderer's own space and precision (N2.5). The Python renderer's target is the
+    // window: identity rows.
     int u_item_from_frag;
     vec3 u_item_from_frag_x;
     vec3 u_item_from_frag_y;
+    vec3 u_window_from_target_x;
+    vec3 u_window_from_target_y;
     vec2 u_target_px;             // the render target's size in pixels (fragPixel's row convention)
     vec4 u_content_rect;          // item-local x, y, width, height
     float u_visual_scale;
@@ -520,7 +525,8 @@ void main() {
     // current device pixel ratio.
     vec2 fragCoord;
     if (u_quick_item_coords == 1 && u_item_from_frag == 1) {
-        vec3 window = vec3(fragPixel(u_target_px), 1.0);
+        vec3 target = vec3(fragPixel(u_target_px), 1.0);
+        vec3 window = vec3(dot(u_window_from_target_x, target), dot(u_window_from_target_y, target), 1.0);
         fragCoord = vec2(dot(u_item_from_frag_x, window), dot(u_item_from_frag_y, window));
     } else if (u_quick_item_coords == 1) {
         fragCoord = v_uv * u_resolution;

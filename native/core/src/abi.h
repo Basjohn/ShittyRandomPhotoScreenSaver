@@ -18,6 +18,8 @@
 // pause_in_copy hook (packet_reader_wait_paused/resume) and its post-copy retiring check; a reader handle owned by its
 // references (packet_reader_close never deletes under a read; packet_reader_live's "closing"); the identity checked before
 // the schema.
+// 7 (N2.5 rule (a)): the Spectrum card's window maps (window_from_target, item_from_window replace item_from_target):
+// the target's pixel is rebuilt as the window's and mapped by the Python renderer's own float32 rows.
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 6
+#define SRPSS_NATIVE_CORE_ABI 7

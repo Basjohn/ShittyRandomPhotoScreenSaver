@@ -13,8 +13,9 @@
 //   expanded card's resample, the bar layout, colours, the rainbow clock, the decoration. Render thread.
 // - From the card as shown (SpectrumPresentation): resolved by Python on the GUI thread
 //   (rendering/native/spectrum.py) from the ResolvedVisualizerPresentation and the composite's geometry, handed over as
-//   plain values. The map from the target's pixel to the item's oriented logical coordinate (u_item_from_frag) is one
-//   of them: the target is the card's drawn rect on whole device pixels, in the content's orientation.
+//   plain values. The maps from the target's pixel to the window's (u_window_from_target) and from the window's pixel
+//   to the item's oriented logical coordinate (u_item_from_frag, the Python renderer's own float32 rows) are two of
+//   them: the target is the card's drawn rect on whole device pixels, in the content's orientation.
 //
 // The stream (SpectrumSource): the GUI binds a frame mapping by name with its expected identity; the reader is opened on
 // the GUI thread and read only at the item's sync, on the render thread (the accept edge, D2; the Python path's
@@ -53,7 +54,11 @@ struct SpectrumPresentation
     double dpr = 1.0;
     double contentFade = 1.0;
     bool expanded = false;          // expanded_display
-    double itemFromTarget[6] = {};  // rows x, y of the target pixel (fragPixel) to the oriented item coordinate
+    // The pixel arithmetic runs in the Python renderer's own space and precision (N2.5 rule (a), lead 14 Nov): the
+    // target's pixel is first rebuilt as the window's (u_window_from_target: exact, whole-pixel offsets and a sign),
+    // then mapped by the Python renderer's own rows (u_item_from_frag, from Qt's float32 item matrix).
+    double windowFromTarget[6] = {};// rows x, y of the target pixel (fragPixel) to the window's pixel (y up)
+    double itemFromWindow[6] = {};  // rows x, y of the window's pixel to the oriented item coordinate
     double targetSize[2] = {};      // the target's pixels (fragPixel's target)
 
     static bool fromJson(const QByteArray &json, SpectrumPresentation *out, QString *error);

@@ -290,24 +290,26 @@ class SceneMirror:
 
 
 class _ParityRoute:
-    """``NativeVisualizerRoute`` for the parity runs: counts what it publishes, and for the mapping control hands the
-    native item the Python renderer's own window-pixel map frame by frame."""
+    """``NativeVisualizerRoute`` for the parity runs. With the mapping check, each card's window map is compared with
+    the Python renderer's own rows of the same frame (``_python_mappings_run``), as float32 (what the GPU reads)."""
 
     @staticmethod
     def make(core, content_host, mirror):
+        import struct
+
         from rendering.quick.visualizer.native_route import NativeVisualizerRoute
+
+        def f32(values):
+            return struct.pack(f"<{len(values)}f", *values)
 
         class Route(NativeVisualizerRoute):
             def card(self, presentation, snapshot, geometry):
                 card = super().card(presentation, snapshot, geometry)
                 mappings = mirror.python_mappings
                 if mappings is not None and self.published < len(mappings):
-                    # The Python renderer's map from its window pixel (x right, q up from the window's bottom) to
-                    # the item, rewritten for the target's pixel (u right, v down from the target's top-left).
-                    (x0, x1, x2), (y0, y1, y2), window_height = mappings[self.published]
-                    left, top = geometry.rect[0] * geometry.dpr, geometry.rect[1] * geometry.dpr
-                    card["item_from_target"] = [x0, -x1, x0 * left + x1 * (window_height - top) + x2,
-                                                y0, -y1, y0 * left + y1 * (window_height - top) + y2]
+                    row_x, row_y, _height = mappings[self.published]
+                    mirror.mapping_compared += 1
+                    mirror.mapping_identical += int(f32(card["item_from_window"]) == f32((*row_x, *row_y)))
                 return card
 
         return Route(core, content_host)
@@ -328,6 +330,8 @@ class NativeSceneMirror(SceneMirror):
         self.native_frames = 0
         # The mapping control: the Python renderer's window-pixel map per drawn frame (``_python_mappings_run``).
         self.python_mappings: list | None = None
+        self.mapping_compared = 0
+        self.mapping_identical = 0
 
     @property
     def native_published(self) -> int:
@@ -483,6 +487,7 @@ def native_drawn_run(mode: str, script, *, settings: dict, core, python_mappings
     report["frames"] = mirror.frames
     report["native_frames"] = mirror.native_frames
     report["native_published"] = mirror.native_published
+    report["mapping"] = {"compared": mirror.mapping_compared, "identical": mirror.mapping_identical}
     return report
 
 
@@ -568,21 +573,73 @@ def _python_mappings_run(mode: str, script, settings: dict) -> tuple[dict, list]
     return run, mappings
 
 
-def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path, *,
-                  mapping_control: bool = False) -> dict:
+#: Lit: a pixel whose brightest channel is this far above the card's dark fill (the classification's mask).
+_LIT_LEVEL = 40
+
+
+def classify_differences(native: dict, python: dict, switch_input: int) -> dict:
+    """Every pixel more than one level off, by class (the lead's rule (a) reading, 14 Nov): ``fade_frame`` (an input
+    at or after the mode switch), ``card_edge_column`` (within 2 device columns of the frame's leftmost or rightmost
+    lit column: the outermost bars' outer edges), ``peak_row`` (within a row of a column's topmost lit run when a
+    gap separates it from the bar below: the peak marker), ``cap_arc`` (the top 4 rows of the bar's own run in that
+    column: its rounded cap), ``other``. Each class: its pixel count and largest level."""
+    import numpy
+
+    classes = {name: {"pixels": 0, "max_level": 0, "inputs": 0} for name in
+               ("card_edge_column", "peak_row", "cap_arc", "fade_frame", "other")}
+    for index, (a, b) in enumerate(zip(native["pixels"], python["pixels"])):
+        if a["hash"] == b["hash"] or a["region"] != b["region"]:
+            continue
+        drawn, reference = _pixels(native, index), _pixels(python, index)
+        delta = numpy.abs(drawn.astype(numpy.int16) - reference).max(axis=2)
+        ys, xs = numpy.nonzero(delta > 1)
+        if not len(ys):
+            continue
+        labels = numpy.full(len(ys), "other", dtype=object)
+        if index >= switch_input:
+            labels[:] = "fade_frame"
+        else:
+            lit = reference[..., :3].max(axis=2) > _LIT_LEVEL
+            columns = numpy.nonzero(lit.any(axis=0))[0]
+            edge = numpy.zeros(len(ys), dtype=bool)
+            if len(columns):
+                edge = (numpy.abs(xs - columns[0]) <= 2) | (numpy.abs(xs - columns[-1]) <= 2)
+            for k in range(len(ys)):
+                if edge[k]:
+                    labels[k] = "card_edge_column"
+                    continue
+                column = lit[:, xs[k]]
+                runs = numpy.flatnonzero(numpy.diff(numpy.concatenate(([0], column.view(numpy.int8), [0]))))
+                starts, ends = runs[0::2], runs[1::2]          # lit runs [start, end) from the top
+                if not len(starts):
+                    continue
+                y = ys[k]
+                if len(starts) > 1 and starts[0] - 1 <= y <= ends[0]:
+                    labels[k] = "peak_row"
+                    continue
+                bar = 1 if len(starts) > 1 else 0
+                if starts[bar] - 1 <= y < starts[bar] + 4:
+                    labels[k] = "cap_arc"
+        levels = delta[ys, xs]
+        for name in classes:
+            chosen = labels == name
+            if chosen.any():
+                entry = classes[name]
+                entry["pixels"] += int(chosen.sum())
+                entry["max_level"] = max(entry["max_level"], int(levels[chosen].max()))
+                entry["inputs"] += 1
+    return classes
+
+
+def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path) -> dict:
     """Rule (a) of the port (N2.5): the owner in process drawn by the Python renderer and by the native item, single-
-    sampled, frame for frame over the card's region and its margin. ``mapping_control``: a third run whose native
-    card carries the Python renderer's own window-pixel map (Qt's float32 item matrix, inverted), frame by frame."""
+    sampled, frame for frame over the card's region and its margin. Each native card's window map is checked against
+    the Python renderer's own rows of the same frame (``mapping``), and every pixel more than a level off is
+    classified (``classes``)."""
     script = parity_script(clip_frames, mode)
     with single_sample_scene_targets():
-        if mapping_control:
-            python, mappings = _python_mappings_run(mode, script, settings)
-        else:
-            python, mappings = drawn_run(mode, script, worker=False, supervisor=None, namespace=None,
-                                         settings=settings), None
-        native = native_drawn_run(mode, script, settings=settings, core=core)
-        control = (native_drawn_run(mode, script, settings=settings, core=core, python_mappings=mappings)
-                   if mapping_control else None)
+        python, mappings = _python_mappings_run(mode, script, settings)
+        native = native_drawn_run(mode, script, settings=settings, core=core, python_mappings=mappings)
     paths = pair_difference(native, python)
     rows = frame_differences(native, python)
     switch_at = next(i for i, (kind, _v) in enumerate(script) if kind == "mode")
@@ -598,11 +655,8 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     verdict["identical"] = bool(paths["first"] is None and verdict["digests_identical"]
                                 and verdict["native_published"] > 0)
     verdict["split"] = _split_rows(rows, switch_input)
-    if control is not None:
-        control_rows = frame_differences(control, python)
-        verdict["mapping_control"] = {"mappings": len(mappings), "native_published": control["native_published"],
-                                      "split": _split_rows(control_rows, switch_input),
-                                      "max_level": max((row["max_level"] for row in control_rows), default=0)}
+    verdict["mapping"] = dict(native["mapping"], python_frames=len(mappings))
+    verdict["classes"] = classify_differences(native, python, switch_input)
     if rows:
         worst = max(rows, key=lambda row: (row["max_level"], row["pixels"]))
         verdict["worst"] = worst
@@ -611,8 +665,7 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     return verdict
 
 
-def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
-               mapping_control: bool = False) -> dict:
+def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = ()) -> dict:
     """``native_parity`` over Spectrum's widened run set (``conventions_identity.mode_runs``); the report."""
     import tools.expanded_visualizer_evidence as evidence
     from rendering.native import load
@@ -630,8 +683,7 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
             if only and f"spectrum{suffix}" not in only:
                 continue
             engine_worker_link.reset_run_state_for_testing()
-            verdict = native_parity(core, "spectrum", suffix, settings, clip.frames, out,
-                                    mapping_control=mapping_control)
+            verdict = native_parity(core, "spectrum", suffix, settings, clip.frames, out)
             report["results"][f"spectrum{suffix}"] = verdict
             print(f"[NATIVE] spectrum{suffix:40s} {verdict['frames_drawn']} frames, native {verdict['native_published']}"
                   f" published; differing inputs {verdict['differing_inputs']}, pixels "
@@ -734,9 +786,6 @@ def main(argv=None) -> int:
     parser.add_argument("--offers", action="store_true",
                         help="with --native: the widened run set (both variants and every Choice offer)")
     parser.add_argument("--runs", nargs="*", default=(), help="with --native: only these run keys (spectrum[:...])")
-    parser.add_argument("--mapping-control", action="store_true",
-                        help="with --native: a third run whose native card carries the Python renderer's own "
-                             "window-pixel map (the control for bar edges lying on pixel centres)")
     args = parser.parse_args(argv)
     # The stills (contact sheets, difference maps) and the report are written into owner scratch and published to
     # ``--out`` by the evidence publisher (``tools/evidence_media.py``); stills stay PNG, lossless.
@@ -755,7 +804,7 @@ def main(argv=None) -> int:
     try:
         if args.native:
             report = run_native(args.out, module_dir=args.module_dir.resolve(), offers=args.offers,
-                                seconds=args.seconds, only=tuple(args.runs), mapping_control=args.mapping_control)
+                                seconds=args.seconds, only=tuple(args.runs))
         else:
             report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
                          seconds=args.seconds, controls=not args.skip_controls)

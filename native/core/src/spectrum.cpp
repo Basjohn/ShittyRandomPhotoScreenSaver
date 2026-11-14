@@ -352,7 +352,8 @@ bool SpectrumPresentation::fromJson(const QByteArray &json, SpectrumPresentation
         || !readNumbers(o, "viewport_extent", p.viewportExtent, 2, error)
         || !readNumbers(o, "visual_scale", &p.visualScale, 1, error) || !readNumbers(o, "dpr", &p.dpr, 1, error)
         || !readNumbers(o, "content_fade", &fade, 1, error)
-        || !readNumbers(o, "item_from_target", p.itemFromTarget, 6, error)
+        || !readNumbers(o, "window_from_target", p.windowFromTarget, 6, error)
+        || !readNumbers(o, "item_from_window", p.itemFromWindow, 6, error)
         || !readNumbers(o, "target_size", p.targetSize, 2, error))
         return false;
     p.contentFade = fade;
@@ -380,7 +381,8 @@ QJsonObject SpectrumPresentation::toJson() const
     o.insert(QStringLiteral("dpr"), dpr);
     o.insert(QStringLiteral("content_fade"), contentFade);
     o.insert(QStringLiteral("expanded"), expanded);
-    o.insert(QStringLiteral("item_from_target"), numbers(itemFromTarget, 6));
+    o.insert(QStringLiteral("window_from_target"), numbers(windowFromTarget, 6));
+    o.insert(QStringLiteral("item_from_window"), numbers(itemFromWindow, 6));
     o.insert(QStringLiteral("target_size"), numbers(targetSize, 2));
     return o;
 }
@@ -392,7 +394,8 @@ bool SpectrumPresentation::operator==(const SpectrumPresentation &o) const
         && std::memcmp(orientedSize, o.orientedSize, sizeof orientedSize) == 0
         && std::memcmp(contentRect, o.contentRect, sizeof contentRect) == 0
         && std::memcmp(viewportExtent, o.viewportExtent, sizeof viewportExtent) == 0
-        && std::memcmp(itemFromTarget, o.itemFromTarget, sizeof itemFromTarget) == 0
+        && std::memcmp(windowFromTarget, o.windowFromTarget, sizeof windowFromTarget) == 0
+        && std::memcmp(itemFromWindow, o.itemFromWindow, sizeof itemFromWindow) == 0
         && std::memcmp(targetSize, o.targetSize, sizeof targetSize) == 0;
 }
 
@@ -565,8 +568,10 @@ bool spectrumBlock(const QByteArray &bytes, const SpectrumPresentation &p, QByte
     values.set("u_viewport_origin_px", 0.0, 0.0);
     values.set("u_quick_item_coords", 1.0);
     values.set("u_item_from_frag", 1.0);
-    values.set("u_item_from_frag_x", p.itemFromTarget[0], p.itemFromTarget[1], p.itemFromTarget[2]);
-    values.set("u_item_from_frag_y", p.itemFromTarget[3], p.itemFromTarget[4], p.itemFromTarget[5]);
+    values.set("u_window_from_target_x", p.windowFromTarget[0], p.windowFromTarget[1], p.windowFromTarget[2]);
+    values.set("u_window_from_target_y", p.windowFromTarget[3], p.windowFromTarget[4], p.windowFromTarget[5]);
+    values.set("u_item_from_frag_x", p.itemFromWindow[0], p.itemFromWindow[1], p.itemFromWindow[2]);
+    values.set("u_item_from_frag_y", p.itemFromWindow[3], p.itemFromWindow[4], p.itemFromWindow[5]);
     values.set("u_target_px", p.targetSize[0], p.targetSize[1]);
     const double contentRect[4] = { contentX, contentY, contentWidth, contentHeight };
     values.set("u_content_rect", contentRect);
