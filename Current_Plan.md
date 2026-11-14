@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** High: N4.a built at ABI 11 (GitHub f3c52faf); its harness runs after the 12:00 UTC reset, on a rebuild with main (1D.14's `spectrum.frag` changed the compiled-in copy). 1D.14 merged (R-213). The N2.9 round 2 audit after the reset. N2.8 waits for two displays.
+**Now (in flight):** High: N4.a's proof on its ABI 11 module (GitHub b0fd7714). Medium: the N2.5 side defects (rule (a)'s fade-frame drift, the owner-parity wall-clock deadline). Audit: N2.9's round 2. 1D.14 merged (R-213). N2.8 waits for two displays.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
