@@ -1104,6 +1104,12 @@ the rules for the GPU-free tests and `scene3d.scene_samples` is the one sampling
   workaround built.
 - Vulkan reported a write-after-write hazard on resolve textures no pass samples; resolves are made only for attachments
   a sampler reads (round 2).
+- Cost (GPU medians, the harness scene's six passes, module 03a0ad8f, evidence `20261115_cost`): the light attachment's
+  clear at 2048 x 1152 adds 0.026 ms on OpenGL and 0.015 ms on Vulkan (choice F: negligible). Four samples minus one,
+  which bounds the resolves but also holds the four-sample rasterisation: OpenGL 0.28 ms at 2560 x 1440 and 1.66 ms at
+  4K, Vulkan 0.41 and 1.89 ms. Past D7's resolve budget at 4K on both backends, so reported (choice G's stop); OpenGL's
+  blit resolve costs no more than Vulkan's in-pass resolve here, so the excess is the multisampling, not Qt's blit.
+  Qt's OpenGL backend returned a GPU time for only 15 to 32 of 240 frames.
 
 ## D1, D2, D3 and the transport rule
 
