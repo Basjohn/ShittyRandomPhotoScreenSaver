@@ -51,6 +51,9 @@ Controls (``--skip-controls`` omits them): the in-process run repeated (``single
 oracle's noise floor is zero), and the mode's Sliders moved a further step must change the drawn frames (the
 oracle sees a Settings change; ``single`` only).
 
+``--native`` (rule (a) of N2.5) draws the widened run set at the rig's own placement and variants a and b again at
+``overscan`` (``PLACEMENTS``: Display 1's R-63 window with the card half a device pixel off the grid, N2.8 R-NEW).
+
 Offscreen GL on this machine's GPU: not physical acceptance (no real window, display timing, device or load).
 """
 from __future__ import annotations
