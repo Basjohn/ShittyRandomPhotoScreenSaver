@@ -14,6 +14,7 @@ from typing import Any
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
 from core.settings.visualizer_mode_registry import EXTRUDED_CAST_SHADOW_AVAILABLE
 from core.authored_clock import authored_now
+from rendering.gl_programs.spectrum_options import SPECTRUM_MAX_BARS
 
 
 _ENVELOPE_PARAMETER_KEYS = {
@@ -155,7 +156,7 @@ def _extruded_envelope(
 
     local_content = _local_content_rect(presentation)
     # Match QuickExtrudedSpectrumRenderer's bounded draw admission exactly.
-    count = min(64, int(logical.common.bar_count if logical is not None
+    count = min(SPECTRUM_MAX_BARS, int(logical.common.bar_count if logical is not None
                         else parameters.get("bar_count", 32)))
     if count <= 0:
         return None

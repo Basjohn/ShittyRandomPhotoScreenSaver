@@ -593,7 +593,12 @@ void main() {
 }
 """
 
-EB_LENS_GLSL = """
+# A shell's lens circle, as a share of the near layer's budget, over which it eases out as it nears the camera (no
+# near-lens blobs): fully drawn below the first, gone at the second.
+EB_LENS_FADE = (0.15, 0.45)
+EB_LENS_GLSL = f"""
+const vec2 EB_LENS_FADE = vec2({EB_LENS_FADE[0]}, {EB_LENS_FADE[1]});
+""" + """
 // Render-only proximity protection. Physical radii, identities and motion stay logical-owned.
 vec2 ebLensAxis(float coordinate, float depth, float radius, float tangent) {
     float distance_ = length(vec2(coordinate, depth));
@@ -640,6 +645,10 @@ vec2 ebLens(vec4 sphere, mat4 projection, vec2 frameSize, float focus,
     // steady lens radius, so breathing never toggles it; the near defocus above is unchanged.
     float surface = (projection[3][3] > 0.5 ? depth : length(sphere.xyz)) - sphere.w;
     opacity *= smoothstep(0.06, 0.33, surface / sphere.w);
+    // No near-lens blobs (operator, 14 Nov 2026): a shell defocused into a wide lens circle reads as a smear on the
+    // lens, not a bubble. As it nears the camera its circle grows and it eases out (from EB_LENS_FADE.x to .y of the
+    // lens budget), and back in as it leaves: it fades, never vanishes. Mild near defocus is kept.
+    opacity *= 1.0 - smoothstep(EB_LENS_FADE.x, EB_LENS_FADE.y, min(circle, maxCircle) / max(maxCircle, 1e-4));
     return vec2(min(circle, maxCircle), opacity);
 }
 """

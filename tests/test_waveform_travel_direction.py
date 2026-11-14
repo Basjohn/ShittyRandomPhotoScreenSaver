@@ -181,7 +181,15 @@ def test_left_to_right_is_the_mirror_image_with_its_fields_and_grade_in_place(qt
         from rendering.quick.scene3d import waveform as waveform_scene
         assert renderer._scene._history_mirror is waveform_scene._HISTORY_X_MIRROR
         assert not waveform_scene._HISTORY_X_MIRROR.flags.writeable
-        mirrored, unmirrored = np.abs(ltr-rtl[:, ::-1]).mean(), np.abs(ltr-rtl).mean()
+        # Judged after a 3x3 box over both pictures: the glow's 8-bit output dither (scene3d.SCENE_OUTPUT_DITHER_GLSL)
+        # is one step of position-hashed noise, the same on both sides, so it never mirrors; the box averages it out
+        # and leaves the picture. An unmirrored pair stays far apart through the same box (the second ratio).
+        def boxed(image):
+            padded = np.pad(image, ((1, 1), (1, 1), (0, 0)), mode="edge")
+            return sum(padded[dy:dy + image.shape[0], dx:dx + image.shape[1]]
+                       for dy in range(3) for dx in range(3)) / 9.
+        ltr_box, rtl_box = boxed(ltr), boxed(rtl)
+        mirrored, unmirrored = np.abs(ltr_box-rtl_box[:, ::-1]).mean(), np.abs(ltr_box-rtl_box).mean()
         assert mirrored < .25*unmirrored, (mirrored, unmirrored)
         # The reduced fields (mist light/shape, floor give) are world-space: mirrored about x = 0 with the history.
         for a, b in zip(rtl_fields, ltr_fields):
