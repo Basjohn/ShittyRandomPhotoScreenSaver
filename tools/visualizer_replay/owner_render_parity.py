@@ -307,8 +307,8 @@ class _ParityRoute:
             return struct.pack(f"<{len(values)}f", *values)
 
         class Route(NativeVisualizerRoute):
-            def card(self, presentation, snapshot, geometry):
-                card = super().card(presentation, snapshot, geometry)
+            def card(self, presentation, snapshot, geometry, metrics=None):
+                card = super().card(presentation, snapshot, geometry, metrics)
                 mappings = mirror.python_mappings
                 if mappings is not None and self.published < len(mappings):
                     row_x, row_y, _height = mappings[self.published]

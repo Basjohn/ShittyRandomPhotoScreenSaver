@@ -290,11 +290,11 @@ def test_the_route_publishes_new_snapshots_and_sends_an_unchanged_card_once(rout
     bridge.snapshots = [_snapshot(presentation, 1)]
     assert _sync(route, bridge, identity, presentation) is True and not route.failed
     # H1 through the route: placed on the window's own ratio (2560 / 1707 across), the card's map whole pixels.
-    from rendering.quick.visualizer.native_route import FAILURE_FADE_MS
-
     place = next(entry for entry in core.log if entry[0] == "place")
     assert place[1]["pixel_ratio"] == [2560 / 1707, 1440 / 960]
-    assert place[2] == {"visible": True, "fade_ms": FAILURE_FADE_MS}        # shown by a fade, never at once
+    # A new activation's first frame shows at once: its fade-in is the card's own content fade (the Python renderer's,
+    # so rule (a) holds from the first frame); a composite fade on top would fade it twice.
+    assert place[2] == {"visible": True, "fade_ms": 0}
     card = next(entry[1][0] for entry in core.log if entry[0] == "present_raw")
     assert all(value == round(value) for value in card["window_from_target"])
     # No new snapshot: nothing published, nothing sent.
@@ -427,6 +427,24 @@ def test_the_routes_teardown_branches_never_raise_and_a_missing_window_logs_at_d
         assert _sync(waiting, bridge, _identity("spectrum"), route_world.presentation) is False
     native = [record for record in caplog.records if "native route" in record.getMessage().lower()]
     assert native and all(record.levelno == logging.DEBUG for record in native)
+
+
+def test_the_parity_tools_route_takes_the_routes_own_card_call(route_world):
+    # rule (a)'s route (owner_render_parity) overrides card(); the route calls it with the window's metrics. When the
+    # two disagreed, every parity run's native item failed closed and drew nothing (found 14 Nov, N2.9 round 2).
+    from tools.visualizer_replay.owner_render_parity import _ParityRoute
+
+    probe, core = route_world.make()
+    mirror = SimpleNamespace(python_mappings=[((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), 0)], mapping_compared=0,
+                             mapping_identical=0)
+    route = _ParityRoute.make(core, probe._content_host, mirror)
+    try:
+        bridge = _Bridge()
+        bridge.snapshots = [_snapshot(route_world.presentation, 1)]
+        assert _sync(route, bridge, _identity("spectrum"), route_world.presentation) is True and not route.failed
+        assert mirror.mapping_compared == 1
+    finally:
+        route.close()
 
 
 def test_the_routes_fade_is_the_visualizers_activation_fade():

@@ -650,6 +650,7 @@ void CompositeItem::itemChange(ItemChange change, const ItemChangeData &value)
 void CompositeItem::apply(const CompositeConfig &config)
 {
     const bool shown = isVisible() && !m_fadingOut;
+    const bool fading = m_fade && m_fade->state() == QAbstractAnimation::Running;
     m_config = config;
     setX(config.rect.x());
     setY(config.rect.y());
@@ -677,12 +678,16 @@ void CompositeItem::apply(const CompositeConfig &config)
         m_fade->setStartValue(opacity());
         m_fade->setEndValue(config.visible ? config.opacity : 0.0);
         m_fade->start();
-    } else if (!m_fade || m_fade->state() != QAbstractAnimation::Running) {
+    } else if (fading && shown == config.visible) {
+        if (config.visible)
+            m_fade->setEndValue(config.opacity); // a fade in progress goes on toward the new opacity
+    } else {
+        // At once (no fade asked): a fade the other way in progress stops here, never completing over this.
+        if (fading)
+            m_fade->stop();
         m_fadingOut = false;
         setVisible(config.visible);
         setOpacity(config.opacity);
-    } else if (config.visible && !m_fadingOut) {
-        m_fade->setEndValue(config.opacity); // a fade in progress goes on toward the new opacity
     }
     update();
 }

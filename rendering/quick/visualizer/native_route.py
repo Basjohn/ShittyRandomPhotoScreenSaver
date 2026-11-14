@@ -67,6 +67,7 @@ class NativeVisualizerRoute:
         self._placed: tuple | None = None
         self._snapshot: Any = None
         self._programmed = False      # the mode's pack is loaded into the native item
+        self._faded_out = False       # faded out within an activation: its next showing fades back in
         self._failure: tuple | None = None   # the inputs a failed sync had (nothing is retried until they change)
         self.failures = 0
         self.published = 0
@@ -130,6 +131,7 @@ class NativeVisualizerRoute:
         self._code = code
         self._card = self._placed = self._settings = None
         self._snapshot = None
+        self._faded_out = False       # a new activation: its card's content fade brings it in
 
     def unbind(self) -> None:
         """The bound stream retires (never waits, D1) and the native item shows nothing."""
@@ -299,9 +301,13 @@ class NativeVisualizerRoute:
         except Exception as exc:
             raise _FrameFailure(exc) from exc
         if placed != self._placed:
-            # Shown (fading in) once a frame of its own is published for it, never before.
-            spectrum.composite.place(geometry, origin, visible=True, fade_ms=FAILURE_FADE_MS)
+            # Shown once a frame of its own is published for it, never before. After a fade-out (a failure, a hide) it
+            # fades back in; a new activation's first frame shows at once, its fade-in the card's own content fade
+            # (the Python renderer's: rule (a) holds from the first frame).
+            fade = FAILURE_FADE_MS if self._faded_out else 0
+            spectrum.composite.place(geometry, origin, visible=True, fade_ms=fade)
             self._placed = placed
+            self._faded_out = False
         self._snapshot = snapshot
         self.published += 1
         spectrum.update()
@@ -336,6 +342,7 @@ class NativeVisualizerRoute:
     def _hide(self) -> None:
         if self._spectrum is not None and self._placed is not None:
             self._placed = None
+            self._faded_out = True
             self._spectrum.composite.set(visible=False, fade_ms=FAILURE_FADE_MS)   # fade, never vanish (N29 M1)
 
 
