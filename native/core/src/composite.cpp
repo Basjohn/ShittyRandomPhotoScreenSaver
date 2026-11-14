@@ -12,7 +12,11 @@
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QMutex>
+#include <QtCore/QPointF>
 #include <QtCore/QPropertyAnimation>
+#include <QtCore/QRect>
+#include <QtGui/QMatrix4x4>
+#include <QtGui/QVector4D>
 #include <QtQuick/QQuickWindow>
 #include <QtQuick/QSGRendererInterface>
 #include <QtQuick/QSGGeometry>
@@ -32,6 +36,10 @@ struct CompositeStats
     QAtomicInteger<qint64> draws { 0 };          // the material's uniform updates: one per frame the node is drawn
     QAtomicInteger<qint64> dprMismatches { 0 };  // draws whose render-time device pixel ratio differed from the sync's
     QAtomicInteger<qint64> renderDprMicro { 0 }; // the last draw's device pixel ratio, in millionths
+    // The last draw's shift of the item's origin onto whole target pixels (composite.vert, R-NEW), in millionths of a
+    // pixel per axis: about 0 for an item placed on whole pixels, up to half a pixel for one placed between them.
+    QAtomicInteger<qint64> originShiftMicroX { 0 };
+    QAtomicInteger<qint64> originShiftMicroY { 0 };
     QAtomicInteger<int> nodes { 0 };
     mutable QMutex mutex; // guards the six below
     QJsonObject sync;     // the last sync's facts
@@ -88,22 +96,25 @@ struct CompositeOffsets
     int quarters = -1;
     int coverageRect = -1;
     int sizes = -1;
+    int viewport = -1;
     int size = 0;
     bool valid() const
     {
         return matrix >= 0 && opacity >= 0 && coverageOn >= 0 && coverageRadius >= 0 && quarters >= 0
-            && coverageRect >= 0 && sizes >= 0 && size > 0;
+            && coverageRect >= 0 && sizes >= 0 && viewport >= 0 && size > 0;
     }
 };
 
-CompositeOffsets reflectOffsets(const QShader &shader)
+// Both stages declare the one block; a member one stage leaves unread may be missing from its reflection, so each
+// stage's members fill what the other's did not.
+void reflectOffsets(const QShader &shader, CompositeOffsets *out)
 {
-    CompositeOffsets o;
+    CompositeOffsets &o = *out;
     const QList<QShaderDescription::UniformBlock> blocks = shader.description().uniformBlocks();
     for (const QShaderDescription::UniformBlock &block : blocks) {
         if (block.binding != 0)
             continue;
-        o.size = block.size;
+        o.size = qMax(o.size, block.size);
         for (const QShaderDescription::BlockVariable &member : block.members) {
             if (member.name == QByteArrayLiteral("qt_Matrix"))
                 o.matrix = member.offset;
@@ -119,9 +130,23 @@ CompositeOffsets reflectOffsets(const QShader &shader)
                 o.coverageRect = member.offset;
             else if (member.name == QByteArrayLiteral("sizes"))
                 o.sizes = member.offset;
+            else if (member.name == QByteArrayLiteral("viewport"))
+                o.viewport = member.offset;
         }
     }
-    return o;
+}
+
+// The shift composite.vert gives the item's origin, in the render target's pixels (R-NEW): onto the nearest pixel
+// corner, the same float arithmetic as the stage. Reported in the item's state (origin_shift): an item placed on whole
+// pixels shifts by float rounding only.
+QPointF originShift(const QMatrix4x4 &matrix, const QRect &viewport)
+{
+    const QVector4D origin = matrix.map(QVector4D(0.0f, 0.0f, 0.0f, 1.0f));
+    if (viewport.width() <= 0 || viewport.height() <= 0 || !(origin.w() > 0.0f))
+        return QPointF();
+    const float cornerX = (origin.x() / origin.w() * 0.5f + 0.5f) * float(viewport.width());
+    const float cornerY = (origin.y() / origin.w() * 0.5f + 0.5f) * float(viewport.height());
+    return QPointF(std::floor(cornerX + 0.5f) - cornerX, std::floor(cornerY + 0.5f) - cornerY);
 }
 
 void put(QByteArray *buffer, int offset, const void *data, int size)
@@ -205,7 +230,8 @@ public:
         const QShader fs = shaderFrom(composite_frag_qsb, composite_frag_qsb_size);
         setShader(VertexStage, vs);
         setShader(FragmentStage, fs);
-        m_offsets = reflectOffsets(fs);
+        reflectOffsets(fs, &m_offsets);
+        reflectOffsets(vs, &m_offsets);
     }
 
     bool updateUniformData(RenderState &state, QSGMaterial *newMaterial, QSGMaterial *oldMaterial) override
@@ -238,6 +264,15 @@ public:
         put(buffer, m_offsets.quarters, &m->quarters, 4);
         put(buffer, m_offsets.coverageRect, m->coverageRect, 16);
         put(buffer, m_offsets.sizes, m->sizes, 16);
+        const QRect viewport = state.viewportRect();
+        const float viewportValues[4] = { float(viewport.x()), float(viewport.y()), float(viewport.width()),
+                                          float(viewport.height()) };
+        put(buffer, m_offsets.viewport, viewportValues, 16);
+        if (m->stats) {
+            const QPointF shift = originShift(matrix, viewport);
+            m->stats->originShiftMicroX.storeRelaxed(qint64(std::llround(shift.x() * 1e6)));
+            m->stats->originShiftMicroY.storeRelaxed(qint64(std::llround(shift.y() * 1e6)));
+        }
         return true;
     }
 
@@ -838,6 +873,8 @@ QJsonObject CompositeItem::stateJson() const
     o.insert(QStringLiteral("draws"), m_stats->draws.loadRelaxed());
     o.insert(QStringLiteral("dpr_mismatches"), m_stats->dprMismatches.loadRelaxed());
     o.insert(QStringLiteral("render_dpr"), double(m_stats->renderDprMicro.loadRelaxed()) / 1e6);
+    o.insert(QStringLiteral("origin_shift"), QJsonArray { double(m_stats->originShiftMicroX.loadRelaxed()) / 1e6,
+                                                          double(m_stats->originShiftMicroY.loadRelaxed()) / 1e6 });
     o.insert(QStringLiteral("nodes"), m_stats->nodes.loadRelaxed());
     QMutexLocker lock(&m_stats->mutex);
     o.insert(QStringLiteral("sync"), m_stats->sync);

@@ -8,7 +8,10 @@
 //   by the content's quarter turns.
 // - The material maps texels one to one: each fragment's texel is the integer index floor(uv x the item's device size),
 //   read with texelFetch (no filtering, no threshold on a pixel centre), turned by the quarter turn as
-//   widgets/spotify_visualizer/presentation_orientation.py logical_uv_from_physical_uv does.
+//   widgets/spotify_visualizer/presentation_orientation.py logical_uv_from_physical_uv does. The vertex stage puts the
+//   item's quad on whole pixels of its render target wherever the item lies (R-NEW: at a half-pixel origin the two
+//   triangles read neighbouring texels along the diagonal), so the map holds at any placement; the state's
+//   origin_shift is the last draw's shift.
 // - The card's coverage (plan 1C.4: no pass writes outside the card, nor under the border's anti-aliased edge) is the
 //   rounded rectangle Python resolves (presentation_geometry.resolve_card_clip_path, through
 //   rendering/native/composite.py), tested at each texel's centre in device pixels, exactly the clip host's rule

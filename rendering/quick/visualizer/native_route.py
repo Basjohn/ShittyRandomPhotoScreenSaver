@@ -402,9 +402,9 @@ class NativeVisualizerRoute:
         window_size, window_pixels = metrics
         geometry = composite_geometry(presentation, quad_aligned=True,
                                       pixel_ratio=window_pixel_ratio(window_size, window_pixels))
-        # The content host's top-left is the record's outer rect (the Python item sits at its origin with the outer
-        # rect's size, ``VisualizerRenderItem.set_presentation``), whenever QML lays the host out.
-        origin = (float(presentation.outer_rect[0]), float(presentation.outer_rect[1]))
+        # The native item is placed in its content host, which lies where the scene draws the card (R-NEW: never the
+        # record's exact outer origin, half a device pixel away from it at most).
+        origin = content_host_origin(presentation)
         placed = (geometry, origin)
         spectrum = self._spectrum
         recheck, self._recheck = self._recheck, False
@@ -476,12 +476,27 @@ class NativeVisualizerRoute:
         from rendering.native.spectrum import spectrum_presentation
 
         window_size, window_pixels = metrics if metrics is not None else self._window_metrics(presentation)
-        card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels)
+        # The Python renderer's item lies in the content host (R-NEW): at the drawn card on the display, and wherever
+        # the display lies in the window (an R-63 overscan above it).
+        placement = {"host_origin": content_host_origin(presentation), "item_origin": self._host_window_origin()}
+        card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels,
+                                     **placement)
         drawn = spectrum_presentation(snapshot.presentation, geometry, window_size=window_size,
-                                      window_pixels=window_pixels)
+                                      window_pixels=window_pixels, **placement)
         for key in ("content_rect", "viewport_extent", "visual_scale", "dpr", "content_fade", "expanded"):
             card[key] = drawn[key]
         return card
+
+    def _host_window_origin(self) -> tuple[float, float] | None:
+        """The content host's top-left in its window, logical (Qt's own scene mapping); None for a host that is not a
+        Qt Quick item (the card then takes the display at the window's origin)."""
+        map_to_scene = getattr(self._content_host, "mapToScene", None)
+        if map_to_scene is None:
+            return None
+        from PySide6.QtCore import QPointF
+
+        point = map_to_scene(QPointF(0.0, 0.0))
+        return (float(point.x()), float(point.y()))
 
     def settings(self, snapshot: Any, card: dict) -> dict:
         """The Settings- and card-derived members of the drawn frame, by name (the Python renderer's own arithmetic,
@@ -570,6 +585,19 @@ def _close_mapping(memory: Any) -> None:
         pass
 
 
+def content_host_origin(presentation: Any) -> tuple[float, float]:
+    """The content host's top-left, display-logical: where the scene places the Visualizer's loader, the drawn card
+    (``resolve_card_drawn_rect``, 1C.4: the record's outer rect on whole device pixels; a frameless shell's is its outer
+    rect). The composite's rect is on whole device pixels in display coordinates, so relative to this origin the native
+    item lies on whole device pixels too. Relative to the record's exact outer origin instead (R-NEW) the item sat up
+    to half a device pixel off them, and at a half pixel the composite's pixel lookup fell on its texel thresholds: the
+    two triangles of the item's quad rounded apart and the bars broke along its diagonal (Vulkan, Display 1)."""
+    from widgets.spotify_visualizer.presentation_geometry import resolve_card_drawn_rect
+
+    x, y, _width, _height = resolve_card_drawn_rect(presentation)
+    return (float(x), float(y))
+
+
 def _placement_key(presentation: Any) -> tuple:
     """What places the card in its window (a failure is retried once any of it changes)."""
     return tuple(getattr(presentation, name, None) for name in (
@@ -592,4 +620,5 @@ def attach_native_route(item: Any, content_host: Any, backend: str | None = None
     return route
 
 
-__all__ = ["NATIVE_MODE_IDS", "NativeVisualizerRoute", "attach_native_route", "native_route_wanted"]
+__all__ = ["NATIVE_MODE_IDS", "NativeVisualizerRoute", "attach_native_route", "content_host_origin",
+           "native_route_wanted"]

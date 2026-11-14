@@ -47,6 +47,9 @@
 // an unbound stream keeps its last frame (L3); the content latch keyed on the target's generation, the program and the
 // settings, not the card, with a bounded retry (L4); mode_core_values (L6); the states' content_failing, refused_run
 // and the reader live JSON's state_json_off_gui_thread (L2).
+// 13 (N2.8, R-NEW: the Vulkan card's diagonal break): the composite's vertex stage puts the item's quad on whole pixels
+// of its render target wherever the item is placed (the block's viewport member); composite_state's origin_shift (the
+// last draw's shift of the item's origin, per axis, in target pixels).
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 12
+#define SRPSS_NATIVE_CORE_ABI 13

@@ -227,11 +227,14 @@ class HiddenDisplayHost:
     orbit target) as inert stand-ins: nothing here receives input.
     """
 
-    def __init__(self, width: int, height: int, *, dpr: float, share: bool = False) -> None:
+    def __init__(self, width: int, height: int, *, dpr: float, share: bool = False, overscan_rows: int = 0) -> None:
         """``share``: the context joins the application's global share group, as every product display window's
-        does (``AA_ShareOpenGLContexts``); two such hosts stand in for two display windows (1C.2)."""
+        does (``AA_ShareOpenGLContexts``); two such hosts stand in for two display windows (1C.2). ``overscan_rows``:
+        logical rows of an R-63 overscan above the display, as the product's window has one (Display 1 at 150 %: 2
+        logical, 3 device rows): the window is that much taller and publishes the display's rect inside it as its
+        ``scene_rect``, which the scene controller lays the scene out on (``scene_offset``: where the display starts)."""
         from OpenGL import GL as gl
-        from PySide6.QtCore import QObject, QSize
+        from PySide6.QtCore import QObject, QRectF, QSize, Signal
         from PySide6.QtGui import QColor, QGuiApplication, QOffscreenSurface, QOpenGLContext
         from PySide6.QtQuick import QQuickGraphicsDevice, QQuickRenderControl, QQuickRenderTarget, QQuickWindow
 
@@ -240,6 +243,8 @@ class HiddenDisplayHost:
         class _SceneContainer(QQuickWindow):
             screen_index = 0
             runtime_generation = 1
+            scene_rect_changed = Signal(object)
+            scene_rect = None
 
             def bind_semantic_double_click_hit_test(self, _test) -> None: pass
             def bind_semantic_middle_click_hit_test(self, _test) -> None: pass
@@ -260,7 +265,12 @@ class HiddenDisplayHost:
         self._gl = gl
         self.logical = (width, height)
         self.dpr = float(dpr)
-        self.pixels = (round(width * self.dpr), round(height * self.dpr))
+        overscan = int(overscan_rows)
+        if overscan < 0:
+            raise ValueError("the overscan is a whole number of logical rows, not negative")
+        #: Where the display starts in the window, logical (x, y).
+        self.scene_offset = (0.0, float(overscan))
+        self.pixels = (round(width * self.dpr), round((height + overscan) * self.dpr))
         self.context = QOpenGLContext()
         if share:
             global_share = QOpenGLContext.globalShareContext()
@@ -277,7 +287,9 @@ class HiddenDisplayHost:
         self.context.setParent(self.control)
         self.surface.setParent(self.control)
         self.window = _SceneContainer(self.control)
-        self.window.resize(width, height)
+        self.window.resize(width, height + overscan)
+        if overscan:
+            self.window.scene_rect = QRectF(0.0, float(overscan), float(width), float(height))
         self.window.setColor(QColor("#0b0d10"))
         self.window.setGraphicsDevice(QQuickGraphicsDevice.fromOpenGLContext(self.context))
         if not self.control.initialize():
@@ -295,7 +307,9 @@ class HiddenDisplayHost:
         self.scene = QuickSceneController(window=self.window, factory=self.factory)
         root = self.window.contentItem()
         root.setWidth(width)
-        root.setHeight(height)
+        root.setHeight(height + overscan)
+        if overscan:
+            self.window.scene_rect_changed.emit(self.window.scene_rect)
 
     def _current(self) -> None:
         if not self.context.makeCurrent(self.surface):
