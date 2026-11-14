@@ -318,8 +318,245 @@ What this means for N3.x:
 
 ---
 
+## Round 2
+
+Same sources (Qt 6.12.0 tag; `qtdeclarative` files for Qt Quick: `qsgrhisupport.cpp` `QSGR`, `qsgthreadedrenderloop.cpp`
+`TRL`, `qquickwindow.cpp`, `qquickgraphicsconfiguration.cpp`, `qsgdefaultrendercontext.cpp`) and the same tags and marks.
+Sections 8 to 12 continue the numbering of the question list.
+
+## N3.4 transparency and post-processing
+
+**Section 8. Weighted-blended OIT on QRhi: per-attachment blending, mixed-format MRT, blend factors and ops.**
+- Per-attachment blend state exists: `QRhiGraphicsPipeline::setTargetBlends`, one `TargetBlend` per colour attachment
+  (`qrhi.cpp:7240-7251`: "there needs to be a TargetBlend structure per render target"). Each carries `enable`,
+  `colorWrite`, `srcColor/dstColor/opColor`, `srcAlpha/dstAlpha/opAlpha` (`qrhi.cpp:7069-7114`).
+- Feature `QRhi::PerRenderTargetBlending` (since 6.9; `qrhi.cpp:1110-1114`). Vulkan: always true (`VK qrhivulkan.cpp:5617-5619`);
+  the pipeline fills one `VkPipelineColorBlendAttachmentState` per `TargetBlend` (`:8920-8943`). Qt never checks or
+  enables the device feature `independentBlend`, which Vulkan requires when attachments differ (search finds no use): a
+  Qt-created device enables all features, an imported device (D6) must. OpenGL: true on desktop GL 4.0+ and ES 3.2+
+  (`GL qrhigles2.cpp:1223-1226`, `:1731-1732`); applied with `glColorMaski`, `glBlendFuncSeparatei`,
+  `glBlendEquationSeparatei` per draw buffer (`:4269-4317`). When the flag is false, OpenGL applies ONLY the first
+  `TargetBlend` to every draw buffer (`:4279-4313`: `break` after buffer 0, plain `glBlendFuncSeparate`).
+- Blend factors: Zero, One, Src/OneMinusSrc Color and Alpha, Dst/OneMinusDst Color and Alpha, Constant/OneMinusConstant
+  Color and Alpha, SrcAlphaSaturate, and the four `Src1*` (dual-source) factors (`qrhi.cpp:6987-7010`). Ops: Add,
+  Subtract, ReverseSubtract, Min, Max (`:7012-7021`). Vulkan maps all of them (`VK :7001-7039`; `Src1*` need the
+  device feature `dualSrcBlend`, not checked or enabled by QRhi). OpenGL maps all but the four `Src1*` factors, which
+  warn "Unsupported blend factor" and become `GL_ZERO` (`GL :3057-3099`). No logic ops, no advanced blend.
+- MRT with mixed formats: the limit is `QRhi::MaxColorAttachments` (GL `maxDrawBuffers` `:1757-1758`; Vulkan
+  `maxColorAttachments` `VK :5642-5643`). A `QRhiTextureRenderTarget` takes one `QRhiColorAttachment` per target, each
+  with its own texture, so RGBA16F plus R16F/R8 in one target is expressed directly. Texture format support:
+  RGBA16F, R16F need `floatFormats` (GL 3.0+/ES 3.0, `GL :994`, `:1614-1620`); `R8` needs `TextureRGFormats`
+  (`caps.r8Format`, `:981`, `:1605`). Vulkan's `isTextureFormatSupported` only tests that the format can be sampled
+  (`VK :5517-5520`): QRhi never asks whether the format is colour-attachment-blendable.
+- Clears: `beginPass` takes ONE `colorClearValue`, written into every colour attachment's clear value (`VK :3445-3458`,
+  GL: one `glClearColor` then a clear of the draw buffers, `GL :5080-5083`). There is no per-attachment clear value.
+
+What this means for N3.x:
+- WBOIT (accumulation RGBA16F with `One,One,Add` for colour and alpha; revealage R16F or R8 with
+  `Zero,OneMinusSrcColor,Add`, which uses only factors both backends have) is expressible on both backends with
+  `PerRenderTargetBlending` true. Gate the OIT stage on that flag: on a GL below 4.0 only one blend state applies
+  to all attachments and WBOIT is off.
+- The two attachments need different clears (accumulation 0, revealage 1). With one clear value for all, store the
+  revealage inverted instead (clear 0, blend `One,One,Add` of coverage, resolve with `1 - r`), or clear it with a
+  fullscreen draw. Decide in the OIT design; this is a QRhi limit, not a backend one.
+- Do not use `Src1*` factors: GL has none.
+- UNSETTLED: that RGBA16F, R16F and R8 are blendable colour attachments on every device. QRhi does not check. Vulkan
+  guarantees blend support for the common 16-bit-float and 8-bit-UNORM colour formats by specification (from the
+  Vulkan format-requirements tables; not fetched here); GL 3.0+ makes float colour buffers renderable and blendable.
+  A one-time device probe (`vkGetPhysicalDeviceFormatProperties` blend bit) settles it.
+- The WBOIT transparent pass needs the OPAQUE pass's depth as a loaded, depth-test-only attachment. QRhi has no
+  read-only depth attachment, so this is a `PreserveDepthStencilContents` load on the same depth texture: the
+  depth-load hazard of section Q3 applies to the OIT stage.
+
+**Section 9. Bloom and HDR chains: a render target per mip level, sampling one level while rendering another.**
+- Rendering to a non-base level: `QRhiColorAttachment::setLevel` (`qrhi.cpp:2474`, example `:2639`), feature
+  `RenderToNonBaseMipLevel` (`qrhi.cpp:872-876`): Vulkan always true (`VK :5568`); GL true on desktop, ES 3.0+
+  (`GL :1066-1069`, `:1682-1683`). Vulkan creates a one-level image view per attachment (`VK :8315-8316`).
+- QRhi tracks usage per TEXTURE, not per subresource: one `UsageState` {layout, access, stage} per `QVkTexture`
+  (`VK :5367-5379`) and its barriers cover `baseMipLevel 0`, `VK_REMAINING_MIP_LEVELS` (`:5424-5425`). A sampled
+  binding uses the whole-image view (`levelCount = mipLevelCount`, `VK :7647`) with `SHADER_READ_ONLY_OPTIMAL`
+  (`:3807`).
+- Consequence: a pass that renders to level N of texture T and samples level N-1 of the same T registers T both as
+  `TexColorOutput` and `TexSample` in one pass. The pass tracker rejects that: "Texture used with different accesses
+  within the same pass, this is not allowed" (`qrhi.cpp:12151-12164`; only load/store image pairs merge). [DERIVED] The
+  Vulkan image would also have to be in `COLOR_ATTACHMENT_OPTIMAL` and `SHADER_READ_ONLY_OPTIMAL` at once; QRhi
+  holds one layout per image. So QRhi cannot do "write level N while reading level N-1" in one texture on Vulkan.
+- A sampler cannot pick one level: QRhi samplers carry `mipmapMode` and filters but no LOD range
+  (`VK :7881`: `maxLod = 1000` with mipmaps, `0.25` without); `QRhiSampler::mipmapMode = None` samples level 0 only.
+  A shader picks a level with `textureLod` or `texelFetch(tex, ivec2, lod)` (`QRhi::TexelFetch`: Vulkan true,
+  GL 3.0+ `GL :1680-1681`, `:1071`).
+- OpenGL: sequential passes are legal; the FBO attaches `glFramebufferTexture2D(..., level)` (`GL :6655-6656`). QRhi
+  never sets `GL_TEXTURE_BASE_LEVEL`/`MAX_LEVEL` (search finds none in `qrhigles2.cpp`), so a mip-filtered sampler
+  covers all levels while one level is attached: [DERIVED] a rendering feedback loop by GL's definition, which is
+  undefined behaviour. With a non-mipmapped sampler only level 0 is sampled. UNSETTLED: driver behaviour on the
+  RTX 4090 for sampling level N-1 while attached to N; it may work and still be undefined.
+- Barriers between sequential passes: the tracker emits one image barrier per texture per pass start
+  (`VK :5381-5441`): for a texture that was `ColorOutput` in the last pass and is `TexSample` now, colour-output write
+  to fragment-shader read plus the layout change for the WHOLE image. Writing a different level of an image that was
+  just sampled forces the whole image back to `COLOR_ATTACHMENT_OPTIMAL`, preserving contents (the old layout is
+  tracked, so no discard).
+- `QRhiResourceUpdateBatch::generateMips` (Vulkan: a `vkCmdBlitImage` chain with `VK_FILTER_LINEAR` per level, with
+  per-level `subresourceBarrier`s, restoring the original layout, `VK :4669-4740`, `:4028-4050`; GL: `glGenerateMipmap`
+  `GL :4161-4164`) needs `UsedWithGenerateMips`, runs outside a render pass, and is a 2x2 box-like filter.
+
+What this means for N3.x:
+- Build the bloom pyramid as one TEXTURE PER LEVEL (or two ping-pong textures) with each level a normal single-level
+  render target and a plain sampled binding. This is portable, has no feedback-loop risk, and QRhi tracks each
+  texture separately. A single mipped texture with per-level targets works only when each pass reads from a different
+  texture than it writes, which defeats the point.
+- Use `generateMips` for a plain box downsample chain if its filter is acceptable (it is linear 2x2 blits, not a
+  13-tap bloom filter); a quality downsample needs the per-level-texture form.
+- Do not count on `textureLod` into a texture while that texture is a render target on GL.
+- Layout and barriers are QRhi's for the chain: each pass start emits one whole-image barrier per texture; a chain of
+  K levels in separate textures costs K barriers, no more.
+
+---
+
+## N3.6 lifetime
+
+**Section 10. Pipeline cache: format, validity, what Qt Quick stores, whether the core can share it.**
+- API: `QRhi::pipelineCacheData()` / `setPipelineCacheData()` (`qrhi.cpp:11304-11390`), feature
+  `PipelineCacheDataLoadSave` (Vulkan true; GL `caps.programBinary` = GL 4.1+/ES 3.0 with the binary-format query,
+  `GL :1082-1091`, `:1690-1691`). `pipelineCacheData()` returns empty unless the `QRhi::EnablePipelineCacheDataSave`
+  create flag was set (`qrhi.cpp:677-696`, `VK :5757`). `releaseCachedResources()` may clear what was collected.
+  The blob is for the Qt version and backend, and "QRhi takes care of adding the appropriate header and safeguards"
+  (`qrhi.cpp:11322-11328`); a mismatch is ignored with a debug print only (category `qt.rhi.general`).
+- Vulkan format (`VK :5740-5862`): a 32-byte header {`rhiId` (Qt version and backend), pointer size, `driverVersion`,
+  `vendorID`, `deviceID`, `dataSize`, UUID size, reserved}, then the 16-byte `pipelineCacheUUID`, then the raw
+  `vkGetPipelineCacheData` bytes. `setPipelineCacheData` rejects on any mismatch of Qt version/backend, architecture,
+  driver version, vendor, device or pipeline cache UUID, or a short blob; on success it destroys the current
+  `VkPipelineCache` and creates a new one with the data as initial data (`:5851-5861`). One `VkPipelineCache` per QRhi
+  (created at the first pipeline, `ensurePipelineCache`, `VK :3733-3748`).
+- OpenGL format (`GL :1838-1958`): a 256-byte header {`rhiId`, pointer size, binary count, data size, 240-byte
+  renderer string}, then, per program, {key length, key, binary length, binary, binary format}. The key is a hash of
+  the shader source plus the vertex input names and locations (`:5764-5805`). Load checks Qt version/backend,
+  architecture, and `strncmp` of the renderer/version string; the driver's own `glProgramBinary` and link status are
+  the final check, and a failure falls back to a normal compile (`:5810-5828`). A program binary is also stored in
+  Qt's older OpenGL disk cache when the pipeline-cache flag is NOT set (`:7032-7040`, `:7154-7161`, `lcOpenGLProgramDiskCache`).
+- What Qt Quick stores (`QSGR qsgrhisupport.cpp:950-1117`, `qquickgraphicsconfiguration.cpp:236-322`): the AUTOMATIC cache
+  is on unless `Qt::AA_DisableShaderDiskCache`, `QT_DISABLE_SHADER_DISK_CACHE`, `QSG_RHI_DISABLE_DISK_CACHE` (the doc
+  text names `QSG_RHI_DISABLE_SHADER_DISK_CACHE`; the code reads the first spelling, `:842-844`) or
+  `setAutomaticPipelineCache(false)`. One file per application and per backend:
+  `<QStandardPaths::CacheLocation>/qtpipelinecache-<buildAbi>/qqpc_<backend>` (`:950-984`). It is read at QRhi creation
+  (`preparePipelineCache` -> `setPipelineCacheData`, called from `createRhi`, `:1296-1298`) and written ONCE, in
+  `destroyRhi`, only if the QRhi is not device-lost (`:1306-1315`); windows with Dialog/Popup flags do not save
+  (`:991-995`). The save flag `EnablePipelineCacheDataSave` is set on the QRhi only when saving is enabled for the
+  window (`:1137-1161`). Explicit file names win: `setPipelineCacheLoadFile` / `SaveFile`, or the env vars
+  `QSG_RHI_PIPELINE_CACHE_LOAD/SAVE` (not allowed by the project's no-env-flag rule; use the API). The writes use
+  `QSaveFile` (atomic). With several windows the single automatic file holds the data of whichever QRhi finalizes last
+  (doc `qquickgraphicsconfiguration.cpp:309-319`).
+- Imported device: the config's pipeline-cache settings are still read (the N06/N07 facts doc A6: they sit outside the
+  `!importedDevice` branch of device creation and Qt's own file logic is independent of device ownership).
+
+What this means for N3.x:
+- Pipelines the core creates on Qt Quick's QRhi (the frame driver's `window->rhi()`) go into that QRhi's one
+  `VkPipelineCache`, and Qt Quick saves them automatically at window teardown, as long as saving is enabled. The core
+  need not own a file for those; it must not disable Qt's automatic cache, and a window the saver kills hard writes
+  nothing (the save happens only in an orderly `destroyRhi`; a device loss never saves). Decide whether a screensaver
+  exit is orderly enough; if not, set an explicit `pipelineCacheSaveFile` per window and the core can write earlier
+  itself through `rhi->pipelineCacheData()`.
+- The core's own raw Vulkan pipelines (D5.3 services) are NOT in that cache. Raw pipelines need their own
+  `VkPipelineCache` and file, with the same checks as Qt's header (driver version, vendor, device, UUID, our own
+  version). The job-thread QRhi (N2b) is a second QRhi with its own `VkPipelineCache`; it saves nothing unless the core
+  calls `pipelineCacheData()` on it and writes a file of its own.
+- The automatic file is one per backend and not per window: the multi-display saver (one QRhi per window) saves only
+  the last window to close. Give each window an explicit file (`setPipelineCacheSaveFile`/`LoadFile` through
+  `QQuickGraphicsConfiguration`), per display or one shared and merged by us. UNSETTLED: whether a file loaded by two QRhis
+  of different windows is safe; each calls `setPipelineCacheData` independently with `QSaveFile` atomic writes, so
+  reading is safe, but the last writer wins.
+- A Qt, driver or GPU change silently drops the cache (a rebuild with a cold compile): warm-up (N3.6) must not rely on
+  the cache having data.
+- `releaseCachedResources()` can clear collected pipeline data on some backends; do not call it before the save.
+
+**Section 11. Device loss: reporting, what Qt Quick does, what the core rebuilds.**
+- Reporting. `QRhi::isDeviceLost()` and `FrameOpDeviceLost` (`qrhi.cpp:11296-11302`, `:11860-11866`: "may also be
+  recoverable by releasing all resources, including the QRhi itself, and then recreating all resources").
+  Vulkan: `VK_ERROR_DEVICE_LOST` from `vkAcquireNextImageKHR` (`VK qrhivulkan.cpp:2728-2733`), submit, present and
+  fence waits (`:2888-3058`) sets `deviceLost` and returns `FrameOpDeviceLost`; it logs `VK_EXT_device_fault` detail
+  when the device has it (`printDeviceLossErrorInfo`, `:4184-4267`, flag `caps.deviceFault`). After loss, QRhi skips
+  `vkQueueWaitIdle` and fence waits (`:1189`, `:2605-2612`). OpenGL: `contextLost` is set only when
+  `QOpenGLContext::makeCurrent` fails and the context is no longer valid (`GL qrhigles2.cpp:706-742`,
+  `:1833-1836`); `beginFrame`/`endFrame` then return `FrameOpDeviceLost` (`:2467-2468`). QRhi never queries
+  `glGetGraphicsResetStatus` or robustness (search finds none), so a GL driver reset that leaves the context current is
+  not detected by QRhi.
+- Qt Quick, threaded loop (`TRL qsgthreadedrenderloop.cpp:591-599`, `:659`, `:694-702`, `:774-781`): on loss in
+  `beginFrame`, `endFrame` or swapchain creation it logs "Graphics device lost, cleaning up scenegraph and releasing
+  RHI", runs `teardownGraphics` (`:579-589`: `cleanupNodesOnShutdown`, `sgrc->invalidate()`, release the swapchain,
+  `destroyRhi` if Qt owns it), sets `rhiDeviceLost`, and posts a `FullUpdateRequest`. The next frame calls
+  `ensureRhi` (`:879-899`), which creates a new QRhi (no `rhiDoomed` while `rhiDeviceLost` is set) and re-initialises the
+  scene graph. `sgrc->invalidate` (`qsgdefaultrendercontext.cpp:147-221`) deletes textures, depth-stencil buffers,
+  atlases and glyph caches and emits `invalidated`, which is connected to `QQuickWindow::sceneGraphInvalidated`
+  (`qquickwindow.cpp:841-842`), emitted on the render thread ("all user resources tied to that context should be
+  released", `qquickwindow.cpp:2571-2586`; with OpenGL the context is NOT current on a real context loss). The
+  window-sized `sceneGraphInitialized` then fires again after the rebuild.
+- `QRhi::create` on rebuild reuses `wd->customDeviceObjects` (`QSGR :1124`, `:1202-1210`): the same adopted
+  `VkDevice`/queue handles. `QQuickWindow::setGraphicsDevice` only stores the value (`qquickwindow.cpp:4480-4484`).
+  [DERIVED] after a true `VK_ERROR_DEVICE_LOST` on our device the rebuild would re-adopt a dead device unless the core
+  replaces it. UNSETTLED: whether `setGraphicsDevice` called from the `sceneGraphInvalidated` slot (render thread)
+  takes effect for the rebuild (it is a plain store, and the docs say it must precede scene graph initialisation, which
+  has been undone), and the threading of that call. A hidden-host loss test (forced via a layer or TDR) settles it.
+
+What this means for N3.x:
+- Qt rebuilds: its QRhi, swapchain, scene graph, textures, atlases, glyph caches, its own pipelines and Quick items'
+  resources, on the window (render) thread, with no core involvement, once the device itself is usable.
+- The core rebuilds, on the `sceneGraphInvalidated` / `sceneGraphInitialized` edges: everything in its Window and Job
+  scopes (D5 lifetime table): all QRhi resources it created (scene targets, meshes, buffers, pipelines, compute
+  resources, SRBs), all raw Vulkan objects (they die with the device), the job-thread QRhi and its device-scope objects,
+  and any texture wrapped from a native image. QRhi resources of a destroyed QRhi must not be touched (QRhi's
+  deferred-release queue is cleared in `destroy`); use `QRhi::addCleanupCallback` (`qrhi.cpp:9673-9684`) to learn that a
+  QRhi is going away.
+- Detect loss yourself on the core's own frame edges: `QRhi::isDeviceLost()` after every `beginFrame` the core relies
+  on, and a failing `QRhi::finish()`/submit on the job queue. On OpenGL expect false negatives (see above), so a
+  GL "loss" arrives as a context-invalid makeCurrent only.
+- Log `VK_EXT_device_fault` once (N3.6 already plans it); it needs the extension enabled on our device and Qt must
+  see `caps.deviceFault` (assumed true for an imported device, N06/N07 facts A5).
+- The rebuild must come from the last packet (N3.6): keep CPU-side copies of everything needed; GPU-held history
+  (N3.9) is lost on a loss unless mirrored.
+
+**Section 12. Release timing: `deleteLater` against `destroy`, and when the GPU object really dies.**
+- `destroy()` releases or "requests deferred releasing of" the native objects; the C++ object stays valid and can
+  `create()` again (`qrhi.cpp:3718-3736`). Every backend's `destroy()` moves the native handles into a release queue
+  rather than deleting them (e.g. `QVkBuffer::destroy`, `VK :7225-7250`).
+- `deleteLater()` adds the C++ object to a list that `QRhi::endFrame` (and the offscreen equivalent) deletes when the
+  frame ends (`qrhi.cpp:3776-3782`, `:11877-11882`); outside a frame it is `delete` now. It only keeps the C++ instance
+  alive until the end of the current frame; the native object's safety is the backend's deferred release, the same for
+  both ("the underlying native graphics objects are never destroyed until ... not used by the GPU in an still in-flight
+  frame", `qrhi.cpp:3749-3755`).
+- Vulkan: `QVK_FRAMES_IN_FLIGHT = 2` (`qrhivulkan_p.h:30`, `resourceLimit(FramesInFlight)` `VK :5644-5645`). An
+  entry records `lastActiveFrameSlot` (the slot of the last frame that recorded a use) and is destroyed in
+  `executeDeferredReleases` when `currentFrameSlot == lastActiveFrameSlot`, or when it was never used
+  (`lastActiveFrameSlot < 0`), or when forced (`VK :4829-4885`). `executeDeferredReleases` runs from `prepareNewFrame`
+  at `beginFrame` and `beginOffscreenFrame` (`:2762`, `:3083`, `:2923`), after that slot's fence has been waited. So an
+  object last used in frame N dies at the start of frame N+2 (the next time slot N%2 comes round) and not before the GPU is done
+  with frame N; an unused one dies at the next `beginFrame`. Forced: `QRhi::finish()` does `vkQueueWaitIdle` then
+  `executeDeferredReleases(true)` (`:3176-3222`); `QRhi::destroy` does the same (`:1184-1193`).
+- OpenGL: no slots (`FramesInFlight` = 1, `GL :1759-1761`). `destroy()` appends to `releaseQueue`; `executeDeferredReleases`
+  deletes EVERYTHING in it, unconditionally, at the next `beginFrame`, `beginOffscreenFrame` or at `QRhi::destroy`
+  (`GL :1321-1349`, `:2474`, `:2534`, `:1296`). The GL driver orders its own commands, so a delete one frame later is
+  safe.
+- Dynamic buffers hold per-slot buffers: a destroyed Dynamic buffer releases both (`VK :7229-7240`).
+
+What this means for N3.x:
+- A resource the core stops using this frame can be `destroy()`ed or `deleteLater()`ed at once, with the same GPU
+  safety; use `deleteLater()` whenever the C++ object may still be touched by recorded commands of the CURRENT frame
+  (it must not be deleted before `endFrame`). The native object dies 2 frames after its last use on Vulkan, next frame
+  on GL (never earlier than GPU completion).
+- Memory is not returned at the moment of retirement: a retired scene target (N3.1, N3.7) keeps its VRAM for up to two
+  further Qt frames on Vulkan. Budget peaks as live + retired-within-2-frames. If no frame comes (nothing is
+  animating, the saver is idle) the release waits: call `QRhi::finish()` from the owner of the QRhi (the render thread)
+  to force it, which also costs a full queue idle, so use it only at lifecycle edges, never per frame.
+- On Qt Quick's QRhi we do not choose when `beginFrame` runs; a window that stops presenting leaves the queue
+  undrained. For the core's job-thread QRhi it owns `beginOffscreenFrame`/`finish()` itself.
+- Raw Vulkan objects the core creates (D5.3 services) get no deferred release: the core must apply the same "last used
+  slot" rule itself, or wait idle.
+
+---
+
 ## Open items in one place
 - D14 was not found (see the top); re-check this file against it.
+- Round 2: section 8, device probe for blend support of the OIT formats and enabling `independentBlend`, `dualSrcBlend`
+  not needed. Section 9, GL feedback loop on a sampled level behaviour on the 4090. Section 10, two-window cache
+  sharing. Section 11, `setGraphicsDevice` after loss and its threading, GL loss detection. Section 12, nothing open.
 - Q1: per-format Vulkan sample counts for the HDR format (check once per device).
 - Q2: a depth-only format with the GL blit mask `DEPTH|STENCIL` (test D32F once, or use D24S8).
 - Q3: depth `LOAD` hazard after a prior pass: a validated hidden-host run settles it.
