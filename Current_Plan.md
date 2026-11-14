@@ -989,6 +989,50 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
 
+### 1D.12 Three small chrome requests (operator, 14 Nov; one Opus Medium agent after the reset, in this order)
+
+No timers, no polling and no env flags: every reveal and fade is an edge-started QML animation that runs only while it
+animates, so nothing is added at rest. Fade, never vanish. Tests assert behaviour and structure, never wording or
+preset values. Prove each item with a hidden-host test and a negative control.
+
+**A. Now Playing in custom geometry reads CUSTOM in its position dropdown.**
+- [ ] Root cause first. `ui/tabs/widgets_tab.py` (about line 495) already enables the CUSTOM entry from
+  `has_saved_custom_layout_for_widget` for every descriptor with `supports_custom_position_slot`. Find why the Media
+  widget's `tab.media_position` (`ui/tabs/widgets_tab_media.py:347`) does not show CUSTOM once Now Playing is moved
+  into custom geometry. Check two things: whether the move, from Edit, Arrange or a drag, persists `position` as the
+  CUSTOM label; and whether the load path at `widgets_tab_media.py:904` falls back because the media descriptor's
+  effective position key differs from the key the move saves under.
+- [ ] Fix it at that owner, so the dropdown selects CUSTOM whenever the saved geometry is custom: on load, and live after
+  an Edit Save while Settings is open. Choosing a named position afterwards still leaves custom geometry the way other
+  widgets do.
+- [ ] Test it on the real SettingsDialog, not a stub host. Negative control: a widget with no saved custom layout never
+  offers CUSTOM.
+
+**B. Glyphs fade out over time; hovering any glyph fades them all back in.**
+- [ ] The scope is the hover glyph set governed by Show Glyphs (`alwaysShowGlyphs`): `OverlayWidget.qml` (about
+  lines 354 and 373), `VisualizerPresentation.qml` (preset arrows, Reset Camera, Rotate, display arrows; about lines
+  271, 446, 508, 611, 705, 776 and 954), and `WidgetHoverEditGlyphs.qml`.
+- [ ] Copy the existing Now Playing fade, so find its owner first. Card hover reveals the glyphs gently. After a dwell
+  with no glyph under the pointer, they fade out slowly while the card is still hovered. Pointer over any one glyph
+  fades the whole set back in, and it stays in while a glyph is hovered. Leaving the card keeps today's fade-out.
+- [ ] Build one shared reveal owner, one per card, that every glyph binds its opacity to. No per-glyph timers. Use the
+  control hint's edge-started `SequentialAnimation` with a `PauseAnimation` (`VisualizerPresentation.qml` about
+  line 1010) as the model.
+- [ ] A faded glyph's hit area stays live, so hovering where it sits brings the set back. Tooltips keep their present
+  one-second dwell. Edit chrome is unchanged.
+
+**C. The WASD control hint shows once per session per mode.**
+- [ ] Today `controlHintVisitStarted` resets on every card leave (`VisualizerPresentation.qml` about lines 176-190 and
+  998), so each new visit replays the five-second hint.
+- [ ] Record "shown" per Visualizer mode id for the life of the process, outside the lazy QML root, which is rebuilt.
+  A plain Python set on the SceneController or the input owner, projected to QML as a bool at mode change and admission
+  edges, is enough. Nothing is persisted to settings. The first eligible visit in a mode plays the hint; later visits in
+  that mode do not. A new saver session starts fresh.
+- [ ] Check that mode switches, display moves and Expanded/fullscreen re-admission do not reset the set. Turning Show 3D
+  Control Hints off and on again may reset it.
+- [ ] Test it hidden-host: two visits in one mode give one reveal; a switch to another 3D mode gives one more reveal.
+  Negative control: with the set bypassed, the second visit reveals again.
+
 ### 1D.10 Audit of 13 Nov: what is left after its merge (14 Nov)
 
 - [ ] C++, with the next native build round: excuse `vulkan_context.cpp:205-207`'s two messages only when Qt6Gui
