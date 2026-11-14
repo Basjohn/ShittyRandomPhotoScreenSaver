@@ -26,7 +26,7 @@ from types import ModuleType
 from typing import Any, Sequence
 
 #: The composite's options (``CompositeConfig`` in ``composite.h``).
-COMPOSITE_OPTIONS = ("rect", "coverage", "quarters", "pattern", "visible", "opacity", "surface_format")
+COMPOSITE_OPTIONS = ("rect", "coverage", "quarters", "pattern", "visible", "opacity", "surface_format", "pixel_ratio")
 #: The surface's texel formats (``surface_format``): rgba8 (the product's), or rgba16f (translucent content not rounded
 #: to 8 bits before the composite blends it). A harness switch: N2.5 round 5 measured no parity gain from rgba16f.
 SURFACE_FORMATS = ("rgba8", "rgba16f")
@@ -37,17 +37,26 @@ _GRID_TOLERANCE = 1e-6   # device pixels: a coordinate this close to a whole pix
 Rect = tuple[float, float, float, float]
 
 
-def _on_device_grid(rect: Sequence[float], dpr: float, *, quad_aligned: bool = False) -> Rect:
-    """The smallest rect on whole device pixels containing ``rect`` (display-logical); ``quad_aligned``: every edge
-    on an even device pixel, so the target's 2x2 derivative quads are the window's own whichever way it rasters."""
+def _on_device_grid(rect: Sequence[float], ratio: float | tuple[float, float], *, quad_aligned: bool = False) -> Rect:
+    """The smallest rect on whole device pixels containing ``rect`` (display-logical); ``ratio``: the window's
+    logical-to-framebuffer ratio (one for both axes, or per axis); ``quad_aligned``: every edge on an even device
+    pixel, so the target's 2x2 derivative quads are the window's own whichever way it rasters."""
+    rx, ry = (float(ratio), float(ratio)) if isinstance(ratio, (int, float)) else (float(ratio[0]), float(ratio[1]))
     x, y, width, height = (float(v) for v in rect)
-    left = math.floor(x * dpr + _GRID_TOLERANCE)
-    top = math.floor(y * dpr + _GRID_TOLERANCE)
-    right = math.ceil((x + width) * dpr - _GRID_TOLERANCE)
-    bottom = math.ceil((y + height) * dpr - _GRID_TOLERANCE)
+    left = math.floor(x * rx + _GRID_TOLERANCE)
+    top = math.floor(y * ry + _GRID_TOLERANCE)
+    right = math.ceil((x + width) * rx - _GRID_TOLERANCE)
+    bottom = math.ceil((y + height) * ry - _GRID_TOLERANCE)
     if quad_aligned:
         left, top, right, bottom = left - left % 2, top - top % 2, right + right % 2, bottom + bottom % 2
-    return (left / dpr, top / dpr, max(1, right - left) / dpr, max(1, bottom - top) / dpr)
+    return (left / rx, top / ry, max(1, right - left) / rx, max(1, bottom - top) / ry)
+
+
+def window_pixel_ratio(window_size: Sequence[float], window_pixels: Sequence[int]) -> tuple[float, float]:
+    """The ratio Qt's projection draws a window with, per axis: its framebuffer's pixels over its logical size (Qt maps
+    ``QRectF(0, 0, window.size())`` onto the framebuffer). Not the device pixel ratio where the logical size is rounded:
+    2560x1440 at 150 % is a 1707x960 window, so x is 2560 / 1707 (audit 14 Nov, H1)."""
+    return (float(window_pixels[0]) / float(window_size[0]), float(window_pixels[1]) / float(window_size[1]))
 
 
 @dataclass(frozen=True)
@@ -62,6 +71,13 @@ class CompositeGeometry:
     quarters: int
     dpr: float
     overflow_admitted: bool = False
+    #: The window's logical-to-framebuffer ratio per axis the rect is on (None: ``dpr`` on both axes).
+    pixel_ratio: tuple[float, float] | None = None
+
+    @property
+    def ratio(self) -> tuple[float, float]:
+        """The ratio per axis (window orientation) the rect's device pixels are counted with."""
+        return self.pixel_ratio if self.pixel_ratio is not None else (float(self.dpr), float(self.dpr))
 
     @property
     def texture_size(self) -> tuple[int, int]:
@@ -76,15 +92,20 @@ class CompositeGeometry:
         if self.coverage is not None:
             (cx, cy, cw, ch), radius = self.coverage
             coverage = {"rect": [cx, cy, cw, ch], "radius": radius}
-        return {"rect": [x - float(parent_origin[0]), y - float(parent_origin[1]), width, height],
-                "coverage": coverage, "quarters": self.quarters}
+        config = {"rect": [x - float(parent_origin[0]), y - float(parent_origin[1]), width, height],
+                  "coverage": coverage, "quarters": self.quarters}
+        if self.pixel_ratio is not None:
+            config["pixel_ratio"] = [float(self.pixel_ratio[0]), float(self.pixel_ratio[1])]
+        return config
 
 
 def composite_geometry(presentation: Any, *, overflow_requested: bool = False,
-                       overflow_rect: Sequence[float] | None = None, quad_aligned: bool = False) -> CompositeGeometry:
+                       overflow_rect: Sequence[float] | None = None, quad_aligned: bool = False,
+                       pixel_ratio: Sequence[float] | None = None) -> CompositeGeometry:
     """The composite of one ``ResolvedVisualizerPresentation``. ``overflow_requested``: the mode's own overflow
     choice (its ``renderer_overflow_setting`` on); ``overflow_rect`` (display-logical) is what such a renderer may
-    reach when the record does not hold it."""
+    reach when the record does not hold it. ``pixel_ratio``: the window's logical-to-framebuffer ratio per axis
+    (``window_pixel_ratio``), which places the rect on the window's own device pixels; None: the record's dpr."""
     from widgets.spotify_visualizer.presentation_geometry import (
         renderer_overflow_held,
         resolve_card_clip_path,
@@ -92,20 +113,23 @@ def composite_geometry(presentation: Any, *, overflow_requested: bool = False,
     )
 
     dpr = float(presentation.dpr)
+    ratio = None if pixel_ratio is None else (float(pixel_ratio[0]), float(pixel_ratio[1]))
+    grid = ratio if ratio is not None else (dpr, dpr)
     quarters = int(presentation.content_rotation_quarters) % 4
     if overflow_requested and not renderer_overflow_held(presentation):
         if overflow_rect is None:
             raise ValueError("an admitted overflow names the rect it may reach (overflow_rect)")
-        rect = _on_device_grid(overflow_rect, dpr, quad_aligned=quad_aligned)
-        return CompositeGeometry(rect, _pixels(rect, dpr), None, quarters, dpr, overflow_admitted=True)
-    rect = _on_device_grid(resolve_card_drawn_rect(presentation), dpr, quad_aligned=quad_aligned)
+        rect = _on_device_grid(overflow_rect, grid, quad_aligned=quad_aligned)
+        return CompositeGeometry(rect, _pixels(rect, grid), None, quarters, dpr, overflow_admitted=True,
+                                 pixel_ratio=ratio)
+    rect = _on_device_grid(resolve_card_drawn_rect(presentation), grid, quad_aligned=quad_aligned)
     (cx, cy, cw, ch), radius = resolve_card_clip_path(presentation)
     coverage = ((cx - rect[0], cy - rect[1], float(cw), float(ch)), float(radius))
-    return CompositeGeometry(rect, _pixels(rect, dpr), coverage, quarters, dpr)
+    return CompositeGeometry(rect, _pixels(rect, grid), coverage, quarters, dpr, pixel_ratio=ratio)
 
 
-def _pixels(rect: Rect, dpr: float) -> tuple[int, int]:
-    return (int(round(rect[2] * dpr)), int(round(rect[3] * dpr)))
+def _pixels(rect: Rect, ratio: tuple[float, float]) -> tuple[int, int]:
+    return (int(round(rect[2] * ratio[0])), int(round(rect[3] * ratio[1])))
 
 
 class CompositeItem:
@@ -161,4 +185,4 @@ class CompositeItem:
 
 
 __all__ = ["COMPOSITE_OPTIONS", "CompositeGeometry", "CompositeItem", "SURFACE_FORMATS", "SURFACE_PATTERNS",
-           "composite_geometry"]
+           "composite_geometry", "window_pixel_ratio"]

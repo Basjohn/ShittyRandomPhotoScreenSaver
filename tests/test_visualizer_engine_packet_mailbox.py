@@ -89,6 +89,27 @@ def test_latest_wins_and_superseded_states_are_counted(mailbox):
     assert mailbox.take() is None and mailbox.superseded_count == 2 and mailbox.revision == 3
 
 
+def test_a_peek_never_hides_a_newer_publication(mailbox):
+    # N2.3 side defect: the peeked frame was cached, so peek, publish, take handed out the older frame once (and the
+    # newer one only at the next take). The in-process mailbox hands out the newest: both take the same frame here.
+    from widgets.spotify_visualizer.logical_runtime import LatestStateMailbox
+
+    reference = LatestStateMailbox()
+    for box in (mailbox, reference):
+        box.publish(_Frame(1.0, protected_edges=(_Edge("reveal", 7),)), generation=4, activation_id=2)
+        assert box.peek().state.value == 1.0
+        box.publish(_Frame(2.0), generation=4, activation_id=2)
+    taken, expected = mailbox.take(), reference.take()
+    assert expected.state.value == 2.0
+    assert taken.state.value == expected.state.value and taken.revision == expected.revision
+    # The peeked frame was never acknowledged, so its protected edge rides into the newest one, as in process.
+    assert taken.state.protected_edges == expected.state.protected_edges == (_Edge("reveal", 7),)
+    assert mailbox.take() is None and reference.take() is None
+    # A peek with nothing newer still returns the same frame, and the take after it hands that frame out once.
+    mailbox.publish(_Frame(3.0), generation=4, activation_id=2)
+    assert mailbox.peek() is mailbox.peek() and mailbox.take().state.value == 3.0 and mailbox.take() is None
+
+
 @pytest.mark.parametrize("failure", ("encode", "capacity"))
 def test_a_publish_that_raises_supersedes_nothing(mailbox, failure):
     # N2.3 side defect: a frame is superseded only once its successor is in the slot. A publish whose encode raises (an

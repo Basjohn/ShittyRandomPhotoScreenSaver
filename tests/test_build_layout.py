@@ -309,6 +309,41 @@ Assert-SRPSSOnedirVisualizerShaders `
     assert "bubble.frag" in (result.stdout + result.stderr)
 
 
+@pytest.mark.parametrize("pack_shipped", (False, True))
+def test_onedir_shader_contract_requires_the_baked_fragment_packs(tmp_path, pack_shipped):
+    # Audit 14 Nov, L7: the native core loads <mode>.frag.qsb at run time, so a pack beside its source must ship too.
+    # Control (pack_shipped): the same payload with the pack passes.
+    repo_root = tmp_path / "repo"
+    shader_source = repo_root / "widgets" / "spotify_visualizer" / "shaders"
+    shader_source.mkdir(parents=True)
+    (shader_source / "spectrum.frag").write_text("spectrum", encoding="utf-8")
+    (shader_source / "spectrum.frag.qsb").write_bytes(b"pack")
+
+    dist_root = tmp_path / "dist"
+    shader_dist = dist_root / "widgets" / "spotify_visualizer" / "shaders"
+    shader_dist.mkdir(parents=True)
+    (shader_dist / "spectrum.frag").write_text("spectrum", encoding="utf-8")
+    if pack_shipped:
+        (shader_dist / "spectrum.frag.qsb").write_bytes(b"pack")
+
+    result = _run_layout_command(
+        """
+. $env:SRPSS_LAYOUT_SCRIPT
+Assert-SRPSSOnedirVisualizerShaders `
+    -RepoRoot $env:SRPSS_REPO_ROOT `
+    -DistributionRoot $env:SRPSS_DIST_ROOT | Out-Null
+""",
+        repo_root=repo_root,
+        dist_root=dist_root,
+    )
+
+    if pack_shipped:
+        assert result.returncode == 0, result.stderr
+    else:
+        assert result.returncode != 0
+        assert "spectrum.frag.qsb" in (result.stdout + result.stderr)
+
+
 def test_onefile_shader_contract_requires_embedded_data_declaration(tmp_path):
     repo_root = tmp_path / "repo"
     shader_source = repo_root / "widgets" / "spotify_visualizer" / "shaders"

@@ -100,7 +100,10 @@ def test_the_adversarial_table_holds_and_every_negative_control_fails_it(core):
 def test_the_in_place_writer_never_gets_a_mixed_record_past_the_seqlock(harness, core):
     result = harness.stress_round(core)
     assert result["seqlock"]["mixed"] == 0 and result["seqlock"]["torn_reads"] > 0, result["seqlock"]
-    assert result["control_skip_seqlock"]["mixed"] > 0, result["control_skip_seqlock"]
+    assert result["control_skip_copy_reread"]["mixed"] > 0, result["control_skip_copy_reread"]
+    # The re-read after the copy, isolated: a slot rewritten during a paused copy is torn; its control accepts it.
+    assert result["rewritten_during_copy"]["held"], result["rewritten_during_copy"]
+    assert result["rewritten_during_copy_control"]["read"] == "accepted", result["rewritten_during_copy_control"]
 
 
 def test_d1_the_readers_own_view_and_retire(harness, core):

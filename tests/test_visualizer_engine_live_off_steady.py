@@ -327,6 +327,12 @@ def test_each_slot_carries_the_identity_and_flags_a_native_reader_validates(qt_a
             expected = ((abi.FLAG_CHANGED if state.changed else 0) | (abi.FLAG_PRESENT_FRAME if state.present_frame else 0)
                         | (abi.FLAG_MODE_REVEAL_READY if state.mode_reveal_ready else 0)
                         | (abi.FLAG_PLAYING if state.playing else 0))
+            # N2.5: whether the frame's reactive source is its own activation's (the native renderer's admission).
+            source_generation = int(getattr(state, "source_generation", -1))
+            source_activation = int(getattr(state, "source_activation_id", -1))
+            if (source_generation >= 0 and source_activation >= 0 and source_generation == state.engine_generation
+                    and source_activation == state.activation_id):
+                expected |= abi.FLAG_SOURCE_CURRENT
             assert flags == expected, index
             assert identity == [state.runtime_generation, state.engine_generation & U32_NONE,
                                 state.activation_id & U32_NONE, abi.MODE_CODES[state.mode_id]], index

@@ -169,6 +169,12 @@ public:
         return value;
     }
     bool flag(const char *name) const { return u32(name) != 0; }
+    // How many elements the field holds (0: no such field).
+    int capacity(const char *name) const
+    {
+        const fa::Field *field = recordField(m_schema, name);
+        return field ? int(field->count) : 0;
+    }
     // implementation_values.rgba: each raw channel over 255, clamped to [0, 1] (alpha 255 stored when absent).
     void rgba(const char *name, double out[4]) const
     {
@@ -377,8 +383,15 @@ bool spectrumBlock(const QByteArray &bytes, const SpectrumPresentation &p, const
     }
     double logicalBars[kMaxBars] = {};
     double logicalPeaks[kMaxBars] = {};
-    int barsLength = int(record.u32("bars_len"));
-    int peaksLength = int(record.u32("peaks_len"));
+    // Kept lengths clamped to the stack arrays and the fields (audit 14 Nov, L1): the reader refuses a length over 64,
+    // but spectrum_block takes any bytes and the skip_head_check control admits any record.
+    const auto keptLength = [&record](const char *lengthName, const char *fieldName) {
+        const quint32 stored = record.u32(lengthName);
+        const quint32 limit = quint32(qMin(kMaxBars, record.capacity(fieldName)));
+        return int(stored < limit ? stored : limit);
+    };
+    int barsLength = keptLength("bars_len", "bars");
+    int peaksLength = keptLength("peaks_len", "peaks");
     for (int i = 0; i < barsLength; ++i)
         logicalBars[i] = record.f64("bars", i);
     for (int i = 0; i < peaksLength; ++i)
@@ -503,6 +516,11 @@ SpectrumSource::~SpectrumSource()
 {
     // The last owner: the node on the render thread, or the item when no node ever read (no read can be in progress).
     releaseRetired();
+    for (PacketReader *reader : m_retiring) { // the last owner: nothing can wait on the source any more
+        reader->release();
+        delete reader;
+    }
+    m_retiring.clear();
     if (m_current) {
         m_current->retire();
         m_current->release();
@@ -602,12 +620,20 @@ bool SpectrumSource::readHead(SlotHead *out)
 
 bool SpectrumSource::waitPaused(int timeoutMs)
 {
+    // The harness's pause_in_copy hook. The reader is waited on without the lock; while any wait is in progress the
+    // retire job keeps every retired reader alive (audit 14 Nov, L9: an unbind then a sync deleted it under the wait).
     PacketReader *reader = nullptr;
     {
         QMutexLocker lock(&m_mutex);
         reader = m_current;
+        if (!reader)
+            return false;
+        ++m_waiters;
     }
-    return reader && reader->waitPaused(timeoutMs);
+    const bool paused = reader->waitPaused(timeoutMs);
+    QMutexLocker lock(&m_mutex);
+    --m_waiters;
+    return paused;
 }
 
 void SpectrumSource::resume()
@@ -624,6 +650,8 @@ void SpectrumSource::releaseRetired()
     QList<PacketReader *> retiring;
     {
         QMutexLocker lock(&m_mutex);
+        if (m_waiters > 0)
+            return; // a harness wait holds a reader: released at the first sync after it returns
         retiring.swap(m_retiring);
     }
     for (PacketReader *reader : retiring) {
@@ -808,6 +836,32 @@ bool SpectrumContent::ensure(QRhi *rhi, ColorTarget &target, QString *error)
         release();                            // a new pack: its pipeline and block buffer are rebuilt
     if (m_res)
         return true;
+    if (m_failed && m_failedRhi == rhi && m_failedPass == target.renderPass.get()
+        && m_failedGeneration == program.shaderGeneration) {
+        *error = m_failedError;               // failed closed: nothing is created again for the same inputs (M2)
+        return false;
+    }
+    if (build(rhi, target, error)) {
+        m_failed = false;
+        return true;
+    }
+    // The failure edge: recorded once, reported through the source's state.
+    m_failed = true;
+    m_failedRhi = rhi;
+    m_failedPass = target.renderPass.get();
+    m_failedGeneration = program.shaderGeneration;
+    m_failedError = *error;
+    ++m_failures;
+    QJsonObject facts;
+    facts.insert(QStringLiteral("content_failed"), true);
+    facts.insert(QStringLiteral("content_failures"), double(m_failures));
+    m_source->noteRecorded(false, QStringLiteral("the content failed: %1").arg(*error), facts);
+    return false;
+}
+
+bool SpectrumContent::build(QRhi *rhi, ColorTarget &target, QString *error)
+{
+    const SpectrumProgram &program = m_source->drawnProgram();
     const BlockLayout &layout = program.layout;
     const QShader vs = shaderFrom(spectrum_vert_qsb, spectrum_vert_qsb_size);
     const QShader &fs = program.fragment;

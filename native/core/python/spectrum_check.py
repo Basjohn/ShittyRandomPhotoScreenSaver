@@ -380,7 +380,7 @@ Rectangle {
 class Scene:
     """An opaque black display with one native Spectrum at (MARGIN, MARGIN), its target on the item's own rect."""
 
-    def __init__(self, core, engine, host) -> None:
+    def __init__(self, core, engine, host, *, program: bool = True) -> None:
         from PySide6.QtCore import QUrl
         from PySide6.QtQml import QQmlComponent
         from PySide6.QtQuick import QQuickItem
@@ -394,7 +394,8 @@ class Scene:
         self.content = self.root.findChild(QQuickItem, "contentHost")
         host.set_content(self.root)
         self.spectrum = core.spectrum(self.content)
-        self.spectrum.program(spectrum_pack())    # the product's pack, loaded at run time (N2.5 round 4)
+        if program:                               # (False: the content-failure check's item with no program)
+            self.spectrum.program(spectrum_pack())    # the product's pack, loaded at run time (N2.5 round 4)
         self.spectrum.composite.set(surface_format=SURFACE_FORMAT[0])
         held = self.spectrum.composite.state()["config"].get("surface_format", "rgba8")
         if held != SURFACE_FORMAT[0]:          # a module from before round 5 ignores the option
@@ -750,7 +751,9 @@ def round_program(core, engine, app, host, records: list[dict]) -> dict:
     """N2.5 round 4's drawn proof of the standing port rule: a copy of spectrum.frag with a Settings-only uniform
     (``u_test_tint``: above 0.5 every drawn pixel is magenta) baked by regen_qrc's baker and handed over at run time;
     the item draws the value with no module rebuild (tint 1: magenta where the bars are; tint 0: none). Control: the
-    module's compiled-in copy refuses the name. Uses tests/test_native_core_spectrum_program.py's copy."""
+    module's compiled-in copy refuses the name. Uses tests/test_native_core_spectrum_program.py's copy. Then the
+    compiled-in copy draws the product pack's pixels exactly (it is baked from the product's spectrum.frag at build
+    time; control: a one-level change is seen)."""
     import tempfile
 
     import numpy as np
@@ -765,31 +768,41 @@ def round_program(core, engine, app, host, records: list[dict]) -> dict:
     stream = Stream()
     magenta = {}
     refused = ""
+    product = compiled = None
     try:
-        with tempfile.TemporaryDirectory(prefix="srpss_program_") as folder:
-            tinted = tinted_pack(Path(folder))
-        scene.spectrum.program(tinted)
         scene.place(card)
         scene.spectrum.bind(stream.name, expect=stream.expect)
 
-        def drawn_magenta(step: int) -> int:
+        def draw(step: int):
             stream.publish(base["record"], float(step))
             scene.spectrum.update()
-            rgb = scene.read(card)[..., :3].astype(int)
+            return scene.read(card)
+
+        def magenta_of(pixels) -> int:
+            rgb = pixels[..., :3].astype(int)
             return int(((rgb[..., 0] > 200) & (rgb[..., 1] < 40) & (rgb[..., 2] > 200)).sum())
 
-        for step, tint in enumerate((1.0, 0.0)):
+        # The product's pack (Scene's default), drawn once; the compiled-in copy must draw exactly this. N2.5
+        # leftover: the copy is baked from the product's spectrum.frag at build time (CMakeLists.txt
+        # _product_shader_sources), so a module built after R-210's hoist draws the product pack's pixels exactly.
+        scene.spectrum.settings(_settings_for_card(card))
+        product = draw(0).copy()
+        scene.spectrum.program(None)                      # the compiled-in copy: the old path
+        compiled = draw(1).copy()
+        with tempfile.TemporaryDirectory(prefix="srpss_program_") as folder:
+            tinted = tinted_pack(Path(folder))
+        scene.spectrum.program(tinted)
+        for step, tint in enumerate((1.0, 0.0), start=2):
             scene.spectrum.settings(dict(_settings_for_card(card), u_test_tint=tint))
-            magenta[str(tint)] = drawn_magenta(step)
+            magenta[str(tint)] = magenta_of(draw(step))
         # Audit 14 Nov, L4: a second program call keeps the settings (the route never resends unchanged ones), so the
         # tint set before it still draws with no settings call after it.
         scene.spectrum.settings(dict(_settings_for_card(card), u_test_tint=1.0))
         scene.spectrum.program(tinted)
-        magenta["kept_across_program"] = drawn_magenta(2)
+        magenta["kept_across_program"] = magenta_of(draw(4))
         try:
-            # The compiled-in copy (the old path) keeps the current settings (audit 14 Nov, L4) and cannot take
-            # u_test_tint: the program itself is refused; were it taken, the settings would be refused by name.
-            scene.spectrum.settings(dict(_settings_for_card(card), u_test_tint=1.0))
+            # The compiled-in copy keeps the current settings (audit 14 Nov, L4) and cannot take u_test_tint: the
+            # program itself is refused; were it taken, the settings would be refused by name.
             scene.spectrum.program(None)
             scene.spectrum.settings(dict(_settings_for_card(card), u_test_tint=1.0))
         except ValueError as exc:
@@ -799,10 +812,56 @@ def round_program(core, engine, app, host, records: list[dict]) -> dict:
         scene.close(app)
         host.frames(2)
         host_check._flush_deletes(app)
+    failure = content_failure(core, engine, app, host, card, base["record"])
+
+    same = product is not None and compiled is not None and product.shape == compiled.shape
+    differing = int(np.any(product != compiled, axis=-1).sum()) if same else -1
+    nudged = None if product is None else product.copy()
+    if nudged is not None:
+        nudged.flat[nudged.size // 2] ^= 1                # control: one level in one channel is seen
     checks = {"new_uniform_drawn": magenta.get("1.0", 0) > 1000, "zero_draws_no_tint": magenta.get("0.0", 1) == 0,
               "settings_kept_across_a_program": magenta.get("kept_across_program", 0) > 1000,
-              "control_compiled_in_refuses_the_name": "u_test_tint" in refused}
-    return {"pass": all(checks.values()), "checks": checks, "magenta_pixels": magenta, "refused": refused}
+              "control_compiled_in_refuses_the_name": "u_test_tint" in refused,
+              "compiled_in_draws_the_product_pack": same and differing == 0
+              and int(np.abs(product.astype(int)).sum()) > 0,
+              "control_one_level_seen": nudged is not None and bool(np.any(nudged != product)),
+              "content_failure_recorded_once": failure["held"]}
+    return {"pass": all(checks.values()), "checks": checks, "magenta_pixels": magenta, "refused": refused,
+            "compiled_in_differing_pixels": differing, "content_failure": failure}
+
+
+def content_failure(core, engine, app, host, card: dict, record: bytes, frames: int = 5) -> dict:
+    """Audit 14 Nov, M2: an item with no program cannot build its content. Its failure is one edge (recorded once,
+    reported in the source's state), and the frames after it create nothing again: the same failure is not rebuilt
+    every frame, and no QRhi object of the content stays alive. (Before the fix nothing was recorded and the content's
+    buffers and bindings were created and freed every frame.)"""
+    scene = Scene(core, engine, host, program=False)
+    stream = Stream()
+    states = []
+    try:
+        width, height = card["item_size"]
+        scene.spectrum.composite.set(rect=[0.0, 0.0, width, height], coverage=None, quarters=int(card["quarters"]),
+                                     visible=True)
+        scene.spectrum.present_raw(_bare(card))
+        scene.spectrum.bind(stream.name, expect=stream.expect)
+        for step in range(frames):
+            stream.publish(record, float(step))
+            scene.spectrum.update()
+            host.frames(1)
+            states.append(scene.spectrum.state())
+        composite = scene.spectrum.composite.state()
+    finally:
+        stream.close()
+        scene.close(app)
+        host.frames(2)
+        host_check._flush_deletes(app)
+    last = states[-1] if states else {}
+    facts = last.get("last_facts") or {}
+    held = (bool(states) and facts.get("content_failed") is True and facts.get("content_failures") == 1
+            and last.get("records") == 1 and last.get("draws") == 0
+            and "content failed" in str(last.get("last_reason", "")) and last.get("accepted", 0) >= 1)
+    return {"held": held, "records": [s.get("records") for s in states], "last_reason": last.get("last_reason"),
+            "last_facts": facts, "composite_surface": composite.get("surface")}
 
 
 def vulkan_against_opengl(out: Path) -> dict:

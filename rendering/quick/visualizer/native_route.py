@@ -63,6 +63,9 @@ class NativeVisualizerRoute:
         self._settings: dict | None = None
         self._placed: tuple | None = None
         self._snapshot: Any = None
+        self._programmed = False      # the mode's pack is loaded into the native item
+        self._failure: tuple | None = None   # the inputs a failed sync had (nothing is retried until they change)
+        self.failures = 0
         self.published = 0
         self.closed = False
 
@@ -89,24 +92,37 @@ class NativeVisualizerRoute:
         self.unbind()
         from core.visualizer_engine.packet_abi import FramePacketWriter, create_frame_mapping, mode_code
 
+        # The native item and its program first: a failure there leaves no mapping behind (audit 14 Nov, M1), and a
+        # program that did not load is loaded again at the next bind rather than drawn without.
+        if self._spectrum is None:
+            self._spectrum = self._core.spectrum(self._content_host)
+            self._spectrum.composite.set(surface_format=self.surface_format)
+        if not self._programmed:
+            from rendering.native.program_values import mode_fragment_pack
+
+            # The product's own pack (tools/regen_qrc.py --shaders), loaded at run time: no module build for a shader
+            # change (N2.5's standing port rule).
+            self._spectrum.program(mode_fragment_pack(mode_id))
+            self._programmed = True
         code = mode_code(mode_id)
         values = {"runtime_generation": int(identity.runtime_generation),
                   "engine_generation": int(identity.engine_generation),
                   "activation_id": int(identity.activation_id)}
-        self._memory = create_frame_mapping(generation=values["runtime_generation"], slot_bytes=_SLOT_BYTES,
-                                            engine_generation=values["engine_generation"],
-                                            activation_id=values["activation_id"], mode_code=code,
-                                            token=f"route{uuid.uuid4().hex[:10]}")
-        self._writer = FramePacketWriter(self._memory.buf)
-        if self._spectrum is None:
-            from rendering.native.program_values import mode_fragment_pack
-
-            self._spectrum = self._core.spectrum(self._content_host)
-            self._spectrum.composite.set(surface_format=self.surface_format)
-            # The product's own pack (tools/regen_qrc.py --shaders), loaded at run time: no module build for a shader
-            # change (N2.5's standing port rule).
-            self._spectrum.program(mode_fragment_pack(mode_id))
-        self._spectrum.bind(self._memory.name, expect={**values, "mode_code": code})
+        memory = create_frame_mapping(generation=values["runtime_generation"], slot_bytes=_SLOT_BYTES,
+                                      engine_generation=values["engine_generation"],
+                                      activation_id=values["activation_id"], mode_code=code,
+                                      token=f"route{uuid.uuid4().hex[:10]}")
+        writer = None
+        try:
+            writer = FramePacketWriter(memory.buf)
+            self._spectrum.bind(memory.name, expect={**values, "mode_code": code})
+        except BaseException:
+            # Nothing of the failed bind stays: the mapping is released, closed and unlinked here.
+            if writer is not None:
+                writer.release()
+            _close_mapping(memory)
+            raise
+        self._memory, self._writer = memory, writer
         self._identity = identity
         self._code = code
         self._card = self._placed = self._settings = None
@@ -128,11 +144,7 @@ class NativeVisualizerRoute:
         if writer is not None:
             writer.release()
         if memory is not None:
-            memory.close()
-            try:
-                memory.unlink()
-            except FileNotFoundError:
-                pass
+            _close_mapping(memory)
 
     def close(self) -> None:
         """Unbind and destroy the native item (before its content host retires). Idempotent."""
@@ -158,22 +170,65 @@ class NativeVisualizerRoute:
 
     def sync(self, *, bridge: Any, identity: Any, presentation: Any, authority: bool) -> bool:
         """GUI thread, at an update request of the item: the take the Python item makes at its sync, published into
-        the stream, and the native item asked for a frame. Returns whether a frame was published."""
+        the stream, and the native item asked for a frame. Returns whether a frame was published.
+
+        Never raises (audit 14 Nov, M1): a failure is logged once, the native item hidden, and nothing is tried again
+        until its inputs change (the identity, the window's size or framebuffer, the record's placement)."""
         if self.closed:
             return False
         if identity is None:
+            self._failure = None
             self.unbind()
             return False
         if presentation is None:
             self._hide()
             return False
+        try:
+            metrics = self._window_metrics(presentation)
+        except Exception as exc:  # no window yet, or none any more
+            return self._fail((identity, None, None), exc)
+        inputs = (identity, metrics, _placement_key(presentation))
+        if self._failure is not None:
+            if inputs == self._failure:
+                return False                              # failed closed: nothing per update until an input changes
+            self._failure = None
+        try:
+            return self._sync(bridge=bridge, identity=identity, presentation=presentation, authority=authority,
+                              metrics=metrics)
+        except Exception as exc:
+            return self._fail(inputs, exc)
+
+    def _window_metrics(self, presentation: Any) -> tuple:
+        from rendering.native.spectrum import window_metrics
+
+        return window_metrics(self._content_host, float(presentation.dpr))
+
+    def _fail(self, inputs: tuple, exc: BaseException) -> bool:
+        """The fail-closed state: logged once per failing inputs, the native item hidden, the frame not drawn."""
+        if inputs != self._failure:
+            self.failures += 1
+            logger.exception("[VISUALIZER][NATIVE] The native route failed (%s); the native item is hidden until its "
+                             "inputs change", exc)
+        self._failure = inputs
+        try:
+            self._hide()
+        except Exception:  # the item itself may be what failed
+            logger.debug("[VISUALIZER][NATIVE] Hiding the failed native item failed", exc_info=True)
+        return False
+
+    @property
+    def failed(self) -> bool:
+        """Whether the route is in its fail-closed state."""
+        return self._failure is not None
+
+    def _sync(self, *, bridge: Any, identity: Any, presentation: Any, authority: bool, metrics: tuple) -> bool:
         if identity != self._identity:
             self.bind(identity)
         if bridge is None:
             return False
         from core.visualizer_engine import spectrum_native_schema
         from core.visualizer_engine.packet_mailbox import publication_flags
-        from rendering.native.composite import composite_geometry
+        from rendering.native.composite import composite_geometry, window_pixel_ratio
 
         if not authority:
             bridge.admit_at_sync()
@@ -182,8 +237,11 @@ class NativeVisualizerRoute:
             activation_id=identity.activation_id, mode_id=identity.mode_id, required_presentation=presentation,
             allow_presentation_rebase=authority)
         # On the window's own 2x2 quads (every edge on an even device pixel): the shader's fine derivatives then pair
-        # the pixels the Python renderer's did (N2.5 rule (a): an odd target origin moved them at the cap arcs).
-        geometry = composite_geometry(presentation, quad_aligned=True)
+        # the pixels the Python renderer's did (N2.5 rule (a): an odd target origin moved them at the cap arcs). The
+        # device pixels are the window's own (its framebuffer over its logical size, audit 14 Nov H1), never dpr's.
+        window_size, window_pixels = metrics
+        geometry = composite_geometry(presentation, quad_aligned=True,
+                                      pixel_ratio=window_pixel_ratio(window_size, window_pixels))
         # The content host's top-left is the record's outer rect (the Python item sits at its origin with the outer
         # rect's size, ``VisualizerRenderItem.set_presentation``), whenever QML lays the host out.
         origin = (float(presentation.outer_rect[0]), float(presentation.outer_rect[1]))
@@ -194,7 +252,7 @@ class NativeVisualizerRoute:
             self._placed = placed
         if snapshot is None:
             return False
-        card = self.card(presentation, snapshot, geometry)
+        card = self.card(presentation, snapshot, geometry, metrics)
         if card != self._card:
             spectrum.present_raw(card)
             self._card = card
@@ -215,13 +273,13 @@ class NativeVisualizerRoute:
         spectrum.update()
         return True
 
-    def card(self, presentation: Any, snapshot: Any, geometry: Any) -> dict:
+    def card(self, presentation: Any, snapshot: Any, geometry: Any, metrics: tuple | None = None) -> dict:
         """The card handed to the native item: the item's own size from the committed record, the drawn inputs from
         the snapshot's (the Python node's split: its item is the record's outer rect, its renderer draws the
-        snapshot's presentation)."""
-        from rendering.native.spectrum import spectrum_presentation, window_metrics
+        snapshot's presentation). ``metrics``: the window's (logical size, framebuffer pixels)."""
+        from rendering.native.spectrum import spectrum_presentation
 
-        window_size, window_pixels = window_metrics(self._content_host, float(presentation.dpr))
+        window_size, window_pixels = metrics if metrics is not None else self._window_metrics(presentation)
         card = spectrum_presentation(presentation, geometry, window_size=window_size, window_pixels=window_pixels)
         drawn = spectrum_presentation(snapshot.presentation, geometry, window_size=window_size,
                                       window_pixels=window_pixels)
@@ -245,6 +303,20 @@ class NativeVisualizerRoute:
         if self._spectrum is not None and self._placed is not None:
             self._spectrum.composite.set(visible=False)
             self._placed = None
+
+
+def _close_mapping(memory: Any) -> None:
+    memory.close()
+    try:
+        memory.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _placement_key(presentation: Any) -> tuple:
+    """What places the card in its window (a failure is retried once any of it changes)."""
+    return tuple(getattr(presentation, name, None) for name in (
+        "outer_rect", "content_rect", "content_rotation_quarters", "dpr"))
 
 
 def attach_native_route(item: Any, content_host: Any, backend: str | None = None) -> NativeVisualizerRoute | None:

@@ -1011,6 +1011,9 @@ only metadata and the core's accepted-sequence watermark: after a drop the core 
 the sequence it held`, and any frame with `sequence <= dropped_through` is never re-presented, whatever a head read
 or a late wake says; only a frame with a larger sequence and a matching identity is. (Today `read_latest` has the
 same property through `accepted`, `packet_abi.py:290-291`; the contract makes it hold across the drop.)
+As built (ABI 9, audit 14 Nov low 2): the retained frame is always the last accepted one, so the accepted watermark
+is the drop's; the reader keeps no `dropped_through` of its own (it could never exceed `accepted`). The drop round's
+control is still `head_resets_watermark`, which resets `accepted` and resurrects the dropped frame.
 
 **Today vs new.** Today: acknowledgement at take; `peek` decodes and advances `accepted`; one drop edge for the
 Python node. New: a head read that decodes nothing and moves nothing; the native accept-edge acknowledgement; the
