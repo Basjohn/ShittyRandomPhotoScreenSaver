@@ -55,6 +55,16 @@ at the size asked.
 
 ### Item 1. Operator-reported defects first
 
+- [ ] Defect (operator, 14 Nov): in frozen builds a Studio window shows Windows' default box as its taskbar icon,
+  not the application's. `main.py` sets the application icon from `SRPSS.ico` beside its entry point and the Studio
+  window (`ui/studio/surface.py:166-178`) takes that or `SRPSS.ico` two folders above itself; a frozen build likely
+  ships neither path (locally `SRPSS.ico` is only in `release/media_center/`), and Qt never reads the executable's
+  embedded icon. Root cause on the real frozen layouts (the screensaver `.scr` and the Media Center onedir: where
+  `__file__` resolves, what ships), then one owner of the application icon's path read by `main.py` and every
+  standalone window. Binding: no QtWidgets in any process (R-176), Nuitka's PySide6 icon hook stays removed
+  (`tools/nuitka_worker_qt_plugin.py`), `tools/frozen_build_audit.py` stays green; a test; the lead checks a GitHub
+  frozen build.
+
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
 - [ ] Native Settings corners: section 1A, item 1.9. Keep their acceptance and reversible checkpoints separate.
 - [ ] Studio stall, clip selection and sidecar log (contract: `Docs/Reference/Visualizer_Studio.md`; the control-hints
