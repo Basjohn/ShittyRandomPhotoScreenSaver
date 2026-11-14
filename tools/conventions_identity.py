@@ -10,8 +10,11 @@ That is proved here, bitwise: record before the change, record after, compare.
   same run with both on (the motion-blur gather and the trail edges are drawn only then). ``FRAMES`` progress points in
   order on one run (trails and motion read the frames before).
 - **Visualizer modes** (``owner_render_parity.drawn_run``: the production owner in process, its presentations drawn
-  by the production ``DisplayScene.qml`` into a hidden texture): every registered mode at variant ``a``'s non-default
-  settings, through its script (play, pause, park, the switch to its partner mode).
+  by the production ``DisplayScene.qml`` into a hidden texture): every registered mode through its script (play,
+  pause, park, the switch to its partner mode), once per run of ``mode_runs``: variant ``a``'s non-default settings
+  (every Toggle on, each Choice's second offer; key ``mode:<id>``), variant ``b``'s (every Toggle off, each Choice's
+  last offer; ``mode:<id>:b``), and with ``--offers`` one run per Choice offer neither variant reaches (variant ``a``
+  with that one Choice moved; ``mode:<id>:<key>=<index>``). Settings come from the spec, never presets.
 
 Every scene target is opened single-sampled for the run (``single_sample_scene_targets``): a multisampled target is
 not bit-reproducible draw to draw on this GPU (``owner_render_parity``'s measurement), a single-sampled one is. Each
@@ -144,7 +147,30 @@ def record_transitions(out: Path, only, summary: dict) -> None:
         capture.close()
 
 
-def record_modes(out: Path, only, summary: dict) -> None:
+def mode_runs(mode: str, offers: bool) -> list[tuple[str, dict]]:
+    """(key suffix, Settings-section overlay) of every run of ``mode``: variants ``a`` and ``b``, and with ``offers``
+    each Choice offer neither variant reaches (a two-offer Choice's first offer among them: both variants take its
+    second), on variant ``a`` with that one Choice moved. Derived from the canonical spec only."""
+    from core.settings.visualizer_mode_settings import Choice, require_mode_settings
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    base = parity.section_settings(mode, "a")
+    runs = [("", base), (":b", parity.section_settings(mode, "b"))]
+    if offers:
+        for control in require_mode_settings(mode).controls:
+            if not isinstance(control, Choice):
+                continue
+            count = len(control.choices)
+            reached = {min(1, count - 1), count - 1}
+            for index in range(count):
+                if index in reached:
+                    continue
+                value = index if control.indexed else control.choices[index]
+                runs.append((f":{control.key}={index}", {**base, control.key: value}))
+    return runs
+
+
+def record_modes(out: Path, only, summary: dict, offers: bool = False) -> None:
     import zlib
 
     import numpy as np
@@ -160,40 +186,49 @@ def record_modes(out: Path, only, summary: dict) -> None:
     for mode in gate.modes():
         if only and mode not in only:
             continue
-        engine_worker_link.reset_run_state_for_testing()
-        script = parity.parity_script(clip.frames, mode)
-        counter: dict = {}
-        calls: list[int] = []
-        binding = {"held": 0, "lost": 0}
-
-        class CountedMirror(parity.SceneMirror):
-            def frame(self, index):
-                before = _frame_calls(counter)
-                record = super().frame(index)
-                calls.append(_frame_calls(counter) - before)
-                _check_conventions_binding(binding)
-                return record
-
-        mirror = CountedMirror()
-        with parity.single_sample_scene_targets(), counting(counter):
-            report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None,
-                                       settings=parity.section_settings(mode, "a"), scene_mirror=mirror)
-        hashes = [record["hash"] for record in report["pixels"]]
-        middle = len(mirror.frames) // 2
-        if mirror.frames:
-            shape, data = mirror.frames[middle]
-            pixels = np.frombuffer(zlib.decompress(data), dtype=np.uint8).reshape(shape)
-            Image.fromarray(pixels[..., :3], "RGB").save(out / f"mode_{mode}.png")
-        key = f"mode:{mode}"
-        summary["items"][key] = {"hashes": hashes, "gl_calls": calls, "final_mode": report.get("final_mode"),
-                                 "gl_calls_by_name": dict(sorted(counter.items())),
-                                 "conventions_binding": binding}
-        if binding["lost"]:
-            print(f"{key}: the conventions block's binding was lost on {binding['lost']} frames", flush=True)
-        print(f"{key}: {len(set(hashes))} distinct of {len(hashes)} frames, GL calls total {sum(calls)}", flush=True)
+        for suffix, settings in mode_runs(mode, offers):
+            _record_mode_run(out, summary, mode, suffix, settings, clip, parity, gate, engine_worker_link,
+                             counting, np, Image, zlib)
 
 
-def record(out: Path, part: str, only) -> int:
+def _record_mode_run(out, summary, mode, suffix, settings, clip, parity, gate, engine_worker_link, counting, np,
+                     Image, zlib) -> None:
+    """One run of ``mode`` at ``settings``, recorded as ``mode:<id><suffix>``."""
+    engine_worker_link.reset_run_state_for_testing()
+    script = parity.parity_script(clip.frames, mode)
+    counter: dict = {}
+    calls: list[int] = []
+    binding = {"held": 0, "lost": 0}
+
+    class CountedMirror(parity.SceneMirror):
+        def frame(self, index):
+            before = _frame_calls(counter)
+            record = super().frame(index)
+            calls.append(_frame_calls(counter) - before)
+            _check_conventions_binding(binding)
+            return record
+
+    mirror = CountedMirror()
+    with parity.single_sample_scene_targets(), counting(counter):
+        report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None,
+                                   settings=settings, scene_mirror=mirror)
+    hashes = [record["hash"] for record in report["pixels"]]
+    middle = len(mirror.frames) // 2
+    if mirror.frames:
+        shape, data = mirror.frames[middle]
+        pixels = np.frombuffer(zlib.decompress(data), dtype=np.uint8).reshape(shape)
+        Image.fromarray(pixels[..., :3], "RGB").save(
+            out / f"mode_{mode}{suffix.replace(':', '_').replace('=', '-')}.png")
+    key = f"mode:{mode}{suffix}"
+    summary["items"][key] = {"hashes": hashes, "gl_calls": calls, "final_mode": report.get("final_mode"),
+                             "gl_calls_by_name": dict(sorted(counter.items())),
+                             "conventions_binding": binding}
+    if binding["lost"]:
+        print(f"{key}: the conventions block's binding was lost on {binding['lost']} frames", flush=True)
+    print(f"{key}: {len(set(hashes))} distinct of {len(hashes)} frames, GL calls total {sum(calls)}", flush=True)
+
+
+def record(out: Path, part: str, only, offers: bool = False) -> int:
     out.mkdir(parents=True, exist_ok=True)
     from rendering.quick.bootstrap import configure_quick_graphics
 
@@ -209,7 +244,7 @@ def record(out: Path, part: str, only) -> int:
         if part in ("transitions", "all"):
             record_transitions(out, only, summary)
         if part in ("modes", "all"):
-            record_modes(out, only, summary)
+            record_modes(out, only, summary, offers)
     finally:
         summary["elapsed_s"] = round(time.perf_counter() - started, 1)
         (out / f"summary_{part}.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
@@ -774,6 +809,8 @@ def main(argv=None) -> int:
     rec.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     rec.add_argument("--part", choices=("transitions", "modes", "all"), default="all")
     rec.add_argument("--only", nargs="*", default=(), help="transition identities, case names or mode ids")
+    rec.add_argument("--offers", action="store_true",
+                     help="modes: also one run per Choice offer neither variant reaches (see mode_runs)")
     cmp_ = commands.add_parser("compare", help="compare two recorded folders frame by frame")
     cmp_.add_argument("before", type=Path)
     cmp_.add_argument("after", type=Path)
@@ -788,7 +825,7 @@ def main(argv=None) -> int:
     evidence_media.redirect_output(args, "out", "conventions_identity")
     try:
         if args.command == "record":
-            code = record(Path(args.out), args.part, set(args.only))
+            code = record(Path(args.out), args.part, set(args.only), args.offers)
         else:
             code = pairs(Path(args.out), args.ref)
     except BaseException:
