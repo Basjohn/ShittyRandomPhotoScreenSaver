@@ -59,7 +59,11 @@ def test_transfer_glyphs_are_absent_when_ineligible_and_use_real_native_hits(qt_
         point = right.mapToScene(QPointF(right.width()/2, right.height()/2)).toPoint()
         QTest.mouseMove(window, point)
         _wait(1850)
-        assert item.property("activeTip") == "MOVE TO NEXT DISPLAY"
+        # The tip is the hovered glyph's own text (never pinned wording here).
+        right_tip = right.property("tipText")
+        assert isinstance(right_tip, str) and right_tip.strip()
+        assert right_tip != left.property("tipText"), "each direction names its own move"
+        assert item.property("activeTip") == right_tip
         QTest.mouseClick(window, Qt.MouseButton.LeftButton, pos=point)
         assert spy.count() == 1 and spy.at(0) == ["transfer_right"]
         item.setProperty("canTransferLeft", True)

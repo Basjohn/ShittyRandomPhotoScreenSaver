@@ -43,8 +43,10 @@ from core.settings.structured_input_compat import promote_legacy_structured_stor
 from core.settings.widget_theme_input_compat import promote_legacy_widget_theme_state
 from core.settings.visualizer_settings_snapshot import (
     migrate_legacy_visualizer_mode_activation_schema,
+    normalize_visualizer_section_from_canonical,
     normalize_visualizer_section_mapping,
 )
+from core.settings.visualizer_preset_indices import catalogue_state
 from core.settings.transition_retired import RETIRED_ROOT_SETTING_KEYS, strip_retired_transition_settings
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_settings_contract import (
@@ -67,6 +69,8 @@ _MANAGERS_BY_STORE: "weakref.WeakKeyDictionary[object, weakref.WeakSet[SettingsM
     weakref.WeakKeyDictionary()
 )
 _NO_EXPLICIT_DEFAULT = object()
+# Per store: (preset catalogue, ((input, canonical) Visualizer section, ...)) - see _normalize_visualizer_section_locked.
+_VISUALIZER_NORMALIZATION_MEMOS: "weakref.WeakKeyDictionary[object, tuple[Any, tuple]]" = weakref.WeakKeyDictionary()
 
 
 class SettingsManager(QObject):
@@ -234,6 +238,11 @@ class SettingsManager(QObject):
                 "[SETTINGS_PERSIST] Startup durability flush failed for %s",
                 storage_path,
             )
+
+        try:
+            self._seed_visualizer_normalization_memo()
+        except Exception:
+            logger.debug("Visualizer normalization memo seed failed", exc_info=True)
 
         # Diagnostic snapshot so widget enable/monitor issues can be traced
         # without guessing what QSettings returned on this machine. The
@@ -538,33 +547,83 @@ class SettingsManager(QObject):
             if changed:
                 self._settings.setValue(root, merged)
 
-    @staticmethod
-    def _normalize_widgets_mapping(value: Any) -> Any:
-        if not isinstance(value, Mapping):
-            return value
-        widgets = dict(value)
-        vis_section = widgets.get("spotify_visualizer")
-        if isinstance(vis_section, Mapping):
-            widgets["spotify_visualizer"] = normalize_visualizer_section_mapping(
-                vis_section,
-                apply_preset_overlay=False,
-            )
-        return widgets
+    def _peek_locked(self, key: str, default: Any = None) -> Any:
+        """Read a stored value without copying it (read-only use, under the lock)."""
+        peek = getattr(self._settings, "peek", None)
+        return peek(key, default) if peek is not None else self._settings.value(key, default)
+
+    def _normalize_visualizer_section_locked(self, section: Mapping[str, Any]) -> Dict[str, Any]:
+        """The canonical Visualizer section, re-normalising only what changed since a known canonical one.
+
+        A whole-section normalisation costs 15-27 ms on a real profile; a display move's Save changes only the
+        widget's route (1C.2). When the section differs from a remembered (input, canonical) pair of this store
+        only in key-local settings, the canonical section is derived from that pair; otherwise it is normalised
+        whole. The pairs hold only for the preset catalogue they were made under.
+        """
+        memo = _VISUALIZER_NORMALIZATION_MEMOS.get(self._settings)
+        if memo is not None:
+            try:
+                catalogue = catalogue_state()
+            except Exception:
+                catalogue = None
+            if catalogue is not None and catalogue == memo[0]:
+                for base_in, base_out in memo[1]:
+                    derived = normalize_visualizer_section_from_canonical(base_in, base_out, section)
+                    if derived is not None:
+                        return derived
+        return normalize_visualizer_section_mapping(section, apply_preset_overlay=False)
+
+    def _remember_canonical_visualizer_section_locked(
+        self, pairs: tuple[tuple[Mapping[str, Any], Mapping[str, Any]], ...],
+    ) -> None:
+        """Remember (input, canonical) Visualizer sections no one changes (stored objects or private copies).
+
+        A canonical section is its own normalisation (the normaliser is idempotent), so the stored result of a
+        widgets write is remembered as (stored, stored).
+        """
+        try:
+            catalogue = catalogue_state()
+        except Exception:
+            _VISUALIZER_NORMALIZATION_MEMOS.pop(self._settings, None)
+            return
+        _VISUALIZER_NORMALIZATION_MEMOS[self._settings] = (catalogue, pairs)
+
+    def _seed_visualizer_normalization_memo(self) -> None:
+        """At load, remember the stored Visualizer section's normalisation once per store (a lifecycle cost), so
+        the first widgets write of a session (a display move's Save) derives its section instead of paying for it."""
+        with self._lock:
+            if self._settings in _VISUALIZER_NORMALIZATION_MEMOS:
+                return
+            widgets = self._peek_locked('widgets')
+            stored = widgets.get('spotify_visualizer') if isinstance(widgets, Mapping) else None
+            if not isinstance(stored, Mapping):
+                return
+            canonical = normalize_visualizer_section_mapping(stored, apply_preset_overlay=False)
+            self._remember_canonical_visualizer_section_locked(((stored, canonical), (canonical, canonical)))
 
     def _store_widgets_root_locked(self, value: Any) -> Dict[str, Any]:
         """Persist the canonical widgets root under the current lock."""
-        normalized = self._normalize_widgets_mapping(value)
-        widgets_dict = dict(normalized) if isinstance(normalized, Mapping) else {}
+        widgets_dict = dict(value) if isinstance(value, Mapping) else {}
+        vis_section = widgets_dict.get("spotify_visualizer")
+        if isinstance(vis_section, Mapping):
+            widgets_dict["spotify_visualizer"] = self._normalize_visualizer_section_locked(vis_section)
         from core.settings.monitor_routes import (
             BINDINGS_KEY, current_screen_identities, reconcile_monitor_bindings,
         )
-        previous = self._settings.value('widgets', {})
+        previous = self._peek_locked('widgets', {})
         widgets_dict[BINDINGS_KEY] = reconcile_monitor_bindings(
             widgets_dict,
             previous if isinstance(previous, Mapping) else {},
             current_screen_identities(),
         )
-        self._settings.setValue('widgets', widgets_dict)
+        changed = self._settings.setValue('widgets', widgets_dict)
+        if isinstance(vis_section, Mapping) and changed is True:
+            # The store now holds its own copy of this canonical section (an unchanged write keeps the old one,
+            # equal but not necessarily of the same types, so it is not remembered).
+            stored = self._peek_locked('widgets', {})
+            stored = stored.get('spotify_visualizer') if isinstance(stored, Mapping) else None
+            if isinstance(stored, Mapping):
+                self._remember_canonical_visualizer_section_locked(((stored, stored),))
         return widgets_dict
 
     def _store_transitions_root_locked(self, value: Any) -> Dict[str, Any]:
@@ -2083,7 +2142,9 @@ class SettingsManager(QObject):
             return
         with self._lock:
             revision = self._store_state_revision()
-            old_value = self._settings.value(section)
+            # The old value is read (a whole-root copy) only for those who are told of the change.
+            verbose = is_verbose_logging()
+            old_value = self._settings.value(section) if emit_change or verbose else None
             if section == "widgets":
                 mapping = self._store_widgets_root_locked(mapping)
             elif section == "transitions":
@@ -2099,7 +2160,7 @@ class SettingsManager(QObject):
             return
         if emit_change:
             self._publish_store_change(section, mapping, old_value)
-        if is_verbose_logging():
+        if verbose:
             logger.debug("Section changed%s: %s: %r -> %r", "" if emit_change else " (silent)", section, old_value, mapping)
         else:
             logger.debug("Section changed%s: %s", "" if emit_change else " (silent)", section)

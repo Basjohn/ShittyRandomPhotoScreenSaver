@@ -52,19 +52,35 @@ def dialog(tmp_path):
     assert manager.flush(timeout=5.0)
 
 
-def _steppable(page, kind):
-    for control in page.findChildren(kind):
-        if kind is NoWheelSlider and control.isEnabled() and control.minimum() < control.value() < control.maximum():
-            return control
-        if kind is RangeSlider and control.isEnabled():
-            low, high = control.value()
-            if control._min < low < high:
-                return control
-    pytest.skip(f"no steppable {kind.__name__} on the page")
+def _first_on_some_page(dialog, find):
+    """The dialog's pages in order (each built as the user opens it): the first page where ``find(page)`` returns a
+    control, and that control. The pages that hold a control move as Settings changes (the Visualizers page builds
+    its slider buckets only when opened), so the test asks the real dialog instead of naming one; a dialog without
+    any is a failure, never a skip."""
+    for index in range(dialog.content_stack.count()):
+        dialog._switch_tab(index, animate=False)
+        QCoreApplication.processEvents()
+        page = dialog.content_stack.widget(index)
+        control = None if page is None else find(page)
+        if control is not None:
+            return page, control
+    raise AssertionError("no Settings page holds the control")
 
 
-def _visualizer_settings(manager):
-    return deepcopy(manager.get("widgets", {}).get("spotify_visualizer", {}))
+def _steppable_slider(page):
+    return next((control for control in page.findChildren(NoWheelSlider)
+                 if control.isEnabled() and control.minimum() < control.value() < control.maximum()), None)
+
+
+def _picker_swatch(page):
+    from ui.styled_popup import ColorSwatchButton
+    return next((swatch for swatch in page.findChildren(ColorSwatchButton) if swatch._auto_picker), None)
+
+
+def _saved(manager):
+    """Every stored setting, as saved."""
+    store = manager._settings
+    return {key: store.value(key) for key in store.allKeys()}
 
 
 def test_the_dialog_owns_undo_and_redo_shortcuts(dialog):
@@ -77,25 +93,26 @@ def test_the_dialog_owns_undo_and_redo_shortcuts(dialog):
 
 
 def test_a_slider_step_undoes_and_redoes_and_saves_back(dialog):
-    _owner_dialog, manager, page = dialog
+    owner_dialog, manager, _page = dialog
+    page, slider = _first_on_some_page(owner_dialog, _steppable_slider)
     owner = settings_undo_for(page)
-    slider = _steppable(page, NoWheelSlider)
-    original, saved_before = slider.value(), _visualizer_settings(manager)
+    original, saved_before = slider.value(), _saved(manager)
     QTest.keyClick(slider, Qt.Key.Key_Right)
     changed = slider.value()
     assert changed != original and owner.can_undo
+    assert _saved(manager) != saved_before                       # the step was saved ..
     assert owner.undo()
     assert slider.value() == original
-    assert _visualizer_settings(manager) == saved_before         # the undo was saved like any edit
+    assert _saved(manager) == saved_before                       # .. and the undo was saved like any edit
     assert not owner.can_undo and owner.can_redo
     assert owner.redo()
     assert slider.value() == changed
 
 
 def test_values_set_by_loading_or_by_undo_are_not_edits(dialog):
-    _owner_dialog, _manager, page = dialog
+    owner_dialog, _manager, _page = dialog
+    page, slider = _first_on_some_page(owner_dialog, _steppable_slider)
     owner = settings_undo_for(page)
-    slider = _steppable(page, NoWheelSlider)
     slider.setValue(slider.value() + 1)                          # as loading or a preset does
     assert not owner.can_undo
     QTest.keyClick(slider, Qt.Key.Key_Left)
@@ -124,12 +141,10 @@ def test_a_range_control_step_is_undoable(dialog):
 
 
 def test_a_picked_colour_is_undoable(dialog, monkeypatch):
-    from ui.styled_popup import ColorSwatchButton, StyledColorPicker
-    _owner_dialog, _manager, page = dialog
+    from ui.styled_popup import StyledColorPicker
+    owner_dialog, _manager, _page = dialog
+    page, swatch = _first_on_some_page(owner_dialog, _picker_swatch)
     owner = settings_undo_for(page)
-    swatch = next((s for s in page.findChildren(ColorSwatchButton) if s._auto_picker), None)
-    if swatch is None:
-        pytest.skip("no colour swatch on the page")
     original = swatch.color().getRgb()
     seen = []
     swatch.color_changed.connect(lambda c: seen.append(c.getRgb()))
@@ -142,9 +157,9 @@ def test_a_picked_colour_is_undoable(dialog, monkeypatch):
 
 
 def test_an_undo_inside_a_gesture_is_not_recorded_again(dialog):
-    _owner_dialog, _manager, page = dialog
+    owner_dialog, _manager, _page = dialog
+    page, slider = _first_on_some_page(owner_dialog, _steppable_slider)
     owner = settings_undo_for(page)
-    slider = _steppable(page, NoWheelSlider)
     QTest.keyClick(slider, Qt.Key.Key_Right)
     QTest.keyPress(slider, Qt.Key.Key_Up)        # a gesture opens ..
     owner.undo()                                 # .. an undo lands inside it ..

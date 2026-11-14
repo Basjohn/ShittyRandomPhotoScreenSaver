@@ -409,6 +409,96 @@ def test_edits_hop_swaps_into_the_display_its_arrow_prepared(qt_app, quiet_ticks
         rig.close()
 
 
+def test_a_prepared_neighbour_redraws_nothing_until_the_hop_binds_the_live_source(qt_app, quiet_ticks):
+    """A held arrow (1C.2): every publication feeds the neighbour while its renderer prepares; from the publication
+    that finds it prepared it is fed nothing and asked for no redraw (its renderer kept, nothing released), however
+    long the pointer rests; the hop then binds the live source with nothing older pending, so its first visible frame
+    is the bridge's newest (rendered on two hidden hosts: evidence ``display/move_timing/20261114_save_cost/
+    prepared_neighbour_after.json``). The never-shown units do not render, so the render thread's report is stood in
+    for at the item's own query. Negative control (pre-change): fed and redrawn on every publication."""
+    rig = _Rig(qt_app, QRect(1280, 0, 1280, 720))
+    try:
+        assert rig.publish(2.0)
+        target_scene = rig.units[1].runtime.scene_controller
+        trace = _PrewarmTrace(target_scene)
+        item = target_scene.visualizer_item
+        updates = [0]
+        update = item.update
+
+        def counting_update():
+            updates[0] += 1
+            return update()
+        item.update = counting_update
+        reported = {"prepared": False}
+        item.renderer_prepared = lambda mode_id, activation_id: reported["prepared"]
+        assert rig.layout.start() is True
+        source_scene = rig.units[0].runtime.scene_controller
+        model, row = source_scene.custom_layout_overlay.model, _visualizer_row(source_scene)
+        identity = rig.owner.render_identity
+        model.setTransferHover(row, "right", True)
+        rig.publish()
+        rig.publish()
+        assert trace.fed >= 2 and updates[0] >= 2                 # preparing: fed and redrawn
+        reported["prepared"] = True
+        rig.publish()                                             # the prepared edge
+        fed, redrawn, releases = trace.fed, updates[0], list(trace.releases)
+        for _ in range(30):
+            assert rig.publish()
+        assert trace.fed == fed and updates[0] == redrawn         # resting: nothing fed, no redraw requested
+        assert item.prewarming and trace.ended == 0 and trace.releases == releases
+        assert rig.owner.prepared_display is rig.units[1].runtime
+        assert model.transferItem(row, "right") is True
+        assert rig.current["unit"] is rig.units[1] and rig.reloads == []
+        assert item.render_identity == identity and not item.prewarming
+        assert item._prewarm_snapshot is None                     # nothing older is left to draw
+        assert item._bridge is rig.owner.controller.render_bridge and updates[0] > redrawn
+        rig.layout.cancel()
+    finally:
+        rig.close()
+
+
+def test_a_new_render_identity_while_the_arrow_is_held_is_prepared_again(qt_app, quiet_ticks):
+    """The prepared edge belongs to one render identity: when the identity changes while the arrow is held (a mode
+    change), the neighbour is fed again until the new identity's renderer reports prepared, then rests again.
+    Negative control (a prepared flag not keyed to the identity): the new identity is never fed."""
+    import dataclasses
+
+    rig = _Rig(qt_app, QRect(1280, 0, 1280, 720))
+    try:
+        assert rig.publish(2.0)
+        target_scene = rig.units[1].runtime.scene_controller
+        trace = _PrewarmTrace(target_scene)
+        item = target_scene.visualizer_item
+        prepared: set[int] = set()
+        item.renderer_prepared = lambda mode_id, activation_id: int(activation_id) in prepared
+        assert rig.layout.start() is True
+        source_scene = rig.units[0].runtime.scene_controller
+        model, row = source_scene.custom_layout_overlay.model, _visualizer_row(source_scene)
+        first = rig.owner.render_identity
+        model.setTransferHover(row, "right", True)
+        rig.publish()
+        prepared.add(int(first.activation_id))
+        rig.publish()                                             # the first identity's prepared edge
+        fed = trace.fed
+        rig.publish()
+        assert trace.fed == fed                                   # resting
+        second = dataclasses.replace(first, activation_id=int(first.activation_id) + 1)
+        rig.owner._render_identity = second                       # the identity changes while the arrow is held
+        rig.publish()
+        rig.publish()
+        assert trace.fed >= fed + 2                               # the new identity is prepared again
+        prepared.add(int(second.activation_id))
+        rig.publish()                                             # its prepared edge
+        fed = trace.fed
+        for _ in range(5):
+            rig.publish()
+        assert trace.fed == fed                                   # resting again
+        rig.owner._render_identity = first
+        rig.layout.cancel()
+    finally:
+        rig.close()
+
+
 def test_an_abandoned_arrow_hover_releases_the_prepared_display_exactly_once(qt_app, quiet_ticks):
     """Leaving the arrow without clicking ends the target's preparation once (its renderer released, its card no
     longer drawn); a repeated leave and Edit's end release nothing more. Negative control: nothing was prepared."""

@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** High: N2.9 round 2 on the ABI 9 branch (round 1 passed N23, N25, N29 on the GitHub build f030503e; the audit `Audit_2026-11-14_N29.md` found the generic pass refuses the product 2D shaders' shape: widened to `v_uv` plus one Draw block filled by name from conventions, settings and record; the schema registry split; M1-M4 and lows), then a build round and merge. Medium: 1C.2's Save stall, the prepared neighbour's redraw and two test side defects (hidden hosts; R-211 merged 6fd20845). N2.8 waits for two displays.
+**Now (in flight):** High: N2.9 round 2 on the ABI 9 branch (round 1 passed N23, N25, N29 on the GitHub build f030503e; the audit `Audit_2026-11-14_N29.md` found the generic pass refuses the product 2D shaders' shape: widened to `v_uv` plus one Draw block filled by name from conventions, settings and record; the schema registry split; M1-M4 and lows), then a build round and merge. Medium: free (1C.2's Save stall, R-212, and the prepared neighbour merged). N2.8 waits for two displays.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -942,26 +942,16 @@ arrangement change, a display added or removed, the owning display lost, Setting
   the fade-in waits): `custom_layout_owner.py:954` -> `SettingsManager.set_widgets_map` ->
   `core/settings/settings_manager.py:542-552`, which re-normalises the whole Visualizer section on every widgets write
   (15-27 ms alone). Reproduce: hidden run plus `--diag gui-stall-stacks` (`20261112_1c2_move_hidden_stalls`).
-  - [ ] Root cause with each part timed; the Save off the fade's critical path or made cheap at its owner (no timer
-    deferral); before/after on the hidden run.
+  - Root cause fixed 14 Nov (R-212): a route-only widgets write derives its section from the store's remembered
+    canonical one and the Save no longer copies the root three times; the settings part 39.1 -> 11.7 ms, saved
+    bytes identical (`display/move_timing/20261114_save_cost/`).
+  - [ ] Lead, two displays: the hidden two-display `--diag gui-stall-stacks` before/after on the product.
 - [ ] Defect (tool): `d1_run.py:440-475` reads 4K frames back and copies them on the render thread, costing the other
   display one 57-92 ms frame per 4K grab; move the copies off the render thread (the read-back itself stays).
 - Visible move confirmed with both displays visible, 13 Nov (`d1_run.py --second-display-visible`): Extruded
   Bubble expanded TV -> MSI -> TV, each landed about 2 s after the press; the hop's Save measured 64-89 ms of GUI
   stall with both displays visible (the defect above). Evidence `display/d1_run/20261113_1c2_move_both_visible/`.
 - [ ] The 1.5 s preparation bound on a cold shader cache (34 units land at 1.22-1.28 s warm, close to the bound).
-- [ ] A prepared neighbour redraws for as long as the pointer rests on an arrow: every published frame calls
-  `feed_visualizer_prewarm` (`quick_display_visualizer_owner.py:585-588`), and `feed_prewarm` calls `update()`
-  (`rendering/quick/visualizer/item.py:344-354`), also after the renderer reported prepared, so a display at rest
-  renders at the Visualizer's rate with no bound.
-  - [ ] Measure on two hidden hosts: frames rendered by the prepared display per second while the hover is held,
-    before and after its renderer is prepared.
-  - [ ] Stop feeding at the "prepared" edge (the renderer is kept, nothing is redrawn until the hop or the release);
-    guard: zero updates of the prepared item across steady frames once prepared (negative control: today's feed).
-- [ ] Side defect: `tests/test_visualizer_hover_transfer_native.py:61` pins UI wording (`activeTip == "MOVE TO NEXT
-  DISPLAY"`): assert the tip's structure (non-empty, from the glyph's own source), never the wording.
-- [ ] Side defect: `tests/test_settings_undo.py:63` and `:132`: four tests skip ("no steppable NoWheelSlider on the
-  page", "no colour swatch on the page"), so they prove nothing: give them a page that has the controls.
 - [ ] PyOpenGL's `GL_TIMEOUT_IGNORED` has the wrong value (`glWaitSync` rejects it): the move uses the GL spec's
   value; record it where GL constants are shared so nothing else takes PyOpenGL's.
 

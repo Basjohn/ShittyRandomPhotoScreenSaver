@@ -254,7 +254,8 @@ class JsonSettingsStore:
                     profile=self._profile,
                     snapshot_version=SNAPSHOT_VERSION,
                     state_revision=state_revision,
-                    data=deepcopy(self._data),
+                    # Shallow: a stored value is never changed in place (``peek``), so the writer may share them.
+                    data=dict(self._data),
                     metadata=deepcopy(self._meta),
                     callback=self._persistence_completed,
                 )
@@ -323,6 +324,15 @@ class JsonSettingsStore:
             if key in self._data:
                 return deepcopy(self._data[key])
             return default
+
+    def peek(self, key: str, default: Any = None) -> Any:
+        """The stored value itself, not a copy; the caller only reads it.
+
+        A stored value is never changed in place (``setValue`` stores a copy and a write replaces it whole), so
+        what this returns stays as it was read. ``value`` is the reader that may keep or change what it gets.
+        """
+        with self._lock:
+            return self._data.get(key, default)
 
     def setValue(self, key: str, value: Any) -> bool:
         """Store ``value``; returns whether the stored state changed."""

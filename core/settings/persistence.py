@@ -385,20 +385,30 @@ class OrderedSettingsPersistence:
 
 
 def _write_snapshot(request: _WriteRequest) -> None:
+    # ``request.data`` shares its values with the live store (a shallow snapshot: the store never changes a stored
+    # value in place), so nothing it holds is changed here: a section container is always this writer's own dict.
     snapshot: Dict[str, Any] = {}
+    owned: set[str] = set()
     for key, value in request.data.items():
         if key in STRUCTURED_SETTINGS_ROOTS and isinstance(value, Mapping):
             snapshot[key] = value
+            owned.discard(key)
             continue
         if "." in key:
             section, subkey = key.split(".", 1)
-            container = snapshot.setdefault(section, {})
+            container = snapshot.get(section)
             if isinstance(container, dict):
+                if section not in owned:
+                    container = dict(container)
+                    snapshot[section] = container
+                    owned.add(section)
                 container[subkey] = value
             else:
                 snapshot[section] = {subkey: value}
+                owned.add(section)
         else:
             snapshot[key] = value
+            owned.discard(key)
 
     payload = {
         "version": request.snapshot_version,

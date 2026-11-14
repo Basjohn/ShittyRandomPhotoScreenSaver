@@ -271,6 +271,55 @@ def normalize_visualizer_section_mapping(
     return strip_retired_visualizer_settings(normalized, prefix=prefix)
 
 
+def _same_stored_value(a: Any, b: Any) -> bool:
+    """Equal and of the same types throughout (``1 == 1.0`` but they are stored differently)."""
+    if a is b:
+        return True
+    if type(a) is not type(b):
+        return False
+    if isinstance(a, dict):
+        return a.keys() == b.keys() and all(_same_stored_value(v, b[k]) for k, v in a.items())
+    if isinstance(a, (list, tuple)):
+        return len(a) == len(b) and all(_same_stored_value(x, y) for x, y in zip(a, b))
+    return a == b
+
+
+def normalize_visualizer_section_from_canonical(
+    base_in: Mapping[str, Any],
+    base_out: Mapping[str, Any],
+    incoming: Mapping[str, Any],
+    *,
+    prefix: str = _PREFIX,
+) -> Dict[str, Any] | None:
+    """``normalize_visualizer_section_mapping(incoming)`` from a known pair, or None when it cannot be derived.
+
+    ``base_out`` is the normalisation of ``base_in`` (same preset catalogue). When ``incoming`` holds the same keys
+    as ``base_in`` and differs only in key-local settings (the widget's outer route), its normalisation is
+    ``base_out`` with those values coerced: nothing else reads them (``KEY_LOCAL_VISUALIZER_SETTINGS``). Any other
+    difference returns None and the caller normalises the whole section.
+    """
+    from core.settings.models._spotify_visualizer import (
+        KEY_LOCAL_VISUALIZER_SETTINGS,
+        normalize_key_local_visualizer_value,
+    )
+
+    if not isinstance(incoming, Mapping) or incoming.keys() != base_in.keys():
+        return None
+    changed: list[str] = []
+    for key, value in incoming.items():
+        if _same_stored_value(value, base_in[key]):
+            continue
+        if key not in KEY_LOCAL_VISUALIZER_SETTINGS:
+            return None
+        changed.append(key)
+    if any(f"{prefix}.{key}" in incoming for key in changed):
+        return None  # a dotted duplicate would shadow the plain key in the full normaliser
+    normalized = deepcopy(dict(base_out))
+    for key in changed:
+        normalized[key] = normalize_key_local_visualizer_value(key, incoming[key])
+    return normalized
+
+
 def normalize_visualizer_mode_payload(
     mode: str,
     data: Mapping[str, Any] | None,
