@@ -35,7 +35,13 @@ Rounds:
           settings; a stream whose schema carries a field no pass declares is refused at bind. The surface's GPU time for
           two passes and for a third (each pass doubled), median and p90.
   framebuffer (each API) a 2560x1440 hidden host at 150 %: the window's framebuffer the native item reports (Qt's own
-          redirect target, L1) is 2560x1440, as against the logical size times the dpr.
+          redirect target, L1) is 2560x1440, as against the logical size times the dpr; nothing before the item's own
+          synchronisation, and nothing after a resize until its next (round 2, L1 and M3).
+  uv      (each API) round 2, M6: the core's v_uv through an asymmetric probe pass at an odd card origin, dpr 1.5 and
+          four rotations, against the card's own item_from_window rows (the Python renderers' arithmetic).
+  attached (each API) the Visualizer item with its native route attached and prepared (``attach_native_route``), no
+          activation: zero syncs, draws, records and surface GPU samples over steady frames and the item's own
+          updates. Controls: an update of the native item is a sync the counters see; a drawn surface is timed.
 Then Vulkan's frames against OpenGL's (within VULKAN_TOLERANCE levels; both native).
 
 Usage (repository venv, from the checkout holding the built module):
@@ -67,7 +73,7 @@ import vk_validation  # noqa: E402  (native/core/python)
 import host_check  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("blocks", "reader", "draw", "framebuffer", "uv")
+ROUNDS = ("blocks", "reader", "draw", "framebuffer", "uv", "attached")
 CHILD_TIMEOUT_S = 900
 MARGIN = 8
 CARD = (480, 270)                # the item's logical size
@@ -78,6 +84,7 @@ SLOT_BYTES = 1024                # one Probe Rings record (208 bytes) per slot, 
 IDENTITY = {"runtime_generation": 5, "engine_generation": 2, "activation_id": 9}
 RADIUS_TOLERANCE_PX = 1.5
 TIMED_FRAMES = 60
+STEADY_FRAMES = 60               # the attached round's steady frames, each half
 FADE_MS = 200                    # the draw round's fade (short: the harness pumps until it ends)
 FRAMEBUFFER_HOST = (2560, 1440, 1.5)
 INT_MEMBERS = ("ring_count",)    # the shaders' int members (every other one is float)
@@ -972,6 +979,97 @@ def round_framebuffer(core, engine, app, api: str) -> dict:
                       "logical_times_dpr": [round(logical[0] * dpr, 3), round(logical[1] * dpr, 3)]}}
 
 
+def round_attached(core, engine, app) -> dict:
+    """The lead's check of N29 round 2: the Visualizer's native item the route makes when it is attached (``prepare``,
+    so it has read its window long before an activation) costs nothing at rest. The product's Visualizer item
+    (``VisualizerRenderItem``) in the scene's content host with its route attached and prepared as
+    ``attach_native_route`` does, on a 2560x1440 host at 150 %, no activation: over steady frames, and again after
+    the item's own updates with no activation (the owner's requests), the native item synchronises zero times, draws
+    zero times, records nothing (no surface, no stream source) and the GPU timer times no surface pass. Controls: the
+    prepared item has read the window's framebuffer; an update of the native item is a synchronisation the counters
+    see; the same item given a rect draws a surface pass the timer times."""
+    from PySide6.QtCore import QUrl
+    from PySide6.QtQml import QQmlComponent
+    from PySide6.QtQuick import QQuickItem
+
+    from rendering.quick.visualizer.item import VisualizerRenderItem
+    from rendering.quick.visualizer.native_route import NativeVisualizerRoute
+
+    width, height, dpr = FRAMEBUFFER_HOST
+    host = core.hidden_host(width, height, dpr=dpr)
+    component = QQmlComponent(engine)
+    component.setData(SCENE_QML, QUrl())
+    root = component.create()
+    route = None
+    facts: dict = {}
+    try:
+        content = root.findChild(QQuickItem, "contentHost")
+        host.set_content(root)
+        item = VisualizerRenderItem(content)
+        route = NativeVisualizerRoute(core, content)
+        item.attach_native_route(route)                 # the item hands the route its update
+        route.prepare()                                  # as attach_native_route
+        host.frames(3)                                   # the prepare's synchronisation, settled
+        composite = route.spectrum.composite
+        window_pixels = composite.window_pixels()
+        host.set_gpu_timer(True)
+        host.frames(4)
+        host.gpu_samples()
+        live_before = core.composite_live()
+        before = composite.state()
+        host.frames(STEADY_FRAMES)
+        for _ in range(3):
+            item.update()                               # the owner's requests with no activation
+            host.frames(STEADY_FRAMES // 3)
+        after = composite.state()
+        samples = host.gpu_samples()
+        live_after = core.composite_live()
+        composite.update()                              # control: one update is one synchronisation
+        host.frames(2)
+        control = composite.state()
+        # Control: the same item given a rect draws its surface (the pattern pass), which the timer times.
+        composite.set(rect=[0.0, 0.0, 64.0, 64.0], visible=True)
+        host.frames(6)
+        control_samples = host.gpu_samples()
+        host.set_gpu_timer(False)
+        host.frames(2)
+        surface_samples = [s for s in samples if s.kind == 2]
+        control_surface = [s for s in control_samples if s.kind == 2]
+        facts = {"window_pixels": window_pixels, "steady_frames": 2 * STEADY_FRAMES,
+                 "syncs": [before.get("syncs"), after.get("syncs"), control.get("syncs")],
+                 "draws": [before.get("draws"), after.get("draws")],
+                 "nodes": [before.get("nodes"), after.get("nodes")],
+                 "surface": [before.get("surface"), after.get("surface")],
+                 "spectrum_source": after.get("spectrum") is not None, "mode_source": after.get("mode") is not None,
+                 "surface_gpu_samples": len(surface_samples), "control_surface_gpu_samples": len(control_surface),
+                 "all_gpu_samples_by_kind": sorted({s.kind for s in samples}),
+                 "route": {"waits": route.waits, "published": route.published, "failures": route.failures,
+                           "edges_armed": sorted(name for name, edge in route._edges.items() if edge)},
+                 "live": [live_before, live_after], "sync_error": after.get("error")}
+    finally:
+        if route is not None:
+            route.close()
+        host.frames(2)
+        host.set_content(None)
+        host_check._drop_item(app, root)
+        host.frames(1)
+        host.close()
+        host_check._flush_deletes(app)
+    checks = {
+        "the_prepared_item_read_the_framebuffer": facts.get("window_pixels") == (width, height),
+        "zero_syncs_at_rest": facts["syncs"][0] == facts["syncs"][1],
+        "zero_draws_at_rest": facts["draws"][0] == facts["draws"][1] == 0,
+        "zero_records_at_rest": (facts["surface"] == [None, None] and not facts["spectrum_source"]
+                                 and not facts["mode_source"] and facts["nodes"] == [0, 0]),
+        "zero_surface_gpu_samples": facts["surface_gpu_samples"] == 0,
+        "nothing_armed_nothing_published": (facts["route"]["edges_armed"] == [] and facts["route"]["published"] == 0
+                                            and facts["route"]["waits"] == 0),
+        "control_an_update_is_a_sync_the_counters_see": facts["syncs"][2] > facts["syncs"][1],
+        "control_a_drawn_surface_is_timed": facts["control_surface_gpu_samples"] > 0,
+    }
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
 # --------------------------------------------------------------------------------------------------- the item's v_uv
 
 #: Audit N29 round 2, M6: the product 2D shaders (devcurve.frag, bubble.frag, oscilloscope.frag) take the item's
@@ -1260,6 +1358,8 @@ def child(args) -> dict:
                         record[name] = round_framebuffer(core, engine, app, args.api)
                     elif name == "uv":
                         record[name] = round_uv(core, engine, app, args.api, folder, out)
+                    elif name == "attached":
+                        record[name] = round_attached(core, engine, app)
                     else:
                         if host is None:
                             host = core.hidden_host(*_host_size())

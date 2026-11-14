@@ -807,9 +807,11 @@ baked from the product's file, the port's constants and block members against th
 # 2 and 3 passes; Vulkan against native OpenGL within 1 level), framebuffer (a 2560x1440 host at 150 %: the window's
 # framebuffer from Qt's own target, nothing before the item's own sync, stale after a resize until its next), uv (N29
 # round 2 M6: the core's v_uv through an asymmetric probe at an odd card origin, dpr 1.5, four rotations, against the
-# card's own item_from_window rows); Vulkan validated
+# card's own item_from_window rows), attached (the Visualizer item with its native route attached and prepared, no
+# activation: zero syncs, draws, records and surface GPU samples over steady frames; controls: an update is seen, a
+# drawn surface is timed); Vulkan validated
 python native/core/python/generic_mode_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
-    [--apis opengl vulkan] [--rounds blocks reader draw framebuffer uv] [--label n29_generic_mode]
+    [--apis opengl vulkan] [--rounds blocks reader draw framebuffer uv attached] [--label n29_generic_mode]
 ```
 
 Tests: `tests/test_native_mode_content.py` (no build: the runtime schema's row shape and fingerprint, appended mode codes,
