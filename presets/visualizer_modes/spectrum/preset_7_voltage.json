@@ -1,5 +1,5 @@
 {
-  "description": "Fine filaments rising from violet roots through electric blue into cyan crowns that burn paler the higher they reach, a spire at the centre, each trailing off into magenta.",
+  "description": "Fine acid-green filaments paling to a white-hot yellow the higher they reach, a spire at the centre, each leaving a soft trail that burns off into magenta.",
   "mode": "spectrum",
   "name": "Preset 7 (Voltage)",
   "preset_index": 6,
@@ -120,15 +120,15 @@
         "spectrum_ghost_tip_color": [
           255,
           40,
-          210,
+          200,
           255
         ],
         "spectrum_gloss": 0.0,
         "spectrum_fill_gradient": true,
         "spectrum_fill_tip_color": [
-          140,
+          250,
           255,
-          215,
+          205,
           255
         ],
         "spectrum_peak_caps": false,
@@ -163,9 +163,9 @@
         "spectrum_manual_floor": 0.42,
         "spectrum_lane_transient_mix": 0.94,
         "spectrum_bar_fill_color": [
-          120,
-          40,
+          110,
           255,
+          40,
           255
         ],
         "spectrum_bar_border_color": [
