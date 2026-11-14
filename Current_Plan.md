@@ -818,28 +818,16 @@ The operator's taste for Spectrum (11 Nov, on five of round 1: "are all ghastly 
 capsule, grid-on-block and dark-fill looks fail; fine luminous gradients pass; fewer good presets beat a full slot
 count. The Spectrum features and the Bar Gap control are in `Docs/Reference/Visualizer_Reference.md`.
 
-- [ ] Side defect: the presets round's `render_spectrum_evidence.py` sets `ROOT = HERE.parents[5]`, which under the
-  evidence junction resolves to `D:\TEMP\Scratch\SRPSS`, not the repo: kept evidence scripts take the repository root
-  from `tools/artifact_paths.py` (or an explicit argument), never from their own location.
-- [ ] Round 2 was never reported: check the Bar Gap control end to end (Settings and Studio rows through the
-  spec, authored into every Spectrum preset by the repair fill, the Visualizer Reference) and the whole-song
-  reactivity table for the round's new presets (`response.json` in
-  `.artifacts/evidence/visualizers/spectrum/presets/20261111_round2/`).
-- [ ] Bar Fill ghosts read as the default look's do (operator, 8 Nov: "Those ghosts are too solid and not
-  blurred."): soft, blurred, translucent, no crisp stripes or stars inside, fading sooner, and no ~1 px dark seam
-  where a transparent-border bar meets its ghost (merged as 092304dc; evidence `20261108_ghost_seam`). This binds
-  every Spectrum preset.
-- [~] Showcase WebPs for the round's new presets exist only as the interrupted agent's drafts: re-render after
-  the two looks are fixed; lead review before the operator sees them.
+- Spectrum part landed 14 Nov (lead's review on a dark and a bright wallpaper, the real card): Bar Count's one
+  maximum (64), the kick lane follows the Bass lane (R-215), soft Bar Fill ghosts, two looks re-authored so none
+  repeat (`visualizers/spectrum/presets/20261114_round3/`).
+- [ ] Side defect: Neon Lake admits 96 Analysis Bands but its renderer stops at 64
+  (`rendering/quick/visualizer/implementations/shockwave_grid.py:388`): one owner for the maximum, as Spectrum's.
 - [ ] Extruded Bubble: one arctic-themed preset, light and depth, not a glossy object.
 - [ ] Neon Lake: three unique presets (using the shape instrument, the far-land brush and the land reactivity).
 - [ ] Every preset authored through the Studio's Save To path, complete for every control (the completeness
   guard).
 - [ ] One showcase WebP per preset (`release_media.py`), reviewed by the lead before the operator sees them.
-- [ ] Side defect: Bar Count is admitted to 96 by the spec but `spectrum.py` clamps to 64 (`_MAX_BARS`, lines 28,
-  105, 205): a higher count would draw only the first 64 bars. One owner for the maximum; render one frame at 96.
-- [ ] Side defect: the kick lane in mirrored layouts boosts the first bars and their mirror, which are the edge
-  bars, wherever the Bass lane sits (`bar_computation.py:422-432`). It should follow the Bass lane's position.
 - [ ] Side defect: Rim Glow measures distance to the square edge (`spectrum.frag:783-785`), so it facets at
   rounded tops.
 

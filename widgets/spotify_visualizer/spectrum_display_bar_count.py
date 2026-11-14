@@ -15,8 +15,10 @@ from __future__ import annotations
 
 from typing import Sequence
 
+from rendering.gl_programs.spectrum_options import SPECTRUM_MAX_BARS
+
 SPECTRUM_EXPANDED_HORIZONTAL_BAR_GAIN = 1.2
-SPECTRUM_MAX_DISPLAY_BARS = 64          # widgets/spotify_visualizer/shaders/spectrum.frag: u_bars[64]
+SPECTRUM_MAX_DISPLAY_BARS = SPECTRUM_MAX_BARS   # the one owner (the size of spectrum.frag's u_bars)
 
 
 def resolve_display_bar_count(

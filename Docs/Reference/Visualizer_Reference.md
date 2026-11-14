@@ -172,9 +172,12 @@ Rules:
   averaged over a box that grows from 0.08 to 0.2 of the field's height as the ghost rises (half as wide; 2 x 4
   taps, each box-filtered over its share), so stripes, stars and pattern edges dissolve into the bar's colours; on
   the bar's side border (each segment's ring in Segments) the border colour at the border's own opacity. Its body is
-  more transparent than a plain ghost (0.85 at the bar, falling to about half that at the peak, on top of the usual
-  fade) and a light surface is made more transparent still, toward the brightness of a hue ghost like Preset 1's
-  (operator, 8 Nov 2026: Bar Fill ghosts were "too solid and not blurred"). It never takes the bar's top stroke, so
+  more transparent than a plain ghost (0.85 at the bar) and a light surface is made more transparent still, toward
+  the brightness of a hue ghost like Preset 1's (operator, 8 Nov 2026: Bar Fill ghosts were "too solid and not
+  blurred"). It reads as a soft glow, not a dim column of the bar's colours (1B.10, 14 Nov 2026,
+  `spectrum_fill_ghost_shape`): its opacity falls as (1 - t)^2 from the bar top to the peak instead of the usual
+  1 -> 0.15 ramp, so it is gone well before its peak, and its sides are feathered in (to a quarter at the very edge),
+  over a tenth of the bar's width at the bar and the whole half-width from 60% of the way up. It never takes the bar's top stroke, so
   nothing lines a ghost's top. In solid bars it begins at the bar's fill top: the bar's top stroke is drawn over the
   ghost's start (a transparent top border shows the ghost, never a dark 1 px seam), it fills the bar's rounded top
   corners and its own bottom stays square, so two roundings never pinch the junction into a dark row; each ramps in

@@ -444,7 +444,8 @@ vec4 spectrum_ghost_fill(vec4 ghost, vec4 fill, bool on_border, int bidx, float 
     if (u_rainbow_ghost == 1 || u_ghost_fill_mix <= 0.0) return ghost;
     float k = clamp(u_ghost_fill_mix, 0.0, 1.0);
     float rise = clamp(t, 0.0, 1.0);
-    float body = mix(1.0, 0.85 * (1.0 - 0.45 * smoothstep(0.0, 1.0, rise)), k);
+    // Its fall toward the top and its soft sides are ``spectrum_fill_ghost_shape``'s.
+    float body = mix(1.0, 0.85, k);
     if (on_border) {
         vec4 edge = (u_rainbow_border == 1) ? apply_spectrum_rainbow(u_border_color, bidx) : u_border_color;
         return vec4(mix(ghost.rgb, edge.rgb, k), ghost.a * mix(1.0, clamp(u_border_color.a, 0.0, 1.0), k) * body);
@@ -457,6 +458,22 @@ vec4 spectrum_ghost_fill(vec4 ghost, vec4 fill, bool on_border, int bidx, float 
     float luma = dot(surface.rgb, vec3(0.2126, 0.7152, 0.0722));
     body *= mix(1.0, clamp(0.55 / max(luma, 1e-3), 0.6, 1.0), k);
     return vec4(mix(ghost.rgb, surface.rgb, k), ghost.a * body);
+}
+
+// A Bar Fill ghost's own envelope over a ghost's usual fade (a factor in 0..1, 1 with no Bar Fill ghost), so it reads
+// as a hue ghost like Preset 1's does (1B.10): a soft glow that is gone well before its peak, never a dim column of
+// the bar's colours. It falls as (1 - t)^2 instead of the usual 1 -> 0.15 ramp, and its sides are feathered in, a
+// little at the bar and more as it rises, so its edges blur instead of standing as a crisp column. ``t``: 0 at the bar
+// top, 1 at the peak; ``lx`` / ``bw``: the pixel's place across its bar.
+float spectrum_fill_ghost_shape(float t, float lx, float bw) {
+    if (u_rainbow_ghost == 1 || u_ghost_fill_mix <= 0.0) return 1.0;
+    float k = clamp(u_ghost_fill_mix, 0.0, 1.0);
+    float rise = clamp(t, 0.0, 1.0);
+    float fall = (1.0 - rise) * (1.0 - rise) / mix(1.0, 0.15, rise);
+    float across = 1.0 - abs(2.0 * clamp(lx / max(bw, 1e-4), 0.0, 1.0) - 1.0);    // 0 at a side, 1 at the centre
+    float reach = mix(0.2, 1.0, smoothstep(0.0, 0.6, rise));
+    float side = mix(0.25, 1.0, smoothstep(0.0, reach, across));
+    return mix(1.0, fall * side, k);
 }
 
 // Peak cap coverage: a band ``thickness`` tall a small gap above ``top``, box-filtered over the pixel so a
@@ -861,7 +878,8 @@ void main() {
             bool ghost_side = (bw_px <= 2.0 * authored_scale) || in_side_band;
             vec4 ghost_base = spectrum_ghost_tip(spectrum_ghost_fill(spectrum_ghost_colour(bar_index, u_fade), fill,
                 ghost_side, bar_index, bar_local_x, bar_width, y_rel, x_rel, authored_scale, t), t);
-            ghost_base.a *= ghost_alpha * ghost_factor * ghost_cover;
+            ghost_base.a *= ghost_alpha * ghost_factor * ghost_cover
+                            * spectrum_fill_ghost_shape(t, bar_local_x, bar_width);
             sp_color = ghost_base;
             if (corner_ghost > 0.0) {
                 sp_color.a *= corner_ghost;
@@ -1057,7 +1075,7 @@ void main() {
 
         vec4 ghost = spectrum_ghost_tip(spectrum_ghost_fill(spectrum_ghost_colour(bar_index, u_fade), fill,
             on_border, bar_index, bar_local_x, bar_width, y_rel, x_rel, authored_scale, ghost_t), ghost_t);
-        ghost.a *= ghost_alpha * ghost_factor;
+        ghost.a *= ghost_alpha * ghost_factor * spectrum_fill_ghost_shape(ghost_t, bar_local_x, bar_width);
         out_color = ghost;
         seg_is_border = true;
     } else {
