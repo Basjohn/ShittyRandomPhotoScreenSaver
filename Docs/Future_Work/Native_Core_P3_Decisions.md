@@ -970,6 +970,13 @@ compiles its GLSL source and the core the pack's (`precise` on the field and on 
 seven stay exact against the product's frame at dpr 1.5 (`product_capture`: the item's logical size, as the runtime
 gives it), which the reference now draws.
 
+**Lead decision (14 Nov 2026): the tie budget.** The residuals are accepted. A `NativeFragmentPass` fragment, whose
+pack the core compiles from translated GLSL, may sit within 1 level of its Python renderer (rule a), and under either
+rule at most eight pixels a frame may pass 1 level where a threshold ties (a highlight where pools pinch, a slice
+edge): invisible and transient, while making them exact would mean the Python renderer compiling the pack's GLSL,
+which retires with it in N5.2h anyway. N5.2a's seven stay exact under rule (a) and within 1 level everywhere under
+rule (b). `transition_route_check.py` encodes this (`TIE_PIXELS`, `_is_fragment_pass`).
+
 ## D1, D2, D3 and the transport rule
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts"). The drafts, with every "today"

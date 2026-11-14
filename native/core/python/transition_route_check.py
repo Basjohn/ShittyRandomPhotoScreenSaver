@@ -59,6 +59,11 @@ DPRS = blc.DPRS
 PROGRESS = fsc.PROGRESS
 DURATION_MS = fsc.DURATION_MS
 VULKAN_TOLERANCE = 1
+#: Lead decision (14 Nov, N5.2b): a NativeFragmentPass fragment, whose pack the core compiles from translated GLSL,
+#: may sit within VULKAN_TOLERANCE of its Python renderer (rule a), and under either rule at most TIE_PIXELS pixels a
+#: frame may pass that level where a threshold ties (a highlight where pools pinch, a slice edge). N5.2a's seven stay
+#: exact under rule (a) and within VULKAN_TOLERANCE everywhere under rule (b).
+TIE_PIXELS = 8  # the measured worst is 5 (Liquid Lens Flood at dpr 1, 2 levels)
 REST_FRAMES = 4
 #: The variant driven through the product's route: the first of these the run drew (N5.2b's: arrays in its block).
 ROUTE_VARIANTS = ("burn_options", "surface_tension_options")
@@ -209,6 +214,8 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                     frames[f"dpr{dpr}_{variant}_{progress:.2f}"] = rows
                     if not vulkan:
                         entry[f"{progress:.2f}"] = blc.compare(rows, expected[(variant, progress)])
+                        entry[f"{progress:.2f}"]["over_tolerance"] = _over(
+                            rows, expected[(variant, progress)], VULKAN_TOLERANCE)
                 if not vulkan:
                     entry["control_next_progress_differs"] = not blc.compare(
                         frames[f"dpr{dpr}_{variant}_{PROGRESS[4]:.2f}"], expected[(variant, PROGRESS[5])])["equal"]
@@ -236,7 +243,8 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
     keys = list(facts["variants"])
     if not vulkan:
         checks["rule_a_equal_to_the_python_renderer"] = all(
-            facts["variants"][k][f"{p:.2f}"]["equal"] for k in keys for p in PROGRESS)
+            facts["variants"][k][f"{p:.2f}"]["over_tolerance"] <= TIE_PIXELS if _is_fragment_pass(k)
+            else facts["variants"][k][f"{p:.2f}"]["equal"] for k in keys for p in PROGRESS)
         checks["control_another_progress_differs"] = all(facts["variants"][k]["control_next_progress_differs"]
                                                          for k in keys)
         worst = max(((k, p, facts["variants"][k][f"{p:.2f}"]) for k in keys for p in PROGRESS),
@@ -300,6 +308,20 @@ def _route_on_vulkan(core, engine, app, frames, facts) -> dict:
     return checks
 
 
+def _over(a, b, level: int) -> int:
+    """How many pixels of ``a`` differ from ``b`` by more than ``level`` in any channel."""
+    import numpy as np
+
+    if a.shape[:2] != b.shape[:2]:
+        return a.shape[0] * a.shape[1]
+    difference = np.abs(a[..., :3].astype(np.int16) - b[..., :3].astype(np.int16)).max(axis=2)
+    return int(np.count_nonzero(difference > level))
+
+
+def _is_fragment_pass(variant: str) -> bool:
+    return variant.split("@", 1)[0] in N52B_VARIANTS
+
+
 def vulkan_against_opengl(work: Path) -> dict:
     import numpy as np
 
@@ -312,12 +334,17 @@ def vulkan_against_opengl(work: Path) -> dict:
     for key in sorted(set(vk.files) & set(gl.files)):
         result = blc.compare(vk[key], gl[key])
         variant = key.rsplit("_", 1)[0]
-        entry = per_variant.setdefault(variant, {"frames": 0, "max_pixels": 0, "max_level": 0})
+        entry = per_variant.setdefault(variant, {"frames": 0, "max_pixels": 0, "max_level": 0, "max_over": 0})
         entry["frames"] += 1
         entry["max_pixels"] = max(entry["max_pixels"], result.get("differing_pixels", 0))
         entry["max_level"] = max(entry["max_level"], result.get("max_level", 0))
+        entry["max_over"] = max(entry["max_over"], _over(vk[key], gl[key], VULKAN_TOLERANCE))
         worst = max(worst, result.get("max_level", 255))
-    return {"pass": bool(per_variant) and worst <= VULKAN_TOLERANCE, "worst_level": worst, "variants": per_variant}
+    ok = bool(per_variant) and all(
+        (e["max_over"] <= TIE_PIXELS) if _is_fragment_pass(v.split("_", 1)[1])
+        else e["max_level"] <= VULKAN_TOLERANCE
+        for v, e in per_variant.items())
+    return {"pass": ok, "worst_level": worst, "variants": per_variant}
 
 
 # --------------------------------------------------------------------------------------------------- the child

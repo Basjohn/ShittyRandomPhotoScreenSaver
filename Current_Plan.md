@@ -44,7 +44,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
 at the size asked.
 - High: N5.7c, then N3. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers
   ride with the next fitting dispatch.
-- Medium: N5.2b.
+- Medium: 1D.12 (three chrome requests).
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -552,15 +552,10 @@ Slots (lead, 12 Nov): N5.2a, the first group on the shared fullscreen pass, goes
 whose primitive is ported with it (N4.c, N4.g, N4.i, N4.j, N4.l). After that, a group whose primitive is already
 native goes to Opus Medium, under the same parity proof and audit as the modes track.
 
-- [ ] N5.2b The six with their own item-quad programs: Beam, Chromatic Shear, Liquid Lens, Melt Drip, Surface
-  Tension, VHS.
-  - [ ] Read each one's Python renderer and program; say which fit N5.2a's path (one fragment between two
-    pictures on the shared pass, as data) and which need more (extra passes, their own geometry, state across
-    frames); the ones that need C++ stop and are reported, not built.
-  - [ ] Port the ones that fit as N5.2a did: the product fragment drawn by the core, integer hashes and uv from the
-    pixel where a float hash or interpolated uv would differ by driver (the lead reviews before/after stills).
-  - [ ] Proof per transition: rule (a) against its Python renderer at the widened progress values, rule (b) Vulkan
-    against OpenGL, dpr 1 and 1.5, overscan placement, nothing at rest; added to `transition_route_check.py`.
+- [ ] N5.2b leftover: Beam. Its sparks are a second pass of their own geometry (900 instanced additive streaks from
+  their own vertex stage), which the core's full-card fragment passes cannot draw; it stays Crossfade on Vulkan.
+  Port it with the instanced-quad primitive the Oscilloscope's beam and Bubble's sprites need (N5.1), under the same
+  proof in `transition_route_check.py`.
 - [ ] N5.2c Scene target and photo environment only (N4.j): Blinds, Cube Turn, Depth Cascade, Jigsaw.
 - [ ] N5.2d Motion blur and trails (N4.i): 3D Block Spins, Crumble, Glass Shatter, Pixel Accretion.
 - [ ] N5.2e Membrane, Page Curl, Exploding Tiles (N4.l).
