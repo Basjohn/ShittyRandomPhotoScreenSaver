@@ -376,12 +376,15 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     (`owner_render_parity.section_settings(mode, "a")`: every Toggle on, ranges at 37 %, each Choice's second offer).
     The Toggle-off paths and every middle Choice offer that selects its own shader path were never proved bit for
     bit. Settings come from the spec, never presets.
-    - [ ] The tool records variants `a` and `b` (Toggles off, 71 %, each Choice's last offer). For each Choice whose
-      offers select different shader paths or program variants (read from the renderer, not guessed), it adds one
-      run per remaining offer.
-    - [ ] Re-prove the merged conversions at the added runs: record on each group's pre-conversion commit in a
-      worktree and compare with main (the 2D modes, Spectrum, Waveform Ribbon, Extruded Bubble's five families).
-      A difference is a defect to fix at once, with a historical bug entry if a product path changed.
+    - The tool now records variants `a` and `b`, and with `--offers` every Choice offer neither reaches (129 runs,
+      about 22 min for all modes; `tests/test_conventions_identity_runs.py`). A two-offer Choice's first offer was
+      never drawn before (both variants took its second).
+    - [ ] Re-prove the merged conversions at the widened runs: running unattended 14 Nov
+      (`D:/Temp/Scratch/SRPSS/n16_reprove/driver.py`): each N1.6 merge's touched modes at its first parent and at
+      the merge (611ae065 all modes, 1d1816d8 and 0a508242 Waveform Ribbon, 580cedc1 the 2D modes, a5648806
+      Extruded Bubble), compared, plus a full main baseline; results in
+      `.artifacts/evidence/native_core/n16_reprove/20261114/verdicts.json`. Lead reads them. A difference is a
+      defect to fix at once, with a historical bug entry if a product path changed.
     - [ ] The N5 port rule and N2.5's parity check use the same widened run set.
   - [ ] Extruded Bubble's traced glass (at its port); Neon Lake; Extruded Spectrum and Sphere.
   - `rendering/gl_programs/lighting.py` belongs to N4.m: it is not a product shader (no `#version`; only its test
