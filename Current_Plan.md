@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** a GitHub product build for the operator (today's OpenGL fixes and the icon owner; the lead checks the Studio icon in its log). N5.7a rehearsed on both displays; the decisions doc consolidated. Next High: N5.7b (the backdrop pyramid) or N5.2a (the seven transitions). Main at ABI 15.
+**Now (in flight):** High: N5.7b (the backdrop pyramid; one build round at ABI 16). Medium: N5.2a (the seven transitions as data on the shared pass; no C++ expected). A GitHub product build for the operator. Main at ABI 15.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -506,10 +506,30 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
 - [ ] N5.7b The native backdrop pyramid (D7 points 2 to 6): from the background layer, only when it changed, only
   while demand is above zero; the full chain of levels; a texture provider `MaterialSurface` samples unchanged;
   fail closed to Normal. Cost against D7's budgets at 2560 x 1440 and 4K; stills of each material beside today's.
+  - [ ] Read first: D7 points 2-6 and their as-built notes; `MaterialSurface` and the Python backdrop pyramid it
+    samples today (Glass and Acrylic: which levels, blur, grain, the demand count); the protected retained paths.
+  - [ ] The pyramid in the core: built from N5.7a's background layer only on a change of the background (a photo
+    commit) and only while demand > 0, every level of the chain, on N4.a's passes as data where they fit (a blur
+    level is a fullscreen pass with a sampler); the levels exposed as a texture provider the existing
+    `MaterialSurface` samples unchanged; nothing built at rest; with no pyramid the cards fail closed to Normal.
+  - [ ] Route: on Vulkan the cards' Glass and Acrylic sample the native pyramid; OpenGL keeps the Python pyramid.
+  - [ ] Proof (hidden host, both backends, validation): each level against the Python pyramid's (rule (a)/(b));
+    each material's card stills beside today's OpenGL ones on the dark and a bright wallpaper; cost against D7's
+    budgets at 2560 x 1440 and 4K; nothing at rest; demand 0 builds nothing; then the lead's rehearsal on both
+    displays.
 - [ ] N5.2a The seven transitions on the shared fullscreen pass (Crossfade, Burn, Particle, Ripple, Slide, Warp,
   Wipe) at parity on both backends.
+  - [ ] Read first: N4.a's as built (D13), `rendering/quick/transitions/fullscreen_pass.py` and the seven
+    implementations, the transition runtime that drives them (progress, duration, the two pictures), and how a
+    transition that is not ported falls back to Crossfade on Vulkan.
   - [ ] The per-frame transition clock (`u_progress`, `u_time`) gets its product owner (N4.a's harness carries it on
     a record outside the product's mode codes).
+  - [ ] Each transition on Vulkan drawn by the core from its own product fragment (data: its pass, its values,
+    the two photos as N4.a textures from N3.8's jobs), with no C++ unless a measured need appears (then stop and
+    report); OpenGL keeps the Python renderers until N5.2h.
+  - [ ] Proof: each transition against its Python renderer at the widened progress values (rule (a)) and Vulkan
+    against OpenGL (rule (b)), on real photos, at dpr 1 and 1.5 and under the overscan placement; nothing at rest
+    after a transition; then the lead's rehearsal with a photo change on both displays.
   - [ ] Burn (lead's decision, 14 Nov): its float hashes (value noise, `fract(sin())` sparks and ash) compile
     differently through SPIR-V (rule (b): 10-20 % of mid-progress pixels up to 248 levels, the burn front only),
     and its thresholds flip on last-bit `vUv` differences (rule (a): 1-41 pixels per frame at 1 level, one frame
