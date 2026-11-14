@@ -22,8 +22,16 @@ from rendering.native.loader import (
     NativeCoreUnavailable,
     load,
 )
+from rendering.native.packet_reader import (
+    READ_RESULTS,
+    READER_CONTROLS,
+    NativeFrame,
+    PacketReader,
+    SchemaTableMismatch,
+)
 
 __all__ = ["COMPOSITE_OPTIONS", "CompositeGeometry", "CompositeItem", "EXPECTED_ABI", "GPU_PASS_KINDS", "GpuSample",
-           "HOST_KINDS", "MODULE_NAME", "PROBE_OPTIONS", "HiddenHost", "Host", "NativeCore", "NativeCoreUnavailable",
-           "ProbeReadback", "QuickFrame", "SURFACE_PATTERNS", "WindowHost", "composite_geometry", "load",
+           "HOST_KINDS", "MODULE_NAME", "NativeFrame", "PROBE_OPTIONS", "PacketReader", "READER_CONTROLS",
+           "READ_RESULTS", "HiddenHost", "Host", "NativeCore", "NativeCoreUnavailable", "ProbeReadback", "QuickFrame",
+           "SURFACE_PATTERNS", "SchemaTableMismatch", "WindowHost", "composite_geometry", "load",
            "write_to_frame_trace"]

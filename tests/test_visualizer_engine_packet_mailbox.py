@@ -89,6 +89,27 @@ def test_latest_wins_and_superseded_states_are_counted(mailbox):
     assert mailbox.take() is None and mailbox.superseded_count == 2 and mailbox.revision == 3
 
 
+@pytest.mark.parametrize("failure", ("encode", "capacity"))
+def test_a_publish_that_raises_supersedes_nothing(mailbox, failure):
+    # N2.3 side defect: a frame is superseded only once its successor is in the slot. A publish whose encode raises (an
+    # unencodable state) or whose payload the slot refuses (FrameCapacityError) leaves the unread frame where it was, so
+    # the superseded count does not move; the next publish that lands supersedes it once. Before the fix the count was
+    # raised before the encode, one high after every failed publish.
+    from core.visualizer_engine.frame_codec import FrameCodecError
+    from core.visualizer_engine.packet_abi import FrameCapacityError
+
+    mailbox.publish(_Frame(1.0), generation=4)
+    if failure == "encode":
+        bad, error = object(), FrameCodecError
+    else:
+        bad, error = b"x" * (mailbox.slot_bytes + 1), FrameCapacityError
+    with pytest.raises(error):
+        mailbox.publish(bad, generation=4)
+    assert mailbox.superseded_count == 0 and mailbox.revision == 1         # nothing of the failed frame landed
+    mailbox.publish(_Frame(2.0), generation=4)
+    assert mailbox.superseded_count == 1 and mailbox.take().state.value == 2.0
+
+
 def test_a_protected_edge_survives_a_skipped_frame_until_acknowledged(mailbox):
     mailbox.publish(_Frame(1.0, protected_edges=(_Edge("reveal", 7),)), generation=4, activation_id=2)
     mailbox.publish(_Frame(2.0), generation=4, activation_id=2)           # the reader skipped frame 1

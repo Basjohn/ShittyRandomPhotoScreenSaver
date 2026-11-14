@@ -8,22 +8,27 @@
 // (frame_driver.h), the module's Vulkan instance and devices (vulkan_context.h), and the probe pass a harness switches
 // on (probe_pass.h). N2.4: the composite, a scene-graph texture node carrying the card's coverage (composite.h), and
 // the surfaces the frame driver records for it (surfaces.h). N2.6: the per-pass GPU timer in the frame driver
-// (gpu_timer.h) and its known-cost pass (load_pass.h). Nothing in the product calls them yet (N2.7 adds the backend
-// owner).
+// (gpu_timer.h) and its known-cost pass (load_pass.h). N2.3: the packet reader, the core's one consuming reader of a
+// Visualizer frame stream (packet_reader.h), with the frame ABI and the native schemas generated from the Python modules
+// (frame_abi_generated.h). The product's one caller of the module is the backend owner, rendering.quick.bootstrap
+// (N2.7), on the Vulkan rehearsal path and for its one kept hidden host; nothing in the product opens a packet reader
+// yet (N2.5's Spectrum does).
 //
-// Every entry runs on the GUI thread. The ones that wait for the hidden host's render thread release the GIL while
-// they wait; the render thread itself never takes it (D5.4).
+// Every entry runs on the GUI thread (a packet reader's entries on the thread that owns it). The ones that wait for the
+// hidden host's render thread release the GIL while they wait; the render thread itself never takes it (D5.4).
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
 #include "abi.h"
 #include "composite.h"
 #include "host_adapter.h"
+#include "packet_reader.h"
 #include "process_counters.h"
 #include "surfaces.h"
 #include "vulkan_context.h"
 
 #include <QtCore/QHash>
+#include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QObject>
@@ -32,6 +37,7 @@
 #include <QtCore/QtGlobal>
 #include <QtQuick/QQuickItem>
 
+#include <cmath>
 #include <cstring>
 #include <iterator>
 #include <memory>
@@ -642,6 +648,320 @@ PyObject *composite_live(PyObject *, PyObject *)
     return pyJson(o);
 }
 
+// ---------------------------------------------------------------- the packet reader (N2.3: D1, D2, the transport rule)
+
+struct Readers
+{
+    qint64 next = 1;
+    QHash<qint64, srpss_core::PacketReader *> live;
+};
+
+Readers &readers()
+{
+    static Readers r;
+    return r;
+}
+
+srpss_core::PacketReader *readerOf(long long handle)
+{
+    srpss_core::PacketReader *reader = readers().live.value(handle, nullptr);
+    if (!reader)
+        PyErr_Format(PyExc_KeyError, "no packet reader %lld (closed, or never created)", handle);
+    return reader;
+}
+
+PyObject *pyU32(quint32 value)
+{
+    return PyLong_FromUnsignedLong(static_cast<unsigned long>(value));
+}
+
+PyObject *pyU64(quint64 value)
+{
+    return PyLong_FromUnsignedLongLong(static_cast<unsigned long long>(value));
+}
+
+PyObject *slotHeadDict(const srpss_core::SlotHead &head)
+{
+    PyObject *d = PyDict_New();
+    if (!d)
+        return nullptr;
+    put(d, "sequence", pyU64(head.sequence));
+    put(d, "payload_bytes", pyU32(head.payloadBytes));
+    put(d, "payload_schema", pyU32(head.payloadSchema));
+    put(d, "logical_timestamp", PyFloat_FromDouble(head.logicalTimestamp));
+    if (std::isnan(head.sourceTimestamp)) {
+        Py_INCREF(Py_None);
+        put(d, "source_timestamp", Py_None);
+    } else {
+        put(d, "source_timestamp", PyFloat_FromDouble(head.sourceTimestamp));
+    }
+    put(d, "flags", pyU32(head.flags));
+    put(d, "protected_edge_mask", pyU32(head.protectedEdgeMask));
+    put(d, "runtime_generation", pyU32(head.runtimeGeneration));
+    put(d, "engine_generation", pyU32(head.engineGeneration));
+    put(d, "activation_id", pyU32(head.activationId));
+    put(d, "mode_code", pyU32(head.modeCode));
+    put(d, "publish_ns", pyU64(head.publishNs));
+    return d;
+}
+
+double recordF64(const char *data, quint32 offset)
+{
+    double value;
+    std::memcpy(&value, data + offset, sizeof value);
+    return value;
+}
+
+quint32 recordU32(const char *data, quint32 offset)
+{
+    quint32 value;
+    std::memcpy(&value, data + offset, sizeof value);
+    return value;
+}
+
+// One element of a field (a u32, an f64, or an f64x4 as a 4-tuple), as the reference decoder's struct.unpack gives it.
+PyObject *recordElement(const char *data, srpss_core::frame_abi::FieldKind kind, quint32 offset)
+{
+    using srpss_core::frame_abi::FieldKind;
+    switch (kind) {
+    case FieldKind::U32:
+        return pyU32(recordU32(data, offset));
+    case FieldKind::F64:
+        return PyFloat_FromDouble(recordF64(data, offset));
+    case FieldKind::F64x4: {
+        PyObject *tuple = PyTuple_New(4);
+        if (!tuple)
+            return nullptr;
+        for (Py_ssize_t i = 0; i < 4; ++i)
+            PyTuple_SetItem(tuple, i, PyFloat_FromDouble(recordF64(data, offset + quint32(i) * 8))); // steals
+        return tuple;
+    }
+    }
+    Py_RETURN_NONE;
+}
+
+quint32 elementBytes(srpss_core::frame_abi::FieldKind kind)
+{
+    using srpss_core::frame_abi::FieldKind;
+    return kind == FieldKind::U32 ? 4u : kind == FieldKind::F64 ? 8u : 32u;
+}
+
+// The record's fields by name in the reference decoder's order (header words excluded): the C++ decode the parity
+// harness compares bit for bit with spectrum_native_schema.decode.
+PyObject *recordFields(const srpss_core::frame_abi::Schema &schema, const QByteArray &record)
+{
+    PyObject *d = PyDict_New();
+    if (!d)
+        return nullptr;
+    const char *data = record.constData();
+    for (quint32 i = 0; i < schema.fieldCount; ++i) {
+        const srpss_core::frame_abi::Field &field = schema.fields[i];
+        PyObject *value = nullptr;
+        if (field.count == 1) {
+            value = recordElement(data, field.kind, field.offset);
+        } else {
+            value = PyTuple_New(Py_ssize_t(field.count));
+            for (quint32 j = 0; value && j < field.count; ++j)
+                PyTuple_SetItem(value, Py_ssize_t(j),
+                                recordElement(data, field.kind, field.offset + j * elementBytes(field.kind)));
+        }
+        if (!value) {
+            Py_DECREF(d);
+            return nullptr;
+        }
+        put(d, field.name, value);
+    }
+    return d;
+}
+
+PyObject *packet_reader_open(PyObject *, PyObject *args)
+{
+    const char *name = nullptr;
+    const char *config = "";
+    Py_ssize_t length = 0;
+    if (!PyArg_ParseTuple(args, "s|s#", &name, &config, &length))
+        return nullptr;
+    srpss_core::PacketReaderConfig parsed;
+    QString error;
+    if (length && !srpss_core::PacketReaderConfig::fromJson(QByteArray(config, qsizetype(length)), &parsed, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    srpss_core::PacketReader *reader = srpss_core::PacketReader::open(QString::fromUtf8(name), parsed, &error);
+    if (!reader) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    const qint64 handle = readers().next++;
+    readers().live.insert(handle, reader);
+    return PyLong_FromLongLong(handle);
+}
+
+PyObject *packet_reader_read(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::PacketReader *reader = readerOf(handle);
+    if (!reader)
+        return nullptr;
+    return PyUnicode_FromString(srpss_core::readResultName(reader->read()));
+}
+
+PyObject *packet_reader_head(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::PacketReader *reader = readerOf(handle);
+    if (!reader)
+        return nullptr;
+    srpss_core::SlotHead head;
+    if (!reader->readHead(&head))
+        Py_RETURN_NONE;
+    return slotHeadDict(head);
+}
+
+PyObject *packet_reader_frame(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::PacketReader *reader = readerOf(handle);
+    if (!reader)
+        return nullptr;
+    srpss_core::SlotHead head;
+    const QByteArray *record = nullptr;
+    if (!reader->retained(&head, &record))
+        Py_RETURN_NONE;
+    PyObject *d = slotHeadDict(head);
+    if (!d)
+        return nullptr;
+    put(d, "payload", PyBytes_FromStringAndSize(record->constData(), Py_ssize_t(record->size())));
+    const srpss_core::frame_abi::Schema *schema = reader->retainedSchema();
+    if (schema) {
+        PyObject *fields = recordFields(*schema, *record);
+        if (!fields) {
+            Py_DECREF(d);
+            return nullptr;
+        }
+        put(d, "fields", fields);
+    } else {
+        Py_INCREF(Py_None);
+        put(d, "fields", Py_None);
+    }
+    return d;
+}
+
+PyObject *packet_reader_drop(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::PacketReader *reader = readerOf(handle);
+    if (!reader)
+        return nullptr;
+    reader->dropRetainedFrame();
+    Py_RETURN_NONE;
+}
+
+PyObject *packet_reader_retire(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::PacketReader *reader = readerOf(handle);
+    if (!reader)
+        return nullptr;
+    reader->retire();
+    Py_RETURN_NONE;
+}
+
+PyObject *packet_reader_release(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::PacketReader *reader = readerOf(handle);
+    if (!reader)
+        return nullptr;
+    reader->release();
+    Py_RETURN_NONE;
+}
+
+PyObject *packet_reader_state(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::PacketReader *reader = readerOf(handle);
+    if (!reader)
+        return nullptr;
+    return pyJson(reader->stateJson());
+}
+
+PyObject *packet_reader_close(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::PacketReader *reader = readers().live.take(handle);
+    if (!reader) {
+        PyErr_Format(PyExc_KeyError, "no packet reader %lld (closed, or never created)", handle);
+        return nullptr;
+    }
+    reader->retire();
+    reader->release();
+    const QJsonObject state = reader->stateJson();
+    delete reader;
+    return pyJson(state);
+}
+
+PyObject *packet_reader_live(PyObject *, PyObject *)
+{
+    QJsonObject o = srpss_core::PacketReader::liveJson();
+    o.insert(QStringLiteral("handles"), int(readers().live.size()));
+    return pyJson(o);
+}
+
+PyObject *frame_schemas(PyObject *, PyObject *)
+{
+    namespace fa = srpss_core::frame_abi;
+    QJsonObject o;
+    o.insert(QStringLiteral("abi_version"), int(fa::kAbiVersion));
+    o.insert(QStringLiteral("mapping_prefix"), QLatin1String(fa::kMappingPrefix));
+    QJsonObject modes;
+    for (const fa::ModeCode &mode : fa::kModeCodes)
+        modes.insert(QLatin1String(mode.modeId), double(mode.code));
+    o.insert(QStringLiteral("mode_codes"), modes);
+    QJsonArray schemas;
+    static const char *kinds[] = { "u32", "f64", "f64x4" };
+    static const char *checks[] = { "", "at_most", "boolean", "enum" };
+    for (const fa::Schema &schema : fa::kSchemas) {
+        QJsonObject s;
+        s.insert(QStringLiteral("schema_id"), double(schema.schemaId));
+        s.insert(QStringLiteral("mode_id"), QLatin1String(schema.modeId));
+        s.insert(QStringLiteral("mode_code"), double(schema.modeCode));
+        s.insert(QStringLiteral("version"), double(schema.version));
+        s.insert(QStringLiteral("record_bytes"), double(schema.recordBytes));
+        s.insert(QStringLiteral("fingerprint"), QLatin1String(schema.fingerprint));
+        QJsonArray fields;
+        for (quint32 i = 0; i < schema.fieldCount; ++i) {
+            const fa::Field &f = schema.fields[i];
+            fields.append(QJsonArray { QLatin1String(f.name), QLatin1String(kinds[int(f.kind)]), double(f.count),
+                                       double(f.offset), QLatin1String(checks[int(f.check)]), double(f.limit) });
+        }
+        s.insert(QStringLiteral("fields"), fields);
+        QJsonArray order;
+        for (quint32 i = 0; i < schema.checkCount; ++i)
+            order.append(double(schema.checkOrder[i]));
+        s.insert(QStringLiteral("check_order"), order);
+        schemas.append(s);
+    }
+    o.insert(QStringLiteral("schemas"), schemas);
+    return pyJson(o);
+}
+
 PyMethodDef methods[] = {
     { "runtime_info", runtime_info, METH_NOARGS,
       "() -> dict: version, ABI, the compiled and running Qt, the compiler, the loaded Qt and MSVC runtime DLLs." },
@@ -700,6 +1020,32 @@ PyMethodDef methods[] = {
       "(handle) -> bool: deletes the item (False when its parent deleted it first)." },
     { "composite_live", composite_live, METH_NOARGS,
       "() -> JSON str: composite items, surfaces and their QRhi objects alive in the process." },
+    { "packet_reader_open", packet_reader_open, METH_VARARGS,
+      "(mapping_name, config_json='') -> int handle: the core's reader of a frame stream on its own view of the named "
+      "mapping (D1); config: expect (the stream's identity), controls (negative controls). A name that does not open "
+      "gives a retired reader; a mapping that is not a frame buffer raises ValueError." },
+    { "packet_reader_read", packet_reader_read, METH_VARARGS,
+      "(handle) -> str: the consuming read at the frame edge (nothing, accepted, torn, stale, foreign, refused, failed, "
+      "retiring, retired); an accepted frame is retained and acknowledged (D2)." },
+    { "packet_reader_head", packet_reader_head, METH_VARARGS,
+      "(handle) -> dict | None: the newest whole slot's head; consumes nothing (D2's head read)." },
+    { "packet_reader_frame", packet_reader_frame, METH_VARARGS,
+      "(handle) -> dict | None: the retained frame: its head, its record bytes and its fields decoded by the C++ table." },
+    { "packet_reader_drop", packet_reader_drop, METH_VARARGS,
+      "(handle) -> None: the drop edge, applied by the next read (no frame at or below the watermark comes back)." },
+    { "packet_reader_retire", packet_reader_retire, METH_VARARGS,
+      "(handle) -> None: retiring, at once; no copy starts after it (D1)." },
+    { "packet_reader_release", packet_reader_release, METH_VARARGS,
+      "(handle) -> None: the retire job: the retained frame and the reader's pin on its view go; retired." },
+    { "packet_reader_state", packet_reader_state, METH_VARARGS,
+      "(handle) -> JSON str: state, counters, the refusal, the liveness block (copies started and finished)." },
+    { "packet_reader_close", packet_reader_close, METH_VARARGS,
+      "(handle) -> JSON str: retires, releases and forgets the reader; its last state." },
+    { "packet_reader_live", packet_reader_live, METH_NOARGS,
+      "() -> JSON str: packet readers alive, views mapped, handles (lifecycle proofs)." },
+    { "frame_schemas", frame_schemas, METH_NOARGS,
+      "() -> JSON str: the frame ABI version, the mode codes and every native schema compiled in (fields, offsets, "
+      "range rules, fingerprints)." },
     { nullptr, nullptr, 0, nullptr }
 };
 

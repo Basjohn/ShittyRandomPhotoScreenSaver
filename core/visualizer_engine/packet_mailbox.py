@@ -198,10 +198,8 @@ class PacketMailbox(LatestStateMailbox):
         with self._lock:
             consumed = self._writer.consumed_sequence
             previous = self._unread if self._unread is not None and self._unread[3] > consumed else None
-            if previous is not None:
-                self._dropped += 1
-                if previous[1] == int(generation) and previous[2] == int(activation_id):
-                    state = _coalesce_protected_state(previous[0], state)
+            if previous is not None and previous[1] == int(generation) and previous[2] == int(activation_id):
+                state = _coalesce_protected_state(previous[0], state)
             produced = float(now_ts if now_ts is not None else authored_now())
             if self._payload == "native":
                 # The mode's fixed-layout record (its identity and timing travel in the slot head); a mode without
@@ -223,6 +221,10 @@ class PacketMailbox(LatestStateMailbox):
                 activation_id=int(activation_id), mode_code=mode_code(getattr(state, "mode_id", None)),
                 publish_ns=time.perf_counter_ns() if self._publish_stamps else 0,
             )
+            if previous is not None:
+                # Superseded only now that its successor is in the slot: an encode or a slot that raised above leaves
+                # the unread frame the newest, and uncounted (N2.3 side defect).
+                self._dropped += 1
             self._unread = (state, int(generation), int(activation_id), sequence)
             self._revision += 1
             if self._wake_sender is not None:

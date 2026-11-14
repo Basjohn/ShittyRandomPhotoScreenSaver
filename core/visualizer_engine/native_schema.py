@@ -179,14 +179,27 @@ class NativeLayout:
         return values
 
 
+#: A record field's own range rule (``NativeSchema.checks``): ``at_most`` (value <= limit), ``boolean`` (0 or 1),
+#: ``enum`` (below limit, the table's length, or ``ENUM_OUTSIDE``).
+FIELD_CHECK_KINDS = ("at_most", "boolean", "enum")
+#: An enum value outside its table (the renderer's own fallback applies to it).
+ENUM_OUTSIDE = 0xFFFFFFFF
+
+
 @dataclass(frozen=True, slots=True)
 class NativeSchema:
-    """One mode's fixed-layout record at one version: the worker's encoder and the pure-Python reference decoder."""
+    """One mode's fixed-layout record at one version: the worker's encoder and the pure-Python reference decoder.
+
+    ``fields``: the decoded record's field names in their order (header words excluded); ``checks``: the record's own
+    range rules ``(field, kind, limit)`` in the order the decoder applies them (``FIELD_CHECK_KINDS``). The C++ reader
+    reads both from the header ``tools/native_frame_abi_header.py`` generates, so the two decoders share one table."""
     mode_id: str
     version: int
     layout: NativeLayout
     encode: Callable[[Any], bytes]          # a VisualizerLogicalFrame of ``mode_id`` -> the record
     decode: Callable[[bytes], dict]         # the record -> its fields by name (validated by size and offsets)
+    fields: tuple[str, ...] = ()
+    checks: tuple[tuple[str, str, int], ...] = ()
 
     @property
     def mode_code(self) -> int:
@@ -282,6 +295,8 @@ def decode_native_payload(payload_schema: int, payload: bytes) -> dict:
 
 
 __all__ = [
+    "ENUM_OUTSIDE",
+    "FIELD_CHECK_KINDS",
     "NATIVE_ALIGNMENT",
     "NATIVE_BASE",
     "NativeField",

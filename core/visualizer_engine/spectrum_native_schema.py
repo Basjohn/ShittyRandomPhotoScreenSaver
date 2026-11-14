@@ -26,6 +26,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from core.visualizer_engine.native_schema import (
+    ENUM_OUTSIDE,
     NativeLayout,
     NativeSchema,
     NativeSchemaError,
@@ -39,8 +40,6 @@ from widgets.spotify_visualizer.spectrum_frame_inputs import MAX_LEVELS, SPECTRU
 MODE_ID = "spectrum"
 VERSION = 1
 SCHEMA_ID = native_schema_id(MODE_CODES[MODE_ID], VERSION)
-#: An enum value outside its table (the renderer's own fallback applies to it).
-ENUM_OUTSIDE = 0xFFFFFFFF
 _U32_MAX = 0xFFFFFFFF
 
 
@@ -68,6 +67,23 @@ def _layout_entries() -> tuple[tuple[str, str, int], ...]:
 LAYOUT = NativeLayout.build(_layout_entries())
 #: The record's field names in declaration order (``project``'s and ``decode``'s key order).
 FIELD_NAMES = tuple(name for name, _kind, _count in _layout_entries())
+
+
+def _field_checks() -> tuple[tuple[str, str, int], ...]:
+    checks = []
+    for entry in SPECTRUM_FRAME_INPUTS:
+        if entry.kind == "levels":
+            checks.append((_length_field(entry.name), "at_most", MAX_LEVELS))
+        elif entry.kind == "bool":
+            checks.append((entry.name, "boolean", 1))
+        elif entry.kind == "enum":
+            checks.append((entry.name, "enum", len(entry.table)))
+    return tuple(checks)
+
+
+#: The record's own range rules in the order ``decode`` applies them (``native_schema.FIELD_CHECK_KINDS``); the C++
+#: reader applies the same table (``native/core/src/frame_abi_generated.h``).
+FIELD_CHECKS = _field_checks()
 
 
 # ------------------------------------------------------------------------------------------------- the fields
@@ -149,19 +165,20 @@ def decode(payload: bytes) -> dict[str, object]:
     validate_record_head(payload, SCHEMA)
     unpacked = LAYOUT.unpack(payload)
     values = {name: unpacked[name] for name in FIELD_NAMES}
-    for entry in SPECTRUM_FRAME_INPUTS:
-        if entry.kind == "levels" and values[_length_field(entry.name)] > MAX_LEVELS:
-            raise PayloadRefused("record", f"{entry.name} keeps {values[_length_field(entry.name)]} levels, "
-                                           f"more than {MAX_LEVELS}")
-        if entry.kind == "bool" and values[entry.name] not in (0, 1):
-            raise PayloadRefused("record", f"{entry.name} is {values[entry.name]}, not a boolean")
-        if entry.kind == "enum" and values[entry.name] != ENUM_OUTSIDE and values[entry.name] >= len(entry.table):
-            raise PayloadRefused("record", f"{entry.name} {values[entry.name]} is outside its table")
+    for name, kind, limit in FIELD_CHECKS:
+        value = values[name]
+        if kind == "at_most" and value > limit:
+            raise PayloadRefused("record", f"{name} is {value}, more than {limit}")
+        if kind == "boolean" and value not in (0, 1):
+            raise PayloadRefused("record", f"{name} is {value}, not a boolean")
+        if kind == "enum" and value != ENUM_OUTSIDE and value >= limit:
+            raise PayloadRefused("record", f"{name} {value} is outside its table")
     return values
 
 
-SCHEMA = NativeSchema(mode_id=MODE_ID, version=VERSION, layout=LAYOUT, encode=encode, decode=decode)
+SCHEMA = NativeSchema(mode_id=MODE_ID, version=VERSION, layout=LAYOUT, encode=encode, decode=decode,
+                      fields=FIELD_NAMES, checks=FIELD_CHECKS)
 SCHEMAS = (SCHEMA,)
 
-__all__ = ["ENUM_OUTSIDE", "FIELD_NAMES", "LAYOUT", "MODE_ID", "SCHEMA", "SCHEMAS", "SCHEMA_ID", "VERSION", "decode", "encode",
+__all__ = ["ENUM_OUTSIDE", "FIELD_CHECKS", "FIELD_NAMES", "LAYOUT", "MODE_ID", "SCHEMA", "SCHEMAS", "SCHEMA_ID", "VERSION", "decode", "encode",
            "project"]

@@ -87,6 +87,7 @@ set(_sources
     src/gpu_timer.cpp
     src/surfaces.cpp
     src/composite.cpp
+    src/packet_reader.cpp
     src/targets.cpp
     src/conventions.cpp
     src/vulkan_context.cpp

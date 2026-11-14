@@ -116,7 +116,8 @@ class EngineSession:
                  bar_count: int = 32, label_namespace: int = 0, wake: Any = None, inputs: str = "feature",
                  seed: int | None = None, order: str = "production",
                  cadence: str = "input", pcm: Any = None, pcm_rate: int | None = None,
-                 interval_s: float | None = None, activation: Any = None, publish_stamps: bool = False) -> None:
+                 interval_s: float | None = None, activation: Any = None, publish_stamps: bool = False,
+                 payload: str = "codec") -> None:
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
         from core.visualizer_engine.packet_mailbox import PacketMailbox
         from widgets.spotify_visualizer import extruded_bubble_drift_log
@@ -178,12 +179,15 @@ class EngineSession:
         # control channel there, so none can be left behind by a worker that dies before decoding its configure).
         # ``publish_stamps``: the owner's ``--frame-trace`` is admitted, so every slot carries its publish time (the
         # main side's trace records the publish from it; gate 3). Off: the slot carries 0 and no clock is read.
+        # ``payload``: what the stream carries (``PacketMailbox``): the tagged codec (production, the main process's
+        # Python reader) or the mode's native schema (native core N2.3; nothing in the product configures it yet: a
+        # Python codec reader refuses such a stream at its first slot head, the refusal tests' real-worker case).
         from core.visualizer_engine.wake_channel import open_wake_sender
 
         wake_sender = open_wake_sender(wake)
         try:
             self.mailbox = PacketMailbox(role="writer", attach=mapping, wake_sender=wake_sender,
-                                         publish_stamps=bool(publish_stamps))
+                                         publish_stamps=bool(publish_stamps), payload=payload)
         except BaseException:
             if wake_sender is not None and wake_sender is not wake:
                 wake_sender.close()               # opened here by name, and the mailbox never took it
