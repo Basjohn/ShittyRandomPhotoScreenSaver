@@ -38,12 +38,12 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.3 C++ reader (High); 1D.12 with 1D.11's fence-wait timing (Medium).
+**Now (in flight):** 1D.12 with 1D.11's fence-wait timing (Medium).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
 - High:
-  1. The C++ packet reader (N2.3), toward N2.5 (Spectrum at parity) and N2.8; N2.7's two exit and grain
+  1. N2.5 (Spectrum at parity; the reader's first user), then N2.8; N2.3's and N2.7's leftovers and the exit and grain
      leftovers ride with the next fitting dispatch.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
@@ -406,14 +406,16 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     transparent content must clear what Qt Quick does not cover; decide that when the first such host exists.
   - [ ] The `QT_DEFECTS` rule is copied in `native/core/python/vk_validation.py` and the spike's `run_n06.py`:
     one source, or both edited when defect A's excuse goes at the next Qt patch.
-- [ ] N2.3 The packet reader with D1's barrier, D2's single consumer and the drop edge; the adversarial tests of
-  P3.0.
-  - [ ] The C++ reader matches the Python reference decoder (`core/visualizer_engine/spectrum_native_schema.py`,
-    `tools/native_schema_check.py`) bit for bit on the shipped clip.
-  - [ ] Side defect: `PacketMailbox.publish` counts a superseded frame before encoding (`packet_mailbox.py`
-    about :202), so an encode that raises leaves the count one high; count after the encode succeeds, with a test.
-  - [ ] The refusal path end to end with a real worker process (tested so far with a real mailbox and link and
-    an in-process writer).
+- [ ] N2.3 leftovers (N2.3 proved 14 Nov: N23 VERDICT PASS on the GitHub-built ABI-5 module,
+  `native/core/python/packet_reader_check.py`; evidence `.artifacts/evidence/native_core/n2_3/20261114_n23_reader/`):
+  - [ ] A refused payload takes the normal failure path (reconfigure once, then in process for the run), but
+    retrying cannot cure a refusal (writer and reader disagree on the contract). Fail it closed for the run, as the
+    capacity violation does, with a test.
+  - [ ] Side defect: `PacketMailbox.peek` caches the frame it peeked (`packet_mailbox.py` `_read`, about :285), so
+    peek, publish, take hands out the older frame once; the in-process mailbox hands out the newest. Fix with a
+    test that fails on the old code.
+  - [ ] D1's "close during copy" with a paused copy has no test hook (the view's pinning is shown instead). Add the
+    hook with N2.5's render-thread retire job, which is the reader's first user.
 - [ ] N2.4 leftovers (N2.4 proved 13 Nov: `native/core/python/composite_check.py`, N24 VERDICT PASS on all four
   backends):
   - [ ] The Glass card material on the native composite; its contract read once Glass's own native path exists.
@@ -430,8 +432,6 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   - [ ] `rendering/quick/qml/shaders/surface_material.frag:178` takes the card grain from raw `gl_FragCoord`,
     whose origin differs by backend: Vulkan and OpenGL differ by up to 8/255 inside the material card. Apply
     N1.4's `gl_FragCoord` rule, bake with `tools/regen_qrc.py --shaders`, OpenGL pixels unchanged.
-  - [ ] Stale comment: `native/core/src/module.cpp:11` ("N2.7 adds the backend owner"). Fix it with the next C++
-    round.
 - [ ] N2.5 Spectrum at parity on both backends (the port rule above; scheduled after N2.6 and N2.7, which its rule
   needs: (e) GPU time per pass is N2.6's timer, (f) the bounded Vulkan rehearsal is N2.7's path and N2.8's run).
   The Python renderer retires only after N2.8 passes. N1.6's Spectrum group is merged (`spectrum.frag` bakes);
