@@ -65,6 +65,30 @@ def test_a_mode_without_a_native_renderer_is_refused_before_anything_is_created(
         route.bind(_identity("bubble"))
 
 
+def _offered_on_vulkan() -> frozenset[str]:
+    from core.settings import visualizer_mode_registry as modes
+
+    return frozenset(d.mode_id for d in modes.iter_all_visualizer_mode_descriptors()
+                     if "vulkan" in d.renderer_backends)
+
+
+def test_vulkan_offers_exactly_the_modes_the_route_draws(monkeypatch):
+    # D10: a mode is offered on Vulkan (its renderer_backends) only once the route draws it, and the route draws only
+    # an offered mode: one answer, read from both owners, never a list here.
+    import dataclasses
+
+    from core.settings import visualizer_mode_registry as modes
+    from rendering.quick.visualizer.native_route import NATIVE_MODE_IDS
+
+    assert NATIVE_MODE_IDS and _offered_on_vulkan() == NATIVE_MODE_IDS
+    # Control: a descriptor claiming Vulkan for a mode the route does not draw is caught.
+    claimed = next(d.mode_id for d in modes.iter_all_visualizer_mode_descriptors() if d.mode_id not in NATIVE_MODE_IDS)
+    monkeypatch.setattr(modes, "_ALL_DESCRIPTORS", tuple(
+        dataclasses.replace(d, renderer_backends=("opengl", "vulkan")) if d.mode_id == claimed else d
+        for d in modes._ALL_DESCRIPTORS))
+    assert _offered_on_vulkan() != NATIVE_MODE_IDS
+
+
 @pytest.mark.qt
 def test_a_native_modes_update_is_the_routes_take_and_another_mode_draws_through_the_item(qt_app, monkeypatch):
     from PySide6.QtQuick import QQuickItem

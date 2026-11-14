@@ -45,9 +45,10 @@ def native_route_wanted(backend: str | None = None) -> bool:
 class NativeVisualizerRoute:
     """One Visualizer item's native drawing: a native item in ``content_host`` and the frame stream it reads."""
 
-    #: The item's surface texels (``rendering.native.composite.SURFACE_FORMATS``). RGBA8 until rule (a)'s
-    #: RGBA16F measurement (round 5) decides: an 8-bit premultiplied target rounds translucent pixels once more than the
-    #: Python renderer, which blends straight into the window.
+    #: The item's surface texels: RGBA8 (lead's decision, N2.5 round 5). RGBA16F gave rule (a) nothing (52,238 steady
+    #: pixels over one level against RGBA8's 52,213 before the quad alignment that fixed it) at twice the memory; the
+    #: composite keeps ``surface_format`` as a harness switch only (``spectrum_check`` / ``owner_render_parity``
+    #: ``--surface-format``).
     surface_format = "rgba8"
 
     def __init__(self, core: Any, content_host: Any) -> None:

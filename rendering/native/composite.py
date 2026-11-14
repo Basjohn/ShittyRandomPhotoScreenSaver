@@ -27,8 +27,8 @@ from typing import Any, Sequence
 
 #: The composite's options (``CompositeConfig`` in ``composite.h``).
 COMPOSITE_OPTIONS = ("rect", "coverage", "quarters", "pattern", "visible", "opacity", "surface_format")
-#: The surface's texel formats (``surface_format``): rgba8, or rgba16f (translucent content not rounded to 8 bits
-#: before the composite blends it; N2.5 rule (a)).
+#: The surface's texel formats (``surface_format``): rgba8 (the product's), or rgba16f (translucent content not rounded
+#: to 8 bits before the composite blends it). A harness switch: N2.5 round 5 measured no parity gain from rgba16f.
 SURFACE_FORMATS = ("rgba8", "rgba16f")
 #: The harness's surface content (``SurfacePattern`` in ``surfaces.h``): each texel's own index, or opaque white.
 SURFACE_PATTERNS = ("texel_id", "white")
