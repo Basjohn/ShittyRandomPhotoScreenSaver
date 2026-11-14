@@ -690,6 +690,13 @@ void SpectrumSource::unbind()
     ++m_retired;
 }
 
+void SpectrumSource::retireCurrent()
+{
+    QMutexLocker lock(&m_mutex);
+    if (m_current)
+        m_current->retire();
+}
+
 void SpectrumSource::setPresentation(const SpectrumPresentation &presentation)
 {
     QMutexLocker lock(&m_mutex);
@@ -761,7 +768,7 @@ bool SpectrumSource::sync()
             presentationTaken = true;
         }
     }
-    ++m_syncs;
+    bool accepted = false;
     bool changed = false;
     if (presentationTaken && presentation != m_drawn) {
         m_drawn = presentation;
@@ -779,7 +786,7 @@ bool SpectrumSource::sync()
                 m_record.resize(retained->size());
             std::memcpy(m_record.data(), retained->constData(), size_t(retained->size()));
             m_hasFrame = true;
-            ++m_accepted;
+            accepted = true;
             changed = true;
         } else if (m_hasFrame && !holds) {
             m_hasFrame = false; // dropped (R-184's edge), or another stream bound: nothing of the old one is drawn
@@ -790,7 +797,11 @@ bool SpectrumSource::sync()
         changed = true;
     }
     QMutexLocker lock(&m_reportMutex);
+    ++m_syncs;
+    if (accepted)
+        ++m_accepted;
     m_lastResult = result;
+    m_reportedFrame = m_hasFrame;
     return changed;
 }
 
@@ -821,6 +832,7 @@ QJsonObject SpectrumSource::stateJson() const
     QMutexLocker lock(&m_reportMutex);
     o.insert(QStringLiteral("syncs"), double(m_syncs));
     o.insert(QStringLiteral("accepted"), double(m_accepted));
+    o.insert(QStringLiteral("has_frame"), m_reportedFrame);
     o.insert(QStringLiteral("last_read"), m_lastResult);
     o.insert(QStringLiteral("records"), double(m_records));
     o.insert(QStringLiteral("draws"), double(m_draws));

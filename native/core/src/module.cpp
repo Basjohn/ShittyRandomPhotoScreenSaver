@@ -789,6 +789,18 @@ PyObject *composite_spectrum_wait_paused(PyObject *, PyObject *args)
     return PyBool_FromLong(paused ? 1 : 0);
 }
 
+PyObject *composite_spectrum_retire(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::SpectrumSource *source = spectrumOf(handle);
+    if (!source)
+        return nullptr;
+    source->retireCurrent(); // any thread, never waits (D1)
+    Py_RETURN_NONE;
+}
+
 PyObject *composite_spectrum_resume(PyObject *, PyObject *args)
 {
     long long handle = 0;
@@ -1003,7 +1015,8 @@ PyObject *packet_reader_read(PyObject *, PyObject *args)
     } else {
         result = reader->read();
     }
-    return PyUnicode_FromString(srpss_core::readResultName(result));
+    const char *name = srpss_core::readResultName(result);
+    return PyUnicode_FromString(name);
 }
 
 PyObject *packet_reader_wait_paused(PyObject *, PyObject *args)
@@ -1265,6 +1278,8 @@ PyMethodDef methods[] = {
       "(handle) -> JSON str: the stream, its reader, the card, syncs, accepted frames, records and draws." },
     { "composite_spectrum_wait_paused", composite_spectrum_wait_paused, METH_VARARGS,
       "(handle, timeout_ms) -> bool: the pause_in_copy hook: the bound reader is paused inside a copy." },
+    { "composite_spectrum_retire", composite_spectrum_retire, METH_VARARGS,
+      "(handle) -> None: the bound stream stores Retiring at once (any thread; D1); unbind releases it." },
     { "composite_spectrum_resume", composite_spectrum_resume, METH_VARARGS,
       "(handle) -> None: the pause_in_copy hook: the paused read goes on." },
     { "spectrum_block", spectrum_block, METH_VARARGS,

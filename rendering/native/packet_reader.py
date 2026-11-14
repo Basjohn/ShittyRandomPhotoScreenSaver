@@ -20,9 +20,10 @@ from typing import Any, Mapping
 READ_RESULTS = ("nothing", "accepted", "torn", "stale", "foreign", "refused", "failed", "retiring", "retired")
 #: The negative controls a harness may switch on (``PacketReaderConfig`` in ``packet_reader.h``); the product never does.
 #: ``pause_in_copy`` is not a negative control but D1's test hook "close during copy": each read pauses inside its copy
-#: until another thread resumes it (``wait_paused``, ``resume``).
+#: until another thread resumes it (``wait_paused``, ``resume``). ``accept_after_retire`` is that test's negative control
+#: (a copy finished after the stream began retiring is accepted).
 READER_CONTROLS = ("skip_head_check", "skip_seqlock", "accept_unordered", "acknowledge_refused", "head_resets_watermark",
-                   "skip_identity", "pause_in_copy")
+                   "skip_identity", "pause_in_copy", "accept_after_retire")
 _IDENTITY_KEYS = ("runtime_generation", "engine_generation", "activation_id", "mode_code")
 
 

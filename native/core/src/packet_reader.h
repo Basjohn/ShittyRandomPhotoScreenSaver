@@ -89,6 +89,7 @@ struct PacketReaderConfig
     // The D1 test hook "close during copy" (harness only, never a guard): the reader pauses inside each copy, after the
     // copy started and before its bytes are read, until resume(); waitPaused() tells another thread it is there.
     bool pauseInCopy = false;
+    bool acceptAfterRetire = false;   // negative control: a copy finished after the stream began retiring is accepted
 
     static bool fromJson(const QByteArray &json, PacketReaderConfig *out, QString *error);
     QJsonObject toJson() const;

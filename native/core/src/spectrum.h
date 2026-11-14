@@ -109,6 +109,9 @@ public:
     // this build reads (a name that does not open gives a retired reader, D1 rule 1).
     bool bind(const QString &mappingName, const PacketReaderConfig &config, QString *error);
     void unbind();                                    // the current stream retires (never waits)
+    // Any thread: the current stream stores Retiring at once (D1; no copy starts after it, a copy in progress is not
+    // presented) and stays bound until unbind() moves it to the render thread's release.
+    void retireCurrent();
     void setPresentation(const SpectrumPresentation &presentation);
     void dropRetainedFrame();                         // R-184's edge, applied by the next read
     bool readHead(SlotHead *out);                     // D2's head read of the current stream (consumes nothing)
@@ -150,10 +153,11 @@ private:
     SpectrumPresentation m_drawn;
     QByteArray m_record;
     bool m_hasFrame = false;
-    qint64 m_syncs = 0;
-    qint64 m_accepted = 0;
 
     mutable QMutex m_reportMutex;           // guards the report
+    qint64 m_syncs = 0;
+    qint64 m_accepted = 0;
+    bool m_reportedFrame = false;
     qint64 m_records = 0;
     qint64 m_draws = 0;
     QString m_lastReason;

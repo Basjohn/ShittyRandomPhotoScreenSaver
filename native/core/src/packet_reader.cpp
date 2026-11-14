@@ -190,6 +190,8 @@ bool PacketReaderConfig::fromJson(const QByteArray &json, PacketReaderConfig *ou
                 c.skipIdentity = true;
             else if (name == QLatin1String("pause_in_copy"))
                 c.pauseInCopy = true;
+            else if (name == QLatin1String("accept_after_retire"))
+                c.acceptAfterRetire = true;
             else {
                 *error = QStringLiteral("unknown packet reader control '%1'").arg(name);
                 return false;
@@ -228,6 +230,8 @@ QJsonObject PacketReaderConfig::toJson() const
         controls.append(QStringLiteral("skip_identity"));
     if (pauseInCopy)
         controls.append(QStringLiteral("pause_in_copy"));
+    if (acceptAfterRetire)
+        controls.append(QStringLiteral("accept_after_retire"));
     o.insert(QStringLiteral("controls"), controls);
     return o;
 }
@@ -676,7 +680,7 @@ ReadResult PacketReader::read()
         ++m_torn; // a write began during the copy: the previous frame stays
         return ReadResult::Torn;
     }
-    if (m_state.loadAcquire() != Open) {
+    if (m_state.loadAcquire() != Open && !m_config.acceptAfterRetire) {
         // D1: the stream began retiring during the copy; the copy completed against the pinned view, and nothing of it
         // is presented or acknowledged.
         ++m_readsWhileRetiring;

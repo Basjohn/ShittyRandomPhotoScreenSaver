@@ -86,6 +86,10 @@ class NativeSpectrum:
     def unbind(self) -> None:
         self._module.composite_spectrum_unbind(self._handle())
 
+    def retire(self) -> None:
+        """Any thread: the bound stream stores Retiring at once (D1); :meth:`unbind` then releases it."""
+        self._module.composite_spectrum_retire(self._handle())
+
     def present(self, presentation: Any, geometry: CompositeGeometry) -> dict:
         """The card as shown (and the composite placed for it); returns what was handed over."""
         card = spectrum_presentation(presentation, geometry)
