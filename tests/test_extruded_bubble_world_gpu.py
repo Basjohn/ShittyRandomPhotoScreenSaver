@@ -4,6 +4,7 @@ import math
 import numpy as np
 import pytest
 from rendering.quick.render.gl_resources import delete_program
+from rendering.gl_programs.extruded_bubble_program import EB_LENS_FADE
 
 
 @pytest.fixture
@@ -338,7 +339,13 @@ def test_near_plane_and_eye_inside_shells_cull_instead_of_covering_viewport(sphe
 
 @pytest.mark.qt
 def test_eye_inside_union_bound_but_outside_members_does_not_collapse_quad_or_fill_gap(sphere_pixels):
-    _,coverage=sphere_pixels('near_cluster',(-.5,0.,-.4),radius=.3,second=(.5,0.,-.4,.3))
+    # No near-lens blobs (operator, 14 Nov 2026): members this close to the lens have faded out, and the union's quad
+    # around the eye fills neither the view nor the gap between them, in either pass.
+    for kind in ('cluster','near_cluster'):
+        pixels,coverage=sphere_pixels(kind,(-.5,0.,-.4),radius=.3,second=(.5,0.,-.4,.3))
+        assert pixels.sum()==0 and coverage.sum()==0
+    # Farther off, the same pair draws, and still not across the gap.
+    _,coverage=sphere_pixels('cluster',(-1.2,0.,-6.),radius=.6,second=(1.2,0.,-6.,.6))
     assert (coverage>.5).sum()>100
     assert coverage[160,240]==0
 
@@ -374,18 +381,24 @@ def test_both_primitive_types_choose_exactly_one_near_layer_and_aperture_reaches
 def test_half_viewport_shell_blurs_even_at_zero_aperture_and_uses_only_near_pass(sphere_pixels,kind,near_kind):
     radius=.6
     tan_y=math.tan(math.radians(45)/2.)
-    depth=radius*math.sqrt(1.+1./(.5*tan_y)**2)
-    sharp,_=sphere_pixels(kind,(0.,0.,-depth),radius=radius)
-    near,circle=sphere_pixels(near_kind,(0.,0.,-depth),radius=radius,circle=True)
+    def depth(share):
+        return radius*math.sqrt(1.+1./(share*tan_y)**2)
+    # No near-lens blobs (operator, 14 Nov 2026): a shell spanning half the view has faded out of both passes; it
+    # never draws as full-opacity bokeh at the lens.
+    for layer in (kind,near_kind):
+        gone,_=sphere_pixels(layer,(0.,0.,-depth(.5)),radius=radius)
+        assert gone.sum()==0
+    # Nearing that size it already blurs at zero aperture, through the near pass only, still almost fully drawn.
+    sharp,_=sphere_pixels(kind,(0.,0.,-depth(.36)),radius=radius)
+    near,circle=sphere_pixels(near_kind,(0.,0.,-depth(.36)),radius=radius,circle=True)
     assert sharp.sum()==0
-    assert near[:,:,3].max()>.99
+    assert near[:,:,3].max()>.9
     coc=np.divide(circle[:,:,0],circle[:,:,1],out=np.zeros((320,480)),where=circle[:,:,1]>1e-6)
-    assert coc.max()>=.8*sphere_pixels.near_budget
-    assert coc.max()<=sphere_pixels.near_budget+1e-4
-    blurred,_=sphere_pixels(near_kind,(0.,0.,-depth),radius=radius,composite=True)
+    assert 1.5<coc.max()<=EB_LENS_FADE[1]*sphere_pixels.near_budget
+    blurred,_=sphere_pixels(near_kind,(0.,0.,-depth(.36)),radius=radius,composite=True)
     # Actual shared defocus composite must soften the white diagnostic silhouette.
     edge=blurred[160,:,0]
-    assert np.count_nonzero((edge>.1)&(edge<.9))>=8
+    assert np.count_nonzero((edge>.1)&(edge<.9))>=4
 
 
 @pytest.mark.qt
@@ -393,13 +406,17 @@ def test_half_viewport_shell_blurs_even_at_zero_aperture_and_uses_only_near_pass
 def test_near_full_viewport_shell_fades_continuously_then_culls(sphere_pixels,near_kind):
     radius=.6
     tan_y=math.tan(math.radians(45)/2.)
+    # Approaching the lens it fades (never vanishes at once) and is gone well before it fills the view.
+    kind={'near':'ordinary','near_cluster':'cluster'}[near_kind]
     alphas=[]
-    for share in (.7,.8,.85,.9,.95,1.02):
+    for share in (.30,.37,.38,.39,.40,.42,.5,.8,1.02):
         depth=radius*math.sqrt(1.+1./(share*tan_y)**2)
-        pixels,_=sphere_pixels(near_kind,(0.,0.,-depth),radius=radius)
-        alphas.append(float(pixels[:,:,3].max()))
-    assert alphas[0]>.99 and alphas[-1]==0.
-    assert all(a>b for a,b in zip(alphas[1:],alphas[2:]))
+        # Whichever pass draws it (sharp while its lens circle is small, the near pass once it blurs).
+        alphas.append(max(float(sphere_pixels(layer,(0.,0.,-depth),radius=radius)[0][:,:,3].max())
+                          for layer in (kind,near_kind)))
+    assert alphas[0]>.99 and alphas[-3:]==[0.,0.,0.]
+    assert all(a>=b for a,b in zip(alphas,alphas[1:]))
+    assert sum(.05<a<.95 for a in alphas)>=2
 
 
 @pytest.mark.qt
@@ -432,13 +449,18 @@ def test_sparse_union_bound_does_not_hide_or_blur_its_small_members(sphere_pixel
 def test_proximity_blur_scales_with_framebuffer_and_survives_tall_cards(sphere_pixels):
     width,height=sphere_pixels.frame_size
     radius=.6
-    share=.5*min(width,height)/height
-    depth=radius*math.sqrt(1.+1./(share*math.tan(math.radians(45)/2.))**2)
+    def depth(share):
+        share*=min(width,height)/height
+        return radius*math.sqrt(1.+1./(share*math.tan(math.radians(45)/2.))**2)
     for kind in ('near','near_cluster'):
-        pixels,circle=sphere_pixels(kind,(0.,0.,-depth),radius=radius,circle=True)
+        # The same share of the view blurs by the same share of the framebuffer's lens budget on every card ...
+        pixels,circle=sphere_pixels(kind,(0.,0.,-depth(.36)),radius=radius,circle=True)
         coc=np.divide(circle[:,:,0],circle[:,:,1],out=np.zeros((height,width)),where=circle[:,:,1]>1e-6)
-        assert pixels[:,:,3].max()>.99
-        assert .8*sphere_pixels.near_budget <= coc.max() <= sphere_pixels.near_budget+1e-4
+        assert pixels[:,:,3].max()>.9
+        assert .1*sphere_pixels.near_budget <= coc.max() <= EB_LENS_FADE[1]*sphere_pixels.near_budget
+        # ... and a shell spanning half of it has faded out on every card, tall ones included.
+        gone,_=sphere_pixels(kind,(0.,0.,-depth(.5)),radius=radius)
+        assert gone.sum()==0
 
 
 @pytest.mark.qt
@@ -446,14 +468,16 @@ def test_proximity_blur_scales_with_framebuffer_and_survives_tall_cards(sphere_p
 def test_offaxis_shell_reaching_the_lens_eases_out_instead_of_filling_the_view(sphere_pixels,kind,near_kind):
     # Off axis its clipped screen share stays small, so only its surface's distance to the eye can fade it.
     energies=[]
-    for gap in (1.0,.33,.2,.12,.03):
-        direction=np.array((.8,0.,-.6))
+    for gap in (6.0,3.0,1.0,.33,.2,.12,.03):
+        direction=np.array((.35,0.,-.94))
+        direction/=np.linalg.norm(direction)    # inside the view at every distance, off its axis
         centre=tuple(direction*(1.+gap))         # radius 1: the surface lies `gap` radii from the eye
         total=0.
         for layer in (kind,near_kind):
             pixels,_=sphere_pixels(layer,centre,radius=1.)
             total+=float(pixels[:,:,3].sum())
         energies.append(total)
-    assert energies[0]>100. and energies[1]>.9*energies[0]
-    assert all(a>b for a,b in zip(energies[1:],energies[2:]))
+    # Drawn while it is a bubble in the view; nearing the lens it eases out (no near-lens blob), never back up.
+    assert energies[0]>100.
+    assert all(a>=b for a,b in zip(energies[1:],energies[2:]))
     assert energies[-1]<.05*energies[0]

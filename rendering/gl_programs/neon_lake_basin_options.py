@@ -1,6 +1,10 @@
 """Neon Basin's canonical surface/body choices. Retired values migrate at input only."""
 from types import MappingProxyType
 
+# The most analysis bands Neon Lake's renderer reads (the size of the basin shader's ``uBars``): the one maximum
+# its Analysis Bands control admits, the renderer clamps to and the shader array holds.
+NEON_LAKE_MAX_BANDS = 64
+
 BASIN_SURFACE_STYLES = MappingProxyType({
     "Vertices": 2, "Glass": 4, "Glass + Vertices": 6,
 })

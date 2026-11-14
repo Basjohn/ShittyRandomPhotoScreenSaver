@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** Medium: 1B.10's fixes (checkpointed: the 8-bit glow dither landed on its branch; the near-lens fade, Aurora Fjord's lake lines and the Neon tests that pin shipped presets wait for the 17:00 UTC reset). Hero Shell removed. R-217 merged at ABI 13. High: free until the reset.
+**Now (in flight):** High: N3.8 (the async job service; one build round at ABI 14). Medium: free (1B.10 landed, R-218, R-219). Main at ABI 13.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -822,13 +822,16 @@ the lead rejects any still or showcase frame that shows one.
 - Spectrum part landed 14 Nov (lead's review on a dark and a bright wallpaper, the real card): Bar Count's one
   maximum (64), the kick lane follows the Bass lane (R-215), soft Bar Fill ghosts, two looks re-authored so none
   repeat (`visualizers/spectrum/presets/20261114_round3/`).
-- [ ] Side defect: Neon Lake admits 96 Analysis Bands but its renderer stops at 64
-  (`rendering/quick/visualizer/implementations/shockwave_grid.py:388`): one owner for the maximum, as Spectrum's.
-- [ ] Extruded Bubble: one arctic-themed preset, light and depth, not a glossy object.
-- [ ] Neon Lake: three unique presets (using the shape instrument, the far-land brush and the land reactivity).
-- [ ] Every preset authored through the Studio's Save To path, complete for every control (the completeness
-  guard).
-- [ ] One showcase WebP per preset (`release_media.py`), reviewed by the lead before the operator sees them.
+- Extruded Bubble and Neon Lake parts landed 14 Nov: one arctic Extruded Bubble look and three Neon Lake looks
+  (lead's review on a dark and a bright wallpaper; `visualizers/extruded_bubble/presets/20261114_arctic/`,
+  `visualizers/shockwave_grid/presets/20261114_round1/`); Neon Lake's band maximum has one owner; R-218 (glow,
+  shafts and the Neon sky stepped into 8-bit bands, now dithered); R-219 (near-lens blobs fade out).
+- [ ] Defect: growing a painted Neon Lake grid shifts the picture 0.055-0.11 of a level on average (allowance
+  0.02); `tests/test_neon_terrain_growth.py` holds it as an expected failure. Cause not found (tile alignment,
+  edge clipping and mound position ruled out). Root-cause it, with the far-land Water trench below if related.
+- [ ] Defect: a river painted with the Water brush in Neon Lake's far land draws as a straight-walled trench, not
+  along its path (reproduction: `render_neon_evidence.py stills --preset 1 --look
+  .artifacts/evidence/visualizers/shockwave_grid/presets/20261114_round1/side_defect_far_water_trench/look_river.json`).
 - [ ] Side defect: Rim Glow measures distance to the square edge (`spectrum.frag:783-785`), so it facets at
   rounded tops.
 

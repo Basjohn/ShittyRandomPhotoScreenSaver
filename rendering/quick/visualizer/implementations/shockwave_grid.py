@@ -30,10 +30,10 @@ from rendering.gl_programs.neon_lake_basin_program import (
 from rendering.gl_programs.neon_celestial import basin_body_position, celestial_placement
 from rendering.gl_programs.neon_terrain_reaction import growth_cell_scale
 from rendering.gl_programs.neon_lake_basin_options import (
-    BASIN_BODY_MODES, BASIN_GROWTH_REGIONS, BASIN_SURFACE_STYLES,
+    BASIN_BODY_MODES, BASIN_GROWTH_REGIONS, BASIN_SURFACE_STYLES, NEON_LAKE_MAX_BANDS,
 )
 from rendering.gl_programs.shockwave_grid_program import (
-    SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_MAX_RIDGE,
+    SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_RIDGE,
     shockwave_amplitude, shockwave_event_records, shockwave_grid_cells, SHOCKWAVE_HALF_WIDTH,
     shockwave_idle, shockwave_wave_speed, shockwave_music_drive, shockwave_ridge_breath,
 )
@@ -385,7 +385,7 @@ class QuickShockwaveGridRenderer:
             return
         parameters = mode_state.parameters
         field, half_width, view, maximum = self._view(frame, parameters)
-        count = min(SHOCKWAVE_MAX_BARS, int(logical.common.bar_count))
+        count = min(NEON_LAKE_MAX_BANDS, int(logical.common.bar_count))
         levels, _peaks = prepare_spectrum_shader_levels(logical.common.bars, mode_state.peaks, bar_count=count)
         events = shockwave_event_records(tuple(mode_state.events), half_width)
         # Existing capture bars, not a new vocal detector, clock or DSP pipeline.

@@ -25,9 +25,10 @@ from rendering.gl_programs.heightfield_volume_glsl import HEIGHTFIELD_VOLUME_GLS
 from rendering.gl_programs.heightfield_glsl import HEIGHTFIELD_GLSL as _SKY_HEIGHTFIELD_GLSL
 from rendering.gl_programs.neon_celestial import NEON_CELESTIAL_GLSL
 from rendering.gl_programs.neon_terrain_reaction import REACTION_GLSL
-from rendering.gl_programs.scene3d import SCENE3D_GLSL, SCENE3D_ORBIT_GLSL
+from rendering.gl_programs.neon_lake_basin_options import NEON_LAKE_MAX_BANDS
+from rendering.gl_programs.scene3d import SCENE3D_GLSL, SCENE3D_ORBIT_GLSL, SCENE_OUTPUT_DITHER_GLSL
 from rendering.gl_programs.shockwave_grid_program import (
-    SHOCKWAVE_DEPTH, SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_WAVE_GLSL, SHOCKWAVE_HALF_WIDTH,
+    SHOCKWAVE_DEPTH, SHOCKWAVE_EVENTS, SHOCKWAVE_WAVE_GLSL, SHOCKWAVE_HALF_WIDTH,
 )
 
 
@@ -168,7 +169,7 @@ uniform vec2 uTan;
 uniform float uHalfWidth;
 uniform float uHorizon;
 uniform int uBarCount;
-uniform float uBars[{SHOCKWAVE_MAX_BARS}];
+uniform float uBars[{NEON_LAKE_MAX_BANDS}];
 uniform float uHeightScale;
 """
 _POSE = """
@@ -1200,7 +1201,7 @@ NEON_SKY_FRAGMENT_SOURCE = (
     "#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
     "layout(location=2) out vec4 ShaftSource;\n"
     + SHOCKWAVE_EVENTS.glsl(3) + SCENE3D_ORBIT_GLSL + _PROJECTION + SHOCKWAVE_WAVE_GLSL + _POSE
-    + _SKY_HEIGHTFIELD_GLSL + _TERRAIN + NEON_CELESTIAL_GLSL + _BODY_VISIBILITY
+    + _SKY_HEIGHTFIELD_GLSL + _TERRAIN + NEON_CELESTIAL_GLSL + _BODY_VISIBILITY + SCENE_OUTPUT_DITHER_GLSL
     + """
 in vec2 vUv;
 uniform int uSkyPass; // 0 background, 2 depth-tested body, 3 light-shaft source (depth-tested)
@@ -1325,6 +1326,8 @@ void main() {
         float starVisibility=1.0-basinCelestialSkyMask(eye,ray);
         FragColor=basinSkyBackground(eye,ray,starVisibility,1);
         if (FragColor.a<0.0001) discard;
+        // The sky's slow dark gradient into the 8-bit scene colour: one output step of dither (no contour bands).
+        FragColor.rgb=max(FragColor.rgb+sceneOutputDither(ivec2(gl_FragCoord.xy)),vec3(0.0));
         // Separate small radiance buffer entry for event stars, not the entire
         // sky (which would turn on widespread bloom and flatten the scene).
         vec3 sparkle=basinBeatStarColour()*uStarColor.a*basinBeatStarLight(eye,ray,uStarGlow,starVisibility)*0.95;

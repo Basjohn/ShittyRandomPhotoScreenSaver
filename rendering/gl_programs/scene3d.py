@@ -175,6 +175,25 @@ float sceneRandom(uint key, uint salt, uint seed) {
 #endif
 """
 
+# Smooth light written to an 8-bit target steps into contour bands where it changes slowly (a dark halo or shaft
+# fading over hundreds of pixels: one output step every few pixels, seen as rings and stair-stepped blocks; the
+# 1B.10 Neon Lake review). ``sceneOutputDither`` is a triangular dither of one output step per channel at a pixel,
+# from the exact integer hash (R-94), mean zero; a writer adds it only where its smooth light is present, so
+# untouched pixels (photographs, empty card) stay exact. ``SCENE_DITHER_FLOOR``: the least light that is dithered.
+SCENE_DITHER_STEP = 1.0 / 255.0
+SCENE_OUTPUT_DITHER_GLSL = SCENE3D_HASH_GLSL + f"""
+#ifndef SCENE_OUTPUT_DITHER_GLSL
+#define SCENE_OUTPUT_DITHER_GLSL
+const float SCENE_DITHER_FLOOR = {SCENE_DITHER_STEP / 4.0:.9f};
+vec3 sceneOutputDither(ivec2 pixel) {{
+    uint key = uint(pixel.x & 0xffff) | (uint(pixel.y & 0xffff) << 16);
+    vec3 a = vec3(sceneRandom(key, 1u, 0u), sceneRandom(key, 2u, 0u), sceneRandom(key, 3u, 0u));
+    vec3 b = vec3(sceneRandom(key, 4u, 0u), sceneRandom(key, 5u, 0u), sceneRandom(key, 6u, 0u));
+    return (a + b - 1.0) * {SCENE_DITHER_STEP:.9f};
+}}
+#endif
+"""
+
 SCENE3D_GLSL = f"""
 const float SCENE_CAMERA = {SCENE3D_CAMERA:.6f};
 const float SCENE_NEAR = {SCENE3D_NEAR:.6f};

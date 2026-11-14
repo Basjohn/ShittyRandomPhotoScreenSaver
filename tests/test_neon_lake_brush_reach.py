@@ -6,8 +6,9 @@ cells for the brush to paint. A stroke there now grows the grid under it (``neon
 invisibly, see ``tests/test_neon_terrain_growth.py``), carries its path across the growth and commits once; only land
 past the largest grid's reach is refused, and that out loud.
 
-These checks drive a live (hidden, offscreen) Neon Lake Studio at every shipped preset's terrain. The land on screen is
-found independently of the brush (``_ground_hit``: the camera's ray marched against the scene's CPU surface).
+These checks drive a live (hidden, offscreen) Neon Lake Studio on test-owned terrains (the stored shapes the brush
+meets; presets are mutable content and never fixtures) under the canonical settings. The land on screen is found
+independently of the brush (``_ground_hit``: the camera's ray marched against the scene's CPU surface).
 """
 from __future__ import annotations
 
@@ -20,12 +21,34 @@ MODE = "shockwave_grid"
 TERRAIN = "shockwave_grid_terrain"
 
 
+def _hilly(size: int = 65) -> dict:
+    """A test-owned terrain: rough land round a lake with a stream to the back edge (presets are mutable content and
+    never fixtures)."""
+    from rendering.gl_programs.heightfield import normalize_heightfield
+    rng = np.random.default_rng(11)
+    yy, xx = np.mgrid[0:size, 0:size] / (size - 1)
+    heights = 0.15 + 0.35 * np.sin(5.0 * xx) ** 2 * np.cos(3.0 * yy) ** 2 + 0.1 * rng.random((size, size))
+    heights[(xx - 0.5) ** 2 + (yy - 0.45) ** 2 < 0.06] = 0.0             # a lake
+    heights[(np.abs(xx - 0.5) < 0.03) & (yy > 0.45)] = 0.0                # its stream, out through the back edge
+    return normalize_heightfield({"version": 1, "size": size, "heights": heights.round(6).ravel().tolist()})
+
+
+def _terrains() -> dict[str, dict]:
+    """The stored terrain shapes the brush meets: the whole grid as the basin, and a basin inside a larger grid."""
+    from rendering.gl_programs.neon_terrain_extent import extend_heightfield
+    whole = _hilly()
+    return {"whole": whole, "basin_inside": extend_heightfield(whole, 8, 8, 16, 0)}
+
+
+_TERRAIN_NAMES = tuple(_terrains())
+
+
 class _Store:
-    def __init__(self, preset_index: int, overrides=None):
+    def __init__(self, terrain: str, overrides=None):
+        from core.settings.default_contract import require_canonical_default
         from core.settings.visualizer_mode_settings import mode_settings
-        from core.settings.visualizer_presets import resolve_visualizer_activation_payload
-        self.values = dict(resolve_visualizer_activation_payload({"mode": MODE, f"preset_{MODE}": preset_index},
-                                                                 mode=MODE).resolved_config)
+        self.values = {**require_canonical_default("widgets.spotify_visualizer"), "mode": MODE,
+                       TERRAIN: _terrains()[terrain]}
         self.values.update(overrides or {})
         spec = mode_settings(MODE)
         self.values.update({c.key: c.admit(self.values[c.key], self.values[c.key])
@@ -52,11 +75,6 @@ class _Presence:
         pass
 
 
-def _presets() -> list[int]:
-    from core.settings.visualizer_presets import get_custom_preset_index
-    return list(range(get_custom_preset_index(MODE)))
-
-
 @pytest.fixture
 def neon(qt_app):
     from rendering.gl_error_policy import disable_per_call_gl_error_checking
@@ -66,7 +84,7 @@ def neon(qt_app):
     disable_per_call_gl_error_checking()
     opened = []
 
-    def open_preset(index, overrides=None):
+    def open_preset(terrain, overrides=None):
         adapter = create_adapter(MODE)
         adapter.recorded_clips = lambda: ()
         surfaces = []
@@ -74,7 +92,7 @@ def neon(qt_app):
         def factory(controller):
             surfaces.append(OffscreenStudioSurface(controller, size=(1600, 900), present_on_show=False))
             return surfaces[0]
-        controller = StudioController(adapter, _Store(index, overrides), _Presence(), factory)
+        controller = StudioController(adapter, _Store(terrain, overrides), _Presence(), factory)
         assert controller.open()
         opened.append(controller)
         surface = surfaces[0]
@@ -169,7 +187,7 @@ def _stroke(controller, surface, points, mode="Raise"):
     bridge.setBrushActive(False)
 
 
-@pytest.mark.parametrize("preset", _presets())
+@pytest.mark.parametrize("preset", _TERRAIN_NAMES)
 def test_every_visible_land_point_is_paintable(neon, preset):
     """Dollied back (a preview pose, as the wheel leaves it) a sizeable share of the land on screen lies past the
     authored grid; the brush lands on every land point, on the grid or past it, and can paint there."""
@@ -181,7 +199,7 @@ def test_every_visible_land_point_is_paintable(neon, preset):
     size = int(values[TERRAIN]["size"])
     land = _land(controller)
     past = [hit for _point, hit in land if not _on_grid(hit)]
-    assert len(past) / len(land) > 0.05, f"preset {preset + 1}: no visible land past the grid"
+    assert len(past) / len(land) > 0.05, f"{preset}: no visible land past the grid"
     missed, refused = [], []
     for point, hit in land:
         uv = pick_terrain(frame, values, point, geometry)
@@ -189,11 +207,11 @@ def test_every_visible_land_point_is_paintable(neon, preset):
             missed.append((point, hit, uv))
         elif not (_on_grid(uv) or terrain_reachable(size, uv)):
             refused.append((point, uv))
-    assert missed == [], f"preset {preset + 1}: land the brush does not land on: {missed[:5]}"
-    assert refused == [], f"preset {preset + 1}: land the brush refuses: {refused[:5]}"
+    assert missed == [], f"{preset}: land the brush does not land on: {missed[:5]}"
+    assert refused == [], f"{preset}: land the brush refuses: {refused[:5]}"
 
 
-@pytest.mark.parametrize("preset", _presets())
+@pytest.mark.parametrize("preset", _TERRAIN_NAMES)
 def test_a_stroke_on_far_land_grows_the_grid_and_is_one_undoable_step(neon, preset):
     from rendering.gl_programs.heightfield import heightfield_basin, heightfield_origin
     from ui.studio.shockwave_grid_adapter import pick_terrain
@@ -241,7 +259,7 @@ def test_a_stroke_carries_on_across_a_growth(neon):
     """A stroke that starts on the stored grid and runs out past it: the grid grows mid-stroke, the path painted so
     far stays where it was on the ground, and the whole stroke is one commit."""
     from rendering.gl_programs.heightfield import heightfield_basin
-    controller, surface = neon(_presets()[-1])
+    controller, surface = neon("whole")
     controller.bridge.zoomBy(-6.0, True)
     surface.pump(2)
     session = controller.session
@@ -277,7 +295,7 @@ def test_land_past_the_largest_grids_reach_is_refused_out_loud(neon):
     """At the cap the brush says so: the cursor's refused state while the pointer is over land it cannot reach, and
     one notice when a stroke is tried there; nothing is painted or saved. Reachable land paints as ever."""
     from rendering.gl_programs.neon_terrain_extent import MAX_GRID_SIZE, grow_heightfield
-    preset = _presets()[-1]
+    preset = "whole"
     terrain = _Store(preset).values[TERRAIN]
     room = MAX_GRID_SIZE - int(terrain["size"])
     assert room > 0
