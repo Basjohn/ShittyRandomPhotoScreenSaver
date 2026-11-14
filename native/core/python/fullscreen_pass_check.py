@@ -176,6 +176,15 @@ def sampler_variant_text(kind: str) -> str:
     raise ValueError(f"unknown variant {kind!r} ({', '.join(SAMPLER_VARIANTS)})")
 
 
+def uv_bits_text() -> str:
+    """Crossfade's fragment changed to write the interpolated vUv's low bits (fract(vUv * 2^20): one ulp near 0.5 is
+    about 16 levels), its pictures still read: the core's uv seen bit for bit, compared across backends (rule (b)'s
+    attribution: a backend difference elsewhere is the fragment's own arithmetic, not the core's uv)."""
+    return _replaced(renderer_class("crossfade").fragment_source, "FragColor = mix(oldColor, newColor, t);",
+                     "FragColor = vec4(fract(vUv * 1048576.0), fract(vUv.x * 4096.0) "
+                     "+ 1e-30 * (oldColor.r + newColor.g + t), 1.0);")
+
+
 def swapped_crossfade_text() -> str:
     """The proof's shader change (rule (g)): Crossfade with its two pictures swapped."""
     return _replaced(renderer_class("crossfade").fragment_source, "FragColor = mix(oldColor, newColor, t);",
@@ -587,6 +596,10 @@ def round_draw(core, engine, app, host, api: str, folder: Path, out: Path, photo
             scene.program("crossfade", transition_pass("crossfade", folder / f"{label}_swapped",
                                                        text=swapped_crossfade_text()), settings)
             swapped = scene.show(record)
+            # The core's uv bits, kept for the Vulkan comparison (rule (b)'s attribution).
+            scene.mode.program([transition_pass("crossfade", folder / f"{label}_uv_bits", text=uv_bits_text())],
+                               settings)
+            frames[f"{label}_uv_bits"] = scene.show(record)
             new_photo = np.asarray(images[1], dtype=np.uint8)
             checks[f"{label}_shader_change_shows"] = compare(swapped, new_photo)["max_level"] <= 1
             frames[f"{label}_shader_change"] = swapped
@@ -801,6 +814,7 @@ def round_timing(core, engine, app, api: str, folder: Path, photo_paths) -> dict
     host = core.hidden_host(width + 2 * MARGIN, height + 2 * MARGIN)
     scene = None
     timing: dict = {}
+    rest_facts: dict = {}
     checks: dict = {}
     try:
         scene = Scene(core, engine, host, 1.0, card=TIMING_TARGET)
@@ -818,26 +832,42 @@ def round_timing(core, engine, app, api: str, folder: Path, photo_paths) -> dict
                 progress = PROGRESS[1 + index % (len(PROGRESS) - 2)]
                 scene.stream.publish(split_values(transition_id, values[progress])[2])
                 scene.mode.update()
-                host.frames(1)
+                # A frame read back: the GPU finishes it before the next is recorded, so its latched result is never
+                # skipped behind a queue the harness built (the readback lies outside the timed bracket).
+                host.read()
             host.frames(4)
-            times = sorted(s.nanoseconds for s in host.gpu_samples() if s.kind == 2)
-            timing[variant] = {"samples": len(times),
+            samples = host.gpu_samples()
+            times = sorted(s.nanoseconds for s in samples if s.kind == 2)
+            state = scene.mode.state()
+            timing[variant] = {"kinds": sorted({int(s.kind) for s in samples}), "records": state.get("records"),
+                               "accepted": state.get("accepted"), "samples": len(times),
                                "median_ms": round(times[len(times) // 2] / 1e6, 4) if times else None,
                                "p90_ms": round(times[int(len(times) * 0.9)] / 1e6, 4) if times else None}
+        # Nothing at rest: no record and no pass timed in a frame after the rest began (a late result of a timed frame
+        # is read latched, so it can arrive during the rest; it carries its own, earlier, frame).
         host.frames(REST_FRAMES)
-        host.gpu_samples()
+        records_before = scene.mode.state().get("records")
+        passes_before = scene.mode.composite.state()["surface"]["passes_recorded"]
+        rest_start = host.read().frame
         host.frames(REST_FRAMES)
-        rest = [s for s in host.gpu_samples() if s.kind == 2]
+        scene.mode.update()
+        host.frames(REST_FRAMES)
+        rest = [s for s in host.gpu_samples() if s.kind == 2 and s.frame > rest_start]
+        records_after = scene.mode.state().get("records")
+        passes_after = scene.mode.composite.state()["surface"]["passes_recorded"]
         host.set_gpu_timer(False)
         checks["gpu_time_recorded"] = all((entry["samples"] or 0) >= TIMED_FRAMES // 2 for entry in timing.values())
-        checks["nothing_timed_at_rest"] = not rest
+        checks["nothing_timed_at_rest"] = not rest and records_after == records_before and passes_after == passes_before
+        rest_facts = {"records": [records_before, records_after], "surface_passes": [passes_before, passes_after],
+                      "timed_after_rest_began": len(rest)}
     finally:
         if scene is not None:
             scene.close(app)
         host.frames(1)
         host.close()
         _flush(app)
-    return {"pass": all(checks.values()), "checks": checks, "facts": {"gpu": timing, "target": list(TIMING_TARGET)}}
+    return {"pass": all(checks.values()), "checks": checks,
+            "facts": {"gpu": timing, "rest": rest_facts, "target": list(TIMING_TARGET)}}
 
 
 def _nothing_left(live: dict) -> bool:
@@ -881,15 +911,23 @@ def vulkan_against_opengl(out: Path) -> dict:
     gl, vk = np.load(gl_path), np.load(vk_path)
     compared = max_level = 0
     worst = None
+    differing: dict = {}
     for key in gl.files:
         if key not in vk.files or gl[key].shape != vk[key].shape:
             return {"pass": False, "error": f"frame {key} is missing or differs in shape"}
         compared += 1
-        level = int(np.abs(gl[key][..., :3].astype(np.int16) - vk[key][..., :3]).max())
+        difference = np.abs(gl[key][..., :3].astype(np.int16) - vk[key][..., :3]).max(axis=2)
+        level = int(difference.max())
+        if level:
+            differing[key] = {"pixels": int(np.count_nonzero(difference)),
+                              "above_tolerance": int(np.count_nonzero(difference > VULKAN_TOLERANCE)),
+                              "max_level": level, "of": int(difference.size)}
         if level > max_level:
             max_level, worst = level, key
+    uv_keys = [key for key in gl.files if key.endswith("_uv_bits")]
     return {"pass": compared > 0 and max_level <= VULKAN_TOLERANCE, "compared": compared, "max_level": max_level,
-            "worst": worst, "tolerance": VULKAN_TOLERANCE}
+            "worst": worst, "tolerance": VULKAN_TOLERANCE, "differing": differing,
+            "uv_bits_identical": bool(uv_keys) and not any(key in differing for key in uv_keys)}
 
 
 # --------------------------------------------------------------------------------------------------- the child
@@ -954,6 +992,10 @@ def child(args) -> dict:
                     if name == "shape":
                         record[name] = round_shape(core, folder)
                     elif name == "timing":
+                        if host is not None:          # one hidden host at a time while timing (its own, at 2560x1440)
+                            record["host_close"] = host.close()
+                            host = None
+                            _flush(app)
                         record[name] = round_timing(core, engine, app, args.api, folder, photo_paths)
                     else:
                         if host is None:
@@ -1071,7 +1113,9 @@ def main(argv: list[str] | None = None) -> int:
     if "vulkan" in results and "opengl" in results and "draw" in args.rounds:
         cross = vulkan_against_opengl(out)
         if not cross.get("pass"):
-            failed.append(f"vulkan against opengl: {cross}")
+            brief = {k: v for k, v in cross.items() if k != "differing"}    # the frames' figures are in summary.json
+            brief["frames_differing"] = sorted(cross.get("differing", {}))
+            failed.append(f"vulkan against opengl: {brief}")
     if not environment["clean"]:
         failed.append(f"environment: {', '.join(environment['contaminating_set'])} set")
     summary = {"apis": args.apis, "rounds": args.rounds, "photos": args.photos, "environment": environment,
@@ -1082,7 +1126,7 @@ def main(argv: list[str] | None = None) -> int:
     for api, (ok, reasons) in verdicts.items():
         print(f"{api}: {'PASS' if ok else 'FAIL'}" + ("" if ok else " (" + "; ".join(reasons)[:2000] + ")"))
     if cross is not None:
-        print(f"vulkan against opengl: {cross}")
+        print(f"vulkan against opengl: { {k: v for k, v in cross.items() if k != 'differing'} }")
     print(f"evidence: {out / 'summary.json'} (the work folder holds the frames: delete it once judged)")
     print("N4A VERDICT " + ("PASS" if not failed else "FAIL: " + "; ".join(failed)[:4000]))
     return 0
