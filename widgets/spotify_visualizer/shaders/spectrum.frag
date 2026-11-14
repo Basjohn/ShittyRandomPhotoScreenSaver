@@ -1,4 +1,8 @@
 #version 460 core
+// The conventions include (N1.4; spliced at the marker by the loader here and by the native core's bake): the fragment's
+// pixel comes from fragPixel, never raw gl_FragCoord, so both renderers read it in their target's row convention.
+#define SRPSS_CONVENTIONS_FRAGMENT
+//@srpss_conventions
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 fragColor;
 
@@ -12,20 +16,22 @@ layout(std140, binding = 18) uniform SpectrumDraw {
     int uContentRotationQuarters;
     vec2 u_resolution;            // logical size in QWidget coordinates
     float u_dpr;                  // device pixel ratio of the backing FBO
-    // Framebuffer-pixel origin of this visualizer's viewport. gl_FragCoord is WINDOW space, so when the compositor
+    // Framebuffer-pixel origin of this visualizer's viewport. The fragment's pixel is WINDOW space, so when the compositor
     // draws the visualizer into the whole-display framebuffer at a non-zero viewport origin the raw value is not
     // card-local. Subtracting this origin restores card-local pixels. A card-sized, origin-zero target passes (0, 0).
     vec2 u_viewport_origin_px;
     // Qt Quick uses interpolated item-local coordinates. The old compositor keeps the framebuffer-coordinate branch
     // until Phase-I deletion.
     int u_quick_item_coords;
-    // 1: item-local coordinates from gl_FragCoord through the item's affine map (rows x and y of a 2 x 3 matrix,
-    // resolved by the renderer from its matrix, viewport and rotation). One continuous coordinate over the whole
+    // 1: item-local coordinates from the fragment's pixel (fragPixel) through the item's affine map (rows x and y of a
+    // 2 x 3 matrix, resolved by the renderer from its matrix, viewport and rotation; the native core's from its target's
+    // place in the item, R-197). One continuous coordinate over the whole
     // full-field quad: the interpolated v_uv is rounded differently in its two triangles, so a bar edge on a pixel
     // centre stepped by a pixel along their shared diagonal. 0: the interpolated v_uv (a matrix that is not affine).
     int u_item_from_frag;
     vec3 u_item_from_frag_x;
     vec3 u_item_from_frag_y;
+    vec2 u_target_px;             // the render target's size in pixels (fragPixel's row convention)
     vec4 u_content_rect;          // item-local x, y, width, height
     float u_visual_scale;
     int u_bar_count;
@@ -507,18 +513,18 @@ void main() {
 
     // Derive logical fragment coordinates from the physical framebuffer
     // position. QOpenGLWidget renders into a device-pixel-scaled FBO, so we
-    // map gl_FragCoord (physical) back into QWidget logical space using the
+    // map the fragment's pixel (physical) back into QWidget logical space using the
     // current device pixel ratio.
     vec2 fragCoord;
     if (u_quick_item_coords == 1 && u_item_from_frag == 1) {
-        vec3 window = vec3(gl_FragCoord.xy, 1.0);
+        vec3 window = vec3(fragPixel(u_target_px), 1.0);
         fragCoord = vec2(dot(u_item_from_frag_x, window), dot(u_item_from_frag_y, window));
     } else if (u_quick_item_coords == 1) {
         fragCoord = v_uv * u_resolution;
     } else {
         float dpr = (u_dpr <= 0.0) ? 1.0 : u_dpr;
         float fb_height = height * dpr;
-        vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
+        vec2 localFrag = fragPixel(u_target_px) - u_viewport_origin_px;
         fragCoord = vec2(localFrag.x / dpr, (fb_height - localFrag.y) / dpr);
     }
     g_px_x = max(abs(dFdx(fragCoord.x)) + abs(dFdy(fragCoord.x)), 1e-4);
