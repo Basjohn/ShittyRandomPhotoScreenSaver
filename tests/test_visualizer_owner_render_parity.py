@@ -111,7 +111,11 @@ def test_a_native_run_is_compared_with_its_accepted_baseline_run_by_run():
                                                                                          "max_level": 1}]}
     baseline = {"results": {"spectrum": run, "spectrum:b": dict(run, native_frames=350)}}
     report = copy.deepcopy(baseline)
-    assert parity.against_baseline(baseline, report)["same"] is True
+    # Without frame hashes only the difference rows compare (audit N29 round 2, L8): equal rows are
+    # "difference-identical", never "same" (bit-identical frames are not proved by them).
+    verdict = parity.against_baseline(baseline, report)
+    assert verdict["same"] is False and verdict["difference_identical"] is True
+    assert verdict["runs"]["spectrum"]["by"] == "differences" and verdict["runs"]["spectrum"]["same"] is False
     # Controls: one pixel more in one input, a run missing, a key missing are each a difference.
     moved = copy.deepcopy(report)
     moved["results"]["spectrum"]["differences"][1]["pixels"] = 4

@@ -59,6 +59,9 @@ _MODE_TRANSITION_HALF_DURATION_S = 0.25
 # startup-reveal window. This is the visualizer's own single scene-fade
 # authority; the generation startup-reveal gate is a separate root multiplicand.
 _ACTIVATION_SCENE_FADE_DURATION_S = 1.3
+#: The same fade for the Visualizer's native route (``rendering.quick.visualizer.native_route``), which fades its native
+#: item in and out over it: one owner of the number (audit N29 round 2, L5).
+ACTIVATION_SCENE_FADE_DURATION_S = _ACTIVATION_SCENE_FADE_DURATION_S
 # A ``prepared_reveal`` target stays hidden while the render thread prepares its renderer on
 # the hidden frames (one spaced unit each, ``QuickVisualizerRenderHost``), so its first-use
 # compile and allocation land behind the fade; past this it reveals anyway and the renderer

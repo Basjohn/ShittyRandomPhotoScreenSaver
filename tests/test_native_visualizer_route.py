@@ -129,8 +129,12 @@ def test_a_native_modes_update_is_the_routes_take_and_another_mode_draws_through
 
 class _Composite:
     def __init__(self, log: list) -> None:
+        from rendering.native.composite import ContentStatus
+
         self.log = log
         self.destroyed = False
+        self.pixels: tuple | None = (2560, 1440)   # Qt's own framebuffer of the 1707x960 window at 150 % (L1)
+        self.status = ContentStatus(draws=0, failures=0, refused_run=0, failing=False)
 
     def set(self, **config):
         self.log.append(("set", config))
@@ -144,7 +148,13 @@ class _Composite:
         return True
 
     def window_pixels(self):
-        return (2560, 1440)                    # Qt's own framebuffer of the 1707x960 window at 150 % (L1)
+        return self.pixels                     # None: the native item has not synchronised with the window (M3)
+
+    def update(self):
+        self.log.append(("composite_update", ()))
+
+    def content_status(self):
+        return self.status                     # read at every sync: never logged
 
 
 class _Spectrum:
@@ -231,7 +241,9 @@ def route_world(monkeypatch):
     from rendering.quick.visualizer.implementations import spectrum as implementation
     from rendering.quick.visualizer.native_route import NativeVisualizerRoute
 
-    window = SimpleNamespace(width=lambda: 1707, height=lambda: 960)
+    size = {"width": 1707, "height": 960}
+    window = SimpleNamespace(width=lambda: size["width"], height=lambda: size["height"],
+                             afterSynchronizing=_Signal("afterSynchronizing"), afterRendering=_Signal("afterRendering"))
     host = SimpleNamespace(window=lambda: window)
     monkeypatch.setattr(spectrum_native_schema, "encode", lambda logical: b"record %d" % logical.value)
     monkeypatch.setattr(program_values, "mode_fragment_pack", lambda _mode: b"pack")
@@ -256,10 +268,32 @@ def route_world(monkeypatch):
         routes.append(route)
         return route, core
 
-    world = SimpleNamespace(make=make, names=names, presentation=_route_presentation((1707.0, 960.0), 1.5))
+    world = SimpleNamespace(make=make, names=names, presentation=_route_presentation((1707.0, 960.0), 1.5),
+                            window=window, size=size)
     yield world
     for route in routes:
         route.close()
+
+
+class _Signal:
+    """A stand-in window signal: the route's edge connects a queued receiver; ``emit`` delivers it (the GUI thread's
+    queued call)."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.slots: list = []
+        self.connections = 0
+
+    def connect(self, slot, _type=None):
+        self.slots.append(slot)
+        self.connections += 1
+
+    def disconnect(self, slot):
+        self.slots.remove(slot)
+
+    def emit(self):
+        for slot in list(self.slots):
+            slot()
 
 
 def _snapshot(presentation, value: int):
@@ -412,15 +446,24 @@ def test_a_refused_frame_fades_the_card_out_and_the_next_new_snapshot_draws_agai
 
 
 def test_the_routes_teardown_branches_never_raise_and_a_missing_window_logs_at_debug(route_world, caplog):
-    # Audit N29 L2: unbind (here a mapping whose close raises) and the hide run guarded; a window that is not there yet
-    # is an ordinary startup state, logged at debug, never an error.
+    # Audit N29 L2: the unbind (here the native item's own unbind raising) runs guarded, and the route's mapping is
+    # still closed and unlinked; a window that is not there yet is an ordinary startup state, logged at debug.
     import logging
 
     route, core = route_world.make(fail_unbind=1)
     bridge = _Bridge()
     bridge.snapshots = [_snapshot(route_world.presentation, 1)]
     assert _sync(route, bridge, _identity("spectrum"), route_world.presentation) is True
+    name = route_world.names[-1]
+    assert _mapping_opens(name)                                   # control: open while bound
     assert route.sync(bridge=bridge, identity=None, presentation=route_world.presentation, authority=True) is False
+    assert ("unbind", ()) in core.log and not _mapping_opens(name) and route.identity is None
+    # Control: unguarded, the same raising unbind reaches the caller (the guard is what keeps the update alive).
+    raising, _raising_core = route_world.make(fail_unbind=1)
+    bridge.snapshots = [_snapshot(route_world.presentation, 2)]
+    assert _sync(raising, bridge, _identity("spectrum"), route_world.presentation) is True
+    with pytest.raises(BufferError):
+        raising.unbind()
     waiting, _core = route_world.make()
     waiting._content_host = SimpleNamespace(window=lambda: None)
     with caplog.at_level(logging.DEBUG, logger="rendering.quick.visualizer.native_route"):
@@ -447,11 +490,260 @@ def test_the_parity_tools_route_takes_the_routes_own_card_call(route_world):
         route.close()
 
 
-def test_the_routes_fade_is_the_visualizers_activation_fade():
-    from rendering.quick.visualizer.native_route import FAILURE_FADE_MS
-    from widgets.spotify_visualizer import quick_display_visualizer_owner as owner
+# ------------------------------------------------------------------- N2.9 round 2's audit (M1 to M5, L3, L5)
 
-    assert FAILURE_FADE_MS == round(owner._ACTIVATION_SCENE_FADE_DURATION_S * 1000.0)
+def _places(core) -> list:
+    return [entry for entry in core.log if entry[0] == "place"]
+
+
+def _hides(core) -> list:
+    return [entry for entry in core.log if entry[0] == "set" and entry[1].get("visible") is False]
+
+
+def _wired(route, bridge, identity, presentation_of):
+    """The item's update as the route's request (``VisualizerRenderItem.attach_native_route``)."""
+    calls: list = []
+
+    def update():
+        calls.append(1)
+        _sync(route, bridge, identity, presentation_of())
+
+    # (getattr: the same test runs against the pre-fix route as its negative control, which has no request at all)
+    getattr(route, "set_update_request", lambda request: None)(update)
+    return calls
+
+
+def test_a_failed_take_is_a_frame_failure_tried_again_at_the_next_update(route_world):
+    # M1: the take raising once (a rebase refusal, a bridge error at an engine handover) fades the card out, and the next
+    # update takes again and fades it back in. Before, the take was the setup's stage: latched, nothing taken again.
+    from rendering.quick.visualizer.native_route import FAILURE_FADE_MS
+
+    route, core = route_world.make()
+    identity = _identity("spectrum")
+    presentation = route_world.presentation
+
+    class _RaisingOnce(_Bridge):
+        raises = 0
+        takes = 0
+
+        def take_for_render(self, **kwargs):
+            self.takes += 1
+            if self.raises:
+                self.raises -= 1
+                raise RuntimeError("a presentation rebase refused")
+            return super().take_for_render(**kwargs)
+
+    bridge = _RaisingOnce()
+    bridge.snapshots = [_snapshot(presentation, 1)]
+    assert _sync(route, bridge, identity, presentation) is True
+    bridge.raises = 1
+    bridge.snapshots = [_snapshot(presentation, 2)]
+    assert _sync(route, bridge, identity, presentation) is False and route.failed
+    assert _hides(core) and _hides(core)[-1][1]["fade_ms"] == FAILURE_FADE_MS
+    takes = bridge.takes
+    published = [_sync(route, bridge, identity, presentation) for _ in range(1)]
+    assert bridge.takes == takes + 1 and published == [True] and not route.failed
+    assert _places(core)[-1][2] == {"visible": True, "fade_ms": FAILURE_FADE_MS}      # faded back in
+
+
+def test_a_card_never_shown_fades_in_when_its_first_frame_comes_late(route_world):
+    # M2: a setup failure before the first placement (a refused bind), retried at a changed input: the first frame is
+    # late, so it fades in (it popped in at full opacity before).
+    from rendering.quick.visualizer.native_route import FAILURE_FADE_MS
+
+    route, core = route_world.make(fail_bind=1)
+    bridge = _Bridge()
+    identity = _identity("spectrum")
+    bridge.snapshots = [_snapshot(route_world.presentation, 1)]
+    assert _sync(route, bridge, identity, route_world.presentation) is False and route.failed
+    moved = _route_presentation((1707.0, 960.0), 1.5, outer_origin=(804.0, 517.0))      # one pixel right: retried
+    bridge.snapshots = [_snapshot(moved, 2)]
+    assert _sync(route, bridge, identity, moved) is True and not route.failed
+    assert [entry[2] for entry in _places(core)] == [{"visible": True, "fade_ms": FAILURE_FADE_MS}]
+    # Control: an activation whose first frame is on time shows at once (its fade-in is the card's content fade).
+    on_time, on_time_core = route_world.make()
+    bridge.snapshots = [_snapshot(route_world.presentation, 3)]
+    assert _sync(on_time, bridge, _identity("spectrum"), route_world.presentation) is True
+    assert [entry[2] for entry in _places(on_time_core)] == [{"visible": True, "fade_ms": 0}]
+
+
+def test_an_update_waiting_for_the_framebuffer_is_redone_at_the_windows_synchronisation(route_world):
+    # M3 case 1: the native item has not read its window's framebuffer yet (before the window's first frame). The
+    # update is not dropped: the route asks for the item's synchronisation and the window's afterSynchronizing re-runs
+    # the update, which draws the frame the bridge holds with no new revision. Not a failure; nothing hidden.
+    route, core = route_world.make()
+    bridge = _Bridge()
+    identity = _identity("spectrum")
+    presentation = route_world.presentation
+    calls = _wired(route, bridge, identity, lambda: presentation)
+    route._window_metrics(presentation)             # the native item made (the route's prepare at attach)
+    composite = core.made[0].composite
+    composite.pixels = None
+    bridge.snapshots = [_snapshot(presentation, 1)]
+    assert _sync(route, bridge, identity, presentation) is False
+    assert not route.failed and route.published == 0 and route.waits == 1 and _hides(core) == []
+    signal = route_world.window.afterSynchronizing
+    assert signal.slots and ("composite_update", ()) in core.log
+    composite.pixels = (2560, 1440)                 # the item's sync read the framebuffer
+    signal.emit()
+    assert calls == [1] and route.published == 1 and signal.slots == []           # drawn; the edge fired once
+    assert _places(core)                                                            # shown (it fades in: late)
+
+
+def test_a_resize_is_carded_again_at_rest_once_the_item_has_read_the_new_framebuffer(route_world):
+    # M3 case 2: the window resized while nothing new is published. The card stays shown (no fade-out for a resize);
+    # once the native item's synchronisation read the new framebuffer, the retained frame is carded and placed for it.
+    route, core = route_world.make()
+    bridge = _Bridge()
+    identity = _identity("spectrum")
+    current = {"presentation": route_world.presentation}
+    calls = _wired(route, bridge, identity, lambda: current["presentation"])
+    bridge.snapshots = [_snapshot(current["presentation"], 1)]
+    assert _sync(route, bridge, identity, current["presentation"]) is True
+    first_card = next(entry[1][0] for entry in core.log if entry[0] == "present_raw")
+    composite = core.made[0].composite
+    route_world.size.update(width=1280, height=720)
+    current["presentation"] = _route_presentation((1280.0, 720.0), 1.5, outer_origin=(201.0, 300.0))
+    composite.pixels = None                          # stale: the item has not synchronised since the resize
+    mark = len(core.log)
+    assert _sync(route, bridge, identity, current["presentation"]) is False
+    assert not route.failed and _hides(core) == []
+    composite.pixels = (1920, 1080)
+    route_world.window.afterSynchronizing.emit()
+    assert calls == [1] and route.published == 1                                      # no new revision published
+    cards = [entry[1][0] for entry in core.log[mark:] if entry[0] == "present_raw"]
+    assert cards and cards[-1]["item_from_window"] != first_card["item_from_window"]   # the new window's map
+    assert any(entry[0] == "place" for entry in core.log[mark:])
+
+
+def test_the_cores_failed_build_fades_the_card_out_once_and_back_in_when_it_draws(route_world, caplog):
+    # M4: the core's content failed (its first build, a program that does not build): the route reads the item's status
+    # at its sync, fades the card out (logged once) and keeps publishing; once the core draws again it fades back in.
+    import logging
+
+    from rendering.native.composite import ContentStatus
+    from rendering.quick.visualizer.native_route import FAILURE_FADE_MS
+
+    route, core = route_world.make()
+    bridge = _Bridge()
+    identity = _identity("spectrum")
+    presentation = route_world.presentation
+    bridge.snapshots = [_snapshot(presentation, 1)]
+    assert _sync(route, bridge, identity, presentation) is True
+    composite = core.made[0].composite
+    composite.status = ContentStatus(draws=0, failures=1, refused_run=0, failing=True)
+    with caplog.at_level(logging.ERROR, logger="rendering.quick.visualizer.native_route"):
+        for value in (2, 3, 4):
+            bridge.snapshots = [_snapshot(presentation, value)]
+            assert _sync(route, bridge, identity, presentation) is True             # still published for the core
+    assert route.failed and route.published == 4
+    assert len([r for r in caplog.records if "build failed" in r.getMessage()]) == 1
+    assert len(_hides(core)) == 1 and _hides(core)[0][1]["fade_ms"] == FAILURE_FADE_MS
+    composite.status = ContentStatus(draws=1, failures=1, refused_run=0, failing=False)
+    bridge.snapshots = [_snapshot(presentation, 5)]
+    assert _sync(route, bridge, identity, presentation) is True and not route.failed
+    assert _places(core)[-1][2] == {"visible": True, "fade_ms": FAILURE_FADE_MS}
+
+
+def test_the_cores_verdict_is_read_after_the_frame_renders_with_no_new_frame(route_world):
+    # M4 with a paused source: the card is placed, the core's build of it fails at the next frame, and nothing new is
+    # published. The window's afterRendering (armed when the route sent the core something to build) re-runs the
+    # update, which reads the failure and fades the card out.
+    from rendering.native.composite import ContentStatus
+
+    route, core = route_world.make()
+    bridge = _Bridge()
+    identity = _identity("spectrum")
+    presentation = route_world.presentation
+    calls = _wired(route, bridge, identity, lambda: presentation)
+    bridge.snapshots = [_snapshot(presentation, 1)]
+    assert _sync(route, bridge, identity, presentation) is True
+    signal = route_world.window.afterRendering
+    assert len(signal.slots) == 1
+    core.made[0].composite.status = ContentStatus(draws=0, failures=1, refused_run=0, failing=True)
+    signal.emit()
+    assert calls == [1] and route.failed and len(_hides(core)) == 1 and signal.slots == []
+    # Control: an update at rest with no edge fired reads nothing and sends nothing.
+    before = list(core.log)
+    healthy, healthy_core = route_world.make()
+    bridge.snapshots = [_snapshot(presentation, 2)]
+    assert _sync(healthy, bridge, identity, presentation) is True
+    mark = len(healthy_core.log)
+    assert _sync(healthy, bridge, identity, presentation) is False and healthy_core.log[mark:] == []
+    assert core.log == before
+
+
+def test_a_lasting_run_of_refused_frames_fades_the_card_out(route_world):
+    # M5: a frame the core refuses keeps the last drawn one; a run of them past REFUSED_RUN_FADE (a value that stays
+    # non-finite) fades the card out instead of freezing it, and the next drawn frame fades it back in.
+    from rendering.native.composite import ContentStatus
+    from rendering.quick.visualizer import native_route
+    from rendering.quick.visualizer.native_route import FAILURE_FADE_MS
+
+    REFUSED_RUN_FADE = getattr(native_route, "REFUSED_RUN_FADE", 30)   # (the pre-fix route, the control, has none)
+
+    route, core = route_world.make()
+    bridge = _Bridge()
+    identity = _identity("spectrum")
+    presentation = route_world.presentation
+    bridge.snapshots = [_snapshot(presentation, 1)]
+    assert _sync(route, bridge, identity, presentation) is True
+    composite = core.made[0].composite
+    composite.status = ContentStatus(draws=1, failures=0, refused_run=REFUSED_RUN_FADE - 1, failing=False)
+    bridge.snapshots = [_snapshot(presentation, 2)]
+    assert _sync(route, bridge, identity, presentation) is True and not route.failed and _hides(core) == []
+    composite.status = ContentStatus(draws=1, failures=0, refused_run=REFUSED_RUN_FADE, failing=False)
+    bridge.snapshots = [_snapshot(presentation, 3)]
+    assert _sync(route, bridge, identity, presentation) is True and route.failed
+    assert len(_hides(core)) == 1 and _hides(core)[0][1]["fade_ms"] == FAILURE_FADE_MS
+    composite.status = ContentStatus(draws=2, failures=0, refused_run=0, failing=False)
+    bridge.snapshots = [_snapshot(presentation, 4)]
+    assert _sync(route, bridge, identity, presentation) is True and not route.failed
+    assert _places(core)[-1][2] == {"visible": True, "fade_ms": FAILURE_FADE_MS}
+
+
+def test_an_unbind_fades_the_card_out_even_when_the_native_unbind_raises(route_world):
+    # L3: the fade is its own step, before the stream retires (the core keeps the last frame for it); a raising native
+    # unbind still leaves the card fading out, never shown with its last frame.
+    from rendering.quick.visualizer.native_route import FAILURE_FADE_MS
+
+    route, core = route_world.make(fail_unbind=1)
+    bridge = _Bridge()
+    bridge.snapshots = [_snapshot(route_world.presentation, 1)]
+    assert _sync(route, bridge, _identity("spectrum"), route_world.presentation) is True
+    route.sync(bridge=bridge, identity=None, presentation=route_world.presentation, authority=True)
+    hides = [index for index, entry in enumerate(core.log) if entry[0] == "set" and entry[1].get("visible") is False]
+    unbinds = [index for index, entry in enumerate(core.log) if entry[0] == "unbind"]
+    assert hides and unbinds and hides[0] < unbinds[0]
+    assert core.log[hides[0]][1]["fade_ms"] == FAILURE_FADE_MS
+
+
+def test_a_card_hidden_with_its_presentation_returns_without_a_second_fade(route_world):
+    # L5: the owner hid the Visualizer (no presentation) and fades it back in itself; the native item's return adds no
+    # fade of its own on top (before, it faded twice).
+    route, core = route_world.make()
+    bridge = _Bridge()
+    identity = _identity("spectrum")
+    presentation = route_world.presentation
+    bridge.snapshots = [_snapshot(presentation, 1)]
+    assert _sync(route, bridge, identity, presentation) is True
+    assert route.sync(bridge=bridge, identity=identity, presentation=None, authority=True) is False
+    assert len(_hides(core)) == 1
+    bridge.snapshots = [_snapshot(presentation, 2)]
+    assert _sync(route, bridge, identity, presentation) is True
+    assert [entry[2] for entry in _places(core)] == [{"visible": True, "fade_ms": 0}] * 2
+
+
+@pytest.mark.qt
+def test_the_item_hands_the_route_its_update(qt_app):
+    from rendering.quick.visualizer.item import VisualizerRenderItem
+
+    handed: list = []
+    route = _RecordingRoute()
+    route.set_update_request = handed.append
+    item = VisualizerRenderItem()
+    item.attach_native_route(route)
+    assert handed == [item.update]
 
 
 @pytest.mark.qt
