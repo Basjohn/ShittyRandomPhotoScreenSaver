@@ -2003,12 +2003,6 @@ _EXTRUDED_BUBBLE = ModeSettings(
                tooltip='Set how strongly bubbles nearer than the Focus distance soften; 0 keeps everything sharp.'),
         Slider("extruded_bubble_exposure", "Exposure:", 0.5, 1.5, bucket="lens",
                tooltip='Scale the overall scene exposure/brightness; it does not alter musical input gain, sensitivity or ray-response timing.'),
-        Slider("extruded_bubble_hero_shell", "Hero Shell:", 0.0, 1.0, bucket="lens",
-               tooltip='Hold one large bubble near the lens, in front of the Focus distance so it melts into soft bokeh; this sets its size. 0 shows none.'),
-        Slider("extruded_bubble_hero_across", "Hero Across:", -1.0, 1.0, bucket="lens", signed=True,
-               tooltip="Place the Hero Shell across the frame, from the left edge (-1) to the right edge (1); it sways slowly around this place."),
-        Slider("extruded_bubble_hero_height", "Hero Height:", -1.0, 1.0, bucket="lens", signed=True,
-               tooltip="Place the Hero Shell from the bottom of the frame (-1) to the top (1); it sways slowly around this place."),
         # The live view pose (set by orbiting, scrolling and panning inside the card, not from the body).
         Slider("extruded_bubble_turn", "", -1.0, 1.0, bucket=""),
         Slider("extruded_bubble_tilt", "", -0.5, 0.5, bucket=""),
