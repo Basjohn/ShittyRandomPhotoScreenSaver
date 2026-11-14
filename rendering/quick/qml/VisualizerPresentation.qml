@@ -173,6 +173,11 @@ Item {
         && controlHintVisitObserver.item !== null && controlHintVisitObserver.item.insideCard
     property bool controlHintVisitStarted: false
     property real controlHintOpacity: 0.0
+    // Plan 1D.12 C: the hint plays once per saver session per Visualizer mode. The scene projects whether this mode's
+    // hint has already played (a Python set that outlives this lazy root); a visit plays it only while it has not.
+    property bool controlHintShown: false
+    // The hint began to play: the scene records the mode (a plain Python method, never a result slot).
+    signal controlHintRevealed()
     onControlHintVisitTrackingChanged: {
         if (!controlHintVisitTracking) {
             controlHintVisitStarted = false
@@ -184,8 +189,11 @@ Item {
     onControlHintHoveredChanged: {
         if (controlHintHovered && !controlHintVisitStarted) {
             controlHintVisitStarted = true
+            if (controlHintShown)
+                return
             controlHintLeave.stop()
             controlHintReveal.restart()
+            controlHintRevealed()
         }
     }
     signal hoverEditGlyphRequested(string action)

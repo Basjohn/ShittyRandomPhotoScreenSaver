@@ -279,6 +279,8 @@ class ScreensaverEngine(QObject):
         self._refresh_transition_gate = None  # one admission owner per display generation
         # Random rotation history is session memory; it never writes Settings.
         self._random_transition_history = RandomTransitionHistory()
+        # The Visualizer modes whose 3D control hint has played: session memory too, never Settings (plan 1D.12 C).
+        self._control_hint_shown_modes: set[str] = set()
         self.image_queue: Optional[ImageQueue] = None
         
         # Image sources
@@ -1155,6 +1157,7 @@ class ScreensaverEngine(QObject):
             display_manager.set_random_transition_selection(
                 self._random_transition_history.current
             )
+            display_manager.set_control_hint_memory(self._control_hint_shown_modes)
 
             def _connect_runtime_signal(signal_name: str, callback) -> None:
                 signal = getattr(display_manager, signal_name)
