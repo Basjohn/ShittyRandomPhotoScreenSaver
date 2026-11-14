@@ -26,6 +26,7 @@ from core.settings.structured_roots import (
     ATOMIC_SETTINGS_MAPPING_KEYS,
     STRUCTURED_SETTINGS_ROOTS,
 )
+from core.settings.stored_values import share_unchanged
 from core.settings.structured_input_compat import promote_legacy_structured_store_shape
 from core.settings.widget_theme_input_compat import promote_legacy_widget_theme_state
 
@@ -328,21 +329,30 @@ class JsonSettingsStore:
     def peek(self, key: str, default: Any = None) -> Any:
         """The stored value itself, not a copy; the caller only reads it.
 
-        A stored value is never changed in place (``setValue`` stores a copy and a write replaces it whole), so
-        what this returns stays as it was read. ``value`` is the reader that may keep or change what it gets.
+        A stored value is never changed in place (``setValue`` keeps none of the caller's containers and a write
+        replaces a changed container with a new one), so what this returns stays as it was read. ``value`` is the
+        reader that may keep or change what it gets.
         """
         with self._lock:
             return self._data.get(key, default)
 
     def setValue(self, key: str, value: Any) -> bool:
-        """Store ``value``; returns whether the stored state changed."""
+        """Store ``value``; returns whether the stored state changed.
+
+        The store keeps none of ``value``'s containers, so the caller may keep and change what it handed over. It
+        does not copy the whole value either (``share_unchanged``): the parts equal to the stored value stay the
+        stored objects and only the containers on a changed path are new, so a write costs what it changes. A
+        caller that builds ``value`` from ``peek``ed parts (``SettingsManager.get_widgets_map_to_write``) makes
+        both this comparison and the write proportional to its change (Current_Plan 1C.2).
+        """
         with self._lock:
             # Missing and explicit JSON null are distinct persisted states.  Using
             # ``dict.get`` here made a first write of ``None`` look unchanged, so
             # canonical nullable defaults could never be seeded durably.
             if key in self._data and self._data[key] == value:
                 return False
-            self._data[key] = deepcopy(value)
+            # A missing key shares nothing (``None`` holds no parts): the value is stored as a fresh copy.
+            self._data[key] = share_unchanged(self._data.get(key), value)
             self._mark_changed_locked()
             return True
 

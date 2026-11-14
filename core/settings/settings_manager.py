@@ -47,6 +47,7 @@ from core.settings.visualizer_settings_snapshot import (
     normalize_visualizer_section_mapping,
 )
 from core.settings.visualizer_preset_indices import catalogue_state
+from core.settings.stored_values import share_unchanged
 from core.settings.transition_retired import RETIRED_ROOT_SETTING_KEYS, strip_retired_transition_settings
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_settings_contract import (
@@ -598,11 +599,20 @@ class SettingsManager(QObject):
             stored = widgets.get('spotify_visualizer') if isinstance(widgets, Mapping) else None
             if not isinstance(stored, Mapping):
                 return
-            canonical = normalize_visualizer_section_mapping(stored, apply_preset_overlay=False)
+            # The canonical section shares every value it has in common with the stored one (the stored section
+            # itself when it is already canonical), so a write derived from it shares them with the store too.
+            canonical = share_unchanged(
+                stored, normalize_visualizer_section_mapping(stored, apply_preset_overlay=False),
+            )
             self._remember_canonical_visualizer_section_locked(((stored, canonical), (canonical, canonical)))
 
     def _store_widgets_root_locked(self, value: Any) -> Dict[str, Any]:
-        """Persist the canonical widgets root under the current lock."""
+        """Persist the canonical widgets root under the current lock.
+
+        The returned root is the caller's, but parts of it may be the store's own values (a derived Visualizer
+        section shares the canonical one's; ``get_widgets_map_to_write`` shares everything below the sections):
+        read it, or publish a copy of it (``_published_widgets``), never change a value inside its sections in place.
+        """
         widgets_dict = dict(value) if isinstance(value, Mapping) else {}
         vis_section = widgets_dict.get("spotify_visualizer")
         if isinstance(vis_section, Mapping):
@@ -625,6 +635,13 @@ class SettingsManager(QObject):
             if isinstance(stored, Mapping):
                 self._remember_canonical_visualizer_section_locked(((stored, stored),))
         return widgets_dict
+
+    @staticmethod
+    def _published_widgets(widgets: Any) -> Any:
+        """The widgets root handed to change listeners: their own copy (``_store_widgets_root_locked``'s result
+        shares values with the store, which listeners may keep or change). A silent write publishes nothing and
+        copies nothing."""
+        return deepcopy(widgets)
 
     def _store_transitions_root_locked(self, value: Any) -> Dict[str, Any]:
         """Persist the canonical transitions root under the current lock."""
@@ -1246,7 +1263,9 @@ class SettingsManager(QObject):
             logger.debug("Setting unchanged, not published: %s", key)
             return
         if emit_change:
-            self._publish_store_change(key, value, old_value)
+            self._publish_store_change(
+                key, self._published_widgets(value) if key == "widgets" else value, old_value,
+            )
 
         # Compact logging by default so large nested maps (e.g. 'widgets')
         # do not flood the log. When verbose logging is enabled we still
@@ -1433,7 +1452,7 @@ class SettingsManager(QObject):
 
         if not changed:
             return
-        self._publish_store_change("widgets", widgets, stored_widgets)
+        self._publish_store_change("widgets", self._published_widgets(widgets), stored_widgets)
         logger.debug("Spotify visualizer settings persisted as one normalized widgets root")
 
     def reset_visualizers_to_defaults(self) -> None:
@@ -2159,7 +2178,9 @@ class SettingsManager(QObject):
         if not changed:
             return
         if emit_change:
-            self._publish_store_change(section, mapping, old_value)
+            self._publish_store_change(
+                section, self._published_widgets(mapping) if section == "widgets" else mapping, old_value,
+            )
         if verbose:
             logger.debug("Section changed%s: %s: %r -> %r", "" if emit_change else " (silent)", section, old_value, mapping)
         else:
@@ -2174,6 +2195,26 @@ class SettingsManager(QObject):
 
         value = self.get_section('widgets', {})
         return dict(value) if isinstance(value, Mapping) else {}
+
+    def get_widgets_map_to_write(self) -> Dict[str, Any]:
+        """The widgets root for a read-change-write that costs what it changes (a display move's Save, 1C.2).
+
+        The root and each section's top-level container (dict or list) are the caller's own; every value inside a
+        section is the stored value itself, which nothing changes in place: assign a section's entries, never change
+        a value inside one in place, and hand the result to ``set_widgets_map`` or discard it. A write of it
+        compares and stores only what changed (``JsonSettingsStore.setValue`` shares the unchanged parts), where
+        ``get_widgets_map`` copies the whole root (300 KB on a real profile) for a caller that may change anything.
+        """
+        with self._lock:
+            root = self._peek_locked('widgets', {})
+            if not isinstance(root, Mapping):
+                return {}
+            return {
+                key: dict(section) if isinstance(section, dict)
+                else list(section) if isinstance(section, list)
+                else section
+                for key, section in root.items()
+            }
 
     def ensure_display_monitor_bindings(self) -> None:
         """Bind legacy saver selection once using the existing Settings transaction."""
