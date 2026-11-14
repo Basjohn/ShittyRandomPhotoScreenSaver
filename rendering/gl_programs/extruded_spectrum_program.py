@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import math
 
+from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import (
     SCENE3D_GLSL,
     SCENE3D_ORBIT_GLSL,
@@ -437,3 +438,9 @@ void main() {
 }
 """
 )
+
+# N1.6: the bar program's loose uniforms are one std140 pass block (``EXTRUDED_BLOCK``), packed per draw by the
+# renderer; the wallpaper samplers keep the units the renderer bound them to (1 and 2).
+EXTRUDED_VERTEX_SOURCE, (EXTRUDED_FRAGMENT_SOURCE,), EXTRUDED_BLOCK = portable_program(
+    EXTRUDED_VERTEX_SOURCE, (EXTRUDED_FRAGMENT_SOURCE,), block="ExtrudedSpectrum",
+    samplers={"uBackdrop": 1, "uBackdropPrevious": 2})

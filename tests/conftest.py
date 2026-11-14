@@ -32,6 +32,14 @@ configure_quick_graphics(reason="pytest-conftest")
 
 from PySide6.QtWidgets import QApplication
 
+# The process's one Qt application is a QApplication, created here, before any test can create another kind. Qt
+# allows one application per process and never replaces it: a test that ran first and made its own QGuiApplication
+# (``QGuiApplication.instance() or QGuiApplication(...)``, a common shape for GL-only tests and the tools they drive)
+# left every later QWidget without a QApplication, and Qt's fatal "Cannot create a QWidget without QApplication"
+# killed the process with no traceback (exit 127 in Git Bash, 0xC0000409 natively; 1D.13, 14 Nov). A QApplication is
+# a QGuiApplication, so those tests run unchanged on this one.
+_PROCESS_QT_APPLICATION = QApplication.instance() or QApplication(sys.argv[:1])
+
 
 ROOT = Path(__file__).resolve().parents[1]
 TEST_APPDATA = ROOT / "tests_tmp_appdata"
@@ -342,26 +350,22 @@ def pytest_runtest_teardown(item, nextitem):
 
 
 @pytest.fixture(autouse=True)
-def _no_plain_qcoreapplication(request):
-    """Fail the test that leaves a non-GUI QCoreApplication as the process's application.
+def _the_process_application_stays_the_qapplication(request):
+    """Stop the session after a test that leaves anything but conftest's QApplication as the process's application.
 
-    Qt allows one application per process and it cannot be replaced. Once a plain
-    QCoreApplication exists, every later QGuiApplication/QApplication request returns
-    it, and creating an OpenGL context (offscreen captures, Quick windows) crashes the
-    interpreter with an access violation in whichever later test tries first, far from
-    the cause (it happened with ``test_release_media``). Tests and the tools they drive
-    use QGuiApplication (or the ``qt_app`` fixture) instead.
+    Qt allows one application per process and it cannot be replaced; conftest creates it at import. A different
+    one (a plain QCoreApplication: later OpenGL context creation crashed with an access violation, as with
+    ``test_release_media``; a QGuiApplication: a later QWidget aborted the process, 1D.13) can only appear if a test
+    destroyed that one, and every later Qt test in the process would then fail far from the cause.
     """
     yield
     from PySide6.QtCore import QCoreApplication
-    from PySide6.QtGui import QGuiApplication
 
     app = QCoreApplication.instance()
-    if app is not None and not isinstance(app, QGuiApplication):
+    if app is not None and not isinstance(app, QApplication):
         pytest.exit(
-            f"{request.node.nodeid} left a plain QCoreApplication as this process's Qt "
-            "application. Later OpenGL context creation in this process would crash. Create a "
-            "QGuiApplication (or use the qt_app fixture) before the code under test needs one.",
+            f"{request.node.nodeid} left a {type(app).__name__} as this process's Qt application instead of "
+            "conftest's QApplication. Later QWidget or OpenGL work in this process would crash.",
             returncode=3,
         )
 
@@ -434,10 +438,10 @@ def _no_studio_worker_outlives_its_module():
 
 @pytest.fixture(scope='session')
 def qt_app():
-    """Create QApplication instance for tests."""
+    """The process's QApplication (created at conftest import)."""
     app = QApplication.instance()
     if app is None:
-        app = QApplication(sys.argv)
+        app = QApplication(sys.argv[:1])
     yield app
     # Don't quit - causes issues with pytest
 
@@ -477,6 +481,48 @@ try:  # pragma: no cover - depends on pytest-qt being installed
         _ORIG_EXCEPT_HOOK(type_, value, tback, exceptions=exceptions)
 
     _pytestqt_exceptions._except_hook = _filtered_except_hook
+except Exception:  # pragma: no cover
+    pass
+
+
+# ---------------------------------------------------------------------------
+# A Qt fatal message names itself before the process dies
+# ---------------------------------------------------------------------------
+# pytest-qt records every Qt message for the running test; a fatal one is recorded too, then Qt aborts the process
+# (a fast fail: no Python traceback, no faulthandler dump, and pytest's captured output is lost). 1D.13's deaths
+# ("Cannot create a QWidget without QApplication") printed nothing but exit 127. The fatal message and the running
+# test are written past pytest's capture first. Only fatal messages take this path.
+_RUNNING = {"config": None, "nodeid": ""}
+
+
+def pytest_configure(config):
+    _RUNNING["config"] = config
+
+
+@pytest.fixture(autouse=True)
+def _name_the_running_test_for_qt_fatal_messages(request):
+    _RUNNING["nodeid"] = request.node.nodeid
+    yield
+
+
+try:  # pragma: no cover - depends on pytest-qt being installed
+    import pytestqt.logging as _pytestqt_logging
+    from PySide6.QtCore import QtMsgType as _QtMsgType
+
+    _ORIG_QT_MESSAGE_HANDLER = _pytestqt_logging._QtMessageCapture._handle_with_context
+
+    def _handle_with_context_reporting_fatal(self, msg_type, context, message):
+        if msg_type == _QtMsgType.QtFatalMsg:
+            config = _RUNNING["config"]
+            capture = config.pluginmanager.getplugin("capturemanager") if config is not None else None
+            if capture is not None:
+                capture.suspend_global_capture(in_=False)
+            sys.stderr.write(f"\nQt fatal message in {_RUNNING['nodeid']} (Qt aborts the process next): "
+                             f"{message}\n")
+            sys.stderr.flush()
+        _ORIG_QT_MESSAGE_HANDLER(self, msg_type, context, message)
+
+    _pytestqt_logging._QtMessageCapture._handle_with_context = _handle_with_context_reporting_fatal
 except Exception:  # pragma: no cover
     pass
 

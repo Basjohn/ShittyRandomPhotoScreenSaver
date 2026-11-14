@@ -34,9 +34,9 @@ def test_ghost_rainbow_presentation_uses_single_existing_spectrum_runtime():
     assert 'parameters["extruded_spectrum_rainbow_ghost"]' in cap
     two_d = (root / "rendering/quick/visualizer/implementations/spectrum.py").read_text()
     three_d = (root / "rendering/quick/visualizer/implementations/extruded_spectrum.py").read_text()
-    # Since N1.6 the 2D renderer writes its uniforms into the SpectrumDraw block (one value per member, packed once).
+    # Since N1.6 both renderers write their uniforms into their pass blocks (one value per member, packed per draw).
     assert 'values["u_rainbow_ghost"]' in two_d
-    assert 'uniforms["uRainbowGhost"]' in three_d
+    assert 'values["uRainbowGhost"]' in three_d
     source = (root / "rendering/gl_programs/extruded_spectrum_program.py").read_text()
     assert '(uPass == 1 && uRainbowGhost == 1)' in source
 

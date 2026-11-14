@@ -142,12 +142,16 @@ def test_voxel_required_uniform_contract_matches_shader_declarations() -> None:
     assert "_SHADOW_VERTEX_SOURCE = _VERTEX_SOURCE" in source
     assert module._SHADOW_VERTEX_SOURCE is module._VERTEX_SOURCE
 
-    uniform_pattern = r"^\s*uniform\s+\w+\s+(u\w+)(?:\s*\[[^\]]+\])?\s*;"
+    uniform_pattern = r"^\s*(?:layout\s*\([^)]*\)\s*)?uniform\s+\w+\s+(u\w+)(?:\s*\[[^\]]+\])?\s*;"
+    bound_sampler_pattern = r"^\s*layout\s*\(\s*binding\s*=\s*\d+\s*\)\s*uniform\s+sampler\w+\s+(u\w+)\s*;"
     uniforms = lambda text: set(re.findall(uniform_pattern, text, flags=re.MULTILINE))
-    # Every declared uniform is set (no dead or missing uniform), for both programs.
-    assert set(module._SAMPLER_UNIFORMS) == uniforms(module._VERTEX_SOURCE) | uniforms(module._FRAGMENT_SOURCE)
+    bound_samplers = lambda text: set(re.findall(bound_sampler_pattern, text, flags=re.MULTILINE))
+    # N1.6: no loose uniform. Every value is the frame block; every declared uniform is a sampler whose unit the
+    # source states (the hero's wallpaper samplers), and the shadow program declares none.
+    hero = uniforms(module._VERTEX_SOURCE) | uniforms(module._FRAGMENT_SOURCE)
+    assert hero and hero == bound_samplers(module._VERTEX_SOURCE) | bound_samplers(module._FRAGMENT_SOURCE)
     assert not uniforms(module._SHADOW_FRAGMENT_SOURCE)
-    declaration = module._SPHERE_FRAME_BLOCK.glsl()
+    declaration = module._SPHERE_FRAME_BLOCK.glsl(module.SCENE3D_FRAME_BLOCK_BINDING)
     assert declaration in module._VERTEX_SOURCE
     assert declaration in module._FRAGMENT_SOURCE
     assert declaration in module._SHADOW_FRAGMENT_SOURCE
