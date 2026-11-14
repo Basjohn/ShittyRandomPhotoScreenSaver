@@ -190,17 +190,38 @@ class Scene:
                 self.layer = self.item.native_layer      # the route made it (the native backend)
         return (time.perf_counter() - started) * 1000.0
 
+    def frames(self, count: int = 1) -> None:
+        """``count`` frames, the GUI thread's queued events delivered before each (as the product's event loop does: the
+        job's frame request is a queued ``update()`` of the item, the layer's fade is a GUI-thread animation)."""
+        from PySide6.QtCore import QCoreApplication
+
+        for _ in range(count):
+            QCoreApplication.processEvents()
+            self.host.frames(1)
+
     def settle(self) -> None:
-        """The image committed before the next read: one frame hands it over, the jobs are waited for (a harness's wait,
-        never the product's), one frame commits it."""
-        self.host.frames(1)
+        """The image committed and the layer's fade done before the next read: one frame hands the image over, the jobs
+        are waited for (a harness's wait, never the product's), frames commit it, and the fade-in (the layer's first
+        photo) is let run to its end."""
+        from PySide6.QtCore import QCoreApplication, QEventLoop
+
+        self.frames(1)
         if not self.core.wait_jobs_idle(20000):
             raise RuntimeError("the upload jobs did not finish within 20 s")
-        self.host.frames(2)
+        self.frames(2)
+        deadline = time.monotonic() + 10.0
+        while self.layer is not None and self.layer.mode is not None and time.monotonic() < deadline:
+            if not self.layer.mode.composite.state().get("fading"):
+                break
+            QCoreApplication.processEvents(QEventLoop.ProcessEventsFlag.AllEvents, 16)
+        self.frames(2)
 
     def read(self):
+        from PySide6.QtCore import QCoreApplication
+
         from composite_analysis import frame_rows
 
+        QCoreApplication.processEvents()
         return frame_rows(asdict(self.host.read()))
 
     def display_rows(self, rows):
@@ -431,7 +452,7 @@ def round_change(core, engine, app, api: str, out: Path, rounds) -> dict:
     checks: dict = {}
     facts: dict = {"changes": []}
     photos = [processed(path, "fill", CHANGE_SIZE) for path in CHANGE_PHOTOS]
-    host = _host(core, CHANGE_SIZE)
+    host = _host(core, (CHANGE_SIZE[0] + 4, CHANGE_SIZE[1] + 6))   # the display under the overscan placement
     scene = Scene(core, engine, host, 1.0, CHANGE_SIZE, kind="layer")
     tiles = []
     try:
@@ -450,7 +471,7 @@ def round_change(core, engine, app, api: str, out: Path, rounds) -> dict:
             handover_passes = _passes(scene) - passes
             waited = 0
             while _uploads(scene) <= uploads and waited < MAX_WAIT_FRAMES:
-                host.frames(1)
+                scene.frames(1)
                 waited += 1
             committed = scene.display_rows(scene.read())
             facts["changes"].append({
@@ -510,13 +531,13 @@ def _rest(core, host, scene, requests_before: int, vulkan: bool) -> tuple[dict, 
     """After the last change: the replaced output released once its frames completed (M2: the retire list asked for
     those frames itself), then nothing at rest."""
     checks: dict = {}
-    host.frames(4)                                   # FramesInFlight + 2: the replaced output's frames completed
+    scene.frames(4)                                   # FramesInFlight + 2: the replaced output's frames completed
     core.wait_jobs_idle(20000)
     after_change = (core.job_counts(), _driver(host))
     host.gpu_samples()
     rest_start = int(_driver(host).get("edges", 0))
     before = (scene.mode_state(), core.job_counts(), scene.composite_state())
-    host.frames(REST_FRAMES)
+    scene.frames(REST_FRAMES)
     after = (scene.mode_state(), core.job_counts(), scene.composite_state())
     samples = [s for s in host.gpu_samples() if s.kind == 2 and s.frame > rest_start]
     checks["nothing_at_rest"] = (
@@ -623,10 +644,10 @@ def round_lifetime(core, engine, app, api: str) -> dict:
         resent = scene.layer.resent
         scene.item.setWidth(0.0)
         scene.layer.geometry_changed()
-        host.frames(2)
+        scene.frames(2)
         scene.item.setWidth(DISPLAY[0])
         scene.layer.geometry_changed()
-        host.frames(1)
+        scene.frames(1)
         app.processEvents()
         scene.settle()
         app.processEvents()
@@ -635,7 +656,7 @@ def round_lifetime(core, engine, app, api: str) -> dict:
         checks["drawn_again_after_the_loss"] = compare(scene.display_rows(scene.read()), photos[0][1])["equal"]
         # Teardown with the job in flight: closed in the frame after the hand-over.
         scene.present(photos[1][0])
-        host.frames(1)
+        scene.frames(1)
         facts["at_close"] = {"jobs": core.job_counts(), "texture_jobs": scene.mode_state().get("texture_jobs")}
     finally:
         scene.close(app)
@@ -698,7 +719,9 @@ def child(args) -> dict:
     try:
         for name in args.rounds:
             if name == "rest":
-                continue                              # measured inside the change round, after its last change
+                # Measured inside the change round, after its last change (its checks are the change round's).
+                record[name] = {"pass": True, "checks": {}, "measured_in": "change"}
+                continue
             if vulkan:
                 core.set_vulkan_phase(f"n57a {name}")
             try:
