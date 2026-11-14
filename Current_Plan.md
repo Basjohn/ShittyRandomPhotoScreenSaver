@@ -386,7 +386,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
       Extruded Bubble), compared, plus a full main baseline; results in
       `.artifacts/evidence/native_core/n16_reprove/20261114/verdicts.json`. Lead reads them. A difference is a
       defect to fix at once, with a historical bug entry if a product path changed.
-    - [ ] The N5 port rule and N2.5's parity check use the same widened run set.
   - [ ] Extruded Bubble's traced glass (at its port); Neon Lake; Extruded Spectrum and Sphere.
   - `rendering/gl_programs/lighting.py` belongs to N4.m: it is not a product shader (no `#version`; only its test
     draws it), and a program that includes it converts it (a 3088-byte block, about 3 KB of resources).
