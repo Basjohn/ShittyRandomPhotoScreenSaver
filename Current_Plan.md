@@ -49,7 +49,8 @@ at the size asked.
 - Medium:
   1. 1D.13 (a test process dies at exit 127 in a larger file set), then N1.6's Extruded Spectrum and Sphere, one
      per commit where it stays bit-identical at the widened run set; a program that cannot converts at its port.
-  2. 1B.10.
+  2. 1D.14 (Spectrum's rim glow), once N2.5 has merged.
+  3. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -1165,6 +1166,23 @@ borderless fullscreen transfers working smoothly.
 - [ ] Tests: the operator's exact sequence (B2 on D1, move to A1 on D0, fullscreen, move to D1, leave fullscreen)
   lands at B2; an invalid remembered spot falls back; nothing else in the record changes (negative controls).
 - [ ] Lead D1 run with both displays: the sequence above, edges read.
+
+### 1D.14 Spectrum's rim glow: a left-side bias, and Placement and Sharpness controls (operator, 14 Nov; Opus Medium, after N2.5 merges)
+
+The operator sees bars glow, or show a gap, on their left side, and most looks glow too softly (Organs is right).
+`spectrum_rim_alpha` (`widgets/spotify_visualizer/shaders/spectrum.frag:455`) takes one `side_dist_px` (the nearer
+side) and a fixed core/falloff shape (`core_end = spread * 0.35`, smoothstep feathers widened by `fwidth`). Timed
+after N2.5's merge so its parity target does not move mid-port; N2.5 makes a settings-only `spectrum.frag` change
+need no native build round.
+- [ ] Root cause first: render bars at several bar widths and both backends, measure the rim on each side of a bar
+  (left against right, in device pixels), and say whether the left bias is the shader (the side distance, the
+  `fwidth` feather, a half-pixel bar origin) or the bar layout (gaps). A defect is fixed at its cause with a test
+  and a historical bug entry.
+- [ ] Two controls in the spec (`visualizer_mode_settings.py`, the appearance bucket, under Enable Rim Glow):
+  Rim Placement (Left, Right, Both) and Rim Sharpness (a slider over the core/falloff shape). Their defaults
+  reproduce today's look exactly (pixel-identical at the widened run set with the defaults); every preset gets them
+  by the repair fill. Studio shows them through the spec.
+- [ ] Renders for the lead: each placement and three sharpness values on real wallpapers.
 
 ### 1D.13 A pytest process dies with exit 127 in larger file sets (14 Nov; Opus Medium)
 
