@@ -17,7 +17,9 @@
 //   rendering/native/composite.py), tested at each texel's centre in device pixels, exactly the clip host's rule
 //   (rendering/quick/visualizer/clip_host.py: a pixel is content when its centre's distance to the path is <= 0). An
 //   admitted overflow (Sphere's, Extruded Spectrum's, not held by the record) skips the term; Python decides which.
-// - Opacity is Qt's (the item's own and its ancestors'); the content is premultiplied.
+// - Opacity is Qt's (the item's own and its ancestors'); the content is premultiplied. An opaque content (N5.7a: the
+//   background layer) is drawn without blending in Qt's opaque pass, as the retained image node it stands for.
+// - The layer (N5.7a, D5.2): a background-layer surface is recorded before every other surface of its window.
 // - Content: the harness's pattern, or a mode's (N2.5: Spectrum, spectrum.h; N2.9: a generic mode, mode_content.h,
 //   read and recorded by the same rules). With Spectrum bound, the node reads the
 //   item's stream at every sync on the render thread (the accept edge), releases the streams the item retired (the
@@ -69,6 +71,12 @@ struct CompositeConfig
     // device pixel ratio is not the framebuffer (2560x1440 at 150 %: logical 1707) the two differ (audit 14 Nov, H1).
     qreal pixelRatioX = 0.0;
     qreal pixelRatioY = 0.0;
+    // N5.7a: the surface's place in the frame's dependency order ("content", or "background": recorded first, D5.2).
+    QString layer = QStringLiteral("content");
+    // N5.7a: the content covers every texel opaquely (the background layer's photo), so the node is drawn in Qt's
+    // opaque pass as the retained QSGImageNode it stands for is (the material without blending; Qt still blends it
+    // while its opacity is below one, a fade). A content with transparent texels is never marked opaque.
+    bool opaque = false;
 
     // Updates `out` from the harness's JSON (missing keys keep what `out` holds); false with `error` for a bad value.
     static bool update(const QByteArray &json, CompositeConfig *out, QString *error);
@@ -110,6 +118,8 @@ public:
     bool programMode(const ModeProgram &program, const QJsonObject *settings, QString *error);
     bool settingsMode(const QJsonObject &settings, QString *error);
     bool cardMode(const ModeCard &card, QString *error);
+    // N5.7a: the generic mode drawn as a still (no stream; mode_content.h "Stills"): the background layer's photo.
+    bool stillMode(bool still, QString *error);
     // N4.a: the item's textures (mode_content.h): an image by name (RGBA8, rows top first), or its removal. `inFrame`
     // (N3.8, a harness control): uploaded in the frame where the device has a job service.
     bool textureMode(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips, QString *error,

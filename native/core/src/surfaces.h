@@ -42,6 +42,17 @@ enum class SurfacePattern {
 bool parseSurfacePattern(const QString &text, SurfacePattern *out);
 QString surfacePatternName(SurfacePattern pattern);
 
+// Where a surface lies in the frame's dependency order (D5.2: background layer, backdrop pyramid, Visualizer scene,
+// overlays). The frame driver records the window's background-layer surfaces before every other (N5.7a: what the
+// backdrop pyramid, N5.7b, will be built from must be drawn first in the frame).
+enum class SurfaceLayer {
+    Content = 0,    // a card's content (Spectrum, a generic mode)
+    Background = 1, // the display's background layer (the photo; later its transition)
+};
+
+bool parseSurfaceLayer(const QString &text, SurfaceLayer *out);
+QString surfaceLayerName(SurfaceLayer layer);
+
 // A mode's content of a surface (render thread only): it records its passes into the surface's target, which keeps its
 // contents (targets.h rule B: a content that must be cleared clears it with its first draw) and was primed for the
 // load (rule C) before record is called.
@@ -67,6 +78,9 @@ public:
         Q_UNUSED(target);
         return true;
     }
+    // After a record that returned true: whether it recorded no pass and the target keeps what it holds (N5.7a: a
+    // still whose drawn inputs did not change; its new image handed to its job). The surface then counts no pass.
+    virtual bool keptTargetLastRecord() const { return false; }
     // Every QRhi object of the content goes (the surface's release, or the content replaced).
     virtual void release() = 0;
     virtual int liveResources() const = 0;
@@ -94,6 +108,11 @@ public:
     // Render thread, at sync: the content's input changed (a frame, the card), so the next edge records.
     void markDirty() { m_dirty.storeRelease(1); }
     bool dirty() const { return m_dirty.loadAcquire() != 0; }
+    // Render thread, at sync: the surface's place in the frame's order (N5.7a). Any thread reads it.
+    void setLayer(SurfaceLayer layer) { m_layer.storeRelease(int(layer)); }
+    SurfaceLayer layer() const { return SurfaceLayer(m_layer.loadAcquire()); }
+    // Passes a content recorded whose target then kept its frame (N5.7a, keptTargetLastRecord): not counted as passes.
+    qint64 keptRecords() const { return m_kept.loadRelaxed(); }
 
     // Render thread, on beforeRendering (inside the frame, outside any pass): records the content pass when dirty,
     // nothing otherwise (`recorded` says which).
@@ -126,7 +145,9 @@ private:
     SurfacePattern m_pattern = SurfacePattern::TexelIdentity;
     bool m_targetClear = false;            // render thread: the target is known to be transparent (cleared by a draw)
     QAtomicInteger<int> m_dirty { 1 };
+    QAtomicInteger<int> m_layer { 0 };     // SurfaceLayer
     QAtomicInteger<qint64> m_passes { 0 };
+    QAtomicInteger<qint64> m_kept { 0 };
     QAtomicInteger<qint64> m_clears { 0 };
     QAtomicInteger<int> m_live { 0 };
     mutable QMutex m_mutex; // guards m_lastPrime (read from the GUI thread)
@@ -154,14 +175,29 @@ public:
     // GUI thread: the window's registry (a new one when the window at this address was destroyed).
     static std::shared_ptr<WindowSurfaces> forWindow(QQuickWindow *window);
 
-    // The frame edges (render thread): counted by the frame driver at each beforeRendering.
-    qint64 noteEdge() { return m_edges.fetchAndAddOrdered(1) + 1; }
+    // The frame edges (render thread): one per rendered frame of the window, whatever number of frame drivers is
+    // connected to it (audit N38 M1: a second driver, or one detached and not yet released, counted the frame again and
+    // released a retired image a frame early). The first driver's beforeRendering in a frame counts it; the window's
+    // afterRendering (one connection per registry, made by forWindow) opens the next frame's count. A driver connected
+    // in the middle of a frame whose count is taken counts from the next one (never twice; at worst one frame late).
+    qint64 noteEdge()
+    {
+        if (m_frameCounted.testAndSetOrdered(0, 1))
+            return m_edges.fetchAndAddOrdered(1) + 1;
+        return m_edges.loadAcquire();
+    }
+    void frameRendered() { m_frameCounted.storeRelease(0); }
     qint64 edges() const { return m_edges.loadAcquire(); }
-    // Render thread: a job's output this window's frames may have sampled up to the current edge.
+    // Render thread: a job's output this window's frames may have sampled up to the current edge. Asks the window for a
+    // frame (audit N38 M2): the frames its release waits for are rendered even when nothing else changes.
     void retire(const std::shared_ptr<JobService> &service, quint64 output);
     bool retiring() const { return m_retiring.loadAcquire() > 0; }
-    // Render thread, at the frame edge `edge`: the entries whose frames completed go to their services.
+    // Render thread, at the frame edge `edge`: the entries whose frames completed go to their services; while any is
+    // left the window is asked for the next frame (M2: one request per frame until the list is empty, an edge each,
+    // never a timer; at rest the list is empty and nothing is asked).
     int releaseRetired(qint64 edge, int framesInFlight);
+    // Frames the retire list asked the window for (M2's proof).
+    qint64 frameRequests() const { return m_frameRequests.loadRelaxed(); }
     // Render thread, outside a frame, after QRhi::finish(): every entry goes.
     int releaseAllRetired();
     // Any thread: entries waiting in every window (the destruction barrier's reading), and the ones left to their
@@ -176,7 +212,7 @@ public:
     void add(const std::shared_ptr<Surface> &surface);
     void remove(const Surface *surface);
     int count() const;
-    // The surfaces with content to record this frame (empty at rest).
+    // The surfaces with content to record this frame (empty at rest), the background layer's first (D5.2's order).
     QList<std::shared_ptr<Surface>> dirtySurfaces() const;
 
 private:
@@ -187,10 +223,17 @@ private:
         qint64 lastUse = 0; // the frame edge of its last possible use
     };
 
+    // Render thread, inside one of the window's frames (the window is alive while it renders): a queued update() of the
+    // window on its own (GUI) thread, dropped by Qt if the window goes first.
+    void requestFrame();
+
+    QQuickWindow *m_window = nullptr; // set by forWindow; dereferenced only inside the window's own frames
+    QAtomicInteger<qint64> m_frameRequests { 0 };
     mutable QMutex m_mutex;
     QList<std::shared_ptr<Surface>> m_surfaces;
     int m_drivers = 0;
     QAtomicInteger<qint64> m_edges { 0 };
+    QAtomicInteger<int> m_frameCounted { 0 }; // this frame's edge is counted (M1); cleared at afterRendering
     QAtomicInteger<int> m_retiring { 0 };
     QList<Retired> m_retired; // under m_mutex
 };

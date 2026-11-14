@@ -1214,6 +1214,24 @@ QJsonObject jobCountsObject()
     return o;
 }
 
+// Audit N38 M1, GPU-free: a window's frame count with two drivers' edges in one frame (a second host on the window, or
+// one detached and not yet released), as WindowSurfaces counts them: frame 1 (two edges), frame 2 (two edges).
+PyObject *window_edges_self_test(PyObject *, PyObject *)
+{
+    srpss_core::WindowSurfaces surfaces;
+    QJsonArray edges;
+    edges.append(double(surfaces.noteEdge())); // frame 1, the first driver
+    edges.append(double(surfaces.noteEdge())); // frame 1, the second driver
+    surfaces.frameRendered();                  // the window's afterRendering
+    edges.append(double(surfaces.noteEdge())); // frame 2
+    edges.append(double(surfaces.noteEdge()));
+    surfaces.frameRendered();
+    QJsonObject o;
+    o.insert(QStringLiteral("edges"), edges);
+    o.insert(QStringLiteral("total"), double(surfaces.edges()));
+    return pyJson(o);
+}
+
 PyObject *job_counts(PyObject *, PyObject *)
 {
     return pyJson(jobCountsObject());
@@ -1432,6 +1450,27 @@ PyObject *composite_mode_retire(PyObject *, PyObject *args)
     if (!source)
         return nullptr;
     source->retireCurrent();
+    // Audit N38 L4: the owner's lost-texture listener goes with its retire (GUI thread), so no lost edge reaches a
+    // retired owner and the core holds no reference to it until the item's deletion.
+    source->notifier()->setListener(nullptr);
+    Py_RETURN_NONE;
+}
+
+// N5.7a: the generic mode drawn as a still (no stream; mode_content.h "Stills"): the background layer's photo.
+PyObject *composite_mode_still(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    int still = 0;
+    if (!PyArg_ParseTuple(args, "Lp", &handle, &still))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    QString error;
+    if (!item->stillMode(still != 0, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
     Py_RETURN_NONE;
 }
 
@@ -2070,6 +2109,9 @@ PyMethodDef methods[] = {
     { "composite_mode_on_lost", composite_mode_on_lost, METH_VARARGS,
       "(handle, callable|None) -> None: N3.8, the owner's lost-texture edge: called on the GUI thread with the list of "
       "names once each is found lost (a node made again, a texture that could not be created)." },
+    { "window_edges_self_test", window_edges_self_test, METH_NOARGS,
+      "() -> JSON str: audit N38 M1, GPU-free: a window's frame count with two drivers' edges in each of two frames "
+      "(edges seen, total): one per frame." },
     { "job_counts", job_counts, METH_NOARGS,
       "() -> JSON str: N3.8, the job services' process-wide counts (services, threads, jobs queued and running, images "
       "held and their bytes, releases pending, wake-ups) and the windows' retiring images." },
@@ -2109,7 +2151,12 @@ PyMethodDef methods[] = {
     { "composite_mode_state", composite_mode_state, METH_VARARGS,
       "(handle) -> JSON str: the stream, its schema and reader, the program, the settings, syncs, records and draws." },
     { "composite_mode_retire", composite_mode_retire, METH_VARARGS,
-      "(handle) -> None: the mode's stream stores Retiring at once (any thread; D1); unbind releases it." },
+      "(handle) -> None: the mode's stream stores Retiring at once (D1); unbind releases it. The owner's lost-texture "
+      "listener goes with it (audit N38 L4; the GUI thread's call)." },
+    { "composite_mode_still", composite_mode_still, METH_VARARGS,
+      "(handle, still) -> None: N5.7a, the item draws as a still (no stream: its textures, settings and card are its "
+      "frame; it records only when what it draws changed). ValueError while a stream is bound or when the program "
+      "cannot be drawn so." },
     { "mode_blocks", mode_blocks, METH_VARARGS,
       "(schema_json, program_json, packs, settings_json, record_bytes, card_json | None, (target_w, target_h)) -> "
       "([block bytes per pass], facts JSON str): what a generic mode uploads for this record (GPU-free); ValueError "

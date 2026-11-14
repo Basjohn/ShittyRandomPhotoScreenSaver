@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** High: N5.7a (the core's background layer; one build round at ABI 15). Audit: N3.8's threading and lifetime. Medium idle (weekly budget: 49 % used with six days left). Main at ABI 14.
+**Now (in flight):** N5.7a merged at ABI 15; the lead's wallpaper rehearsal on both displays; the decisions doc consolidation merging next; a GitHub product build for the operator (today's OpenGL fixes and the icon owner). High and Medium free.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -496,32 +496,12 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     in-frame (Vulkan only; OpenGL runs in-frame).
   - [ ] D9 point 2, consumer (b), the warm-up class: warm-up jobs run on this service, scheduled with N3.6's
     gradual warm-up (one unit per spaced frame). Transition preparation (consumer (a)) is N5.2g's.
-  - [ ] Audit 14 Nov (`Docs/Future_Work/Audit_2026-11-14_N38.md`; no high), with N5.7a's build round (High):
-    M2 a retired job image is released only while the window renders (a 4K photo with mips, about 44 MB, held at
-    rest after a change): request the frames the release needs; M1 frame edges counted per frame driver, not per
-    window (a retired image freed a frame early with two drivers on one window): one count per window; M3 the
-    destruction barrier counts process-wide native work, not the retiring generation's (any live native item
-    stalls teardown to its timeout): count per item or wait on in-flight work only; lows L1-L5 (device loss fails
-    closed, the job's fields read under its lock, a failed thread start falls back in-frame, the lost-texture
-    listener cleared at retire, a failed import switches none of the item's textures).
-- [ ] N5.7a The image presenter and background as the core's background layer (D7 point 1): image ownership,
-  covered-display admission and timing kept; the photo textures are the core's (the wrapped-texture bridge is
-  OpenGL only and retires with the Python presenter); at rest nothing is drawn again. Proved in the hidden host
-  on both backends against the Python presenter's frames, and measured against the protected retained-background
-  path. It runs in the rehearsal only; production on OpenGL keeps the Python presenter until N5.2h.
-  - [ ] Read first, write down before code: D7 point 1; the Python presenter and its owners
-    (`rendering/quick/display_presenter.py`, `display_image_route.py`, `image_state.py`, `image_boundary.py`):
-    image ownership, covered-display admission, the fit and crop arithmetic, the timing and its edges; the
-    protected retained-background path (commits ce07b991, 07486d83, 985b9d53: never retuned to satisfy an oracle).
-  - [ ] The background layer in the core: N4.a's fullscreen pass drawing the current photo with the presenter's
-    own fit and crop (one owner of that arithmetic, read by both), the photo uploaded by N3.8's job service,
-    retained (nothing drawn again at rest), a change of photo published at a frame edge.
-  - [ ] The route: on Vulkan the window's background comes from the core (the rehearsal shows the wallpaper);
-    OpenGL production keeps the Python presenter unchanged until N5.2h.
-  - [ ] Proof in the hidden host, both backends, validation: native against the Python presenter's frames on real
-    photos (landscape, portrait, odd aspect, at dpr 1 and 1.5, under the overscan placement), rule (a) and (b);
-    photo changes through jobs with no render-thread stall; nothing at rest; then the lead's Display 1 and
-    Display 0 rehearsal with the wallpaper and music.
+- [ ] N5.7a leftovers (the core's background layer landed 14 Nov at ABI 15, D7 "Point 1 as built (N5.7a)": OpenGL
+  native equals the Python presenter pixel for pixel, Vulkan equal to it, photo changes through N3.8's jobs, nothing
+  drawn at rest; the N3.8 audit's M1-M3 and L1-L5 fixed with it; evidence `native_core/n5_7a/`):
+  - [ ] Lead, Display 1 and Display 0: the rehearsal with the wallpaper and recorded music on Vulkan (the
+    replaced 4K photo released at rest in a real window, M2).
+  - Until N5.2a a photo change on Vulkan cuts at the end of the transition's duration (rehearsal only).
 - [ ] N5.7b The native backdrop pyramid (D7 points 2 to 6): from the background layer, only when it changed, only
   while demand is above zero; the full chain of levels; a texture provider `MaterialSurface` samples unchanged;
   fail closed to Normal. Cost against D7's budgets at 2560 x 1440 and 4K; stills of each material beside today's.

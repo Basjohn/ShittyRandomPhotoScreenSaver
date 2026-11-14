@@ -189,7 +189,15 @@ class NativeMode:
     def unbind(self) -> None:
         self._module.composite_mode_unbind(self._handle())
 
+    def still(self, still: bool = True) -> None:
+        """N5.7a: the item draws as a still, with no stream (``mode_content.h``, "Stills"): its textures, settings and
+        card are its frame, and it records only when what it draws changed (a new image handed to its upload job keeps
+        the frame until the commit). Refused (ValueError) while a stream is bound, or when the program cannot be drawn
+        without a record (a member the core and the settings do not fill)."""
+        self._module.composite_mode_still(self._handle(), bool(still))
+
     def retire(self) -> None:
+        """The stream retires (D1); the owner's lost-texture listener goes with it (audit N38 L4)."""
         self._module.composite_mode_retire(self._handle())
 
     def program(self, passes: Sequence[ModePass], settings: Mapping[str, Any] | None = None) -> None:

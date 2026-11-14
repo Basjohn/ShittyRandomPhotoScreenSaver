@@ -54,6 +54,12 @@
 // control; composite_mode_on_lost (the lost edge); job_counts, job_services_state, job_services_wait_idle and
 // job_service_self_test; composite_mode_state's texture_jobs, image_changes and textures_lost_edges; the host state's
 // device queues and job_service; the frame driver state's retired_outputs_released and window_edges.
+// 15 (N5.7a, the background layer; the N3.8 audit): composite_mode_still (a generic mode drawn with no stream);
+// composite_set's layer (content, background: recorded first) and opaque (Qt's opaque pass); composite_state's surface
+// kept_records and layer, its sync's material_blending and layer; composite_mode_state's still, still_kept and
+// textures_lost_listener (cleared by composite_mode_retire, L4); the frame driver state's window_retire_frame_requests
+// and window_retiring (M2); window edges counted once per frame (M1; window_edges_self_test); the job service's device-loss, thread-start and
+// briefJson rules (L1-L3), its self-test's lose_device, fail_thread_start and running_state; the commit's two phases (L5).
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 14
+#define SRPSS_NATIVE_CORE_ABI 15

@@ -27,7 +27,10 @@ from typing import Any, NamedTuple, Sequence
 
 #: The composite's options (``CompositeConfig`` in ``composite.h``).
 COMPOSITE_OPTIONS = ("rect", "coverage", "quarters", "pattern", "visible", "opacity", "surface_format", "pixel_ratio",
-                     "fade_ms")
+                     "fade_ms", "layer", "opaque")
+#: Where a composite's surface lies in the frame's dependency order (``SurfaceLayer`` in ``surfaces.h``, D5.2; N5.7a): a
+#: card's content, or the display's background layer (recorded before every other surface of its window).
+SURFACE_LAYERS = ("content", "background")
 #: The surface's texel formats (``surface_format``): rgba8 (the product's), or rgba16f (translucent content not rounded
 #: to 8 bits before the composite blends it). A harness switch: N2.5 round 5 measured no parity gain from rgba16f.
 SURFACE_FORMATS = ("rgba8", "rgba16f")
@@ -163,7 +166,9 @@ class CompositeItem:
     def set(self, **config: Any) -> None:
         """Updates the item (``COMPOSITE_OPTIONS``; missing ones keep their values): ``rect`` [x, y, w, h] in its
         parent, ``coverage`` {rect, radius} item-local or None (skipped), ``quarters``, ``pattern``
-        (``SURFACE_PATTERNS``), ``visible``, ``opacity``, ``fade_ms`` (a change of ``visible`` fades over it)."""
+        (``SURFACE_PATTERNS``), ``visible``, ``opacity``, ``fade_ms`` (a change of ``visible`` fades over it), ``layer``
+        (``SURFACE_LAYERS``), ``opaque`` (N5.7a: a content that covers every texel opaquely is drawn in Qt's opaque
+        pass, as the retained image node it stands for)."""
         unknown = sorted(set(config) - set(COMPOSITE_OPTIONS))
         if unknown:
             raise ValueError(f"unknown composite option(s) {', '.join(unknown)} "
@@ -174,6 +179,11 @@ class CompositeItem:
         pattern = config.get("pattern")
         if pattern is not None and pattern not in SURFACE_PATTERNS:
             raise ValueError(f"unknown pattern {pattern!r} (the patterns are {', '.join(SURFACE_PATTERNS)})")
+        layer = config.get("layer")
+        if layer is not None and layer not in SURFACE_LAYERS:
+            raise ValueError(f"unknown layer {layer!r} (the layers are {', '.join(SURFACE_LAYERS)})")
+        if "opaque" in config and not isinstance(config["opaque"], bool):
+            raise ValueError("opaque is True or False")
         self._module.composite_set(self._live(), json.dumps(config))
 
     def place(self, geometry: CompositeGeometry, parent_origin: Sequence[float] = (0.0, 0.0), **config: Any) -> None:
@@ -213,5 +223,5 @@ class CompositeItem:
         return bool(self._module.composite_destroy(self._handle))
 
 
-__all__ = ["COMPOSITE_OPTIONS", "CompositeGeometry", "CompositeItem", "ContentStatus", "SURFACE_FORMATS", "SURFACE_PATTERNS",
-           "composite_geometry", "window_pixel_ratio"]
+__all__ = ["COMPOSITE_OPTIONS", "CompositeGeometry", "CompositeItem", "ContentStatus", "SURFACE_FORMATS", "SURFACE_LAYERS",
+           "SURFACE_PATTERNS", "composite_geometry", "window_pixel_ratio"]

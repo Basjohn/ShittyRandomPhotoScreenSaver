@@ -15,6 +15,7 @@ from PySide6.QtQuick import (
 
 from core.logging.logger import get_logger
 
+from ..background_placement import background_placement
 from ..bootstrap import validate_or_quit_current_opengl_context
 from ..image_state import PresentationImage
 from ..transitions.state import TransitionRun
@@ -159,8 +160,9 @@ class RetainedBackgroundSceneNode(QSGNode):
                     revision=self._native_trace_change_seq,
                     auxiliary=1 if self._image_adopted else 2,  # adopted / uploaded
                 )
-        elif self._image_node is not None:
-            self._image_node.setRect(QRectF(0.0, 0.0, width, height))
+        elif self._image_node is not None and self._native_image_source is not None:
+            placement = background_placement(self._native_image_source.pixel_size, (width, height))
+            self._image_node.setRect(QRectF(*placement.target_rect))
 
         if custom_required:
             self._set_native_visible(False)
@@ -286,12 +288,10 @@ class RetainedBackgroundSceneNode(QSGNode):
             # QSGImageNode must have a texture before it enters the scene graph.
             self._image_opacity.appendChildNode(self._image_node)
 
-        self._image_node.setSourceRect(
-            QRectF(0.0, 0.0, float(width), float(height))
-        )
-        self._image_node.setRect(
-            QRectF(0.0, 0.0, logical_width, logical_height)
-        )
+        # The presenter's fit and crop: one owner, read by the native background layer too (N5.7a).
+        placement = background_placement((width, height), (logical_width, logical_height))
+        self._image_node.setSourceRect(QRectF(*placement.source_rect))
+        self._image_node.setRect(QRectF(*placement.target_rect))
 
     def _adopt_resident_texture(
         self,

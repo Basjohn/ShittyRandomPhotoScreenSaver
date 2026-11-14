@@ -169,6 +169,84 @@ def test_a_service_that_cannot_be_set_up_fails_closed(core):
 
 
 @needs_module
+def test_a_device_lost_during_an_upload_fails_the_job_and_the_service_closed(core):
+    # Audit N38 L1: the upload's completion edge found the device lost. The job never publishes (Qt would import an
+    # image whose upload never completed) and every later job runs in the frame.
+    result = _run(core, [
+        {"op": "lose_device"},
+        {"op": "submit", "name": "a"},
+        {"op": "wait_idle"},
+        {"op": "submit", "name": "b"},
+    ])
+    lost = _step(result, 2)
+    assert lost["jobs"]["a"]["state"] == "failed" and "lost" in lost["jobs"]["a"]["error"]
+    assert lost["service"]["published"] == 0 and lost["counts"]["job_images"] == 0
+    assert lost["service"]["failed"] is True
+    assert _step(result, 3)["submitted"] is False
+    # Control: an ordinary upload failure fails the job only (the service goes on: the failed-job case above).
+
+
+@needs_module
+def test_a_job_thread_that_cannot_start_fails_the_service_closed(core):
+    # Audit N38 L3: Qt only warns when a thread does not start. Nothing may stay queued that no thread runs: the job is
+    # refused (its consumer runs the in-frame form) and so is every later one.
+    result = _run(core, [
+        {"op": "fail_thread_start"},
+        {"op": "submit", "name": "a"},
+        {"op": "submit", "name": "b"},
+        {"op": "release", "name": "a"},
+    ])
+    assert _step(result, 1)["submitted"] is False and _step(result, 2)["submitted"] is False
+    end = _final(result)
+    assert end["service"]["failed"] is True
+    assert end["counts"]["jobs_queued"] == 0 and end["counts"]["job_releases_pending"] == 0
+    assert end["service"]["set_up_error"]
+    # Control: without the failed start the same job is queued and runs.
+    ran = _run(core, [{"op": "submit", "name": "a"}, {"op": "wait_idle"}])
+    assert _step(ran, 0)["submitted"] is True and _final(ran)["jobs"]["a"]["state"] == "done"
+
+
+@needs_module
+def test_the_state_reads_only_the_running_jobs_constant_fields(core):
+    # Audit N38 L2: while the job thread may be writing a job's error, times and output, another thread's state reads
+    # its constant fields and its atomic state only.
+    result = _run(core, [
+        {"op": "hold"},
+        {"op": "submit", "name": "a"},
+        {"op": "wait_entered", "count": 1},
+        {"op": "running_state"},
+        {"op": "go"},
+        {"op": "wait_idle"},
+    ])
+    assert sorted(_step(result, 3)["running_keys"]) == ["generation", "mips", "name", "size", "state"]
+    assert _final(result)["jobs"]["a"]["state"] == "done"
+
+
+@needs_module
+def test_a_windows_frame_is_counted_once_whatever_number_of_drivers_sees_it(core):
+    # Audit N38 M1: two drivers on one window (a second host, or one detached and not yet released) counted each frame
+    # twice, and a retired image was released a frame early ([1, 2, 3, 4] before the fix).
+    result = json.loads(core.module.window_edges_self_test())
+    assert result == {"edges": [1, 1, 2, 2], "total": 2}
+
+
+@needs_module
+def test_the_lost_texture_listener_goes_with_the_owners_retire(core, qt_app):
+    # Audit N38 L4: no lost edge reaches a retired owner, and the core holds no reference to it after its retire.
+    from PySide6.QtQuick import QQuickItem
+
+    parent = QQuickItem()
+    mode = core.mode(parent)
+    try:
+        mode.on_textures_lost(lambda names: None)
+        assert mode.state()["textures_lost_listener"] is True          # the control: set until the retire
+        mode.retire()
+        assert mode.state()["textures_lost_listener"] is False
+    finally:
+        mode.composite.destroy()
+
+
+@needs_module
 def test_stop_abandons_the_job_in_flight_and_the_queue_and_joins(core):
     result = _run(core, [
         {"op": "hold"},
@@ -264,15 +342,19 @@ def test_the_mode_face_passes_the_in_frame_control_and_the_lost_listener():
     assert calls[2][1] == (9, listener) and calls[3][1] == (9, None)
 
 
-def test_pending_native_work_names_every_kind_the_barrier_waits_for():
+def test_pending_native_work_names_only_the_work_in_flight():
     jobs = {"jobs_queued": 1, "jobs_running": 1, "job_releases_pending": 2, "job_images": 3, "job_images_retiring": 1,
             "job_services": 1, "job_threads": 1, "job_wakeups": 40}
     live = {"mode_textures": 2, "mode_texture_images": 1, "items": 1}
     core = loader.NativeCore(_StandInModule(jobs, live), {})
     pending = {entry["kind"]: entry["count"] for entry in core.pending_native_work()}
     assert pending == {"native_jobs_queued": 1, "native_jobs_running": 1, "native_job_releases_pending": 2,
-                       "native_job_images": 3, "native_job_images_retiring": 1, "native_mode_textures": 2,
-                       "native_mode_texture_images": 1}
+                       "native_job_images_retiring": 1}
+    # Audit N38 M3: what live items hold (their textures, an output shown as a front, a copy not yet uploaded) is
+    # process-wide and never ends by itself while those items live (another display's background layer): it does not
+    # hold a retiring generation's barrier. (Before M3 these kinds were counted: the barrier timed out on them.)
+    shown = loader.NativeCore(_StandInModule({"job_images": 3, "job_services": 1}, live), {})
+    assert shown.pending_native_work() == []
     # A device's parked service and thread are not work: they go with the window's device.
     idle = loader.NativeCore(_StandInModule({"job_services": 1, "job_threads": 1, "job_wakeups": 9}, {"items": 0}), {})
     assert idle.pending_native_work() == []
