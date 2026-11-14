@@ -285,13 +285,14 @@ def python_references(samples) -> list:
 class Stream:
     """A native Spectrum stream the harness writes (the engine worker's side): a frame mapping and its writer."""
 
-    def __init__(self) -> None:
+    def __init__(self, identity: dict | None = None) -> None:
         from core.visualizer_engine.packet_abi import FramePacketWriter, create_frame_mapping, mode_code
 
+        self.identity = dict(identity or IDENTITY)
         self.code = mode_code("spectrum")
-        self.memory = create_frame_mapping(generation=IDENTITY["runtime_generation"], slot_bytes=SLOT_BYTES,
-                                           engine_generation=IDENTITY["engine_generation"],
-                                           activation_id=IDENTITY["activation_id"], mode_code=self.code,
+        self.memory = create_frame_mapping(generation=self.identity["runtime_generation"], slot_bytes=SLOT_BYTES,
+                                           engine_generation=self.identity["engine_generation"],
+                                           activation_id=self.identity["activation_id"], mode_code=self.code,
                                            token=uuid.uuid4().hex[:12])
         self.writer = FramePacketWriter(self.memory.buf)
         self.closed = False
@@ -302,14 +303,16 @@ class Stream:
 
     @property
     def expect(self) -> dict:
-        return {**IDENTITY, "mode_code": self.code}
+        return {**self.identity, "mode_code": self.code}
 
-    def publish(self, record: bytes, timestamp: float) -> int:
+    def publish(self, record: bytes, timestamp: float, flags: int | None = None) -> int:
+        """One frame; ``flags`` the publication's slot flags (default: a present frame, not playing)."""
         from core.visualizer_engine import spectrum_native_schema
         from core.visualizer_engine.packet_abi import FLAG_PRESENT_FRAME
 
         return self.writer.publish(record, payload_schema=spectrum_native_schema.SCHEMA_ID, logical_timestamp=timestamp,
-                                   flags=FLAG_PRESENT_FRAME, mode_code=self.code, **IDENTITY)
+                                   flags=FLAG_PRESENT_FRAME if flags is None else int(flags), mode_code=self.code,
+                                   **self.identity)
 
     def consumed(self) -> int:
         return self.writer.consumed_sequence

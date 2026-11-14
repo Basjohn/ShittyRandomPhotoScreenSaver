@@ -289,6 +289,158 @@ class SceneMirror:
         host.close()
 
 
+class NativeSceneMirror(SceneMirror):
+    """``SceneMirror`` with the native Spectrum (N2.5, rule (a)) in place of the Python node while the activation is
+    Spectrum's: the same hidden production scene, the module's frame driver attached to its window, a composite in the
+    Visualizer's content host placed from the committed record (``composite_geometry``), fed by a native frame stream
+    (Spectrum's fixed-layout record, ``spectrum_native_schema.encode``) that the item's packet reader reads at its sync.
+
+    The mirror takes each frame from the owner's render bridge exactly as the Python item would at its sync
+    (``admit_at_sync``, ``take_for_render`` under the committed record) and publishes it into the stream with the
+    publication's slot flags; the Python item is left unbound meanwhile, so the mirror is the bridge's one consumer.
+    Another mode's activation goes to the Python item as before (the mixed window of D10 point 4)."""
+
+    def __init__(self, core) -> None:
+        super().__init__()
+        self.core = core
+        self.window_host = None
+        self.spectrum = None
+        self._stream = None
+        self._bridge = None
+        self._identity = None
+        self._card = None
+        self._placed = None
+        self.native_frames = 0
+        self.native_published = 0
+
+    def attach(self, runtime: Any) -> None:
+        super().attach(runtime)
+        hidden = self.host.scene
+        self.window_host = self.core.attach_host(self.host.window)
+        bind_python = hidden.set_visualizer_render_source
+        drop_python = hidden.drop_visualizer_retained_frame
+        present_python = hidden.request_visualizer_present
+
+        def bind(bridge, identity):
+            if identity.mode_id == "spectrum":
+                self._bind_native(bridge, identity)
+                return None
+            self._unbind_native()
+            return bind_python(bridge, identity)
+
+        def drop():
+            if self._identity is not None:
+                self.spectrum.drop_retained_frame()
+                return True
+            return drop_python()
+
+        def present():
+            if self._identity is not None:
+                self.spectrum.update()
+                return True
+            return present_python()
+
+        hidden.set_visualizer_render_source = bind
+        hidden.drop_visualizer_retained_frame = drop
+        hidden.request_visualizer_present = present
+
+    def _content_host(self):
+        return self.host.scene._ensure_visualizer_items().parentItem()
+
+    def _bind_native(self, bridge, identity) -> None:
+        import sys as _sys
+        from pathlib import Path as _Path
+
+        here = _Path(__file__).resolve().parents[2] / "native" / "core" / "python"
+        if str(here) not in _sys.path:
+            _sys.path.insert(0, str(here))
+        from spectrum_check import Stream
+
+        item = self.host.scene._ensure_visualizer_items()
+        if item.render_identity is not None:
+            item.clear_render_source()                   # the Python node draws nothing of a Spectrum activation
+        if self.spectrum is None:
+            self.spectrum = self.core.spectrum(self._content_host())
+        self._unbind_native()
+        identity_values = {"runtime_generation": int(identity.runtime_generation),
+                           "engine_generation": int(identity.engine_generation),
+                           "activation_id": int(identity.activation_id)}
+        self._stream = Stream(identity=identity_values)
+        self.spectrum.bind(self._stream.name, expect=self._stream.expect)
+        self.spectrum.composite.set(visible=True)
+        self._bridge, self._identity = bridge, identity
+
+    def _unbind_native(self) -> None:
+        if self._identity is None:
+            return
+        self.spectrum.unbind()                           # retiring at once; released at the item's next sync
+        self.spectrum.composite.set(visible=False)
+        self._stream.close()                             # the owner's close and unlink (D1: never waits)
+        self._stream = self._bridge = self._identity = None
+        self._card = self._placed = None
+
+    def _take(self) -> None:
+        """What the Python item does at its sync (``VisualizerRenderItem.updatePaintNode``), into the stream."""
+        from core.visualizer_engine import spectrum_native_schema
+        from core.visualizer_engine.packet_mailbox import publication_flags
+        from PySide6.QtCore import QPointF
+        from rendering.native.composite import composite_geometry
+        from rendering.native.spectrum import spectrum_presentation
+
+        item = self.host.scene._visualizer_item
+        committed = None if item is None else item.presentation
+        identity = self._identity
+        if committed is None or identity is None:
+            return
+        authority = bool(item._custom_layout_presentation_authority)
+        if not authority:
+            self._bridge.admit_at_sync()
+        snapshot = self._bridge.take_for_render(
+            runtime_generation=identity.runtime_generation, engine_generation=identity.engine_generation,
+            activation_id=identity.activation_id, mode_id=identity.mode_id, required_presentation=committed,
+            allow_presentation_rebase=authority)
+        geometry = composite_geometry(committed)
+        origin = self._content_host().mapToScene(QPointF(0.0, 0.0))
+        placed = (geometry, round(origin.x(), 6), round(origin.y(), 6))
+        if placed != self._placed:
+            self.spectrum.composite.place(geometry, (origin.x(), origin.y()))
+            self._placed = placed
+        if snapshot is None:
+            return
+        # The card: the item's own size from the committed record (the Python node's size), the drawn inputs from the
+        # snapshot's (the Python renderer's frame), as the Python path splits them.
+        card = spectrum_presentation(committed, geometry)
+        drawn = spectrum_presentation(snapshot.presentation, geometry)
+        for key in ("content_rect", "viewport_extent", "visual_scale", "dpr", "content_fade", "expanded"):
+            card[key] = drawn[key]
+        if card != self._card:
+            self.spectrum.present_raw(card)
+            self._card = card
+        logical = snapshot.logical
+        self._stream.publish(spectrum_native_schema.encode(logical), float(logical.logical_timestamp or 0.0),
+                             flags=publication_flags(logical))
+        self.native_published += 1
+        self.spectrum.update()
+
+    def frame(self, index: int) -> dict:
+        if self._identity is not None:
+            self._take()
+            self.native_frames += 1
+        return super().frame(index)
+
+    def close(self) -> None:
+        if self.host is not None:
+            self._unbind_native()
+            if self.spectrum is not None:
+                self.spectrum.composite.destroy()
+                self.spectrum = None
+                self.host.render()                       # Qt deletes the node: the reader goes on its thread
+            if self.window_host is not None:
+                self.window_host.close()
+                self.window_host = None
+        super().close()
+
+
 def _pixels(run: dict, index: int):
     import numpy
 
@@ -404,6 +556,126 @@ def rendered_parity(mode: str, variant: str, clip_frames, supervisor: Any, *, sa
     return verdict
 
 
+def native_drawn_run(mode: str, script, *, settings: dict, core) -> dict:
+    """``drawn_run`` in process with the native Spectrum drawing Spectrum's activations (``NativeSceneMirror``)."""
+    from tools.visualizer_replay import owner_worker_gate as gate
+
+    mirror = NativeSceneMirror(core)
+    report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings,
+                               scene_mirror=mirror)
+    report["lit"] = mirror.lit
+    report["frames"] = mirror.frames
+    report["native_frames"] = mirror.native_frames
+    report["native_published"] = mirror.native_published
+    return report
+
+
+def frame_differences(a: dict, b: dict) -> list[dict]:
+    """Every input whose drawn region differs: its pixel count, largest 8-bit level and the differing pixels' bounding
+    box (left, top, right, bottom in the region's device pixels)."""
+    import numpy
+
+    rows = []
+    for index, (x, y) in enumerate(zip(a["pixels"], b["pixels"])):
+        if x["hash"] == y["hash"] or x["region"] != y["region"]:
+            continue
+        delta = numpy.abs(_pixels(a, index).astype(numpy.int16) - _pixels(b, index)).max(axis=2)
+        ys, xs = numpy.nonzero(delta)
+        if not len(xs):
+            continue
+        rows.append({"input": index, "pixels": int(len(xs)), "max_level": int(delta.max()),
+                     "bbox": [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())],
+                     "levels": {str(level): int((delta == level).sum()) for level in sorted(set(delta[delta > 0].tolist()))[:8]}})
+    return rows
+
+
+def _write_native_crops(out: Path, name: str, native: dict, python: dict, row: dict) -> list[str]:
+    """The worst differing input's crops (the differing pixels' box with 12 px around it, 4x nearest): Python, native
+    and the difference x64; plus the whole region of each."""
+    import numpy
+    from PIL import Image
+
+    out.mkdir(parents=True, exist_ok=True)
+    index = row["input"]
+    a, b = _pixels(python, index), _pixels(native, index)
+    left, top, right, bottom = row["bbox"]
+    pad = 12
+    box = (max(0, left - pad), max(0, top - pad), min(a.shape[1], right + pad + 1), min(a.shape[0], bottom + pad + 1))
+    written = []
+    for label, image in (("python", a[..., :3]), ("native", b[..., :3]),
+                         ("difference_x64", numpy.clip(numpy.abs(a[..., :3].astype(numpy.int16) - b[..., :3]) * 64,
+                                                       0, 255).astype(numpy.uint8))):
+        crop = image[box[1]:box[3], box[0]:box[2]]
+        path = out / f"{name}_input{index}_{label}_crop_x4.png"
+        Image.fromarray(numpy.ascontiguousarray(crop), "RGB").resize(
+            (crop.shape[1] * 4, crop.shape[0] * 4), Image.NEAREST).save(path)
+        written.append(str(path))
+        whole = out / f"{name}_input{index}_{label}.png"
+        Image.fromarray(numpy.ascontiguousarray(image), "RGB").save(whole)
+        written.append(str(whole))
+    return written
+
+
+def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path) -> dict:
+    """Rule (a) of the port (N2.5): the owner in process drawn by the Python renderer and by the native item, single-
+    sampled, frame for frame over the card's region and its margin."""
+    script = parity_script(clip_frames, mode)
+    with single_sample_scene_targets():
+        python = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings)
+        native = native_drawn_run(mode, script, settings=settings, core=core)
+    paths = pair_difference(native, python)
+    rows = frame_differences(native, python)
+    switch_at = next(i for i, (kind, _v) in enumerate(script) if kind == "mode")
+    switch_input = sum(1 for kind, _value in script[:switch_at] if kind == "input")
+    verdict = {"mode": mode, "run": f"{mode}{suffix}", "inputs": python["inputs"],
+               "frames_drawn": [len(python["pixels"]), len(native["pixels"])],
+               "native_frames": native["native_frames"], "native_published": native["native_published"],
+               "switch_input": switch_input, "paths": paths, "differing_inputs": len(rows),
+               "differing_pixels_total": sum(row["pixels"] for row in rows),
+               "max_level": max((row["max_level"] for row in rows), default=0),
+               "differences": rows[:200], "region": python["pixels"][0]["region"] if python["pixels"] else None,
+               "digests_identical": python["digests"] == native["digests"]}
+    verdict["identical"] = bool(paths["first"] is None and verdict["digests_identical"]
+                                and verdict["native_published"] > 0)
+    if rows:
+        worst = max(rows, key=lambda row: (row["max_level"], row["pixels"]))
+        verdict["worst"] = worst
+        verdict["crops"] = _write_native_crops(Path(out), f"{mode}{suffix.replace(':', '_').replace('=', '-')}",
+                                               native, python, worst)
+    return verdict
+
+
+def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = ()) -> dict:
+    """``native_parity`` over Spectrum's widened run set (``conventions_identity.mode_runs``); the report."""
+    import tools.expanded_visualizer_evidence as evidence
+    from rendering.native import load
+    from tools import conventions_identity
+    from widgets.spotify_visualizer import engine_worker_link
+
+    core = load(module_dir)
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    clip = evidence.shipped_clip(seconds)
+    report: dict = {"mode": "spectrum", "offers": offers, "seconds": seconds, "display": list(DISPLAY), "results": {}}
+    started = time.perf_counter()
+    try:
+        for suffix, settings in conventions_identity.mode_runs("spectrum", offers):
+            if only and f"spectrum{suffix}" not in only:
+                continue
+            engine_worker_link.reset_run_state_for_testing()
+            verdict = native_parity(core, "spectrum", suffix, settings, clip.frames, out)
+            report["results"][f"spectrum{suffix}"] = verdict
+            print(f"[NATIVE] spectrum{suffix:40s} {verdict['frames_drawn']} frames, native {verdict['native_published']}"
+                  f" published; differing inputs {verdict['differing_inputs']}, pixels "
+                  f"{verdict['differing_pixels_total']}, max level {verdict['max_level']}; "
+                  f"{'IDENTICAL' if verdict['identical'] else 'DIFFERENT'}", flush=True)
+    finally:
+        report["elapsed_s"] = round(time.perf_counter() - started, 1)
+        report["identical"] = bool(report["results"]) and all(v["identical"] for v in report["results"].values())
+        (out / "native_render_parity.json").write_text(json.dumps(report, indent=1), encoding="utf-8")
+    return report
+
+
 def _write_stills(out: Path, name: str, script, worker: dict, in_process: dict, paths: dict) -> None:
     """One sheet per run: three of the worker path's frames side by side (half size). When the paths differ, both
     paths' frames of the first differing input and an amplified difference map as well."""
@@ -487,6 +759,13 @@ def main(argv=None) -> int:
     parser.add_argument("--sampling", nargs="*", default=list(SAMPLINGS), choices=SAMPLINGS)
     parser.add_argument("--seconds", type=float, default=5.5)
     parser.add_argument("--skip-controls", action="store_true")
+    parser.add_argument("--native", action="store_true",
+                        help="rule (a) of N2.5: Spectrum drawn by the native item against the Python renderer, in "
+                             "process, single-sampled (needs --module-dir)")
+    parser.add_argument("--module-dir", type=Path, default=Path("release/native_module"))
+    parser.add_argument("--offers", action="store_true",
+                        help="with --native: the widened run set (both variants and every Choice offer)")
+    parser.add_argument("--runs", nargs="*", default=(), help="with --native: only these run keys (spectrum[:...])")
     args = parser.parse_args(argv)
     # The stills (contact sheets, difference maps) and the report are written into owner scratch and published to
     # ``--out`` by the evidence publisher (``tools/evidence_media.py``); stills stay PNG, lossless.
@@ -503,8 +782,12 @@ def main(argv=None) -> int:
 
     app = QApplication(["owner-render-parity"])
     try:
-        report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
-                     seconds=args.seconds, controls=not args.skip_controls)
+        if args.native:
+            report = run_native(args.out, module_dir=args.module_dir.resolve(), offers=args.offers,
+                                seconds=args.seconds, only=tuple(args.runs))
+        else:
+            report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
+                         seconds=args.seconds, controls=not args.skip_controls)
     except BaseException:
         evidence_media.finish(1)                # a run that broke: its scratch is kept and its path printed
         raise
