@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** nothing. N2.9 merged at ABI 10 (9181aafc); d1_run's grab works on both backends through QRhi, its 4K copies off the render thread (27.7 to 6.2 ms per grab). N2.8 waits for two displays.
+**Now (in flight):** High: N4.a (the fullscreen pass and sampling on N2.9's generic pass). Medium: 1D.14 (Spectrum's rim glow, no build round). Audit of N2.9's round 2 (the shared StreamSource/ContentLatch, the product-shader shape) after the 12:00 UTC reset. N2.8 waits for two displays.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
