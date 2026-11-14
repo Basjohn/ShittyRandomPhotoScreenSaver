@@ -554,6 +554,13 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
 
 - [ ] N5.2b The six with their own item-quad programs: Beam, Chromatic Shear, Liquid Lens, Melt Drip, Surface
   Tension, VHS.
+  - [ ] Read each one's Python renderer and program; say which fit N5.2a's path (one fragment between two
+    pictures on the shared pass, as data) and which need more (extra passes, their own geometry, state across
+    frames); the ones that need C++ stop and are reported, not built.
+  - [ ] Port the ones that fit as N5.2a did: the product fragment drawn by the core, integer hashes and uv from the
+    pixel where a float hash or interpolated uv would differ by driver (the lead reviews before/after stills).
+  - [ ] Proof per transition: rule (a) against its Python renderer at the widened progress values, rule (b) Vulkan
+    against OpenGL, dpr 1 and 1.5, overscan placement, nothing at rest; added to `transition_route_check.py`.
 - [ ] N5.2c Scene target and photo environment only (N4.j): Blinds, Cube Turn, Depth Cascade, Jigsaw.
 - [ ] N5.2d Motion blur and trails (N4.i): 3D Block Spins, Crumble, Glass Shatter, Pixel Accretion.
 - [ ] N5.2e Membrane, Page Curl, Exploding Tiles (N4.l).
