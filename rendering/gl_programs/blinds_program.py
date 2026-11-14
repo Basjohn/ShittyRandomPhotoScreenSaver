@@ -7,18 +7,7 @@ to thin lines; by t=1 they cover the full cell width.
 
 from __future__ import annotations
 
-import logging
-from typing import Any, Dict, Tuple
-
 from rendering.gl_programs.base_program import BaseGLProgram
-
-logger = logging.getLogger(__name__)
-
-# PyOpenGL import with graceful fallback
-try:
-    from OpenGL import GL as gl
-except ImportError:
-    gl = None  # type: ignore
 
 
 class BlindsProgram(BaseGLProgram):
@@ -120,78 +109,6 @@ void main() {
     FragColor = mix(oldColor, newColor, mixFactor);
 }
 """
-
-    def cache_uniforms(self, program: int) -> Dict[str, int]:
-        """Cache uniform locations for the Blinds program."""
-        if gl is None:
-            return {}
-        return {
-            "u_progress": gl.glGetUniformLocation(program, "u_progress"),
-            "u_resolution": gl.glGetUniformLocation(program, "u_resolution"),
-            "uOldTex": gl.glGetUniformLocation(program, "uOldTex"),
-            "uNewTex": gl.glGetUniformLocation(program, "uNewTex"),
-            "u_grid": gl.glGetUniformLocation(program, "u_grid"),
-            "u_feather": gl.glGetUniformLocation(program, "u_feather"),
-            "u_direction": gl.glGetUniformLocation(program, "u_direction"),
-        }
-
-    def render(
-        self,
-        program: int,
-        uniforms: Dict[str, int],
-        viewport: Tuple[int, int],
-        old_tex: int,
-        new_tex: int,
-        state: Any,
-        quad_vao: int,
-    ) -> None:
-        """Draw one frame of the Blinds transition."""
-        if gl is None:
-            return
-
-        vp_w, vp_h = viewport
-        progress = max(0.0, min(1.0, float(getattr(state, "progress", 0.0))))
-
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-
-        gl.glUseProgram(program)
-        try:
-            if uniforms.get("u_progress", -1) != -1:
-                gl.glUniform1f(uniforms["u_progress"], float(progress))
-
-            if uniforms.get("u_resolution", -1) != -1:
-                gl.glUniform2f(uniforms["u_resolution"], float(vp_w), float(vp_h))
-
-            if uniforms.get("u_grid", -1) != -1:
-                cols = float(max(1, int(getattr(state, "cols", 1))))
-                rows = float(max(1, int(getattr(state, "rows", 1))))
-                gl.glUniform2f(uniforms["u_grid"], cols, rows)
-
-            if uniforms.get("u_feather", -1) != -1:
-                feather = max(0.001, min(0.5, float(getattr(state, "feather", 0.08))))
-                gl.glUniform1f(uniforms["u_feather"], feather)
-
-            if uniforms.get("u_direction", -1) != -1:
-                direction = int(getattr(state, "direction", 0))
-                gl.glUniform1i(uniforms["u_direction"], direction)
-
-            if uniforms.get("uOldTex", -1) != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, old_tex)
-                gl.glUniform1i(uniforms["uOldTex"], 0)
-
-            if uniforms.get("uNewTex", -1) != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, new_tex)
-                gl.glUniform1i(uniforms["uNewTex"], 1)
-
-            self._draw_fullscreen_quad(quad_vao)
-
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
 
 
 # Singleton instance for convenience

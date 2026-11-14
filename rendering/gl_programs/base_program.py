@@ -1,20 +1,15 @@
 """Abstract base class for per-transition GL shader programs.
 
-Each concrete program helper implements:
-- GLSL vertex/fragment source as properties
-- create_program() to compile and link
-- cache_uniforms() to store uniform locations
-- render() to draw one frame given current state
-
-Helpers do NOT own GL contexts, textures, or animation timing. They are pure
-renderers invoked by the compositor.
+Each concrete program helper holds its GLSL vertex/fragment source as properties
+(create_program() compiles and links them). The Quick transitions draw with the
+sources themselves (rendering/quick/transitions); the helpers own no GL context,
+texture, draw call or animation timing.
 """
 
 from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -71,49 +66,3 @@ void main() {
         program = compile_program(self.vertex_source, self.fragment_source, label=self.name)
         logger.debug("[GL PROGRAM] %s shader program created: %d", self.name, program)
         return int(program)
-
-    @abstractmethod
-    def cache_uniforms(self, program: int) -> Dict[str, int]:
-        """Cache uniform locations for the program.
-        
-        Returns a dict mapping uniform name to location.
-        """
-        pass
-
-    @abstractmethod
-    def render(
-        self,
-        program: int,
-        uniforms: Dict[str, int],
-        viewport: Tuple[int, int],
-        old_tex: int,
-        new_tex: int,
-        state: Any,
-        quad_vao: int,
-    ) -> None:
-        """Draw one frame of the transition.
-        
-        Args:
-            program: GL program ID
-            uniforms: Dict of uniform locations from cache_uniforms()
-            viewport: (width, height) of the viewport
-            old_tex: GL texture ID for old image
-            new_tex: GL texture ID for new image
-            state: Transition-specific state dataclass
-            quad_vao: VAO for fullscreen quad
-        """
-        pass
-
-    def _draw_fullscreen_quad(self, quad_vao: int) -> None:
-        """Draw the fullscreen quad using the provided VAO."""
-        if gl is None:
-            return
-        gl.glBindVertexArray(quad_vao)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-        gl.glBindVertexArray(0)
-
-    def _get_uniform_location(self, program: int, name: str) -> int:
-        """Get uniform location, returning -1 if not found."""
-        if gl is None:
-            return -1
-        return gl.glGetUniformLocation(program, name)

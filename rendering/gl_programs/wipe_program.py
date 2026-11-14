@@ -6,18 +6,7 @@ several directions: horizontal, vertical, or diagonal.
 
 from __future__ import annotations
 
-import logging
-from typing import Any, Dict, Tuple
-
 from rendering.gl_programs.base_program import BaseGLProgram
-
-logger = logging.getLogger(__name__)
-
-# PyOpenGL import with graceful fallback
-try:
-    from OpenGL import GL as gl
-except ImportError:
-    gl = None  # type: ignore
 
 
 class WipeProgram(BaseGLProgram):
@@ -91,92 +80,6 @@ void main() {
     FragColor = mix(oldColor, newColor, m);
 }
 """
-
-    def cache_uniforms(self, program: int) -> Dict[str, int]:
-        """Cache uniform locations for the Wipe program."""
-        if gl is None:
-            return {}
-        return {
-            "u_progress": gl.glGetUniformLocation(program, "u_progress"),
-            "uOldTex": gl.glGetUniformLocation(program, "uOldTex"),
-            "uNewTex": gl.glGetUniformLocation(program, "uNewTex"),
-            "u_mode": gl.glGetUniformLocation(program, "u_mode"),
-        }
-
-    def _direction_to_mode(self, direction: Any) -> int:
-        """Map WipeDirection enum to shader mode integer.
-        
-        Mode values:
-            0 = Left-to-right (default)
-            1 = Right-to-left
-            2 = Top-to-bottom
-            3 = Bottom-to-top
-            4 = Diagonal TL-BR
-            5 = Diagonal TR-BL
-        """
-        try:
-            value = getattr(direction, "value", direction)
-            normalized = str(value or "left_to_right").strip().lower()
-            return {
-                "left_to_right": 0,
-                "right_to_left": 1,
-                "top_to_bottom": 2,
-                "bottom_to_top": 3,
-                "diag_tl_br": 4,
-                "diag_tr_bl": 5,
-            }.get(normalized, 0)
-        except Exception as e:
-            logger.debug("[MISC] Exception suppressed: %s", e)
-        return 0  # Default: LEFT_TO_RIGHT
-
-    def render(
-        self,
-        program: int,
-        uniforms: Dict[str, int],
-        viewport: Tuple[int, int],
-        old_tex: int,
-        new_tex: int,
-        state: Any,
-        quad_vao: int,
-    ) -> None:
-        """Draw one frame of the Wipe transition."""
-        if gl is None:
-            return
-
-        vp_w, vp_h = viewport
-        progress = max(0.0, min(1.0, float(getattr(state, "progress", 0.0))))
-        
-        # Get mode from state direction
-        direction = getattr(state, "direction", None)
-        mode = self._direction_to_mode(direction)
-
-        gl.glViewport(0, 0, vp_w, vp_h)
-        gl.glDisable(gl.GL_DEPTH_TEST)
-
-        gl.glUseProgram(program)
-        try:
-            if uniforms.get("u_progress", -1) != -1:
-                gl.glUniform1f(uniforms["u_progress"], float(progress))
-
-            if uniforms.get("u_mode", -1) != -1:
-                gl.glUniform1i(uniforms["u_mode"], mode)
-
-            if uniforms.get("uOldTex", -1) != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE0)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, old_tex)
-                gl.glUniform1i(uniforms["uOldTex"], 0)
-
-            if uniforms.get("uNewTex", -1) != -1:
-                gl.glActiveTexture(gl.GL_TEXTURE1)
-                gl.glBindTexture(gl.GL_TEXTURE_2D, new_tex)
-                gl.glUniform1i(uniforms["uNewTex"], 1)
-
-            self._draw_fullscreen_quad(quad_vao)
-
-        finally:
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
-            gl.glActiveTexture(gl.GL_TEXTURE0)
-            gl.glUseProgram(0)
 
 
 # Singleton instance for convenience
