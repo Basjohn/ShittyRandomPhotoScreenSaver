@@ -450,6 +450,24 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     port admits it, the guard then binding that mode.
   - [ ] The module's compiled-in `spectrum.frag` copy (the program round's negative control) predates the hoist;
     refreshed at the next C++ round.
+  - [ ] Audit 14 Nov (`Docs/Future_Work/Audit_2026-11-14_N25.md`), H1: at fractional scales where the logical
+    window size times dpr is not the framebuffer (2560 x 1440 at 150 %: logical 1707; 3840 x 2160 at 175 %),
+    `compose_window_from_target` (`rendering/native/spectrum.py`) raises on every update and the native Spectrum
+    never draws on Vulkan. Build the map and `composite_geometry`'s placement from the window's real pixel ratio,
+    never raise out of `sync`, tests at 150 % and 175 % (red on the old code), and a check on Display 1 in N2.8.
+    (Medium, after N2.3's lows, in the same C++ round.)
+  - [ ] Audit M1/M2: the route and the content fail closed: bind cleanup (no leaked mapping), the program pack
+    retried or failed closed, no exception out of `update()`, no per-frame rebuild of a failed content record
+    (`surfaces.cpp`, `spectrum.cpp`), with tests. (Medium.)
+  - [ ] Audit M3: `spectrum_settings_values` and `QuickSpectrumRenderer.render` share one settings owner (or the
+    parity test widened past its one frozen setup). With the two-block split.
+  - [ ] Audit M4: unit tests of `NativeVisualizerRoute` itself (sync, caching, unbind's close and unlink, close).
+    (Medium.)
+  - [ ] Audit lows: L1 `spectrumBlock` checks `bars_len`/`peaks_len`, L9 the harness wait's use-after-free, L7 the
+    post-build check covers the `.qsb` packs (Medium, same C++ round); L2 `program_blocks` edge cases fail closed,
+    L3 settings packed on change only, L4 `setProgram` keeps the settings (High, with N2.9's files); L5 the
+    derivative guard's four missed shapes (with the derivatives-after-discard box); L6 the native pipeline joins
+    the gradual warm-up; L8 the destruction barrier sees the native objects.
   - Surface format: RGBA8 (RGBA16F gave rule (a) no gain at twice the memory; quad alignment fixed it).
     `surface_format` stays a harness-only switch.
 - [ ] N2.9 Generic mode content: a mode drawn by the core from data alone, so new modes iterate with no build
