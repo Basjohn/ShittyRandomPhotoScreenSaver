@@ -733,6 +733,21 @@ Each foundation slice adds what it learned here.
 - Continuous play across songs: chain the recordings into one clip (shifted timestamps, capture serials continued)
   and replay once; a fresh activation per song hides what a follower carries over the boundary.
 
+**Where a mode's work lives on the native core (14 Nov; `Current_Plan.md` port rule (g) and N2.9)**
+- One layer by default. A mode is a Python simulation in the engine worker (off the render thread, publishing its
+  frame record), its shaders loaded at runtime from the product's `.qsb`, and its spec. The core packs the settings
+  block (on a Settings or card change only) and the frame block (from the record) by reflected name. Studio and
+  Settings work, shader changes and simulation changes never need a module build.
+- Escape hatch: when a measurement shows the simulation too slow in the engine worker (its tick misses the frame
+  budget, or GIL-holding calls stall it), only that hot path moves to C++, after the mode's visual and reactive
+  goals are met, never while it is still being iterated toward its mock.
+- No competing layers. The move replaces the Python path in the same change, as a port replaces a renderer: one
+  owner of the simulation at any time, never a Python and a C++ version both live or selectable. It is proved
+  against the Python simulation's records (bit for bit, or a tolerance the change states and the lead accepts) at
+  the widened run set, with the tick's cost before and after.
+- A new GPU technique (depth, multiple targets, compute, a new resource kind) is a primitive, built and proved once
+  in C++ on its own harness and then used by every mode as data, never a per-mode C++ renderer.
+
 ## Operator-triggered appearance review (reference checklist)
 
 Automated image differences are not aesthetic acceptance. Previously implemented work is operator-accepted; use the following reference checks **only if** a newly observed regression or new transition tranche requires targeted appearance review:
