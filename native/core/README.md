@@ -106,6 +106,10 @@ never ships.
     edges); teardown abandoning the job in flight. A scripted backend runs it GPU-free (`job_service_self_test`).
   - `item_notifier.*` (N3.8): how the render and job threads reach an item on the GUI thread (a queued `update()`, the
     owner's lost-texture edge) without ever touching a deleted item.
+  - `backdrop.*` (N5.7b, D7 points 2 to 6 "As built (N5.7b)"): the card-material backdrop pyramid, level for level the
+    Python pyramid's (`rendering/quick/render/surface_backdrop.py`), built from the window's background layer by the frame
+    driver right after the layer, only in the frame the layer drew a new frame (the surface's drawn generation) and only
+    while its item is not parked; its item is the texture provider `MaterialSurface` samples unchanged.
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
     loader's runtime rule); Qt's types instead.
@@ -146,6 +150,10 @@ never ships.
   the Python presenter's frames on real photos at dpr 1 and 1.5 under the overscan placement, Vulkan within 1 level,
   photo changes through jobs with no pass at the hand-over, nothing at rest, the cost at rest against the protected
   retained-background path, the lost edge and teardown in flight) and of the N3.8 audit's M1 and M2 on a real render.
+- `python/backdrop_pyramid_check.py`: N5.7b's proof of the backdrop pyramid (every level against the Python pyramid on
+  OpenGL and Vulkan against OpenGL, on a dark and a bright photo at the overscan and the product's R-63 placement; each
+  material's card stills against today's; the build's GPU time against D7's budgets at 2560x1440 and 4K; nothing at
+  rest, one build per photo or dimming change, demand 0 building nothing; the owner's route; teardown).
 - `python/timer_check.py`: N2.6's proof (off is free by count, a known-cost pass scaled N times and its empty-bracket
   control, QRhi's frame figure, latched reads in a real window with the waiting read as control, the frame trace and
   its report, the two forms against each other, validation; `timer_analysis.py`).

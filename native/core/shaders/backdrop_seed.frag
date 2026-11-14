@@ -8,6 +8,9 @@
 // it samples the Python level. The layer lies in the window at uSeedWindow.zw (rows top-down) and its target is top-down
 // in memory on every backend (N0.3 F1); outside it the window is its clear colour, black. Inside, the hardware's bilinear
 // tap the blit uses; where the tap's 2 x 2 texels straddle the layer's edge, the same tap by hand with black outside.
+// Emulated against the Python blit on OpenGL before the build (two PERSONALSET photos at the overscan placement): the
+// interior equal, the hand tap within 1 level on a few texels of the outermost column or row (the blit's hardware weights
+// round its half-black taps their own way; whole-level ties to even, half up and truncation all matched it worse).
 // Dimming, the black rectangle over the wallpaper, is the uniform blend it is: the layer times uSeedLayer.w.
 
 layout(location = 0) in vec2 vUv;

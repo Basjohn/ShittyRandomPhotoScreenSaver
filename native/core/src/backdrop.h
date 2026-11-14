@@ -53,7 +53,6 @@
 #include <QtQuick/QSGTextureProvider>
 #include <rhi/qrhi.h>
 
-#include <functional>
 #include <memory>
 
 class QSGNode;
@@ -124,8 +123,14 @@ public:
     QRhiTexture *output() const;
     QSize outputSize() const;
     bool ready() const { return m_ready.loadAcquire() != 0; }
-    // Render thread: called once each time the output becomes ready (the provider's textureChanged).
-    void setOnReady(std::function<void()> onReady) { m_onReady = std::move(onReady); }
+    // Render thread: told once each time the output becomes ready (the provider's textureChanged).
+    class ReadyListener
+    {
+    public:
+        virtual ~ReadyListener() = default;
+        virtual void outputReady() = 0;
+    };
+    void setReadyListener(std::shared_ptr<ReadyListener> listener) { m_listener = std::move(listener); }
     int liveResources() const { return m_live.loadRelaxed(); }
     QJsonObject stateJson() const;
     // Any thread: the last readback's levels (taken once; false when none completed since).
@@ -157,7 +162,7 @@ private:
     QAtomicInteger<int> m_wanting { 1 };
     QAtomicInteger<int> m_ready { 0 };
     QAtomicInteger<int> m_live { 0 };
-    std::function<void()> m_onReady;
+    std::shared_ptr<ReadyListener> m_listener;
 
     mutable QMutex m_mutex;             // guards the facts below and the readback's results
     qint64 m_builds = 0;
@@ -203,9 +208,10 @@ protected:
     void itemChange(ItemChange change, const ItemChangeData &value) override;
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
 
-private:
-    friend class BackdropNode;
+    // Shared by the item (GUI thread), its node and its provider (render thread); backdrop.cpp.
     struct Shared;
+
+private:
     std::shared_ptr<Shared> m_shared;
     std::shared_ptr<WindowSurfaces> m_surfaces; // the window's registry (GUI thread; copied by the node at sync)
 };

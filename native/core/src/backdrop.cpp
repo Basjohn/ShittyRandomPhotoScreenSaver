@@ -592,8 +592,8 @@ bool BackdropPyramid::record(QRhi *rhi, QRhiCommandBuffer *cb, const Surface *so
         }
         if (becameReady && m_outputClear) {
             m_ready.storeRelease(1);
-            if (m_onReady)
-                m_onReady();
+            if (m_listener)
+                m_listener->outputReady();
         }
         return true;
     }
@@ -673,8 +673,8 @@ bool BackdropPyramid::record(QRhi *rhi, QRhiCommandBuffer *cb, const Surface *so
     }
     if (becameReady) {
         m_ready.storeRelease(1);
-        if (m_onReady)
-            m_onReady();
+        if (m_listener)
+            m_listener->outputReady();
     }
     return true;
 }
@@ -803,14 +803,16 @@ private:
     std::shared_ptr<BackdropPyramid> m_pyramid;
 };
 
+// The item's texture provider: the node's wrapper, handed out only once the output is ready (written by a clear or a
+// build). Render thread (Qt Quick's ShaderEffect asks at its sync).
 class BackdropProvider final : public QSGTextureProvider
 {
 public:
-    explicit BackdropProvider(std::function<QSGTexture *()> texture) : m_texture(std::move(texture)) {}
-    QSGTexture *texture() const override { return m_texture(); }
+    explicit BackdropProvider(std::weak_ptr<BackdropItem::Shared> shared) : m_shared(std::move(shared)) {}
+    QSGTexture *texture() const override;
 
 private:
-    std::function<QSGTexture *()> m_texture;
+    std::weak_ptr<BackdropItem::Shared> m_shared;
 };
 
 } // namespace
@@ -832,6 +834,38 @@ struct BackdropItem::Shared
     }
 };
 
+namespace {
+
+QSGTexture *BackdropProvider::texture() const
+{
+    const std::shared_ptr<BackdropItem::Shared> shared = m_shared.lock();
+    if (!shared)
+        return nullptr;
+    QMutexLocker lock(&shared->mutex);
+    const std::shared_ptr<BackdropPyramid> pyramid = shared->pyramid.lock();
+    if (!shared->texture || !pyramid || !pyramid->ready() || !pyramid->output())
+        return nullptr;
+    return shared->texture;
+}
+
+// The node's listener of the output's ready edge: the cards' ShaderEffects ask the provider again (its textureChanged,
+// emitted on the render thread, queued to them).
+class ProviderNotifier final : public BackdropPyramid::ReadyListener
+{
+public:
+    explicit ProviderNotifier(std::shared_ptr<BackdropItem::Shared> shared) : m_shared(std::move(shared)) {}
+    void outputReady() override
+    {
+        if (m_shared->provider)
+            Q_EMIT m_shared->provider->textureChanged();
+    }
+
+private:
+    std::shared_ptr<BackdropItem::Shared> m_shared;
+};
+
+} // namespace
+
 class BackdropNode final : public QSGNode
 {
 public:
@@ -839,12 +873,7 @@ public:
         : m_shared(std::move(shared)), m_registry(std::move(registry)), m_pyramid(std::make_shared<BackdropPyramid>())
     {
         m_texture = new PyramidTexture(m_pyramid);
-        const std::shared_ptr<BackdropItem::Shared> owner = m_shared;
-        m_pyramid->setOnReady([owner]() {
-            // Render thread: the output became ready; the cards' ShaderEffects ask the provider again (queued to them).
-            if (owner->provider)
-                Q_EMIT owner->provider->textureChanged();
-        });
+        m_pyramid->setReadyListener(std::make_shared<ProviderNotifier>(m_shared));
         QMutexLocker lock(&m_shared->mutex);
         m_shared->pyramid = m_pyramid;
     }
@@ -858,7 +887,7 @@ public:
             m_shared->texture = nullptr;
             m_shared->pyramid.reset();
         }
-        m_pyramid->setOnReady(nullptr);
+        m_pyramid->setReadyListener(nullptr);
         m_pyramid->release();
         delete m_texture;
         if (m_shared->provider)
@@ -918,18 +947,8 @@ BackdropItem::BackdropItem(QQuickItem *parent) : QQuickItem(nullptr), m_shared(s
 {
     g_liveItems.fetchAndAddRelaxed(1);
     setFlag(QQuickItem::ItemHasContents, true);
-    const std::weak_ptr<Shared> weak = m_shared;
     // The provider hands out the node's wrapper only once the output is ready (written by a clear or a build).
-    m_shared->provider = new BackdropProvider([weak]() -> QSGTexture * {
-        const std::shared_ptr<Shared> shared = weak.lock();
-        if (!shared)
-            return nullptr;
-        QMutexLocker lock(&shared->mutex);
-        const std::shared_ptr<BackdropPyramid> pyramid = shared->pyramid.lock();
-        if (!shared->texture || !pyramid || !pyramid->ready() || !pyramid->output())
-            return nullptr;
-        return shared->texture;
-    });
+    m_shared->provider = new BackdropProvider(std::weak_ptr<Shared>(m_shared));
     setParent(parent);
     setParentItem(parent);
 }
