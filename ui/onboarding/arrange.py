@@ -380,6 +380,8 @@ class ArrangePage(Page):
     """Shared Guided Setup/Quick Start draft editor; writes only on Apply/leave."""
 
     pendingChanged = Signal(bool)
+    # Apply wrote positions and routes into Settings: pages that show them reload (1D.12 A).
+    applied = Signal()
 
     def __init__(self, settings, parent=None, *, show_slots: bool = True) -> None:
         super().__init__(settings, parent)
@@ -646,8 +648,11 @@ class ArrangePage(Page):
     def apply(self) -> bool:
         if self.model is None: return False
         # Merge onto current Settings: other pages may have written meanwhile.
-        if self.model.pending: self.settings.set("widgets", self.model.apply(base=self.settings.get("widgets")))
-        self._pending_changed(); return True
+        wrote = bool(self.model.pending)
+        if wrote: self.settings.set("widgets", self.model.apply(base=self.settings.get("widgets")))
+        self._pending_changed()
+        if wrote: self.applied.emit()
+        return True
 
     def discard(self):
         if self.model is not None: self.model.discard(); self.canvas._selected = None; self._refresh_item_choices(); self.canvas.update(); self._pending_changed()

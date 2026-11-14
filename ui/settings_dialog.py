@@ -1149,7 +1149,20 @@ class SettingsDialog(QDialog):
 
     def _create_layout_tab(self) -> QWidget:
         from ui.onboarding.layout_page import LayoutPage
-        return LayoutPage(self._settings, parent=self.content_stack)
+        page = LayoutPage(self._settings, parent=self.content_stack)
+        page.widgetsWritten.connect(self._reload_widgets_tab_after_layout_write)
+        return page
+
+    def _reload_widgets_tab_after_layout_write(self) -> None:
+        """Layout wrote positions/routes: a Widgets page built earlier follows them (1D.12 A).
+
+        Without this the built page kept its old position combo (a moved widget never read CUSTOM, a reset one
+        kept reading it) and the page's next save wrote that stale position back over the Layout tab's.
+        """
+        tab = self.__dict__.get("widgets_tab")  # the built tab only; never construct it here
+        reload = getattr(tab, "load_from_settings", None)
+        if callable(reload):
+            reload()
 
     def run_guided_setup(self) -> None:
         """Show Guided Setup in place of the sidebar and tabs (never a second window)."""
