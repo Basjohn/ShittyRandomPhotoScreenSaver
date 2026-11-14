@@ -1046,6 +1046,24 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
 
+### 1D.14 Checkpoint audit 1 fixes (15 Nov; `Docs/Future_Work/Checkpoint_Audits_Nov15.md`; the next Opus Medium opening, before more side work)
+
+- [ ] High: choosing a corner in Visualizers > Fullscreen wipes the overlay's whole Fullscreen Edit placement
+  (`ui/tabs/visualizers_fullscreen_page.py:213-229`, `core/settings/fullscreen_overlays.py:386`). The lead's brief
+  caused it by saying "clears". Decided: the dropdown is about position, so "moved" means a non-zero offset only. A
+  corner choice keeps scale, text box, base width and child layout, and returns only the position to the corner.
+  The moved offsets are kept through the one owner (`normalize_fullscreen_overlays`) as the overlay's stored custom
+  position, so choosing CUSTOM again restores it, as ordinary widgets keep their custom geometry. Restore the
+  pre-merge test's assertion that scale and artwork survive a corner change, with a note saying why it changed back.
+- [ ] Medium: the 3D control hint replays after the Visualizer moves back to a display whose card is reused
+  (`scene_controller.py:2549-2634`, `:3247`, `visualizer_host_binding.py:601-674`). Project `controlHintShown` at
+  the display-move edge too. Turn the audit's probe
+  (`.artifacts/evidence/visualizers/shared/checkpoint_audit1/20261115_hint_return_hop/`) into the guard. It
+  replaces `test_expanded_readmission_and_a_rebuilt_root_keep_the_set`'s faked rebuild and L2's methods compiled
+  out of `display_manager.py` with the shared doubles.
+- L1 (the tie budget caps a count, not a level) is recorded, not fixed: a regression confined to 8 isolated pixels
+  a frame is invisible, and N5.2a's seven stay exact.
+
 ### 1D.13 Side defects found at its merge (15 Nov; Opus Medium when a slot is free of native work)
 
 - [ ] Two tests fail only inside one long same-process pytest run (2,413 tests over 14 minutes), and pass alone:
