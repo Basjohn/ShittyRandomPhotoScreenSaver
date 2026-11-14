@@ -227,8 +227,10 @@ def test_the_slot_carries_the_nodes_admission(source, playing) -> None:
     assert bool(flags & FLAG_SOURCE_CURRENT) == snapshot_has_current_reactive_source(snapshot)
     native = bool(flags & FLAG_PRESENT_FRAME) and (not flags & FLAG_PLAYING or bool(flags & FLAG_SOURCE_CURRENT))
     assert native == snapshot_is_render_admissible(snapshot)
-    text = (CORE / "src" / "spectrum.cpp").read_text(encoding="utf-8")
-    assert "kFlagPresentFrame" in text and "kFlagSourceCurrent" in text
+    # The admission is every mode item's (N2.9 round 2: stream_source.cpp's syncStream, under SpectrumSource too).
+    text = (CORE / "src" / "stream_source.cpp").read_text(encoding="utf-8")
+    assert "kFlagPresentFrame" in text and "kFlagSourceCurrent" in text and "kFlagPlaying" in text
+    assert "class SpectrumSource final : public StreamSource" in (CORE / "src" / "spectrum.h").read_text(encoding="utf-8")
 
 
 def test_the_port_sets_exactly_the_frame_members_by_name() -> None:

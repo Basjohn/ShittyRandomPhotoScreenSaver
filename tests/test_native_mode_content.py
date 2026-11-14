@@ -176,21 +176,37 @@ def test_the_spectrum_block_copies_the_packed_settings_and_reads_no_json_per_rec
 # ------------------------------------------------------------------------------------------- Probe Rings
 
 
-def test_probe_rings_is_never_registered():
-    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+def registered_places(mode_id: str, code: int, schema_id: int) -> list[str]:
+    """Where the product knows a mode: its code, its schema, its Settings spec, its registry descriptor, its shaders."""
+    from core.settings import visualizer_mode_registry
     from core.settings.visualizer_mode_settings import iter_mode_settings
-    from core.visualizer_engine import native_schema
-    from core.visualizer_engine.packet_abi import MODE_CODES
-
-    assert pr.MODE_ID not in MODE_CODES and pr.MODE_CODE not in MODE_CODES.values()
-    assert pr.SCHEMA.schema_id not in native_schema.native_schemas()
-    assert all(spec.mode_id != pr.MODE_ID for spec in iter_mode_settings())
-    with pytest.raises(Exception):
-        get_visualizer_mode_descriptor(pr.MODE_ID)
-    # The product's shader folders never hold it (it is baked by the harness only).
+    from core.visualizer_engine import native_schema, packet_abi
     from tools import regen_qrc
 
-    assert not [p for p in regen_qrc.quick_shader_sources() if p.parent == pr.HERE]
+    places = []
+    if mode_id in packet_abi.MODE_CODES or code in packet_abi.MODE_CODES.values():
+        places.append("MODE_CODES")
+    if schema_id in native_schema.native_schemas():
+        places.append("native_schemas")
+    if any(spec.mode_id == mode_id for spec in iter_mode_settings()):
+        places.append("mode settings")
+    try:
+        visualizer_mode_registry.get_visualizer_mode_descriptor(mode_id)
+        places.append("mode registry")
+    except Exception:
+        pass
+    if [p for p in regen_qrc.quick_shader_sources() if p.parent == pr.HERE]:
+        places.append("product shaders")
+    return places
+
+
+def test_probe_rings_is_never_registered(monkeypatch):
+    from core.visualizer_engine import packet_abi
+
+    assert registered_places(pr.MODE_ID, pr.MODE_CODE, pr.SCHEMA.schema_id) == []
+    # Negative control (audit N29 L11): a stand-in registration of its code is seen.
+    monkeypatch.setattr(packet_abi, "MODE_CODES", {**packet_abi.MODE_CODES, pr.MODE_ID: pr.MODE_CODE})
+    assert registered_places(pr.MODE_ID, pr.MODE_CODE, pr.SCHEMA.schema_id) == ["MODE_CODES"]
 
 
 def _block_members(text: str, block: str) -> list[str]:
