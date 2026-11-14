@@ -150,6 +150,7 @@ private:
     mutable QMutex m_mutex;                 // guards the members down to m_presentationGeneration
     PacketReader *m_current = nullptr;      // read only on the render thread; replaced on the GUI thread
     QList<PacketReader *> m_retiring;       // retired, waiting for the render thread's release
+    int m_waiters = 0;                      // waitPaused calls in progress: no retired reader is deleted under them
     SpectrumPresentation m_presentation;    // the GUI's latest
     SpectrumProgram m_program;              // the GUI's latest program and settings
     quint64 m_presentationGeneration = 0;   // the presentation's or the program's change
@@ -195,9 +196,18 @@ public:
 private:
     struct Resources;
     bool ensure(QRhi *rhi, ColorTarget &target, QString *error);
+    bool build(QRhi *rhi, ColorTarget &target, QString *error);
 
     std::shared_ptr<SpectrumSource> m_source;
     std::unique_ptr<Resources> m_res;
+    // A failed build (audit 14 Nov, M2): the inputs it failed with; nothing is created again until one of them changes
+    // (another QRhi, another target pass, another program pack), so a refused pipeline is not rebuilt every frame.
+    bool m_failed = false;
+    QRhi *m_failedRhi = nullptr;
+    QRhiRenderPassDescriptor *m_failedPass = nullptr;
+    quint64 m_failedGeneration = 0;
+    QString m_failedError;
+    qint64 m_failures = 0;
 };
 
 } // namespace srpss_core

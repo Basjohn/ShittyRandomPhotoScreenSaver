@@ -380,7 +380,7 @@ Rectangle {
 class Scene:
     """An opaque black display with one native Spectrum at (MARGIN, MARGIN), its target on the item's own rect."""
 
-    def __init__(self, core, engine, host) -> None:
+    def __init__(self, core, engine, host, *, program: bool = True) -> None:
         from PySide6.QtCore import QUrl
         from PySide6.QtQml import QQmlComponent
         from PySide6.QtQuick import QQuickItem
@@ -394,7 +394,8 @@ class Scene:
         self.content = self.root.findChild(QQuickItem, "contentHost")
         host.set_content(self.root)
         self.spectrum = core.spectrum(self.content)
-        self.spectrum.program(spectrum_pack())    # the product's pack, loaded at run time (N2.5 round 4)
+        if program:                               # (False: the content-failure check's item with no program)
+            self.spectrum.program(spectrum_pack())    # the product's pack, loaded at run time (N2.5 round 4)
         self.spectrum.composite.set(surface_format=SURFACE_FORMAT[0])
         held = self.spectrum.composite.state()["config"].get("surface_format", "rgba8")
         if held != SURFACE_FORMAT[0]:          # a module from before round 5 ignores the option
@@ -802,6 +803,7 @@ def round_program(core, engine, app, host, records: list[dict]) -> dict:
         scene.close(app)
         host.frames(2)
         host_check._flush_deletes(app)
+    failure = content_failure(core, engine, app, host, card, base["record"])
     import numpy as np
 
     same = product is not None and compiled is not None and product.shape == compiled.shape
@@ -813,9 +815,44 @@ def round_program(core, engine, app, host, records: list[dict]) -> dict:
               "control_compiled_in_refuses_the_name": "u_test_tint" in refused,
               "compiled_in_draws_the_product_pack": same and differing == 0
               and int(np.abs(product.astype(int)).sum()) > 0,
-              "control_one_level_seen": nudged is not None and bool(np.any(nudged != product))}
+              "control_one_level_seen": nudged is not None and bool(np.any(nudged != product)),
+              "content_failure_recorded_once": failure["held"]}
     return {"pass": all(checks.values()), "checks": checks, "magenta_pixels": magenta, "refused": refused,
-            "compiled_in_differing_pixels": differing}
+            "compiled_in_differing_pixels": differing, "content_failure": failure}
+
+
+def content_failure(core, engine, app, host, card: dict, record: bytes, frames: int = 5) -> dict:
+    """Audit 14 Nov, M2: an item with no program cannot build its content. Its failure is one edge (recorded once,
+    reported in the source's state), and the frames after it create nothing again: the same failure is not rebuilt
+    every frame, and no QRhi object of the content stays alive. (Before the fix nothing was recorded and the content's
+    buffers and bindings were created and freed every frame.)"""
+    scene = Scene(core, engine, host, program=False)
+    stream = Stream()
+    states = []
+    try:
+        width, height = card["item_size"]
+        scene.spectrum.composite.set(rect=[0.0, 0.0, width, height], coverage=None, quarters=int(card["quarters"]),
+                                     visible=True)
+        scene.spectrum.present_raw(_bare(card))
+        scene.spectrum.bind(stream.name, expect=stream.expect)
+        for step in range(frames):
+            stream.publish(record, float(step))
+            scene.spectrum.update()
+            host.frames(1)
+            states.append(scene.spectrum.state())
+        composite = scene.spectrum.composite.state()
+    finally:
+        stream.close()
+        scene.close(app)
+        host.frames(2)
+        host_check._flush_deletes(app)
+    last = states[-1] if states else {}
+    facts = last.get("last_facts") or {}
+    held = (bool(states) and facts.get("content_failed") is True and facts.get("content_failures") == 1
+            and last.get("records") == 1 and last.get("draws") == 0
+            and "content failed" in str(last.get("last_reason", "")) and last.get("accepted", 0) >= 1)
+    return {"held": held, "records": [s.get("records") for s in states], "last_reason": last.get("last_reason"),
+            "last_facts": facts, "composite_surface": composite.get("surface")}
 
 
 def vulkan_against_opengl(out: Path) -> dict:

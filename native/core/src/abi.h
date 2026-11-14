@@ -25,7 +25,9 @@
 // spectrum_block takes the pack and the settings; spectrum_block_layout takes a pack; the composite's surface_format
 // option (rgba8, rgba16f; N2.5 rule (a)). Round 4 never compiled (limited-API macros): round 5 is ABI 8's first build.
 // 9 (N2.3 leftovers, audit 14 Nov lows): the packet reader's controls split (skip_seqlock is now skip_head_seqlock and
-// skip_copy_reread) and copy_while_retiring added; packet_reader_state no longer has dropped_through.
+// skip_copy_reread) and copy_while_retiring added; packet_reader_state no longer has dropped_through. The N2.5 audit's
+// fixes: the composite's pixel_ratio option (the window's own logical-to-framebuffer ratio per axis, H1); a Spectrum
+// content that failed to build reports content_failed/content_failures once and is not rebuilt every frame (M2).
 #pragma once
 
 #define SRPSS_NATIVE_CORE_ABI 9
