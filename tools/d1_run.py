@@ -5,7 +5,8 @@ Display 0 is rare: the lead only, through ``--allow-primary``, never in a test, 
 ``--only-display <index>`` and ``--exit-after <seconds>``, from a COPY of a profile, and brings back:
 
 * **frames**: at the requested times after the first reveal, the saver window's own content on that display (the
-  next frame it renders, read back from its back buffer on its render thread at the window's device pixels, PNG;
+  next frame it renders, read back from its swap chain through QRhi on its render thread at the window's device
+  pixels, on OpenGL and Vulkan; the image is made and encoded on a writer thread, PNG;
   ``QQuickWindow.grabWindow`` deadlocks against the saver's Python render nodes), cropped around named points of a
   named scene item (default the Visualizer card's frame) and zoomed nearest-neighbour; ``screen`` steps also grab the
   composited desktop of that display (what DWM shows), visible runs only;
@@ -520,51 +521,74 @@ def client_size(window) -> tuple[int, int]:
     return rect.right - rect.left, rect.bottom - rect.top
 
 
-def read_back_frame(window, size: tuple[int, int]):
-    """Render thread, inside ``afterRendering``: the frame just rendered into the window's back buffer, as a QImage.
+@dataclass(frozen=True)
+class RawFrame:
+    """A swap chain read-back as the render thread hands it over: Qt's bytes, not yet an image (``frame_image``)."""
+    data: object                 # QByteArray, rows of ``width * 4`` bytes
+    texture_format: object       # QRhiTexture.Format
+    width: int
+    height: int
+    y_up: bool                   # rows run bottom-up (OpenGL)
 
-    ``beginExternalCommands`` makes Qt's OpenGL backend execute the frame's recorded commands first, so the read sees
-    this frame; read state is saved and restored, and ``endExternalCommands`` tells Qt its state is dirty. Alpha is
-    ignored (the window is opaque; the panel shows RGB).
+
+def read_back_frame(window) -> RawFrame:
+    """Render thread, inside ``afterRendering``: the frame just rendered into the window's swap chain, through QRhi.
+
+    Backend-neutral (OpenGL and Vulkan; N2.8): the read-back of the swap chain's current back buffer is recorded on
+    the frame's own command buffer after the scene's pass (``afterRendering`` is outside it), and ``QRhi.finish``
+    submits and waits for it, as Qt Quick's own ``grabWindow`` does on its render thread, without blocking the GUI
+    thread. Only the read-back runs here; turning the bytes into an image (copy, row flip) is ``frame_image``'s, on the
+    writer thread (1C.2: those copies on the render thread cost the other display a frame per 4K grab).
     """
-    from OpenGL import GL
-    from PySide6.QtGui import QImage, QOpenGLContext
+    from PySide6.QtCore import QByteArray
+    from PySide6.QtGui import QRhiReadbackDescription, QRhiReadbackResult
 
-    width, height = size
-    window.beginExternalCommands()
-    try:
-        context = QOpenGLContext.currentContext()
-        if context is None:
-            raise RuntimeError("no current OpenGL context in afterRendering")
-        fbo = int(context.defaultFramebufferObject())
-        previous_fbo = int(GL.glGetIntegerv(GL.GL_READ_FRAMEBUFFER_BINDING))
-        previous_buffer = int(GL.glGetIntegerv(GL.GL_READ_BUFFER))
-        previous_alignment = int(GL.glGetIntegerv(GL.GL_PACK_ALIGNMENT))
-        try:
-            GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, fbo)
-            if fbo == 0:
-                GL.glReadBuffer(GL.GL_BACK)
-            GL.glPixelStorei(GL.GL_PACK_ALIGNMENT, 4)
-            data = GL.glReadPixels(0, 0, width, height, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE)
-        finally:
-            GL.glPixelStorei(GL.GL_PACK_ALIGNMENT, previous_alignment)
-            GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, previous_fbo)
-            if previous_fbo == 0:
-                GL.glReadBuffer(previous_buffer)
-    finally:
-        window.endExternalCommands()
-    raw = bytes(data)
-    if len(raw) != width * height * 4:
-        raise RuntimeError(f"read {len(raw)} bytes for {width}x{height}")
-    image = QImage(raw, width, height, width * 4, QImage.Format.Format_RGBX8888).copy()   # own the bytes
-    return flip_rows(image)
+    rhi, swap_chain = window.rhi(), window.swapChain()
+    if rhi is None or swap_chain is None:
+        raise RuntimeError("the window has no QRhi swap chain in afterRendering")
+    batch = rhi.nextResourceUpdateBatch()
+    if batch is None:
+        raise RuntimeError("QRhi has no free resource update batch")
+    result = QRhiReadbackResult()
+    batch.readBackTexture(QRhiReadbackDescription(), result)   # no texture: the current swap chain's back buffer
+    swap_chain.currentFrameCommandBuffer().resourceUpdate(batch)
+    rhi.finish()
+    size = result.pixelSize
+    # ``result.data`` wraps the member of ``result`` (gone with it): a QByteArray copy shares the bytes, no deep copy.
+    return RawFrame(QByteArray(result.data), result.format, size.width(), size.height(), rhi.isYUpInFramebuffer())
 
 
-def flip_rows(image):
-    """OpenGL rows run bottom-up; images top-down."""
-    from PySide6.QtCore import Qt
+def frame_image(frame):
+    """Writer thread: a ``RawFrame`` as a top-down QImage that owns its bytes; anything else is returned unchanged.
 
-    return image.flipped(Qt.Orientation.Vertical) if hasattr(image, "flipped") else image.mirrored(False, True)
+    Alpha is ignored (the window is opaque; the panel shows RGB). The bytes are copied (and OpenGL's bottom-up rows
+    turned over) row band by row band in Python, so the writer thread never holds the GIL for long (the saver's
+    Python render nodes need it on the render threads): one 4K ``bytes()`` plus ``QImage.flipped`` held it 16 ms
+    in one piece. The QImage is made over the new buffer without another copy (PySide keeps the buffer alive).
+    """
+    if not isinstance(frame, RawFrame):
+        return frame
+    from PySide6.QtGui import QImage, QRhiTexture
+
+    formats = {QRhiTexture.Format.RGBA8: QImage.Format.Format_RGBX8888,
+               QRhiTexture.Format.BGRA8: QImage.Format.Format_RGB32}      # BGRA bytes: 0xffRRGGBB little-endian
+    image_format = formats.get(frame.texture_format)
+    if image_format is None:
+        raise RuntimeError(f"no image format for the swap chain's {frame.texture_format}")
+    source = memoryview(frame.data)
+    stride = frame.width * 4
+    if len(source) != stride * frame.height:
+        raise RuntimeError(f"read {len(source)} bytes for {frame.width}x{frame.height}")
+    pixels = bytearray(len(source))
+    if frame.y_up:
+        last = (frame.height - 1) * stride
+        for row in range(0, len(source), stride):
+            pixels[row:row + stride] = source[last - row:last - row + stride]
+    else:
+        band = stride * 64
+        for start in range(0, len(source), band):
+            pixels[start:start + band] = source[start:start + band]
+    return QImage(pixels, frame.width, frame.height, stride, image_format)
 
 
 class _FrameGrab:
@@ -573,15 +597,17 @@ class _FrameGrab:
     ``QQuickWindow.grabWindow`` cannot be used on the live saver: it blocks the GUI thread (holding the GIL) until the
     render thread renders, and the saver's Python render nodes need the GIL on that thread (the first hidden run hung
     there until the watchdog ended it). This waits for nothing: the next frame the window renders anyway is read.
+    ``render_thread_ms`` is how long the read-back held the render thread (the image is made on the writer thread).
     """
 
-    def __init__(self, window, size: tuple[int, int], on_done, timeout_ms: int = 5000) -> None:
+    def __init__(self, window, on_done, timeout_ms: int = 5000) -> None:
         from PySide6.QtCore import QObject, Qt, QTimer, Signal
 
         class Relay(QObject):
             ready = Signal(object)
 
-        self.window, self.size, self.on_done, self.pending = window, size, on_done, True
+        self.window, self.on_done, self.pending = window, on_done, True
+        self.render_thread_ms: float | None = None
         self.relay = Relay()
         self.relay.ready.connect(self._deliver, Qt.ConnectionType.QueuedConnection)
         window.afterRendering.connect(self._after_rendering, Qt.ConnectionType.DirectConnection)
@@ -592,10 +618,12 @@ class _FrameGrab:
         if not self.pending:
             return
         self.pending = False
+        began = time.perf_counter()
         try:
-            result = read_back_frame(self.window, self.size)
+            result = read_back_frame(self.window)
         except Exception as exc:                      # handed over and recorded as the step's failure
             result = exc
+        self.render_thread_ms = (time.perf_counter() - began) * 1000.0
         self.relay.ready.emit(result)
 
     def _deliver(self, result) -> None:                # GUI thread
@@ -765,8 +793,9 @@ class D1Driver:
             if step.kind == "grab":
                 # The scene geometry is read now, on the GUI thread; the pixels come from the next rendered frame.
                 record.update(self._frame_facts(window))
-                self._grabs.append(_FrameGrab(window, tuple(record["client_px"]),
-                                              partial(self._grabbed, window, step, record)))
+                grab = _FrameGrab(window, lambda result: self._grabbed(window, step, record, result,
+                                                                       grab.render_thread_ms))
+                self._grabs.append(grab)
                 return
             if step.kind == "screen":
                 record.update(self._frame_facts(window))
@@ -784,7 +813,9 @@ class D1Driver:
             record.update(ok=False, error=repr(exc))
         self._complete(record)
 
-    def _grabbed(self, window, step: Step, record: dict, result) -> None:
+    def _grabbed(self, window, step: Step, record: dict, result, render_thread_ms: float | None = None) -> None:
+        if render_thread_ms is not None:
+            record["render_thread_ms"] = round(render_thread_ms, 3)
         if isinstance(result, Exception):
             record.update(ok=False, error=repr(result))
             self._complete(record)
@@ -840,6 +871,7 @@ class D1Driver:
         return facts
 
     def _save_frame(self, image, step: Step, record: dict, offset: tuple[float, float]) -> dict:
+        image = frame_image(image)                      # a grab's read-back becomes an image here, off the render thread
         if image is None or image.isNull():
             raise RuntimeError(f"{step.kind} returned an empty image")
         frames = self.out / "frames"
