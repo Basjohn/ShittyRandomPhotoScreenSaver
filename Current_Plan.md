@@ -452,9 +452,15 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   - [ ] The Oscilloscope's port: its Quick renderer draws an instanced beam from a storage buffer with its own scene
     target and bloom, not `oscilloscope.frag`, so its N5 port needs those primitives (or returns to the 2D shader).
 - [ ] N2.8 Lead, Display 1: the first rehearsal (cards and Spectrum on Vulkan; no wallpaper yet).
-  - Pre-check done 14 Nov (`.artifacts/evidence/display/d1_run/20261114_n27_vulkan_visible/`, displays on):
-    the saver on Vulkan revealed on its first presented frame, every card drew with its material and text, and
-    it exited 0 through the terminal barrier.
+  - Run 14 Nov on main at ABI 11 (`.artifacts/evidence/display/d1_run/20261114_n28_vulkan_screen_only/`, both
+    displays on): what the panel shows (DWM) is every card with its material and text and the native Spectrum
+    drawing the recorded clip, black where the wallpaper will be; exit 0 through the terminal barrier. Rule (f)
+    passes for Spectrum's first rehearsal; the Python renderer retires in the switch change.
+  - [ ] Defect (tool, from 667224c1): `d1_run.py`'s QRhi `grab` breaks what the saver presents on Vulkan: after
+    the first grab every later `screen` step is black, though the grabs themselves keep reading content
+    (`20261114_n28_vulkan_spectrum/`: grabs at 5, 15, 30 s have content, screens at 15 and 40 s are black; the
+    same run with screen steps only shows content). Root cause (the swap chain read back inside `afterRendering`
+    and `QRhi.finish` mid-frame are the suspects; check OpenGL too), fix, and a test that presents after a grab.
   - [ ] H1 on a real window: at a fractional scale (the MSI at 150 %) the native Spectrum draws placed exactly,
     the framebuffer size read from Qt's swapchain matching what Qt projects onto (N2.9 proved it in the hidden
     host's redirect target only).
@@ -941,7 +947,13 @@ arrangement change, a display added or removed, the owning display lost, Setting
   - Root cause fixed 14 Nov (R-212): a route-only widgets write derives its section from the store's remembered
     canonical one and the Save no longer copies the root three times; the settings part 39.1 -> 11.7 ms, saved
     bytes identical (`display/move_timing/20261114_save_cost/`).
-  - [ ] Lead, two displays: the hidden two-display `--diag gui-stall-stacks` before/after on the product.
+  - [ ] Not fixed in the product (lead, 14 Nov, both displays, the 12 Nov recipe:
+    `display/d1_run/20261114_1c2_move_hidden_stalls_after_r212/`): the hop's Save still stalls the GUI thread
+    58.6 ms (57.2 before), now inside `JsonSettingsStore.setValue`'s deepcopy of the whole widgets root
+    (`json_store.py:345`), inflated by the render threads' GIL like the rest. R-212's single-threaded 39 to 12 ms
+    does not show at the product. Next: the store takes ownership of the fresh canonical root the manager builds
+    (no deepcopy for a value no caller keeps), or the Save moves to the hop fade's end edge by event order (no
+    timer); proved with this recipe, the stall's GUI stack free of settings.
 - Visible move confirmed with both displays visible, 13 Nov (`d1_run.py --second-display-visible`): Extruded
   Bubble expanded TV -> MSI -> TV, each landed about 2 s after the press; the hop's Save measured 64-89 ms of GUI
   stall with both displays visible (the defect above). Evidence `display/d1_run/20261113_1c2_move_both_visible/`.
