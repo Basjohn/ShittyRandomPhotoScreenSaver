@@ -17,16 +17,20 @@
             1.0
           ],
           [
-            0.1,
-            0.78
+            0.08,
+            0.92
           ],
           [
-            0.5,
-            0.7
+            0.24,
+            0.58
+          ],
+          [
+            0.7,
+            0.5
           ],
           [
             1.0,
-            0.56
+            0.34
           ]
         ],
         "spectrum_notch_positions_mirrored": [
@@ -103,7 +107,7 @@
         "spectrum_drop_speed": 1.6,
         "spectrum_ghosting_enabled": true,
         "spectrum_rainbow_ghost": false,
-        "spectrum_ghost_alpha": 0.7,
+        "spectrum_ghost_alpha": 0.8,
         "spectrum_ghost_decay": 0.18,
         "spectrum_ghost_color_source": "Bar Fill",
         "spectrum_ghost_color": [

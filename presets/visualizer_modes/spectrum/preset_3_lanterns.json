@@ -99,7 +99,7 @@
         "spectrum_drop_speed": 0.72,
         "spectrum_ghosting_enabled": true,
         "spectrum_rainbow_ghost": false,
-        "spectrum_ghost_alpha": 0.55,
+        "spectrum_ghost_alpha": 0.75,
         "spectrum_ghost_decay": 0.18,
         "spectrum_ghost_color_source": "Bar Fill",
         "spectrum_ghost_color": [
