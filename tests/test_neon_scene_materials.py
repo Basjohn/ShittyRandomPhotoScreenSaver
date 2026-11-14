@@ -132,15 +132,14 @@ def test_ray_admission_is_event_driven_and_colour_strength_change_the_actual_ray
     snapshot = _base(shockwave_grid_wire_display='Glass + Vertices', shockwave_grid_sun_enabled=True)
     capture.render(host, snapshot)
     renderer = host._implementations['shockwave_grid']
-    from rendering.quick.visualizer.implementations.shockwave_grid import _SKY_UNIFORMS
-    location = renderer._resources.uniforms('sky', _SKY_UNIFORMS)['uSkyPass']
-    actual = gl.glUniform1i
+    actual = renderer._draw
     passes = []
-    def record(uniform, value):
-        if uniform == location and int(gl.glGetIntegerv(gl.GL_CURRENT_PROGRAM)) == renderer._resources._programs['sky']:
-            passes.append(value)
-        return actual(uniform, value)
-    monkeypatch.setattr(gl, 'glUniform1i', record)
+    def record(key, values, *draw):
+        # Each sky draw's pass, as its pass block carries it (N1.6).
+        if key == 'sky':
+            passes.append(values['uSkyPass'])
+        return actual(key, values, *draw)
+    monkeypatch.setattr(renderer, '_draw', record)
     names, meshes = dict(renderer._target._names), dict(renderer._resources._meshes)
     disabled = capture.render(host, snapshot)
     assert 3 not in passes and 1 not in passes

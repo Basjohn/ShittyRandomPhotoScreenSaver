@@ -11,6 +11,7 @@ flight move a real eye over the land; audio cannot change framing or target sizi
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -1334,5 +1335,45 @@ void main() {
 """
 )
 
+# N1.6 (``portable_program``): each program's loose uniforms become ONE std140 pass block its stages declare, the
+# land's samplers at the units the renderer binds (the stored cells 4, a grown grid's overlay 5; an ungrown grid never
+# reads the overlay). A uniform's initialiser is not Vulkan GLSL: the composed sources drop it and the block starts
+# from it instead (``NEON_DEFAULTS``); the shared pieces above keep theirs for the probes that draw them loose. The
+# renderer (``rendering.quick.visualizer.implementations.shockwave_grid``) keeps each program's values as its uniforms
+# held them and packs them for each draw.
+from rendering.gl_programs.portable import portable_program  # noqa: E402
+
+NEON_HEIGHT_UNIT, NEON_OVERLAY_UNIT = 4, 5
+NEON_SAMPLERS = {"uTerrain": NEON_HEIGHT_UNIT, "uTerrainDelta": NEON_OVERLAY_UNIT}
+# What a uniform declared with an initialiser read before any draw set it.
+NEON_DEFAULTS = {"uTerrainGrid": (0.0, 0.0, 1.0), "uTerrainOrigin": (0.0, 0.0, 1.0, 1.0), "uWaterLines": (1.0, 1.0)}
+_INITIALISED = re.compile(r"^([ \t]*uniform[ \t]+\w+[ \t]+(\w+))[ \t]*=[^;\n]*;", re.M)
+
+
+def _without_initialisers(source: str) -> str:
+    """``source`` with each ``uniform T name = value;`` declared as ``uniform T name;`` (its value in
+    ``NEON_DEFAULTS``; an initialised uniform missing there is an error, so no default is lost silently)."""
+    unknown = sorted({match.group(2) for match in _INITIALISED.finditer(source)} - set(NEON_DEFAULTS))
+    if unknown:
+        raise ValueError(f"initialised uniforms without a block default: {unknown}")
+    return _INITIALISED.sub(lambda match: match.group(1) + ";", source)
+
+
+# The basin (terrain and water) keeps its loose uniforms: on its pass block the Glass surfaces drew a few pixels one
+# 8-bit level apart in OpenGL on 19-215 of 549 recorded frames per run (the 2026-11-14 identity record; every other
+# program bit-identical), so N1.6 does not convert it here; it converts at its port. ``NEON_BLOCK`` is the layout it
+# will pack then: the renderer keeps the basin's values by the same names and uploads them as its uniforms.
+NEON_BLOCK = portable_program(
+    _without_initialisers(NEON_VERTEX_SOURCE), (_without_initialisers(NEON_FRAGMENT_SOURCE),), block="NeonBasin",
+    samplers=NEON_SAMPLERS)[2]
+NEON_SKYLINE_VERTEX_SOURCE, (NEON_SKYLINE_FRAGMENT_SOURCE,), NEON_SKYLINE_BLOCK = portable_program(
+    _without_initialisers(NEON_SKYLINE_VERTEX_SOURCE), (_without_initialisers(NEON_SKYLINE_FRAGMENT_SOURCE),),
+    block="NeonSkyline", samplers=NEON_SAMPLERS)
+NEON_SKY_VERTEX_SOURCE, (NEON_SKY_FRAGMENT_SOURCE,), NEON_SKY_BLOCK = portable_program(
+    _without_initialisers(NEON_SKY_VERTEX_SOURCE), (_without_initialisers(NEON_SKY_FRAGMENT_SOURCE),),
+    block="NeonSky", samplers=NEON_SAMPLERS)
+
 __all__ = ["BasinView", "basin_view", "orbit_view", "NEON_VERTEX_SOURCE", "NEON_FRAGMENT_SOURCE",
-           "NEON_SKY_VERTEX_SOURCE", "NEON_SKY_FRAGMENT_SOURCE", "NEON_SKYLINE_VERTEX_SOURCE", "NEON_SKYLINE_FRAGMENT_SOURCE"]
+           "NEON_SKY_VERTEX_SOURCE", "NEON_SKY_FRAGMENT_SOURCE", "NEON_SKYLINE_VERTEX_SOURCE", "NEON_SKYLINE_FRAGMENT_SOURCE",
+           "NEON_BLOCK", "NEON_SKYLINE_BLOCK", "NEON_SKY_BLOCK", "NEON_DEFAULTS", "NEON_HEIGHT_UNIT", "NEON_OVERLAY_UNIT",
+           "NEON_SAMPLERS"]

@@ -165,7 +165,7 @@ uniform vec4 uReaction;                  // strength (0 = off), peaks, pulses, s
 uniform float uReactionBands[5];         // eased lane drives, 0..1
 uniform float uReactionPhase;            // the landforms' wander, advanced by the music
 uniform float uReactionMaximum;          // the authored summit: the shaper's right edge
-uniform float uReactionLanes[5 * REACTION_SAMPLES];   // per lane, its eased weight along the land's height
+uniform float uReactionLanes[{5 * REACTION_SAMPLES}];   // per lane (5 * REACTION_SAMPLES), its eased weight along the land's height
 uniform float uReactionBias[REACTION_SAMPLES];
 uniform vec4 uReactionForms;             // Growth (amount), its shape (0 mounds .. 1 spires), Indents (amount)
 uniform vec2 uReactionDrives;            // the music's fixed-scale drive of Growth and of Indents, 0..1

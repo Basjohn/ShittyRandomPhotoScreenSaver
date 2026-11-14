@@ -22,8 +22,10 @@ from dataclasses import dataclass
 from OpenGL import GL as gl
 
 from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
+from rendering.gl_programs.portable import portable_program
 
 from .post import FULLSCREEN_VERTEX_SOURCE
+from .uniforms import PassBlocks
 
 SHAFT_TAPS = 16
 
@@ -79,6 +81,15 @@ void main() {
 }
 """ % (SHAFT_TAPS, SHAFT_TAPS, SHAFT_TAPS)
 
+# N1.6 (``portable_program``): each pass's values in one std140 pass block, its source at unit 0 (the unit it read as
+# a loose uniform); the gather's two draws each bind their own copy.
+_, (_DOWNSAMPLE_FRAGMENT,), _ = portable_program(None, (_DOWNSAMPLE_FRAGMENT,), block="ShaftDownsample",
+                                                                 samplers={"uSource": 0})
+_, (_DOWNSAMPLE_SAMPLES_FRAGMENT,), _DOWNSAMPLE_SAMPLES_BLOCK = portable_program(
+    None, (_DOWNSAMPLE_SAMPLES_FRAGMENT,), block="ShaftDownsampleSamples", samplers={"uSource": 0})
+_, (_GATHER_FRAGMENT,), _GATHER_BLOCK = portable_program(None, (_GATHER_FRAGMENT,), block="ShaftGather",
+                                                         samplers={"uSource": 0})
+
 SHAFT_PROGRAMS = (
     ("shaft_down", FULLSCREEN_VERTEX_SOURCE, _DOWNSAMPLE_FRAGMENT),
     ("shaft_gather", FULLSCREEN_VERTEX_SOURCE, _GATHER_FRAGMENT),
@@ -95,10 +106,12 @@ class LightShafts:
         self._levels: list[tuple[int, int]] = []   # (texture, fbo) x 2, both half the allocation
         self._size: tuple[int, int] | None = None
         self._key: tuple[int, int] | None = None
+        # The passes' blocks (N1.6): one copy per draw of a pass (the downsample, the gather's two) in one scope.
+        self._blocks = PassBlocks(f"{label} shafts", copies=2)
 
     @property
     def has_resources(self) -> bool:
-        return bool(self._levels)
+        return bool(self._levels) or self._blocks.has_resources
 
     def apply(self, source: int, samples: int, allocation: tuple[int, int], light_uv: tuple[float, float],
               reach: float, resources, vao: int) -> int:
@@ -109,9 +122,7 @@ class LightShafts:
         multisampled = samples > 1
         key, vertex, fragment = (SHAFT_SAMPLES_PROGRAMS if multisampled else SHAFT_PROGRAMS)[0]
         down = resources.program(key, vertex, fragment)
-        down_uniforms = resources.uniforms(key, ("uSource", "uSamples") if multisampled else ("uSource",))
         gather = resources.program("shaft_gather", FULLSCREEN_VERTEX_SOURCE, _GATHER_FRAGMENT)
-        gather_uniforms = resources.uniforms("shaft_gather", ("uSource", "uLight", "uReach"))
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         gl.glDisable(gl.GL_BLEND)
@@ -121,30 +132,31 @@ class LightShafts:
         first, second = self._levels
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, first[1])
         gl.glUseProgram(down)
-        gl.glUniform1i(down_uniforms["uSource"], 0)
         if multisampled:
-            gl.glUniform1i(down_uniforms["uSamples"], samples)
             gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, source)
+            with self._blocks.bound(_DOWNSAMPLE_SAMPLES_BLOCK.pack({"uSamples": samples})):
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+            gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, 0)
         else:
             gl.glBindTexture(gl.GL_TEXTURE_2D, source)
-        gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
-        if multisampled:
-            gl.glBindTexture(gl.GL_TEXTURE_2D_MULTISAMPLE, 0)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)          # no values: the downsample reads its source alone
         gl.glUseProgram(gather)
-        gl.glUniform1i(gather_uniforms["uSource"], 0)
-        gl.glUniform2f(gather_uniforms["uLight"], *light_uv)
         reach = max(0.0, min(1.0, float(reach)))
-        for target, read, span in ((second, first, reach), (first, second, reach / SHAFT_TAPS)):
-            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target[1])
-            gl.glBindTexture(gl.GL_TEXTURE_2D, read[0])
-            gl.glUniform1f(gather_uniforms["uReach"], span)
-            gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+        light = tuple(float(v) for v in light_uv)
+        with self._blocks.bound(_GATHER_BLOCK.pack({"uLight": light, "uReach": reach})) as rebind:
+            for target, read, span in ((second, first, reach), (first, second, reach / SHAFT_TAPS)):
+                gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target[1])
+                gl.glBindTexture(gl.GL_TEXTURE_2D, read[0])
+                if read is second:
+                    rebind(_GATHER_BLOCK.pack({"uLight": light, "uReach": span}))
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         return first[0]
 
     def warm(self, allocation: tuple[int, int]) -> bool:
-        """Allocate for ``allocation`` if not yet; True if it already was."""
+        """Allocate for ``allocation`` if not yet (one unit per call: the levels, then the passes' blocks); True once
+        both are."""
         if self._key == allocation:
-            return True
+            return self._blocks.warm()
         self.release()
         width, height = max(1, allocation[0] // 2), max(1, allocation[1] // 2)
         for _level in range(2):
@@ -173,6 +185,10 @@ class LightShafts:
 
     def release(self) -> None:
         errors: list[str] = []
+        try:
+            self._blocks.release()
+        except Exception as exc:
+            errors.append(str(exc))
         kept: list[tuple[int, int]] = []
         for texture, fbo in self._levels:
             try:

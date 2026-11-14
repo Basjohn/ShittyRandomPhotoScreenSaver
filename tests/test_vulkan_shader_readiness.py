@@ -241,15 +241,10 @@ _RATCHET = {
         "rendering.quick.scene3d.probe._PREFILTER_GEOMETRY",
     ),
     "Neon Lake": (
+        # The basin keeps its loose uniforms: on its pass block the Glass surfaces drew a few pixels one 8-bit level
+        # apart in OpenGL (N1.6, 14 Nov 2026); it converts at its port.
         "rendering.gl_programs.neon_lake_basin_program.NEON_FRAGMENT_SOURCE",
-        "rendering.gl_programs.neon_lake_basin_program.NEON_SKYLINE_FRAGMENT_SOURCE",
-        "rendering.gl_programs.neon_lake_basin_program.NEON_SKYLINE_VERTEX_SOURCE",
-        "rendering.gl_programs.neon_lake_basin_program.NEON_SKY_FRAGMENT_SOURCE",
-        "rendering.gl_programs.neon_lake_basin_program.NEON_SKY_VERTEX_SOURCE",
         "rendering.gl_programs.neon_lake_basin_program.NEON_VERTEX_SOURCE",
-        "rendering.quick.scene3d.shafts._DOWNSAMPLE_FRAGMENT",
-        "rendering.quick.scene3d.shafts._DOWNSAMPLE_SAMPLES_FRAGMENT",
-        "rendering.quick.scene3d.shafts._GATHER_FRAGMENT",
     ),
     "Extruded Spectrum": (
         "rendering.gl_programs.extruded_spectrum_program.EXTRUDED_FRAGMENT_SOURCE",
