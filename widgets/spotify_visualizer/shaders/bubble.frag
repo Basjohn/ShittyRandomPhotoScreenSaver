@@ -146,6 +146,29 @@ void main() {
         ? 0.0 : max(0.0, 8.0 - border_w);
     if (inner_w <= 0.0 || inner_h <= 0.0) discard;
 
+    // Every derivative is taken here, before the first discard a pixel can take alone: a derivative after one is
+    // undefined in GLSL (non-uniform control flow) and differs by driver: Vulkan's discard (SPIR-V OpKill) ends the
+    // lane (R-210), and on OpenGL the content edge's pixels moved by up to 21 levels once the derivative came first.
+    // The two discards above read uniforms only, so they end every lane of a quad together. Implicit-LOD texture
+    // reads take derivatives too.
+    // tests/test_shader_derivatives.py refuses a derivative after such a discard, or in a non-uniform branch.
+    // Remap to 0..1 within inner rect
+    vec2 uv = vec2((fc.x - inner_x) / inner_w, (fc.y - inner_y) / inner_h);
+    // A real framebuffer pixel is independent of the persisted world scale.
+    // The latter may be 0.17 on a large visible card. Using it for AA created
+    // subpixel coverage and jagged/disappearing outlines at that geometry.
+    float uv_pixel = max(length(vec2(dFdx(uv.y), dFdy(uv.y))), 0.000001);
+    // The optional water-decoration underlay and its particle light (composited below).
+    vec4 decor = vec4(0.0);
+    vec3 particle_light = vec3(0.0);
+    if (u_ambient_enabled) {
+        decor = texture(u_ambient_texture, vec2(uv.x, 1.0 - uv.y));
+        if (u_ambient_light_enabled) {
+            particle_light = texture(u_ambient_light, vec2(uv.x, 1.0 - uv.y)).rgb;
+        }
+    }
+    // ---------- No derivative below this line. ----------
+
     // Discard outside inner content rect (rectangular pre-check)
     if (fc.x < inner_x || fc.x > inner_x + inner_w ||
         fc.y < inner_y || fc.y > inner_y + inner_h) {
@@ -169,17 +192,12 @@ void main() {
         if (in_corner && (d.x * d.x + d.y * d.y) > r * r) discard;
     }
 
-    // Remap to 0..1 within inner rect
-    vec2 uv = vec2((fc.x - inner_x) / inner_w, (fc.y - inner_y) / inner_h);
     float aspect = inner_w / max(inner_h, 1.0);
     float specular_aspect = (u_quick_item_coords == 1)
         ? u_specular_reference_aspect : aspect;
-    
-    // A real framebuffer pixel is independent of the persisted world scale.
-    // The latter may be 0.17 on a large visible card. Using it for AA created
-    // subpixel coverage and jagged/disappearing outlines at that geometry.
+
     float px = (u_quick_item_coords == 1)
-        ? max(length(vec2(dFdx(uv.y), dFdy(uv.y))), 0.000001)
+        ? uv_pixel
         : 1.0 / (max(inner_h, 1.0) * max(u_dpr, 1.0));
     float style_px = authored_scale / max(inner_h, 1.0);
     float response_scale = (u_quick_item_coords == 1) ? u_response_radius_scale : 1.0;
@@ -223,7 +241,6 @@ void main() {
         // The separate point pass stores premultiplied RGBA. Convert the
         // composited background back to straight RGB so the EXACT existing
         // Bubble wake/ghost/hero mix operations continue unchanged.
-        vec4 decor = texture(u_ambient_texture, vec2(uv.x, 1.0 - uv.y));
         float a = clamp(decor.a, 0.0, 1.0);
         // Emissive RGB is not coverage. A halo can have essentially zero
         // alpha while still lighting the water; discarding it here forced
@@ -246,7 +263,7 @@ void main() {
             // own hue: overlapping halos and hot cores reach full brightness
             // smoothly instead of clipping to a flat or washed-out plateau.
             // At zero light this is exactly the previous result.
-            vec3 light = texture(u_ambient_light, vec2(uv.x, 1.0 - uv.y)).rgb;
+            vec3 light = particle_light;
             float emitted = max(max(light.r, light.g), light.b);
             if (emitted > 0.0) {
                 vec3 base = srgb_to_linear(clamp(result.rgb, 0.0, 1.0));

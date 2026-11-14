@@ -380,14 +380,11 @@ void main() {
     if (inner_width <= 0.0 || inner_height <= 0.0) {
         discard;
     }
-
-    // Discard outside card area
-    if (fc.x < content_rect.x + margin_x ||
-        fc.x > content_rect.x + content_rect.z - margin_x ||
-        fc.y < content_rect.y + margin_y ||
-        fc.y > content_rect.y + content_rect.w - margin_y) {
-        discard;
-    }
+    // Every derivative (eval_line's) is taken before the first discard a pixel can take alone (outside the card
+    // area, at the end): a derivative after one is undefined in GLSL (non-uniform control flow) and differs by
+    // driver: Vulkan's discard (SPIR-V OpKill) ends the lane (R-210), and on OpenGL a quad straddling the card edge
+    // lost its inside pixel. The discards above read uniforms only, so they end every lane of a quad together.
+    // tests/test_shader_derivatives.py refuses a derivative after such a discard, or in a non-uniform branch.
 
     // Normalise fragment position within the inner rect
     float nx = (fc.x - content_rect.x - margin_x) / inner_width;
@@ -736,6 +733,15 @@ void main() {
     float ghost_visibility = 1.0 - lines_a * 0.35;
     vec3 final_rgb = lines_rgb + ghost_rgb * ghost_visibility;
     float final_a = lines_a + ghost_a * ghost_visibility;
+
+    // ---------- No derivative below this line (the comment above main's normalisation). ----------
+    // Discard outside card area
+    if (fc.x < content_rect.x + margin_x ||
+        fc.x > content_rect.x + content_rect.z - margin_x ||
+        fc.y < content_rect.y + margin_y ||
+        fc.y > content_rect.y + content_rect.w - margin_y) {
+        discard;
+    }
 
     if (final_a <= 0.001) {
         discard;

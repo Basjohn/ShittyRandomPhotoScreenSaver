@@ -445,9 +445,6 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   - [ ] The two-block split (port rule (g)'s preferred shape): a settings block packed on change and a frame block
     per frame, removing the 980 to 995 Python calls a frame on the OpenGL path; OpenGL bit-identical at the
     widened run set.
-  - [ ] Derivatives after a `discard` (R-210's class) remain in Oscilloscope (12), Bubble (2) and Spline Curve (8)
-    (`tests/test_shader_derivatives.py` lists them; `guard_control.txt` in the evidence): each fixed before its N5
-    port admits it, the guard then binding that mode.
   - [ ] The module's compiled-in `spectrum.frag` copy (the program round's negative control) predates the hoist;
     refreshed at the next C++ round.
   - [ ] Audit 14 Nov (`Docs/Future_Work/Audit_2026-11-14_N25.md`), H1: at fractional scales where the logical
@@ -465,8 +462,7 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     (Medium.)
   - [ ] Audit lows: L1 `spectrumBlock` checks `bars_len`/`peaks_len`, L9 the harness wait's use-after-free, L7 the
     post-build check covers the `.qsb` packs (Medium, same C++ round); L2 `program_blocks` edge cases fail closed,
-    L3 settings packed on change only, L4 `setProgram` keeps the settings (High, with N2.9's files); L5 the
-    derivative guard's four missed shapes (with the derivatives-after-discard box); L6 the native pipeline joins
+    L3 settings packed on change only, L4 `setProgram` keeps the settings (High, with N2.9's files); L6 the native pipeline joins
     the gradual warm-up; L8 the destruction barrier sees the native objects.
   - Surface format: RGBA8 (RGBA16F gave rule (a) no gain at twice the memory; quad alignment fixed it).
     `surface_format` stays a harness-only switch.
@@ -810,10 +806,6 @@ The operator's taste for Spectrum (11 Nov, on five of round 1: "are all ghastly 
 capsule, grid-on-block and dark-fill looks fail; fine luminous gradients pass; fewer good presets beat a full slot
 count. The Spectrum features and the Bar Gap control are in `Docs/Reference/Visualizer_Reference.md`.
 
-- [ ] Side defect (same cause as R-197, unchecked): Oscilloscope (`widgets/spotify_visualizer/shaders/oscilloscope.frag`
-  about :352), Spline Curve (`devcurve.frag` about :262) and Bubble (`bubble.frag` about :121) threshold the
-  interpolated `v_uv * u_resolution` too: render each at 840x560 and compare coverage across the quad's diagonal; fix
-  any that steps with the same affine map (one helper, not three copies).
 - [ ] Side defect: the presets round's `render_spectrum_evidence.py` sets `ROOT = HERE.parents[5]`, which under the
   evidence junction resolves to `D:\TEMP\Scratch\SRPSS`, not the repo: kept evidence scripts take the repository root
   from `tools/artifact_paths.py` (or an explicit argument), never from their own location.
