@@ -1042,7 +1042,9 @@ preset values. Prove each item with a hidden-host test and a negative control.
 
 - [ ] Defect, first: Fullscreen (Hide Borders) now shows a border, although it was edge-perfect before. Fullscreen
   draws no frame (border width 0, content rect = visible rect; plan 01, section "Geometry"), so any visible band
-  is a regression. Bisect it on the hidden host with `native/core/python/composite_check.py` (the
+  is a regression. The operator's screenshot shows a lavender line about 1 px wide down the left
+  edge in Extruded Bubble, the border colour, with a faint notch about halfway down. Check the other three edges
+  too. Bisect it on the hidden host with `native/core/python/composite_check.py` (the
   `expanded_*` display-style cases) on OpenGL and on Vulkan. The suspects are today's merges that touch card
   placement: R-217's origin snap in `composite.vert` (81a14dda); the native background and backdrop routes (N5.7a
   07433be2, N5.7b 36096bf2, R-220); and the 1D.2 style binding at `VisualizerPresentation.qml` (about line 218).
