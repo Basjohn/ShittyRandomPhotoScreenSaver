@@ -22,8 +22,9 @@ Rounds:
           thread, and D1's "close during copy": the reader paused inside a copy (the pause_in_copy hook) while another
           thread closes and unlinks the mapping and retires the stream; the copy completes against the pinned view, the
           frame is discarded and nothing is acknowledged, and the retire call returns at once. Negative control:
-          accept_after_retire accepts that frame. Every reader, view, source and QRhi object of the core's is gone at
-          the end.
+          accept_after_retire accepts that frame. A refused frame (a NaN bar) keeps the drawn frame, counted once with
+          its reason (audit N29 M4); control: a frame with no bars clears the card. Every reader, view, source and QRhi
+          object of the core's is gone at the end.
   pixels  (each API) the drawn pixels: a sample of the captured frames drawn by the native item (its target placed on
           the item's own rect, over an opaque black display) against the Python renderer's own draw of the same frame
           into a transparent target of the item's size (OpenGL child; premultiplied over black is the same colour):

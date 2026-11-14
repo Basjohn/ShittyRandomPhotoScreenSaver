@@ -775,8 +775,10 @@ python native/core/python/spectrum_check.py --module-dir release/native_module -
 # native route (NativeVisualizerRoute on the Visualizer item), frame for frame at dpr 1.5; per input rows split at the
 # mode switch (steady, fade), each card's window map checked against the Python renderer's own float32 rows, and every
 # pixel more than a level off classified (card-edge column, peak row, cap arc, fade frame, other); worst-frame crops
+# --against <accepted native_render_parity.json>: after a build round, each run against the accepted one (the native
+# frames' hashes decide where both runs keep them, else every difference row and total); exit 0 only when all match
 python tools/visualizer_replay/owner_render_parity.py --native --module-dir release/native_module --offers --out <dir>
-    [--runs spectrum spectrum:b ...]
+    [--runs spectrum spectrum:b ...] [--against <accepted json>]
 ```
 
 The work folder beside its summary holds the captured frames and references; delete it once the run is judged. Tests:
