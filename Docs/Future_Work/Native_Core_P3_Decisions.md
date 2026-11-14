@@ -1077,6 +1077,15 @@ to the GL limits.
 - G. QRhi's OpenGL resolve is accepted if measured within budget, the figure recorded; past budget the work stops and
   is reported with the measurement.
 
+**Accepted by the lead with build round 1 (15 Nov 2026, ABI 17 at 03a0ad8f).** Three additions of the build:
+- *An explicit size changes without a new program* (`composite_mode_target_size`, `NativeMode.target_size`): Bubble's
+  ambient target follows its card through the allocation rule above, the pipelines kept; a new program would rebuild
+  every pipeline at every card resize.
+- *The blend `additive`* (ONE, ONE on every channel) beside `replace`, `alpha`, `premultiplied` and `add` (which weighs
+  the source by its alpha and keeps the target's): the light attachments add so in the Python renderer (Extruded Bubble's
+  `emission_writes`, Bubble's ambient light).
+- *At most 16 passes a program* (8 before), so a 3D scene's passes and its captures fit.
+
 ## D1, D2, D3 and the transport rule
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts"). The drafts, with every "today"

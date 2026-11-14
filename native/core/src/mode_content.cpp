@@ -2802,8 +2802,8 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             // over the whole allocation at its first run of the record, the passes over its content viewport.
             SceneTargets::Target &t = *m_targets.target(pass.target);
             primeForLoad(rhi, cb, m_targets.loadedColour(pass.target));
-            if (t.depth)
-                primeDepthForLoad(rhi, cb, t.depth.get());
+            if (t.depth && !skipDepthPrime() && primeDepthForLoad(rhi, cb, t.depth.get()))
+                countDepthPrime();
             cb->beginPass(t.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
             pending = nullptr;
             if (!cleared[pass.target]) {

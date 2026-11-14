@@ -344,6 +344,26 @@ QList<int> removedSampleCounts()
     return removedCounts();
 }
 
+namespace {
+QAtomicInteger<int> g_skipDepthPrime { 0 };
+QAtomicInteger<qint64> g_depthPrimes { 0 };
+} // namespace
+
+void setSkipDepthPrime(bool skip)
+{
+    g_skipDepthPrime.storeRelease(skip ? 1 : 0);
+}
+
+bool skipDepthPrime()
+{
+    return g_skipDepthPrime.loadAcquire() != 0;
+}
+
+void countDepthPrime()
+{
+    g_depthPrimes.fetchAndAddRelaxed(1);
+}
+
 QList<int> supportedSampleCounts(QRhi *rhi)
 {
     QList<int> counts;
@@ -369,6 +389,7 @@ SceneTargetCounts sceneTargetCounts()
     c.allocations = g_allocations.loadRelaxed();
     c.steps = g_steps.loadRelaxed();
     c.readbacksPending = g_readbacksPending.loadRelaxed();
+    c.depthPrimes = g_depthPrimes.loadRelaxed();
     return c;
 }
 
@@ -563,7 +584,10 @@ bool SceneTargets::step(Target &t, int index, QString *error)
         const QRhiTexture::Format format = targetRhiFormat(a.format);
         const QByteArray name = label + QByteArrayLiteral(".") + a.name;
         bool ok = make(t.colour[k], format, t.samples, t.samples > 1 ? QRhiTexture::RenderTarget : readableFlags, name);
-        if (ok && t.samples > 1)
+        // A resolve only for an attachment a sampler or the capture reads (D14 point 8). An unread resolve is never
+        // read between two passes' stores, and its render pass's UNDEFINED transition then races the last store
+        // (SYNC-HAZARD-WRITE-AFTER-WRITE, build round 1's msaa round).
+        if (ok && t.samples > 1 && a.read)
             ok = make(t.resolve[k], format, 1, readableFlags, name + QByteArrayLiteral(" resolve"));
         if (!ok)
             *error = QStringLiteral("target '%1': attachment '%2' could not be created at %3 x %4 (%5 sample(s))")

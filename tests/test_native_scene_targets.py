@@ -265,7 +265,7 @@ def test_the_admission_refuses_with_its_reasons(core, packs, qt_app):
     _refused(core, (planes, show), (scene, ambient), "before a capture step")
     reads_own = ModePass("planes", packs["planes"], "replace", target="scene", depth_test="always", depth_write=True,
                          samplers=(PassSampler("u_x", "scene.colour"),))
-    _refused(core, (reads_own,), (scene,), "unknown")                            # the planes pack declares no u_x
+    _refused(core, (reads_own,), (scene,), "the target the pass draws into")     # never its own target's attachment
     _refused(core, (planes, ModePass("show", packs["show"], "replace", samplers=(
         PassSampler("u_scene", "scene.colour", mips="linear"), PassSampler("u_depth", "scene.depth"),
         PassSampler("u_cover", "ambient.coverage"), PassSampler("u_light", "ambient.light")))), (scene, ambient),

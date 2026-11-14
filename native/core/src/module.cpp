@@ -680,6 +680,7 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("scene_target_allocations"), double(scenes.allocations));
     o.insert(QStringLiteral("scene_target_steps"), double(scenes.steps));
     o.insert(QStringLiteral("scene_target_readbacks"), scenes.readbacksPending);
+    o.insert(QStringLiteral("scene_target_depth_primes"), double(scenes.depthPrimes));
     return pyJson(o);
 }
 
@@ -1602,6 +1603,16 @@ PyObject *scene_sample_counts_control(PyObject *, PyObject *args)
     Py_RETURN_NONE;
 }
 
+// Harness: rule C for depth switched off (its negative control under synchronisation validation), or on again.
+PyObject *scene_depth_prime_control(PyObject *, PyObject *args)
+{
+    int skip = 0;
+    if (!PyArg_ParseTuple(args, "p", &skip))
+        return nullptr;
+    srpss_core::setSkipDepthPrime(skip != 0);
+    Py_RETURN_NONE;
+}
+
 // GPU-free: D14 point 2's allocation rule, ((w, h), reason) for a current allocation ((0, 0): none) and a needed size.
 PyObject *scene_target_next_allocation(PyObject *, PyObject *args)
 {
@@ -2506,6 +2517,9 @@ PyMethodDef methods[] = {
     { "scene_sample_counts_control", scene_sample_counts_control, METH_VARARGS,
       "([counts]) -> None: N3.1, harness: sample counts taken out of every device's supported set (the clamp's "
       "negative control); [] restores them." },
+    { "scene_depth_prime_control", scene_depth_prime_control, METH_VARARGS,
+      "(skip) -> None: N3.1, harness: the depth's rule C prime skipped (its negative control under synchronisation "
+      "validation); False restores it." },
     { "scene_target_next_allocation", scene_target_next_allocation, METH_VARARGS,
       "((current_w, current_h), (needed_w, needed_h)) -> ((w, h), reason): D14's allocation rule (GPU-free)." },
     { "scene_target_viewport", scene_target_viewport, METH_VARARGS,

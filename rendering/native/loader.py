@@ -218,6 +218,11 @@ class NativeCore:
         ``()`` restores them."""
         self.module.scene_sample_counts_control([int(v) for v in removed])
 
+    def scene_depth_prime_control(self, skip: bool) -> None:
+        """N3.1, harness only: the depth's rule C prime skipped (``True``: its negative control under synchronisation
+        validation) or restored."""
+        self.module.scene_depth_prime_control(bool(skip))
+
     def program_block_pack(self, pack: bytes, block: str, values: Mapping[str, Any]) -> tuple[bytes, dict]:
         """One reflected block of ``pack`` packed from ``values`` by name, as the core packs every block (GPU-free):
         its bytes and facts (``layout``, ``unfilled``); ValueError when a value is refused."""

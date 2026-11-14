@@ -104,6 +104,11 @@ void setRemovedSampleCounts(const QList<int> &removed);
 QList<int> removedSampleCounts();
 // QRhi's supported sample counts less the control's.
 QList<int> supportedSampleCounts(QRhi *rhi);
+// The harness's control of the depth's rule C (its negative control: a run with synchronisation validation shows what the
+// prime prevents), and the count of depth primes recorded (process-wide).
+void setSkipDepthPrime(bool skip);
+bool skipDepthPrime();
+void countDepthPrime();
 
 // The process's scene targets (lifecycle proofs, composite_live, the destruction barrier's reading).
 struct SceneTargetCounts
@@ -114,6 +119,7 @@ struct SceneTargetCounts
     qint64 allocations = 0; // allocations made (a new size or layout)
     qint64 steps = 0;      // allocation steps run
     int readbacksPending = 0;
+    qint64 depthPrimes = 0; // depth transitions recorded by the core before a load (rule C for depth)
 };
 SceneTargetCounts sceneTargetCounts();
 
