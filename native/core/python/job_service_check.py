@@ -111,11 +111,38 @@ class Swapper:
     def show(self):
         return self.scene.show(self.record)
 
+    def timed_frame(self) -> float:
+        """One frame's wall time on the calling thread (ms): the hidden host's sync, render and end of frame (which
+        waits for the GPU), so it holds every render-thread cost of the frame, Qt's deferred OpenGL commands included."""
+        self.scene.stream.publish(self.record)
+        self.scene.mode.update()
+        started = time.perf_counter()
+        self.host.frames(1)
+        return (time.perf_counter() - started) * 1000.0
+
+    def timed_swap(self, image, *, in_frame: bool) -> dict:
+        """``image`` (with mips) set as ``new``: the hand-over frame's and the commit frame's wall times, and the
+        frames drawn between (no readback, nothing else in the frames)."""
+        before = _state(self.scene).get("texture_uploads", 0)
+        self.scene.mode.texture("new", image.tobytes(), image.size, mips=True, in_frame=in_frame)
+        handover = self.timed_frame()
+        between: list[float] = []
+        commit = None
+        if _state(self.scene).get("texture_uploads", 0) <= before:
+            for _ in range(MAX_WAIT_FRAMES):
+                ms = self.timed_frame()
+                if _state(self.scene).get("texture_uploads", 0) > before:
+                    commit = ms
+                    break
+                between.append(ms)
+        return {"handover_ms": round(handover, 4), "commit_ms": None if commit is None else round(commit, 4),
+                "frames_between": len(between), "between_ms": [round(v, 4) for v in between[:8]]}
+
     def swap(self, image, *, in_frame: bool) -> dict:
-        """``image`` set as ``new`` while drawing: the hand-over frame read back, then frames until it is committed,
-        then the committed frame read back."""
+        """``image`` (with its GPU mips: the photo's job) set as ``new`` while drawing: the hand-over frame read back,
+        then frames until it is committed, then the committed frame read back."""
         before = _state(self.scene)
-        self.scene.mode.texture("new", image.tobytes(), image.size, in_frame=in_frame)
+        self.scene.mode.texture("new", image.tobytes(), image.size, mips=True, in_frame=in_frame)
         started = time.perf_counter()
         handover = self.show()                     # the record that takes the image
         waited = 0
@@ -199,6 +226,14 @@ def round_swap(core, engine, app, api: str, folder: Path, out: Path, photo_paths
                 "gpu_surface_ms_all": _ms_stats(surface_ms),
                 "texture_jobs": _jobs(state),
             }
+            # The whole frame's cost (OpenGL's QRhi runs an upload at the end of the frame, after the core's record, so
+            # the record time alone misses it there): plain frames, then each photo's hand-over and commit frames.
+            baseline = [swapper.timed_frame() for _ in range(8)]
+            timed = [swapper.timed_swap(image, in_frame=in_frame) for image in images[2:] + images[1:2]]
+            change = [t["handover_ms"] for t in timed] + [t["commit_ms"] for t in timed if t["commit_ms"] is not None]
+            per_route[route]["frame_ms"] = {"plain": _ms_stats(baseline), "image_change": _ms_stats(change),
+                                            "swaps": timed}
+            host.gpu_samples()
             checks[f"{route}_every_swap_committed"] = all(s["committed_in_time"] for s in swaps)
             checks[f"{route}_every_swap_draws_its_photo"] = all(s["committed_equals_photo"] for s in swaps)
         facts["routes"] = per_route
@@ -221,6 +256,12 @@ def round_swap(core, engine, app, api: str, folder: Path, out: Path, photo_paths
             frame_ms = [r["record_ms"] for r in control["image_changes"] if "in_frame" in r["kind"]]
             checks["render_thread_cost_below_in_frame"] = bool(job_ms) and bool(frame_ms) and max(job_ms) < min(frame_ms)
             facts["render_thread_cost_ms"] = {"job": _ms_stats(job_ms), "in_frame": _ms_stats(frame_ms)}
+            facts["frame_cost_ms"] = {route: per_route[route]["frame_ms"] for route in routes}
+            job_frames = default["frame_ms"]["image_change"]
+            control_frames = control["frame_ms"]["image_change"]
+            checks["image_change_frames_cheaper_than_in_frame"] = (
+                job_frames.get("n", 0) > 0 and control_frames.get("n", 0) > 0
+                and job_frames["median_ms"] < control_frames["median_ms"])
             # A superseded image: the first photo's job cancelled, one commit, the second drawn.
             before = _jobs(_state(swapper.scene))
             uploads_before = _state(swapper.scene).get("texture_uploads", 0)
@@ -236,13 +277,17 @@ def round_swap(core, engine, app, api: str, folder: Path, out: Path, photo_paths
                 and _drawn_equals(result["committed"], images[3]))
         else:
             facts["render_thread_cost_ms"] = {"in_frame": _ms_stats([r["record_ms"] for r in default["image_changes"]])}
+            facts["frame_cost_ms"] = {"default": default["frame_ms"]}
         # Nothing at rest (after the last swap's retired image went: its frames were drawn above).
         host.frames(REST_FRAMES)
         rest_before = (_state(swapper.scene), core.job_counts(), swapper.scene.mode.composite.state())
         host.gpu_samples()
+        # A timed frame's result is read latched (never waited for), so a late one can arrive during the rest; it
+        # carries its own, earlier, frame: only passes of frames after the rest began count (N4.a's timing round).
+        rest_start = int((host.state().get("driver") or {}).get("edges", 0))
         host.frames(REST_FRAMES)
         rest_after = (_state(swapper.scene), core.job_counts(), swapper.scene.mode.composite.state())
-        rest_samples = [s for s in host.gpu_samples() if s.kind == 2]
+        rest_samples = [s for s in host.gpu_samples() if s.kind == 2 and s.frame > rest_start]
         host.set_gpu_timer(False)
         checks["nothing_at_rest"] = (
             rest_after[0].get("records") == rest_before[0].get("records")
@@ -514,9 +559,11 @@ def main(argv: list[str] | None = None) -> int:
     (out / "summary.json").write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
     for api, (ok, reasons) in verdicts.items():
         print(f"{api}: {'PASS' if ok else 'FAIL'}" + ("" if ok else " (" + "; ".join(reasons)[:2000] + ")"))
-        cost = ((results[api].get("swap") or {}).get("facts") or {}).get("render_thread_cost_ms")
-        if cost:
-            print(f"{api} render-thread cost per image change at {SIZE[0]}x{SIZE[1]}: {cost}")
+        facts = (results[api].get("swap") or {}).get("facts") or {}
+        if facts.get("render_thread_cost_ms"):
+            print(f"{api} record time per image change at {SIZE[0]}x{SIZE[1]}: {facts['render_thread_cost_ms']}")
+        for route, frames in (facts.get("frame_cost_ms") or {}).items():
+            print(f"{api} {route} frame time: plain {frames['plain']}, image change {frames['image_change']}")
     print(f"evidence: {out / 'summary.json'}")
     print("N38 VERDICT " + ("PASS" if not failed else "FAIL: " + "; ".join(failed)[:4000]))
     return 0
