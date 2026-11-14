@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** nothing; N2.5 merged (b8457c3c), main's module rebuilt at ABI 8 (31 native tests pass). N2.8 waits for two displays (14 Nov 05:40 UTC: only the LG TV present, as primary). Dispatches resume after the 07:00 UTC reset.
+**Now (in flight):** High: N2.9 (generic mode content). Medium: N2.3's C++ lows with the stale compiled-in `spectrum.frag` (one C++ round; the lead builds). Audit: the N2.5 merge (b8457c3c). N2.8 waits for two displays (14 Nov 05:40 UTC: only the LG TV present, as primary).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,7 +47,7 @@ at the size asked.
      between them. N2.3's and N2.5's leftovers ride with the next fitting dispatch.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. N2.3's C++ control lows once N2.5 merges (the same files).
+  1. N2.3's C++ control lows with the module's stale `spectrum.frag` copy (in flight).
   2. 1D.14 (Spectrum's rim glow), once N2.5 has merged.
   3. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
@@ -420,14 +420,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     transparent content must clear what Qt Quick does not cover; decide that when the first such host exists.
 - [ ] N2.3 leftovers (N2.3 proved 14 Nov: N23 VERDICT PASS on the GitHub-built ABI-5 module,
   `native/core/python/packet_reader_check.py`; evidence `.artifacts/evidence/native_core/n2_3/20261114_n23_reader/`):
-  - [ ] A refused payload takes the normal failure path (reconfigure once, then in process for the run), but
-    retrying cannot cure a refusal (writer and reader disagree on the contract). Fail it closed for the run, as the
-    capacity violation does, with a test.
   - [ ] Side defect: `PacketMailbox.peek` caches the frame it peeked (`packet_mailbox.py` `_read`, about :285), so
     peek, publish, take hands out the older frame once; the in-process mailbox hands out the newest. Fix with a
     test that fails on the old code.
-  - [ ] D1's "close during copy" with a paused copy has no test hook (the view's pinning is shown instead). Add the
-    hook with N2.5's render-thread retire job, which is the reader's first user.
   - [ ] Audit 14 Nov lows (`Docs/Future_Work/Audit_2026-11-14.md`): the x86-64 guard also admits ARM64EC (weakly
     ordered: refuse it); `skip_seqlock` drops three guards at once, so split it so one control isolates the
     re-read after the copy; D1's "retiring: no copy starts" gets a negative control; the drop's own watermark is
