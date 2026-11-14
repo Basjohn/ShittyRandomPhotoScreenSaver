@@ -67,7 +67,8 @@
 // backdrop step after the background layer are additions; primeForLoad transitions every mip level (one for every
 // single-level target, as before).
 // 17 (N3.1, scene targets; D14, scene_targets.h): a program's "targets" and a pass's "target", "attachments", "depth"
-// and capture steps ({"name", "capture"} with an empty pack); samplers naming "<target>.<attachment>"; at most 16
+// and capture steps ({"name", "capture"} with an empty pack); samplers naming "<target>.<attachment>"; the blend
+// "additive" (ONE, ONE: emitted light, Bubble's ambient light); at most 16
 // passes (8 before); composite_mode_target_size, composite_mode_target_read and composite_mode_target_pixels (harness);
 // scene_sample_counts_control (the clamp's control); scene_target_next_allocation, scene_target_viewport and
 // scene_target_clamp (GPU-free); composite_live's scene_targets, scene_target_textures, scene_target_bytes,

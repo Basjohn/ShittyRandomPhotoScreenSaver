@@ -529,6 +529,13 @@ QRhiGraphicsPipeline::TargetBlend targetBlend(PassBlend blend)
         b.srcAlpha = QRhiGraphicsPipeline::Zero;
         b.dstAlpha = QRhiGraphicsPipeline::One;
         break;
+    case PassBlend::Additive: // N3.1: every channel added (ONE, ONE): emitted light and Bubble's ambient light
+        b.enable = true;
+        b.srcColor = QRhiGraphicsPipeline::One;
+        b.dstColor = QRhiGraphicsPipeline::One;
+        b.srcAlpha = QRhiGraphicsPipeline::One;
+        b.dstAlpha = QRhiGraphicsPipeline::One;
+        break;
     }
     return b;
 }
@@ -763,8 +770,8 @@ bool ModeCard::operator==(const ModeCard &o) const
 
 bool parsePassBlend(const QString &text, PassBlend *out)
 {
-    static const char *names[] = { "replace", "alpha", "premultiplied", "add" };
-    for (int i = 0; i < 4; ++i) {
+    static const char *names[] = { "replace", "alpha", "premultiplied", "add", "additive" };
+    for (int i = 0; i < 5; ++i) {
         if (text == QLatin1String(names[i])) {
             *out = PassBlend(i);
             return true;
@@ -775,8 +782,8 @@ bool parsePassBlend(const QString &text, PassBlend *out)
 
 QString passBlendName(PassBlend blend)
 {
-    static const char *names[] = { "replace", "alpha", "premultiplied", "add" };
-    return QLatin1String(names[qBound(0, int(blend), 3)]);
+    static const char *names[] = { "replace", "alpha", "premultiplied", "add", "additive" };
+    return QLatin1String(names[qBound(0, int(blend), 4)]);
 }
 
 QString passUvName(PassUv uv)

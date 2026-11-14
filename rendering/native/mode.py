@@ -50,7 +50,7 @@ from rendering.native.composite import CompositeItem
 from rendering.native.packet_reader import reader_config
 
 #: How a pass's colour meets the target (``PassBlend`` in ``mode_content.h``).
-PASS_BLENDS = ("replace", "alpha", "premultiplied", "add")
+PASS_BLENDS = ("replace", "alpha", "premultiplied", "add", "additive")  # N3.1: "additive" is ONE, ONE
 #: N3.1: a scene target's attachment formats (``TargetFormat`` in ``scene_targets.h``) and a pass's depth tests.
 TARGET_FORMATS = ("rgba8", "rgba16f", "r16f", "r32f")
 DEPTH_TESTS = ("none", "never", "less", "equal", "less_equal", "greater", "not_equal", "greater_equal", "always")

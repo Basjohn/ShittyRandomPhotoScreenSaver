@@ -163,7 +163,8 @@ struct ModeCard
 // values: never zeros for a name it does not know).
 bool modeCoreValues(const QByteArray &name, const ModeCard &card, const QSize &target, double *out, int *count);
 
-enum class PassBlend { Replace = 0, Alpha = 1, Premultiplied = 2, Add = 3 };
+// N3.1: Additive (ONE, ONE on every channel) for the light attachments (EB's emission, Bubble's ambient light).
+enum class PassBlend { Replace = 0, Alpha = 1, Premultiplied = 2, Add = 3, Additive = 4 };
 bool parsePassBlend(const QString &text, PassBlend *out);
 QString passBlendName(PassBlend blend);
 
