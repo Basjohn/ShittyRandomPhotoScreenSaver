@@ -1048,7 +1048,9 @@ preset values. Prove each item with a hidden-host test and a negative control.
   too. The operator adds that it varies: sometimes a side shows, sometimes the bottom, which
   points at overscan or the window's placement against the visible rect. Compare the window's geometry, the scene
   root's overscan offset and `display_size` on each entry. A frame that comes and goes means the card is not on
-  whole device pixels at that edge. Bisect it on the hidden host with `native/core/python/composite_check.py` (the
+  whole device pixels at that edge. The overscan window itself is protected (operator, 15 Nov): it is the only measure that
+  stopped flicker and artefacts while the window initialises. Fix the card's placement inside it; never remove or
+  reshape the overscan. Bisect it on the hidden host with `native/core/python/composite_check.py` (the
   `expanded_*` display-style cases) on OpenGL and on Vulkan. The suspects are today's merges that touch card
   placement: R-217's origin snap in `composite.vert` (81a14dda); the native background and backdrop routes (N5.7a
   07433be2, N5.7b 36096bf2, R-220); and the 1D.2 style binding at `VisualizerPresentation.qml` (about line 218).
