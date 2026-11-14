@@ -452,7 +452,94 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
 - [ ] N3.1 Scene targets: colour, depth and the HDR intermediate with fixed allocations per size, resize and
   retirement; a sampled depth texture and the background capture (Extruded Bubble); a small extra target with a
   second light attachment (Bubble); single-sampled first (the parity gate), then one sampling-policy owner for
-  the 3D Detail tier and a transition's own request (2x to 8x), clamped to what the device supports.
+  the 3D Detail tier and a transition's own request (2x to 8x), clamped to what the device supports. The design and
+  its open choices A to G: decisions doc, "N3.1 draft" (15 Nov). No C++ before the lead answers them.
+  - [ ] Contract: the lead's answers to A to G folded into the decisions doc as "N3.1, decided", the draft's text
+    replaced, not kept beside it. It states: targets as program data (name; size, the surface's or explicit pixels;
+    at most 4 named colour attachments, RGBA8, RGBA16F, R16F or R32F; depth none or one D32F texture; requested
+    samples), the bucket and when an allocation is made, the content's place in a bucketed allocation (image rows
+    [H-h, H), Python's GL bottom-left) and the one `conventions.h` function that gives QRhi's viewport and scissor
+    per backend, each pass's target, outputs, per-attachment mask and blend, depth test and write, `gl_FragDepth`
+    only into a target with depth, the capture step, samplers naming `<target>.<attachment>`, rules B and C for
+    every attachment and for depth, the sampling request's owner and the core's clamp, resolve-first for
+    multisampled targets, and every refusal with its reason.
+  - [ ] C++ owner (render thread; `native/core/src`; no STL, Qt types, as the README says):
+    - [ ] `scene_targets.{h,cpp}`: `SceneTargets`, owned by `ModeContent` (choice B), keyed by (bucketed size,
+      effective samples, declaration); allocation one attachment per step (an entry N3.6 calls as a warm-up unit;
+      until then the first record makes them); the same QRhi objects re-created at a new key; one render target per
+      target with every attachment; resolve textures for the attachments a sampler reads when multisampled;
+      `release()` with the content; process-wide counts (targets, attachments, bytes, allocations, resolves) for
+      `composite_live` and `RuntimeDestructionBarrier`.
+    - [ ] `conventions.h`: the content rect of a bucketed allocation to QRhi's viewport and scissor per backend
+      (on the core's OpenGL targets F1's flip puts QRhi's viewport origin at the image top), with a GPU-free test of
+      both backends' answers.
+    - [ ] `targets.{h,cpp}`: rules B and C for depth (a D32F texture preserved and cleared by a draw; its prime on
+      Vulkan to DEPTH_STENCIL_ATTACHMENT_OPTIMAL with read and write, if validation shows QRhi's tracker needs it as it
+      does for colour).
+    - [ ] `mode_content.{h,cpp}` admission widened (D12/D13's way): a pass's target, outputs at locations 0..n-1
+      matching its target's attachments, per-attachment write mask and blend (refused with a reason where the device
+      lacks `QRhi::PerRenderTargetBlending` and the blends differ), depth test and write, `gl_FragDepth` only into a
+      target with depth; samplers bound to `<target>.<attachment>` (never to the attachment the pass writes); the
+      passes recorded per target in order, one render pass per run of passes on the same target; the content latch
+      keyed on the targets' generations too; the state's targets (allocated size, effective samples, bytes, the last
+      allocation's reason).
+    - [ ] The capture: a step between two passes on one target ends its pass, draws the capture pass into a target of
+      its own (colour as the scene's format with linear sampling, nearest window depth R32F through
+      `viewDepthFromDepthTexture` with nearest sampling, the whole allocation; a shader of the core's, both forms
+      `background()` has: single-sampled and over the resolves), then begins the target's pass again with colour and
+      depth loaded.
+    - [ ] The clamp: the largest of `QRhi::supportedSampleCounts()` not above the request (1 when none), applied when a
+      target is allocated, reported in the state; a harness control that removes counts from the supported set (the
+      clamp's negative control).
+    - [ ] Python face: `rendering/native/mode.py` `ModeTarget` (with `ModePass` gaining target, outputs, masks, blends,
+      depth and capture; `PassSampler` naming an attachment), `program_json` carrying them, `NativeMode.state()`'s
+      targets.
+    - [ ] The sampling request's one owner beside the tier table (`rendering/gl_programs/scene3d.py`); its callers
+      `extruded_bubble.py:131`, `sphere_voxel.py:122`, `shockwave_grid.py:104`, `extruded_spectrum.py:63`,
+      `scene3d/waveform.py:377` and `oscilloscope.py:165` call it, Waveform's 4 and the Oscilloscope's 1 kept as declared
+      requests (choice D); `tools/conventions_identity.py` identical before and after for every mode and transition
+      (this closes N1's last box). Transitions keep `scene3d_samples` as the request.
+  - [ ] ABI 17: `abi.h`'s comment and `SRPSS_NATIVE_CORE_ABI`, `rendering/native/loader.py` `EXPECTED_ABI` (with
+    `tests/test_native_core_loader.py`); the program declaration's targets and pass fields, the harness readback of a
+    target's attachments (`composite_mode_target_read`: RGBA8, half floats and R32F as stored), the clamp control,
+    `composite_live`'s scene target counts, `composite_mode_state`'s targets, the host state's supported sample
+    counts. Then the lead's GitHub build (`--select native_module`) at the commit; agents never build.
+  - [ ] Harness proof `native/core/python/scene_target_check.py` (hidden host, OpenGL and Vulkan on the module's
+    device; harness fragments in the product shape under `native/core/python/scene_targets/`, like `probe_rings/`;
+    PERSONALSET photos as the scene's backdrop; evidence `.artifacts/evidence/native_core/n3_1/`):
+    - [ ] Rule (a), single-sampled, OpenGL native against the Python owners driving the same fragments in the
+      production GL host: `SceneTarget` with `depth_texture`, `background()` and `hdr` (its colour, emission and both
+      capture textures read back, RGBA16F as half floats), and for the second attachment a GL target with
+      `QuickBubbleAmbientPoints`' formats and blend states; exact, at dpr 1 and 1.5, at a bucket-aligned and an odd
+      size (slack present), with a negative control (the content placed at the image top: the edge reads differ).
+    - [ ] Rule (b): Vulkan against native OpenGL within 1 level (depth and the capture's R32F within 2e-7, N0.3 scene
+      2's bound).
+    - [ ] Depth: two known-depth planes written through `gl_FragDepth` by the project's camera (N0.3 scene 2's): the
+      capture's depth against the analytic window depth, the nearer plane winning, the clear value, the depth loaded
+      across the capture split (a third pass depth-tested after it).
+    - [ ] Multisampled, after the single-sampled gate: 2x, 4x and 8x requests on both backends, repeat-relative
+      (`tests/_msaa_render_noise.py`'s rule); the clamp with the harness control removing 8 (8 drawn as 4, reported);
+      colour and depth resolves (depth only where `ResolveDepthStencil` is reported); the resolve's GPU time on
+      OpenGL against Vulkan at 2560x1440 and 4K (choice G).
+    - [ ] Nothing at rest: a minute at rest records no target pass and allocates nothing (counts unchanged); control: a
+      content dirtied every frame.
+    - [ ] Resize: a scripted drag of the card from 800 to 1000 px in 1 px steps reallocates only at bucket crossings
+      (control: a 1 px bucket reallocates every step); after each reallocation the frame equals a fresh target's at that
+      size.
+    - [ ] Retirement without leaks: the content released (a mode switch, the node deleted, the scene graph
+      invalidated, the item destroyed mid-allocation between steps): targets, attachments, bytes and resolves back to
+      zero, the destruction barrier's reading zero; Vulkan validation with synchronisation validation clean through
+      create, resize, capture, multisample and teardown (Qt 6.12.0's defect A only, by its id).
+    - [ ] Cost and threads: GPU time per pass (the GPU timer) median and p90 at 2560x1440 and 4K, single and 4x; the
+      allocation steps' render-thread CPU time at 4K (the units N3.6 will space); the thread probe: zero calls with a
+      Python thread state.
+    - [ ] Regressions on the same module: `generic_mode_check.py`, `fullscreen_pass_check.py`,
+      `background_layer_check.py`, `backdrop_pyramid_check.py`, `transition_route_check.py` verdicts unchanged.
+  - [ ] Docs: the decisions doc's "As built (N3.1)" under "N3.1, decided"; `native/core/README.md` (`scene_targets.*`,
+    the proof, "How a new mode is built" gains a targets step); `Docs/Reference/Primitives.md` E3's native line and
+    the class the lead gives it; `Docs/Reference/Scene3D_Resources.md`'s native scene target row;
+    `Docs/Reference/Harness_Index.md` (the command); the 3D foundation lessons in `Docs/Reference/Transitions.md`
+    (appended after the slice).
 - [ ] N3.2 Mesh and buffer resources: static meshes built once and kept, dynamic buffers with dynamic offsets,
   instancing, pre-built resource bindings per ring slot (no allocation per frame), instanced quads in place of
   point sprites (Bubble, Neon Lake's marks, Waveform's sparks use `gl_PointSize`).
