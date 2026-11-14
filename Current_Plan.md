@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** nothing (5-hour window at 81 %; N2.5 and N1.6's next mode start after its reset).
+**Now (in flight):** N2.5 (High); the N1.6 re-proof runs unattended (lead). Medium starts after the reset.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
