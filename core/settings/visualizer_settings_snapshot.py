@@ -7,6 +7,7 @@ from typing import Any, Dict, Mapping
 from core.logging.logger import get_logger
 from core.settings.default_contract import require_canonical_default
 from core.settings.models import SpotifyVisualizerSettings
+from core.settings.stored_values import changed_keys, same_stored_value
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
     coerce_visualizer_mode_id,
@@ -271,17 +272,7 @@ def normalize_visualizer_section_mapping(
     return strip_retired_visualizer_settings(normalized, prefix=prefix)
 
 
-def _same_stored_value(a: Any, b: Any) -> bool:
-    """Equal and of the same types throughout (``1 == 1.0`` but they are stored differently)."""
-    if a is b:
-        return True
-    if type(a) is not type(b):
-        return False
-    if isinstance(a, dict):
-        return a.keys() == b.keys() and all(_same_stored_value(v, b[k]) for k, v in a.items())
-    if isinstance(a, (list, tuple)):
-        return len(a) == len(b) and all(_same_stored_value(x, y) for x, y in zip(a, b))
-    return a == b
+_same_stored_value = same_stored_value
 
 
 def normalize_visualizer_section_from_canonical(
@@ -297,6 +288,11 @@ def normalize_visualizer_section_from_canonical(
     as ``base_in`` and differs only in key-local settings (the widget's outer route), its normalisation is
     ``base_out`` with those values coerced: nothing else reads them (``KEY_LOCAL_VISUALIZER_SETTINGS``). Any other
     difference returns None and the caller normalises the whole section.
+
+    The result shares ``base_out``'s values (pass a ``base_out`` nothing changes in place: a stored or private
+    canonical section). Only the values of ``incoming`` that are not ``base_in``'s own objects are looked at, so an
+    ``incoming`` built from the stored section's own values (``SettingsManager.get_widgets_map_to_write``) costs
+    what changed, not a walk of the section.
     """
     from core.settings.models._spotify_visualizer import (
         KEY_LOCAL_VISUALIZER_SETTINGS,
@@ -305,16 +301,21 @@ def normalize_visualizer_section_from_canonical(
 
     if not isinstance(incoming, Mapping) or incoming.keys() != base_in.keys():
         return None
+    candidates = (
+        changed_keys(incoming, base_in)
+        if type(incoming) is dict and type(base_in) is dict
+        else list(incoming)
+    )
     changed: list[str] = []
-    for key, value in incoming.items():
-        if _same_stored_value(value, base_in[key]):
+    for key in candidates:
+        if same_stored_value(incoming[key], base_in[key]):
             continue
         if key not in KEY_LOCAL_VISUALIZER_SETTINGS:
             return None
         changed.append(key)
     if any(f"{prefix}.{key}" in incoming for key in changed):
         return None  # a dotted duplicate would shadow the plain key in the full normaliser
-    normalized = deepcopy(dict(base_out))
+    normalized = dict(base_out)
     for key in changed:
         normalized[key] = normalize_key_local_visualizer_value(key, incoming[key])
     return normalized
