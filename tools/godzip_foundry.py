@@ -2973,7 +2973,7 @@ class PushTab(QWidget):
         buttons = QHBoxLayout()
         bl.addLayout(buttons)
         self.commit_button = QPushButton("COMMIT")
-        self.commit_push_button = QPushButton("COMMIT & PUSH")
+        self.commit_push_button = QPushButton("COMMIT && PUSH")
         self.commit_push_button.setObjectName("primaryButton")
         self.push_button = QPushButton("PUSH EXISTING COMMITS")
         self.commit_button.clicked.connect(lambda: self.commit(push=False))
@@ -3858,7 +3858,7 @@ class CommandTab(QWidget):
         self.script_run_button = QPushButton("RUN SCRIPT")
         self.script_run_button.setObjectName("primaryButton")
         self.script_run_button.clicked.connect(self._run_script)
-        self.script_paste_button = QPushButton("CLEAR & PASTE")
+        self.script_paste_button = QPushButton("CLEAR && PASTE")
         self.script_paste_button.setToolTip("Replace the script editor with plain text from the clipboard; never executes it")
         self.script_paste_button.clicked.connect(self._clear_and_paste)
         self.script_suite_button = QPushButton("RUN CHUNKED SUITE")
@@ -4675,7 +4675,7 @@ class GodzipFoundryWindow(QMainWindow):
     ) -> None:
         before = self._plan_edit_snapshot
         if before is None:
-            self.current_plan_button.setText("OPEN CP & DIFF")
+            self.current_plan_button.setText("OPEN CP && DIFF")
             return
         plan_path = self.repo_root / "Current_Plan.md"
         try:
@@ -4699,12 +4699,12 @@ class GodzipFoundryWindow(QMainWindow):
                 )
                 return
             self._plan_edit_snapshot = None
-            self.current_plan_button.setText("OPEN CP & DIFF")
+            self.current_plan_button.setText("OPEN CP && DIFF")
             self.set_status("Current_Plan.md closed with no changes; no diff generated.")
             return
 
         self._plan_edit_snapshot = None
-        self.current_plan_button.setText("OPEN CP & DIFF")
+        self.current_plan_button.setText("OPEN CP && DIFF")
         summary = "Current_Plan.md changed · exact pre-open snapshot → saved file"
         dialog = DiffResultDialog(self, "CURRENT PLAN DIFF", diff_text, summary)
         self._track_dialog(dialog)
@@ -4899,7 +4899,7 @@ class GodzipFoundryWindow(QMainWindow):
         subtitle.setObjectName("subtitle")
         subtitle.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         titles.addWidget(subtitle)
-        self.current_plan_button = QPushButton("OPEN CP & DIFF")
+        self.current_plan_button = QPushButton("OPEN CP && DIFF")
         self.current_plan_button.setObjectName("toolTitlePlanButton")
         self.current_plan_button.setFixedHeight(34)
         self.current_plan_button.setToolTip(
