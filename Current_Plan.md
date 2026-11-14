@@ -197,8 +197,14 @@ repository: `D:\Temp\Scratch\SRPSS\research\20261112\native_core_capability_matr
   native OpenGL result, within a tolerance the port states, (c) the frame trace and render-thread figures beside
   the Python path's with zero calls holding a Python thread state, (d) Settings, Studio and engine-worker parity
   and the mode's own tests green, (e) GPU time per pass and nothing per frame at rest, (f) one bounded Vulkan
-  rehearsal on Display 1 by the lead (D10). Then the Python renderer and its shaders are deleted in the same
-  change (a transition's at the background family's switch, N5.2h). Never two permanent renderers.
+  rehearsal on Display 1 by the lead (D10), (g) no rebuild for Settings or Studio work (lead, 14 Nov, from the
+  operator's question): the mode's fragment shaders load at runtime from the product's own `.qsb` (baked by
+  `tools/regen_qrc.py --shaders`), every Settings-derived value is resolved in Python from the spec and packed by
+  the core by reflected name (a settings block re-packed only on a Settings or card change), and C++ holds only
+  per-frame and simulation arithmetic; a test adds a settings-only uniform and draws it with no module rebuild.
+  N2.5 builds the shared piece (round 4); every later port uses it. Then the Python renderer and its shaders are
+  deleted in the same change (a transition's at the background family's switch, N5.2h). Never two permanent
+  renderers.
 - Every primitive and service is proved on its own off-screen harness scene (GPU time median and p90, lazy
   creation, no work when dormant, clean retirement); none becomes a second renderer, clock or camera. Read the 3D
   foundation lessons (`Docs/Reference/Transitions.md`) before a 3D slice and append after it.
