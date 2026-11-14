@@ -1055,12 +1055,8 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   The moved offsets are kept through the one owner (`normalize_fullscreen_overlays`) as the overlay's stored custom
   position, so choosing CUSTOM again restores it, as ordinary widgets keep their custom geometry. Restore the
   pre-merge test's assertion that scale and artwork survive a corner change, with a note saying why it changed back.
-- [ ] Medium: the 3D control hint replays after the Visualizer moves back to a display whose card is reused
-  (`scene_controller.py:2549-2634`, `:3247`, `visualizer_host_binding.py:601-674`). Project `controlHintShown` at
-  the display-move edge too. Turn the audit's probe
-  (`.artifacts/evidence/visualizers/shared/checkpoint_audit1/20261115_hint_return_hop/`) into the guard. It
-  replaces `test_expanded_readmission_and_a_rebuilt_root_keep_the_set`'s faked rebuild and L2's methods compiled
-  out of `display_manager.py` with the shared doubles.
+- The medium (the hint replays after a move back to a display whose card is reused) is accepted as it is (operator,
+  15 Nov); L2 goes with it.
 - L1 (the tie budget caps a count, not a level) is recorded, not fixed: a regression confined to 8 isolated pixels
   a frame is invisible, and N5.2a's seven stay exact.
 
