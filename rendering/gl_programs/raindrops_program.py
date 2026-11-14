@@ -44,7 +44,7 @@ layout(std140, binding = 18) uniform RipplePass {
     mat4 uMatrix;
     vec2 uItemSize;
     float u_progress;
-    vec2 u_resolution;
+    vec2 u_target_px;   // the target's pixels (the viewport; the native core fills it by this name, N4.a)
     int u_ripple_count;  // 1-8, default 3
     float u_ripple_seed;  // per-transition random seed for position variety
 };
@@ -61,7 +61,7 @@ void main() {
     vec4 newColor = texture(uNewTex, uv);
 
     float t = clamp(u_progress, 0.0, 1.0);
-    float aspect = u_resolution.x / max(u_resolution.y, 1.0);
+    float aspect = u_target_px.x / max(u_target_px.y, 1.0);
     int count = clamp(u_ripple_count, 1, 8);
 
     // Accumulate wave displacement and reveal mask across all ripple sources.
