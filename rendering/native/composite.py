@@ -37,13 +37,16 @@ _GRID_TOLERANCE = 1e-6   # device pixels: a coordinate this close to a whole pix
 Rect = tuple[float, float, float, float]
 
 
-def _on_device_grid(rect: Sequence[float], dpr: float) -> Rect:
-    """The smallest rect on whole device pixels containing ``rect`` (display-logical)."""
+def _on_device_grid(rect: Sequence[float], dpr: float, *, quad_aligned: bool = False) -> Rect:
+    """The smallest rect on whole device pixels containing ``rect`` (display-logical); ``quad_aligned``: every edge
+    on an even device pixel, so the target's 2x2 derivative quads are the window's own whichever way it rasters."""
     x, y, width, height = (float(v) for v in rect)
     left = math.floor(x * dpr + _GRID_TOLERANCE)
     top = math.floor(y * dpr + _GRID_TOLERANCE)
     right = math.ceil((x + width) * dpr - _GRID_TOLERANCE)
     bottom = math.ceil((y + height) * dpr - _GRID_TOLERANCE)
+    if quad_aligned:
+        left, top, right, bottom = left - left % 2, top - top % 2, right + right % 2, bottom + bottom % 2
     return (left / dpr, top / dpr, max(1, right - left) / dpr, max(1, bottom - top) / dpr)
 
 
@@ -78,7 +81,7 @@ class CompositeGeometry:
 
 
 def composite_geometry(presentation: Any, *, overflow_requested: bool = False,
-                       overflow_rect: Sequence[float] | None = None) -> CompositeGeometry:
+                       overflow_rect: Sequence[float] | None = None, quad_aligned: bool = False) -> CompositeGeometry:
     """The composite of one ``ResolvedVisualizerPresentation``. ``overflow_requested``: the mode's own overflow
     choice (its ``renderer_overflow_setting`` on); ``overflow_rect`` (display-logical) is what such a renderer may
     reach when the record does not hold it."""
@@ -93,9 +96,9 @@ def composite_geometry(presentation: Any, *, overflow_requested: bool = False,
     if overflow_requested and not renderer_overflow_held(presentation):
         if overflow_rect is None:
             raise ValueError("an admitted overflow names the rect it may reach (overflow_rect)")
-        rect = _on_device_grid(overflow_rect, dpr)
+        rect = _on_device_grid(overflow_rect, dpr, quad_aligned=quad_aligned)
         return CompositeGeometry(rect, _pixels(rect, dpr), None, quarters, dpr, overflow_admitted=True)
-    rect = _on_device_grid(resolve_card_drawn_rect(presentation), dpr)
+    rect = _on_device_grid(resolve_card_drawn_rect(presentation), dpr, quad_aligned=quad_aligned)
     (cx, cy, cw, ch), radius = resolve_card_clip_path(presentation)
     coverage = ((cx - rect[0], cy - rect[1], float(cw), float(ch)), float(radius))
     return CompositeGeometry(rect, _pixels(rect, dpr), coverage, quarters, dpr)

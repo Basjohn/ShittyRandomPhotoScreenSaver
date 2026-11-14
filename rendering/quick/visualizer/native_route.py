@@ -180,7 +180,9 @@ class NativeVisualizerRoute:
             runtime_generation=identity.runtime_generation, engine_generation=identity.engine_generation,
             activation_id=identity.activation_id, mode_id=identity.mode_id, required_presentation=presentation,
             allow_presentation_rebase=authority)
-        geometry = composite_geometry(presentation)
+        # On the window's own 2x2 quads (every edge on an even device pixel): the shader's fine derivatives then pair
+        # the pixels the Python renderer's did (N2.5 rule (a): an odd target origin moved them at the cap arcs).
+        geometry = composite_geometry(presentation, quad_aligned=True)
         # The content host's top-left is the record's outer rect (the Python item sits at its origin with the outer
         # rect's size, ``VisualizerRenderItem.set_presentation``), whenever QML lays the host out.
         origin = (float(presentation.outer_rect[0]), float(presentation.outer_rect[1]))
