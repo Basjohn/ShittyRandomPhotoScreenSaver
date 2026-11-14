@@ -89,6 +89,11 @@ Item {
     // Fullscreen Edit (M3c): the Edit session is open on the overlays; they show to be grabbed and report geometry.
     property bool expandedOverlayEditing: false
     signal expandedOverlayEditGeometryChanged()
+    // The pixel shift this card holds back while it is the display (DisplayScene's visualizerCardIsTheDisplay, 1D.13):
+    // the card stays on the display's edges and its full-display overlays take the shift again (burn-in). Zero for
+    // every other card, which moves with the shift as a whole.
+    property real heldPixelShiftX: 0.0
+    property real heldPixelShiftY: 0.0
     // The bottom-right glyph row (operator, 8 Nov: "the rotate glyph should be on the same line as the bottom right
     // glyphs, heck let's put expansion there too"). One Row (glyphRow below) places every card control of that
     // corner, on the ordinary and the display-wide card alike. Left to right: the preset steps,
@@ -401,6 +406,10 @@ Item {
         objectName: "visualizerExpandedOverlays"
         anchors.fill: parent
         z: 6
+        transform: Translate {
+            x: visualizerPresentationRoot.heldPixelShiftX
+            y: visualizerPresentationRoot.heldPixelShiftY
+        }
         active: visualizerPresentationRoot.expandedOverlaysDrawn && visualizerPresentationRoot.presentationActive
         sourceComponent: ExpandedVisualizerOverlays {
             config: visualizerPresentationRoot.expandedOverlayConfig

@@ -29,6 +29,7 @@ from widgets.spotify_visualizer.render_bridge import (
 )
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation, VisualizerRenderSnapshot
 from widgets.spotify_visualizer.presentation_geometry import (
+    card_is_the_display,
     resize_visualizer_presentation,
     resolve_card_drawn_rect,
     snap_to_device_pixels,
@@ -2698,6 +2699,12 @@ class QuickSceneController(QObject):
         root.setHeight(outer_height)
         # Edit's outline and handles sit on the drawn card, from this one resolution (1C.4).
         root.setProperty("drawnCardRect", drawn_rect)
+        # A card that is the display holds its place under pixel shift (1D.13): set with the record, before the
+        # item takes it, so the card is never drawn shifted off the display's edges.
+        scene_root = self._scene_root
+        held = card_is_the_display(presentation)
+        if scene_root is not None and bool(scene_root.property("visualizerCardIsTheDisplay")) != held:
+            scene_root.setProperty("visualizerCardIsTheDisplay", held)
         item.set_presentation(presentation)
         self._resolve_visualizer_framed_view(presentation)
 

@@ -11,6 +11,13 @@ Item {
     property real dimmingOpacity: 0.0
     property real pixelShiftX: 0.0
     property real pixelShiftY: 0.0
+    // A Visualizer card that is the display (a Fullscreen style whose card meets every display edge, 1D.13): pixel
+    // shift could only move it off one edge and bare a strip of the wallpaper on the other, so the card holds its
+    // place (its loader takes the shift back) and only its full-display overlays keep moving. The scene controller
+    // sets it with each record (``card_is_the_display``).
+    property bool visualizerCardIsTheDisplay: false
+    readonly property real visualizerHeldShiftX: visualizerCardIsTheDisplay ? pixelShiftPaintTranslation.x : 0.0
+    readonly property real visualizerHeldShiftY: visualizerCardIsTheDisplay ? pixelShiftPaintTranslation.y : 0.0
     property var contextMenuModel: null
     property bool contextMenuShadowEnabled: true
     property color contextMenuShadowColor: "#c4000000"
@@ -259,6 +266,11 @@ Item {
                 spread: sourceRoot ? Number(sourceRoot.cardShadowSpread) : 0.0
                 offset: Qt.vector2d(0.0, 0.0)
                 cached: true
+                // With its card (a card that is the display holds its place; it casts no shadow today).
+                transform: Translate {
+                    x: -displayScene.visualizerHeldShiftX
+                    y: -displayScene.visualizerHeldShiftY
+                }
             }
 
             // Every ordinary card shadow is parented here (after the Visualizer's, so the paint order is
@@ -293,9 +305,17 @@ Item {
             asynchronous: false
             source: "VisualizerPresentation.qml"
             z: 20
+            // A card that is the display holds its place under pixel shift (visualizerCardIsTheDisplay).
+            transform: Translate {
+                x: -displayScene.visualizerHeldShiftX
+                y: -displayScene.visualizerHeldShiftY
+            }
             onLoaded: {
                 if (item) {
                     item.externalCardShadow = true
+                    // ... and hands the shift on to its full-display overlays, which keep moving (burn-in).
+                    item.heldPixelShiftX = Qt.binding(function() { return displayScene.visualizerHeldShiftX })
+                    item.heldPixelShiftY = Qt.binding(function() { return displayScene.visualizerHeldShiftY })
                     // The full-display overlays (M3b) step aside for a showing OSD: hand over its lane once.
                     item.expandedOverlayOsdHost = systemAudioOSDForegroundHost
                 }

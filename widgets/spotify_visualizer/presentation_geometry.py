@@ -567,17 +567,29 @@ def resolve_expanded_visualizer_presentation(
     }))
 
 
-def renderer_overflow_held(presentation: ResolvedVisualizerPresentation | None) -> bool:
-    """Whether a renderer's declared overflow (Sphere's, Extruded Spectrum's) is held to the card's clip (1D.2).
+def card_is_the_display(presentation: ResolvedVisualizerPresentation | None) -> bool:
+    """Whether the card is the whole display: a display-wide card in a non-Default display style (1D.2), whose outer
+    rect is the display's visible rect, so its every edge is a display edge.
 
-    A display-wide card in a non-Default display style is the whole display: past it lies only the window's
-    off-desktop overscan (an exterior edge) or nothing (a shared edge), so no style draws past the visible rect (lead,
-    12 Nov). The render node then takes its clipped path, whose clip is the card's (the display rect). Every other
-    record keeps the mode's own overflow choice exactly as before.
+    Such a card cannot move: pixel shift would push one side off the display and bare a strip of the wallpaper on the
+    other (1D.13), so the scene holds it in place (``DisplayScene.qml``'s ``visualizerCardIsTheDisplay``) and only its
+    full-display overlays take the shift. Nothing can lie past it either (``renderer_overflow_held``).
     """
 
     return bool(presentation is not None and presentation.expanded_display
                 and presentation.display_style != "default")
+
+
+def renderer_overflow_held(presentation: ResolvedVisualizerPresentation | None) -> bool:
+    """Whether a renderer's declared overflow (Sphere's, Extruded Spectrum's) is held to the card's clip (1D.2).
+
+    A display-wide card in a non-Default display style is the whole display (``card_is_the_display``): past it lies
+    only the window's off-desktop overscan (an exterior edge) or nothing (a shared edge), so no style draws past the
+    visible rect (lead, 12 Nov). The render node then takes its clipped path, whose clip is the card's (the display
+    rect). Every other record keeps the mode's own overflow choice exactly as before.
+    """
+
+    return card_is_the_display(presentation)
 
 
 def framed_aperture_scale(presentation: ResolvedVisualizerPresentation, *, content: bool = False) -> float:
