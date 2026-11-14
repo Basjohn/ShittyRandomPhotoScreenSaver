@@ -79,6 +79,11 @@ def _catalogue_identities(mode: str) -> list[str]:
     return [preset_identity(name) for name in get_preset_names(mode)]
 
 
+def catalogue_state() -> tuple[tuple[str, ...], ...]:
+    """Every registered mode's catalogue identities in slot order: all that index resolution reads of the presets."""
+    return tuple(tuple(_catalogue_identities(mode)) for mode in VISUALIZER_MODE_IDS)
+
+
 def catalogue_signature(identities: list[str]) -> str:
     """A short signature of one mode's catalogue (its identities in slot order, Custom last)."""
     return hashlib.sha1("\n".join(identities).encode("utf-8")).hexdigest()[:12]

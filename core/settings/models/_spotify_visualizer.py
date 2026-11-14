@@ -206,6 +206,18 @@ _CORE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'position': str,
 }
 
+# The widget's outer route (admission, display, placement): each one's canonical value is its own stored value
+# coerced, read by no migration, preset or other setting. A widgets write that changes only these (a display
+# move's Save) re-normalises them alone (``normalize_visualizer_section_from_canonical``).
+KEY_LOCAL_VISUALIZER_SETTINGS: Tuple[str, ...] = tuple(_CORE_BUILD_SPECS)
+
+
+def normalize_key_local_visualizer_value(key: str, value: Any) -> Any:
+    """The canonical stored form of one key-local setting: its build coercion, then its serializer."""
+
+    return _CORE_SETTINGS_SERIALIZERS[key](_CORE_BUILD_SPECS[key](value))
+
+
 _SPECTRUM_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'spectrum_visual_smoothing_enabled': bool,
     'spectrum_visual_smoothing': float,
