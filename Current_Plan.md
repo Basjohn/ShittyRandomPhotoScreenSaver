@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N5.7b and N5.2a merged (ABI 16); the lead's rehearsal of glass cards and a transition on both displays. Next High: N5.7c (the first full rehearsal), then N3.
+**Now (in flight):** nothing. N5.7b and N5.2a merged (ABI 16) and rehearsed on Display 1: wallpaper, glass cards and a native transition on Vulkan. Next High: N5.7c (the first full rehearsal: sleep and wake, Settings round trip, resize and DPI), then N3.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -525,8 +525,10 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   product fragment over the background layer, exact against its Python renderer on OpenGL, Vulkan within 1 level;
   Burn, Particle and Ripple on integer hashes and every target-reading transition's uv from the pixel, the lead
   judged the new patterns as the same character; `native_core/n5_2a/`):
-  - [ ] Lead: the rehearsal with a photo change on both displays (and the first frame's pipeline build cost when a
-    run switches program; 4K cost).
+  - Rehearsed 14 Nov on Display 1 on Vulkan (ABI 16; `display/d1_run/20261114_n5_vulkan_glass_transition_d1/`):
+    a bright and a dark photo every 10 s, the native wallpaper, every card on its Glass material through the native
+    pyramid, a native transition mid-run between the photos, the native Spectrum on its glass card, exit 0.
+  - [ ] The first frame's pipeline build cost when a run switches program, and the 4K cost (not measured).
   - [ ] Side defect (C++): the core refusing a still for "no card" draws black silently and `content_status`
     reports no failure, so the layer's fade-out on failure would not trigger; report it and fail closed.
 - [ ] N5.7c Lead, Display 1: the first full rehearsal (wallpaper, a transition, cards on each material, Spectrum,
