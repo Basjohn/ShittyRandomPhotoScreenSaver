@@ -1086,6 +1086,25 @@ to the GL limits.
   `emission_writes`, Bubble's ambient light).
 - *At most 16 passes a program* (8 before), so a 3D scene's passes and its captures fit.
 
+**As built (N3.1, 15 Nov 2026).** `native/core/src/scene_targets.*` holds the rules (`bucketPixels`, `nextAllocation`,
+`contentViewport`, `clampSamples`) and `SceneTargets`, the content's owner; `rendering/native/scene_targets.py` mirrors
+the rules for the GPU-free tests and `scene3d.scene_samples` is the one sampling request. The proof is
+`native/core/python/scene_target_check.py` (evidence under `.artifacts/evidence/native_core/n3_1/`):
+- Single-sampled, both backends pass: rule (a) against the Python `SceneTarget` (exact but for `scene.colour`, 3 px one
+  float16 step past, and coverage one level), rule (b) Vulkan against OpenGL (exact but the light, one float16 step),
+  the analytic checks (captured depth within 1e-7, after-pass drawn only behind loaded depth, HDR above 1 kept,
+  emission masked where written off, light cleared when nothing glows), nothing at rest, the drag across bucket edges
+  both ways (5 reallocations against the no-hysteresis control's 7, an explicit target never reallocated, content equal
+  to a fresh target's), retirement with validation, no frame-thread work from Python.
+- `ResolveDepthStencil` reads true on both backends and the clamp reports the count created (8 forced away gives 4).
+  **Multisampled depth does not work through QRhi on this machine, either backend** (choice E's stop): with
+  `setDepthResolveTexture` the resolved D32F reads 0 everywhere on OpenGL and a strided pattern with NaNs on Vulkan,
+  and QRhi then stores no multisampled depth (`DontCare`), so a capture split cannot keep testing against it. The
+  colour resolve is right on both. Nothing that reads depth may declare `samples > 1` until the lead decides; no
+  workaround built.
+- Vulkan reported a write-after-write hazard on resolve textures no pass samples; resolves are made only for attachments
+  a sampler reads (round 2).
+
 ## D1, D2, D3 and the transport rule
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts"). The drafts, with every "today"

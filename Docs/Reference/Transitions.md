@@ -749,6 +749,22 @@ Each foundation slice adds what it learned here.
 - A new GPU technique (depth, multiple targets, compute, a new resource kind) is a primitive, built and proved once
   in C++ on its own harness and then used by every mode as data, never a per-mode C++ renderer.
 
+**Native scene targets (N3.1, 15 Nov; D14)**
+- A bucketed target keeps the Python renderer's edges only if its content sits where Python's does in image terms: the
+  allocation's bottom rows (GL's bottom-left), so a linear read past the content's edge reads the same slack or clamp.
+  QRhi's viewport counts from the framebuffer's bottom-left, which on the core's OpenGL targets (F1's flip) is the
+  image's top: one function gives each backend's viewport, never a per-pass sum.
+- Compare a target by reading its textures back (the core's readback, rows top first; the Python texture flipped),
+  never through a composite that each renderer addresses differently. Positions from vUv over the pass's own content
+  draw the same in both renderers; translated GLSL still sits within one float16 ulp of the Python compile on a few
+  pixels, and depth through gl_FragDepth is exact.
+- A resolve attachment that nothing reads still races its own last store at the next pass's UNDEFINED transition
+  (SYNC-HAZARD-WRITE-AFTER-WRITE on Vulkan): make resolves only for what is read.
+- Multisampled depth through QRhi's depth resolve did not work in build round 1 on either backend (OpenGL: the resolved
+  D32F read 0; Vulkan: values strided or garbage), and QRhi discards the multisampled depth itself once a depth resolve is
+  set, so a scene split by a capture cannot keep testing against its multisampled depth. Prove a multisampled depth
+  path on the harness before a mode relies on it.
+
 ## Operator-triggered appearance review (reference checklist)
 
 Automated image differences are not aesthetic acceptance. Previously implemented work is operator-accepted; use the following reference checks **only if** a newly observed regression or new transition tranche requires targeted appearance review:

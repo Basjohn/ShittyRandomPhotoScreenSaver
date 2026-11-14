@@ -120,7 +120,9 @@ OIT, HDR with an ACES tone map, and a shaft-source attachment. Consumers: Blinds
 Depth Cascade, Disintegrate, Exploding Tiles, Glass Shatter, Jigsaw, Membrane, Page Curl, Pixel Accretion, Volumetric
 Dissolve (transitions); Oscilloscope, Neon Lake, Extruded Bubble, Extruded Spectrum, Sphere, Waveform Ribbon (modes).
 Tests: `test_scene3d_target.py` (G1, G3A, shafts, scale, lifetime), `test_scene3d_dsa_targets.py`. Native: N3.1
-(targets, sampled depth, background capture, one sampling-policy owner) and N3.4 (OIT, bloom, HDR as opt-in stages);
+(D14, `native/core/src/scene_targets.*`, ABI 17: targets as program data, sampled D32F depth, the capture step, MRT with
+per-attachment blends, one sampling request owner `scene3d.scene_samples` and the core's clamp; proved single-sampled
+on both backends by `scene_target_check.py`, its multisampled depth open) and N3.4 (OIT, bloom, HDR as opt-in stages);
 the eight composites in `target.py:125-286` keep raw `gl_FragCoord` and are never converted (D5.2 replaces them;
 item 8b, N1.4's remainder). Notes: allocation rounds to 64 px; no `glBlitFramebuffer` resolves (about 0.5 ms at 1440p; Lessons line
 176-177); per-sample reads (`sampler2DMS`, `gl_SampleID`) are the N1.8 resolve-first set and the one thing QRhi
