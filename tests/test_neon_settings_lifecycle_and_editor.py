@@ -80,6 +80,9 @@ class FakeUnit:
 
 
 def test_quick_runtime_callbacks_do_not_retain_retired_display_unit(monkeypatch):
+    # The unit imports the real runtime and controllers (scene_controller needs the real registry's
+    # VisualizerShellPolicy), so it is built before the registry stub below scopes only the connect call.
+    unit = FakeUnit()
     registry = ModuleType('core.settings.visualizer_mode_registry')
     registry.get_visualizer_mode_descriptor = lambda _mode: SimpleNamespace(scene_transform_settings=())
     monkeypatch.setitem(sys.modules, registry.__name__, registry)
@@ -104,7 +107,6 @@ def test_quick_runtime_callbacks_do_not_retain_retired_display_unit(monkeypatch)
             return lambda *_args, **_kwargs: None
 
     manager = Manager()
-    unit = FakeUnit()
     runtime = unit.runtime
     _quick_connect_function()(manager, unit, startup_generation=0)
     runtime.play_pause_requested.emit()

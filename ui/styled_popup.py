@@ -137,6 +137,7 @@ def _build_color_picker_wrapper_stylesheet(theme: SettingsThemeSpec) -> str:
 
 
 ButtonDef = Tuple[str, str]
+_BUTTON_VALUE_PROPERTY = "srpssPopupValue"
 
 
 class StyledPopup(QDialog):
@@ -283,7 +284,10 @@ class StyledPopup(QDialog):
             button = OutlinedButton(label, role="secondary")
             button.setMinimumHeight(32)
             button.setMinimumWidth(96)
-            button.clicked.connect(lambda _=False, val=value: self._on_button(val))
+            # A bound method, never a lambda capturing self: Qt keeps a slot alive with its button, the button is
+            # this popup's child, so a captured self kept every popup alive until interpreter teardown.
+            button.setProperty(_BUTTON_VALUE_PROPERTY, value)
+            button.clicked.connect(self._on_button_clicked)
             if primary:
                 button.setDefault(True)
             btn_layout.addWidget(button)
@@ -295,6 +299,11 @@ class StyledPopup(QDialog):
         self.setMinimumWidth(280)
         self.adjustSize()
     
+    def _on_button_clicked(self, _checked: bool = False) -> None:
+        button = self.sender()
+        if button is not None:
+            self._on_button(button.property(_BUTTON_VALUE_PROPERTY))
+
     def _on_button(self, value: str) -> None:
         self._result_value = value
         self.accept()
