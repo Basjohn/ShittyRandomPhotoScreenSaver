@@ -98,7 +98,7 @@ def test_script_runner_ui_has_review_capture_and_explicit_no_admin():
                    'self.script_input.setPlainText(preview.script)', 'if preview.warnings:',
                    'self._start_script(',
                    'QProcess(self)', 'setWorkingDirectory(str(self.repo_root))',
-                   'COPY RESULTS', 'ZIP RUN + NEW LOGS', 'External terminal (keep open)',
+                   'Copy Results', 'Zip Run + New Logs', 'External terminal (keep open)',
                    'create_script_results_zip(', 'self._run_final_logs = snapshot_loose_logs('):
         assert marker in klass
     launch = klass.split('def _run_script(self)', 1)[1].split('def _start_script(', 1)[0]

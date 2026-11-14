@@ -26,7 +26,7 @@ native core and the P1 harness) have their own workflow on the same contract (se
 ## Running a remote build
 
 1. Commit and **push** what you want built. GitHub builds the pushed commit, never your working tree.
-2. Open Build Runner (`python tools/build_runner.py`, or `--mode github`) and choose **GITHUB REMOTE**. (`--debug`
+2. Open Build Runner (`python tools/build_runner.py`, or `--mode github`) and choose **GitHub Remote**. (`--debug`
    prints the window's DPI awareness mode as it opens; Build Runner reads no environment variable flags.)
 3. Read the pre-flight line. It names exactly what GitHub will build: `GitHub builds origin/main @ 1a2b3c4d: <subject>`.
    It warns when your local HEAD is not that commit (unpushed commits) or when you have uncommitted changes, which
@@ -34,7 +34,7 @@ native core and the P1 harness) have their own workflow on the same contract (se
 4. Tick **Standard + Diagnostic (GitHub)**, **Media Center (GitHub)** or both. **Reddit Helper (local)** is
    pre-selected when its fingerprint says it is stale, and the two installers are pre-selected as on the venv tab;
    optionally tick **Linux (GitHub runner)**, **Linux Media Center (GitHub runner)**, or both.
-5. **START SELECTED.** Both selected products are dispatched at once and build in parallel on separate runners. Each
+5. **Start Selected.** Both selected products are dispatched at once and build in parallel on separate runners. Each
    row shows `Queued`, `Building`, `Downloading`, `Validating`, `Publishing`; the progress line shows the runner's
    current step, and a **GitHub run** link opens the run in your browser. Each selected Linux profile also starts
    a separate Ubuntu run on the same pinned commit and downloads its separately named tarball into `release\linux`
@@ -47,7 +47,7 @@ native core and the P1 harness) have their own workflow on the same contract (se
    selected Linux builds have ended too. A typical run takes about as long as a local build (the runner has 4 cores); your
    machine stays idle.
 
-**EMERGENCY STOP** (or closing the window) cancels the real GitHub runs (`gh run cancel`, both Linux profiles included),
+**Emergency Stop** (or closing the window, after a confirmation that defaults to keeping the build) cancels the real GitHub runs (`gh run cancel`, both Linux profiles included),
 not just the local monitoring, and stops any local step. The Linux job's process owner follows the pipeline's, so one
 stop ends both. A Linux job stopped before it began following its run still cancels it: the run is found by the run
 token its log names (or, for a temporary `linux-build/*` tag, by the tag, which is also deleted). Already published

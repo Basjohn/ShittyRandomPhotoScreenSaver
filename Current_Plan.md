@@ -55,6 +55,13 @@ at the size asked.
 
 ### Item 1. Operator-reported defects first
 
+- Foundry UX (operator, 14 Nov): the audit `Docs/Future_Work/Foundry_UX_Audit_2026-11-14.md`'s eight quick wins landed
+  (close guard, elapsed clocks, Start off on pre-flight errors, the failure reason shown, `&&` mnemonics, `--help`,
+  tab-bound status, Title Case). Open from it, for the operator's pick: its remaining high and medium findings and
+  the Build Foundry's port from Tkinter to PySide6.
+  - [ ] Side defect: `tests/test_godzip_foundry_core.py` and `test_godzip_foundry_script_runner.py` pin button
+    wording; assert structure (the button exists, its action) instead.
+
 - [~] Defect (operator, 14 Nov): a Studio window's taskbar icon in frozen builds is Windows' default box. One owner
   of the application icon (`ui/app_icon.py`): `SRPSS.ico` only when Qt can decode it, else the executable's own
   icon resource; `main.py` and the Studio read it, with an `[ICON]` startup line and a warning if a shown Studio
