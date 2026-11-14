@@ -99,7 +99,7 @@ bool parseNative(quint32 schema, quint32 *mode, quint32 *version)
     return *mode != 0 && *version != 0;
 }
 
-QString hex(quint32 value)
+QString hexText(quint32 value)
 {
     return QStringLiteral("0x%1").arg(value, 0, 16);
 }
@@ -452,17 +452,17 @@ bool PacketReader::admit(const SlotHead &head, QString *cause, QString *reason) 
     quint32 version = 0;
     if (!parseNative(schemaId, &schemaMode, &version)) {
         *cause = QStringLiteral("schema");
-        *reason = QStringLiteral("unknown payload schema %1").arg(hex(schemaId));
+        *reason = QStringLiteral("unknown payload schema %1").arg(hexText(schemaId));
         return false;
     }
     if (!knownMode(schemaMode)) {
         *cause = QStringLiteral("mode");
-        *reason = QStringLiteral("schema %1 names unknown mode code %2").arg(hex(schemaId)).arg(schemaMode);
+        *reason = QStringLiteral("schema %1 names unknown mode code %2").arg(hexText(schemaId)).arg(schemaMode);
         return false;
     }
     if (schemaMode != mode) {
         *cause = QStringLiteral("mode");
-        *reason = QStringLiteral("schema %1 is for mode code %2, the slot's is %3").arg(hex(schemaId)).arg(schemaMode).arg(mode);
+        *reason = QStringLiteral("schema %1 is for mode code %2, the slot's is %3").arg(hexText(schemaId)).arg(schemaMode).arg(mode);
         return false;
     }
     const fa::Schema *found = schema(schemaId);
@@ -478,7 +478,7 @@ bool PacketReader::admit(const SlotHead &head, QString *cause, QString *reason) 
         } else {
             *cause = QStringLiteral("version");
             *reason = QStringLiteral("schema %1: version %2 is %3 this build's newest %4")
-                          .arg(hex(schemaId))
+                          .arg(hexText(schemaId))
                           .arg(version)
                           .arg(version > newest ? QStringLiteral("newer than") : QStringLiteral("not one of"))
                           .arg(newest);
@@ -488,7 +488,7 @@ bool PacketReader::admit(const SlotHead &head, QString *cause, QString *reason) 
     if (head.payloadBytes != found->recordBytes) {
         *cause = QStringLiteral("size");
         *reason = QStringLiteral("schema %1: a %2-byte payload disagrees with its %3-byte layout")
-                      .arg(hex(schemaId))
+                      .arg(hexText(schemaId))
                       .arg(head.payloadBytes)
                       .arg(found->recordBytes);
         return false;
@@ -496,7 +496,7 @@ bool PacketReader::admit(const SlotHead &head, QString *cause, QString *reason) 
     if (found->recordBytes > m_capacity) {
         *cause = QStringLiteral("size");
         *reason = QStringLiteral("schema %1: its %2-byte record does not fit the %3-byte slot")
-                      .arg(hex(schemaId))
+                      .arg(hexText(schemaId))
                       .arg(found->recordBytes)
                       .arg(m_capacity);
         return false;
@@ -513,7 +513,7 @@ bool PacketReader::checkRecord(const fa::Schema *schema, const QByteArray &recor
         *reason = QStringLiteral("a %1-byte payload is not the %2-byte record of schema %3")
                       .arg(record.size())
                       .arg(schema->recordBytes)
-                      .arg(hex(schema->schemaId));
+                      .arg(hexText(schema->schemaId));
         return false;
     }
     const uchar *data = reinterpret_cast<const uchar *>(record.constData());
@@ -522,9 +522,9 @@ bool PacketReader::checkRecord(const fa::Schema *schema, const QByteArray &recor
     if (head != schema->schemaId || size != schema->recordBytes) {
         *cause = QStringLiteral("schema");
         *reason = QStringLiteral("the record names schema %1 (%2 bytes), not %3 (%4 bytes)")
-                      .arg(hex(head))
+                      .arg(hexText(head))
                       .arg(size)
-                      .arg(hex(schema->schemaId))
+                      .arg(hexText(schema->schemaId))
                       .arg(schema->recordBytes);
         return false;
     }
