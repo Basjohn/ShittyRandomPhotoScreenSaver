@@ -1,10 +1,13 @@
 # R-217 | The native Visualizer item sat half a device pixel off its card, and the composite's quad broke the bars along its diagonal on Vulkan
 
-**Status:** fixed 14 Nov 2026 (Current_Plan N2.8, the operator's defect box), in two parts. The owner (Python, landed
-on ABI 12): the native route places its item relative to the content host's real origin, the drawn card. The core
-(C++, ABI 13, proved in the build round): the composite's vertex stage puts the item's quad on whole pixels of its
-render target wherever the item is placed. Regression bars: `tests/test_native_visualizer_route.py::
-test_the_native_item_lies_on_whole_window_pixels_in_the_drawn_card_host` (red on the pre-fix route);
+**Status:** fixed 14 Nov 2026 (Current_Plan N2.8, the operator's defect box), in three parts. The route (Python,
+landed on ABI 12): the native item is placed relative to the content host's real origin, the drawn card. The card
+(Python, ABI 12): the native Spectrum's item is the Python renderer's, at the content host and the display's own
+place in its window. The core (C++, ABI 13, proved in the build round): the composite's vertex stage puts the item's
+quad on whole pixels of its render target wherever the item is placed. Regression bars:
+`tests/test_native_visualizer_route.py::test_the_native_item_lies_on_whole_window_pixels_in_the_drawn_card_host` (red
+on the pre-fix route); `tests/test_native_core_spectrum.py::
+test_the_cards_window_pixel_is_where_the_composite_shows_the_target_pixel` (red on the pre-fix card);
 `native/core/python/spectrum_check.py`'s pixels and seam rounds at every `PLACEMENTS` entry (the seam round red on
 ABI 12's Vulkan at the half-pixel placement: 57 of 57 counts); `tools/visualizer_replay/owner_render_parity.py
 --native`'s `overscan` placement (Display 1's R-63 window, the card's origin half a device pixel off the grid).
