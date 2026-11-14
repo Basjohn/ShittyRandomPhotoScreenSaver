@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** High: N2.9 with N2.3's leftovers and the N2.5 audit's fixes, one branch, built at ABI 9 (GitHub f030503e, compiled first time); harnesses running on the built module. Medium: derivatives after discard in Oscilloscope, Bubble and Spline Curve, with audit L5's guard shapes and 1B.10's interpolated-uv side defect (the same three shaders). N2.8 waits for two displays.
+**Now (in flight):** High: N2.9 round 2 on the ABI 9 branch (round 1 passed N23, N25, N29 on the GitHub build f030503e; the audit `Audit_2026-11-14_N29.md` found the generic pass refuses the product 2D shaders' shape: widened to `v_uv` plus one Draw block filled by name from conventions, settings and record; the schema registry split; M1-M4 and lows), then a build round and merge. Medium: 1C.2's Save stall, the prepared neighbour's redraw and two test side defects (hidden hosts; R-211 merged 6fd20845). N2.8 waits for two displays.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -445,9 +445,6 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   - [ ] The two-block split (port rule (g)'s preferred shape): a settings block packed on change and a frame block
     per frame, removing the 980 to 995 Python calls a frame on the OpenGL path; OpenGL bit-identical at the
     widened run set.
-  - [ ] Derivatives after a `discard` (R-210's class) remain in Oscilloscope (12), Bubble (2) and Spline Curve (8)
-    (`tests/test_shader_derivatives.py` lists them; `guard_control.txt` in the evidence): each fixed before its N5
-    port admits it, the guard then binding that mode.
   - [ ] The module's compiled-in `spectrum.frag` copy (the program round's negative control) predates the hoist;
     refreshed at the next C++ round.
   - [ ] Audit 14 Nov (`Docs/Future_Work/Audit_2026-11-14_N25.md`), H1: at fractional scales where the logical
@@ -465,8 +462,7 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     (Medium.)
   - [ ] Audit lows: L1 `spectrumBlock` checks `bars_len`/`peaks_len`, L9 the harness wait's use-after-free, L7 the
     post-build check covers the `.qsb` packs (Medium, same C++ round); L2 `program_blocks` edge cases fail closed,
-    L3 settings packed on change only, L4 `setProgram` keeps the settings (High, with N2.9's files); L5 the
-    derivative guard's four missed shapes (with the derivatives-after-discard box); L6 the native pipeline joins
+    L3 settings packed on change only, L4 `setProgram` keeps the settings (High, with N2.9's files); L6 the native pipeline joins
     the gradual warm-up; L8 the destruction barrier sees the native objects.
   - Surface format: RGBA8 (RGBA16F gave rule (a) no gain at twice the memory; quad alignment fixed it).
     `surface_format` stays a harness-only switch.
@@ -481,6 +477,12 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
     spec drawn natively on OpenGL and Vulkan; a change to its shader, spec or simulation shows with no module
     rebuild; GPU time per pass and nothing per frame at rest.
   - [ ] `native/core/README.md` and `Native_Core_P3_Decisions.md` (a decision record) say how a new mode is built.
+  - [ ] Audit 14 Nov (`Docs/Future_Work/Audit_2026-11-14_N29.md`) M5: the generic pass takes the product 2D shaders' shape
+    (`v_uv` from `mode.vert`; one Draw block filled by name from the core's conventions, the settings and the
+    record; samplers stay a primitive), so the N5 ports are data; Oscilloscope and Spline Curve admitted by `checkPass`,
+    Bubble refused only for its samplers. The Python schema registry split into compiled and runtime schemas.
+  - [ ] Audit M1-M4: the latch re-arms on any changed input and fades; one shared latch for both contents; binding 17
+    refused; a refused record keeps the last frame drawn. Lows L1 (framebuffer size from Qt's swapchain, not ctypes) to L11.
 - [ ] N2.8 Lead, Display 1: the first rehearsal (cards and Spectrum on Vulkan; no wallpaper yet).
   - Pre-check done 14 Nov (`.artifacts/evidence/display/d1_run/20261114_n27_vulkan_visible/`, displays on):
     the saver on Vulkan revealed on its first presented frame, every card drew with its material and text, and
@@ -804,10 +806,6 @@ The operator's taste for Spectrum (11 Nov, on five of round 1: "are all ghastly 
 capsule, grid-on-block and dark-fill looks fail; fine luminous gradients pass; fewer good presets beat a full slot
 count. The Spectrum features and the Bar Gap control are in `Docs/Reference/Visualizer_Reference.md`.
 
-- [ ] Side defect (same cause as R-197, unchecked): Oscilloscope (`widgets/spotify_visualizer/shaders/oscilloscope.frag`
-  about :352), Spline Curve (`devcurve.frag` about :262) and Bubble (`bubble.frag` about :121) threshold the
-  interpolated `v_uv * u_resolution` too: render each at 840x560 and compare coverage across the quad's diagonal; fix
-  any that steps with the same affine map (one helper, not three copies).
 - [ ] Side defect: the presets round's `render_spectrum_evidence.py` sets `ROOT = HERE.parents[5]`, which under the
   evidence junction resolves to `D:\TEMP\Scratch\SRPSS`, not the repo: kept evidence scripts take the repository root
   from `tools/artifact_paths.py` (or an explicit argument), never from their own location.

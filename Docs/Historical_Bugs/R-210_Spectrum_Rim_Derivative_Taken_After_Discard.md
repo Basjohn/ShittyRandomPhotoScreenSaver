@@ -43,5 +43,5 @@ With every derivative taken before any lane leaves:
 
 Take every derivative where control flow is still uniform: before the first `discard` or early `return`. A
 derivative after one reads whatever the driver leaves in the quad, so a shader can look right on one backend for
-years and differ on the next. The guard binds every native port; Oscilloscope, Bubble and Spline Curve still take
-derivatives after a discard and must be fixed before their N5 ports admit them.
+years and differ on the next. The guard binds every 2D mode since R-211 fixed Oscilloscope, Bubble and Spline Curve
+(14 Nov) and refuses four more shapes.
