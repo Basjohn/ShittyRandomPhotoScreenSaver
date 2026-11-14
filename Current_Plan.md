@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** Medium: 1B.10's Neon Lake fixes and the arctic preset's near-lens blob (no near-lens blobs ever, operator 14 Nov). Docs/writing (Sonnet): removing Hero Shell. R-217 merged at ABI 13. High: free.
+**Now (in flight):** Medium: 1B.10's fixes (checkpointed: the 8-bit glow dither landed on its branch; the near-lens fade, Aurora Fjord's lake lines and the Neon tests that pin shipped presets wait for the 17:00 UTC reset). Hero Shell removed. R-217 merged at ABI 13. High: free until the reset.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -1604,18 +1604,6 @@ Active density/composition work and native evidence: section 1A, items 1.7/1.9. 
 **Widget theme legibility (open)**
 
 - [ ] Theme the Weather detail asset icons: they remain white and become faint on pale cards.
-
-**Extruded Bubble: remove Hero Shell (operator, 14 Nov: "hero shell is a trash feature I never asked for"; "We never
-ever want near lens blobs")**
-
-- [ ] Remove the Hero Shell and its Hero Across and Hero Height controls end to end: the spec rows
-  (`core/settings/visualizer_mode_settings.py`, Lens bucket), defaults, the renderer's hero-shell path
-  (`rendering/quick/visualizer/implementations/extruded_bubble.py`, `rendering/gl_programs/extruded_bubble_scene.py`),
-  the Studio rows, every preset's keys, the docs (`Docs/Reference/Extruded_Bubble/Target.md`, `Investigation.md`,
-  `Docs/Reference/Transitions.md`), and its test. The persisted keys become retired keys
-  (`core/settings/visualizer_retired_modes.py` `_RETIRED_VISUALIZER_KEYS`, as earlier retirements), so a saved
-  profile drops them quietly. Proof: every Extruded Bubble look renders identically before and after (Hero Shell
-  is 0 in every preset); nothing else in the mode moves; no reference to it is left outside the historical record.
 
 **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent); second pass
 done, awaiting the lead's review**

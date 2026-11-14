@@ -76,6 +76,11 @@ _RETIRED_VISUALIZER_KEYS = frozenset({
     # projection, so the per-mode choice is gone and a saved Orthographic resolves to Perspective.
     "waveform_ribbon_camera_projection",
     "extruded_bubble_camera_projection",
+    # Extruded Bubble's Hero Shell (one large near-lens bubble) and its Hero Across / Hero Height placement, retired
+    # 14 Nov 2026 at the operator's request: saved profiles, custom presets and exports drop them.
+    "extruded_bubble_hero_shell",
+    "extruded_bubble_hero_across",
+    "extruded_bubble_hero_height",
 })
 _RETIRED_VISUALIZER_PREFIXES = ("blob_", "sine_", "sinewave_")
 
