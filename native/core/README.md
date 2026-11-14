@@ -34,12 +34,31 @@ never ships.
     layout, mode codes and record tables, generated from `core/visualizer_engine/packet_abi.py` and `native_schema.py`
     by `tools/native_frame_abi_header.py` (never edited by hand). Its first consumer is N2.5's Spectrum, at the item's
     sync on the render thread; `pause_in_copy` is D1's "close during copy" hook (a harness's only).
-  - `spectrum.*` (N2.5): Spectrum on a composite's surface. The fragment shader is the product's own
-    `widgets/spotify_visualizer/shaders/spectrum.frag` (baked from that path by `CMakeLists.txt`; `shaders/spectrum.vert`
-    and `shaders/clear.frag` are the core's), its SpectrumDraw block packed at the reflected offsets with the Python
-    renderer's arithmetic ported line for line (`spectrum_block`, GPU-free, for the byte-for-byte test). The stream is
-    bound by its mapping name from the GUI thread, read at the item's sync on the render thread, and a retired stream is
-    released there (the render-thread retire job, also at the node's deletion). Python face: `rendering/native/spectrum.py`.
+  - `program_blocks.*` (N2.5 round 4, **the standing port rule for every mode**): a runtime shader's uniform block,
+    reflected by name (`BlockLayout::reflect`) and packed generically (`BlockValues`): `set(name, numbers)` from any
+    name -> value source (a Python settings dict through `setJson` now; a record's named fields later, N2.9), at the
+    member's reflected offset, type and array stride (std140: a scalar array's stride is 16 when the reflection says 0),
+    ints as int32, floats as float32 rounded to nearest. An unknown name or a wrong size is refused with a reason;
+    `unfilled()` names every member nobody set (a harness error). A port therefore writes:
+    1. its fragment shader once, in `widgets/spotify_visualizer/shaders/` (the Python renderer and the core draw the same
+       file), baked by `tools/regen_qrc.py --shaders` into `<file>.qsb` beside it (the conventions splice included; the
+       same staleness check as the Qt Quick packs) and handed to the core as bytes at run time
+       (`rendering/native/program_values.py` `mode_fragment_pack`): **no module build for a shader change**;
+    2. one Python function giving every Settings- and card-derived member by name, from the spec and the card, with the
+       Python renderer's own arithmetic (Spectrum: `spectrum_settings_values`), sent when it changes (nothing per frame at
+       rest);
+    3. C++ only for the per-frame or simulation arithmetic, setting its members by name through the same `BlockValues`
+       (Spectrum: `kSpectrumFrameMembers`).
+    A new Settings-only uniform is a shader line, a spec entry, a line in step 2 and a bake: no C++, no build round.
+  - `spectrum.*` (N2.5): Spectrum on a composite's surface, the first port under that rule. Its program
+    (`SpectrumProgram`) is the product's `spectrum.frag` pack handed over at run time (`composite_spectrum_program`; the
+    module's compiled-in copy remains only as the harness's negative control) and its Settings-derived members by name
+    (`composite_spectrum_settings`); the C++ fills the per-frame members from the record (bars, peaks, the bar layout that
+    follows the bar count, the clock's hues, the play state), ported line for line from the Python renderer
+    (`spectrum_block`, GPU-free, for the byte-for-byte test). The stream is bound by its mapping name from the GUI thread,
+    read at the item's sync on the render thread, and a retired stream is released there (the render-thread retire job,
+    also at the node's deletion). Python face: `rendering/native/spectrum.py`; the product route:
+    `rendering/quick/visualizer/native_route.py`.
   - `vulkan_context.*`: D6, the process's Vulkan instance and one device per window, given to Qt Quick.
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
