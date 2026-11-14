@@ -497,6 +497,19 @@ N2.5 (built), then N2.8, whose rehearsal closes N2.5's rule (f) and releases the
   OpenGL only and retires with the Python presenter); at rest nothing is drawn again. Proved in the hidden host
   on both backends against the Python presenter's frames, and measured against the protected retained-background
   path. It runs in the rehearsal only; production on OpenGL keeps the Python presenter until N5.2h.
+  - [ ] Read first, write down before code: D7 point 1; the Python presenter and its owners
+    (`rendering/quick/display_presenter.py`, `display_image_route.py`, `image_state.py`, `image_boundary.py`):
+    image ownership, covered-display admission, the fit and crop arithmetic, the timing and its edges; the
+    protected retained-background path (commits ce07b991, 07486d83, 985b9d53: never retuned to satisfy an oracle).
+  - [ ] The background layer in the core: N4.a's fullscreen pass drawing the current photo with the presenter's
+    own fit and crop (one owner of that arithmetic, read by both), the photo uploaded by N3.8's job service,
+    retained (nothing drawn again at rest), a change of photo published at a frame edge.
+  - [ ] The route: on Vulkan the window's background comes from the core (the rehearsal shows the wallpaper);
+    OpenGL production keeps the Python presenter unchanged until N5.2h.
+  - [ ] Proof in the hidden host, both backends, validation: native against the Python presenter's frames on real
+    photos (landscape, portrait, odd aspect, at dpr 1 and 1.5, under the overscan placement), rule (a) and (b);
+    photo changes through jobs with no render-thread stall; nothing at rest; then the lead's Display 1 and
+    Display 0 rehearsal with the wallpaper and music.
 - [ ] N5.7b The native backdrop pyramid (D7 points 2 to 6): from the background layer, only when it changed, only
   while demand is above zero; the full chain of levels; a texture provider `MaterialSurface` samples unchanged;
   fail closed to Normal. Cost against D7's budgets at 2560 x 1440 and 4K; stills of each material beside today's.
