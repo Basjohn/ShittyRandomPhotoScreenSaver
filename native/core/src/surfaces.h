@@ -19,6 +19,7 @@
 #include <QtCore/QMutex>
 #include <QtCore/QSize>
 #include <QtCore/QString>
+#include <rhi/qrhi.h> // QRhiTexture::Format in a declaration needs the class (round 5's first compile)
 
 #include <memory>
 

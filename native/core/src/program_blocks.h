@@ -21,8 +21,6 @@
 #include <QtCore/QStringList>
 #include <rhi/qshader.h>
 
-#include <vector>
-
 namespace srpss_core {
 
 struct BlockMember
@@ -78,7 +76,7 @@ public:
 private:
     BlockLayout m_layout;
     QByteArray m_bytes;
-    std::vector<bool> m_filled;
+    QList<bool> m_filled;  // Qt containers only: the core imports nothing from the STL DLL (P1 risk 4)
 };
 
 } // namespace srpss_core

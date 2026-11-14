@@ -119,7 +119,7 @@ QJsonObject BlockLayout::toJson() const
 }
 
 BlockValues::BlockValues(const BlockLayout &layout)
-    : m_layout(layout), m_filled(size_t(layout.members().size()), false)
+    : m_layout(layout), m_filled(layout.members().size(), false)
 {
     m_bytes.fill('\0', layout.size());
 }
@@ -152,7 +152,7 @@ bool BlockValues::set(const QByteArray &name, const double *values, int count, Q
             if (at + 4 <= m_bytes.size())
                 writeScalar(data + at, member.type, values[i]);
         }
-        m_filled[size_t(index)] = true;
+        m_filled[index] = true;
         return true;
     }
     *error = QStringLiteral("'%1' is not a member of %2 (an unknown name is refused)")
@@ -164,22 +164,22 @@ bool BlockValues::setJson(const QJsonObject &values, QString *error)
 {
     BlockValues staged = *this;
     for (auto it = values.begin(); it != values.end(); ++it) {
-        std::vector<double> numbers;
+        QList<double> numbers;
         if (it.value().isDouble() || it.value().isBool()) {
-            numbers.push_back(it.value().isBool() ? (it.value().toBool() ? 1.0 : 0.0) : it.value().toDouble());
+            numbers.append(it.value().isBool() ? (it.value().toBool() ? 1.0 : 0.0) : it.value().toDouble());
         } else if (it.value().isArray()) {
             for (const QJsonValue &item : it.value().toArray()) {
                 if (!item.isDouble()) {
                     *error = QStringLiteral("'%1' holds a value that is not a number").arg(it.key());
                     return false;
                 }
-                numbers.push_back(item.toDouble());
+                numbers.append(item.toDouble());
             }
         } else {
             *error = QStringLiteral("'%1' is not a number or a list of numbers").arg(it.key());
             return false;
         }
-        if (!staged.set(it.key().toLatin1(), numbers.data(), int(numbers.size()), error))
+        if (!staged.set(it.key().toLatin1(), numbers.constData(), int(numbers.size()), error))
             return false;
     }
     *this = staged;
@@ -191,7 +191,7 @@ QStringList BlockValues::unfilled() const
     QStringList names;
     const QList<BlockMember> &members = m_layout.members();
     for (int index = 0; index < members.size(); ++index) {
-        if (!m_filled[size_t(index)] && members.at(index).components() > 0)
+        if (!m_filled[index] && members.at(index).components() > 0)
             names.append(QString::fromLatin1(members.at(index).name));
     }
     return names;
@@ -202,7 +202,7 @@ QStringList BlockValues::filled() const
     QStringList names;
     const QList<BlockMember> &members = m_layout.members();
     for (int index = 0; index < members.size(); ++index) {
-        if (m_filled[size_t(index)])
+        if (m_filled[index])
             names.append(QString::fromLatin1(members.at(index).name));
     }
     return names;
