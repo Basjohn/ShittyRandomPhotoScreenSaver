@@ -60,7 +60,7 @@ import vk_validation  # noqa: E402  (native/core/python)
 import host_check  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("block", "item", "pixels")
+ROUNDS = ("block", "item", "pixels", "seam")
 CHILD_TIMEOUT_S = 1800
 MARGIN = 8                       # logical pixels between the display's corner and the item
 REST_FRAMES = 3
@@ -618,6 +618,72 @@ def round_pixels(core, engine, app, host, api: str, records: list[dict], referen
             "max_level": max_level, "worst": worst, "gpu": gpu}
 
 
+#: Record fields set for the seam round (the decorations off, so a row's colour depends on the bar coverage alone).
+_SEAM_FIELDS = {"single_piece": 1, "spectrum_glow_enabled": 0, "spectrum_ghosting_enabled": 0, "rainbow_enabled": 0,
+                "rainbow_per_bar": 0, "spectrum_rainbow_fill": 0, "spectrum_rainbow_border": 0,
+                "spectrum_rainbow_ghost": 0, "spectrum_pattern_shown": 0}
+_SEAM_REALS = {"border_radius": 0.0, "spectrum_gloss": 0.0, "spectrum_fill_gradient_mix": 0.0,
+               "spectrum_peak_caps_mix": 0.0, "spectrum_pattern_mix": 0.0, "spectrum_ghost_fill_mix": 0.0}
+
+
+def _seam_record(base: bytes, count: int) -> bytes:
+    import struct
+
+    from core.visualizer_engine import spectrum_native_schema
+
+    layout = spectrum_native_schema.LAYOUT
+    record = bytearray(base)
+    for name in ("bars", "peaks"):
+        offset = layout.field(name).offset
+        for index in range(64):
+            struct.pack_into("<d", record, offset + 8 * index, 1.0 if index < count else 0.0)
+        struct.pack_into("<I", record, layout.field(f"{name}_len").offset, count)
+    struct.pack_into("<I", record, layout.field("bar_count").offset, count)
+    for name, value in _SEAM_FIELDS.items():
+        struct.pack_into("<I", record, layout.field(name).offset, value)
+    for name, value in _SEAM_REALS.items():
+        struct.pack_into("<d", record, layout.field(name).offset, value)
+    return bytes(record)
+
+
+def round_seam(core, engine, app, host, records: list[dict]) -> dict:
+    """R-197 on the native item (rule (d)): 1B.10's scene (the card at 2x, full-height bars at every count from 8 to 64,
+    so edges land on pixel centres): in the band every bar covers, every row has the same bar edges."""
+    import numpy as np
+
+    base = next(entry for entry in records if entry["key"] == "spectrum")
+    card = _card_for_item(dict(base["card"], dpr=2.0))
+    host.set_device_pixel_ratio(2.0)
+    scene = Scene(core, engine, host)
+    stream = Stream()
+    stepped: dict = {}
+    counts = 0
+    try:
+        scene.place(card)
+        scene.spectrum.bind(stream.name, expect=stream.expect)
+        for step, count in enumerate(range(8, 65)):
+            stream.publish(_seam_record(base["record"], count), float(step))
+            scene.spectrum.update()
+            pixels = scene.read(card)
+            height = pixels.shape[0]
+            band = pixels[height // 4:3 * height // 4, :, :3].max(axis=2) > 0
+            edges = [tuple(np.flatnonzero(np.diff(row.astype(np.int8)))) for row in band]
+            if len(edges[0]) < 2 * count - 1:
+                stepped[count] = f"only {len(edges[0])} edges"
+                continue
+            counts += 1
+            if any(row != edges[0] for row in edges):
+                stepped[count] = sorted(set(edges[0]) ^ {x for row in edges for x in row})[:20]
+    finally:
+        stream.close()
+        scene.close(app)
+        host.frames(2)
+        host_check._flush_deletes(app)
+    checks = {"every_count_drawn": not any(isinstance(v, str) for v in stepped.values()) and counts == 57,
+              "one_x_per_edge_in_every_row": not stepped}
+    return {"pass": all(checks.values()), "checks": checks, "stepped": {str(k): v for k, v in stepped.items()}}
+
+
 def vulkan_against_opengl(out: Path) -> dict:
     """Rule (b)'s first form: the Vulkan frames against the native OpenGL frames of the same samples."""
     import numpy as np
@@ -738,6 +804,8 @@ def child(args) -> dict:
             try:
                 if name == "item":
                     record[name] = round_item(core, engine, app, host, records)
+                elif name == "seam":
+                    record[name] = round_seam(core, engine, app, host, records)
                 else:
                     record[name] = round_pixels(core, engine, app, host, args.api, records, references, out)
             except Exception:
