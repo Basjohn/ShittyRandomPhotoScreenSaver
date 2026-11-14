@@ -86,6 +86,7 @@ VHS_FRAGMENT_SOURCE = (
     "uniform sampler2D uOldTex;\nuniform sampler2D uNewTex;\nuniform vec2 uItemSize;\n"
     "uniform float uEnvelope;\nuniform float uRoll;\nuniform float uRollSign;\nuniform float uTime;\n"
     "uniform float uSeed;\nuniform float uTracking;\nuniform float uBleed;\nuniform float uNoise;\n"
+    "uniform vec2 u_target_px;\nuniform int uShow;\n"
     + ANALOG_SIGNAL_GLSL
     + f"""
 const float VHS_BAR = {VHS_BAR:.6f};
@@ -94,7 +95,12 @@ const float VHS_LINES = {VHS_LINES:.1f};
 const float VHS_FIELD_RATE = {VHS_FIELD_RATE:.1f};
 
 void main() {{
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+    // The pixel's own uv (N5.2a): the interpolated vUv differs in its last bits between renderers and backends; the
+    // pixel's centre over the item's own pixels does not.
+    vec2 pixelUv = (floor(vUv * u_target_px) + 0.5) / u_target_px;
+    vec2 uv = vec2(pixelUv.x, 1.0 - pixelUv.y);
+    if (uShow == 1) {{ FragColor = texture(uOldTex, uv); return; }}
+    if (uShow == 2) {{ FragColor = texture(uNewTex, uv); return; }}
     uint seed = uint(uSeed);
     float e = uEnvelope;
     float track = e * uTracking, bleed = e * uBleed, noise = e * uNoise;

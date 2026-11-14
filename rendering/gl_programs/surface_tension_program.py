@@ -84,7 +84,7 @@ SURFACE_TENSION_FRAGMENT_SOURCE = (
     "#version 460 core\nin vec2 vUv;\nout vec4 FragColor;\n"
     "uniform sampler2D uOldTex;\nuniform sampler2D uNewTex;\nuniform vec2 uItemSize;\n"
     f"uniform vec4 uPools[{TENSION_MAX_POOLS}];\nuniform vec2 uDrift[{TENSION_MAX_POOLS}];\nuniform int uPoolCount;\n"
-    "uniform float uProgress;\nuniform float uGloss;\n"
+    "uniform float uProgress;\nuniform float uGloss;\nuniform vec2 u_target_px;\nuniform int uShow;\n"
     + REFRACTION_GLSL + MENISCUS_FIELD_GLSL
     + f"""
 const float THRESHOLD = {TENSION_THRESHOLD:.6f};
@@ -106,7 +106,12 @@ float tensionField(vec2 p) {{
 }}
 
 void main() {{
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+    // The pixel's own uv (N5.2a): the interpolated vUv differs in its last bits between renderers and backends; the
+    // pixel's centre over the item's own pixels does not.
+    vec2 pixelUv = (floor(vUv * u_target_px) + 0.5) / u_target_px;
+    vec2 uv = vec2(pixelUv.x, 1.0 - pixelUv.y);
+    if (uShow == 1) {{ FragColor = texture(uOldTex, uv); return; }}
+    if (uShow == 2) {{ FragColor = texture(uNewTex, uv); return; }}
     float aspect = uItemSize.x / uItemSize.y;
     vec2 p = vec2((uv.x - 0.5) * aspect, 0.5 - uv.y);
     float e = 1.5 / uItemSize.y;

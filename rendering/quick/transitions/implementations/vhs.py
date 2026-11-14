@@ -11,6 +11,7 @@ from rendering.gl_programs.vhs_program import (
     VHS_BLOCK, VHS_FRAGMENT_SOURCE, VHS_PERIOD, VHS_VERTEX_SOURCE, vhs_envelope, vhs_roll,
 )
 from rendering.quick.scene3d.resources import UNDERLAY_PROGRAM, MeshResources, bind_frame, warm_programs, warm_pass_blocks
+from ..fullscreen_pass import SHOW_EFFECT, SHOW_NEW, SHOW_OLD, NativeFragmentPass
 from ..render_contract import QuickTransitionRenderFrame
 
 _ROLL_SIGN = {"up": 1.0, "down": -1.0}
@@ -30,8 +31,19 @@ def vhs_parameters(parameters: Mapping[str, object]) -> tuple[float, float, floa
     return values[0], values[1], values[2], seed
 
 
-class QuickVhsRenderer:
+def _shown(envelope: float, roll: float) -> int:
+    """What the frame shows: a clean signal before the roll (the old picture) and after hold and tracking have settled
+    (the new one); else the effect."""
+    if envelope <= 0.0 and roll <= 0.0:
+        return SHOW_OLD
+    if envelope <= 0.0 and roll >= VHS_PERIOD:
+        return SHOW_NEW
+    return SHOW_EFFECT
+
+
+class QuickVhsRenderer(NativeFragmentPass):
     transition_id = "vhs"
+    fragment_source = VHS_FRAGMENT_SOURCE
 
     _SAMPLERS = ("uOldTex", "uNewTex")      # every other value is in VHS_BLOCK
 
@@ -42,22 +54,30 @@ class QuickVhsRenderer:
     def has_resources(self) -> bool:
         return self._resources.has_resources
 
-    def render(self, frame: QuickTransitionRenderFrame) -> None:
+    def block_values(self, frame: QuickTransitionRenderFrame) -> dict[str, object]:
+        """Every value of the pass block for this frame (validated first; no GL): the one owner, packed by ``render``
+        and filled by the native core (N5.2b)."""
         progress = max(0.0, min(1.0, float(frame.sample.eased_progress)))
         code = str(frame.run.request.direction)
         if code not in _ROLL_SIGN:
             raise ValueError(f"unknown resolved VHS Distortion direction: {code!r}")
         tracking, bleed, noise, seed = vhs_parameters(frame.run.request.parameter_dict())
         envelope, roll = vhs_envelope(progress), vhs_roll(progress)
+        return {"uMatrix": frame.matrix_values, "uItemSize": frame.logical_size, "u_target_px": frame.item_pixels,
+                "uShow": _shown(envelope, roll), "uEnvelope": envelope, "uRoll": roll, "uRollSign": _ROLL_SIGN[code],
+                "uTime": progress * frame.run.request.duration_ms / 1000.0, "uSeed": float(seed),
+                "uTracking": tracking, "uBleed": bleed, "uNoise": noise}
+
+    def render(self, frame: QuickTransitionRenderFrame) -> None:
+        values = self.block_values(frame)
         try:
-            # Clean signal before the roll and after hold and tracking have settled: the photographs.
-            if envelope <= 0.0 and roll <= 0.0:
+            if values["uShow"] == SHOW_OLD:
                 self._resources.draw_image(frame, frame.source_texture_id)
                 return
-            if envelope <= 0.0 and roll >= VHS_PERIOD:
+            if values["uShow"] == SHOW_NEW:
                 self._resources.draw_image(frame, frame.destination_texture_id)
                 return
-            self._draw(frame, progress, envelope, roll, _ROLL_SIGN[code], tracking, bleed, noise, seed)
+            self._draw(frame, values)
         except Exception:
             self.release_resources()
             raise
@@ -74,8 +94,7 @@ class QuickVhsRenderer:
     def park(self) -> None:
         """Nothing per run to drop; the programs stay warm."""
 
-    def _draw(self, frame, progress: float, envelope: float, roll: float, sign: float, tracking: float,
-              bleed: float, noise: float, seed: int) -> None:
+    def _draw(self, frame, block: dict) -> None:
         r = self._resources
         program = r.program("vhs", VHS_VERTEX_SOURCE, VHS_FRAGMENT_SOURCE)
         uniforms = r.uniforms("vhs", self._SAMPLERS)
@@ -83,14 +102,7 @@ class QuickVhsRenderer:
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDepthMask(gl.GL_FALSE)
         bind_frame(program, uniforms, frame, values)
-        values["uEnvelope"] = envelope
-        values["uRoll"] = roll
-        values["uRollSign"] = sign
-        values["uTime"] = progress * frame.run.request.duration_ms / 1000.0
-        values["uSeed"] = float(seed)
-        values["uTracking"] = tracking
-        values["uBleed"] = bleed
-        values["uNoise"] = noise
+        values.update(block)
         with r.pass_blocks.bound(pack_block(VHS_BLOCK, values)):
             gl.glBindVertexArray(frame.quad_vao)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)

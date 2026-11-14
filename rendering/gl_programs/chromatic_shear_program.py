@@ -43,7 +43,7 @@ CHROMATIC_SHEAR_FRAGMENT_SOURCE = (
     "#version 460 core\nin vec2 vUv;\nout vec4 FragColor;\n"
     "uniform sampler2D uOldTex;\nuniform sampler2D uNewTex;\nuniform vec2 uItemSize;\n"
     "uniform float uProgress;\nuniform vec2 uAxis;\nuniform float uSpread;\nuniform float uSlices;\n"
-    "uniform float uSeed;\n"
+    "uniform float uSeed;\nuniform vec2 u_target_px;\nuniform int uShow;\n"
     + SPECTRAL_GLSL
     + f"""
 const float SHEAR_AMOUNT = {SHEAR_AMOUNT:.6f};
@@ -51,7 +51,16 @@ const float SHEAR_FAN = {SHEAR_FAN:.6f};
 const vec2 SHEAR_SWITCH = vec2({SHEAR_SWITCH[0]:.6f}, {SHEAR_SWITCH[1]:.6f});
 const float SHEAR_SWITCH_WIDTH = {SHEAR_SWITCH_WIDTH:.6f};
 
-float hash1(float n) {{ return fract(sin(n * 91.3458 + uSeed * 0.0173) * 47453.5453); }}
+// Integer hash of the slice index and the seed (R-94's class; N5.2b): exact on every GPU, compiler and backend, where
+// a float fract(sin()) hash compiles to different values through SPIR-V.
+uint shearMix(uint x) {{
+    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
+    return x;
+}}
+float hash1(float n) {{
+    uint k = uint(int(n) + 65536);
+    return float(shearMix(k * 0x9e3779b9u ^ shearMix(uint(uSeed) * 0x85ebca6bu + 17u))) * (1.0 / 4294967295.0);
+}}
 float sliceOffset(float k, float across) {{
     return (hash1(k) * 2.0 - 1.0) + 0.35 * sin(across * 2.3 + uSeed);
 }}
@@ -59,7 +68,12 @@ float sliceOffset(float k, float across) {{
 vec2 mirrored(vec2 uv) {{ return 1.0 - abs(1.0 - mod(uv, 2.0)); }}
 
 void main() {{
-    vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
+    // The pixel's own uv (N5.2a): the interpolated vUv differs in its last bits between renderers and backends; the
+    // pixel's centre over the item's own pixels does not.
+    vec2 pixelUv = (floor(vUv * u_target_px) + 0.5) / u_target_px;
+    vec2 uv = vec2(pixelUv.x, 1.0 - pixelUv.y);
+    if (uShow == 1) {{ FragColor = texture(uOldTex, uv); return; }}
+    if (uShow == 2) {{ FragColor = texture(uNewTex, uv); return; }}
     float aspect = uItemSize.x / uItemSize.y;
     vec2 p = vec2((uv.x - 0.5) * aspect, 0.5 - uv.y);
     float t = clamp(uProgress, 0.0, 1.0);

@@ -93,14 +93,14 @@ def transition_pack_path(transition_id: str) -> Path:
 
 def native_transition_renderer(transition_id: str) -> Any:
     """The Python renderer whose values the core's pass reads, when the core draws ``transition_id`` (a one-fragment
-    pass, ``FullscreenPassRenderer``, with its pack shipped); None otherwise."""
-    from rendering.quick.transitions.fullscreen_pass import FullscreenPassRenderer
+    pass, ``NativeFragmentPass``, with its pack shipped); None otherwise."""
+    from rendering.quick.transitions.fullscreen_pass import NativeFragmentPass
     from rendering.quick.transitions.implementation_registry import resolve_quick_transition_renderer
 
     if not transition_pack_path(transition_id).is_file():
         return None
     renderer = resolve_quick_transition_renderer(transition_id, enabled_transition_ids=frozenset({transition_id}))
-    return renderer if isinstance(renderer, FullscreenPassRenderer) else None
+    return renderer if isinstance(renderer, NativeFragmentPass) else None
 
 
 def transition_program(transition_id: str, old: str, new: str, pack: bytes | None = None) -> list:
@@ -117,11 +117,19 @@ def transition_program(transition_id: str, old: str, new: str, pack: bytes | Non
 def transition_settings(renderer: Any, run: Any, sample: Any, logical_size: tuple[float, float],
                         device_pixel_ratio: float) -> dict:
     """The pass's settings for this frame of ``run``: the Python renderer's own block values (its one owner,
-    ``FullscreenPassRenderer.block_values``), less the members the core fills from the item (its conventions)."""
+    ``NativeFragmentPass.block_values``), less the members the core fills from the item (its conventions). An array
+    member's elements (Surface Tension's pools, N5.2b) are given flat: the core packs them at the reflected stride."""
     from rendering.native.mode import MODE_CORE_MEMBERS
 
     values = renderer.run_values(run, sample, logical_size, device_pixel_ratio)
-    return {name: value for name, value in values.items() if name not in MODE_CORE_MEMBERS}
+    return {name: _flat(value) for name, value in values.items() if name not in MODE_CORE_MEMBERS}
+
+
+def _flat(value: Any) -> Any:
+    """A value of nested sequences as one flat list of its numbers (an array of vectors); anything else as it is."""
+    if not isinstance(value, (tuple, list)) or not any(isinstance(item, (tuple, list)) for item in value):
+        return value
+    return [number for item in value for number in (_flat(item) if isinstance(item, (tuple, list)) else (item,))]
 
 
 def background_layer_settings(pixel_size: tuple[int, int], logical_size: tuple[float, float]) -> dict:

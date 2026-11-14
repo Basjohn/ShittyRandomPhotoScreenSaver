@@ -40,7 +40,8 @@ class TransitionDescriptor:
 
 
 # N5.2a: the fullscreen transitions the native core draws from their own fragment over the background layer
-# (``rendering/quick/render/native_background.py``) on the Vulkan rehearsal path.
+# (``rendering/quick/render/native_background.py``) on the Vulkan rehearsal path; N5.2b added the five
+# item-quad programs that are one fragment between two pictures (Beam's sparks are a second pass: not).
 _ON_THE_CORE: tuple[str, ...] = ("opengl", "vulkan")
 
 _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
@@ -93,6 +94,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Melt Drip",
         stable_id="melt_drip",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
@@ -111,6 +113,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="VHS Distortion",
         stable_id="vhs",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
@@ -123,6 +126,7 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Liquid Lens",
         stable_id="liquid_lens",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
@@ -135,12 +139,14 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
     TransitionDescriptor(
         setting_name="Surface Tension Merge",
         stable_id="surface_tension",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
         setting_name="Chromatic Shear",
         stable_id="chromatic_shear",
+        renderer_backends=_ON_THE_CORE,
         easing_curve=EasingCurve.LINEAR,
         requires_hw_accel=True,
     ),

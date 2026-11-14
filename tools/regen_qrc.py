@@ -432,23 +432,25 @@ def transition_shader_dir(repo_root: Path = ROOT) -> Path:
 
 
 def transition_fragment_sources() -> dict[str, str]:
-    """Every fullscreen transition's fragment (a ``FullscreenPassRenderer`` subclass, discovered in
-    ``rendering/quick/transitions/implementations``, never listed): its stable id -> the fragment text its Python
-    renderer compiles (the one source; its pack ``<id>.frag.qsb`` is baked from it)."""
+    """Every fullscreen transition's fragment (a ``NativeFragmentPass`` subclass: ``FullscreenPassRenderer``'s seven and
+    N5.2b's item-quad programs, discovered in ``rendering/quick/transitions/implementations``, never listed): its stable
+    id -> the fragment text its Python renderer compiles (the one source; its pack ``<id>.frag.qsb`` is baked from
+    it)."""
     import importlib
 
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
     from rendering.quick.transitions import implementations
-    from rendering.quick.transitions.fullscreen_pass import FullscreenPassRenderer
+    from rendering.quick.transitions.fullscreen_pass import NativeFragmentPass
 
     found: dict[str, str] = {}
     for path in sorted(Path(implementations.__file__).parent.glob("*.py")):
-        if "FullscreenPassRenderer" not in path.read_text(encoding="utf-8"):
+        text = path.read_text(encoding="utf-8")
+        if "FullscreenPassRenderer" not in text and "NativeFragmentPass" not in text:
             continue
         module = importlib.import_module(f"{implementations.__name__}.{path.stem}")
         for value in vars(module).values():
-            if (isinstance(value, type) and issubclass(value, FullscreenPassRenderer)
+            if (isinstance(value, type) and issubclass(value, NativeFragmentPass)
                     and value.__module__ == module.__name__):
                 found[value.transition_id] = value.fragment_source
     return found
