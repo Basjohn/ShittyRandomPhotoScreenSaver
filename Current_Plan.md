@@ -38,7 +38,7 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** N2.5 (High); the N1.6 re-proof runs unattended (lead). Medium starts after the reset.
+**Now (in flight):** N2.5 (High); N1.6 Neon Lake, then Extruded Spectrum and Sphere (Medium); the audit of 14 Nov's merges and the core doc sweep (Audit).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
@@ -47,7 +47,7 @@ at the size asked.
      ride with the next fitting dispatch.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. N1.6's coverage gap (variants a and b, the shader-selecting Choice offers, the merged conversions re-proved), then N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
+  1. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
      Sphere); a mode that cannot be made bit-identical in one dispatch converts at its port.
   2. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
@@ -372,21 +372,12 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   Waveform Ribbon; 13 Nov (ratchet 95 to 40): the motion and trail family and its transitions, `bind_frame`'s loose
   branch deleted, Waveform's fog, and the 2D modes (the substrate was already done on 12 Nov). Open (this is the
   one home of the remainder; ratchet 40):
-  - [ ] Coverage gap first (lead, 14 Nov), before the next mode converts and before any N5 port: the identity proof
-    `tools/conventions_identity.py --part modes` draws each mode at variant `a` alone
-    (`owner_render_parity.section_settings(mode, "a")`: every Toggle on, ranges at 37 %, each Choice's second offer).
-    The Toggle-off paths and every middle Choice offer that selects its own shader path were never proved bit for
-    bit. Settings come from the spec, never presets.
-    - The tool now records variants `a` and `b`, and with `--offers` every Choice offer neither reaches (129 runs,
-      about 22 min for all modes; `tests/test_conventions_identity_runs.py`). A two-offer Choice's first offer was
-      never drawn before (both variants took its second).
-    - [ ] Re-prove the merged conversions at the widened runs: running unattended 14 Nov
-      (`D:/Temp/Scratch/SRPSS/n16_reprove/driver.py`): each N1.6 merge's touched modes at its first parent and at
-      the merge (611ae065 all modes, 1d1816d8 and 0a508242 Waveform Ribbon, 580cedc1 the 2D modes, a5648806
-      Extruded Bubble), compared, plus a full main baseline; results in
-      `.artifacts/evidence/native_core/n16_reprove/20261114/verdicts.json`. Lead reads them. A difference is a
-      defect to fix at once, with a historical bug entry if a product path changed.
-  - [ ] Extruded Bubble's traced glass (at its port); Neon Lake; Extruded Spectrum and Sphere.
+  - The coverage gap is closed (14 Nov): `conventions_identity` records variants `a` and `b` and, with `--offers`,
+    every Choice offer (129 runs for all modes; `tests/test_conventions_identity_runs.py`); every N1.6 merge
+    (611ae065, 1d1816d8, 0a508242, 580cedc1, a5648806) re-proved ALL IDENTICAL at that set, first parent against
+    merge (`.artifacts/evidence/native_core/n16_reprove/20261114/`). New conversions and ports prove at that set.
+  - [ ] Neon Lake; Extruded Spectrum and Sphere (Medium, in flight 14 Nov). Extruded Bubble's traced glass
+    converts at its port.
   - `rendering/gl_programs/lighting.py` belongs to N4.m: it is not a product shader (no `#version`; only its test
     draws it), and a program that includes it converts it (a 3088-byte block, about 3 KB of resources).
 - [ ] D5.3's formats service, its one listed use: the scene target's multisampled velocity attachment
