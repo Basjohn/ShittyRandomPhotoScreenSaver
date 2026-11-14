@@ -289,6 +289,10 @@ class SceneMirror:
         host.close()
 
 
+#: ``--surface-format``: the native item's surface texels for this run (None: the route's own choice).
+NATIVE_SURFACE_FORMAT: str | None = None
+
+
 class _ParityRoute:
     """``NativeVisualizerRoute`` for the parity runs. With the mapping check, each card's window map is compared with
     the Python renderer's own rows of the same frame (``_python_mappings_run``), as float32 (what the GPU reads)."""
@@ -312,7 +316,21 @@ class _ParityRoute:
                     mirror.mapping_identical += int(f32(card["item_from_window"]) == f32((*row_x, *row_y)))
                 return card
 
-        return Route(core, content_host)
+        route = Route(core, content_host)
+        if NATIVE_SURFACE_FORMAT is not None:
+            route.surface_format = NATIVE_SURFACE_FORMAT      # rule (a)'s target-format measurement (round 5)
+            spectrum = core.spectrum                           # checked on the first item the route creates
+
+            def checked(parent, _make=spectrum):
+                item = _make(parent)
+                item.composite.set(surface_format=NATIVE_SURFACE_FORMAT)
+                held = item.composite.state()["config"].get("surface_format", "rgba8")
+                if held != NATIVE_SURFACE_FORMAT:
+                    raise RuntimeError(f"the module draws its surface as {held}: build round 5")
+                return item
+
+            route._core = type("Core", (), {"spectrum": staticmethod(checked)})()
+        return route
 
 
 class NativeSceneMirror(SceneMirror):
@@ -790,6 +808,8 @@ def main(argv=None) -> int:
     parser.add_argument("--offers", action="store_true",
                         help="with --native: the widened run set (both variants and every Choice offer)")
     parser.add_argument("--runs", nargs="*", default=(), help="with --native: only these run keys (spectrum[:...])")
+    parser.add_argument("--surface-format", choices=("rgba8", "rgba16f"), default=None,
+                        help="with --native: the native item's surface texels (default: the route's own)")
     args = parser.parse_args(argv)
     # The stills (contact sheets, difference maps) and the report are written into owner scratch and published to
     # ``--out`` by the evidence publisher (``tools/evidence_media.py``); stills stay PNG, lossless.
@@ -807,6 +827,8 @@ def main(argv=None) -> int:
     app = QApplication(["owner-render-parity"])
     try:
         if args.native:
+            global NATIVE_SURFACE_FORMAT
+            NATIVE_SURFACE_FORMAT = args.surface_format
             report = run_native(args.out, module_dir=args.module_dir.resolve(), offers=args.offers,
                                 seconds=args.seconds, only=tuple(args.runs))
         else:

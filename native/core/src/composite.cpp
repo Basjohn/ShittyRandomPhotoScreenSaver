@@ -366,6 +366,13 @@ bool CompositeConfig::update(const QByteArray &json, CompositeConfig *out, QStri
             return false;
         }
     }
+    if (o.contains(QStringLiteral("surface_format"))) {
+        c.surfaceFormat = o.value(QStringLiteral("surface_format")).toString();
+        if (c.surfaceFormat != QStringLiteral("rgba8") && c.surfaceFormat != QStringLiteral("rgba16f")) {
+            *error = QStringLiteral("unknown surface_format '%1' (rgba8, rgba16f)").arg(c.surfaceFormat);
+            return false;
+        }
+    }
     if (o.contains(QStringLiteral("visible")))
         c.visible = o.value(QStringLiteral("visible")).toBool(true);
     if (o.contains(QStringLiteral("opacity"))) {
@@ -394,6 +401,7 @@ QJsonObject CompositeConfig::toJson() const
     }
     o.insert(QStringLiteral("quarters"), quarters);
     o.insert(QStringLiteral("pattern"), pattern);
+    o.insert(QStringLiteral("surface_format"), surfaceFormat);
     o.insert(QStringLiteral("visible"), visible);
     o.insert(QStringLiteral("opacity"), opacity);
     return o;
@@ -527,7 +535,9 @@ QSGNode *CompositeItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *d
         const QSize texturePixels = quarterTurn ? device.transposed() : device;
         SurfacePattern pattern = SurfacePattern::TexelIdentity;
         parseSurfacePattern(m_config.pattern, &pattern);
-        if (node->surface()->ensureTarget(rhi, texturePixels, &error)) {
+        const QRhiTexture::Format format = m_config.surfaceFormat == QStringLiteral("rgba16f") ? QRhiTexture::RGBA16F
+                                                                                                 : QRhiTexture::RGBA8;
+        if (node->surface()->ensureTarget(rhi, texturePixels, &error, format)) {
             node->surface()->setPattern(pattern);
             node->setSpectrum(m_spectrum);
             // Spectrum's sync (render thread, the GUI blocked): the retired streams released, the stream read at its

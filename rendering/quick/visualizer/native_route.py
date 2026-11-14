@@ -45,6 +45,11 @@ def native_route_wanted(backend: str | None = None) -> bool:
 class NativeVisualizerRoute:
     """One Visualizer item's native drawing: a native item in ``content_host`` and the frame stream it reads."""
 
+    #: The item's surface texels (``rendering.native.composite.SURFACE_FORMATS``). RGBA8 until rule (a)'s
+    #: RGBA16F measurement (round 5) decides: an 8-bit premultiplied target rounds translucent pixels once more than the
+    #: Python renderer, which blends straight into the window.
+    surface_format = "rgba8"
+
     def __init__(self, core: Any, content_host: Any) -> None:
         self._core = core
         self._content_host = content_host
@@ -96,6 +101,7 @@ class NativeVisualizerRoute:
             from rendering.native.program_values import mode_fragment_pack
 
             self._spectrum = self._core.spectrum(self._content_host)
+            self._spectrum.composite.set(surface_format=self.surface_format)
             # The product's own pack (tools/regen_qrc.py --shaders), loaded at run time: no module build for a shader
             # change (N2.5's standing port rule).
             self._spectrum.program(mode_fragment_pack(mode_id))

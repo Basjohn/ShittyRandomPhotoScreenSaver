@@ -127,6 +127,27 @@ def test_the_module_is_built_without_the_fh4_exception_handler():
         assert removed != text and fh4_problems(removed), flag
 
 
+#: CPython's non-limited-API accessor macros (the module builds against the limited API: N2.5 build round 4 failed on
+#: PyBytes_AS_STRING / PyBytes_GET_SIZE). Their function forms (PyBytes_AsString, PyBytes_Size, ...) are fine.
+_NON_LIMITED_MACRO = re.compile(r"\bPy\w+_(?:AS_[A-Z_]+|GET_[A-Z_]+|SET_[A-Z_]+)\s*\("
+                                r"|\bPyUnicode_(?:DATA|KIND|READ|WRITE|READ_CHAR|GET_LENGTH)\s*\("
+                                r"|\bPySequence_Fast_GET_\w+\s*\(")
+
+
+def non_limited_macros(text: str) -> list[str]:
+    code = re.sub(r"//[^\n]*", "", text)
+    return [match.group(0) for match in _NON_LIMITED_MACRO.finditer(code)]
+
+
+def test_the_module_sources_use_only_the_limited_apis_function_forms():
+    found = {path.name: non_limited_macros(path.read_text(encoding="utf-8"))
+             for path in sorted((CORE / "src").glob("*.cpp")) + sorted((CORE / "src").glob("*.h"))}
+    assert not {name: hits for name, hits in found.items() if hits}, found
+    # Negative control: round 4's failing line is caught.
+    assert non_limited_macros("*out = QByteArray(PyBytes_AS_STRING(o), qsizetype(PyBytes_GET_SIZE(o)));") == [
+        "PyBytes_AS_STRING(", "PyBytes_GET_SIZE("]
+
+
 # ----------------------------------------------------------------------------------------------- the build script
 
 

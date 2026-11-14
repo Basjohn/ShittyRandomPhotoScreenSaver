@@ -61,7 +61,9 @@ public:
 
     // Render thread, at sync: the target at this size on this QRhi. A new size recreates the same QRhi objects (Qt's
     // QQuickRhiItem pattern, so Qt Quick's bindings follow the texture's generation); either change makes it dirty.
-    bool ensureTarget(QRhi *rhi, const QSize &pixels, QString *error);
+    // `format`: the target's texel format (RGBA8; RGBA16F for content whose translucent pixels must not be rounded to
+    // 8 bits before the composite blends them, N2.5): a change recreates every QRhi object of the surface.
+    bool ensureTarget(QRhi *rhi, const QSize &pixels, QString *error, QRhiTexture::Format format = QRhiTexture::RGBA8);
     // Render thread, at sync: the content; a change makes it dirty.
     void setPattern(SurfacePattern pattern);
     // Render thread, at sync: a mode's content in place of the pattern (null: the pattern again); the one it replaces

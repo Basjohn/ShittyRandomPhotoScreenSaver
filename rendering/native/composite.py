@@ -26,7 +26,10 @@ from types import ModuleType
 from typing import Any, Sequence
 
 #: The composite's options (``CompositeConfig`` in ``composite.h``).
-COMPOSITE_OPTIONS = ("rect", "coverage", "quarters", "pattern", "visible", "opacity")
+COMPOSITE_OPTIONS = ("rect", "coverage", "quarters", "pattern", "visible", "opacity", "surface_format")
+#: The surface's texel formats (``surface_format``): rgba8, or rgba16f (translucent content not rounded to 8 bits
+#: before the composite blends it; N2.5 rule (a)).
+SURFACE_FORMATS = ("rgba8", "rgba16f")
 #: The harness's surface content (``SurfacePattern`` in ``surfaces.h``): each texel's own index, or opaque white.
 SURFACE_PATTERNS = ("texel_id", "white")
 _GRID_TOLERANCE = 1e-6   # device pixels: a coordinate this close to a whole pixel is on it
@@ -128,6 +131,9 @@ class CompositeItem:
         if unknown:
             raise ValueError(f"unknown composite option(s) {', '.join(unknown)} "
                              f"(the options are {', '.join(COMPOSITE_OPTIONS)})")
+        surface_format = config.get("surface_format")
+        if surface_format is not None and surface_format not in SURFACE_FORMATS:
+            raise ValueError(f"unknown surface_format {surface_format!r} (the formats are {', '.join(SURFACE_FORMATS)})")
         pattern = config.get("pattern")
         if pattern is not None and pattern not in SURFACE_PATTERNS:
             raise ValueError(f"unknown pattern {pattern!r} (the patterns are {', '.join(SURFACE_PATTERNS)})")
@@ -151,4 +157,5 @@ class CompositeItem:
         return bool(self._module.composite_destroy(self._handle))
 
 
-__all__ = ["COMPOSITE_OPTIONS", "CompositeGeometry", "CompositeItem", "SURFACE_PATTERNS", "composite_geometry"]
+__all__ = ["COMPOSITE_OPTIONS", "CompositeGeometry", "CompositeItem", "SURFACE_FORMATS", "SURFACE_PATTERNS",
+           "composite_geometry"]

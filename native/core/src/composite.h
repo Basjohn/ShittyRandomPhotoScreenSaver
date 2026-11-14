@@ -46,6 +46,7 @@ struct CompositeConfig
     qreal coverageRadius = 0.0;
     int quarters = 0;          // the content's clockwise quarter turns
     QString pattern = QStringLiteral("texel_id");
+    QString surfaceFormat = QStringLiteral("rgba8"); // the surface's texels: rgba8 or rgba16f (N2.5 rule (a))
     bool visible = true;
     qreal opacity = 1.0;
 

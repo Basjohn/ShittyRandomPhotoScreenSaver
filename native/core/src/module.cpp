@@ -723,7 +723,12 @@ bool packArgument(PyObject *object, QByteArray *out)
         PyErr_SetString(PyExc_TypeError, "a shader pack is bytes (a .qsb) or None");
         return false;
     }
-    *out = QByteArray(PyBytes_AS_STRING(object), qsizetype(PyBytes_GET_SIZE(object)));
+    // The limited API's function forms (the module builds against it: no PyBytes_AS_STRING / PyBytes_GET_SIZE).
+    const char *data = PyBytes_AsString(object);
+    const Py_ssize_t size = PyBytes_Size(object);
+    if (!data || size < 0)
+        return false;                         // the error is set
+    *out = QByteArray(data, qsizetype(size));
     return true;
 }
 

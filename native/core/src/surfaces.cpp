@@ -149,7 +149,7 @@ void Surface::setContent(const std::shared_ptr<SurfaceContent> &content)
     m_dirty.storeRelease(1);
 }
 
-bool Surface::ensureTarget(QRhi *rhi, const QSize &pixels, QString *error)
+bool Surface::ensureTarget(QRhi *rhi, const QSize &pixels, QString *error, QRhiTexture::Format format)
 {
     if (!rhi || pixels.width() < 1 || pixels.height() < 1) {
         *error = QStringLiteral("a surface needs a QRhi and a size of at least one pixel");
@@ -160,10 +160,13 @@ bool Surface::ensureTarget(QRhi *rhi, const QSize &pixels, QString *error)
         *error = QStringLiteral("the surface was created on another QRhi");
         return false;
     }
+    if (m_res && m_res->target.texture && m_res->target.texture->format() != format)
+        release(); // another texel format: every object again (the content's pipelines follow its new pass)
     if (!m_res) {
         auto res = std::make_unique<Resources>();
         res->rhi = rhi;
-        if (!createColorTarget(rhi, pixels, QByteArrayLiteral("srpss core surface"), &res->target, error))
+        if (!createColorTarget(rhi, pixels, QByteArrayLiteral("srpss core surface"), &res->target, error, false,
+                               format))
             return false;
         m_res = std::move(res);
         setLive(kTargetObjects);

@@ -27,10 +27,10 @@ void ColorTarget::reset()
 }
 
 bool createColorTarget(QRhi *rhi, const QSize &size, const QByteArray &name, ColorTarget *out, QString *error,
-                       bool withDepthStencil)
+                       bool withDepthStencil, QRhiTexture::Format format)
 {
     out->reset();
-    out->texture.reset(rhi->newTexture(QRhiTexture::RGBA8, size, 1,
+    out->texture.reset(rhi->newTexture(format, size, 1,
                                        QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
     out->texture->setName(name);
     if (!out->texture->create()) {

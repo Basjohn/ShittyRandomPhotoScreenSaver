@@ -62,6 +62,7 @@ import host_check  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("block", "item", "pixels", "seam", "program")
+SURFACE_FORMAT = ["rgba8"]             # --surface-format (the child's), read by Scene
 CHILD_TIMEOUT_S = 1800
 MARGIN = 8                       # logical pixels between the display's corner and the item
 REST_FRAMES = 3
@@ -394,6 +395,10 @@ class Scene:
         host.set_content(self.root)
         self.spectrum = core.spectrum(self.content)
         self.spectrum.program(spectrum_pack())    # the product's pack, loaded at run time (N2.5 round 4)
+        self.spectrum.composite.set(surface_format=SURFACE_FORMAT[0])
+        held = self.spectrum.composite.state()["config"].get("surface_format", "rgba8")
+        if held != SURFACE_FORMAT[0]:          # a module from before round 5 ignores the option
+            raise RuntimeError(f"the module draws its surface as {held}, not {SURFACE_FORMAT[0]}: build round 5")
 
     def place(self, card: dict) -> None:
         """The target on the item's own rect (no coverage: the Python reference draws the whole item too)."""
@@ -852,7 +857,9 @@ def _load_records(out: Path) -> tuple[list[dict], list]:
 def child(args) -> dict:
     root = host_check._root(args.repo)
     out = Path(args.out_dir)
-    record: dict = {"api": args.api, "rounds": list(args.rounds), "module_loaded": False, "instance_created": False}
+    SURFACE_FORMAT[0] = args.surface_format
+    record: dict = {"api": args.api, "rounds": list(args.rounds), "module_loaded": False, "instance_created": False,
+                    "surface_format": args.surface_format}
     if args.api == "opengl":
         from rendering.quick.bootstrap import configure_quick_graphics
 
@@ -964,6 +971,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")
     parser.add_argument("--require-validation", action="store_true",
                         help="a Vulkan run whose validation layer did not load is a FAIL, never a pass")
+    parser.add_argument("--surface-format", choices=("rgba8", "rgba16f"), default="rgba8",
+                        help="the item's surface texels (rule (a)'s target-format measurement, round 5)")
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--api", choices=APIS, help=argparse.SUPPRESS)
     parser.add_argument("--out-dir", help=argparse.SUPPRESS)
@@ -993,7 +1002,8 @@ def main(argv: list[str] | None = None) -> int:
         child_json = out / f"child_{api}.json"
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
-                   "--sample-every", str(args.sample_every), "--rounds", *args.rounds]
+                   "--sample-every", str(args.sample_every), "--surface-format", args.surface_format,
+                   "--rounds", *args.rounds]
         started = time.monotonic()
         try:
             proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(root))
