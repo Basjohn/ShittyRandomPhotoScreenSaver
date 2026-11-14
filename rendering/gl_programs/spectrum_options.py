@@ -20,3 +20,7 @@ SPECTRUM_PATTERNS = ("Off", *SPECTRUM_GEOMETRIC_PATTERNS, *SPECTRUM_FLAG_PATTERN
 # Per Bar: each bar carries its own copy of the pattern (columns fitted to its width, chevrons centred on it).
 # Shared: one sheet laid over the whole bar field, continuous across bars and gaps, seen through the bar fills.
 SPECTRUM_PATTERN_ANCHORS = ("Per Bar", "Shared")
+
+# Which sides of each bar carry the rim glow (the top always does). The renderer reads it as two side envelopes the
+# presentation owner fades (``spectrum_decor``), never as a position.
+SPECTRUM_RIM_PLACEMENTS = ("Left", "Right", "Both")

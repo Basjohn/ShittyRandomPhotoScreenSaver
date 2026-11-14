@@ -59,6 +59,7 @@ from typing import Union
 from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
 from rendering.gl_programs.spectrum_options import (
     SPECTRUM_GEOMETRIC_PATTERNS, SPECTRUM_GHOST_COLOUR_SOURCES, SPECTRUM_PATTERN_ANCHORS, SPECTRUM_PATTERNS,
+    SPECTRUM_RIM_PLACEMENTS,
 )
 from rendering.gl_programs.neon_lake_basin_options import (
     BASIN_BODY_MODES, BASIN_GROWTH_REGIONS, BASIN_SURFACE_STYLES,
@@ -1420,6 +1421,12 @@ _SPECTRUM = ModeSettings(
                bucket="appearance", when=("spectrum_glow_enabled", True), swatch_row=False),
         Slider('spectrum_glow_intensity', 'Glow Intensity:', 0.0, 1.5,
                'How bright the thin Spectrum rim glow appears. Higher = stronger emissive edge.', bucket='appearance', truncate=True, percent=True, tick=10, when=('spectrum_glow_enabled', True)),
+        Choice('spectrum_glow_placement', 'Rim Placement:', SPECTRUM_RIM_PLACEMENTS,
+               'Which sides of each bar carry the rim glow; the top edge always does.',
+               bucket='appearance', when=('spectrum_glow_enabled', True)),
+        Slider('spectrum_glow_sharpness', 'Rim Sharpness:', 0.0, 1.0,
+               'Low fades the rim gently into the bar; high gives it a crisp, solid edge.',
+               bucket='appearance', percent=True, tick=25, when=('spectrum_glow_enabled', True)),
         Custom("shape", "shape", keys=("spectrum_mirrored", "spectrum_shape_nodes", "spectrum_notch_positions_mirrored",
                      "spectrum_notch_positions_linear", "spectrum_lane_strengths_mirrored", "spectrum_lane_strengths_linear"),
                admit="core.settings.models._visualizer_helpers:admit_spectrum_shape_key"),

@@ -1,4 +1,5 @@
-"""Spectrum's optional decoration (ghost colour, fill gradient, gloss, peak caps, pattern) as renderer parameters.
+"""Spectrum's optional decoration (ghost colour, fill gradient, gloss, peak caps, pattern, the rim glow's placement and
+sharpness) as renderer parameters.
 
 The values are the presentation owner's spec'd controls (``core/settings/visualizer_mode_settings.py``). A toggled
 decoration fades in and out instead of popping: ``SpectrumDecorFade`` keeps one envelope per decoration on the
@@ -7,13 +8,14 @@ or thread, and a fresh owner (a new activation, an exact Studio replay) starts s
 pattern switched to another pattern (or another anchor) dips through zero and comes back as the new one.
 
 Every envelope at rest is exactly 0 or 1, so the default (all off) parameters are constants and the shader takes
-none of the decoration branches.
+none of the decoration branches. The rim glow's two side envelopes rest at 1 with Rim Placement's default (Both),
+where the shader draws today's rim exactly.
 """
 from __future__ import annotations
 
 from typing import Any
 
-from rendering.gl_programs.spectrum_options import SPECTRUM_PATTERNS
+from rendering.gl_programs.spectrum_options import SPECTRUM_PATTERNS, SPECTRUM_RIM_PLACEMENTS
 
 FADE_SECONDS = 0.6            # a full fade in or out
 _MAX_STEP = 0.1               # a capture gap longer than this (pause, stall) advances at most this much
@@ -29,6 +31,7 @@ DECOR_KEYS = (
     "spectrum_gloss", "spectrum_fill_gradient", "spectrum_fill_tip_color", "spectrum_peak_caps",
     "spectrum_peak_cap_color", "spectrum_peak_cap_thickness", "spectrum_pattern", "spectrum_pattern_color",
     "spectrum_pattern_scale", "spectrum_pattern_strength", "spectrum_pattern_anchor",
+    "spectrum_glow_placement", "spectrum_glow_sharpness",
 )
 _ATTRS = tuple((key, "_" + key) for key in DECOR_KEYS)
 _TOGGLES = {
@@ -37,6 +40,10 @@ _TOGGLES = {
     "ghost_gradient": lambda pres: bool(pres._spectrum_ghost_gradient),
     "fill_gradient": lambda pres: bool(pres._spectrum_fill_gradient),
     "peak_caps": lambda pres: bool(pres._spectrum_peak_caps),
+    # Rim Placement as one envelope per side, so a side's rim fades in or out when the placement changes. Any value
+    # but Left or Right is Both (an unknown stored value falls back quietly).
+    "glow_left": lambda pres: pres._spectrum_glow_placement != SPECTRUM_RIM_PLACEMENTS[1],
+    "glow_right": lambda pres: pres._spectrum_glow_placement != SPECTRUM_RIM_PLACEMENTS[0],
 }
 
 

@@ -83,6 +83,11 @@ layout(std140, binding = 18) uniform SpectrumDraw {
     vec4 u_pattern_color;
     float u_pattern_scale;
     float u_time;                 // Spectrum's animation clock (seconds); only the flag sheets' wave reads it
+    // The rim glow's shape and sides (1D.14; Settings-only members, appended). Sharpness 0 is the long-standing soft
+    // rim; the side envelopes are Rim Placement as the presentation owner fades it (both 1: Both, today's rim).
+    float u_spectrum_glow_sharpness;
+    float u_spectrum_glow_left;
+    float u_spectrum_glow_right;
 };
 
 // One framebuffer pixel in item coordinates, taken where control flow is still uniform (before any discard), so
@@ -463,13 +468,33 @@ float spectrum_cap_coverage(float y, float top, float scale) {
     return clamp((min(y + 0.5 * px, high) - max(y - 0.5 * px, low)) / px, 0.0, 1.0);
 }
 
-float spectrum_rim_alpha_at(float side_dist_px, float top_dist_px, float coverage_px) {
+// The rim's level at ``edge_dist`` in from its edge (``spread``: its reach; ``coverage_px``: the feather). Inward rim
+// glow: a bright core near the edge that fades deeper into the bar. Rim Sharpness 0 is the long-standing soft rim (the
+// core ramps out to 35 % of the reach, a 55 % falloff behind it); toward 1 the core becomes a solid band ending in one
+// feather at 80 % of the reach and the falloff dims. At 0 it is the rim's original expression, verbatim: the same
+// constants folded into the arithmetic as before (a runtime-selected constant compiles to other roundings, which the
+// widened identity run showed as one changed frame per run).
+float spectrum_rim_shape(float edge_dist, float spread, float coverage_px) {
+    float sharp = clamp(u_spectrum_glow_sharpness, 0.0, 1.0);
+    if (sharp <= 0.0) {
+        float core_end = spread * 0.35;
+        float inner_core = 1.0 - smoothstep(0.0, max(core_end, coverage_px), edge_dist);
+        float inner_falloff = 1.0 - smoothstep(core_end, spread + coverage_px, edge_dist);
+        return max(inner_core * 0.90, inner_falloff * 0.55);
+    }
+    float core_end = spread * mix(0.35, 0.80, sharp);
+    float core_edge = max(core_end, coverage_px);
+    float core_start = sharp * max(core_edge - coverage_px, 0.0);
+    float inner_core = 1.0 - smoothstep(core_start, core_edge, edge_dist);
+    float inner_falloff = 1.0 - smoothstep(core_end, spread + coverage_px, edge_dist);
+    return max(inner_core * mix(0.90, 1.00, sharp), inner_falloff * mix(0.55, 0.25, sharp));
+}
+
+float spectrum_rim_alpha_at(float left_dist_px, float right_dist_px, float top_dist_px, float coverage_px) {
     if (u_spectrum_glow_enabled != 1) return 0.0;
     float glow_strength = clamp(u_spectrum_glow_intensity, 0.0, 1.5);
     if (glow_strength <= 0.001) return 0.0;
-    float edge_dist = min(side_dist_px, top_dist_px);
-    // Inward rim glow: bright core near the edge that fades deeper into the
-    // bar interior.  Thresholds sized so bars of 8-15px width get a clearly
+    // Thresholds sized so bars of 8-15px width get a clearly
     // visible tinted band (roughly the outer 40-60% of the bar).
     float authored_scale = (u_quick_item_coords == 1)
         ? max(u_visual_scale, 0.01) : 1.0;
@@ -483,10 +508,19 @@ float spectrum_rim_alpha_at(float side_dist_px, float top_dist_px, float coverag
     // below that scale it exceeds ``spread`` and reverses smoothstep's edges,
     // which is undefined and can wash the entire black Organs fill white.
     // ``coverage_px`` is that feather (spectrum_rim_coverage, taken in main's prologue).
-    float core_end = spread * 0.35;
-    float inner_core = 1.0 - smoothstep(0.0, max(core_end, coverage_px), edge_dist);
-    float inner_falloff = 1.0 - smoothstep(core_end, spread + coverage_px, edge_dist);
-    float rim = max(inner_core * 0.90, inner_falloff * 0.55);
+    float left = clamp(u_spectrum_glow_left, 0.0, 1.0);
+    float right = clamp(u_spectrum_glow_right, 0.0, 1.0);
+    float rim;
+    if (left >= 1.0 && right >= 1.0) {
+        // Both sides (Rim Placement's default): the nearest edge's rim, as it always was.
+        rim = spectrum_rim_shape(min(min(left_dist_px, right_dist_px), top_dist_px), spread, coverage_px);
+    } else {
+        // One side (or a side fading in or out): each edge's rim, the sides weighted by their envelopes. Where both
+        // envelopes are 1 this is the branch above (the rim falls with distance, so the nearest edge's is the most).
+        rim = max(spectrum_rim_shape(top_dist_px, spread, coverage_px),
+                  max(left * spectrum_rim_shape(left_dist_px, spread, coverage_px),
+                      right * spectrum_rim_shape(right_dist_px, spread, coverage_px)));
+    }
     float color_alpha = clamp(u_spectrum_glow_color.a, 0.0, 1.0);
     return rim * clamp(color_alpha * (0.55 + glow_strength * 0.40), 0.0, 0.95);
 }
@@ -499,6 +533,16 @@ float spectrum_rim_alpha_at(float side_dist_px, float top_dist_px, float coverag
 // all 5,652 Vulkan pixels more than a level off shared a quad with a discarded one).
 float spectrum_rim_coverage(float side_dist_px, float top_dist_px) {
     return max(fwidthFine(min(side_dist_px, top_dist_px)), 0.0001);
+}
+
+// The border band of a bar (x) or a segment (y): one authored unit in from each edge, never under one logical pixel
+// (the bar top's stroke rule: a narrower band holds no pixel centre at small visual scales), on the continuous
+// coordinate the fragment's pixel centre has, the same test on both edges (``local`` is half-open, [0, extent)). The
+// old test floored the coordinate and took ``<=`` on the low edge: two units on the left and bottom against one plus
+// the extent's fraction on the right and top, so the left border covered the rim glow's brightest columns (1D.14).
+bool spectrum_in_border_band(float local, float extent, float scale) {
+    float band = max(scale, 1.0);
+    return local < band || local >= extent - band;
 }
 
 vec4 blend_spectrum_rim_glow(vec4 base_color, float rim_alpha) {
@@ -625,7 +669,9 @@ void main() {
     int seg_index = int(floor(y_rel / step_y));
     float seg_local_y = y_rel - float(seg_index) * step_y;
     // The rim's distances and its derivative (spectrum_rim_coverage), from every lane of the quad.
-    float rim_side_dist_px = min(bar_local_x, bar_width - bar_local_x);
+    float rim_left_dist_px = bar_local_x;
+    float rim_right_dist_px = bar_width - bar_local_x;
+    float rim_side_dist_px = min(rim_left_dist_px, rim_right_dist_px);
     float rim_top_dist_px = (u_single_piece == 1)
         ? abs((is_ghost ? peak_height : active_height) - y_rel) : abs(seg_height - seg_local_y);
     float rim_coverage_px = spectrum_rim_coverage(rim_side_dist_px, rim_top_dist_px);
@@ -787,7 +833,7 @@ void main() {
         fill = spectrum_fill_gradient(fill, y_rel / (0.95 * inner_height));
 
         float bw_px = floor(bar_width);
-        float bx = floor(bar_local_x);
+        bool in_side_band = spectrum_in_border_band(bar_local_x, bar_width, authored_scale);
 
         vec4 sp_color;
         bool sp_is_border = false;
@@ -796,7 +842,7 @@ void main() {
         // fill and its ghost. ``band_ghost`` is that stroke's share of the ghost (0 with no Bar Fill ghost above).
         float band_ghost = 0.0;
         if (is_bar && corner_ghost <= 0.0 && fill_ghost_above && bw_px > 2.0 * authored_scale
-                && !(bx <= authored_scale || bx >= bw_px - authored_scale) && y_rel >= authored_scale
+                && !in_side_band && y_rel >= authored_scale
                 && y_rel >= active_height - max(authored_scale, 1.0)) {
             band_ghost = fill_k * lift;
         }
@@ -812,8 +858,7 @@ void main() {
             float ghost_factor = mix(1.0, 0.15, t);
             // Ghost visibility is owned by its opacity, not border alpha. An
             // author may deliberately use fully transparent or black borders.
-            bool ghost_side = (bw_px <= 2.0 * authored_scale) || bx <= authored_scale
-                || bx >= bw_px - authored_scale;
+            bool ghost_side = (bw_px <= 2.0 * authored_scale) || in_side_band;
             vec4 ghost_base = spectrum_ghost_tip(spectrum_ghost_fill(spectrum_ghost_colour(bar_index, u_fade), fill,
                 ghost_side, bar_index, bar_local_x, bar_width, y_rel, x_rel, authored_scale, t), t);
             ghost_base.a *= ghost_alpha * ghost_factor * ghost_cover;
@@ -834,7 +879,7 @@ void main() {
             if (bw_px <= 2.0 * authored_scale) {
                 on_border = true;
             } else {
-                bool on_side = (bx <= authored_scale || bx >= bw_px - authored_scale);
+                bool on_side = in_side_band;
                 // The moving horizontal cap is finished pixel chrome, not world
                 // thickness. A sub-pixel interval can contain no fragment centre
                 // at some fractional bar heights, which is the observed top-edge
@@ -848,7 +893,8 @@ void main() {
             sp_is_border = on_border;
             sp_color = on_border ? border : fill;
         }
-        float rim_alpha = spectrum_rim_alpha_at(rim_side_dist_px, rim_top_dist_px, rim_coverage_px) * u_fade;
+        float rim_alpha = spectrum_rim_alpha_at(rim_left_dist_px, rim_right_dist_px, rim_top_dist_px,
+                                                rim_coverage_px) * u_fade;
         if (!sp_is_border) {
             sp_color = blend_spectrum_rim_glow(sp_color, rim_alpha);
         }
@@ -966,15 +1012,14 @@ void main() {
 
     float bw_px = floor(bar_width);
     float sh_px = floor(seg_height);
-    float bx = floor(bar_local_x);
-    float by = floor(seg_local_y);
 
     bool on_border = false;
     if (is_bar_frag || is_ghost_frag) {
         if (bw_px <= 2.0 * authored_scale || sh_px <= 2.0 * authored_scale) {
             on_border = true;
         } else {
-            if (bx <= authored_scale || bx >= bw_px - authored_scale || by <= authored_scale || by >= sh_px - authored_scale) {
+            if (spectrum_in_border_band(bar_local_x, bar_width, authored_scale)
+                    || spectrum_in_border_band(seg_local_y, seg_height, authored_scale)) {
                 on_border = true;
             }
         }
@@ -1019,7 +1064,8 @@ void main() {
         seg_is_border = on_border;
         out_color = on_border ? border : fill;
     }
-    float seg_rim_alpha = spectrum_rim_alpha_at(rim_side_dist_px, rim_top_dist_px, rim_coverage_px) * u_fade;
+    float seg_rim_alpha = spectrum_rim_alpha_at(rim_left_dist_px, rim_right_dist_px, rim_top_dist_px,
+                                                rim_coverage_px) * u_fade;
     if (!seg_is_border) {
         out_color = blend_spectrum_rim_glow(out_color, seg_rim_alpha);
     }

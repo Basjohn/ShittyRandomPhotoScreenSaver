@@ -139,10 +139,11 @@ def test_the_record_carries_what_the_renderer_reads_from_one_declaration():
     carried = {entry.name for entry in SPECTRUM_FRAME_INPUTS if entry.source == "mode_state"}
     assert {field.name for field in dataclasses.fields(SpectrumFrame)} == (
         carried | set(SPECTRUM_FRAME_FIELDS_NOT_DRAWN) | {"parameters"})
-    # Every declared input is a field of the record (a level sequence with its kept length).
+    # Every declared input is a field of the record (a level sequence with its kept length), except a Settings-only
+    # one, which the native core takes by name with the other settings and the record never carries.
     names = {field.name for field in spectrum.LAYOUT.fields}
     for entry in SPECTRUM_FRAME_INPUTS:
-        assert entry.name in names
+        assert (entry.name in names) == entry.record, entry.name
         if entry.kind == "levels":
             assert spectrum.LAYOUT.field(entry.name).count == MAX_LEVELS and f"{entry.name}_len" in names
     # The renderer reads its frame's style and parameters only through the declaration (its per-frame fetch and the

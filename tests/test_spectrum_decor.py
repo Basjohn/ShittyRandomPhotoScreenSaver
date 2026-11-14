@@ -54,8 +54,11 @@ def _owner(**values) -> Owner:
 
 def test_a_fresh_owner_starts_settled_at_its_settings():
     off = SpectrumDecorFade(_owner()).mixes()
-    assert {k: v for k, v in off.items() if k.endswith("_mix")} == dict.fromkeys(
-        [k for k in off if k.endswith("_mix")], 0.0)
+    # The decorations rest off; the rim glow's side envelopes rest at the default Rim Placement's sides.
+    rim = {"spectrum_glow_left_mix", "spectrum_glow_right_mix"}
+    assert {k: v for k, v in off.items() if k.endswith("_mix") and k not in rim} == dict.fromkeys(
+        [k for k in off if k.endswith("_mix") and k not in rim], 0.0)
+    assert {off[k] for k in rim} <= {0.0, 1.0} and max(off[k] for k in rim) == 1.0
     on = SpectrumDecorFade(_owner(spectrum_peak_caps=True, spectrum_pattern=SPECTRUM_PATTERNS[2])).mixes()
     assert on["spectrum_peak_caps_mix"] == 1.0 and on["spectrum_pattern_mix"] == 1.0
     assert on["spectrum_pattern_shown"] == SPECTRUM_PATTERNS[2]
