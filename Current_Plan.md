@@ -47,7 +47,7 @@ at the size asked.
      ride with the next fitting dispatch.
   2. 1D.6 (design note first), then the 1C.2 Save stall and 1C.10, as defects between N steps.
 - Medium:
-  1. N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
+  1. N1.6's coverage gap (variants a and b, the shader-selecting Choice offers, the merged conversions re-proved), then N1.6's other 3D modes, one per dispatch where it stays bit-identical (Neon Lake; Extruded Spectrum and
      Sphere); a mode that cannot be made bit-identical in one dispatch converts at its port.
   2. 1B.10.
 - Docs (Sonnet): only when a step needs a document.
@@ -371,7 +371,19 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   Waveform Ribbon; 13 Nov (ratchet 95 to 40): the motion and trail family and its transitions, `bind_frame`'s loose
   branch deleted, Waveform's fog, and the 2D modes (the substrate was already done on 12 Nov). Open (this is the
   one home of the remainder; ratchet 40):
-  - [ ] Extruded Bubble; Neon Lake; Extruded Spectrum and Sphere.
+  - [ ] Coverage gap first (lead, 14 Nov), before the next mode converts and before any N5 port: the identity proof
+    `tools/conventions_identity.py --part modes` draws each mode at variant `a` alone
+    (`owner_render_parity.section_settings(mode, "a")`: every Toggle on, ranges at 37 %, each Choice's second offer).
+    The Toggle-off paths and every middle Choice offer that selects its own shader path were never proved bit for
+    bit. Settings come from the spec, never presets.
+    - [ ] The tool records variants `a` and `b` (Toggles off, 71 %, each Choice's last offer). For each Choice whose
+      offers select different shader paths or program variants (read from the renderer, not guessed), it adds one
+      run per remaining offer.
+    - [ ] Re-prove the merged conversions at the added runs: record on each group's pre-conversion commit in a
+      worktree and compare with main (the 2D modes, Spectrum, Waveform Ribbon, Extruded Bubble's five families).
+      A difference is a defect to fix at once, with a historical bug entry if a product path changed.
+    - [ ] The N5 port rule and N2.5's parity check use the same widened run set.
+  - [ ] Extruded Bubble's traced glass (at its port); Neon Lake; Extruded Spectrum and Sphere.
   - `rendering/gl_programs/lighting.py` belongs to N4.m: it is not a product shader (no `#version`; only its test
     draws it), and a program that includes it converts it (a 3088-byte block, about 3 KB of resources).
 - [ ] D5.3's formats service, its one listed use: the scene target's multisampled velocity attachment
