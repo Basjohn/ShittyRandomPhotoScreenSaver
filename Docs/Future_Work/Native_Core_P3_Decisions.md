@@ -1215,6 +1215,130 @@ the rules for the GPU-free tests and `scene3d.scene_samples` is the one sampling
   - L1 (point 2's per-axis rule) and L5: a failed allocation step leaves the target's objects to the content, which
     releases the pipelines first.
 
+## N3.3 draft: compute passes (15 Nov 2026; proposed by the High agent; D16 once the lead answers A to L)
+
+*A draft, not a decision. It builds on D14 (N3.1, on main) and D15 (N3.2, ABI 18, in the worktree agent-a7f0682c,
+under audit and not merged when this was written; D15 sits between D14 and this section once merged). Qt facts are
+`Native_Core_QRhi_Research_N3.md` Q7 (Qt 6.12.0 source) unless marked; two were re-read at the v6.12.0 tag for this
+draft: `qrhi.h` declares `QRhiCommandBuffer::dispatch(int, int, int)` and no indirect dispatch, and
+`QRhiResourceUpdateBatch` has no buffer-to-buffer copy and no buffer clear (only `copyTexture`); in
+`qrhivulkan.cpp` `QRhiVulkan::dispatch`, a binding declared load-store is entered in the pass's written set, and an
+entry is removed only when a later dispatch uses it read-only (after its barrier). The plan's N3.3 boxes carry the
+steps.*
+
+**What the consumers dispatch today** (the plan's N3.3 box has the file:line of each). Waveform Ribbon: five programs,
+seven dispatches a fogged frame, every one writing an image (`imageStore`, RGBA32F 2D, RGBA16F and R16F 3D) that a
+later dispatch reads by `imageLoad` or the draws sample; one reads the knot packet as storage. Extruded Bubble's drift:
+one dispatch a family over persistent read-write state buffers and one shared output, only for steps newer than the
+last applied serial; buffer clears and prefix copies at reallocation edges; one readback, the pair self-check, once per
+solver. The compacted populations: three dispatches over storage buffers ending in a compute-written indirect command.
+Elsewhere (later consumers): the edge and propagation fields (N4.g), the motion tile-max (N4.i). The job service runs no
+compute; N0.7's edge field ran one as a job, one QRhi compute pass per dispatch, clean under synchronisation validation.
+
+**The proposal.**
+1. *Compute passes in a program's pass list.* A pass entry may be a compute entry: a compute pack (baked by
+   `tools/regen_qrc.py` as fragments are; every product compute source already passes `qsb`, the N1 compute rule in
+   `tools/vulkan_shader_readiness.py`), its own block (in the arena, D15 point 3, by dynamic offset), its group counts,
+   its trigger (point 7) and its bindings by name, each with its access. It is recorded at its place in the list,
+   outside any render pass: a compute entry between two passes on one scene target ends that target's run, as a
+   capture does. The list's order is the dependency order (D5.6 row 1); a mode puts its compute before the passes that
+   read it. Group counts are a number, a name the record or the settings fill (D15 point 1's rule), or `"over"` an
+   image or buffer (the core divides its extent by the local size `qsb` reflects, rounding up: the fog grid follows
+   the surface).
+2. *Storage buffers and images, shared with draws.* A program declares storage buffers (name, bytes: a number or a
+   setting; usage: storage, plus vertex and indirect where a draw reads it so) and storage images (name, 2D or 3D,
+   size explicit or set by Python at a size edge as N3.1's `setTargetSize`, format RGBA8, RGBA16F, RGBA32F, R16F or
+   R32F). Both are `Static`, GPU-resident and content-scoped (as D14 choice B and D15 choice A), created zeroed, never
+   resized per frame. A draw reads a buffer through N3.2's bindings (storage `bufferLoad` in its vertex or fragment
+   stage, vertex input, `drawIndirect` with `StorageBuffer | IndirectBuffer`), and an image through a sampler naming it
+   (`sampler2D`, and `sampler3D` for a 3D image). Inputs from Python: N3.2's storage streams (per record, now bindable
+   in the compute stage) and meshes with storage usage (D3's geometry, once per revision). A buffer is never reached by
+   a raw handle: every use is declared through QRhi, or the tracker never sees it (research Q7).
+3. *Barriers derived from binding access types.* Each binding declares `read`, `write` or `read_write`, mapped to
+   QRhi's `bufferLoad`/`bufferStore`/`bufferLoadStore` and `imageLoad`/`imageStore`/`imageLoadStore`, checked against the
+   pack's reflection (a block or image the shader can write, declared `read`, is refused). D5.6 row 12's rule: the
+   `barriers` argument of `compute.py` is gone; the core never issues a barrier of its own. Vulkan: QRhi's pass tracker
+   emits one barrier per resource at the next pass's start, from its last access to its first in that pass, skipped
+   only for read after read, with the destination stage and access of the use (vertex input, indirect command, uniform,
+   shader read). OpenGL: QRhi's `BarriersForPass` issues `glMemoryBarrier` with every bit of the class (buffers:
+   vertex, element, uniform, buffer update, shader storage, command; textures: texture fetch, image access, pixel
+   buffer, texture update, framebuffer) for each resource last written, and inside a compute pass
+   `GL_SHADER_STORAGE_BARRIER_BIT` or `GL_SHADER_IMAGE_ACCESS_BARRIER_BIT` before a dispatch touching an earlier
+   dispatch's write.
+4. *Read-after-write and write-after-write inside a pass; write-after-read across passes.* Inside one QRhi compute
+   pass QRhi covers read-after-write and write-after-write between dispatches, not write-after-read (dispatch N
+   reads, N+1 writes: the read is never entered in the written set), and one buffer registered with two access types
+   in one pass is ignored after the first with a warning. Across a pass boundary every change of access gets a barrier,
+   read to write included; the draw-reads, next-record's-compute-writes direction is the research's one unproved
+   pairing (Q7) and is settled under validation. Hence choice A: each compute entry is its own QRhi compute pass, so
+   every hazard crosses a pass boundary and no in-pass rule is needed (N0.7's form). A ping-pong uses two buffers.
+5. *Indirect dispatch.* Not in QRhi 6.12 (no `dispatchIndirect`). No consumer dispatches indirectly: the population
+   scans in one fixed group and draws indirectly (`drawIndirect` over a compute-written command, N3.2's draw with a
+   `Static` buffer). A GPU-sized dispatch is written as the maximum with an early return. A raw
+   `vkCmdDispatchIndirect`/`glDispatchComputeIndirect` inside `beginExternal` would be a native route beside QRhi:
+   not proposed (handbook section 8: it needs the lead's line, with its OpenGL twin).
+6. *OpenGL's compute support.* `QRhi::Compute` needs desktop OpenGL 4.3 (or ES 3.1); the product already refuses a
+   context without the compute entry points (`rendering/quick/bootstrap.py:91`). Storage buffers bind at the
+   bindings' bind time with no dynamic offset (as on Vulkan). The class-wide barrier bits cost more than the
+   Python seam's targeted ones; with one pass per entry that is one `glMemoryBarrier` per written resource per pass,
+   about Python's count (one per dispatch). Accepted if GPU time is no worse than the Python path's on the same scene;
+   otherwise choice A's alternative is measured. A device where `QRhi::Compute`, `ThreeDimensionalTextures` or a
+   format's storage-image feature (Vulkan's R16F needs the extended storage formats) is missing refuses the program
+   with the reason, read once at device creation; never assumed.
+7. *Dispatch only when there is new work.* A content records whenever its card, settings or a texture change, so a
+   compute entry carries its own trigger: `frame` (a newly accepted record, never a re-record of the same one: a fade
+   step, a settings or card change dispatches nothing) or a record `u32` field (dispatched only when it changes: the
+   drift's step serial). Nothing at rest by construction; a stateful pass is never integrated twice. The core fills
+   `u_srpss_compute` = (the trigger's value, its value at the last dispatch, `fresh`, 0): `fresh` is 1 at the first
+   dispatch after the state was created, so the drift's "apply the steps after the last applied serial, restart from
+   zero when fresh" is the shader's arithmetic, not render-side Python. Anything else the drift's render side does is
+   N5.6's.
+8. *No readback in the product.* Compute results are consumed on the GPU only; the readback entry
+   (`composite_mode_storage_read`) is the harness's. The one product readback today is D4's pair self-check (choice G).
+
+**Open choices, each with the recommendation.**
+- A. *QRhi compute passes per entry, or per run.* Recommended: one per compute entry (point 4), N0.7's proven form;
+  no promotion rule, no WAR gap, barriers only at pass boundaries. The alternative, one QRhi pass per run of compute
+  entries with every buffer written anywhere in the run declared load-store in all its dispatches (which keeps it in
+  QRhi's written set and so gives write-after-read its barrier), and a split wherever a texture would be both sampled
+  and image-accessed, is measured only if the per-pass cost shows on OpenGL.
+- B. *Scope of storage.* Recommended: content scope (D14 B, D15 A); a device cache would need a cross-mode key.
+- C. *Buffer clear and copy.* QRhi has neither. Recommended: two compute kernels of the core's (clear words, copy a
+  word range between two buffers), used at allocation edges only, never per frame; a resized buffer keeps its prefix
+  (the drift's relayout and capacity growth keep their history, as Python's do). Rejected: restarting a family's state
+  at every resize (a visible jump at a Settings edge). Creation zeroes through one `uploadStaticBuffer` of a zero array
+  kept for the purpose, or the clear kernel: the build picks by measurement.
+- D. *Access declared or reflected.* Recommended: declared per binding and checked against the reflection
+  (`QShaderDescription`'s storage block and image qualifiers, if 6.12's `qsb` records `readonly`/`writeonly` for every
+  target; else the declaration alone, with the harness's negative control).
+- E. *Triggers.* Recommended: `frame` and a `u32` field, as point 7. An `inputs` trigger (only at a settings or size
+  edge, a baked field) has no consumer and is not built.
+- F. *Indirect dispatch.* Recommended: not built (point 5).
+- G. *D4's pair self-check.* Recommended: the one named product readback, at its warm-up edge only (once per device
+  lifetime, D4 "Consequences"), through `readBackBuffer` with its completion read at a later frame, never waited on, its
+  result logged by the core; on OpenGL QRhi reads it synchronously when the batch runs, one stall at that edge,
+  measured. The alternative, removing the self-check, loses D4's guard against a compiler that drops `precise`.
+- H. *OpenGL's barriers.* Recommended: QRhi's, as point 6, judged by GPU time against Python's; no raw
+  `glMemoryBarrier` of the core's.
+- I. *Lost state.* Recommended: a content made again creates its storage zeroed, dispatches with `fresh`, and tells
+  the owner once (`NativeMode.on_state_lost`, as N3.8's `on_textures_lost`). A display move keeping the history is
+  N3.9's.
+- J. *Group counts.* Recommended: a number, a name (record or settings), or `"over"` a resource (point 1).
+- K. *The job form.* Recommended: not built here. Compute runs in the frame (D9 point 2c). When N5.2g moves a
+  preparation to a job, its output must be a texture: `QRhiBuffer` has no `createFrom` in 6.12 (D15 point 2), so a
+  job can hand Qt's QRhi an image but not a buffer.
+- L. *Storage images in N3.3.* Recommended: yes, 2D and 3D, with `sampler3D` admitted for a draw reading one:
+  Waveform's five passes are all image passes, and without them N3.3 serves none of its first consumer. The fog volume
+  itself stays N4.f1's.
+
+**Proof** (the plan's N3.3 harness box): rules (a) and (b) on results read back in the harness only, exact for
+integers and copies, float differences reported with their ULP distance for the lead to judge; dispatches only on a
+trigger, none at rest; barriers under Vulkan synchronisation validation over consecutive records with no readback
+between them, with two negative controls (a written binding declared read must report read-after-write; a
+write-after-read pair recorded in one QRhi pass must report write-after-read); OpenGL proved by values; copy and
+clear; retirement to zero; cost at 2560x1440 and 4K against the Python path, by absolute times on a quiet GPU with
+`nvidia-smi` and the display state recorded, the cost round also once under the layer.
+
 ## D1, D2, D3 and the transport rule
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts"). The drafts, with every "today"
