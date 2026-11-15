@@ -1344,6 +1344,20 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
 - I. The core's objects and heap flat; QRhi's internal heap behind a `Static` upload reported, not counted.
 - J. The built-in mesh `quad`.
 
+**Accepted by the lead with the first build (15 Nov 2026, ABI 18 at 3a7fb6d3, compiled on GitHub first time).** Four
+choices the build made where D15 left room:
+- *`uMatrix` stays zeros on the core's triangle* (nothing reads it there, and `generic_mode_check` holds those blocks'
+  bytes); a pass with its own vertex stage gets item pixels (the item's unrotated coordinates, y down) to the drawn
+  target's clip space, corrected once (`itemClipMatrix`, conventions.h rule 1).
+- *The conventions block's `z`* is no longer reserved: 1 where the target's top row lies at clip NDC -Y after the core's
+  correction (the core's OpenGL and Vulkan targets), 0 in the OpenGL renderer and on D3D and Metal; the geometry
+  include's sprites read it (`srpss_geometry.glsl`, its Python twin `SRPSS_GEOMETRY_GLSL`, the marker
+  `//@srpss_geometry`).
+- *A batched pass's batch table is the one record field two readers share*: the core reads its counts, the shader its
+  bases as a storage stream; any other field has one owner.
+- *Pack order*: a pass's fragment pack, then its vertex pack ("vertex": true), then a batched pass's draw-parameters pack
+  (empty bytes: none).
+
 ## D1, D2, D3 and the transport rule
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts"). The drafts, with every "today"
