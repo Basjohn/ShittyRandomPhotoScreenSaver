@@ -1882,7 +1882,7 @@ PyObject *recordElement(const char *data, srpss_core::frame_abi::FieldKind kind,
     case FieldKind::F32: { // D15 choice B: one float of a stream's bytes
         float value = 0.0f;
         std::memcpy(&value, data + offset, sizeof(value));
-        return PyFloat_FromDouble(double(value));
+        return PyFloat_FromDouble(static_cast<double>(value));
     }
     }
     Py_RETURN_NONE;

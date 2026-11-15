@@ -294,6 +294,10 @@ struct Instance
 
 Instance *g_instance = nullptr;
 
+// N3.2: each created device's facts (vulkanDeviceFacts), written on the GUI thread, read by any.
+QMutex g_factsMutex;
+QHash<quint64, QJsonObject> g_deviceFacts;
+
 QByteArrayList availableInstanceExtensions(const Loader &loader, const char *layer)
 {
     auto enumerate = loader.get<PFN_vkEnumerateInstanceExtensionProperties>(
@@ -723,6 +727,23 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
     }
     std::unique_ptr<VulkanDevice> out(new VulkanDevice);
     out->m_device = quint64(reinterpret_cast<quintptr>(device));
+    {
+        // N3.2 (D15 point 3): QRhi never checks these, so the core records them once from the device it made.
+        QJsonObject facts;
+        facts.insert(QStringLiteral("min_uniform_buffer_offset_alignment"),
+                     double(props.limits.minUniformBufferOffsetAlignment));
+        facts.insert(QStringLiteral("max_uniform_buffer_range"), double(props.limits.maxUniformBufferRange));
+        facts.insert(QStringLiteral("max_descriptor_set_uniform_buffers_dynamic"),
+                     double(props.limits.maxDescriptorSetUniformBuffersDynamic));
+        facts.insert(QStringLiteral("max_storage_buffer_range"), double(props.limits.maxStorageBufferRange));
+        facts.insert(QStringLiteral("multi_draw_indirect"), f2.features.multiDrawIndirect == VK_TRUE);
+        facts.insert(QStringLiteral("draw_indirect_first_instance"),
+                     f2.features.drawIndirectFirstInstance == VK_TRUE);
+        facts.insert(QStringLiteral("shader_draw_parameters"), f11.shaderDrawParameters == VK_TRUE);
+        facts.insert(QStringLiteral("device_name"), QString::fromUtf8(props.deviceName));
+        QMutexLocker lock(&g_factsMutex);
+        g_deviceFacts.insert(out->m_device, facts);
+    }
     out->m_physicalDevice = quint64(reinterpret_cast<quintptr>(physDev));
     out->m_family = family;
     out->m_queues = queueCount;
@@ -765,6 +786,12 @@ void VulkanDevice::applyTo(QQuickWindow *window) const
         int(m_family), 0));
 }
 
+QJsonObject vulkanDeviceFacts(quint64 device)
+{
+    QMutexLocker lock(&g_factsMutex);
+    return g_deviceFacts.value(device);
+}
+
 QStringList VulkanDevice::destroy()
 {
     QStringList steps;
@@ -777,6 +804,10 @@ QStringList VulkanDevice::destroy()
         steps << (QStringLiteral("job service stopped: ")
                   + QString::fromUtf8(QJsonDocument(stopped).toJson(QJsonDocument::Compact)));
         m_jobs.reset();
+    }
+    {
+        QMutexLocker lock(&g_factsMutex);
+        g_deviceFacts.remove(m_device);
     }
     const VkDevice device = reinterpret_cast<VkDevice>(quintptr(m_device));
     if (g_instance) {

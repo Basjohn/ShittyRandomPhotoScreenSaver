@@ -52,6 +52,24 @@ def test_the_core_bakes_the_production_include():
     assert (SHADERS / "srpss_conventions.glsl").read_text(encoding="utf-8") == SRPSS_CONVENTIONS_GLSL
 
 
+def test_the_core_holds_the_production_geometry_include():
+    """N3.2 (D15 point 5): the sprites and batch-index include, one text in both places."""
+    from rendering.gl_programs.conventions import SRPSS_GEOMETRY_GLSL
+
+    assert (SHADERS / "srpss_geometry.glsl").read_text(encoding="utf-8") == SRPSS_GEOMETRY_GLSL
+
+
+def test_the_geometry_marker_expands_to_the_include(tmp_path):
+    """A product shader's ``//@srpss_geometry`` line composes into the include's text (both renderers' one source)."""
+    from rendering.gl_programs.conventions import SRPSS_GEOMETRY_GLSL
+    from widgets.spotify_visualizer.shaders import GEOMETRY_MARKER, compose_shader_source
+
+    source = tmp_path / "probe.vert"
+    source.write_text("#version 460\n//@srpss_conventions\n" + GEOMETRY_MARKER + "\nvoid main() {}\n", encoding="utf-8")
+    composed = compose_shader_source(source)
+    assert SRPSS_GEOMETRY_GLSL in composed and GEOMETRY_MARKER not in composed
+
+
 def test_every_core_shader_bakes_for_every_target_with_the_include(tmp_path):
     from tools.vulkan_shader_readiness import _qsb, compile_source
 
@@ -169,7 +187,9 @@ def facts_for(backend: str, *, corrected: bool = True) -> dict:
             "gl_form": _column_major(_ortho()), "uploaded": _column_major(uploaded), "corrected": corrected,
             "double_correction_refused": True if corrected else None, "front_face": rule,
             "front_face_rule_on_uploaded": rule,
-            "conventions_block": [0.0, 1.0 if (ndc_up and not fb_up) else 0.0, 0.0, 0.0]}
+            # z (N3.2, D15 point 5): 1 where the OpenGL-form top lands at clip -Y after the correction.
+            "conventions_block": [0.0, 1.0 if (ndc_up and not fb_up) else 0.0,
+                                  1.0 if float((correction @ np.array([0.0, 1.0, 0.0, 1.0]))[1]) < 0.0 else 0.0, 0.0]}
 
 
 def _readback(facts: dict, image: np.ndarray) -> dict:

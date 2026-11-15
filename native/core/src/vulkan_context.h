@@ -20,6 +20,7 @@
 #pragma once
 
 #include <QtCore/QByteArray>
+#include <QtCore/QJsonObject>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 
@@ -41,6 +42,11 @@ bool vulkanInstanceExists();
 // The phase the debug messages that follow are counted under (any thread may log; the counters are guarded).
 void vulkanSetPhase(const QString &phase);
 int vulkanLiveDevices();
+// N3.2 (D15 point 3): the facts of the device the core created, read once at its creation (any thread; empty
+// for a device the core did not create): minUniformBufferOffsetAlignment, maxUniformBufferRange,
+// maxDescriptorSetUniformBuffersDynamic, and the multiDrawIndirect, drawIndirectFirstInstance and
+// shaderDrawParameters features it enabled (every supported one: Qt's feature set).
+QJsonObject vulkanDeviceFacts(quint64 device);
 
 // One VkDevice for one Qt Quick window, on the process instance.
 class VulkanDevice

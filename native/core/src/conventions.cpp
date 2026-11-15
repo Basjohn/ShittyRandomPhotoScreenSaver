@@ -2,6 +2,8 @@
 
 #include <rhi/qrhi.h>
 
+#include <QtGui/QVector3D>
+
 namespace srpss_core {
 
 QMatrix4x4 targetCorrection(QRhi *rhi)
@@ -33,6 +35,8 @@ ConventionsBlock targetConventions(QRhi *rhi)
     ConventionsBlock block;
     block.fragmentFlip = 0.0f; // F1: every target the core owns is top-down in memory
     block.ndcFlip = (rhi && rhi->isYUpInNDC() && !rhi->isYUpInFramebuffer()) ? 1.0f : 0.0f; // F2
+    // N3.2: where the OpenGL-form top (+Y) lands after the correction (a sprite's offset follows it).
+    block.clipTopDown = targetCorrection(rhi).map(QVector3D(0.0f, 1.0f, 0.0f)).y() < 0.0f ? 1.0f : 0.0f;
     return block;
 }
 
