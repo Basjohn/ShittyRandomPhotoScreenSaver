@@ -47,6 +47,7 @@ _SCHEMA_MODULES = {
 #: registry only.
 _RUNTIME_SCHEMA_MODULES: dict[str, str] = {
     "devcurve": "core.visualizer_engine.devcurve_native_schema",
+    "bubble": "core.visualizer_engine.bubble_native_schema",
 }
 
 PayloadKind = Literal["codec", "native"]
@@ -184,7 +185,12 @@ class NativeLayout:
             value = values[f.name]
             element = _KINDS[f.kind][0]
             if f.kind == "f64x4":
-                struct.pack_into("<4d", out, f.offset, *value)
+                # One vec4, or an array of them (Bubble's positions: N5.1) given flat or as four-number rows.
+                flat = (tuple(float(v) for row in value for v in row)
+                        if f.count > 1 and value and not isinstance(value[0], (int, float)) else tuple(value))
+                if len(flat) != 4 * f.count:
+                    raise NativeSchemaError(f"{f.name}: {len(flat)} numbers for {f.count} four-number element(s)")
+                struct.pack_into(f"<{4 * f.count}d", out, f.offset, *flat)
             elif f.kind == "f32" and isinstance(value, (bytes, bytearray, memoryview)):
                 # A stream's bytes as the renderer packed them (D15 choice B): copied verbatim, the rest zero.
                 data = bytes(value)
@@ -203,8 +209,11 @@ class NativeLayout:
         values: dict[str, Any] = {}
         for f in self.fields:
             element = _KINDS[f.kind][0]
-            if f.kind == "f64x4":
+            if f.kind == "f64x4" and f.count == 1:
                 values[f.name] = struct.unpack_from("<4d", view, f.offset)
+            elif f.kind == "f64x4":
+                flat = struct.unpack_from(f"<{4 * f.count}d", view, f.offset)
+                values[f.name] = tuple(flat[i:i + 4] for i in range(0, len(flat), 4))
             elif f.count > 1:
                 values[f.name] = struct.unpack_from(f"<{f.count}{element}", view, f.offset)
             else:
