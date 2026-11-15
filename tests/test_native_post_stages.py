@@ -286,6 +286,38 @@ def test_the_program_declares_the_stages_and_orders_their_packs() -> None:
         ModeTarget("near", (TargetAttachment("colour", "rgba16f"),), mips=True, samples=4)
 
 
+def test_a_transparent_pass_declares_the_core_blends_empty() -> None:
+    """The core refuses a transparent pass whose first two "attachments" entries are not {} (its accumulation and
+    coverage blends are the core's); a borrowed attachment keeps its own entry."""
+    from rendering.native.mode import ModePass, PassOutput, program_json
+
+    outputs = (PassOutput(True, "replace"), PassOutput(True, "replace"), PassOutput(True, "additive"))
+    shells = ModePass("shells", b"SHELLS", "replace", target="oit", sorted_pack=b"SORTED", outputs=outputs)
+    declared = json.loads(program_json((shells,))[0])["passes"][0]["attachments"]
+    assert declared == [{}, {}, {"write": True, "blend": "additive"}]
+    # Negative control: the same outputs on a pass without a sorted pack keep every entry.
+    plain = ModePass("plain", b"PLAIN", "replace", target="scene", outputs=outputs)
+    assert json.loads(program_json((plain,))[0])["passes"][0]["attachments"][0] == {"write": True, "blend": "replace"}
+
+
+def test_the_defocus_run_chains_its_two_stage_reads() -> None:
+    """Qt 6.12.0's pass tracker keeps the earlier stage of a texture read in two stages of one pass, so the defocus
+    run (the gather reads the layer in the fragment stage, the sprites in the vertex stage) is followed by the core's
+    execution dependency from both stages (targets.cpp chainShaderReads), unless the harness's control skips it."""
+    content = (CORE / "src" / "mode_content.cpp").read_text(encoding="utf-8")
+    defocus = content[content.index("void ModeContent::recordDefocus("):content.index("bool ModeContent::syncTargets(")]
+    end = defocus.index("cb->endPass();")
+    assert "if (!skipReadChain())\n        chainShaderReads(rhi, cb);" in defocus[end:]
+    targets = (CORE / "src" / "targets.cpp").read_text(encoding="utf-8")
+    chain = targets[targets.index("bool chainShaderReads("):]
+    assert "VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT" in chain
+    assert "VK_PIPELINE_STAGE_ALL_COMMANDS_BIT" in chain[:chain.index("cb->endExternal();")]
+    # Negative control: the gather and the sprites do read the layer in those two stages (else no chain is needed).
+    stages = (CORE / "src" / "post_stages.cpp").read_text(encoding="utf-8")
+    assert "sampledTexture(1, fragment, d.colour, d.mipSampler.get())" in stages
+    assert "sampledTexture(1, vertex, d.colour, d.mipSampler.get())" in stages
+
+
 def test_the_core_reads_every_stage_shader_it_bakes() -> None:
     stages = (CORE / "src" / "post_stages.cpp").read_text(encoding="utf-8")
     for name in ("scene_oit_resolve.frag", "scene_oit_resolve_samples.frag", "scene_oit_resolve_sample0.frag",

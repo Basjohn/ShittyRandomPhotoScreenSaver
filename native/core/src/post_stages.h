@@ -103,6 +103,8 @@ void setBloomSameTexture(bool same);            // an upsample samples the level
 bool bloomSameTexture();
 void setSkipStageRelease(bool skip);            // the stages' objects left behind at a release (counted)
 bool skipStageRelease();
+void setSkipReadChain(bool skip);               // the defocus run's chainShaderReads skipped (read per record)
+bool skipReadChain();
 // A new number at every control change (a content's gate is decided again only then).
 quint64 stageControlGeneration();
 

@@ -5822,6 +5822,8 @@ void ModeContent::recordDefocus(QRhi *rhi, QRhiCommandBuffer *cb, int index, QRh
     m_post.recordDefocusOnto(cb, index, ownInput, r.passes[index].blockOffset, r.conventionsOffset,
                              defocusRadius(index) >= 0.5f); // Python draws the sprites from half a pixel
     cb->endPass();
+    if (!skipReadChain())
+        chainShaderReads(rhi, cb);            // the layer read in two stages: QRhi's next barrier keeps one (targets.h)
     recordNearest(cb, pass.target, index, readback); // D14 point 10: what a later pass or the readback reads
 }
 

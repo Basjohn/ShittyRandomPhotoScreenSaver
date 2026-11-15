@@ -30,6 +30,7 @@ QAtomicInteger<int> g_transparencyFirstSample { 0 };
 QAtomicInteger<int> g_skipBloomPrime { 0 };
 QAtomicInteger<int> g_bloomSameTexture { 0 };
 QAtomicInteger<int> g_skipStageRelease { 0 };
+QAtomicInteger<int> g_skipReadChain { 0 };
 QAtomicInteger<quint64> g_controlGeneration { 1 };
 
 QAtomicInteger<int> g_bloomChains { 0 };
@@ -286,6 +287,8 @@ void setBloomSameTexture(bool same) { setControl(g_bloomSameTexture, same); }
 bool bloomSameTexture() { return g_bloomSameTexture.loadAcquire() != 0; }
 void setSkipStageRelease(bool skip) { setControl(g_skipStageRelease, skip); }
 bool skipStageRelease() { return g_skipStageRelease.loadAcquire() != 0; }
+void setSkipReadChain(bool skip) { setControl(g_skipReadChain, skip); }
+bool skipReadChain() { return g_skipReadChain.loadAcquire() != 0; }
 quint64 stageControlGeneration() { return g_controlGeneration.loadAcquire(); }
 
 StageCounts stageCounts()
@@ -821,11 +824,23 @@ void PostStages::release()
         };
         auto held = std::make_shared<Held>();
         int objects = 0;
+        // They leave the stages' counts here (chains, steps, textures, bytes) and are counted as left behind alone, so
+        // their release at the later sync settles every count (the retirement proof's audit, 15 Nov).
         for (int i = 0; i < kMaxBloomStages; ++i) {
+            if (m_blooms[i]) {
+                int textures = 0;
+                for (int k = 0; k < kBloomLevels; ++k)
+                    textures += m_blooms[i]->levels[k] ? 1 : 0;
+                count(-textures, -m_blooms[i]->bytes, textures ? -1 : 0, 0);
+            }
             objects += m_blooms[i] ? 3 * kBloomLevels : 0;
             held->blooms[i] = std::move(m_blooms[i]);
         }
         for (int i = 0; i < kMaxDefocusStages; ++i) {
+            if (m_defocus[i]) {
+                const bool below = m_defocus[i]->below != nullptr;
+                count(below ? -1 : 0, -m_defocus[i]->bytes, 0, below ? -1 : 0);
+            }
             objects += m_defocus[i] ? 3 : 0;
             held->defocus[i] = std::move(m_defocus[i]);
         }

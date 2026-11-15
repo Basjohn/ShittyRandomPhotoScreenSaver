@@ -105,12 +105,19 @@ COST_FRAMES = 240
 PYTHON_COST_FRAMES = 120
 _ALLOWED_ENV: set[str] = set()
 
-# The validation phases whose finding is expected (each control's own), and how each is recognised.
+# The validation phases whose finding is expected (each control's own): how each is recognised (an id or a text in the
+# message; none: any error), whether it is required (False: reported only, the layer cannot show it, see the bloom
+# prime's note in D17's As built), and the text that places it (the transparency run's own depth load: EB's
+# transparency target holds accumulation, coverage and the borrowed emission, so its depth is attachment 3).
 CONTROL_PHASES = {
-    "n34 control depth prime": ("SYNC-HAZARD-READ-AFTER-WRITE",),
-    "n34 control bloom prime": ("SYNC-HAZARD-READ-AFTER-WRITE",),
-    "n34 control bloom same texture": (),              # any error (QRhi's refusal or the layer's layout errors)
-    "n34 control no independent blend": ("independentBlend", "00605"),
+    "n34 control depth prime": {"expect": ("SYNC-HAZARD-READ-AFTER-WRITE",), "required": True,
+                                "placed": "depth aspect of attachment 3"},
+    "n34 control bloom prime": {"expect": ("SYNC-HAZARD-READ-AFTER-WRITE",), "required": False, "placed": None},
+    "n34 control bloom same texture": {"expect": (), "required": True, "placed": None},
+    # The defocus run reads the layer in its vertex (sprites) and fragment (gather) stages; without the core's chain
+    # QRhi's next barrier on the layer (generateMips) leaves the fragment reads unordered (targets.h chainShaderReads).
+    "n34 control read chain": {"expect": ("SYNC-HAZARD-WRITE-AFTER-READ",), "required": True, "placed": "near."},
+    "n34 control no independent blend": {"expect": ("independentBlend", "00605"), "required": True, "placed": None},
 }
 
 
@@ -886,6 +893,9 @@ def round_barriers(core, engine, app, api: str, packs: dict) -> dict:
             facts["control_bloom_same_texture"] = _records(core, engine, app, host, packs,
                                                            Case("osc", "osc", controls=("bloom_same_texture",),
                                                                 changes={"u_hdr_exposure": 0.0}), CONTROL_RECORDS)
+            phase("n34 control read chain")
+            facts["control_read_chain"] = _records(core, engine, app, host, packs,
+                                                   Case("eb", "eb", controls=("skip_read_chain",)), CONTROL_RECORDS)
             phase("n34 after controls")
     finally:
         host.close()
@@ -943,16 +953,22 @@ def split_validation(messages: dict) -> dict:
                 warnings=sum(int(e.get("count", 1)) for e in rest_entries if e.get("severity") == "warning"))
     summary = vk_validation.validation_summary(rest)
     controls = {}
-    for phase, expected in CONTROL_PHASES.items():
+    for phase, rule in CONTROL_PHASES.items():
+        expected = rule["expect"]
         found = [e for e in entries if e.get("phase") == phase and e.get("severity") == "error"]
         ids = sorted({str(e.get("id")) for e in found})
         if expected:
-            reported = any(any(x in str(e.get("id")) or x in str(e.get("message", "")) for x in expected) for e in found)
+            matching = [e for e in found
+                        if any(x in str(e.get("id")) or x in str(e.get("message", "")) for x in expected)]
         else:
-            reported = bool(found)
-        controls[phase] = {"expected": list(expected) or "any error", "found": ids, "reported": reported,
+            matching = found
+        placed = [e for e in matching if rule["placed"] is None or rule["placed"] in str(e.get("message", ""))]
+        controls[phase] = {"expected": list(expected) or "any error", "required": rule["required"],
+                           "placed_by": rule["placed"], "found": ids, "reported": bool(placed),
                            "count": sum(int(e.get("count", 1)) for e in found),
-                           "first_message": (found[0].get("message", "")[:600] if found else "")}
+                           "placed_count": sum(int(e.get("count", 1)) for e in placed),
+                           "first_message": (placed[0].get("message", "")[:600] if placed else
+                                             found[0].get("message", "")[:600] if found else "")}
     return {"outside_controls": {k: v for k, v in summary.items() if k != "groups"},
             "attribution": summary["groups"], "controls": controls}
 
@@ -1613,7 +1629,7 @@ def api_verdict(api: str, record: dict, require_validation: bool, rounds) -> tup
     ok, failed = host_check.api_verdict(api, record, require_validation)
     if api == "vulkan" and "barriers" in rounds and record.get("instance_created"):
         for phase, c in ((record.get("validation") or {}).get("controls") or {}).items():
-            if not c.get("reported"):
+            if c.get("required") and not c.get("reported"):
                 failed.append(f"vulkan: the control phase '{phase}' reported no {c.get('expected')} ({c.get('found')})")
     if record.get("module_loaded") and (api != "vulkan" or record.get("instance_created")):
         live = record.get("composites_at_end") or {}

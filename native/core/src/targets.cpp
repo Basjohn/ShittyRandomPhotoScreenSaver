@@ -290,6 +290,31 @@ bool primeDepthForLoad(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *depth)
     return true;
 }
 
+bool chainShaderReads(QRhi *rhi, QRhiCommandBuffer *cb)
+{
+    if (!rhi || !cb || rhi->backend() != QRhi::Vulkan)
+        return false;
+    const auto *handles = static_cast<const QRhiVulkanNativeHandles *>(rhi->nativeHandles());
+    if (!handles || !handles->inst || !handles->dev)
+        return false;
+    QVulkanDeviceFunctions *df = handles->inst->deviceFunctions(handles->dev);
+    if (!df)
+        return false;
+    cb->beginExternal();
+    const auto *cbHandles = static_cast<const QRhiVulkanCommandBufferNativeHandles *>(cb->nativeHandles());
+    const bool recorded = cbHandles && cbHandles->commandBuffer;
+    if (recorded) {
+        // An execution dependency only (a read needs no availability): every earlier vertex and fragment shader read
+        // before every later stage, so QRhi's next barrier on those textures (its first scope the earlier stage alone)
+        // chains after this one.
+        df->vkCmdPipelineBarrier(cbHandles->commandBuffer,
+                                 VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                 VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 0, nullptr);
+    }
+    cb->endExternal();
+    return recorded;
+}
+
 QString primeForLoadOutsideFrame(QRhi *rhi, QRhiTexture *texture)
 {
     if (!rhi || !texture || rhi->backend() != QRhi::Vulkan)
