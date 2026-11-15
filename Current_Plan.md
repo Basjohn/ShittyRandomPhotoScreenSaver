@@ -282,6 +282,13 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [ ] One helper beside `configure_offline_controller` sets the framed view of the card a host models
     (`resolve_framed_view`); each host above calls it (the worker gates send it as `VIS_SET_VIEW`).
   - [ ] Guard: a Waveform tick in each of those hosts has a view span (negative control: today's hosts have none).
+- [ ] Retire the P1 spike from the build path (lead, 15 Nov; operator asked its value): `native/spike_p1` was the P1
+  proof and its N0.6 and N0.7 rounds are recorded (D6, `Native_Core_N06_N07_Qt_Facts.md`). The core now owns its
+  Vulkan device and has its own hidden-host harnesses, so the N0.6 leftovers below are retargeted to `native/core`
+  (`host_check.py` and `composite_check.py` gain the visible translucent round and the fail-closed validation
+  rule), then the `native_spike` selection is removed from `tools/build_runner.py`, `tools/github_remote_build.py`,
+  the workflow and their tests. The source stays in the repository as evidence (the keep-useful-tools rule; it adds
+  nothing to the product); the validation-layer folder under `D:/Temp/Scratch/SRPSS/native_spike/` keeps its name.
 - [ ] N0.6 D6's proof (harness rounds 1 to 6 merged; the record is D6's "As proved" in the decisions document;
   evidence `.artifacts/evidence/native_core/n06/`). The validation layer (Khronos's Windows build in
   `D:/Temp/Scratch/SRPSS/native_spike/validation_layers/extracted/`) is given to the harness process alone with
@@ -1118,6 +1125,9 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 - [ ] Guard: two displays in one batch get different seeds and different Liquid Lens plans; the same display gets the
   same seed for the same batch seed (reproducible); negative control on today's shared seed. The native route
   (N5.2a/b) receives the per-display seed through the same request.
+- [ ] Docs (operator, 15 Nov): a short note in `Docs/Reference/Transitions.md` when it lands: seeds are per display,
+  and the heavy-geometry transitions (Glass Shatter, Crumble, Jigsaw) now prepare one geometry set per display in
+  the idle gap. Record the measured prepare time per display, so a later performance question has its baseline.
 
 ### 1D.13 Side defects found at its merge (15 Nov; Opus Medium when a slot is free of native work)
 
