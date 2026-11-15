@@ -727,24 +727,86 @@ def test_current_plan_edit_diff_is_exact_and_silent_when_unchanged() -> None:
     assert "+- [ ] New" in rendered
 
 
-def test_foundry_header_exposes_waitable_current_plan_diff_workflow() -> None:
-    source = (TOOLS_DIR / "godzip_foundry.py").read_text(encoding="utf-8")
-    for marker in (
-        'QPushButton("Open CP && Diff")',
-        'self.current_plan_button.clicked.connect(self.open_current_plan_and_diff)',
-        'generate_text_edit_diff("Current_Plan.md", before, after)',
-        '_shell_open_associated_document(plan_path)',
-        'ShellExecuteExW',
-        'SEE_MASK_NOCLOSEPROCESS',
-        'os.startfile(str(path))',
-        'bridge.opened.emit({"waitable": bool(process_handle)})',
-        'DiffResultDialog(self, "CURRENT PLAN DIFF"',
-        'self.current_plan_button.setText("Check CP Diff")',
-    ):
-        assert marker in source
-    # The original cmd.exe/start launcher could report success while opening
-    # nothing. File association launch now belongs to ShellExecuteEx directly.
-    assert 'start "" /wait' not in source
+@pytest.fixture
+def plan_window(qt_app, monkeypatch, tmp_path):
+    """A real Foundry window whose result dialogs are recorded instead of shown."""
+    from tests.test_foundry_widget_ownership import _git_repo
+    from tools import godzip_foundry
+
+    monkeypatch.setattr(godzip_foundry, "collect_repo_files", lambda _root: [])
+    shown: list[str] = []
+    monkeypatch.setattr(godzip_foundry, "DiffResultDialog",
+                        lambda _parent, _title, text, _summary: shown.append(text) or object())
+    monkeypatch.setattr(godzip_foundry.GodzipFoundryWindow, "_track_dialog", lambda _self, _dialog: None)
+    window = godzip_foundry.GodzipFoundryWindow(_git_repo(tmp_path))
+    thread = window._task_thread
+    if thread is not None:
+        thread.join(timeout=60)
+    qt_app.processEvents()
+    try:
+        yield window, shown, godzip_foundry
+    finally:
+        window.close()
+        window.deleteLater()
+        qt_app.processEvents()
+
+
+def test_current_plan_button_diffs_only_the_edits_made_since_it_armed(plan_window) -> None:
+    """The header button owns the Current Plan diff: with a snapshot armed, a press compares the saved file to
+    that snapshot and hands the exact diff to the result dialog; with nothing saved it shows nothing and keeps
+    the snapshot armed for a later press."""
+    window, shown, _module = plan_window
+    plan = window.repo_root / "Current_Plan.md"
+    before, after = "# Plan\n\n- [ ] Old\n", "# Plan\n\n- [x] Old\n- [ ] New\n"
+    plan.write_text(before, encoding="utf-8")
+    window._plan_edit_snapshot = before
+
+    window.current_plan_button.click()
+    assert shown == [], "an unchanged plan produced a diff"
+    assert window._plan_edit_snapshot == before, "an unchanged press must keep the snapshot armed"
+
+    plan.write_text(after, encoding="utf-8")
+    window.current_plan_button.click()
+    assert shown == [core.generate_text_edit_diff("Current_Plan.md", before, after)]
+    assert window._plan_edit_snapshot is None, "a delivered diff disarms the snapshot"
+
+
+def test_current_plan_open_waits_on_the_launcher_then_delivers_the_diff(plan_window, qt_app, monkeypatch) -> None:
+    """Pressing the button snapshots the plan, opens it through the file-association launcher off the UI thread,
+    and when the launcher returns delivers the diff of what was saved meanwhile."""
+    if sys.platform != "win32":
+        pytest.skip("the waitable launcher path is Windows-only")
+    window, shown, module = plan_window
+    plan = window.repo_root / "Current_Plan.md"
+    before, after = "# Plan\n\n- [ ] Old\n", "# Plan\n\n- [ ] Old\n- [ ] New\n"
+    plan.write_text(before, encoding="utf-8")
+    opened: list[Path] = []
+
+    def launcher(path: Path):
+        opened.append(Path(path))
+        path.write_text(after, encoding="utf-8")  # the operator edits and saves in the editor
+        return None  # a single-instance editor hands back no waitable handle
+
+    monkeypatch.setattr(module, "_shell_open_associated_document", launcher)
+    window.current_plan_button.click()
+    thread = window._plan_edit_thread
+    assert thread is not None
+    thread.join(timeout=30)
+    assert not thread.is_alive()
+    qt_app.processEvents()
+    assert opened == [plan]
+    assert shown == [core.generate_text_edit_diff("Current_Plan.md", before, after)]
+    assert window._plan_edit_snapshot is None and not window._plan_edit_waiting
+
+
+def test_current_plan_button_reports_a_missing_plan_without_arming(plan_window, monkeypatch) -> None:
+    window, shown, _module = plan_window
+    errors: list[str] = []
+    monkeypatch.setattr(type(window), "show_error", lambda _self, title, _exc: errors.append(title))
+    assert not (window.repo_root / "Current_Plan.md").exists()
+    window.current_plan_button.click()
+    assert len(errors) == 1 and shown == []
+    assert window._plan_edit_snapshot is None
 
 
 def _readme_pair(tmp_path: Path) -> tuple[Path, Path]:
@@ -773,7 +835,7 @@ def test_pull_readme_fast_forwards_when_it_can(tmp_path: Path) -> None:
     message = core.pull_readme(local)
     assert "ast-forward" in message
     assert core.git_head(local) == _git(local, "rev-parse", "origin/main")
-    assert (local / "README.md").read_text(encoding="utf-8") == "readme v2\n"
+    assert (local / core.README_PATH).read_text(encoding="utf-8") == "readme v2\n"
     assert (local / "scratch.txt").read_text(encoding="utf-8") == "unrelated local edit\n"
 
 
@@ -786,7 +848,7 @@ def test_pull_readme_overwrites_only_readme_when_the_branch_has_local_commits(tm
     message = core.pull_readme(local)
     assert "README.md" in message and "pull" in message
     assert core.git_head(local) == head, "no commit, no merge"
-    assert (local / "README.md").read_text(encoding="utf-8") == "readme v2\n"
+    assert (local / core.README_PATH).read_text(encoding="utf-8") == "readme v2\n"
     assert not (local / "other.txt").exists()
     assert (local / "local.txt").read_text(encoding="utf-8") == "local commit\n"
     assert (local / "change.txt").read_text(encoding="utf-8") == "base\n"
@@ -800,7 +862,7 @@ def test_pull_readme_overwrites_a_locally_edited_readme_and_leaves_other_files(t
     head = core.git_head(local)
     message = core.pull_readme(local)
     assert "overwritten" in message
-    assert (local / "README.md").read_text(encoding="utf-8") == "readme v2\n"
+    assert (local / core.README_PATH).read_text(encoding="utf-8") == "readme v2\n"
     assert (local / "keep.txt").read_text(encoding="utf-8") == "my other edit\n"
     assert core.git_head(local) == head
 

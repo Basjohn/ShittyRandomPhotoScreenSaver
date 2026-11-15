@@ -6,7 +6,11 @@ compensator cannot quietly spread from Spectrum into every mode.
 """
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
+
+import numpy as np
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -26,16 +30,35 @@ def test_no_generic_larger_axis_temporal_compensator_in_visualizer_runtime() -> 
     assert offenders == []
 
 
-def test_line_mode_pixel_thickness_is_uniform_scale_owned() -> None:
-    """The live renderer must use presentation scale, not authored viewport dimensions.
+def _beam_thickness(pixels) -> int:
+    """Lit rows of the flat beam down the item's middle column."""
+    column = pixels[:, pixels.shape[1] // 2, :]
+    return int(np.count_nonzero(column[:, 1] > 32))
 
-    Oscilloscope takes a beam-width setting into a shader; it must not reintroduce
-    an arbitrary larger-axis compensation or viewport-size pin.
-    """
-    osc = _read("rendering/quick/visualizer/implementations/oscilloscope.py")
-    assert "presentation.uniform_visual_scale" in osc
-    assert 'parameter(parameters, "osc_beam_width")' in osc
-    assert 'gl.glUniform1f(beam_uniforms["uCore"], core)' in osc
+
+@pytest.mark.qt
+def test_line_mode_pixel_thickness_is_uniform_scale_owned(qt_app) -> None:
+    """The rendered beam's pixel thickness follows presentation.uniform_visual_scale and
+    nothing about the item's size: doubling the scale thickens the beam, while the same
+    scale at two very different viewports draws the same thickness."""
+    from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
+    from tests.test_oscilloscope_rework import _ScopeGlTarget, _scope_gl_snapshot
+
+    def thickness(width: int, height: int, scale: float) -> int:
+        snapshot = _scope_gl_snapshot(width, height)
+        snapshot = replace(snapshot, presentation=replace(snapshot.presentation, uniform_visual_scale=scale))
+        target, host = _ScopeGlTarget(width, height), QuickVisualizerRenderHost()
+        try:
+            return _beam_thickness(target.render(host, snapshot))
+        finally:
+            host.release_resources()
+            target.close()
+
+    base = thickness(480, 270, 1.0)
+    assert base > 0
+    assert thickness(480, 270, 2.0) >= 1.6 * base
+    # The same scale at a very different viewport and aspect is the same line.
+    assert thickness(900, 160, 1.0) == base
 
 
 def test_line_mode_authored_frame_runtimes_do_not_read_viewport_geometry() -> None:
