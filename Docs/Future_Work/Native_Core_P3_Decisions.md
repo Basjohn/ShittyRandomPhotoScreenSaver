@@ -1768,10 +1768,15 @@ unchanged, no entry or state key added).**
   on each API, and under rule (b) with the other scenes; its control (`pair_check_broken`, the two error terms a
   compiler that drops `precise` may lose, zeroed) must not be exact. (2) Write-after-read's ping-pong form
   (`war_pingpong`: ping reads A and writes B, pong reads B and writes A) in the war round by value and clean in the
-  barriers phase; its control records the written bindings as reads (phase "n33 control pingpong write_as_read",
-  `SYNC-HAZARD-WRITE-AFTER-READ`). The ping-pong in one QRhi pass is recorded as a fact phase, not a control: read
-  from QRhi's rules it stays clean, because the in-pass read-after-write barrier on B is a compute-to-compute
-  execution dependency that orders A's write after its read too; the run records what the layer says. (3) *OpenGL's
+  barriers phase; its control records the written bindings as reads (phase "n33 control pingpong write_as_read":
+  `SYNC-HAZARD-WRITE-AFTER-READ`, with read-after-write and write-after-write). The ping-pong in one QRhi pass is a fact
+  phase, not a control, and is clean under the layer: QRhi's in-pass read-after-write barrier on B is a
+  compute-to-compute execution dependency, which orders A's write after its read too. Both run in a Vulkan child of
+  their own: the layer reports one message id at most 10 times an instance (its duplicate message limit), so after the
+  single-pass control has used `SYNC-HAZARD-WRITE-AFTER-READ`'s ten, a later phase of the same process reports none.
+  The first run, with them in the barriers round, showed exactly that. A clean phase is therefore a hazard proof only
+  before any control of its process: "n33 barriers" is; the cost round, which follows the controls in the default
+  order, is not. (3) *OpenGL's
   barrier calls are not counted, and cannot be without large new work:* QRhi issues `glMemoryBarrier` inside its GL
   backend through the function pointers `QOpenGLExtraFunctions` resolved at its creation, records nothing countable
   (no statistic, no debug-output message for a barrier), and the core may not hook them (a native route beside QRhi,

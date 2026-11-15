@@ -38,9 +38,11 @@ Rounds:
              the release skipping the storage (counted left behind).
   barriers   (each API; on Vulkan under synchronisation validation) consecutive records of every scene with no readback
              between them (phase "n33 barriers": clean, the ping-pong included); the controls in their own phases:
-             written bindings recorded as reads ("n33 control write_as_read": SYNC-HAZARD-READ-AFTER-WRITE; the
-             ping-pong's, "n33 control pingpong write_as_read": SYNC-HAZARD-WRITE-AFTER-READ) and the write-after-read
-             pair in one QRhi pass ("n33 control single_pass": SYNC-HAZARD-WRITE-AFTER-READ). On OpenGL the same
+             written bindings recorded as reads ("n33 control write_as_read": SYNC-HAZARD-READ-AFTER-WRITE) and the
+             write-after-read pair in one QRhi pass ("n33 control single_pass": SYNC-HAZARD-WRITE-AFTER-READ); in a
+             Vulkan child of its own (the layer reports an id at most 10 times an instance), the ping-pong in one QRhi
+             pass (a fact phase) and its control ("n33 control pingpong write_as_read":
+             SYNC-HAZARD-WRITE-AFTER-READ). On OpenGL the same
              records' values. OpenGL's glMemoryBarrier calls are not counted: QRhi makes them inside its GL backend
              through resolved function pointers no public API counts (D16's as-built says why).
   cost       (each API; and the reference) GPU time (the content's whole record) median and p90 at 2560x1440 and
@@ -96,9 +98,14 @@ CONTROL_PHASES = {"n33 control write_as_read": "SYNC-HAZARD-READ-AFTER-WRITE",
                   # Checkpoint audit 5 M4: the ping-pong's write-after-read is barriered only because QRhi knows A is
                   # written; recorded as read, it is not.
                   "n33 control pingpong write_as_read": "SYNC-HAZARD-WRITE-AFTER-READ"}
-# Phases recorded as facts, neither clean nor a control: the ping-pong in one QRhi pass. Expected clean by reading
-# (QRhi's in-pass read-after-write barrier on B is a compute-to-compute execution dependency, which also orders A's
-# write after its read), but not relied on: the run says what the layer found.
+# Which round runs each control phase. The layer reports one message id at most 10 times an instance (its duplicate
+# message limit): once the single-pass control has used SYNC-HAZARD-WRITE-AFTER-READ's ten, a later phase in the same
+# process reports none (audit 5 run, 15 Nov). So the ping-pong's phases run in a Vulkan child of their own
+# (the "pingpong" round, added whenever the barriers round runs on Vulkan), its fact phase first.
+CONTROL_ROUNDS = {"n33 control write_as_read": "barriers", "n33 control single_pass": "barriers",
+                  "n33 control pingpong write_as_read": "pingpong"}
+# Phases recorded as facts, neither clean nor a control: the ping-pong in one QRhi pass (expected clean: QRhi's in-pass
+# read-after-write barrier on B is a compute-to-compute execution dependency that also orders A's write after its read).
 FACT_PHASES = ("n33 fact single_pass pingpong",)
 _ALLOWED_ENV: set[str] = set()
 
@@ -1037,10 +1044,7 @@ def round_barriers(core, engine, app, api: str, packs: dict) -> dict:
             finally:
                 _close(scene, host, app)
         for phase, control, scenes in (("n33 control write_as_read", {"write_as_read": True}, ("chain", "state")),
-                                       ("n33 control single_pass", {"single_pass": True}, ("war",)),
-                                       ("n33 control pingpong write_as_read", {"write_as_read": True},
-                                        ("war_pingpong",)),
-                                       ("n33 fact single_pass pingpong", {"single_pass": True}, ("war_pingpong",))):
+                                       ("n33 control single_pass", {"single_pass": True}, ("war",))):
             if vulkan:
                 core.set_vulkan_phase(phase)
             core.module.compute_control(json.dumps(control))
@@ -1061,6 +1065,30 @@ def round_barriers(core, engine, app, api: str, packs: dict) -> dict:
         host.close()
         host_check._flush_deletes(app)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def round_pingpong(core, engine, app, api: str, packs: dict) -> dict:
+    """The ping-pong's Vulkan phases, in a child of their own (CONTROL_ROUNDS): the single-pass fact, then the control
+    (written bindings recorded as reads)."""
+    host = mbc._host(core)
+    try:
+        for phase, control in (("n33 fact single_pass pingpong", {"single_pass": True}),
+                               ("n33 control pingpong write_as_read", {"write_as_read": True})):
+            core.set_vulkan_phase(phase)
+            core.module.compute_control(json.dumps(control))
+            try:
+                scene = Scene(core, engine, host, spec_for("war_pingpong", packs))
+                try:
+                    _records(scene, 12, change=lambda i: _record_values("war_pingpong", i))
+                finally:
+                    _close(scene, host, app)
+            finally:
+                core.module.compute_control(json.dumps({k: False for k in control}))
+        core.set_vulkan_phase("n33 after pingpong")
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    return {"pass": True, "checks": {"pingpong_phases_ran": True}, "facts": {}}
 
 
 def split_validation(messages: dict) -> dict:
@@ -1194,6 +1222,7 @@ def child(args) -> dict:
                       "steady": lambda: round_steady(core, engine, app, args.api, packs),
                       "retire": lambda: round_retire(core, engine, app, args.api, packs),
                       "barriers": lambda: round_barriers(core, engine, app, args.api, packs),
+                      "pingpong": lambda: round_pingpong(core, engine, app, args.api, packs),
                       "cost": lambda: round_cost(core, engine, app, args.api, packs)}
             for name in args.rounds:
                 if vulkan:
@@ -1225,9 +1254,9 @@ def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool,
         return bool(entry.get("pass")), ([] if entry.get("pass") else
                                          [f"reference: {(entry.get('error') or record.get('error') or 'failed')[-1500:]}"])
     ok, failed = host_check.api_verdict(api, record, require_validation)
-    if api == "vulkan" and "barriers" in record.get("rounds", []):
+    if api == "vulkan":
         for phase, c in ((record.get("validation") or {}).get("controls") or {}).items():
-            if not c.get("reported"):
+            if CONTROL_ROUNDS.get(phase) in record.get("rounds", []) and not c.get("reported"):
                 failed.append(f"vulkan: the control phase '{phase}' reported no {c.get('expected')} ({c.get('found')})")
     if record.get("module_loaded") and (api != "vulkan" or record.get("instance_created")):
         live = record.get("composites_at_end") or {}
@@ -1243,7 +1272,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--module-dir", default="release/native_module")
     parser.add_argument("--repo", default=".", help="the repository root (default: the current directory)")
     parser.add_argument("--apis", nargs="+", default=list(APIS), choices=APIS)
-    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=ROUNDS)
+    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=(*ROUNDS, "pingpong"))
     parser.add_argument("--label", default="n33_compute")
     parser.add_argument("--layer-path", type=Path, default=None,
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")
@@ -1275,12 +1304,15 @@ def main(argv: list[str] | None = None) -> int:
     bake = bake_packs(out)
     qualifiers = qualifier_facts(bake)
     results: dict = {}
-    children = [a for a in APIS if a in args.apis]
+    main_rounds = [r for r in args.rounds if r != "pingpong"]
+    children = [(a, a, main_rounds) for a in APIS if a in args.apis]
     if ("parity" in args.rounds or "cost" in args.rounds) and "opengl" in args.apis:
-        children.append("reference")
-    for api in children:
-        child_json = out / f"child_{api}.json"
-        rounds = [r for r in args.rounds if r != "facts" or api != "reference"]
+        children.append(("reference", "reference", [r for r in main_rounds if r != "facts"]))
+    if "vulkan" in args.apis and ("barriers" in args.rounds or "pingpong" in args.rounds):
+        # The ping-pong's control in a process of its own (CONTROL_ROUNDS: the layer's per-id message limit).
+        children.append(("vulkan_pingpong", "vulkan", ["pingpong"]))
+    for key, api, rounds in children:
+        child_json = out / f"child_{key}.json"
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
                    "--rounds", *rounds]
@@ -1291,16 +1323,17 @@ def main(argv: list[str] | None = None) -> int:
         except subprocess.TimeoutExpired as exc:
             exit_code, stderr = "timeout", str(exc.stderr or "")
         record = json.loads(child_json.read_text(encoding="utf-8")) if child_json.exists() else {
-            "api": api, "rounds": list(args.rounds), "error": f"the child process ended without a record ({exit_code})"}
+            "api": api, "rounds": list(rounds), "error": f"the child process ended without a record ({exit_code})"}
         child_json.unlink(missing_ok=True)
         record["exit_code"] = exit_code
         record["seconds"] = round(time.monotonic() - started, 1)
         if exit_code != 0 or record.get("error"):
             record["stderr_tail"] = (stderr or "")[-4000:]
-        results[api] = record
+        results[key] = record
     conditions["after"] = mbc._gpu_conditions()
 
-    verdicts = {api: api_verdict(api, record, args.require_validation) for api, record in results.items()}
+    apis_of = {key: api for key, api, _rounds in children}
+    verdicts = {key: api_verdict(apis_of[key], record, args.require_validation) for key, record in results.items()}
     failed = [reason for _ok, reasons in verdicts.values() for reason in reasons]
     if "facts" in args.rounds:
         for key, value in qualifiers.items():
