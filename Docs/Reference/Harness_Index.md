@@ -803,13 +803,25 @@ baked from the product's file, the port's constants and block members against th
 python native/core/python/devcurve_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
     [--apis opengl vulkan] [--rounds block item pixels] [--sample-every 40] [--label n51_devcurve]
 
-# Rule (a) through the product's route for any native mode (Spectrum's run above with --mode spectrum, the default)
+# Rule (a) through the product's route for any native mode (Spectrum's run above with --mode spectrum, the default);
+# each run draws its Python reference a second time over a magenta backdrop (content_backdrop) for the translucency mask
 python tools/visualizer_replay/owner_render_parity.py --native --mode devcurve --module-dir release/native_module --offers --out <dir>
 ```
 
 Tests: `tests/test_native_devcurve.py` (the record's fields and layout, one source per member with a control, the
 settings following Settings and the card only, the module's block equal to the Python renderer's at dpr 1 and 1.5 with
-controls, the admission of a self-animating mode's frames with Spectrum as control, the route's generic item).
+controls, the admission of a self-animating mode's frames with Spectrum as control, the route's generic item, a refused
+program latched until an input changes).
+
+### The shared pixel tolerance (checkpoint audits 3 M1 and 4 M2)
+
+`tools/pixel_tolerance.py` judges every native parity harness's frames pixel by pixel (D12, "The pixel tolerance"):
+exact, except one level on a mask the harness derives from its reference (translucent or blended pixels), scatter
+capped per frame, ties capped in count and level (2; 3 for the composite's edge class) and isolated or on an edge, and
+flips only where a decision names them. Used by `owner_render_parity.py` (rule (a)), `devcurve_check.py`,
+`transition_route_check.py`, `mesh_buffer_check.py` and `scene_target_check.py`; each states its `Tolerance` beside its
+measured worst. Tests: `tests/test_pixel_tolerance.py` (the audits' probes fail every harness's tolerance; each
+harness's predicate on its own saved frame format).
 
 ### Generic mode content (N2.9)
 

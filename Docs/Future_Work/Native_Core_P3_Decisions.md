@@ -923,6 +923,39 @@ runs (variants a and b, display and overscan) pass under it: 6.3M to 17.6M pixel
 level, no edge pixel; the same figures with the route as it was before N5.1
 (`.artifacts/evidence/native_core/n5_1_devcurve/20261115_rule_a_spectrum_tolerance/`, `..._spectrum_base_route/`).
 
+**The pixel tolerance (every native parity harness; checkpoint audit 3 M1 and audit 4 M2, 15 Nov 2026).** The
+tolerances above were histograms: "any pixel within 1 level" let a uniform one-level regression through (a fade packed
+as 254/255, a colour converted twice), and "at most 8 pixels past 1 level" bounded neither how far those pixels were
+off nor where they sat. One module now judges every harness's frames pixel by pixel, `tools/pixel_tolerance.py`, and
+each harness states its bounds beside their measured reasons:
+1. *Exact everywhere*, opaque content and background included, except:
+2. *The explained one-level class, only through a mask derived from the reference*: the pixels the reference draws
+   translucent, found by drawing it over two backgrounds (the owner-level rule (a): `owner_render_parity.py
+   content_backdrop` clears the Python render host's viewport to magenta in a second Python run) or read from its own
+   alpha in a target cleared to zero (`devcurve_check.py`, the scene targets' RGBA8 textures), and the pixels a blended
+   layer sums into (`mesh_buffer_check.py`: alpha strictly between 0 and 255, or above 0 in an additive scene). A float
+   texture's unit is its own rounding (one float16 ulp, or the depth bound), which every texel may reach.
+3. *Scatter*: single-level pixels outside the mask where two compilers round a value within float error of a half
+   level (a `NativeFragmentPass` against its Python renderer; Vulkan against OpenGL on one pack), at most a measured
+   number a frame: a share of the frame, never the frame.
+4. *Ties*: every other pixel past its allowance, at most a measured number a frame, each at most 2 levels off (3 only
+   for the composite's edge class above), each isolated or on a content edge of the reference (its 3x3 neighbourhood
+   spanning 32 levels).
+5. *Flips*: none, except where a decision names them. The one so far is Surface Tension's specular flip where pools
+   pinch (D13, N5.2b: one pixel a frame at 224 levels, with options at 0.80), admitted as one isolated pixel a frame on
+   a content edge for the `NativeFragmentPass` rule (a) only.
+
+The bounds, each the measured worst times 1.5 or the decision it came from: the composite (rule (a) of every mode drawn
+through it) 1 level on the mask, 10 ties at 3 levels; Spline Curve's owner runs measure 5.1M to 38M masked pixels over
+a run and at most 8 ties a frame. A `NativeFragmentPass` (`transition_route_check.py`) rule (a): 72 scatter (measured
+48), 8 ties, 1 flip; rule (b): 2,000 scatter (measured 1,317, VHS), 8 ties (measured 5). N5.2a's seven: rule (a) exact,
+rule (b) 1,100 scatter (measured 736, Warp), no tie. Geometry passes (`mesh_buffer_check.py`, both rules): 1 level on
+the mask, 8 ties (measured one, at 2 levels on a streak's edge). Scene targets (`scene_target_check.py`): 1 unit on the
+mask, rule (a) 8 ties (measured 3 at 2 ulps), rule (b) none. The audits' probes fail every one of them: a one-level
+shift on every pixel, a fixed 10-pixel artefact of 3 levels, 8 pixels off by up to 207 levels
+(`tests/test_pixel_tolerance.py`). A port judges its own data with these bounds and its own mask; a new class or a
+wider bound is a lead's decision recorded here.
+
 ## D13. The fullscreen pass and image sampling as a primitive (N4.a, 14 Nov 2026; proposed by the High agent)
 
 Supersedes D12 point 3's refusal of samplers and its "v_uv only" input; the rest of D12 stands.
@@ -1012,7 +1045,9 @@ pack the core compiles from translated GLSL, may sit within 1 level of its Pytho
 rule at most eight pixels a frame may pass 1 level where a threshold ties (a highlight where pools pinch, a slice
 edge): invisible and transient, while making them exact would mean the Python renderer compiling the pack's GLSL,
 which retires with it in N5.2h anyway. N5.2a's seven stay exact under rule (a) and within 1 level everywhere under
-rule (b). `transition_route_check.py` encodes this (`TIE_PIXELS`, `_is_fragment_pass`).
+rule (b). `transition_route_check.py` encodes this (`TIE_PIXELS`, `_is_fragment_pass`). *Superseded in form by D12's
+"The pixel tolerance" (15 Nov, audit 1 L1, audit 4 M2):* the single levels are scatter with a measured cap, the eight
+pixels are ties of at most 2 levels, isolated or on an edge, and the Surface Tension pixel is the one named flip.
 
 ## D14. Scene targets (N3.1, decided 15 Nov 2026; proposed by the High agent, choices A to G answered by the lead)
 
@@ -1421,7 +1456,8 @@ choices the build made where D15 left room:
   the other way (the fill rule's top edge is its bottom edge under the flip), so whole rows can move. The harness data
   keeps edges off exact pixel centres; a port's own data is judged under the same budget. Measured: the box and the
   voxels exact under both rules; sprites, beam and streaks at most 7 pixels at 1 level and one additive streaks pixel at
-  2 levels (dpr 1.5).
+  2 levels (dpr 1.5). *Judged since 15 Nov by D12's "The pixel tolerance"* (audit 4 M2): the single levels only on the
+  pixels a blend wrote, the eight capped at 2 levels and isolated or on an edge.
 - *Sprites against `gl_PointSize`* differ as quads and points inherently do, the Python renderer's own quads by the
   same amounts: at dpr 1, 41 to 42 pixels past 0 and 6 past 1 level (at most 3 levels); at dpr 1.5, 151 to 153 past 0
   and 70 past 1 level (at most 7). Accepted. Each port's parity is judged against its own quad conversion, made first in
