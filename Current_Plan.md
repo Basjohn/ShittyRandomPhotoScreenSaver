@@ -516,6 +516,25 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       refusals; `compute_passes.h:50-52` and `compute_passes.cpp:768-772` image bounds;
       `Docs/Guardrails/Performance_Optimization_Contract.md:450-456` exception G; the documents against the code:
       `compute_passes.h:16-17,265`, `mode_content.h:127`, `tests/test_native_mesh_buffers.py:6`).
+      What the triage left open (the rest is in D16's "As built after checkpoint audit 5"):
+      - [ ] L2, a trigger consumed by a record that dispatches nothing: `decideDispatches` advances `lastTrigger`,
+        `dispatches` and the fresh serial before `recordCompute` may skip the entry (no pipeline, a group count of 0,
+        groups past the device's limit). Decide the groups and the pipeline in `decideDispatches` and advance only an
+        entry that dispatches; proof: a field-triggered stateful entry whose named group count is 0 for one record keeps
+        that record's step for the next (the state scene with `state_groups` 0 once), control on the pre-change module.
+      - [ ] L3, dispatch totals: the product of an entry's three group counts is unbounded (three record counts under
+        at_most 65535 admit 2.8e14 groups, a TDR from an owner bug). Bound the product at admission and per record, the
+        refusal made at its edge as the per-dimension one is; GPU-free test and a harness case refused with its reason.
+      - [ ] L4, an image's zeros: one host `QByteArray` of a whole slice on the render thread (up to 256 MiB under the
+        new bound). Upload them in bands of rows from one bounded block of zeros (QRhi's sub-rectangle uploads), proved
+        by the copy round's zero reads on a 2D and a 3D image larger than one band; and decide whether
+        `UsedAsTransferSource` (only the harness's readback needs it) stays on every storage image.
+      - [ ] L5, the harness readback reaching the product: `NativeMode.read_storage` and `storage_data`
+        (`rendering/native/mode.py`) are the harness's only; a test that no module under `rendering/`, `widgets/`,
+        `core/` or `ui/` calls them (as N3.1's `read_targets`), with its control.
+      - [ ] M3's draw-side form: one render pass reading a storage buffer two ways (as `storage` and as `instance_from`
+        or `indirect`, in one draw or two draws of a run) is admitted, and QRhi keeps one access a resource a pass;
+        refuse it at admission with the reason (or split the run), proved under validation with shader accesses on.
 - [ ] N3.4 Transparency and post-processing as shared stages, each opt-in and absent from a mode that does not use
   it: depth-aware order-independent transparency, bloom and the HDR resolve, the defocus layer.
   Decided by the lead, 15 Nov, from `Docs/Future_Work/Native_Core_QRhi_Research_N3.md` sections 3, 8 and 9:

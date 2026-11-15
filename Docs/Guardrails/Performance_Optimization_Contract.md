@@ -450,10 +450,19 @@ calls 1609 -> 1216, render-thread CPU 0.68 -> 0.51 ms; baselines `tools/baseline
 **No readback in the product.** Nothing the product draws or computes on the GPU is read back to the CPU, and no
 frame waits on a fence for it (the native core's rule, `Docs/Future_Work/Native_Core_P3_Decisions.md` D5's "What a
 mode's native renderer may not do" and D16 point 8); readbacks belong to harnesses and tools. **The one named
-exception** (lead, 15 Nov 2026, D16 choice G): Extruded Bubble's drift pair self-check (D4 "Consequences"), once per
-device at its warm-up edge, never waited on, its result logged. On OpenGL QRhi reads it synchronously when its batch
-runs; that stall is lifecycle, not steady state, and is never counted as a steady-state hitch. Any other readback needs
-its own line here and in D16.
+exception** (lead, 15 Nov 2026, D16 choice G; worded to match D16 after checkpoint audit 5 L5): Extruded Bubble's
+drift pair self-check (D4 "Consequences"), bounded on every side:
+- *Once per solver*, at its warm-up edge, never again for that solver (`DriftSolver.check`: done once per solver
+  lifetime). Only a new solver runs it again (a device loss or a display move may make one).
+- *The warm-up edge* is the solver's first warm-up unit: one of the reveal's hidden frames, or else the first frame
+  that has drift work. When that frame is visible (a mode switch mid-show), it is held to the warm-up rule (one unit
+  on an already-rendered frame, within the ~14 ms an image change leaves) and counts as steady state like any frame.
+- *The bytes*: the check's results only (one vec4 per case, about a kilobyte), read once through `readBackBuffer` with
+  the completion taken at a later frame; never waited on by a frame.
+- *What the result may do*: be logged and kept as the solver's report. Nothing else: it changes no drawing, no
+  setting and no later frame's work.
+On OpenGL QRhi reads it synchronously when its batch runs; that stall is lifecycle only on a hidden reveal frame, and a
+visible warm-up frame carries it under the warm-up rule above. Any other readback needs its own line here and in D16.
 
 Work prepared off the render thread for a renderer (for example `run_geometry` keys) must key on the renderer's own inputs: transition renderers draw at the background item's logical size, which is not `display_bounds`: it is the monitor's device-exact rectangle inside the R-63 window (1706.67 logical px where Qt's rounded screen geometry says 1707), or the whole overscanned window before the native rectangle is known. Prove a hit, not just a build — a key that never matches fails silently into a render-thread rebuild (R-95).
 

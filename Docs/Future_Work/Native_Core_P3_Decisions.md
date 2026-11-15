@@ -1745,6 +1745,50 @@ harness's), and `tools/regen_qrc.py` bakes a mode's `.comp` as it bakes its frag
   not N3.3: fragPixel's target is the window's on the Python route and the core's own target on the native one, so
   the round now expects the card's target size there, as `tests/test_native_devcurve.py` does, and passes.
 
+**As built after checkpoint audit 5 (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 5"; ABI 19
+unchanged, no entry or state key added).**
+- *M1, a program without storage.* `ModeStorage::empty()` now counts the buffers awaiting their delayed release and the
+  kernels, so the content still syncs while any is held: the first record under a program without storage moves the
+  last program's buffers to the retiring list, and the next record's sync releases them and the kernels (a resize's
+  release, never inside the record that last used them). `holds()` (declared resources) is what the lost edge reads.
+  The retire round's program-without-storage case now also runs after the population (five buffers), not only after
+  the field (one image). A content that records nothing more keeps them until its next record or its release.
+- *M2, `fresh` per entry (point 7 as written).* Each buffer and image carries the serial it was made zeroed at (a
+  resize's prefix copy keeps its source's); an entry is fresh when the largest serial over its own storage bindings
+  changed since its last dispatch, or at its first. A new program keeps the track (dispatches, last trigger, serial) of
+  each entry it declares again by name; an entry whose pack, bindings or trigger changed is due at the next record, not
+  fresh. So the same program sent again, or an image no entry of the state binds made again, restarts nothing: the
+  trigger round's kept-history checks ([7, 7, 6, 6] after the program again, [8, 8, 7, 7] after the image). The
+  content made again still dispatches fresh (its tracks go with it).
+- *M3, one resource bound twice with two accesses* in one compute entry is refused at admission with the reason
+  (QRhi's tracker keeps one access a resource a pass). The facts round's `one_buffer_bound_read_and_write` case. The
+  draw-side form (one render pass reading a storage buffer two ways) is the plan's box.
+- *M4, the three harness boxes.* (1) D4's pair-check kernel, the product's `PROGRAMS[2]` verbatim with `precise`, is a
+  parity scene (`pair_check`): its cases from a storage stream, its results judged as `DriftSolver.check` judges them
+  on each API, and under rule (b) with the other scenes; its control (`pair_check_broken`, the two error terms a
+  compiler that drops `precise` may lose, zeroed) must not be exact. (2) Write-after-read's ping-pong form
+  (`war_pingpong`: ping reads A and writes B, pong reads B and writes A) in the war round by value and clean in the
+  barriers phase; its control records the written bindings as reads (phase "n33 control pingpong write_as_read",
+  `SYNC-HAZARD-WRITE-AFTER-READ`). The ping-pong in one QRhi pass is recorded as a fact phase, not a control: read
+  from QRhi's rules it stays clean, because the in-pass read-after-write barrier on B is a compute-to-compute
+  execution dependency that orders A's write after its read too; the run records what the layer says. (3) *OpenGL's
+  barrier calls are not counted, and cannot be without large new work:* QRhi issues `glMemoryBarrier` inside its GL
+  backend through the function pointers `QOpenGLExtraFunctions` resolved at its creation, records nothing countable
+  (no statistic, no debug-output message for a barrier), and the core may not hook them (a native route beside QRhi,
+  handbook section 8) nor run an external API tracer here. By Qt's rules (point 3) one pass per entry gives one
+  barrier per written resource at the next pass boundary, which is Python's one per dispatch for these scenes. Choice
+  H already judges OpenGL by GPU time (the cost round), which stays the criterion.
+- *Lows fixed.* L1: a record whose declarations are all kept returns from the storage sync before any list is built,
+  and the left-behind control's mutex is taken only while it left anything. L3: an image's format is asked only when
+  the image is made, from the Vulkan facts the core read at device creation (the format's `STORAGE_IMAGE` feature, and
+  `shaderStorageImageExtendedFormats` for R16F) on a device the core made, QRhi's answer elsewhere; a compute pack's
+  reflected local size is checked against `MaxThreadGroupX/Y/Z` and `MaxThreadsPerThreadGroup` at the build. Point 6's
+  "read once at device creation" holds for the formats; `QRhi::Compute` is still asked at each build and at the
+  kernels' creation, both edges, never per record. L4: a storage image is at most 256 MiB (`kMaxStorageImageBytes`, a
+  buffer's bound), refused with the reason at the declaration and at a size edge. L5: Exception G's wording now matches
+  choice G (once per solver, the warm-up edge defined, the bytes and what the result may do bounded). The other lows
+  are the plan's boxes.
+
 ## D1, D2, D3 and the transport rule
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts"). The drafts, with every "today"
