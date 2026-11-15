@@ -243,8 +243,10 @@ worked example (harness-only); a product mode does the same in the product's pla
    `NativeMode.mesh(name, vertices, RecordLayout, instances=, instance_layout=)`; streams (`ModeStream`) from the
    record's `f32` fields (the std430 bytes the Python renderer packs, verbatim). Only a storage stream keeps the bytes
    past its used length from an earlier record; an instance stream is drawn exactly its used records (its pass's
-   instance count is the stream's used records, and any other count refuses the draw: checkpoint audit 4, H2). The
-   block's `uMatrix` is item pixels to the drawn target's clip space, corrected once; `srpssVertexIndex`/`srpssInstanceIndex` read the same numbers on both
+   instance count is the stream's used records, and any other count refuses the draw: checkpoint audit 4, H2). Every
+   vertex, instance, indirect command and batch count is checked at the record against the buffer it reads, and a
+   count past it refuses that pass's draw with its reason; a record's indirect commands are uploaded with their
+   `firstInstance` written as 0 (audit 4, M1). The block's `uMatrix` is item pixels to the drawn target's clip space, corrected once; `srpssVertexIndex`/`srpssInstanceIndex` read the same numbers on both
    backends (`firstInstance` is always 0). Sprites are instanced quads (`//@srpss_geometry` after
    `//@srpss_conventions`: `srpssSpriteCorner`, `srpssSpriteClip`, `srpssSpriteCulled`; the sprite coordinate has
    `gl_PointCoord`'s orientation), converted first in the Python renderer and judged against that conversion. Every

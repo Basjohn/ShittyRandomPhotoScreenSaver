@@ -571,7 +571,8 @@ What this means for N3.x:
   per backend (first vertex 4): `gl_DrawID` the batch and `gl_BaseInstance` 0 on both; `gl_BaseVertex` 4 on Vulkan and
   0 on OpenGL (a non-indexed draw has no base vertex there). A direct
   draw's `firstInstance` 3 is ignored on OpenGL and moves the instance index on Vulkan (the reason for D15's "always
-  0"). `firstInstance` in indirect commands on GL 4.0/4.1 is not tested (no such device here; the core never sets it).
+  0"). `firstInstance` in indirect commands on GL 4.0/4.1 is not tested (no such device here; the core never sets it: its own commands carry 0, and since checkpoint audit 4, M1, a record's
+  commands are uploaded with it written as 0).
 - Q6: measured (`mesh_buffer_check.py --rounds stream_ring`, 15 Nov 2026): every QRhi route at 4 KiB to 288 KiB is
   within 0.05 ms of the pair's floor on both axes on both backends (the figures are in D5.3's stream ring row), so the
   pair is not built.

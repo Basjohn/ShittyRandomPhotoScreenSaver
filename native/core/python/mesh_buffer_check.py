@@ -25,7 +25,9 @@ Rounds:
              equals the direct draw. firstInstance 3 on a direct draw (the control): ignored on OpenGL, moved on Vulkan
              (the reason firstInstance is always 0). gl_DrawID, gl_BaseInstance and gl_BaseVertex read back as
              the colour of the multi-draw (first vertex 4) where it is recorded. The device facts (Vulkan) and
-             research Q5's bake facts.
+             research Q5's bake facts. Audit 4 M1: a record's command with firstInstance 3 draws as with 0 (written
+             as 0 in the copy); vertices past the quad (direct and by a command), instances past a mesh's instance
+             stream and batches past the batch table each refuse the draw (nothing drawn, the reason given).
   used       (each API) D15 point 4: an f32 stream writes only its used elements (the bytes written per record), a
              storage stream's bytes past its used length are the earlier record's (nothing past it uploaded), an
              instance stream is drawn exactly its used records and another instance count is refused (audit 4 H2;
@@ -837,8 +839,9 @@ def round_forms(core, engine, app, api: str, packs: dict, facts_in: dict) -> dic
                 after = core.composite_live()
                 live[label] = {k: after.get(k, 0) - before.get(k, 0) for k in
                                ("mesh_buffers_indirect_draws", "mesh_buffers_batched_indirect",
-                                "mesh_buffers_batched_loop")}
+                                "mesh_buffers_batched_loop", "mesh_buffers_draws_refused")}
                 live[label]["last_reason"] = scene.mode.state().get("last_reason")
+                live[label]["lit"] = int((frames[label][..., :4].max(axis=2) > 0).sum())
             finally:
                 _close(scene, host, app)
                 if control:
@@ -853,6 +856,24 @@ def round_forms(core, engine, app, api: str, packs: dict, facts_in: dict) -> dic
         run("streaks", spec_for("streaks", packs, api))
         run("streaks_indirect", spec_for("streaks_indirect", packs, api))
         run("streaks_first3", spec_for("streaks", packs, api), {"direct_first_instance": 3})
+        # Checkpoint audit 4, M1: the record's commands have their firstInstance written as 0; every count past the
+        # buffer it reads refuses that draw (the audit's probe_n32 P3 and P4 are the controls, seen failing on e95d9306).
+        mb = _scenes()
+        indirect = spec_for("streaks_indirect", packs, api)
+        run("streaks_indirect_first3", replace(indirect, record=dict(indirect.record, commands=(4, mb.STREAKS, 0, 3))))
+        run("streaks_indirect_past_mesh", replace(indirect, record=dict(indirect.record, commands=(5, mb.STREAKS, 0, 0))))
+        streaks = spec_for("streaks", packs, api)
+        run("streaks_past_mesh", replace(streaks, passes=(replace(streaks.passes[0], geometry=replace(
+            streaks.passes[0].geometry, vertices=5)),)))
+        voxels = spec_for("voxels", packs, api)
+        run("voxels_past_source", replace(voxels, passes=(replace(voxels.passes[0], geometry=replace(
+            voxels.passes[0].geometry, instances=mb.VOXELS + 1)),)))
+        cells = spec_for("cells", packs, api)
+        entries = (("cell_rows", "f32", 4 * mb.CELLS), ("batch_table", "u32", 2 * mb.BATCHES),
+                   ("cell_floats", "u32", 1), ("batch_len", "u32", 1))      # the cells scene's, its rule one past
+        run("cells_past_table", replace(cells, schema=mb.schema("cells", entries, (
+            ("cell_floats", "at_most", 4 * mb.CELLS), ("batch_len", "at_most", mb.BATCHES + 1))),
+            record=dict(cells.record, batch_len=mb.BATCHES + 1)))
         if "cell_ids.vert" in packs:
             # gl_DrawID, gl_BaseInstance and gl_BaseVertex drawn as the colour by the multi-draw (first vertex 4).
             base = spec_for("cells", packs, api)
@@ -904,6 +925,17 @@ def round_forms(core, engine, app, api: str, packs: dict, facts_in: dict) -> dic
         checks["first_instance_3_ignored_on_opengl"] = s["streaks_first3"]["exact"]
     else:
         facts["first_instance_3_moves_on_vulkan"] = not s["streaks_first3"]["exact"]
+    # Checkpoint audit 4, M1.
+    first3 = _compare(frames["streaks_indirect"], frames["streaks_indirect_first3"])
+    facts["record_command_first_instance_3"] = first3
+    checks["a_record_commands_first_instance_is_written_as_0"] = first3["exact"] and live[
+        "streaks_indirect_first3"]["mesh_buffers_indirect_draws"] > 0
+    refusals = {"streaks_indirect_past_mesh": "indirect command", "streaks_past_mesh": "to vertex",
+                "voxels_past_source": "instance source", "cells_past_table": "batch table"}
+    facts["over_counts"] = {label: live[label] for label in refusals}
+    for label, words in refusals.items():
+        checks[f"{label}_is_refused"] = (live[label]["lit"] == 0 and live[label]["mesh_buffers_draws_refused"] > 0
+                                         and words in str(live[label]["last_reason"]))
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 

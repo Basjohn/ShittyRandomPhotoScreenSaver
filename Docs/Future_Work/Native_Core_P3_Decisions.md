@@ -1461,6 +1461,18 @@ core's plan mirrored) and the geometry include (`srpss_geometry.glsl`, `SRPSS_GE
   proves it on the sprites' instance stream (three records of 40 used after one of 120 each equal a fresh 40-sprite
   frame; another count is refused), and its control `instances_past_used` (the named count drawn past the used
   records) shows the alternating frames on Vulkan.
+- *Draw counts are bounded at the record (the lead, after checkpoint audit 4, M1).* `robustBufferAccess` stays off, so
+  every vertex, instance, indirect command and batch count a record or a setting names is checked when the pass is
+  drawn against the buffer it reads: the first vertex plus the vertices within the mesh, the instances within the
+  instance source's records (a mesh's instance stream, or an instance stream's used records), the draw count within
+  the indirect stream's commands and each command within the mesh and the instance source, the batch count within
+  the batch table's pairs. A count past its buffer refuses that pass's draw (the other passes draw), with the reason
+  noted once in the mesh-buffer state (`draws_refused`), named in the record's reason and counted
+  (`mesh_buffers_draws_refused`); the reason is made only at the refusal's edge, so nothing is allocated by the
+  records that repeat it. A pass with no mesh or no instance source reads no vertex buffer for it, so its counts bound
+  only the shader's own reads. A record's indirect commands are uploaded with their `firstInstance` written as 0, so
+  "`firstInstance` is always 0" holds for every draw. The `forms` round proves both (the record's `firstInstance` 3
+  draws the same picture as 0; four over-counts are refused), with the audit's `probe_n32` P3 and P4 as the controls.
 - *The draw parameters' values* (read back as colour from the multi-draw, first vertex 4): `gl_DrawID` is the batch
   and `gl_BaseInstance` 0 on both backends; `gl_BaseVertex` is 4 on Vulkan (the command's first vertex) and 0 on
   OpenGL (`ARB_shader_draw_parameters`: a non-indexed draw has no base vertex), so a shader never reads

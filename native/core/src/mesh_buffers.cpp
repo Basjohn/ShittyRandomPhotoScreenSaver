@@ -810,8 +810,16 @@ void ModeStreams::write(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QByte
                                                                                     qsizetype(bytes)));
         } else {
             char *p = s->buffer->beginFullDynamicBufferUpdateForCurrentFrame();
-            if (p)
+            if (p) {
                 std::memcpy(p, data, bytes);
+                if (s->decl.kind == StreamKind::Indirect) {
+                    // Audit 4 M1: D15's firstInstance is always 0, for the record's commands too (both backends move the
+                    // instance index by it): each command's fourth number written as 0 in the copy.
+                    const quint32 zero = 0;
+                    for (quint32 at = 12; at + 4 <= bytes; at += kIndirectCommandBytes)
+                        std::memcpy(p + at, &zero, sizeof(zero));
+                }
+            }
             s->buffer->endFullDynamicBufferUpdateForCurrentFrame();
         }
         g_streamWrites.fetchAndAddRelaxed(1);

@@ -3778,10 +3778,28 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
     if (bound)
         cb->setVertexInput(0, bound, inputs);
     const quint32 vertices = resolveCount(pass.vertices, mesh ? mesh->vertexCount : 0u);
+    // Audit 4 M1: every count is checked here, at the record, against the buffer it reads (robustBufferAccess is off:
+    // a fetch past a vertex buffer is undefined, on some drivers a device loss). A pass without a mesh reads no vertex
+    // buffer per vertex, and one without an instance source none per instance.
+    quint32 instanceRecords = instanceMesh ? instanceMesh->instanceCount : 0u;
+    if (instanceStream && instanceStream->decl.layout.stride) {
+        // Audit 4 H2: an instance stream holds its used records this record (the bytes past them are another frame
+        // slot's on Vulkan, undefined on OpenGL).
+        instanceRecords = instanceStream->used / instanceStream->decl.layout.stride;
+    }
+    const quint64 lastVertex = quint64(pass.firstVertex) + quint64(vertices);
+    if (mesh && vertices && lastVertex > mesh->vertexCount) {
+        refuseDraw(index, RefusedVerticesPastMesh, lastVertex, mesh->vertexCount);
+        return;
+    }
     if (pass.batched()) {
         const RuntimeSchema *schema = m_source->drawnStill() ? nullptr : m_source->drawnSchema();
         const fa::Field *table = schema ? schema->field(pass.batches) : nullptr;
-        const quint32 batches = qMin(resolveCount(pass.batchCount, 0), quint32(qMax(0, p.copies)));
+        const quint32 batches = resolveCount(pass.batchCount, 0);
+        if (batches > quint32(qMax(0, p.copies))) {
+            refuseDraw(index, RefusedBatchesPastTable, batches, quint64(qMax(0, p.copies)));
+            return;
+        }
         if (!table || batches == 0 || vertices == 0)
             return;
         if (p.drawParameters && m_streams.batchCommands()) {
@@ -3810,28 +3828,48 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
     cb->setShaderResources(nullptr, count, offsets);
     if (!pass.indirect.isEmpty()) {
         const ModeStreams::Stream *commands = m_streams.find(pass.indirect);
-        const quint32 drawn = commands ? qMin(resolveCount(pass.drawCount, 0), commands->decl.capacity / kIndirectCommandBytes)
-                                       : 0u;
-        if (drawn) {
-            cb->drawIndirect(commands->buffer.get(), 0, drawn, kIndirectCommandBytes);
-            countIndirectDraw();
+        const quint32 drawn = commands ? resolveCount(pass.drawCount, 0) : 0u;
+        const quint32 held = commands ? commands->decl.capacity / kIndirectCommandBytes : 0u;
+        if (drawn > held) {
+            refuseDraw(index, RefusedCommandsPastStream, drawn, held);
+            return;
         }
+        if (!drawn || !commands->field)
+            return;
+        // The record's commands as the stream uploaded them (its firstInstance written as 0): each within the mesh's
+        // vertices and the instance source's records.
+        const QByteArray record = m_source->frameRecord();
+        for (quint32 c = 0; c < drawn; ++c) {
+            const quint32 at = commands->field->offset + c * kIndirectCommandBytes;
+            const quint32 commandVertices = recordU32At(record, at);
+            const quint32 commandInstances = recordU32At(record, at + 4);
+            const quint64 commandLast = quint64(recordU32At(record, at + 8)) + quint64(commandVertices);
+            if (mesh && commandVertices && commandLast > mesh->vertexCount) {
+                refuseDraw(index, RefusedCommandVertices, commandLast, mesh->vertexCount);
+                return;
+            }
+            if (p.instanceBinding && commandInstances > instanceRecords) {
+                refuseDraw(index, RefusedCommandInstances, commandInstances, instanceRecords);
+                return;
+            }
+        }
+        cb->drawIndirect(commands->buffer.get(), 0, drawn, kIndirectCommandBytes);
+        countIndirectDraw();
         return;
     }
-    quint32 sourceCount = instanceMesh ? instanceMesh->instanceCount : 0u;
-    if (instanceStream && instanceStream->decl.layout.stride) {
-        // Audit 4 H2: an instance stream is drawn exactly its used records (the bytes past them are another frame
-        // slot's on Vulkan, undefined on OpenGL); the harness control draws past them, up to its capacity.
-        sourceCount = instanceStream->used / instanceStream->decl.layout.stride;
-    }
-    const quint32 instances = resolveCount(pass.instances, sourceCount);
-    if (instanceStream && instances != sourceCount) {
+    const quint32 instances = resolveCount(pass.instances, instanceRecords);
+    if (instanceStream && instances != instanceRecords) {
+        // Audit 4 H2: an instance stream is drawn exactly its used records; the harness control draws past them, up
+        // to its capacity.
         const quint32 capacity = instanceStream->decl.layout.stride
             ? instanceStream->decl.capacity / instanceStream->decl.layout.stride : 0u;
         if (!instancesPastUsed() || instances > capacity) {
-            refuseDraw(index, RefusedInstancesNotUsed, instances, sourceCount);
+            refuseDraw(index, RefusedInstancesNotUsed, instances, instanceRecords);
             return;
         }
+    } else if (instanceMesh && instances > instanceRecords) {
+        refuseDraw(index, RefusedInstancesPastSource, instances, instanceRecords); // audit 4 M1
+        return;
     }
     if (vertices && instances)
         cb->draw(vertices, instances, pass.firstVertex, directFirstInstance()); // 0 but under the harness control
