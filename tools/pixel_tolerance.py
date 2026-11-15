@@ -198,6 +198,7 @@ def summarise(frames) -> dict:
     return {"pass": not failed, "frames": len(frames), "frames_failed": len(failed),
             "max_level": max((f.get("max_level") or 0 for f in frames), default=0),
             "masked_differing_worst_frame": max((f.get("masked_differing", 0) for f in frames), default=0),
+            "mask_pixels_largest_frame": max((f.get("mask_pixels", 0) for f in frames), default=0),
             "scatter_worst_frame": max((f.get("scatter", 0) for f in frames), default=0),
             "ties_worst_frame": max((f.get("ties", 0) for f in frames), default=0),
             "flips_worst_frame": max((f.get("flips", 0) for f in frames), default=0),

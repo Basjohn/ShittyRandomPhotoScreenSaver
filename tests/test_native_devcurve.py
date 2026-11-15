@@ -483,3 +483,50 @@ def test_the_route_draws_spline_curve_on_the_generic_item(monkeypatch):
         assert "settings" not in [entry[0] for entry in core.log[mark:]]
     finally:
         route.close()
+
+
+def test_a_refused_program_latches_until_an_input_changes(monkeypatch):
+    # Checkpoint audit 3 L2: a program the core refuses (settings that do not fit, D12 point 4) is a setup failure,
+    # latched as Spectrum's program at its bind is: not tried again at every update (the program JSON, the pack
+    # hand-over and the refusal on the GUI thread), only once an input of the setup changes.
+    from rendering.native import program_values
+    from rendering.quick.visualizer.native_route import NativeVisualizerRoute
+
+    monkeypatch.setattr(program_values, "mode_fragment_pack", lambda _mode: b"pack")
+    size = {"width": 1707}
+    window = SimpleNamespace(width=lambda: size["width"], height=lambda: 960,
+                             afterSynchronizing=SimpleNamespace(connect=lambda *a: None, disconnect=lambda *a: None),
+                             afterRendering=SimpleNamespace(connect=lambda *a: None, disconnect=lambda *a: None))
+
+    class Refusing(_Mode):
+        def program(self, passes, settings=None):
+            super().program(passes, settings)
+            raise ValueError("refused: the settings do not fit")
+
+    class Core(_Core):
+        def mode(self, _host):
+            made = Refusing(self.log)
+            self.modes.append(made)
+            return made
+
+    core = Core()
+    route = NativeVisualizerRoute(core, SimpleNamespace(window=lambda: window))
+    presentation = _presentation()
+    identity = SimpleNamespace(mode_id="devcurve", runtime_generation=1, engine_generation=2, activation_id=7)
+    bridge = _Bridge([SimpleNamespace(logical=_logical(step), presentation=presentation) for step in range(40)])
+
+    def programs() -> int:
+        return sum(1 for entry in core.log if entry[0] == "program")
+
+    try:
+        for _ in range(30):
+            assert route.sync(bridge=bridge, identity=identity, presentation=presentation, authority=True) is False
+        assert programs() == 1 and route.failures == 1 and route.failed
+        assert "bind" not in [entry[0] for entry in core.log]           # the stream is never bound without it
+        # Control: an input of the setup changes (the window's size), and the program is tried once more.
+        size["width"] = 1600
+        for _ in range(5):
+            route.sync(bridge=bridge, identity=identity, presentation=presentation, authority=True)
+        assert programs() == 2 and route.failures == 2
+    finally:
+        route.close()
