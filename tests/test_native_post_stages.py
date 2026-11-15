@@ -339,6 +339,20 @@ def test_the_defocus_read_level_cap_keeps_reads_on_even_built_levels() -> None:
     assert "const int maxLevel = defocusReadLevelCap(layer);" in sync
 
 
+def test_the_defocus_draw_timer_is_opengl_only_and_off_by_default() -> None:
+    """The defocus cost's diagnosis (time_defocus_draws): marks around the gather and the sprites, OpenGL only, nothing
+    at all while the control is off (no query object, no external block), results latched (never waited for)."""
+    stages = (CORE / "src" / "post_stages.cpp").read_text(encoding="utf-8")
+    mark = stages[stages.index("void PostStages::markDefocus("):stages.index("void PostStages::releaseDrawTimer(")]
+    assert "if (!m_rhi || m_rhi->backend() != QRhi::OpenGLES2 || !timeDefocusDraws())\n        return;" in mark
+    assert mark.index("return;") < mark.index("std::make_unique<DrawTimer>()") < mark.index("cb->beginExternal();")
+    assert "kGlQueryResultAvailable" in mark and "GL_QUERY_RESULT_NO_WAIT" not in mark
+    onto = stages[stages.index("void PostStages::recordDefocusOnto("):]
+    assert onto.index("markDefocus(cb, 0);") < onto.index("cb->draw(3);") < onto.index("markDefocus(cb, 1);") \
+        < onto.index("cb->draw(4, sprites);") < onto.index("markDefocus(cb, 2);")
+    assert "QAtomicInteger<int> g_timeDefocusDraws { 0 };" in stages
+
+
 def test_the_core_reads_every_stage_shader_it_bakes() -> None:
     stages = (CORE / "src" / "post_stages.cpp").read_text(encoding="utf-8")
     for name in ("scene_oit_resolve.frag", "scene_oit_resolve_samples.frag", "scene_oit_resolve_sample0.frag",

@@ -105,6 +105,11 @@ void setSkipStageRelease(bool skip);            // the stages' objects left behi
 bool skipStageRelease();
 void setSkipReadChain(bool skip);               // the defocus run's chainShaderReads skipped (read per record)
 bool skipReadChain();
+// The defocus cost's diagnosis (the lead, 15 Nov), OpenGL only: GL timestamps before the gather, between it and the
+// sprites, and after them, read back latched (never waited for) at a later record; their sums join composite_live
+// (stage_defocus_timed, stage_gather_gpu_ns, stage_sprites_gpu_ns). Off: no query object and no call.
+void setTimeDefocusDraws(bool on);
+bool timeDefocusDraws();
 // A new number at every control change (a content's gate is decided again only then).
 quint64 stageControlGeneration();
 
@@ -125,6 +130,10 @@ struct StageCounts
     int leftBehind = 0;           // objects the skipped-release control left behind
     qint64 recordsTimed = 0;      // records of programs with stages, timed on the render thread
     qint64 recordNs = 0;          // their summed CPU time (the whole record: every pass and stage)
+    qint64 defocusTimed = 0;      // the timeDefocusDraws control's records read back (OpenGL)
+    qint64 gatherGpuNs = 0;       // their gathers' summed GPU time
+    qint64 spritesGpuNs = 0;      // their sprites' summed GPU time
+    qint64 defocusTimeSkipped = 0; // records left untimed (every slot still pending)
 };
 StageCounts stageCounts();
 void countTransparencyResolve();
@@ -243,6 +252,12 @@ private:
         std::unique_ptr<QRhiGraphicsPipeline> sprites;
         qint64 bytes = 0;
     };
+
+    // The timeDefocusDraws control's GL queries (made at its first use on this QRhi, deleted with the stages).
+    struct DrawTimer;
+    std::unique_ptr<DrawTimer> m_drawTimer;
+    void markDefocus(QRhiCommandBuffer *cb, int mark);
+    void releaseDrawTimer();
 
     Defocus *defocusFor(int pass) const;
     bool bloomBindings(Bloom &b);

@@ -744,6 +744,10 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("stage_left_behind"), sc.leftBehind);
     o.insert(QStringLiteral("stage_records_timed"), double(sc.recordsTimed));
     o.insert(QStringLiteral("stage_record_ns"), double(sc.recordNs));
+    o.insert(QStringLiteral("stage_defocus_timed"), double(sc.defocusTimed));
+    o.insert(QStringLiteral("stage_gather_gpu_ns"), double(sc.gatherGpuNs));
+    o.insert(QStringLiteral("stage_sprites_gpu_ns"), double(sc.spritesGpuNs));
+    o.insert(QStringLiteral("stage_defocus_time_skipped"), double(sc.defocusTimeSkipped));
     return pyJson(o);
 }
 
@@ -1962,6 +1966,8 @@ PyObject *stage_control(PyObject *, PyObject *args)
         srpss_core::setDeviceWithoutIndependentBlend(value);
     else if (control == "skip_read_chain")
         srpss_core::setSkipReadChain(value);
+    else if (control == "time_defocus_draws")
+        srpss_core::setTimeDefocusDraws(value);
     else
         Py_RETURN_FALSE;
     Py_RETURN_TRUE;
@@ -2928,7 +2934,8 @@ PyMethodDef methods[] = {
     { "stage_control", stage_control, METH_VARARGS,
       "(name, on) -> bool: N3.4, harness: a D17 negative control by name (skip_blend_gate, blend_formats_missing, "
       "sample_shading_missing, transparency_first_sample, skip_bloom_prime, bloom_same_texture, skip_stage_release, "
-      "skip_read_chain, device_without_independent_blend: read at the next device's creation); False for an unknown "
+      "skip_read_chain, time_defocus_draws (OpenGL), device_without_independent_blend: read at the next device's "
+      "creation); False for an unknown "
       "name." },
     { "scene_depth_prime_control", scene_depth_prime_control, METH_VARARGS,
       "(skip) -> None: N3.1, harness: the depth's rule C prime skipped (its negative control under synchronisation "

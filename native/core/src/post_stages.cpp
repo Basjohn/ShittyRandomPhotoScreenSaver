@@ -10,6 +10,7 @@
 #include <QtCore/QJsonObject>
 #include <QtCore/QMutex>
 #include <QtGui/QColor>
+#include <QtGui/QOpenGLContext>
 #include <rhi/qrhi_platform.h>
 
 #include <cmath>
@@ -31,6 +32,11 @@ QAtomicInteger<int> g_skipBloomPrime { 0 };
 QAtomicInteger<int> g_bloomSameTexture { 0 };
 QAtomicInteger<int> g_skipStageRelease { 0 };
 QAtomicInteger<int> g_skipReadChain { 0 };
+QAtomicInteger<int> g_timeDefocusDraws { 0 };
+QAtomicInteger<qint64> g_defocusTimed { 0 };
+QAtomicInteger<qint64> g_gatherGpuNs { 0 };
+QAtomicInteger<qint64> g_spritesGpuNs { 0 };
+QAtomicInteger<qint64> g_defocusTimeSkipped { 0 };
 QAtomicInteger<quint64> g_controlGeneration { 1 };
 
 QAtomicInteger<int> g_bloomChains { 0 };
@@ -291,6 +297,8 @@ void setSkipStageRelease(bool skip) { setControl(g_skipStageRelease, skip); }
 bool skipStageRelease() { return g_skipStageRelease.loadAcquire() != 0; }
 void setSkipReadChain(bool skip) { setControl(g_skipReadChain, skip); }
 bool skipReadChain() { return g_skipReadChain.loadAcquire() != 0; }
+void setTimeDefocusDraws(bool on) { setControl(g_timeDefocusDraws, on); }
+bool timeDefocusDraws() { return g_timeDefocusDraws.loadAcquire() != 0; }
 quint64 stageControlGeneration() { return g_controlGeneration.loadAcquire(); }
 
 StageCounts stageCounts()
@@ -310,6 +318,10 @@ StageCounts stageCounts()
     c.leftBehind = g_leftBehindObjects.loadRelaxed();
     c.recordsTimed = g_stageRecordsTimed.loadRelaxed();
     c.recordNs = g_stageRecordNs.loadRelaxed();
+    c.defocusTimed = g_defocusTimed.loadRelaxed();
+    c.gatherGpuNs = g_gatherGpuNs.loadRelaxed();
+    c.spritesGpuNs = g_spritesGpuNs.loadRelaxed();
+    c.defocusTimeSkipped = g_defocusTimeSkipped.loadRelaxed();
     return c;
 }
 
@@ -335,6 +347,108 @@ int defocusReadLevelCap(const QSize &layer)
 void countTransparencyResolve() { g_transparencyResolves.fetchAndAddRelaxed(1); }
 void countFallback() { g_fallbacks.fetchAndAddRelaxed(1); }
 void countGeneratedMips(int count) { g_generatedMips.fetchAndAddRelaxed(count); }
+
+// ------------------------------------------------------------------------------------------------- the draw timer
+
+#ifdef APIENTRY
+#define SRPSS_STAGE_GLAPI APIENTRY
+#elif defined(_WIN32)
+#define SRPSS_STAGE_GLAPI __stdcall
+#else
+#define SRPSS_STAGE_GLAPI
+#endif
+
+// The timeDefocusDraws control (OpenGL): three timestamps a record (before the gather, between, after the sprites) in a
+// ring of slots, each read once its last result is available, never waited for.
+struct PostStages::DrawTimer
+{
+    static constexpr int kSlots = 8;
+    using GenQueries = void(SRPSS_STAGE_GLAPI *)(int, unsigned int *);
+    using DeleteQueries = void(SRPSS_STAGE_GLAPI *)(int, const unsigned int *);
+    using QueryCounter = void(SRPSS_STAGE_GLAPI *)(unsigned int, unsigned int);
+    using GetQueryObjectiv = void(SRPSS_STAGE_GLAPI *)(unsigned int, unsigned int, int *);
+    using GetQueryObjectui64v = void(SRPSS_STAGE_GLAPI *)(unsigned int, unsigned int, quint64 *);
+    GenQueries genQueries = nullptr;
+    DeleteQueries deleteQueries = nullptr;
+    QueryCounter queryCounter = nullptr;
+    GetQueryObjectiv getQueryObjectiv = nullptr;
+    GetQueryObjectui64v getQueryObjectui64v = nullptr;
+    unsigned int names[kSlots * 3] = {};
+    bool pending[kSlots] = {};
+    int current = -1;                 // the slot this record marks (-1: none free, the record untimed)
+    bool usable = false;
+};
+
+namespace {
+constexpr unsigned int kGlTimestamp = 0x8E28;
+constexpr unsigned int kGlQueryResult = 0x8866;
+constexpr unsigned int kGlQueryResultAvailable = 0x8867;
+} // namespace
+
+void PostStages::markDefocus(QRhiCommandBuffer *cb, int mark)
+{
+    // mark 0: before the gather (the slots read back first, a free one taken); 1: between; 2: after the sprites.
+    if (!m_rhi || m_rhi->backend() != QRhi::OpenGLES2 || !timeDefocusDraws())
+        return;
+    if (!m_drawTimer) {
+        m_drawTimer = std::make_unique<DrawTimer>();
+        QOpenGLContext *context = QOpenGLContext::currentContext();
+        DrawTimer &t = *m_drawTimer;
+        if (context && !context->isOpenGLES()) {
+            t.genQueries = reinterpret_cast<DrawTimer::GenQueries>(context->getProcAddress("glGenQueries"));
+            t.deleteQueries = reinterpret_cast<DrawTimer::DeleteQueries>(context->getProcAddress("glDeleteQueries"));
+            t.queryCounter = reinterpret_cast<DrawTimer::QueryCounter>(context->getProcAddress("glQueryCounter"));
+            t.getQueryObjectiv =
+                reinterpret_cast<DrawTimer::GetQueryObjectiv>(context->getProcAddress("glGetQueryObjectiv"));
+            t.getQueryObjectui64v =
+                reinterpret_cast<DrawTimer::GetQueryObjectui64v>(context->getProcAddress("glGetQueryObjectui64v"));
+            t.usable = t.genQueries && t.deleteQueries && t.queryCounter && t.getQueryObjectiv && t.getQueryObjectui64v;
+            if (t.usable)
+                t.genQueries(DrawTimer::kSlots * 3, t.names);
+        }
+    }
+    DrawTimer &t = *m_drawTimer;
+    if (!t.usable)
+        return;
+    cb->beginExternal(); // QRhi's OpenGL backend issues what it recorded first, so the mark lands in order
+    if (mark == 0) {
+        for (int s = 0; s < DrawTimer::kSlots; ++s) {
+            if (!t.pending[s])
+                continue;
+            int available = 0;
+            t.getQueryObjectiv(t.names[s * 3 + 2], kGlQueryResultAvailable, &available);
+            if (!available)
+                continue;
+            quint64 stamps[3] = {};
+            for (int q = 0; q < 3; ++q)
+                t.getQueryObjectui64v(t.names[s * 3 + q], kGlQueryResult, &stamps[q]);
+            g_gatherGpuNs.fetchAndAddRelaxed(qint64(stamps[1] - stamps[0]));
+            g_spritesGpuNs.fetchAndAddRelaxed(qint64(stamps[2] - stamps[1]));
+            g_defocusTimed.fetchAndAddRelaxed(1);
+            t.pending[s] = false;
+        }
+        t.current = -1;
+        for (int s = 0; s < DrawTimer::kSlots && t.current < 0; ++s)
+            t.current = t.pending[s] ? -1 : s;
+        if (t.current < 0)
+            g_defocusTimeSkipped.fetchAndAddRelaxed(1);
+    }
+    if (t.current >= 0) {
+        t.queryCounter(t.names[t.current * 3 + mark], kGlTimestamp);
+        if (mark == 2)
+            t.pending[t.current] = true;
+    }
+    cb->endExternal();
+}
+
+void PostStages::releaseDrawTimer()
+{
+    if (!m_drawTimer)
+        return;
+    if (m_drawTimer->usable && m_rhi && m_rhi->makeThreadLocalNativeContextCurrent())
+        m_drawTimer->deleteQueries(DrawTimer::kSlots * 3, m_drawTimer->names);
+    m_drawTimer.reset();
+}
 
 // ------------------------------------------------------------------------------------------------- the stages' objects
 
@@ -839,6 +953,7 @@ void PostStages::releasePipelines()
 void PostStages::release()
 {
     releasePipelines();
+    releaseDrawTimer();                       // before m_rhi goes (its queries are this QRhi's context's)
     if (skipStageRelease() && m_rhi && (m_bloomCount > 0 || m_defocusCount > 0)) {
         // The retirement proof's control: the objects left behind (counted) until a later sync on this QRhi.
         struct Held
@@ -975,11 +1090,13 @@ void PostStages::recordDefocusOnto(QRhiCommandBuffer *cb, int pass, const QRhiCo
     // the layer is empty (premultiplied over of zero), and the sprites' clip positions are over the layer's size.
     const QRhiViewport whole(0, 0, float(d->layerSize.width()), float(d->layerSize.height()));
     const QRhiCommandBuffer::DynamicOffset offsets[2] = { { 0, blockOffset }, { kConventionsBinding, conventionsOffset } };
+    markDefocus(cb, 0);                       // the harness's timeDefocusDraws control only (OpenGL)
     cb->setGraphicsPipeline(d->gather.get());
     cb->setViewport(whole);
     cb->setShaderResources(d->gatherBindings.get(), 2, offsets);
     cb->setVertexInput(0, 1, &triangle);
     cb->draw(3);
+    markDefocus(cb, 1);
     // The highlight sprites (Python draws them for a radius of half a pixel or more): one per texel of the read level,
     // exactly that level's texels (the count is the core's, D17 choice I).
     if (drawSprites) {
@@ -989,6 +1106,7 @@ void PostStages::recordDefocusOnto(QRhiCommandBuffer *cb, int pass, const QRhiCo
         cb->setShaderResources(d->spriteBindings.get(), 1, offsets);
         cb->draw(4, sprites);
     }
+    markDefocus(cb, 2);
     g_defocusRecords.fetchAndAddRelaxed(1);
 }
 

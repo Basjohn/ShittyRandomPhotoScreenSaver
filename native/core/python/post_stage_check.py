@@ -78,7 +78,7 @@ from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("parity", "gate", "rest", "steady", "retire", "barriers", "cost")
-ALONE_ROUNDS = ("defocus_cost", "showcase", "big_frames")
+ALONE_ROUNDS = ("defocus_cost", "showcase", "big_frames", "defocus_draws")
 PYTHON_ROUNDS = ("python_cost", "python_defocus_cost")
 CHILD_TIMEOUT_S = 2400
 MARGIN = stc.MARGIN
@@ -1143,6 +1143,46 @@ def round_defocus_cost(core, engine, app, api: str, packs: dict) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
+def round_defocus_draws(core, engine, app, api: str, packs: dict) -> dict:
+    """The defocus cost's diagnosis on OpenGL (the lead, 15 Nov): the gather's and the sprites' own GPU time from the
+    core's GL timestamps around them (``time_defocus_draws``, read back latched), at 4K, one and four samples, with the
+    sprites (``full``), with the highlight's few, and with none, beside the whole record's time."""
+    if api != "opengl":
+        return {"pass": True, "skipped": "OpenGL only (the timestamps are GL queries)"}
+    size = COST_HOSTS[-1]
+    facts, checks = {}, {}
+    host = core.hidden_host(size[0] + 2 * MARGIN, size[1] + 2 * MARGIN)
+    _controls(core, ("time_defocus_draws",), True)
+    try:
+        for samples in (1, 4):
+            for label, changes in (("full", {}), ("few_sprites", {"u_defocus_highlight": 2.0}),
+                                   ("no_sprites", {"u_defocus_highlight": 1e6})):
+                case = Case(f"draws_{label}", "eb", card=size, samples=samples, changes=changes)
+                passes, targets, values = build(case, packs)
+                scene = stc.Scene(core, engine, host, size, 1.0, packs, passes=passes, targets=targets,
+                                  settings=values)
+                try:
+                    host.frames(4)
+                    before = _live(core)
+                    timed = stc._timed(host, scene, values, COST_FRAMES, member="u_back_gain", step=0.001)
+                    host.frames(4)
+                    after = _live(core)
+                finally:
+                    _close(scene, host, app)
+                n = after["stage_defocus_timed"] - before["stage_defocus_timed"]
+                facts[f"x{samples}_{label}"] = {
+                    "draws_timed": n, "skipped": after["stage_defocus_time_skipped"] - before["stage_defocus_time_skipped"],
+                    "gather_ms": round((after["stage_gather_gpu_ns"] - before["stage_gather_gpu_ns"]) / 1e6 / n, 4) if n else None,
+                    "sprites_ms": round((after["stage_sprites_gpu_ns"] - before["stage_sprites_gpu_ns"]) / 1e6 / n, 4) if n else None,
+                    "record_median_ms": timed.get("median_ms"), "record_p10_ms": timed.get("p10_ms")}
+                checks[f"x{samples}_{label}_timed"] = n >= stc.COST_MIN_SAMPLES
+    finally:
+        _controls(core, ("time_defocus_draws",), False)
+        host.close()
+        host_check._flush_deletes(app)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
 def round_big_frames(core, engine, app, api: str, packs: dict, out: Path) -> dict:
     """The EB scene's targets and frame at 3840 x 2160, one sample, with the sprites and without (their highlight past
     any light), saved per API for the defocus cost's diagnosis (``post_big_<api>``)."""
@@ -1946,7 +1986,8 @@ def child(args) -> dict:
                           "cost": lambda: round_cost(core, engine, app, args.api, packs),
                           "defocus_cost": lambda: round_defocus_cost(core, engine, app, args.api, packs),
                           "showcase": lambda: round_showcase(core, engine, app, args.api, packs, out),
-                          "big_frames": lambda: round_big_frames(core, engine, app, args.api, packs, out)}
+                          "big_frames": lambda: round_big_frames(core, engine, app, args.api, packs, out),
+                          "defocus_draws": lambda: round_defocus_draws(core, engine, app, args.api, packs)}
                 for name in args.rounds:
                     if vulkan:
                         core.set_vulkan_phase(f"n34 {name}")

@@ -2033,6 +2033,13 @@ Python face is `rendering/native/mode.py` (`TransparencyTarget`, `TransparencyRe
     raster 2.6 ms at 1x (1.2 at 4x) on OpenGL against about 0 on Vulkan, for the same sprites (53,383 texels lit on both
     backends, the frames within one level). With only the highlight's few sprites the raster costs nothing. Why native
     OpenGL rasterises them so slowly where Python on the same driver does not is not yet known (the plan's box).
+    The lead's first hypothesis, a stall on a per-record instance upload that QRhi's OpenGL backend rewrites in one
+    buffer, does not hold: the sprites have no instance stream (their pipeline has an empty vertex input layout; each
+    instance reads its texel by `gl_InstanceIndex`), the record's only upload is the block arena, and the "few sprites"
+    and "full" variants upload the same arena (they differ only in `u_defocus_highlight`) yet differ by the whole 2.6
+    ms. Its variants (a still record, a storage stream, a mesh) therefore have nothing to move. Next, built for the
+    following run: the `time_defocus_draws` control (OpenGL; GL timestamps before the gather, between, after the
+    sprites, read back latched) and `post_stage_check.py --apis opengl --rounds defocus_draws`.
   - The render thread's record (`stage_record_ns`, the whole record of a program with stages): on OpenGL 19 to 20 us
     for EB's shape at every size and count (6.7 to 9.5 us with no stage), 33 us mean over the steady minute at 4x; on
     Vulkan 1.1 to 1.4 ms, which is the validation layer's own CPU work (22 us with no stage under the same layer); the
