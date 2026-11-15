@@ -1120,22 +1120,27 @@ the rules for the GPU-free tests and `scene3d.scene_samples` is the one sampling
 - The clamp reports the count created (8 forced away gives 4). QRhi's depth resolve (build rounds 1 and 2) gave wrong
   values on both backends (the resolved D32F read 0 on OpenGL, a strided pattern with NaNs on Vulkan) and stored no
   multisampled depth once set (`DontCare`), though `ResolveDepthStencil` read true on both: the stop that led to
-  point 10. Point 10's nearest resolve is built for build round 3 (`scene_nearest.frag`, `SceneTargets` nearest slots,
-  `ModeContent::recordNearest`); its proof is the msaa round's (evidence after the build).
+  point 10.
+- Point 10, proved at build round 3 (`20261115_round3_msaa`), both backends, 2x, 4x and 8x: means (a) works (QRhi
+  samples the multisampled D32F with `texelFetch` on both), and (b) works beside it. Without partial coverage every
+  resolve equals the single-sampled frame; with the `gl_SampleMask` bands the capture's depth, the depth a sampler
+  reads, the nearest R32F attachment and its target's depth are the analytic nearest depth within 8.7e-8; the sample-0
+  control is wrong on exactly the first band's 6720 pixels and nowhere else; validation clean but for Qt's defect A.
 - Vulkan reported a write-after-write hazard on resolve textures no pass samples; resolves are made only for attachments
-  a sampler reads (round 2: the msaa round's validation is clean but for Qt's defect A).
-- Rule C for depth's negative control (round 2, `--rounds prime_control`, Vulkan): with the prime skipped, synchronisation
-  validation reports read-after-write hazards on the depth load (3); with it, none.
-- Cost (GPU medians, the harness scene's passes). The light attachment's clear at 2048 x 1152 adds 0.026 ms on OpenGL
-  and 0.015 ms on Vulkan (choice F: negligible). Four samples minus one at 4K: the Python renderer on the same load
-  0.34 ms (OpenGL, `python_cost`); native at round 2 (QRhi's depth resolve still set) Vulkan 1.25 ms, OpenGL 0.22 ms
-  (Qt's OpenGL backend returns a GPU time for only about one frame in twenty, so OpenGL's figure is loose). The
-  breakdown (`cost_parts`, Vulkan, 4x minus 1x): a clearing draw and a plane 0.26 ms, three passes 0.09 ms, a colour
-  read 0.17 ms, the capture split 0.98 ms. The split's 0.8 ms over a colour read holds QRhi's depth resolve at both
-  runs (gone with point 10), a second colour resolve and the capture; round 3's breakdown says how much was the depth
-  resolve. The clearing draw at four samples is the other candidate (rule B's clear by a draw writes every sample
-  where the Python renderer's `glClear` is a fast clear). The native figure after point 10 is measured at build round
-  3 against the Python one.
+  a sampler reads (round 2).
+- Rule C for depth's negative control (`--rounds prime_control`, Vulkan, 1x and 4x): with the prime skipped,
+  synchronisation validation reports read-after-write hazards on the depth load (3 at one sample, 7 with 4x, where
+  the nearest resolve reads the depth before the load); with it, none.
+- Cost (GPU, the harness scene's passes; the operator's machine ran a game at about 40% GPU through every round-3
+  figure, so medians move by tenths of a millisecond between runs: the p10 is reported beside them). The light
+  attachment's clear at 2048 x 1152 adds 0.02 to 0.04 ms (choice F: negligible). Four samples minus one at 4K, p10:
+  the Python renderer 0.26 to 0.42 ms over three runs (OpenGL, `python_cost`); native, the full scene, Vulkan 0.50 ms
+  and OpenGL 0.40 ms (`20261115_round3_cost2`, beside a Python 0.26). Round 2's Vulkan 1.25 ms was QRhi's depth
+  resolve: the capture split's 4x minus 1x went from 0.98 ms to about 0.5 ms (`cost_parts`). Native OpenGL is level
+  with Python within its run-to-run spread; Vulkan sits 0.1 to 0.2 ms above it. The clearing draw (rule B writes every
+  sample where `glClear` is a fast clear) is the remaining candidate, but `cost_parts` cannot separate 0.1 ms under
+  the load (its clear-and-plane part read 0.21 to 0.25 ms while the same part with a second plane read 0.09); a quiet
+  GPU or a load-op clear build decides it.
 
 ## D1, D2, D3 and the transport rule
 

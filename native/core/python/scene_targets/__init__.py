@@ -102,7 +102,8 @@ def lin_program(packs: dict[str, bytes], *, samples: int, mask_band: float):
 
 def cost_part_program(packs: dict[str, bytes], part: str, *, samples: int):
     """The cost breakdown's programs on the scene target alone (the lead's 15 Nov ask: where the four-sample time
-    goes): ``clear`` (the clearing draw and the plane), ``draws`` (plane, nearer, after; nothing read, so nothing
+    goes): ``clear`` (the clearing draw and the plane), ``planes2`` (the plane twice: its second draw is what one more
+    full draw into every attachment costs, the clearing draw's own cost), ``draws`` (plane, nearer, after; nothing read, so nothing
     resolved), ``read`` (``draws`` and a surface pass reading the colour: one colour resolve), ``capture`` (``read``
     with the capture between nearer and after: the depth read, resolves at both runs). (passes, targets, settings)."""
     from rendering.native.mode import CapturePass, ModePass, ModeTarget, PassOutput, PassSampler, TargetAttachment
@@ -116,9 +117,11 @@ def cost_part_program(packs: dict[str, bytes], part: str, *, samples: int):
                      outputs=(PassOutput(True, "alpha"), PassOutput(False)), depth_test="less_equal", depth_write=False)
     show = ModePass("show_colour", packs["show_colour"], "replace",
                     samplers=(PassSampler("u_scene", "scene.colour", "linear"),))
-    passes = {"clear": (planes,), "draws": (planes, nearer, after), "read": (planes, nearer, after, show),
+    again = ModePass("planes_again", packs["planes"], "replace", target="scene", depth_test="always", depth_write=True)
+    passes = {"clear": (planes,), "planes2": (planes, again), "draws": (planes, nearer, after),
+              "read": (planes, nearer, after, show),
               "capture": (planes, nearer, CapturePass("background", "scene"), after, show)}[part]
-    names = {"clear": ("planes",), "draws": ("planes", "nearer", "after"),
+    names = {"clear": ("planes",), "planes2": ("planes",), "draws": ("planes", "nearer", "after"),
              "read": ("planes", "nearer", "after"), "capture": ("planes", "nearer", "after")}[part]
     values = {k: v for k, v in SETTINGS.items()
               if any(k in shader_text(dict(FRAGMENTS)[n]) for n in names)}

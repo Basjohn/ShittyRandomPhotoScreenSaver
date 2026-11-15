@@ -116,7 +116,9 @@ never ships.
     at the allocation's image rows `[H-h, H)` (the Python renderer's GL bottom-left; `contentViewport` gives QRhi's
     viewport per backend), cleared by a draw, primed for the load on Vulkan (rule C for colour and depth), the capture
     step (Python's `SceneTarget.background()`), the sample request clamped to the device's list (the count reported
-    is the count created), released with the content. Counted in `composite_live` (`scene_targets*`).
+    is the count created), multisampled colour resolved by QRhi (only what is read) and a read multisampled depth by
+    the core's nearest resolve (D14 point 10), released with the content. Counted in `composite_live`
+    (`scene_targets*`, `scene_target_nearest_resolves`).
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
     loader's runtime rule); Qt's types instead.
@@ -206,8 +208,8 @@ worked example (harness-only); a product mode does the same in the product's pla
    `"<target>.depth"` or `"<target>.capture_colour|capture_depth"`. The sample request comes from
    `rendering.gl_programs.scene3d.scene_samples`; an explicit size follows its card through `NativeMode.target_size`.
    Read a target by its own pixel or by a uv over its allocation (`textureSize`): the content sits at the allocation's
-   bottom rows, columns from 0. A target whose depth is read or kept across a capture stays single-sampled until
-   multisampled depth is proved (D14's as-built).
+   bottom rows, columns from 0. A multisampled target's read depth is the core's nearest resolve (D14 point 10:
+   `shaders/scene_nearest.frag`, the minimum over the samples); an R32F attachment may declare `"resolve": "nearest"`.
 5. **What is refused, with its reason:** a setting or a record field no pass declares (unknown); a member no source
    fills (unfilled); a name with two owners (a setting or a field naming a core member, a setting naming a field); a
    value of the wrong size or without a defined conversion (a refused frame keeps the last drawn one); a sampler the

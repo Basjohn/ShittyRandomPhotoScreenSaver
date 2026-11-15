@@ -122,7 +122,7 @@ Dissolve (transitions); Oscilloscope, Neon Lake, Extruded Bubble, Extruded Spect
 Tests: `test_scene3d_target.py` (G1, G3A, shafts, scale, lifetime), `test_scene3d_dsa_targets.py`. Native: N3.1
 (D14, `native/core/src/scene_targets.*`, ABI 17: targets as program data, sampled D32F depth, the capture step, MRT with
 per-attachment blends, one sampling request owner `scene3d.scene_samples` and the core's clamp; proved single-sampled
-on both backends by `scene_target_check.py`, its multisampled depth open) and N3.4 (OIT, bloom, HDR as opt-in stages);
+on both backends by `scene_target_check.py`, multisampled through the core's nearest resolve, D14 point 10) and N3.4 (OIT, bloom, HDR as opt-in stages);
 the eight composites in `target.py:125-286` keep raw `gl_FragCoord` and are never converted (D5.2 replaces them;
 item 8b, N1.4's remainder). Notes: allocation rounds to 64 px; no `glBlitFramebuffer` resolves (about 0.5 ms at 1440p; Lessons line
 176-177); per-sample reads (`sampler2DMS`, `gl_SampleID`) are the N1.8 resolve-first set and the one thing QRhi
@@ -399,7 +399,7 @@ the product module holds today.
 | **GPU timer per pass** (D5.3 row 1) | line 217; N2.6 | built and proved 13 Nov (`native/core/src/gpu_timer.*`, `rendering/native/gpu_timing.py`, `timer_check.py`) | per-pass figures in the frame trace; off means no query objects; every later port measured per pass |
 | **Stream ring service** (D5.3 row 2) | line 218; N3.2 | built only if it wins by 0.05 ms | larger histories and denser strands at one copy per frame |
 | **Indirect and count draws** (D5.3 row 3) | line 219 | **retired 12 Nov**: QRhi 6.12 has `drawIndirect` and `DrawIndirectMulti`; N4.c queries support at runtime (N4.c's box) | GPU-driven populations of 10^5 to 10^6 without a raw service |
-| **Per-sample reads** (D5.3 row 4) | line 220; N1.8; D14 point 10 | **decided 15 Nov** (the lead, after N3.1's build round 2: QRhi's depth resolve gave wrong values on both backends): the scene target's nearest resolve, a QRhi pass reading every sample (`scene_nearest.frag`), built in N3.1's round 3; proof pending its build | Extruded Bubble's nearest-depth `background()` (N1.8's A/B settled: the nearest depth, as Python) |
+| **Per-sample reads** (D5.3 row 4) | line 220; N1.8; D14 point 10 | **decided 15 Nov** (the lead, after N3.1's build round 2: QRhi's depth resolve gave wrong values on both backends): the scene target's nearest resolve, a QRhi pass reading every sample (`scene_nearest.frag`), built and proved in N3.1's round 3 on both backends (the multisampled D32F sampled directly; an R32F attachment declared "nearest" beside it) | Extruded Bubble's nearest-depth `background()` (N1.8's A/B settled: the nearest depth, as Python) |
 | **Formats service** (D5.3 row 5) | line 221; N1.7 widened first | one listed use, the multisampled velocity attachment (N1.7's box) | RG16F, RG32F, R11G11B10F without doubling memory |
 | **Async GPU jobs** (D9, row 6) | line 498-622; N3.8 (N3.8's box) | **proved N0.7** (second QRhi on our VkDevice, queue index 1 of family 0; latched publication; in-frame form always exists); built in N3.8 | no late frame at an image change or a transition's preparation while a Visualizer runs (4K edge-field build in frame: 40 late of 1200, as a job: 0 late) |
 | **Vulkan device ownership** (D6) | line 240+ | **proved N0.6** (our instance and device host Qt Quick pixel-identical; teardown, resize, second queue) | one device per window; Vulkan by default at NF |

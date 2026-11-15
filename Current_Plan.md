@@ -519,8 +519,11 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       across the capture split (a third pass depth-tested after it).
     - [ ] Multisampled, after the single-sampled gate: 2x, 4x and 8x requests on both backends, repeat-relative
       (`tests/_msaa_render_noise.py`'s rule); the clamp with the harness control removing 8 (8 drawn as 4, reported);
-      colour and depth resolves (depth only where `ResolveDepthStencil` is reported); the resolve's GPU time on
-      OpenGL against Vulkan at 2560x1440 and 4K (choice G).
+      colour resolves (QRhi's average) and the depth's nearest resolve (D14 point 10, the core's per-sample pass:
+      equal to single-sampled without partial coverage, the analytic nearest depth with `gl_SampleMask` bands, means
+      (a) and (b), the sample-0 negative control wrong exactly in the first band); the 4K 4x-minus-1x against the
+      Python path's on the same load (D14 point 11: accepted when no worse; worse is a defect, its time found by
+      `cost_parts`).
     - [ ] Nothing at rest: a minute at rest records no target pass and allocates nothing (counts unchanged); control: a
       content dirtied every frame.
     - [ ] Resize: a scripted drag of the card from 800 to 1000 px in 1 px steps reallocates only at bucket crossings

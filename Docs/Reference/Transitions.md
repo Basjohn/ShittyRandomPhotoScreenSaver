@@ -766,8 +766,10 @@ Each foundation slice adds what it learned here.
   10): the core's own nearest resolve, a pass reading every sample; never set a depth resolve texture. A depth written
   through `gl_FragDepth` is per fragment, so a scene drawn by fullscreen passes with `discard` has no partial coverage
   at all: prove a per-sample rule with partial coverage made on purpose (`gl_SampleMask`).
-- A harness cost breakdown before a fix: the 4K four-sample time was mostly the capture split (with QRhi's depth
-  resolve at both runs), not the passes or a colour resolve; measure the parts (`cost_parts`) before redesigning one.
+- A harness cost breakdown before a fix: the 4K four-sample time was mostly the capture split's QRhi depth resolve
+  (Vulkan 0.98 ms to about 0.5 ms once the core's nearest resolve replaced it), not the passes or a colour resolve;
+  measure the parts (`cost_parts`) before redesigning one. On the operator's machine the GPU is shared (a game ran at
+  40% through round 3): compare p10 figures taken back to back, never medians from different runs.
 
 ## Operator-triggered appearance review (reference checklist)
 

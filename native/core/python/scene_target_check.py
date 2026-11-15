@@ -706,7 +706,7 @@ def round_prime_control(core, engine, app, packs: dict) -> dict:
                        facts["skipped"]["depth_primes"] == 0 and facts["primed"]["depth_primes"] > 0}}
 
 
-COST_PARTS = ("clear", "draws", "read", "capture")
+COST_PARTS = ("clear", "planes2", "draws", "read", "capture")
 
 
 def round_cost_parts(core, engine, app, packs: dict) -> dict:
@@ -738,6 +738,8 @@ def round_cost_parts(core, engine, app, packs: dict) -> dict:
                     host_check._flush_deletes(app)
             single, multi = timings["x1"]["median_ms"], timings["x4"]["median_ms"]
             timings["four_minus_one_ms"] = None if single is None or multi is None else round(multi - single, 4)
+            low1, low4 = timings["x1"]["p10_ms"], timings["x4"]["p10_ms"]
+            timings["four_minus_one_p10_ms"] = None if low1 is None or low4 is None else round(low4 - low1, 4)
             facts[part] = timings
     finally:
         host.close()
@@ -776,10 +778,17 @@ def _timed(host, scene, settings: dict, frames: int) -> dict:
     host.frames(4)
     times = sorted(s.nanoseconds for s in host.gpu_samples() if s.kind == 2)
     host.set_gpu_timer(False)
+    return _time_summary(times)
+
+
+def _time_summary(times: list[int]) -> dict:
+    """GPU times (ns, sorted) as ms: the median and p90, and the p10 (the figure least touched by another process
+    sharing the GPU: the operator's machine is never idle; record its load beside the figures)."""
     if not times:
-        return {"samples": 0, "median_ms": None, "p90_ms": None}
+        return {"samples": 0, "median_ms": None, "p90_ms": None, "p10_ms": None}
     return {"samples": len(times), "median_ms": round(times[len(times) // 2] / 1e6, 4),
-            "p90_ms": round(times[int(len(times) * 0.9)] / 1e6, 4)}
+            "p90_ms": round(times[int(len(times) * 0.9)] / 1e6, 4),
+            "p10_ms": round(times[int(len(times) * 0.1)] / 1e6, 4)}
 
 
 def round_cost(core, engine, app, packs: dict, folder: Path) -> dict:
@@ -816,6 +825,8 @@ def round_cost(core, engine, app, packs: dict, folder: Path) -> dict:
             single, multi = timings["x1"]["median_ms"], timings["x4"]["median_ms"]
             bound = None if single is None or multi is None else round(multi - single, 4)
             facts[label]["resolve_bound_ms"] = bound
+            low1, low4 = timings["x1"]["p10_ms"], timings["x4"]["p10_ms"]
+            facts[label]["resolve_bound_p10_ms"] = None if low1 is None or low4 is None else round(low4 - low1, 4)
             checks[f"{label}_timed"] = all(timings[key]["samples"] >= COST_MIN_SAMPLES for key in ("x1", "x4"))
             checks[f"{label}_4x_minus_1x_within_the_resolve_budget"] = bound is not None and bound <= RESOLVE_BUDGET_MS[
                 size]
@@ -1092,8 +1103,7 @@ def python_cost(core, packs: dict, size: tuple[int, int], samples: int, frames: 
                 delete_program(program)
     target_gl.close()
     times.sort()
-    return {"samples": len(times), "median_ms": round(times[len(times) // 2] / 1e6, 4) if times else None,
-            "p90_ms": round(times[int(len(times) * 0.9)] / 1e6, 4) if times else None}
+    return _time_summary(times)
 
 
 def round_python_cost(core, packs: dict) -> dict:
@@ -1105,6 +1115,7 @@ def round_python_cost(core, packs: dict) -> dict:
         timings = {f"x{n}": python_cost(core, packs, size, n, PYTHON_COST_FRAMES) for n in (1, 4)}
         single, multi = timings["x1"]["median_ms"], timings["x4"]["median_ms"]
         timings["four_minus_one_ms"] = None if single is None or multi is None else round(multi - single, 4)
+        timings["four_minus_one_p10_ms"] = round(timings["x4"]["p10_ms"] - timings["x1"]["p10_ms"], 4)
         facts[label] = timings
     ok = all(facts[f"{s[0]}x{s[1]}"]["four_minus_one_ms"] is not None for s in COST_HOSTS)
     return {"pass": ok, "facts": facts}
@@ -1343,7 +1354,8 @@ def main(argv: list[str] | None = None) -> int:
         child_json = out / f"child_{api}.json"
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
-                   "--rounds", *args.rounds]
+                   "--rounds", *(args.rounds if api == "reference"
+                                 else [r for r in args.rounds if r not in PYTHON_ROUNDS])]
         started = time.monotonic()
         try:
             proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(root))
