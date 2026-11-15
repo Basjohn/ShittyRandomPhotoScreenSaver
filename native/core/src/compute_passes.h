@@ -256,7 +256,8 @@ private:
 
     QList<Buffer *> m_buffers;          // owned (Qt containers only)
     QList<Image *> m_images;
-    QList<Buffer *> m_retiring;         // replaced buffers kept until their copy is recorded
+    QList<Buffer *> m_retiring;         // replaced buffers, released at the next record's sync (after their copy ran)
+    QRhi *m_rhi = nullptr;              // the QRhi the storage was made on (the skipped-release control's key)
     Op m_ops[kMaxStorageEdgeOps];
     int m_opCount = 0;
     bool m_uploaded = false;

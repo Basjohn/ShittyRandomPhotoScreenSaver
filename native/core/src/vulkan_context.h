@@ -34,8 +34,11 @@ namespace srpss_core {
 class JobService;
 
 // Creates the process instance. validation: enable the Khronos layer and synchronisation validation when installed
-// (the JSON says whether it loaded; a harness that requires it fails closed on that). Returns one JSON object.
-QByteArray vulkanInstanceCreateJson(bool validation);
+// (the JSON says whether it loaded; a harness that requires it fails closed on that). shaderAccesses (harness only, with
+// validation): also turn on the layer's shader-access hazard checks (syncval_shader_accesses_heuristic, off by default
+// in the layer), through VK_EXT_layer_settings when the layer offers it; the JSON says whether it did. Returns one JSON
+// object.
+QByteArray vulkanInstanceCreateJson(bool validation, bool shaderAccesses = false);
 // Destroys the process instance; refused while a device lives. Returns the steps and the message counts.
 QByteArray vulkanInstanceDestroyJson();
 bool vulkanInstanceExists();

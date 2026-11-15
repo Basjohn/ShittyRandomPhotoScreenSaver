@@ -141,9 +141,10 @@ PyObject *process_counters(PyObject *, PyObject *)
 PyObject *vulkan_instance_create(PyObject *, PyObject *args)
 {
     int validation = 0;
-    if (!PyArg_ParseTuple(args, "|p", &validation))
+    int shaderAccesses = 0;
+    if (!PyArg_ParseTuple(args, "|pp", &validation, &shaderAccesses))
         return nullptr;
-    return pyJson(srpss_core::vulkanInstanceCreateJson(validation != 0));
+    return pyJson(srpss_core::vulkanInstanceCreateJson(validation != 0, shaderAccesses != 0));
 }
 
 PyObject *vulkan_instance_destroy(PyObject *, PyObject *)

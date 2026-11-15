@@ -6,6 +6,7 @@
 #include <rhi/qshaderdescription.h>
 
 #include <QtCore/QJsonDocument>
+#include <QtCore/QMutex>
 
 #include <cmath>
 #include <cstring>
@@ -511,12 +512,62 @@ void ModeStorage::releaseKernels()
     m_kernelRhi = nullptr;
 }
 
+namespace {
+
+// The skipped-release control's storage (the retirement proof's negative control): left behind and counted, released
+// by the next storage sync on the same QRhi once the control is off, so the harness's device is torn down clean.
+struct LeftBehind
+{
+    QRhi *rhi = nullptr;
+    QList<ModeStorage::Buffer *> buffers;
+    QList<ModeStorage::Image *> images;
+};
+QMutex g_leftBehindMutex;
+QList<LeftBehind> g_leftBehind;
+
+void releaseLeftBehind(QRhi *rhi)
+{
+    QList<LeftBehind> mine;
+    {
+        QMutexLocker lock(&g_leftBehindMutex);
+        for (qsizetype i = g_leftBehind.size() - 1; i >= 0; --i) {
+            if (g_leftBehind.at(i).rhi == rhi)
+                mine.append(g_leftBehind.takeAt(i));
+        }
+    }
+    for (const LeftBehind &left : mine) {
+        for (ModeStorage::Buffer *b : left.buffers) {
+            if (b->buffer)
+                countLive(g_buffers, g_bufferBytes, qint64(b->bytes), -1);
+            delete b;
+        }
+        for (ModeStorage::Image *i : left.images) {
+            if (i->texture)
+                countLive(g_images, g_imageBytes, i->bytes, -1);
+            delete i;
+        }
+    }
+}
+
+} // namespace
+
 void ModeStorage::release()
 {
-    if (skipStorageRelease())
-        return;                               // the retirement proof's control: the storage left behind (counted)
     m_opCount = 0;
     releaseKernels();
+    if (skipStorageRelease()) {
+        // The retirement proof's control: the storage left behind (counted) until a later sync on this QRhi.
+        LeftBehind left;
+        left.rhi = m_rhi;
+        left.buffers = m_buffers + m_retiring;
+        left.images = m_images;
+        m_buffers.clear();
+        m_retiring.clear();
+        m_images.clear();
+        QMutexLocker lock(&g_leftBehindMutex);
+        g_leftBehind.append(left);
+        return;
+    }
     for (Buffer *b : m_retiring)
         releaseBuffer(b);
     m_retiring.clear();
@@ -535,6 +586,15 @@ bool ModeStorage::sync(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QList<
 {
     *fresh = false;
     m_uploaded = false;
+    m_rhi = rhi;
+    if (!skipStorageRelease())
+        releaseLeftBehind(rhi);
+    // The buffers an earlier record replaced go now, a frame after the copy that read them was recorded: on OpenGL QRhi
+    // runs the frame's commands at its end through the objects they name, and on Vulkan it records a pass's barriers
+    // for its tracked buffers at the next pass, so neither may go inside the record that used it.
+    for (Buffer *b : m_retiring)
+        releaseBuffer(b);
+    m_retiring.clear();
     // Phase 1: every size checked and every new object made; a failure changes nothing (the storage stays drawn).
     struct Made
     {
@@ -627,7 +687,8 @@ bool ModeStorage::sync(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QList<
         }
         if (existing && existing->texture && existing->decl.sameShape(decl) && existing->decl.sameSize(decl))
             continue;                         // kept
-        const QRhiTexture::Flags flags = QRhiTexture::UsedWithLoadStore
+        // UsedAsTransferSource: the harness's readback copies from it (Vulkan validates the usage; no cost otherwise).
+        const QRhiTexture::Flags flags = QRhiTexture::UsedWithLoadStore | QRhiTexture::UsedAsTransferSource
             | (decl.dimensions == 3 ? QRhiTexture::ThreeDimensional : QRhiTexture::Flags());
         MadeImage *m = new MadeImage;
         m->index = k;
@@ -786,12 +847,8 @@ bool ModeStorage::ensureKernels(QRhi *rhi, QString *error)
 
 QRhiResourceUpdateBatch *ModeStorage::recordEdges(QRhi *rhi, QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *updates)
 {
-    if (m_opCount == 0) {
-        for (Buffer *b : m_retiring)
-            releaseBuffer(b);
-        m_retiring.clear();
+    if (m_opCount == 0)
         return updates;
-    }
     // Each operation's block at its offset, written whole once (the fast path; never a batch update): its range and the
     // dispatch's invocations, the stride each invocation steps by.
     const QRhiShaderResourceBinding::StageFlags cs = QRhiShaderResourceBinding::ComputeStage;
@@ -841,10 +898,7 @@ QRhiResourceUpdateBatch *ModeStorage::recordEdges(QRhi *rhi, QRhiCommandBuffer *
         (op.copy ? g_copies : g_clears).fetchAndAddRelaxed(1);
     }
     m_opCount = 0;
-    // The replaced buffers go now: their copies are recorded (QRhi releases the native objects after the frame).
-    for (Buffer *b : m_retiring)
-        releaseBuffer(b);
-    m_retiring.clear();
+    // The replaced buffers stay until the next record's sync (the copies just recorded read them).
     return pending;
 }
 

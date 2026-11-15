@@ -344,8 +344,8 @@ QList<const char *> pointers(const QByteArrayList &list)
     return v;
 }
 
-bool createVkInstance(Instance *inst, bool wantValidation, QByteArrayList *extensionsOut, QByteArrayList *layersOut,
-                      QJsonObject *o)
+bool createVkInstance(Instance *inst, bool wantValidation, bool wantShaderAccesses, QByteArrayList *extensionsOut,
+                      QByteArrayList *layersOut, QJsonObject *o)
 {
     auto createInstance = inst->loader.get<PFN_vkCreateInstance>(nullptr, "vkCreateInstance");
     if (!createInstance) {
@@ -369,6 +369,7 @@ bool createVkInstance(Instance *inst, bool wantValidation, QByteArrayList *exten
 
     QByteArrayList layers;
     bool syncValidation = false;
+    bool shaderAccesses = false;
     QString validation;
     if (!wantValidation) {
         validation = QStringLiteral("not requested");
@@ -385,7 +386,22 @@ bool createVkInstance(Instance *inst, bool wantValidation, QByteArrayList *exten
             validation = QStringLiteral("enabled without synchronisation validation "
                                         "(the layer offers no VK_EXT_validation_features)");
         }
+#ifdef VK_EXT_layer_settings
+        if (wantShaderAccesses && syncValidation
+            && layerExtensions.contains(QByteArrayLiteral("VK_EXT_layer_settings"))) {
+            extensions.append(QByteArrayLiteral("VK_EXT_layer_settings"));
+            shaderAccesses = true;
+        }
+#endif
     }
+    QString shaderAccessesNote;
+    if (!wantShaderAccesses)
+        shaderAccessesNote = QStringLiteral("not requested");
+    else if (shaderAccesses)
+        shaderAccessesNote = QStringLiteral("enabled (syncval_shader_accesses_heuristic)");
+    else
+        shaderAccessesNote = QStringLiteral("requested, but synchronisation validation or VK_EXT_layer_settings is "
+                                            "unavailable");
     const bool debugUtils = extensions.contains(QByteArrayLiteral("VK_EXT_debug_utils"));
 
     const QList<const char *> extensionPtrs = pointers(extensions);
@@ -421,8 +437,29 @@ bool createVkInstance(Instance *inst, bool wantValidation, QByteArrayList *exten
         *tail = &messengerInfo;
         tail = &messengerInfo.pNext;
     }
-    if (syncValidation)
+    if (syncValidation) {
         *tail = &validationFeatures;
+        tail = &validationFeatures.pNext;
+    }
+#ifdef VK_EXT_layer_settings
+    // The layer's shader-access hazard checks are off by default (the layer says the heuristic can report false
+    // positives); a harness proving barriers between compute passes needs them on to see a missing barrier at all.
+    const VkBool32 shaderAccessesOn = VK_TRUE;
+    VkLayerSettingEXT shaderAccessesSetting = {};
+    shaderAccessesSetting.pLayerName = kValidationLayer;
+    shaderAccessesSetting.pSettingName = "syncval_shader_accesses_heuristic";
+    shaderAccessesSetting.type = VK_LAYER_SETTING_TYPE_BOOL32_EXT;
+    shaderAccessesSetting.valueCount = 1;
+    shaderAccessesSetting.pValues = &shaderAccessesOn;
+    VkLayerSettingsCreateInfoEXT layerSettings = {};
+    layerSettings.sType = VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT;
+    layerSettings.settingCount = 1;
+    layerSettings.pSettings = &shaderAccessesSetting;
+    if (shaderAccesses) {
+        *tail = &layerSettings;
+        tail = &layerSettings.pNext;
+    }
+#endif
 
     const VkResult created = createInstance(&ci, nullptr, &inst->instance);
     o->insert(QStringLiteral("api_version"), QStringLiteral("1.2"));
@@ -432,6 +469,8 @@ bool createVkInstance(Instance *inst, bool wantValidation, QByteArrayList *exten
     o->insert(QStringLiteral("validation"), validation);
     o->insert(QStringLiteral("validation_layer_loaded"), !layers.isEmpty());
     o->insert(QStringLiteral("synchronisation_validation"), syncValidation);
+    o->insert(QStringLiteral("synchronisation_shader_accesses"), shaderAccesses);
+    o->insert(QStringLiteral("synchronisation_shader_accesses_note"), shaderAccessesNote);
     *extensionsOut = extensions;
     *layersOut = layers;
     if (created != VK_SUCCESS) {
@@ -474,7 +513,7 @@ void destroyInstanceObjects(Instance *inst, QJsonArray *steps)
 
 } // namespace
 
-QByteArray vulkanInstanceCreateJson(bool validation)
+QByteArray vulkanInstanceCreateJson(bool validation, bool shaderAccesses)
 {
     QJsonObject root;
     if (g_instance) {
@@ -492,7 +531,7 @@ QByteArray vulkanInstanceCreateJson(bool validation)
     QByteArrayList extensions;
     QByteArrayList layers;
     QJsonObject created;
-    bool ok = createVkInstance(inst.get(), validation, &extensions, &layers, &created);
+    bool ok = createVkInstance(inst.get(), validation, shaderAccesses, &extensions, &layers, &created);
     if (ok) {
         inst->validationLoaded = !layers.isEmpty();
         // Adopt: the exact lists we enabled (Qt does not query an adopted instance) and the API version, without which

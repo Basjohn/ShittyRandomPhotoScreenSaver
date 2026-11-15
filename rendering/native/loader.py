@@ -241,9 +241,13 @@ class NativeCore:
         data, facts = self.module.program_block_pack(bytes(pack), str(block), settings_json(values))
         return bytes(data), json.loads(facts)
 
-    def vulkan_instance(self, *, validation: bool = False) -> dict:
+    def vulkan_instance(self, *, validation: bool = False, shader_accesses: bool = False) -> dict:
         """The process's Vulkan instance (D6 point 1), before any Vulkan host. ``validation`` (harness only) enables the
-        Khronos layer and synchronisation validation when installed; the result says whether it loaded."""
+        Khronos layer and synchronisation validation when installed; the result says whether it loaded.
+        ``shader_accesses`` (harness only, with validation) also turns on the layer's shader-access hazard checks, which
+        the layer leaves off by default; ``synchronisation_shader_accesses`` in the result says whether it did."""
+        if shader_accesses:
+            return json.loads(self.module.vulkan_instance_create(bool(validation), True))
         return json.loads(self.module.vulkan_instance_create(bool(validation)))
 
     def destroy_vulkan_instance(self) -> dict:
