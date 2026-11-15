@@ -320,7 +320,7 @@ class PreparedGeometryCache:
     """Small LRU of immutable CPU geometry keyed by its complete pure inputs.
 
     Keys hold every input the builder reads, so an entry can never be stale; the
-    bound only limits memory. Both displays of a batch may read one entry. A
+    bound only limits memory. Each display of a batch has its own entry (its own seed). A
     key being prepared is tracked so a render thread that needs it meanwhile
     waits for that build instead of duplicating it under GIL contention.
     """
@@ -441,6 +441,20 @@ def prepare_run_geometry(
             PREPARED_GEOMETRY.settle(key, value)
 
 
+def prepare_display_run_geometry(
+    transition_id: str,
+    jobs: Iterable[tuple[Mapping[str, object], float]],
+    direction: object = None,
+) -> None:
+    """Build each display's own set (its parameters, its render aspect) one after another, in the given order.
+
+    Every display of a batch runs its own seed (plan 1D.15), so the displays no longer share one set.
+    """
+
+    for parameters, aspect in jobs:
+        prepare_run_geometry(transition_id, parameters, (aspect,), direction)
+
+
 __all__ = [
     "CRUMBLE_CHUNK_ATTRIBUTES",
     "IN_FLIGHT_WAIT_S",
@@ -461,5 +475,6 @@ __all__ = [
     "glass_geometry_key",
     "has_run_geometry",
     "jigsaw_geometry_key",
+    "prepare_display_run_geometry",
     "prepare_run_geometry",
 ]

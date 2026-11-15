@@ -19,6 +19,7 @@ from rendering.quick.transitions.run_geometry import (
     crumble_vertices,
     debris_instances,
     glass_geometry_key,
+    prepare_display_run_geometry,
     prepare_run_geometry,
 )
 
@@ -181,17 +182,21 @@ def test_display_manager_prepares_geometry_once_per_batch_on_compute(qt_app) -> 
         def get_bool(self, key, default=False):
             return bool(self.get(key, default))
 
-    def _unit(width: float, height: float):
+    from tests._display_manager_doubles import display_runtime_double, display_unit_double, quick_display_identity
+
+    def _unit(index: int, x: int, width: float, height: float):
         # R-63: the window (and the background item the renderer reads its
         # aspect from) is one logical pixel taller than the monitor rectangle.
-        return SimpleNamespace(
+        identity = quick_display_identity(index, f"hidden-key-{index}", (x, 0, int(width), int(height)))
+        return display_unit_double(
+            display_runtime_double(display_identity=identity),
             display_bounds=lambda: SimpleNamespace(x=0.0, y=0.0, width=width, height=height),
             transition_logical_size=lambda: (width, height + 1.0),
         )
 
     manager = DisplayManager(settings_manager=_Settings(), thread_manager=_Threads(), runtime_generation=705)
     try:
-        manager.displays = [_unit(2560.0, 1440.0), _unit(1920.0, 1200.0)]
+        manager.displays = [_unit(0, 0, 2560.0, 1440.0), _unit(1, 2560, 1920.0, 1200.0)]
         manager.set_random_transition_selection(RandomTransitionSelection("Crumble"))
         spec = manager._resolve_quick_transition_batch_spec()
         assert spec is not None and spec.transition_id == "crumble"
@@ -199,19 +204,23 @@ def test_display_manager_prepares_geometry_once_per_batch_on_compute(qt_app) -> 
 
         assert len(submitted) == 1
         func, args, kwargs = submitted[0]
-        assert func is prepare_run_geometry
+        assert func is prepare_display_run_geometry
         assert args[0] == "crumble"
-        assert args[1] == dict(spec.parameters)
         # Regression (2026-09-23 23:47 trace): keyed on the monitor rectangle,
         # no run ever found its prepared geometry and every Glass/Crumble run
         # built it on the render thread (43-141 ms first moving frames).
         render_aspects = (2560.0 / 1441.0, 1920.0 / 1201.0)
-        assert args[2] == render_aspects
-        assert args[3] == spec.direction
+        # Plan 1D.15: each display's own run (its own seed), in display order.
+        own = [manager._display_transition_spec(unit, spec, manager._quick_transition_batch_seed)
+               for unit in manager.displays]
+        assert args[1] == tuple((dict(display_spec.parameters), aspect)
+                                for display_spec, aspect in zip(own, render_aspects))
+        assert dict(own[0].parameters)["seed"] != dict(own[1].parameters)["seed"]
+        assert args[2] == spec.direction
         assert kwargs == {"category": "transition_geometry"}
         func(*args)
-        for aspect in render_aspects:  # the key QuickCrumbleRenderer asks for
-            assert PREPARED_GEOMETRY.get(crumble_geometry_key(dict(spec.parameters), aspect)) is not None
+        for display_spec, aspect in zip(own, render_aspects):  # the key QuickCrumbleRenderer asks for
+            assert PREPARED_GEOMETRY.get(crumble_geometry_key(dict(display_spec.parameters), aspect)) is not None
 
         manager._reset_quick_transition_batch()
         manager.set_random_transition_selection(RandomTransitionSelection("Slide"))

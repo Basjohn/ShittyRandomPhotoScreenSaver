@@ -131,7 +131,7 @@ def _resolve_ripple(
     defaults = _canonical("ripple")
     return _finish(None, {
         **require_transition_settings("ripple").page_values(cfg, defaults),
-        "ripple_seed": float(rng.random()) * 1000.0,
+        "ripple_seed": _unit_seed(rng),
     })
 
 
@@ -153,7 +153,7 @@ def _resolve_crumble(
     defaults = _canonical("crumble")
     spec = require_transition_settings("crumble")
     return _finish(None, {
-        "seed": float(rng.random()) * 1000.0,
+        "seed": _unit_seed(rng),
         **spec.page_values(cfg, defaults),
         # Retired Bias labels admit as Top Weighted; the Settings page writes the label on its next save.
         "weight_mode": _CRUMBLE_WEIGHT_MODES[spec.admit("weighting", cfg, defaults)],
@@ -231,7 +231,7 @@ def _resolve_particle(
     return _finish(
         None,
         {
-            "seed": float(rng.random()) * 1000.0,
+            "seed": _unit_seed(rng),
             "mode": mode,
             "direction": direction,
             "particle_radius": radius,
@@ -362,7 +362,7 @@ def _resolve_burn(
             "ash_density": float(burn.admit("ash_density", cfg, defaults)),
             "flames": _bool(_value(cfg, defaults, "flames"), bool(defaults["flames"])),
             "ember_veins": _bool(_value(cfg, defaults, "ember_veins"), bool(defaults["ember_veins"])),
-            "seed": float(rng.random()) * 1000.0,
+            "seed": _unit_seed(rng),
         },
     )
 
@@ -371,6 +371,34 @@ def _seed(rng: _RandomSource) -> int:
     """Generate one deterministic per-request seed; it is never persisted."""
 
     return int(rng.randint(1, 65535))
+
+
+def _unit_seed(rng: _RandomSource) -> float:
+    """The older float-shaped per-request seed in [0, 1000); never persisted."""
+
+    return float(rng.random()) * 1000.0
+
+
+# The per-run seed fields the resolvers above draw, each in the shape its own draw gives (an integer from ``_seed``, a
+# float from ``_unit_seed``). A multi-display batch shares one resolved spec and re-draws only these per display
+# (``ResolvedQuickTransitionSpec.for_display``, plan 1D.15): the same type, Settings and directions on every display,
+# its own path or pattern on each.
+RUN_SEED_FIELDS = ("seed", "ripple_seed")
+
+
+def redraw_run_seeds(parameters: Mapping[str, object], rng: _RandomSource) -> dict[str, object] | None:
+    """``parameters`` with every run seed re-drawn from ``rng`` in its own shape; None when it carries none."""
+
+    fields = [name for name in RUN_SEED_FIELDS if name in parameters]
+    if not fields:
+        return None
+    redrawn = dict(parameters)
+    for name in fields:
+        value = parameters[name]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"run seed {name!r} must be a resolved number")
+        redrawn[name] = _seed(rng) if isinstance(value, int) else _unit_seed(rng)
+    return redrawn
 
 
 # The request-time field carrying the run's resolved 3D Transitions tier. Never persisted:

@@ -15,6 +15,7 @@ follow the real surfaces instead of a copied list:
 * ``display_unit_double`` / ``display_runtime_double``: the read surface of ``QuickDisplayUnit`` (live by default) and
   ``QuickDisplayRuntime`` (its scene and input controllers default to the setter doubles), each name checked against
   the real class.
+* ``quick_display_identity``: a real ``QuickDisplayIdentity`` for a hidden display (no QScreen, no window).
 """
 from __future__ import annotations
 
@@ -148,10 +149,24 @@ def display_unit_double(runtime: Any = None, *, retired: bool = False, **members
     return _checked_surface(QuickDisplayUnit, surface)
 
 
+def quick_display_identity(screen_index: int, screen_key: str, geometry: tuple[int, int, int, int]):
+    """A real ``QuickDisplayIdentity`` for a hidden display (no QScreen): ``screen_key`` stands for the stable
+    signature (``get_screen_signature``) a live runtime would capture, ``geometry`` its virtual-desktop rectangle."""
+    from rendering.quick.state import QuickDisplayIdentity
+
+    return QuickDisplayIdentity(
+        screen_index=int(screen_index), runtime_generation=None, screen_key=str(screen_key),
+        name=f"hidden-{screen_index}", manufacturer="", model="", serial_number="",
+        geometry=tuple(geometry), available_geometry=tuple(geometry),
+        device_pixel_ratio=1.0, refresh_rate_hz=60.0,
+    )
+
+
 __all__ = [
     "bare_display_manager",
     "display_runtime_double",
     "display_unit_double",
+    "quick_display_identity",
     "input_controller_double",
     "scene_controller_double",
     "visualizer_owner_double",

@@ -44,7 +44,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
 at the size asked.
 - High: N3.4 (transparency and post-processing), then N3.6. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers
   ride with the next fitting dispatch.
-- Medium: 1D.15 (per-display transition seeds), then the Bubble port (the Oscilloscope after N3.4's bloom).
+- Medium: the Bubble port (N5.1; the Oscilloscope after N3.4's bloom), then the Python bloom sampler fix.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -670,6 +670,10 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     median/p90, swap gap, late %, hitches a minute, saver CPU % of a core, GPU ms per frame, RSS and private memory,
     first-2-seconds frames.
   - [ ] Idle and loaded. game60 is only with the operator's yes on the day, 10 minutes at most, lead only.
+  - [ ] The full matrix (about 64 minutes a size and state, `tools/preflip_pack.py`) runs only while the operator's
+    displays are off (operator, 15 Nov: "I cannot give up 64 entire minutes of display"); short captures (one pass of
+    the modes, about 10 minutes) may run while they are on. The 15 Nov modes-only capture (idle and game60) is in
+    `Docs/Reference/Benchmarks.md`; the transitions and the second size are still owed.
   - [ ] Conditions recorded with every figure: displays on or off, other processes' CPU and GPU, GPU clock and
     `nvidia-smi` state. Comparisons are within a session and control-relative (`Benchmarks.md` rules).
   - [ ] Stored as a named baseline (`tools/baselines/preflip/`) and summarised in `Docs/Reference/Benchmarks.md`; the
@@ -1101,24 +1105,6 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   Settings and Studio box.
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
-
-### 1D.15 Seeded transitions mirror across displays (operator, 15 Nov; Opus Medium, small)
-
-- [ ] Root cause, proved: `engine/display_manager.py:4913-4926` resolves one transition spec per batch from one
-  `_next_batch_seed`, so every display gets the same seed, and Liquid Lens (and every seeded transition: Crumble,
-  Glass Shatter, Jigsaw, Particle...) follows the same path or pattern on both displays at once. Confirm on a
-  two-display hidden host.
-- [ ] Fix at the owner: the batch keeps one transition type and its Settings, but each display's run gets its own
-  seed, derived from the batch seed and that display's stable identity (never its index order, which a display
-  move changes). The ahead-of-time preparation (`prepare_next_transition`, `_prepare_transition_run_geometry`, the
-  idle warm seed at about line 5003) prepares each display's own geometry, still one unit per spaced frame
-  (gradual warm-up rule).
-- [ ] Guard: two displays in one batch get different seeds and different Liquid Lens plans; the same display gets the
-  same seed for the same batch seed (reproducible); negative control on today's shared seed. The native route
-  (N5.2a/b) receives the per-display seed through the same request.
-- [ ] Docs (operator, 15 Nov): a short note in `Docs/Reference/Transitions.md` when it lands: seeds are per display,
-  and the heavy-geometry transitions (Glass Shatter, Crumble, Jigsaw) now prepare one geometry set per display in
-  the idle gap. Record the measured prepare time per display, so a later performance question has its baseline.
 
 ### 1D.13 Side defects found at its merge (15 Nov; Opus Medium when a slot is free of native work)
 
