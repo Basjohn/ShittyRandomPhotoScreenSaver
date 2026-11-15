@@ -176,6 +176,7 @@ bool StreamSource::syncStream()
             if (m_record.size() != retained->size())
                 m_record.resize(retained->size());
             std::memcpy(m_record.data(), retained->constData(), size_t(retained->size()));
+            ++m_frameSerial;    // N3.3: a compute entry's frame trigger
             m_hasFrame = true;
             accepted = true;
             changed = true;

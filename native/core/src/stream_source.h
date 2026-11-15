@@ -84,6 +84,9 @@ public:
     bool hasFrame() const { return m_hasFrame; }
     bool streamBound() const { return m_streamBound; }
     const QByteArray &frameRecord() const { return m_record; }
+    // N3.3 (D16 point 7): the accepted frames so far (render thread): a compute entry's frame trigger. A re-record of
+    // the same frame (the card, the settings, a texture) keeps it.
+    quint64 frameSerial() const { return m_frameSerial; }
 
     // The content's report (render thread writes, any thread reads). `refused`: a frame the content could not pack (the
     // target kept); its reason is reported once per run of refusals.
@@ -121,6 +124,7 @@ protected:
 private:
     // Render thread.
     QByteArray m_record;
+    quint64 m_frameSerial = 0;              // N3.3
     bool m_hasFrame = false;
     bool m_streamBound = false;
 

@@ -17,6 +17,7 @@
 #include <QtGui/QColor>
 #include <QtGui/QVector3D>
 
+#include <array>
 #include <cmath>
 #include <cstring>
 
@@ -99,6 +100,9 @@ const ModeCoreMember kModeCoreMembers[] = {
     { "uQuarters", 1, true, valueQuarters },              // the content's quarter turns
     // N3.2 (D15 point 6): a batched pass's batch, 0 here; the arena's copy of each batch sets its own.
     { "u_srpss_batch", 1, false, valueZeros },
+    // N3.3 (D16 point 7): a compute entry's (trigger, last trigger, fresh, dispatches), a uvec4; zeros here, the
+    // content writes each entry's into the arena's copy at the record that dispatches it.
+    { "u_srpss_compute", 4, false, valueZeros },
 };
 const int kModeCoreMemberCount = int(sizeof(kModeCoreMembers) / sizeof(kModeCoreMembers[0]));
 
@@ -422,11 +426,13 @@ bool checkPass(ModePass &pass, const QList<TargetDeclaration> &targets, QString 
                          .arg(name, QString::fromLatin1(s.name));
             return false;
         }
-        if (image->type != QShaderDescription::Sampler2D) {
+        if (image->type != QShaderDescription::Sampler2D && image->type != QShaderDescription::Sampler3D) {
             *error = QStringLiteral("pass '%1': the sampler '%2' is not a sampler2D (the sampling primitive reads 2D "
-                                    "textures)").arg(name, QString::fromLatin1(s.name));
+                                    "textures; a sampler3D reads a 3D storage image, N3.3)")
+                         .arg(name, QString::fromLatin1(s.name));
             return false;
         }
+        s.dimensions = image->type == QShaderDescription::Sampler3D ? 3 : 2; // checked against its texture later
         if (image->binding < 0 || image->binding == kConventionsBinding || image->binding == ownBinding) {
             *error = QStringLiteral("pass '%1': the sampler '%2' is at binding %3 (17 is the conventions block's; %4 "
                                     "its own block's)").arg(name, QString::fromLatin1(s.name)).arg(image->binding)
@@ -841,11 +847,13 @@ bool checkGeometryPass(ModePass &pass, const QList<TargetDeclaration> &targets, 
             for (const QShaderDescription::InOutVariable &image : s.d->combinedImageSamplers()) {
                 if (image.name != smp.name)
                     continue;
-                if (image.type != QShaderDescription::Sampler2D || (smp.binding >= 0 && smp.binding != image.binding)) {
-                    *error = QStringLiteral("pass '%1': the sampler '%2' is not one sampler2D at one binding")
-                                 .arg(name, QString::fromLatin1(smp.name));
+                if ((image.type != QShaderDescription::Sampler2D && image.type != QShaderDescription::Sampler3D)
+                    || (smp.binding >= 0 && smp.binding != image.binding)) {
+                    *error = QStringLiteral("pass '%1': the sampler '%2' is not one sampler2D (or sampler3D) at one "
+                                            "binding").arg(name, QString::fromLatin1(smp.name));
                     return false;
                 }
+                smp.dimensions = image.type == QShaderDescription::Sampler3D ? 3 : 2; // N3.3, checked later
                 smp.binding = image.binding;
                 smp.stages |= s.flag;
             }
@@ -1060,6 +1068,283 @@ QJsonValue drawCountJson(const DrawCount &count)
     return count.toJson();
 }
 
+// ------------------------------------------------------------------------------------------------- N3.3 (D16)
+
+// A compute entry's keys (mode_content.h's header): its trigger, its groups, its bindings; its samplers as any pass's.
+bool parseComputeEntry(const QJsonObject &o, ModePass &pass, QString *error)
+{
+    static const QStringList allowed = { QStringLiteral("name"), QStringLiteral("compute"), QStringLiteral("trigger"),
+                                         QStringLiteral("groups"), QStringLiteral("bindings"),
+                                         QStringLiteral("samplers") };
+    const QString label = QString::fromLatin1(pass.name);
+    bool known = true;
+    for (auto it = o.begin(); it != o.end(); ++it)
+        known = known && allowed.contains(it.key());
+    if (!known || !passName(pass.name) || o.value(QStringLiteral("compute")) != QJsonValue(true)) {
+        *error = QStringLiteral("compute entry '%1' is {\"name\", \"compute\": true, \"trigger\"?: \"frame\" or "
+                                "{\"field\"}, \"groups\": [x, y, z] or {\"over\": a resource}, \"bindings\": [...], "
+                                "\"samplers\"?: [...]}").arg(label);
+        return false;
+    }
+    if (o.contains(QStringLiteral("trigger")) && !parseComputeTrigger(o.value(QStringLiteral("trigger")), &pass.trigger)) {
+        *error = QStringLiteral("compute entry '%1': \"trigger\" is \"frame\" or {\"field\": a record u32 scalar}")
+                     .arg(label);
+        return false;
+    }
+    const QJsonValue groups = o.value(QStringLiteral("groups"));
+    if (groups.isObject()) {
+        const QJsonObject g = groups.toObject();
+        pass.groupsOver = g.value(QStringLiteral("over")).toString().toLatin1();
+        if (g.size() != 1 || !passName(pass.groupsOver)) {
+            *error = QStringLiteral("compute entry '%1': \"groups\" {\"over\": a storage buffer or image}").arg(label);
+            return false;
+        }
+    } else {
+        const QJsonArray list = groups.toArray();
+        bool ok = groups.isArray() && list.size() == 3;
+        for (int a = 0; ok && a < 3; ++a)
+            ok = parseDrawCount(list.at(a), false, &pass.groups[a]);
+        if (!ok) {
+            *error = QStringLiteral("compute entry '%1': \"groups\" is three counts (a number or a name the record or "
+                                    "the settings fill) or {\"over\": a resource}").arg(label);
+            return false;
+        }
+    }
+    const QJsonValue bindings = o.value(QStringLiteral("bindings"));
+    if (!bindings.isArray() || bindings.toArray().size() > kMaxComputeBindings) {
+        *error = QStringLiteral("compute entry '%1': \"bindings\" is at most %2 {\"name\", \"buffer\" | \"image\" | "
+                                "\"stream\" | \"mesh\", \"access\"}").arg(label).arg(kMaxComputeBindings);
+        return false;
+    }
+    static const char *const kinds[] = { "buffer", "image", "stream", "mesh" };
+    for (const QJsonValue &entry : bindings.toArray()) {
+        const QJsonObject b = entry.toObject();
+        ComputeBinding binding;
+        binding.name = b.value(QStringLiteral("name")).toString().toLatin1();
+        int found = 0;
+        for (int k = 0; k < 4; ++k) {
+            if (b.contains(QLatin1String(kinds[k]))) {
+                ++found;
+                binding.kind = ComputeResource(k);
+                binding.resource = b.value(QLatin1String(kinds[k])).toString().toLatin1();
+            }
+        }
+        bool twice = false;
+        for (const ComputeBinding &earlier : pass.computeBindings)
+            twice = twice || earlier.name == binding.name;
+        if (!entry.isObject() || b.size() != 3 || found != 1 || !shaderIdentifier(binding.name)
+            || !passName(binding.resource) || twice
+            || !parseStorageAccess(b.value(QStringLiteral("access")).toString(), &binding.access)) {
+            *error = QStringLiteral("compute entry '%1': a binding is {\"name\": the shader's buffer block or image, named "
+                                    "once, one of \"buffer\", \"image\", \"stream\" or \"mesh\": the resource, "
+                                    "\"access\": read, write or read_write}").arg(label);
+            return false;
+        }
+        if ((binding.kind == ComputeResource::Stream || binding.kind == ComputeResource::Mesh)
+            && binding.access != StorageAccess::Read) {
+            *error = QStringLiteral("compute entry '%1': '%2' reads a %3, which is read only (the record's and the "
+                                    "owner's data)").arg(label, QString::fromLatin1(binding.name),
+                                                         computeResourceName(binding.kind));
+            return false;
+        }
+        pass.computeBindings.append(binding);
+    }
+    return parseSamplers(o.value(QStringLiteral("samplers")), pass, error);
+}
+
+// A compute entry's pack against its declaration (mode_content.h's header, D16 points 1 to 3): one block of its own
+// (not the conventions: a dispatch has no target), every buffer block and image bound by name to a declared resource of
+// the right kind, the access each declares checked against the reflection (a block or image the shader can write
+// declared read is refused, as is a write into one it declares read only), images of the declared dimensions and
+// format, samplers as a pass's, every binding once.
+bool checkComputePass(ModePass &pass, const ModeProgram &program, QString *error)
+{
+    const QString name = QString::fromLatin1(pass.name);
+    if (!pass.computeShader.isValid() || pass.computeShader.stage() != QShader::ComputeStage) {
+        *error = QStringLiteral("compute entry '%1': the pack is not a compute shader (a .qsb from tools/regen_qrc.py's "
+                                "baker)").arg(name);
+        return false;
+    }
+    const QShaderDescription d = pass.computeShader.description();
+    QByteArray own;
+    int ownBinding = -1;
+    for (const QShaderDescription::UniformBlock &block : d.uniformBlocks()) {
+        if (block.blockName == kConventionsBlock || !own.isEmpty() || block.binding < 0
+            || block.binding == kConventionsBinding) {
+            *error = QStringLiteral("compute entry '%1': one block of its own, not at binding %2 (a dispatch has no "
+                                    "target, so no SrpssConventions)").arg(name).arg(kConventionsBinding);
+            return false;
+        }
+        own = block.blockName;
+        ownBinding = block.binding;
+    }
+    if (!d.separateImages().isEmpty() || !d.separateSamplers().isEmpty() || !d.pushConstantBlocks().isEmpty()) {
+        *error = QStringLiteral("compute entry '%1' declares a separate texture or sampler or a push constant").arg(name);
+        return false;
+    }
+    QList<int> used;
+    if (ownBinding >= 0)
+        used.append(ownBinding);
+    const auto claim = [&used](int binding) {
+        if (binding < 0 || binding == kConventionsBinding || used.contains(binding))
+            return false;
+        used.append(binding);
+        return true;
+    };
+    const auto bindingFor = [&pass](const QByteArray &shaderName) -> ComputeBinding * {
+        for (ComputeBinding &b : pass.computeBindings) {
+            if (b.name == shaderName)
+                return &b;
+        }
+        return nullptr;
+    };
+    const auto accessFits = [](StorageAccess access, bool readOnly, bool writeOnly) {
+        if (readOnly)
+            return access == StorageAccess::Read;
+        if (writeOnly)
+            return access == StorageAccess::Write;
+        return access != StorageAccess::Read; // the shader can write it: a read declaration would skip its barrier
+    };
+    for (ComputeBinding &b : pass.computeBindings)
+        b.binding = -1;
+    for (const QShaderDescription::StorageBlock &block : d.storageBlocks()) {
+        ComputeBinding *b = bindingFor(block.blockName);
+        if (!b || b->kind == ComputeResource::Image) {
+            *error = QStringLiteral("unbound: compute entry '%1' uses the buffer block '%2', which its program binds to no "
+                                    "buffer, stream or mesh").arg(name, QString::fromLatin1(block.blockName));
+            return false;
+        }
+        const bool readOnly = block.qualifierFlags.testFlag(QShaderDescription::QualifierReadOnly);
+        const bool writeOnly = block.qualifierFlags.testFlag(QShaderDescription::QualifierWriteOnly);
+        if (!accessFits(b->access, readOnly, writeOnly)) {
+            *error = QStringLiteral("compute entry '%1': '%2' is declared %3, but the shader's block is %4")
+                         .arg(name, QString::fromLatin1(block.blockName), storageAccessName(b->access),
+                              readOnly ? QStringLiteral("readonly") : writeOnly ? QStringLiteral("writeonly")
+                                                                                 : QStringLiteral("read and written"));
+            return false;
+        }
+        if (!claim(block.binding)) {
+            *error = QStringLiteral("compute entry '%1': the buffer block '%2' shares binding %3")
+                         .arg(name, QString::fromLatin1(block.blockName)).arg(block.binding);
+            return false;
+        }
+        b->binding = block.binding;
+    }
+    for (const QShaderDescription::InOutVariable &image : d.storageImages()) {
+        ComputeBinding *b = bindingFor(image.name);
+        const StorageImageDeclaration *decl = b ? program.storageImage(b->resource) : nullptr;
+        if (!b || b->kind != ComputeResource::Image || !decl) {
+            *error = QStringLiteral("unbound: compute entry '%1' uses the image '%2', which its program binds to no "
+                                    "declared storage image").arg(name, QString::fromLatin1(image.name));
+            return false;
+        }
+        const bool dimensionsFit = (decl->dimensions == 2 && image.type == QShaderDescription::Image2D)
+            || (decl->dimensions == 3 && image.type == QShaderDescription::Image3D);
+        if (!dimensionsFit || int(image.imageFormat) != storageReflectedFormat(decl->format)) {
+            *error = QStringLiteral("compute entry '%1': the image '%2' is not image%3D with the format %4 of storage "
+                                    "image '%5'").arg(name, QString::fromLatin1(image.name)).arg(decl->dimensions)
+                         .arg(storageFormatName(decl->format), QString::fromLatin1(decl->name));
+            return false;
+        }
+        const bool readOnly = image.imageFlags.testFlag(QShaderDescription::ReadOnlyImage);
+        const bool writeOnly = image.imageFlags.testFlag(QShaderDescription::WriteOnlyImage);
+        if (!accessFits(b->access, readOnly, writeOnly)) {
+            *error = QStringLiteral("compute entry '%1': the image '%2' is declared %3, which its qualifiers do not "
+                                    "match").arg(name, QString::fromLatin1(image.name), storageAccessName(b->access));
+            return false;
+        }
+        if (!claim(image.binding)) {
+            *error = QStringLiteral("compute entry '%1': the image '%2' shares binding %3")
+                         .arg(name, QString::fromLatin1(image.name)).arg(image.binding);
+            return false;
+        }
+        b->binding = image.binding;
+    }
+    for (const ComputeBinding &b : pass.computeBindings) {
+        if (b.binding < 0) {
+            *error = QStringLiteral("unknown: compute entry '%1' binds '%2', which its shader does not declare")
+                         .arg(name, QString::fromLatin1(b.name));
+            return false;
+        }
+        bool declared = true;
+        switch (b.kind) {
+        case ComputeResource::Buffer:
+            declared = program.storageBuffer(b.resource) != nullptr;
+            break;
+        case ComputeResource::Image:
+            declared = program.storageImage(b.resource) != nullptr;
+            break;
+        case ComputeResource::Stream: {
+            declared = false;
+            for (const StreamDeclaration &s : program.streams)
+                declared = declared || (s.name == b.resource && s.kind == StreamKind::Storage);
+            break;
+        }
+        case ComputeResource::Mesh:
+            declared = b.resource != kBuiltinQuadMesh; // an owner's mesh, sent as data with "storage": true
+            break;
+        }
+        if (!declared) {
+            *error = QStringLiteral("compute entry '%1' binds '%2' to the %3 '%4', which the program does not declare")
+                         .arg(name, QString::fromLatin1(b.name), computeResourceName(b.kind),
+                              QString::fromLatin1(b.resource));
+            return false;
+        }
+    }
+    // The samplers: as a pass's (sampler2D, or sampler3D for a 3D storage image), each bound once.
+    for (PassSampler &s : pass.samplers) {
+        s.binding = -1;
+        for (const QShaderDescription::InOutVariable &image : d.combinedImageSamplers()) {
+            if (image.name != s.name)
+                continue;
+            if (image.type != QShaderDescription::Sampler2D && image.type != QShaderDescription::Sampler3D) {
+                *error = QStringLiteral("compute entry '%1': the sampler '%2' is not a sampler2D or sampler3D")
+                             .arg(name, QString::fromLatin1(s.name));
+                return false;
+            }
+            s.dimensions = image.type == QShaderDescription::Sampler3D ? 3 : 2;
+            s.binding = image.binding;
+            s.stages = int(QRhiShaderResourceBinding::ComputeStage);
+        }
+        if (s.binding < 0 || !claim(s.binding)) {
+            *error = QStringLiteral("compute entry '%1': the sampler '%2' is not declared, or shares its binding")
+                         .arg(name, QString::fromLatin1(s.name));
+            return false;
+        }
+    }
+    for (const QShaderDescription::InOutVariable &image : d.combinedImageSamplers()) {
+        bool bound = false;
+        for (const PassSampler &s : pass.samplers)
+            bound = bound || s.name == image.name;
+        if (!bound) {
+            *error = QStringLiteral("unbound: compute entry '%1' samples '%2', which its program binds to no texture")
+                         .arg(name, QString::fromLatin1(image.name));
+            return false;
+        }
+    }
+    if (!pass.groupsOver.isEmpty() && !program.storageBuffer(pass.groupsOver) && !program.storageImage(pass.groupsOver)) {
+        *error = QStringLiteral("compute entry '%1': its groups are over '%2', which is no storage buffer or image")
+                     .arg(name, QString::fromLatin1(pass.groupsOver));
+        return false;
+    }
+    const std::array<uint, 3> local = d.computeShaderLocalSize();
+    for (int a = 0; a < 3; ++a)
+        pass.localSize[a] = qMax(1u, quint32(local[size_t(a)]));
+    pass.computeMemberOffset = -1;
+    if (!own.isEmpty()) {
+        pass.block = BlockLayout::reflect(pass.computeShader, own);
+        const BlockMember *member = pass.block.member(kComputeMember);
+        if (member) {
+            if (member->type != QShaderDescription::Uint4 || member->count != 1) {
+                *error = QStringLiteral("compute entry '%1': %2 is a uvec4").arg(name, QLatin1String(kComputeMember));
+                return false;
+            }
+            pass.computeMemberOffset = member->offset;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 bool parseDepthTest(const QString &text, DepthTest *out)
@@ -1248,8 +1533,10 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
     const QJsonArray declared = root.value(QStringLiteral("passes")).toArray();
     const bool withTargets = root.contains(QStringLiteral("targets")); // N3.1
     const bool withStreams = root.contains(QStringLiteral("streams")); // N3.2
+    const bool withBuffers = root.contains(QStringLiteral("buffers")); // N3.3
+    const bool withImages = root.contains(QStringLiteral("images"));   // N3.3
     if (parse.error != QJsonParseError::NoError || !document.isObject()
-        || root.size() != 1 + (withTargets ? 1 : 0) + (withStreams ? 1 : 0)
+        || root.size() != 1 + (withTargets ? 1 : 0) + (withStreams ? 1 : 0) + (withBuffers ? 1 : 0) + (withImages ? 1 : 0)
         || declared.isEmpty() || declared.size() > kMaxModePasses) {
         *error = QStringLiteral("a mode's program is {\"passes\": [{\"name\", \"blend\"}, ...], \"targets\" (optional): "
                                 "[...]} with 1 to %1 passes").arg(kMaxModePasses);
@@ -1290,6 +1577,51 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                 }
             }
             program.streams.append(stream);
+        }
+    }
+    // N3.3 (D16 point 2): the storage buffers and images, before the passes that bind them; names are unique across
+    // the streams, the buffers and the images (a draw's "storage", "instance_from" and "indirect" name either).
+    const auto storageNameTaken = [&program](const QByteArray &name) {
+        for (const StreamDeclaration &s : program.streams) {
+            if (s.name == name)
+                return true;
+        }
+        return program.storageBuffer(name) != nullptr || program.storageImage(name) != nullptr;
+    };
+    if (withBuffers) {
+        const QJsonValue buffers = root.value(QStringLiteral("buffers"));
+        if (!buffers.isArray() || buffers.toArray().size() > kMaxStorageBuffers) {
+            *error = QStringLiteral("\"buffers\" is a list of at most %1 storage buffers").arg(kMaxStorageBuffers);
+            return false;
+        }
+        for (const QJsonValue &entry : buffers.toArray()) {
+            StorageBufferDeclaration buffer;
+            if (!parseStorageBuffer(entry, &buffer, error))
+                return false;
+            if (storageNameTaken(buffer.name)) {
+                *error = QStringLiteral("the storage buffer '%1' shares its name with a stream, buffer or image")
+                             .arg(QString::fromLatin1(buffer.name));
+                return false;
+            }
+            program.buffers.append(buffer);
+        }
+    }
+    if (withImages) {
+        const QJsonValue images = root.value(QStringLiteral("images"));
+        if (!images.isArray() || images.toArray().size() > kMaxStorageImages) {
+            *error = QStringLiteral("\"images\" is a list of at most %1 storage images").arg(kMaxStorageImages);
+            return false;
+        }
+        for (const QJsonValue &entry : images.toArray()) {
+            StorageImageDeclaration image;
+            if (!parseStorageImage(entry, &image, error))
+                return false;
+            if (storageNameTaken(image.name)) {
+                *error = QStringLiteral("the storage image '%1' shares its name with a stream, buffer or image")
+                             .arg(QString::fromLatin1(image.name));
+                return false;
+            }
+            program.images.append(image);
         }
     }
     // N3.1: the scene targets, before the passes that name them.
@@ -1347,6 +1679,31 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             target.capture = true;
             target.colour[0].read = true;
             target.depthRead = target.depthRead || target.depth;
+        } else if (o.contains(QStringLiteral("compute"))) {
+            // N3.3 (D16 point 1): a compute entry, its one pack a compute shader.
+            pass.compute = true;
+            if (!parseComputeEntry(o, pass, error))
+                return false;
+            pass.computeShader = QShader::fromSerialized(fragmentPack);
+            if (!checkComputePass(pass, program, error))
+                return false;
+            for (const PassSampler &s : pass.samplers) {
+                if (!targetTextureName(s.texture))
+                    continue;
+                if (!checkTargetSampler(pass, s, program.targets, error))
+                    return false;
+                const qsizetype dot = s.texture.indexOf('.');
+                const int t = targetIndex(QString::fromLatin1(s.texture.left(dot)));
+                const QByteArray attachment = s.texture.mid(dot + 1);
+                if (t >= 0 && !drawn[t] && attachment != "capture_colour" && attachment != "capture_depth"
+                    && !program.targets.at(t).previousFrame) {
+                    *error = QStringLiteral("compute entry '%1': the sampler '%2' reads '%3' before any pass of the frame "
+                                            "drew it (a target read as the frame before declares \"previous_frame\": "
+                                            "true)").arg(QString::fromLatin1(pass.name), QString::fromLatin1(s.name),
+                                                         QString::fromLatin1(s.texture));
+                    return false;
+                }
+            }
         } else {
             static const QStringList allowed = { QStringLiteral("name"), QStringLiteral("blend"),
                                                  QStringLiteral("samplers"), QStringLiteral("target"),
@@ -1410,7 +1767,7 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                 return false;
             }
         }
-        if (!pass.capture) {
+        if (!pass.capture && !pass.compute) {
             pass.fragment = QShader::fromSerialized(fragmentPack);
             if (!pass.fragment.isValid()) {
                 *error = QStringLiteral("pass '%1': the fragment pack does not load (a .qsb from tools/regen_qrc.py's "
@@ -1472,20 +1829,46 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
         }
         return nullptr;
     };
-    for (const ModePass &pass : program.passes) {
+    for (ModePass &pass : program.passes) {
         const QString label = QString::fromLatin1(pass.name);
+        // N3.3 (D16 point 2): a storage buffer serves as a draw's storage, its per-instance input (with "vertex" in its
+        // usage) or its indirect commands (with "indirect"); a sampler reads a storage image of its own dimensions.
         for (const PassStorage &st : pass.storage) {
             const StreamDeclaration *s = stream(st.stream);
-            if (!s || s->kind != StreamKind::Storage) {
-                *error = QStringLiteral("pass '%1' binds '%2' to '%3', which is no storage stream")
+            if ((!s || s->kind != StreamKind::Storage) && !program.storageBuffer(st.stream)) {
+                *error = QStringLiteral("pass '%1' binds '%2' to '%3', which is no storage stream or storage buffer")
                              .arg(label, QString::fromLatin1(st.name), QString::fromLatin1(st.stream));
                 return false;
             }
         }
-        if (!pass.indirect.isEmpty() && (!stream(pass.indirect) || stream(pass.indirect)->kind != StreamKind::Indirect)) {
-            *error = QStringLiteral("pass '%1' draws from '%2', which is no indirect stream")
-                         .arg(label, QString::fromLatin1(pass.indirect));
+        const StorageBufferDeclaration *indirectBuffer = pass.indirect.isEmpty() ? nullptr
+                                                                                 : program.storageBuffer(pass.indirect);
+        if (!pass.indirect.isEmpty() && (!stream(pass.indirect) || stream(pass.indirect)->kind != StreamKind::Indirect)
+            && !(indirectBuffer && indirectBuffer->indirect)) {
+            *error = QStringLiteral("pass '%1' draws from '%2', which is no indirect stream or storage buffer with "
+                                    "\"indirect\" usage").arg(label, QString::fromLatin1(pass.indirect));
             return false;
+        }
+        const StorageBufferDeclaration *instanceBuffer = pass.instanceFrom.isEmpty()
+            ? nullptr : program.storageBuffer(pass.instanceFrom);
+        if (instanceBuffer && !instanceBuffer->vertex) {
+            *error = QStringLiteral("pass '%1' takes its instances from the storage buffer '%2', which has no \"vertex\" "
+                                    "usage").arg(label, QString::fromLatin1(pass.instanceFrom));
+            return false;
+        }
+        for (PassSampler &s : pass.samplers) {
+            const StorageImageDeclaration *image = program.storageImage(s.texture);
+            if ((image ? image->dimensions : 2) != s.dimensions) {
+                *error = QStringLiteral("pass '%1': the sampler '%2' is a sampler%3D reading '%4', a %5D texture")
+                             .arg(label, QString::fromLatin1(s.name)).arg(s.dimensions)
+                             .arg(QString::fromLatin1(s.texture)).arg(image ? image->dimensions : 2);
+                return false;
+            }
+            if (image && s.mips != SamplerMips::None) {
+                *error = QStringLiteral("pass '%1': the sampler '%2' reads a storage image, which has no mips")
+                             .arg(label, QString::fromLatin1(s.name));
+                return false;
+            }
         }
         const StreamDeclaration *source = pass.instanceFrom.isEmpty() ? nullptr : stream(pass.instanceFrom);
         if (source && source->kind != StreamKind::Instance) {
@@ -1493,7 +1876,8 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                          .arg(label, QString::fromLatin1(pass.instanceFrom));
             return false;
         }
-        if ((!pass.mesh.isEmpty() && stream(pass.mesh)) || pass.instanceFrom == kBuiltinQuadMesh) {
+        if ((!pass.mesh.isEmpty() && (stream(pass.mesh) || program.storageBuffer(pass.mesh) || program.storageImage(pass.mesh)))
+            || pass.instanceFrom == kBuiltinQuadMesh) {
             *error = QStringLiteral("pass '%1': its mesh '%2' names a stream, or its instances the built-in quad")
                          .arg(label, QString::fromLatin1(pass.mesh));
             return false;
@@ -1566,9 +1950,37 @@ QJsonObject ModeProgram::toJson() const
             g.insert(QStringLiteral("draw_parameters_pack"), pass.vertexDrawParameters.isValid());
             p.insert(QStringLiteral("geometry"), g);
         }
+        if (pass.compute) {
+            // N3.3 (D16): a compute entry.
+            QJsonObject c;
+            c.insert(QStringLiteral("trigger"), pass.trigger.toJson());
+            if (!pass.groupsOver.isEmpty()) {
+                c.insert(QStringLiteral("groups"), QJsonObject { { QStringLiteral("over"),
+                                                                    QString::fromLatin1(pass.groupsOver) } });
+            } else {
+                c.insert(QStringLiteral("groups"), QJsonArray { drawCountJson(pass.groups[0]), drawCountJson(pass.groups[1]),
+                                                                drawCountJson(pass.groups[2]) });
+            }
+            QJsonArray bindings;
+            for (const ComputeBinding &b : pass.computeBindings)
+                bindings.append(b.toJson());
+            c.insert(QStringLiteral("bindings"), bindings);
+            c.insert(QStringLiteral("local_size"), QJsonArray { double(pass.localSize[0]), double(pass.localSize[1]),
+                                                                double(pass.localSize[2]) });
+            c.insert(QStringLiteral("compute_member"), pass.computeMemberOffset >= 0);
+            p.insert(QStringLiteral("compute"), c);
+        }
         list.append(p);
     }
     o.insert(QStringLiteral("passes"), list);
+    QJsonArray declaredBuffers; // N3.3
+    for (const StorageBufferDeclaration &b : buffers)
+        declaredBuffers.append(b.toJson());
+    o.insert(QStringLiteral("buffers"), declaredBuffers);
+    QJsonArray declaredImages;
+    for (const StorageImageDeclaration &i : images)
+        declaredImages.append(i.toJson());
+    o.insert(QStringLiteral("images"), declaredImages);
     QJsonArray declaredStreams;
     for (const StreamDeclaration &s : streams)
         declaredStreams.append(s.toJson());
@@ -1582,15 +1994,43 @@ QJsonObject ModeProgram::toJson() const
 
 QList<QByteArray> ModeProgram::sampledTextures() const
 {
-    // The item's textures only (N3.1: a scene target's "<target>.<attachment>" is the core's own, never sent).
+    // The item's textures only (N3.1: a scene target's "<target>.<attachment>" is the core's own, never sent; N3.3: so
+    // is a storage image).
     QList<QByteArray> names;
     for (const ModePass &pass : passes) {
         for (const PassSampler &s : pass.samplers) {
-            if (!targetTextureName(s.texture) && !names.contains(s.texture))
+            if (!targetTextureName(s.texture) && !storageImage(s.texture) && !names.contains(s.texture))
                 names.append(s.texture);
         }
     }
     return names;
+}
+
+const StorageBufferDeclaration *ModeProgram::storageBuffer(const QByteArray &name) const
+{
+    for (const StorageBufferDeclaration &b : buffers) {
+        if (b.name == name)
+            return &b;
+    }
+    return nullptr;
+}
+
+const StorageImageDeclaration *ModeProgram::storageImage(const QByteArray &name) const
+{
+    for (const StorageImageDeclaration &i : images) {
+        if (i.name == name)
+            return &i;
+    }
+    return nullptr;
+}
+
+bool ModeProgram::hasCompute() const
+{
+    for (const ModePass &pass : passes) {
+        if (pass.compute)
+            return true;
+    }
+    return false;
 }
 
 void ModeProgram::passTargetSizes(const QSize &surface, const QList<TargetDeclaration> *sized,
@@ -1635,6 +2075,15 @@ bool ModeProgram::drawNames(const QByteArray &name) const
         if (named(pass.vertices) || named(pass.instances) || named(pass.drawCount) || named(pass.batchCount)
             || named(pass.frontSelector) || (pass.batched() && pass.batches == name))
             return true;
+        // N3.3: a compute entry's group counts and its field trigger.
+        if (pass.compute && (named(pass.groups[0]) || named(pass.groups[1]) || named(pass.groups[2])
+                             || (pass.trigger.kind == ComputeTrigger::Kind::Field && pass.trigger.field == name)))
+            return true;
+    }
+    // N3.3: a storage buffer's size (a setting's: the check refuses a record field).
+    for (const StorageBufferDeclaration &b : buffers) {
+        if (named(b.bytes))
+            return true;
     }
     return false;
 }
@@ -1656,12 +2105,16 @@ QList<QByteArray> ModeProgram::drawnMeshes() const
             if (s.name == name)
                 return true;
         }
-        return false;
+        return storageBuffer(name) != nullptr; // N3.3: a storage buffer is the core's own, never sent
     };
     for (const ModePass &pass : passes) {
         for (const QByteArray &name : { pass.mesh, pass.instanceFrom }) {
             if (!name.isEmpty() && name != kBuiltinQuadMesh && !isStream(name) && !names.contains(name))
                 names.append(name);
+        }
+        for (const ComputeBinding &b : pass.computeBindings) { // N3.3: a mesh a compute entry reads
+            if (b.kind == ComputeResource::Mesh && !names.contains(b.resource))
+                names.append(b.resource);
         }
     }
     return names;
@@ -1831,6 +2284,27 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
                                 : QStringLiteral("count or selector: a u32 scalar"));
                     return false;
                 }
+                // N3.3: a storage buffer is sized by a number or a setting, never per record; a compute entry's group
+                // count from the record is bounded (an at_most rule within the device's smallest group limit, 65535).
+                for (const StorageBufferDeclaration &b : buffers) {
+                    if (b.bytes.kind == DrawCount::Kind::Named && b.bytes.name == name) {
+                        *error = QStringLiteral("the record's field '%1' sizes the storage buffer '%2': a buffer's size "
+                                                "is a number or a setting").arg(QString::fromLatin1(name),
+                                                                                QString::fromLatin1(b.name));
+                        return false;
+                    }
+                }
+                for (const ModePass &pass : passes) {
+                    bool group = false;
+                    for (int a = 0; pass.compute && a < 3; ++a)
+                        group = group || (pass.groups[a].kind == DrawCount::Kind::Named && pass.groups[a].name == name);
+                    if (group && (field.check != fa::FieldCheck::AtMost || field.limit > 65535u)) {
+                        *error = QStringLiteral("the record's field '%1' is compute entry '%2''s group count: a u32 "
+                                                "under an at_most rule of at most 65535")
+                                     .arg(QString::fromLatin1(name), QString::fromLatin1(pass.name));
+                        return false;
+                    }
+                }
             }
             for (const StreamDeclaration &stream : streams) {
                 QString fits = stream.field == name ? streamFieldFits(stream, field) : QString();
@@ -1883,6 +2357,13 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
                 *error = QStringLiteral("'%1' is both a block member and a draw count: one owner a name").arg(it.key());
                 return false;
             }
+            for (const ModePass &pass : passes) { // N3.3: new work comes with the record, never with a setting
+                if (pass.compute && pass.trigger.kind == ComputeTrigger::Kind::Field && pass.trigger.field == name) {
+                    *error = QStringLiteral("'%1' is compute entry '%2''s trigger: a record field, never a setting")
+                                 .arg(it.key(), QString::fromLatin1(pass.name));
+                    return false;
+                }
+            }
         }
     }
     if (!schema)
@@ -1918,6 +2399,35 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
             if (!field)
                 waiting.append(QStringLiteral("%1.%2").arg(QString::fromLatin1(pass.name), QString::fromLatin1(pass.batches)));
         }
+        if (pass.compute) {
+            // N3.3: its group counts (the record or the settings) and its field trigger (the record only).
+            for (const DrawCount &count : pass.groups) {
+                if (count.kind != DrawCount::Kind::Named)
+                    continue;
+                bool field = false;
+                for (quint32 i = 0; i < schema->fieldCount && !field; ++i)
+                    field = count.name == schema->fields[i].name;
+                if (!field && !(settings && settings->contains(QString::fromLatin1(count.name))))
+                    waiting.append(QStringLiteral("%1.%2").arg(QString::fromLatin1(pass.name),
+                                                               QString::fromLatin1(count.name)));
+            }
+            if (pass.trigger.kind == ComputeTrigger::Kind::Field) {
+                const fa::Field *trigger = nullptr;
+                for (quint32 i = 0; i < schema->fieldCount; ++i) {
+                    if (pass.trigger.field == schema->fields[i].name)
+                        trigger = &schema->fields[i];
+                }
+                if (!trigger) {
+                    *error = QStringLiteral("unfilled: compute entry '%1''s trigger '%2' is no field of the record")
+                                 .arg(QString::fromLatin1(pass.name), QString::fromLatin1(pass.trigger.field));
+                    return false;
+                }
+            }
+        }
+    }
+    for (const StorageBufferDeclaration &b : buffers) { // N3.3: a buffer sized by a setting waits for it
+        if (b.bytes.kind == DrawCount::Kind::Named && !(settings && settings->contains(QString::fromLatin1(b.bytes.name))))
+            waiting.append(QStringLiteral("buffers.%1").arg(QString::fromLatin1(b.bytes.name)));
     }
     for (const ModePass &pass : passes) {
         if (!pass.block.valid())
@@ -2096,6 +2606,10 @@ bool ModeSource::admit(const ModeProgram &program, const QSharedPointer<const Ru
         return true;                          // nothing to check against yet
     // A still (N5.7a) is checked against its empty schema: no record, so every member is the core's or a setting.
     const fa::Schema *checked = schema ? &schema->schema() : (m_still ? &stillSchema() : nullptr);
+    if (!schema && m_still && program.hasCompute()) {
+        *error = QStringLiteral("a still draws no compute (N3.3: a compute entry's work comes with the record)");
+        return false;
+    }
     if (!program.check(checked, settings, ready, error))
         return false;
     // Packed now (the settings given, or none when the core and the record fill every member: audit L5).
@@ -2170,6 +2684,7 @@ bool ModeSource::setProgram(const ModeProgram &program, const QJsonObject *setti
     // N3.1 audit 2, M3: the new program's declarations size its targets; a size set through setTargetSize before it
     // was the old program's.
     m_targetSizes.clear();
+    m_imageSizes.clear();                     // N3.3: likewise its storage images
     ++m_generation;
     ++m_buildGeneration;
     return true;
@@ -2418,6 +2933,64 @@ bool ModeSource::setTargetSize(const QByteArray &name, const QSize &size, QStrin
     return true;
 }
 
+bool ModeSource::setImageSize(const QByteArray &name, const int *size, QString *error)
+{
+    QMutexLocker lock(&m_mutex);
+    const StorageImageDeclaration *declared = m_program.storageImage(name);
+    if (!declared) {
+        *error = QStringLiteral("the program declares no storage image '%1'").arg(QString::fromLatin1(name));
+        return false;
+    }
+    if (!storageImageSizeFits(*declared, size, error))
+        return false;
+    for (StorageImageDeclaration &set : m_imageSizes) {
+        if (set.name == name) {
+            if (std::memcmp(set.size, size, sizeof(set.size)) == 0)
+                return true;                  // unchanged: nothing is recorded
+            std::memcpy(set.size, size, sizeof(set.size));
+            ++m_generation;
+            ++m_buildGeneration;
+            return true;
+        }
+    }
+    StorageImageDeclaration set;
+    set.name = name;
+    std::memcpy(set.size, size, sizeof(set.size));
+    m_imageSizes.append(set);
+    ++m_generation;
+    ++m_buildGeneration;
+    return true;
+}
+
+void ModeSource::requestStorageRead()
+{
+    QMutexLocker lock(&m_mutex);
+    m_storageReads.fetchAndAddOrdered(1);
+    ++m_generation;                           // the next sync records (a readback rides on a record; no new work)
+}
+
+void ModeSource::setStorageReadback(const std::shared_ptr<StorageReadback> &readback)
+{
+    QMutexLocker lock(&m_textureReportMutex);
+    m_storageReadback = readback;
+}
+
+bool ModeSource::takeStoragePixels(QList<StoragePixels> *out)
+{
+    QMutexLocker lock(&m_textureReportMutex);
+    if (!m_storageReadback || !m_storageReadback->done())
+        return false;
+    *out = m_storageReadback->take();
+    m_storageReadback.reset();
+    return true;
+}
+
+void ModeSource::noteStorage(const QJsonObject &state)
+{
+    QMutexLocker lock(&m_textureReportMutex);
+    m_storageState = state;
+}
+
 void ModeSource::requestTargetRead()
 {
     QMutexLocker lock(&m_mutex);
@@ -2474,6 +3047,14 @@ bool ModeSource::sync()
                 for (const TargetDeclaration &set : m_targetSizes) {
                     if (set.name == target.name && !target.surfaceSized())
                         target.size = set.size;
+                }
+            }
+            // N3.3: the program's storage images with the sizes set since.
+            m_drawnImages = m_program.images;
+            for (StorageImageDeclaration &image : m_drawnImages) {
+                for (const StorageImageDeclaration &set : m_imageSizes) {
+                    if (set.name == image.name)
+                        std::memcpy(image.size, set.size, sizeof(image.size));
                 }
             }
             // The textures (N4.a): each image moves to the render thread once (the GUI side keeps none); an image of
@@ -2585,6 +3166,10 @@ void ModeSource::stateInto(QJsonObject &o) const
     o.insert(QStringLiteral("still_kept"), double(r.stillKept));
     o.insert(QStringLiteral("scene_targets"), sceneTargetsStateJson(m_targetsState)); // N3.1 (made here: M5)
     o.insert(QStringLiteral("mesh_buffers"), m_meshBuffersState);                    // N3.2 (noted on object change)
+    o.insert(QStringLiteral("storage"), m_storageState);                             // N3.3 (noted at an edge)
+    o.insert(QStringLiteral("storage_reads_requested"), double(m_storageReads.loadAcquire()));
+    o.insert(QStringLiteral("storage_readback_pending"), m_storageReadback && !m_storageReadback->done());
+    o.insert(QStringLiteral("storage_held"), storageHeld());
     o.insert(QStringLiteral("target_reads_requested"), double(m_targetReads.loadAcquire()));
     o.insert(QStringLiteral("target_readback_pending"), m_targetReadback && !m_targetReadback->done());
     QJsonArray changes;
@@ -2620,6 +3205,7 @@ struct ModeContent::Resources
         bool meshBinding = false;
         bool instanceBinding = false;
         bool drawParameters = false;
+        std::unique_ptr<QRhiComputePipeline> computePipeline; // N3.3: a compute entry's
     };
 
     // N3.1: a scene target's clearing draw (its clear values, its pipeline over the target's render pass).
@@ -2713,7 +3299,8 @@ int ModeContent::liveResources() const
     int textures = 0;
     for (const GpuTexture &texture : m_textures)
         textures += texture.texture ? 1 : 0;
-    return (m_res ? m_res->objects : 0) + textures + m_targets.liveObjects() + m_meshes.live() + m_streams.live();
+    return (m_res ? m_res->objects : 0) + textures + m_targets.liveObjects() + m_meshes.live() + m_streams.live()
+        + m_storage.live();                   // N3.3
 }
 
 void ModeContent::releasePipelines()
@@ -2736,6 +3323,7 @@ void ModeContent::releasePipelines()
     }
     for (int i = m_res->passCount - 1; i >= 0; --i) {
         Resources::Pass &p = m_res->passes[i];
+        p.computePipeline.reset();            // N3.3
         p.pipelineCw.reset();                 // N3.2
         p.pipeline.reset();
         p.bindings.reset();
@@ -2760,6 +3348,13 @@ void ModeContent::release()
     m_targets.release();                      // N3.1: every scene target (D14 point 3: with the content)
     m_targetObjectsSeen = 0;
     m_meshes.release();                       // N3.2 (D15 choice A: with the content)
+    m_storage.release();                      // N3.3 (D16 choice B: with the content; a content made again finds it lost)
+    m_storageObjectsSeen = 0;
+    m_storageNoted = ~quint64(0);
+    m_storageHeldHere = false;                // storage made after this is found lost (the source held it)
+    m_computeProgram = 0;
+    for (ComputeTrack &t : m_compute)
+        t = ComputeTrack();
     m_arena.clear();
     m_meshesLost.clear();
     for (GpuTexture &texture : m_textures) {
@@ -3315,6 +3910,8 @@ QRhiTexture *ModeContent::samplerTexture(const QByteArray &name) const
 {
     if (targetTextureName(name))
         return m_targets.sampledTexture(name); // N3.1: the core's own (its resolve when multisampled)
+    if (const ModeStorage::Image *image = m_storage.image(name))
+        return image->texture.get();           // N3.3: a storage image (the core's own)
     const GpuTexture *texture = front(name);
     return texture ? texture->texture.get() : nullptr;
 }
@@ -3346,6 +3943,8 @@ bool ModeContent::passBindings(const Resources &r, int index, QList<QRhiShaderRe
                                                               p.samplers[0].get()));
         return true;
     }
+    if (pass.compute)
+        return computeBindings(r, index, out); // N3.3
     QRhiBuffer *arena = m_streams.arena();
     if (!arena)
         return false;
@@ -3365,9 +3964,11 @@ bool ModeContent::passBindings(const Resources &r, int index, QList<QRhiShaderRe
     // N3.2: storage, read only, from its storage stream.
     for (const PassStorage &st : pass.storage) {
         const ModeStreams::Stream *stream = m_streams.find(st.stream);
-        if (!stream || !stream->buffer)
+        const ModeStorage::Buffer *storage = stream ? nullptr : m_storage.buffer(st.stream); // N3.3: compute's output
+        QRhiBuffer *buffer = stream ? stream->buffer.get() : storage ? storage->buffer.get() : nullptr;
+        if (!buffer)
             return false;
-        out->append(QRhiShaderResourceBinding::bufferLoad(st.binding, stages(st.stages), stream->buffer.get()));
+        out->append(QRhiShaderResourceBinding::bufferLoad(st.binding, stages(st.stages), buffer));
     }
     // The samplers (N4.a): each with its declared state, over the texture it names (an item texture's front, or N3.1 a
     // scene target's).
@@ -3420,7 +4021,7 @@ bool ModeContent::rebindTextures()
     const ModeProgram &program = m_source->drawnProgram();
     for (int i = 0; i < m_res->passCount; ++i) {
         const ModePass &pass = program.passes.at(i);
-        if (pass.samplers.isEmpty() && !pass.capture && pass.storage.isEmpty())
+        if (pass.samplers.isEmpty() && !pass.capture && pass.storage.isEmpty() && !pass.compute)
             continue;
         Resources::Pass &p = m_res->passes[i];
         if (!p.bindings || (!pass.capture && p.samplerCount != int(pass.samplers.size())))

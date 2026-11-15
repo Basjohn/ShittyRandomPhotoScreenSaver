@@ -28,6 +28,7 @@ QAtomicInteger<qint64> g_copies { 0 };
 QAtomicInteger<qint64> g_imageZeroUploads { 0 };
 QAtomicInteger<qint64> g_objectsCreated { 0 };
 QAtomicInteger<int> g_readbacksPending { 0 };
+QAtomicInteger<qint64> g_statesLost { 0 };
 QAtomicInteger<int> g_writeAsRead { 0 };
 QAtomicInteger<int> g_singlePass { 0 };
 QAtomicInteger<int> g_triggerEveryRecord { 0 };
@@ -330,12 +331,14 @@ ComputeCounts computeCounts()
     c.imageZeroUploads = g_imageZeroUploads.loadRelaxed();
     c.objectsCreated = g_objectsCreated.loadRelaxed();
     c.readbacksPending = g_readbacksPending.loadRelaxed();
+    c.statesLost = g_statesLost.loadRelaxed();
     return c;
 }
 
 void countDispatch() { g_dispatches.fetchAndAddRelaxed(1); }
 void countComputePass() { g_computePasses.fetchAndAddRelaxed(1); }
 void countSkipped() { g_skipped.fetchAndAddRelaxed(1); }
+void countStateLost() { g_statesLost.fetchAndAddRelaxed(1); }
 
 void setComputeWriteAsRead(bool on) { g_writeAsRead.storeRelaxed(on ? 1 : 0); }
 bool computeWriteAsRead() { return g_writeAsRead.loadRelaxed() != 0; }

@@ -143,6 +143,7 @@ ComputeCounts computeCounts();
 void countDispatch();
 void countComputePass();
 void countSkipped();
+void countStateLost();
 
 // Harness controls (each the negative control of one proof; process-wide, the harness's only):
 // - every written binding recorded as a read (QRhi then derives no barrier for the write: read-after-write's control);

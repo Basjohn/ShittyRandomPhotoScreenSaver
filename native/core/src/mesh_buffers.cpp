@@ -399,6 +399,7 @@ QJsonObject ModeMesh::toJson() const
     o.insert(QStringLiteral("vertex_count"), double(vertexCount));
     o.insert(QStringLiteral("instances"), instanceLayout.valid() ? QJsonValue(instanceLayout.toJson()) : QJsonValue());
     o.insert(QStringLiteral("instance_count"), double(instanceCount));
+    o.insert(QStringLiteral("storage"), storage);
     o.insert(QStringLiteral("image_held"), !image.isNull());
     return o;
 }
@@ -415,12 +416,17 @@ bool makeModeMesh(const QByteArray &name, const QByteArray &declaration, const Q
     const QJsonDocument document = QJsonDocument::fromJson(declaration, &parse);
     const QJsonObject o = document.object();
     const bool withInstances = o.contains(QStringLiteral("instances"));
-    if (parse.error != QJsonParseError::NoError || !document.isObject() || o.size() != (withInstances ? 2 : 1)) {
-        *error = QStringLiteral("%1: its declaration is {\"vertices\": a layout, \"instances\"?: a layout}").arg(label);
+    const bool withStorage = o.contains(QStringLiteral("storage")); // N3.3
+    if (parse.error != QJsonParseError::NoError || !document.isObject()
+        || o.size() != 1 + (withInstances ? 1 : 0) + (withStorage ? 1 : 0)
+        || (withStorage && !o.value(QStringLiteral("storage")).isBool())) {
+        *error = QStringLiteral("%1: its declaration is {\"vertices\": a layout, \"instances\"?: a layout, \"storage\"?: "
+                                "true or false}").arg(label);
         return false;
     }
     ModeMesh mesh;
     mesh.name = name;
+    mesh.storage = o.value(QStringLiteral("storage")).toBool(false);
     if (!parseRecordLayout(o.value(QStringLiteral("vertices")), &mesh.vertexLayout, label + QStringLiteral(" vertices"),
                            error))
         return false;
@@ -545,8 +551,10 @@ void ModeMeshes::release()
 bool ModeMeshes::upload(QRhi *rhi, QRhiResourceUpdateBatch *updates, Gpu &gpu, const ModeMesh &mesh,
                         const QSharedPointer<MeshImage> &image, QStringList *lost)
 {
-    std::unique_ptr<QRhiBuffer> vertices(rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer,
-                                                        quint32(image->vertices.size())));
+    // N3.3: a mesh with storage usage is also a StorageBuffer (compute reads it, D3's geometry once per revision).
+    const QRhiBuffer::UsageFlags usage = mesh.storage ? (QRhiBuffer::VertexBuffer | QRhiBuffer::StorageBuffer)
+                                                      : QRhiBuffer::UsageFlags(QRhiBuffer::VertexBuffer);
+    std::unique_ptr<QRhiBuffer> vertices(rhi->newBuffer(QRhiBuffer::Immutable, usage, quint32(image->vertices.size())));
     vertices->setName(QByteArrayLiteral("srpss core mesh ") + mesh.name);
     std::unique_ptr<QRhiBuffer> instances;
     bool ok = vertices->create();
@@ -575,6 +583,7 @@ bool ModeMeshes::upload(QRhi *rhi, QRhiResourceUpdateBatch *updates, Gpu &gpu, c
     gpu.instanceLayout = mesh.instanceLayout;
     gpu.vertexCount = mesh.vertexCount;
     gpu.instanceCount = mesh.instanceCount;
+    gpu.storage = mesh.storage;
     gpu.vertices = std::move(vertices);
     gpu.instances = std::move(instances);
     gpu.bytes = qint64(image->vertices.size()) + qint64(image->instances.size());
