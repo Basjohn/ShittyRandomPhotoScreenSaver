@@ -42,7 +42,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
-- High: N5.7c, then N3. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers
+- High: N5.7c, then N3.4 (transparency and post-processing), then N3.6. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers
   ride with the next fitting dispatch.
 - Medium: the next N5 port (Oscilloscope or Bubble once N3.2's instanced quads land).
 - Docs (Sonnet): only when a step needs a document.
@@ -442,106 +442,7 @@ N2.8, whose rehearsal closes N2.5's rule (f) and releases the Python renderer's 
 Numbering kept stable for the documents that cite it: N3.5 (per-pass GPU timing) moved to N2.6, and N3.8 (the job
 service) is built in N2b, where its first job (a photo's upload) is needed.
 
-- [ ] N3.1 Scene targets: colour, depth and the HDR intermediate with fixed allocations per size, resize and
-  retirement; a sampled depth texture and the background capture (Extruded Bubble); a small extra target with a
-  second light attachment (Bubble); single-sampled first (the parity gate), then one sampling-policy owner for
-  the 3D Detail tier and a transition's own request (2x to 8x), clamped to what the device supports. The design and
-  its open choices A to G: decisions doc, "N3.1 draft" (15 Nov). No C++ before the lead answers them.
-  - [ ] Contract: the lead's answers to A to G folded into the decisions doc as "N3.1, decided", the draft's text
-    replaced, not kept beside it. It states: targets as program data (name; size, the surface's or explicit pixels;
-    at most 4 named colour attachments, RGBA8, RGBA16F, R16F or R32F; depth none or one D32F texture; requested
-    samples), the bucket and when an allocation is made, the content's place in a bucketed allocation (image rows
-    [H-h, H), Python's GL bottom-left) and the one `conventions.h` function that gives QRhi's viewport and scissor
-    per backend, each pass's target, outputs, per-attachment mask and blend, depth test and write, `gl_FragDepth`
-    only into a target with depth, the capture step, samplers naming `<target>.<attachment>`, rules B and C for
-    every attachment and for depth, the sampling request's owner and the core's clamp, resolve-first for
-    multisampled targets, and every refusal with its reason.
-  - [ ] C++ owner (render thread; `native/core/src`; no STL, Qt types, as the README says):
-    - [ ] `scene_targets.{h,cpp}`: `SceneTargets`, owned by `ModeContent` (choice B), keyed by (bucketed size,
-      effective samples, declaration); allocation one attachment per step (an entry N3.6 calls as a warm-up unit;
-      until then the first record makes them); the same QRhi objects re-created at a new key; one render target per
-      target with every attachment; resolve textures for the attachments a sampler reads when multisampled;
-      `release()` with the content; process-wide counts (targets, attachments, bytes, allocations, resolves) for
-      `composite_live` and `RuntimeDestructionBarrier`.
-    - [ ] `conventions.h`: the content rect of a bucketed allocation to QRhi's viewport and scissor per backend
-      (on the core's OpenGL targets F1's flip puts QRhi's viewport origin at the image top), with a GPU-free test of
-      both backends' answers.
-    - [ ] `targets.{h,cpp}`: rules B and C for depth (a D32F texture preserved and cleared by a draw; its prime on
-      Vulkan to DEPTH_STENCIL_ATTACHMENT_OPTIMAL with read and write, if validation shows QRhi's tracker needs it as it
-      does for colour).
-    - [ ] `mode_content.{h,cpp}` admission widened (D12/D13's way): a pass's target, outputs at locations 0..n-1
-      matching its target's attachments, per-attachment write mask and blend (refused with a reason where the device
-      lacks `QRhi::PerRenderTargetBlending` and the blends differ), depth test and write, `gl_FragDepth` only into a
-      target with depth; samplers bound to `<target>.<attachment>` (never to the attachment the pass writes); the
-      passes recorded per target in order, one render pass per run of passes on the same target; the content latch
-      keyed on the targets' generations too; the state's targets (allocated size, effective samples, bytes, the last
-      allocation's reason).
-    - [ ] The capture: a step between two passes on one target ends its pass, draws the capture pass into a target of
-      its own (colour as the scene's format with linear sampling, nearest window depth R32F through
-      `viewDepthFromDepthTexture` with nearest sampling, the whole allocation; a shader of the core's, both forms
-      `background()` has: single-sampled and over the resolves), then begins the target's pass again with colour and
-      depth loaded.
-    - [ ] The clamp: the largest of `QRhi::supportedSampleCounts()` not above the request (1 when none), applied when a
-      target is allocated, reported in the state; a harness control that removes counts from the supported set (the
-      clamp's negative control).
-    - [ ] Python face: `rendering/native/mode.py` `ModeTarget` (with `ModePass` gaining target, outputs, masks, blends,
-      depth and capture; `PassSampler` naming an attachment), `program_json` carrying them, `NativeMode.state()`'s
-      targets.
-    - [ ] The sampling request's one owner beside the tier table (`rendering/gl_programs/scene3d.py`); its callers
-      `extruded_bubble.py:131`, `sphere_voxel.py:122`, `shockwave_grid.py:104`, `extruded_spectrum.py:63`,
-      `scene3d/waveform.py:377` and `oscilloscope.py:165` call it, Waveform's 4 and the Oscilloscope's 1 kept as declared
-      requests (choice D); no pixel moves, proved GPU-free by
-      `tests/test_native_scene_targets.py::test_every_visualizer_request_is_its_former_expression` (every caller's
-      request equals its former expression for every tier; `shockwave_quality`'s `scene_samples(detail)` is checked
-      there through the owner, not through the function). `tools/conventions_identity.py` cannot see a sample request:
-      it forces every `SceneTarget` to one sample (`owner_render_parity.single_sample_scene_targets`; audit 2, L4).
-      This closes N1's last box. Transitions keep `scene3d_samples` as the request.
-  - [ ] ABI 17: `abi.h`'s comment and `SRPSS_NATIVE_CORE_ABI`, `rendering/native/loader.py` `EXPECTED_ABI` (with
-    `tests/test_native_core_loader.py`); the program declaration's targets and pass fields, the harness readback of a
-    target's attachments (`composite_mode_target_read`: RGBA8, half floats and R32F as stored), the clamp control,
-    `composite_live`'s scene target counts, `composite_mode_state`'s targets, the host state's supported sample
-    counts. Then the lead's GitHub build (`--select native_module`) at the commit; agents never build.
-  - [ ] Harness proof `native/core/python/scene_target_check.py` (hidden host, OpenGL and Vulkan on the module's
-    device; harness fragments in the product shape under `native/core/python/scene_targets/`, like `probe_rings/`;
-    PERSONALSET photos as the scene's backdrop; evidence `.artifacts/evidence/native_core/n3_1/`):
-    - [ ] Rule (a), single-sampled, OpenGL native against the Python owners driving the same fragments in the
-      production GL host: `SceneTarget` with `depth_texture`, `background()` and `hdr` (its colour, emission and both
-      capture textures read back, RGBA16F as half floats), and for the second attachment a GL target with
-      `QuickBubbleAmbientPoints`' formats and blend states; exact, at dpr 1 and 1.5, at a bucket-aligned and an odd
-      size (slack present), with a negative control (the content placed at the image top: the edge reads differ).
-    - [ ] Rule (b): Vulkan against native OpenGL within 1 level (depth and the capture's R32F within 2e-7, N0.3 scene
-      2's bound).
-    - [ ] Depth: two known-depth planes written through `gl_FragDepth` by the project's camera (N0.3 scene 2's): the
-      capture's depth against the analytic window depth, the nearer plane winning, the clear value, the depth loaded
-      across the capture split (a third pass depth-tested after it).
-    - [ ] Multisampled, after the single-sampled gate: 2x, 4x and 8x requests on both backends, repeat-relative
-      (`tests/_msaa_render_noise.py`'s rule); the clamp with the harness control removing 8 (8 drawn as 4, reported);
-      colour resolves (QRhi's average) and the depth's nearest resolve (D14 point 10, the core's per-sample pass:
-      equal to single-sampled without partial coverage, the analytic nearest depth with `gl_SampleMask` bands, means
-      (a) and (b), the sample-0 negative control wrong exactly in the first band); the 4K 4x-minus-1x against the
-      Python path's on the same load (D14 point 11: accepted when no worse; worse is a defect, its time found by
-      `cost_parts`).
-    - [ ] Nothing at rest: a minute at rest records no target pass and allocates nothing (counts unchanged); control: a
-      content dirtied every frame.
-    - [ ] Resize: a scripted drag of the card from 800 to 1000 px in 1 px steps reallocates only at bucket crossings
-      (control: a 1 px bucket reallocates every step); after each reallocation the frame equals a fresh target's at that
-      size.
-    - [ ] Retirement without leaks: the content released (a mode switch, the node deleted, the scene graph
-      invalidated, the item destroyed mid-allocation between steps): targets, attachments, bytes and resolves back to
-      zero, the destruction barrier's reading zero; Vulkan validation with synchronisation validation clean through
-      create, resize, capture, multisample (consecutive multisampled records with no readback between them: the cost
-      round under the layer, and `prime_control`'s resolve phases; audit 2, H1) and teardown (Qt 6.12.0's defect A
-      only, by its id).
-    - [ ] Cost and threads: GPU time per pass (the GPU timer) median and p90 at 2560x1440 and 4K, single and 4x; the
-      allocation steps' render-thread CPU time at 4K (the units N3.6 will space); the thread probe: zero calls with a
-      Python thread state.
-    - [ ] Regressions on the same module: `generic_mode_check.py`, `fullscreen_pass_check.py`,
-      `background_layer_check.py`, `backdrop_pyramid_check.py`, `transition_route_check.py` verdicts unchanged.
-  - [ ] Docs: the decisions doc's "As built (N3.1)" under "N3.1, decided"; `native/core/README.md` (`scene_targets.*`,
-    the proof, "How a new mode is built" gains a targets step); `Docs/Reference/Primitives.md` E3's native line and
-    the class the lead gives it; `Docs/Reference/Scene3D_Resources.md`'s native scene target row;
-    `Docs/Reference/Harness_Index.md` (the command); the 3D foundation lessons in `Docs/Reference/Transitions.md`
-    (appended after the slice).
+- N3.1 Scene targets: merged (3c13c76e; D14 in `Docs/Future_Work/Native_Core_P3_Decisions.md`); its leftovers are N3.1b and N3.1c.
 - [ ] N3.1b The four-sample capture cost on Vulkan (D14 point 13; settled before N5.6, Extruded Bubble, the first
   consumer of a four-sample capture). At 4K Vulkan's 4x minus 1x is 0.58 ms against the Python path's 0.41 (OpenGL
   0.45 is within noise, accepted); `cost_parts` puts about 0.5 ms of it in the capture step at four samples against
@@ -574,154 +475,7 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     in 1 px steps (`DRAG`'s step is 2 px); the resize control as a 1 px bucket (it re-buckets at every change today);
     the retirements "item destroyed mid-allocation between steps" and "scene graph invalidated" exercised (every step
     runs in one record today, and `release()` covers both by construction only).
-- [ ] N3.2 Mesh and buffer resources: static meshes built once and kept, dynamic buffers with dynamic offsets,
-  instancing, pre-built resource bindings per ring slot (no allocation per frame), instanced quads in place of
-  point sprites (Bubble, Neon Lake's marks, Waveform's sparks use `gl_PointSize`).
-  - The design: decisions doc D15 (decided 15 Nov; the lead accepted A to J, G built now with no consumer: the batched
-    draw with its two packs). Built on N3.1's branch merged in under audit; main is merged when N3.1 lands. C's move to
-    the block arena stops and is reported if any listed proof moves a pixel.
-  - [ ] Contract: the lead's answers to A to J folded into the decisions doc as "D15, decided", the draft's text
-    replaced, not kept beside it. It states: a pass's own vertex stage and its geometry (topology: triangles or a
-    triangle strip, points refused; vertex count, a number or the mesh's; instance count by name from the record or a
-    setting, 0 draws nothing; first vertex; `firstInstance` always 0); vertex inputs bound by name to mesh attributes
-    (per vertex) or a stream's or mesh's (per instance, step rate 1 only); read-only storage buffers by name; cull and
-    front face, fixed or chosen per record between two pipelines built ahead; the blend as a full declaration
-    (operation and factors, `Max` and `Min` included) beside N3.1's presets; meshes as data (bytes, attributes, stride,
-    an optional instance stream; `Immutable`, uploaded once at the next record, the copy then dropped; replaced in the
-    record that first draws it; content scope; lost when the content is made again; the built-in `quad`); the block
-    arena (every block of a content in one `Dynamic` uniform buffer at `ubufAligned` offsets, dynamic offsets per draw,
-    written whole by the fast path once per record); streams from `f32` record fields (instance: `Dynamic` vertex
-    buffer by the fast path; storage: `Static`, `uploadStaticBuffer` of the used bytes); the per-backend limits (at most
-    4 dynamic-offset blocks a pass, a block within `MaxUniformBufferRange`, no dynamic offset on storage); the sprite
-    include; how a batch is chosen without `firstInstance`; indirect draws from record-written commands; "no allocation
-    per frame" as the lead defines it (choice I); every refusal with its reason.
-  - [ ] C++ owner (render thread; `native/core/src`; no STL, Qt types, as the README says):
-    - [ ] `meshes.{h,cpp}`: `ModeMeshes`, owned by `ModeContent` (choice A): the GUI thread's copy (a generation per
-      mesh, at most a fixed count a content, each within a byte cap); the render thread's upload at the next record into
-      an `Immutable` `QRhiBuffer` (an entry N3.6 calls as a warm-up unit; until then the record uploads), the copy
-      dropped; a replacement uploaded in the record that first draws it, the old buffer by `deleteLater` after it; the
-      built-in `quad` (the item quad's vertices read from the Python host's VAO data, one table); lost on a content made
-      again; `release()` with the content; process-wide counts (meshes, bytes, uploads) for `composite_live` and
-      `RuntimeDestructionBarrier`.
-    - [ ] `streams.{h,cpp}`: `ModeStreams`, owned by `ModeContent`: the block arena (layout from each block's size and
-      `QRhi::ubufAligned`, made at a build, written whole per record through
-      `beginFullDynamicBufferUpdateForCurrentFrame`, never a batch update); the instance streams (`Dynamic`
-      `VertexBuffer`, fast path) and storage streams (`Static` `StorageBuffer`, `uploadStaticBuffer` of the used bytes),
-      each sized at bind from its record field's capacity and never resized; the indirect buffer from a record field
-      (`Dynamic` `IndirectBuffer`); nothing written by a record that does not draw; counts (streams, bytes, bytes
-      written per record) in the state.
-    - [ ] `mode_content.{h,cpp}` admission widened (D12, D13 and D14's way): the vertex pack and its reflected inputs,
-      matched by name; the geometry and draw declarations; storage bindings (read only, vertex or fragment stage); cull,
-      front face and its per-record selector; the blend declaration; counts and selectors filled by name under the one
-      rule (a name with two owners refused; a record field feeding both a block and a stream refused); the N2.9 and N3.1
-      passes moved to the block arena (choice C) with one shader-resource-bindings object per (pipeline layout,
-      resources), offsets given at each `setShaderResources`; draws recorded `draw(vertices, instances, firstVertex, 0)`,
-      `drawIndirect` from the indirect stream; the content latch keyed on the meshes' and streams' generations too; the
-      state's meshes, streams and arena.
-    - [ ] The batched draw (choice G, built with no consumer): a pass's table of batches (first instance, instance
-      count, block values) recorded as one `drawIndirect` with `gl_DrawID` over core-written commands where
-      `DrawIndirect`, `DrawIndirectMulti` and `ShaderDrawParameters` are reported, else one draw a batch with its block
-      at its dynamic offset; the pass's two packs (`draw_parameters` and plain), refused without the plain one.
-    - [ ] Core member for vertex stages (choice H): item pixels to the drawn target's clip space, from the card and
-      the target with the conventions' clip Y, in `kModeCoreMembers` with its own row; a GPU-free test of both
-      backends' values against the Python renderer's `uMatrix` for a card at the target's origin.
-    - [ ] The sprite include: `srpssSpriteCorner`, `srpssSpriteCornerList`, `srpssSpriteClip` and the sprite coordinate
-      in `native/core/shaders/srpss_conventions.glsl` and `rendering/gl_programs/conventions.py`, the test that holds
-      them equal extended.
-    - [ ] Device facts, read once at device creation into the host state: Vulkan `minUniformBufferOffsetAlignment`,
-      `maxUniformBufferRange`, `maxDescriptorSetUniformBuffersDynamic`, `multiDrawIndirect`, `drawIndirectFirstInstance`,
-      `shaderDrawParameters` (from the physical device the core creates, D6); QRhi's `ubufAlignment()`, `Instancing`,
-      `BaseInstance`, `DrawIndirect`, `DrawIndirectMulti`, `ShaderDrawParameters`, `MaxUniformBufferRange` on both
-      backends (research Q4 and Q5's open points).
-    - [ ] The record's `f32` field kind (choice B): `core/visualizer_engine/native_schema.py` (`_KINDS`, packing,
-      fingerprint), `tools/native_frame_abi_header.py` and the generated `frame_abi_generated.h` (`--check` in
-      `tests/test_native_packet_reader_sources.py`), the C++ reader's admission of the kind, the Python reference
-      decoder; an `f32` array admitted only with its used-length `u32` field and `at_most` rule (the stream's `"used"`,
-      refused without one, past the capacity or on a u32 stream; only the used bytes written each record: the lead,
-      15 Nov; a storage stream's bytes past the used length are an earlier record's, an instance stream is drawn
-      exactly its used records and any other instance count is refused: checkpoint audit 4, H2;
-      `mesh_buffer_check.py --rounds used` proves the bytes written, a storage stream's bytes past it untouched, an
-      instance stream drawn exactly its used records with no frame-slot difference (control `instances_past_used`: the
-      Vulkan frames alternate), another instance count refused, and a record past its rule writing nothing).
-    - [ ] Python face: `rendering/native/mode.py` (`ModeMesh`, `ModeStream`, `ModePass` gaining the vertex pack,
-      geometry, draw, storage bindings, cull, front face and blend declaration; `program_json` carrying them;
-      `NativeMode.set_mesh`/`remove_mesh`; `state()`'s meshes, streams and arena); a GPU-free mirror of the arena's
-      layout for a given alignment (`rendering/native/streams.py`), with tests that have negative controls.
-  - [ ] ABI 18: `abi.h`'s comment and `SRPSS_NATIVE_CORE_ABI`, `rendering/native/loader.py` `EXPECTED_ABI` (with
-    `tests/test_native_core_loader.py`); the program declaration's vertex stage, geometry, streams and blends; the mesh
-    entries (`composite_mode_mesh`, `composite_mode_mesh_remove`); the record's `f32` kind; `composite_live`'s mesh and
-    stream counts; `composite_mode_state`'s meshes, streams and arena; the host state's device facts; the harness hooks
-    the proof's controls need (no environment variable). Then the lead's GitHub build (`--select native_module`) at
-    the commit; agents never build.
-  - [ ] Harness proof `native/core/python/mesh_buffer_check.py` (hidden host, OpenGL and Vulkan on the module's
-    device; harness vertex and fragment shaders in the product shape under `native/core/python/mesh_buffers/`, like
-    `scene_targets/`; PERSONALSET photos as a backdrop where a scene shows one; evidence
-    `.artifacts/evidence/native_core/n3_2/`):
-    - [ ] Rule (a), OpenGL native against the Python owners driving the same shaders in the production GL host
-      (`MeshResources.mesh` with an instance stream, `StreamRing` storage and pass blocks, `glDrawArraysInstanced`):
-      a box mesh instanced over storage records, a static per-instance stream (Sphere's shape), an instance stream
-      written per frame (Bubble's shape), a vertex-pulled strip (the Oscilloscope's shape) with blend MAX, and the
-      built-in `quad` under 900 culled and live instances (Beam's shape); within the transitions' tie budget (at most
-      8 pixels a frame past 1 level; D15, the lead's decision of 15 Nov), at dpr 1 and 1.5, the harness data's edges
-      off exact pixel centres; negative control: an instance stream read out of step (the pixels differ).
-    - [ ] Rule (b): Vulkan against native OpenGL within the same tie budget on every scene above.
-    - [ ] Sprites: the instanced-quad form against the Python renderer's `gl_PointSize` points at sizes 1.0, 1.7, 2.1,
-      12.5 and 128 px and sub-pixel centres, both sprite-coordinate users (a ring and a radial profile); the figures (pixels
-      past 0 and past 1 level) to the lead (the conversion's look question); the same quad form drawn by the Python
-      renderer equals the core's within the tie budget (rule a proper); the culled sprite draws nothing; negative control: the
-      sprite coordinate with y up (the ring's glint moves).
-    - [ ] Dynamic offsets: sixteen draws of one pipeline in one pass, each with its own block at its offset, equal
-      bit for bit to sixteen passes each with its own buffer (N3.1's form); the shader-resource-bindings count is one;
-      negative control: every draw given the first offset.
-    - [ ] Indirect and draw parameters: `drawIndirect` from record-written commands equals the direct draw; one
-      multi-draw with `gl_DrawID` and `gl_BaseInstance` where both features are reported, against the per-draw loop
-      with the base in the block; `gl_DrawID`, `gl_BaseInstance` and `gl_BaseVertex` compiled by `qsb` for both targets
-      and read back per backend; `srpssInstanceIndex` equal on both backends with `firstInstance` 0; the device facts
-      recorded; negative control: a direct draw with `firstInstance` 3 on OpenGL (ignored: the instance index starts at
-      0, the reason for the rule).
-    - [ ] Nothing at rest: a minute at rest uploads no mesh, writes no arena or stream byte and records no pass; control:
-      a content dirtied every frame.
-    - [ ] No allocation per frame: over a steady minute of recorded frames, QRhi's resource counts, the core's mesh and
-      stream counts and the ownership counts are flat, and the core's heap is flat under the harness's counting
-      allocator; QRhi's batch copy of each `Static` upload reported with its size (choice I); control: a stream
-      recreated each record (the counts grow).
-    - [ ] Retirement without leaks: the content released (a mode switch, the node deleted, the scene graph invalidated,
-      a mesh replaced and removed, the item destroyed between an upload and its first draw): meshes, streams, arena and
-      bytes back to zero, the destruction barrier's reading zero; control: a release that skips the meshes.
-    - [ ] Validation: Vulkan with synchronisation validation clean through upload, replacement, per-record streams,
-      dynamic offsets, indirect draws and teardown (Qt 6.12.0's defect A only, by its id); OpenGL debug output with no
-      error.
-    - [ ] Threads and cost: the thread probe (zero calls with a Python thread state); GPU time per pass (the GPU timer)
-      median and p90 for each scene at 2560x1440 and 4K; the render-thread CPU time of a record with each stream size.
-    - [ ] Regressions on the same module: `generic_mode_check.py`, `fullscreen_pass_check.py`,
-      `background_layer_check.py`, `backdrop_pyramid_check.py`, `transition_route_check.py`, `scene_target_check.py`
-      verdicts unchanged, outputs bit-identical after the move to the block arena (choice C).
-      - [ ] Spline Curve's `devcurve_check.py` too, once it is on main; any proof that moves a pixel stops the work.
-    - [ ] The batched draw: the indirect form equals the per-batch form pixel for pixel on each backend that reports
-      the features; the per-batch form on a device control that hides them.
-  - [ ] The stream ring: QRhi dynamic buffers against the persistent-mapped pair (D5.3) at the product's ring
-    sizes on both backends; the pair is built only if it wins by 0.05 ms or more (D8 plus 8).
-    - [ ] Measured in `mesh_buffer_check.py --rounds stream_ring`, on a quiet GPU (`nvidia-smi` utilisation before
-      and after recorded, nothing else rendering) with the display state recorded: payloads at the product's sizes
-      (the block arena with 16 blocks, 4 KiB, Bubble's 4.6 KB of points, the Oscilloscope's 48 KiB, Waveform's 160 KiB
-      packet and 288 KiB with its cohorts), each through every QRhi route that applies (arena by the fast path and by
-      batch updates; instance stream by the fast path; storage by `uploadStaticBuffer`), with a pass that reads the
-      data as its consumer does (every vertex reading its neighbours for the storage case). Both axes per frame:
-      render-thread CPU time of the write and the record, and GPU time of the reading pass (the GPU timer; on OpenGL a
-      bounded loop over a counted number of frames, since Qt's timer returns about one result in 20 frames).
-    - [ ] The pair's floor, measured in QRhi without building the pair: CPU, the payload written once into mapped memory
-      (the fast path's own write into a `Dynamic` buffer of that size); GPU, the reading pass with the data already
-      resident and no copy recorded. Judged by both configurations' absolute times, never a difference alone.
-    - [ ] Decision: where every QRhi route is within 0.05 ms of the floor on both axes on both backends, the pair is not
-      built and D5.3's row says so with the figures. Otherwise the work stops and goes to the lead with the figures
-      (a pair here is a raw draw of that pass on both backends, since `QRhiBuffer` has no `createFrom`).
-  - [ ] Docs: the decisions doc's "As built (N3.2)" under "D15, decided" and D5.3's stream ring row with the measured
-    figures; D5's ownership table's static-mesh row (choice A); `native/core/README.md` (`meshes.*`, `streams.*`, the
-    proof; "How a new mode is built" gains the vertex stage, meshes, streams and sprites); `Docs/Reference/Primitives.md`
-    (instanced quads and meshes, the class the lead gives them, a showcase WebP); `Docs/Reference/Scene3D_Resources.md`'s
-    native mesh and stream rows; `Docs/Reference/Harness_Index.md` (the command); `Native_Core_QRhi_Research_N3.md`'s
-    open items Q4 to Q6 answered from the proof; the 3D foundation lessons in `Docs/Reference/Transitions.md` (appended
-    after the slice).
+- N3.2 Mesh and buffer resources: merged (d43049ce; D15 in `Docs/Future_Work/Native_Core_P3_Decisions.md`). Open:
   - [ ] Checkpoint audit 4's three open lows (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 4";
     recorded, not fixed, by the lead's decision of 15 Nov):
     - [ ] L1, the draw-parameters pack's interface: `checkGeometryPass` (`mode_content.cpp`) checks only a batched
@@ -741,113 +495,24 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       `itemClipMatrix`; `test_the_core_arena_rule_is_the_mirror_s` calling the module's `mesh_buffer_arena_layout`
       instead of matching source text; a test comparing the C++ reader's decode of an `f32` field with Python's
       (fields equal, bytes round-trip with inf, -0 and a denormal: the audit's `probe_f32_reader.py`).
-- [ ] N3.3 Compute passes: dispatch only when there is new work, storage buffers shared with draws, barriers from
-  the binding access types, no readback in the product. Builds on N3.2's streams and pass model (D15, ABI 18; not
-  merged when this was written). The design and its open choices A to L: decisions doc, "N3.3 draft" (15 Nov). No C++
-  before the lead answers them. Consumers, as they dispatch today:
-  - Waveform Ribbon (N5.4): five programs, seven dispatches a fogged frame, all writing images the draws sample:
-    `waveform_field.py:54-55` (the body field, RGBA32F, reads the knot packet at storage binding 0),
-    `floor_give.py:79-88` (sections RGBA32F, then a blur reading them by `imageLoad`), `fog_volume.py:155-167`
-    (inject writes 3D RGBA16F and R16F, integrate reads inject and writes 3D RGBA16F), run twice
-    (`waveform.py:288-300`: the main and the reflected volume). The fog grid follows the surface size
-    (`waveform.py:338`).
-  - Extruded Bubble's drift (D4, N5.6): `extruded_bubble_drift_solver.py:680-752` dispatches only for steps newer
-    than the last applied serial (`:705`, nothing at `:716-717`); one dispatch a family (`:845-875`) over persistent
-    read-write state and one shared output; reallocation clears and copies a kept prefix (`:650-678`, `:817-843`:
-    `glClearNamedBufferData`, `glCopyNamedBufferSubData`); the pair self-check reads back once per solver (`:555-614`).
-  - Compacted populations (N4.c): `population.py:216-243`, count, scan and scatter over storage buffers, the scan
-    writing the indirect command a `glDrawArraysIndirect` draws (`:243`).
-  - The job service: uploads and mips only (`job_service.cpp:722-776`, N3.2's head), no compute. N0.7's edge field
-    (`native/spike_p1/src/vk_n07.cpp:436-459`) proved a compute job body, one QRhi compute pass per dispatch. D9's
-    class (a) (transition preparation: edge and propagation fields, population scan) is N5.2g's job form; class (c)
-    (the drift, Waveform's passes, fog) stays in the frame (D9 point 2).
-  - [ ] Contract: the lead's answers to A to L folded into the decisions doc as "D16. Compute passes", the draft's
-    text replaced, not kept beside it. It states: a compute entry in a program's pass list (its pack, block, group
-    counts, trigger, bindings with their access), the storage buffers and images a program declares (name, size,
-    format, usage, clear), their scope and lifetime, how a draw reads them (N3.2's storage, vertex and indirect
-    bindings; samplers naming an image), the access each binding declares and the barrier it yields on each backend,
-    the trigger rule and the core member it fills, the copy and clear kernels, what the product may read back (choice G),
-    and every refusal with its reason.
-  - [ ] C++ owner (render thread; `native/core/src`; no STL, Qt types, as the README says):
-    - [ ] `compute_passes.{h,cpp}`: the declarations (any thread; parse and check like `mesh_buffers.h`), the
-      content's storage buffers and images (`ModeStorage`: Static buffers with their declared usage, textures with
-      `UsedWithLoadStore`, sized at the build or a size edge, zeroed at creation), the core's copy and clear kernels
-      (choice C: compute shaders of the core's, both backends, used at allocation edges only), the process-wide counts
-      (buffers, images, bytes, dispatches, compute passes, copies, clears, buffers created) and the harness controls (a
-      binding's declared access overridden, a run recorded as one QRhi pass, the trigger forced every record, the
-      release skipping storage).
-    - [ ] `mode_content.{h,cpp}`: compute entries admitted (D12's one rule for the block, the groups and the trigger;
-      bindings by name to a storage buffer, an image or a storage stream; a write the reflection shows refused when
-      declared read); recorded at their place in the pass list, each as its own QRhi compute pass (choice A), outside
-      any render pass; skipped when the trigger has not changed (choice E); `u_srpss_compute` filled; a draw reading a
-      storage buffer (`bufferLoad`, vertex input, `drawIndirect`) or sampling an image (`sampler2D`, `sampler3D`);
-      the latch and the state's storage noted only at an edge (never per record).
-    - [ ] `mesh_buffers.{h,cpp}`: N3.2's storage stream bindable in the compute stage; a mesh with storage usage
-      (D3's geometry, once per revision, read by compute).
-    - [ ] Device facts: `QRhi::Compute`, `ThreeDimensionalTextures`, the compute limits, and on Vulkan the
-      `STORAGE_IMAGE` format feature of each declared format (R16F needs the extended formats) read once at device
-      creation and logged in the host state; a program needing one the device lacks is refused with the reason.
-    - [ ] Python face: `rendering/native/mode.py` (`ComputePass`, `StorageBuffer`, `StorageImage`, image sizes set at a
-      size edge as N3.1's `setTargetSize`), `program_json`, `NativeMode.state()`'s storage and the lost-state edge
-      (`on_state_lost`, choice I); `tools/regen_qrc.py` bakes compute packs as it bakes fragments.
-  - [ ] ABI 19: `abi.h`'s comment and `SRPSS_NATIVE_CORE_ABI`, `rendering/native/loader.py` `EXPECTED_ABI` (with
-    `tests/test_native_core_loader.py`); the compute entries and storage declarations, the harness readback of a
-    storage buffer or image as stored (`composite_mode_storage_read`: u32 words, f32, half floats), the harness
-    controls, `composite_live`'s storage counts, `composite_mode_state`'s storage, the host state's compute facts. Every
-    new Python entry is limited API, in `module.cpp` only. Then the lead's GitHub build (`--select native_module`) at
-    the commit; agents never build.
-  - [ ] Harness proof `native/core/python/compute_pass_check.py` (hidden host, OpenGL and Vulkan on the module's
-    device; harness compute shaders in the product shape under `native/core/python/compute_passes/`; evidence
-    `.artifacts/evidence/native_core/n3_3/`). Every result is read back in the harness only. Scenes, one per consumer
-    shape: a field (a storage stream in, a 2D RGBA32F image out, a draw sampling it); a two-dispatch image chain
-    (store, then `imageLoad` in the next dispatch); a 3D pair (RGBA16F and R16F, a draw through `sampler3D`); a
-    stateful buffer advanced per trigger, two dispatches writing disjoint regions of one shared output, resized with
-    its prefix kept; a population (count, scan, scatter, a compute-written command drawn by `drawIndirect`, the vertex
-    stage reading ids and states):
-    - [ ] Rule (a): native OpenGL against the Python owners (`compute.py`'s seam, `population.py`) driving the same
-      sources in the production GL host, outputs compared as stored. Integer outputs and copies exact; float outputs
-      exact, any difference reported with its ULP distance and the shader operation, and judged by the lead (no
-      tolerance granted ahead: checkpoint audit 3's M1). A negative control that must differ: one input element
-      changed.
-    - [ ] Rule (b): Vulkan against native OpenGL, under the same rule. D4's pair-check kernel (`PROGRAMS[2]`) through
-      `qsb` exact on both backends (`precise` survives the bake).
-    - [ ] Dispatch only when there is new work: a frame trigger dispatches once per accepted record and never for a
-      card, settings or fade re-record; a field trigger only when its field changes; the stateful scene's state after
-      200 records equals a CPU reference, and the control (the trigger forced every record) integrates twice and
-      differs. A content made again dispatches with `fresh` set and the owner's edge fires once.
-    - [ ] Nothing at rest: a minute at rest records no compute pass and no dispatch (counts unchanged); control: a
-      content dirtied every frame.
-    - [ ] Barriers under Vulkan synchronisation validation, consecutive records with no readback between them (N3.1's
-      lesson: a readback hides a hazard), clean through every scene: compute to compute (read-after-write,
-      write-after-write on the shared output), compute to draw (storage read, vertex input, indirect command, a sampled
-      image), and draw to the next record's compute (the research's Q7 open point). Negative control: a written
-      binding declared read (the barrier skipped) must report `SYNC-HAZARD-READ-AFTER-WRITE`.
-    - [ ] Write-after-read: dispatch 1 reads a buffer and dispatch 2 writes it, in both forms the research names (two
-      passes, the default; two buffers, a ping-pong); clean. Control: the same two dispatches recorded as one QRhi pass
-      (the run control) must report `SYNC-HAZARD-WRITE-AFTER-READ` (QRhi's gap: no barrier keyed on a read).
-    - [ ] OpenGL's barriers: every scene's outputs equal on OpenGL with QRhi's own `glMemoryBarrier` calls (no
-      validation layer exists there: values are the proof). The barrier calls per record counted against Python's on
-      the same scene.
-    - [ ] Copy and clear: a resized buffer keeps its prefix bit-exact and reads zero past it, on both backends; a
-      created buffer and image read zero.
-    - [ ] Retirement without leaks: the content released (a mode switch, the node deleted, the scene graph
-      invalidated, the item destroyed between a resize's allocation and its copy): buffers, images, bytes back to zero,
-      the destruction barrier's reading zero; control: the skipped-release control leaves them counted. No buffer or
-      image created over a steady minute.
-    - [ ] Cost: GPU time per compute pass (N3.1b's per-run scopes if landed, else the record's), median and p90, at
-      2560x1440 and 4K, at Waveform's fogged-frame shape (a 128x72 grid, both volumes) and the drift at 216,000 specks
-      (D4 point 5), against the Python path on the same load, judged by absolute times; the render thread's record
-      time (N3.8's timer). A quiet GPU, `nvidia-smi` and the display state recorded with the figures; OpenGL timer
-      waits are bounded loops over counted frames. The cost round runs once under the validation layer too
-      (consecutive records), its times taken from the run without it.
-    - [ ] The thread probe: zero calls with a Python thread state. Regressions on the same module:
-      `generic_mode_check.py`, `scene_target_check.py`, `mesh_buffer_check.py`, `fullscreen_pass_check.py`,
-      `background_layer_check.py`, `backdrop_pyramid_check.py`, `transition_route_check.py` verdicts unchanged.
-  - [ ] Docs: the decisions doc's "As built (N3.3)" under D16; `native/core/README.md` (`compute_passes.*`, the proof,
-    "How a new mode is built" gains a compute step); `Docs/Reference/Primitives.md` (the compute seam's native line);
-    `Docs/Reference/Scene3D_Resources.md`'s storage rows; `Docs/Reference/Harness_Index.md` (the command); the
-    research doc's Q7 open point closed with the result; the 3D foundation lessons in `Docs/Reference/Transitions.md`
-    (appended after the slice).
+- N3.3 Compute passes: merged (6d87276a; D16 in `Docs/Future_Work/Native_Core_P3_Decisions.md`). Open:
+  - [ ] Checkpoint audit 5 fixes, before N5.4 or N5.6 uses compute (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`,
+    audit 5):
+    - [ ] M1, a program without storage keeps the last program's buffers: `compute_passes.h:235` (`empty()` ignores
+      `m_retiring`), `compute_passes.cpp:746-749`, `:595-597`, `:793-794`, `mode_content.cpp:4645-4646`; proof
+      `probe_audit5.py` P1, and a retirement case in `compute_pass_check.py` (`:868-879`) that holds a buffer.
+    - [ ] M2, `fresh` restarts kept storage: `mode_content.cpp:4639-4644`, `:4656-4657`, `:4710` with
+      `compute_passes.cpp:741,784`; `fresh` per resource, not per content or program; proof `probe_audit5.py` P2.
+    - [ ] M3, one buffer bound twice with two accesses is admitted: `mode_content.cpp:1134`, `:1188`, `:1836-1860`;
+      refuse it with its reason; proof `probe_audit5.py` P3 (`SYNC-HAZARD-WRITE-AFTER-WRITE`).
+    - [ ] M4, three harness boxes unbuilt in `compute_pass_check.py`: D4's pair-check kernel (`PROGRAMS[2]`) through
+      `qsb` with `precise` (rule b); the write-after-read ping-pong form (two buffers); OpenGL's barrier calls
+      counted per record against Python's.
+    - [ ] Lows L1-L6 triaged (`compute_passes.cpp:590-591,611-762` allocations per record; `mode_content.cpp:4693-4759`
+      a trigger consumed without a dispatch; `compute_passes.cpp:631-632` and `mode_content.cpp:1330-1332` storage
+      refusals; `compute_passes.h:50-52` and `compute_passes.cpp:768-772` image bounds;
+      `Docs/Guardrails/Performance_Optimization_Contract.md:450-456` exception G; the documents against the code:
+      `compute_passes.h:16-17,265`, `mode_content.h:127`, `tests/test_native_mesh_buffers.py:6`).
 - [ ] N3.4 Transparency and post-processing as shared stages, each opt-in and absent from a mode that does not use
   it: depth-aware order-independent transparency, bloom and the HDR resolve, the defocus layer.
   Decided by the lead, 15 Nov, from `Docs/Future_Work/Native_Core_QRhi_Research_N3.md` sections 3, 8 and 9:
