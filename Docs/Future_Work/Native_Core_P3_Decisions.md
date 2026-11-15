@@ -1708,12 +1708,13 @@ harness's), and `tools/regen_qrc.py` bakes a mode's `.comp` as it bakes its frag
   not N3.3: fragPixel's target is the window's on the Python route and the core's own target on the native one, so
   the round now expects the card's target size there, as `tests/test_native_devcurve.py` does, and passes.
 
-## N3.4 draft: transparency and post-processing as shared stages (proposed by the High agent, 15 Nov 2026; for the lead)
+## D17. Transparency and post-processing as shared stages (N3.4, decided 15 Nov 2026; proposed by the High agent, choices A to I answered by the lead)
 
-*A draft, not a decision: it becomes D17 with the lead's answers to A to I. It builds on the lead's decided designs in
-the plan's N3.4 box (per-attachment blending with `independentBlend`, coverage stored inverted, the blendable-format
-check, the depth prime, one texture per bloom level), on D14 to D16 as built (ABI 19), and on
-`Native_Core_QRhi_Research_N3.md` sections 3, 8 and 9. The plan's N3.4 box carries the steps.*
+*The draft of 15 Nov became this decision: the lead accepted A to I as recommended, with the notes folded in (the list
+at the end). It builds on the lead's decided designs in the plan's N3.4 box (per-attachment blending with
+`independentBlend`, coverage stored inverted, the blendable-format check, the depth prime, one texture per bloom
+level), on D14 to D16 as built (ABI 19), and on `Native_Core_QRhi_Research_N3.md` sections 3, 8 and 9. The plan's N3.4
+box carries the steps.*
 
 **What the consumers do today (read at 0b63e9a3e).**
 - *Extruded Bubble* (`rendering/quick/visualizer/implementations/extruded_bubble.py`): one overlay scope with bloom,
@@ -1773,7 +1774,7 @@ point 1); per-attachment clear values written by the target's clearing draw (`Ta
 (a)); a device that enables every feature the physical device reports (`vulkan_context.cpp:699-729`) with its facts
 read once (`:770-808`).
 
-**The proposal.**
+**The decision.**
 1. *Stages are data in a program* (D12's rule; D13, D14 and D16's shape), each absent unless declared: a program
    without it holds no object of it, records nothing of it and draws the same picture bit for bit. A mode turns a stage
    on or off by its program, which Python chooses at the Settings edge (the Oscilloscope's and Neon Lake's glow at 0,
@@ -1844,10 +1845,9 @@ read once (`:770-808`).
    per record; the counts per stage join `composite_live`.
 9. *Not built here*: the shafts (N4.k), motion blur (N4.i), the reduced-resolution layers (N4.f2), the oriented
    composites (N3.7), the warm-up schedule (N3.6). Waveform clears its colour each frame to a backdrop from its recipe
-   (`waveform.py:387`), while a target's clear value is fixed in its declaration: Waveform's port (N5.4) settles that
-   (a clear value filled by a setting, or a first pass that writes it).
+   (`waveform.py:387`), while a target's clear value is fixed in its declaration: a port decision recorded at N5.4.
 
-**Open choices, with the agent's recommendation for each.**
+**The choices as the agent put them (each answered as recommended; the lead's notes follow).**
 - **A. Whose shaders.** (1) The core's, held equal to Python's text by tests; tuning a stage's filter needs a module
   build, but no Settings value lives in them (port rule (g) holds). (2) The mode's product packs, one set per mode,
   loaded at runtime. *Recommend (1):* the stages are shared (one Python source in `target.py`, `post.py`, `defocus.py`
@@ -1895,6 +1895,19 @@ read once (`:770-808`).
   below texture as an explicit-size target from Python and the count as a member. *Recommend (1)*: an explicit size is
   bucketed (D14 point 2) while the clip must draw exactly the level's texels, and a sprite count past the level reads
   past the texture (robust access is off); the core checks every count against its resource.
+
+**The lead's answers (15 Nov 2026), folded in above.** A to I as the agent recommended, with these notes:
+- B. The clearing draw stays (rule B) and coverage stays inverted. The reason is precision: half-float steps are
+  finest near 0, where the coverage of faint stacks sits. The plan's decided-design text gave "no clearing draw" as the
+  reason; that was wrong (the clearing draw already writes a value per attachment) and is corrected there.
+- C. The resolve is per sample. `sampleRateShading` joins the device gate (point 3).
+- G. QRhi's `generateMips` is admitted for the defocus layer only, because it is Python's own mip generation
+  (`glGenerateTextureMipmap`). The rule "never `generateMips`" stands for bloom and HDR chains. The harness proves that
+  the odd mip levels match.
+- The latent N3.1 defect is fixed in N3.4's change: the per-attachment check (`mode_content.cpp:5066-5074`) reads the
+  core's own device facts (`independentBlend` on Vulkan), never QRhi's always-true `PerRenderTargetBlending`, with a
+  negative control that fakes a device without the feature.
+- Waveform's per-frame clear colour is a port decision recorded at N5.4, not here.
 
 ## D1, D2, D3 and the transport rule
 

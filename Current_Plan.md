@@ -519,9 +519,11 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [ ] Per-attachment blending: the core creates its own Vulkan device, so it enables `independentBlend` there
     whenever the physical device reports it. OpenGL 4.0+ has it already. The OIT stage is admitted only where
     `PerRenderTargetBlending` is true; elsewhere a mode's transparency falls back to its sorted path, recorded once.
-  - [ ] One clear value for all attachments: revealage is stored inverted as coverage (clear 0, output alpha, blend
-    ONE / ONE_MINUS_SRC_COLOR with the fragment alpha written to the single channel, read back as 1 - coverage), so accumulation and coverage share the clear to 0 with no
-    clearing draw. The harness proves it equal to the textbook revealage form on a known stack of layers.
+  - [ ] Revealage is stored inverted as coverage (clear 0, output alpha, blend ONE / ONE_MINUS_SRC_COLOR with the
+    fragment alpha written to the single channel, read back as 1 - coverage), for precision: half-float steps are
+    finest near 0, where faint stacks sit. The target is still cleared by rule B's clearing draw, which writes a value
+    per attachment (D17 choice B; an earlier "no clearing draw" reason here was wrong). The harness proves it equal to
+    the textbook revealage form on a known stack of layers.
   - [ ] Blendable formats: QRhi does not check them, so the core checks RGBA16F and R16F for
     `COLOR_ATTACHMENT_BLEND` at device creation (Vulkan format features; GL 4.6 guarantees both). A device without
     them falls back as above.
@@ -530,9 +532,9 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     rendering one level while sampling another is rejected). The chain is allocated with N3.1's bucket rule,
     downsampled by our own shader with `textureLod(…, 0)`, never `generateMips`, whose linear blit is not the
     designed filter.
-  Steps (Opus High agent's decomposition, 15 Nov; the consumers' file:line and the open choices A to I with a
-  recommendation each are "N3.4 draft" in `Docs/Future_Work/Native_Core_P3_Decisions.md`):
-  - [ ] Contract: D17 in the decisions document, from the draft and the lead's answers to A to I. Every stage is data in
+  Steps (Opus High agent's decomposition, 15 Nov; the consumers' file:line and choices A to I, accepted by the lead as
+  recommended, are D17 in `Docs/Future_Work/Native_Core_P3_Decisions.md`):
+  - [ ] Contract (D17): every stage is data in
     a program beside its passes (D12's rule; D13, D14, D16's shape), absent unless declared: a program without it holds
     no object of it and records nothing of it. Python oracles: `rendering/quick/scene3d/target.py` (`SceneTarget`'s
     transparency, composites and HDR tone map), `post.py` (`BloomChain`), `defocus.py` (`DefocusLayer`).
@@ -567,7 +569,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       once beside the storage formats, `vulkan_context.cpp:791-805`; GL 4.6 guarantees both), and, for the per-sample
       resolve, `sampleRateShading`. Elsewhere the mode's transparent passes draw their sorted pack (choice D) and the
       fallback is recorded once in the content's state with its reason. N3.1's check of differing attachment states
-      (`mode_content.cpp:5066-5074`) reads the same gate.
+      (`mode_content.cpp:5066-5074`) reads the same device facts, never QRhi's always-true flag (a latent N3.1 defect,
+      fixed in this change), with a negative control that fakes a device without `independentBlend`.
     - [ ] What N3.4 settles for N1.8 (its first two uses; D5.6 row 7): the composites' shader average becomes
       the resolve the composite step reads (D14 point 8); the per-sample OIT composite stays per sample (choice C).
       The shafts' source is N4.k's; the background capture was settled by D14 point 10.
@@ -599,7 +602,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       unaligned one; single-sampled under the shared tolerance (checkpoint audit 3's M1 and audit 4's M2 if landed,
       else D15's tie budget); multisampled repeat-relative (D8 point 1).
     - [ ] Rule (b): Vulkan against the native OpenGL result, the tolerance stated per stage (half-float accumulation
-      and blending; Vulkan's linear-blit mips against `glGenerateMipmap` on odd levels).
+      and blending). The defocus layer's mips (QRhi's `generateMips`, admitted for this layer only, D17 choice G):
+      every level read back on both backends, the odd levels included, matching Python's `glGenerateTextureMipmap`.
     - [ ] Analytic: coverage stored inverted equals the textbook revealage (clear 1, ZERO, ONE_MINUS_SRC_COLOR) on a
       known stack of layers within half-float rounding (the bound stated); two draw orders of the transparent layers
       give the same picture within that rounding; light above 1 kept until the tone map; no glow where no emission;
@@ -742,6 +746,10 @@ the feature (D3D11 is not stated).
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).
+  - [ ] Port decision: Waveform clears its scene colour every frame to a backdrop from its recipe
+    (`rendering/quick/scene3d/waveform.py:387`), while a native target's clear value is fixed in its declaration
+    (D14; D17 point 9). Decide the port's form (a clear value filled by a setting, or a first pass that writes the
+    backdrop) and prove it against the Python renderer under the port rule.
 - [ ] N5.6 Extruded Bubble (the drift compute of D4, transparency, HDR, the depth texture and background
   capture, the probe and defocus, N4.k, N4.g's impostors and optics; not populations).
 - [ ] N4.f2 (the reduced-resolution layers; Waveform and Extruded Bubble are native), then Expanded Visualizer M6
