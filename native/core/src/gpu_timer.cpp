@@ -65,6 +65,46 @@ QString gpuPassKindName(GpuPassKind kind)
     return QStringLiteral("unknown");
 }
 
+// ------------------------------------------------------------------------------------------------- the ring's rule
+
+GpuSlotUse gpuSlotUse(bool pending, qint64 slotEdge, qint64 edge, int ringFrames)
+{
+    if (!pending)
+        return GpuSlotUse::Take;
+    return edge - slotEdge > qint64(ringFrames) ? GpuSlotUse::Abandon : GpuSlotUse::Busy;
+}
+
+GpuRingSimulation simulateGpuRing(int ringFrames, int frames, int lag, bool abandon)
+{
+    GpuRingSimulation out;
+    const int ring = qBound(1, ringFrames, 64);
+    qint64 slotEdge[64];
+    bool pending[64] = {};
+    for (qint64 edge = 0; edge < frames; ++edge) {
+        // beginFrame's read: every earlier pending slot whose result has arrived.
+        for (int i = 0; i < ring; ++i) {
+            if (pending[i] && slotEdge[i] < edge && lag >= 0 && edge >= slotEdge[i] + lag) {
+                pending[i] = false;
+                ++out.results;
+            }
+        }
+        const int index = int(edge % ring);
+        GpuSlotUse use = gpuSlotUse(pending[index], pending[index] ? slotEdge[index] : -1, edge, ring);
+        if (use == GpuSlotUse::Abandon && !abandon)
+            use = GpuSlotUse::Busy;           // the negative control: the rule before R-223
+        if (use == GpuSlotUse::Busy) {
+            ++out.busy;
+            continue;
+        }
+        if (use == GpuSlotUse::Abandon)
+            ++out.abandoned;
+        slotEdge[index] = edge;
+        pending[index] = true;
+        ++out.timed;
+    }
+    return out;
+}
+
 // ------------------------------------------------------------------------------------------------- the configuration
 
 bool GpuTimerConfig::fromJson(const QByteArray &json, GpuTimerConfig *out, QString *error)
@@ -311,8 +351,15 @@ void GpuTimer::beginFrame(QRhi *rhi, QRhiCommandBuffer *cb, qint64 edge)
     const int index = int(edge % kRingFrames);
     Slot &slot = m_slots[index];
     if (slot.pending) {
-        ++m_slotBusyFrames; // its frame's results are still unread: this frame goes untimed, they are kept
-        return;
+        if (gpuSlotUse(true, slot.edge, edge, kRingFrames) == GpuSlotUse::Busy) {
+            ++m_slotBusyFrames; // its frame's results are still unread: this frame goes untimed, they are kept
+            return;
+        }
+        // R-223's safety net: unread for more frames than the ring is long. Given up on; its queries are reused, so a
+        // late result is never read (resolve() reads pending slots only).
+        ++m_abandonedSlots;
+        slot.pending = false;
+        slot.scopes = 0;
     }
     slot.edge = edge;
     slot.scopes = 0;
@@ -582,6 +629,7 @@ QJsonObject GpuTimer::stateJson() const
     o.insert(QStringLiteral("not_ready_reads"), m_notReadyReads);
     o.insert(QStringLiteral("blocking_reads"), m_blockingReads);
     o.insert(QStringLiteral("slot_busy_frames"), m_slotBusyFrames);
+    o.insert(QStringLiteral("abandoned_slots"), m_abandonedSlots);
     o.insert(QStringLiteral("over_capacity"), m_overCapacity);
     o.insert(QStringLiteral("release_waits"), m_releaseWaits);
     o.insert(QStringLiteral("resolve_ns_max"), m_resolveNsMax);

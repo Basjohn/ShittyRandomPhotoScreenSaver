@@ -594,9 +594,13 @@ bool HiddenHost::renderFrames(int count, QuickReadback *readLast, QString *error
                 batch->readBackTexture(QRhiReadbackDescription(s.target.texture.get()), &result);
                 cb->resourceUpdate(batch);
             }
-            s.control->endFrame(); // an offscreen frame: waits for the GPU, readbacks complete
-            // A probe readback recorded in this frame completes now, outside the frame (QRhi::finish).
-            if (read || (driver && driver->readbackPending()))
+            s.control->endFrame(); // an offscreen frame: Vulkan's waits for the GPU, readbacks complete
+            // A probe readback recorded in this frame completes now, outside the frame (QRhi::finish). On OpenGL every
+            // frame does (R-223): QRhi's OpenGL offscreen frame only flushes, so with nothing throttling the hidden host
+            // the CPU ran ahead of the GPU without bound (timer results 12 to 220 frames late at 4K, and a timer ring
+            // that never came free: "a GPU time about one frame in twenty" since N2.6). The host's frame is
+            // synchronous on every backend, as Vulkan's already was.
+            if (read || (driver && driver->readbackPending()) || rhi->backend() == QRhi::OpenGLES2)
                 rhi->finish();
             if (read) {
                 read->rgba = result.data;

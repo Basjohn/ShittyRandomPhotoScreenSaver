@@ -23,6 +23,7 @@
 #include "abi.h"
 #include "backdrop.h"
 #include "composite.h"
+#include "gpu_timer.h"
 #include "host_adapter.h"
 #include "item_notifier.h"
 #include "job_service.h"
@@ -1257,6 +1258,23 @@ PyObject *job_counts(PyObject *, PyObject *)
     return pyJson(jobCountsObject());
 }
 
+// R-223, GPU-free: the GPU timer's ring over `frames` edges whose results arrive `lag` edges late (< 0: never), with or
+// without abandoning a slot unread for longer than the ring.
+PyObject *gpu_timer_ring_simulation(PyObject *, PyObject *args)
+{
+    int ring = 0, frames = 0, lag = 0, abandon = 1;
+    if (!PyArg_ParseTuple(args, "iiip", &ring, &frames, &lag, &abandon))
+        return nullptr;
+    const srpss_core::GpuRingSimulation s = srpss_core::simulateGpuRing(ring, frames, lag, abandon != 0);
+    QJsonObject o;
+    o.insert(QStringLiteral("timed"), s.timed);
+    o.insert(QStringLiteral("results"), s.results);
+    o.insert(QStringLiteral("busy"), s.busy);
+    o.insert(QStringLiteral("abandoned"), s.abandoned);
+    o.insert(QStringLiteral("ring_frames"), srpss_core::GpuTimer::kRingFrames);
+    return pyJson(o);
+}
+
 PyObject *job_services_state(PyObject *, PyObject *args)
 {
     int withLog = 0;
@@ -2484,6 +2502,10 @@ PyMethodDef methods[] = {
     { "window_edges_self_test", window_edges_self_test, METH_NOARGS,
       "() -> JSON str: audit N38 M1, GPU-free: a window's frame count with two drivers' edges in each of two frames "
       "(edges seen, total): one per frame." },
+    { "gpu_timer_ring_simulation", gpu_timer_ring_simulation, METH_VARARGS,
+      "(ring, frames, lag, abandon) -> JSON str: R-223, GPU-free: the GPU timer's ring over frames whose results "
+      "arrive lag edges late (< 0: never), with or without abandoning a slot unread longer than the ring "
+      "({timed, results, busy, abandoned, ring_frames})." },
     { "job_counts", job_counts, METH_NOARGS,
       "() -> JSON str: N3.8, the job services' process-wide counts (services, threads, jobs queued and running, images "
       "held and their bytes, releases pending, wake-ups) and the windows' retiring images." },

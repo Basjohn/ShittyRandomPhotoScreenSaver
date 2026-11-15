@@ -874,9 +874,13 @@ def _timed(host, scene, settings: dict, frames: int, member: str = "u_hdr_gain",
         times.extend(s.nanoseconds for s in host.gpu_samples() if s.kind == 2)
     host.frames(4)
     times.extend(s.nanoseconds for s in host.gpu_samples() if s.kind == 2)
+    timer = (host.state().get("driver") or {}).get("gpu_timer") or {}
     host.set_gpu_timer(False)
     summary = _time_summary(sorted(times))
     summary["records"] = drawn
+    # R-223: the timer's own counts (slots given up on, frames left untimed) beside the figure.
+    summary["abandoned_slots"] = timer.get("abandoned_slots")
+    summary["slot_busy_frames"] = timer.get("slot_busy_frames")
     return summary
 
 
@@ -927,6 +931,11 @@ def round_cost(core, engine, app, packs: dict, folder: Path) -> dict:
             low1, low4 = timings["x1"]["p10_ms"], timings["x4"]["p10_ms"]
             facts[label]["resolve_bound_p10_ms"] = None if low1 is None or low4 is None else round(low4 - low1, 4)
             checks[f"{label}_timed"] = all(timings[key]["samples"] >= COST_MIN_SAMPLES for key in ("x1", "x4"))
+            # R-223: with the host's frames finished on every backend the times arrive well inside the cap (at most
+            # twice the minimum records), and no slot is given up on.
+            checks[f"{label}_timed_well_inside_the_cap"] = all(
+                timings[key]["records"] <= 2 * COST_FRAMES and not timings[key].get("abandoned_slots")
+                for key in ("x1", "x4"))
             checks[f"{label}_4x_minus_1x_within_the_resolve_budget"] = bound is not None and bound <= RESOLVE_BUDGET_MS[
                 size]
         finally:

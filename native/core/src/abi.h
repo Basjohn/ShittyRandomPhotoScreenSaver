@@ -75,7 +75,8 @@
 // point 10, still 17): an attachment's "resolve" ("average" or "nearest"), the core's nearest resolve in place of
 // QRhi's depth resolve, scene_nearest_first_sample_control (its control), composite_live's
 // scene_target_nearest_resolves and the readback's "<target>.depth" when multisampled; audit 2 (still 17):
-// scene_resolve_prime_control and composite_live's scene_target_resolve_primes; scene_target_next_allocation, scene_target_viewport and
+// scene_resolve_prime_control and composite_live's scene_target_resolve_primes; R-223 (still 17): gpu_timer_ring_simulation
+// (GPU-free), the timer state's abandoned_slots, the OpenGL hidden host's frames finished; scene_target_next_allocation, scene_target_viewport and
 // scene_target_clamp (GPU-free); composite_live's scene_targets, scene_target_textures, scene_target_bytes,
 // scene_target_allocations, scene_target_steps and scene_target_readbacks; composite_mode_state's scene_targets,
 // target_reads_requested and target_readback_pending; a program's layout JSON carries targets and each pass's target,

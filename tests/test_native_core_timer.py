@@ -394,6 +394,70 @@ def test_the_python_face_passes_the_timer_and_the_load_through_and_refuses_what_
     assert calls[-1] == ("host_attach", ("hidden", 0, 64, 32, True))
 
 
+# ------------------------------------------------------------------------------------------------- the ring (R-223)
+
+MODULE_DIR = ROOT / "release" / "native_module"
+
+
+def _ring_module():
+    import os
+
+    from rendering.native import loader
+
+    if not (os.name == "nt" and (MODULE_DIR / f"{loader.MODULE_NAME}.pyd").is_file()):
+        pytest.skip("the native core is not built in this checkout")
+    core = loader.load(MODULE_DIR)
+    if not hasattr(core.module, "gpu_timer_ring_simulation"):
+        pytest.skip("the built module predates R-223's ring simulation")
+    return core.module
+
+
+def _ring(module, frames: int, lag: int, abandon: bool = True) -> dict:
+    ring = json.loads(module.gpu_timer_ring_simulation(0, 0, 0, True))["ring_frames"]
+    return json.loads(module.gpu_timer_ring_simulation(ring, frames, lag, abandon))
+
+
+def test_the_ring_times_every_frame_whose_results_keep_up():
+    """R-223: results a few frames late (the OpenGL hidden host now finishing its frames: 3 edges) leave no frame
+    untimed and nothing abandoned."""
+    module = _ring_module()
+    ring = json.loads(module.gpu_timer_ring_simulation(0, 0, 0, True))["ring_frames"]
+    s = _ring(module, 240, 3)
+    assert s["timed"] == 240 and s["busy"] == 0 and s["abandoned"] == 0
+    assert s["results"] == 240 - 3                                   # the last three still in flight
+    # A lag as long as the ring still keeps up; one longer leaves frames untimed but abandons nothing it can read.
+    assert _ring(module, 240, ring)["busy"] == 0
+    longer = _ring(module, 240, ring + 4)
+    assert longer["busy"] > 0 and longer["abandoned"] == 0 and longer["results"] > 0
+
+
+def test_a_ring_whose_results_never_arrive_keeps_timing_by_abandoning():
+    """R-223's safety net: with results that never arrive (the hidden host's OpenGL GPU falling behind without bound)
+    the rule before the fix times the first ring's frames and nothing after (the negative control); abandoning a slot
+    unread for longer than the ring keeps timing every frame it can, counts every slot given up, and reads none of
+    their late results."""
+    module = _ring_module()
+    ring = json.loads(module.gpu_timer_ring_simulation(0, 0, 0, True))["ring_frames"]
+    stuck = _ring(module, 400, -1, abandon=False)
+    assert stuck["timed"] == ring and stuck["busy"] == 400 - ring and stuck["results"] == 0
+    net = _ring(module, 400, -1)
+    assert net["timed"] > 400 // 3 and net["abandoned"] == net["timed"] - ring and net["results"] == 0
+
+
+def test_the_opengl_hidden_host_finishes_every_frame():
+    """R-223's cause: QRhi's OpenGL offscreen frame only flushes, so the hidden host finishes each OpenGL frame itself
+    (as Vulkan's offscreen frame waits); the control is the reading of the same source without the clause."""
+    source = (CORE / "src" / "host_adapter.cpp").read_text(encoding="utf-8")
+    start = source.index("bool HiddenHost::renderFrames(")
+    body = source[start:source.index("\n}\n", start)]
+
+    def finishes_opengl(text: str) -> bool:
+        return bool(re.search(r"if \([^;{]*rhi->backend\(\) == QRhi::OpenGLES2\)\s*\n\s*rhi->finish\(\);", text))
+
+    assert finishes_opengl(body)
+    assert not finishes_opengl(body.replace(" || rhi->backend() == QRhi::OpenGLES2", ""))
+
+
 def test_the_module_lists_what_the_face_calls():
     module = (CORE / "src" / "module.cpp").read_text(encoding="utf-8")
     for name in ("host_load", "host_gpu_timer", "host_gpu_samples", "gpu_timer_live"):
