@@ -1104,6 +1104,21 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
 
+### 1D.15 Seeded transitions mirror across displays (operator, 15 Nov; Opus Medium, small)
+
+- [ ] Root cause, proved: `engine/display_manager.py:4913-4926` resolves one transition spec per batch from one
+  `_next_batch_seed`, so every display gets the same seed, and Liquid Lens (and every seeded transition: Crumble,
+  Glass Shatter, Jigsaw, Particle...) follows the same path or pattern on both displays at once. Confirm on a
+  two-display hidden host.
+- [ ] Fix at the owner: the batch keeps one transition type and its Settings, but each display's run gets its own
+  seed, derived from the batch seed and that display's stable identity (never its index order, which a display
+  move changes). The ahead-of-time preparation (`prepare_next_transition`, `_prepare_transition_run_geometry`, the
+  idle warm seed at about line 5003) prepares each display's own geometry, still one unit per spaced frame
+  (gradual warm-up rule).
+- [ ] Guard: two displays in one batch get different seeds and different Liquid Lens plans; the same display gets the
+  same seed for the same batch seed (reproducible); negative control on today's shared seed. The native route
+  (N5.2a/b) receives the per-display seed through the same request.
+
 ### 1D.13 Side defects found at its merge (15 Nov; Opus Medium when a slot is free of native work)
 
 - [ ] Two tests fail only inside one long same-process pytest run (2,413 tests over 14 minutes), and pass alone:
