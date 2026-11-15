@@ -44,7 +44,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
 at the size asked.
 - High: N3.4 (transparency and post-processing), then N3.6. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers
   ride with the next fitting dispatch.
-- Medium: the shared tolerance (checkpoint audits 3 and 4), then N3.3's audit-5 fixes, then the Oscilloscope or Bubble port.
+- Medium: N3.3's audit-5 fixes, then the Bubble port (the Oscilloscope after N3.4's bloom).
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -54,8 +54,6 @@ at the size asked.
 
 - Foundry UX (operator, 14 Nov): `Docs/Future_Work/Foundry_UX_Audit_2026-11-14.md`; open from it, for the operator's
   pick: its remaining high and medium findings and the Build Foundry's port from Tkinter to PySide6.
-  - [ ] Side defect: `tests/test_godzip_foundry_core.py` and `test_godzip_foundry_script_runner.py` pin button
-    wording; assert structure (the button exists, its action) instead.
 - [~] Defect (operator, 14 Nov): a Studio window's taskbar icon in frozen builds is Windows' default box. The static
   cause is unproven (likely an icon Qt could not decode). Lead: check the next GitHub frozen build's `[ICON]` startup
   line, any no-icon warning for a shown Studio window, and the taskbar.
@@ -356,6 +354,11 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   (`scene3d/target.py`, RG16F kept; RGBA16F would add 127.5 MiB per 4K display at 4x, 255 MiB at 8x). Built with the
   substrate when the scene target ports (N3), or reconsidered if N1.8's resolve-first rule removes the multisampled
   velocity.
+  Lead, 15 Nov (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 14): QRhi has no RG16F, so "RG16F kept" cannot be built natively. The native
+  velocity is two R16F attachments, the same bytes as RG16F; RGBA16F only if the measurement shows two
+  attachments cost more. A biased RG16 is refused: the single MRT clear value cannot encode zero velocity in it.
+  The velocity resolve differs by backend (Vulkan averages, OpenGL blits nearest), so velocity resolves through
+  the core's own per-sample pass (D14 point 10), nearest, on both.
 - [ ] D5.6 row 13's control was not run: fill the widened targets' unused channels with non-zero values in a test, so
   a consumer that reads them fails (the scan and source checks show only `.rg`/`.xy`/`.rgb` reads today).
 - [ ] N1.8 Per-sample multisample reads (`sampler2DMS`, `gl_SampleID`): each use resolves first and reads the
@@ -685,8 +688,15 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
 - [ ] N4.d Planar reflections and rough receivers (Waveform's floor), the scene probe (Extruded Bubble),
   wet-surface masks (high potential). Neon Lake's water reflection is analytic in its own basin shader and needs
   none of this.
+  Lead, 15 Nov (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 15): a cube renders as six passes, one render target per face (`setLayer`);
+  multiview cannot render into a cube. Rough-receiver prefiltering is the core's own shader, never `generateMips`
+  (a linear blit chain). The harness reads every face back on both backends first: face orientation may be
+  mirrored between OpenGL and Vulkan.
 - [ ] N4.e Heightfields and refined terrain meshes (the authored heightfield resource; Neon Lake's tile-refined
   basin; the grid a dynamic surface field will share).
+  Lead, 15 Nov (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 16): vertex-stage sampling uses the binding's `VertexStage` flag with
+  `textureLod`/`texelFetch` (QRhi has no feature flag for it); the heightfield is R16F or R32F read with
+  `texelFetch`, so 32-bit float filtering is never required.
 - [ ] N4.f1 The fog volume port (Waveform draws it today, so N5.4 cannot reach parity without it): ported just
   before its first consumer, N5.4, like every N4 item. The fog detail march (written and tested, runs nowhere in
   production: too costly at full size in the Python path) is the base of N6.3 and stays with N4.f2's reduced path.
@@ -698,12 +708,24 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
 - [ ] N4.h Shared shadows (one fitted directional depth map, bounded soft filtering, caster and receiver
   admission, measured tiers). **High potential: built without a consumer**, proved on a harness scene; not a
   revival of the rejected Extruded cast shadows, and no mode turns it on without its own review.
+  Lead, 15 Nov (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 13): comparison sampling through `QRhiSampler` compare ops on a depth-only
+  pass (legal on both backends). The shader branches on `isClipDepthZeroToOne()`. Depth bias is tuned per backend
+  and measured, never one shared number (the offset unit is implementation-defined, and Qt sets Vulkan's bias clamp
+  to 0). Outside the light frustum is handled in the shader (no clamp-to-border in QRhi).
 - [ ] N4.i Motion blur and trails (a velocity attachment, the tile-max compute, trails and motion uniforms): five
   transitions.
+  Lead, 15 Nov (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 14): the velocity is the formats-service decision above (two R16F); the
+  tile-max runs as compute over a storage image (D16) in a format the research lists as load-store on both
+  backends.
 - [ ] N4.j Photo and backdrop environments (`PhotoEnvironment`: ten transitions; `BackdropEnvironment`: Extruded
   Spectrum and Sphere's wallpaper reflection).
 - [ ] N4.k Light shafts: the shared owner (Neon Lake today) and Extruded Bubble's own second implementation
   merged onto it, one owner (high potential); ported with Extruded Bubble, then used by Neon Lake.
+  Lead, 15 Nov (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 17): volumes are written by compute (one pass, D16), never by per-slice
+  rendering (one pass per slice, and Vulkan 1.1 instance API for slices).
+- Topology rule for every N4 primitive (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 18): triangle lists or degenerate strips, never a restart
+  index (OpenGL restarts every topology, Vulkan only strips); no wide lines (false on the OpenGL core profile);
+  lines and points are instanced quads (D15).
 - [ ] N4.l Silhouette shadows (Extruded Spectrum's directional silhouette and Sphere's own pass) as one shared
   primitive, distinct from N4.h; the bendable grid (Membrane, Page Curl); Exploding Tiles' planar shadows and
   particles.
@@ -723,23 +745,11 @@ are measured above a handful per frame, one pipeline and one indirect call with 
 (`gl_DrawID`, `gl_BaseInstance`, `gl_BaseVertex`) replaces a draw per batch; the port records which backends report
 the feature (D3D11 is not stated).
 
-- [ ] Checkpoint audit 3 fixes (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`; the next Opus Medium opening, before
-  the Oscilloscope or Bubble port relies on the tolerance):
-  - [ ] M1: `rule_a_verdict` (`tools/visualizer_replay/owner_render_parity.py:357-370`) accepts a 1-level shift on
-    every pixel, and 10 pixels at 2-3 levels anywhere. Restrict it to what the per-pixel proof covers: the 1-level
-    allowance only on pixels the reference draws translucent (derive the mask from the reference's own content, for
-    example a draw over two different backgrounds), and the 2-3 level allowance only on pixels next to a content
-    edge. Opaque content and background stay exact. Spectrum and Spline Curve must still pass, and the audit's
-    synthetic `rule_a_probe.py` (an all-pixel +1, a fixed 10-pixel 3-level artefact) must fail.
-  - [ ] Checkpoint audit 4's M2 joins M1: the transitions' and N3.2's tie budgets
-    (`transition_route_check.py` `TIE_PIXELS`, `mesh_buffer_check.py`) admit a uniform 1-level shift and 8 pixels off
-    by up to 207 levels. Build one shared tolerance function that every harness uses (the explained 1-level classes
-    by mask, tie pixels capped in level and required to be isolated), and rerun every harness that uses it.
-  - [ ] L1: the by-value array test (`tests/test_native_devcurve.py:188-202`) scans every shader the core draws,
-    including the fullscreen transition fragments' Python sources, and every GLSL form (`float c[N]`,
-    `float[96] c`, indented definitions); the audit's `by_value_probe.py` is the control.
-  - [ ] L2: a program the core refuses latches in `native_route.py:670-688` until an input changes, as before N5.1;
-    `route_probe.py` is the control.
+- [ ] Side defect from the shared tolerance (`tools/pixel_tolerance.py`, D12 "The pixel tolerance"): six harnesses
+  still accept rule (a) or (b) at "max level at most 1 everywhere", so a uniform 1-level shift passes them
+  (`devcurve_check.py:474`, `spectrum_check`, `generic_mode_check`, `fullscreen_pass_check`, `background_layer_check`,
+  `backdrop_pyramid_check`). Route each through the shared tolerance with its own mask or scatter cap; the audit
+  probes' uniform shift must fail each.
 - [ ] N5.1 Spline Curve leftover: its Studio is not offered on Vulkan (`STUDIO_PREVIEW_BACKENDS`), the same open
   item as Spectrum's; both close with N5.8.
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
@@ -1218,10 +1228,6 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
     it also fails on N3.1's base commit.
   - `tests/test_qtquick_visualizer_clip_smoke.py:303`, the Oscilloscope reflow, reads 175 against 173. The QSG/clip
     optimisations are protected: never retune production to satisfy this oracle; judge whether the oracle is stale.
-  - `tests/test_visualizer_extreme_viewport_scaling_audit_contract.py:38` pins Oscilloscope source text
-    (`gl.glUniform1f(beam_uniforms["uCore"], core)`) that no longer exists; rewrite it to assert behaviour.
-  - `tests/test_test_suite_durability.py` flags `tests/test_godzip_foundry_core.py:776, 789, 803` as documentation
-    prose oracles: the same item as the Foundry box in item 1.
 - [ ] Lead, Display 1: confirm R-221 in the product, Fullscreen Hide Borders with pixel shift stepping, and check
   whether the operator's lavender edge colour came from the shift.
 

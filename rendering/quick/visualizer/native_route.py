@@ -472,6 +472,8 @@ class NativeVisualizerRoute:
                                      engine_generation=int(identity.engine_generation),
                                      activation_id=int(identity.activation_id))
             healthy = self._core_verdict(content.composite.content_status())
+        except _ProgramRefused as refused:
+            raise refused.cause from None             # the setup stage's: latched until an input changes
         except Exception as exc:
             raise _FrameFailure(exc) from exc
         if healthy and placed != self._placed:
@@ -678,7 +680,12 @@ class _ModeContent:
 
             if self._pack is None or self._pack[0] != mode_id:
                 self.load(mode_id)
-            self.item.program([ModePass(mode_id, self._pack[1], "alpha")], values)
+            try:
+                self.item.program([ModePass(mode_id, self._pack[1], "alpha")], values)
+            except Exception as exc:
+                # A setup input (checkpoint audit 3 L2): latched by the route until one of its inputs changes, as
+                # Spectrum's program at its bind, never tried again at every update.
+                raise _ProgramRefused(exc) from exc
             self._program_mode = mode_id
         else:
             self.item.settings(values)
@@ -754,6 +761,15 @@ def _edge_receiver(fire: Callable[[], None]) -> Any:
 
 class _FrameFailure(Exception):
     """A failure of one frame's own inputs (its card, settings or publish): tried again at the next new snapshot."""
+
+    def __init__(self, cause: BaseException) -> None:
+        super().__init__(str(cause))
+        self.cause = cause
+
+
+class _ProgramRefused(Exception):
+    """The core refused a generic mode's program (its settings do not fit, D12 point 4): a setup failure, latched until
+    an input of the setup changes (checkpoint audit 3 L2), raised past the frame stage."""
 
     def __init__(self, cause: BaseException) -> None:
         super().__init__(str(cause))

@@ -185,7 +185,23 @@ def test_the_settings_follow_settings_and_the_card_only():
     assert _settings(_logical(0, enabled=(False,) * 4), presentation, card)["u_devcurve_foreground_layer_id"] == -1
 
 
-_ARRAY_PARAMETER = r"^\w[\w ]*\([^)]*\b\w+\s+\w+\s*\[\d*\][^)]*\)\s*\{"
+#: A function definition (indented or not, its parameters over any number of lines) with an array parameter, in either
+#: GLSL form: ``float c[N]`` (any size expression, a literal, a #define or none) or ``float[96] c``. A prototype (ending
+#: in ``;``) copies nothing and is not matched.
+_ARRAY_PARAMETER = (r"^[ \t]*\w[\w \t]*\([^;{}()]*?"
+                    r"(?:\b\w+\s+\w+\s*\[[^\]]*\]|\b\w+\s*\[[^\]]*\]\s+\w+)[^;{}()]*\)\s*\{")
+
+
+def _shader_sources() -> dict[str, str]:
+    """Every shader the product bakes or the core draws: the files of the three shader folders, and the fullscreen
+    transitions' fragments, which are Python strings baked to packs the core draws on Vulkan (N5.2a, N5.2b)."""
+    from tools.regen_qrc import transition_fragment_sources
+
+    sources = {str(path.relative_to(ROOT)): path.read_text(encoding="utf-8")
+               for folder in ("widgets/spotify_visualizer/shaders", "rendering/quick/qml/shaders", "native/core/shaders")
+               for path in (ROOT / folder).rglob("*") if path.suffix in (".frag", ".vert", ".comp", ".glsl")}
+    sources.update({f"transition {name}": text for name, text in transition_fragment_sources().items()})
+    return sources
 
 
 def test_no_product_shader_passes_an_array_to_a_function_by_value():
@@ -193,15 +209,25 @@ def test_no_product_shader_passes_an_array_to_a_function_by_value():
     # did so and its pass cost 1.97 ms on Vulkan against 0.030 ms on OpenGL at dpr 1 (N5.1).
     import re
 
-    sources = [path for folder in ("widgets/spotify_visualizer/shaders", "rendering/quick/qml/shaders",
-                                   "native/core/shaders")
-               for path in (ROOT / folder).rglob("*") if path.suffix in (".frag", ".vert", ".comp", ".glsl")]
-    assert sources
-    found = [f"{path.name}: {match.group(0)}" for path in sources
-             for match in re.finditer(_ARRAY_PARAMETER, path.read_text(encoding="utf-8"), flags=re.M)]
+    sources = _shader_sources()
+    assert any(name.startswith("transition ") for name in sources)
+    assert any(name.endswith(".frag") for name in sources)
+    found = [f"{name}: {match.group(0)}" for name, text in sources.items()
+             for match in re.finditer(_ARRAY_PARAMETER, text, flags=re.M)]
     assert found == []
-    # Control: the old signature is caught.
-    assert re.search(_ARRAY_PARAMETER, "float _sample_curve(const float curve[96], float x, int count) {", flags=re.M)
+    # Controls: the old signature, a size that is not a literal, the array-type form, an indented definition, a
+    # parameter list over two lines and a brace on the next line are caught; a prototype and a call are not.
+    for case in ("float _sample_curve(const float curve[96], float x, int count) {",
+                 "float sampleCurve(const float curve[N], float x) {",
+                 "float sampleCurve(float[96] curve, float x) {",
+                 "    float sampleCurve(const float curve[96], float x) {",
+                 "float sampleCurve(float x,\n                  const float curve[CURVE_SAMPLES])\n{"):
+        assert re.search(_ARRAY_PARAMETER, case, flags=re.M), case
+    for case in ("float sampleCurve(const float curve[96], float x);",
+                 "    if (curve[3] > x) {",
+                 "    for (int i = 0; i < count[0]; ++i) {",
+                 "float sampleCurve(int index, float x) {"):
+        assert not re.search(_ARRAY_PARAMETER, case, flags=re.M), case
 
 
 # --------------------------------------------------------------------------------------- the module's blocks
@@ -278,23 +304,41 @@ def test_rule_a_is_the_composite_tolerance_for_every_composite_mode():
     # The lead's decision on N5.1's per-pixel proof: a fill within the fill level, edge pixels within the edge level and
     # at most the cap a frame; one rule for every mode drawn through the composite, Spectrum included. Bounds are read
     # from the harness's own constants.
+    # Judged pixel by pixel (tools/pixel_tolerance.py): the fill level only on the pixels the reference draws
+    # translucent (here its own alpha), edge pixels isolated (tests/test_pixel_tolerance.py has the rest).
+    import numpy as np
+
+    from tools import pixel_tolerance as pt
     from tools.visualizer_replay import owner_render_parity as parity
 
     fill, edge, cap = parity.RULE_A_FILL_LEVEL, parity.RULE_A_EDGE_LEVEL, parity.RULE_A_EDGE_PIXELS_PER_FRAME
+    reference = np.zeros((200, 600, 4), np.uint8)
+    reference[..., :3] = 60
+    reference[..., 3] = 128                                    # translucent content everywhere ...
+    reference[150:, :, 3] = 255                                # ... but an opaque band
+    mask = pt.translucent_by_alpha(reference)
 
-    def row(levels: dict) -> dict:
-        return {"pixels": sum(levels.values()), "max_level": max(levels), "levels": {str(k): v for k, v in levels.items()}}
+    def frame(fill_pixels: int, edge_pixels: int, edge_level: int, *, opaque: bool = False, level: int = fill):
+        drawn = reference.astype(np.int16)
+        rows = (slice(150, 200) if opaque else slice(0, 150))
+        region = drawn[rows, :, :3].copy()
+        flat = region.reshape(-1, 3)
+        flat[:fill_pixels] += level
+        drawn[rows, :, :3] = flat.reshape(region.shape)
+        for k in range(edge_pixels):
+            drawn[10 + 3 * (k % 10), 400 + 3 * (k // 10), :3] = reference[0, 0, :3] + edge_level
+        return parity.rule_a_frame(drawn.astype(np.uint8), reference, mask)
 
-    within = [row({fill: 100000, edge: cap})]
-    assert parity.rule_a_verdict("devcurve", within)["pass"]
-    assert parity.rule_a_verdict("devcurve", [])["pass"]
+    assert parity.rule_a_verdict([frame(80000, cap, edge)])["pass"]
+    assert parity.rule_a_verdict([])["pass"]
     # Controls: one edge pixel too many in a frame, one level too far.
-    assert not parity.rule_a_verdict("devcurve", [row({fill: 10, edge: cap + 1})])["pass"]
-    assert not parity.rule_a_verdict("devcurve", [row({fill: 10, edge + 1: 1})])["pass"]
-    # Spectrum under the same rule: its owner runs' shape (every differing pixel at 1 level) passes; a Spectrum frame
-    # with its pixels at 2 levels, beyond the fill bound and over the edge cap, fails.
-    assert parity.rule_a_verdict("spectrum", [row({fill: 17000})])["pass"]
-    assert not parity.rule_a_verdict("spectrum", [row({fill + 1: 17000})])["pass"]
+    assert not parity.rule_a_verdict([frame(10, cap + 1, edge)])["pass"]
+    assert not parity.rule_a_verdict([frame(10, 1, edge + 1)])["pass"]
+    # Spectrum under the same rule: its owner runs' shape (every differing pixel at 1 level, translucent) passes; a
+    # Spectrum frame with those pixels at 2 levels fails, and so do the same pixels at 1 level on opaque content.
+    assert parity.rule_a_verdict([frame(17000, 0, edge)])["pass"]
+    assert not parity.rule_a_verdict([frame(17000, 0, edge, level=fill + 1)])["pass"]
+    assert not parity.rule_a_verdict([frame(17000, 0, edge, opaque=True)])["pass"]
 
 
 # ------------------------------------------------------------------------------------------------- the route
@@ -437,5 +481,52 @@ def test_the_route_draws_spline_curve_on_the_generic_item(monkeypatch):
         mark = len(core.log)
         route.sync(bridge=bridge, identity=second, presentation=presentation, authority=True)
         assert "settings" not in [entry[0] for entry in core.log[mark:]]
+    finally:
+        route.close()
+
+
+def test_a_refused_program_latches_until_an_input_changes(monkeypatch):
+    # Checkpoint audit 3 L2: a program the core refuses (settings that do not fit, D12 point 4) is a setup failure,
+    # latched as Spectrum's program at its bind is: not tried again at every update (the program JSON, the pack
+    # hand-over and the refusal on the GUI thread), only once an input of the setup changes.
+    from rendering.native import program_values
+    from rendering.quick.visualizer.native_route import NativeVisualizerRoute
+
+    monkeypatch.setattr(program_values, "mode_fragment_pack", lambda _mode: b"pack")
+    size = {"width": 1707}
+    window = SimpleNamespace(width=lambda: size["width"], height=lambda: 960,
+                             afterSynchronizing=SimpleNamespace(connect=lambda *a: None, disconnect=lambda *a: None),
+                             afterRendering=SimpleNamespace(connect=lambda *a: None, disconnect=lambda *a: None))
+
+    class Refusing(_Mode):
+        def program(self, passes, settings=None):
+            super().program(passes, settings)
+            raise ValueError("refused: the settings do not fit")
+
+    class Core(_Core):
+        def mode(self, _host):
+            made = Refusing(self.log)
+            self.modes.append(made)
+            return made
+
+    core = Core()
+    route = NativeVisualizerRoute(core, SimpleNamespace(window=lambda: window))
+    presentation = _presentation()
+    identity = SimpleNamespace(mode_id="devcurve", runtime_generation=1, engine_generation=2, activation_id=7)
+    bridge = _Bridge([SimpleNamespace(logical=_logical(step), presentation=presentation) for step in range(40)])
+
+    def programs() -> int:
+        return sum(1 for entry in core.log if entry[0] == "program")
+
+    try:
+        for _ in range(30):
+            assert route.sync(bridge=bridge, identity=identity, presentation=presentation, authority=True) is False
+        assert programs() == 1 and route.failures == 1 and route.failed
+        assert "bind" not in [entry[0] for entry in core.log]           # the stream is never bound without it
+        # Control: an input of the setup changes (the window's size), and the program is tried once more.
+        size["width"] = 1600
+        for _ in range(5):
+            route.sync(bridge=bridge, identity=identity, presentation=presentation, authority=True)
+        assert programs() == 2 and route.failures == 2
     finally:
         route.close()

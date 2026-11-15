@@ -90,17 +90,100 @@ def test_logzip_rejects_outside_run_directory(tmp_path):
         create_script_results_zip(repo, fake, initial_logs={}, output_dir=tmp_path / 'out')
 
 
-def test_script_runner_ui_has_review_capture_and_explicit_no_admin():
-    # Pure source contract: Qt runtime interactions receive a separate Windows gate.
-    source = (Path(__file__).resolve().parents[1] / 'tools' / 'godzip_foundry.py').read_text(encoding='utf-8')
-    klass = source.split('class CommandTab(QWidget):', 1)[1].split('class GodzipFoundryWindow(QMainWindow):', 1)[0]
-    for marker in ('normalize_script_paste(', 'self.script_input.toPlainText() != preview.script',
-                   'self.script_input.setPlainText(preview.script)', 'if preview.warnings:',
-                   'self._start_script(',
-                   'QProcess(self)', 'setWorkingDirectory(str(self.repo_root))',
-                   'Copy Results', 'Zip Run + New Logs', 'External terminal (keep open)',
-                   'create_script_results_zip(', 'self._run_final_logs = snapshot_loose_logs('):
-        assert marker in klass
-    launch = klass.split('def _run_script(self)', 1)[1].split('def _start_script(', 1)[0]
-    assert 'if dialog.exec()' not in launch  # The actual editor is the reviewed command.
-    assert 'self.admin.isChecked()' not in launch  # No implicit elevation.
+@pytest.fixture
+def command_tab(qt_app, monkeypatch, tmp_path):
+    """The real Run Script tab of a real Foundry window over a throwaway repository."""
+    from tests.test_foundry_widget_ownership import _git_repo
+    from tools import godzip_foundry
+
+    monkeypatch.setattr(godzip_foundry, 'collect_repo_files', lambda _root: [])
+    window = godzip_foundry.GodzipFoundryWindow(_git_repo(tmp_path))
+    thread = window._task_thread
+    if thread is not None:
+        thread.join(timeout=60)
+    qt_app.processEvents()
+    try:
+        yield window.command_tab, godzip_foundry
+    finally:
+        window.close()
+        window.deleteLater()
+        qt_app.processEvents()
+
+
+def test_run_script_shows_the_reviewed_command_and_launches_exactly_it(command_tab):
+    """Run Script normalises the paste in the editor itself (the reviewed command), refuses ambiguous input
+    without launching, and launches the normalised script with the chosen shell and capture mode, never
+    reading the elevation checkbox."""
+    tab, _module = command_tab
+    launched = []
+    tab._start_script = lambda shell, script, *, external: launched.append((shell, script, external))
+    pasted = 'PS F:\\repo> python -m pytest tests\\test_a.py -q;'
+    expected = normalize_script_paste(pasted, shell='auto')
+    tab.admin.setChecked(True)  # explicit elevation belongs to the terminal launcher, not to Run Script
+
+    tab.script_input.setPlainText(pasted)
+    tab.script_run_button.click()
+    assert launched == [(expected.shell, expected.script, False)]
+    assert tab.script_input.toPlainText() == expected.script, 'the editor must show the command that runs'
+
+    launched.clear()
+    tab.script_input.setPlainText('```powershell\npython -m pytest')  # ambiguous: fails closed
+    tab.script_run_button.click()
+    assert launched == []
+
+    tab.script_input.setPlainText(pasted)
+    tab.script_external.setChecked(True)
+    tab.script_run_button.click()
+    assert launched and launched[0][2] is True
+
+
+def test_run_script_captures_a_real_run_in_the_repository_and_enables_results(command_tab, qt_app):
+    """A captured run executes from the repository root, records the transcript and result, and only then
+    enables copying, opening and zipping the results."""
+    import json
+
+    tab, _module = command_tab
+    assert not (tab.script_copy.isEnabled() or tab.script_show_results.isEnabled() or tab.script_zip.isEnabled())
+    tab.script_input.setPlainText('cd')
+    tab.script_shell.setCurrentIndex(tab.script_shell.findData('cmd'))
+    tab.script_run_button.click()
+    process = tab._process
+    assert process is not None and tab._running
+    assert not tab.script_run_button.isEnabled() and tab.script_stop_button.isEnabled()
+    assert process.workingDirectory() == str(tab.repo_root)
+    assert process.waitForFinished(60000)
+    qt_app.processEvents()
+    assert not tab._running
+    run_dir = tab._run_dir
+    assert str(tab.repo_root).lower() in (run_dir / 'output.txt').read_text(encoding='utf-8', errors='replace').lower()
+    assert json.loads((run_dir / 'result.json').read_text(encoding='utf-8'))['exit_code'] == 0
+    assert tab.script_copy.isEnabled() and tab.script_show_results.isEnabled() and tab.script_zip.isEnabled()
+    assert tab.script_run_button.isEnabled() and not tab.script_stop_button.isEnabled()
+
+
+def test_run_script_zip_bundles_the_run_and_only_logs_it_changed(command_tab, qt_app, monkeypatch, tmp_path):
+    tab, module = command_tab
+    logs = tab.repo_root / 'logs'
+    logs.mkdir()
+    (logs / 'before.log').write_text('old')
+    tab.script_input.setPlainText('echo done')
+    tab.script_shell.setCurrentIndex(tab.script_shell.findData('cmd'))
+    # The log appears during the run: the process is started, then the file is written before it finishes.
+    tab.script_run_button.click()
+    (logs / 'during.log').write_text('new')
+    assert tab._process.waitForFinished(60000)
+    qt_app.processEvents()
+    made = []
+    real = module.create_script_results_zip
+    monkeypatch.setattr(module, 'create_script_results_zip',
+                        lambda *args, **kwargs: made.append(real(*args, **kwargs)) or made[-1])
+    tab.script_zip.click()
+    thread = tab.window._task_thread
+    assert thread is not None
+    thread.join(timeout=60)
+    assert not thread.is_alive()
+    qt_app.processEvents()
+    assert made, 'the Zip button must build the results archive'
+    archive, members = made[0]
+    assert Path(archive).is_file()
+    assert 'logs/during.log' in members and 'logs/before.log' not in members

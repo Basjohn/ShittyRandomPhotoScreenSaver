@@ -76,8 +76,13 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
+ROOT = HERE.parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import vk_validation  # noqa: E402  (native/core/python)
 import host_check  # noqa: E402
+from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("parity", "forms", "used", "rest", "steady", "retire", "cost", "stream_ring")
@@ -86,9 +91,15 @@ MARGIN = 8
 DPRS = (1.0, 1.5)
 IDENTITY = {"runtime_generation": 5, "engine_generation": 2, "activation_id": 9}
 PARITY_SCENES = ("box", "voxels", "sprites", "beam", "streaks")
-# Both rules: within 1 level but for at most this many pixels (D13's tie budget: an additive or blended pixel sums
-# per-layer roundings, each within 1 level, of SPIRV-Cross's GLSL against the source's own); the exact counts are kept.
+# Both rules, judged by the shared pixel tolerance (tools/pixel_tolerance.py, D12 "The pixel tolerance"; checkpoint
+# audit 4 M2): a blended pixel sums per-layer roundings of SPIRV-Cross's GLSL against the source's own, so the pixels a
+# blend wrote (the reference's alpha strictly between 0 and 255, or above 0 in an additive scene, ADDITIVE_SCENES) may
+# sit 1 level off; opaque content and the cleared background are exact; at most TIE_PIXELS pixels a frame past that, at
+# 2 levels at most, isolated or on an edge (measured: streaks at dpr 1.5, 131 blended pixels at 1 level and one at 2 on
+# its edge). The exact counts are kept beside the verdict.
 TIE_PIXELS = 8
+GEOMETRY_TOLERANCE = pt.Tolerance("geometry pass (rules a and b)", masked_level=1, tie_pixels=TIE_PIXELS)
+ADDITIVE_SCENES = ("streaks",)
 REST_FRAMES = 8
 STEADY_SECONDS = {"sprites": 60.0}  # the plan's steady minute on the per-record instance stream; the others shorter
 STEADY_OTHER_SECONDS = 10.0
@@ -762,10 +773,23 @@ def cross_compare(out: Path) -> dict:
 
     gl, vk, ref = load("opengl"), load("vulkan"), load("reference")
     result: dict = {}
+
+    def judged(candidate: dict, reference: dict) -> dict:
+        per = {}
+        for name in PARITY_SCENES:
+            for dpr in DPRS:
+                key = f"{name}|dpr{dpr}"
+                entry = _compare(candidate[key], reference[key])
+                mask = (pt.translucent_by_alpha(reference[key], additive=name in ADDITIVE_SCENES)
+                        if candidate[key].shape == reference[key].shape else None)
+                entry["tolerance"] = pt.judge(candidate[key], reference[key], GEOMETRY_TOLERANCE, mask=mask)
+                per[key] = entry
+        return per
+
     if gl and ref:
-        per = {f"{name}|dpr{dpr}": _compare(gl[f"{name}|dpr{dpr}"], ref[f"{name}|dpr{dpr}"])
-               for name in PARITY_SCENES for dpr in DPRS}
-        result["rule_a"] = {"pass": all(0 <= v["past1"] <= TIE_PIXELS for v in per.values()), "compared": per,
+        per = judged(gl, ref)
+        result["rule_a"] = {"pass": all(v["tolerance"]["pass"] for v in per.values()), "compared": per,
+                            "bound": GEOMETRY_TOLERANCE.bound(),
                             "exact": sorted(k for k, v in per.items() if v["exact"])}
         sprites = {f"dpr{dpr}": {"quads_vs_points": _compare(gl[f"sprites|dpr{dpr}"], ref[f"sprites.points|dpr{dpr}"]),
                                  "reference_quads_vs_points": _compare(ref[f"sprites|dpr{dpr}"],
@@ -778,9 +802,9 @@ def cross_compare(out: Path) -> dict:
     else:
         result["rule_a"] = {"pass": False, "error": "a frame set is missing"}
     if vk and gl:
-        per = {f"{name}|dpr{dpr}": _compare(vk[f"{name}|dpr{dpr}"], gl[f"{name}|dpr{dpr}"])
-               for name in PARITY_SCENES for dpr in DPRS}
-        result["rule_b"] = {"pass": all(0 <= v["past1"] <= TIE_PIXELS for v in per.values()), "compared": per,
+        per = judged(vk, gl)
+        result["rule_b"] = {"pass": all(v["tolerance"]["pass"] for v in per.values()), "compared": per,
+                            "bound": GEOMETRY_TOLERANCE.bound(),
                             "exact": sorted(k for k, v in per.items() if v["exact"])}
     else:
         result["rule_b"] = {"pass": False, "error": "a frame set is missing"}

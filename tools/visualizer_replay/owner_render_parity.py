@@ -342,32 +342,118 @@ def card_placement(name: str):
 
 #: Rule (a)'s tolerance for a mode drawn through the composite's premultiplied surface (lead's decision, N5.1 review;
 #: the per-pixel proof: .artifacts/evidence/native_core/n5_1_devcurve/20261115_rule_a_per_pixel/, D12 "As built: Spline
-#: Curve"). The Python node rounds once, round(s8 a8 / 255 + d (1 - a8 / 255)); the native item rounds the premultiplied
-#: product into its surface first, so a translucent fill pixel may sit RULE_A_FILL_LEVEL off. Edge pixels flip on float32
+#: Curve"), judged pixel by pixel by the shared tolerance (``tools/pixel_tolerance.py``, D12 "The pixel tolerance";
+#: checkpoint audit 3 M1). The Python node rounds once, round(s8 a8 / 255 + d (1 - a8 / 255)); the native item rounds the
+#: premultiplied product into its surface first, so a pixel the reference draws translucent (the mask: ``rule_a_masks``)
+#: may sit RULE_A_FILL_LEVEL off. Opaque content and the card's own background are exact. Edge pixels flip on float32
 #: interpolation between the core's triangle and the Python quad (each within 4e-3 of a device pixel of its rounding
-#: boundary): within RULE_A_EDGE_LEVEL, at most RULE_A_EDGE_PIXELS_PER_FRAME pixels above the fill level in one frame
-#: (the measured worst, 7 in one frame of Spline Curve's widened run set and overscan runs on 15 Nov, times 1.5, whole
-#: pixels). One rule for every mode drawn through the composite, Spectrum included (lead, 15 Nov: its translucent bars
-#: and glow pass through the same surface; its owner runs sit at exactly 1 level with no edge pixel).
+#: boundary): ties, within RULE_A_EDGE_LEVEL, at most RULE_A_EDGE_PIXELS_PER_FRAME a frame (the measured worst, 7 in one
+#: frame of Spline Curve's widened run set and overscan runs on 15 Nov, times 1.5, whole pixels), each isolated or on a
+#: content edge. One rule for every mode drawn through the composite, Spectrum included (lead, 15 Nov: its translucent
+#: bars and glow pass through the same surface).
 RULE_A_FILL_LEVEL = 1
 RULE_A_EDGE_LEVEL = 3
 RULE_A_EDGE_PIXELS_PER_FRAME = 10
+#: The colour the translucency run draws under the mode's content (``content_backdrop``): magenta, so that no content
+#: pixel short of a near-zero alpha can equal it in all three channels.
+MASK_BACKDROP = (255, 0, 255)
 
 
-def rule_a_verdict(mode: str, rows: list[dict]) -> dict:
-    """Rule (a) over ``rows`` (``frame_differences``' per-input rows: pixels, max_level, levels) for ``mode``, within
-    the composite's tolerance (one rule for every composite mode). Returns pass, the bound and the worst figures."""
-    del mode                                       # one rule for all composite content
-    above = [sum(count for level, count in row["levels"].items() if int(level) > RULE_A_FILL_LEVEL) for row in rows]
-    worst_level = max((row["max_level"] for row in rows), default=0)
-    worst_edge = max(above, default=0)
-    # A row's level histogram keeps its first 8 levels; any level beyond them is above RULE_A_EDGE_LEVEL and fails by
-    # max_level.
-    return {"bound": {"fill_level": RULE_A_FILL_LEVEL, "edge_level": RULE_A_EDGE_LEVEL,
-                      "edge_pixels_per_frame": RULE_A_EDGE_PIXELS_PER_FRAME},
-            "pass": worst_level <= RULE_A_EDGE_LEVEL and worst_edge <= RULE_A_EDGE_PIXELS_PER_FRAME,
-            "max_level": worst_level, "edge_pixels_worst_frame": worst_edge,
-            "frames_over_the_edge_cap": sum(1 for count in above if count > RULE_A_EDGE_PIXELS_PER_FRAME)}
+def composite_tolerance():
+    """The composite's tolerance (``RULE_A_*``) as the shared ``pixel_tolerance.Tolerance``."""
+    from tools import pixel_tolerance
+
+    return pixel_tolerance.Tolerance("composite (rule a)", masked_level=RULE_A_FILL_LEVEL,
+                                     tie_pixels=RULE_A_EDGE_PIXELS_PER_FRAME, tie_level=RULE_A_EDGE_LEVEL,
+                                     edge_class=True)
+
+
+def rule_a_frame(native, python, mask) -> dict:
+    """One frame of rule (a): the native frame against the Python frame (same shape, the channels compared) under the
+    composite's tolerance, ``mask`` the pixels the Python renderer draws translucent."""
+    from tools import pixel_tolerance
+
+    return pixel_tolerance.judge(native, python, composite_tolerance(), mask=mask)
+
+
+def rule_a_verdict(frames) -> dict:
+    """Rule (a) over the per-frame verdicts of ``rule_a_frame`` (frames that are equal may be left out): pass, the
+    bound and the worst figures."""
+    from tools import pixel_tolerance
+
+    summary = pixel_tolerance.summarise(frames)
+    return {"bound": composite_tolerance().bound(), **summary,
+            "edge_pixels_worst_frame": summary["ties_worst_frame"]}
+
+
+@contextlib.contextmanager
+def content_backdrop(colour: tuple[int, int, int] = MASK_BACKDROP):
+    """For the block, the Python render host clears its viewport (inside any scissor already set) to ``colour`` before
+    each mode draw: the reference drawn over a second background (``rule_a_masks``). Nothing else about a draw changes;
+    the GL state it touches is restored."""
+    from OpenGL import GL as gl
+
+    from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
+
+    render = QuickVisualizerRenderHost.render
+
+    def backdrop(self, *, viewport, **kwargs):
+        x, y, w, h = (int(v) for v in viewport)
+        scissor = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
+        box = [int(v) for v in gl.glGetIntegerv(gl.GL_SCISSOR_BOX)]
+        clear = [float(v) for v in gl.glGetFloatv(gl.GL_COLOR_CLEAR_VALUE)]
+        mask = [bool(v) for v in gl.glGetBooleanv(gl.GL_COLOR_WRITEMASK)]
+        left, bottom = (max(x, box[0]), max(y, box[1])) if scissor else (x, y)
+        right = min(x + w, box[0] + box[2]) if scissor else x + w
+        top = min(y + h, box[1] + box[3]) if scissor else y + h
+        if right > left and top > bottom:
+            gl.glEnable(gl.GL_SCISSOR_TEST)
+            gl.glScissor(left, bottom, right - left, top - bottom)
+            gl.glColorMask(True, True, True, True)
+            gl.glClearColor(colour[0] / 255.0, colour[1] / 255.0, colour[2] / 255.0, 1.0)
+            gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+            gl.glColorMask(*mask)
+            gl.glClearColor(*clear)
+            gl.glScissor(*box)
+            if not scissor:
+                gl.glDisable(gl.GL_SCISSOR_TEST)
+        return render(self, viewport=viewport, **kwargs)
+
+    QuickVisualizerRenderHost.render = backdrop
+    try:
+        yield
+    finally:
+        QuickVisualizerRenderHost.render = render
+
+
+def rule_a_masks(python: dict, backdrop: dict) -> dict:
+    """Per input, the pixels the Python renderer draws translucent: its run against the same run drawn over
+    ``MASK_BACKDROP`` (``content_backdrop``), ``pixel_tolerance.translucent_by_backgrounds``. An input whose two draws
+    have different regions has no mask (every pixel exact)."""
+    from tools import pixel_tolerance
+
+    masks = {}
+    for index, (x, y) in enumerate(zip(python["pixels"], backdrop["pixels"])):
+        if x["region"] != y["region"]:
+            continue
+        masks[index] = pixel_tolerance.translucent_by_backgrounds(_pixels(python, index), _pixels(backdrop, index),
+                                                                  MASK_BACKDROP)
+    return masks
+
+
+def rule_a_frames(native: dict, python: dict, masks: dict) -> list[dict]:
+    """``rule_a_frame`` for every input whose drawn region differs between the native run and the Python run."""
+    frames = []
+    for index, (x, y) in enumerate(zip(native["pixels"], python["pixels"])):
+        if x["hash"] == y["hash"]:
+            continue
+        if x["region"] != y["region"]:
+            frames.append({"pass": False, "reasons": [f"input {index}: the regions differ"], "max_level": None})
+            continue
+        verdict = rule_a_frame(_pixels(native, index), _pixels(python, index), masks.get(index))
+        verdict["input"] = index
+        frames.append(verdict)
+    return frames
 
 
 #: ``--surface-format``: the native item's surface texels for this run (None: the route's own choice).
@@ -762,6 +848,10 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
                                          settings=settings), []
         native = native_drawn_run(mode, script, settings=settings, core=core,
                                   python_mappings=mappings if mode == "spectrum" else None)
+        # Rule (a)'s mask: the same Python run over a second background (its translucent pixels).
+        with content_backdrop():
+            backdrop = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings)
+    masks = rule_a_masks(python, backdrop)
     paths = pair_difference(native, python)
     rows = frame_differences(native, python)
     switch_at = next(i for i, (kind, _v) in enumerate(script) if kind == "mode")
@@ -785,10 +875,13 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
                "python_hashes": [entry["hash"] for entry in python["pixels"]]}
     verdict["identical"] = bool(paths["first"] is None and verdict["digests_identical"]
                                 and verdict["native_published"] > 0)
-    # Rule (a)'s verdict: exact, or the composite's tolerance for a translucent mode (RULE_A_*).
-    verdict["rule_a"] = rule_a_verdict(mode, rows)
+    # Rule (a)'s verdict: the composite's tolerance (RULE_A_*), pixel by pixel with the translucency mask.
+    verdict["rule_a"] = rule_a_verdict(rule_a_frames(native, python, masks))
+    verdict["rule_a"]["mask_inputs"] = len(masks)
+    verdict["rule_a"]["backdrop_frames"] = len(backdrop["pixels"])
     verdict["pass"] = bool(verdict["rule_a"]["pass"] and verdict["digests_identical"] and verdict["native_published"] > 0
-                           and paths["regions_equal"] and len(python["pixels"]) == len(native["pixels"]))
+                           and paths["regions_equal"] and len(python["pixels"]) == len(native["pixels"])
+                           == len(backdrop["pixels"]))
     verdict["split"] = _split_rows(rows, switch_input)
     verdict["mapping"] = dict(native["mapping"], python_frames=len(mappings))
     verdict["classes"] = classify_differences(native, python, switch_input)
