@@ -53,6 +53,10 @@ def _harness():
     owner._idle_warm_steps = 0
     owner._idle_warm_transition_id = 'crumble'
     owner._idle_warm_parameters = {'test_owned': True}
+    # The per-display spec and geometry (plan 1D.15) are DisplayManager collaborators outside this Qt-free cut.
+    owner._idle_warm_spec = None
+    owner._display_transition_spec = lambda display, spec, seed: spec
+    owner._prepare_transition_run_geometry = lambda spec, seed, displays: None
     owner._idle_warm_reporter = SimpleNamespace(finished=SimpleNamespace())
     owner._transition_work_pending = False
     owner.has_transition_work_pending = lambda: owner._transition_work_pending

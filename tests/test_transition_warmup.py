@@ -340,7 +340,7 @@ def test_the_next_batch_meets_the_spec_and_geometry_prepared_while_idle(qt_app):
 
     from engine.display_manager import DisplayManager
     from rendering.quick.transitions.request_resolution import RandomTransitionSelection
-    from rendering.quick.transitions.run_geometry import prepare_run_geometry
+    from rendering.quick.transitions.run_geometry import prepare_display_run_geometry
 
     submitted, warmed, deferred = [], [], []
 
@@ -365,7 +365,10 @@ def test_the_next_batch_meets_the_spec_and_geometry_prepared_while_idle(qt_app):
         def get_bool(self, key, default=False):
             return bool(self.get(key, default))
 
-    unit = SimpleNamespace(
+    from tests._display_manager_doubles import display_runtime_double, display_unit_double, quick_display_identity
+
+    unit = display_unit_double(
+        display_runtime_double(display_identity=quick_display_identity(0, "hidden-key-0", (0, 0, 1920, 1080))),
         display_bounds=lambda: SimpleNamespace(x=0.0, y=0.0, width=1920.0, height=1080.0),
         transition_logical_size=lambda: (1920.0, 1081.0),
         schedule_transition_warm_step=lambda transition_id, parameters, reporter, ticket: (warmed.append(parameters) or True),
@@ -384,11 +387,12 @@ def test_the_next_batch_meets_the_spec_and_geometry_prepared_while_idle(qt_app):
             assert len(deferred) == 1 and len(warmed) == 0
             deferred.pop(0)[1]()
             assert len(warmed) == 1
-            assert [func for func, _ in submitted] == [prepare_run_geometry]
+            assert [func for func, _ in submitted] == [prepare_display_run_geometry]
             prepared = submitted[0][1]
             manager.set_random_transition_selection(selection)
             spec = manager._resolve_quick_transition_batch_spec()
-            assert dict(spec.parameters) == warmed[0]          # seed and all: nothing re-drawn
+            own = manager._display_transition_spec(unit, spec, manager._quick_transition_batch_seed)
+            assert dict(own.parameters) == warmed[0]           # the display's own seed and all: nothing re-drawn
             assert submitted[-1][1] == prepared                 # same preparation supplied to admission
             manager._reset_quick_transition_batch()
         # Settings changed after the warm-up: the batch follows Settings, not the warm-up.
@@ -550,11 +554,14 @@ def test_stale_reservation_and_recreation_cancel_idle_gl_jobs(qt_app, monkeypatc
             deferred.append((delay, lambda: callback(*args)))
             return SimpleNamespace(active=True)
 
-    monkeypatch.setattr(source, "resolve_quick_transition_spec",
-                        lambda *a, **k: SimpleNamespace(transition_id="crossfade", parameters={}))
+    from rendering.quick.transitions.request_resolution import ResolvedQuickTransitionSpec
+
+    spec = ResolvedQuickTransitionSpec(transition_id="crossfade", requested_name="Crossfade",
+                                       selected_from_random=False, duration_ms=1000, direction=None, parameters=())
+    monkeypatch.setattr(source, "resolve_quick_transition_spec", lambda *a, **k: spec)
     monkeypatch.setattr(source, "preload_quick_transition_implementation", lambda *a: None)
     manager = DisplayManager(settings_manager=object(), thread_manager=_Threads(), runtime_generation=710)
-    manager._prepare_transition_run_geometry = lambda spec: None
+    manager._prepare_transition_run_geometry = lambda spec, seed, displays: None
     manager._authoritative_first_frame_emitted = True
     manager.displays = [SimpleNamespace(
         schedule_transition_warm_step=lambda *args: (warmed.append(args) or True),

@@ -8,7 +8,7 @@ import weakref
 from copy import deepcopy
 from dataclasses import asdict, replace
 from types import MappingProxyType
-from typing import Any, Callable, List, Dict, Optional, Set, Mapping
+from typing import Any, Callable, Iterable, List, Dict, Optional, Set, Mapping
 from PySide6.QtCore import QObject, QPoint, Signal, Slot, QUrl, Qt
 from PySide6.QtGui import QGuiApplication, QScreen, QDesktopServices
 
@@ -69,7 +69,7 @@ from rendering.quick.transitions.request_resolution import (
 )
 from rendering.quick.transitions.run_geometry import (
     has_run_geometry,
-    prepare_run_geometry,
+    prepare_display_run_geometry,
 )
 from core.authored_clock import authored_now
 
@@ -462,6 +462,9 @@ class DisplayManager(QObject):
         self._transition_work_pending = False
         self._quick_transition_batch_spec: ResolvedQuickTransitionSpec | None = None
         self._quick_transition_spec_resolved = False
+        # The resolved batch's seed: each display's run re-draws its run seeds from it and that display's stable
+        # identity (plan 1D.15), so seeded transitions differ per display under one shared type and Settings.
+        self._quick_transition_batch_seed: int | None = None
         # Engine-made Random pick for the next resolved batch; kept until the
         # engine replaces it so Previous (no new pick) reuses the current one.
         self._random_transition_selection: RandomTransitionSelection | None = None
@@ -491,6 +494,7 @@ class DisplayManager(QObject):
         self._idle_warm_steps = 0
         self._idle_warm_transition_id = ""
         self._idle_warm_parameters: dict[str, object] = {}
+        self._idle_warm_spec: ResolvedQuickTransitionSpec | None = None
         self._monitor_detection_app = None
         self._monitor_detection_connected = False
         self._monitor_reconcile_pending = False
@@ -4837,6 +4841,7 @@ class DisplayManager(QObject):
 
     def _reset_quick_transition_batch(self) -> None:
         self._quick_transition_batch_spec = None
+        self._quick_transition_batch_seed = None
         self._quick_transition_spec_resolved = False
         self._quick_transition_paths.clear()
         self._quick_batch_expected_screens.clear()
@@ -4913,18 +4918,55 @@ class DisplayManager(QObject):
     def _resolve_quick_transition_batch_spec(
         self,
     ) -> ResolvedQuickTransitionSpec | None:
-        """Resolve Settings intent once, then share it across this batch."""
+        """Resolve Settings intent once, then share it across this batch.
+
+        Every batch has a seed: the one reserved while idle, else a fresh draw. Each display's run takes
+        ``_display_transition_spec``'s copy of this spec, its run seeds re-drawn from that seed and the display.
+        """
 
         if not self._quick_transition_spec_resolved:
             seed, self._next_batch_seed = self._next_batch_seed, None
+            if seed is None:
+                seed = random.getrandbits(64)
             self._quick_transition_batch_spec = resolve_quick_transition_spec(
                 self.settings_manager,
                 random_selection=self._random_transition_selection,
-                random_source=None if seed is None else random.Random(seed),
+                random_source=random.Random(seed),
             )
+            self._quick_transition_batch_seed = seed
             self._quick_transition_spec_resolved = True
-            self._prepare_transition_run_geometry(self._quick_transition_batch_spec)
+            self._prepare_transition_run_geometry(self._quick_transition_batch_spec, seed, self.displays)
         return self._quick_transition_batch_spec
+
+    @staticmethod
+    def _display_seed_key(display: object) -> str:
+        """The display's stable identity key (``get_screen_signature``, the one display moves bind to), never its
+        index; empty when the unit has no live runtime."""
+
+        try:
+            identity = getattr(getattr(display, "runtime", None), "display_identity", None)
+        except RuntimeError:
+            return ""  # a retired unit
+        return str(getattr(identity, "screen_key", "") or "")
+
+    def _display_transition_spec(
+        self,
+        display: object,
+        spec: ResolvedQuickTransitionSpec | None,
+        batch_seed: int | None,
+    ) -> ResolvedQuickTransitionSpec | None:
+        """One display's copy of a batch spec: its own run seeds (plan 1D.15), the batch's type and Settings."""
+
+        if spec is None or batch_seed is None or not spec.has_run_seed:
+            return spec
+        key = self._display_seed_key(display)
+        if not key:
+            logger.warning(
+                "[TRANSITION] Display has no stable identity; its run keeps the batch seed screen=%s",
+                getattr(display, "screen_index", None),
+            )
+            return spec
+        return spec.for_display(batch_seed, key)
 
     def prepare_next_transition(self, random_selection: RandomTransitionSelection | None) -> None:
         """Reserve and prepare the next run only once the whole batch is idle.
@@ -4957,7 +4999,9 @@ class DisplayManager(QObject):
                 and self._idle_warm_parameters == parameters
                 and self._idle_warm_order == tuple(self.displays)):
             return  # no duplicate geometry submission, module import or GL job
-        self._prepare_transition_run_geometry(spec)
+        # Geometry is per display now (its own seed): the first display's here, each next one's when the spaced chain
+        # reaches it (_on_idle_warm_step_finished), so the idle gap never builds more than one set at a time.
+        self._prepare_transition_run_geometry(spec, reserved_seed, self.displays[:1])
         try:
             preload_quick_transition_implementation(spec.transition_id)
         except Exception:
@@ -4969,6 +5013,7 @@ class DisplayManager(QObject):
         self._idle_warm_order = tuple(self.displays)
         self._idle_warm_transition_id = spec.transition_id
         self._idle_warm_parameters = parameters
+        self._idle_warm_spec = spec
         self._arm_next_idle_warm_step()
 
     def _cancel_idle_transition_warmup(self) -> None:
@@ -4988,6 +5033,7 @@ class DisplayManager(QObject):
         self._idle_warm_serial += 1
         self._idle_warm_ticket = -1
         self._idle_warm_seed = None
+        self._idle_warm_spec = None
         self._idle_warm_order = ()
         self._idle_warm_index = 0
         self._idle_warm_steps = 0
@@ -5048,8 +5094,11 @@ class DisplayManager(QObject):
         admitted = False
         try:
             if callable(request):
+                # The display warms its own run (its own seed, so its own geometry upload).
+                own = self._display_transition_spec(display, self._idle_warm_spec, self._idle_warm_seed)
                 admitted = bool(request(
-                    self._idle_warm_transition_id, self._idle_warm_parameters,
+                    self._idle_warm_transition_id,
+                    self._idle_warm_parameters if own is None else dict(own.parameters),
                     self._idle_warm_reporter, ticket,
                 ))
         except Exception:
@@ -5063,20 +5112,34 @@ class DisplayManager(QObject):
         if ticket != self._idle_warm_ticket or not self._idle_warm_valid(ticket):
             return
         self._idle_warm_steps += 1
+        advanced = False
         if done or self._idle_warm_steps >= IDLE_TRANSITION_WARM_MAX_STEPS_PER_DISPLAY:
             self._idle_warm_index += 1
             self._idle_warm_steps = 0
+            advanced = True
         if self._idle_warm_index >= len(self._idle_warm_order):
             logger.debug("[TRANSITION] Idle NoStage preparation completed for all displays")
             self._cancel_idle_transition_warmup()
         else:
+            if advanced:
+                # The chain reached the next display: its own geometry set, one unit for this spaced step.
+                self._prepare_transition_run_geometry(
+                    self._idle_warm_spec, self._idle_warm_seed,
+                    self._idle_warm_order[self._idle_warm_index:self._idle_warm_index + 1],
+                )
             self._arm_next_idle_warm_step()
 
     def _prepare_transition_run_geometry(
         self,
         spec: ResolvedQuickTransitionSpec | None,
+        batch_seed: int | None,
+        displays: Iterable[object],
     ) -> None:
         """Build per-run fracture geometry on COMPUTE while the batch images process.
+
+        Each of ``displays`` (in order: the next to run first) gets its own set, keyed by its own run seed and render
+        aspect, in one COMPUTE task that builds them one after another. A set already prepared or in flight is not
+        built again.
 
         The spec resolves in the pre-queue preflight, well before any display
         starts the run. The render thread uploads the prepared bytes, waits
@@ -5091,8 +5154,8 @@ class DisplayManager(QObject):
         submit = getattr(self._thread_manager, "submit_compute_task", None)
         if not callable(submit):
             return
-        aspects: list[float] = []
-        for display in self.displays:
+        jobs: list[tuple[dict[str, object], float]] = []
+        for display in displays:
             render_size = getattr(display, "transition_logical_size", None)
             if not callable(render_size):
                 continue
@@ -5102,15 +5165,15 @@ class DisplayManager(QObject):
                 logger.debug("[TRANSITION] Render size unavailable for geometry preparation", exc_info=True)
                 continue
             if width > 0.0 and height > 0.0:
-                aspects.append(width / height)
-        if not aspects:
+                own = self._display_transition_spec(display, spec, batch_seed)
+                jobs.append((dict(own.parameters), width / height))
+        if not jobs:
             return
         try:
             submit(
-                prepare_run_geometry,
+                prepare_display_run_geometry,
                 spec.transition_id,
-                dict(spec.parameters),
-                tuple(aspects),
+                tuple(jobs),
                 spec.direction,
                 category="transition_geometry",
             )
@@ -5214,6 +5277,9 @@ class DisplayManager(QObject):
             raise RuntimeError(
                 f"screen {screen_index} image batch has no admissible transition"
             )
+        if not startup_desktop_transition:
+            # This display's own run seeds (plan 1D.15); the native route takes them in the same request.
+            spec = self._display_transition_spec(display, spec, self._quick_transition_batch_seed)
 
         request = spec.build_request(
             runtime_generation=int(self._runtime_generation or 0),

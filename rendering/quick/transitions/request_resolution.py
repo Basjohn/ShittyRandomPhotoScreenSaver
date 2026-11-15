@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+import hashlib
 import random
 from typing import Any, Protocol
 
@@ -26,7 +27,9 @@ from rendering.transition_settings import BLOCK_SPIN_DIRECTIONS, require_transit
 
 from .parameter_resolution import (
     PARAMETERIZED_TRANSITION_IDS,
+    RUN_SEED_FIELDS,
     SCENE_DETAIL_FIELD,
+    redraw_run_seeds,
     resolve_block_spins_parameters,
     resolve_parameterized_phase_c_inputs,
 )
@@ -58,7 +61,7 @@ class RandomTransitionSelection:
 
 @dataclass(frozen=True, slots=True)
 class ResolvedQuickTransitionSpec:
-    """Display-independent transition intent shared by one image batch."""
+    """Display-independent transition intent shared by one image batch; each display runs ``for_display``'s copy."""
 
     transition_id: str
     requested_name: str
@@ -66,6 +69,20 @@ class ResolvedQuickTransitionSpec:
     duration_ms: int
     direction: object
     parameters: TransitionParameters
+
+    @property
+    def has_run_seed(self) -> bool:
+        parameters = dict(self.parameters)
+        return any(name in parameters for name in RUN_SEED_FIELDS)
+
+    def for_display(self, batch_seed: int, display_key: str) -> "ResolvedQuickTransitionSpec":
+        """This batch's spec for one display: every run seed re-drawn from the batch seed and that display's stable
+        identity (plan 1D.15), everything else shared. Reproducible: the same pair always gives the same spec."""
+
+        redrawn = redraw_run_seeds(dict(self.parameters), random.Random(display_run_seed(batch_seed, display_key)))
+        if redrawn is None:
+            return self
+        return replace(self, parameters=freeze_transition_parameters(redrawn))
 
     def build_request(
         self,
@@ -85,6 +102,21 @@ class ResolvedQuickTransitionSpec:
             source_image=source_image,
             destination_image=destination_image,
         )
+
+
+def display_run_seed(batch_seed: int, display_key: str) -> int:
+    """One display's run seed for one batch: a stable hash of the batch seed and the display's identity key.
+
+    The key is the display's ``screen_key`` (``get_screen_signature``, the identity display moves bind to), never its
+    index, so a display move or a changed screen order keeps each monitor's own sequence. Hashed, not ``hash()``ed, so
+    it is the same in every process.
+    """
+
+    key = str(display_key or "")
+    if not key:
+        raise ValueError("display_run_seed needs a display identity key")
+    digest = hashlib.blake2b(f"{int(batch_seed)}|{key}".encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest, "big")
 
 
 def _mapping(value: object) -> Mapping[str, Any]:
@@ -260,5 +292,6 @@ def resolve_quick_transition_spec(
 __all__ = [
     "RandomTransitionSelection",
     "ResolvedQuickTransitionSpec",
+    "display_run_seed",
     "resolve_quick_transition_spec",
 ]
