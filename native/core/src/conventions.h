@@ -49,7 +49,8 @@ struct ConventionsBlock
 {
     float fragmentFlip = 0.0f; // x
     float ndcFlip = 0.0f;      // y
-    float reserved0 = 0.0f;
+    float clipTopDown = 0.0f;  // z (N3.2, D15 point 5): 1 where the target's top row lies at clip NDC -Y after the
+                               // correction (OpenGL, F1's flip, and Vulkan); read by srpss_geometry.glsl's sprites
     float reserved1 = 0.0f;
 };
 static_assert(sizeof(ConventionsBlock) == 16, "std140 vec4");

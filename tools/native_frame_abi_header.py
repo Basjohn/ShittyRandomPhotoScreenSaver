@@ -18,7 +18,8 @@ import sys
 from pathlib import Path
 
 HEADER_RELATIVE = Path("native") / "core" / "src" / "frame_abi_generated.h"
-_KIND = {"u32": "FieldKind::U32", "f64": "FieldKind::F64", "f64x4": "FieldKind::F64x4"}
+_KIND = {"u32": "FieldKind::U32", "f64": "FieldKind::F64", "f64x4": "FieldKind::F64x4",
+         "f32": "FieldKind::F32"}
 _CHECK = {None: "FieldCheck::None", "at_most": "FieldCheck::AtMost", "boolean": "FieldCheck::Boolean",
           "enum": "FieldCheck::Enum"}
 
@@ -126,7 +127,7 @@ def render() -> str:
     lines += [
         "};",
         "",
-        "enum class FieldKind : quint8 { U32, F64, F64x4 };",
+        "enum class FieldKind : quint8 { U32, F64, F64x4, F32 };",
         "enum class FieldCheck : quint8 { None, AtMost, Boolean, Enum };",
         "",
         "struct Field",

@@ -122,6 +122,15 @@ never ships.
     is the count created), multisampled colour resolved by QRhi (only what is read) and a read multisampled depth by
     the core's nearest resolve (D14 point 10), released with the content. Counted in `composite_live`
     (`scene_targets*`, `scene_target_nearest_resolves`).
+  - `mesh_buffers.*` (N3.2, decision D15): a program's geometry as data, owned by its content: meshes (interleaved f32
+    vertices with an optional per-instance stream, `Immutable`, uploaded once at the first record that draws them,
+    never again at rest; the built-in `quad` only for a program that draws it), streams from record `f32` fields
+    (instance: a `Dynamic` vertex buffer by the fast path; storage: a `Static` buffer by `uploadStaticBuffer` from a
+    `QByteArray` kept across records; indirect: `Dynamic` commands), the block arena (every block of the content in one
+    `Dynamic` uniform buffer at `ubufAligned` offsets, written whole once a record by the fast path, bound with dynamic
+    offsets), batched draws (one multi-draw with `gl_DrawID` where the device reports the features, else one draw a
+    batch at its dynamic offset) and the harness controls. Counted in `composite_live` (`mesh_buffers_*`, the record's
+    render-thread time among them).
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
     loader's runtime rule); Qt's types instead.
@@ -175,6 +184,13 @@ never ships.
   (b); the captured depth and the depth loaded across the capture split; the second attachment and its clear; MSAA with
   the clamp; nothing at rest; the resize drag across bucket boundaries both ways; retirement; cost and the thread probe;
   `--rounds prime_control` on Vulkan alone: rule C for depth's negative control under synchronisation validation).
+- `python/mesh_buffer_check.py`: N3.2's proof on the harness scenes `python/mesh_buffers/` (a box mesh instanced over
+  storage records with depth and the per-record front face, a static instance stream, sprites as instanced quads from a
+  per-record instance stream, a vertex-pulled strip with blend MAX, 900 streaks over the built-in quad; rule (a) against
+  the Python owners and rule (b) at dpr 1 and 1.5 within the tie budget; the sprites against `gl_PointSize`; the batched
+  forms, sixteen passes and the indirect draw equal; firstInstance's control; nothing at rest; no allocation over a
+  steady minute; retirement; validation; cost; `--rounds stream_ring`: QRhi's routes against the pair's floor, D15
+  point 7).
 - `python/timer_check.py`: N2.6's proof (off is free by count, a known-cost pass scaled N times and its empty-bracket
   control, QRhi's frame figure, latched reads in a real window with the waiting read as control, the frame trace and
   its report, the two forms against each other, validation; `timer_analysis.py`).
@@ -188,7 +204,7 @@ worked example (harness-only); a product mode does the same in the product's pla
    `tools/native_frame_abi_header.py`). A module built before keeps working: it reads the mode by its runtime schema
    and the face tolerates codes appended after it (`schema_table_differences`).
 2. **Its simulation and record.** A Python simulation in the engine worker publishing one fixed-layout record per frame
-   (`native_schema.NativeLayout.build` of `(name, kind, count)`; kinds u32, f64, f64x4; range rules on u32 fields).
+   (`native_schema.NativeLayout.build` of `(name, kind, count)`; kinds u32, f64, f64x4, and N3.2's f32 arrays for streams; range rules on u32 fields).
    Its `NativeSchema` goes in the runtime registry (`native_schema._RUNTIME_SCHEMA_MODULES`): the Python transport
    knows it and the core receives it at bind (`NativeMode.bind(mapping, schema)`), so it never makes a built module's
    table differ. `_SCHEMA_MODULES` is for the schemas the module compiles (a hand-written consumer's); a mode is in one
@@ -217,6 +233,28 @@ worked example (harness-only); a product mode does the same in the product's pla
    Read a target by its own pixel or by a uv over its allocation (`textureSize`): the content sits at the allocation's
    bottom rows, columns from 0. A multisampled target's read depth is the core's nearest resolve (D14 point 10:
    `shaders/scene_nearest.frag`, the minimum over the samples); an R32F attachment may declare `"resolve": "nearest"`.
+4d. **Its vertex stage, meshes and streams** (N3.2, decision D15, when a pass draws geometry rather than a full-card
+   fragment): a `PassGeometry` on the `ModePass` (its `.vert` pack baked like a fragment; topology `triangles` or
+   `triangle_strip`; vertex and instance counts as numbers, `"mesh"`, or a record `u32` field or setting by name; its
+   `mesh`, its `instance_from` (a mesh's instance stream or an instance stream), its storage blocks bound by name to
+   streams, `cull` and `front_face` (`ccw`, `cw`, or a name choosing per record: N0.3 rule 4 on the matrix as the core
+   uploads it, `conventions.front_face_clockwise`), an `indirect` stream with its `draw_count`, or a batched draw's
+   `batches`/`batch_count` with an optional draw-parameters pack (SPIR-V and GLSL only)). Meshes by
+   `NativeMode.mesh(name, vertices, RecordLayout, instances=, instance_layout=)`; streams (`ModeStream`) from the
+   record's `f32` fields (the std430 bytes the Python renderer packs, verbatim). Only a storage stream keeps the bytes
+   past its used length from an earlier record; an instance stream is drawn exactly its used records (its pass's
+   instance count is the stream's used records, and any other count refuses the draw: checkpoint audit 4, H2). Every
+   vertex, instance, indirect command and batch count is checked at the record against the buffer it reads, and a
+   count past it refuses that pass's draw with its reason; a record's indirect commands are uploaded with their
+   `firstInstance` written as 0 (audit 4, M1). The block's `uMatrix` is item pixels to the drawn target's clip space,
+   corrected once; `srpssVertexIndex`/`srpssInstanceIndex` read the same numbers on both backends (`firstInstance` is
+   always 0). Sprites are instanced quads (`//@srpss_geometry` after `//@srpss_conventions`: `srpssSpriteCorner`,
+   `srpssSpriteClip`, `srpssSpriteCulled`; the sprite coordinate has `gl_PointCoord`'s orientation; the geometry marker
+   is spliced by the Python composer, `rendering/gl_programs/conventions.py`, only: the core's own bake,
+   `cmake/compose_shader.cmake`, replaces `//@srpss_conventions` alone), converted first in the Python renderer and
+   judged against that conversion. Every
+   block lives in the content's arena; a blend may be a full `BlendState` (`max`, `min` included). A record field fills
+   exactly one of a block member, a draw count or selector, and a stream (a batched draw's table is read both ways).
 5. **What is refused, with its reason:** a setting or a record field no pass declares (unknown); a member no source
    fills (unfilled); a name with two owners (a setting or a field naming a core member, a setting naming a field); a
    value of the wrong size or without a defined conversion (a refused frame keeps the last drawn one); a sampler the
@@ -224,7 +262,8 @@ worked example (harness-only); a product mode does the same in the product's pla
    declare (unknown), one bound twice or sharing a binding (doubly bound), one at binding 17 or at its block's binding,
    one that is not a `sampler2D`, a mip sampler over a texture set without mips; a pass that declares a separate
    texture or sampler, storage, a push constant, a second block of its own, a block at binding 17 or an input other
-   than `v_uv` or `vUv`; a schema that is not a valid fixed layout or names a compiled mode. A program that does not
+   than `v_uv` or `vUv` (a pass with its own vertex stage, step 4d, may read storage blocks bound to streams and take
+   its vertex stage's outputs); a schema that is not a valid fixed layout or names a compiled mode. A program that does not
    take the current settings or textures is refused and the drawn one stays.
 6. **Its route** (a product mode, N5.1): its settings function in `rendering/quick/visualizer/native_route.py`
    `GENERIC_MODE_SETTINGS` (`(snapshot, card) -> members`) and `"vulkan"` in its descriptor's `renderer_backends`; the

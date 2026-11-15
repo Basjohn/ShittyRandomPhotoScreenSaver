@@ -44,6 +44,7 @@
 #include <QtCore/QObject>
 #include <QtCore/QPointer>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 #include <QtCore/QtGlobal>
 #include <QtQuick/QQuickItem>
 
@@ -684,6 +685,29 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("scene_target_depth_primes"), double(scenes.depthPrimes));
     o.insert(QStringLiteral("scene_target_resolve_primes"), double(scenes.resolvePrimes));
     o.insert(QStringLiteral("scene_target_nearest_resolves"), double(scenes.nearestResolves));
+    // N3.2 (D15): the meshes (resident buffers, bytes, the core's copies, uploads), the streams and arenas (buffers,
+    // bytes, writes), every buffer created (the no-allocation proof), and the indirect and batched draws recorded.
+    const srpss_core::MeshBufferCounts mb = srpss_core::meshBufferCounts();
+    o.insert(QStringLiteral("mesh_buffers_meshes"), mb.meshes);
+    o.insert(QStringLiteral("mesh_buffers_mesh_bytes"), double(mb.meshBytes));
+    o.insert(QStringLiteral("mesh_buffers_mesh_images"), mb.meshImages);
+    o.insert(QStringLiteral("mesh_buffers_mesh_image_bytes"), double(mb.meshImageBytes));
+    o.insert(QStringLiteral("mesh_buffers_mesh_uploads"), double(mb.meshUploads));
+    o.insert(QStringLiteral("mesh_buffers_streams"), mb.streams);
+    o.insert(QStringLiteral("mesh_buffers_stream_bytes"), double(mb.streamBytes));
+    o.insert(QStringLiteral("mesh_buffers_stream_writes"), double(mb.streamWrites));
+    o.insert(QStringLiteral("mesh_buffers_stream_bytes_written"), double(mb.streamBytesWritten));
+    o.insert(QStringLiteral("mesh_buffers_arenas"), mb.arenas);
+    o.insert(QStringLiteral("mesh_buffers_arena_bytes"), double(mb.arenaBytes));
+    o.insert(QStringLiteral("mesh_buffers_arena_writes"), double(mb.arenaWrites));
+    o.insert(QStringLiteral("mesh_buffers_buffers_created"), double(mb.buffersCreated));
+    o.insert(QStringLiteral("mesh_buffers_indirect_draws"), double(mb.indirectDraws));
+    o.insert(QStringLiteral("mesh_buffers_batched_indirect"), double(mb.batchedIndirect));
+    o.insert(QStringLiteral("mesh_buffers_batched_loop"), double(mb.batchedLoop));
+    o.insert(QStringLiteral("mesh_buffers_records_timed"), double(mb.recordsTimed));
+    o.insert(QStringLiteral("mesh_buffers_record_ns"), double(mb.recordNs));
+    o.insert(QStringLiteral("mesh_buffers_stream_write_ns"), double(mb.streamWriteNs));
+    o.insert(QStringLiteral("mesh_buffers_draws_refused"), double(mb.drawsRefused)); // audit 4 H2, M1
     return pyJson(o);
 }
 
@@ -1329,6 +1353,117 @@ PyObject *composite_mode_texture_remove(PyObject *, PyObject *args)
     Py_RETURN_NONE;
 }
 
+bool intsArgument(PyObject *object, QList<int> *out, const char *what); // defined below
+
+// N3.2 (D15 point 2): an item's mesh from bytes Python holds (interleaved f32 records); copied once into the core.
+PyObject *composite_mode_mesh(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *name = nullptr;
+    const char *declaration = "";
+    Py_ssize_t declarationLength = 0;
+    PyObject *vertices = nullptr;
+    PyObject *instances = nullptr;
+    if (!PyArg_ParseTuple(args, "Lss#O|O", &handle, &name, &declaration, &declarationLength, &vertices, &instances))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    if (!PyBytes_Check(vertices) || (instances && instances != Py_None && !PyBytes_Check(instances))) {
+        PyErr_SetString(PyExc_TypeError, "a mesh's vertices (and instances) are bytes (interleaved f32 records)");
+        return nullptr;
+    }
+    const QByteArray v(PyBytes_AsString(vertices), qsizetype(PyBytes_Size(vertices)));
+    const QByteArray i = (instances && instances != Py_None)
+        ? QByteArray(PyBytes_AsString(instances), qsizetype(PyBytes_Size(instances)))
+        : QByteArray();
+    QString error;
+    if (!item->meshMode(QByteArray(name), QByteArray(declaration, qsizetype(declarationLength)), v, i, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+
+PyObject *composite_mode_mesh_remove(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *name = nullptr;
+    if (!PyArg_ParseTuple(args, "Ls", &handle, &name))
+        return nullptr;
+    srpss_core::CompositeItem *item = compositeOf(handle);
+    if (!item)
+        return nullptr;
+    QString error;
+    if (!item->removeMeshMode(QByteArray(name), &error)) {
+        PyErr_SetString(PyExc_KeyError, error.toUtf8().constData());
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+
+// N3.2, harness: the proofs' negative controls (mesh_buffers.h), each process-wide; a key left out keeps its value.
+PyObject *mesh_buffer_control(PyObject *, PyObject *args)
+{
+    const char *json = "";
+    Py_ssize_t length = 0;
+    if (!PyArg_ParseTuple(args, "s#", &json, &length))
+        return nullptr;
+    const QJsonObject o = QJsonDocument::fromJson(QByteArray(json, qsizetype(length))).object();
+    static const QStringList keys = { QStringLiteral("hide_draw_parameters"), QStringLiteral("direct_first_instance"),
+                                      QStringLiteral("recreate_streams"), QStringLiteral("skip_mesh_release"),
+                                      QStringLiteral("instances_past_used") };
+    for (auto it = o.begin(); it != o.end(); ++it) {
+        if (!keys.contains(it.key())) {
+            PyErr_Format(PyExc_ValueError, "unknown control '%s' (%s)", it.key().toUtf8().constData(),
+                         keys.join(QStringLiteral(", ")).toUtf8().constData());
+            return nullptr;
+        }
+    }
+    if (o.contains(QStringLiteral("hide_draw_parameters")))
+        srpss_core::setHideDrawParameters(o.value(QStringLiteral("hide_draw_parameters")).toBool());
+    if (o.contains(QStringLiteral("direct_first_instance")))
+        srpss_core::setDirectFirstInstance(quint32(qMax(0, o.value(QStringLiteral("direct_first_instance")).toInt())));
+    if (o.contains(QStringLiteral("recreate_streams")))
+        srpss_core::setRecreateStreams(o.value(QStringLiteral("recreate_streams")).toBool());
+    if (o.contains(QStringLiteral("skip_mesh_release")))
+        srpss_core::setSkipMeshRelease(o.value(QStringLiteral("skip_mesh_release")).toBool());
+    if (o.contains(QStringLiteral("instances_past_used")))
+        srpss_core::setInstancesPastUsed(o.value(QStringLiteral("instances_past_used")).toBool());
+    Py_RETURN_NONE;
+}
+
+// GPU-free: D15 point 3's arena layout (offsets, size) for block sizes at an alignment.
+PyObject *mesh_buffer_arena_layout(PyObject *, PyObject *args)
+{
+    PyObject *sizes = nullptr;
+    int alignment = 1;
+    if (!PyArg_ParseTuple(args, "Oi", &sizes, &alignment))
+        return nullptr;
+    QList<int> values;
+    if (!intsArgument(sizes, &values, "the block sizes"))
+        return nullptr;
+    QList<quint32> list;
+    for (const int v : values)
+        list.append(quint32(qMax(0, v)));
+    const srpss_core::ArenaLayout layout = srpss_core::arenaLayout(list, alignment);
+    PyObject *offsets = PyList_New(Py_ssize_t(layout.offsets.size()));
+    if (!offsets)
+        return nullptr;
+    for (qsizetype k = 0; k < layout.offsets.size(); ++k)
+        PyList_SetItem(offsets, Py_ssize_t(k), PyLong_FromUnsignedLong(layout.offsets.at(k)));
+    return Py_BuildValue("(Nk)", offsets, (unsigned long)layout.size);
+}
+
+// N3.2: a device's facts (the core's Vulkan device's limits and draw features), by its VkDevice handle.
+PyObject *vulkan_device_facts(PyObject *, PyObject *args)
+{
+    unsigned long long device = 0;
+    if (!PyArg_ParseTuple(args, "K", &device))
+        return nullptr;
+    return pyJson(srpss_core::vulkanDeviceFacts(quint64(device)));
+}
+
 PyObject *mode_core_members(PyObject *, PyObject *)
 {
     QJsonArray rows;
@@ -1703,9 +1838,30 @@ PyObject *mode_blocks(PyObject *, PyObject *args)
     Py_ssize_t cardLength = 0;
     int targetWidth = 0;
     int targetHeight = 0;
-    if (!PyArg_ParseTuple(args, "s#s#Os#y#z#(ii)", &schemaJson, &schemaLength, &json, &length, &packs, &settingsJson,
-                          &settingsLength, &record, &recordLength, &cardJson, &cardLength, &targetWidth, &targetHeight))
+    PyObject *correctionArgument = nullptr;   // N3.2: an optional clip correction (16 floats, column-major)
+    if (!PyArg_ParseTuple(args, "s#s#Os#y#z#(ii)|O", &schemaJson, &schemaLength, &json, &length, &packs, &settingsJson,
+                          &settingsLength, &record, &recordLength, &cardJson, &cardLength, &targetWidth, &targetHeight,
+                          &correctionArgument))
         return nullptr;
+    float correction[16] = {};
+    const bool corrected = correctionArgument && correctionArgument != Py_None;
+    if (corrected) {
+        // The limited API's function forms (the module builds against it), as the other sequence arguments here.
+        if (!PySequence_Check(correctionArgument) || PySequence_Size(correctionArgument) != 16) {
+            PyErr_SetString(PyExc_ValueError, "a clip correction is 16 numbers (column-major)");
+            return nullptr;
+        }
+        for (Py_ssize_t k = 0; k < 16; ++k) {
+            PyObject *item = PySequence_GetItem(correctionArgument, k); // a new reference
+            if (!item)
+                return nullptr;
+            const double value = PyFloat_AsDouble(item);
+            Py_DECREF(item);
+            if (PyErr_Occurred())
+                return nullptr;
+            correction[k] = float(value);
+        }
+    }
     const QSharedPointer<const srpss_core::RuntimeSchema> schema = schemaArgument(schemaJson, schemaLength);
     srpss_core::ModeProgram program;
     QJsonObject settings;
@@ -1717,7 +1873,8 @@ PyObject *mode_blocks(PyObject *, PyObject *args)
     QJsonObject facts;
     QString reason;
     if (!srpss_core::modeBlocks(*schema, program, settings, card, QSize(targetWidth, targetHeight),
-                                QByteArray(record, qsizetype(recordLength)), &blocks, &facts, &reason)) {
+                                QByteArray(record, qsizetype(recordLength)), &blocks, &facts, &reason,
+                                corrected ? correction : nullptr)) {
         PyErr_SetString(PyExc_ValueError, reason.toUtf8().constData());
         return nullptr;
     }
@@ -1909,6 +2066,11 @@ PyObject *recordElement(const char *data, srpss_core::frame_abi::FieldKind kind,
             PyTuple_SetItem(tuple, i, PyFloat_FromDouble(recordF64(data, offset + quint32(i) * 8))); // steals
         return tuple;
     }
+    case FieldKind::F32: { // D15 choice B: one float of a stream's bytes
+        float value = 0.0f;
+        std::memcpy(&value, data + offset, sizeof(value));
+        return PyFloat_FromDouble(static_cast<double>(value));
+    }
     }
     Py_RETURN_NONE;
 }
@@ -1916,7 +2078,7 @@ PyObject *recordElement(const char *data, srpss_core::frame_abi::FieldKind kind,
 quint32 elementBytes(srpss_core::frame_abi::FieldKind kind)
 {
     using srpss_core::frame_abi::FieldKind;
-    return kind == FieldKind::U32 ? 4u : kind == FieldKind::F64 ? 8u : 32u;
+    return kind == FieldKind::U32 || kind == FieldKind::F32 ? 4u : kind == FieldKind::F64 ? 8u : 32u;
 }
 
 // The record's fields by name in the reference decoder's order (header words excluded): the C++ decode the parity
@@ -2182,7 +2344,7 @@ PyObject *frame_schemas(PyObject *, PyObject *)
         modes.insert(QLatin1String(mode.modeId), double(mode.code));
     o.insert(QStringLiteral("mode_codes"), modes);
     QJsonArray schemas;
-    static const char *kinds[] = { "u32", "f64", "f64x4" };
+    static const char *kinds[] = { "u32", "f64", "f64x4", "f32" };
     static const char *checks[] = { "", "at_most", "boolean", "enum" };
     for (const fa::Schema &schema : fa::kSchemas) {
         QJsonObject s;
@@ -2559,6 +2721,19 @@ PyMethodDef methods[] = {
     { "composite_mode_target_pixels", composite_mode_target_pixels, METH_VARARGS,
       "(handle) -> list | None: N3.1, harness: the readback once complete, each {name, size, content, format, samples, "
       "data} (rows top first on every backend)." },
+    { "composite_mode_mesh", composite_mode_mesh, METH_VARARGS,
+      "(handle, name, declaration_json, vertices_bytes, instances_bytes | None) -> None: N3.2 (D15), an item's mesh "
+      "(interleaved f32 records; declaration {\"vertices\": layout, \"instances\"?: layout}), copied once and uploaded "
+      "once at the next record. ValueError when refused." },
+    { "composite_mode_mesh_remove", composite_mode_mesh_remove, METH_VARARGS,
+      "(handle, name) -> None: N3.2, the mesh goes (its buffers at the next record). KeyError when there is none." },
+    { "mesh_buffer_control", mesh_buffer_control, METH_VARARGS,
+      "(controls_json) -> None: N3.2, harness: the proofs' negative controls (hide_draw_parameters, "
+      "direct_first_instance, recreate_streams, skip_mesh_release, instances_past_used), process-wide." },
+    { "mesh_buffer_arena_layout", mesh_buffer_arena_layout, METH_VARARGS,
+      "([block sizes], alignment) -> ([offsets], size): D15 point 3's block arena layout (GPU-free)." },
+    { "vulkan_device_facts", vulkan_device_facts, METH_VARARGS,
+      "(vk_device_handle) -> dict: N3.2, the limits and draw features of a device the core created ({} otherwise)." },
     { "scene_sample_counts_control", scene_sample_counts_control, METH_VARARGS,
       "([counts]) -> None: N3.1, harness: sample counts taken out of every device's supported set (the clamp's "
       "negative control); [] restores them." },

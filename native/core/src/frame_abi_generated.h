@@ -76,7 +76,7 @@ constexpr ModeCode kModeCodes[] = {
     { "waveform_ribbon", 9 },
 };
 
-enum class FieldKind : quint8 { U32, F64, F64x4 };
+enum class FieldKind : quint8 { U32, F64, F64x4, F32 };
 enum class FieldCheck : quint8 { None, AtMost, Boolean, Enum };
 
 struct Field

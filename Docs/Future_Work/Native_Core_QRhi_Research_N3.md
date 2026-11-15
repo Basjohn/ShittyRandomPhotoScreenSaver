@@ -560,7 +560,20 @@ What this means for N3.x:
 - Q1: per-format Vulkan sample counts for the HDR format (check once per device).
 - Q2: a depth-only format with the GL blit mask `DEPTH|STENCIL` (test D32F once, or use D24S8).
 - Q3: depth `LOAD` hazard after a prior pass: a validated hidden-host run settles it.
-- Q4: the device's real `maxDescriptorSetUniformBuffersDynamic`; log it.
-- Q5: qsb compile of `gl_DrawID`/`gl_BaseInstance`/`gl_BaseVertex`; `firstInstance` in indirect commands on GL 4.0/4.1.
-- Q6: no measurement made; D5.3's 0.05 ms gate still needs the product's ring sizes on both backends.
+- Q4: answered by N3.2's proof (`mesh_buffer_check.py --rounds forms`, 15 Nov 2026): the RTX 4090's Vulkan device
+  reports `maxDescriptorSetUniformBuffersDynamic` 15, `minUniformBufferOffsetAlignment` 64 and `maxUniformBufferRange`
+  65,536; the core records them once from the device it creates (`vulkan_device_facts`). Sixteen draws of one pipeline
+  at sixteen dynamic offsets equal sixteen passes bit for bit on both backends.
+- Q5: answered by the same proof: `qsb` bakes `gl_DrawID`, `gl_BaseInstance` and `gl_BaseVertex` for SPIR-V and GLSL
+  460 and 430, and HLSL 5.0 refuses them ("Unsupported builtin in HLSL: 4426"), so draw-parameter packs are SPIR-V and
+  GLSL only (D15). QRhi reports `DrawIndirect`, `DrawIndirectMulti` and `ShaderDrawParameters` on both of this
+  machine's backends, and the multi-draw with `gl_DrawID` is recorded on both and equals the per-batch form. Read back
+  per backend (first vertex 4): `gl_DrawID` the batch and `gl_BaseInstance` 0 on both; `gl_BaseVertex` 4 on Vulkan and
+  0 on OpenGL (a non-indexed draw has no base vertex there). A direct
+  draw's `firstInstance` 3 is ignored on OpenGL and moves the instance index on Vulkan (the reason for D15's "always
+  0"). `firstInstance` in indirect commands on GL 4.0/4.1 is not tested (no such device here; the core never sets it: its own commands carry 0, and since checkpoint audit 4, M1, a record's
+  commands are uploaded with it written as 0).
+- Q6: measured (`mesh_buffer_check.py --rounds stream_ring`, 15 Nov 2026): every QRhi route at 4 KiB to 288 KiB is
+  within 0.05 ms of the pair's floor on both axes on both backends (the figures are in D5.3's stream ring row), so the
+  pair is not built.
 - Q7: write-after-read across a pass boundary (buffer read in a draw, written by the next compute pass).

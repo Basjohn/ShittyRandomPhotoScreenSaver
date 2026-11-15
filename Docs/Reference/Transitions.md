@@ -777,6 +777,30 @@ Each foundation slice adds what it learned here.
   that has a resolve only when its target preserves contents, so a later run in the same record loads undefined
   samples. Judge a clearing change by both counts' absolute times, never by 4x minus 1x alone.
 
+**Native meshes and buffers (N3.2, 15 Nov; D15)**
+- An edge through an exact pixel centre is a tie, and the core's Y flip (F1) resolves it the other way: the fill
+  rule's top edge becomes a bottom edge, so whole rows of a box or a voxel move between the Python renderer and the
+  core. Keep harness data's edges off pixel centres; judge geometry by the tie budget (8 pixels past 1 level), not
+  exact. Blended and additive pixels sum per-layer roundings of SPIRV-Cross's GLSL against the source's own.
+- Prove the per-record front face by pictures, not by the rule alone: with depth testing, the box culled must equal the
+  box unculled, and the opposite winding must show the inside faces. The rule is N0.3's on the matrix as uploaded
+  (mirrored by the correction on both of the core's backends): clockwise on the core's OpenGL, counter-clockwise on
+  Vulkan.
+- A negative control must be able to fail: an instance stream "offset by one record" over a regular grid draws the
+  same set of sprites in another order (4 pixels differed); read the attributes out of step instead (every pixel moved).
+- A record field nothing reads is refused (one owner a name), so a scene with no per-record data still needs one field
+  a block declares (`u_frame`); a storage block a variant never reads can leave the pack, so every variant reads it.
+- `firstInstance` is always 0: a direct draw's `firstInstance` 3 is ignored on OpenGL and moves `gl_InstanceIndex` on
+  Vulkan, so the same pack draws different pictures. Batches go by dynamic offset or `gl_DrawID`; sixteen draws at
+  sixteen offsets equal sixteen passes bit for bit.
+- `qsb` refuses the draw-parameter built-ins for HLSL 5.0: a `gl_DrawID` pack is SPIR-V and GLSL only, beside a plain
+  pack that works everywhere.
+- Time the render thread with the core's own counter, not the GUI's frame wall time: a whole frame from Python moved
+  by 0.1 ms between runs (Vulkan, a busy GPU) while the record itself is 0.01 to 0.04 ms. QRhi's OpenGL "fast path" for a
+  `Dynamic` vertex buffer is itself a buffer update call (about 0.02 ms a record whatever the size), so on OpenGL the
+  instance route can cost more CPU than the storage route: measure a floor (the record with the data resident plus one
+  copy into mapped memory), never one route against another.
+
 ## Operator-triggered appearance review (reference checklist)
 
 Automated image differences are not aesthetic acceptance. Previously implemented work is operator-accepted; use the following reference checks **only if** a newly observed regression or new transition tranche requires targeted appearance review:
