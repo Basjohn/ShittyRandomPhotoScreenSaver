@@ -269,6 +269,7 @@ const char *fieldKindName(frame_abi::FieldKind kind)
     case frame_abi::FieldKind::U32: return "u32";
     case frame_abi::FieldKind::F64: return "f64";
     case frame_abi::FieldKind::F64x4: return "f64x4";
+    case frame_abi::FieldKind::F32: return "f32";
     }
     return "?";
 }
@@ -290,6 +291,10 @@ QString recordFieldFits(const BlockMember &member, const frame_abi::Field &field
     case frame_abi::FieldKind::F64x4:
         typeFits = type == QShaderDescription::Vec4;
         break;
+    case frame_abi::FieldKind::F32:
+        // D15 point 4: an f32 field is a stream's bytes and fills a stream, never a block member.
+        return QStringLiteral("'%1': the record's f32 field is a stream's (D15): it fills no block member")
+            .arg(QString::fromLatin1(member.name));
     }
     const QString name = QString::fromLatin1(member.name);
     if (!typeFits) {

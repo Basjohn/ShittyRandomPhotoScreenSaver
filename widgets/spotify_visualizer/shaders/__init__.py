@@ -39,6 +39,9 @@ def _active_shader_files() -> Dict[str, str]:
 #: native core's bake splices the same text at the same line (``native/core/cmake/compose_shader.cmake``), so a file
 #: both renderers draw is one source.
 CONVENTIONS_MARKER = "//@srpss_conventions"
+#: The geometry include's line (D15: ``rendering.gl_programs.conventions.SRPSS_GEOMETRY_GLSL``), after the
+#: conventions marker.
+GEOMETRY_MARKER = "//@srpss_geometry"
 
 
 def compose_shader_source(path: Path) -> str:
@@ -68,6 +71,11 @@ def _load_shader_source(path: Path, *, include_stack: tuple[Path, ...] = (), bas
             from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_GLSL
 
             expanded.append(SRPSS_CONVENTIONS_GLSL)
+            continue
+        if stripped == GEOMETRY_MARKER:
+            from rendering.gl_programs.conventions import SRPSS_GEOMETRY_GLSL
+
+            expanded.append(SRPSS_GEOMETRY_GLSL)  # D15: sprites and the batch index
             continue
         if not stripped.startswith("#include "):
             expanded.append(line)

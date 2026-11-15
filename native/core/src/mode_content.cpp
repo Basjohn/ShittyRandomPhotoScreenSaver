@@ -76,7 +76,9 @@ void valueTargetPixels(const ModeCard &, const QSize &target, double *out)
 // bubble.py render), the minimum that covers them, each with its values. A mode's own layout arithmetic
 // (u_content_rect, u_visual_scale, ...) is its settings, resolved in Python.
 const ModeCoreMember kModeCoreMembers[] = {
-    { "uMatrix", 16, false, valueZeros },                     // the Python quad's item matrix: zeros (the core's triangle)
+    // The Python quad's item matrix: zeros on the core's triangle (nothing reads it there); for a pass with its own vertex
+    // stage (N3.2, D15 choice H) packFrame fills it with item pixels to the drawn target's clip space (itemClipMatrix).
+    { "uMatrix", 16, false, valueZeros },
     { "uItemSize", 2, true, valueItemSize },                  // the item's logical size
     { "uContentRotationQuarters", 1, true, valueQuarters },
     { "u_resolution", 2, true, valueOrientedSize },           // the item's logical size in the content's orientation
@@ -95,6 +97,8 @@ const ModeCoreMember kModeCoreMembers[] = {
     // 2 L7's scan of implementations/oscilloscope.py).
     { "uOriented", 2, true, valueOrientedSize },          // the item's logical size in the content's orientation
     { "uQuarters", 1, true, valueQuarters },              // the content's quarter turns
+    // N3.2 (D15 point 6): a batched pass's batch, 0 here; the arena's copy of each batch sets its own.
+    { "u_srpss_batch", 1, false, valueZeros },
 };
 const int kModeCoreMemberCount = int(sizeof(kModeCoreMembers) / sizeof(kModeCoreMembers[0]));
 
@@ -355,6 +359,10 @@ bool parseSamplers(const QJsonValue &value, ModePass &pass, QString *error)
     return true;
 }
 
+bool checkPassOutputs(ModePass &pass, const QList<TargetDeclaration> &targets, const QShaderDescription &d,
+                      QString *error);
+bool checkGeometryPass(ModePass &pass, const QList<TargetDeclaration> &targets, QString *error);
+
 // What a pass may declare (mode_content.h): one block of its own at any binding but 17, the conventions block at 17,
 // a vec2 at location 0 named v_uv or vUv, sampler2Ds each bound by name, one vec4 output (N3.1: on a scene target one
 // output per colour attachment at locations 0..n-1, and gl_FragDepth into a target with depth).
@@ -365,6 +373,8 @@ bool checkPass(ModePass &pass, const QList<TargetDeclaration> &targets, QString 
         *error = QStringLiteral("pass '%1': the pack is not a fragment shader").arg(name);
         return false;
     }
+    if (pass.ownVertex())
+        return checkGeometryPass(pass, targets, error); // N3.2: its own vertex stage
     const QShaderDescription d = pass.fragment.description();
     QByteArray own;
     int ownBinding = -1;
@@ -457,6 +467,19 @@ bool checkPass(ModePass &pass, const QList<TargetDeclaration> &targets, QString 
         }
         pass.uv = up ? PassUv::Up : PassUv::Down;
     }
+    if (!checkPassOutputs(pass, targets, d, error))
+        return false;
+    if (!own.isEmpty())
+        pass.block = BlockLayout::reflect(pass.fragment, own);
+    return true;
+}
+
+// The fragment's outputs (N3.1) and gl_FragDepth: a pass on the surface writes one vec4 at location 0; on a scene target
+// one float vector at each location 0..n-1, one per colour attachment; gl_FragDepth only into a target with depth.
+bool checkPassOutputs(ModePass &pass, const QList<TargetDeclaration> &targets, const QShaderDescription &d,
+                      QString *error)
+{
+    const QString name = QString::fromLatin1(pass.name);
     const QList<QShaderDescription::InOutVariable> outputs = d.outputVariables();
     const TargetDeclaration *target = pass.target >= 0 ? &targets.at(pass.target) : nullptr;
     if (!target) {
@@ -497,8 +520,6 @@ bool checkPass(ModePass &pass, const QList<TargetDeclaration> &targets, QString 
         *error = QStringLiteral("pass '%1' writes gl_FragDepth into a target without depth").arg(name);
         return false;
     }
-    if (!own.isEmpty())
-        pass.block = BlockLayout::reflect(pass.fragment, own);
     return true;
 }
 
@@ -540,10 +561,10 @@ QRhiGraphicsPipeline::TargetBlend targetBlend(PassBlend blend)
     return b;
 }
 
-// N3.1: one attachment's write mask and blend.
+// N3.1: one attachment's write mask and blend (N3.2: a full declaration where the pass gave one).
 QRhiGraphicsPipeline::TargetBlend outputBlend(const PassOutput &output)
 {
-    QRhiGraphicsPipeline::TargetBlend b = targetBlend(output.blend);
+    QRhiGraphicsPipeline::TargetBlend b = output.custom ? output.customBlend : targetBlend(output.blend);
     if (!output.write) {
         b.enable = false;
         b.colorWrite = QRhiGraphicsPipeline::ColorMask();
@@ -551,9 +572,34 @@ QRhiGraphicsPipeline::TargetBlend outputBlend(const PassOutput &output)
     return b;
 }
 
+bool sameBlendState(const QRhiGraphicsPipeline::TargetBlend &a, const QRhiGraphicsPipeline::TargetBlend &b)
+{
+    return a.enable == b.enable && a.srcColor == b.srcColor && a.dstColor == b.dstColor && a.opColor == b.opColor
+        && a.srcAlpha == b.srcAlpha && a.dstAlpha == b.dstAlpha && a.opAlpha == b.opAlpha;
+}
+
 bool sameOutput(const PassOutput &a, const PassOutput &b)
 {
-    return a.write == b.write && (!a.write || a.blend == b.blend);
+    if (a.write != b.write)
+        return false;
+    if (!a.write)
+        return true;
+    if (a.custom || b.custom)
+        return a.custom == b.custom && sameBlendState(a.customBlend, b.customBlend); // N3.2
+    return a.blend == b.blend;
+}
+
+// N3.2 (D15 point 1): a blend value, a preset's name or a full declaration.
+bool parseBlendValue(const QJsonValue &value, PassBlend *preset, bool *custom,
+                     QRhiGraphicsPipeline::TargetBlend *state)
+{
+    if (value.isObject()) {
+        *custom = true;
+        *preset = PassBlend::Replace;
+        return parseBlendObject(value, state);
+    }
+    *custom = false;
+    return parsePassBlend(value.toString(), preset);
 }
 
 // N3.1: a pass's "attachments" ([{"write"?: bool, "blend"?: name}], one per colour attachment of its target) and
@@ -564,8 +610,12 @@ bool parsePassTargetState(const QJsonObject &o, ModePass &pass, const QList<Targ
     const TargetDeclaration *target = pass.target >= 0 ? &targets.at(pass.target) : nullptr;
     const int count = target ? int(target->colour.size()) : 1;
     pass.outputs.clear();
-    for (int i = 0; i < count; ++i)
-        pass.outputs.append(PassOutput { true, pass.blend });
+    for (int i = 0; i < count; ++i) {
+        PassOutput output { true, pass.blend };
+        output.custom = pass.customBlend;             // N3.2
+        output.customBlend = pass.blendState;
+        pass.outputs.append(output);
+    }
     const QJsonValue attachments = o.value(QStringLiteral("attachments"));
     if (!attachments.isUndefined()) {
         const QJsonArray list = attachments.toArray();
@@ -584,7 +634,8 @@ bool parsePassTargetState(const QJsonObject &o, ModePass &pass, const QList<Targ
             keys += blend.isUndefined() ? 0 : 1;
             PassOutput &output = pass.outputs[i];
             if (!list.at(i).isObject() || a.size() != keys || (!write.isUndefined() && !write.isBool())
-                || (!blend.isUndefined() && !parsePassBlend(blend.toString(), &output.blend))) {
+                || (!blend.isUndefined()
+                    && !parseBlendValue(blend, &output.blend, &output.custom, &output.customBlend))) {
                 *error = QStringLiteral("pass '%1': attachment %2 is {\"write\"?: true or false, \"blend\"?: replace, "
                                         "alpha, premultiplied or add}").arg(label).arg(i);
                 return false;
@@ -668,6 +719,345 @@ bool checkTargetSampler(const ModePass &pass, const PassSampler &s, QList<Target
     }
     t.colour[colour].read = true;
     return true;
+}
+
+// ------------------------------------------------------------------------------------------------- N3.2 (D15)
+
+int inputComponents(QShaderDescription::VariableType type)
+{
+    switch (type) {
+    case QShaderDescription::Float: return 1;
+    case QShaderDescription::Vec2: return 2;
+    case QShaderDescription::Vec3: return 3;
+    case QShaderDescription::Vec4: return 4;
+    default: return 0;
+    }
+}
+
+// A pass with its own vertex stage (mode_content.h's header): the pass's block in either stage or both (the same block),
+// the conventions block, samplers and storage in either stage, bound by name; the vertex stage's float inputs (bound at
+// the build to its mesh's and instance source's attributes by name); the fragment's inputs carried by the vertex stage's
+// outputs at the same locations; the fragment's outputs as any pass's (checkPassOutputs).
+bool checkGeometryPass(ModePass &pass, const QList<TargetDeclaration> &targets, QString *error)
+{
+    const QString name = QString::fromLatin1(pass.name);
+    if (pass.vertex.stage() != QShader::VertexStage
+        || (pass.vertexDrawParameters.isValid() && pass.vertexDrawParameters.stage() != QShader::VertexStage)) {
+        *error = QStringLiteral("pass '%1': its vertex pack (and a batched pass's draw-parameters pack) is a vertex "
+                                "shader").arg(name);
+        return false;
+    }
+    const QShaderDescription f = pass.fragment.description();
+    const QShaderDescription v = pass.vertex.description();
+    struct Stage
+    {
+        const QShaderDescription *d;
+        int flag;
+    };
+    const Stage stages[2] = { { &v, int(QRhiShaderResourceBinding::VertexStage) },
+                              { &f, int(QRhiShaderResourceBinding::FragmentStage) } };
+    QByteArray own;
+    int ownBinding = -1;
+    int ownSize = 0;
+    pass.blockStages = 0;
+    pass.conventionsStages = 0;
+    pass.conventions = false;
+    for (const Stage &s : stages) {
+        for (const QShaderDescription::UniformBlock &block : s.d->uniformBlocks()) {
+            if (block.blockName == kConventionsBlock) {
+                if (block.binding != kConventionsBinding) {
+                    *error = QStringLiteral("pass '%1': SrpssConventions is at binding %2, not %3").arg(name)
+                                 .arg(block.binding).arg(kConventionsBinding);
+                    return false;
+                }
+                pass.conventionsStages |= s.flag;
+                pass.conventions = true;
+                continue;
+            }
+            if (block.binding < 0 || block.binding == kConventionsBinding) {
+                *error = QStringLiteral("pass '%1': block '%2' is at binding %3 (17 is the conventions block's)")
+                             .arg(name, QString::fromLatin1(block.blockName)).arg(block.binding);
+                return false;
+            }
+            if (own.isEmpty()) {
+                own = block.blockName;
+                ownBinding = block.binding;
+                ownSize = block.size;
+            } else if (block.blockName != own || block.binding != ownBinding || block.size != ownSize) {
+                *error = QStringLiteral("pass '%1' declares the blocks '%2' and '%3': a pass has one block of its own, "
+                                        "the same in both stages").arg(name, QString::fromLatin1(own),
+                                                                       QString::fromLatin1(block.blockName));
+                return false;
+            }
+            pass.blockStages |= s.flag;
+        }
+        if (!s.d->separateImages().isEmpty() || !s.d->separateSamplers().isEmpty() || !s.d->storageImages().isEmpty()
+            || !s.d->pushConstantBlocks().isEmpty()) {
+            *error = QStringLiteral("pass '%1' declares a separate texture or sampler, a storage image or a push constant: "
+                                    "that is a primitive with its own C++, not pass data").arg(name);
+            return false;
+        }
+    }
+    // Storage, read only, bound by name to a storage stream.
+    for (PassStorage &st : pass.storage) {
+        st.binding = -1;
+        st.stages = 0;
+    }
+    for (const Stage &s : stages) {
+        for (const QShaderDescription::StorageBlock &block : s.d->storageBlocks()) {
+            PassStorage *bound = nullptr;
+            for (PassStorage &st : pass.storage) {
+                if (st.name == block.blockName)
+                    bound = &st;
+            }
+            if (!bound) {
+                *error = QStringLiteral("unbound: pass '%1' reads the buffer block '%2', which its program binds to no "
+                                        "storage stream").arg(name, QString::fromLatin1(block.blockName));
+                return false;
+            }
+            if (block.binding < 0 || block.binding == kConventionsBinding || block.binding == ownBinding
+                || (bound->binding >= 0 && bound->binding != block.binding)) {
+                *error = QStringLiteral("pass '%1': the buffer block '%2' is at binding %3 (17 is the conventions "
+                                        "block's, %4 its own block's)").arg(name, QString::fromLatin1(block.blockName))
+                             .arg(block.binding).arg(ownBinding);
+                return false;
+            }
+            bound->binding = block.binding;
+            bound->stages |= s.flag;
+        }
+    }
+    for (const PassStorage &st : pass.storage) {
+        if (st.binding < 0) {
+            *error = QStringLiteral("unknown: pass '%1' binds the buffer block '%2', which its shaders do not declare")
+                         .arg(name, QString::fromLatin1(st.name));
+            return false;
+        }
+    }
+    // Samplers in either stage, each bound by name once.
+    for (PassSampler &smp : pass.samplers) {
+        smp.binding = -1;
+        smp.stages = 0;
+        for (const Stage &s : stages) {
+            for (const QShaderDescription::InOutVariable &image : s.d->combinedImageSamplers()) {
+                if (image.name != smp.name)
+                    continue;
+                if (image.type != QShaderDescription::Sampler2D || (smp.binding >= 0 && smp.binding != image.binding)) {
+                    *error = QStringLiteral("pass '%1': the sampler '%2' is not one sampler2D at one binding")
+                                 .arg(name, QString::fromLatin1(smp.name));
+                    return false;
+                }
+                smp.binding = image.binding;
+                smp.stages |= s.flag;
+            }
+        }
+        if (smp.binding < 0) {
+            *error = QStringLiteral("unknown: pass '%1' binds the sampler '%2', which its shaders do not declare")
+                         .arg(name, QString::fromLatin1(smp.name));
+            return false;
+        }
+        bool clash = smp.binding == kConventionsBinding || smp.binding == ownBinding;
+        for (const PassStorage &st : pass.storage)
+            clash = clash || st.binding == smp.binding;
+        for (const PassSampler &other : pass.samplers)
+            clash = clash || (&other != &smp && other.binding == smp.binding);
+        if (clash) {
+            *error = QStringLiteral("pass '%1': the sampler '%2' shares binding %3 (doubly bound)")
+                         .arg(name, QString::fromLatin1(smp.name)).arg(smp.binding);
+            return false;
+        }
+    }
+    for (const Stage &s : stages) {
+        for (const QShaderDescription::InOutVariable &image : s.d->combinedImageSamplers()) {
+            bool bound = false;
+            for (const PassSampler &smp : pass.samplers)
+                bound = bound || smp.name == image.name;
+            if (!bound) {
+                *error = QStringLiteral("unbound: pass '%1' samples '%2', which its program binds to no texture")
+                             .arg(name, QString::fromLatin1(image.name));
+                return false;
+            }
+        }
+    }
+    // The vertex stage's inputs, float vectors bound by name at the build.
+    pass.inputs.clear();
+    for (const QShaderDescription::InOutVariable &input : v.inputVariables()) {
+        const int components = inputComponents(input.type);
+        if (components == 0 || input.location < 0) {
+            *error = QStringLiteral("pass '%1': the vertex input '%2' is not a float, vec2, vec3 or vec4 at a location")
+                         .arg(name, QString::fromLatin1(input.name));
+            return false;
+        }
+        pass.inputs.append(PassInput { input.name, input.location, components });
+    }
+    if (pass.inputs.size() > 2 * kMaxMeshAttributes) {
+        *error = QStringLiteral("pass '%1' reads more than %2 vertex inputs").arg(name).arg(2 * kMaxMeshAttributes);
+        return false;
+    }
+    // The fragment's inputs: the vertex stage's outputs at the same locations, of the same types.
+    for (const QShaderDescription::InOutVariable &in : f.inputVariables()) {
+        bool carried = false;
+        for (const QShaderDescription::InOutVariable &out : v.outputVariables())
+            carried = carried || (out.location == in.location && out.type == in.type);
+        if (!carried) {
+            *error = QStringLiteral("pass '%1': the fragment reads '%2' at location %3, which its vertex stage does not "
+                                    "write there with that type").arg(name, QString::fromLatin1(in.name)).arg(in.location);
+            return false;
+        }
+    }
+    pass.uv = PassUv::None;
+    if (!checkPassOutputs(pass, targets, f, error))
+        return false;
+    if (!own.isEmpty()) {
+        pass.block = BlockLayout::reflect((pass.blockStages & int(QRhiShaderResourceBinding::FragmentStage)) ? pass.fragment
+                                                                                                           : pass.vertex,
+                                          own);
+    }
+    if (pass.batched()) {
+        const BlockMember *batch = pass.block.valid() ? pass.block.member(kBatchMember) : nullptr;
+        if (!batch || batch->count != 1
+            || (batch->type != QShaderDescription::Int && batch->type != QShaderDescription::Uint)) {
+            *error = QStringLiteral("pass '%1' is batched: its block declares an int %2 (its plain pack's batch, D15 "
+                                    "point 6)").arg(name, QLatin1String(kBatchMember));
+            return false;
+        }
+    }
+    return true;
+}
+
+const char *const kTopologyNames[] = { "triangles", "triangle_strip" };
+const char *const kCullNames[] = { "none", "back", "front" };
+
+// The geometry keys of a pass (mode_content.h's header). `vertex`: the pass declared "vertex": true.
+bool parseGeometry(const QJsonObject &o, ModePass &pass, bool vertex, QString *error)
+{
+    static const QStringList keys = { QStringLiteral("topology"), QStringLiteral("vertices"), QStringLiteral("instances"),
+                                      QStringLiteral("first_vertex"), QStringLiteral("mesh"),
+                                      QStringLiteral("instance_from"), QStringLiteral("storage"), QStringLiteral("cull"),
+                                      QStringLiteral("front_face"), QStringLiteral("indirect"),
+                                      QStringLiteral("draw_count"), QStringLiteral("batches"),
+                                      QStringLiteral("batch_count") };
+    const QString label = QString::fromLatin1(pass.name);
+    bool any = false;
+    for (const QString &key : keys)
+        any = any || o.contains(key);
+    if (!vertex) {
+        if (any) {
+            *error = QStringLiteral("pass '%1' declares geometry without its own vertex stage (\"vertex\": true)")
+                         .arg(label);
+            return false;
+        }
+        return true;
+    }
+    const QString bad = QStringLiteral("pass '%1': ").arg(label);
+    const int topology = nameIndex(o.value(QStringLiteral("topology")).toString(QStringLiteral("triangles")),
+                                   kTopologyNames, 2);
+    const int cull = nameIndex(o.value(QStringLiteral("cull")).toString(QStringLiteral("none")), kCullNames, 3);
+    if (topology < 0 || cull < 0) {
+        *error = bad + QStringLiteral("\"topology\" is triangles or triangle_strip (points are refused: instanced quads, "
+                                      "D5.6 row 11), \"cull\" none, back or front");
+        return false;
+    }
+    pass.topology = PassTopology(topology);
+    pass.cull = PassCull(cull);
+    pass.mesh = o.value(QStringLiteral("mesh")).toString().toLatin1();
+    pass.instanceFrom = o.value(QStringLiteral("instance_from")).toString().toLatin1();
+    if ((o.contains(QStringLiteral("mesh")) && !passName(pass.mesh))
+        || (o.contains(QStringLiteral("instance_from")) && !passName(pass.instanceFrom))) {
+        *error = bad + QStringLiteral("\"mesh\" and \"instance_from\" name a mesh or a stream (identifiers)");
+        return false;
+    }
+    const QJsonValue vertices = o.value(QStringLiteral("vertices"));
+    if (vertices.isUndefined() ? pass.mesh.isEmpty() : !parseDrawCount(vertices, !pass.mesh.isEmpty(), &pass.vertices)) {
+        *error = bad + QStringLiteral("\"vertices\" is a number, \"mesh\" (with a mesh) or a name the record or the "
+                                     "settings fill");
+        return false;
+    }
+    if (vertices.isUndefined())
+        pass.vertices.kind = DrawCount::Kind::Mesh;
+    // Instances: 1 without an instance source; with one, its count by default ("mesh": a mesh's instance stream's, or an
+    // instance stream's records).
+    pass.instances.number = 1;
+    if (!pass.instanceFrom.isEmpty())
+        pass.instances.kind = DrawCount::Kind::Mesh;
+    if (o.contains(QStringLiteral("instances"))
+        && !parseDrawCount(o.value(QStringLiteral("instances")), !pass.instanceFrom.isEmpty(), &pass.instances)) {
+        *error = bad + QStringLiteral("\"instances\" is a number, a name the record or the settings fill, or \"mesh\" "
+                                     "(the instance source's count)");
+        return false;
+    }
+    if (o.contains(QStringLiteral("first_vertex"))) {
+        DrawCount first;
+        if (!parseDrawCount(o.value(QStringLiteral("first_vertex")), false, &first)
+            || first.kind != DrawCount::Kind::Number) {
+            *error = bad + QStringLiteral("\"first_vertex\" is a number");
+            return false;
+        }
+        pass.firstVertex = first.number;
+    }
+    const QJsonValue front = o.value(QStringLiteral("front_face"));
+    const QString frontText = front.toString(QStringLiteral("ccw"));
+    if (frontText == QLatin1String("ccw") || frontText == QLatin1String("cw")) {
+        pass.frontClockwise = frontText == QLatin1String("cw");
+    } else if (!parseDrawCount(front, false, &pass.frontSelector) || pass.frontSelector.kind != DrawCount::Kind::Named) {
+        *error = bad + QStringLiteral("\"front_face\" is ccw, cw or a name choosing per record (0 ccw, 1 cw)");
+        return false;
+    }
+    const QJsonValue storage = o.value(QStringLiteral("storage"));
+    if (!storage.isUndefined()) {
+        if (!storage.isArray() || storage.toArray().size() > kMaxPassStorage) {
+            *error = bad + QStringLiteral("\"storage\" is at most %1 {\"name\": a buffer block, \"stream\": a storage "
+                                          "stream}").arg(kMaxPassStorage);
+            return false;
+        }
+        for (const QJsonValue &entry : storage.toArray()) {
+            const QJsonObject s = entry.toObject();
+            PassStorage st;
+            st.name = s.value(QStringLiteral("name")).toString().toLatin1();
+            st.stream = s.value(QStringLiteral("stream")).toString().toLatin1();
+            bool twice = false;
+            for (const PassStorage &earlier : pass.storage)
+                twice = twice || earlier.name == st.name;
+            if (!entry.isObject() || s.size() != 2 || !shaderIdentifier(st.name) || !passName(st.stream) || twice) {
+                *error = bad + QStringLiteral("a storage binding is {\"name\": a buffer block named once, \"stream\": a "
+                                              "storage stream}");
+                return false;
+            }
+            pass.storage.append(st);
+        }
+    }
+    pass.indirect = o.value(QStringLiteral("indirect")).toString().toLatin1();
+    pass.batches = o.value(QStringLiteral("batches")).toString().toLatin1();
+    if (o.contains(QStringLiteral("indirect"))
+        && (!passName(pass.indirect) || !parseDrawCount(o.value(QStringLiteral("draw_count")), false, &pass.drawCount))) {
+        *error = bad + QStringLiteral("\"indirect\" names an indirect stream, with \"draw_count\" (a number or a name)");
+        return false;
+    }
+    if (o.contains(QStringLiteral("batches"))
+        && (!passName(pass.batches) || !parseDrawCount(o.value(QStringLiteral("batch_count")), false, &pass.batchCount)
+            || pass.batchCount.kind != DrawCount::Kind::Named)) {
+        *error = bad + QStringLiteral("\"batches\" names the record's u32 {first, count} pairs, with \"batch_count\" (the "
+                                     "record field or setting holding how many)");
+        return false;
+    }
+    if (o.contains(QStringLiteral("draw_count")) != o.contains(QStringLiteral("indirect"))
+        || o.contains(QStringLiteral("batch_count")) != o.contains(QStringLiteral("batches"))
+        || (pass.batched() && (!pass.indirect.isEmpty() || o.contains(QStringLiteral("instances"))
+                               || !pass.instanceFrom.isEmpty()))) {
+        *error = bad + QStringLiteral("a pass draws directly, indirectly (\"indirect\" with \"draw_count\") or batched "
+                                     "(\"batches\" with \"batch_count\"; its instances come from storage, never "
+                                     "\"instances\" or \"instance_from\")");
+        return false;
+    }
+    if (pass.batched() && pass.vertices.kind == DrawCount::Kind::Mesh && pass.mesh.isEmpty()) {
+        *error = bad + QStringLiteral("a batched pass's \"vertices\" is a number or a name");
+        return false;
+    }
+    return true;
+}
+
+QJsonValue drawCountJson(const DrawCount &count)
+{
+    return count.toJson();
 }
 
 } // namespace
@@ -857,17 +1247,51 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
     const QJsonObject root = document.object();
     const QJsonArray declared = root.value(QStringLiteral("passes")).toArray();
     const bool withTargets = root.contains(QStringLiteral("targets")); // N3.1
-    if (parse.error != QJsonParseError::NoError || !document.isObject() || root.size() != (withTargets ? 2 : 1)
+    const bool withStreams = root.contains(QStringLiteral("streams")); // N3.2
+    if (parse.error != QJsonParseError::NoError || !document.isObject()
+        || root.size() != 1 + (withTargets ? 1 : 0) + (withStreams ? 1 : 0)
         || declared.isEmpty() || declared.size() > kMaxModePasses) {
         *error = QStringLiteral("a mode's program is {\"passes\": [{\"name\", \"blend\"}, ...], \"targets\" (optional): "
                                 "[...]} with 1 to %1 passes").arg(kMaxModePasses);
         return false;
     }
-    if (packs.size() != declared.size()) {
-        *error = QStringLiteral("%1 pass(es) declared, %2 fragment pack(s) given").arg(declared.size()).arg(packs.size());
+    // N3.2: a pass with its own vertex stage takes its vertex pack after its fragment's, and a batched one its
+    // draw-parameters pack (empty: none) after that.
+    qsizetype expectedPacks = 0;
+    for (const QJsonValue &entry : declared) {
+        const QJsonObject e = entry.toObject();
+        const bool vertex = e.value(QStringLiteral("vertex")).toBool(false);
+        expectedPacks += 1 + (vertex ? 1 : 0) + (vertex && e.contains(QStringLiteral("batches")) ? 1 : 0);
+    }
+    if (packs.size() != expectedPacks) {
+        *error = QStringLiteral("%1 pass(es) declared, %2 pack(s) given, %3 expected (a fragment pack a pass; a vertex "
+                                "pack after it for a pass with \"vertex\": true, and a draw-parameters pack after that for "
+                                "a batched one)").arg(declared.size()).arg(packs.size()).arg(expectedPacks);
         return false;
     }
+    qsizetype packIndex = 0;
     ModeProgram program;
+    // N3.2: the streams (a record field each), before the passes that bind them.
+    if (withStreams) {
+        const QJsonValue streams = root.value(QStringLiteral("streams"));
+        if (!streams.isArray() || streams.toArray().size() > kMaxModeStreams) {
+            *error = QStringLiteral("\"streams\" is a list of at most %1 streams").arg(kMaxModeStreams);
+            return false;
+        }
+        for (const QJsonValue &entry : streams.toArray()) {
+            StreamDeclaration stream;
+            if (!parseStreamDeclaration(entry, &stream, error))
+                return false;
+            for (const StreamDeclaration &earlier : program.streams) {
+                if (earlier.name == stream.name || earlier.field == stream.field) {
+                    *error = QStringLiteral("two streams share the name '%1' or the field '%2'")
+                                 .arg(QString::fromLatin1(stream.name), QString::fromLatin1(stream.field));
+                    return false;
+                }
+            }
+            program.streams.append(stream);
+        }
+    }
     // N3.1: the scene targets, before the passes that name them.
     if (withTargets) {
         const QJsonValue targets = root.value(QStringLiteral("targets"));
@@ -900,11 +1324,16 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
         const QJsonObject o = declared.at(i).toObject();
         ModePass pass;
         pass.name = o.value(QStringLiteral("name")).toString().toLatin1();
+        const QByteArray fragmentPack = packs.at(packIndex++);
+        const bool vertex = o.value(QStringLiteral("vertex")).toBool(false); // N3.2
+        const QByteArray vertexPack = vertex ? packs.at(packIndex++) : QByteArray();
+        const QByteArray drawParametersPack = vertex && o.contains(QStringLiteral("batches")) ? packs.at(packIndex++)
+                                                                                              : QByteArray();
         if (o.contains(QStringLiteral("capture"))) {
             // N3.1: a capture step of a target (D14 point 5), no fragment of its own.
             pass.capture = true;
             pass.target = targetIndex(o.value(QStringLiteral("capture")).toString());
-            if (o.size() != 2 || !passName(pass.name) || pass.target < 0 || !packs.at(i).isEmpty()) {
+            if (o.size() != 2 || !passName(pass.name) || pass.target < 0 || !fragmentPack.isEmpty()) {
                 *error = QStringLiteral("pass %1 is a capture step {\"name\": an identifier, \"capture\": a declared "
                                         "target} with an empty pack").arg(i);
                 return false;
@@ -921,12 +1350,21 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
         } else {
             static const QStringList allowed = { QStringLiteral("name"), QStringLiteral("blend"),
                                                  QStringLiteral("samplers"), QStringLiteral("target"),
-                                                 QStringLiteral("attachments"), QStringLiteral("depth") };
+                                                 QStringLiteral("attachments"), QStringLiteral("depth"),
+                                                 // N3.2 (D15): its own vertex stage and geometry
+                                                 QStringLiteral("vertex"), QStringLiteral("topology"),
+                                                 QStringLiteral("vertices"), QStringLiteral("instances"),
+                                                 QStringLiteral("first_vertex"), QStringLiteral("mesh"),
+                                                 QStringLiteral("instance_from"), QStringLiteral("storage"),
+                                                 QStringLiteral("cull"), QStringLiteral("front_face"),
+                                                 QStringLiteral("indirect"), QStringLiteral("draw_count"),
+                                                 QStringLiteral("batches"), QStringLiteral("batch_count") };
             bool known = true;
             for (auto it = o.begin(); it != o.end(); ++it)
                 known = known && allowed.contains(it.key());
             if (!known || !passName(pass.name)
-                || !parsePassBlend(o.value(QStringLiteral("blend")).toString(), &pass.blend)) {
+                || (o.contains(QStringLiteral("vertex")) && !o.value(QStringLiteral("vertex")).isBool())
+                || !parseBlendValue(o.value(QStringLiteral("blend")), &pass.blend, &pass.customBlend, &pass.blendState)) {
                 *error = QStringLiteral("pass %1 is {\"name\": an identifier, \"blend\": replace, alpha, premultiplied or "
                                         "add, \"samplers\" (optional): [...], \"target\", \"attachments\", \"depth\" "
                                         "(optional, N3.1)}").arg(i);
@@ -940,7 +1378,8 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                     return false;
                 }
             }
-            if (!parseSamplers(o.value(QStringLiteral("samplers")), pass, error)
+            if (!parseGeometry(o, pass, vertex, error) // N3.2, before the outputs take the pass's blend
+                || !parseSamplers(o.value(QStringLiteral("samplers")), pass, error)
                 || !parsePassTargetState(o, pass, program.targets, error))
                 return false;
             for (const PassSampler &s : pass.samplers) {
@@ -972,11 +1411,21 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             }
         }
         if (!pass.capture) {
-            pass.fragment = QShader::fromSerialized(packs.at(i));
+            pass.fragment = QShader::fromSerialized(fragmentPack);
             if (!pass.fragment.isValid()) {
                 *error = QStringLiteral("pass '%1': the fragment pack does not load (a .qsb from tools/regen_qrc.py's "
                                         "baker)").arg(QString::fromLatin1(pass.name));
                 return false;
+            }
+            if (vertex) {
+                // N3.2: its vertex pack (and a batched pass's draw-parameters pack, when given).
+                pass.vertex = QShader::fromSerialized(vertexPack);
+                if (!drawParametersPack.isEmpty())
+                    pass.vertexDrawParameters = QShader::fromSerialized(drawParametersPack);
+                if (!pass.vertex.isValid() || (!drawParametersPack.isEmpty() && !pass.vertexDrawParameters.isValid())) {
+                    *error = QStringLiteral("pass '%1': its vertex pack does not load").arg(QString::fromLatin1(pass.name));
+                    return false;
+                }
             }
             if (!checkPass(pass, program.targets, error))
                 return false;
@@ -1014,6 +1463,42 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             }
         }
     }
+    // N3.2: what a pass binds is declared: its storage and indirect streams by kind; an instance source that is a stream
+    // is an instance stream (any other name is a mesh, sent as data).
+    const auto stream = [&program](const QByteArray &name) -> const StreamDeclaration * {
+        for (const StreamDeclaration &s : program.streams) {
+            if (s.name == name)
+                return &s;
+        }
+        return nullptr;
+    };
+    for (const ModePass &pass : program.passes) {
+        const QString label = QString::fromLatin1(pass.name);
+        for (const PassStorage &st : pass.storage) {
+            const StreamDeclaration *s = stream(st.stream);
+            if (!s || s->kind != StreamKind::Storage) {
+                *error = QStringLiteral("pass '%1' binds '%2' to '%3', which is no storage stream")
+                             .arg(label, QString::fromLatin1(st.name), QString::fromLatin1(st.stream));
+                return false;
+            }
+        }
+        if (!pass.indirect.isEmpty() && (!stream(pass.indirect) || stream(pass.indirect)->kind != StreamKind::Indirect)) {
+            *error = QStringLiteral("pass '%1' draws from '%2', which is no indirect stream")
+                         .arg(label, QString::fromLatin1(pass.indirect));
+            return false;
+        }
+        const StreamDeclaration *source = pass.instanceFrom.isEmpty() ? nullptr : stream(pass.instanceFrom);
+        if (source && source->kind != StreamKind::Instance) {
+            *error = QStringLiteral("pass '%1' takes its instances from '%2', which is no instance stream")
+                         .arg(label, QString::fromLatin1(pass.instanceFrom));
+            return false;
+        }
+        if ((!pass.mesh.isEmpty() && stream(pass.mesh)) || pass.instanceFrom == kBuiltinQuadMesh) {
+            *error = QStringLiteral("pass '%1': its mesh '%2' names a stream, or its instances the built-in quad")
+                         .arg(label, QString::fromLatin1(pass.mesh));
+            return false;
+        }
+    }
     program.generation = generations.fetchAndAddRelaxed(1) + 1;
     *out = program;
     return true;
@@ -1047,9 +1532,47 @@ QJsonObject ModeProgram::toJson() const
         p.insert(QStringLiteral("depth"), QJsonObject { { QStringLiteral("test"), depthTestName(pass.depthTest) },
                                                         { QStringLiteral("write"), pass.depthWrite } });
         p.insert(QStringLiteral("frag_depth"), pass.fragDepth);
+        if (pass.customBlend)
+            p.insert(QStringLiteral("blend_state"), blendJson(pass.blendState)); // N3.2
+        if (pass.ownVertex()) {
+            // N3.2 (D15): its own vertex stage and geometry.
+            QJsonObject g;
+            g.insert(QStringLiteral("topology"), QLatin1String(kTopologyNames[int(pass.topology)]));
+            g.insert(QStringLiteral("vertices"), drawCountJson(pass.vertices));
+            g.insert(QStringLiteral("instances"), drawCountJson(pass.instances));
+            g.insert(QStringLiteral("first_vertex"), double(pass.firstVertex));
+            g.insert(QStringLiteral("mesh"), QString::fromLatin1(pass.mesh));
+            g.insert(QStringLiteral("instance_from"), QString::fromLatin1(pass.instanceFrom));
+            QJsonArray inputs;
+            for (const PassInput &in : pass.inputs)
+                inputs.append(QJsonObject { { QStringLiteral("name"), QString::fromLatin1(in.name) },
+                                            { QStringLiteral("location"), in.location },
+                                            { QStringLiteral("components"), in.components } });
+            g.insert(QStringLiteral("inputs"), inputs);
+            QJsonArray storage;
+            for (const PassStorage &st : pass.storage)
+                storage.append(QJsonObject { { QStringLiteral("name"), QString::fromLatin1(st.name) },
+                                             { QStringLiteral("stream"), QString::fromLatin1(st.stream) },
+                                             { QStringLiteral("binding"), st.binding } });
+            g.insert(QStringLiteral("storage"), storage);
+            g.insert(QStringLiteral("cull"), QLatin1String(kCullNames[int(pass.cull)]));
+            g.insert(QStringLiteral("front_face"), pass.frontSelector.kind == DrawCount::Kind::Named
+                         ? drawCountJson(pass.frontSelector)
+                         : QJsonValue(pass.frontClockwise ? QStringLiteral("cw") : QStringLiteral("ccw")));
+            g.insert(QStringLiteral("indirect"), QString::fromLatin1(pass.indirect));
+            g.insert(QStringLiteral("draw_count"), drawCountJson(pass.drawCount));
+            g.insert(QStringLiteral("batches"), QString::fromLatin1(pass.batches));
+            g.insert(QStringLiteral("batch_count"), drawCountJson(pass.batchCount));
+            g.insert(QStringLiteral("draw_parameters_pack"), pass.vertexDrawParameters.isValid());
+            p.insert(QStringLiteral("geometry"), g);
+        }
         list.append(p);
     }
     o.insert(QStringLiteral("passes"), list);
+    QJsonArray declaredStreams;
+    for (const StreamDeclaration &s : streams)
+        declaredStreams.append(s.toJson());
+    o.insert(QStringLiteral("streams"), declaredStreams);
     QJsonArray declaredTargets;
     for (const TargetDeclaration &target : targets)
         declaredTargets.append(target.toJson());
@@ -1105,6 +1628,141 @@ bool ModeProgram::declares(const QByteArray &member) const
     return false;
 }
 
+bool ModeProgram::drawNames(const QByteArray &name) const
+{
+    const auto named = [&name](const DrawCount &c) { return c.kind == DrawCount::Kind::Named && c.name == name; };
+    for (const ModePass &pass : passes) {
+        if (named(pass.vertices) || named(pass.instances) || named(pass.drawCount) || named(pass.batchCount)
+            || named(pass.frontSelector) || (pass.batched() && pass.batches == name))
+            return true;
+    }
+    return false;
+}
+
+bool ModeProgram::streamReads(const QByteArray &field) const
+{
+    for (const StreamDeclaration &s : streams) {
+        if (s.field == field || s.used == field)  // the data and its used length (D15 point 4): the stream's
+            return true;
+    }
+    return false;
+}
+
+QList<QByteArray> ModeProgram::drawnMeshes() const
+{
+    QList<QByteArray> names;
+    const auto isStream = [this](const QByteArray &name) {
+        for (const StreamDeclaration &s : streams) {
+            if (s.name == name)
+                return true;
+        }
+        return false;
+    };
+    for (const ModePass &pass : passes) {
+        for (const QByteArray &name : { pass.mesh, pass.instanceFrom }) {
+            if (!name.isEmpty() && name != kBuiltinQuadMesh && !isStream(name) && !names.contains(name))
+                names.append(name);
+        }
+    }
+    return names;
+}
+
+QHash<QByteArray, double> ModeProgram::drawSettingNumbers(const QJsonObject &settings) const
+{
+    QHash<QByteArray, double> numbers;
+    for (auto it = settings.begin(); it != settings.end(); ++it) {
+        const QByteArray name = it.key().toLatin1();
+        if (drawNames(name) && (it.value().isDouble() || it.value().isBool()))
+            numbers.insert(name, it.value().isBool() ? (it.value().toBool() ? 1.0 : 0.0) : it.value().toDouble());
+    }
+    return numbers;
+}
+
+namespace {
+
+// N3.2: item pixels (the item's own unrotated coordinates, y down; a pass with its own vertex stage) to the drawn
+// target's clip space in OpenGL form, column-major: the oriented coordinate of the item pixel (the Oscilloscope's
+// physicalPoint inverted), the target pixel of that oriented coordinate (the card's item_from_window after
+// window_from_target, inverted), and the target's clip space (its top row at +1). With no card: target pixels.
+void itemClipMatrix(const ModeCard &card, const QSize &target, const float *correction, double *out)
+{
+    // phys -> oriented: o = R p + t (2x2 and translation).
+    double r[4] = { 1, 0, 0, 1 };
+    double t[2] = { 0, 0 };
+    double a[6] = { 1, 0, 0, 0, 1, 0 }; // oriented <- target pixel (rows x, y)
+    if (card.valid) {
+        const double ox = card.orientedSize[0];
+        const double oy = card.orientedSize[1];
+        switch (card.quarters & 3) {
+        case 1: // p = (oy - o.y, o.x): o.x = p.y, o.y = oy - p.x
+            r[0] = 0; r[1] = 1; r[2] = -1; r[3] = 0; t[0] = 0; t[1] = oy;
+            break;
+        case 2:
+            r[0] = -1; r[1] = 0; r[2] = 0; r[3] = -1; t[0] = ox; t[1] = oy;
+            break;
+        case 3: // p = (o.y, ox - o.x): o.y = p.x, o.x = ox - p.y
+            r[0] = 0; r[1] = -1; r[2] = 1; r[3] = 0; t[0] = ox; t[1] = 0;
+            break;
+        default:
+            break;
+        }
+        const double *w = card.windowFromTarget;
+        const double *m = card.itemFromWindow;
+        // a = m * w (both 2x3 affine rows)
+        a[0] = m[0] * w[0] + m[1] * w[3];
+        a[1] = m[0] * w[1] + m[1] * w[4];
+        a[2] = m[0] * w[2] + m[1] * w[5] + m[2];
+        a[3] = m[3] * w[0] + m[4] * w[3];
+        a[4] = m[3] * w[1] + m[4] * w[4];
+        a[5] = m[3] * w[2] + m[4] * w[5] + m[5];
+    }
+    // target pixel <- oriented: the inverse of a.
+    const double det = a[0] * a[4] - a[1] * a[3];
+    double inv[6] = { 1, 0, 0, 0, 1, 0 };
+    if (det != 0.0) {
+        inv[0] = a[4] / det;
+        inv[1] = -a[1] / det;
+        inv[3] = -a[3] / det;
+        inv[4] = a[0] / det;
+        inv[2] = -(inv[0] * a[2] + inv[1] * a[5]);
+        inv[5] = -(inv[3] * a[2] + inv[4] * a[5]);
+    }
+    // target pixel <- phys: inv * (R p + t)
+    const double px[3] = { inv[0] * r[0] + inv[1] * r[2], inv[0] * r[1] + inv[1] * r[3],
+                           inv[0] * t[0] + inv[1] * t[1] + inv[2] };
+    const double py[3] = { inv[3] * r[0] + inv[4] * r[2], inv[3] * r[1] + inv[4] * r[3],
+                           inv[3] * t[0] + inv[4] * t[1] + inv[5] };
+    const double w = target.width() > 0 ? double(target.width()) : 1.0;
+    const double h = target.height() > 0 ? double(target.height()) : 1.0;
+    // clip (OpenGL form): x = 2 tx / W - 1, y = 1 - 2 ty / H; z and w pass through. Row-major m[row][col].
+    double m[4][4] = { { 2.0 / w * px[0], 2.0 / w * px[1], 0.0, 2.0 / w * px[2] - 1.0 },
+                       { -2.0 / h * py[0], -2.0 / h * py[1], 0.0, 1.0 - 2.0 / h * py[2] },
+                       { 0.0, 0.0, 1.0, 0.0 },
+                       { 0.0, 0.0, 0.0, 1.0 } };
+    if (correction) {
+        // conventions.h rule 1: corrected exactly once, here (correction is column-major).
+        double c[4][4];
+        for (int row = 0; row < 4; ++row) {
+            for (int col = 0; col < 4; ++col)
+                c[row][col] = double(correction[col * 4 + row]);
+        }
+        double product[4][4] = {};
+        for (int row = 0; row < 4; ++row) {
+            for (int col = 0; col < 4; ++col) {
+                for (int k = 0; k < 4; ++k)
+                    product[row][col] += c[row][k] * m[k][col];
+            }
+        }
+        std::memcpy(m, product, sizeof(m));
+    }
+    for (int col = 0; col < 4; ++col) {
+        for (int row = 0; row < 4; ++row)
+            out[col * 4 + row] = m[row][col];
+    }
+}
+
+} // namespace
+
 bool ModeProgram::needsCard() const
 {
     for (const ModePass &pass : passes) {
@@ -1145,10 +1803,50 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
                              .arg(QString::fromLatin1(name));
                 return false;
             }
-            if (!declares(name)) {
-                *error = QStringLiteral("unknown: the record's field '%1' is no pass's member (an unknown name is "
-                                        "refused)").arg(QString::fromLatin1(name));
+            if (!declares(name) && !drawNames(name) && !streamReads(name)) {
+                *error = QStringLiteral("unknown: the record's field '%1' is no pass's member, draw count or stream "
+                                        "(an unknown name is refused)").arg(QString::fromLatin1(name));
                 return false;
+            }
+            // N3.2: one owner a field: a block member, a draw's name or a stream. A batched pass's batch table is the one
+            // field two readers share: the core reads its counts, the shader its bases (as a storage stream).
+            bool batchTable = false;
+            for (const ModePass &pass : passes)
+                batchTable = batchTable || (pass.batched() && pass.batches == name);
+            if (int(declares(name)) + int(drawNames(name) && !batchTable) + int(streamReads(name)) > 1
+                || (batchTable && declares(name))) {
+                *error = QStringLiteral("the record's field '%1' fills two of a block member, a draw count and a stream: "
+                                        "one owner a name").arg(QString::fromLatin1(name));
+                return false;
+            }
+            if (drawNames(name)) {
+                bool batches = false;
+                for (const ModePass &pass : passes)
+                    batches = batches || (pass.batched() && pass.batches == name);
+                const bool fits = batches ? (field.kind == fa::FieldKind::U32 && field.count >= 2 && field.count % 2 == 0)
+                                          : (field.kind == fa::FieldKind::U32 && field.count == 1);
+                if (!fits) {
+                    *error = QStringLiteral("the record's field '%1' is a draw's %2").arg(QString::fromLatin1(name),
+                        batches ? QStringLiteral("batch table: a u32 array of {first, count} pairs")
+                                : QStringLiteral("count or selector: a u32 scalar"));
+                    return false;
+                }
+            }
+            for (const StreamDeclaration &stream : streams) {
+                QString fits = stream.field == name ? streamFieldFits(stream, field) : QString();
+                if (fits.isEmpty() && stream.field == name) {
+                    // D15 point 4: an f32 stream's used length, a u32 scalar under an at_most rule within its count.
+                    const fa::Field *used = nullptr;
+                    for (quint32 u = 0; !stream.used.isEmpty() && u < schema->fieldCount; ++u) {
+                        if (stream.used == schema->fields[u].name)
+                            used = &schema->fields[u];
+                    }
+                    fits = streamUsedFits(stream, field, used);
+                }
+                if (!fits.isEmpty()) {
+                    *error = fits;
+                    return false;
+                }
             }
             for (const ModePass &pass : passes) {
                 const BlockMember *member = pass.block.valid() ? pass.block.member(name) : nullptr;
@@ -1176,8 +1874,13 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
                     }
                 }
             }
-            if (!declares(name)) {
-                *error = QStringLiteral("'%1' is no pass's member (an unknown name is refused)").arg(it.key());
+            if (!declares(name) && !drawNames(name)) {
+                *error = QStringLiteral("'%1' is no pass's member or draw count (an unknown name is refused)")
+                             .arg(it.key());
+                return false;
+            }
+            if (declares(name) && drawNames(name)) {
+                *error = QStringLiteral("'%1' is both a block member and a draw count: one owner a name").arg(it.key());
                 return false;
             }
         }
@@ -1186,6 +1889,36 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
         return true;                         // the rest is checked when the stream is bound
     // Unfilled: a member none of the three sources fills.
     QStringList waiting;
+    // N3.2: a stream's field missing from the record, and a draw's name neither the record nor the settings fill.
+    for (const StreamDeclaration &stream : streams) {
+        bool field = false;
+        for (quint32 i = 0; i < schema->fieldCount && !field; ++i)
+            field = stream.field == schema->fields[i].name;
+        if (!field) {
+            *error = QStringLiteral("unfilled: stream '%1' reads the record's field '%2', which the record does not hold")
+                         .arg(QString::fromLatin1(stream.name), QString::fromLatin1(stream.field));
+            return false;
+        }
+    }
+    for (const ModePass &pass : passes) {
+        for (const DrawCount *count : { &pass.vertices, &pass.instances, &pass.drawCount, &pass.batchCount,
+                                        &pass.frontSelector }) {
+            if (count->kind != DrawCount::Kind::Named)
+                continue;
+            bool field = false;
+            for (quint32 i = 0; i < schema->fieldCount && !field; ++i)
+                field = count->name == schema->fields[i].name;
+            if (!field && !(settings && settings->contains(QString::fromLatin1(count->name))))
+                waiting.append(QStringLiteral("%1.%2").arg(QString::fromLatin1(pass.name), QString::fromLatin1(count->name)));
+        }
+        if (pass.batched()) {
+            bool field = false;
+            for (quint32 i = 0; i < schema->fieldCount && !field; ++i)
+                field = pass.batches == schema->fields[i].name;
+            if (!field)
+                waiting.append(QStringLiteral("%1.%2").arg(QString::fromLatin1(pass.name), QString::fromLatin1(pass.batches)));
+        }
+    }
     for (const ModePass &pass : passes) {
         if (!pass.block.valid())
             continue;
@@ -1235,7 +1968,7 @@ bool ModeProgram::packSettings(const QJsonObject &settings, QList<BlockValues> *
 
 bool ModeProgram::packFrame(const fa::Schema &schema, const QByteArray &record, const ModeCard &card,
                             const QSize &surfaceTarget, QList<BlockValues> &blocks, QString *error,
-                            const QList<QSize> *passTargets) const
+                            const QList<QSize> *passTargets, const float *clipCorrection) const
 {
     if (quint32(record.size()) != schema.recordBytes) {
         *error = QStringLiteral("a %1-byte record is not schema 0x%2's %3").arg(record.size())
@@ -1255,11 +1988,19 @@ bool ModeProgram::packFrame(const fa::Schema &schema, const QByteArray &record, 
         BlockValues &block = blocks[p];
         for (quint32 i = 0; i < schema.fieldCount; ++i) {
             const fa::Field &field = schema.fields[i];
-            if (pass.block.member(QByteArray(field.name)) && !packRecordField(block, field, record, error))
+            if (pass.block.member(QByteArray(field.name)) && !streamReads(QByteArray(field.name))
+                && !packRecordField(block, field, record, error))
                 return false;
         }
         for (const BlockMember &member : pass.block.members()) {
             int count = 0;
+            if (pass.ownVertex() && member.name == "uMatrix") {
+                // N3.2 (D15 choice H): item pixels to the drawn target's clip space, corrected once.
+                itemClipMatrix(card, target, clipCorrection, values);
+                if (!block.set(member.name, values, 16, error))
+                    return false;
+                continue;
+            }
             if (modeCoreValues(member.name, card, target, values, &count) && !block.set(member.name, values, count, error))
                 return false;
         }
@@ -1275,7 +2016,7 @@ bool ModeProgram::packFrame(const fa::Schema &schema, const QByteArray &record, 
 
 bool modeBlocks(const RuntimeSchema &schema, const ModeProgram &program, const QJsonObject &settings,
                 const ModeCard &card, const QSize &target, const QByteArray &record, QList<QByteArray> *blocksOut,
-                QJsonObject *facts, QString *reason)
+                QJsonObject *facts, QString *reason, const float *clipCorrection)
 {
     bool ready = false;
     if (!program.check(&schema.schema(), &settings, &ready, reason))
@@ -1290,7 +2031,7 @@ bool modeBlocks(const RuntimeSchema &schema, const ModeProgram &program, const Q
     }
     QList<BlockValues> blocks;
     if (!program.packSettings(settings, &blocks, reason)
-        || !program.packFrame(schema.schema(), record, card, target, blocks, reason))
+        || !program.packFrame(schema.schema(), record, card, target, blocks, reason, nullptr, clipCorrection))
         return false;
     blocksOut->clear();
     QJsonArray passes;
@@ -1423,6 +2164,7 @@ bool ModeSource::setProgram(const ModeProgram &program, const QJsonObject *setti
         m_hasSettings = true;
     }
     m_program = program;
+    m_program.drawSettings = program.drawSettingNumbers(kept ? *kept : QJsonObject()); // N3.2
     m_packedSettings = packed;
     m_ready = ready;
     // N3.1 audit 2, M3: the new program's declarations size its targets; a size set through setTargetSize before it
@@ -1474,6 +2216,7 @@ bool ModeSource::setSettings(const QJsonObject &settings, QString *error)
         return true;                          // unchanged: nothing is recorded
     m_settings = settings;
     m_hasSettings = true;
+    m_program.drawSettings = m_program.drawSettingNumbers(settings); // N3.2
     m_packedSettings = packed;
     m_ready = ready;
     ++m_generation;
@@ -1550,6 +2293,64 @@ bool ModeSource::removeTexture(const QByteArray &name, QString *error)
     }
     *error = QStringLiteral("the item holds no texture '%1'").arg(QString::fromLatin1(name));
     return false;
+}
+
+bool ModeSource::setMesh(const QByteArray &name, const QByteArray &declaration, const QByteArray &vertices,
+                         const QByteArray &instances, QString *error)
+{
+    ModeMesh mesh;
+    if (!makeModeMesh(name, declaration, vertices, instances, &mesh, error))
+        return false;
+    QMutexLocker lock(&m_mutex);
+    for (ModeMesh &held : m_meshes) {
+        if (held.name == name) {
+            held = mesh;                          // the one it replaces (if not taken) goes
+            ++m_generation;
+            ++m_buildGeneration;
+            return true;
+        }
+    }
+    if (m_meshes.size() >= kMaxModeMeshes) {
+        *error = QStringLiteral("an item holds at most %1 meshes").arg(kMaxModeMeshes);
+        return false;
+    }
+    m_meshes.append(mesh);
+    ++m_generation;
+    ++m_buildGeneration;
+    return true;
+}
+
+bool ModeSource::removeMesh(const QByteArray &name, QString *error)
+{
+    QMutexLocker lock(&m_mutex);
+    for (int i = 0; i < m_meshes.size(); ++i) {
+        if (m_meshes.at(i).name == name) {
+            m_meshes.removeAt(i);                 // its bytes (if not taken) go; its buffers at the next record
+            ++m_generation;
+            ++m_buildGeneration;
+            return true;
+        }
+    }
+    *error = QStringLiteral("the item holds no mesh '%1'").arg(QString::fromLatin1(name));
+    return false;
+}
+
+QSharedPointer<MeshImage> ModeSource::takeMeshImage(const QByteArray &name)
+{
+    for (ModeMesh &mesh : m_drawnMeshes) {
+        if (mesh.name == name) {
+            QSharedPointer<MeshImage> image = mesh.image;
+            mesh.image.reset();
+            return image;
+        }
+    }
+    return QSharedPointer<MeshImage>();
+}
+
+void ModeSource::noteMeshBuffers(const QJsonObject &state)
+{
+    QMutexLocker lock(&m_textureReportMutex);
+    m_meshBuffersState = state;
 }
 
 QSharedPointer<TextureImage> ModeSource::takeTextureImage(const QByteArray &name)
@@ -1690,6 +2491,20 @@ bool ModeSource::sync()
                 drawn.append(taken);
             }
             m_drawnTextures = drawn;
+            // N3.2: the meshes, the same way (each mesh's bytes move to the render thread once).
+            QList<ModeMesh> drawnMeshes;
+            for (ModeMesh &mesh : m_meshes) {
+                ModeMesh taken = mesh;
+                if (!taken.image) {
+                    for (const ModeMesh &before : m_drawnMeshes) {
+                        if (before.name == mesh.name && before.generation == mesh.generation)
+                            taken.image = before.image;
+                    }
+                }
+                mesh.image.reset();
+                drawnMeshes.append(taken);
+            }
+            m_drawnMeshes = drawnMeshes;
             QString missing;
             for (const QByteArray &name : m_program.sampledTextures()) {
                 bool held = false;
@@ -1741,6 +2556,10 @@ void ModeSource::stateInto(QJsonObject &o) const
         textures.append(t);
     }
     o.insert(QStringLiteral("textures"), textures);
+    QJsonArray meshes; // N3.2
+    for (const ModeMesh &mesh : m_meshes)
+        meshes.append(mesh.toJson());
+    o.insert(QStringLiteral("meshes"), meshes);
     o.insert(QStringLiteral("textures_lost_edges"), double(m_notifier->lostEdges()));
     o.insert(QStringLiteral("textures_lost_delivered"), double(m_notifier->lostDelivered()));
     o.insert(QStringLiteral("textures_lost_listener"), m_notifier->hasListener());
@@ -1765,6 +2584,7 @@ void ModeSource::stateInto(QJsonObject &o) const
     o.insert(QStringLiteral("texture_jobs"), jobs);
     o.insert(QStringLiteral("still_kept"), double(r.stillKept));
     o.insert(QStringLiteral("scene_targets"), sceneTargetsStateJson(m_targetsState)); // N3.1 (made here: M5)
+    o.insert(QStringLiteral("mesh_buffers"), m_meshBuffersState);                    // N3.2 (noted on object change)
     o.insert(QStringLiteral("target_reads_requested"), double(m_targetReads.loadAcquire()));
     o.insert(QStringLiteral("target_readback_pending"), m_targetReadback && !m_targetReadback->done());
     QJsonArray changes;
@@ -1785,19 +2605,30 @@ struct ModeContent::Resources
 {
     struct Pass
     {
-        std::unique_ptr<QRhiBuffer> block;    // the pass's own block (null: it declares none)
+        std::unique_ptr<QRhiBuffer> block;    // unused since N3.2 (the block arena holds every block)
         std::unique_ptr<QRhiSampler> samplers[kMaxPassSamplers];
         int samplerCount = 0;
         std::unique_ptr<QRhiShaderResourceBindings> bindings;
         std::unique_ptr<QRhiGraphicsPipeline> pipeline;
+        // N3.2 (D15): the arena's offset of its block (a batched pass: its first batch's), a batch's stride and its
+        // batches; the clockwise twin of a pass whose front face is chosen per record; its vertex input bindings; a
+        // batched pass recorded as one multi-draw (form 3).
+        quint32 blockOffset = 0;
+        quint32 blockStride = 0;
+        int copies = 0;
+        std::unique_ptr<QRhiGraphicsPipeline> pipelineCw;
+        bool meshBinding = false;
+        bool instanceBinding = false;
+        bool drawParameters = false;
     };
 
     // N3.1: a scene target's clearing draw (its clear values, its pipeline over the target's render pass).
     struct TargetClear
     {
-        std::unique_ptr<QRhiBuffer> block;
+        std::unique_ptr<QRhiBuffer> block;    // unused since N3.2 (the arena)
         std::unique_ptr<QRhiShaderResourceBindings> bindings;
         std::unique_ptr<QRhiGraphicsPipeline> pipeline;
+        quint32 offset = 0;                   // N3.2: its clear values' offset in the arena
     };
 
     QRhi *rhi = nullptr;
@@ -1814,10 +2645,11 @@ struct ModeContent::Resources
     // pipeline over the slot's render pass); null where the slot is not in use.
     struct NearestResolve
     {
-        std::unique_ptr<QRhiBuffer> block;
+        std::unique_ptr<QRhiBuffer> block;    // unused since N3.2 (the arena)
         std::unique_ptr<QRhiSampler> sampler;
         std::unique_ptr<QRhiShaderResourceBindings> bindings;
         std::unique_ptr<QRhiGraphicsPipeline> pipeline;
+        quint32 offset = 0;                   // N3.2: its block's offset in the arena
     };
     NearestResolve nearest[kMaxSceneTargets][kNearestSlots];
     // The vertices uploaded: the card's triangle (fullTriangle for the drawn card and the surface), then (N3.1) the
@@ -1831,6 +2663,8 @@ struct ModeContent::Resources
     bool passesBuilt = false;   // false: the clear only (a sampled texture was not uploaded yet)
     quint64 textureObjects = 0; // the texture objects the passes' bindings name
     quint64 sceneLayout = 0;    // N3.1: the scene targets' render-pass descriptors the pipelines were built over
+    quint32 conventionsOffset = 0; // N3.2: the conventions block's offset in the arena
+    quint64 meshObjects = 0;    // N3.2: the meshes the vertex input layouts were built over
 };
 
 namespace {
@@ -1856,6 +2690,14 @@ QRhiSampler::AddressMode rhiWrap(SamplerWrap wrap)
 
 } // namespace
 
+namespace {
+// N3.1: the clear values of a target's attachments (std140 vec4 uClear[4]) and a capture's block (int uHasDepth).
+constexpr quint32 kClearBlockBytes = 4 * 4 * sizeof(float);
+constexpr quint32 kCaptureBlockBytes = 16;
+// D14 point 10: a nearest resolve's block (int uSamples, int uFirstOnly).
+constexpr quint32 kNearestBlockBytes = 16;
+} // namespace
+
 ModeContent::ModeContent(std::shared_ptr<ModeSource> source, std::shared_ptr<WindowSurfaces> registry)
     : m_source(std::move(source)), m_registry(std::move(registry))
 {
@@ -1871,7 +2713,7 @@ int ModeContent::liveResources() const
     int textures = 0;
     for (const GpuTexture &texture : m_textures)
         textures += texture.texture ? 1 : 0;
-    return (m_res ? m_res->objects : 0) + textures + m_targets.liveObjects();
+    return (m_res ? m_res->objects : 0) + textures + m_targets.liveObjects() + m_meshes.live() + m_streams.live();
 }
 
 void ModeContent::releasePipelines()
@@ -1894,6 +2736,7 @@ void ModeContent::releasePipelines()
     }
     for (int i = m_res->passCount - 1; i >= 0; --i) {
         Resources::Pass &p = m_res->passes[i];
+        p.pipelineCw.reset();                 // N3.2
         p.pipeline.reset();
         p.bindings.reset();
         for (int s = p.samplerCount - 1; s >= 0; --s)
@@ -1905,6 +2748,7 @@ void ModeContent::releasePipelines()
     m_res->conventions.reset();
     m_res->vertices.reset();
     m_res.reset();
+    m_streams.release();                      // N3.2: the streams and the arena the bindings named (made at the build)
 }
 
 void ModeContent::release()
@@ -1915,6 +2759,9 @@ void ModeContent::release()
     releasePipelines();                       // first: their bindings name the textures (and the targets' passes)
     m_targets.release();                      // N3.1: every scene target (D14 point 3: with the content)
     m_targetObjectsSeen = 0;
+    m_meshes.release();                       // N3.2 (D15 choice A: with the content)
+    m_arena.clear();
+    m_meshesLost.clear();
     for (GpuTexture &texture : m_textures) {
         dropCandidate(texture);               // N3.8: its job cancelled (nothing waits on this thread)
         releaseFront(texture);                // an imported one to the window's retire list
@@ -2321,6 +3168,7 @@ QByteArray ModeContent::stillSignature(const ColorTarget &target, const float *t
         s.append(block.bytes());
     s.append(reinterpret_cast<const char *>(triangle), qsizetype(2 * kTriangleFloats * sizeof(float)));
     put(m_targets.objectGeneration());       // N3.1: a scene target made again draws again
+    put(m_meshes.objects());                 // N3.2: a mesh made or gone draws again
     return s;
 }
 
@@ -2347,7 +3195,7 @@ void ModeContent::reportTextures()
 
 // ------------------------------------------------------------------------------------------------- the passes
 
-void ModeContent::pack(const ColorTarget &target)
+void ModeContent::pack(QRhi *rhi, const ColorTarget &target)
 {
     const ModeSource &source = *m_source;
     m_draw = false;
@@ -2374,8 +3222,9 @@ void ModeContent::pack(const ColorTarget &target)
         program.passTargetSizes(target.texture->pixelSize(), &source.drawnTargets(), &m_passTargets);
         passTargets = &m_passTargets;
     }
+    const QMatrix4x4 correction = targetCorrection(rhi); // N3.2: a vertex stage's uMatrix, corrected once (rule 1)
     if (!program.packFrame(schema, still ? QByteArray() : source.frameRecord(), source.drawnCard(),
-                           target.texture->pixelSize(), m_blocks, &m_reason, passTargets)) {
+                           target.texture->pixelSize(), m_blocks, &m_reason, passTargets, correction.constData())) {
         m_refused = true;                     // a value with no defined conversion: the frame is refused (M4)
         m_blocksGeneration = 0;               // the next frame starts from the packed settings again
         return;
@@ -2404,7 +3253,7 @@ bool ModeContent::keepsTarget(QRhi *rhi, ColorTarget &target)
     // design (N5.7a): it records whenever its inputs changed.
     if (!m_source->streamBound() && !m_source->drawnStill() && holdsFrame(target))
         return true;
-    pack(target);
+    pack(rhi, target);
     if (m_refused && holdsFrame(target)) {
         m_source->noteRefused(m_reason);      // the last drawn frame stays (M4)
         return true;
@@ -2437,10 +3286,12 @@ bool ModeContent::ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QStrin
     // N3.1: a scene target re-created at a new size is such an object too.
     if (m_res && m_res->rhi == rhi && m_res->pass == target.renderPass.get() && m_res->generation == program.generation
         && m_res->sceneLayout == layout && m_res->passesBuilt && withPasses
+        && m_res->meshObjects == m_meshes.objects() // N3.2
         && m_res->textureObjects != m_textureObjects && rebindTextures())
         return true;
     if (m_res && (m_res->rhi != rhi || m_res->pass != target.renderPass.get() || m_res->generation != program.generation
                   || m_res->sceneLayout != layout || m_res->passesBuilt != withPasses
+                  || (withPasses && m_res->meshObjects != m_meshes.objects()) // N3.2: the vertex input layouts
                   || (withPasses && m_res->textureObjects != m_textureObjects)))
         releasePipelines(); // a new program, or bindings that could not be made again: the pipelines and bindings again
     if (m_res)
@@ -2477,30 +3328,46 @@ bool ModeContent::passBindings(const Resources &r, int index, QList<QRhiShaderRe
         // N3.1: the capture's block (uHasDepth), the conventions, the target's colour and depth (their resolves when
         // multisampled); a target without depth binds its colour in the depth's place, never read (uHasDepth 0).
         const SceneTargets::Target *t = m_targets.target(pass.target);
-        if (!t || !t->ready() || !p.block || !p.samplers[0] || !r.conventions)
+        QRhiBuffer *arena = m_streams.arena();
+        if (!t || !t->ready() || !p.samplers[0] || !arena)
             return false;
         QRhiTexture *colour = t->readable(0);
         QRhiTexture *depth = t->decl.depth ? t->readableDepth() : colour;
         if (!colour || !depth)
             return false;
-        out->append(QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::FragmentStage, p.block.get()));
-        out->append(QRhiShaderResourceBinding::uniformBuffer(kConventionsBinding, QRhiShaderResourceBinding::FragmentStage,
-                                                             r.conventions.get()));
+        // N3.2: the blocks at their dynamic offsets in the arena (D15 point 3).
+        out->append(QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::FragmentStage,
+                                                                              arena, kCaptureBlockBytes));
+        out->append(QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(
+            kConventionsBinding, QRhiShaderResourceBinding::FragmentStage, arena, sizeof(ConventionsBlock)));
         out->append(QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, colour,
                                                               p.samplers[0].get()));
         out->append(QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage, depth,
                                                               p.samplers[0].get()));
         return true;
     }
+    QRhiBuffer *arena = m_streams.arena();
+    if (!arena)
+        return false;
+    const auto stages = [](int flags) {
+        return flags ? QRhiShaderResourceBinding::StageFlags::fromInt(flags)
+                     : QRhiShaderResourceBinding::StageFlags(QRhiShaderResourceBinding::FragmentStage);
+    };
+    // N3.2 (D15 point 3): the pass's block and the conventions at their dynamic offsets in the arena.
     if (pass.block.valid()) {
-        if (!p.block)
-            return false;
-        out->append(QRhiShaderResourceBinding::uniformBuffer(pass.block.binding(), QRhiShaderResourceBinding::FragmentStage,
-                                                             p.block.get()));
+        out->append(QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(
+            pass.block.binding(), stages(pass.blockStages), arena, quint32(pass.block.size())));
     }
     if (pass.conventions) { // bound only to a pass that declares it (audit N29 M3)
-        out->append(QRhiShaderResourceBinding::uniformBuffer(kConventionsBinding, QRhiShaderResourceBinding::FragmentStage,
-                                                             r.conventions.get()));
+        out->append(QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(
+            kConventionsBinding, stages(pass.conventionsStages), arena, sizeof(ConventionsBlock)));
+    }
+    // N3.2: storage, read only, from its storage stream.
+    for (const PassStorage &st : pass.storage) {
+        const ModeStreams::Stream *stream = m_streams.find(st.stream);
+        if (!stream || !stream->buffer)
+            return false;
+        out->append(QRhiShaderResourceBinding::bufferLoad(st.binding, stages(st.stages), stream->buffer.get()));
     }
     // The samplers (N4.a): each with its declared state, over the texture it names (an item texture's front, or N3.1 a
     // scene target's).
@@ -2509,8 +3376,8 @@ bool ModeContent::passBindings(const Resources &r, int index, QList<QRhiShaderRe
         QRhiTexture *texture = samplerTexture(declared.texture);
         if (!texture || s >= p.samplerCount || !p.samplers[s])
             return false;
-        out->append(QRhiShaderResourceBinding::sampledTexture(declared.binding, QRhiShaderResourceBinding::FragmentStage,
-                                                              texture, p.samplers[s].get()));
+        out->append(QRhiShaderResourceBinding::sampledTexture(declared.binding, stages(declared.stages), texture,
+                                                              p.samplers[s].get()));
     }
     return true;
 }
@@ -2521,11 +3388,14 @@ bool ModeContent::nearestBindings(const Resources &r, int target, int slot, QLis
     const SceneTargets::Target *t = m_targets.target(target);
     const Resources::NearestResolve &n = r.nearest[target][slot];
     QRhiTexture *source = t ? t->nearestSource(slot) : nullptr;
-    if (!source || !n.block || !n.sampler || !r.conventions)
+    QRhiBuffer *arena = m_streams.arena();
+    if (!source || !n.sampler || !arena)
         return false;
-    out->append(QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::FragmentStage, n.block.get()));
-    out->append(QRhiShaderResourceBinding::uniformBuffer(kConventionsBinding, QRhiShaderResourceBinding::FragmentStage,
-                                                         r.conventions.get()));
+    // N3.2: its block and the conventions in the arena.
+    out->append(QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::FragmentStage,
+                                                                          arena, kNearestBlockBytes));
+    out->append(QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(
+        kConventionsBinding, QRhiShaderResourceBinding::FragmentStage, arena, sizeof(ConventionsBlock)));
     out->append(QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, source,
                                                           n.sampler.get()));
     return true;
@@ -2550,7 +3420,7 @@ bool ModeContent::rebindTextures()
     const ModeProgram &program = m_source->drawnProgram();
     for (int i = 0; i < m_res->passCount; ++i) {
         const ModePass &pass = program.passes.at(i);
-        if (pass.samplers.isEmpty() && !pass.capture)
+        if (pass.samplers.isEmpty() && !pass.capture && pass.storage.isEmpty())
             continue;
         Resources::Pass &p = m_res->passes[i];
         if (!p.bindings || (!pass.capture && p.samplerCount != int(pass.samplers.size())))
@@ -2587,13 +3457,305 @@ QShader sceneClearShader(int attachments)
     }
 }
 
-// N3.1: the clear values of a target's attachments (std140 vec4 uClear[4]) and a capture's block (int uHasDepth).
-constexpr quint32 kClearBlockBytes = 4 * 4 * sizeof(float);
-constexpr quint32 kCaptureBlockBytes = 16;
-// D14 point 10: a nearest resolve's block (int uSamples, int uFirstOnly).
-constexpr quint32 kNearestBlockBytes = 16;
+// (N3.1's block sizes moved up, before the content: N3.2's arena bindings name them.)
+
+QRhiVertexInputAttribute::Format floatFormat(int components)
+{
+    switch (components) {
+    case 1: return QRhiVertexInputAttribute::Float;
+    case 2: return QRhiVertexInputAttribute::Float2;
+    case 3: return QRhiVertexInputAttribute::Float3;
+    default: return QRhiVertexInputAttribute::Float4;
+    }
+}
+
+// N3.2: a u32 of the record at `offset` (0 past its end).
+quint32 recordU32At(const QByteArray &record, quint32 offset)
+{
+    quint32 value = 0;
+    if (quint64(offset) + 4 <= quint64(record.size()))
+        std::memcpy(&value, record.constData() + offset, 4);
+    return value;
+}
 
 } // namespace
+
+// ------------------------------------------------------------------------------------------------- N3.2 (D15)
+
+int ModeContent::batchCapacity(const ModePass &pass) const
+{
+    const RuntimeSchema *schema = m_source->drawnSchema();
+    const fa::Field *field = schema ? schema->field(pass.batches) : nullptr;
+    return field ? qMin(int(field->count / 2), kMaxBatches) : 0;
+}
+
+bool ModeContent::meshesReady() const
+{
+    for (const QByteArray &name : m_source->drawnProgram().drawnMeshes()) {
+        if (!m_meshes.find(name))
+            return false;
+    }
+    return true;
+}
+
+void ModeContent::noteMeshBuffers()
+{
+    const quint64 seen = m_meshes.objects() * 1000003u + m_streams.generation();
+    if (seen == m_meshBuffersNoted)
+        return;
+    m_meshBuffersNoted = seen;
+    QJsonObject o = m_streams.stateJson();
+    o.insert(QStringLiteral("meshes"), m_meshes.stateJson());
+    o.insert(QStringLiteral("meshes_lost"), QJsonArray::fromStringList(m_meshesLost));
+    m_source->noteMeshBuffers(o);
+}
+
+quint32 ModeContent::resolveCount(const DrawCount &count, quint32 meshCount) const
+{
+    switch (count.kind) {
+    case DrawCount::Kind::Number:
+        return count.number;
+    case DrawCount::Kind::Mesh:
+        return meshCount;
+    case DrawCount::Kind::Named:
+        break;
+    }
+    // A record u32 scalar (its range rule held at the accept), else a setting (its number when admitted).
+    const RuntimeSchema *schema = m_source->drawnStill() ? nullptr : m_source->drawnSchema();
+    const fa::Field *field = schema ? schema->field(count.name) : nullptr;
+    if (field && field->kind == fa::FieldKind::U32 && field->count == 1)
+        return recordU32At(m_source->frameRecord(), field->offset);
+    const double value = m_source->drawnProgram().drawSettings.value(count.name, 0.0);
+    return value > 0.0 && value < 4294967295.0 ? quint32(value) : 0u;
+}
+
+void ModeContent::fillArena()
+{
+    if (!m_res)
+        return;
+    Resources &r = *m_res;
+    const ModeProgram &program = m_source->drawnProgram();
+    const QByteArray record = m_source->drawnStill() ? QByteArray() : m_source->frameRecord();
+    const RuntimeSchema *schema = m_source->drawnStill() ? nullptr : m_source->drawnSchema();
+    char *arena = m_arena.data();
+    char *commands = m_batchShadow.isEmpty() ? nullptr : m_batchShadow.data();
+    for (int i = 0; i < r.passCount; ++i) {
+        const ModePass &pass = program.passes.at(i);
+        const Resources::Pass &p = r.passes[i];
+        if (pass.capture || !pass.block.valid() || p.copies <= 0 || i >= m_blocks.size())
+            continue;
+        const QByteArray &bytes = m_blocks.at(i).bytes();
+        if (bytes.isEmpty())
+            continue;
+        if (!pass.batched()) {
+            if (quint64(p.blockOffset) + quint64(bytes.size()) <= quint64(m_arena.size()))
+                std::memcpy(arena + p.blockOffset, bytes.constData(), size_t(bytes.size()));
+            continue;
+        }
+        // D15 point 6: one copy of the block a batch, its u_srpss_batch set; and its indirect command (form 3).
+        const BlockMember *batch = pass.block.member(kBatchMember);
+        const fa::Field *table = schema ? schema->field(pass.batches) : nullptr;
+        const quint32 batches = qMin(resolveCount(pass.batchCount, 0), quint32(p.copies));
+        const ModeMeshes::Gpu *mesh = pass.mesh.isEmpty() ? nullptr : m_meshes.find(pass.mesh);
+        const quint32 vertices = resolveCount(pass.vertices, mesh ? mesh->vertexCount : 0u);
+        for (quint32 b = 0; b < quint32(p.copies); ++b) {
+            const quint32 at = p.blockOffset + b * p.blockStride;
+            if (quint64(at) + quint64(bytes.size()) > quint64(m_arena.size()))
+                break;
+            std::memcpy(arena + at, bytes.constData(), size_t(bytes.size()));
+            if (batch) {
+                const qint32 index = qint32(b);
+                std::memcpy(arena + at + batch->offset, &index, sizeof(index));
+            }
+            if (commands && p.drawParameters && table) {
+                const quint32 count = b < batches ? recordU32At(record, table->offset + 8 * b + 4) : 0u;
+                const quint32 command[4] = { vertices, count, pass.firstVertex, 0u }; // firstInstance 0 (D15 point 6)
+                std::memcpy(commands + (quint64(i) * kMaxBatches + b) * kIndirectCommandBytes, command, sizeof(command));
+            }
+        }
+    }
+}
+
+bool ModeContent::buildGeometryPass(QRhi *rhi, Resources &r, int index, QRhiRenderPassDescriptor *renderPass,
+                                    int samples, QString *reason, int *objects)
+{
+    const ModePass &pass = m_source->drawnProgram().passes.at(index);
+    Resources::Pass &p = r.passes[index];
+    const QString label = QString::fromLatin1(pass.name);
+    // The vertex input layout: binding 0 the mesh (per vertex), then the instance source (per instance, step rate 1).
+    const ModeMeshes::Gpu *mesh = pass.mesh.isEmpty() ? nullptr : m_meshes.find(pass.mesh);
+    const ModeStreams::Stream *instanceStream = pass.instanceFrom.isEmpty() ? nullptr : m_streams.find(pass.instanceFrom);
+    const ModeMeshes::Gpu *instanceMesh = (pass.instanceFrom.isEmpty() || instanceStream) ? nullptr
+                                                                                          : m_meshes.find(pass.instanceFrom);
+    const RecordLayout *instanceLayout = instanceStream ? &instanceStream->decl.layout
+        : (instanceMesh && instanceMesh->instanceLayout.valid() ? &instanceMesh->instanceLayout : nullptr);
+    if ((!pass.mesh.isEmpty() && !mesh) || (!pass.instanceFrom.isEmpty() && !instanceLayout)) {
+        *reason = QStringLiteral("pass '%1': its mesh '%2' or its instance source '%3' (a mesh with an instance stream, or "
+                                 "an instance stream) is not held").arg(label, QString::fromLatin1(pass.mesh),
+                                                                       QString::fromLatin1(pass.instanceFrom));
+        return false;
+    }
+    QList<QRhiVertexInputBinding> bindings;
+    QList<QRhiVertexInputAttribute> attributes;
+    int meshBinding = -1;
+    int instanceBinding = -1;
+    if (mesh) {
+        meshBinding = int(bindings.size());
+        bindings.append(QRhiVertexInputBinding(mesh->vertexLayout.stride));
+    }
+    if (instanceLayout) {
+        instanceBinding = int(bindings.size());
+        bindings.append(QRhiVertexInputBinding(instanceLayout->stride, QRhiVertexInputBinding::PerInstance));
+    }
+    for (const PassInput &in : pass.inputs) {
+        const MeshAttribute *a = mesh ? mesh->vertexLayout.attribute(in.name) : nullptr;
+        int binding = meshBinding;
+        if (!a && instanceLayout) {
+            a = instanceLayout->attribute(in.name);
+            binding = instanceBinding;
+        }
+        if (!a || a->components != in.components) {
+            *reason = QStringLiteral("pass '%1' reads the vertex input '%2' (%3 float(s)): no attribute of that name and "
+                                     "size in its mesh or instance source").arg(label, QString::fromLatin1(in.name))
+                          .arg(in.components);
+            return false;
+        }
+        attributes.append(QRhiVertexInputAttribute(binding, in.location, floatFormat(in.components), a->offset));
+    }
+    QRhiVertexInputLayout input;
+    input.setBindings(bindings.cbegin(), bindings.cend());
+    input.setAttributes(attributes.cbegin(), attributes.cend());
+    p.meshBinding = mesh != nullptr;
+    p.instanceBinding = instanceLayout != nullptr;
+    // D15 point 6: a batched pass's form, decided at the build from the device (and the harness control).
+    p.drawParameters = pass.batched() && pass.vertexDrawParameters.isValid() && drawParametersAvailable(rhi);
+    const QShader &vertex = p.drawParameters ? pass.vertexDrawParameters : pass.vertex;
+    QList<QRhiGraphicsPipeline::TargetBlend> blends;
+    for (const PassOutput &output : pass.outputs)
+        blends.append(outputBlend(output));
+    const bool selected = pass.frontSelector.kind == DrawCount::Kind::Named;
+    for (int variant = 0; variant < (selected ? 2 : 1); ++variant) {
+        std::unique_ptr<QRhiGraphicsPipeline> pipeline(rhi->newGraphicsPipeline());
+        pipeline->setName(QByteArrayLiteral("srpss core mode pass ") + pass.name
+                          + (variant ? QByteArrayLiteral(" (cw)") : QByteArray()));
+        pipeline->setTopology(pass.topology == PassTopology::TriangleStrip ? QRhiGraphicsPipeline::TriangleStrip
+                                                                           : QRhiGraphicsPipeline::Triangles);
+        pipeline->setCullMode(pass.cull == PassCull::Back    ? QRhiGraphicsPipeline::Back
+                              : pass.cull == PassCull::Front ? QRhiGraphicsPipeline::Front
+                                                             : QRhiGraphicsPipeline::None);
+        const bool clockwise = selected ? variant == 1 : pass.frontClockwise;
+        pipeline->setFrontFace(clockwise ? QRhiGraphicsPipeline::CW : QRhiGraphicsPipeline::CCW);
+        pipeline->setTargetBlends(blends.cbegin(), blends.cend());
+        if (pass.target >= 0 && pass.depthTest != DepthTest::None) {
+            pipeline->setDepthTest(true);
+            pipeline->setDepthOp(rhiCompare(pass.depthTest));
+            pipeline->setDepthWrite(pass.depthWrite);
+        }
+        pipeline->setSampleCount(samples);
+        pipeline->setShaderStages({ { QRhiShaderStage::Vertex, vertex }, { QRhiShaderStage::Fragment, pass.fragment } });
+        pipeline->setVertexInputLayout(input);
+        pipeline->setShaderResourceBindings(p.bindings.get());
+        pipeline->setRenderPassDescriptor(renderPass);
+        if (!pipeline->create()) {
+            *reason = QStringLiteral("pass '%1': its pipeline could not be created").arg(label);
+            return false;
+        }
+        ++*objects;
+        (variant ? p.pipelineCw : p.pipeline) = std::move(pipeline);
+    }
+    return true;
+}
+
+void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QRhiViewport &viewport,
+                           const QRhiCommandBuffer::VertexInput &triangle)
+{
+    Q_UNUSED(rhi);
+    const ModeProgram &program = m_source->drawnProgram();
+    const ModePass &pass = program.passes.at(index);
+    Resources &r = *m_res;
+    Resources::Pass &p = r.passes[index];
+    // The arena's offsets of this pass's blocks (D15 point 3).
+    QRhiCommandBuffer::DynamicOffset offsets[2];
+    int count = 0;
+    const int blockAt = pass.block.valid() ? count++ : -1;
+    if (blockAt >= 0)
+        offsets[blockAt] = { pass.block.binding(), p.blockOffset };
+    if (pass.conventions)
+        offsets[count++] = { kConventionsBinding, r.conventionsOffset };
+    if (!pass.ownVertex()) {
+        cb->setGraphicsPipeline(p.pipeline.get());
+        cb->setViewport(viewport);
+        cb->setShaderResources(nullptr, count, offsets);
+        cb->setVertexInput(0, 1, &triangle);
+        cb->draw(3);
+        return;
+    }
+    const bool clockwise = pass.frontSelector.kind == DrawCount::Kind::Named && resolveCount(pass.frontSelector, 0) == 1;
+    cb->setGraphicsPipeline(clockwise && p.pipelineCw ? p.pipelineCw.get() : p.pipeline.get());
+    cb->setViewport(viewport);
+    const ModeMeshes::Gpu *mesh = p.meshBinding ? m_meshes.find(pass.mesh) : nullptr;
+    const ModeStreams::Stream *instanceStream = p.instanceBinding ? m_streams.find(pass.instanceFrom) : nullptr;
+    const ModeMeshes::Gpu *instanceMesh = p.instanceBinding && !instanceStream ? m_meshes.find(pass.instanceFrom) : nullptr;
+    QRhiCommandBuffer::VertexInput inputs[2];
+    int bound = 0;
+    if (mesh)
+        inputs[bound++] = { mesh->vertices.get(), 0 };
+    if (instanceStream)
+        inputs[bound++] = { instanceStream->buffer.get(), 0 };
+    else if (instanceMesh)
+        inputs[bound++] = { instanceMesh->instances.get(), 0 };
+    if (bound != int(p.meshBinding) + int(p.instanceBinding))
+        return;                               // a source went (a mesh removed): the next build follows
+    if (bound)
+        cb->setVertexInput(0, bound, inputs);
+    const quint32 vertices = resolveCount(pass.vertices, mesh ? mesh->vertexCount : 0u);
+    if (pass.batched()) {
+        const RuntimeSchema *schema = m_source->drawnStill() ? nullptr : m_source->drawnSchema();
+        const fa::Field *table = schema ? schema->field(pass.batches) : nullptr;
+        const quint32 batches = qMin(resolveCount(pass.batchCount, 0), quint32(qMax(0, p.copies)));
+        if (!table || batches == 0 || vertices == 0)
+            return;
+        if (p.drawParameters && m_streams.batchCommands()) {
+            // Form 3: one multi-draw; gl_DrawID picks each batch's table entry.
+            cb->setShaderResources(nullptr, count, offsets);
+            cb->drawIndirect(m_streams.batchCommands(), quint32(index) * kMaxBatches * kIndirectCommandBytes, batches,
+                             kIndirectCommandBytes);
+            countIndirectDraw();
+            countBatched(true);
+            return;
+        }
+        // Form 2: one draw a batch, its block at its dynamic offset (u_srpss_batch its index).
+        const QByteArray record = m_source->frameRecord();
+        for (quint32 b = 0; b < batches; ++b) {
+            if (blockAt >= 0)
+                offsets[blockAt].second = p.blockOffset + b * p.blockStride;
+            const quint32 instances = recordU32At(record, table->offset + 8 * b + 4);
+            if (instances == 0)
+                continue;
+            cb->setShaderResources(nullptr, count, offsets);
+            cb->draw(vertices, instances, pass.firstVertex, 0);
+        }
+        countBatched(false);
+        return;
+    }
+    cb->setShaderResources(nullptr, count, offsets);
+    if (!pass.indirect.isEmpty()) {
+        const ModeStreams::Stream *commands = m_streams.find(pass.indirect);
+        const quint32 drawn = commands ? qMin(resolveCount(pass.drawCount, 0), commands->decl.capacity / kIndirectCommandBytes)
+                                       : 0u;
+        if (drawn) {
+            cb->drawIndirect(commands->buffer.get(), 0, drawn, kIndirectCommandBytes);
+            countIndirectDraw();
+        }
+        return;
+    }
+    quint32 sourceCount = instanceMesh ? instanceMesh->instanceCount : 0u;
+    if (instanceStream && instanceStream->decl.layout.stride)
+        sourceCount = instanceStream->decl.capacity / instanceStream->decl.layout.stride;
+    const quint32 instances = resolveCount(pass.instances, sourceCount);
+    if (vertices && instances)
+        cb->draw(vertices, instances, pass.firstVertex, directFirstInstance()); // 0 but under the harness control
+}
 
 bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error)
 {
@@ -2637,10 +3799,62 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
     };
     // Static: uploaded again when the card or the target moves its numbers (M6), never per frame at rest.
     res->vertices.reset(rhi->newBuffer(QRhiBuffer::Static, QRhiBuffer::VertexBuffer, sizeof(res->triangle)));
-    res->conventions.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(ConventionsBlock)));
     res->vertices->setName(QByteArrayLiteral("srpss core mode vertices"));
-    res->conventions->setName(QByteArrayLiteral("srpss core mode conventions block"));
-    bool ok = created(res->vertices->create()) && created(res->conventions->create());
+    bool ok = created(res->vertices->create());
+    // N3.2 (D15 point 3): the block arena's plan (every block a content draws with, at ubufAligned offsets), then the
+    // streams and the arena, made here and never per frame.
+    res->meshObjects = m_meshes.objects();
+    res->targetClearCount = m_targets.count();
+    res->passCount = withPasses ? int(program.passes.size()) : 0;
+    {
+        QList<quint32> sizes;
+        sizes.append(sizeof(ConventionsBlock));
+        for (int t = 0; t < res->targetClearCount; ++t) {
+            sizes.append(kClearBlockBytes);
+            const SceneTargets::Target *scene = m_targets.target(t);
+            for (int s = 0; s < kNearestSlots; ++s) {
+                if (scene && scene->nearestActive(s))
+                    sizes.append(kNearestBlockBytes);
+            }
+        }
+        for (int i = 0; i < res->passCount; ++i) {
+            const ModePass &pass = program.passes.at(i);
+            const int copies = pass.capture ? 1 : !pass.block.valid() ? 0 : pass.batched() ? batchCapacity(pass) : 1;
+            const quint32 size = pass.capture ? kCaptureBlockBytes : quint32(qMax(0, pass.block.size()));
+            for (int c = 0; c < copies; ++c)
+                sizes.append(size);
+            res->passes[i].copies = copies;
+        }
+        const ArenaLayout plan = arenaLayout(sizes, rhi->ubufAlignment());
+        int k = 0;
+        res->conventionsOffset = plan.offsets.at(k++);
+        for (int t = 0; t < res->targetClearCount; ++t) {
+            res->targetClears[t].offset = plan.offsets.at(k++);
+            const SceneTargets::Target *scene = m_targets.target(t);
+            for (int s = 0; s < kNearestSlots; ++s) {
+                if (scene && scene->nearestActive(s))
+                    res->nearest[t][s].offset = plan.offsets.at(k++);
+            }
+        }
+        bool batchedForm3 = false;
+        for (int i = 0; i < res->passCount; ++i) {
+            Resources::Pass &pass = res->passes[i];
+            if (pass.copies > 0)
+                pass.blockOffset = plan.offsets.at(k);
+            pass.blockStride = pass.copies > 1 ? plan.offsets.at(k + 1) - plan.offsets.at(k) : 0u;
+            k += pass.copies;
+            const ModePass &declared = program.passes.at(i);
+            batchedForm3 = batchedForm3
+                || (declared.batched() && declared.vertexDrawParameters.isValid() && drawParametersAvailable(rhi));
+        }
+        const quint32 batchBytes = batchedForm3 ? quint32(res->passCount) * kMaxBatches * kIndirectCommandBytes : 0u;
+        const RuntimeSchema *schema = m_source->drawnStill() ? nullptr : m_source->drawnSchema();
+        ok = ok && m_streams.build(rhi, program.streams, schema ? &schema->schema() : nullptr, plan.size, batchBytes,
+                                   &reason);
+        m_arena = QByteArray(qsizetype(plan.size), '\0');
+        m_batchShadow = QByteArray(qsizetype(batchBytes), '\0');
+        m_meshBuffersNoted = ~quint64(0);
+    }
     res->clearBindings.reset(rhi->newShaderResourceBindings());
     res->clearBindings->setName(QByteArrayLiteral("srpss core mode clear bindings"));
     ok = ok && created(res->clearBindings->create());
@@ -2676,13 +3890,11 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
             break;
         }
         const QByteArray label = QByteArrayLiteral("srpss core scene target clear ") + scene->decl.name;
-        c.block.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, kClearBlockBytes));
-        c.block->setName(label + QByteArrayLiteral(" block"));
-        ok = ok && created(c.block->create());
         c.bindings.reset(rhi->newShaderResourceBindings());
         c.bindings->setName(label + QByteArrayLiteral(" bindings"));
-        c.bindings->setBindings({ QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::FragmentStage,
-                                                                           c.block.get()) });
+        // N3.2: its clear values in the arena (D15 point 3).
+        c.bindings->setBindings({ QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(
+            0, QRhiShaderResourceBinding::FragmentStage, m_streams.arena(), kClearBlockBytes) });
         ok = ok && created(c.bindings->create());
         QList<QRhiGraphicsPipeline::TargetBlend> blends;
         for (int a = 0; a < attachments; ++a)
@@ -2714,9 +3926,6 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
             }
             Resources::NearestResolve &n = res->nearest[t][s];
             const QByteArray nearestLabel = QByteArrayLiteral("srpss core scene target nearest ") + scene->decl.name;
-            n.block.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, kNearestBlockBytes));
-            n.block->setName(nearestLabel + QByteArrayLiteral(" block"));
-            ok = ok && created(n.block->create());
             n.sampler.reset(rhi->newSampler(QRhiSampler::Nearest, QRhiSampler::Nearest, QRhiSampler::None,
                                             QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
             n.sampler->setName(nearestLabel + QByteArrayLiteral(" sampler"));
@@ -2739,7 +3948,6 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
             ok = ok && created(n.pipeline->create());
         }
     }
-    res->passCount = withPasses ? int(program.passes.size()) : 0;
     for (int i = 0; ok && i < res->passCount; ++i) {
         const ModePass &pass = program.passes.at(i);
         Resources::Pass &p = res->passes[i];
@@ -2753,9 +3961,6 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
         if (pass.capture) {
             // N3.1: the capture (D14 point 5): its block, a nearest sampler for both sources, its pipeline over the
             // capture's render pass (two attachments, blending off, one sample).
-            p.block.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, kCaptureBlockBytes));
-            p.block->setName(label + QByteArrayLiteral(" block"));
-            ok = ok && created(p.block->create());
             p.samplerCount = 1;
             p.samplers[0].reset(rhi->newSampler(QRhiSampler::Nearest, QRhiSampler::Nearest, QRhiSampler::None,
                                                 QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
@@ -2790,11 +3995,6 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
         }
         if (!ok)
             break;
-        if (pass.block.valid()) {
-            p.block.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, quint32(pass.block.size())));
-            p.block->setName(label + QByteArrayLiteral(" block"));
-            ok = ok && created(p.block->create());
-        }
         // The samplers (N4.a): each with its declared state (passBindings binds them over their textures).
         p.samplerCount = int(pass.samplers.size());
         for (int s = 0; ok && s < p.samplerCount; ++s) {
@@ -2811,6 +4011,14 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
         p.bindings->setName(label + QByteArrayLiteral(" bindings"));
         p.bindings->setBindings(bindings.cbegin(), bindings.cend());
         ok = ok && created(p.bindings->create());
+        if (ok && pass.ownVertex()) {
+            // N3.2 (D15): its own vertex stage, geometry and pipelines.
+            int made = 0;
+            ok = buildGeometryPass(rhi, *res, i, scene ? scene->renderPass.get() : res->pass, scene ? scene->samples : 1,
+                                   &reason, &made);
+            objects += made;
+            continue;
+        }
         QList<QRhiGraphicsPipeline::TargetBlend> blends;
         for (const PassOutput &output : pass.outputs)
             blends.append(outputBlend(output));
@@ -2913,7 +4121,8 @@ void ModeContent::recordNearest(QRhiCommandBuffer *cb, int target, int last, boo
         cb->beginPass(t.nearestTarget[s].get(), QColor(255, 0, 0, 255), { 1.0f, 0 });
         cb->setGraphicsPipeline(n.pipeline.get());
         cb->setViewport(whole);
-        cb->setShaderResources();
+        const QRhiCommandBuffer::DynamicOffset offsets[2] = { { 0, n.offset }, { kConventionsBinding, r.conventionsOffset } };
+        cb->setShaderResources(nullptr, 2, offsets); // N3.2: the arena
         cb->setVertexInput(0, 1, &input);
         cb->draw(3);
         cb->endPass();
@@ -2947,7 +4156,9 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             pending = nullptr;
             cb->setGraphicsPipeline(r.passes[i].pipeline.get());
             cb->setViewport(QRhiViewport(0, 0, float(t.allocation.width()), float(t.allocation.height())));
-            cb->setShaderResources();
+            const QRhiCommandBuffer::DynamicOffset captureOffsets[2] = { { 0, r.passes[i].blockOffset },
+                                                                         { kConventionsBinding, r.conventionsOffset } };
+            cb->setShaderResources(nullptr, 2, captureOffsets); // N3.2: the arena
             cb->setVertexInput(0, 1, &cardInput);
             cb->draw(3);
             cb->endPass();
@@ -2969,13 +4180,8 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                 cb->draw(3);
                 surfaceOpened = true;
             }
-            for (int k = i; k <= last; ++k) {
-                cb->setGraphicsPipeline(r.passes[k].pipeline.get());
-                cb->setViewport(surfaceViewport);
-                cb->setShaderResources();
-                cb->setVertexInput(0, 1, &cardInput);
-                cb->draw(3);
-            }
+            for (int k = i; k <= last; ++k)
+                drawPass(rhi, cb, k, surfaceViewport, cardInput); // N3.2
             cb->endPass();
         } else {
             // N3.1: a run on a scene target: its attachments primed for the load (rule C, depth too), its average
@@ -2994,7 +4200,8 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             if (!cleared[pass.target]) {
                 cb->setGraphicsPipeline(r.targetClears[pass.target].pipeline.get());
                 cb->setViewport(QRhiViewport(0, 0, float(t.allocation.width()), float(t.allocation.height())));
-                cb->setShaderResources();
+                const QRhiCommandBuffer::DynamicOffset clearOffset { 0, r.targetClears[pass.target].offset };
+                cb->setShaderResources(nullptr, 1, &clearOffset); // N3.2: the arena
                 cb->setVertexInput(0, 1, &cardInput);
                 cb->draw(3);
                 cleared[pass.target] = true;
@@ -3002,13 +4209,8 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             const QRect v = contentViewport(rhi->isYUpInFramebuffer(), t.allocation, t.content);
             const QRhiViewport content(float(v.x()), float(v.y()), float(v.width()), float(v.height()));
             const QRhiCommandBuffer::VertexInput &input = t.decl.surfaceSized() ? cardInput : ownInput;
-            for (int k = i; k <= last; ++k) {
-                cb->setGraphicsPipeline(r.passes[k].pipeline.get());
-                cb->setViewport(content);
-                cb->setShaderResources();
-                cb->setVertexInput(0, 1, &input);
-                cb->draw(3);
-            }
+            for (int k = i; k <= last; ++k)
+                drawPass(rhi, cb, k, content, input); // N3.2
             cb->endPass();
             recordNearest(cb, pass.target, last, readback); // D14 point 10: what a later pass or the readback reads
         }
@@ -3040,12 +4242,19 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
     // the item's textures commit together.
     const QString imageChange = advanceTextures(rhi, updates, &imageBytes);
     reportTextures();
+    // N3.2 (D15 point 2): each new mesh once, before the passes that draw it; a mesh the item no longer holds goes.
+    m_meshesLost.clear();
+    bool quad = false;                        // the built-in quad, made only for a program that draws it
+    for (const ModePass &pass : m_source->drawnProgram().passes)
+        quad = quad || pass.mesh == kBuiltinQuadMesh || pass.instanceFrom == kBuiltinQuadMesh;
+    m_meshes.sync(rhi, updates, m_source->drawnMeshes(),
+                  [this](const QByteArray &name) { return m_source->takeMeshImage(name); }, &m_meshesLost, quad);
     // N3.1: the scene targets at this surface's size, made before the pipelines that draw into them.
     if (!syncTargets(rhi, target, error)) {
         cb->resourceUpdate(updates);          // the uploads stand (their images are taken): nothing is lost
         return false;
     }
-    const bool withPasses = texturesReady();
+    const bool withPasses = texturesReady() && meshesReady(); // N3.2: every drawn mesh uploaded
     if (!ensure(rhi, target, withPasses, error)) {
         cb->resourceUpdate(updates);          // the uploads stand (their images are taken): nothing is lost
         return false;
@@ -3057,7 +4266,19 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
                   .arg(m_report.jobsPending)
             : QStringLiteral("lost: %1 (the owner sends the image again)")
                   .arg(m_texturesLost.join(QStringLiteral(", ")));
+        if (texturesReady() && !meshesReady()) {
+            // Every mesh the program draws that the content does not hold: lost with a content made again, or one the
+            // owner removed while the program still draws it (the sync's list names only the first).
+            QStringList missing;
+            for (const QByteArray &name : m_source->drawnProgram().drawnMeshes()) {
+                if (!m_meshes.find(name))
+                    missing.append(QString::fromLatin1(name));
+            }
+            m_reason = QStringLiteral("lost: mesh(es) %1 (the owner sends them again)")
+                           .arg(missing.join(QStringLiteral(", ")));
+        }
     }
+    noteMeshBuffers();                        // N3.2: only when the meshes' or streams' objects changed
     Resources &r = *m_res;
     float triangle[2 * kTriangleFloats];
     fullTriangle(rhi, m_source->drawnCard(), target.texture->pixelSize(), triangle);
@@ -3096,9 +4317,11 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
     }
     if (!r.staticUploaded) {
         const ConventionsBlock conventions = targetConventions(rhi); // F1, F2: a target the core owns
-        updates->updateDynamicBuffer(r.conventions.get(), 0, sizeof(ConventionsBlock), &conventions);
+        if (quint64(r.conventionsOffset) + sizeof(conventions) <= quint64(m_arena.size()))
+            std::memcpy(m_arena.data() + r.conventionsOffset, &conventions, sizeof(conventions)); // N3.2: the arena
         r.staticUploaded = true;
     }
+    qint64 streamWriteNs = 0;                 // N3.2: the stream and arena writes of this record
     if (!r.targetsUploaded) {
         // N3.1: the targets' clear values and the captures' blocks, once per build (they come with the program).
         for (int t = 0; t < r.targetClearCount; ++t) {
@@ -3106,34 +4329,43 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
             float values[16] = {};
             for (int a = 0; scene && a < int(scene->decl.colour.size()); ++a)
                 std::memcpy(values + 4 * a, scene->decl.colour.at(a).clear, 4 * sizeof(float));
-            if (r.targetClears[t].block)
-                updates->updateDynamicBuffer(r.targetClears[t].block.get(), 0, kClearBlockBytes, values);
+            if (r.targetClears[t].pipeline && quint64(r.targetClears[t].offset) + kClearBlockBytes <= quint64(m_arena.size()))
+                std::memcpy(m_arena.data() + r.targetClears[t].offset, values, kClearBlockBytes); // N3.2: the arena
             // D14 point 10: the nearest resolves' blocks (the target's samples; the harness's sample-0 control).
             const qint32 nearestBlock[4] = { scene ? scene->samples : 1, nearestFirstSample() ? 1 : 0, 0, 0 };
             for (int s = 0; s < kNearestSlots; ++s) {
-                if (r.nearest[t][s].block)
-                    updates->updateDynamicBuffer(r.nearest[t][s].block.get(), 0, kNearestBlockBytes, nearestBlock);
+                if (r.nearest[t][s].pipeline
+                    && quint64(r.nearest[t][s].offset) + kNearestBlockBytes <= quint64(m_arena.size()))
+                    std::memcpy(m_arena.data() + r.nearest[t][s].offset, nearestBlock, kNearestBlockBytes); // N3.2
             }
         }
         const ModeProgram &program = m_source->drawnProgram();
         for (int i = 0; i < r.passCount; ++i) {
             const ModePass &pass = program.passes.at(i);
-            if (!pass.capture || !r.passes[i].block)
+            if (!pass.capture || !r.passes[i].pipeline)
                 continue;
             const SceneTargets::Target *scene = m_targets.target(pass.target);
             const qint32 block[4] = { scene && scene->decl.depth ? 1 : 0, 0, 0, 0 };
-            updates->updateDynamicBuffer(r.passes[i].block.get(), 0, kCaptureBlockBytes, block);
+            if (quint64(r.passes[i].blockOffset) + kCaptureBlockBytes <= quint64(m_arena.size()))
+                std::memcpy(m_arena.data() + r.passes[i].blockOffset, block, kCaptureBlockBytes); // N3.2: the arena
         }
         r.targetsUploaded = true;
     }
     if (draw) {
-        for (int i = 0; i < r.passCount; ++i) {
-            const QByteArray &bytes = m_blocks.at(i).bytes();
-            if (r.passes[i].block && !bytes.isEmpty())
-                updates->updateDynamicBuffer(r.passes[i].block.get(), 0, quint32(bytes.size()), bytes.constData());
-        }
+        // N3.2 (D15 points 3, 4 and 6): the streams from the record, every block into the arena's copy (the batched
+        // passes' commands with them), then the arena whole by the fast path (one copy; never a batch update).
+        const qint64 writesFrom = recordTimer.nsecsElapsed();
+        if (!m_source->drawnStill())
+            m_streams.write(rhi, updates, m_source->frameRecord());
+        fillArena();
+        m_streams.writeArena(m_arena);
+        if (!m_batchShadow.isEmpty())
+            m_streams.writeBatchCommands(m_batchShadow.constData(), quint32(m_batchShadow.size()));
+        streamWriteNs = recordTimer.nsecsElapsed() - writesFrom;
     }
     recordPasses(rhi, cb, target, updates, draw, readback);
+    if (draw && !m_source->drawnStill())
+        countRecordTime(recordTimer.nsecsElapsed(), streamWriteNs); // D15 point 7: the stream ring's CPU axis
     const QSize size = target.texture->pixelSize();
     if (readback) {
         // N3.1, harness: every scene target's readable texture as this record left it.
