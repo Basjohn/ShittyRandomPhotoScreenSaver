@@ -692,6 +692,10 @@ the feature (D3D11 is not stated).
     example a draw over two different backgrounds), and the 2-3 level allowance only on pixels next to a content
     edge. Opaque content and background stay exact. Spectrum and Spline Curve must still pass, and the audit's
     synthetic `rule_a_probe.py` (an all-pixel +1, a fixed 10-pixel 3-level artefact) must fail.
+  - [ ] Checkpoint audit 4's M2 joins M1: the transitions' and N3.2's tie budgets
+    (`transition_route_check.py` `TIE_PIXELS`, `mesh_buffer_check.py`) admit a uniform 1-level shift and 8 pixels off
+    by up to 207 levels. Build one shared tolerance function that every harness uses (the explained 1-level classes
+    by mask, tie pixels capped in level and required to be isolated), and rerun every harness that uses it.
   - [ ] L1: the by-value array test (`tests/test_native_devcurve.py:188-202`) scans every shader the core draws,
     including the fullscreen transition fragments' Python sources, and every GLSL form (`float c[N]`,
     `float[96] c`, indented definitions); the audit's `by_value_probe.py` is the control.
