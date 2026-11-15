@@ -1782,6 +1782,12 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
     *ready = false;
     // A core member declared at another size than the core fills it is refused once, here, not per frame.
     for (const ModePass &pass : passes) {
+        // Audit 4 L4: D15 point 3's limit on the blocks a pass binds at dynamic offsets (its block and the conventions).
+        if (int(pass.block.valid()) + int(pass.conventions) > kMaxDynamicOffsetBlocks) {
+            *error = QStringLiteral("pass '%1' binds more than %2 blocks at dynamic offsets")
+                         .arg(QString::fromLatin1(pass.name)).arg(kMaxDynamicOffsetBlocks);
+            return false;
+        }
         if (!pass.block.valid())
             continue;
         for (const BlockMember &member : pass.block.members()) {
@@ -1823,12 +1829,15 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
                 bool batches = false;
                 for (const ModePass &pass : passes)
                     batches = batches || (pass.batched() && pass.batches == name);
-                const bool fits = batches ? (field.kind == fa::FieldKind::U32 && field.count >= 2 && field.count % 2 == 0)
+                // Audit 4 L4: a batch table holds at most kMaxBatches pairs (the arena's copies and the commands).
+                const bool fits = batches ? (field.kind == fa::FieldKind::U32 && field.count >= 2 && field.count % 2 == 0
+                                             && field.count / 2 <= quint32(kMaxBatches))
                                           : (field.kind == fa::FieldKind::U32 && field.count == 1);
                 if (!fits) {
                     *error = QStringLiteral("the record's field '%1' is a draw's %2").arg(QString::fromLatin1(name),
-                        batches ? QStringLiteral("batch table: a u32 array of {first, count} pairs")
-                                : QStringLiteral("count or selector: a u32 scalar"));
+                        batches
+                            ? QStringLiteral("batch table: a u32 array of 1 to %1 {first, count} pairs").arg(kMaxBatches)
+                            : QStringLiteral("count or selector: a u32 scalar"));
                     return false;
                 }
             }
@@ -3538,9 +3547,20 @@ int ModeContent::batchCapacity(const ModePass &pass) const
 
 bool ModeContent::meshesReady() const
 {
-    for (const QByteArray &name : m_source->drawnProgram().drawnMeshes()) {
-        if (!m_meshes.find(name))
-            return false;
+    // Every record: the passes' mesh and instance source read in place (audit 4 L3: drawnMeshes() builds a list).
+    const ModeProgram &program = m_source->drawnProgram();
+    const auto isStream = [&program](const QByteArray &name) {
+        for (const StreamDeclaration &s : program.streams) {
+            if (s.name == name)
+                return true;
+        }
+        return false;
+    };
+    for (const ModePass &pass : program.passes) {
+        for (const QByteArray *name : { &pass.mesh, &pass.instanceFrom }) {
+            if (!name->isEmpty() && *name != kBuiltinQuadMesh && !isStream(*name) && !m_meshes.find(*name))
+                return false;
+        }
     }
     return true;
 }
@@ -3881,6 +3901,22 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
     if (!program.valid()) {
         *error = QStringLiteral("the mode has no program");
         return false;
+    }
+    // Audit 4 L4: D15 point 3's and 6's device limits, refused with the reason (none is reached on this machine's
+    // devices): a block within the device's uniform range, an indirect draw only where QRhi reports DrawIndirect.
+    const int uniformRange = rhi->resourceLimit(QRhi::MaxUniformBufferRange);
+    for (const ModePass &pass : program.passes) {
+        if (pass.block.valid() && uniformRange > 0 && pass.block.size() > uniformRange) {
+            *error = QStringLiteral("pass '%1': its block of %2 bytes is past this device's uniform range of %3 bytes")
+                         .arg(QString::fromLatin1(pass.name)).arg(pass.block.size()).arg(uniformRange);
+            return false;
+        }
+        if (!pass.indirect.isEmpty() && !rhi->isFeatureSupported(QRhi::DrawIndirect)) {
+            *error = QStringLiteral("pass '%1' draws from the indirect stream '%2', and this device does not report "
+                                    "QRhi::DrawIndirect").arg(QString::fromLatin1(pass.name),
+                                                              QString::fromLatin1(pass.indirect));
+            return false;
+        }
     }
     const QShader vs = shaderFrom(mode_vert_qsb, mode_vert_qsb_size); // the full-target triangle with both quads' uv
     const QShader clear = shaderFrom(clear_frag_qsb, clear_frag_qsb_size);

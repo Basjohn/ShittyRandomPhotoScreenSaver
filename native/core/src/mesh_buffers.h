@@ -58,7 +58,8 @@ constexpr int kMaxMeshAttributes = 8;
 constexpr qint64 kMaxMeshBytes = qint64(64) << 20;
 constexpr int kMaxBatches = 64;
 // D15 point 3: a pass's bindings carry at most this many dynamic-offset blocks (inside OpenGL's 8 a bind and Vulkan's
-// specification minimum of 8 a set).
+// specification minimum of 8 a set). Refused past it by the program's check, as a batch table past kMaxBatches pairs is
+// (audit 4 L4).
 constexpr int kMaxDynamicOffsetBlocks = 4;
 constexpr quint32 kIndirectCommandBytes = 16; // {vertexCount, instanceCount, firstVertex, firstInstance}
 extern const char kBuiltinQuadMesh[];         // "quad"
@@ -252,10 +253,12 @@ public:
     ModeMeshes(const ModeMeshes &) = delete;
     ModeMeshes &operator=(const ModeMeshes &) = delete;
 
-    // At a record: a mesh the item no longer holds goes; a drawn mesh with a new generation is uploaded into `updates`
-    // (its image taken through `take`); the built-in quad is made once, when a pass draws it (`quad`). `lost` names the
-    // drawn meshes with no image to upload from (a content made again). False with the reason when a buffer could not
-    // be created (that mesh lost).
+    // At a record: a mesh the item no longer holds goes; every mesh the item holds (`drawn`: the item's meshes, drawn by
+    // a pass or not) with a new generation is uploaded into `updates` (its image taken through `take`); the built-in
+    // quad is made once, when a pass draws it (`quad`), and stays until the content goes (it is outside the retire
+    // loop). `lost` names the item's meshes with no image to upload from (a content made again: an undrawn one too), and
+    // a mesh whose buffer could not be created (its old buffer goes with it, audit 4 L5: not drawn again until the
+    // owner sends it again).
     template <typename Take>
     void sync(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QList<ModeMesh> &drawn, Take take, QStringList *lost,
               bool quad);

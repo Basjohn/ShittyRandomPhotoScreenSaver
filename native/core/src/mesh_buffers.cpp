@@ -566,6 +566,10 @@ bool ModeMeshes::upload(QRhi *rhi, QRhiResourceUpdateBatch *updates, Gpu &gpu, c
         g_buffersCreated.fetchAndAddRelaxed(1);
     }
     if (!ok) {
+        // Audit 4 L5: the mesh is lost, so the buffer it would replace goes too (find() no longer returns it and
+        // nothing draws the old vertices under the new declaration); it waits for the owner to send it again.
+        if (gpu.vertices || !gpu.name.isEmpty())
+            releaseGpu(gpu);
         lost->append(QStringLiteral("%1 could not be created").arg(QString::fromLatin1(mesh.name)));
         return false;
     }
