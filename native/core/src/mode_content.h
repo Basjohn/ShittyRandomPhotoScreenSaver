@@ -86,7 +86,8 @@
 // ({"passes": [...], "targets": [...]}), and a pass names the target it draws into ("target"; the surface without it).
 // A pass on a scene target writes outputs at locations 0..n-1 for the target's n colour attachments, each with its own
 // write mask and blend ("attachments": [{"write", "blend"}], default: every attachment with the pass's blend; differing
-// states need QRhi::PerRenderTargetBlending), may test and write the target's depth ("depth": {"test", "write"}) and
+// states need per-attachment blending: N3.4, read from the core's device facts, post_stages.h perTargetBlendReal), may
+// test and write the target's depth ("depth": {"test", "write"}) and
 // write gl_FragDepth (only into a target with depth). A capture step ({"name", "capture": <target>}, an empty pack) ends
 // the target's pass, copies its colour and nearest window depth into the target's capture (Python's
 // SceneTarget.background()) and the next pass on the target loads it again. A sampler reads a target's attachment by
@@ -127,12 +128,33 @@
 // the storage (ModeStorage); it survives a pipeline rebuild and a new program that declares it the same way. A content
 // made again finds its storage gone: it is made zeroed, the entries dispatch fresh, and the owner is told once through
 // the lost edge with the names "state:<resource>" (NativeMode.on_state_lost). A still draws no compute.
+//
+// Stages (N3.4, D17; post_stages.h): transparency and post-processing, each data in the program and absent unless
+// declared (a program without it holds no object of it and records nothing of it):
+// - a transparency target ({"name", "transparency": {"of": <scene target>, "borrow": [...]}}, scene_targets.h): its
+//   passes are the mode's, drawn into its accumulation (location 0), coverage (1) and borrowed attachments (2..), the
+//   core fixing the blends of the first two (ONE, ONE; ONE, ONE_MINUS_SRC_COLOR), depth tested against the owner's
+//   loaded depth (less unless declared) and never written. Each such pass ships its sorted pack after its others
+//   ("sorted": true): drawn into the owner, premultiplied over, where the device gate does not admit the stage. A
+//   resolve step ({"name", "transparency_resolve": <target>, "alpha"?: "coverage" | "keep"}, an empty pack) composites
+//   it onto the owner's colour 0, per sample when multisampled; it follows every pass on the target, and nothing samples
+//   the owner between them;
+// - a bloom step ({"name", "bloom": "<target>.<attachment>"}, an empty pack): its chain from the attachment (its resolve
+//   when multisampled), its glow read by a later sampler as "<step>.glow";
+// - a composite step ({"name", "composite": overlay | overlay_glow | opaque_glow, "scene": "<target>.<attachment>",
+//   "glow"?: "<bloom step>.glow"}, an empty pack): a pass on the surface whose fragment is the core's, its block filled
+//   by the one rule (u_target_px and u_fade the core's; u_bloom_strength and u_hdr_exposure the record's or the
+//   settings'), its blend the form's (overlay: alpha; overlay_glow: premultiplied; opaque_glow: replace);
+// - a defocus step ({"name", "defocus": <mips target>, "onto": <scene target>}, an empty pack): the layer's mips, the
+//   clip, the gather and the highlight sprites; its block (u_defocus_radius, u_defocus_highlight, u_defocus_level) filled
+//   by the one rule.
 #pragma once
 
 #include "compute_passes.h"
 #include "mesh_buffers.h"
 #include "mode_schema.h"
 #include "packet_reader.h"
+#include "post_stages.h"
 #include "program_blocks.h"
 #include "scene_targets.h"
 #include "stream_source.h"
@@ -313,9 +335,22 @@ struct ModePass
     QList<ComputeBinding> computeBindings;
     quint32 localSize[3] = { 1, 1, 1 };              // reflected
     int computeMemberOffset = -1;                    // u_srpss_compute's offset in its block (-1: not declared)
+    // N3.4 (D17): a stage entry (post_stages.h). A resolve's `target` is the owner and `stageSource` the transparency
+    // target; a bloom's `stageSource` and `stageAttachment` its source (`target` -1: it has its own); a defocus's
+    // `target` the onto target and `stageSource` the layer; a composite is a surface pass with the core's fragment.
+    StageKind stage = StageKind::None;
+    int stageSource = -1;
+    int stageAttachment = -1;
+    bool coverageAlpha = true;                       // a resolve: alpha ONE (an overlay's coverage), else ZERO (kept)
+    CompositeForm compositeForm = CompositeForm::Overlay;
+    // A pass on a transparency target: its sorted pack and its outputs on the owner (the fallback, D17 choice D).
+    QShader sorted;
+    QList<PassOutput> sortedOutputs;
 
     bool ownVertex() const { return vertex.isValid(); }
     bool batched() const { return !batches.isEmpty(); }
+    // A bloom or defocus step: recorded outside the runs of passes, with render passes of its own.
+    bool stepOfItsOwn() const { return stage == StageKind::Bloom || stage == StageKind::Defocus; }
 };
 
 struct ModeProgram
@@ -673,8 +708,9 @@ private:
                       bool draw, bool readback);
     bool build(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
     // N3.2: a pass with its own vertex stage: its pipelines (two when its front face is chosen per record).
+    // N3.4: `sorted`, the pass's sorted pack and its outputs on the owner (a transparency target not admitted).
     bool buildGeometryPass(QRhi *rhi, Resources &r, int index, QRhiRenderPassDescriptor *renderPass, int samples,
-                           QString *reason, int *objects);
+                           QString *reason, int *objects, bool sorted = false);
     // N3.2: a batched pass's batches the arena holds (its batch table's pairs, at most kMaxBatches).
     int batchCapacity(const ModePass &pass) const;
     // N3.2: the meshes' and streams' state, noted on the source only when their objects changed (never per record).
@@ -803,6 +839,33 @@ private:
     quint64 m_storageNoted = ~quint64(0);    // the storage's objects the state was last noted for
     bool m_storageHeldHere = false;          // this content made storage (a later one of the source finds it lost)
     quint64 m_storageReadsDone = 0;          // harness readbacks served
+    // N3.4 (D17): the stages' objects (the content's), the program's bloom and defocus steps (derived once per program),
+    // the device gate's answer (decided per QRhi, program and harness control: never per record) and the stages' object
+    // generation the bindings were made over.
+    PostStages m_post;
+    QList<BloomSpec> m_bloomSpecs;
+    QList<DefocusSpec> m_defocusSpecs;
+    quint64 m_specsProgram = 0;
+    const QRhi *m_gateRhi = nullptr;
+    quint64 m_gateProgram = 0;
+    quint64 m_gateControls = 0;
+    quint32 m_dormant = 0;                   // the transparency targets not admitted on this device (bit: target)
+    quint64 m_postObjectsSeen = 0;
+    // The target a pass draws into this record: its own, or a dormant transparency target's owner (the sorted fallback).
+    int effectiveTarget(int pass) const;
+    // N3.4: the gate (D17 point 3) at its edge, the stages' objects at the targets' sizes; false with the reason.
+    void decideTransparencyGate(QRhi *rhi);
+    bool syncStages(QRhi *rhi, QString *error);
+    // N3.4: the read level of a defocus step (its block's u_defocus_level as packed) and its radius.
+    int defocusLevel(int pass) const;
+    float defocusRadius(int pass) const;
+    // N3.4: a defocus step's record: the layer's mips and the clip, then a run on the onto target with the gather and the
+    // sprites (cleared there first when no pass drew it yet this record).
+    void recordDefocus(QRhi *rhi, QRhiCommandBuffer *cb, int index, QRhiResourceUpdateBatch **pending, bool *cleared,
+                       bool readback);
+    // N3.4: each defocus step's block offsets of its level and radius (derived with the specs, never per record).
+    int m_defocusLevelOffset[kMaxModePasses] = {};
+    int m_defocusRadiusOffset[kMaxModePasses] = {};
 };
 
 } // namespace srpss_core

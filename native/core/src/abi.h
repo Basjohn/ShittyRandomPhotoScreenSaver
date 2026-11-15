@@ -105,6 +105,14 @@
 // storage_readback_pending and storage_held; vulkan_device_facts' queue_family_compute,
 // shader_storage_image_extended_formats, max_compute_work_group_count_x, max_compute_work_group_invocations and
 // storage_image_formats. Backward compatible for every earlier program (no compute: N3.2's passes).
+// 20 (N3.4, transparency and post-processing as shared stages; D17, post_stages.h): a target's "transparency" ({"of",
+// "borrow"}) and "mips"; a transparent pass's sorted pack ("sorted": true, the pack after its others); the steps
+// {"transparency_resolve", "alpha"}, {"bloom"}, {"defocus", "onto"} and {"composite", "scene", "glow"} (an empty pack
+// each); a sampler naming "<bloom step>.glow"; stage_control (harness); composite_live's stage_* counts; the targets'
+// state's transparency_fallbacks and each target's transparency_of, borrow and mips; composite_mode_target_pixels'
+// "level" (a mipped target's every level read back); vulkan_device_facts' independent_blend, sample_rate_shading and
+// color_attachment_blend. N3.1's check of differing attachment states reads the core's device facts (independentBlend on
+// Vulkan), never QRhi's PerRenderTargetBlending. Backward compatible for every earlier program (no stage: N3.3's).
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 19
+#define SRPSS_NATIVE_CORE_ABI 20

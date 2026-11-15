@@ -99,6 +99,7 @@ set(_sources
     src/scene_targets.cpp
     src/mesh_buffers.cpp
     src/compute_passes.cpp
+    src/post_stages.cpp
     src/job_service.cpp
     src/item_notifier.cpp
     src/program_blocks.cpp

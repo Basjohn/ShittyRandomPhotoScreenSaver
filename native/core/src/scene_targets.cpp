@@ -803,6 +803,7 @@ bool SceneTargets::sync(QRhi *rhi, const QList<TargetDeclaration> &declarations,
             t.decl = TargetDeclaration();
             t.allocation = QSize();
             ++m_stateVersion;
+            ++m_layoutGeneration;             // the pipelines of its passes are built again (into it, or the owner)
         }
         if (dormant) {
             t.decl = d;
