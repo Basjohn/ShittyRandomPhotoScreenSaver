@@ -30,9 +30,12 @@ force-push or rewrite main.
 - N3.1 to N3.3 are merged and audited. **N3.4 is merged but NOT audited** (merge 39e661d80): its box in
   `Current_Plan.md` lists the two open steps (the OpenGL defocus cost diagnosis, then the High audit). Nothing may
   consume N3.4 (no Oscilloscope port) until both are done.
-- Mode ports: Spline Curve is native. The Bubble port (N5.1) state is in its box (see section 3).
+- Mode ports: Spectrum and Spline Curve are native. The Bubble port (N5.1) is merged DORMANT (22a99fa45): Bubble is
+  not offered on Vulkan until native OpenGL matches Python (rule (a) fails at worst 8 levels on 101 edge pixels; the
+  tolerance allows 3). Its box lists the remaining steps, root cause first.
 - Transitions: 12 of 28 are native.
-- Agent worktrees at handoff: see section 3's last line. Check with `.venv/Scripts/python.exe tools/agent_handover.py`.
+- Agent worktrees at handoff: none. Check with `.venv/Scripts/python.exe tools/agent_handover.py`.
+- Known stale red: `tests/test_extruded_bubble_empty_near.py` (in the plan's stale-red list); not caused by this week.
 
 ## 3. The route for this week, in order
 

@@ -62,7 +62,7 @@ Status today (item 8b, "State" paragraph, 14 Nov): N0's contracts decided; **N0.
 accepted); N1.6 merged to ratchet 24 (Neon Lake, Extruded Spectrum and Sphere in flight; Extruded Bubble's traced
 glass converts at its port); **N2.1, N2.2, N2.4 and N2.6** merged and proved; **N2.3** (Spectrum's native schema and
 the C++ packet reader, module ABI 5) merged and proved 14 Nov; **N2.7** (the backend owner) and its first leftovers
-merged; N2.5 in flight; N2.8's Vulkan pre-check done. Updated 15 Nov: N3.1 (D14, ABI 17), N3.2 (D15, ABI 18) and N3.3 (D16, ABI 19) are built and proved, and N4.a (D13), N5.1, N5.2a and b and N5.7a and b run as data on the core; N3.4, N3.6, N3.7, N3.9, NF and every N4 and N6 primitive are open or decided and not built (the module holds the host adapter, frame driver, composite node, GPU timer, packet reader, generic mode content, textures, scene targets, meshes and buffers, and compute passes). `native/spike_p1` is evidence, never a shipped renderer (item 8b, N2's heading). Step by step:
+merged; N2.5 in flight; N2.8's Vulkan pre-check done. Updated 15 Nov: N3.1 (D14, ABI 17), N3.2 (D15, ABI 18) and N3.3 (D16, ABI 19) are built and proved, N3.4 (D17, ABI 20) is built and proved but merged pre-audit (no consumer until its audit), and N4.a (D13), N5.1, N5.2a and b and N5.7a and b run as data on the core; N3.6, N3.7, N3.9, NF and every N4 and N6 primitive are open or decided and not built (the module holds the host adapter, frame driver, composite node, GPU timer, packet reader, generic mode content, textures, scene targets, meshes and buffers, and compute passes). `native/spike_p1` is evidence, never a shipped renderer (item 8b, N2's heading). Step by step:
 
 | Step | State (plan, 14 Nov) | Primitive relevance |
 |---|---|---|
@@ -134,7 +134,7 @@ owners' pictures on both backends; showcase `native_core/n3_4/20261115_n34_showc
 the eight composites in `target.py:125-286` keep raw `gl_FragCoord` and are never converted (D5.2 replaces them;
 item 8b, N1.4's remainder). Notes: allocation rounds to 64 px; no `glBlitFramebuffer` resolves (about 0.5 ms at 1440p; Lessons line
 176-177); per-sample reads (`sampler2DMS`, `gl_SampleID`) are the N1.8 resolve-first set; QRhi's own depth resolve is wrong on both backends, so the core's nearest pass reads every sample, and `texelFetch` on a multisampled D32F works on both (D14 point 10, proved at N3.1 round 3); the multisampled velocity attachment is the only listed use of D5.3's formats service and natively it is two R16F attachments (`Current_Plan.md` item 8b, formats box; Research section 14); Waveform's 4 samples and the Oscilloscope's 1 are declared fixed requests of `scene3d.scene_samples` (D14 point 7); a 1-sample multisampled renderbuffer does not rasterise like a direct draw (Lessons line 178-179).
-Native status: built (D14, N3.1, ABI 17); OIT, bloom and HDR are N3.4, decided in the plan, not built. Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e3).
+Native status: built (D14, N3.1, ABI 17); OIT, bloom and HDR are N3.4: built at ABI 20 (D17), merged pre-audit. Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e3).
 
 <a id="e4"></a>
 ### E4. Bloom chain
@@ -147,7 +147,7 @@ sampling, `Current_Plan.md` item 8b, N4.a's box). Test: `test_scene3d_dsa_target
 `tests/test_native_post_stages.py`; exact against Python with its source sampled LINEAR/CLAMP; Python's own source
 sampler, NEAREST with REPEAT, is a recorded defect, D17).
 Notes: photographs write 0 emitted light so endpoints stay exact (Lessons line 180-181).
-Native status: decided, not built (N3.4; D17 is not on main). Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e4).
+Native status: built at ABI 20 (N3.4, D17 "As built"), merged pre-audit; no consumer until the plan's N3.4 box closes. Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e4).
 
 <a id="e5"></a>
 ### E5. Motion blur (velocity plus tile max)
@@ -338,7 +338,7 @@ layer": a mipped target and a defocus step, mips by QRhi's `generateMips`, every
 read level capped where levels come from odd sizes; D17) and N5.6. No class stated. Notes: the EB abyss near defocus measured 3.3 ms of its GPU budget (largely the
 near shells drawn into the layer; `Scene3D_Resources.md:529-533`); masks are per draw-buffer index (a masked emission
 index once dropped every circle); the RG16F circle storage was widened by N1.7.
-Native status: decided, not built (N3.4). Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e4).
+Native status: built at ABI 20 (N3.4, D17), merged pre-audit; its OpenGL cost at 4K is open (the plan's N3.4 box). Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e4).
 
 <a id="e20"></a>
 ### E20. Light shafts
