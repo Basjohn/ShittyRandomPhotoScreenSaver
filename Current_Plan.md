@@ -694,6 +694,19 @@ are measured above a handful per frame, one pipeline and one indirect call with 
 (`gl_DrawID`, `gl_BaseInstance`, `gl_BaseVertex`) replaces a draw per batch; the port records which backends report
 the feature (D3D11 is not stated).
 
+- [ ] Checkpoint audit 3 fixes (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`; the next Opus Medium opening, before
+  the Oscilloscope or Bubble port relies on the tolerance):
+  - [ ] M1: `rule_a_verdict` (`tools/visualizer_replay/owner_render_parity.py:357-370`) accepts a 1-level shift on
+    every pixel, and 10 pixels at 2-3 levels anywhere. Restrict it to what the per-pixel proof covers: the 1-level
+    allowance only on pixels the reference draws translucent (derive the mask from the reference's own content, for
+    example a draw over two different backgrounds), and the 2-3 level allowance only on pixels next to a content
+    edge. Opaque content and background stay exact. Spectrum and Spline Curve must still pass, and the audit's
+    synthetic `rule_a_probe.py` (an all-pixel +1, a fixed 10-pixel 3-level artefact) must fail.
+  - [ ] L1: the by-value array test (`tests/test_native_devcurve.py:188-202`) scans every shader the core draws,
+    including the fullscreen transition fragments' Python sources, and every GLSL form (`float c[N]`,
+    `float[96] c`, indented definitions); the audit's `by_value_probe.py` is the control.
+  - [ ] L2: a program the core refuses latches in `native_route.py:670-688` until an input changes, as before N5.1;
+    `route_probe.py` is the control.
 - [ ] N5.1 Spline Curve leftover: its Studio is not offered on Vulkan (`STUDIO_PREVIEW_BACKENDS`), the same open
   item as Spectrum's; both close with N5.8.
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
