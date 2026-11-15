@@ -24,6 +24,12 @@ reported with its ULP distance.
   draws the same members directly (the indirect draw's equal).
 - ``war``: write-after-read: entry 1 reads X and writes Y, entry 2 writes X (two QRhi passes: clean; the single-pass
   control: the hazard QRhi does not barrier).
+- ``war_pingpong``: write-after-read's other form (checkpoint audit 5 M4): two buffers, a ping-pong; entry 1 reads A
+  and writes B, entry 2 reads B and writes A (A's write after entry 1's read), each a counter one past what it read.
+- ``pair_check``: D4's pair-check kernel (``extruded_bubble_drift_solver.PROGRAMS[2]``, verbatim, ``precise``) baked
+  through the core's own path, its cases from a storage stream, its results in a storage buffer, judged against exact
+  arithmetic as ``DriftSolver.check`` judges them (audit 5 M4, rule (b)); ``pair_check_broken`` is the same kernel with
+  the error terms a compiler that ignores ``precise`` may drop zeroed (its negative control).
 """
 from __future__ import annotations
 
@@ -37,7 +43,9 @@ HERE = Path(__file__).resolve().parent
 
 CARD = (480, 270)
 MODE_CODES = {"field": 230, "chain": 231, "volume": 232, "state": 233, "population": 234, "population_direct": 235,
-              "war": 236, "refusal": 237}
+              "war": 236, "refusal": 237,
+              # Checkpoint audit 5's scenes, below 230 (mesh_buffers holds 240 to 249).
+              "war_pingpong": 227, "pair_check": 228, "pair_check_broken": 229}
 KNOTS = 64                 # field and chain: 64 knots of vec4
 FIELD_SIZE = (64, 8)
 VOLUME_SIZE = (16, 8, 4)
@@ -291,6 +299,61 @@ void main()
 }
 """
 
+# The ping-pong form (two buffers): each entry writes one past what it read, so A's write must follow entry 1's read.
+PINGPONG_COMP = """#version 440
+layout(local_size_x = 64) in;
+layout(std140, binding = 0) uniform PingPong { float u_frame; };   // the record's (w only: the counter ignores it)
+layout(std430, binding = 1) readonly buffer X { vec4 x[]; };
+layout(std430, binding = 2) writeonly buffer Y { vec4 y[]; };
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    if (i < 64u)
+        y[i] = vec4(x[i].x + 1.0, float(i), x[i].x, u_frame);
+}
+"""
+
+
+def pair_check_sources() -> tuple[str, str]:
+    """D4's pair-check kernel verbatim (the product's ``PROGRAMS[2]``) and its broken twin: the error terms a compiler
+    that ignores ``precise`` may reassociate away, zeroed (``tests/test_extruded_bubble_drift_solver.py``'s model)."""
+    from rendering.quick.visualizer.implementations.extruded_bubble_drift_solver import PROGRAMS
+
+    source = PROGRAMS[2][1]
+    broken = (source.replace("precise float e = (a - (s - v)) + (b - v);", "precise float e = 0.0;")
+              .replace("precise float e = ((x.x * y.x - p) + x.x * y.y + x.y * y.x) + x.y * y.y;",
+                       "precise float e = 0.0;"))
+    if broken == source:
+        raise RuntimeError("the pair-check kernel changed: its broken twin no longer differs")
+    return source, broken
+
+
+def pair_check_report(results: bytes) -> dict:
+    """The kernel's results judged as ``DriftSolver.check`` judges them (exact arithmetic on the same cases)."""
+    import numpy as np
+
+    from rendering.quick.visualizer.implementations.extruded_bubble_drift_solver import pair_check_cases
+
+    cases, expected = pair_check_cases()
+    got = np.frombuffer(results, "<f4").reshape(-1, 4)[:len(cases)]
+    fraction = np.abs(got[:, 0].astype(np.float64) - expected["fraction"])
+    fraction = np.minimum(fraction, 1. - fraction)
+    report = {"fraction_error": float(fraction.max()),
+              "product_mismatches": int((got[:, 1] != expected["product"]).sum()),
+              "sum_mismatches": int((got[:, 2] != expected["sum"]).sum())}
+    report["exact"] = (report["fraction_error"] < 1e-6 and not report["product_mismatches"]
+                       and not report["sum_mismatches"])
+    return report
+
+
+def pair_check_record() -> dict:
+    """The pair check's record: its cases as the storage stream's floats."""
+    from rendering.quick.visualizer.implementations.extruded_bubble_drift_solver import pair_check_cases
+
+    cases, _expected = pair_check_cases()
+    return {"case_rows": cases.astype("<f4").tobytes(), "case_floats": int(cases.size)}
+
+
 # ----------------------------------------------------------------------------------------------------- refusals
 # D16 choice D's admission, settled on the module: each is refused with its reason.
 REFUSAL_COMP = """#version 440
@@ -325,8 +388,10 @@ def shaders() -> dict[str, str]:
         "state_a.comp": STATE_COMP.replace("HALF", "u_half_a"), "state_b.comp": STATE_COMP.replace("HALF", "u_half_b"),
         "state.vert": STATE_VERT, "colour.frag": COLOUR_FRAG, "plain.frag": PLAIN_FRAG, "population.vert": POPULATION_VERT,
         "war_read.comp": WAR_READ_COMP, "war_write.comp": WAR_WRITE_COMP, "refusal.comp": REFUSAL_COMP,
+        "pingpong.comp": PINGPONG_COMP,
     }
     out.update(population_shaders())
+    out["pair_check.comp"], out["pair_check_broken.comp"] = pair_check_sources()
     return out
 
 
@@ -529,6 +594,25 @@ def scene(name: str, packs: dict, *, state_rows: int = STATE_ROWS, population: i
         return SceneSpec(name, passes, (), (), {"u_war": [0.5, 0.0, 0.0, 0.0], "u_war_next": [0.25, 0.0, 0.0, 0.0]},
                          schema(name, (("u_frame", "f64", 1),)), {"u_frame": 0.0},
                          buffers=(StorageBuffer("x", 16 * WAR_ROWS), StorageBuffer("y", 16 * WAR_ROWS)))
+    if name == "war_pingpong":
+        passes = (
+            ComputePass("ping", packs["pingpong.comp"], groups=(1, 1, 1),
+                        bindings=(ComputeBinding("X", "a", "buffer", "read"), ComputeBinding("Y", "b", "buffer", "write"))),
+            ComputePass("pong", packs["pingpong.comp"], groups=(1, 1, 1),
+                        bindings=(ComputeBinding("X", "b", "buffer", "read"), ComputeBinding("Y", "a", "buffer", "write"))))
+        return SceneSpec(name, passes, (), (), {}, schema(name, (("u_frame", "f64", 1),)), {"u_frame": 0.0},
+                         buffers=(StorageBuffer("a", 16 * WAR_ROWS), StorageBuffer("b", 16 * WAR_ROWS)))
+    if name in ("pair_check", "pair_check_broken"):
+        record = pair_check_record()
+        floats = record["case_floats"]
+        passes = (
+            ComputePass("pair_check", packs[f"{name}.comp"], groups=(1, 1, 1),
+                        bindings=(ComputeBinding("CheckCases", "cases", "stream"),
+                                  ComputeBinding("CheckResults", "results", "buffer", "write"))),)
+        return SceneSpec(name, passes, (), (ModeStream("cases", "case_rows", used="case_floats"),), {},
+                         schema(name, (("case_rows", "f32", floats), ("case_floats", "u32", 1)),
+                                (("case_floats", "at_most", floats),)),
+                         record, buffers=(StorageBuffer("results", 4 * floats),))
     raise KeyError(name)
 
 
@@ -561,6 +645,8 @@ def refusal_programs(packs: dict) -> dict:
         "writeonly_image_declared_read": (entry(uVol=("vol", "image", "read")), buffers, images),
         "image_of_another_format": (entry(), buffers, wrong_format),
         "2d_image_bound_to_image3d": (entry(), buffers, flat),
+        # Checkpoint audit 5 M3: one buffer bound twice with two accesses (each block's qualifier fits its own access).
+        "one_buffer_bound_read_and_write": (entry(Out=("in_rows", "buffer", "write")), buffers, images),
         "unbound_block": (ComputePass("refusal", packs["refusal.comp"], groups=(1, 1, 1),
                                       bindings=tuple(ComputeBinding(k, r, kind, a) for k, (r, kind, a) in
                                                      {"In": ("in_rows", "buffer", "read"),
@@ -569,5 +655,5 @@ def refusal_programs(packs: dict) -> dict:
     }
 
 
-__all__ = ["CARD", "SceneSpec", "bake_all", "knots", "live_members", "reflection", "refusal_programs", "scene",
-           "shaders"]
+__all__ = ["CARD", "SceneSpec", "bake_all", "knots", "live_members", "pair_check_record", "pair_check_report",
+           "pair_check_sources", "reflection", "refusal_programs", "scene", "shaders"]

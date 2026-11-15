@@ -124,7 +124,8 @@
 // indirect commands ("indirect"), and an image through a sampler naming it (sampler2D, or sampler3D for a 3D image).
 // Every count a draw or a dispatch reads over a storage buffer is checked against that buffer; a named group count is a
 // record u32 under an at_most rule (or a setting); groups past the device's limit are not dispatched. The content owns
-// the storage (ModeStorage); it survives a pipeline rebuild and a new program that declares it the same way. A content
+// the storage (ModeStorage); it survives a pipeline rebuild and a new program that declares it the same way, and each
+// entry declared again by name keeps its history over it (fresh is per entry: checkpoint audit 5 M2). A content
 // made again finds its storage gone: it is made zeroed, the entries dispatch fresh, and the owner is told once through
 // the lost edge with the names "state:<resource>" (NativeMode.on_state_lost). A still draws no compute.
 #pragma once
@@ -789,11 +790,21 @@ private:
     // readbacks served.
     struct ComputeTrack
     {
-        bool dispatched = false;             // since the storage was made (or the program came)
+        bool dispatched = false;             // since the content was made (a new program keeps it by the entry's name)
+        bool changed = false;                // a new program changed the entry (pack, bindings, trigger): due once
         quint64 lastTrigger = 0;
-        quint64 freshSeen = 0;               // the storage's fresh generation at its last dispatch
+        quint64 freshSeen = 0;               // audit 5 M2: its bindings' largest storage serial at its last dispatch
         quint64 dispatches = 0;
+        // What the entry was, to find it in the next program (set at a program edge only, never per record).
+        QByteArray name;
+        QShader shader;
+        QList<ComputeBinding> bindings;
+        ComputeTrigger trigger;
     };
+    // Audit 5 M2: the largest serial ModeStorage made the entry's storage bindings zeroed at (0: none).
+    quint64 entryFreshKey(const ModePass &pass) const;
+    // Audit 5 M2: the tracks of a new program, each entry's kept from the last program by its name.
+    void retrackCompute(const ModeProgram &program);
     ModeStorage m_storage;
     ComputeTrack m_compute[kMaxModePasses];
     bool m_dispatch[kMaxModePasses] = {};

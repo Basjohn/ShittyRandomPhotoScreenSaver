@@ -3,7 +3,7 @@
 - the block arena's layout (``rendering.native.streams.arena_layout``, the core's ``arenaLayout`` mirrored);
 - the record's ``f32`` field kind (a stream's bytes verbatim) in the Python reference;
 - a program's packs in order (a geometry pass's fragment, vertex and draw-parameters packs) and its declaration;
-- the core's sources hold the contract's names (the per-batch core member, the module entries, ABI 18).
+- the core's sources hold the contract's names (the per-batch core member, the module entries, ABI 18 or later).
 """
 from __future__ import annotations
 

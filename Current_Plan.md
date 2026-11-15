@@ -44,7 +44,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
 at the size asked.
 - High: N3.4 (transparency and post-processing), then N3.6. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers
   ride with the next fitting dispatch.
-- Medium: N3.3's audit-5 fixes, then the Bubble port (the Oscilloscope after N3.4's bloom).
+- Medium: 1D.15 (per-display transition seeds), then the Bubble port (the Oscilloscope after N3.4's bloom).
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -506,24 +506,7 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       instead of matching source text; a test comparing the C++ reader's decode of an `f32` field with Python's
       (fields equal, bytes round-trip with inf, -0 and a denormal: the audit's `probe_f32_reader.py`).
 - N3.3 Compute passes: merged (6d87276a; D16 in `Docs/Future_Work/Native_Core_P3_Decisions.md`). Open:
-  - [ ] Checkpoint audit 5 fixes, before N5.4 or N5.6 uses compute (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`,
-    audit 5):
-    - [ ] M1, a program without storage keeps the last program's buffers: `compute_passes.h:235` (`empty()` ignores
-      `m_retiring`), `compute_passes.cpp:746-749`, `:595-597`, `:793-794`, `mode_content.cpp:4645-4646`; proof
-      `probe_audit5.py` P1, and a retirement case in `compute_pass_check.py` (`:868-879`) that holds a buffer.
-    - [ ] M2, `fresh` restarts kept storage: `mode_content.cpp:4639-4644`, `:4656-4657`, `:4710` with
-      `compute_passes.cpp:741,784`; `fresh` per resource, not per content or program; proof `probe_audit5.py` P2.
-    - [ ] M3, one buffer bound twice with two accesses is admitted: `mode_content.cpp:1134`, `:1188`, `:1836-1860`;
-      refuse it with its reason; proof `probe_audit5.py` P3 (`SYNC-HAZARD-WRITE-AFTER-WRITE`).
-    - [ ] M4, three harness boxes unbuilt in `compute_pass_check.py`: D4's pair-check kernel (`PROGRAMS[2]`) through
-      `qsb` with `precise` (rule b); the write-after-read ping-pong form (two buffers); OpenGL's barrier calls
-      counted per record against Python's.
-    - [ ] Lows L1-L6 triaged (`compute_passes.cpp:590-591,611-762` allocations per record; `mode_content.cpp:4693-4759`
-      a trigger consumed without a dispatch; `compute_passes.cpp:631-632` and `mode_content.cpp:1330-1332` storage
-      refusals; `compute_passes.h:50-52` and `compute_passes.cpp:768-772` image bounds;
-      `Docs/Guardrails/Performance_Optimization_Contract.md:450-456` exception G; the documents against the code:
-      `compute_passes.h:16-17,265`, `mode_content.h:127`, `tests/test_native_mesh_buffers.py:6`).
-- [ ] N3.4 Transparency and post-processing as shared stages, each opt-in and absent from a mode that does not use
+  - [ ] N3.4 Transparency and post-processing as shared stages, each opt-in and absent from a mode that does not use
   it: depth-aware order-independent transparency, bloom and the HDR resolve, the defocus layer.
   Decided by the lead, 15 Nov, from `Docs/Future_Work/Native_Core_QRhi_Research_N3.md` sections 3, 8 and 9:
   - [ ] Per-attachment blending: the core creates its own Vulkan device, so it enables `independentBlend` there
