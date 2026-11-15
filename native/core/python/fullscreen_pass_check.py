@@ -33,7 +33,7 @@ Rounds:
             its images never uploaded, leave no texture, byte or copy behind.
   timing    (each API) GPU time of the pass (median and p90 of the surface's record) for Crossfade and Burn at
             TIMING_TARGET, and nothing at rest.
-Then Vulkan's frames against OpenGL's (within VULKAN_TOLERANCE levels; both native; rule (b)).
+Then Vulkan's frames against OpenGL's (VULKAN_RULE_B, pixel by pixel; both native; rule (b)).
 
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/fullscreen_pass_check.py --module-dir release/native_module --require-validation
@@ -62,6 +62,11 @@ from typing import Any, Mapping
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
+ROOT = HERE.parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("shape", "draw", "textures", "timing")
@@ -101,7 +106,12 @@ MARGIN = 8
 REST_FRAMES = 3
 TIMED_FRAMES = 60
 TIMING_TARGET = (2560, 1440)
-VULKAN_TOLERANCE = 1             # 8-bit levels, native Vulkan against native OpenGL
+#: Rule (b), judged pixel by pixel by the shared tolerance (``tools/pixel_tolerance.py``, D12 "The pixel tolerance"):
+#: the two drivers round single values differently on a value within float error of a half level. Measured over the
+#: 256 frames (the 13 variants at both ratios, every progress, and the swapped and uv frames): at most 618 pixels a
+#: frame (Warp at dpr 1.5, progress 0.20), every one exactly one level off, on opaque photographs (no translucent
+#: pixel, so no mask explains them): scatter, 618 times 1.5. Nothing is a tie, and the core's uv frames are identical.
+VULKAN_RULE_B = pt.Tolerance("fullscreen pass, Vulkan against OpenGL (rule b)", scatter_pixels=927)
 SLOT_BYTES = 256
 IDENTITY = {"runtime_generation": 7, "engine_generation": 3, "activation_id": 11}
 #: The harness record's mode: outside ``packet_abi.MODE_CODES`` (append-only from 1; a test holds it out).
@@ -640,7 +650,8 @@ def round_draw(core, engine, app, host, api: str, folder: Path, out: Path, photo
                                settings)
             frames[f"{label}_uv_bits"] = scene.show(record)
             new_photo = np.asarray(images[1], dtype=np.uint8)
-            checks[f"{label}_shader_change_shows"] = compare(swapped, new_photo)["max_level"] <= 1
+            # The swapped Crossfade at progress 0 draws the new photo exactly (measured: 0 differing pixels, both APIs).
+            checks[f"{label}_shader_change_shows"] = pt.judge(swapped[..., :3], new_photo[..., :3], pt.EXACT)["pass"]
             frames[f"{label}_shader_change"] = swapped
             facts[label] = {"parity": parity, "state": {k: scene.mode.state().get(k) for k in (
                 "accepted", "records", "draws", "texture_uploads", "textures_resident", "textures_lost",
@@ -950,21 +961,23 @@ def vulkan_against_opengl(out: Path) -> dict:
     compared = max_level = 0
     worst = None
     differing: dict = {}
+    judged: list[dict] = []
     for key in gl.files:
         if key not in vk.files or gl[key].shape != vk[key].shape:
             return {"pass": False, "error": f"frame {key} is missing or differs in shape"}
         compared += 1
-        difference = np.abs(gl[key][..., :3].astype(np.int16) - vk[key][..., :3]).max(axis=2)
-        level = int(difference.max())
+        verdict = pt.judge(vk[key][..., :3], gl[key][..., :3], VULKAN_RULE_B)
+        judged.append(verdict)
+        level = int(verdict["max_level"])
         if level:
-            differing[key] = {"pixels": int(np.count_nonzero(difference)),
-                              "above_tolerance": int(np.count_nonzero(difference > VULKAN_TOLERANCE)),
-                              "max_level": level, "of": int(difference.size)}
+            differing[key] = {"pixels": verdict["differing"], "above_one_level": verdict["ties"] + verdict["flips"],
+                              "max_level": level, "of": int(gl[key].shape[0] * gl[key].shape[1])}
         if level > max_level:
             max_level, worst = level, key
     uv_keys = [key for key in gl.files if key.endswith("_uv_bits")]
-    return {"pass": compared > 0 and max_level <= VULKAN_TOLERANCE, "compared": compared, "max_level": max_level,
-            "worst": worst, "tolerance": VULKAN_TOLERANCE, "differing": differing,
+    tolerance = pt.summarise(judged)
+    return {"pass": compared > 0 and tolerance["pass"], "compared": compared, "max_level": max_level,
+            "worst": worst, "tolerance": tolerance, "bound": VULKAN_RULE_B.bound(), "differing": differing,
             "uv_bits_identical": bool(uv_keys) and not any(key in differing for key in uv_keys)}
 
 

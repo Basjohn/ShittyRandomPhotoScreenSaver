@@ -29,7 +29,7 @@ Rounds:
           the item's own rect, over an opaque black display) against the Python renderer's own draw of the same frame
           into a transparent target of the item's size (OpenGL child; premultiplied over black is the same colour):
           equal byte for byte on OpenGL (rule (a)'s first form, before the owner-level run); on Vulkan, against the
-          native OpenGL frames within VULKAN_TOLERANCE levels (rule (b)'s first form). Every sample is drawn at each
+          native OpenGL frames under VULKAN_RULE_B, pixel by pixel (rule (b)'s first form). Every sample is drawn at each
           placement of PLACEMENTS (N2.8, R-NEW): on whole device pixels, and between them in a scene under Display
           1's overscan, where Vulkan once broke the card along its composite quad's diagonal; the composite's
           reported origin_shift proves each placement is what it says. The per-pass GPU time of the surface is
@@ -64,8 +64,12 @@ ROOT = HERE.parents[2]                 # the repository (native/core/python -> r
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import vk_validation  # noqa: E402  (native/core/python)
 import host_check  # noqa: E402
+from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("block", "item", "pixels", "seam", "program")
@@ -82,7 +86,12 @@ PLACEMENTS = (("margin", 0, (0.0, 0.0)), ("overscan_half", OVERSCAN_DEVICE, (0.5
               ("overscan_quarter", OVERSCAN_DEVICE, (0.25, 0.75)))
 HOST_PIXELS = (1920 + 2 * MARGIN, 1080 + 2 * MARGIN)   # the hidden host's device pixels
 REST_FRAMES = 3
-VULKAN_TOLERANCE = 1             # 8-bit levels, native Vulkan against native OpenGL (rule (b)'s stated tolerance)
+#: Rule (b), judged pixel by pixel by the shared tolerance (``tools/pixel_tolerance.py``, D12 "The pixel tolerance"):
+#: the two drivers round single values differently on a value within float error of a half level. Measured over the
+#: 513 sampled frames (three placements): at most 83 pixels a frame, every one exactly one level off, none on the
+#: reference's translucent pixels (its own alpha strictly between 0 and 255), so no mask explains them and they are
+#: scatter, 83 times 1.5. Nothing is a tie: a frame with a pixel past one level, or a uniform shift, fails.
+VULKAN_RULE_B = pt.Tolerance("spectrum, Vulkan against OpenGL (rule b)", scatter_pixels=125)
 SLOT_BYTES = 4096                # one Spectrum record (1488 bytes) per slot, with room
 IDENTITY = {"runtime_generation": 7, "engine_generation": 3, "activation_id": 11}
 _ALLOWED_ENV: set[str] = set()
@@ -1041,6 +1050,7 @@ def vulkan_against_opengl(out: Path) -> dict:
     gl, vk = np.load(gl_path), np.load(vk_path)
     compared = differing = max_level = 0
     by_placement: dict = {}
+    judged: list[dict] = []
     for key in gl.files:
         placement = key.split("@", 1)[1] if "@" in key else PLACEMENTS[0][0]
         stats = by_placement.setdefault(placement, {"compared": 0, "differing": 0, "max_level": 0, "missing": 0})
@@ -1050,7 +1060,9 @@ def vulkan_against_opengl(out: Path) -> dict:
             continue
         compared += 1
         stats["compared"] += 1
-        level = int(np.abs(gl[key][..., :3].astype(np.int16) - vk[key][..., :3]).max())
+        verdict = pt.judge(vk[key][..., :3], gl[key][..., :3], VULKAN_RULE_B)
+        judged.append(verdict)
+        level = int(verdict["max_level"])
         differing += int(level > 0)
         stats["differing"] += int(level > 0)
         max_level = max(max_level, level)
@@ -1058,9 +1070,10 @@ def vulkan_against_opengl(out: Path) -> dict:
     # Every placement is compared (N2.8, R-NEW: the item between device pixels, where Vulkan broke along the quad's
     # diagonal while OpenGL did not).
     placed = all(by_placement.get(name, {}).get("compared", 0) > 0 for name, _o, _f in PLACEMENTS)
-    return {"pass": compared > 0 and placed and max_level <= VULKAN_TOLERANCE,
-            "compared": compared, "differing": differing, "max_level": max_level, "tolerance": VULKAN_TOLERANCE,
-            "placements": by_placement}
+    tolerance = pt.summarise(judged)
+    return {"pass": compared > 0 and placed and tolerance["pass"],
+            "compared": compared, "differing": differing, "max_level": max_level, "tolerance": tolerance,
+            "bound": VULKAN_RULE_B.bound(), "placements": by_placement}
 
 
 def _sheet(out: Path, api: str, references, native_frames, suffix: str = "") -> None:
