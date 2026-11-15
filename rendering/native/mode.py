@@ -29,6 +29,15 @@ released on the render thread. N3.8 (D9): on a Vulkan device with a job service 
 and the item's changed textures are drawn together once their jobs are published; elsewhere it is recorded in the
 frame. A texture whose node was made again is lost: the owner's :meth:`NativeMode.on_textures_lost` is called with its
 name (the edge; ``state()["textures_lost"]`` keeps the list), and it sends the image again.
+
+Scene targets (N3.1, decision D14; ``native/core/src/scene_targets.h``): a program may declare up to four targets
+(:class:`ModeTarget`) its passes draw into before what reaches the card: colour attachments (``TARGET_FORMATS``; the HDR
+intermediate is ``rgba16f``), an optional D32F depth, a requested sample count (``rendering.gl_programs.scene3d``'s
+``scene_samples`` is its one owner; the core clamps it to the device). A pass names its ``target``, writes one output per
+attachment (:class:`PassOutput`: its write mask and blend) and may test and write the depth (``depth_test``,
+``depth_write``); a :class:`CapturePass` copies what a target's passes drew so far (Python's ``SceneTarget.background()``);
+a sampler reads ``"<target>.<attachment>"``, ``"<target>.depth"``, ``"<target>.capture_colour"`` or
+``"<target>.capture_depth"``. Allocation is the core's: 64 px buckets, grown at once, shrunk two buckets below.
 """
 from __future__ import annotations
 
@@ -41,7 +50,16 @@ from rendering.native.composite import CompositeItem
 from rendering.native.packet_reader import reader_config
 
 #: How a pass's colour meets the target (``PassBlend`` in ``mode_content.h``).
-PASS_BLENDS = ("replace", "alpha", "premultiplied", "add")
+PASS_BLENDS = ("replace", "alpha", "premultiplied", "add", "additive")  # N3.1: "additive" is ONE, ONE
+#: N3.1: a scene target's attachment formats (``TargetFormat`` in ``scene_targets.h``) and a pass's depth tests.
+TARGET_FORMATS = ("rgba8", "rgba16f", "r16f", "r32f")
+#: D14 points 8 and 10: a multisampled attachment's single-sampled copy (QRhi's average, or the core's nearest).
+TARGET_RESOLVES = ("average", "nearest")
+DEPTH_TESTS = ("none", "never", "less", "equal", "less_equal", "greater", "not_equal", "greater_equal", "always")
+#: N3.1: the most targets a program declares, attachments a target holds, samples a target requests.
+MAX_TARGETS = 4
+MAX_TARGET_COLOUR = 4
+MAX_TARGET_SAMPLES = 8
 #: The core's conventions (``kModeCoreMembers`` in ``mode_content.cpp``; a test holds the two equal): name ->
 #: (components, read from the card). Every other member of a pass's block is a setting or a record field.
 MODE_CORE_MEMBERS = {
@@ -129,29 +147,145 @@ class PassSampler:
 
 
 @dataclass(frozen=True)
+class TargetAttachment:
+    """N3.1: one colour attachment of a scene target: its name, its format, the value its clearing draw writes and,
+    when the target is multisampled, how a sampler's single-sampled copy is made (D14 points 8 and 10): ``average``
+    (QRhi's resolve) or ``nearest`` (the core's minimum over the samples; an ``r32f`` attachment past the first, e.g. a
+    linear depth written beside the colour)."""
+
+    name: str
+    format: str = "rgba8"
+    clear: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    resolve: str = "average"
+
+    def __post_init__(self) -> None:
+        if self.format not in TARGET_FORMATS:
+            raise ValueError(f"unknown format {self.format!r} (the formats are {', '.join(TARGET_FORMATS)})")
+        if len(self.clear) != 4:
+            raise ValueError("a clear value is four numbers")
+        if self.resolve not in TARGET_RESOLVES:
+            raise ValueError(f"unknown resolve {self.resolve!r} (the resolves are {', '.join(TARGET_RESOLVES)})")
+        if self.resolve == "nearest" and self.format != "r32f":
+            raise ValueError("a nearest resolve takes an r32f attachment")
+
+    def declaration(self) -> dict:
+        entry: dict[str, Any] = {"name": self.name, "format": self.format}
+        if tuple(self.clear) != (0.0, 0.0, 0.0, 0.0):
+            entry["clear"] = [float(v) for v in self.clear]
+        if self.resolve != "average":
+            entry["resolve"] = self.resolve
+        return entry
+
+
+@dataclass(frozen=True)
+class ModeTarget:
+    """N3.1 (D14): a scene target a program's passes draw into: its name, its size (None: the surface's device pixels;
+    else explicit pixels, changed later with :meth:`NativeMode.target_size`), its colour attachments, whether it has a
+    depth (one D32F texture) and its requested samples (``rendering.gl_programs.scene3d.scene_samples``).
+    ``previous_frame``: a pass may sample it before any pass of the frame drew it, reading the frame before
+    (single-sampled only; the core refuses such a read otherwise, audit 2 M4)."""
+
+    name: str
+    colour: tuple[TargetAttachment, ...]
+    size: tuple[int, int] | None = None
+    depth: bool = False
+    samples: int = 1
+    previous_frame: bool = False
+
+    def __post_init__(self) -> None:
+        if not 1 <= len(self.colour) <= MAX_TARGET_COLOUR:
+            raise ValueError(f"a target has 1 to {MAX_TARGET_COLOUR} colour attachments")
+        if not 1 <= int(self.samples) <= MAX_TARGET_SAMPLES:
+            raise ValueError(f"a target requests 1 to {MAX_TARGET_SAMPLES} samples")
+
+    def declaration(self) -> dict:
+        entry: dict[str, Any] = {"name": self.name,
+                                 "size": "surface" if self.size is None else [int(self.size[0]), int(self.size[1])],
+                                 "colour": [a.declaration() for a in self.colour]}
+        if self.depth:
+            entry["depth"] = True
+        if int(self.samples) != 1:
+            entry["samples"] = int(self.samples)
+        if self.previous_frame:
+            entry["previous_frame"] = True
+        return entry
+
+
+@dataclass(frozen=True)
+class PassOutput:
+    """N3.1: one attachment's write mask and blend in a pass on a scene target (None: the pass's blend)."""
+
+    write: bool = True
+    blend: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.blend is not None and self.blend not in PASS_BLENDS:
+            raise ValueError(f"unknown blend {self.blend!r} (the blends are {', '.join(PASS_BLENDS)})")
+
+    def declaration(self) -> dict:
+        entry: dict[str, Any] = {"write": bool(self.write)}
+        if self.blend is not None:
+            entry["blend"] = self.blend
+        return entry
+
+
+@dataclass(frozen=True)
 class ModePass:
-    """One full-card pass: its name, its fragment pack (bytes of a ``.qsb``), its blend and its samplers."""
+    """One full-card pass: its name, its fragment pack (bytes of a ``.qsb``), its blend and its samplers. N3.1: the
+    scene target it draws into (None: the card's surface), its attachments' masks and blends (empty: every attachment
+    with ``blend``), and its depth test and write (on a target with depth)."""
 
     name: str
     pack: bytes
     blend: str = "alpha"
     samplers: tuple[PassSampler, ...] = ()
+    target: str | None = None
+    outputs: tuple[PassOutput, ...] = ()
+    depth_test: str | None = None
+    depth_write: bool = False
 
     def __post_init__(self) -> None:
         if self.blend not in PASS_BLENDS:
             raise ValueError(f"unknown blend {self.blend!r} (the blends are {', '.join(PASS_BLENDS)})")
+        if self.depth_test is not None and self.depth_test not in DEPTH_TESTS:
+            raise ValueError(f"unknown depth test {self.depth_test!r} (the tests are {', '.join(DEPTH_TESTS)})")
+
+    def declaration(self) -> dict:
+        entry: dict[str, Any] = {"name": self.name, "blend": self.blend}
+        if self.samplers:
+            entry["samplers"] = [s.declaration() for s in self.samplers]
+        if self.target is not None:
+            entry["target"] = self.target
+        if self.outputs:
+            entry["attachments"] = [o.declaration() for o in self.outputs]
+        if self.depth_test is not None:
+            entry["depth"] = {"test": self.depth_test, "write": bool(self.depth_write)}
+        return entry
 
 
-def program_json(passes: Sequence[ModePass]) -> tuple[str, list[bytes]]:
+@dataclass(frozen=True)
+class CapturePass:
+    """N3.1 (D14 point 5): a capture step of ``target``: what its passes drew so far, copied (colour, nearest window
+    depth) into ``"<target>.capture_colour"`` and ``"<target>.capture_depth"``; the next pass on the target goes on
+    drawing where it was. No fragment of its own."""
+
+    name: str
+    target: str
+
+    def declaration(self) -> dict:
+        return {"name": self.name, "capture": self.target}
+
+
+def program_json(passes: Sequence[ModePass | CapturePass],
+                 targets: Sequence[ModeTarget] = ()) -> tuple[str, list[bytes]]:
     """The program's declaration and its packs, in pass order (a pass with samplers declares them; one without has no
-    ``samplers`` key, N2.9's declaration as it was)."""
-    declared = []
-    for p in passes:
-        entry: dict[str, Any] = {"name": p.name, "blend": p.blend}
-        if p.samplers:
-            entry["samplers"] = [s.declaration() for s in p.samplers]
-        declared.append(entry)
-    return json.dumps({"passes": declared}), [bytes(p.pack) for p in passes]
+    ``samplers`` key, N2.9's declaration as it was; N3.1: ``targets`` when there are any, a capture's pack empty)."""
+    declared = [p.declaration() for p in passes]
+    program: dict[str, Any] = {"passes": declared}
+    if targets:
+        program["targets"] = [t.declaration() for t in targets]
+    packs = [b"" if isinstance(p, CapturePass) else bytes(p.pack) for p in passes]
+    return json.dumps(program), packs
 
 
 def _settings(values: Mapping[str, Any]) -> str:
@@ -200,10 +334,12 @@ class NativeMode:
         """The stream retires (D1); the owner's lost-texture listener goes with it (audit N38 L4)."""
         self._module.composite_mode_retire(self._handle())
 
-    def program(self, passes: Sequence[ModePass], settings: Mapping[str, Any] | None = None) -> None:
-        """The passes; ``settings`` with them (a shader that adds a member comes with its value), else the ones given
-        before. Refused (ValueError), the drawn program kept, when they do not fit."""
-        declared, packs = program_json(passes)
+    def program(self, passes: Sequence[ModePass | CapturePass], settings: Mapping[str, Any] | None = None, *,
+                targets: Sequence[ModeTarget] = ()) -> None:
+        """The passes (N3.1: and the scene targets they draw into); ``settings`` with them (a shader that adds a member
+        comes with its value), else the ones given before. Refused (ValueError), the drawn program kept, when they do
+        not fit."""
+        declared, packs = program_json(passes, targets)
         if settings is None:
             self._module.composite_mode_program(self._handle(), declared, packs)
         else:
@@ -242,6 +378,23 @@ class NativeMode:
         """The texture goes; the render thread releases it at the next record (KeyError: no such texture)."""
         self._module.composite_mode_texture_remove(self._handle(), str(name))
 
+    def target_size(self, name: str, size: tuple[int, int]) -> None:
+        """N3.1: an explicit-size scene target's size (Bubble's ambient target follows its card) with no new program;
+        the core's allocation follows at the next record, until the next :meth:`program`, whose declarations size its
+        targets again (``state()["target_sizes"]`` holds the sizes set since the program). ValueError for a target the
+        program does not declare with an explicit size."""
+        self._module.composite_mode_target_size(self._handle(), str(name), (int(size[0]), int(size[1])))
+
+    def read_targets(self) -> None:
+        """N3.1, harness: a readback of every scene target's readable texture at the next record."""
+        self._module.composite_mode_target_read(self._handle())
+
+    def target_pixels(self) -> list[dict] | None:
+        """N3.1, harness: the last readback once complete (None before), each ``{"name", "size", "content", "format",
+        "samples", "data"}``, rows top first on every backend; the content sits at rows ``[H-h, H)``, columns
+        ``[0, w)``."""
+        return self._module.composite_mode_target_pixels(self._handle())
+
     def update(self) -> None:
         self._module.composite_update(self._handle())
 
@@ -267,6 +420,7 @@ def mode_blocks(module: ModuleType, schema: Any, passes: Sequence[ModePass], set
     return [bytes(block) for block in blocks], json.loads(facts)
 
 
-__all__ = ["MODE_CARD_KEYS", "MODE_CORE_MEMBERS", "ModePass", "NativeMode", "PASS_BLENDS", "PassSampler",
-           "SAMPLER_FILTERS", "SAMPLER_MIPS", "SAMPLER_WRAPS", "mode_blocks", "mode_card", "program_json",
-           "schema_table_entry"]
+__all__ = ["CapturePass", "DEPTH_TESTS", "MAX_TARGETS", "MAX_TARGET_COLOUR", "MAX_TARGET_SAMPLES", "MODE_CARD_KEYS",
+           "MODE_CORE_MEMBERS", "ModePass", "ModeTarget", "NativeMode", "PASS_BLENDS", "PassOutput", "PassSampler",
+           "SAMPLER_FILTERS", "SAMPLER_MIPS", "SAMPLER_WRAPS", "TARGET_FORMATS", "TARGET_RESOLVES", "TargetAttachment", "mode_blocks",
+           "mode_card", "program_json", "schema_table_entry"]

@@ -63,6 +63,21 @@ QString primeForLoad(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *texture);
 // Rule C for several textures in one external block (N5.7b: every target of a backdrop build): the ones not in
 // COLOR_ATTACHMENT_OPTIMAL, each over every level. Returns how many were primed (0 off Vulkan).
 int primeForLoad(QRhi *rhi, QRhiCommandBuffer *cb, const QList<QRhiTexture *> &textures);
+// The same for `count` textures given as an array (the scene targets' per-run primes: nothing allocated per record).
+int primeForLoad(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *const *textures, int count);
+
+// N3.1 audit 2 (H1): a multisampled scene target's resolve textures (QRhi's average), before every run on Vulkan. QRhi
+// gives a resolve attachment initialLayout UNDEFINED and no VK_SUBPASS_EXTERNAL dependency (Qt 6.12.0's defect B,
+// native/core/python/vk_validation.py), so the run's begin transitions it unordered against the previous frame's resolve
+// store whenever no read ordered the two in between. This records, every time, a barrier from every earlier write to
+// every later stage (ALL_COMMANDS: the render pass's layout transition included) and tells QRhi the layout. Returns how
+// many it recorded (0 off Vulkan).
+int primeResolvesForPass(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *const *textures, int count);
+
+// Rule C for a depth texture (N3.1, D14 point 5: depth is preserved and cleared by a draw): on Vulkan, when it is not in
+// DEPTH_STENCIL_ATTACHMENT_OPTIMAL (a capture or a later pass sampled it), records the transition with depth read and
+// write in its second scope and tells QRhi the layout; elsewhere nothing. True when it recorded one.
+bool primeDepthForLoad(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *depth);
 
 // The same for a texture outside any frame: an offscreen frame of its own, waited on (a target's creation edge before
 // any frame of the host exists, the hidden host's Quick target).

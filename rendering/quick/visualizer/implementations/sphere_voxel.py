@@ -20,6 +20,7 @@ from rendering.gl_programs.conventions import front_face_clockwise
 from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import (
     SCENE3D_FRAME_BLOCK_BINDING, SCENE3D_GLSL, SCENE3D_SPHERE_CAMERA_GLSL, Scene3DBlockLayout, scene3d_detail,
+    scene_samples,
 )
 from rendering.quick import gl_query
 from rendering.quick.scene3d.environment import BackdropEnvironment
@@ -119,7 +120,7 @@ def sphere_mirror(parameters) -> float:
 
 def sphere_samples(parameters) -> int:
     """The scene target's multisampling for the activation's 3D Detail tier (1: single-sampled)."""
-    return max(1, scene3d_detail(parameter(parameters, "scene3d_detail")).overlay_samples)
+    return scene_samples(scene3d_detail(parameter(parameters, "scene3d_detail")), at_least=1)
 
 
 _SPHERE_FRAME_BLOCK = Scene3DBlockLayout.of("SphereFrameBlock", (

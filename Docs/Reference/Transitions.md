@@ -749,6 +749,34 @@ Each foundation slice adds what it learned here.
 - A new GPU technique (depth, multiple targets, compute, a new resource kind) is a primitive, built and proved once
   in C++ on its own harness and then used by every mode as data, never a per-mode C++ renderer.
 
+**Native scene targets (N3.1, 15 Nov; D14)**
+- A bucketed target keeps the Python renderer's edges only if its content sits where Python's does in image terms: the
+  allocation's bottom rows (GL's bottom-left), so a linear read past the content's edge reads the same slack or clamp.
+  QRhi's viewport counts from the framebuffer's bottom-left, which on the core's OpenGL targets (F1's flip) is the
+  image's top: one function gives each backend's viewport, never a per-pass sum.
+- Compare a target by reading its textures back (the core's readback, rows top first; the Python texture flipped),
+  never through a composite that each renderer addresses differently. Positions from vUv over the pass's own content
+  draw the same in both renderers; translated GLSL still sits within one float16 ulp of the Python compile on a few
+  pixels, and depth through gl_FragDepth is exact.
+- A resolve attachment that nothing reads still races its own last store at the next pass's UNDEFINED transition
+  (SYNC-HAZARD-WRITE-AFTER-WRITE on Vulkan): make resolves only for what is read.
+- Multisampled depth through QRhi's depth resolve did not work in build round 1 on either backend (OpenGL: the resolved
+  D32F read 0; Vulkan: values strided or garbage), and QRhi discards the multisampled depth itself once a depth resolve is
+  set, so a scene split by a capture cannot keep testing against its multisampled depth. The lead's answer (D14 point
+  10): the core's own nearest resolve, a pass reading every sample; never set a depth resolve texture. A depth written
+  through `gl_FragDepth` is per fragment, so a scene drawn by fullscreen passes with `discard` has no partial coverage
+  at all: prove a per-sample rule with partial coverage made on purpose (`gl_SampleMask`).
+- A harness cost breakdown before a fix: the 4K four-sample time was mostly the capture split's QRhi depth resolve
+  (Vulkan 0.98 ms to about 0.5 ms once the core's nearest resolve replaced it), not the passes or a colour resolve;
+  measure the parts (`cost_parts`) before redesigning one. On the operator's machine the GPU is shared (a game ran at
+  40% through part of round 3): check `nvidia-smi` before a cost run and judge only figures from a quiet GPU taken
+  back to back; under load even p10s moved by 0.15 ms. On a quiet GPU a second full-screen draw at four samples cost
+  nothing measurable while the target's first write (a clearing draw after a load) cost most of the four-sample time.
+- A load-op clear is not free speed (D14 point 12, rejected): it lowered the single-sampled time more than the
+  four-sample one and slowed a capture split at 4x; and QRhi's Vulkan backend keeps a multisampled colour attachment
+  that has a resolve only when its target preserves contents, so a later run in the same record loads undefined
+  samples. Judge a clearing change by both counts' absolute times, never by 4x minus 1x alone.
+
 ## Operator-triggered appearance review (reference checklist)
 
 Automated image differences are not aesthetic acceptance. Previously implemented work is operator-accepted; use the following reference checks **only if** a newly observed regression or new transition tranche requires targeted appearance review:

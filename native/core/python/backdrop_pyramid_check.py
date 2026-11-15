@@ -76,6 +76,7 @@ CARD_NORMAL = "#80204060"           # the cards' Normal fill (premultiplied over
 COST_SIZES = ((2560, 1440), (3840, 2160))
 BUDGET_MS = {(2560, 1440): 0.3, (3840, 2160): 0.6}   # D7 point 3, per build, the development GPU
 TIMED_BUILDS = 60
+MAX_TIMED_BUILDS = 600           # the cost round's bound while OpenGL's GPU times are still arriving
 RULE_A_TOLERANCE = 1                # 8-bit levels: OpenGL native against the Python pyramid
 VULKAN_TOLERANCE = 1                # 8-bit levels: Vulkan native against OpenGL native (rule (b))
 CARD_OUTLIER_SHARE = 0.001          # Vulkan cards: share of card pixels more than 1 level from OpenGL's
@@ -632,24 +633,28 @@ def round_cost(core, engine, app, api: str) -> dict:
             scene.frames(2)
             host.set_gpu_timer(True)
             host.gpu_samples()
-            cpu = []
-            for _ in range(TIMED_BUILDS):
+            # Vulkan reads every build's timestamps; OpenGL's latched TIME_ELAPSED queries drop a result that is not
+            # ready before the timer's ring wraps (the N2.6 timer's rule, never a wait), so the builds go on past
+            # TIMED_BUILDS until enough GPU times have arrived, at most MAX_TIMED_BUILDS: counted, never slept.
+            required = TIMED_BUILDS - 2 if api == "vulkan" else TIMED_BUILDS // 3
+            cpu, samples, builds = [], [], 0
+            while builds < MAX_TIMED_BUILDS and (builds < TIMED_BUILDS or len(samples) < required):
                 scene.native.request_build()
                 scene.frames(1)
+                builds += 1
                 cpu.append(float((scene.native.state().get("pyramid") or {}).get("last_build_ms", 0.0)))
+                samples.extend(s.milliseconds for s in host.gpu_samples() if s.kind == 4)
             scene.frames(4)
-            samples = [s.milliseconds for s in host.gpu_samples() if s.kind == 4]
+            samples.extend(s.milliseconds for s in host.gpu_samples() if s.kind == 4)
             host.set_gpu_timer(False)
             gpu = _ms_stats(samples)
             name = f"{size[0]}x{size[1]}"
             results[name] = {"build_gpu": gpu, "build_render_thread_cpu": _ms_stats(cpu),
                              "budget_ms": BUDGET_MS[size]}
             checks[f"build_within_budget_{name}"] = bool(samples) and gpu["p90_ms"] <= BUDGET_MS[size]
-            # Vulkan reads every build's timestamps; OpenGL's latched TIME_ELAPSED queries drop a result that is not
-            # ready before the timer's ring wraps (the N2.6 timer's rule, never a wait), so enough builds are measured.
             results[name]["samples"] = len(samples)
-            checks[f"enough_builds_measured_{name}"] = len(samples) >= (TIMED_BUILDS - 2 if api == "vulkan"
-                                                                         else TIMED_BUILDS // 3)
+            results[name]["builds"] = builds
+            checks[f"enough_builds_measured_{name}"] = len(samples) >= required
         finally:
             scene.close(app)
             _close_host(app, host)
