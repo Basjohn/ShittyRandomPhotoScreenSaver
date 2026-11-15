@@ -53,6 +53,15 @@ def test_the_route_is_the_vulkan_backends_only(backend, wanted):
         assert native_route.attach_native_route(item, object(), backend) is None and attached == []
 
 
+def _not_drawn_natively() -> str:
+    """A registered mode the route does not draw (derived from both owners, never named here)."""
+    from core.settings import visualizer_mode_registry as modes
+    from rendering.quick.visualizer.native_route import NATIVE_MODE_IDS
+
+    return next(d.mode_id for d in modes.iter_all_visualizer_mode_descriptors()
+                if d.mode_id not in NATIVE_MODE_IDS)
+
+
 def test_a_mode_without_a_native_renderer_is_refused_before_anything_is_created():
     from rendering.quick.visualizer.native_route import NativeVisualizerRoute
 
@@ -62,7 +71,7 @@ def test_a_mode_without_a_native_renderer_is_refused_before_anything_is_created(
 
     route = NativeVisualizerRoute(_NoCore(), object())
     with pytest.raises(ValueError, match="never offered"):
-        route.bind(_identity("bubble"))
+        route.bind(_identity(_not_drawn_natively()))
 
 
 def _offered_on_vulkan() -> frozenset[str]:
@@ -117,7 +126,7 @@ def test_a_native_modes_update_is_the_routes_take_and_another_mode_draws_through
 
     # The mixed window: another mode's activation draws through the item's own node; the native stream retires.
     route.calls.clear()
-    item._identity = _identity("bubble")
+    item._identity = _identity(_not_drawn_natively())
     item.update()
     assert route.calls == [("unbind", None)] and qt_updates == [item] and has_contents()
 

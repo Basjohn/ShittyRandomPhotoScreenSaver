@@ -363,6 +363,7 @@ def bubble_without_samplers_text(text: str) -> str:
         if f"texture({sampler}," not in text:
             raise ValueError(f"bubble.frag does not read {sampler}")
         text = text.replace(f"texture({sampler},", "srpssNoTexture(")
+        text = text.replace(f"textureSize({sampler}, 0)", "ivec2(1)")       # where its content lies (N5.1)
     return _replaced(text, "void main()", "vec4 srpssNoTexture(vec2 uv) { return vec4(0.0 * uv.x); }\nvoid main()")
 
 
