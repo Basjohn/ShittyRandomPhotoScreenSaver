@@ -855,6 +855,10 @@ Port-readiness rules bind all new GPU code now (the backend decision). Expanded 
   and reuse of Studio Qt Quick bounce/hover transitions with reduced-motion policy. Theme editor follows later.
   M2 keeps SQLite with mandatory FTS5, indexed virtualised pages, bounded edits and measured 50k/250k-track
   concurrency/recovery; no custom database core. Plan 02 §3.3 and §8.2A govern.
+  **Pre-SMP admission (operator, 16 Nov):** NF (the native flip) is necessary but not sufficient: finish the
+  *admitted* native-core, compositor and planned N4/N6 primitive work before entering SMP foundations, including
+  the Context Menu backdrop-source defect in 1B.8 and any chosen N5.9 material solution. Do not make hypothetical
+  unadmitted future primitives an indefinite blocker.
 - [ ] New modes (Reactive Liquid / Melt Pool, Concrete Rain, Usu Moonscape; section 7, lab first) are built on
   the native core only, after it.
 - [ ] Very low priority, after the native core and its new primitives (operator, 14 Nov): Extruded Bubble's arctic
@@ -947,6 +951,11 @@ follow-ups with their evidence folders).
 - [ ] Mid-transition frames and a real display for M1, M2 and M2b: a D1 run (1B.14 harness), lead review.
 - [ ] M3. With the inner hairline gone, the border stays clearly distinct from the face on the three light
   themes over a busy bright wallpaper and over a dark one (3x edge zooms); no second line inside the card.
+- [ ] **Context Menu backdrop correctness (operator, 16 Nov; close before SMP):** its current `MaterialSurface` samples the shared wallpaper/dimming pyramid, even when right-clicked over another card or the fullscreen Visualizer. This distorts an image which is not actually behind the menu. The menu and its submenu must either sample the *real visible underlay* or render as straightforward theme-coloured translucent surfaces; never advertise a false glass result.
+  - [ ] **Investigate first, bounded to the existing material/native compositor:** assess native QRhi's retained layer textures and N5.9's proposed overlap-limited Visualizer glass (D7 point 7; ≤0.3 ms). That source alone omits ordinary cards. Check whether a colour-accurate, correctly ordered *local* composited-underlay texture for the menu's rectangle can be obtained without a new fullscreen capture, CPU/GPU readback, synchronous right-click frame fence, duplicate blur chain, Visualizer-frame work while no menu is shown, or compositor rearchitecture. Test both menu and submenu as they move and overlap other surfaces. No risky new capture owner just to simulate glass.
+  - [ ] **Decide by evidence, not the material label:** adopt true blurred/translucent glass only if its sampled colours and spatial details reflect the actually visible wallpaper/cards/Visualizer, its local cost is within N5.9's overlap budget where relevant, and opening, submenu reveal and frame p90 show no meaningful hitch or regression. **Otherwise choose Normal with theme-derived RGBA opacity/tint** (including existing ink-contrast, border, shadow, hover and opacity-adjust authority): a naturally transparent coloured menu with no special wallpaper sampling, fabricated distortion, capture or extra material pass. No new theme switch required.
+  - [ ] **Proof and ordering:** compare right-click over bright/dark wallpaper, opaque/translucent cards and active fullscreen Visualizer, including while a wallpaper transition runs; check submenus, clipping, colour/alpha, light/dark themes and mixed DPR on both native OpenGL and Vulkan where supported. Capture pixel evidence plus GPU cost, input-to-menu latency, frame p90 and dormancy, with the Visualizer uninterrupted. Place final material behaviour in `Docs/Architecture/Card_Surface_Materials.md`; use focused Context Menu regressions. This is pre-SMP surface work, shared across Standard/MC/SMP, and must not create an SMP-only renderer.
+
 - [ ] Each step: `.qsb` regenerated, the SURFACE block kept identical across its three shader files, one focused
   GPU before/after, lead pixel review on the operator's two wallpapers.
 
