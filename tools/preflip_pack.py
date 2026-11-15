@@ -7,16 +7,25 @@ the figures with the conditions they were taken under, and compares two stored b
 
 The matrix (``--list`` prints it and the time it needs, starting nothing):
 
-* every Visualizer mode of ``iter_visualizer_mode_descriptors()`` at its canonical default preset slot, and every
-  available transition of ``iter_transition_descriptors()`` (fixed type, a short image interval so it repeats);
-* two sizes: ``2160p`` = Display 1 at 3840 x 2160 and ``1440p`` = Display 0 at 2560 x 1440 (the saver's windows are
-  invisible and on that one display; Display 0 is the primary, so ``--allow-primary`` is required for it);
+* every Visualizer mode of ``iter_visualizer_mode_descriptors()`` at its canonical default preset slot (one process
+  per mode), and the five transitions of ``SESSION_TRANSITIONS`` (a named set, not a registry sweep: the four heaviest
+  by measured cost and Crossfade as the light control; per-transition parity is proved at each port, so this is a load
+  comparison). The transitions run as ONE saver session per size and state (``--per-row`` runs one process per
+  transition instead, and a single pending transition row always does): the saver cycles the five in a fixed order, one
+  per image change, and each one's window is cut from the frame trace by its run's first and last background-render
+  records (``tools/live_check_transition_session.py``); a transition whose window has no end record is stored failed.
+  The profile copy's transition durations are pinned to the canonical ones. A transition window has no swap records
+  (the saver has no Visualizer), so its frame pacing, stored as the swap gap, is the gap between Quick's rendered frames;
+* one size: ``2160p`` = Display 1 at 3840 x 2160, invisible saver (the windows have an empty region and never show a
+  pixel). Nothing runs on Display 0, which is the primary: a primary display is refused outright. The saver's window
+  always takes its display's own resolution, so there is no 2560 x 1440 view of Display 1 without changing the product;
 * the Usu wallpaper folder and the ``anything_mixed2`` recording, ``--noupdates``;
 * two states: ``idle`` (default) and ``loaded`` (``--load game60``: the existing ``tools/gpu_load_generator.py``;
   explicit only, lead only, after the operator's yes, never a default).
 
     python tools/preflip_pack.py --list
-    python tools/preflip_pack.py --size 2160p --rows "visualizer/*"                 # one window, one slice
+    python tools/preflip_pack.py --rows "visualizer/*"                              # one window, one slice
+    python tools/preflip_pack.py --rows "transition/crossfade/*"                    # one row: its own process
     python tools/preflip_pack.py --name before_flip                                 # resumable: reruns skip ok rows
     python tools/preflip_pack.py --name after_flip --compare tools/baselines/preflip/before_flip.json
     python tools/preflip_pack.py --compare-only OLD.json NEW.json
@@ -53,15 +62,22 @@ WALLPAPER = Path("D:/Temp/Scratch/SRPSS/wallpaper_usu")
 CLIP = ROOT / "logs" / "visualizer_recordings" / "anything_mixed2.jsonl"
 APPLICATION = "Screensaver_MC"
 
-VIZ_SECONDS = 60.0                  # the live check's ``--seconds`` for a Visualizer row
-TRANSITION_SECONDS = 75.0           # a transition row: several repeats of one transition
-TRANSITION_INTERVAL_S = 8           # image interval of a transition row (the card-materials session's)
+VIZ_SECONDS = 45.0                  # the live check's ``--seconds`` for a Visualizer row (the 15 Nov pass's)
+TRANSITION_SECONDS = 75.0           # a per-row transition run: several repeats of one transition
+TRANSITION_INTERVAL_S = 8           # fallback image interval when a transition's duration is unknown
 ROW_OVERHEAD_S = 30.0               # profile copy, startup, teardown (the live check's own figure)
 LOAD_CALIBRATION_S = 25.0           # game60's calibration before the saver starts (an estimate)
 CONTROL_SECONDS = 60.0              # the offscreen control run, estimated
 GAIN_BAND_PCT = 5.0                 # a row's figure counts as moved only beyond this
 SCHEMA = 1
+RESOURCE_GROWTH_EXIT = 4        # the live check's exit when --resource-readings finds growth
 LOADS = ("game60",)
+
+# The transition set, chosen once (operator, 15 Nov: per-transition parity and regressions are proved at each port, so
+# this is only a load comparison). By measured cost in tools/baselines/overhead/2026-11-14_756c9237.json: the four
+# heaviest (Exploding Tiles 0.50 CPU + 0.09 GPU ms, Volumetric Dissolve, Disintegrate, Jigsaw, also the heaviest geometry
+# prepare) and one light control, Crossfade, already pure data on the native core. The order is the session's order.
+SESSION_TRANSITIONS = ("exploding_tiles", "volumetric_dissolve", "disintegrate", "jigsaw", "crossfade")
 
 
 @dataclass(frozen=True)
@@ -72,7 +88,7 @@ class Size:
     height: int
 
 
-SIZES = {"2160p": Size("2160p", 1, 3840, 2160), "1440p": Size("1440p", 0, 2560, 1440)}
+SIZES = {"2160p": Size("2160p", 1, 3840, 2160)}
 
 
 @dataclass(frozen=True)
@@ -112,11 +128,33 @@ def registry_visualizer_modes() -> list[str]:
     return [descriptor.mode_id for descriptor in iter_visualizer_mode_descriptors()]
 
 
-def registry_transitions() -> list[tuple[str, str]]:
-    """``(stable_id, setting_name)`` of every available transition, in registry order."""
+def registry_transitions(names=SESSION_TRANSITIONS) -> list[tuple[str, str]]:
+    """``(stable_id, setting_name)`` of the named transitions in the given order, read from the registry. A name the
+    registry no longer has or no longer offers is an error: the set is chosen, not swept."""
     from rendering.transition_registry import iter_transition_descriptors
 
-    return [(item.stable_id, item.setting_name) for item in iter_transition_descriptors() if item.available]
+    available = {item.stable_id: item.setting_name for item in iter_transition_descriptors() if item.available}
+    missing = [name for name in names if name not in available]
+    if missing:
+        raise ValueError(f"SESSION_TRANSITIONS names {missing}, which the transition registry does not offer")
+    return [(name, available[name]) for name in names]
+
+
+def canonical_transition_durations() -> dict[str, float]:
+    """The canonical per-transition durations in milliseconds, by setting name."""
+    from core.settings.default_contract import get_canonical_default
+
+    stored = get_canonical_default("transitions.durations", APPLICATION, missing=None)
+    return {str(k): float(v) for k, v in (stored or {}).items() if isinstance(v, (int, float))}
+
+
+def session_interval(labels, durations=None) -> int:
+    """Image interval of a session over ``labels``: the longest of their durations completes, then a short settle."""
+    from tools.live_check_transition_session import session_interval_s
+
+    known = canonical_transition_durations() if durations is None else durations
+    values = [known[label] for label in labels if label in known]
+    return session_interval_s(values) if values else TRANSITION_INTERVAL_S
 
 
 def row_seconds(kind: str, *, viz_seconds: float = VIZ_SECONDS, transition_seconds: float = TRANSITION_SECONDS) -> float:
@@ -162,9 +200,42 @@ def pending_rows(rows: list[Row], baseline: dict, *, redo: bool = False) -> list
     return [row for row in rows if redo or stored.get(row.key, {}).get("status") != "ok"]
 
 
-def estimate_seconds(rows: list[Row], *, loaded: bool = False) -> float:
-    """Wall time the rows take: each row's run plus the live check's startup and teardown (and game60's calibration)."""
-    return sum(row.seconds + ROW_OVERHEAD_S + (LOAD_CALIBRATION_S if loaded else 0.0) for row in rows)
+def plan_units(rows: list[Row], *, per_row: bool = False) -> list[tuple[str, object]]:
+    """The saver processes the rows need: ``("row", Row)`` for one process per row, ``("session", [Row, ...])`` for the
+    transition rows of one size and state run as one session (in the order the rows have). A lone transition row is
+    never a session, and ``per_row`` makes every row its own process (single-row reruns)."""
+    if per_row:
+        return [("row", row) for row in rows]
+    groups: dict[tuple[str, str], list[Row]] = {}
+    for row in rows:
+        if row.kind == "transition":
+            groups.setdefault((row.size, row.state), []).append(row)
+    units, placed = [], set()
+    for row in rows:
+        group = groups.get((row.size, row.state)) if row.kind == "transition" else None
+        if group is None or len(group) < 2:
+            units.append(("row", row))
+        elif (row.size, row.state) not in placed:
+            placed.add((row.size, row.state))
+            units.append(("session", group))
+    return units
+
+
+def unit_seconds(unit, *, durations=None) -> float:
+    """The unit's own run time (startup and teardown excluded)."""
+    from tools.live_check_transition_session import session_seconds
+
+    kind, payload = unit
+    if kind == "row":
+        return payload.seconds
+    return session_seconds(len(payload), session_interval([r.label for r in payload], durations))
+
+
+def estimate_seconds(rows: list[Row], *, loaded: bool = False, per_row: bool = False, durations=None) -> float:
+    """Wall time the rows take: each saver process's run plus the live check's startup and teardown (and game60's
+    calibration)."""
+    return sum(unit_seconds(unit, durations=durations) + ROW_OVERHEAD_S + (LOAD_CALIBRATION_S if loaded else 0.0)
+               for unit in plan_units(rows, per_row=per_row))
 
 
 def default_preset_slot(mode: str) -> int:
@@ -177,6 +248,14 @@ def default_preset_slot(mode: str) -> int:
 
 # -- one row: the live check's command line ---------------------------------------------------------------------------
 
+def pinned_durations(labels) -> list[tuple[str, object]]:
+    """The canonical duration of each transition, written into the profile copy: the copy starts from the operator's own
+    profile, whose durations differ (a 15 Nov check saw Crossfade at 12 s and Exploding Tiles at 7.3 s against the
+    canonical 8 s), and a before and an after run must time the same transition length."""
+    known = canonical_transition_durations()
+    return [(f"transitions.durations.{label}", int(known[label])) for label in labels if label in known]
+
+
 def row_settings(row: Row) -> list[tuple[str, object]]:
     """Persisted settings written into the row's profile copy (through ``SettingsManager``, read back)."""
     from core.settings.default_contract import IMAGE_INTERVAL_MAX_SECONDS
@@ -186,10 +265,38 @@ def row_settings(row: Row) -> list[tuple[str, object]]:
         # No transition inside the window: the row measures the Visualizer, not an image change.
         settings.append(("timing.interval", IMAGE_INTERVAL_MAX_SECONDS))
     else:
-        settings += [("widgets.spotify_visualizer.enabled", False), ("timing.interval", TRANSITION_INTERVAL_S),
+        settings += [("widgets.spotify_visualizer.enabled", False), ("timing.interval", session_interval([row.label])),
                      ("transitions.random_always", False), ("transitions.type", row.label),
-                     (f"transitions.activation.{row.label}", True)]
+                     (f"transitions.activation.{row.label}", True), *pinned_durations([row.label])]
     return settings
+
+
+def session_settings(rows: list[Row], interval_s: int) -> list[tuple[str, object]]:
+    """Persisted settings of a transition session: the first transition is the opening type, every one is activated, and
+    the image interval lets the longest complete and settle (the driver writes ``transitions.type`` before each change)."""
+    settings: list[tuple[str, object]] = [
+        ("sources.mode", "folders"), ("sources.folders", [str(WALLPAPER)]),
+        ("widgets.spotify_visualizer.enabled", False), ("timing.interval", int(interval_s)),
+        ("transitions.random_always", False), ("transitions.type", rows[0].label)]
+    settings += [(f"transitions.activation.{row.label}", True) for row in rows]
+    return settings + pinned_durations([row.label for row in rows])
+
+
+def session_command(rows: list[Row], out: Path, *, interval_s: int, clip: Path = CLIP,
+                    python: str | None = None) -> list[str]:
+    """The live check's command line for one transition session of ``rows`` (one process, one size, invisible)."""
+    from tools.live_check_transition_session import session_seconds
+
+    size = SIZES[rows[0].size]
+    command = [python or sys.executable, str(ROOT / "tools" / "visualizer_live_check.py"), "--mode", "none",
+               "--seconds", f"{session_seconds(len(rows), interval_s):g}", "--out", str(out), "--clip", str(clip),
+               "--display", str(size.display), "--no-updates", "--process-samples",
+               "--transition-session", ",".join(row.label for row in rows)]
+    if rows[0].state == "loaded":
+        command += ["--load", "game60"]
+    for key, value in session_settings(rows, interval_s):
+        command.append(f"--setting={key}={json.dumps(value)}")
+    return command
 
 
 def row_command(row: Row, out: Path, *, clip: Path = CLIP, preset_slot=None, python: str | None = None) -> list[str]:
@@ -200,7 +307,8 @@ def row_command(row: Row, out: Path, *, clip: Path = CLIP, preset_slot=None, pyt
                "--seconds", f"{row.seconds:g}", "--out", str(out), "--clip", str(clip), "--display", str(size.display),
                "--no-updates", "--process-samples"]
     if row.kind == "visualizer":
-        command += ["--preset", str((preset_slot or default_preset_slot)(row.ident))]
+        # --resource-readings as the 15 Nov pass ran: the same process also reads its own handles and memory growth.
+        command += ["--preset", str((preset_slot or default_preset_slot)(row.ident)), "--resource-readings"]
     if row.state == "loaded":
         command += ["--load", "game60"]
     for key, value in row_settings(row):
@@ -208,18 +316,18 @@ def row_command(row: Row, out: Path, *, clip: Path = CLIP, preset_slot=None, pyt
     return command
 
 
-def display_problem(size: Size, displays: list[dict], *, allow_primary: bool) -> str | None:
+def display_problem(size: Size, displays: list[dict]) -> str | None:
     """Why a row cannot run on ``size``'s display now (None when it can): the display is missing, is not that size, or
-    is the primary without ``--allow-primary``. Displays are dicts with ``index``, ``width``, ``height`` (device pixels)
-    and ``primary``."""
+    is the primary (the pack never presents on it). Displays are dicts with ``index``, ``width``, ``height`` (device
+    pixels) and ``primary``."""
     present = next((d for d in displays if int(d["index"]) == size.display), None)
     if present is None:
         return f"display {size.display} is not present (present: {sorted(int(d['index']) for d in displays)})"
     if abs(int(present["width"]) - size.width) > 2 or abs(int(present["height"]) - size.height) > 2:
         return (f"display {size.display} is {present['width']} x {present['height']}, the {size.name} rows need "
                 f"{size.width} x {size.height}")
-    if present.get("primary") and not allow_primary:
-        return f"display {size.display} is the primary display; pass --allow-primary (lead only)"
+    if present.get("primary"):
+        return f"display {size.display} is the primary display; the pack never runs there"
     return None
 
 
@@ -387,7 +495,8 @@ def new_baseline(name: str, *, commit: str, load: str | None, backend: str | Non
     return {"schema": SCHEMA, "name": name, "commit": commit, "created": stamp, "updated": stamp, "backend": backend,
             "clip": CLIP.name, "wallpaper": str(WALLPAPER), "load": load, "controls": {}, "rows": {},
             "settings": {"viz_seconds": VIZ_SECONDS, "transition_seconds": TRANSITION_SECONDS,
-                         "transition_interval_s": TRANSITION_INTERVAL_S}}
+                         "transition_interval_s": TRANSITION_INTERVAL_S,
+                         "session_transitions": list(SESSION_TRANSITIONS)}}
 
 
 def load_baseline(path: Path) -> dict:
@@ -415,8 +524,18 @@ def commit_id() -> str:
 
 def run_live_check_row(row: Row, out: Path, *, timeout_s: float, keep_logs: bool) -> tuple[int, dict | None]:
     """Run one row through the live check; returns (exit code, its ``summary.json`` or None)."""
+    return _run_live_check(row_command(row, out), out, timeout_s=timeout_s, keep_logs=keep_logs)
+
+
+def run_live_check_session(rows: list[Row], out: Path, *, timeout_s: float,
+                           keep_logs: bool) -> tuple[int, dict | None]:
+    """Run one transition session through the live check; returns (exit code, its ``summary.json`` or None)."""
+    return _run_live_check(session_command(rows, out, interval_s=session_interval([r.label for r in rows])), out,
+                           timeout_s=timeout_s, keep_logs=keep_logs)
+
+
+def _run_live_check(command: list[str], out: Path, *, timeout_s: float, keep_logs: bool) -> tuple[int, dict | None]:
     out.mkdir(parents=True, exist_ok=True)
-    command = row_command(row, out)
     with (out / "pack_row.txt").open("w", encoding="utf-8") as log:
         log.write(" ".join(command) + "\n")
         log.flush()
@@ -433,35 +552,97 @@ def run_live_check_row(row: Row, out: Path, *, timeout_s: float, keep_logs: bool
     return code, summary
 
 
-def measure_rows(rows: list[Row], baseline: dict, path: Path, *, measure, conditions_fn, displays_fn, allow_primary: bool,
-                 out_dir_fn, save=save_baseline, redo: bool = False, log=print, clock=time.time) -> dict:
-    """Measure ``rows`` one after another, storing each result in ``baseline`` and on disk as it lands. Returns
-    ``{"ok": [...], "failed": [...], "skipped": {key: reason}}``. ``measure(row, out) -> (exit code, summary or None)``."""
-    outcome = {"ok": [], "failed": [], "skipped": {}}
-    for row in pending_rows(rows, baseline, redo=redo):
-        problem = display_problem(SIZES[row.size], displays_fn(), allow_primary=allow_primary)
-        if problem:
-            outcome["skipped"][row.key] = problem
-            log(f"  skip   {row.key}: {problem}")
-            continue
-        before = conditions_fn()
-        out = out_dir_fn(row)
-        began = clock()
-        code, summary = measure(row, out)
+def session_figures(window: dict) -> dict:
+    """A session row's stored figures from its transition window (``live_check_transition_session``): the same names a
+    per-row run stores. Quick's render phase is the render time; the first-2-seconds figures belong to a process start
+    and are not stored for a window. ``late_frames``, ``hitches`` and ``frames`` are the window's own counts."""
+    process = window.get("process") or {}
+    render, swap = window.get("quick_render_ms"), window.get("swap_gap_ms")
+    return {
+        "fps": window.get("fps"),
+        "render_median_ms": _stat(render, "median"), "render_p90_ms": _stat(render, "p90"),
+        "render_source": "quick_render_ms" if render else None,
+        "swap_gap_median_ms": _stat(swap, "median"), "swap_gap_p90_ms": _stat(swap, "p90"),
+        "frame_source": window.get("frame_source"),
+        "late_pct": window.get("steady_late_pct"), "hitches_per_min": window.get("hitches_per_min"),
+        "cpu_core_pct": process.get("cpu_core_pct"), "gpu_pct": process.get("gpu_pct"),
+        "gpu_ms_per_frame": process.get("gpu_ms_per_frame"),
+        "rss_mb": process.get("rss_mb"), "private_mb": process.get("private_mb"),
+        "first2s_frames": None, "first2s_late_pct": None, "steady_seconds": window.get("window_s"),
+        "late_frames": window.get("late_frames"), "hitches": window.get("hitches"), "frames": window.get("frames"),
+        "run_id": window.get("run_id"),
+    }
+
+
+def session_records(rows: list[Row], code: int, summary: dict | None, out: Path, before: dict, seconds: float) -> list[dict]:
+    """One stored record per row of a session, keyed and shaped as a per-row run's (so ``--compare`` reads them alike).
+    A row is ok only when the session produced a complete window for it; everything else is stored failed with why."""
+    analysis = (summary or {}).get("transition_session") or {}
+    by_name = {item["name"]: item for item in analysis.get("rows", ())}
+    records = []
+    for row in rows:
+        window = by_name.get(row.label)
         record = {"key": row.key, "kind": row.kind, "id": row.ident, "label": row.label, "size": row.size,
                   "state": row.state, "seconds": row.seconds, "exit_code": code, "evidence": str(out),
-                  "measured_in_s": round(clock() - began, 1), "conditions_before": before}
-        if code == 0 and summary:
-            record.update(status="ok", figures=extract_figures(summary), conditions_during=summary.get("conditions"))
-            outcome["ok"].append(row.key)
+                  "measured_in_s": round(seconds, 1), "conditions_before": before, "session": True,
+                  "conditions_during": (summary or {}).get("conditions")}
+        if window and window.get("status") == "ok" and code in (0, 3):
+            record.update(status="ok", figures=session_figures(window))
         else:
-            record.update(status="failed", figures=None, conditions_during=(summary or {}).get("conditions"))
-            outcome["failed"].append(row.key)
-        baseline["rows"][row.key] = record
-        save(path, baseline)
-        fig = record["figures"] or {}
-        log(f"  {record['status']:6s} {row.key}  fps {fig.get('fps')}  render {fig.get('render_median_ms')}/"
-            f"{fig.get('render_p90_ms')} ms  late {fig.get('late_pct')} %  cpu {fig.get('cpu_core_pct')} %")
+            reason = (window or {}).get("reason") or (f"the session exited {code} and left no window for this transition"
+                                                       if window is None else "no complete window")
+            record.update(status="failed", figures=None, failure=reason)
+        records.append(record)
+    return records
+
+
+def _log_record(record: dict, log) -> None:
+    fig = record["figures"] or {}
+    log(f"  {record['status']:6s} {record['key']}  fps {fig.get('fps')}  render {fig.get('render_median_ms')}/"
+        f"{fig.get('render_p90_ms')} ms  late {fig.get('late_pct')} %  cpu {fig.get('cpu_core_pct')} %"
+        + (f"  ({record['failure']})" if record.get("failure") else ""))
+
+
+def measure_rows(rows: list[Row], baseline: dict, path: Path, *, measure, conditions_fn, displays_fn, out_dir_fn,
+                 save=save_baseline, redo: bool = False, log=print, clock=time.time, measure_session=None,
+                 per_row: bool = False) -> dict:
+    """Measure ``rows`` one saver process after another, storing each result in ``baseline`` and on disk as it lands.
+    Returns ``{"ok": [...], "failed": [...], "skipped": {key: reason}}``. ``measure(row, out) -> (exit code, summary or
+    None)``; with ``measure_session(rows, out) -> (exit code, summary or None)`` the pending transition rows of one size
+    and state run as one session (see ``plan_units``), unless ``per_row``."""
+    outcome = {"ok": [], "failed": [], "skipped": {}}
+    for kind, payload in plan_units(pending_rows(rows, baseline, redo=redo), per_row=per_row or measure_session is None):
+        group = payload if kind == "session" else [payload]
+        problem = display_problem(SIZES[group[0].size], displays_fn())
+        if problem:
+            for row in group:
+                outcome["skipped"][row.key] = problem
+                log(f"  skip   {row.key}: {problem}")
+            continue
+        before = conditions_fn()
+        began = clock()
+        if kind == "session":
+            out = out_dir_fn(group[0], session=True)
+            code, summary = measure_session(group, out)
+            records = session_records(group, code, summary, out, before, clock() - began)
+        else:
+            out = out_dir_fn(payload)
+            code, summary = measure(payload, out)
+            record = {"key": payload.key, "kind": payload.kind, "id": payload.ident, "label": payload.label,
+                      "size": payload.size, "state": payload.state, "seconds": payload.seconds, "exit_code": code,
+                      "evidence": str(out), "measured_in_s": round(clock() - began, 1), "conditions_before": before}
+            # Exit 4 is the resource readings' growth verdict: the figures are measured, the growth is a finding.
+            if code in (0, RESOURCE_GROWTH_EXIT) and summary:
+                record.update(status="ok", figures=extract_figures(summary), conditions_during=summary.get("conditions"),
+                              resource_growth=code == RESOURCE_GROWTH_EXIT)
+            else:
+                record.update(status="failed", figures=None, conditions_during=(summary or {}).get("conditions"))
+            records = [record]
+        for record in records:
+            outcome["ok" if record["status"] == "ok" else "failed"].append(record["key"])
+            baseline["rows"][record["key"]] = record
+            save(path, baseline)
+            _log_record(record, log)
     return outcome
 
 
@@ -620,15 +801,17 @@ def build_parser() -> argparse.ArgumentParser:
                                                                + ", ".join(SIZES))
     parser.add_argument("--rows", metavar="PATTERN[,PATTERN]",
                         help="only rows whose key (kind/id/size/state) matches a glob, e.g. 'visualizer/*' or "
-                             "'transition/ripple/*'")
+                             "'transition/crossfade/*'")
     parser.add_argument("--load", choices=LOADS, help="the loaded state: game60 (explicit only: lead only, after the "
                                                        "operator's yes, 10 minutes at most per run window)")
     parser.add_argument("--backend", help="a label stored with the baseline (e.g. python-vulkan, native-opengl)")
-    parser.add_argument("--allow-primary", action="store_true", help="let rows run on the primary display (Display 0: "
-                                                                     "lead only)")
+    parser.add_argument("--per-row", action="store_true",
+                        help="one saver process per transition row instead of one session per size and state "
+                             "(single-row reruns; a lone pending transition row is always per-row)")
     parser.add_argument("--redo", action="store_true", help="measure rows again even when the baseline holds them ok")
     parser.add_argument("--viz-seconds", type=float, default=VIZ_SECONDS)
-    parser.add_argument("--transition-seconds", type=float, default=TRANSITION_SECONDS)
+    parser.add_argument("--transition-seconds", type=float, default=TRANSITION_SECONDS,
+                        help="run time of a per-row transition process (a session sizes itself)")
     parser.add_argument("--no-control", action="store_true", help="skip the offscreen Crossfade session control")
     parser.add_argument("--keep-logs", action="store_true", help="keep each row's logs and frame trace")
     parser.add_argument("--list", action="store_true", help="print the rows and the time they need; start nothing")
@@ -659,18 +842,23 @@ def plan_rows(args, *, modes=None, transitions=None, old: dict | None = None) ->
     return rows, unmatched
 
 
-def print_plan(rows: list[Row], *, loaded: bool, log=print) -> None:
+def print_plan(rows: list[Row], *, loaded: bool, per_row: bool = False, log=print) -> None:
     by_size: dict[str, list[Row]] = {}
     for row in rows:
         by_size.setdefault(row.size, []).append(row)
     for size, group in by_size.items():
-        seconds = estimate_seconds(group, loaded=loaded) + CONTROL_SECONDS
-        log(f"{size} ({SIZES[size].width}x{SIZES[size].height} on Display {SIZES[size].display}): {len(group)} rows "
-            f"({sum(r.kind == 'visualizer' for r in group)} Visualizer, {sum(r.kind == 'transition' for r in group)} "
-            f"transition), about {seconds / 60:.0f} min including the control")
-    for row in rows:
-        log(f"  {row.key}  {row.seconds:g} s")
-    log(f"total about {(estimate_seconds(rows, loaded=loaded) + CONTROL_SECONDS * len(by_size)) / 60:.0f} min")
+        seconds = estimate_seconds(group, loaded=loaded, per_row=per_row) + CONTROL_SECONDS
+        units = plan_units(group, per_row=per_row)
+        log(f"{size} ({SIZES[size].width}x{SIZES[size].height} on Display {SIZES[size].display}): {len(group)} rows in "
+            f"{len(units)} saver processes ({sum(r.kind == 'visualizer' for r in group)} Visualizer, "
+            f"{sum(r.kind == 'transition' for r in group)} transition), about {seconds / 60:.0f} min including the control")
+    for kind, payload in plan_units(rows, per_row=per_row):
+        if kind == "session":
+            log(f"  session {payload[0].size}/{payload[0].state}: " + ", ".join(r.label for r in payload)
+                + f"  every {session_interval([r.label for r in payload])} s, {unit_seconds((kind, payload)):g} s")
+        else:
+            log(f"  {payload.key}  {payload.seconds:g} s")
+    log(f"total about {(estimate_seconds(rows, loaded=loaded, per_row=per_row) + CONTROL_SECONDS * len(by_size)) / 60:.0f} min")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -685,7 +873,7 @@ def main(argv: list[str] | None = None) -> int:
     for pattern in unmatched:
         print(f"WARNING: --rows pattern {pattern!r} matched no row")
     if args.list:
-        print_plan(rows, loaded=bool(args.load))
+        print_plan(rows, loaded=bool(args.load), per_row=args.per_row)
         return 0
     if not rows:
         print("no rows to run")
@@ -705,7 +893,7 @@ def main(argv: list[str] | None = None) -> int:
     required = {size: SIZES[size] for size in sorted({row.size for row in rows})}
     todo = pending_rows(rows, baseline, redo=args.redo)
     print(f"{len(rows)} rows, {len(rows) - len(todo)} already stored ok; about "
-          f"{estimate_seconds(todo, loaded=bool(args.load)) / 60:.0f} min to run -> {path.relative_to(ROOT)}")
+          f"{estimate_seconds(todo, loaded=bool(args.load), per_row=args.per_row) / 60:.0f} min to run -> {path.relative_to(ROOT)}")
     if not args.no_control:
         for size in required:
             if size not in baseline["controls"]:
@@ -722,10 +910,13 @@ def main(argv: list[str] | None = None) -> int:
         conditions_fn=lambda: collect_conditions(required=required, displays_fn=system_displays,
                                                  processes_fn=system_cpu_processes,
                                                  gpu_processes_fn=system_gpu_processes, nvidia_fn=system_nvidia_state),
-        displays_fn=system_displays, allow_primary=args.allow_primary,
-        out_dir_fn=lambda row: artifact_paths.evidence_dir("performance", "preflip_pack",
-                                                           artifact_paths.slug(f"{name}_{row.key}")),
-        redo=args.redo)
+        displays_fn=system_displays,
+        out_dir_fn=lambda row, session=False: artifact_paths.evidence_dir(
+            "performance", "preflip_pack",
+            artifact_paths.slug(f"{name}_{'session/' + row.size + '/' + row.state if session else row.key}")),
+        redo=args.redo, per_row=args.per_row,
+        measure_session=lambda group, out: run_live_check_session(
+            group, out, timeout_s=unit_seconds(("session", group)) + 240.0, keep_logs=args.keep_logs))
     md_path = path.with_suffix(".md")
     md_path.write_text(baseline_markdown(baseline), encoding="utf-8")
     print(f"ok {len(outcome['ok'])}, failed {len(outcome['failed'])}, skipped {len(outcome['skipped'])}; "

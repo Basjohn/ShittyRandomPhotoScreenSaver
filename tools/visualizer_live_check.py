@@ -96,6 +96,8 @@ from tools.live_check_mode_switch import (  # noqa: E402  (stdlib-only at import
     analyse_mode_switches, parse_mode_switch, print_mode_switches,
 )
 from tools import live_check_resources  # noqa: E402  (stdlib-only at import)
+from tools import live_check_transition_session  # noqa: E402  (stdlib-only at import)
+from tools.live_check_transition_session import parse_session_names  # noqa: E402
 from tools import artifact_paths  # noqa: E402
 DEFAULT_CLIP = ROOT / "logs" / "visualizer_recordings" / "anything_mixed2.jsonl"    # mixed real music, ~2 min
 STEADY_AFTER_STARTUP_NS = 2_000_000_000
@@ -653,7 +655,8 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
             display_off: list[tuple[float, float]] | None = None,
             settings_roundtrip: list[float] | None = None, roundtrip_memory: tuple[str, ...] = (),
             app_args: tuple[str, ...] = (), mode_switch: list[float] | None = None, display: int | None = None,
-            settings: tuple[tuple[str, object], ...] = (), no_updates: bool = False) -> None:
+            settings: tuple[tuple[str, object], ...] = (), no_updates: bool = False,
+            transition_session: list[str] | None = None) -> None:
     import contextlib
 
     began = time.monotonic()
@@ -715,6 +718,11 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
         switcher = ModeSwitchDriver(mode_switch, began=began, state_path=out / "mode_switch.json", memory_probe=probe)
         switcher.install()
         atexit.register(switcher.finish)
+    if transition_session:
+        # One transition per image change in a fixed order; each run is recorded with its id (the parent cuts windows).
+        session_driver = live_check_transition_session.TransitionSessionDriver(
+            transition_session, began=began, state_path=out / "transition_session.json")
+        session_driver.install()
     atexit.register(lambda: (out / "phases.json").write_text(json.dumps(phases._summary(), indent=1), encoding="utf-8"))
     import runpy
     with stack:
@@ -934,6 +942,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mode-switch", metavar="AT[,AT]", type=parse_mode_switch,
                         help="make the production mode-cycle gesture AT s after the runner starts (one at a time); "
                              "a switch that never completes fails the run")
+    parser.add_argument("--transition-session", metavar="NAME[,NAME]", type=parse_session_names,
+                        help="cycle these transitions (setting names) in this fixed order, one per image change, and "
+                             "report each one's window cut from the frame trace as summary['transition_session'] "
+                             "(tools/live_check_transition_session.py); a transition with no complete window fails the run")
     parser.add_argument("--app-arg", action="append", default=[], type=parse_app_arg, metavar="=TOKEN",
                         help="an experiment-flag token added to the saver's argv, e.g. --app-arg=--viz-in-process "
                              "(the in-process control; the engine worker is the default)")
@@ -984,6 +996,7 @@ def runner_command(args, out: Path, clip: Path | None) -> list[str]:
             + (["--roundtrip-memory", ",".join(args.roundtrip_memory)]
                if (args.settings_roundtrip or args.mode_switch) and args.roundtrip_memory else [])
             + (["--mode-switch", ",".join(f"{at:g}" for at in args.mode_switch)] if args.mode_switch else [])
+            + (["--transition-session", ",".join(args.transition_session)] if args.transition_session else [])
             + [f"--app-arg={token}" for token in args.app_arg])
 
 
@@ -1000,7 +1013,7 @@ def main(argv: list[str] | None = None) -> int:
         _runner(args.out, args.seconds, args.visible, clip, args.clip_start, args.mode,
                 parse_display_off(args.display_off) if args.display_off else None, args.settings_roundtrip,
                 args.roundtrip_memory if (args.settings_roundtrip or args.mode_switch) else (), tuple(args.app_arg),
-                args.mode_switch, args.display, tuple(args.setting), args.no_updates)
+                args.mode_switch, args.display, tuple(args.setting), args.no_updates, args.transition_session)
         return 0
     out = artifact_paths.checked_output(args.out) if args.out is not None else default_out(args)
     if clip is not None and not clip.exists():
@@ -1136,6 +1149,13 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
     if args.process_samples:
         summary["process"] = summarise_process_samples(power_samples, tuple(summary["steady_window_ns"]),
                                                        summary["frames_per_s"])
+    if args.transition_session:
+        state_path = out / "transition_session.json"
+        summary["transition_session"] = live_check_transition_session.analyse_session(
+            live_check_transition_session.read_trace_events(trace),
+            json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else None,
+            args.transition_session, samples=power_samples if args.process_samples else None,
+            process_summary=summarise_process_samples)
     summary["hud_age_ms"] = hud_ages(out / "logs" / "screensaver_perf.log", args.mode)
     usage = usage_summary(out / "logs" / "screensaver_usage.log")
     summary["usage"] = usage
@@ -1168,7 +1188,7 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
     (out / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     for key, value in summary.items():
         if key not in ("render_stages_ms", "process_tree", "actual_waveform_configuration", "display_power",
-                       "settings_roundtrip", "steady_window_ns"):
+                       "settings_roundtrip", "steady_window_ns", "transition_session"):
             print(f"{key:28s} {value}")
     for key, limit, message in _FLAGS:
         if key == "main_wall_share" and summary.get("tick_process") == "main":
@@ -1182,8 +1202,10 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
               f"first_swap_after_on_ms={pair['first_swap_after_on_ms']} resume_2s={pair['resume_2s']}")
         for name in ("on_before", "off", "on_after"):
             print(f"  {name:9s} {pair[name]}")
+    for failure in (summary.get("transition_session") or {}).get("failures", ()):
+        print(f"FAIL transition session: {failure}")
     print(f"written {out / 'summary.json'}")
-    return 0
+    return 3 if (summary.get("transition_session") or {}).get("failures") else 0
 
 
 if __name__ == "__main__":
