@@ -131,6 +131,11 @@ public:
     bool textureMode(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips, QString *error,
                      bool inFrame = false);
     bool removeTextureMode(const QByteArray &name, QString *error);
+    // N3.2 (D15 point 2): the item's meshes (mode_content.h): a mesh by name from its declaration and bytes, or its
+    // removal.
+    bool meshMode(const QByteArray &name, const QByteArray &declaration, const QByteArray &vertices,
+                  const QByteArray &instances, QString *error);
+    bool removeMeshMode(const QByteArray &name, QString *error);
     // N3.8: the owner's listener of the lost edge (null: none), called on the GUI thread (item_notifier.h).
     bool texturesLostListener(const std::shared_ptr<TexturesLostListener> &listener, QString *error);
     ModeSource *mode() const { return m_mode.get(); }

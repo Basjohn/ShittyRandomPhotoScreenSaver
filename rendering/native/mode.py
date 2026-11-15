@@ -38,6 +38,13 @@ attachment (:class:`PassOutput`: its write mask and blend) and may test and writ
 ``depth_write``); a :class:`CapturePass` copies what a target's passes drew so far (Python's ``SceneTarget.background()``);
 a sampler reads ``"<target>.<attachment>"``, ``"<target>.depth"``, ``"<target>.capture_colour"`` or
 ``"<target>.capture_depth"``. Allocation is the core's: 64 px buckets, grown at once, shrunk two buckets below.
+Meshes and buffers (N3.2, decision D15; ``native/core/src/mesh_buffers.h``): a pass may bring its own vertex stage
+(:class:`PassGeometry`: its vertex pack, topology, counts, its mesh and instance source, storage, cull and front face, an
+indirect or batched draw); an item holds meshes (:meth:`NativeMode.mesh`: interleaved f32 records with their
+:class:`RecordLayout`, uploaded once; the built-in ``quad`` is the item quad's four vertices, ``aPosition``); a program
+declares streams (:class:`ModeStream`: a record field each, read as per-instance attributes, storage or indirect
+commands); a blend may be a full declaration (:class:`BlendState`). Every block lives in one arena at aligned offsets
+(``rendering.native.streams.arena_layout`` mirrors the core's plan); ``firstInstance`` is always 0.
 """
 from __future__ import annotations
 
@@ -80,6 +87,7 @@ MODE_CORE_MEMBERS = {
     "u_target_px": (2, False),
     "uOriented": (2, True),
     "uQuarters": (1, True),
+    "u_srpss_batch": (1, False),   # N3.2 (D15 point 6): a batched pass's batch
 }
 #: The card's keys (``ModeCard::fromJson``).
 MODE_CARD_KEYS = ("quarters", "item_size", "oriented_size", "dpr", "content_fade", "border_width", "window_from_target",
@@ -206,21 +214,173 @@ class ModeTarget:
         return entry
 
 
+#: N3.2 (D15): a pass's topology (points are refused: instanced quads, D5.6 row 11), cull, stream kinds, blend operations
+#: and factors; the most batches a batched pass draws.
+TOPOLOGIES = ("triangles", "triangle_strip")
+CULL_MODES = ("none", "back", "front")
+STREAM_KINDS = ("instance", "storage", "indirect")
+BLEND_OPS = ("add", "subtract", "reverse_subtract", "min", "max")
+BLEND_FACTORS = ("zero", "one", "src_color", "one_minus_src_color", "dst_color", "one_minus_dst_color", "src_alpha",
+                 "one_minus_src_alpha", "dst_alpha", "one_minus_dst_alpha")
+MAX_BATCHES = 64
+#: The built-in mesh (the item quad's vertices as the Python host's VAO holds them; attribute ``aPosition``).
+BUILTIN_QUAD_MESH = "quad"
+
+
+@dataclass(frozen=True)
+class BlendState:
+    """N3.2: a full blend declaration, ``(op, src, dst)`` for the colour and the alpha (``BLEND_OPS``, ``BLEND_FACTORS``)."""
+
+    color: tuple[str, str, str]
+    alpha: tuple[str, str, str]
+
+    def __post_init__(self) -> None:
+        for op, src, dst in (self.color, self.alpha):
+            if op not in BLEND_OPS or src not in BLEND_FACTORS or dst not in BLEND_FACTORS:
+                raise ValueError(f"unknown blend ({op}, {src}, {dst})")
+
+    def declaration(self) -> dict:
+        return {"color": list(self.color), "alpha": list(self.alpha)}
+
+
+def _blend_declaration(blend: "str | BlendState") -> Any:
+    if isinstance(blend, BlendState):
+        return blend.declaration()
+    if blend not in PASS_BLENDS:
+        raise ValueError(f"unknown blend {blend!r} (the blends are {', '.join(PASS_BLENDS)}, or a BlendState)")
+    return blend
+
+
+@dataclass(frozen=True)
+class MeshAttribute:
+    """N3.2: one attribute of interleaved f32 records: its name (the vertex input it fills), floats and byte offset."""
+
+    name: str
+    components: int
+    offset: int
+
+    def declaration(self) -> dict:
+        return {"name": self.name, "components": int(self.components), "offset": int(self.offset)}
+
+
+@dataclass(frozen=True)
+class RecordLayout:
+    """N3.2: the interleaved f32 records of a mesh's vertices, its instance stream, or an instance stream."""
+
+    stride: int
+    attributes: tuple[MeshAttribute, ...]
+
+    def __post_init__(self) -> None:
+        if int(self.stride) <= 0 or int(self.stride) % 4 or not self.attributes:
+            raise ValueError("a layout has a positive stride (a multiple of 4) and attributes")
+        for a in self.attributes:
+            if not 1 <= int(a.components) <= 4 or int(a.offset) % 4 or int(a.offset) + 4 * int(a.components) > self.stride:
+                raise ValueError(f"attribute {a.name!r} does not fit its {self.stride}-byte record")
+
+    def declaration(self) -> dict:
+        return {"stride": int(self.stride), "attributes": [a.declaration() for a in self.attributes]}
+
+
+@dataclass(frozen=True)
+class ModeStream:
+    """N3.2 (D15 point 4): a record's array field bound by name as a stream: ``instance`` (f32 records of ``layout`` read
+    per instance), ``storage`` (read in a buffer block) or ``indirect`` (u32 commands of four: vertices, instances,
+    first vertex, 0)."""
+
+    name: str
+    field: str
+    kind: str = "storage"
+    layout: RecordLayout | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind not in STREAM_KINDS:
+            raise ValueError(f"unknown stream kind {self.kind!r} (the kinds are {', '.join(STREAM_KINDS)})")
+        if (self.kind == "instance") != (self.layout is not None):
+            raise ValueError("an instance stream has a layout; the others have none")
+
+    def declaration(self) -> dict:
+        entry: dict[str, Any] = {"name": self.name, "field": self.field, "kind": self.kind}
+        if self.layout is not None:
+            entry["layout"] = self.layout.declaration()
+        return entry
+
+
+@dataclass(frozen=True)
+class PassGeometry:
+    """N3.2 (D15 point 1): a pass's own vertex stage and geometry. Counts are a number or a name the record (a u32
+    field) or the settings fill; ``vertices`` may be ``"mesh"`` (the mesh's), ``instances`` ``"mesh"`` (the instance
+    source's; the default with one). ``front_face`` is ``ccw``, ``cw`` or a name choosing per record (0 ccw, 1 cw). An
+    indirect draw names an indirect stream and its ``draw_count``; a batched draw (D15 point 6) names the record's u32
+    {first, count} pairs and its ``batch_count``, and may give a ``draw_parameters_pack`` (one multi-draw where the
+    device reports the features; the plain ``vertex_pack`` draws one draw a batch with ``u_srpss_batch`` set)."""
+
+    vertex_pack: bytes
+    topology: str = "triangles"
+    vertices: int | str | None = None
+    instances: int | str | None = None
+    first_vertex: int = 0
+    mesh: str | None = None
+    instance_from: str | None = None
+    storage: tuple[tuple[str, str], ...] = ()          # (buffer block, storage stream)
+    cull: str = "none"
+    front_face: str = "ccw"
+    indirect: str | None = None
+    draw_count: int | str | None = None
+    batches: str | None = None
+    batch_count: str | None = None
+    draw_parameters_pack: bytes = b""
+
+    def __post_init__(self) -> None:
+        if self.topology not in TOPOLOGIES:
+            raise ValueError(f"unknown topology {self.topology!r} (the topologies are {', '.join(TOPOLOGIES)})")
+        if self.cull not in CULL_MODES:
+            raise ValueError(f"unknown cull {self.cull!r} (the modes are {', '.join(CULL_MODES)})")
+        if (self.indirect is None) != (self.draw_count is None) or (self.batches is None) != (self.batch_count is None):
+            raise ValueError("an indirect draw names its draw_count, a batched draw its batch_count")
+        if self.draw_parameters_pack and self.batches is None:
+            raise ValueError("a draw-parameters pack belongs to a batched draw")
+
+    def declaration(self) -> dict:
+        entry: dict[str, Any] = {"vertex": True, "topology": self.topology}
+        for key, value in (("vertices", self.vertices), ("instances", self.instances), ("mesh", self.mesh),
+                           ("instance_from", self.instance_from), ("indirect", self.indirect),
+                           ("draw_count", self.draw_count), ("batches", self.batches),
+                           ("batch_count", self.batch_count)):
+            if value is not None:
+                entry[key] = value
+        if int(self.first_vertex):
+            entry["first_vertex"] = int(self.first_vertex)
+        if self.storage:
+            entry["storage"] = [{"name": block, "stream": stream} for block, stream in self.storage]
+        if self.cull != "none":
+            entry["cull"] = self.cull
+        if self.front_face != "ccw":
+            entry["front_face"] = self.front_face
+        return entry
+
+    def packs(self) -> list[bytes]:
+        """The packs after the fragment's: the vertex pack, and a batched draw's draw-parameters pack (empty: none)."""
+        packs = [bytes(self.vertex_pack)]
+        if self.batches is not None:
+            packs.append(bytes(self.draw_parameters_pack))
+        return packs
+
+
 @dataclass(frozen=True)
 class PassOutput:
     """N3.1: one attachment's write mask and blend in a pass on a scene target (None: the pass's blend)."""
 
     write: bool = True
-    blend: str | None = None
+    blend: "str | BlendState | None" = None
 
     def __post_init__(self) -> None:
-        if self.blend is not None and self.blend not in PASS_BLENDS:
-            raise ValueError(f"unknown blend {self.blend!r} (the blends are {', '.join(PASS_BLENDS)})")
+        if self.blend is not None:
+            _blend_declaration(self.blend)
 
     def declaration(self) -> dict:
         entry: dict[str, Any] = {"write": bool(self.write)}
         if self.blend is not None:
-            entry["blend"] = self.blend
+            entry["blend"] = _blend_declaration(self.blend)
         return entry
 
 
@@ -232,21 +392,23 @@ class ModePass:
 
     name: str
     pack: bytes
-    blend: str = "alpha"
+    blend: "str | BlendState" = "alpha"
     samplers: tuple[PassSampler, ...] = ()
     target: str | None = None
     outputs: tuple[PassOutput, ...] = ()
     depth_test: str | None = None
     depth_write: bool = False
+    geometry: PassGeometry | None = None   # N3.2: its own vertex stage (None: the core's triangle)
 
     def __post_init__(self) -> None:
-        if self.blend not in PASS_BLENDS:
-            raise ValueError(f"unknown blend {self.blend!r} (the blends are {', '.join(PASS_BLENDS)})")
+        _blend_declaration(self.blend)
         if self.depth_test is not None and self.depth_test not in DEPTH_TESTS:
             raise ValueError(f"unknown depth test {self.depth_test!r} (the tests are {', '.join(DEPTH_TESTS)})")
 
     def declaration(self) -> dict:
-        entry: dict[str, Any] = {"name": self.name, "blend": self.blend}
+        entry: dict[str, Any] = {"name": self.name, "blend": _blend_declaration(self.blend)}
+        if self.geometry is not None:
+            entry.update(self.geometry.declaration())
         if self.samplers:
             entry["samplers"] = [s.declaration() for s in self.samplers]
         if self.target is not None:
@@ -271,15 +433,23 @@ class CapturePass:
         return {"name": self.name, "capture": self.target}
 
 
-def program_json(passes: Sequence[ModePass | CapturePass],
-                 targets: Sequence[ModeTarget] = ()) -> tuple[str, list[bytes]]:
+def program_json(passes: Sequence[ModePass | CapturePass], targets: Sequence[ModeTarget] = (),
+                 streams: Sequence[ModeStream] = ()) -> tuple[str, list[bytes]]:
     """The program's declaration and its packs, in pass order (a pass with samplers declares them; one without has no
-    ``samplers`` key, N2.9's declaration as it was; N3.1: ``targets`` when there are any, a capture's pack empty)."""
+    ``samplers`` key, N2.9's declaration as it was; N3.1: ``targets`` when there are any, a capture's pack empty; N3.2:
+    ``streams`` when there are any, and after a geometry pass's fragment pack its vertex pack, then a batched one's
+    draw-parameters pack)."""
     declared = [p.declaration() for p in passes]
     program: dict[str, Any] = {"passes": declared}
     if targets:
         program["targets"] = [t.declaration() for t in targets]
-    packs = [b"" if isinstance(p, CapturePass) else bytes(p.pack) for p in passes]
+    if streams:
+        program["streams"] = [s.declaration() for s in streams]
+    packs: list[bytes] = []
+    for p in passes:
+        packs.append(b"" if isinstance(p, CapturePass) else bytes(p.pack))
+        if isinstance(p, ModePass) and p.geometry is not None:
+            packs.extend(p.geometry.packs())
     return json.dumps(program), packs
 
 
@@ -330,11 +500,11 @@ class NativeMode:
         self._module.composite_mode_retire(self._handle())
 
     def program(self, passes: Sequence[ModePass | CapturePass], settings: Mapping[str, Any] | None = None, *,
-                targets: Sequence[ModeTarget] = ()) -> None:
-        """The passes (N3.1: and the scene targets they draw into); ``settings`` with them (a shader that adds a member
-        comes with its value), else the ones given before. Refused (ValueError), the drawn program kept, when they do
-        not fit."""
-        declared, packs = program_json(passes, targets)
+                targets: Sequence[ModeTarget] = (), streams: Sequence[ModeStream] = ()) -> None:
+        """The passes (N3.1: and the scene targets they draw into; N3.2: and the streams they read); ``settings`` with
+        them (a shader that adds a member comes with its value), else the ones given before. Refused (ValueError), the
+        drawn program kept, when they do not fit."""
+        declared, packs = program_json(passes, targets, streams)
         if settings is None:
             self._module.composite_mode_program(self._handle(), declared, packs)
         else:
@@ -372,6 +542,23 @@ class NativeMode:
     def remove_texture(self, name: str) -> None:
         """The texture goes; the render thread releases it at the next record (KeyError: no such texture)."""
         self._module.composite_mode_texture_remove(self._handle(), str(name))
+
+    def mesh(self, name: str, vertices: bytes, layout: RecordLayout, *, instances: bytes | None = None,
+             instance_layout: RecordLayout | None = None) -> None:
+        """N3.2 (D15 point 2): the item's mesh ``name``: interleaved f32 ``vertices`` of ``layout`` and optionally an
+        instance stream; copied once into the core and uploaded once at the next record, never again at rest. Refused
+        (ValueError) for a bad name (or ``quad``, the built-in), layout or byte count, or too many meshes."""
+        declaration: dict[str, Any] = {"vertices": layout.declaration()}
+        if (instances is None) != (instance_layout is None):
+            raise ValueError("a mesh's instance stream comes with its layout")
+        if instance_layout is not None:
+            declaration["instances"] = instance_layout.declaration()
+        self._module.composite_mode_mesh(self._handle(), str(name), json.dumps(declaration), bytes(vertices),
+                                         None if instances is None else bytes(instances))
+
+    def remove_mesh(self, name: str) -> None:
+        """N3.2: the mesh goes; the render thread releases it at the next record (KeyError: no such mesh)."""
+        self._module.composite_mode_mesh_remove(self._handle(), str(name))
 
     def target_size(self, name: str, size: tuple[int, int]) -> None:
         """N3.1: an explicit-size scene target's size (Bubble's ambient target follows its card) with no new program;
@@ -414,7 +601,9 @@ def mode_blocks(module: ModuleType, schema: Any, passes: Sequence[ModePass], set
     return [bytes(block) for block in blocks], json.loads(facts)
 
 
-__all__ = ["CapturePass", "DEPTH_TESTS", "MAX_TARGETS", "MAX_TARGET_COLOUR", "MAX_TARGET_SAMPLES", "MODE_CARD_KEYS",
-           "MODE_CORE_MEMBERS", "ModePass", "ModeTarget", "NativeMode", "PASS_BLENDS", "PassOutput", "PassSampler",
+__all__ = ["BLEND_FACTORS", "BLEND_OPS", "BUILTIN_QUAD_MESH", "BlendState", "CULL_MODES", "CapturePass", "DEPTH_TESTS",
+           "MAX_BATCHES", "MAX_TARGETS", "MAX_TARGET_COLOUR", "MAX_TARGET_SAMPLES", "MODE_CARD_KEYS", "MODE_CORE_MEMBERS",
+           "MeshAttribute", "ModePass", "ModeStream", "ModeTarget", "NativeMode", "PASS_BLENDS", "PassGeometry",
+           "PassOutput", "PassSampler", "RecordLayout", "STREAM_KINDS", "TOPOLOGIES",
            "SAMPLER_FILTERS", "SAMPLER_MIPS", "SAMPLER_WRAPS", "TARGET_FORMATS", "TARGET_RESOLVES", "TargetAttachment", "mode_blocks",
            "mode_card", "program_json", "schema_table_entry"]

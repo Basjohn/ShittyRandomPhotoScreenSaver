@@ -700,6 +700,31 @@ bool CompositeItem::removeTextureMode(const QByteArray &name, QString *error)
     return true;
 }
 
+bool CompositeItem::meshMode(const QByteArray &name, const QByteArray &declaration, const QByteArray &vertices,
+                             const QByteArray &instances, QString *error)
+{
+    if (modeRefused(error))
+        return false;
+    std::shared_ptr<ModeSource> source = currentOrNewMode();
+    if (!source->setMesh(name, declaration, vertices, instances, error))
+        return false;
+    m_mode = source;
+    update();
+    return true;
+}
+
+bool CompositeItem::removeMeshMode(const QByteArray &name, QString *error)
+{
+    if (!m_mode) {
+        *error = QStringLiteral("this composite holds no mesh '%1'").arg(QString::fromLatin1(name));
+        return false;
+    }
+    if (!m_mode->removeMesh(name, error))
+        return false;
+    update();
+    return true;
+}
+
 bool CompositeItem::bindSpectrum(const QString &mappingName, const PacketReaderConfig &config, QString *error)
 {
     if (spectrumRefused(error))
