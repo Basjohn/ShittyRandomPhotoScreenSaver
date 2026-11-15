@@ -96,8 +96,26 @@
 // record, and the surface is opened (and cleared) once at least. A pass on a scene target draws over its content
 // viewport (scene_targets.h contentViewport); its v_uv and vUv are the surface's for a surface-sized target and the
 // target's own for an explicit size, and u_target_px is its target's content size.
+//
+// Meshes and buffers (N3.2, D15; mesh_buffers.h): a pass may bring its own vertex stage ("vertex": true, its pack after
+// the fragment's; a batched pass's draw-parameters pack after that) and its geometry: "topology" (triangles or
+// triangle_strip; points refused), "vertices" (a number, "mesh", or a name the record or the settings fill), "instances"
+// (likewise; 0 draws nothing), "first_vertex", "mesh" (its per-vertex inputs: an item's mesh or the built-in "quad"),
+// "instance_from" (per-instance inputs, step rate 1: a mesh's instance stream or an instance stream), "storage"
+// ([{"name": the shader's buffer block, "stream": a storage stream}], read only), "cull" (none, back, front),
+// "front_face" (ccw, cw, or a name choosing between two pipelines built ahead: 0 ccw, 1 cw), "indirect" (an indirect
+// stream, with "draw_count"), "batches" (a u32 array field of {first, count} pairs, with "batch_count": D15 point 6) and
+// "blend" as a full declaration ({"color": [op, src, dst], "alpha": [...]}) beside the presets. The vertex stage's inputs
+// bind by name to the mesh's and the instance source's attributes; its outputs carry the fragment's inputs by location.
+// Its block is the pass's own (the same block in both stages when both declare it), and it may read the conventions
+// block, samplers and storage. The program declares its streams ({"streams": [...]}: a record field each). Every block of
+// the content (the passes', the conventions, the clears', the captures', the nearest resolves') lives in one block arena
+// given as dynamic offsets; firstInstance is always 0. The core member uMatrix (item pixels, the item's own unrotated
+// coordinates, to the drawn target's clip space, corrected once: conventions.h rule 1) is filled for a pass with its own
+// vertex stage; on the core's triangle it stays zeros (nothing reads it there).
 #pragma once
 
+#include "mesh_buffers.h"
 #include "mode_schema.h"
 #include "packet_reader.h"
 #include "program_blocks.h"
@@ -192,6 +210,7 @@ struct PassSampler
     SamplerFilter filter = SamplerFilter::Linear;
     SamplerWrap wrap = SamplerWrap::Clamp;
     SamplerMips mips = SamplerMips::None;
+    int stages = 0;       // N3.2: QRhiShaderResourceBinding::StageFlags the pass's stages read it in (0: the fragment)
 
     QJsonObject toJson() const;
 };
@@ -201,6 +220,29 @@ struct PassOutput
 {
     bool write = true;
     PassBlend blend = PassBlend::Alpha;
+    bool custom = false;                            // N3.2: a full declaration (customBlend) in place of `blend`
+    QRhiGraphicsPipeline::TargetBlend customBlend;
+};
+
+// N3.2 (D15 point 1): a pass's geometry.
+enum class PassTopology { Triangles = 0, TriangleStrip = 1 };
+enum class PassCull { None = 0, Back = 1, Front = 2 };
+
+// A vertex stage's input, bound by name at the build to its mesh's or its instance source's attribute.
+struct PassInput
+{
+    QByteArray name;
+    int location = 0;
+    int components = 0;
+};
+
+// A storage block of the pass's stages bound by name to a storage stream (read only).
+struct PassStorage
+{
+    QByteArray name;      // the shader's buffer block
+    QByteArray stream;
+    int binding = -1;     // reflected
+    int stages = 0;       // QRhiShaderResourceBinding::StageFlags
 };
 
 // N3.1: a pass's depth test (none: the depth is neither tested nor written).
@@ -224,12 +266,40 @@ struct ModePass
     DepthTest depthTest = DepthTest::None;
     bool depthWrite = false;
     bool fragDepth = false;   // the fragment writes gl_FragDepth
+    // N3.2 (D15): its own vertex stage and geometry (mode_content.h's header, mesh_buffers.h).
+    bool customBlend = false;                        // "blend" was a full declaration
+    QRhiGraphicsPipeline::TargetBlend blendState;    // its state (customBlend)
+    QShader vertex;                                  // invalid: the core's triangle (N2.9 to N3.1)
+    QShader vertexDrawParameters;                    // a batched pass's draw-parameters pack (D15 point 6)
+    int blockStages = 0;                             // the stages that declare the pass's block (0: the fragment)
+    int conventionsStages = 0;                       // the stages that declare SrpssConventions (0: the fragment)
+    PassTopology topology = PassTopology::Triangles;
+    DrawCount vertices;                              // a number, "mesh", or a name
+    DrawCount instances;                             // a number (1 by default) or a name; 0 draws nothing
+    quint32 firstVertex = 0;
+    QByteArray mesh;                                 // per-vertex inputs (an item's mesh or "quad")
+    QByteArray instanceFrom;                         // per-instance inputs (a mesh's instance stream, or a stream)
+    QList<PassInput> inputs;                         // the vertex stage's, reflected
+    QList<PassStorage> storage;
+    PassCull cull = PassCull::None;
+    bool frontClockwise = false;                     // the fixed front face (cw), when no selector
+    DrawCount frontSelector;                         // a name choosing ccw (0) or cw (1) per record
+    QByteArray indirect;                             // an indirect stream (empty: a direct draw)
+    DrawCount drawCount;                             // its commands drawn
+    QByteArray batches;                              // a batched draw's u32 {first, count} pairs (D15 point 6)
+    DrawCount batchCount;                            // how many batches the record holds
+
+    bool ownVertex() const { return vertex.isValid(); }
+    bool batched() const { return !batches.isEmpty(); }
 };
 
 struct ModeProgram
 {
     QList<ModePass> passes;
     QList<TargetDeclaration> targets; // N3.1: its scene targets (reads derived from the samplers and captures)
+    QList<StreamDeclaration> streams; // N3.2: its streams (a record field each)
+    // N3.2: the numbers of the settings the draws name (counts and selectors), set where the settings are admitted.
+    QHash<QByteArray, double> drawSettings;
     quint64 generation = 0; // a new program rebuilds the pipelines at the next record
 
     // The program from its declaration ({"passes": [{"name", "blend", "samplers"?: [{"name", "texture", "filter",
@@ -239,6 +309,13 @@ struct ModeProgram
     bool valid() const { return !passes.isEmpty(); }
     QJsonObject toJson() const;
     bool declares(const QByteArray &member) const;
+    // N3.2: whether a draw names `name` (a count or a selector a record field or a setting fills), or a stream reads it.
+    bool drawNames(const QByteArray &name) const;
+    bool streamReads(const QByteArray &field) const;
+    // N3.2: the meshes the passes draw (each once; never the built-in quad).
+    QList<QByteArray> drawnMeshes() const;
+    // N3.2: the settings' numbers the draws name, from `settings`.
+    QHash<QByteArray, double> drawSettingNumbers(const QJsonObject &settings) const;
     bool needsCard() const;
     // The item's textures the passes sample (each once, in first-use order).
     QList<QByteArray> sampledTextures() const;
@@ -257,8 +334,11 @@ struct ModeProgram
     // overwritten in place). Refused (a NaN, a value with no defined conversion) with the reason.
     // N3.1: `passTargets` (one per pass) gives each pass's target content size for its core members (u_target_px);
     // null: `target` for every pass.
+    // N3.2: `clipCorrection` (16 floats, column-major; null: none) is the target's correction (conventions.h rule 1) of
+    // the uMatrix of a pass with its own vertex stage.
     bool packFrame(const frame_abi::Schema &schema, const QByteArray &record, const ModeCard &card, const QSize &target,
-                   QList<BlockValues> &blocks, QString *error, const QList<QSize> *passTargets = nullptr) const;
+                   QList<BlockValues> &blocks, QString *error, const QList<QSize> *passTargets = nullptr,
+                   const float *clipCorrection = nullptr) const;
     // N3.1: each pass's target content size for a surface of `surface` pixels (a surface-sized target's is the surface's)
     // under `targets` (the program's own when null: ModeSource::drawnTargets carries the sizes set since).
     QList<QSize> passTargetSizes(const QSize &surface, const QList<TargetDeclaration> *targets = nullptr) const;
@@ -369,6 +449,12 @@ public:
     bool setTexture(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips, QString *error,
                     bool inFrame = false);
     bool removeTexture(const QByteArray &name, QString *error);
+    // N3.2 (D15 point 2), GUI thread: a mesh (makeModeMesh's declaration and bytes), replacing the one of that name;
+    // refused for a bad name, declaration or byte count, or more than kMaxModeMeshes. removeMesh: false when there is
+    // none of that name.
+    bool setMesh(const QByteArray &name, const QByteArray &declaration, const QByteArray &vertices,
+                 const QByteArray &instances, QString *error);
+    bool removeMesh(const QByteArray &name, QString *error);
 
     // N3.8: the item's notifier (the job thread's frame request, the lost edge); the item attaches it.
     const std::shared_ptr<ItemNotifier> &notifier() const { return m_notifier; }
@@ -390,6 +476,12 @@ public:
     const QList<ModeTexture> &drawnTextures() const { return m_drawnTextures; }
     // The image of the drawn texture `name` (its core copy moves to the caller; null when it was taken before).
     QSharedPointer<TextureImage> takeTextureImage(const QByteArray &name);
+    // N3.2: the drawn meshes, and the bytes of the drawn mesh `name` (they move to the caller; null when taken before).
+    const QList<ModeMesh> &drawnMeshes() const { return m_drawnMeshes; }
+    QSharedPointer<MeshImage> takeMeshImage(const QByteArray &name);
+    // N3.2: the content's meshes, streams and arena as built (render thread, at a build or a mesh change only; never
+    // per record: N3.1 audit's lesson), and the meshes found lost.
+    void noteMeshBuffers(const QJsonObject &state);
     // The content's texture report (render thread writes, any thread reads).
     void noteTextures(const TextureReport &report);
     // N3.8: a record that changed an image (the last kImageChangeRecords are kept).
@@ -436,6 +528,7 @@ private:
     ModeCard m_card;
     QList<ModeTexture> m_textures;              // N4.a: the item's textures, their images until taken
     QList<TargetDeclaration> m_targetSizes;     // N3.1: explicit sizes set since the program (name and size only)
+    QList<ModeMesh> m_meshes;                   // N3.2: the item's meshes, their bytes until taken
     quint64 m_generation = 0;                   // a stream, program, settings, card or texture change
     quint64 m_buildGeneration = 0;              // the same but the card
 
@@ -451,6 +544,7 @@ private:
     QString m_drawnWaiting;
     QList<ModeTexture> m_drawnTextures;
     QList<TargetDeclaration> m_drawnTargets;    // N3.1
+    QList<ModeMesh> m_drawnMeshes;              // N3.2
     quint64 m_takenJobsFinished = 0;            // N3.8: the notifier's count at the last sync
 
     const std::shared_ptr<ItemNotifier> m_notifier;
@@ -461,6 +555,7 @@ private:
     QJsonObject m_targetsState;                 // N3.1, under m_textureReportMutex
     std::shared_ptr<SceneReadback> m_targetReadback; // N3.1, under m_textureReportMutex
     QAtomicInteger<quint64> m_targetReads { 0 };
+    QJsonObject m_meshBuffersState;             // N3.2, under m_textureReportMutex
 };
 
 class ModeContent final : public SurfaceContent
@@ -515,7 +610,23 @@ private:
     void recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, QRhiResourceUpdateBatch *updates,
                       bool draw, bool readback);
     bool build(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
-    void pack(const ColorTarget &target);
+    // N3.2: a pass with its own vertex stage: its pipelines (two when its front face is chosen per record).
+    bool buildGeometryPass(QRhi *rhi, Resources &r, int index, QRhiRenderPassDescriptor *renderPass, int samples,
+                           QString *reason, int *objects);
+    // N3.2: a batched pass's batches the arena holds (its batch table's pairs, at most kMaxBatches).
+    int batchCapacity(const ModePass &pass) const;
+    // N3.2: the meshes' and streams' state, noted on the source only when their objects changed (never per record).
+    void noteMeshBuffers();
+    // N3.2: one pass's draw on its open render pass (pipeline, viewport, the arena's offsets, inputs, the draw call).
+    void drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QRhiViewport &viewport,
+                  const QRhiCommandBuffer::VertexInput &triangle);
+    // N3.2: a count or a selector for this record (a number, the mesh's, a record u32 field, a setting).
+    quint32 resolveCount(const DrawCount &count, quint32 meshCount) const;
+    // N3.2: the passes' blocks into the arena's CPU copy (a batched pass: one copy a batch, its u_srpss_batch set).
+    void fillArena();
+    // N3.2: the drawn passes' meshes all uploaded.
+    bool meshesReady() const;
+    void pack(QRhi *rhi, const ColorTarget &target);
     // The QRhi objects of the passes only: a rebuild (a new program, a failed build) keeps the record of the frame in the
     // target, so a failure leaves that frame for the route to fade the card out over (round 2, M4).
     void releasePipelines();
@@ -574,6 +685,12 @@ private:
     QByteArray m_stillSignature;             // N5.7a: what the still last drew (empty: nothing of a still's)
     bool m_keptTarget = false;               // the last record kept the target (a still's unchanged frame)
     SceneTargets m_targets;                  // N3.1 (D14 choice B: the content owns its targets)
+    ModeMeshes m_meshes;                     // N3.2 (D15 choice A: the content owns its meshes)
+    ModeStreams m_streams;                   // N3.2: the streams and the block arena
+    QByteArray m_arena;                      // N3.2: the arena's CPU copy, written whole per drawn record (choice D)
+    QStringList m_meshesLost;                // N3.2: drawn meshes with nothing to upload from (a content made again)
+    QByteArray m_batchShadow;                // N3.2: the batched passes' indirect commands (form 3), written per record
+    quint64 m_meshBuffersNoted = ~quint64(0); // N3.2: the meshes' and streams' objects the state was last noted for
     quint64 m_targetObjectsSeen = 0;         // the targets' object generation the bindings were made over
     quint64 m_targetReadsDone = 0;           // N3.1, harness: readback requests served
     QList<QSize> m_passTargets;              // N3.1: each pass's target content size (packed with the frame)
