@@ -370,10 +370,20 @@ int clampSamples(const QList<int> &supported, int requested)
     return best;
 }
 
+namespace {
+QAtomicInteger<quint64> g_removedGeneration { 0 };
+} // namespace
+
 void setRemovedSampleCounts(const QList<int> &removed)
 {
     QMutexLocker lock(&removedMutex());
     removedCounts() = removed;
+    g_removedGeneration.fetchAndAddOrdered(1);
+}
+
+quint64 removedSampleCountsGeneration()
+{
+    return g_removedGeneration.loadAcquire();
 }
 
 QList<int> removedSampleCounts()
@@ -567,7 +577,15 @@ bool SceneTargets::sync(QRhi *rhi, const QList<TargetDeclaration> &declarations,
         release();                            // another QRhi: every object again (a node made again)
     }
     m_rhi = rhi;
-    m_supported = supportedSampleCounts(rhi);
+    // QRhi's counts (a list by value) and the control's (under its mutex) only when either may have changed (audit 2,
+    // M5: nothing allocated per record).
+    const quint64 control = removedSampleCountsGeneration();
+    if (rhi != m_supportedRhi || control != m_supportedControl) {
+        m_supported = supportedSampleCounts(rhi);
+        m_supportedRhi = rhi;
+        m_supportedControl = control;
+        ++m_stateVersion;
+    }
     const int sizeMax = rhi ? rhi->resourceLimit(QRhi::TextureSizeMax) : 16384;
     if (declarations.size() > kMaxSceneTargets) {
         *error = QStringLiteral("a program declares at most %1 targets").arg(kMaxSceneTargets);
@@ -581,13 +599,18 @@ bool SceneTargets::sync(QRhi *rhi, const QList<TargetDeclaration> &declarations,
                 *relayout = true;
             releaseTarget(*m_targets[i]);
             m_targets[i].reset();
+            ++m_stateVersion;
         }
     }
+    if (m_count != int(declarations.size()))
+        ++m_stateVersion;
     m_count = int(declarations.size());
     for (int i = 0; i < m_count; ++i) {
         const TargetDeclaration &d = declarations.at(i);
-        if (!m_targets[i])
+        if (!m_targets[i]) {
             m_targets[i] = std::make_unique<Target>();
+            ++m_stateVersion;
+        }
         Target &t = *m_targets[i];
         const QSize needed = d.surfaceSized() ? surface : d.size;
         if (needed.width() < 1 || needed.height() < 1) {
@@ -603,11 +626,16 @@ bool SceneTargets::sync(QRhi *rhi, const QList<TargetDeclaration> &declarations,
                          .arg(QString::fromLatin1(d.name)).arg(allocation.width()).arg(allocation.height()).arg(sizeMax);
             return false;
         }
+        if (t.content != needed)
+            ++m_stateVersion;
         t.content = needed;
         if (!layoutChanged && allocation == t.allocation) {
-            t.decl = d;                       // the same layout; nothing to make
+            if (t.decl.size != d.size || t.decl.previousFrame != d.previousFrame)
+                ++m_stateVersion;             // what the state reports of the declaration (the rest is the layout)
+            t.decl = d;                       // the same layout; nothing to make (implicitly shared: no copy)
             continue;
         }
+        ++m_stateVersion;
         if (layoutChanged) {
             if (t.renderPass || t.captureRenderPass)
                 *relayout = true;
@@ -646,6 +674,7 @@ bool SceneTargets::allocateStep(bool *done, QString *error)
             continue;
         if (t.stepsDone == 0 && t.newLayout)
             releaseTarget(t);                 // the old layout's objects (the caller released the pipelines over them)
+        ++m_stateVersion;
         if (!step(t, i, error)) {
             releaseTarget(t);
             t.allocation = QSize();
@@ -883,6 +912,8 @@ int SceneTargets::liveObjects() const
 
 void SceneTargets::release()
 {
+    if (m_rhi || m_count > 0)
+        ++m_stateVersion;                     // a set that was synced reports its release (a never-used one: nothing)
     for (int i = 0; i < kMaxSceneTargets; ++i) {
         if (m_targets[i]) {
             releaseTarget(*m_targets[i]);
@@ -891,6 +922,7 @@ void SceneTargets::release()
     }
     m_count = 0;
     m_rhi = nullptr;
+    m_supportedRhi = nullptr;                 // a later QRhi may take the address: its counts are read again
     ++m_layoutGeneration;
     ++m_objectGeneration;
 }
@@ -968,11 +1000,54 @@ std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiResourceUpdateBat
     return set;
 }
 
-QJsonObject SceneTargets::stateJson(QRhi *rhi) const
+SceneTargetsState SceneTargets::state(QRhi *rhi) const
+{
+    SceneTargetsState s;
+    s.noted = true;
+    s.supported = m_supported;
+    if (rhi) {
+        s.backend = QString::fromLatin1(rhi->backendName());
+        s.yUpInFramebuffer = rhi->isYUpInFramebuffer();
+        s.resolveDepthStencil = rhi->isFeatureSupported(QRhi::ResolveDepthStencil);
+        s.perRenderTargetBlending = rhi->isFeatureSupported(QRhi::PerRenderTargetBlending);
+        s.multisampleTexture = rhi->isFeatureSupported(QRhi::MultisampleTexture);
+    }
+    s.allocations = m_allocations;
+    s.steps = m_steps;
+    s.layoutGeneration = m_layoutGeneration;
+    s.objectGeneration = m_objectGeneration;
+    for (int i = 0; i < m_count; ++i) {
+        const Target &t = *m_targets[i];
+        SceneTargetsState::Entry e;
+        e.decl = t.decl;
+        e.content = t.content;
+        e.allocation = t.allocation;
+        e.samples = t.samples;
+        e.bytes = t.bytes;
+        e.textures = t.textures;
+        e.generation = t.generation;
+        e.ready = t.ready();
+        e.lastReason = t.lastReason;
+        s.targets.append(e);
+    }
+    return s;
+}
+
+bool SceneTargets::takeStateChange()
+{
+    if (m_stateVersion == m_stateNoted)
+        return false;
+    m_stateNoted = m_stateVersion;
+    return true;
+}
+
+QJsonObject sceneTargetsStateJson(const SceneTargetsState &s)
 {
     QJsonObject o;
+    if (!s.noted)
+        return o;
     QJsonArray supported;
-    for (const int count : m_supported)
+    for (const int count : s.supported)
         supported.append(count);
     o.insert(QStringLiteral("supported_samples"), supported);
     QJsonArray removed;
@@ -980,19 +1055,17 @@ QJsonObject SceneTargets::stateJson(QRhi *rhi) const
         removed.append(count);
     o.insert(QStringLiteral("removed_samples"), removed);
     // A fact only (D14 point 10: the core's nearest resolve replaces QRhi's depth resolve on every backend).
-    o.insert(QStringLiteral("resolve_depth_stencil"), rhi ? rhi->isFeatureSupported(QRhi::ResolveDepthStencil) : false);
+    o.insert(QStringLiteral("resolve_depth_stencil"), s.resolveDepthStencil);
     o.insert(QStringLiteral("nearest_first_sample_control"), nearestFirstSample());
-    o.insert(QStringLiteral("per_render_target_blending"),
-             rhi ? rhi->isFeatureSupported(QRhi::PerRenderTargetBlending) : false);
-    o.insert(QStringLiteral("multisample_texture"), rhi ? rhi->isFeatureSupported(QRhi::MultisampleTexture) : false);
-    o.insert(QStringLiteral("backend"), rhi ? QString::fromLatin1(rhi->backendName()) : QString());
-    o.insert(QStringLiteral("allocations"), double(m_allocations));
-    o.insert(QStringLiteral("steps"), double(m_steps));
-    o.insert(QStringLiteral("layout_generation"), double(m_layoutGeneration));
-    o.insert(QStringLiteral("object_generation"), double(m_objectGeneration));
+    o.insert(QStringLiteral("per_render_target_blending"), s.perRenderTargetBlending);
+    o.insert(QStringLiteral("multisample_texture"), s.multisampleTexture);
+    o.insert(QStringLiteral("backend"), s.backend);
+    o.insert(QStringLiteral("allocations"), double(s.allocations));
+    o.insert(QStringLiteral("steps"), double(s.steps));
+    o.insert(QStringLiteral("layout_generation"), double(s.layoutGeneration));
+    o.insert(QStringLiteral("object_generation"), double(s.objectGeneration));
     QJsonArray targets;
-    for (int i = 0; i < m_count; ++i) {
-        const Target &t = *m_targets[i];
+    for (const SceneTargetsState::Entry &t : s.targets) {
         QJsonObject e = t.decl.toJson();
         e.insert(QStringLiteral("content"), QJsonArray { t.content.width(), t.content.height() });
         e.insert(QStringLiteral("allocation"), QJsonArray { t.allocation.width(), t.allocation.height() });
@@ -1001,10 +1074,10 @@ QJsonObject SceneTargets::stateJson(QRhi *rhi) const
         e.insert(QStringLiteral("bytes"), double(t.bytes));
         e.insert(QStringLiteral("textures"), t.textures);
         e.insert(QStringLiteral("generation"), double(t.generation));
-        e.insert(QStringLiteral("ready"), t.ready());
+        e.insert(QStringLiteral("ready"), t.ready);
         e.insert(QStringLiteral("last_reason"), t.lastReason);
-        if (rhi) {
-            const QRect v = contentViewport(rhi->isYUpInFramebuffer(), t.allocation, t.content);
+        if (!s.backend.isEmpty()) {
+            const QRect v = contentViewport(s.yUpInFramebuffer, t.allocation, t.content);
             e.insert(QStringLiteral("viewport"), QJsonArray { v.x(), v.y(), v.width(), v.height() });
         }
         targets.append(e);

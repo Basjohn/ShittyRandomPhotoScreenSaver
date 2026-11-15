@@ -120,6 +120,8 @@ int clampSamples(const QList<int> &supported, int requested);
 // The harness's control of the clamp (its negative control): counts taken out of every device's supported set.
 void setRemovedSampleCounts(const QList<int> &removed);
 QList<int> removedSampleCounts();
+// A new number at every setRemovedSampleCounts (a target set reads QRhi's counts again only then: audit 2, M5).
+quint64 removedSampleCountsGeneration();
 // QRhi's supported sample counts less the control's.
 QList<int> supportedSampleCounts(QRhi *rhi);
 // The harness's control of the depth's rule C (its negative control: a run with synchronisation validation shows what the
@@ -165,6 +167,38 @@ struct SceneTargetPixels
     int samples = 1;       // the target's effective samples (a multisampled attachment is read through its resolve)
     QByteArray data;
 };
+
+// A content's targets as plain values (audit 2, M5): copied by the render thread only when they changed (a new
+// allocation, a step, a new size or layout, a release: never per record), made into JSON only when the state is asked
+// for (sceneTargetsStateJson, the GUI thread).
+struct SceneTargetsState
+{
+    struct Entry
+    {
+        TargetDeclaration decl;
+        QSize content;
+        QSize allocation;
+        int samples = 1;
+        qint64 bytes = 0;
+        int textures = 0;
+        quint64 generation = 0;
+        bool ready = false;
+        QString lastReason;
+    };
+    bool noted = false;                // false: nothing noted yet (the state's "scene_targets" is {})
+    QList<int> supported;
+    QString backend;
+    bool yUpInFramebuffer = false;
+    bool resolveDepthStencil = false;
+    bool perRenderTargetBlending = false;
+    bool multisampleTexture = false;
+    qint64 allocations = 0;
+    qint64 steps = 0;
+    quint64 layoutGeneration = 0;
+    quint64 objectGeneration = 0;
+    QList<Entry> targets;
+};
+QJsonObject sceneTargetsStateJson(const SceneTargetsState &state);
 
 // A readback of every readable texture of a content's targets: written by QRhi at a frame's end, read by the GUI thread.
 struct SceneReadback
@@ -257,8 +291,10 @@ public:
     // Render thread, after the record's passes: a readback of every readable texture (harness only).
     std::shared_ptr<SceneReadback> startReadback(QRhiResourceUpdateBatch *updates);
 
-    // The targets' state (render thread writes it into the source's report).
-    QJsonObject stateJson(QRhi *rhi) const;
+    // The targets' state as values (render thread; the caller hands it to the source's report), and whether it changed
+    // since the last call that returned true (audit 2, M5: the report is written only then, never per record).
+    SceneTargetsState state(QRhi *rhi) const;
+    bool takeStateChange();
 
 private:
     void releaseTarget(Target &t);
@@ -272,6 +308,10 @@ private:
     qint64 m_allocations = 0;
     qint64 m_steps = 0;
     QList<int> m_supported;
+    const QRhi *m_supportedRhi = nullptr;     // m_supported is this QRhi's ...
+    quint64 m_supportedControl = 0;           // ... under this generation of the clamp's control (M5: not per record)
+    quint64 m_stateVersion = 0;               // a change of what state() reports
+    quint64 m_stateNoted = 0;
 };
 
 } // namespace srpss_core

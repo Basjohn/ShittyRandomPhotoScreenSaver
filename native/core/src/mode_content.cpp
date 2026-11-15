@@ -1070,15 +1070,16 @@ QList<QByteArray> ModeProgram::sampledTextures() const
     return names;
 }
 
-QList<QSize> ModeProgram::passTargetSizes(const QSize &surface, const QList<TargetDeclaration> *sized) const
+void ModeProgram::passTargetSizes(const QSize &surface, const QList<TargetDeclaration> *sized,
+                                  QList<QSize> *out) const
 {
     const QList<TargetDeclaration> &list = sized && sized->size() == targets.size() ? *sized : targets;
-    QList<QSize> sizes;
-    for (const ModePass &pass : passes) {
+    out->resize(passes.size());               // in place: no allocation once the capacity holds the passes
+    for (qsizetype p = 0; p < passes.size(); ++p) {
+        const ModePass &pass = passes.at(p);
         const TargetDeclaration *target = pass.target >= 0 ? &list.at(pass.target) : nullptr;
-        sizes.append(target && !target->surfaceSized() ? target->size : surface);
+        (*out)[p] = target && !target->surfaceSized() ? target->size : surface;
     }
-    return sizes;
 }
 
 QString ModeProgram::textureFits(const QByteArray &texture, bool mips) const
@@ -1646,7 +1647,7 @@ bool ModeSource::takeTargetPixels(QList<SceneTargetPixels> *out)
     return true;
 }
 
-void ModeSource::noteTargets(const QJsonObject &state)
+void ModeSource::noteTargets(const SceneTargetsState &state)
 {
     QMutexLocker lock(&m_textureReportMutex);
     m_targetsState = state;
@@ -1763,7 +1764,7 @@ void ModeSource::stateInto(QJsonObject &o) const
     jobs.insert(QStringLiteral("rebinds"), double(r.rebinds));
     o.insert(QStringLiteral("texture_jobs"), jobs);
     o.insert(QStringLiteral("still_kept"), double(r.stillKept));
-    o.insert(QStringLiteral("scene_targets"), m_targetsState);                       // N3.1
+    o.insert(QStringLiteral("scene_targets"), sceneTargetsStateJson(m_targetsState)); // N3.1 (made here: M5)
     o.insert(QStringLiteral("target_reads_requested"), double(m_targetReads.loadAcquire()));
     o.insert(QStringLiteral("target_readback_pending"), m_targetReadback && !m_targetReadback->done());
     QJsonArray changes;
@@ -2367,9 +2368,14 @@ void ModeContent::pack(const ColorTarget &target)
     }
     const ModeProgram &program = source.drawnProgram();
     const fa::Schema &schema = still ? stillSchema() : source.drawnSchema()->schema();
-    m_passTargets = program.passTargetSizes(target.texture->pixelSize(), &source.drawnTargets()); // N3.1
+    // N3.1: each pass's target size, filled in place, for a program with targets only (N2.9's: the surface's for all).
+    const QList<QSize> *passTargets = nullptr;
+    if (!program.targets.isEmpty()) {
+        program.passTargetSizes(target.texture->pixelSize(), &source.drawnTargets(), &m_passTargets);
+        passTargets = &m_passTargets;
+    }
     if (!program.packFrame(schema, still ? QByteArray() : source.frameRecord(), source.drawnCard(),
-                           target.texture->pixelSize(), m_blocks, &m_reason, &m_passTargets)) {
+                           target.texture->pixelSize(), m_blocks, &m_reason, passTargets)) {
         m_refused = true;                     // a value with no defined conversion: the frame is refused (M4)
         m_blocksGeneration = 0;               // the next frame starts from the packed settings again
         return;
@@ -2851,7 +2857,8 @@ bool ModeContent::syncTargets(QRhi *rhi, const ColorTarget &target, QString *err
         m_targetObjectsSeen = 0;
         const qint64 failures = m_latch.failed(latchKey(rhi, target), *error);
         m_source->noteFailure(*error, failures);
-        m_source->noteTargets(m_targets.stateJson(rhi));
+        m_targets.takeStateChange();
+        m_source->noteTargets(m_targets.state(rhi));
         return false;
     }
     if (m_targets.objectGeneration() != m_targetObjectsSeen) {
@@ -2882,15 +2889,18 @@ void ModeContent::recordNearest(QRhiCommandBuffer *cb, int target, int last, boo
         if (later.capture && later.target == target)
             needed[kNearestDepthSlot] = true;
         for (const PassSampler &s : later.samplers) {
-            const qsizetype dot = s.texture.indexOf('.');
-            if (dot <= 0 || s.texture.left(dot) != t.decl.name)
+            // Views, not copies: this runs every record (audit 2, M5).
+            const QByteArrayView texture(s.texture);
+            const qsizetype dot = texture.indexOf('.');
+            if (dot <= 0 || texture.first(dot) != QByteArrayView(t.decl.name))
                 continue;
-            const QByteArray attachment = s.texture.mid(dot + 1);
-            if (attachment == "depth")
+            const QByteArrayView attachment = texture.sliced(dot + 1);
+            if (attachment == QByteArrayView("depth"))
                 needed[kNearestDepthSlot] = true;
-            const int colour = t.decl.colourIndex(attachment);
-            if (colour >= 0)
-                needed[colour] = true;
+            for (int c = 0; c < int(t.decl.colour.size()) && c < kMaxTargetColour; ++c) {
+                if (attachment == QByteArrayView(t.decl.colour.at(c).name))
+                    needed[c] = true;
+            }
         }
     }
     const QRhiViewport whole(0, 0, float(t.allocation.width()), float(t.allocation.height()));
@@ -2930,7 +2940,8 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             // N3.1: the capture (D14 point 5): the target's pass ended; its capture's two textures primed for the load
             // (rule C: a later pass or a readback left them elsewhere) and written over the whole allocation.
             const SceneTargets::Target &t = *m_targets.target(pass.target);
-            primeForLoad(rhi, cb, QList<QRhiTexture *> { t.captureColour.get(), t.captureDepth.get() });
+            QRhiTexture *const captured[2] = { t.captureColour.get(), t.captureDepth.get() };
+            primeForLoad(rhi, cb, captured, 2); // no list per capture (audit 2, M5)
             cb->beginPass(t.captureTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
             pending = nullptr;
             cb->setGraphicsPipeline(r.passes[i].pipeline.get());
@@ -3130,8 +3141,8 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
         m_source->setTargetReadback(m_targets.startReadback(readbacks));
         cb->resourceUpdate(readbacks);
     }
-    if (m_targets.count() > 0 || readback)
-        m_source->noteTargets(m_targets.stateJson(rhi));
+    if (m_targets.takeStateChange())          // audit 2, M5: only when it changed (an allocation edge), never per record
+        m_source->noteTargets(m_targets.state(rhi));
     if (draw) {
         m_drawnTexture = target.texture.get();
         m_drawnSize = size;
