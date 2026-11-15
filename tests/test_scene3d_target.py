@@ -439,6 +439,71 @@ def test_an_overlays_bloom_glows_only_from_emitted_light_and_never_darkens(captu
     assert not target.has_resources
 
 
+def _edge_emitter(left: bool):
+    """A strip hugging the card's left or right edge, emitting hard into location 1."""
+    from rendering.quick.render.gl_resources import compile_program
+    from rendering.quick.scene3d.target import SCENE_EMISSION_GLSL
+
+    x0, x1 = (-1.0, -0.9) if left else (0.9, 1.0)
+    vertex = ("#version 460 core\nvoid main() {\n"
+              f"    vec2 p[4] = vec2[](vec2({x0}, -1.0), vec2({x1}, -1.0), vec2({x0}, 1.0), vec2({x1}, 1.0));\n"
+              "    gl_Position = vec4(p[gl_VertexID], 0.0, 1.0);\n}\n")
+    fragment = ("#version 460 core\nlayout(location = 0) out vec4 FragColor;\n"
+                "layout(location = 1) out vec4 Emission;\n" + SCENE_EMISSION_GLSL
+                + "void main() { FragColor = vec4(0.2, 0.2, 0.2, 1.0); Emission = sceneEmission(vec3(6.0, 4.0, 1.0)); }\n")
+    return compile_program(vertex, fragment, label="edge emitter test")
+
+
+def _opposite_edge_light(capture, samples: int, *, left: bool) -> float:
+    """Mean brightness the bloom adds to the outermost columns of the edge facing away from the emitter."""
+    resources, target = MeshResources("target test"), SceneTarget("target test")
+    program = _edge_emitter(left)
+    try:
+        card = _card_frame(capture, 0, 0, WIDTH, HEIGHT)
+        results = []
+        for bloom in (0.0, 1.0):
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+            gl.glViewport(0, 0, WIDTH, HEIGHT)
+            gl.glDisable(gl.GL_SCISSOR_TEST)
+            gl.glClearColor(0.25, 0.25, 0.3, 1.0)
+            gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+            _straight_alpha()
+            with target.scope(card, samples, resources, overlay=1.0, bloom=bloom):
+                gl.glUseProgram(program)
+                gl.glBindVertexArray(capture.vao)
+                with target.emission_writes():
+                    gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+            results.append(_read(capture)[..., :3].sum(axis=2).astype(np.float64))
+        added = results[1] - results[0]
+        far = added[:, -4:] if left else added[:, :4]
+        near = added[:, 12:20] if left else added[:, -20:-12]
+        assert near.mean() > 20           # the emitter does glow on its own side: the probe is live
+        return float(far.mean())
+    finally:
+        gl.glDisable(gl.GL_BLEND)
+        delete_program(program)
+        target.release()
+        resources.release_resources()
+
+
+@pytest.mark.parametrize("samples", (1, 4))
+@pytest.mark.parametrize("left", (True, False))
+def test_bloom_light_never_wraps_in_from_the_opposite_edge(capture, samples, left):
+    """The bloom chain samples bilinear and clamps at the edge (as the native core does): emission at one edge
+    adds nothing to the opposite edge."""
+    assert _opposite_edge_light(capture, samples, left=left) <= 1.0
+
+
+@pytest.mark.parametrize("samples", (1, 4))
+def test_the_wrap_guard_fails_on_the_old_nearest_repeat_sampler(capture, monkeypatch, samples):
+    """Negative control: with the bloom source back on the default NEAREST/REPEAT state the same probe sees the
+    wrapped light, so the guard above can fail."""
+    from rendering.quick.scene3d import target as module
+
+    monkeypatch.setattr(module, "_BLOOM_SOURCE_KEYS", frozenset())
+    assert _opposite_edge_light(capture, samples, left=True) > 1.0
+
+
 def test_light_shafts_are_one_transform_of_the_overlay_composite_and_warm_with_the_target():
     from rendering.quick.scene3d import target as module
     from rendering.quick.scene3d.shafts import SHAFT_PROGRAMS, SHAFT_SAMPLES_PROGRAMS

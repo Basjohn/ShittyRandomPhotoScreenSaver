@@ -257,6 +257,11 @@ class MotionBlur:
         # The tile max is a compute-written image; only the blurred scene is drawn.
         self._allocate_texture(tile_w, tile_h, gl.GL_RGBA16F)   # .xy used (N1.7: QRhi has no RG16F)
         texture = self._allocate_texture(width, height, gl.GL_RGBA8)
+        # The blurred scene is the bloom chain's source when both run: bilinear taps, an edge that clamps.
+        for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
+            gl.glTextureParameteri(texture, parameter, gl.GL_LINEAR)
+        for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
+            gl.glTextureParameteri(texture, wrap, gl.GL_CLAMP_TO_EDGE)
         framebuffer_name = (ctypes.c_uint * 1)()
         gl.glCreateFramebuffers(1, framebuffer_name)
         fbo = int(framebuffer_name[0])
