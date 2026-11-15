@@ -218,7 +218,9 @@ def _python_block(logical, presentation, card) -> dict:
     values = {"uMatrix": (0.0,) * 16, "uItemSize": tuple(card["item_size"]),
               "uContentRotationQuarters": int(card["quarters"]), "u_resolution": tuple(card["oriented_size"]),
               "u_dpr": presentation.dpr, "u_viewport_origin_px": (0.0, 0.0), "u_quick_item_coords": 1,
-              "u_border_width": presentation.border_width, "u_fade": presentation.content_fade}
+              "u_border_width": presentation.border_width, "u_fade": presentation.content_fade,
+              # fragPixel's target: the render target's pixels (the core's own target; the window's in Python).
+              "u_target_px": tuple(float(v) for v in card["target_size"])}
     values.update(devcurve_settings_values(logical, layout))
     values.update(devcurve_frame_values(logical))
     return values

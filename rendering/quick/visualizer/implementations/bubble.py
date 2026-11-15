@@ -315,6 +315,8 @@ class QuickBubbleRenderer:
         values["u_dpr"] = presentation.dpr
         values["u_viewport_origin_px"] = (0.0, 0.0)
         values["u_quick_item_coords"] = 1
+        # fragPixel's target (the window's framebuffer here; its row flip is 0 in this renderer, N1.4).
+        values["u_target_px"] = (float(frame.viewport[2]), float(frame.viewport[3]))
         values["u_content_rect"] = tuple(layout.content_rect)
         values["u_visual_scale"] = layout.effect_scale
         values["u_response_radius_scale"] = layout.response_radius_scale
@@ -477,6 +479,7 @@ class QuickBubbleRenderer:
             "u_dpr",
             "u_viewport_origin_px",
             "u_quick_item_coords",
+            "u_target_px",
             "u_content_rect",
             "u_visual_scale",
             "u_response_radius_scale",

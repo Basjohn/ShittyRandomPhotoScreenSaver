@@ -337,6 +337,8 @@ class QuickDevCurveRenderer:
         values["u_dpr"] = presentation.dpr
         values["u_viewport_origin_px"] = (0.0, 0.0)
         values["u_quick_item_coords"] = 1
+        # fragPixel's target (the window's framebuffer here; its row flip is 0 in this renderer, N1.4).
+        values["u_target_px"] = (float(frame.viewport[2]), float(frame.viewport[3]))
         values["u_border_width"] = presentation.border_width
         values["u_fade"] = presentation.content_fade
         values.update(settings)
@@ -367,6 +369,7 @@ class QuickDevCurveRenderer:
             "u_dpr",
             "u_viewport_origin_px",
             "u_quick_item_coords",
+            "u_target_px",
             "u_content_rect",
             "u_devcurve_normalized_scale",
             "u_devcurve_x_to_y_scale",

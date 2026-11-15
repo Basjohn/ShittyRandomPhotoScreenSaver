@@ -542,15 +542,27 @@ def _converted_sources() -> dict[str, str]:
     from rendering.gl_programs.fog_volume import FOG_COMPOSITE_FRAGMENT, fog_march_source
     from rendering.gl_programs.reflection import PLANAR_REFLECTION_GLSL
 
+    from pathlib import Path
+
+    from rendering.gl_programs.extruded_spectrum_program import EXTRUDED_FRAGMENT_SOURCE
+    from rendering.quick.visualizer.implementations import sphere_voxel
+    from widgets.spotify_visualizer.shaders import compose_shader_source
+
+    shaders = Path(__file__).resolve().parents[1] / "widgets" / "spotify_visualizer" / "shaders"
     return {"fog march": fog_march_source(), "fog composite": FOG_COMPOSITE_FRAGMENT,
-            "planar reflection": PLANAR_REFLECTION_GLSL, "Extruded Bubble shafts": SHAFT_FRAGMENT}
+            "planar reflection": PLANAR_REFLECTION_GLSL, "Extruded Bubble shafts": SHAFT_FRAGMENT,
+            "Extruded Spectrum bars": EXTRUDED_FRAGMENT_SOURCE, "Sphere voxels": sphere_voxel._FRAGMENT_SOURCE,
+            **{name: compose_shader_source(shaders / name) for name in ("bubble.frag", "devcurve.frag",
+                                                                         "oscilloscope.frag", "spectrum.frag")}}
 
 
 def test_the_per_pixel_seeds_read_the_pixel_through_the_include():
     """The hash seeds (the fog march's step jitter, the fog edge's filament noise, the reflection streak's offset, the
-    shafts' jitter) read the fragment's pixel through ``fragPixel``, so each is the same texel on every backend: outside
-    the include's own text no source reads ``gl_FragCoord``. (Drawn identity on OpenGL: ``tools/conventions_identity.py``
+    shafts' jitter), the mirrored faces' backdrop uv (Extruded Spectrum, Sphere) and the 2D shaders' framebuffer
+    branch read the fragment's pixel through ``fragPixel``, so each is the same texel on every backend: outside the
+    include's own text no source reads ``gl_FragCoord``. (Drawn identity on OpenGL: ``tools/conventions_identity.py``
     record/compare and pairs, N1.4's evidence.)"""
     for name, source in _converted_sources().items():
-        assert "fragPixel(" in source.replace(SRPSS_CONVENTIONS_GLSL, ""), name
-        assert "gl_FragCoord" not in source.replace(SRPSS_CONVENTIONS_GLSL, ""), name
+        code = re.sub(r"//[^\n]*", "", source.replace(SRPSS_CONVENTIONS_GLSL, ""))   # code only, not comments
+        assert "fragPixel(" in code, name
+        assert "gl_FragCoord" not in code, name
