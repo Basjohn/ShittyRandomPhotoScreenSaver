@@ -79,6 +79,7 @@ void main()
 VOXEL_BLOCK = """layout(std140, binding = 18) uniform VoxelDraw {
     mat4 uMatrix;
     vec4 u_tint;
+    float u_frame;    // the record's tick (no math reads it: a record field fills a member)
 };
 """
 VOXEL_VERT = HEADER + VOXEL_BLOCK + HUE + """layout(location = 0) in vec3 aPosition;
@@ -204,6 +205,7 @@ STREAK_BLOCK = """layout(std140, binding = 18) uniform StreakDraw {
     vec2 uItemSize;
     vec2 u_spread;    // length range px
     vec4 u_colour;
+    float u_frame;    // the record's tick
 };
 """
 STREAK_VERT = HEADER + STREAK_BLOCK + """layout(location = 0) in vec2 aPosition;   // the item quad's (the built-in mesh "quad")
@@ -261,11 +263,16 @@ void main()
 #elif defined(CELLS_FLAT)
     int batch = 0;
     uint index = uint(srpssInstanceIndex);
+#elif defined(CELLS_PASS)
+    int batch = CELLS_PASS;
+    uint index = uint(4 * CELLS_PASS + srpssInstanceIndex);
 #else
     int batch = int(srpssBatchIndex);
     uint index = batches[batch].x + uint(srpssInstanceIndex);
 #endif
     vec4 c = cells[index];
+    if (batches[0].y > 1000000u)
+        c.z = 0.0;                     // every variant reads the table (never true: four a batch)
     vec2 corner = vec2(float(srpssVertexIndex & 1), float((srpssVertexIndex >> 1) & 1));
     gl_Position = uMatrix * vec4(c.xy + (corner - 0.5) * c.z, 0.0, 1.0);
     vColour = vec4(hue(c.w + 0.06 * float(batch)) * u_tint.rgb, u_tint.a);
@@ -275,6 +282,24 @@ CELL_VERT = HEADER + "//@srpss_conventions\n" + CELL_BODY
 CELL_VERT_DP = HEADER_460 + "#define SRPSS_DRAW_PARAMETERS\n//@srpss_conventions\n" + CELL_BODY
 CELL_VERT_DIRECT = HEADER + "#define CELLS_DIRECT\n//@srpss_conventions\n" + CELL_BODY
 CELL_VERT_FLAT = HEADER + "#define CELLS_FLAT\n//@srpss_conventions\n" + CELL_BODY
+
+
+def cell_pass_vert(batch: int) -> str:
+    """One batch drawn as a pass of its own (N3.1's form: sixteen passes, each its own block)."""
+    return HEADER + f"#define CELLS_PASS {int(batch)}\n//@srpss_conventions\n" + CELL_BODY
+
+
+SPRITE_FRAG_Y_UP = "#version 440\n#define SPRITE_Y_UP\n" + SPRITE_BLOCK + SPRITE_FRAG_BODY
+SPRITE_FRAG_POINTS = "#version 440\n#define SPRITE_POINTS\n" + SPRITE_BLOCK + SPRITE_FRAG_BODY
+# Research Q5: qsb compiles the draw parameters (gl_DrawID, gl_BaseInstance, gl_BaseVertex) for which targets.
+DRAW_PARAMETERS_PROBE = """#version 460
+layout(location = 0) out vec4 vIds;
+void main()
+{
+    vIds = vec4(float(gl_DrawID), float(gl_BaseInstance), float(gl_BaseVertex), 0.0);
+    gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
+}
+"""
 CELL_FRAG = "#version 440\n" + """layout(location = 0) in vec4 vColour;
 layout(location = 0) out vec4 fragColor;
 void main()
@@ -287,6 +312,7 @@ void main()
 RING_BLOCK = """layout(std140, binding = 18) uniform RingDraw {
     mat4 uMatrix;
     vec4 u_colour;
+    float u_frame;    // the record's tick
 };
 """
 RING_VERT = HEADER + RING_BLOCK + """layout(std430, binding = 3) readonly buffer Small { vec4 small[]; };
@@ -299,15 +325,45 @@ void main()
     vColour = u_colour;
 }
 """
+# The payload read per instance (Extruded Spectrum's bars, Bubble's points): a quad a row.
+RING_INSTANCE_VERT = HEADER + RING_BLOCK + """layout(location = 0) in vec2 aCorner;
+layout(location = 1) in vec4 aRow;      // x, y px, size px, 0
+layout(location = 0) out vec4 vColour;
+void main()
+{
+    gl_Position = uMatrix * vec4(aRow.xy + (aCorner - 0.5) * aRow.z, 0.0, 1.0);
+    vColour = u_colour;
+}
+"""
+# The payload read with neighbours (the Oscilloscope's points, Waveform's knots): a segment a row.
+RING_STORAGE_VERT = HEADER + RING_BLOCK + """layout(std430, binding = 3) readonly buffer Rows { vec4 rows[]; };
+layout(location = 0) out vec4 vColour;
+void main()
+{
+    int i = srpssInstanceIndex;
+    vec2 a = rows[i].xy;
+    vec2 b = rows[i + 1].xy;
+    vec2 dir = normalize(b - a + vec2(1e-6, 0.0));
+    vec2 n = vec2(-dir.y, dir.x);
+    int v = srpssVertexIndex;
+    vec2 end = v < 2 ? a : b;
+    gl_Position = uMatrix * vec4(end + n * ((v & 1) == 1 ? 1.0 : -1.0), 0.0, 1.0);
+    vColour = u_colour;
+}
+"""
 RING_FRAG = CELL_FRAG
 
 SHADERS = {
     "box.vert": BOX_VERT, "box.frag": BOX_FRAG, "voxel.vert": VOXEL_VERT, "voxel.frag": VOXEL_FRAG,
     "sprite.vert": SPRITE_VERT, "sprite.frag": SPRITE_FRAG, "beam.vert": BEAM_VERT, "beam.frag": BEAM_FRAG,
-    "streak.vert": STREAK_VERT, "streak.frag": STREAK_FRAG, "cell.vert": CELL_VERT, "cell_dp.vert": CELL_VERT_DP,
+    "streak.vert": STREAK_VERT, "streak.frag": STREAK_FRAG, "cell.vert": CELL_VERT,
     "cell_direct.vert": CELL_VERT_DIRECT, "cell_flat.vert": CELL_VERT_FLAT, "cell.frag": CELL_FRAG,
-    "ring.vert": RING_VERT, "ring.frag": RING_FRAG,
+    "ring.vert": RING_VERT, "ring.frag": RING_FRAG, "ring_instance.vert": RING_INSTANCE_VERT,
+    "ring_storage.vert": RING_STORAGE_VERT, "sprite_yup.frag": SPRITE_FRAG_Y_UP,
+    **{f"cell_pass{b}.vert": cell_pass_vert(b) for b in range(16)},
 }
+#: Baked apart: a failure is a fact (research Q5), not the harness's end.
+OPTIONAL_SHADERS = {"cell_dp.vert": CELL_VERT_DP, "draw_parameters.vert": DRAW_PARAMETERS_PROBE}
 
 
 def compose(text: str) -> str:
@@ -320,10 +376,43 @@ def compose(text: str) -> str:
 
 
 def bake_all(folder: Path) -> dict[str, bytes]:
-    """Every shader baked by ``tools/regen_qrc.py``'s own baker (its markers composed): file name -> pack."""
+    """Every shader of ``SHADERS`` baked by ``tools/regen_qrc.py``'s own baker (its markers composed): file name
+    -> pack (the optional ones are :func:`bake_optional`'s)."""
     import probe_rings
 
-    return {name: probe_rings.bake(compose(text), name, folder) for name, text in SHADERS.items()}
+    packs = {name: probe_rings.bake(compose(text), name, folder) for name, text in SHADERS.items()}
+    return packs
+
+
+def bake_optional(folder: Path) -> tuple[dict[str, bytes], dict[str, dict]]:
+    """The optional shaders (``OPTIONAL_SHADERS``), tried for every shipped target, then for SPIR-V and GLSL alone:
+    name -> pack, and name -> the targets each was baked for (or the errors; a failure leaves the pack out)."""
+    import subprocess
+    import sys
+
+    import probe_rings
+    from tools import regen_qrc
+
+    packs, facts = {}, {}
+    for name, text in OPTIONAL_SHADERS.items():
+        try:
+            packs[name] = probe_rings.bake(compose(text), name, folder)
+            facts[name] = {"targets": list(regen_qrc.quick_shader_targets())}
+            continue
+        except Exception as exc:            # noqa: BLE001 (the fact is the failure)
+            facts[name] = {"every_target_error": str(exc)[-600:]}
+        source = Path(folder) / name
+        source.write_text(compose(text), encoding="utf-8")
+        pack = source.with_name(name + ".qsb")
+        glsl = regen_qrc.quick_shader_targets()[1]
+        try:
+            regen_qrc._bake_quick_shader(regen_qrc.quick_shader_baker(sys.executable), source, pack, ("--glsl", glsl),
+                                         subprocess.run)
+            packs[name] = pack.read_bytes()
+            facts[name]["targets"] = ["--glsl", glsl]
+        except Exception as exc:            # noqa: BLE001
+            facts[name]["spirv_glsl_error"] = str(exc)[-600:]
+    return packs, facts
 
 
 # ----------------------------------------------------------------------------------------------------- the data
@@ -383,14 +472,16 @@ def box_mesh() -> bytes:
 def bars(frame: int = 0) -> list[float]:
     out = []
     for i in range(BARS):
-        out += [40.0 + i * 17.5, 30.0 + 160.0 * (0.5 + 0.5 * math.sin(0.7 * i + 0.3 * frame)), i / BARS, 0.0]
+        out += [40.13 + i * 17.5, 30.0 + 160.0 * (0.5 + 0.5 * math.sin(0.7 * i + 0.3 * frame)), i / BARS, 0.0]
     return out
 
 
 def voxel_instances() -> bytes:
     out = []
     for i in range(VOXELS):
-        out += [60.0 + (i % 10) * 38.0, 60.0 + (i // 10) * 48.0, 20.0 + 6.0 * (i % 3), (i * 0.137) % 1.0]
+        # Edges off pixel centres: an edge through a centre is a tie the core's Y flip turns the other way (the fill
+        # rule's top edge is its bottom edge), so it is no proof of the stream (the tie round shows it apart).
+        out += [60.137 + (i % 10) * 38.0, 60.291 + (i // 10) * 48.0, 20.31 + 6.0 * (i % 3), (i * 0.137) % 1.0]
     return _f32(out)
 
 
@@ -462,7 +553,7 @@ def scene(name: str, packs: dict, *, front_cw: int = 0, form: str = "") -> Scene
         passes = (ModePass("box", packs["box.frag"], "replace", target="scene", depth_test="less", depth_write=True,
                            geometry=geometry),)
         return SceneSpec(name, passes, (_target(depth=True),), (ModeStream("bars", "bar_rows"),),
-                         {"u_box": [11.0, 250.0, 0.6, 0.55], "u_light": [0.4, -0.6, 0.7, 0.0],
+                         {"u_box": [11.3, 249.71, 0.6, 0.55], "u_light": [0.4, -0.6, 0.7, 0.0],
                           "u_front_cw": int(front_cw)},
                          schema(name, (("bar_rows", "f32", 4 * 64), ("bar_count", "u32", 1)),
                                 (("bar_count", "at_most", 64),)),
@@ -473,7 +564,7 @@ def scene(name: str, packs: dict, *, front_cw: int = 0, form: str = "") -> Scene
         geometry = PassGeometry(packs["voxel.vert"], mesh="voxels", instance_from="voxels")
         passes = (ModePass("voxels", packs["voxel.frag"], "alpha", target="scene", geometry=geometry),)
         return SceneSpec(name, passes, (_target(),), (), {"u_tint": [1.0, 0.85, 0.7, 0.6]},
-                         schema(name, (("frame", "f64", 1),)), {"frame": 0.0},
+                         schema(name, (("u_frame", "f64", 1),)), {"u_frame": 0.0},
                          (("voxels", box_mesh(), box_layout(), voxel_instances(), cell_layout),))
     if name == "sprites":
         layout = RecordLayout(24, (MeshAttribute("aPoint", 4, 0), MeshAttribute("aOther", 2, 16)))
@@ -502,8 +593,8 @@ def scene(name: str, packs: dict, *, front_cw: int = 0, form: str = "") -> Scene
                     PassGeometry(packs["streak.vert"], topology="triangle_strip", mesh="quad", vertices="mesh",
                                  instances=STREAKS))
         passes = (ModePass("streaks", packs["streak.frag"], "additive", target="scene", geometry=geometry),)
-        entries = ((("commands", "u32", 4), ("command_count", "u32", 1)) if indirect else (("frame", "f64", 1),))
-        record = {"commands": (4, STREAKS, 0, 0), "command_count": 1} if indirect else {"frame": 0.0}
+        entries = (("u_frame", "f64", 1),) + ((("commands", "u32", 4), ("command_count", "u32", 1)) if indirect else ())
+        record = dict({"u_frame": 0.0}, **({"commands": (4, STREAKS, 0, 0), "command_count": 1} if indirect else {}))
         return SceneSpec(name, passes, (_target(),),
                          (ModeStream("commands", "commands", "indirect"),) if indirect else (),
                          {"u_spread": [6.0, 36.0], "u_colour": [1.0, 0.7, 0.35, 1.0]},
@@ -530,26 +621,61 @@ def scene(name: str, packs: dict, *, front_cw: int = 0, form: str = "") -> Scene
     raise KeyError(name)
 
 
+def ring_rows(count: int) -> bytes:
+    """``count`` payload rows (x, y px, size px, 0) spread over the card."""
+    out = []
+    for i in range(count):
+        out += [20.0 + (i * 7.31) % 440.0, 20.0 + (i * 3.17) % 230.0, 3.0, 0.0]
+    return _f32(out)
+
+
+RING_CORNERS = _f32([0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0])
+
+
 def ring_scene(packs: dict, payload_floats: int, kind: str):
-    """The stream ring's measurement (D15 point 7): a small storage stream the pass reads (8 quads) and an unread
-    stream of ``payload_floats`` floats of ``kind`` (storage: QRhi's Static route; instance: its Dynamic fast path, the
-    pair's floor); ``kind`` "none" has no second stream (the base)."""
+    """The stream ring's measurement (D15 point 7), a payload of ``payload_floats`` floats (rows of four) read as its
+    consumer reads it: ``instance`` (an instance stream: QRhi's Dynamic fast path, the pair's CPU floor), ``storage``
+    (a storage stream read with neighbours: QRhi's Static route, ``uploadStaticBuffer``), ``floor`` (the instance pass
+    over the same rows resident in a mesh's instance stream: no copy, the pair's GPU floor); ``none``: eight quads from a
+    small storage stream (the base)."""
     from rendering.native.mode import MeshAttribute, ModePass, ModeStream, PassGeometry, RecordLayout
 
-    geometry = PassGeometry(packs["ring.vert"], topology="triangle_strip", vertices=4, instances=8,
-                            storage=(("Small", "small"),))
+    rows = max(2, int(payload_floats) // 4)
+    corner = RecordLayout(8, (MeshAttribute("aCorner", 2, 0),))
+    row = RecordLayout(16, (MeshAttribute("aRow", 4, 0),))
+    entries = [("u_frame", "f64", 1)]
+    record: dict = {"u_frame": 0.0}
+    streams: tuple = ()
+    meshes: tuple = ()
+    if kind == "none":
+        geometry = PassGeometry(packs["ring.vert"], topology="triangle_strip", vertices=4, instances=8,
+                                storage=(("Small", "small"),))
+        streams = (ModeStream("small", "small_rows"),)
+        entries.append(("small_rows", "f32", 32))
+        record["small_rows"] = _f32([40.0 + 50.0 * i if j == 0 else (60.0 if j == 1 else (30.0 if j == 2 else 0.0))
+                                     for i in range(8) for j in range(4)])
+    elif kind == "instance":
+        geometry = PassGeometry(packs["ring_instance.vert"], topology="triangle_strip", mesh="ring_quad",
+                                vertices="mesh", instance_from="payload")
+        streams = (ModeStream("payload", "payload", "instance", row),)
+        meshes = (("ring_quad", RING_CORNERS, corner, None, None),)
+        entries.append(("payload", "f32", 4 * rows))
+        record["payload"] = ring_rows(rows)
+    elif kind == "storage":
+        geometry = PassGeometry(packs["ring_storage.vert"], topology="triangle_strip", vertices=4, instances=rows - 1,
+                                storage=(("Rows", "payload"),))
+        streams = (ModeStream("payload", "payload"),)
+        entries.append(("payload", "f32", 4 * rows))
+        record["payload"] = ring_rows(rows)
+    elif kind == "floor":
+        geometry = PassGeometry(packs["ring_instance.vert"], topology="triangle_strip", mesh="ring_floor",
+                                vertices="mesh", instance_from="ring_floor")
+        meshes = (("ring_floor", RING_CORNERS, corner, ring_rows(rows), row),)
+    else:
+        raise KeyError(kind)
     passes = (ModePass("ring", packs["ring.frag"], "alpha", target="scene", geometry=geometry),)
-    streams = [ModeStream("small", "small_rows")]
-    entries = [("small_rows", "f32", 32), ("frame", "f64", 1)]
-    record = {"small_rows": _f32([40.0 + 50.0 * i if j == 0 else (60.0 if j == 1 else (30.0 if j == 2 else 0.0))
-                                  for i in range(8) for j in range(4)]), "frame": 0.0}
-    if kind != "none":
-        entries.append(("payload", "f32", int(payload_floats)))
-        layout = RecordLayout(16, (MeshAttribute("aUnread", 4, 0),)) if kind == "instance" else None
-        streams.append(ModeStream("payload", "payload", kind, layout))
-        record["payload"] = bytes(4 * int(payload_floats))
-    return SceneSpec(f"ring_{kind}_{payload_floats}", passes, (_target(),), tuple(streams),
-                     {"u_colour": [0.6, 0.8, 1.0, 0.9]}, schema("ring", tuple(entries)), record)
+    return SceneSpec(f"ring_{kind}_{payload_floats}", passes, (_target(),), streams,
+                     {"u_colour": [0.6, 0.8, 1.0, 0.9]}, schema("ring", tuple(entries)), record, meshes)
 
 
 __all__ = ["CARD", "SHADERS", "SceneSpec", "bake_all", "compose", "ring_scene", "scene", "schema"]
