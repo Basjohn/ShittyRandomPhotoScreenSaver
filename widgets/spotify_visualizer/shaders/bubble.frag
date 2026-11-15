@@ -178,7 +178,10 @@ void main() {
         // clamp-to-edge result at the content's own edges, never the allocation's cleared texels past them.
         vec2 allocation = vec2(textureSize(u_ambient_texture, 0));
         vec2 ratio = u_ambient_px / allocation;
-        vec2 ambient_uv = vec2(uv.x * ratio.x, 1.0 - uv.y * ratio.y);
+        // Its rows: this renderer's target keeps OpenGL's bottom-up rows (the content's top row last); the native
+        // core's are top-down (its top row first, at row H - h), which the conventions block's z says (D15).
+        vec2 ambient_uv = vec2(uv.x * ratio.x, srpssConventions.z > 0.5 ? 1.0 - (1.0 - uv.y) * ratio.y
+                                                                         : 1.0 - uv.y * ratio.y);
         ambient_uv = clamp(ambient_uv, vec2(0.5, allocation.y - u_ambient_px.y + 0.5) / allocation,
                            vec2(u_ambient_px.x - 0.5, allocation.y - 0.5) / allocation);
         decor = texture(u_ambient_texture, ambient_uv);
