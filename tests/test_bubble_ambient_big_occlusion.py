@@ -1,10 +1,10 @@
 """Accuracy of decorative bubble masking, without extra full-screen work."""
 from types import SimpleNamespace
+
+import numpy as np
 import pytest
 
-from widgets.spotify_visualizer.bubble_ambient_geometry import (
-    ambient_occluder_quads, select_ambient_occluders,
-)
+from widgets.spotify_visualizer.bubble_ambient_geometry import select_ambient_occluders
 
 
 def test_occlusion_uses_all_visible_bubbles_with_the_exact_rendered_radii():
@@ -21,30 +21,10 @@ def test_occlusion_uses_all_visible_bubbles_with_the_exact_rendered_radii():
     )
 
 
-@pytest.mark.parametrize('width,height,scale', [
-    (420, 280, 1.0), (420, 280, 1.6), (4000, 250, 0.7), (250, 4000, 1.3),
-    (2048, 300, 1.0), (300, 2048, 1.0),
-])
-def test_masks_remain_physical_circles_with_correct_response_scaling(width, height, scale):
-    data = ambient_occluder_quads((0.4, 0.6, 0.045, 0.75), width, height, scale)
-    assert len(data) == 6 * 5
-    vertices = [data[i:i+5] for i in range(0, len(data), 5)]
-    xs = [v[0] for v in vertices]
-    ys = [v[1] for v in vertices]
-    assert ((max(xs) - min(xs)) * width) == pytest.approx((max(ys)-min(ys)) * height)
-    assert ((max(ys)-min(ys)) * height) == pytest.approx(2 * .045 * scale * height)
-    assert all(v[4] == .75 for v in vertices)
-
-
 def test_empty_ambient_mask_and_invalid_contracts():
-    assert ambient_occluder_quads((), 420, 280) == ()
     assert select_ambient_occluders((), ()) == ()
     with pytest.raises(ValueError):
         select_ambient_occluders([SimpleNamespace(is_big=True)], ())
-    with pytest.raises(ValueError):
-        ambient_occluder_quads((0.1, 0.2, 0.3), 420, 280)
-    with pytest.raises(ValueError):
-        ambient_occluder_quads((0.1, 0.2, float('nan'), 0.7), 420, 280)
 
 
 def test_immutable_bubble_frame_requires_complete_bounded_occlusion_records():
@@ -57,41 +37,83 @@ def test_immutable_bubble_frame_requires_complete_bounded_occlusion_records():
         BubbleFrame(ambient_occluders=(0.45, 0.6, 0.07, 0.9))
     with pytest.raises(ValueError):
         BubbleFrame(ambient_points=points, ambient_occluders=(0.4, 0.6))
+    with pytest.raises(ValueError):
+        BubbleFrame(ambient_points=points, ambient_occluders=(0.4, 0.6, float("nan"), 0.7))
 
 
-def _per_circle_reference(occluders, width, height, response_radius_scale=1.0):
-    """The original per-circle Python encoding, kept as the oracle for the vectorised one."""
-    result = []
-    corners = ((-1., -1.), (1., -1.), (1., 1.), (-1., -1.), (1., 1.), (-1., 1.))
-    for i in range(0, len(occluders), 4):
-        x, y, r, alpha = occluders[i:i + 4]
-        if r <= 0.0 or alpha <= 0.0:
-            continue
-        radius_y = r * response_radius_scale
-        radius_x = radius_y * height / width
-        for dx, dy in corners:
-            result.extend((x + dx * radius_x, y + dy * radius_y, dx, dy, min(1., max(0., alpha))))
-    return tuple(result)
+# ------------------------------------------------------------------------------------------- the mask on the GPU
+
+@pytest.fixture
+def ambient(qt_app):
+    from PySide6.QtGui import QOffscreenSurface, QOpenGLContext, QSurfaceFormat
+
+    fmt = QSurfaceFormat()
+    fmt.setRenderableType(QSurfaceFormat.OpenGL)
+    fmt.setProfile(QSurfaceFormat.CoreProfile)
+    fmt.setVersion(4, 6)
+    context = QOpenGLContext()
+    context.setFormat(fmt)
+    if not context.create():
+        pytest.skip("OpenGL 4.6 context unavailable on this runner")
+    surface = QOffscreenSurface()
+    surface.setFormat(fmt)
+    surface.create()
+    if not surface.isValid() or not context.makeCurrent(surface):
+        pytest.skip("offscreen OpenGL context unavailable")
+    from rendering.quick.visualizer.implementations.bubble_ambient_gl import QuickBubbleAmbientPoints
+
+    renderer = QuickBubbleAmbientPoints()
+    try:
+        yield renderer
+    finally:
+        renderer.release_resources()
+        context.doneCurrent()
+        surface.destroy()
 
 
-def test_vectorised_occluder_vertices_are_byte_identical_to_the_per_circle_encoding():
-    import random
+def _erased(renderer, width, height, occluders, scale):
+    """The ambient target filled opaque, then only the hero mask drawn over it: the erased alpha (rows top first)."""
+    from OpenGL import GL as gl
 
-    import numpy as np
+    invisible = (0.5, 0.5, 1.0, 0.0, 0.0, 0.0)
+    renderer.render_texture((0.0, 0.0, float(width), float(height)), 1.0, invisible, sprite_scale=1.0,
+                            micro_color=(1.0, 1.0, 1.0, 1.0), particle_color=(1.0, 1.0, 1.0, 1.0))
+    assert renderer.target_size == (width, height)
+    gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, renderer._fbo)
+    gl.glViewport(0, 0, width, height)
+    gl.glClearColor(1.0, 1.0, 1.0, 1.0)
+    gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+    gl.glEnable(gl.GL_BLEND)
+    renderer._draw_occluders(tuple(occluders), width, height, scale)
+    gl.glReadBuffer(gl.GL_COLOR_ATTACHMENT0)
+    gl.glPixelStorei(gl.GL_PACK_ALIGNMENT, 1)
+    raw = gl.glReadPixels(0, 0, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
+    gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0)
+    gl.glDisable(gl.GL_BLEND)
+    assert gl.glGetError() == gl.GL_NO_ERROR
+    pixels = np.frombuffer(raw if isinstance(raw, (bytes, bytearray)) else np.asarray(raw).tobytes(),
+                           dtype=np.uint8).reshape(height, width, 4)[::-1]
+    return 255 - pixels[..., 3].astype(np.int32)
 
-    from widgets.spotify_visualizer.bubble_ambient_geometry import ambient_occluder_vertices
 
-    rng = random.Random(7)
-    for _trial in range(400):
-        occluders = []
-        for _ in range(rng.randint(0, 110)):
-            occluders += [rng.uniform(-0.2, 1.2), rng.uniform(-0.2, 1.2),
-                          rng.choice([0.0, -0.01, rng.uniform(0.0, 0.2)]),
-                          rng.choice([0.0, 1.0, 1.3, rng.uniform(-0.1, 1.2)])]
-        width, height = rng.choice([(420, 280), (2048, 766), (300, 2400), (1, 1)])
-        scale = rng.choice([1.0, 0.37, 2.9, rng.uniform(0.1, 3.0)])
-        expected = _per_circle_reference(tuple(occluders), width, height, scale)
-        assert ambient_occluder_quads(tuple(occluders), width, height, scale) == expected
-        # The GPU upload: float32 bytes exactly as the per-circle tuple produced them.
-        vertices = ambient_occluder_vertices(tuple(occluders), width, height, scale)
-        assert vertices.astype(np.float32).tobytes() == np.asarray(expected, dtype=np.float32).tobytes()
+@pytest.mark.qt
+@pytest.mark.parametrize('width,height,scale', [
+    (420, 280, 1.0), (420, 280, 1.6), (1600, 250, 0.7), (250, 1600, 1.3),
+])
+def test_masks_remain_physical_circles_with_correct_response_scaling(ambient, width, height, scale):
+    """Each hero circle erases a round disc in texels whatever the target's aspect, of radius r x the response scale
+    x the target height, at its alpha; a circle of radius or alpha 0 erases nothing."""
+    x, y, r, alpha = 0.4, 0.6, 0.045, 0.75
+    erased = _erased(ambient, width, height, (x, y, r, alpha, 0.2, 0.2, 0.0, 1.0, 0.8, 0.2, 0.05, 0.0), scale)
+    radius = r * scale * height
+    rows, cols = np.nonzero(erased > 0)
+    assert rows.size
+    # one disc: centred where the circle is, as wide as it is tall, of the projected radius (within the edge's AA)
+    assert (cols.max() - cols.min() + 1) == pytest.approx(rows.max() - rows.min() + 1, abs=2)
+    assert (rows.max() - rows.min() + 1) == pytest.approx(2 * radius, abs=3)
+    assert (cols.min() + cols.max() + 1) / 2 == pytest.approx(x * width, abs=1)
+    assert (rows.min() + rows.max() + 1) / 2 == pytest.approx(y * height, abs=1)
+    # round, not square: the disc's corners keep their coverage
+    assert erased[int(y * height), int(x * width)] == pytest.approx(round(255 * alpha), abs=1)
+    corner = (int(y * height - radius * 0.9), int(x * width - radius * 0.9))
+    assert erased[corner] == 0

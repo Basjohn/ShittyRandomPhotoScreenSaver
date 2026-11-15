@@ -277,20 +277,7 @@ class QuickBubbleAmbientPoints:
             with self._blocks.bound(block):
                 gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, len(points)//RECORD_STRIDE)
             if occluders:
-                count = len(occluders) // 4
-                self._occluder_data.reshape(-1)[:len(occluders)] = occluders
-                gl.glUseProgram(self._occluder_program)
-                gl.glBindVertexArray(self._occluder_vao)
-                gl.glBindBuffer(gl.GL_ARRAY_BUFFER,self._occluder_vbo)
-                gl.glBufferSubData(gl.GL_ARRAY_BUFFER,0,count*4*4,self._occluder_data[:count])
-                # Erase premultiplied RGB, alpha and light under rendered hero circles.
-                # No additional full-screen shader scans and no hero shape change.
-                gl.glBlendFuncSeparate(gl.GL_ZERO,gl.GL_ONE_MINUS_SRC_ALPHA,
-                                       gl.GL_ZERO,gl.GL_ONE_MINUS_SRC_ALPHA)
-                mask = pack_block(_MASK_BLOCK, {'u_target_px': (float(width), float(height)),
-                                                'u_response_radius_scale': response_radius_scale})
-                with self._mask_blocks.bound(mask):
-                    gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, count)
+                self._draw_occluders(occluders, width, height, response_radius_scale)
             return self._texture, self._light_texture
         finally:
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER,draw_fb)
@@ -310,6 +297,24 @@ class QuickBubbleAmbientPoints:
             gl.glUseProgram(program if program and gl.glIsProgram(program) else 0)
             gl.glBindTexture(gl.GL_TEXTURE_2D,texture_before)
             gl.glActiveTexture(texture_unit)
+
+    def _draw_occluders(self, occluders: tuple[float, ...], width: int, height: int,
+                        response_radius_scale: float) -> None:
+        """Erase premultiplied RGB, alpha and light under the rendered hero circles in the bound target: one instanced
+        quad a circle (a square of its diameter in texels; a circle of radius or alpha 0 is culled). No additional
+        full-screen shader scans and no hero shape change."""
+        count = len(occluders) // 4
+        self._occluder_data.reshape(-1)[:len(occluders)] = occluders
+        gl.glUseProgram(self._occluder_program)
+        gl.glBindVertexArray(self._occluder_vao)
+        gl.glBindBuffer(gl.GL_ARRAY_BUFFER,self._occluder_vbo)
+        gl.glBufferSubData(gl.GL_ARRAY_BUFFER,0,count*4*4,self._occluder_data[:count])
+        gl.glBlendFuncSeparate(gl.GL_ZERO,gl.GL_ONE_MINUS_SRC_ALPHA,
+                               gl.GL_ZERO,gl.GL_ONE_MINUS_SRC_ALPHA)
+        mask = pack_block(_MASK_BLOCK, {'u_target_px': (float(width), float(height)),
+                                        'u_response_radius_scale': response_radius_scale})
+        with self._mask_blocks.bound(mask):
+            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, count)
 
     def release_resources(self) -> None:
         if self._fbo: gl.glDeleteFramebuffers(1,[self._fbo])
