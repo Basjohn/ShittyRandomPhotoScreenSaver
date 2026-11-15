@@ -339,15 +339,8 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   invisible to the lifecycle tests: record those too, with a test.
 - [ ] Side defect: `waveform_ribbon.py:54` (`0.5*(clip.z/clip.w+1.0)`) and `scene3d_spheres.py:197` assume OpenGL's
   -1..1 depth: route both through `viewDepthFromDepthTexture`/the include before matrices are corrected at upload.
-- [ ] N1.4's remainder (the include and its use across the substrate, Waveform and Extruded Bubble landed, above):
-  - [ ] Per-pixel hash seeds still read raw `gl_FragCoord` (`gl_programs/fog_volume.py:165,289`,
-    `reflection.py:84`, `extruded_bubble_program.py:545`): through `fragPixel`, so the dither is the same texel on
-    every backend and a port's Vulkan record is not compared across two noise patterns. Bit-identical in OpenGL.
-  - [ ] Extruded Spectrum's and Sphere's backdrop uv (`extruded_spectrum_program.py:415`, `sphere_voxel.py:658`)
-    and the four 2D shaders (`gl_FragCoord.xy - u_viewport_origin_px`), each with its N1.6 group. Spectrum's group
-    merged without it (`spectrum.frag:521` still reads raw `gl_FragCoord`): Spectrum's is still owed (N2.5 merged without it).
-  - The eight scene composites in `scene3d/target.py:125-286` (and their oriented forms) keep raw `gl_FragCoord`
-    and are never converted: D5.2 replaces them with a texture node.
+- N1.4's remainder: the eight scene composites in `scene3d/target.py:125-286` (and their oriented forms) keep raw
+  `gl_FragCoord` and are never converted: D5.2 replaces them with a texture node.
 - [ ] N1.6 Loose uniforms into blocks across the renderer (`qsb` needs blocks), each group pixel-identical in OpenGL
   before and after and with GL calls per frame recorded before and after (fewer calls is a gain today); `.qsb` baked
   for every backend, not `--glsl 460` only; each group leaves the readiness ratchet in the same change. A group whose
@@ -365,9 +358,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   velocity.
 - [ ] D5.6 row 13's control was not run: fill the widened targets' unused channels with non-zero values in a test, so
   a consumer that reads them fails (the scan and source checks show only `.rg`/`.xy`/`.rgb` reads today).
-- [ ] Side defect: `rendering/quick/visualizer/implementations/bubble_ambient_gl.py:421` restores the caller's program
-  unconditionally; a program deleted while current makes the restore raise `GL_INVALID_VALUE` (hit by the harness;
-  production's Quick program is live): restore only a live program, with a test.
 - [ ] N1.8 Per-sample multisample reads (`sampler2DMS`, `gl_SampleID`): each use resolves first and reads the
   resolve, with stills before and after; a use that cannot is listed for D5.3's per-sample service with the
   reason. The uses (D5.6 rows 7 and 15), one step each:
@@ -648,8 +638,11 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       `tests/test_native_packet_reader_sources.py`), the C++ reader's admission of the kind, the Python reference
       decoder; an `f32` array admitted only with its used-length `u32` field and `at_most` rule (the stream's `"used"`,
       refused without one, past the capacity or on a u32 stream; only the used bytes written each record: the lead,
-      15 Nov; `mesh_buffer_check.py --rounds used` proves the bytes written, the bytes past it untouched and a record
-      past its rule writing nothing).
+      15 Nov; a storage stream's bytes past the used length are an earlier record's, an instance stream is drawn
+      exactly its used records and any other instance count is refused: checkpoint audit 4, H2;
+      `mesh_buffer_check.py --rounds used` proves the bytes written, a storage stream's bytes past it untouched, an
+      instance stream drawn exactly its used records with no frame-slot difference (control `instances_past_used`: the
+      Vulkan frames alternate), another instance count refused, and a record past its rule writing nothing).
     - [ ] Python face: `rendering/native/mode.py` (`ModeMesh`, `ModeStream`, `ModePass` gaining the vertex pack,
       geometry, draw, storage bindings, cull, front face and blend declaration; `program_json` carrying them;
       `NativeMode.set_mesh`/`remove_mesh`; `state()`'s meshes, streams and arena); a GPU-free mirror of the arena's
@@ -729,6 +722,25 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     native mesh and stream rows; `Docs/Reference/Harness_Index.md` (the command); `Native_Core_QRhi_Research_N3.md`'s
     open items Q4 to Q6 answered from the proof; the 3D foundation lessons in `Docs/Reference/Transitions.md` (appended
     after the slice).
+  - [ ] Checkpoint audit 4's three open lows (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 4";
+    recorded, not fixed, by the lead's decision of 15 Nov):
+    - [ ] L1, the draw-parameters pack's interface: `checkGeometryPass` (`mode_content.cpp`) checks only a batched
+      pass's draw-parameters pack's stage; its blocks, storage, samplers, inputs and outputs are compared with the
+      plain pack's, and a pack that differs is refused with the reason (today it reaches the device as a pipeline
+      whose layout does not match its shader). GPU-free test through `mode_blocks` with a pack of another input or
+      block; negative control on the pre-change module (admitted).
+    - [ ] L2, a mesh replaced by one of the same layout retargets instead of rebuilding: the latch key and
+      `ensure()` tell a mesh's layout (stride and attributes) from its buffer (`ModeMeshes::objects()` counts both, so
+      `meshObjects` forces `releasePipelines`, which releases the streams and the arena too, losing the storage
+      streams' bytes past their used length); the vertex buffers are given per draw, so only a layout change needs new
+      pipelines. Proof: `probe_replace.py`'s box replaced by its own bytes and layout creates only the mesh's buffer
+      and keeps the streams' build generation (today 3 buffers and generation 1 to 2).
+    - [ ] L6, three tests made as strong as their boxes (`tests/test_native_mesh_buffers.py`):
+      `test_umatrix_follows_the_cards_rotation_and_window_map` against the Python renderer's `uMatrix` (the
+      Oscilloscope's `physicalPoint` inverted and the card's `item_from_window`), not `_item_clip`'s copy of
+      `itemClipMatrix`; `test_the_core_arena_rule_is_the_mirror_s` calling the module's `mesh_buffer_arena_layout`
+      instead of matching source text; a test comparing the C++ reader's decode of an `f32` field with Python's
+      (fields equal, bytes round-trip with inf, -0 and a denormal: the audit's `probe_f32_reader.py`).
 - [ ] N3.3 Compute passes: dispatch only when there is new work, storage buffers shared with draws, barriers from
   the binding access types, no readback in the product. Builds on N3.2's streams and pass model (D15, ABI 18; not
   merged when this was written). The design and its open choices A to L: decisions doc, "N3.3 draft" (15 Nov). No C++
@@ -947,6 +959,10 @@ the feature (D3D11 is not stated).
     example a draw over two different backgrounds), and the 2-3 level allowance only on pixels next to a content
     edge. Opaque content and background stay exact. Spectrum and Spline Curve must still pass, and the audit's
     synthetic `rule_a_probe.py` (an all-pixel +1, a fixed 10-pixel 3-level artefact) must fail.
+  - [ ] Checkpoint audit 4's M2 joins M1: the transitions' and N3.2's tie budgets
+    (`transition_route_check.py` `TIE_PIXELS`, `mesh_buffer_check.py`) admit a uniform 1-level shift and 8 pixels off
+    by up to 207 levels. Build one shared tolerance function that every harness uses (the explained 1-level classes
+    by mask, tie pixels capped in level and required to be isolated), and rerun every harness that uses it.
   - [ ] L1: the by-value array test (`tests/test_native_devcurve.py:188-202`) scans every shader the core draws,
     including the fullscreen transition fragments' Python sources, and every GLSL form (`float c[N]`,
     `float[96] c`, indented definitions); the audit's `by_value_probe.py` is the control.

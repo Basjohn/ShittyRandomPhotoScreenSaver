@@ -433,7 +433,9 @@ class QuickBubbleAmbientPoints:
             gl.glClearColor(*clear_color)
             gl.glBindVertexArray(vao)
             gl.glBindBuffer(gl.GL_ARRAY_BUFFER,buffer)
-            gl.glUseProgram(program)
+            # The caller's program comes back only while it lives: one deleted while current went with the switch
+            # to this pass's program, and naming it again raises GL_INVALID_VALUE.
+            gl.glUseProgram(program if program and gl.glIsProgram(program) else 0)
             gl.glBindTexture(gl.GL_TEXTURE_2D,texture_before)
             gl.glActiveTexture(texture_unit)
 

@@ -40,6 +40,8 @@ public:
     const frame_abi::Schema &schema() const { return m_schema; }
     const frame_abi::Field *field(const QByteArray &name) const;
     QJsonObject toJson() const;
+    // NativeLayout.fingerprint() of this table (its fields' names, kinds, counts and offsets, and the record's size).
+    const QByteArray &fingerprint() const { return m_fingerprint; }
 
     // NativeLayout.fingerprint() of these fields (the header words first, then every field in offset order).
     static QByteArray fingerprintOf(const frame_abi::Field *fields, quint32 count, quint32 recordBytes);

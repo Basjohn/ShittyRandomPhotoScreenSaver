@@ -280,6 +280,9 @@ class QuickExtrudedSpectrumRenderer:
                 # The samplers' units (1 and 2) are stated in the program's source (N1.6).
                 vx, vy, vw, vh = frame.viewport
                 values["uBackdropMap"] = (origin[0] - vx, origin[1] - vy, vw, vh)
+                # The scene target the bars draw into: the backdrop uv's pixel (fragPixel, N1.4).
+                allocation = self._target.allocation
+                values["uTargetSize"] = (float(allocation[0]), float(allocation[1]))
                 gl.glActiveTexture(gl.GL_TEXTURE1)
                 gl.glBindTexture(gl.GL_TEXTURE_2D, backdrop)
                 gl.glActiveTexture(gl.GL_TEXTURE2)

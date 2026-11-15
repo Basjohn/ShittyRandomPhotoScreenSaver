@@ -2235,6 +2235,12 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
     *ready = false;
     // A core member declared at another size than the core fills it is refused once, here, not per frame.
     for (const ModePass &pass : passes) {
+        // Audit 4 L4: D15 point 3's limit on the blocks a pass binds at dynamic offsets (its block and the conventions).
+        if (int(pass.block.valid()) + int(pass.conventions) > kMaxDynamicOffsetBlocks) {
+            *error = QStringLiteral("pass '%1' binds more than %2 blocks at dynamic offsets")
+                         .arg(QString::fromLatin1(pass.name)).arg(kMaxDynamicOffsetBlocks);
+            return false;
+        }
         if (!pass.block.valid())
             continue;
         for (const BlockMember &member : pass.block.members()) {
@@ -2276,12 +2282,15 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
                 bool batches = false;
                 for (const ModePass &pass : passes)
                     batches = batches || (pass.batched() && pass.batches == name);
-                const bool fits = batches ? (field.kind == fa::FieldKind::U32 && field.count >= 2 && field.count % 2 == 0)
+                // Audit 4 L4: a batch table holds at most kMaxBatches pairs (the arena's copies and the commands).
+                const bool fits = batches ? (field.kind == fa::FieldKind::U32 && field.count >= 2 && field.count % 2 == 0
+                                             && field.count / 2 <= quint32(kMaxBatches))
                                           : (field.kind == fa::FieldKind::U32 && field.count == 1);
                 if (!fits) {
                     *error = QStringLiteral("the record's field '%1' is a draw's %2").arg(QString::fromLatin1(name),
-                        batches ? QStringLiteral("batch table: a u32 array of {first, count} pairs")
-                                : QStringLiteral("count or selector: a u32 scalar"));
+                        batches
+                            ? QStringLiteral("batch table: a u32 array of 1 to %1 {first, count} pairs").arg(kMaxBatches)
+                            : QStringLiteral("count or selector: a u32 scalar"));
                     return false;
                 }
                 // N3.3: a storage buffer is sized by a number or a setting, never per record; a compute entry's group
@@ -3206,6 +3215,10 @@ struct ModeContent::Resources
         bool instanceBinding = false;
         bool drawParameters = false;
         std::unique_ptr<QRhiComputePipeline> computePipeline; // N3.3: a compute entry's
+        // Audit 4 (H2, M1): the last refusal of its draw (a count its buffers do not hold), its reason made once at the
+        // refusal's edge (nothing allocated by the records that repeat it).
+        int refusal = 0;
+        QString refusalReason;
     };
 
     // N3.1: a scene target's clearing draw (its clear values, its pipeline over the target's render pass).
@@ -3357,6 +3370,7 @@ void ModeContent::release()
         t = ComputeTrack();
     m_arena.clear();
     m_meshesLost.clear();
+    m_waitingValid = false;                   // the waiting reason is made again at the next wait
     for (GpuTexture &texture : m_textures) {
         dropCandidate(texture);               // N3.8: its job cancelled (nothing waits on this thread)
         releaseFront(texture);                // an imported one to the window's retire list
@@ -3876,16 +3890,23 @@ bool ModeContent::ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QStrin
 {
     const ModeProgram &program = m_source->drawnProgram();
     const quint64 layout = m_targets.layoutGeneration(); // N3.1: the scene targets' render-pass descriptors
+    // N3.2 audit 4 H1: the streams, the arena's batch copies and the batched commands are sized from the bound schema; a
+    // stream bound again under another layout (its fingerprint) builds them again. With no stream bound (an unbind)
+    // nothing is drawn, so what was built stays for the next bind to be compared against.
+    const RuntimeSchema *bound = m_source->drawnStill() ? nullptr : m_source->drawnSchema();
+    const bool schemaHolds = (!bound && !m_source->drawnStill()) || m_streams.builtFor(bound);
     // N3.8: a texture object made or gone under the same program, pass and QRhi: only the passes' bindings are made
     // again over the new objects (the pipelines stay: layout-compatible), the render thread's cost of an image change.
     // N3.1: a scene target re-created at a new size is such an object too.
     if (m_res && m_res->rhi == rhi && m_res->pass == target.renderPass.get() && m_res->generation == program.generation
         && m_res->sceneLayout == layout && m_res->passesBuilt && withPasses
         && m_res->meshObjects == m_meshes.objects() // N3.2
+        && schemaHolds                              // N3.2 audit 4 H1
         && m_res->textureObjects != m_textureObjects && rebindTextures())
         return true;
     if (m_res && (m_res->rhi != rhi || m_res->pass != target.renderPass.get() || m_res->generation != program.generation
                   || m_res->sceneLayout != layout || m_res->passesBuilt != withPasses
+                  || !schemaHolds                                              // N3.2 audit 4 H1: a new layout
                   || (withPasses && m_res->meshObjects != m_meshes.objects()) // N3.2: the vertex input layouts
                   || (withPasses && m_res->textureObjects != m_textureObjects)))
         releasePipelines(); // a new program, or bindings that could not be made again: the pipelines and bindings again
@@ -4079,6 +4100,48 @@ quint32 recordU32At(const QByteArray &record, quint32 offset)
     return value;
 }
 
+// N3.2 audit 4: why a pass's draw is refused (H2: an instance stream drawn other than its used records; M1: a count past
+// the buffer it reads).
+enum DrawRefusal {
+    RefusedNone = 0,
+    RefusedInstancesNotUsed,     // an instance stream's pass asked another count than the stream's used records
+    RefusedInstancesPastSource,  // instances past the instance source's records
+    RefusedVerticesPastMesh,     // first vertex plus vertices past the mesh's vertices
+    RefusedBatchesPastTable,     // batches past the batch table's pairs
+    RefusedCommandsPastStream,   // indirect commands past the indirect stream's
+    RefusedCommandVertices,      // a record command's first vertex plus vertices past the mesh's
+    RefusedCommandInstances,     // a record command's instances past the instance source's records
+    RefusedCommandsPastStorage,  // N3.3: indirect commands past the storage buffer a compute entry writes them into
+    RefusedGroupsPastDevice,     // N3.3: a compute entry's groups past the device's limit a dimension (not dispatched)
+};
+
+const char *drawRefusalText(int what)
+{
+    switch (what) {
+    case RefusedInstancesNotUsed:
+        return "draws %1 instance(s) from its instance stream, which holds %2 used record(s) this record: an instance "
+               "stream is drawn exactly its used records";
+    case RefusedInstancesPastSource:
+        return "draws %1 instance(s) from an instance source of %2 record(s)";
+    case RefusedVerticesPastMesh:
+        return "draws to vertex %1 of a mesh of %2 vertices";
+    case RefusedBatchesPastTable:
+        return "draws %1 batch(es) from a batch table of %2 pair(s)";
+    case RefusedCommandsPastStream:
+        return "draws %1 indirect command(s) from a stream of %2";
+    case RefusedCommandVertices:
+        return "has an indirect command drawing to vertex %1 of a mesh of %2 vertices";
+    case RefusedCommandInstances:
+        return "has an indirect command drawing %1 instance(s) from an instance source of %2 record(s)";
+    case RefusedCommandsPastStorage:
+        return "draws %1 indirect command(s) from a storage buffer of %2";
+    case RefusedGroupsPastDevice:
+        return "dispatches %1 group(s) a dimension past the device's %2";
+    default:
+        return "is refused (%1 of %2)";
+    }
+}
+
 } // namespace
 
 // ------------------------------------------------------------------------------------------------- N3.2 (D15)
@@ -4092,11 +4155,38 @@ int ModeContent::batchCapacity(const ModePass &pass) const
 
 bool ModeContent::meshesReady() const
 {
-    for (const QByteArray &name : m_source->drawnProgram().drawnMeshes()) {
-        if (!m_meshes.find(name))
-            return false;
+    return missingMeshMask() == 0;
+}
+
+quint64 ModeContent::missingMeshMask() const
+{
+    // Every record: the passes' mesh and instance source read in place (audit 4 L3: drawnMeshes() builds a list); bit
+    // 2 * pass for a pass's mesh, the next bit for its instance source (kMaxModePasses 16: 32 bits).
+    static_assert(2 * kMaxModePasses <= 64, "a pass's two mesh names are bits of a quint64");
+    quint64 mask = 0;
+    const ModeProgram &program = m_source->drawnProgram();
+    const auto isStream = [&program](const QByteArray &name) {
+        for (const StreamDeclaration &s : program.streams) {
+            if (s.name == name)
+                return true;
+        }
+        return program.storageBuffer(name) != nullptr; // N3.3: a storage buffer is the core's own, never sent
+    };
+    for (int i = 0; i < int(program.passes.size()) && i < kMaxModePasses; ++i) {
+        const ModePass &pass = program.passes.at(i);
+        const QByteArray *names[2] = { &pass.mesh, &pass.instanceFrom };
+        for (int slot = 0; slot < 2; ++slot) {
+            const QByteArray &name = *names[slot];
+            if (!name.isEmpty() && name != kBuiltinQuadMesh && !isStream(name) && !m_meshes.find(name))
+                mask |= quint64(1) << (2 * i + slot);
+        }
+        // N3.3: a mesh a compute entry reads (a compute entry draws no mesh of its own: its bit is the pass's first).
+        for (const ComputeBinding &b : pass.computeBindings) {
+            if (b.kind == ComputeResource::Mesh && !m_meshes.find(b.resource))
+                mask |= quint64(1) << (2 * i);
+        }
     }
-    return true;
+    return mask;
 }
 
 void ModeContent::noteMeshBuffers()
@@ -4108,6 +4198,13 @@ void ModeContent::noteMeshBuffers()
     QJsonObject o = m_streams.stateJson();
     o.insert(QStringLiteral("meshes"), m_meshes.stateJson());
     o.insert(QStringLiteral("meshes_lost"), QJsonArray::fromStringList(m_meshesLost));
+    // Audit 4 (H2, M1): each pass's draw refusal of this build, noted at its edge only.
+    QJsonArray refused;
+    for (int i = 0; m_res && i < m_res->passCount; ++i) {
+        if (!m_res->passes[i].refusalReason.isEmpty())
+            refused.append(m_res->passes[i].refusalReason);
+    }
+    o.insert(QStringLiteral("draws_refused"), refused);
     m_source->noteMeshBuffers(o);
 }
 
@@ -4128,6 +4225,21 @@ quint32 ModeContent::resolveCount(const DrawCount &count, quint32 meshCount) con
         return recordU32At(m_source->frameRecord(), field->offset);
     const double value = m_source->drawnProgram().drawSettings.value(count.name, 0.0);
     return value > 0.0 && value < 4294967295.0 ? quint32(value) : 0u;
+}
+
+void ModeContent::refuseDraw(int index, int what, quint64 asked, quint64 held)
+{
+    countDrawRefused();
+    Resources::Pass &p = m_res->passes[index];
+    if (p.refusal != what) {
+        // The edge (once per kind a build): the reason made and noted in the state, never again per record.
+        p.refusal = what;
+        p.refusalReason = QStringLiteral("pass '%1' %2 (N3.2 audit 4): its draw is refused")
+                              .arg(QString::fromLatin1(m_source->drawnProgram().passes.at(index).name),
+                                   QString::fromLatin1(drawRefusalText(what)).arg(asked).arg(held));
+        m_meshBuffersNoted = ~quint64(0);     // the state is noted again after this record (noteMeshBuffers)
+    }
+    m_reason = p.refusalReason;               // the record's reason (a shared copy: nothing allocated)
 }
 
 void ModeContent::fillArena()
@@ -4319,10 +4431,33 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
     if (bound)
         cb->setVertexInput(0, bound, inputs);
     const quint32 vertices = resolveCount(pass.vertices, mesh ? mesh->vertexCount : 0u);
+    // Audit 4 M1: every count is checked here, at the record, against the buffer it reads (robustBufferAccess is off:
+    // a fetch past a vertex buffer is undefined, on some drivers a device loss). A pass without a mesh reads no vertex
+    // buffer per vertex, and one without an instance source none per instance.
+    quint32 instanceRecords = instanceMesh ? instanceMesh->instanceCount : 0u;
+    if (instanceStream && instanceStream->decl.layout.stride) {
+        // Audit 4 H2: an instance stream holds its used records this record (the bytes past them are another frame
+        // slot's on Vulkan, undefined on OpenGL).
+        instanceRecords = instanceStream->used / instanceStream->decl.layout.stride;
+    }
+    if (instanceStorage && instanceStorage->decl.layout.stride) {
+        // N3.3: a storage buffer a compute entry writes holds every record it has (zeroed at its allocation, never
+        // past its bytes).
+        instanceRecords = quint32(instanceStorage->bytes / instanceStorage->decl.layout.stride);
+    }
+    const quint64 lastVertex = quint64(pass.firstVertex) + quint64(vertices);
+    if (mesh && vertices && lastVertex > mesh->vertexCount) {
+        refuseDraw(index, RefusedVerticesPastMesh, lastVertex, mesh->vertexCount);
+        return;
+    }
     if (pass.batched()) {
         const RuntimeSchema *schema = m_source->drawnStill() ? nullptr : m_source->drawnSchema();
         const fa::Field *table = schema ? schema->field(pass.batches) : nullptr;
-        const quint32 batches = qMin(resolveCount(pass.batchCount, 0), quint32(qMax(0, p.copies)));
+        const quint32 batches = resolveCount(pass.batchCount, 0);
+        if (batches > quint32(qMax(0, p.copies))) {
+            refuseDraw(index, RefusedBatchesPastTable, batches, quint64(qMax(0, p.copies)));
+            return;
+        }
         if (!table || batches == 0 || vertices == 0)
             return;
         if (p.drawParameters && m_streams.batchCommands()) {
@@ -4351,26 +4486,65 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
     cb->setShaderResources(nullptr, count, offsets);
     if (!pass.indirect.isEmpty()) {
         const ModeStreams::Stream *commands = m_streams.find(pass.indirect);
-        // N3.3: or a storage buffer a compute entry wrote (its commands checked against its size).
-        const ModeStorage::Buffer *storageCommands = commands ? nullptr : m_storage.buffer(pass.indirect);
-        QRhiBuffer *buffer = commands ? commands->buffer.get() : storageCommands ? storageCommands->buffer.get() : nullptr;
-        const quint32 capacity = commands ? commands->decl.capacity / kIndirectCommandBytes
-                                          : storageCommands ? storageCommands->bytes / kIndirectCommandBytes : 0u;
-        const quint32 drawn = buffer ? qMin(resolveCount(pass.drawCount, 0), capacity) : 0u;
-        if (drawn) {
-            cb->drawIndirect(buffer, 0, drawn, kIndirectCommandBytes);
-            countIndirectDraw();
+        if (!commands) {
+            // N3.3: a storage buffer a compute entry wrote: its command count checked against its bytes at the record,
+            // as a stream's is. Its commands are the GPU's (written by the mode's compute entry, never seen here).
+            const ModeStorage::Buffer *storageCommands = m_storage.buffer(pass.indirect);
+            const quint32 drawn = storageCommands ? resolveCount(pass.drawCount, 0) : 0u;
+            const quint32 held = storageCommands ? quint32(storageCommands->bytes / kIndirectCommandBytes) : 0u;
+            if (drawn > held) {
+                refuseDraw(index, RefusedCommandsPastStorage, drawn, held);
+                return;
+            }
+            if (drawn && storageCommands->buffer) {
+                cb->drawIndirect(storageCommands->buffer.get(), 0, drawn, kIndirectCommandBytes);
+                countIndirectDraw();
+            }
+            return;
         }
+        const quint32 drawn = resolveCount(pass.drawCount, 0);
+        const quint32 held = commands->decl.capacity / kIndirectCommandBytes;
+        if (drawn > held) {
+            refuseDraw(index, RefusedCommandsPastStream, drawn, held);
+            return;
+        }
+        if (!drawn || !commands->field)
+            return;
+        // The record's commands as the stream uploaded them (its firstInstance written as 0): each within the mesh's
+        // vertices and the instance source's records.
+        const QByteArray record = m_source->frameRecord();
+        for (quint32 c = 0; c < drawn; ++c) {
+            const quint32 at = commands->field->offset + c * kIndirectCommandBytes;
+            const quint32 commandVertices = recordU32At(record, at);
+            const quint32 commandInstances = recordU32At(record, at + 4);
+            const quint64 commandLast = quint64(recordU32At(record, at + 8)) + quint64(commandVertices);
+            if (mesh && commandVertices && commandLast > mesh->vertexCount) {
+                refuseDraw(index, RefusedCommandVertices, commandLast, mesh->vertexCount);
+                return;
+            }
+            if (p.instanceBinding && commandInstances > instanceRecords) {
+                refuseDraw(index, RefusedCommandInstances, commandInstances, instanceRecords);
+                return;
+            }
+        }
+        cb->drawIndirect(commands->buffer.get(), 0, drawn, kIndirectCommandBytes);
+        countIndirectDraw();
         return;
     }
-    quint32 sourceCount = instanceMesh ? instanceMesh->instanceCount : 0u;
-    if (instanceStream && instanceStream->decl.layout.stride)
-        sourceCount = instanceStream->decl.capacity / instanceStream->decl.layout.stride;
-    if (instanceStorage && instanceStorage->decl.layout.stride)
-        sourceCount = instanceStorage->bytes / instanceStorage->decl.layout.stride; // N3.3
-    quint32 instances = resolveCount(pass.instances, sourceCount);
-    if (instanceStorage)
-        instances = qMin(instances, sourceCount);  // N3.3: a count over a storage buffer is checked against it
+    const quint32 instances = resolveCount(pass.instances, instanceRecords);
+    if (instanceStream && instances != instanceRecords) {
+        // Audit 4 H2: an instance stream is drawn exactly its used records; the harness control draws past them, up
+        // to its capacity.
+        const quint32 capacity = instanceStream->decl.layout.stride
+            ? instanceStream->decl.capacity / instanceStream->decl.layout.stride : 0u;
+        if (!instancesPastUsed() || instances > capacity) {
+            refuseDraw(index, RefusedInstancesNotUsed, instances, instanceRecords);
+            return;
+        }
+    } else if ((instanceMesh || instanceStorage) && instances > instanceRecords) {
+        refuseDraw(index, RefusedInstancesPastSource, instances, instanceRecords); // audit 4 M1; N3.3 storage
+        return;
+    }
     if (vertices && instances)
         cb->draw(vertices, instances, pass.firstVertex, directFirstInstance()); // 0 but under the harness control
 }
@@ -4568,13 +4742,16 @@ void ModeContent::recordCompute(QRhi *rhi, QRhiCommandBuffer *cb, int index, QRh
     for (int a = 0; a < 3; ++a)
         groups[a] = computeGroups(rhi, pass, a);
     if (groups[0] == ~0u || groups[1] == ~0u || groups[2] == ~0u) {
-        // Every count a dispatch reads is checked: past the device's limit, nothing is dispatched (reported once).
-        const QString reason = QStringLiteral("compute entry '%1': its groups pass the device's %2 a dimension; not "
-                                              "dispatched").arg(QString::fromLatin1(pass.name))
-                                   .arg(rhi->resourceLimit(QRhi::MaxThreadGroupsPerDimension));
-        if (reason != m_computeReason) {
-            m_computeReason = reason;
-            m_source->noteRefused(reason);
+        // Every count a dispatch reads is checked: past the device's limit, nothing is dispatched. The reason is made at
+        // its edge only (once a build, as a draw's refusal is: audit 4), never per record.
+        countDrawRefused();
+        if (p.refusal != RefusedGroupsPastDevice) {
+            p.refusal = RefusedGroupsPastDevice;
+            p.refusalReason = QStringLiteral("compute entry '%1': its groups pass the device's %2 a dimension; not "
+                                             "dispatched").arg(QString::fromLatin1(pass.name))
+                                  .arg(rhi->resourceLimit(QRhi::MaxThreadGroupsPerDimension));
+            m_source->noteRefused(p.refusalReason);
+            m_meshBuffersNoted = ~quint64(0); // the mesh-buffer state's draws_refused names it after this record
         }
         return;
     }
@@ -4607,6 +4784,22 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
     if (!program.valid()) {
         *error = QStringLiteral("the mode has no program");
         return false;
+    }
+    // Audit 4 L4: D15 point 3's and 6's device limits, refused with the reason (none is reached on this machine's
+    // devices): a block within the device's uniform range, an indirect draw only where QRhi reports DrawIndirect.
+    const int uniformRange = rhi->resourceLimit(QRhi::MaxUniformBufferRange);
+    for (const ModePass &pass : program.passes) {
+        if (pass.block.valid() && uniformRange > 0 && pass.block.size() > uniformRange) {
+            *error = QStringLiteral("pass '%1': its block of %2 bytes is past this device's uniform range of %3 bytes")
+                         .arg(QString::fromLatin1(pass.name)).arg(pass.block.size()).arg(uniformRange);
+            return false;
+        }
+        if (!pass.indirect.isEmpty() && !rhi->isFeatureSupported(QRhi::DrawIndirect)) {
+            *error = QStringLiteral("pass '%1' draws from the indirect stream '%2', and this device does not report "
+                                    "QRhi::DrawIndirect").arg(QString::fromLatin1(pass.name),
+                                                              QString::fromLatin1(pass.indirect));
+            return false;
+        }
     }
     const QShader vs = shaderFrom(mode_vert_qsb, mode_vert_qsb_size); // the full-target triangle with both quads' uv
     const QShader clear = shaderFrom(clear_frag_qsb, clear_frag_qsb_size);
@@ -4692,9 +4885,11 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
                 || (declared.batched() && declared.vertexDrawParameters.isValid() && drawParametersAvailable(rhi));
         }
         const quint32 batchBytes = batchedForm3 ? quint32(res->passCount) * kMaxBatches * kIndirectCommandBytes : 0u;
-        const RuntimeSchema *schema = m_source->drawnStill() ? nullptr : m_source->drawnSchema();
-        ok = ok && m_streams.build(rhi, program.streams, schema ? &schema->schema() : nullptr, plan.size, batchBytes,
-                                   &reason);
+        // Audit 4 H1: the streams hold the schema they are built from (their fields point into it).
+        ok = ok && m_streams.build(rhi, program.streams,
+                                   m_source->drawnStill() ? QSharedPointer<const RuntimeSchema>()
+                                                          : m_source->drawnSchemaShared(),
+                                   plan.size, batchBytes, &reason);
         m_arena = QByteArray(qsizetype(plan.size), '\0');
         m_batchShadow = QByteArray(qsizetype(batchBytes), '\0');
         m_meshBuffersNoted = ~quint64(0);
@@ -5165,22 +5360,40 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
     }
     const bool draw = m_draw && withPasses;   // packed by keepsTarget for this record
     if (m_draw && !withPasses) {
-        m_reason = m_report.jobsPending > 0 && m_texturesLost.isEmpty()
-            ? QStringLiteral("waiting: the item's textures are uploading (%1 job(s) in flight)")
-                  .arg(m_report.jobsPending)
-            : QStringLiteral("lost: %1 (the owner sends the image again)")
-                  .arg(m_texturesLost.join(QStringLiteral(", ")));
-        if (texturesReady() && !meshesReady()) {
-            // Every mesh the program draws that the content does not hold: lost with a content made again, or one the
-            // owner removed while the program still draws it (the sync's list names only the first).
-            QStringList missing;
-            for (const QByteArray &name : m_source->drawnProgram().drawnMeshes()) {
-                if (!m_meshes.find(name))
-                    missing.append(QString::fromLatin1(name));
+        // The waiting reason, made only at its edge (audit 4's side defect: a string and a mesh list every record while
+        // the content waits): what it names is compared in place (the program, the jobs in flight, the lost textures,
+        // and which passes' meshes are missing), and the reason kept is reused while that holds.
+        const bool meshesWaiting = texturesReady() && !meshesReady();
+        const quint64 missingMask = meshesWaiting ? missingMeshMask() : 0u;
+        const quint64 program = m_source->drawnProgram().generation;
+        if (!m_waitingValid || m_waitingProgram != program || m_waitingJobs != m_report.jobsPending
+            || m_waitingMeshes != missingMask || m_waitingLost != m_texturesLost) {
+            m_waitingValid = true;
+            m_waitingProgram = program;
+            m_waitingJobs = m_report.jobsPending;
+            m_waitingMeshes = missingMask;
+            m_waitingLost = m_texturesLost;   // a shared copy, at the edge only
+            if (meshesWaiting) {
+                // Every mesh the program draws that the content does not hold: lost with a content made again, or one
+                // the owner removed while the program still draws it (the sync's list names only the first).
+                QStringList missing;
+                for (const QByteArray &name : m_source->drawnProgram().drawnMeshes()) {
+                    if (!m_meshes.find(name))
+                        missing.append(QString::fromLatin1(name));
+                }
+                m_waitingReason = QStringLiteral("lost: mesh(es) %1 (the owner sends them again)")
+                                      .arg(missing.join(QStringLiteral(", ")));
+            } else {
+                m_waitingReason = m_report.jobsPending > 0 && m_texturesLost.isEmpty()
+                    ? QStringLiteral("waiting: the item's textures are uploading (%1 job(s) in flight)")
+                          .arg(m_report.jobsPending)
+                    : QStringLiteral("lost: %1 (the owner sends the image again)")
+                          .arg(m_texturesLost.join(QStringLiteral(", ")));
             }
-            m_reason = QStringLiteral("lost: mesh(es) %1 (the owner sends them again)")
-                           .arg(missing.join(QStringLiteral(", ")));
         }
+        m_reason = m_waitingReason;           // a shared copy: nothing allocated while the content waits
+    } else {
+        m_waitingValid = false;               // the next wait is an edge again
     }
     noteMeshBuffers();                        // N3.2: only when the meshes' or streams' objects changed
     Resources &r = *m_res;
@@ -5269,6 +5482,7 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
         streamWriteNs = recordTimer.nsecsElapsed() - writesFrom;
     }
     recordPasses(rhi, cb, target, updates, draw, readback);
+    noteMeshBuffers();                        // N3.2 audit 4: a draw refused at its edge in this record (else nothing)
     if (draw && !m_source->drawnStill())
         countRecordTime(recordTimer.nsecsElapsed(), streamWriteNs); // D15 point 7: the stream ring's CPU axis
     const QSize size = target.texture->pixelSize();

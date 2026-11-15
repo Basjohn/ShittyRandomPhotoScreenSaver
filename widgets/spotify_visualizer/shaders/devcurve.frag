@@ -1,6 +1,10 @@
 #version 460 core
 // Spline Curve (mode id devcurve): smooth full-width spline-like filled curves.
 // Its sibling owners are mapped in Docs/Reference/Naming.md.
+// The conventions include (N1.4; spliced at the marker by the loader here and by the native core's bake): the fragment's
+// pixel comes from fragPixel, never raw gl_FragCoord, so both renderers read it in their target's row convention.
+#define SRPSS_CONVENTIONS_FRAGMENT
+//@srpss_conventions
 
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 fragColor;
@@ -15,13 +19,14 @@ layout(std140, binding = 18) uniform DevCurveDraw {
     int uContentRotationQuarters;
     vec2 u_resolution;
     float u_dpr;
-    // Framebuffer-pixel origin of this visualizer's viewport. gl_FragCoord is WINDOW space, so when the compositor
-    // draws the visualizer into the whole-display framebuffer at a non-zero viewport origin the raw value is not
-    // card-local. Subtracting this origin restores card-local pixels. A card-sized, origin-zero target passes (0, 0).
+    // Framebuffer-pixel origin of this visualizer's viewport. The fragment's pixel is WINDOW space, so when the
+    // compositor draws the visualizer into the whole-display framebuffer at a non-zero viewport origin the raw value is
+    // not card-local. Subtracting this origin restores card-local pixels. A card-sized, origin-zero target passes (0, 0).
     vec2 u_viewport_origin_px;
     // Qt Quick uses interpolated item-local coordinates. The old compositor keeps the framebuffer-coordinate/card-clip
     // branch until Phase-I deletion.
     int u_quick_item_coords;
+    vec2 u_target_px;             // the render target's size in pixels (fragPixel's row convention)
     vec4 u_content_rect;          // item-local x, y, width, height
     // Baseline/current normalized-axis transfer for authored pixel-like DevCurve controls in the Quick branch. Legacy
     // compositor leaves this unset and keeps the historical canonical normalized clamps below.
@@ -271,7 +276,7 @@ void main() {
     } else {
         float dpr = max(1.0, u_dpr);
         float fb_h = height * dpr;
-        vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
+        vec2 localFrag = fragPixel(u_target_px) - u_viewport_origin_px;
         fc = vec2(localFrag.x / dpr, (fb_h - localFrag.y) / dpr);
     }
 

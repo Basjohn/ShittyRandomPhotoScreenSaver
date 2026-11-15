@@ -257,11 +257,18 @@ worked example (harness-only); a product mode does the same in the product's pla
    uploads it, `conventions.front_face_clockwise`), an `indirect` stream with its `draw_count`, or a batched draw's
    `batches`/`batch_count` with an optional draw-parameters pack (SPIR-V and GLSL only)). Meshes by
    `NativeMode.mesh(name, vertices, RecordLayout, instances=, instance_layout=)`; streams (`ModeStream`) from the
-   record's `f32` fields (the std430 bytes the Python renderer packs, verbatim). The block's `uMatrix` is item pixels to
-   the drawn target's clip space, corrected once; `srpssVertexIndex`/`srpssInstanceIndex` read the same numbers on both
-   backends (`firstInstance` is always 0). Sprites are instanced quads (`//@srpss_geometry` after
-   `//@srpss_conventions`: `srpssSpriteCorner`, `srpssSpriteClip`, `srpssSpriteCulled`; the sprite coordinate has
-   `gl_PointCoord`'s orientation), converted first in the Python renderer and judged against that conversion. Every
+   record's `f32` fields (the std430 bytes the Python renderer packs, verbatim). Only a storage stream keeps the bytes
+   past its used length from an earlier record; an instance stream is drawn exactly its used records (its pass's
+   instance count is the stream's used records, and any other count refuses the draw: checkpoint audit 4, H2). Every
+   vertex, instance, indirect command and batch count is checked at the record against the buffer it reads, and a
+   count past it refuses that pass's draw with its reason; a record's indirect commands are uploaded with their
+   `firstInstance` written as 0 (audit 4, M1). The block's `uMatrix` is item pixels to the drawn target's clip space,
+   corrected once; `srpssVertexIndex`/`srpssInstanceIndex` read the same numbers on both backends (`firstInstance` is
+   always 0). Sprites are instanced quads (`//@srpss_geometry` after `//@srpss_conventions`: `srpssSpriteCorner`,
+   `srpssSpriteClip`, `srpssSpriteCulled`; the sprite coordinate has `gl_PointCoord`'s orientation; the geometry marker
+   is spliced by the Python composer, `rendering/gl_programs/conventions.py`, only: the core's own bake,
+   `cmake/compose_shader.cmake`, replaces `//@srpss_conventions` alone), converted first in the Python renderer and
+   judged against that conversion. Every
    block lives in the content's arena; a blend may be a full `BlendState` (`max`, `min` included). A record field fills
    exactly one of a block member, a draw count or selector, and a stream (a batched draw's table is read both ways).
 4e. **Its compute** (N3.3, decision D16, when a step runs on the GPU: a field, a volume, a simulation, a population):

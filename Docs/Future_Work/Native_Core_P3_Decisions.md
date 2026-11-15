@@ -1284,7 +1284,8 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
      with dynamic offsets at every `setShaderResources`; its pools hold 256 dynamic uniform descriptors and 128 sets
      each and grow; QRhi never checks `maxDescriptorSetUniformBuffersDynamic` (the specification's minimum is 8, as
      recalled), so the core reads it, `maxUniformBufferRange` and the alignment from the physical device it creates
-     (D6) and logs them once in the host state.
+     (D6) and logs them once in the host state. (As built, audit 4 L7: they are read once into a map of their own,
+     returned by `vulkan_device_facts(device)`, not the host state; QRhi's per-backend facts are not recorded.)
    - OpenGL: the alignment is 1; a "uniform buffer" is a CPU array and a bind issues one `glUniform*` per member of the
      pipeline's block from `data + offset`, at every bind when the set has dynamic offsets; at most 8 dynamic offsets
      per bind call (`MAX_DYNAMIC_OFFSET_COUNT`); `MaxUniformBufferRange` is `maxUniformVectors * 16`.
@@ -1406,7 +1407,8 @@ choices the build made where D15 left room:
 - *The conventions block's `z`* is no longer reserved: 1 where the target's top row lies at clip NDC -Y after the core's
   correction (the core's OpenGL and Vulkan targets), 0 in the OpenGL renderer and on D3D and Metal; the geometry
   include's sprites read it (`srpss_geometry.glsl`, its Python twin `SRPSS_GEOMETRY_GLSL`, the marker
-  `//@srpss_geometry`).
+  `//@srpss_geometry`; only the Python composer splices that marker: the core's own bake,
+  `cmake/compose_shader.cmake`, replaces only `//@srpss_conventions`, so none of the core's shaders uses it).
 - *A batched pass's batch table is the one record field two readers share*: the core reads its counts, the shader its
   bases as a storage stream; any other field has one owner.
 - *Pack order*: a pass's fragment pack, then its vertex pack ("vertex": true), then a batched pass's draw-parameters pack
@@ -1444,21 +1446,55 @@ core's plan mirrored) and the geometry include (`srpss_geometry.glsl`, `SRPSS_GE
   or a rule past the capacity) and a u32 stream with one; the used length is the stream's (never also a block member
   or a draw count). Each record writes only the used bytes (none at 0): the storage route uploads a view of them
   (`QByteArray::fromRawData` over the bytes kept across records, no copy, nothing allocated), the instance route
-  writes them by the fast path; bytes past the used length keep what an earlier record wrote. A variable-length
-  consumer (Waveform's cohorts) pays for what it carries, never the capacity. Proved on e95d9306 (`--rounds used`, both
-  backends): 40 of 192 sprites write 960 bytes a record; a beam drawn past its used points equals the composite of the
-  two records exactly; a record whose used length breaks its rule is refused by the reader and writes nothing.
+  writes them by the fast path. A variable-length consumer (Waveform's cohorts) pays for what it carries, never the
+  capacity. Proved on e95d9306 (`--rounds used`, both backends): 40 of 192 sprites write 960 bytes a record; a beam
+  drawn past its used points equals the composite of the two records exactly; a record whose used length breaks its
+  rule is refused by the reader and writes nothing.
+- *Narrowed by the lead after checkpoint audit 4 (H2, 15 Nov): only a storage stream keeps the bytes past its used
+  length.* A storage stream is one buffer written by `uploadStaticBuffer` of the used bytes, so the bytes past them are
+  an earlier record's. An instance stream is a `Dynamic` buffer written by the fast path, which Qt documents as a
+  whole-buffer update: on Vulkan it is one buffer per frame slot, so the bytes past the used length are the record two
+  frames back (or uninitialised in a slot not yet written), and on OpenGL QRhi maps with `GL_MAP_INVALIDATE_BUFFER_BIT`,
+  so they are undefined. The audit measured it: an instance stream drawn 120 records with 40 used differed from the
+  composite record on 94,698 pixels on Vulkan in alternate frames. So an instance stream draws exactly its used records:
+  its pass's instance count is the stream's used records this record (`"mesh"`, the default), and any other count
+  (a number, a record field or a setting) refuses that pass's draw with the reason, noted once in the mesh-buffer state
+  (`draws_refused`) and named in the record's reason; nothing past the used length is ever read. The `used` round
+  proves it on the sprites' instance stream (three records of 40 used after one of 120 each equal a fresh 40-sprite
+  frame; another count is refused), and its control `instances_past_used` (the named count drawn past the used
+  records) shows the alternating frames on Vulkan.
+- *Draw counts are bounded at the record (the lead, after checkpoint audit 4, M1).* `robustBufferAccess` stays off, so
+  every vertex, instance, indirect command and batch count a record or a setting names is checked when the pass is
+  drawn against the buffer it reads: the first vertex plus the vertices within the mesh, the instances within the
+  instance source's records (a mesh's instance stream, or an instance stream's used records), the draw count within
+  the indirect stream's commands and each command within the mesh and the instance source, the batch count within
+  the batch table's pairs. A count past its buffer refuses that pass's draw (the other passes draw), with the reason
+  noted once in the mesh-buffer state (`draws_refused`), named in the record's reason and counted
+  (`mesh_buffers_draws_refused`); the reason is made only at the refusal's edge, so nothing is allocated by the
+  records that repeat it. A pass with no mesh or no instance source reads no vertex buffer for it, so its counts bound
+  only the shader's own reads. A record's indirect commands are uploaded with their `firstInstance` written as 0, so
+  "`firstInstance` is always 0" holds for every draw. The `forms` round proves both (the record's `firstInstance` 3
+  draws the same picture as 0; four over-counts are refused), with the audit's `probe_n32` P3 and P4 as the controls.
 - *The draw parameters' values* (read back as colour from the multi-draw, first vertex 4): `gl_DrawID` is the batch
   and `gl_BaseInstance` 0 on both backends; `gl_BaseVertex` is 4 on Vulkan (the command's first vertex) and 0 on
   OpenGL (`ARB_shader_draw_parameters`: a non-indexed draw has no base vertex), so a shader never reads
   `gl_BaseVertex` for a non-indexed draw. A culled sprite (`srpssSpriteCulled`) draws nothing on both backends.
-- The built-in `quad` is made only for a program that draws it (a program without it holds no mesh).
+- The built-in `quad` is made only for a program that draws it; once made it stays until the content goes (it is
+  outside `ModeMeshes::sync`'s retire loop), so a later program of the same content that does not draw it still holds
+  it.
+- Every mesh the item holds with a new generation is uploaded, drawn by a pass or not, and a content made again reports
+  an undrawn one lost too. A mesh whose buffer cannot be created is lost and its old buffer goes with it, so it is not
+  drawn again until the owner sends it (audit 4, L5).
 - A content whose program draws a mesh the item no longer holds draws nothing, its reason naming the mesh.
 - The record's render-thread time is counted (`mesh_buffers_records_timed`, `_record_ns`, `_stream_write_ns`), timed
   with the record's own N3.8 timer: the stream ring's CPU axis, nothing at rest.
-- QRhi reports `DrawIndirect`, `DrawIndirectMulti` and `ShaderDrawParameters` on both of this machine's backends, so
-  form 3 is recorded on OpenGL and Vulkan alike; the RTX 4090's device facts: dynamic offset alignment 64, 15 dynamic
-  uniform buffers a set, a 64 KiB uniform range.
+- Form 3 is recorded on OpenGL and Vulkan alike, so QRhi reports `DrawIndirect`, `DrawIndirectMulti` and
+  `ShaderDrawParameters` on both of this machine's backends (inferred from the recording: QRhi's feature answers are
+  not recorded anywhere); the RTX 4090's device facts: dynamic offset alignment 64, 15 dynamic uniform buffers a set,
+  a 64 KiB uniform range.
+- D15's limits are admission refusals (audit 4, L4): a pass binding more than 4 blocks at dynamic offsets and a batch
+  table of more than 64 pairs are refused by the program's check, a block past the device's `MaxUniformBufferRange`
+  and an indirect pass on a device without `QRhi::DrawIndirect` by the content's build, each with its reason.
 - The proof (`native/core/python/mesh_buffer_check.py`, all rounds PASS on both backends, Vulkan validation clean):
   rules (a) and (b) as decided above; the batched draw's two forms, one direct draw and sixteen passes equal bit for bit
   (the first-offset control differs); `drawIndirect` equals the direct draw; nothing at rest; no buffer created over a
@@ -1470,9 +1506,10 @@ core's plan mirrored) and the geometry include (`srpss_geometry.glsl`, `SRPSS_GE
 - Choice I, as measured: over the steady minute (a per-record instance stream, 159,696 records on OpenGL and 103,056
   on Vulkan) no buffer was created and the process's private memory moved by one step (OpenGL 910.4 to 913.0 MiB,
   Vulkan 1,010.6 to 1,011.5 MiB) and was flat on either side of it, so neither QRhi's `Static` route nor the driver
-  grows per record. Not built: a counting allocator for the core's own heap (the core allocates nothing per record
-  by construction: the arena, streams and commands are sized at the build); the two Qt points of point 4
-  (`QRhiBufferData::assign`'s heap reuse, VMA's mapping of the staging) are therefore read only through that flat
+  grows per record. Not built: a counting allocator for the core's own heap (N3.2's arena, streams and commands are
+  sized at the build; checkpoint audit 4, L3, found one list built per record, the drawn meshes' names for the
+  meshes-ready test, now read in place; `pack()`'s per-record facts JSON predates N3.2, audit 2 M5); the two Qt
+  points of point 4 (`QRhiBufferData::assign`'s heap reuse, VMA's mapping of the staging) are therefore read only through that flat
   private memory, not counted directly.
 - Choice C: N2.9's and N3.1's passes moved to the arena with their proofs' pictures unchanged (generic_mode_check,
   scene_target_check, fullscreen_pass_check, background_layer_check, backdrop_pyramid_check, transition_route_check and

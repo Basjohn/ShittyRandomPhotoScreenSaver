@@ -591,7 +591,9 @@ class QuickExtrudedBubbleRenderer:
                         "uLightTravel": _floats(knobs["scene_light"]["travel"]),
                         "uLightAxis": _floats(knobs["scene_light"]["axis"]),
                         "uLightReach": _floats(knobs["scene_light"]["reach"]),
-                        "uParticleAtten": max(0.0, min(0.08, 0.08 * float(state.emission)))}
+                        "uParticleAtten": max(0.0, min(0.08, 0.08 * float(state.emission))),
+                        # The shafts' own half-resolution target: the jitter's pixel (fragPixel, N1.4).
+                        "uFrameSize": (float(self._shafts.size[0]), float(self._shafts.size[1]))}
         for i, bubble in enumerate(leaders):
             ray_uniforms[f"uBlock{i}"] = bubble
         self._uniforms.set(programs["shafts"], ray_uniforms)

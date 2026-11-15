@@ -1,4 +1,8 @@
 #version 460 core
+// The conventions include (N1.4; spliced at the marker by the loader here and by the native core's bake): the fragment's
+// pixel comes from fragPixel, never raw gl_FragCoord, so both renderers read it in their target's row convention.
+#define SRPSS_CONVENTIONS_FRAGMENT
+//@srpss_conventions
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 fragColor;
 
@@ -7,8 +11,8 @@ layout(location = 0) out vec4 fragColor;
 layout(std140, binding = 18) uniform OscilloscopeDraw {
     vec2 u_resolution;
     float u_dpr;
-    // Framebuffer-pixel origin of this visualizer's viewport. gl_FragCoord is
-    // WINDOW space, so when the compositor draws the visualizer into the
+    // Framebuffer-pixel origin of this visualizer's viewport. The fragment's pixel
+    // is WINDOW space, so when the compositor draws the visualizer into the
     // whole-display framebuffer at a non-zero viewport origin the raw value is
     // not card-local. Subtracting this origin restores card-local pixels.
     // A card-sized, origin-zero target simply passes (0, 0).
@@ -16,6 +20,7 @@ layout(std140, binding = 18) uniform OscilloscopeDraw {
     // Qt Quick uses interpolated item-local coordinates. The old compositor keeps
     // the framebuffer-coordinate branch until Phase-I deletion.
     int u_quick_item_coords;
+    vec2 u_target_px;     // the render target's size in pixels (fragPixel's row convention)
     vec4 u_content_rect;  // item-local x, y, width, height
     float u_visual_scale;
     float u_viewport_height_scale;  // viewport extent height / canonical height
@@ -357,7 +362,7 @@ void main() {
     } else {
         float dpr = (u_dpr <= 0.0) ? 1.0 : u_dpr;
         float fb_height = height * dpr;
-        vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
+        vec2 localFrag = fragPixel(u_target_px) - u_viewport_origin_px;
         fc = vec2(localFrag.x / dpr, (fb_height - localFrag.y) / dpr);
     }
 

@@ -207,7 +207,7 @@ def mb_packs(tmp_path_factory):
 
     folder = tmp_path_factory.mktemp("mesh_buffers")
     return {name: probe_rings.bake(mesh_buffers.compose(mesh_buffers.SHADERS[name]), name, folder)
-            for name in ("streak.vert", "streak.frag", "beam.vert", "beam.frag")}
+            for name in ("streak.vert", "streak.frag", "beam.vert", "beam.frag", "cell.vert", "cell.frag")}
 
 
 def _mb():
@@ -376,3 +376,35 @@ def test_the_used_length_is_the_streams_alone(core, mb_packs):
     with pytest.raises(ValueError, match="two of"):
         _beam(core, mb_packs, BEAM[:2], [("segments", "at_most", 255)],
               ModeStream("trace", "trace_rows", used="segments"))
+
+
+def _cells(core, mb_packs, pairs):
+    """The harness's batched cells pass over a batch table of ``pairs`` {first, count} pairs, through mode_blocks."""
+    from rendering.native.mode import ModePass, ModeStream, PassGeometry, mode_blocks
+
+    import probe_rings
+
+    mb = _mb()
+    geometry = PassGeometry(mb_packs["cell.vert"], topology="triangle_strip", vertices=4,
+                            storage=(("Cells", "cells"), ("Batches", "batches")), batches="batch_table",
+                            batch_count="batch_len")
+    passes = (ModePass("cells", mb_packs["cell.frag"], "alpha", geometry=geometry),)
+    entries = (("cell_rows", "f32", 4 * mb.CELLS), ("batch_table", "u32", 2 * pairs), ("cell_floats", "u32", 1),
+               ("batch_len", "u32", 1))
+    schema = mb.schema("cells", entries, (("cell_floats", "at_most", 4 * mb.CELLS), ("batch_len", "at_most", pairs)))
+    record = schema.encode({"cell_rows": bytes(16 * mb.CELLS), "batch_table": (0,) * (2 * pairs), "cell_floats": 0,
+                            "batch_len": 0})
+    return mode_blocks(core.module, schema, passes, {"u_tint": [1.0, 1.0, 1.0, 1.0]}, record,
+                       probe_rings.harness_card((480, 270), 1.0), (480, 270),
+                       streams=(ModeStream("cells", "cell_rows", used="cell_floats"),
+                                ModeStream("batches", "batch_table")))
+
+
+@built
+def test_a_batch_table_past_the_batch_cap_is_refused(core, mb_packs):
+    """Checkpoint audit 4, L4: D15 point 6's cap of 64 batches a pass is an admission refusal (the arena's copies and
+    the batched commands hold 64), never a silent cap that leaves the batches past it undrawn. Control: 64 pairs are
+    admitted (on the e95d9306 module, 65 were admitted too: the test failed there)."""
+    _cells(core, mb_packs, 64)
+    with pytest.raises(ValueError, match="1 to 64"):
+        _cells(core, mb_packs, 65)

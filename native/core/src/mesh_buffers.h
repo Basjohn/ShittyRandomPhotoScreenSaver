@@ -13,7 +13,14 @@
 //   Dynamic VertexBuffer read as per-instance attributes, written by the fast path), a storage stream (a Static
 //   StorageBuffer, uploadStaticBuffer of the used bytes through a QByteArray the stream keeps across records), or an
 //   indirect stream (a Dynamic IndirectBuffer of 16-byte commands {vertexCount, instanceCount, firstVertex, 0}). Each is
-//   sized at the build from its field's capacity and never resized; written only by a record that draws.
+//   sized at the build from its field's capacity and never resized; written only by a record that draws. The streams
+//   hold the schema they were built from (audit 4 H1: their fields point into it) and are built again when the bound
+//   schema's fingerprint changes.
+//   An instance stream is drawn exactly its used records (audit 4 H2): its pass's instance count is the stream's used
+//   records this record ("mesh", the default), and any other count refuses that pass's draw with the reason. QRhi's
+//   fast path is a whole-buffer update, so the bytes past the used length are another frame slot's on Vulkan and
+//   undefined on OpenGL. Only a storage stream (one buffer, uploadStaticBuffer of the used bytes) keeps the bytes past
+//   its used length from an earlier record.
 // - The block arena (D15 point 3, choices C and D): every block of a content in one Dynamic UniformBuffer at offsets
 //   rounded up with QRhi::ubufAligned, given per draw as dynamic offsets; written whole once per record from the content's
 //   CPU copy through beginFullDynamicBufferUpdateForCurrentFrame, never a batch update.
@@ -42,6 +49,7 @@ namespace frame_abi {
 struct Field;
 struct Schema;
 }
+class RuntimeSchema;
 
 constexpr int kMaxModeMeshes = 8;
 constexpr int kMaxModeStreams = 8;
@@ -50,7 +58,8 @@ constexpr int kMaxMeshAttributes = 8;
 constexpr qint64 kMaxMeshBytes = qint64(64) << 20;
 constexpr int kMaxBatches = 64;
 // D15 point 3: a pass's bindings carry at most this many dynamic-offset blocks (inside OpenGL's 8 a bind and Vulkan's
-// specification minimum of 8 a set).
+// specification minimum of 8 a set). Refused past it by the program's check, as a batch table past kMaxBatches pairs is
+// (audit 4 L4).
 constexpr int kMaxDynamicOffsetBlocks = 4;
 constexpr quint32 kIndirectCommandBytes = 16; // {vertexCount, instanceCount, firstVertex, firstInstance}
 extern const char kBuiltinQuadMesh[];         // "quad"
@@ -191,8 +200,10 @@ struct MeshBufferCounts
     qint64 recordsTimed = 0;
     qint64 recordNs = 0;
     qint64 streamWriteNs = 0;
+    qint64 drawsRefused = 0;    // audit 4: pass draws refused for a count their buffers do not hold (H2, M1)
 };
 MeshBufferCounts meshBufferCounts();
+void countDrawRefused();
 void countIndirectDraw();
 void countBatched(bool indirect);
 void countRecordTime(qint64 recordNs, qint64 streamWriteNs);
@@ -201,7 +212,9 @@ void countRecordTime(qint64 recordNs, qint64 streamWriteNs);
 // - hide the draw-parameters features: a batched pass is recorded one draw a batch on every device;
 // - a direct draw's firstInstance (0 by the rule; 3 shows QRhi's OpenGL backend ignores it);
 // - every stream recreated at each record (the no-allocation proof's control);
-// - the content's release skips its meshes (the retirement proof's control: counts left above zero).
+// - the content's release skips its meshes (the retirement proof's control: counts left above zero);
+// - an instance stream drawn its pass's count up to its capacity, past its used records (the used round's control,
+//   audit 4 H2: the bytes past the used length alternate between frame slots on Vulkan).
 void setHideDrawParameters(bool hide);
 bool hideDrawParameters();
 void setDirectFirstInstance(quint32 first);
@@ -210,6 +223,8 @@ void setRecreateStreams(bool recreate);
 bool recreateStreams();
 void setSkipMeshRelease(bool skip);
 bool skipMeshRelease();
+void setInstancesPastUsed(bool past);
+bool instancesPastUsed();
 
 // The draw-parameters forms this device can record (D15 point 6): DrawIndirect, DrawIndirectMulti and
 // ShaderDrawParameters, less the harness control.
@@ -240,10 +255,12 @@ public:
     ModeMeshes(const ModeMeshes &) = delete;
     ModeMeshes &operator=(const ModeMeshes &) = delete;
 
-    // At a record: a mesh the item no longer holds goes; a drawn mesh with a new generation is uploaded into `updates`
-    // (its image taken through `take`); the built-in quad is made once, when a pass draws it (`quad`). `lost` names the
-    // drawn meshes with no image to upload from (a content made again). False with the reason when a buffer could not
-    // be created (that mesh lost).
+    // At a record: a mesh the item no longer holds goes; every mesh the item holds (`drawn`: the item's meshes, drawn by
+    // a pass or not) with a new generation is uploaded into `updates` (its image taken through `take`); the built-in
+    // quad is made once, when a pass draws it (`quad`), and stays until the content goes (it is outside the retire
+    // loop). `lost` names the item's meshes with no image to upload from (a content made again: an undrawn one too), and
+    // a mesh whose buffer could not be created (its old buffer goes with it, audit 4 L5: not drawn again until the
+    // owner sends it again).
     template <typename Take>
     void sync(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QList<ModeMesh> &drawn, Take take, QStringList *lost,
               bool quad);
@@ -272,11 +289,11 @@ public:
     struct Stream
     {
         StreamDeclaration decl;
-        const frame_abi::Field *field = nullptr; // the bound schema's (outlives the build: the drawn schema)
-        const frame_abi::Field *usedField = nullptr; // an f32 stream's used length (D15 point 4)
+        const frame_abi::Field *field = nullptr; // into the schema the streams hold (m_schema: audit 4 H1)
+        const frame_abi::Field *usedField = nullptr; // an f32 stream's used length (D15 point 4), the same
         std::unique_ptr<QRhiBuffer> buffer;
         QByteArray staging;                       // a storage stream's bytes, kept across records (D15 point 4)
-        quint32 used = 0;                         // bytes written by the last record
+        quint32 used = 0;                         // bytes written by the last record (an instance stream's draw)
     };
 
     ModeStreams() = default;
@@ -284,10 +301,14 @@ public:
     ModeStreams(const ModeStreams &) = delete;
     ModeStreams &operator=(const ModeStreams &) = delete;
 
-    // At a build: one buffer per declared stream, sized from its field, and the arena of `arenaBytes` (0: none). False
-    // with the reason (the content's failure).
-    bool build(QRhi *rhi, const QList<StreamDeclaration> &streams, const frame_abi::Schema *schema, quint32 arenaBytes,
-               quint32 indirectBatchBytes, QString *error);
+    // At a build: one buffer per declared stream, sized from its field, and the arena of `arenaBytes` (0: none). The
+    // streams hold `schema` (shared: their fields point into it) until they are released. False with the reason (the
+    // content's failure).
+    bool build(QRhi *rhi, const QList<StreamDeclaration> &streams, const QSharedPointer<const RuntimeSchema> &schema,
+               quint32 arenaBytes, quint32 indirectBatchBytes, QString *error);
+    // Whether the streams were built for a schema of `schema`'s layout (the same table, or the same fingerprint);
+    // false: the content builds them again (audit 4 H1). Nothing is allocated.
+    bool builtFor(const RuntimeSchema *schema) const;
     // At a record that draws: each stream's bytes from the record: an f32 stream's used elements (its used-length
     // field, at most its capacity; none written at 0), a u32 stream's whole field.
     void write(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QByteArray &record);
@@ -306,6 +327,7 @@ public:
 
 private:
     QList<Stream *> m_streams;  // owned (Qt containers only)
+    QSharedPointer<const RuntimeSchema> m_schema; // the schema they were built from (audit 4 H1)
     std::unique_ptr<QRhiBuffer> m_arena;
     std::unique_ptr<QRhiBuffer> m_batchCommands;
     quint32 m_arenaBytes = 0;

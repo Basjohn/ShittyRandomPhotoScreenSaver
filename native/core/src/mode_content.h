@@ -500,6 +500,8 @@ public:
     const ModeProgram &drawnProgram() const { return m_drawnProgram; }
     const QList<BlockValues> &drawnSettings() const { return m_drawnSettings; }
     const RuntimeSchema *drawnSchema() const { return m_drawnSchema.data(); }
+    // N3.2 audit 4 H1: the drawn schema, shared with what is built from it (the streams point into its fields).
+    const QSharedPointer<const RuntimeSchema> &drawnSchemaShared() const { return m_drawnSchema; }
     bool drawnStill() const { return m_drawnStill; }
     const ModeCard &drawnCard() const { return m_drawnCard; }
     bool drawnReady() const { return m_drawnReady; }
@@ -682,10 +684,16 @@ private:
                   const QRhiCommandBuffer::VertexInput &triangle);
     // N3.2: a count or a selector for this record (a number, the mesh's, a record u32 field, a setting).
     quint32 resolveCount(const DrawCount &count, quint32 meshCount) const;
+    // N3.2 audit 4 (H2, M1): pass `index`'s draw refused this record: `what` (a DrawRefusal) asked `asked` of a buffer
+    // holding `held`. The reason is made, and noted in the mesh-buffer state, once at the refusal's edge; the record's
+    // reason names it.
+    void refuseDraw(int index, int what, quint64 asked, quint64 held);
     // N3.2: the passes' blocks into the arena's CPU copy (a batched pass: one copy a batch, its u_srpss_batch set).
     void fillArena();
     // N3.2: the drawn passes' meshes all uploaded.
     bool meshesReady() const;
+    // Which passes' meshes are missing (bit 2 * pass its mesh, the next its instance source; 0: none), read in place.
+    quint64 missingMeshMask() const;
     // N3.3 (D16): the storage at this record (made, kept or made again; its edge kernels recorded now, before any pass);
     // false with the reason (the content's failure, latched like a build's).
     bool syncStorage(QRhi *rhi, QRhiCommandBuffer *cb, const ColorTarget &target, QString *error);
@@ -764,6 +772,14 @@ private:
     ModeStreams m_streams;                   // N3.2: the streams and the block arena
     QByteArray m_arena;                      // N3.2: the arena's CPU copy, written whole per drawn record (choice D)
     QStringList m_meshesLost;                // N3.2: drawn meshes with nothing to upload from (a content made again)
+    // N3.2 audit 4's side defect: the waiting reason (textures uploading or lost, meshes lost), made at its edge only,
+    // and what it was made for.
+    bool m_waitingValid = false;
+    quint64 m_waitingProgram = 0;
+    int m_waitingJobs = 0;
+    quint64 m_waitingMeshes = 0;
+    QStringList m_waitingLost;
+    QString m_waitingReason;
     QByteArray m_batchShadow;                // N3.2: the batched passes' indirect commands (form 3), written per record
     quint64 m_meshBuffersNoted = ~quint64(0); // N3.2: the meshes' and streams' objects the state was last noted for
     quint64 m_targetObjectsSeen = 0;         // the targets' object generation the bindings were made over
@@ -787,7 +803,6 @@ private:
     quint64 m_storageNoted = ~quint64(0);    // the storage's objects the state was last noted for
     bool m_storageHeldHere = false;          // this content made storage (a later one of the source finds it lost)
     quint64 m_storageReadsDone = 0;          // harness readbacks served
-    QString m_computeReason;                 // the last entry not dispatched for a limit, reported once
 };
 
 } // namespace srpss_core

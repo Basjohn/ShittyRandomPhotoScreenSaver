@@ -2,6 +2,7 @@
 #include "mesh_buffers.h"
 
 #include "frame_abi_generated.h"
+#include "mode_schema.h"
 
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonParseError>
@@ -41,6 +42,8 @@ QAtomicInteger<int> g_hideDrawParameters { 0 };
 QAtomicInteger<quint32> g_directFirstInstance { 0 };
 QAtomicInteger<int> g_recreateStreams { 0 };
 QAtomicInteger<int> g_skipMeshRelease { 0 };
+QAtomicInteger<int> g_instancesPastUsed { 0 };
+QAtomicInteger<qint64> g_drawsRefused { 0 };
 
 // The item quad of the Python host (render_host.py _ensure_quad): (0,0), (1,0), (0,1), (1,1), a strip.
 constexpr float kQuadVertices[8] = { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f };
@@ -473,6 +476,7 @@ MeshBufferCounts meshBufferCounts()
     c.recordsTimed = g_recordsTimed.loadRelaxed();
     c.recordNs = g_recordNs.loadRelaxed();
     c.streamWriteNs = g_streamWriteNs.loadRelaxed();
+    c.drawsRefused = g_drawsRefused.loadRelaxed();
     return c;
 }
 
@@ -484,6 +488,7 @@ void countRecordTime(qint64 recordNs, qint64 streamWriteNs)
 }
 
 void countIndirectDraw() { g_indirectDraws.fetchAndAddRelaxed(1); }
+void countDrawRefused() { g_drawsRefused.fetchAndAddRelaxed(1); }
 void countBatched(bool indirect) { (indirect ? g_batchedIndirect : g_batchedLoop).fetchAndAddRelaxed(1); }
 void meshesCountUpload() { g_meshUploads.fetchAndAddRelaxed(1); }
 
@@ -495,6 +500,8 @@ void setRecreateStreams(bool recreate) { g_recreateStreams.storeRelaxed(recreate
 bool recreateStreams() { return g_recreateStreams.loadRelaxed() != 0; }
 void setSkipMeshRelease(bool skip) { g_skipMeshRelease.storeRelaxed(skip ? 1 : 0); }
 bool skipMeshRelease() { return g_skipMeshRelease.loadRelaxed() != 0; }
+void setInstancesPastUsed(bool past) { g_instancesPastUsed.storeRelaxed(past ? 1 : 0); }
+bool instancesPastUsed() { return g_instancesPastUsed.loadRelaxed() != 0; }
 
 bool drawParametersAvailable(QRhi *rhi)
 {
@@ -567,6 +574,10 @@ bool ModeMeshes::upload(QRhi *rhi, QRhiResourceUpdateBatch *updates, Gpu &gpu, c
         g_buffersCreated.fetchAndAddRelaxed(1);
     }
     if (!ok) {
+        // Audit 4 L5: the mesh is lost, so the buffer it would replace goes too (find() no longer returns it and
+        // nothing draws the old vertices under the new declaration); it waits for the owner to send it again.
+        if (gpu.vertices || !gpu.name.isEmpty())
+            releaseGpu(gpu);
         lost->append(QStringLiteral("%1 could not be created").arg(QString::fromLatin1(mesh.name)));
         return false;
     }
@@ -655,6 +666,17 @@ void ModeStreams::release()
         countBuffer(g_streams, g_streamBytes, qint64(m_batchCommands->size()), -1);
     m_batchCommands.reset();
     m_arenaBytes = 0;
+    m_schema.reset();                         // after the streams whose fields pointed into it
+}
+
+bool ModeStreams::builtFor(const RuntimeSchema *schema) const
+{
+    const RuntimeSchema *built = m_schema.data();
+    if (built == schema)
+        return true;
+    if (!built || !schema)
+        return false;
+    return built->fingerprint() == schema->fingerprint(); // the same layout: the fields' offsets and counts hold
 }
 
 int ModeStreams::live() const
@@ -675,11 +697,15 @@ const ModeStreams::Stream *ModeStreams::find(const QByteArray &name) const
     return nullptr;
 }
 
-bool ModeStreams::build(QRhi *rhi, const QList<StreamDeclaration> &streams, const fa::Schema *schema,
-                        quint32 arenaBytes, quint32 indirectBatchBytes, QString *error)
+bool ModeStreams::build(QRhi *rhi, const QList<StreamDeclaration> &streams,
+                        const QSharedPointer<const RuntimeSchema> &bound, quint32 arenaBytes, quint32 indirectBatchBytes,
+                        QString *error)
 {
     release();
     ++m_generation;
+    // Audit 4 H1: the streams' fields point into this schema, so they hold it (a rebind may free the drawn one).
+    m_schema = bound;
+    const fa::Schema *schema = bound ? &bound->schema() : nullptr;
     for (const StreamDeclaration &decl : streams) {
         const fa::Field *field = nullptr;
         for (quint32 i = 0; schema && i < schema->fieldCount; ++i) {
@@ -761,6 +787,7 @@ bool ModeStreams::build(QRhi *rhi, const QList<StreamDeclaration> &streams, cons
 void ModeStreams::write(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QByteArray &record)
 {
     for (Stream *s : m_streams) {
+        s->used = 0;                          // a stream not written this record draws nothing (audit 4 H2)
         if (recreateStreams() && s->decl.kind != StreamKind::Storage) {
             // The no-allocation proof's control: a stream made again at every record (the counts grow). Not a storage
             // stream: the pass's bindings name it (an instance or indirect stream is given per draw).
@@ -796,8 +823,16 @@ void ModeStreams::write(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QByte
                                                                                     qsizetype(bytes)));
         } else {
             char *p = s->buffer->beginFullDynamicBufferUpdateForCurrentFrame();
-            if (p)
+            if (p) {
                 std::memcpy(p, data, bytes);
+                if (s->decl.kind == StreamKind::Indirect) {
+                    // Audit 4 M1: D15's firstInstance is always 0, for the record's commands too (both backends move the
+                    // instance index by it): each command's fourth number written as 0 in the copy.
+                    const quint32 zero = 0;
+                    for (quint32 at = 12; at + 4 <= bytes; at += kIndirectCommandBytes)
+                        std::memcpy(p + at, &zero, sizeof(zero));
+                }
+            }
             s->buffer->endFullDynamicBufferUpdateForCurrentFrame();
         }
         g_streamWrites.fetchAndAddRelaxed(1);
