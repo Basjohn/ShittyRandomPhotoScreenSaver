@@ -185,6 +185,25 @@ def test_the_settings_follow_settings_and_the_card_only():
     assert _settings(_logical(0, enabled=(False,) * 4), presentation, card)["u_devcurve_foreground_layer_id"] == -1
 
 
+_ARRAY_PARAMETER = r"^\w[\w ]*\([^)]*\b\w+\s+\w+\s*\[\d*\][^)]*\)\s*\{"
+
+
+def test_no_product_shader_passes_an_array_to_a_function_by_value():
+    # SPIR-V copies a by-value array argument whole into function memory at every call: Spline Curve's curve sampling
+    # did so and its pass cost 1.97 ms on Vulkan against 0.030 ms on OpenGL at dpr 1 (N5.1).
+    import re
+
+    sources = [path for folder in ("widgets/spotify_visualizer/shaders", "rendering/quick/qml/shaders",
+                                   "native/core/shaders")
+               for path in (ROOT / folder).rglob("*") if path.suffix in (".frag", ".vert", ".comp", ".glsl")]
+    assert sources
+    found = [f"{path.name}: {match.group(0)}" for path in sources
+             for match in re.finditer(_ARRAY_PARAMETER, path.read_text(encoding="utf-8"), flags=re.M)]
+    assert found == []
+    # Control: the old signature is caught.
+    assert re.search(_ARRAY_PARAMETER, "float _sample_curve(const float curve[96], float x, int count) {", flags=re.M)
+
+
 # --------------------------------------------------------------------------------------- the module's blocks
 
 def _python_block(logical, presentation, card) -> dict:
