@@ -9,14 +9,14 @@ visualizer renderer lifecycle.
 from __future__ import annotations
 
 import math
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 
 import numpy as np
 from OpenGL import GL as gl
 
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from core.settings.shadow_direction import ShadowDirection, shadow_direction_signs
-from rendering.gl_programs.conventions import front_face_clockwise
+from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL, front_face_clockwise
 from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import (
     SCENE3D_FRAME_BLOCK_BINDING, SCENE3D_GLSL, SCENE3D_SPHERE_CAMERA_GLSL, Scene3DBlockLayout, scene3d_detail,
@@ -177,6 +177,7 @@ _SPHERE_FRAME_BLOCK = Scene3DBlockLayout.of("SphereFrameBlock", (
     ('uBackdropBlend', 'float'),
     ('uShadowColor', 'vec4'),
     ('uLayerAlpha', 'float'),
+    ('uTargetSize', 'vec2'),         # the scene target's pixels: the backdrop uv's pixel (fragPixel, N1.4)
 ))
 
 
@@ -525,7 +526,7 @@ out vec4 fragColor;
 
 uniform sampler2D uBackdrop;    // the displayed wallpaper, a small mipmapped copy
 uniform sampler2D uBackdropPrevious; // the wallpaper before a change, faded out by uBackdropBlend
-
+""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 vec3 rainbowRgb(float hue) {
     vec3 p = abs(fract(hue + vec3(0.0, 0.6666667, 0.3333333)) * 6.0 - 3.0);
     vec3 pure = clamp(p - 1.0, 0.0, 1.0);
@@ -657,7 +658,7 @@ void main() {
         vec3 reflected = reflect(-eyeToward, worldNormal);
         // Soften only the reflected-wallpaper lookup. Fast-changing face normals
         // previously walked many texels per degree and shimmered on each frame.
-        vec2 uv = (gl_FragCoord.xy + uBackdropMap.xy) / uBackdropMap.zw + reflected.xy * 0.16;
+        vec2 uv = (fragPixel(uTargetSize) + uBackdropMap.xy) / uBackdropMap.zw + reflected.xy * 0.16;
         uv = 1.0 - abs(1.0 - mod(uv, 2.0));
         float polish = max(gloss, clamp(uMirror, 0.0, 1.0));
         float lod = mix(3.6, 1.8, polish);
@@ -963,7 +964,6 @@ class QuickSphereVoxelRenderer:
             "uShadowColor": (0.0, 0.0, 0.0, 0.0),
             "uLayerAlpha": 1.0,
         })
-        packed = _SPHERE_FRAME_BLOCK.pack(values)
         has_outtake = fade_incoming and any(cohort.outtake for cohort in state.particle_cohorts)
         front_face = gl_query.get_int(gl.GL_FRONT_FACE)
         cull_face = gl_query.get_int(gl.GL_CULL_FACE_MODE)
@@ -971,10 +971,11 @@ class QuickSphereVoxelRenderer:
         try:
             # Sphere's own colour + depth target (cleared by the scope): the projected shadow's
             # depth is a silhouette mask, cleared again before the hero so it cannot occlude it.
-            # The content fade stays per fragment (uFade), as Sphere has always drawn it.
+            # The content fade stays per fragment (uFade), as Sphere has always drawn it. The block is
+            # packed once the scope has allocated the target (its size is the frame's uTargetSize).
             with self._target.scope(target_frame, samples, self._resources, overlay=1.0), (
-                self._frame_block.bound(packed) if not has_outtake else nullcontext()
-            ):
+                self._packed_frame(values, bind=not has_outtake)
+            ) as packed:
                 gl.glEnable(gl.GL_DEPTH_TEST)
                 gl.glDepthMask(gl.GL_TRUE)
                 gl.glDepthFunc(gl.GL_LESS)
@@ -1035,6 +1036,19 @@ class QuickSphereVoxelRenderer:
             gl.glFrontFace(front_face)
             gl.glCullFace(cull_face)
             gl.glDepthFunc(depth_function)
+
+    @contextmanager
+    def _packed_frame(self, values: dict, *, bind: bool):
+        """The frame block packed for the open scope's target (``uTargetSize``: its allocation, the pixel space the
+        fragment's ``fragPixel`` reads), bound for the enclosed draws when ``bind``; yields the packed bytes."""
+        allocation = self._target.allocation
+        values["uTargetSize"] = (float(allocation[0]), float(allocation[1]))
+        packed = _SPHERE_FRAME_BLOCK.pack(values)
+        if not bind:
+            yield packed
+            return
+        with self._frame_block.bound(packed):
+            yield packed
 
     def _draw_scene_shadow(
         self,

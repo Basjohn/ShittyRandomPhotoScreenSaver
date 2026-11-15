@@ -8,6 +8,7 @@ from rendering.gl_error_policy import disable_per_call_gl_error_checking
 disable_per_call_gl_error_checking()
 from OpenGL import GL as gl
 from core.settings.framed_camera import perspective_matrix
+from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
 from rendering.gl_programs.reflection import PLANAR_REFLECTION_GLSL, mirror_view
 from rendering.quick import gl_query
 from rendering.quick.render.gl_resources import compile_program, delete_program
@@ -28,9 +29,10 @@ uniform vec3 uColour;
 out vec4 FragColor;
 void main() { FragColor=vec4(uColour,1.0); }
 """
-_FLOOR = "#version 460 core\nout vec4 FragColor;\nuniform vec2 uViewport;\n" + PLANAR_REFLECTION_GLSL + """
-void main() { FragColor=vec4(planarReflection(gl_FragCoord.xy/uViewport,vec2(0.0),0.0),1.0); }
-"""
+_FLOOR = ("#version 460 core\nout vec4 FragColor;\nuniform vec2 uViewport;\n" + SRPSS_CONVENTIONS_FRAGMENT_GLSL
+          + PLANAR_REFLECTION_GLSL + """
+void main() { FragColor=vec4(planarReflection(uViewport,vec2(0.0),0.0),1.0); }
+""")
 
 
 def look_at(eye, target=(0., 0., 0.)):

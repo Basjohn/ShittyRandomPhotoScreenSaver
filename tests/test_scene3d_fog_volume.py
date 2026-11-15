@@ -155,10 +155,12 @@ def test_composite_fringe_smoothing_is_opt_in_and_reaches_pixels(gl_context):
     gl.glTextureSubImage2D(march.texture, 0, 0, 0, 8, 8, gl.GL_RGBA, gl.GL_FLOAT, fixture)
     def pixels(**options):
         target.bind(clear=(0., 0., 0., 0.))
-        march.composite(**options)
+        march.composite(target_size=(16, 16), **options)   # the bound target's pixels
         return target.read_rgba()
     default = pixels()
     np.testing.assert_array_equal(default, pixels(fringe_smoothing=0.))
     assert np.abs(default.astype(int) - pixels(fringe_smoothing=1.).astype(int)).max() > 5
     with pytest.raises(ValueError, match='smoothing'):
-        march.composite(fringe_smoothing=float('nan'))
+        march.composite(target_size=(16, 16), fringe_smoothing=float('nan'))
+    with pytest.raises(ValueError, match='positive size'):
+        march.composite(target_size=(0, 16))

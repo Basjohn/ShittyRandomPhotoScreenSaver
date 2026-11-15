@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import math
 
+from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
 from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import (
     SCENE3D_GLSL,
@@ -359,10 +360,11 @@ EXTRUDED_FRAGMENT_SOURCE = (
     "uniform float uSmooth;     // 1: edge lines measured in screen pixels (anti-aliased at any angle)\n"
     "uniform float uMirror;     // polished, reflective faces (never the edge lines)\n"
     "uniform sampler2D uBackdrop;   // what Quick drew under the Visualizer, mipmapped\n"
-    "uniform vec4 uBackdropMap;     // (gl_FragCoord.xy + xy) / zw is the backdrop's uv\n"
+    "uniform vec4 uBackdropMap;     // (fragPixel(uTargetSize) + xy) / zw is the backdrop's uv\n"
+    "uniform vec2 uTargetSize;      // the scene target's pixels (fragPixel's target, N1.4)\n"
     "uniform sampler2D uBackdropPrevious; // the wallpaper before a change, faded out by uBackdropBlend\n"
     "uniform float uBackdropBlend;\nuniform vec4 uShadowColor;\nuniform vec2 uShadowVector;\n"
-    + SCENE3D_GLSL + SCENE3D_ORBIT_GLSL
+    + SCENE3D_GLSL + SCENE3D_ORBIT_GLSL + SRPSS_CONVENTIONS_FRAGMENT_GLSL
     + """
 void main() {
     if (uPass == 4) {
@@ -413,7 +415,7 @@ void main() {
         // Edge lines stay as they are.
         vec3 v = normalize(vec3(0.0, 0.4, 1.6) - vWorld);
         vec3 r = reflect(-v, n);
-        vec2 uv = (gl_FragCoord.xy + uBackdropMap.xy) / uBackdropMap.zw + vec2(r.x, r.y) * 0.35;
+        vec2 uv = (fragPixel(uTargetSize) + uBackdropMap.xy) / uBackdropMap.zw + vec2(r.x, r.y) * 0.35;
         uv = 1.0 - abs(1.0 - mod(uv, 2.0));
         float lod = mix(3.0, 0.4, uGloss);
         vec3 seen = mix(textureLod(uBackdropPrevious, uv, lod).rgb, textureLod(uBackdrop, uv, lod).rgb,

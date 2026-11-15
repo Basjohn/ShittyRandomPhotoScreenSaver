@@ -365,8 +365,10 @@ void main() {
 """)
 
 # Volumetric shafts at half resolution, jittered, then blurred: smooth beams without per-pixel grain.
-SHAFT_FRAGMENT = "#version 460 core\nout vec4 FragColor;\nin vec2 vNdc;\n" + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL + COMMON + """
-uniform float uShaftScale;      // source pattern frequency (1: the shared pattern's)
+SHAFT_FRAGMENT = ("#version 460 core\nout vec4 FragColor;\nin vec2 vNdc;\n" + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL
+                  + COMMON + SRPSS_CONVENTIONS_FRAGMENT_GLSL) + """
+uniform vec2 uFrameSize;        // the half-resolution shaft target's pixels (fragPixel's target: the jitter's seed)
+uniform float uShaftScale;     // source pattern frequency (1: the shared pattern's)
 uniform float uShaftSoft;       // threshold softness 0..1
 uniform float uShaftFan;
 uniform float uFanRays;
@@ -543,7 +545,7 @@ float beamShafts(vec3 ray, vec3 rayOrigin, float maxDistance, vec3 sunBelow, flo
 void main() {
     vec3 ray = uViewToWorld * framedRayDirection(vNdc, uTan);
     vec3 rayOrigin = uEye + uViewToWorld * framedRayOrigin(vNdc, uTan);
-    float jitter = fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))));
+    float jitter = fract(52.9829189*fract(dot(fragPixel(uFrameSize),vec2(0.06711056,0.00583715))));
     if (uLightingScene < 0.5) {
         float toward = pow(max(dot(ray, uSunBelow), 0.0), 2.0);
         float march = beamShafts(ray, rayOrigin, 45.0, uSunBelow, uShaftY, uTime, 40, jitter) * 0.13 * (0.25 + toward);

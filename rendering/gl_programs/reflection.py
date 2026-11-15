@@ -22,8 +22,10 @@ def mirror_view(view: np.ndarray, plane_y: float) -> np.ndarray:
     return np.asarray(view, float) @ mirror_matrix(plane_y)
 
 
-# Receiver side. screenUv is gl_FragCoord.xy over the receiver's viewport; the reflection target covers the same view
-# at its own resolution. Roughness defines an elongated texture footprint: wet rough floors stretch reflections
+# Receiver side. The receiver includes the conventions' fragment part (``SRPSS_CONVENTIONS_FRAGMENT_GLSL``) before this
+# and passes its own target's pixels (``targetPx``): the reflection is sampled at the receiver's uv there
+# (``fragUv(targetPx)``) and the streak's per-pixel offset is seeded by its pixel (``fragPixel``, N1.4), the same texel
+# on every backend. The reflection target covers the same view at its own resolution. Roughness defines an elongated texture footprint: wet rough floors stretch reflections
 # toward the viewer. Hardware anisotropy integrates at most 16:1, so one footprint longer than that coarsens the
 # short axis too and washes neighbouring highlights into one smear; a long streak is split into up to sixteen abutting segments,
 # each within the sampler's ratio and Gaussian-weighted along the streak. Separated point taps stamped copies.
@@ -45,7 +47,8 @@ void reflectionGaussian(float sigma, out float offsets[5], out float weights[5])
     weights=float[5](farWeight/total,nearWeight/total,1.0/total,nearWeight/total,farWeight/total);
     if(sigma<=0.0) weights=float[5](0.0,0.0,1.0,0.0,0.0);
 }
-vec3 planarReflection(vec2 screenUv, vec2 offset, float roughness, float streakHalfLength) {
+vec3 planarReflection(vec2 targetPx, vec2 offset, float roughness, float streakHalfLength) {
+    vec2 screenUv=fragUv(targetPx);
     float lod=mix(uReflectionLook.y,uReflectionLook.z,roughness);
     float streak=streakHalfLength*roughness;
     vec2 size=vec2(textureSize(uReflection,0));
@@ -81,7 +84,7 @@ vec3 planarReflection(vec2 screenUv, vec2 offset, float roughness, float streakH
         float total=0.0;
         // Offset the segments per pixel by up to one spacing: fixed offsets copied a thin highlight into evenly
         // spaced horizontal bands (an unstructured hash; neighbouring pixels average it out).
-        uvec2 cell=uvec2(gl_FragCoord.xy);
+        uvec2 cell=uvec2(fragPixel(targetPx));
         uint bits=cell.x*2654435761u^(cell.y*2246822519u+374761393u);
         bits^=bits>>15; bits*=2246822519u; bits^=bits>>13;
         float shift=float(bits&0xffffu)/65536.0-0.5;
@@ -99,7 +102,7 @@ vec3 planarReflection(vec2 screenUv, vec2 offset, float roughness, float streakH
     }
     return colour;
 }
-vec3 planarReflection(vec2 screenUv, vec2 offset, float roughness) {
-    return planarReflection(screenUv,offset,roughness,uReflectionLook.x);
+vec3 planarReflection(vec2 targetPx, vec2 offset, float roughness) {
+    return planarReflection(targetPx,offset,roughness,uReflectionLook.x);
 }
 """

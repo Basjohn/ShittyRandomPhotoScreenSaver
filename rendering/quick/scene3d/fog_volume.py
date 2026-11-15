@@ -330,6 +330,7 @@ class FogMarch:
                 "uMarch": (float(steps), max_extinction, erosion, detail_frequency),
                 "uMarchStep": (*step, shadow_floor), "uMarchEdge": (edge_glow, *base),
                 "uMarchShade": (*shadow, 0. if ground is None else float(ground), 0. if ground is None else 1.),
+                "uViewportSize": (float(width), float(height)),    # the march target: fragPixel's (N1.4)
                 **(coverage_values or {})}
             gl.glBindVertexArray(self._vao)
             with self._blocks.bound(pack_block(self._march_block, values)):
@@ -343,14 +344,18 @@ class FogMarch:
             (gl.glEnable if depth_test else gl.glDisable)(gl.GL_DEPTH_TEST)
             (gl.glEnablei if blend else gl.glDisablei)(gl.GL_BLEND, 0)
 
-    def composite(self, *, glow: float = 0., additive: bool = False, scale: float = 1., crackle=(0., 0., 1., 1.),
-                  crackle_glow: float = 0., crackle_limit=None, crackle_limit_texture: int | None = None,
-                  fringe_smoothing: float = 0.) -> None:
+    def composite(self, *, target_size, glow: float = 0., additive: bool = False, scale: float = 1.,
+                  crackle=(0., 0., 1., 1.), crackle_glow: float = 0., crackle_limit=None,
+                  crackle_limit_texture: int | None = None, fringe_smoothing: float = 0.) -> None:
         """Draw the last march over the bound framebuffer: dst x transmittance + in-scatter (``additive``: + in-scatter
-        only, for a target that holds light alone, such as a reflection)."""
+        only, for a target that holds light alone, such as a reflection). ``target_size``: that framebuffer's pixels
+        (width, height), the target the edge filaments' per-pixel noise reads its pixel in (``fragPixel``, N1.4)."""
         self._check_context()
         if not self._colour:
             raise RuntimeError(f"{self.label}: fog composite before a march")
+        target_width, target_height = (int(v) for v in target_size)
+        if target_width <= 0 or target_height <= 0:
+            raise ValueError(f"{self.label}: fog composite needs its target's positive size")
         if not math.isfinite(fringe_smoothing) or not 0. <= fringe_smoothing <= 4.:
             raise ValueError('Fog fringe smoothing must be finite in 0..4 march texels')
         if crackle_limit is not None and crackle_limit_texture is not None:
@@ -370,7 +375,8 @@ class FogMarch:
             limited=crackle_limit is not None or crackle_limit_texture is not None
             block = pack_block(FOG_COMPOSITE_BLOCK, {
                 "uFogGlow": glow, "uFogScale": scale, "uFogFringeSmoothing": fringe_smoothing, "uFogCrackle": crackle,
-                "uFogCrackleSeed": (crackle_glow, 0.), "uFogCrackleLimited": int(limited)})
+                "uFogCrackleSeed": (crackle_glow, 0.), "uFogCrackleLimited": int(limited),
+                "uTargetSize": (float(target_width), float(target_height))})
             if limited:
                 if crackle_limit is not None:self._upload_limit(np.ascontiguousarray(crackle_limit, np.float32))
                 gl.glBindTextureUnit(self.LIMIT_UNIT,self._limit if crackle_limit_texture is None else crackle_limit_texture)

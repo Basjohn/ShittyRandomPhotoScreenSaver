@@ -120,6 +120,34 @@ def test_light_falls_monotonically_from_the_core_in_the_particle_hue(ambient):
 
 
 @pytest.mark.qt
+def test_the_callers_program_comes_back_only_while_it_lives(ambient):
+    """The pass restores the caller's program; one the caller deleted while it was current went with the pass's own
+    program switch, so naming it again raised GL_INVALID_VALUE (hit by a harness). A live one comes back."""
+    from OpenGL import GL as gl
+
+    from rendering.quick.render.gl_resources import compile_program, delete_program
+
+    vertex = "#version 460 core\nvoid main() { gl_Position = vec4(0.0, 0.0, 0.0, 1.0); }\n"
+    fragment = "#version 460 core\nout vec4 C;\nvoid main() { C = vec4(1.0); }\n"
+    live = compile_program(vertex, fragment, label="ambient caller (live)")
+    try:
+        gl.glUseProgram(live)
+        _draw(ambient, 32.5, 32.5, 2.4, 1.0)
+        assert int(gl.glGetIntegerv(gl.GL_CURRENT_PROGRAM)) == live
+    finally:
+        gl.glUseProgram(0)
+        delete_program(live)
+    gone = compile_program(vertex, fragment, label="ambient caller (deleted while current)")
+    gl.glUseProgram(gone)
+    delete_program(gone)                       # flagged: it lives only while it stays current
+    assert gl.glIsProgram(gone)
+    _draw(ambient, 32.5, 32.5, 2.4, 1.0)       # raised GL_INVALID_VALUE at the restore before the fix
+    assert not gl.glIsProgram(gone)
+    assert int(gl.glGetIntegerv(gl.GL_CURRENT_PROGRAM)) == 0
+    assert gl.glGetError() == gl.GL_NO_ERROR
+
+
+@pytest.mark.qt
 @pytest.mark.parametrize("diameter", (0.9, 1.5, 2.4, 4.0))
 @pytest.mark.parametrize("glow", (0.0, 0.3, 2.0))
 def test_total_light_is_steady_as_the_particle_moves_between_pixel_centres(ambient, diameter, glow):

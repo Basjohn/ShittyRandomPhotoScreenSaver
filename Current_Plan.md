@@ -339,15 +339,8 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   invisible to the lifecycle tests: record those too, with a test.
 - [ ] Side defect: `waveform_ribbon.py:54` (`0.5*(clip.z/clip.w+1.0)`) and `scene3d_spheres.py:197` assume OpenGL's
   -1..1 depth: route both through `viewDepthFromDepthTexture`/the include before matrices are corrected at upload.
-- [ ] N1.4's remainder (the include and its use across the substrate, Waveform and Extruded Bubble landed, above):
-  - [ ] Per-pixel hash seeds still read raw `gl_FragCoord` (`gl_programs/fog_volume.py:165,289`,
-    `reflection.py:84`, `extruded_bubble_program.py:545`): through `fragPixel`, so the dither is the same texel on
-    every backend and a port's Vulkan record is not compared across two noise patterns. Bit-identical in OpenGL.
-  - [ ] Extruded Spectrum's and Sphere's backdrop uv (`extruded_spectrum_program.py:415`, `sphere_voxel.py:658`)
-    and the four 2D shaders (`gl_FragCoord.xy - u_viewport_origin_px`), each with its N1.6 group. Spectrum's group
-    merged without it (`spectrum.frag:521` still reads raw `gl_FragCoord`): Spectrum's is still owed (N2.5 merged without it).
-  - The eight scene composites in `scene3d/target.py:125-286` (and their oriented forms) keep raw `gl_FragCoord`
-    and are never converted: D5.2 replaces them with a texture node.
+- N1.4's remainder: the eight scene composites in `scene3d/target.py:125-286` (and their oriented forms) keep raw
+  `gl_FragCoord` and are never converted: D5.2 replaces them with a texture node.
 - [ ] N1.6 Loose uniforms into blocks across the renderer (`qsb` needs blocks), each group pixel-identical in OpenGL
   before and after and with GL calls per frame recorded before and after (fewer calls is a gain today); `.qsb` baked
   for every backend, not `--glsl 460` only; each group leaves the readiness ratchet in the same change. A group whose
@@ -365,9 +358,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   velocity.
 - [ ] D5.6 row 13's control was not run: fill the widened targets' unused channels with non-zero values in a test, so
   a consumer that reads them fails (the scan and source checks show only `.rg`/`.xy`/`.rgb` reads today).
-- [ ] Side defect: `rendering/quick/visualizer/implementations/bubble_ambient_gl.py:421` restores the caller's program
-  unconditionally; a program deleted while current makes the restore raise `GL_INVALID_VALUE` (hit by the harness;
-  production's Quick program is live): restore only a live program, with a test.
 - [ ] N1.8 Per-sample multisample reads (`sampler2DMS`, `gl_SampleID`): each use resolves first and reads the
   resolve, with stills before and after; a use that cannot is listed for D5.3's per-sample service with the
   reason. The uses (D5.6 rows 7 and 15), one step each:
