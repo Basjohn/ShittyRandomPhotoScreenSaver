@@ -64,6 +64,11 @@ QString primeForLoad(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *texture);
 // COLOR_ATTACHMENT_OPTIMAL, each over every level. Returns how many were primed (0 off Vulkan).
 int primeForLoad(QRhi *rhi, QRhiCommandBuffer *cb, const QList<QRhiTexture *> &textures);
 
+// Rule C for a depth texture (N3.1, D14 point 5: depth is preserved and cleared by a draw): on Vulkan, when it is not in
+// DEPTH_STENCIL_ATTACHMENT_OPTIMAL (a capture or a later pass sampled it), records the transition with depth read and
+// write in its second scope and tells QRhi the layout; elsewhere nothing. True when it recorded one.
+bool primeDepthForLoad(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *depth);
+
 // The same for a texture outside any frame: an offscreen frame of its own, waited on (a target's creation edge before
 // any frame of the host exists, the hidden host's Quick target).
 QString primeForLoadOutsideFrame(QRhi *rhi, QRhiTexture *texture);

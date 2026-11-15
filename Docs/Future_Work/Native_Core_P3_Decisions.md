@@ -4,7 +4,7 @@
 card-material backdrop), D8 (what Parity+ means), D9 (async GPU jobs), D10 (the Vulkan rehearsal path and the flip
 gate) and D11 (the Qt version) were decided by the one-off architectural audit of 12 Nov 2026 (Fable 5.2, at the
 lead's request, answering the operator's direction of 11 and 12 Nov). D12 and D13 (14 Nov) were proposed by the High
-agent for N2.9 and N4.a. They bind until the lead or the operator supersedes one in writing here. D1 to D3 and the
+agent for N2.9 and N4.a, and D14 (15 Nov, scene targets) for N3.1 with the lead's answers. They bind until the lead or the operator supersedes one in writing here. D1 to D3 and the
 transport rule, the rest of D5 (N0.5), N0.3 and N0.4 (D5.5) were drafted as proposals and accepted by the lead on
 12 Nov; this file states each as decided, with the lead's answers folded in. What each decision built is under its
 "As built" or "As proved" record. The ordered work is `Current_Plan.md`, item 8b.
@@ -976,6 +976,190 @@ rule at most eight pixels a frame may pass 1 level where a threshold ties (a hig
 edge): invisible and transient, while making them exact would mean the Python renderer compiling the pack's GLSL,
 which retires with it in N5.2h anyway. N5.2a's seven stay exact under rule (a) and within 1 level everywhere under
 rule (b). `transition_route_check.py` encodes this (`TIE_PIXELS`, `_is_fragment_pass`).
+
+## D14. Scene targets (N3.1, decided 15 Nov 2026; proposed by the High agent, choices A to G answered by the lead)
+
+*The draft of 15 Nov became this decision with the lead's answers folded in (the list at the end). The plan's N3.1
+boxes carry the steps.*
+
+**The oracle, read at de68ede75.** `rendering/quick/scene3d/target.py` `SceneTarget`: colour (RGBA8, RGBA16F with
+`hdr`), depth (a depth24 renderbuffer, or a DEPTH_COMPONENT32F texture with `depth_texture`), opt-in emission,
+shafts, velocity and OIT attachments, allocated at `_bucket` (64 px, grow-only, `begin`/`warm` reallocate only when the
+rect outgrows the bucket or the key changes), the content at the allocation's GL origin (bottom-left), the whole
+allocation cleared at `begin`, released at `park()` or retirement. `background()` copies, mid-scope, the colour
+(averaged over samples; linear filter) and the nearest window depth (R32F through `viewDepthFromDepthTexture`, which
+is the identity: window depth 0..1 on every backend, N0.3 scene 2; nearest filter) over the whole allocation, addressed
+by pixel over allocation. Bubble's ambient target (`bubble_ambient_gl.py`): RGBA8 coverage plus an RGBA16F light
+attachment that exists only while a particle glows, at `ambient_target_size` (at most 2048 a side), coverage blended
+premultiplied-over and light added, `bubble.frag` reading the light only under `u_ambient_light_enabled`. Sample counts
+come from six places: transitions' `scene3d_samples` (the tier or the transition's Off/2x/4x/8x), the tier's
+`overlay_samples` in Extruded Bubble, Sphere and Neon Lake, doubled by Smooth Edges in Extruded Spectrum, a fixed 4 in
+Waveform (`waveform.py:377`) and a fixed 1 in the Oscilloscope (`oscilloscope.py:165`); `SceneTarget._allocate` clamps
+to the GL limits.
+
+**The decision.**
+1. *Targets are data, a primitive used by every consumer* (D12 point 3's rule, as D13 did for samplers). A program
+   declares its targets beside its passes: a name; a size (the surface's device pixels, or explicit pixels from Python,
+   Bubble's ambient size); colour attachments (at most 4, named; RGBA8, RGBA16F, R16F or R32F); a depth (none, or one
+   D32F texture); a requested sample count. A pass names its target (the surface by default), its per-attachment write
+   mask and blend (`QRhi::PerRenderTargetBlending`), its depth test and write, and outputs at locations 0..n-1 matching
+   the target's attachments (`gl_FragDepth` only into a target with depth). A sampler binds a target's attachment by
+   name (`<target>.<attachment>`), reading its single-sample texture or its resolve. One target is one QRhi render
+   target with all its attachments; a pass writing fewer attachments masks the others (Python's `emission_writes` and
+   `shaft_writes` are masks too), so no pass switches render pass to change outputs. Refusals, with the reason, as D12's.
+2. *Allocation per size.* One `SceneTargets` owner per content (render thread; surface scope, choice B: the content
+   already lives and dies with its node, and with one Visualizer per window a window registry would add nothing). An
+   allocation is keyed by (allocated size, effective samples, the declaration), its size in 64 px buckets (choice A):
+   it grows at once, to the needed size's buckets, whenever the needed size passes the allocation on either axis; it
+   shrinks, to the needed size's buckets, only when the needed size falls two or more buckets below the allocation on
+   either axis, so a drag across one bucket boundary does not reallocate back and forth. Both are decided at the size
+   edge (a new card or explicit size reaching the item's sync), never by a timer or a settle poll. An allocation is
+   made one attachment per step (N3.6 schedules the steps as warm-up units; until then the first record makes them),
+   never per frame. The content sits at image rows [H-h, H) and columns [0, w) of a bucketed allocation, the Python renderer's GL
+   bottom-left, so a linear read past the content's edge (refraction, a blur) reads what Python's reads. One function in
+   `conventions.h` turns that rect into QRhi's viewport and scissor per backend: QRhi's viewport origin is the
+   framebuffer's bottom-left, which on the core's OpenGL targets (F1's flip) is the image's top. A single-sample target
+   is a plain texture (the lesson: a 1-sample multisample object does not rasterise like a direct draw).
+3. *Resize and retirement.* A new key re-creates the same QRhi objects at the new size (Qt's pattern, as `Surface` and
+   the backdrop do), so bindings follow the textures' generation and the passes' bindings are made again with the
+   pipelines kept (N3.8's rebind); a sample-count or format change needs a new render-pass descriptor and so new
+   pipelines. Everything is released with the content (the node's deletion, a mode switch, retirement, the scene graph's
+   invalidation) on the render thread, the QRhi alive; process-wide counts (targets, attachments, bytes, allocations)
+   join `composite_live` and the destruction barrier's reading. Nothing at rest: a target is recorded only when its
+   surface is dirty.
+4. *The HDR intermediate is RGBA16F* (the Python renderer's: colour, emission, the HDR capture, Bubble's light). No
+   R11G11B10F: QRhi lacks it and D5.3's formats service is admitted only on a measured cost. The tone map into the
+   surface is N3.4's HDR resolve, not this primitive. Rules B and C hold for every attachment: preserved, cleared by a
+   draw over the whole allocation, primed for the load on Vulkan.
+5. *The sampled depth and the capture.* Depth is always one D32F texture (the same 4 bytes as D24S8; the Python renderer
+   draws pixel-identically with either), preserved and cleared by a draw (rule B extended to depth; rule C's prime gets a
+   depth twin if synchronisation validation asks). The capture (D5.6 row 15) ends the scene's render pass, draws the
+   capture pass into a target of its own (colour RGBA8 or RGBA16F with linear sampling, the nearest window depth R32F
+   with nearest sampling, the whole allocation) and begins the scene's pass again with its colour and depth loaded.
+   Single-sampled, the capture is a copy and rule (a) is exact.
+6. *The second attachment* is any target's attachment 1. Bubble's ambient target is RGBA8 coverage (premultiplied over)
+   and RGBA16F light (added) at its explicit size; the light attachment is made with the target and cleared with it, so
+   the pass that samples it always has a texture bound and `u_ambient_light_enabled` keeps the light unread when nothing
+   glows (choice F).
+7. *One sampling policy, one clamp.* The request has one Python owner, beside the tier table in
+   `rendering/gl_programs/scene3d.py`: a transition's Antialiasing choice or Auto (the tier's `samples`), or a Visualizer's
+   tier `overlay_samples` times its declared factor (Extruded Spectrum's Smooth Edges) or its declared fixed count
+   (Waveform 4, the Oscilloscope 1); every caller listed above calls it and the Python pixels do not move (N1's last box
+   is closed by it). The request travels as the target's `samples`; the core's clamp is the only place it meets a device:
+   the largest of `QRhi::supportedSampleCounts()` not above it, 1 when the device offers no other. The effective count
+   is reported in the content's state. The Python renderer keeps its GL clamp until it retires. Waveform's 4 and the
+   Oscilloscope's 1 stay declared fixed requests (choice D: no pixel moves); whether they follow the tier is an operator
+   look and cost question for later, and blocks nothing.
+8. *Multisampled targets resolve first* (D5.6 row 7): each attachment a sampler reads gets a resolve texture
+   (`QRhiColorAttachment::setResolveTexture`), and depth a depth resolve (`setDepthResolveTexture`, where the device
+   reports `QRhi::ResolveDepthStencil`; one sample's depth, not the nearest; choice E; **the depth half is superseded
+   by point 10**, the lead after build round 2). The proof reads the flag on both
+   backends; a backend without it stops the work and is reported, with no workaround built. On Qt's OpenGL backend a
+   resolve is a framebuffer blit (Qt source; the lesson's 0.5 ms at 1440p was a blit): accepted if measured within
+   budget, the figure recorded (choice G; the budget the proof applies is D7's, 0.3 ms at 2560 x 1440 and 0.6 ms at 4K
+   for a frame's resolves, until the lead sets another); past it the work stops and is reported with the measurement.
+   Multisampled output is judged repeat-relative (D8 point 1).
+9. *Not built here.* Velocity (motion blur, with D5.3's formats box), OIT's second target sharing the scene's depth,
+   bloom and the tone map (N3.4); geometry (N3.2); the warm-up schedule (N3.6). The declaration keeps room for a target
+   that borrows another's depth (N3.4's OIT) without a contract change.
+
+**The lead's answers (15 Nov 2026), folded in above.**
+- A. 64 px buckets; grow at once whenever the needed size passes the allocation; shrink only with hysteresis, when
+  the needed size falls two or more buckets below the allocation on either axis; decided at the size edge only, no
+  timer and no settle polling.
+- B. The content owns its targets (surface scope).
+- C. Always one D32F texture.
+- D. Waveform's 4 and the Oscilloscope's 1 stay declared fixed requests; following the tier is a later operator look
+  and cost question that blocks nothing.
+- E. QRhi's depth resolve now; the proof checks `ResolveDepthStencil` on both backends; a backend without it stops the
+  work and is reported, no workaround.
+- F. The light attachment is made with Bubble's target and cleared when nothing glows; the proof confirms the clear's
+  cost is negligible.
+- G. QRhi's OpenGL resolve is accepted if measured within budget, the figure recorded; past budget the work stops and
+  is reported with the measurement.
+
+**Accepted by the lead with build round 1 (15 Nov 2026, ABI 17 at 03a0ad8f).** Three additions of the build:
+- *An explicit size changes without a new program* (`composite_mode_target_size`, `NativeMode.target_size`): Bubble's
+  ambient target follows its card through the allocation rule above, the pipelines kept; a new program would rebuild
+  every pipeline at every card resize.
+- *The blend `additive`* (ONE, ONE on every channel) beside `replace`, `alpha`, `premultiplied` and `add` (which weighs
+  the source by its alpha and keeps the target's): the light attachments add so in the Python renderer (Extruded Bubble's
+  `emission_writes`, Bubble's ambient light).
+- *At most 16 passes a program* (8 before), so a 3D scene's passes and its captures fit.
+
+**The lead's decisions after build round 2 (15 Nov 2026), on the two stops below.**
+10. *Multisampled depth: the core's own per-sample nearest resolve* (D5.3's per-sample service, in QRhi form). QRhi's
+    depth resolve is out on both backends. A fullscreen pass (`shaders/scene_nearest.frag`) reads every sample of the
+    multisampled source and writes the minimum (the nearest under the project's depth convention) into a
+    single-sampled R32F texture; the samplers that read the depth and the capture bind that texture. Nothing sets
+    `setDepthResolveTexture`, so the multisampled depth is stored and loaded for the passes after a capture (rule C
+    primes it). Means in order: (a) the multisampled D32F read directly (`texelFetch` on a `sampler2DMS`) where QRhi
+    admits it on both backends; (b) failing that, the depth-writing passes also write a depth into a multisampled R32F
+    attachment declared `"resolve": "nearest"` (an attachment past the first), resolved by the same pass. The pass runs
+    after a run of passes on the target only when a later pass reads it (or the harness reads the targets back). The
+    proof is against the single-sampled analytic depth: equal where every sample is the same, the minimum at pixels
+    of partial coverage (the harness's two bands drawn with `gl_SampleMask`), and a negative control (sample 0 alone)
+    wrong exactly where sample 0 was not covered. This settles N1.8's open "nearest depth" A/B for Extruded Bubble:
+    its multisampled `background()` keeps the nearest depth, as the Python renderer does, with no look question left.
+11. *The four-sample cost at 4K*: D7's 0.6 ms applies to the substrate's overhead, not to the rasterisation a mode
+    already pays. The measure is the Python path's 4x minus 1x on the same load at 4K on OpenGL
+    (`scene_target_check.py --rounds python_cost`); the native figure is accepted when no worse, and a worse figure is
+    a defect whose time is found (`--rounds cost_parts`). Whether 4K defaults to fewer samples is the operator's look
+    call later; it blocks nothing.
+12. *The fast clear: tried, measured, rejected* (the lead, 15 Nov 2026; build rounds 4 `1dfac891` and 5 `844e5681`,
+    reverted, so the core keeps round 3's clearing draw over the loaded contents). The attempt: a target's first run in
+    a record cleared through its pass's load op (a second render target over the same attachments without the preserve
+    flags; a `persist` declaration opting out), its later runs loading. Measured on a quiet GPU at 4K
+    (`20261115_round4_quiet_cost`; Python's 4x minus 1x 0.40 ms): it lowered the single-sampled baseline more than the
+    four-sample time (a clearing draw and a plane, Vulkan: 0.14 ms at 1x against 0.20 with the clearing draw, 0.42 at
+    4x against 0.49), so the 4x minus 1x figure grew (OpenGL 0.61 ms, Vulkan 0.93 ms); it slowed the capture variant at
+    4x (OpenGL 0.99 against 0.91 ms, Vulkan 1.31 against 1.01); and QRhi's Vulkan backend does not store a
+    multisampled colour attachment that has a resolve unless its contents are preserved, so the run after a capture
+    loaded undefined samples (NaN in the final resolve at 2x, 4x and 8x; the persist control caught it; OpenGL
+    unaffected). Round 5's fix (a twin without resolves and the core's average) was never built.
+13. *Accepted at round 3's figures* (the lead, 15 Nov 2026). OpenGL's 4K 4x minus 1x 0.45 ms against Python's 0.41 is
+    within run noise. Vulkan's 0.58 ms is 0.17 ms over at 4K and stays open as a plan box under N3: per-run GPU timing
+    inside a content, then the capture step's four-sample cost located (the nearest pass, the depth's layout switch or
+    the second run's load), settled before N5.6 (Extruded Bubble), the first consumer of a four-sample capture.
+
+**As built (N3.1, 15 Nov 2026).** `native/core/src/scene_targets.*` holds the rules (`bucketPixels`, `nextAllocation`,
+`contentViewport`, `clampSamples`) and `SceneTargets`, the content's owner; `rendering/native/scene_targets.py` mirrors
+the rules for the GPU-free tests and `scene3d.scene_samples` is the one sampling request. The proof is
+`native/core/python/scene_target_check.py` (evidence under `.artifacts/evidence/native_core/n3_1/`):
+- Single-sampled, both backends pass: rule (a) against the Python `SceneTarget` (exact but for `scene.colour`, 3 px one
+  float16 step past, and coverage one level), rule (b) Vulkan against OpenGL (exact but the light, one float16 step),
+  the analytic checks (captured depth within 1e-7, after-pass drawn only behind loaded depth, HDR above 1 kept,
+  emission masked where written off, light cleared when nothing glows), nothing at rest, the drag across bucket edges
+  both ways (5 reallocations against the no-hysteresis control's 7, an explicit target never reallocated, content equal
+  to a fresh target's), retirement with validation, no frame-thread work from Python.
+- The clamp reports the count created (8 forced away gives 4). QRhi's depth resolve (build rounds 1 and 2) gave wrong
+  values on both backends (the resolved D32F read 0 on OpenGL, a strided pattern with NaNs on Vulkan) and stored no
+  multisampled depth once set (`DontCare`), though `ResolveDepthStencil` read true on both: the stop that led to
+  point 10.
+- Point 10, proved at build round 3 (`20261115_round3_msaa`), both backends, 2x, 4x and 8x: means (a) works (QRhi
+  samples the multisampled D32F with `texelFetch` on both), and (b) works beside it. Without partial coverage every
+  resolve equals the single-sampled frame; with the `gl_SampleMask` bands the capture's depth, the depth a sampler
+  reads, the nearest R32F attachment and its target's depth are the analytic nearest depth within 8.7e-8; the sample-0
+  control is wrong on exactly the first band's 6720 pixels and nowhere else; validation clean but for Qt's defect A.
+- Vulkan reported a write-after-write hazard on resolve textures no pass samples; resolves are made only for attachments
+  a sampler reads (round 2).
+- Rule C for depth's negative control (`--rounds prime_control`, Vulkan, 1x and 4x): with the prime skipped,
+  synchronisation validation reports read-after-write hazards on the depth load (3 at one sample, 7 with 4x, where
+  the nearest resolve reads the depth before the load); with it, none.
+- Cost (GPU, the harness scene's passes, module de12cb82; on a quiet GPU, `20261115_round3_quiet_parts` and
+  `_quiet_cost`; figures taken while a game held 40% of the GPU moved by tenths of a millisecond and are kept only as
+  evidence). The light attachment's clear at 2048 x 1152 adds 0.01 to 0.02 ms (choice F: negligible). Four samples
+  minus one at 4K: the Python renderer 0.41 ms (OpenGL, `python_cost`); native, the scene with its capture, OpenGL
+  0.45 ms and Vulkan 0.58 ms (the full scene with the ambient target and the surface pass: Vulkan 0.58, OpenGL 0.44 at
+  p10); at 2560 x 1440 Python 0.15, native OpenGL 0.19, Vulkan 0.22. Round 2's Vulkan 1.25 ms was QRhi's depth
+  resolve. What is left, by part (`cost_parts`, 4x minus 1x, Vulkan / OpenGL): the clearing draw and a plane 0.29 /
+  0.13 ms, while a second full plane adds nothing at four samples (0.19 / 0.07 for both) and the other passes little:
+  the four-sample cost points to the target's first write of every sample (the parts cannot tell the clearing draw
+  from the load before it), the clearing draw over contents loaded first
+  (rule B: `PreserveColorContents` loads, then the draw writes every sample of two RGBA16F attachments and the D32F, about
+  660 MB at 4K, where the Python renderer's `glClear` is a fast clear). The capture split adds 0.36 / 0.30 ms (the
+  second run, the nearest resolve, the capture, a second colour resolve), as Python's `background()` does its own.
+  The fast clear this pointed to was built and rejected (point 12); the figures above stand (point 13).
 
 ## N3.2 draft: meshes and buffers (15 Nov 2026; proposed by the High agent, open choices A to J for the lead)
 

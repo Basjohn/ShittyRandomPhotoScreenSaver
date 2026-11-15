@@ -110,6 +110,15 @@ never ships.
     Python pyramid's (`rendering/quick/render/surface_backdrop.py`), built from the window's background layer by the frame
     driver right after the layer, only in the frame the layer drew a new frame (the surface's drawn generation) and only
     while its item is not parked; its item is the texture provider `MaterialSurface` samples unchanged.
+  - `scene_targets.*` (N3.1, decision D14): the scene targets a program declares as data, owned by its content: a
+    surface-sized or explicit-size target of 1 to 4 colour attachments (RGBA8, RGBA16F, R16F, R32F) and an optional
+    D32F depth, allocated in 64 px buckets (grown at once, shrunk only two buckets below, at the size edge), the content
+    at the allocation's image rows `[H-h, H)` (the Python renderer's GL bottom-left; `contentViewport` gives QRhi's
+    viewport per backend), cleared by a draw, primed for the load on Vulkan (rule C for colour and depth), the capture
+    step (Python's `SceneTarget.background()`), the sample request clamped to the device's list (the count reported
+    is the count created), multisampled colour resolved by QRhi (only what is read) and a read multisampled depth by
+    the core's nearest resolve (D14 point 10), released with the content. Counted in `composite_live`
+    (`scene_targets*`, `scene_target_nearest_resolves`).
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
     loader's runtime rule); Qt's types instead.
@@ -154,6 +163,11 @@ never ships.
   OpenGL and Vulkan against OpenGL, on a dark and a bright photo at the overscan and the product's R-63 placement; each
   material's card stills against today's; the build's GPU time against D7's budgets at 2560x1440 and 4K; nothing at
   rest, one build per photo or dimming change, demand 0 building nothing; the owner's route; teardown).
+- `python/scene_target_check.py`: N3.1's proof of the scene targets on the harness scene `python/scene_targets/` (the
+  targets' readbacks against the Python owners driving the same fragments, rule (a), and Vulkan against OpenGL, rule
+  (b); the captured depth and the depth loaded across the capture split; the second attachment and its clear; MSAA with
+  the clamp; nothing at rest; the resize drag across bucket boundaries both ways; retirement; cost and the thread probe;
+  `--rounds prime_control` on Vulkan alone: rule C for depth's negative control under synchronisation validation).
 - `python/timer_check.py`: N2.6's proof (off is free by count, a known-cost pass scaled N times and its empty-bracket
   control, QRhi's frame figure, latched reads in a real window with the waiting read as control, the frame trace and
   its report, the two forms against each other, validation; `timer_analysis.py`).
@@ -187,6 +201,15 @@ worked example (harness-only); a product mode does the same in the product's pla
    (`NativeMode.program(passes, settings)`) and again when Settings change (`NativeMode.settings`); the item as shown
    (`NativeMode.card(mode_card(...))`) whenever it changes.
 4b. **Its textures** (N4.a, when a pass samples an image): see "Samplers and textures" below.
+4c. **Its scene targets** (N3.1, when it draws into intermediates: depth, an HDR colour, a second attachment, a capture):
+   `ModeTarget`s given with the program (`NativeMode.program(passes, settings, targets=...)`); a pass names its
+   `target`, one `PassOutput` (write mask, blend) per attachment and its depth test and write; a `CapturePass` copies a
+   target's colour and nearest window depth for later passes; a sampler reads `"<target>.<attachment>"`,
+   `"<target>.depth"` or `"<target>.capture_colour|capture_depth"`. The sample request comes from
+   `rendering.gl_programs.scene3d.scene_samples`; an explicit size follows its card through `NativeMode.target_size`.
+   Read a target by its own pixel or by a uv over its allocation (`textureSize`): the content sits at the allocation's
+   bottom rows, columns from 0. A multisampled target's read depth is the core's nearest resolve (D14 point 10:
+   `shaders/scene_nearest.frag`, the minimum over the samples); an R32F attachment may declare `"resolve": "nearest"`.
 5. **What is refused, with its reason:** a setting or a record field no pass declares (unknown); a member no source
    fills (unfilled); a name with two owners (a setting or a field naming a core member, a setting naming a field); a
    value of the wrong size or without a defined conversion (a refused frame keeps the last drawn one); a sampler the

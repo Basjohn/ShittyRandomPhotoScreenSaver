@@ -166,6 +166,47 @@ int primeForLoad(QRhi *rhi, QRhiCommandBuffer *cb, const QList<QRhiTexture *> &t
     return int(due.size());
 }
 
+bool primeDepthForLoad(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *depth)
+{
+    if (!rhi || !cb || !depth || rhi->backend() != QRhi::Vulkan)
+        return false;
+    const QRhiTexture::NativeTexture native = depth->nativeTexture();
+    if (native.layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+        return false;
+    const auto *handles = static_cast<const QRhiVulkanNativeHandles *>(rhi->nativeHandles());
+    if (!handles || !handles->inst || !handles->dev)
+        return false;
+    QVulkanDeviceFunctions *df = handles->inst->deviceFunctions(handles->dev);
+    if (!df)
+        return false;
+    cb->beginExternal();
+    const auto *cbHandles = static_cast<const QRhiVulkanCommandBufferNativeHandles *>(cb->nativeHandles());
+    const bool recorded = cbHandles && cbHandles->commandBuffer;
+    if (recorded) {
+        VkImageMemoryBarrier barrier = {};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+            | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        barrier.oldLayout = VkImageLayout(native.layout);
+        barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = reinterpret_cast<VkImage>(quintptr(native.object));
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT; // D32F: depth only
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.layerCount = 1;
+        df->vkCmdPipelineBarrier(cbHandles->commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                                 VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                                 0, 0, nullptr, 0, nullptr, 1, &barrier);
+    }
+    cb->endExternal();
+    if (!recorded)
+        return false;
+    depth->setNativeLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    return true;
+}
+
 QString primeForLoadOutsideFrame(QRhi *rhi, QRhiTexture *texture)
 {
     if (!rhi || !texture || rhi->backend() != QRhi::Vulkan)

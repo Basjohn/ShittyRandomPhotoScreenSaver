@@ -4,7 +4,7 @@ from core.waveform_ribbon_view import physical_view  # the camera owner; re-expo
 from widgets.spotify_visualizer.render_state import WaveformRibbonFrame
 from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
 from rendering.quick.scene3d.frame import item_pixel_rect,orient_visualizer_scene_frame
-from rendering.quick.scene3d.waveform import WaveformScene
+from rendering.quick.scene3d.waveform import SCENE_SAMPLES, WaveformScene
 from rendering.quick.scene3d.resources import warm_programs
 from rendering.quick.scene3d.target import scene_target_programs
 from rendering.gl_programs.waveform_ribbon import FLOOR_VERTEX,FLOOR_FRAGMENT
@@ -36,7 +36,7 @@ class QuickWaveformRibbonRenderer:
         if recipe.fog is not None:
             programs.extend(((scene.fog_resources,'fog medium',MEDIUM_INJECT_SOURCE),
                              (scene.fog_resources,'sky',SKY_VERTEX,SKY_FRAGMENT)))
-        programs.extend((scene.resources,*entry) for entry in scene_target_programs(4,recipe.bloom>0.,False,
+        programs.extend((scene.resources,*entry) for entry in scene_target_programs(SCENE_SAMPLES,recipe.bloom>0.,False,
             overlay=True,oit=True,hdr=recipe.bloom>0.,rotation=frame.scene_output_rotation))
         if not warm_programs(programs):return False
         # The floor's, the sky's and the medium's pass block rings (N1.6), one allocation a step.

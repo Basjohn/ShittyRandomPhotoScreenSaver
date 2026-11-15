@@ -66,6 +66,19 @@
 // compatible for every earlier caller: the surface's drawn generation and window placement and the frame driver's
 // backdrop step after the background layer are additions; primeForLoad transitions every mip level (one for every
 // single-level target, as before).
+// 17 (N3.1, scene targets; D14, scene_targets.h): a program's "targets" and a pass's "target", "attachments", "depth"
+// and capture steps ({"name", "capture"} with an empty pack); samplers naming "<target>.<attachment>"; the blend
+// "additive" (ONE, ONE: emitted light, Bubble's ambient light); at most 16
+// passes (8 before); composite_mode_target_size, composite_mode_target_read and composite_mode_target_pixels (harness);
+// scene_sample_counts_control (the clamp's control); scene_depth_prime_control (build round 2: rule C for depth's
+// control) and composite_live's scene_target_depth_primes (still 17: round 2 of the same unmerged N3.1); round 3 (D14
+// point 10, still 17): an attachment's "resolve" ("average" or "nearest"), the core's nearest resolve in place of
+// QRhi's depth resolve, scene_nearest_first_sample_control (its control), composite_live's
+// scene_target_nearest_resolves and the readback's "<target>.depth" when multisampled; scene_target_next_allocation, scene_target_viewport and
+// scene_target_clamp (GPU-free); composite_live's scene_targets, scene_target_textures, scene_target_bytes,
+// scene_target_allocations, scene_target_steps and scene_target_readbacks; composite_mode_state's scene_targets,
+// target_reads_requested and target_readback_pending; a program's layout JSON carries targets and each pass's target,
+// capture, attachments, depth and frag_depth. Backward compatible for every earlier program (no targets: N2.9's passes).
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 16
+#define SRPSS_NATIVE_CORE_ABI 17

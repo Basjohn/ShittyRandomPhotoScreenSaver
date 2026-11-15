@@ -96,6 +96,7 @@ set(_sources
     src/stream_source.cpp
     src/mode_schema.cpp
     src/mode_content.cpp
+    src/scene_targets.cpp
     src/job_service.cpp
     src/item_notifier.cpp
     src/program_blocks.cpp
