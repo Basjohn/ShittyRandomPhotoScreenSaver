@@ -850,3 +850,291 @@ Proof: read from the code. All of them are unreachable on this machine's devices
   - M1's out-of-bounds fetch as a fault (only its admission).
   - A device without `DrawIndirect`, `DrawIndirectMulti` or `ShaderDrawParameters`.
 - **Real windows:** hidden hosts only, and no Display 1 rehearsal.
+
+## Checkpoint audit 5 (N3.3, High)
+
+Branch `worktree-agent-a2e216858330ebb7e` at ae2bf6b0b against `main` (compute passes, C++ at ABI 19, D16), High
+effort. Nothing was fixed. The branch fast-forwarded onto the auditor's worktree (main had nothing the branch lacked), so
+line numbers are the branch's. The auditor ran the branch's GitHub-built module (`release/native_module`, manifest
+commit 686ae09cf, run 43682663623). `git diff --stat 686ae09cf ae2bf6b0b` touches only documents and
+`devcurve_check.py`, so the module is the code under audit. No build was started. Evidence is in the auditor's worktree
+under `.artifacts/evidence/native_core/`: `n3_3/20261115_audit5_compute`, `n3_3/20261115_audit5_probes` (the probe
+script `probe_audit5.py` is kept beside its `probe_opengl.json` and `probe_vulkan.json`), `n3_2/20261115_audit5_used_forms`
+and `n3_1/20261115_audit5_gate`. The GPU was not quiet: before the first run nvidia-smi read 46 to 49 %, P5 (an SRPSS
+process the auditor did not start), and 16 % after it. Hidden hosts only.
+
+**Verdict: the branch can merge as it is.** There is no critical or high finding. The proof reproduces on both
+backends. Each negative control fails without its rule, and synchronisation validation with the shader-access checks is
+clean outside the control phases. Three medium findings are contract defects in the code that N5.4 and N5.6 will build
+on. Each is a small fix in `compute_passes.cpp` or `mode_content.cpp` and should be a box before the first consumer uses
+compute:
+
+- **M1:** a program without storage never releases the storage buffers of the program before it.
+- **M2:** `fresh` is set for every entry by a new program or by any one resource made again, so a stateful entry
+  restarts its history while its buffer is kept.
+- **M3:** one buffer bound twice with two accesses in one entry is admitted. QRhi then derives a wrong barrier, and the
+  layer reports the hazard.
+
+M4 is three harness boxes of the plan that were not built, and the as-built does not say so.
+
+**Reruns on the copied module** (each once):
+
+| Proof | APIs | Result | Negative controls seen failing |
+| --- | --- | --- | --- |
+| `compute_pass_check`, every round (facts, parity, trigger, war, copy, rest, steady, retire, barriers, cost) with `--require-validation`; shader-access checks on (`synchronisation_shader_accesses` true) | OpenGL, Vulkan, reference | **N33 VERDICT PASS.** Rule (a) and rule (b) exact on every resource of field, chain, volume and population (and `population_direct`), with the pixels exact. Vulkan validation: 10 errors, all Qt defect A (excused by id); 0 unexplained. | `write_as_read`: `SYNC-HAZARD-READ-AFTER-WRITE` (and WAW), 20 errors. `single_pass`: `SYNC-HAZARD-WRITE-AFTER-READ`, 10. `trigger_every_record`: 400 dispatches, row 0 `[201, 100, 100, 200]` against the reference `[100, 100, 99, 99]`. Skipped release: 2 buffers (2,048 bytes) left, then 0 after the next sync. Rest control: 180 dispatches in 60 records. |
+| the same: trigger, copy, rest | both | 20 dispatches in 20 records. 15 re-records (fade, settings, readback) gave 0 dispatches and 15 skips. Made again: `on_state_lost` once with `["out", "state"]` and row 0 `[1, 100, 0, 1000]`. Resize 256 to 512 rows: 2 copies, 2 clears, 0 dispatches, the prefix exact, zero past it. | |
+| the same: cost (GPU busy, see above) | both | GPU median of the whole record at 2560x1440 and 4K, in ms. Vulkan: field 0.036 and 0.071, waveform 0.044 and 0.083, drift 0.137 and 0.150, population 0.118 and 0.131. OpenGL: field 0.064 and 0.128, waveform 0.099 and 0.136, drift 0.178 and 0.155, population 0.165 and 0.211. These are within a few hundredths of D16's figures. | |
+| `mesh_buffer_check --rounds used forms --require-validation` | both | N32 VERDICT PASS. Vulkan: 10 defect-A errors only. | |
+| `scene_target_check` gate (default rounds, cost included) with `--require-validation` | both, reference | N31 VERDICT PASS. Rule (a) 5 exact, rule (b) 16 exact. Vulkan: 10 defect-A errors only. | |
+
+**Focused tests:** `pytest -k test_native_` over `tests/` (without `_sdk_fetch` and `_spike_n03`) gives 508 passed.
+
+### Critical
+
+None.
+
+### High
+
+None.
+
+### Medium
+
+**M1. A program without storage keeps the storage buffers of the program before it until the item is destroyed.**
+
+- **Where:**
+  - `native/core/src/compute_passes.h:235`: `empty()` looks at `m_buffers` and `m_images` only, never at `m_retiring`.
+  - `compute_passes.cpp:746-749`: the first sync under the new program moves every buffer into `m_retiring`.
+  - `compute_passes.cpp:595-597`: `m_retiring` is released only at the start of a later `sync`.
+  - `mode_content.cpp:4645-4646`: from the second record on, `syncStorage` returns before `sync`, because the program
+    declares nothing and `m_storage.empty()` is true.
+  - The kernels stay too: `compute_passes.cpp:793-794` releases them only when `m_retiring` is empty.
+  - Images are released at once (`compute_passes.cpp:787-790`), so only buffers are affected.
+- **Failure scenario:**
+  1. The generic route sends another mode's program to the same item (`_program_mode` changes).
+  2. That program declares no storage, for example a switch from Extruded Bubble's drift to an ordinary mode.
+  3. Every storage buffer, up to 8 of 256 MiB each, stays resident with the core's four kernel objects until the item
+     goes.
+  4. `composite_live`'s `compute_buffers` stays above zero.
+  5. D16's "as built" (`Native_Core_P3_Decisions.md:1682`: "retirement to zero after ... a program without storage") and
+     the plan's retirement box say otherwise.
+- **Why the proof missed it:** `round_retire`'s case (`compute_pass_check.py:868-879`) uses the field scene. That scene
+  holds one image and no buffer (`held: compute_buffers 0, compute_images 1`).
+- **Proof:** `probe_audit5.py` P1, on both APIs. The population scene holds 5 buffers (82,064 bytes). After a program
+  of one plain pass, it still holds 5 buffers and 82,064 bytes after 3 frames and after 33. They go to 0 only when the
+  item is destroyed.
+
+**M2. `fresh` is per content, not per resource, and a new program sets it. A stateful entry restarts over storage that
+was kept.**
+
+- **Where:**
+  - `mode_content.cpp:4639-4644`: a new program generation resets every `ComputeTrack`, so `!t.dispatched` makes the
+    next dispatch fresh (`:4710`) and `u_srpss_compute.y` 0.
+  - `mode_content.cpp:4656-4657` with `compute_passes.cpp:741,784`: any one buffer made without a prefix, or any image
+    made again, raises one `m_freshGeneration`. Every entry then dispatches fresh, including those whose buffers were
+    kept. An image is made again by Python's `image_size`, which is Waveform's fog grid following its surface.
+- **Why it matters:** D16 point 7 (`:1593-1595`) says `fresh` is 1 "at the first dispatch after the state was created".
+  `compute_passes.h:16-17` and `mode_content.h:127` say the storage "survives a pipeline rebuild and a new program that
+  declares it the same way". Choice C rejects "restarting a family's state at every resize (a visible jump at a Settings
+  edge)". The bytes survive, but the shader is told to throw them away, and D16 makes the drift's "restart from zero
+  when fresh" the shader's own rule.
+- **Failure scenario:**
+  1. Extruded Bubble's drift (N5.6) is re-sent its program at a Settings edge with the same storage. A variant change
+     does this, or a worker rebind that sends the program again.
+  2. Alternatively, a mode with a stateful buffer and a surface-sized image is resized.
+  3. The drift state restarts from zero: the visible jump that choice C rejected.
+- **Proof:** `probe_audit5.py` P2, on both APIs.
+  - The state scene is stepped 6 times, giving row 0 `[6, 6, 5, 5]`.
+  - The same program is then sent again with the same buffers. No object is created and no clear runs: the storage is
+    kept.
+  - One more step gives `[1, 7, 0, 1000]` (fresh, last trigger 0) instead of `[7, 7, 6, 6]`.
+  - The image path is read from the code and was not run.
+
+**M3. One storage resource bound twice in one compute entry, with two accesses, is admitted, and QRhi then derives a
+wrong barrier.**
+
+- **Where:**
+  - `mode_content.cpp:1134`: the duplicate check compares the shader's names only.
+  - `mode_content.cpp:1188` (`claim`) checks the binding numbers. Nothing checks that two bindings name different
+    resources.
+  - QRhi's pass tracker keeps the first access of a buffer registered twice in one pass and ignores the second
+    (research Q7 gap (b), `Native_Core_QRhi_Research_N3.md:277-279`), so D16 point 3's "barriers derived from access
+    types" silently loses the write.
+  - By reading, the same class reaches draws. One render pass may read a storage buffer as `storage` and as
+    `instance_from` in two draws of one run, or in one draw. That is two access types, and `mode_content.cpp:1836-1860`
+    admits it.
+- **Failure scenario:**
+  - A port binds `In` (readonly) and `Out` (writeonly) to one ping-pong buffer, or a readonly and a read-write view of
+    the drift state.
+  - The program is admitted with no reason.
+  - The write is untracked, so the next pass reads it with no barrier on Vulkan. That is a race on the GPU.
+- **Proof:** `probe_audit5.py` P3 (Vulkan, validation with shader-access checks).
+  - The entry `war_read.comp` with `X` (read) and `Y` (write) both on buffer `x`, followed by an entry reading `x`, is
+    admitted (`last_reason` empty). Over 12 records the layer reports `SYNC-HAZARD-WRITE-AFTER-WRITE` in that phase.
+  - The control, the same two entries with `Y` on a third buffer, reports no hazard. Its phase holds one defect-A
+    error only.
+  - The probe looked for Qt's "used with different accesses" warning in the child's stderr and found none.
+
+**M4. Three harness boxes of the plan were not built, and the as-built does not say so.**
+
+- **Where:** `Current_Plan.md`, the N3.3 harness box.
+- **What is missing:**
+  - **Rule (b):** "D4's pair-check kernel (`PROGRAMS[2]`) through `qsb` exact on both backends (`precise` survives the
+    bake)" (`:812-813`). No scene or round uses it: `compute_pass_check.py` and `compute_passes/` have no pair-check
+    kernel and no `precise`.
+  - **Write-after-read, ping-pong form:** "in both forms the research names (two passes, the default; two buffers, a
+    ping-pong)" (`:825-826`). Only the two-pass form (`war`) is built.
+  - **OpenGL's barriers:** "the barrier calls per record counted against Python's" (`:829-830`). They are not counted.
+    D16's as-built judges OpenGL by GPU time instead, which is choice H's criterion, but the box still asks for the
+    count.
+- **Why it matters:** the first is D4's guard against a compiler that drops `precise`, which choice G keeps the product
+  readback for. Its bake through the core's own path is unproved.
+- **Proof:** read from the harness; Grep for `precise`, `PROGRAMS` and `ping` over `compute_pass_check.py` and
+  `compute_passes/` finds nothing.
+
+### Low
+
+**L1. The core allocates on the render thread at every record of a content with storage.**
+
+- **Where:**
+  - `compute_passes.cpp:611,628`: `ModeStorage::sync` runs every record and builds `QList<quint32> sizes`.
+  - `:714,726`: it builds `next`.
+  - `:751,762`: it builds `nextImages`. These are heap allocations even when everything is kept.
+  - `:590-591`: `releaseLeftBehind` takes the process-wide `g_leftBehindMutex` at every record, for the harness
+    control's sake.
+- **Why the proof missed it:** the steady round counts QRhi objects (`compute_objects_created`), not heap allocations:
+  audit 4 L3's class.
+- **Proof:** read from the code.
+
+**L2. A trigger is consumed by a record that dispatches nothing.**
+
+- **Where:** `decideDispatches` advances `lastTrigger`, `dispatches` and `freshSeen` (`mode_content.cpp:4693-4732`)
+  before `recordCompute` decides. `recordCompute` then may not dispatch:
+  - groups past the device's limit (`:4744-4757`);
+  - a group count of 0 (`:4758-4759`);
+  - no pipeline (`:4739`).
+- **Failure scenario:**
+  - A field-triggered stateful entry whose group count is 0 for one record (a named count, for example an empty
+    population) loses that record's steps for good. The next dispatch sees `y` = the skipped value.
+  - If that record was the first after the storage was made, `fresh` is consumed with no dispatch.
+  - This is D16 point 7's "a stateful pass is never integrated twice" turned into "sometimes not at all".
+- **Proof:** read from the code. Nothing provoked it: no scene has a zero group count.
+
+**L3. Storage refusals rest on facts the core records but does not use.**
+
+- **The format check:** D16 point 6 (`Native_Core_P3_Decisions.md:1586-1588`) says a missing storage-image format
+  (Vulkan's R16F needs the extended formats) refuses the program, "read once at device creation". The core asks
+  `rhi->isTextureFormatSupported(format, UsedWithLoadStore)` at every sync instead (`compute_passes.cpp:631-632`).
+  - The Vulkan facts it records for exactly this, `storage_image_formats` and `shader_storage_image_extended_formats`
+    (`vulkan_context.cpp:786-804`), are never consulted.
+  - Whether Qt 6.12's backends honour `UsedWithLoadStore` in that query was not verified: there is no Qt source on
+    this machine, and every format is supported here.
+- **Group limits:** the pack's reflected local size (`mode_content.cpp:1330-1332`) is never checked against
+  `MaxThreadGroupX/Y/Z` or `MaxThreadsPerThreadGroup`. Only the group counts are checked.
+- **Dispatch totals:** the product of three admitted group counts is unbounded: three record counts under at_most
+  65535 is 2.8e14 groups, a TDR on the screensaver from an owner bug (audit 4 M1's class).
+- **Proof:** read from the code.
+
+**L4. Image storage has no byte bound, and its zeroing is a host allocation of a whole slice.**
+
+- **Where:**
+  - Buffers are capped at 256 MiB (`compute_passes.h:50`). An image is bounded only per side, up to 16384 square in
+    2D and 2048 cubed in 3D (`:51-52`).
+  - Its zeros are one `QByteArray` of a whole slice, made on the render thread (`compute_passes.cpp:768-772`): 4 GiB for
+    a 16384-square RGBA32F image.
+  - Every storage image carries `UsedAsTransferSource`, which only the harness's readback needs (`:690-692`).
+- **Proof:** read from the code.
+
+**L5. Exception G is a closed list, but it is looser than D16 in three places.**
+
+- **Where:** `Docs/Guardrails/Performance_Optimization_Contract.md:450-456`. It cannot become a general licence: it
+  names one readback and requires "its own line here and in D16" for any other.
+- **Where it is looser:**
+  - It says "once per device", where D16 says "once per solver" (`Native_Core_P3_Decisions.md:1534-1535`) and choice
+    G says "once, at its warm-up edge". A device loss or a display move would legitimately repeat it.
+  - It bounds neither the bytes read (the pair's few words) nor what the result may do ("logged" does not say "and
+    nothing else").
+  - It pre-excuses the OpenGL synchronous read as lifecycle and "never counted as a steady-state hitch", without
+    defining the warm-up edge. A warm-up at a mode switch mid-show is a visible frame, which the warm-up rule
+    (gradual, ~14 ms at an image change) treats as steady state.
+- **Not enforced:** the harness readback entries reach the product's Python face (`NativeMode.read_storage`,
+  `storage_data`, `rendering/native/mode.py:712-719`, as N3.1's `read_targets`). No test keeps product code from
+  calling them. Grep finds no caller in `rendering/`, `widgets/`, `core/` or `ui/` today.
+- **Proof:** read from the documents.
+
+**L6. The documents disagree with the code.**
+
+- D16 "as built" `:1682`: "retirement to zero after ... a program without storage" holds for images only (M1).
+- `compute_passes.h:16-17` and `mode_content.h:127`: the storage "survives ... a new program", but its entries restart
+  (M2).
+- D16 point 6 says compute support is "read once at device creation". The code reads `QRhi::Compute` at every build
+  (`mode_content.cpp` `build`) and in `ensureKernels`, and the formats at every sync (L3).
+- `compute_passes.h:265`: `m_zeros` is "kept for the uploads at an edge" but is never written. The zeros are a local
+  at `compute_passes.cpp:769`.
+- `tests/test_native_mesh_buffers.py:6`: the docstring still says "ABI 18". The assertions are correct (`>= 18`, and
+  `test_native_compute_passes.py:101-102` pins 19).
+
+### Checked, no finding
+
+- **Lifetime:**
+  - A resized buffer's predecessor is held in `m_retiring` and released at the next record's sync, never inside the
+    record whose copy reads it (`compute_passes.cpp:592-597`).
+  - The edge kernels are recorded in the same `syncStorage` call as the sync that queued them (`mode_content.cpp`
+    `syncStorage` then `recordEdges`), so `Op`'s raw pointers never outlive their buffers.
+  - `kMaxStorageEdgeOps` (16) equals 8 buffers by 2 operations.
+  - Phase 1 makes every object before anything changes, and a failure is latched (`m_latch.failed`).
+  - The bindings over the storage are made again through `m_textureObjects` before any pass, and compute passes are
+    included in `rebindTextures`. Vertex input and `drawIndirect` take the current buffer at draw time.
+  - A content made again finds the storage zeroed, dispatches fresh and tells the owner once, the lost names prefixed
+    `state:` and split in `NativeMode._lost`.
+  - Retirement reaches zero after a destroy, a destroy mid-resize, and the skipped-release control's next sync (rerun).
+- **Kernels:**
+  - The std140 block (dst, src, words, value, stride) matches the C++ words at offsets 0 to 16 in a 32-byte stride
+    aligned by `ubufAligned`.
+  - Groups are capped at 65535 and each invocation strides by groups x 256, so a 256 MiB buffer is covered in 4 passes
+    of the loop with no 32-bit overflow.
+  - The clear and the copy into one buffer are two QRhi passes (WAW barriered).
+  - The prefix is bit-exact, rerun.
+- **3D storage images:** made with `ThreeDimensional`, zeroed slice by slice, read back per layer, and sampled by
+  `sampler3D` with no mips. Rule (a) and rule (b) are exact on the volume's RGBA16F and R16F images (rerun).
+- **Counts (N3.2's narrowed rules):**
+  - Instances from a storage buffer are checked against bytes over stride, and indirect commands against bytes over
+    16, both refused with the reason made at the edge (`mode_content.cpp` `drawPass`).
+  - The commands a compute entry writes are the lead's trusted exception, documented in D16.
+  - Record group counts need an at_most rule of at most 65535, and groups past the device's limit are not dispatched.
+  - A record field cannot size a buffer, and a setting cannot be a trigger.
+- **Synchronisation:**
+  - Every compute entry is its own QRhi compute pass (`recordCompute` ends it unless the harness's `single_pass`
+    control is on), as is every kernel operation.
+  - Accesses map one to one to `bufferLoad`/`Store`/`LoadStore` and `imageLoad`/`Store`/`LoadStore`, and are checked
+    against `qsb`'s qualifiers (the facts round's eight refusals, rerun).
+  - The core issues no barrier of its own for compute.
+- **Shader-access validation is harness-only:**
+  - `VK_EXT_layer_settings` is chained only when the caller asks for it, with validation and synchronisation validation
+    loaded (`vulkan_context.cpp:389-394`).
+  - The product's only caller, `rendering/quick/bootstrap.py:669`, calls `core.vulkan_instance()` with the defaults
+    (no validation, no shader accesses).
+  - No environment variable is involved.
+- **Triggers:** a re-recorded frame never re-dispatches: the frame trigger reads `StreamSource::m_frameSerial`, bumped
+  only when a new record is accepted (`stream_source.cpp:179`). The field trigger reads the record's u32. The proof's
+  15 re-records gave 0 dispatches (rerun).
+- **Nothing per record at rest:** the rest round's minute gave 0 compute passes, dispatches and objects (rerun).
+- **The limited Python API:** the four new entries use `PyArg_ParseTuple`, `PyList_*`, `PyDict_New`,
+  `PyBytes_FromStringAndSize`, `Py_BuildValue` and `PyErr_*` only, with their references released on every error path.
+- **ABI 19:** `abi.h:110`, `EXPECTED_ABI` (`loader.py:49`) and `test_native_compute_passes.py:101-102` agree, and
+  `abi.h`'s comment lists the new entries and state keys the code has.
+- **`tools/regen_qrc.py`:** `.comp` joins the baked suffixes. No product folder holds a `.comp` today, so no pack
+  changes.
+- **Rules:** no environment flags, timers or polling in product code, and no preset names. The protected clip commits
+  are untouched.
+
+### Not verified
+
+- **Rounds not rerun:** `generic_mode_check`, `fullscreen_pass_check`, `background_layer_check`,
+  `backdrop_pyramid_check`, `transition_route_check` and `devcurve_check` (the brief named only the three above).
+  `mesh_buffer_check`'s parity, rest, steady, retire, cost and stream_ring rounds were not rerun either.
+- **Cost on a quiet GPU:** not possible. The GPU was 46 to 49 % busy before the run.
+- **What the probes did not cover:**
+  - M2's image path (a fresh image restarting a kept buffer's entry): read from the code.
+  - M3's draw-side form (a storage buffer read two ways in one render pass): read from the code.
+  - L2 and L3 were not provoked.
+- **Real windows:** hidden hosts only, and no Display 1 rehearsal.
