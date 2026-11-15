@@ -35,6 +35,7 @@ from rendering.quick.scene3d.frame import item_pixel_rect
 from rendering.quick.scene3d.resources import MeshResources, warm_pass_blocks, warm_programs
 from rendering.quick.scene3d.stream import StreamRing
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
+from rendering.gl_programs.scene3d import scene_samples
 from widgets.spotify_visualizer.render_state import OscilloscopeFrame
 
 from ..implementation_values import parameter, rgba
@@ -46,6 +47,9 @@ _PADDING = 0.06               # the field's margin around the drawing (share of 
 _TRACE_HEIGHT = 0.92          # the trace's swing (share of the padded half height)
 _FLARE_WIDTH = 0.9            # how much a full flare widens the beam (share of its width)
 _GLOW_LIGHT = 1.8             # the light a beam pixel sends to the bloom (a thin beam needs plenty)
+# The scene target's multisampling: the Oscilloscope's declared fixed request (N3.1, D14 choice D: single-sampled
+# whatever the tier), through the one sampling owner.
+_SCENE_SAMPLES = scene_samples(None, fixed=1)
 
 
 def oscilloscope_layout(field, display: str, item_width: float | None = None,
@@ -117,13 +121,13 @@ class QuickOscilloscopeRenderer:
         r = self._resources
         if not warm_programs([(r, "beam", OSC_BEAM_VERTEX_SOURCE, OSC_BEAM_FRAGMENT_SOURCE),
                               (r, "graticule", OSC_GRATICULE_VERTEX_SOURCE, OSC_GRATICULE_FRAGMENT_SOURCE),
-                              *((r, *program) for program in scene_target_programs(1, bloom, False, overlay=True))]):
+                              *((r, *program) for program in scene_target_programs(_SCENE_SAMPLES, bloom, False, overlay=True))]):
             return False
         if not warm_pass_blocks(r, item_pixel_rect(frame)[2:]):
             return False
         if not self._stream.warm():
             return False
-        return self._target.warm(item_pixel_rect(frame)[2:], 1, overlay=True, bloom=bloom)
+        return self._target.warm(item_pixel_rect(frame)[2:], _SCENE_SAMPLES, overlay=True, bloom=bloom)
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         snapshot = frame.snapshot
@@ -162,7 +166,7 @@ class QuickOscilloscopeRenderer:
         r = self._resources
         beam_program = r.program("beam", OSC_BEAM_VERTEX_SOURCE, OSC_BEAM_FRAGMENT_SOURCE)
         graticule = str(parameter(parameters, "osc_graticule"))
-        with self._target.scope(frame, 1, r, overlay=presentation.content_fade, bloom=bloom):
+        with self._target.scope(frame, _SCENE_SAMPLES, r, overlay=presentation.content_fade, bloom=bloom):
             inherited = _blend_state()
             gl.glEnable(gl.GL_BLEND)
             gl.glBlendEquationSeparatei(0, gl.GL_MAX, gl.GL_MAX)

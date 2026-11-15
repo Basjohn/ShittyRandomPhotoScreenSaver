@@ -33,7 +33,7 @@ from rendering.gl_programs.extruded_spectrum_program import (
     extruded_reach,
 )
 from rendering.gl_programs.portable import pack_block
-from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VERTICES, scene3d_detail
+from rendering.gl_programs.scene3d import SCENE3D_BOX_ATTRIBUTES, SCENE3D_BOX_VERTICES, scene3d_detail, scene_samples
 from rendering.quick.scene3d.environment import BackdropEnvironment
 from rendering.quick.scene3d.frame import item_pixel_rect, reach_item_frame, orient_visualizer_scene_frame
 from rendering.quick.scene3d.resources import MeshResources, warm_programs
@@ -60,7 +60,7 @@ def extruded_quality(parameters) -> tuple[int, float]:
     mirror = float(parameter(parameters, "extruded_spectrum_face_mirror")) if detail.reflections else 0.0
     if parameter(parameters, "backdrop") is None:
         mirror = 0.0
-    return detail.overlay_samples * (2 if smooth else 1), mirror
+    return scene_samples(detail, overlay_factor=2 if smooth else 1), mirror
 
 
 def extruded_bar_records(levels, peaks, count: int, order=None) -> bytes:

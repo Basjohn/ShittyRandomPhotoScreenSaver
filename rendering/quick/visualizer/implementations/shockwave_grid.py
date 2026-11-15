@@ -15,7 +15,7 @@ import numpy as np
 from OpenGL import GL as gl
 
 from rendering.gl_programs.portable import pack_block
-from rendering.gl_programs.scene3d import scene3d_detail, scene3d_grid_vertices
+from rendering.gl_programs.scene3d import scene3d_detail, scene3d_grid_vertices, scene_samples
 from rendering.gl_programs.neon_lake_basin_mesh import (
     BASIN_MESH_FINE_ROWS, BASIN_MESH_SUBDIVISION, NO_EXTENT, basin_mesh_vertices, basin_mesh_points, upload_bytes,
 )
@@ -101,7 +101,7 @@ def shockwave_quality(parameters) -> tuple[int, float, tuple[int, int]]:
         # Ten percent more vertices by area; keep marks on the same surface
         # lattice rather than introducing a second approximation/depth owner.
         cells=tuple(round(value*math.sqrt(1.10)) for value in cells)
-    return detail.overlay_samples, glow, cells
+    return scene_samples(detail), glow, cells
 
 
 def water_lines_amount(parameters) -> float:

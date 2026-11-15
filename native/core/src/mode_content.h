@@ -81,11 +81,27 @@
 // new image to its upload job (the picture drawn is still the old front until the item's textures commit) keeps the
 // frame the target holds and records no pass (TextureReport::stillKept), so the layer's texture changes exactly once
 // per photo, at the commit's record (the frame edge the latch publishes at). At rest nothing is recorded.
+//
+// Scene targets (N3.1, D14; scene_targets.h): a program may declare up to kMaxSceneTargets targets beside its passes
+// ({"passes": [...], "targets": [...]}), and a pass names the target it draws into ("target"; the surface without it).
+// A pass on a scene target writes outputs at locations 0..n-1 for the target's n colour attachments, each with its own
+// write mask and blend ("attachments": [{"write", "blend"}], default: every attachment with the pass's blend; differing
+// states need QRhi::PerRenderTargetBlending), may test and write the target's depth ("depth": {"test", "write"}) and
+// write gl_FragDepth (only into a target with depth). A capture step ({"name", "capture": <target>}, an empty pack) ends
+// the target's pass, copies its colour and nearest window depth into the target's capture (Python's
+// SceneTarget.background()) and the next pass on the target loads it again. A sampler reads a target's attachment by
+// "<target>.<attachment>" (its resolve when multisampled), "<target>.depth", "<target>.capture_colour" or
+// "<target>.capture_depth" (never an attachment of the pass's own target), with no mips. The passes are recorded in
+// order, one render pass per run of passes on the same target; a target is cleared by a draw at its first run of a
+// record, and the surface is opened (and cleared) once at least. A pass on a scene target draws over its content
+// viewport (scene_targets.h contentViewport); its v_uv and vUv are the surface's for a surface-sized target and the
+// target's own for an explicit size, and u_target_px is its target's content size.
 #pragma once
 
 #include "mode_schema.h"
 #include "packet_reader.h"
 #include "program_blocks.h"
+#include "scene_targets.h"
 #include "stream_source.h"
 #include "surfaces.h"
 
@@ -103,7 +119,7 @@
 
 namespace srpss_core {
 
-constexpr int kMaxModePasses = 8;
+constexpr int kMaxModePasses = 16; // N3.1: a 3D scene's passes and captures (8 before)
 
 struct ModeCard;
 class ItemNotifier;
@@ -147,7 +163,8 @@ struct ModeCard
 // values: never zeros for a name it does not know).
 bool modeCoreValues(const QByteArray &name, const ModeCard &card, const QSize &target, double *out, int *count);
 
-enum class PassBlend { Replace = 0, Alpha = 1, Premultiplied = 2, Add = 3 };
+// N3.1: Additive (ONE, ONE on every channel) for the light attachments (EB's emission, Bubble's ambient light).
+enum class PassBlend { Replace = 0, Alpha = 1, Premultiplied = 2, Add = 3, Additive = 4 };
 bool parsePassBlend(const QString &text, PassBlend *out);
 QString passBlendName(PassBlend blend);
 
@@ -179,6 +196,18 @@ struct PassSampler
     QJsonObject toJson() const;
 };
 
+// N3.1: one colour attachment's write mask and blend in a pass.
+struct PassOutput
+{
+    bool write = true;
+    PassBlend blend = PassBlend::Alpha;
+};
+
+// N3.1: a pass's depth test (none: the depth is neither tested nor written).
+enum class DepthTest { None = 0, Never, Less, Equal, LessOrEqual, Greater, NotEqual, GreaterOrEqual, Always };
+bool parseDepthTest(const QString &text, DepthTest *out);
+QString depthTestName(DepthTest test);
+
 struct ModePass
 {
     QByteArray name;
@@ -188,11 +217,19 @@ struct ModePass
     bool conventions = false; // the pass declares SrpssConventions
     PassUv uv = PassUv::None; // the quad uv the pass reads at location 0
     QList<PassSampler> samplers;
+    // N3.1 (scene targets): the target it draws into (-1: the surface), or the target a capture step copies.
+    int target = -1;
+    bool capture = false;     // a capture step (no fragment, no block, no samplers)
+    QList<PassOutput> outputs; // one per colour attachment of its target (the surface: one, the pass's blend)
+    DepthTest depthTest = DepthTest::None;
+    bool depthWrite = false;
+    bool fragDepth = false;   // the fragment writes gl_FragDepth
 };
 
 struct ModeProgram
 {
     QList<ModePass> passes;
+    QList<TargetDeclaration> targets; // N3.1: its scene targets (reads derived from the samplers and captures)
     quint64 generation = 0; // a new program rebuilds the pipelines at the next record
 
     // The program from its declaration ({"passes": [{"name", "blend", "samplers"?: [{"name", "texture", "filter",
@@ -218,8 +255,13 @@ struct ModeProgram
     bool packSettings(const QJsonObject &settings, QList<BlockValues> *out, QString *error) const;
     // One frame: the record's fields and the core's members, by name, over the packed settings (`blocks`, one per pass,
     // overwritten in place). Refused (a NaN, a value with no defined conversion) with the reason.
+    // N3.1: `passTargets` (one per pass) gives each pass's target content size for its core members (u_target_px);
+    // null: `target` for every pass.
     bool packFrame(const frame_abi::Schema &schema, const QByteArray &record, const ModeCard &card, const QSize &target,
-                   QList<BlockValues> &blocks, QString *error) const;
+                   QList<BlockValues> &blocks, QString *error, const QList<QSize> *passTargets = nullptr) const;
+    // N3.1: each pass's target content size for a surface of `surface` pixels (a surface-sized target's is the surface's)
+    // under `targets` (the program's own when null: ModeSource::drawnTargets carries the sizes set since).
+    QList<QSize> passTargetSizes(const QSize &surface, const QList<TargetDeclaration> *targets = nullptr) const;
 };
 
 // GPU-free: what the content uploads for one record (each pass's block bytes), with the same refusals; `facts` names
@@ -356,6 +398,22 @@ public:
     void texturesLost(const QStringList &names);
     static constexpr int kImageChangeRecords = 64;
 
+    // N3.1, GUI thread: an explicit-size target's size (Bubble's ambient target follows its card) with no new program:
+    // the allocation follows at the next record (the pipelines kept). Refused for a target the program does not
+    // declare with an explicit size, or a size outside 1 to 16384.
+    bool setTargetSize(const QByteArray &name, const QSize &size, QString *error);
+    // Render thread: the drawn program's targets with the sizes set since.
+    const QList<TargetDeclaration> &drawnTargets() const { return m_drawnTargets; }
+
+    // N3.1, harness: a readback of every scene target's readable textures at the next record (GUI thread; the caller
+    // asks the item for a frame), and its pixels once QRhi completed it (any thread; taken once).
+    void requestTargetRead();
+    quint64 targetReadRequests() const { return m_targetReads.loadAcquire(); }
+    void setTargetReadback(const std::shared_ptr<SceneReadback> &readback);
+    bool takeTargetPixels(QList<SceneTargetPixels> *out);
+    // N3.1: the scene targets' state (render thread writes it; the state's "scene_targets").
+    void noteTargets(const QJsonObject &state);
+
     static int liveSources();
 
 protected:
@@ -377,6 +435,7 @@ private:
     bool m_ready = false;
     ModeCard m_card;
     QList<ModeTexture> m_textures;              // N4.a: the item's textures, their images until taken
+    QList<TargetDeclaration> m_targetSizes;     // N3.1: explicit sizes set since the program (name and size only)
     quint64 m_generation = 0;                   // a stream, program, settings, card or texture change
     quint64 m_buildGeneration = 0;              // the same but the card
 
@@ -391,6 +450,7 @@ private:
     bool m_drawnReady = false;
     QString m_drawnWaiting;
     QList<ModeTexture> m_drawnTextures;
+    QList<TargetDeclaration> m_drawnTargets;    // N3.1
     quint64 m_takenJobsFinished = 0;            // N3.8: the notifier's count at the last sync
 
     const std::shared_ptr<ItemNotifier> m_notifier;
@@ -398,6 +458,9 @@ private:
     mutable QMutex m_textureReportMutex;        // guards the texture report
     TextureReport m_textureReport;
     QList<ImageChangeRecord> m_imageChanges;
+    QJsonObject m_targetsState;                 // N3.1, under m_textureReportMutex
+    std::shared_ptr<SceneReadback> m_targetReadback; // N3.1, under m_textureReportMutex
+    QAtomicInteger<quint64> m_targetReads { 0 };
 };
 
 class ModeContent final : public SurfaceContent
@@ -435,6 +498,22 @@ private:
     bool ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
     // N3.8: the passes' bindings over the current texture objects, the pipelines kept; false: build everything again.
     bool rebindTextures();
+    // N4.a, N3.1: the texture a sampler reads: an item texture's front, or a scene target's ("<target>.<attachment>").
+    QRhiTexture *samplerTexture(const QByteArray &name) const;
+    // N3.1: a pass's bindings (its block, the conventions, its samplers; a capture's block and sources), in build()'s order.
+    bool passBindings(const Resources &r, int index, QList<QRhiShaderResourceBinding> *out) const;
+    // D14 point 10: a nearest resolve's bindings (its block, the conventions, the multisampled source).
+    bool nearestBindings(const Resources &r, int target, int slot, QList<QRhiShaderResourceBinding> *out) const;
+    // D14 point 10: after a run of passes on `target` ending at pass `last`, the nearest resolves a later pass reads (or
+    // the readback, after the target's last run).
+    void recordNearest(QRhiCommandBuffer *cb, int target, int last, bool readback);
+    // N3.1: the program's targets at this surface's size, allocated (every step, until N3.6 spaces them); false with the
+    // reason (the content's failure).
+    bool syncTargets(QRhi *rhi, const ColorTarget &target, QString *error);
+    // N3.1: the passes, the captures and the surface's opening(s) of one record (the surface cleared once at least);
+    // `readback`: the harness reads the targets after this record (their nearest resolves are made after the last run).
+    void recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, QRhiResourceUpdateBatch *updates,
+                      bool draw, bool readback);
     bool build(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
     void pack(const ColorTarget &target);
     // The QRhi objects of the passes only: a rebuild (a new program, a failed build) keeps the record of the frame in the
@@ -494,6 +573,10 @@ private:
     QSize m_drawnSize;
     QByteArray m_stillSignature;             // N5.7a: what the still last drew (empty: nothing of a still's)
     bool m_keptTarget = false;               // the last record kept the target (a still's unchanged frame)
+    SceneTargets m_targets;                  // N3.1 (D14 choice B: the content owns its targets)
+    quint64 m_targetObjectsSeen = 0;         // the targets' object generation the bindings were made over
+    quint64 m_targetReadsDone = 0;           // N3.1, harness: readback requests served
+    QList<QSize> m_passTargets;              // N3.1: each pass's target content size (packed with the frame)
 };
 
 } // namespace srpss_core
