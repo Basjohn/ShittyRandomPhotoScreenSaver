@@ -1908,6 +1908,11 @@ read once (`:770-808`).
   core's own device facts (`independentBlend` on Vulkan), never QRhi's always-true `PerRenderTargetBlending`, with a
   negative control that fakes a device without the feature.
 - Waveform's per-frame clear colour is a port decision recorded at N5.4, not here.
+- The sorted fallback's reach (the lead, 15 Nov, after the first build was started): it rescues an owner with one
+  attachment, and a device that fails only the blend-format or the sample-shading part of the gate. An owner with
+  several attachments written differently (Extruded Bubble's colour and emission) needs per-attachment blending for
+  its own passes too (N3.1's check), so on a device without `independentBlend` the mode is not offered on that backend:
+  the mode-level fallback, logged once. The harness proves the sorted fallback with a one-attachment owner.
 
 ## D1, D2, D3 and the transport rule
 

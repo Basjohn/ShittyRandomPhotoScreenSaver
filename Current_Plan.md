@@ -622,7 +622,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       colour prime skipped (read-after-write on the larger level's load); a bloom chain built as levels of one texture
       (QRhi's "different accesses within the same pass" refusal, or the layer's layout errors); a device made without
       `independentBlend` with the gate bypassed (the layer's differing-blend-state error), and with the gate (the stage
-      refused, the sorted pack drawn, recorded once); the blendable-format fact forced false (the fallback, recorded
+      refused, the sorted pack drawn into a one-attachment harness owner, recorded once; a multi-attachment owner takes
+      the mode-level fallback, D17's lead answers); the blendable-format fact forced false (the fallback, recorded
       once); the resolve read through an averaged resolve instead of per sample (wrong exactly at partial coverage).
     - [ ] Retirement to zero after a destroy, a program without the stages, a mode switch, a destroy mid-resize and the
       scene graph's invalidation, with the skipped-release control counted and then released.
