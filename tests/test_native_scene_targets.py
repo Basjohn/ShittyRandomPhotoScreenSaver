@@ -298,7 +298,10 @@ def test_the_admission_refuses_with_its_reasons(core, packs, qt_app):
                              depth_test="always", depth_write=True),), (scene,), "attachments")
     _refused(core, (CapturePass("background", "scene"), planes), (scene,), "before any pass drew")
     show = scene_targets.passes(packs)[-1]
-    _refused(core, (planes, show), (scene, ambient), "before a capture step")
+    ambient_pass = next(p for p in scene_targets.passes(packs) if getattr(p, "target", None) == "ambient")
+    # The ambient pass draws its target first, so only the missing capture step is wrong (audit 2, M4 refuses an
+    # undrawn target's read before it gets that far).
+    _refused(core, (planes, ambient_pass, show), (scene, ambient), "before a capture step")
     reads_own = ModePass("planes", packs["planes"], "replace", target="scene", depth_test="always", depth_write=True,
                          samplers=(PassSampler("u_x", "scene.colour"),))
     _refused(core, (reads_own,), (scene,), "the target the pass draws into")     # never its own target's attachment
