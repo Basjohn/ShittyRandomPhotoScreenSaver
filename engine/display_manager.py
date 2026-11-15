@@ -465,6 +465,9 @@ class DisplayManager(QObject):
         # Engine-made Random pick for the next resolved batch; kept until the
         # engine replaces it so Previous (no new pick) reuses the current one.
         self._random_transition_selection: RandomTransitionSelection | None = None
+        # Plan 1D.12 C: the Visualizer modes whose 3D control hint has played. The engine hands each generation its
+        # session's one set (set_control_hint_memory); this default serves a manager used alone.
+        self._control_hint_shown_modes: set[str] = set()
         # Drawn when the next batch's transition is prepared while idle; the batch resolves
         # its randomised parameters from it, so it meets the same spec the displays warmed
         # and the geometry COMPUTE already built (unless Settings changed meanwhile).
@@ -1046,6 +1049,8 @@ class DisplayManager(QObject):
             bool(active and owner.controller.presentation_policy.content_rotation_capable),
         )
         runtime.scene_controller.set_visualizer_control_hints_available(framed)
+        runtime.scene_controller.set_visualizer_control_hint_memory(
+            mode if framed else "", self._control_hint_shown_modes)
         runtime.input_controller.set_scene_transform_enabled(framed, mode_id=mode)
 
     def _set_quick_view_orbit_rates(self, turn_steps: float, tilt_steps: float) -> None:
@@ -4893,6 +4898,17 @@ class DisplayManager(QObject):
         ):
             raise TypeError("selection must be a RandomTransitionSelection")
         self._random_transition_selection = selection
+
+    def set_control_hint_memory(self, shown_modes: set[str]) -> None:
+        """Adopt the session's control-hint memory (plan 1D.12 C) before any display binds.
+
+        One plain set for the life of the saver session: mode switches, display moves, Expanded re-admission and new
+        runtime generations (Settings opened from the saver) read it; nothing persists it.
+        """
+
+        if not isinstance(shown_modes, set):
+            raise TypeError("shown_modes must be a set")
+        self._control_hint_shown_modes = shown_modes
 
     def _resolve_quick_transition_batch_spec(
         self,

@@ -6,7 +6,8 @@ built from its one spec declaration ``DISPLAY_STYLE_CONTROL``). Every value is `
 (``core.settings.fullscreen_overlays``: one canonical owner, persisted with the Visualizer section, reset and imported
 with it); this page holds no other state. Placement offsets and scales (Fullscreen Edit, M3c) have no control here:
 they are kept as loaded and written back unchanged, except that a new Corner rebases the overlay's offset by the one
-owner's rule (``rebase_offset_for_corner``).
+owner's rule (``rebase_offset_for_corner``). An overlay Fullscreen Edit has moved reads CUSTOM in its Corner choice
+(``overlay_placement_moved``); choosing a corner there clears the placement (``clear_overlay_placement``; 1D.12 A2).
 
 Layout follows the Settings bucket pattern: one bucket per overlay plus Text, closed by default, one open at a time
 (the Visualizer pages' remembered leaf), a one-sentence intro, details in tooltips.
@@ -26,9 +27,12 @@ from core.settings.fullscreen_overlays import (
     DISPLAY_STYLE_KEY,
     FONT_SIZE_MAX,
     FONT_SIZE_MIN,
+    clear_overlay_placement,
     normalize_fullscreen_overlays,
+    overlay_placement_moved,
     rebase_offset_for_corner,
 )
+from rendering.widget_descriptors import CUSTOM_POSITION_OPTION_LABEL
 from ui.tabs import shared_styles
 from ui.tabs.media.builder_scaffold import build_collapsible_bucket
 from ui.tabs.shared_styles import add_aligned_row, style_group_box
@@ -47,6 +51,8 @@ _CORNER_LABELS = {
     "bottom_left": "Bottom Left",
     "bottom_right": "Bottom Right",
 }
+#: The Corner choice's CUSTOM entry (never stored: the stored corner stays the overlay's anchor).
+_CUSTOM = "custom"
 
 
 class FullscreenModePage(QWidget):
@@ -166,14 +172,29 @@ class FullscreenModePage(QWidget):
         combo.setObjectName(f"fullscreen_{overlay}_corner")
         for corner in CORNERS:
             combo.addItem(_CORNER_LABELS[corner], corner)
+        # Fullscreen Edit moved it off its bare corner (plan 1D.12 A2): offered and shown only then, as ordinary
+        # widgets show their CUSTOM slot.
+        combo.addItem(CUSTOM_POSITION_OPTION_LABEL, _CUSTOM)
         combo.setMinimumWidth(150)
         combo.setToolTip("Which corner of the display it sits in. Two overlays in one corner stack, the newer "
-                         "one nearer the edge.")
+                         "one nearer the edge. Custom: moved in Fullscreen Edit; a corner puts it back.")
         combo.currentIndexChanged.connect(
             lambda _index, box=combo, name=overlay: self._set_corner(name, str(box.currentData())))
         row.addWidget(combo)
         row.addStretch()
         return combo
+
+    def _sync_corner(self, combo: StyledComboBox, overlay: str) -> None:
+        """Show the overlay's corner, or CUSTOM while Fullscreen Edit's placement moves it (enabled only then)."""
+
+        moved = overlay_placement_moved(self._values[overlay], overlay)
+        custom_index = combo.findData(_CUSTOM)
+        model = combo.model()
+        item = model.item(custom_index) if hasattr(model, "item") else None
+        if item is not None:
+            item.setEnabled(moved)
+        with QSignalBlocker(combo):
+            combo.setCurrentIndex(custom_index if moved else max(0, combo.findData(self._values[overlay]["corner"])))
 
     def _check(self, parent: QVBoxLayout, label: str, overlay: str, key: str, tooltip: str) -> QCheckBox:
         check = QCheckBox(label)
@@ -193,9 +214,18 @@ class FullscreenModePage(QWidget):
         """A new anchor corner rebases the overlay's Fullscreen Edit offset (the one owner's rule): kept on each axis
         that still points into the display from the new corner, reset where it would push the overlay out."""
 
-        if self._loading or self._values[overlay].get("corner") == corner:
+        if self._loading or corner == _CUSTOM:
             return
-        self._values[overlay] = rebase_offset_for_corner(self._values[overlay], corner)
+        combo = self.preset_corner if overlay == "preset" else self.now_playing_corner
+        if overlay_placement_moved(self._values[overlay], overlay):
+            # Leaving CUSTOM for a corner clears Fullscreen Edit's placement (the one reset owner), as an ordinary
+            # widget leaves its custom geometry for a named position.
+            self._values[overlay] = clear_overlay_placement(self._values[overlay], overlay, corner)
+        elif self._values[overlay].get("corner") == corner:
+            return
+        else:
+            self._values[overlay] = rebase_offset_for_corner(self._values[overlay], corner)
+        self._sync_corner(combo, overlay)
         self._changed()
 
     def _set_value(self, path: tuple[str, ...], value: Any) -> None:
@@ -219,8 +249,7 @@ class FullscreenModePage(QWidget):
         self._loading = True
         try:
             for combo, overlay in ((self.preset_corner, "preset"), (self.now_playing_corner, "now_playing")):
-                with QSignalBlocker(combo):
-                    combo.setCurrentIndex(max(0, combo.findData(values[overlay]["corner"])))
+                self._sync_corner(combo, overlay)
             for check, overlay, key in (
                 (self.preset_always_show, "preset", "always_show"),
                 (self.preset_card, "preset", "card"),

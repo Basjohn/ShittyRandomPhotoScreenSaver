@@ -789,6 +789,28 @@ The work folder beside its summary holds the captured frames and references; del
 `tests/test_native_core_spectrum.py` (no build: the card's target map at every quarter turn, the Python face, the shader
 baked from the product's file, the port's constants and block members against the Python renderer).
 
+### Native Spline Curve (N5.1)
+
+```powershell
+# Spline Curve (devcurve) on the generic mode content, an OpenGL child then a Vulkan child; the OpenGL child captures
+# every frame the production owner draws through the widened run set (variants a and b, every Choice offer) with the
+# Python renderer: block (each frame's mode_blocks against the Python renderer's DevCurveDraw, member by member, uMatrix
+# aside; every member from one source; controls: a curve sample and the card's fade change the block), item (one record
+# per accepted frame, nothing at rest, the drop edge, a refused NaN frame keeping the card, an unbind keeping the frame,
+# a Settings and a record change shown on the same program, no Python thread state on the render thread with the
+# GUI-thread host as control, nothing left), pixels (samples against the Python renderer's own draw into a transparent
+# target at dpr 1 and 1.5 on OpenGL; Vulkan against native OpenGL within 1 level; GPU time per pass); Vulkan validated
+python native/core/python/devcurve_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan] [--rounds block item pixels] [--sample-every 40] [--label n51_devcurve]
+
+# Rule (a) through the product's route for any native mode (Spectrum's run above with --mode spectrum, the default)
+python tools/visualizer_replay/owner_render_parity.py --native --mode devcurve --module-dir release/native_module --offers --out <dir>
+```
+
+Tests: `tests/test_native_devcurve.py` (the record's fields and layout, one source per member with a control, the
+settings following Settings and the card only, the module's block equal to the Python renderer's at dpr 1 and 1.5 with
+controls, the admission of a self-animating mode's frames with Spectrum as control, the route's generic item).
+
 ### Generic mode content (N2.9)
 
 ```powershell

@@ -291,6 +291,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         # Bubble's pulse.
         technical_hidden_suffixes=("agc_strength", "dynamic_range_enabled", "kick_lane_gain", "transient_pulse_gain"),
         supports_expanded_display=True,                # Expanded Visualizer (operator, 7 Nov)
+        # N5.1: the native core draws it on Vulkan as generic mode content (rendering.quick.visualizer.native_route,
+        # D12), at parity with the Python renderer (Current_Plan.md item 8b).
+        renderer_backends=("opengl", "vulkan"),
     ),
     VisualizerModeDescriptor(
         "sphere",

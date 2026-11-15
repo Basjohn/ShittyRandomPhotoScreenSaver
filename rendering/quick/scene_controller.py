@@ -29,6 +29,7 @@ from widgets.spotify_visualizer.render_bridge import (
 )
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation, VisualizerRenderSnapshot
 from widgets.spotify_visualizer.presentation_geometry import (
+    card_is_the_display,
     resize_visualizer_presentation,
     resolve_card_drawn_rect,
     snap_to_device_pixels,
@@ -522,6 +523,10 @@ class QuickSceneController(QObject):
         self._visualizer_overlay_media_model: QObject | None = None
         self._visualizer_overlay_editing = False
         self._visualizer_control_hints_available = False
+        # Plan 1D.12 C: the modes whose control hint has played this saver session (DisplayManager hands every
+        # display the session's one set) and this display's current mode.
+        self._visualizer_control_hint_mode = ""
+        self._visualizer_control_hint_shown_modes: set[str] = set()
         self._visualizer_content_host: QQuickItem | None = None
         self._visualizer_item: VisualizerRenderItem | None = None
         self._presentation_image_listener: Callable[[], None] | None = None
@@ -2698,6 +2703,12 @@ class QuickSceneController(QObject):
         root.setHeight(outer_height)
         # Edit's outline and handles sit on the drawn card, from this one resolution (1C.4).
         root.setProperty("drawnCardRect", drawn_rect)
+        # A card that is the display holds its place under pixel shift (1D.13): set with the record, before the
+        # item takes it, so the card is never drawn shifted off the display's edges.
+        scene_root = self._scene_root
+        held = card_is_the_display(presentation)
+        if scene_root is not None and bool(scene_root.property("visualizerCardIsTheDisplay")) != held:
+            scene_root.setProperty("visualizerCardIsTheDisplay", held)
         item.set_presentation(presentation)
         self._resolve_visualizer_framed_view(presentation)
 
@@ -2993,6 +3004,31 @@ class QuickSceneController(QObject):
         if self._visualizer_root is not None:
             self._visualizer_root.setProperty("controlHintsAvailable", bool(available))
 
+    def set_visualizer_control_hint_memory(self, mode_id: str, shown_modes: set[str]) -> None:
+        """Project whether ``mode_id``'s control hint has played this session (plan 1D.12 C).
+
+        ``shown_modes`` is the session's one set (shared by every display and runtime generation); the lazy root,
+        which is rebuilt, only ever reads a bool from it at mode and admission edges.
+        """
+        self._visualizer_control_hint_mode = str(mode_id or "")
+        self._visualizer_control_hint_shown_modes = shown_modes
+        self._project_visualizer_control_hint_shown()
+
+    def _project_visualizer_control_hint_shown(self) -> None:
+        root = self._visualizer_root
+        if root is None:
+            return
+        mode = self._visualizer_control_hint_mode
+        root.setProperty("controlHintShown", bool(mode) and mode in self._visualizer_control_hint_shown_modes)
+
+    def _on_visualizer_control_hint_revealed(self) -> None:
+        """The hint began to play in this display's mode: later visits in that mode stay quiet (plain method)."""
+        mode = self._visualizer_control_hint_mode
+        if not mode:
+            return
+        self._visualizer_control_hint_shown_modes.add(mode)
+        self._project_visualizer_control_hint_shown()
+
     def set_visualizer_presentation_active(self, active: bool) -> None:
         """Change retained presentation visibility without rebuilding it."""
 
@@ -3208,6 +3244,10 @@ class QuickSceneController(QObject):
         root.setProperty("expandLeftAvailable", self._visualizer_expand_sides[0])
         root.setProperty("expandRightAvailable", self._visualizer_expand_sides[1])
         root.setProperty("controlHintsAvailable", self._visualizer_control_hints_available)
+        self._project_visualizer_control_hint_shown()
+        hint_revealed = getattr(root, "controlHintRevealed", None)
+        if hint_revealed is not None and hasattr(hint_revealed, "connect"):
+            hint_revealed.connect(self._on_visualizer_control_hint_revealed)
         root.setProperty("expandedOverlayConfig", self._visualizer_overlay_config)
         root.setProperty("expandedOverlayPresetName", self._visualizer_overlay_preset[0])
         root.setProperty("expandedOverlayPresetSerial", self._visualizer_overlay_preset[1])

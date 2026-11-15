@@ -82,15 +82,14 @@ layout(std140, binding = 18) uniform DevCurveDraw {
     vec4 u_devcurve_specular_slot2;
 };
 
-float _sample_curve(const float curve[96], float x, int count) {
-    int n = clamp(count, 2, 96);
-    float p = clamp(x, 0.0, 1.0) * float(n - 1);
-    int i0 = int(floor(p));
-    int i1 = min(i0 + 1, n - 1);
-    float t = p - float(i0);
-    float y0 = curve[i0];
-    float y1 = curve[i1];
-    return mix(y0, y1, t);
+// A curve's sample read in place from the block. Never pass a curve array to a function by value: SPIR-V copies a
+// by-value array argument whole into function memory at every call (96 floats, about twenty calls a fragment), which
+// made the pass 65 times slower on Vulkan than on OpenGL (N5.1: 1.97 ms against 0.030 ms at dpr 1).
+float _curve_at(int layerId, int i) {
+    if (layerId == 0) return u_devcurve_curve_bass[i];
+    else if (layerId == 1) return u_devcurve_curve_vocals[i];
+    else if (layerId == 2) return u_devcurve_curve_mids[i];
+    return u_devcurve_curve_transients[i];
 }
 
 vec4 _blend_over(vec4 dst, vec4 src) {
@@ -142,11 +141,12 @@ vec4 _draw_layer(float yCurve, vec4 color, vec4 outlineColor, int enabled, float
 }
 
 float _sample_curve_by_id(int layerId, float x, int sampleCount) {
-    float y = 0.5;
-    if (layerId == 0) y = _sample_curve(u_devcurve_curve_bass, x, sampleCount);
-    else if (layerId == 1) y = _sample_curve(u_devcurve_curve_vocals, x, sampleCount);
-    else if (layerId == 2) y = _sample_curve(u_devcurve_curve_mids, x, sampleCount);
-    else y = _sample_curve(u_devcurve_curve_transients, x, sampleCount);
+    int n = clamp(sampleCount, 2, 96);
+    float p = clamp(x, 0.0, 1.0) * float(n - 1);
+    int i0 = int(floor(p));
+    int i1 = min(i0 + 1, n - 1);
+    float t = p - float(i0);
+    float y = mix(_curve_at(layerId, i0), _curve_at(layerId, i1), t);
     // Curves are authored in bottom-origin space (0=bottom, 1=top).
     // Shader UV.y is top-origin, so invert once here.
     return clamp(1.0 - y, 0.0, 1.0);

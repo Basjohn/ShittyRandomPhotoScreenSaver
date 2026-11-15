@@ -162,6 +162,137 @@ def _slot(values: Sequence[object]) -> tuple[float, float, float, float]:
     return padded[:4]  # type: ignore[return-value]
 
 
+def devcurve_presentation_layout(presentation, logical_content_rect: Sequence[object]) -> QuickDevCurveLayout:
+    """The layout of a drawn card: ``presentation`` (a ``ResolvedVisualizerPresentation``) with its content rect in the
+    oriented item (the Python renderer's ``frame.logical_content_rect``; the native card's ``content_rect``)."""
+    scale = presentation.uniform_visual_scale
+    extra_inset = float(presentation.shell_style["content_inset"])
+    # The shell border now follows the shared bounded visible-stroke contract,
+    # so it is intentionally non-linear with visual scale. DevCurve's authored
+    # baseline content extent must recover the original authored border source
+    # rather than reverse-scaling the visible/clamped frame thickness.
+    authored_border = float(
+        presentation.shell_style["authored_border_width"]
+    )
+    authored_inset = authored_border + extra_inset / scale
+    baseline_width, baseline_height = presentation.baseline_viewport_size
+    return compute_quick_devcurve_layout(
+        local_content_rect=logical_content_rect,
+        visual_scale=scale,
+        baseline_content_extent=(
+            max(1.0, baseline_width - 2.0 * authored_inset),
+            max(1.0, baseline_height - 2.0 * authored_inset),
+        ),
+    )
+
+
+def _mode_state(logical) -> DevCurveFrame:
+    mode_state = logical.mode_state
+    if not isinstance(mode_state, DevCurveFrame):
+        raise TypeError("DevCurve renderer received another mode frame")
+    return mode_state
+
+
+#: DevCurveDraw's members the Python renderer never writes (declared by the shader, read by none of its paths in the
+#: Quick branch): zero, as its uniforms were at link. The native core takes them as settings, since it fills no member
+#: silently (D12 point 2).
+DEVCURVE_UNWRITTEN_MEMBERS = ("u_playing", "u_ghost_alpha", "u_devcurve_base_level")
+
+#: DevCurveDraw's per-frame members (``devcurve_frame_values``): the native record's fields
+#: (``core.visualizer_engine.devcurve_native_schema``), each a curve sample, a specular slot, or a value the runtime or
+#: the clock moves every frame. Every other member is the core's (the card) or a setting.
+DEVCURVE_FRAME_MEMBERS = (
+    *(f"u_devcurve_curve_{name}" for name in _LAYER_NAMES),
+    "u_devcurve_specular_slot0", "u_devcurve_specular_slot1", "u_devcurve_specular_slot2",
+    "u_devcurve_foreground_specular_alpha", "u_rainbow_hue_offset",
+)
+
+
+def devcurve_settings_values(logical, layout: QuickDevCurveLayout) -> dict[str, object]:
+    """Every DevCurveDraw member that comes from Settings or the card, by name, as the Python renderer writes it
+    (``QuickDevCurveRenderer.render`` calls this): the values the native core packs by reflected name (N5.1, D12).
+    ``layout``: ``devcurve_presentation_layout`` of the drawn card. The draw order and the foreground layer follow the
+    layer Settings alone (their order and enabled state); the core members (``MODE_CORE_MEMBERS``) are not here."""
+    mode_state = _mode_state(logical)
+    parameters = mode_state.parameters
+    curves = _curve_mapping(mode_state.curves)
+    sample_count = _sample_count(curves, parameter(parameters, "devcurve_sample_count"))
+    values: dict[str, object] = {
+        "u_content_rect": tuple(layout.content_rect),
+        "u_devcurve_normalized_scale": (layout.normalized_x_scale, layout.normalized_y_scale),
+        "u_devcurve_x_to_y_scale": layout.normalized_y_scale / layout.normalized_x_scale,
+        "u_devcurve_sample_count": sample_count,
+    }
+    for name in _LAYER_NAMES:
+        values[f"u_devcurve_layer_{name}_color"] = tuple(
+            rgba(parameter(parameters, f"devcurve_layer_{name}_color")))
+        values[f"u_devcurve_layer_{name}_outline_color"] = tuple(
+            rgba(parameter(parameters, f"devcurve_layer_{name}_outline_color")))
+        values[f"u_devcurve_layer_{name}_outline_width"] = devcurve_outline_half_width(
+            float(parameter(parameters, f"devcurve_layer_{name}_outline_width")), layout)
+        values[f"u_devcurve_layer_{name}_enabled"] = (
+            1 if bool(parameter(parameters, f"devcurve_layer_{name}_enabled")) else 0)
+        values[f"u_devcurve_layer_{name}_alpha"] = max(
+            0.0, min(1.0, float(parameter(parameters, f"devcurve_layer_{name}_alpha"))))
+    for index, name in enumerate(_draw_order(mode_state.draw_order)):
+        values[f"u_devcurve_order{index}"] = _LAYER_IDS[name]
+    values["u_devcurve_foreground_layer_id"] = max(-1, min(3, int(mode_state.foreground_layer_id)))
+    values["u_devcurve_foreground_shadow_enabled"] = (
+        1 if bool(parameter(parameters, "devcurve_foreground_shadow_enabled")) else 0)
+    for uniform_name, parameter_name, minimum, maximum in (
+        ("u_devcurve_foreground_shadow_alpha", "devcurve_foreground_shadow_alpha", 0.0, 1.0),
+        ("u_devcurve_foreground_shadow_darken", "devcurve_foreground_shadow_darken", 0.0, 1.0),
+        ("u_devcurve_foreground_shadow_offset", "devcurve_foreground_shadow_offset", 0.0, 0.45),
+    ):
+        value = max(minimum, min(maximum, float(parameter(parameters, parameter_name))))
+        if parameter_name.endswith("offset"):
+            value *= layout.normalized_y_scale
+        values[uniform_name] = value
+    values["u_devcurve_foreground_specular_enabled"] = (
+        1 if bool(parameter(parameters, "devcurve_foreground_specular_enabled")) else 0)
+    # Each projected width and offset is the clamped authored value times its axis scale.
+    values["u_devcurve_foreground_specular_width"] = max(
+        0.002, min(0.120, float(parameter(parameters, "devcurve_foreground_specular_width")))
+    ) * layout.normalized_x_scale
+    values["u_devcurve_foreground_specular_offset"] = max(
+        -0.20, min(0.20, float(parameter(parameters, "devcurve_foreground_specular_offset")))
+    ) * layout.normalized_y_scale
+    values["u_devcurve_foreground_specular_crest_bias"] = max(
+        0.0, min(2.0, float(parameter(parameters, "devcurve_foreground_specular_crest_bias"))))
+    for name in DEVCURVE_UNWRITTEN_MEMBERS:
+        values[name] = 0
+    return values
+
+
+def devcurve_frame_values(logical) -> dict[str, object]:
+    """DevCurveDraw's per-frame members (``DEVCURVE_FRAME_MEMBERS``) of ``logical`` (a Spline Curve
+    ``VisualizerLogicalFrame``), by name, as the Python renderer writes them (it calls this): the native record's field
+    values, in double precision (the core rounds each to float as the Python block packer does)."""
+    mode_state = _mode_state(logical)
+    parameters = mode_state.parameters
+    curves = _curve_mapping(mode_state.curves)
+    sample_count = _sample_count(curves, parameter(parameters, "devcurve_sample_count"))
+    values: dict[str, object] = {
+        f"u_devcurve_curve_{name}": _padded_samples(curves[name], sample_count=sample_count)
+        for name in _LAYER_NAMES
+    }
+    specular_activity = max(0.0, min(1.0, float(parameter(parameters, "devcurve_specular_activity_alpha"))))
+    values["u_devcurve_foreground_specular_alpha"] = max(
+        0.0, min(1.0, float(parameter(parameters, "devcurve_foreground_specular_alpha")))
+    ) * specular_activity
+    slots = list(mode_state.specular_slots)
+    while len(slots) < 3:
+        slots.append(())
+    for index, slot in enumerate(slots[:3]):
+        values[f"u_devcurve_specular_slot{index}"] = _slot(slot)
+    hue = 0.0
+    if bool(parameter(parameters, "rainbow_enabled")):
+        speed = max(0.01, min(5.0, float(parameter(parameters, "rainbow_speed"))))
+        hue = safe_hue(logical.logical_timestamp * speed * 0.1)
+    values["u_rainbow_hue_offset"] = hue
+    return values
+
+
 class QuickDevCurveRenderer:
     mode_id = "devcurve"
 
@@ -182,41 +313,15 @@ class QuickDevCurveRenderer:
         if not isinstance(mode_state, DevCurveFrame):
             raise TypeError("DevCurve renderer received another mode frame")
         presentation = snapshot.presentation
-        outer_x, outer_y, _outer_width, _outer_height = (
-            presentation.outer_rect
-        )
-        content_x, content_y, content_width, content_height = (
-            presentation.content_rect
-        )
-        scale = presentation.uniform_visual_scale
-        extra_inset = float(presentation.shell_style["content_inset"])
-        # The shell border now follows the shared bounded visible-stroke contract,
-        # so it is intentionally non-linear with visual scale. DevCurve's authored
-        # baseline content extent must recover the original authored border source
-        # rather than reverse-scaling the visible/clamped frame thickness.
-        authored_border = float(
-            presentation.shell_style["authored_border_width"]
-        )
-        authored_inset = authored_border + extra_inset / scale
-        baseline_width, baseline_height = presentation.baseline_viewport_size
-        layout = compute_quick_devcurve_layout(
-            local_content_rect=frame.logical_content_rect,
-            visual_scale=scale,
-            baseline_content_extent=(
-                max(1.0, baseline_width - 2.0 * authored_inset),
-                max(1.0, baseline_height - 2.0 * authored_inset),
-            ),
-        )
+        layout = devcurve_presentation_layout(presentation, frame.logical_content_rect)
         if not self._program:
             self._initialize()
+        # The Settings- and card-derived members and the per-frame ones: the functions the native core's values come
+        # from too (N5.1), so the two renderers share one arithmetic. Resolved before the program is used: a frame
+        # that breaks its contract raises with nothing bound.
+        settings = devcurve_settings_values(snapshot.logical, layout)
+        per_frame = devcurve_frame_values(snapshot.logical)
 
-        parameters = mode_state.parameters
-        curves = _curve_mapping(mode_state.curves)
-        sample_count = _sample_count(
-            curves,
-            parameter(parameters, "devcurve_sample_count"),
-        )
-        order = _draw_order(mode_state.draw_order)
         # The program's values persist between frames as its uniforms did; the whole block is bound for the draw
         # (N1.6).
         values = self._values
@@ -232,105 +337,10 @@ class QuickDevCurveRenderer:
         values["u_dpr"] = presentation.dpr
         values["u_viewport_origin_px"] = (0.0, 0.0)
         values["u_quick_item_coords"] = 1
-        values["u_content_rect"] = tuple(layout.content_rect)
-        values["u_devcurve_normalized_scale"] = (layout.normalized_x_scale, layout.normalized_y_scale)
-        values["u_devcurve_x_to_y_scale"] = layout.normalized_y_scale / layout.normalized_x_scale
         values["u_border_width"] = presentation.border_width
         values["u_fade"] = presentation.content_fade
-        values["u_devcurve_sample_count"] = sample_count
-
-        for name in _LAYER_NAMES:
-            values[f"u_devcurve_layer_{name}_color"] = tuple(
-                rgba(parameter(parameters, f"devcurve_layer_{name}_color")))
-            values[f"u_devcurve_layer_{name}_outline_color"] = tuple(
-                rgba(parameter(parameters, f"devcurve_layer_{name}_outline_color")))
-            values[f"u_devcurve_layer_{name}_outline_width"] = devcurve_outline_half_width(
-                float(parameter(parameters, f"devcurve_layer_{name}_outline_width")), layout)
-            values[f"u_devcurve_layer_{name}_enabled"] = (
-                1 if bool(parameter(parameters, f"devcurve_layer_{name}_enabled")) else 0)
-            values[f"u_devcurve_layer_{name}_alpha"] = max(
-                0.0, min(1.0, float(parameter(parameters, f"devcurve_layer_{name}_alpha"))))
-            values[f"u_devcurve_curve_{name}"] = _padded_samples(curves[name], sample_count=sample_count)
-
-        for index, name in enumerate(order):
-            values[f"u_devcurve_order{index}"] = _LAYER_IDS[name]
-        values["u_devcurve_foreground_layer_id"] = max(-1, min(3, int(mode_state.foreground_layer_id)))
-        values["u_devcurve_foreground_shadow_enabled"] = (
-            1 if bool(parameter(parameters, "devcurve_foreground_shadow_enabled")) else 0)
-        for uniform_name, parameter_name, minimum, maximum in (
-            (
-                "u_devcurve_foreground_shadow_alpha",
-                "devcurve_foreground_shadow_alpha",
-                0.0,
-                1.0,
-            ),
-            (
-                "u_devcurve_foreground_shadow_darken",
-                "devcurve_foreground_shadow_darken",
-                0.0,
-                1.0,
-            ),
-            (
-                "u_devcurve_foreground_shadow_offset",
-                "devcurve_foreground_shadow_offset",
-                0.0,
-                0.45,
-            ),
-        ):
-            value = max(
-                minimum,
-                min(maximum, float(parameter(parameters, parameter_name))),
-            )
-            if parameter_name.endswith("offset"):
-                value *= layout.normalized_y_scale
-            values[uniform_name] = value
-
-        values["u_devcurve_foreground_specular_enabled"] = (
-            1 if bool(parameter(parameters, "devcurve_foreground_specular_enabled")) else 0)
-        specular_activity = max(
-            0.0,
-            min(
-                1.0,
-                float(
-                    parameter(
-                        parameters,
-                        "devcurve_specular_activity_alpha",
-                    )
-                ),
-            ),
-        )
-        values["u_devcurve_foreground_specular_alpha"] = max(
-            0.0, min(1.0, float(parameter(parameters, "devcurve_foreground_specular_alpha")))
-        ) * specular_activity
-        # Each projected width and offset is the clamped authored value times its axis scale.
-        values.update(
-            u_devcurve_foreground_specular_width=max(
-                0.002,
-                min(0.120, float(parameter(parameters, "devcurve_foreground_specular_width"))),
-            )
-            * layout.normalized_x_scale,
-            u_devcurve_foreground_specular_offset=max(
-                -0.20,
-                min(0.20, float(parameter(parameters, "devcurve_foreground_specular_offset"))),
-            )
-            * layout.normalized_y_scale,
-            u_devcurve_foreground_specular_crest_bias=max(
-                0.0, min(2.0, float(parameter(parameters, "devcurve_foreground_specular_crest_bias")))),
-        )
-        slots = list(mode_state.specular_slots)
-        while len(slots) < 3:
-            slots.append(())
-        for index, slot in enumerate(slots[:3]):
-            values[f"u_devcurve_specular_slot{index}"] = _slot(slot)
-
-        hue = 0.0
-        if bool(parameter(parameters, "rainbow_enabled")):
-            speed = max(
-                0.01,
-                min(5.0, float(parameter(parameters, "rainbow_speed"))),
-            )
-            hue = safe_hue(snapshot.logical.logical_timestamp * speed * 0.1)
-        values["u_rainbow_hue_offset"] = hue
+        values.update(settings)
+        values.update(per_frame)
         with self._blocks.bound(pack_block(DEVCURVE_BLOCK, values)):
             gl.glBindVertexArray(frame.quad_vao)
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
@@ -408,8 +418,13 @@ def create_visualizer_renderer() -> QuickDevCurveRenderer:
 
 
 __all__ = [
+    "DEVCURVE_FRAME_MEMBERS",
+    "DEVCURVE_UNWRITTEN_MEMBERS",
     "QuickDevCurveLayout",
     "QuickDevCurveRenderer",
     "compute_quick_devcurve_layout",
     "create_visualizer_renderer",
+    "devcurve_frame_values",
+    "devcurve_presentation_layout",
+    "devcurve_settings_values",
 ]

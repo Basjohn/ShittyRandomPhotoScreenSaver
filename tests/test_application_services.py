@@ -74,6 +74,9 @@ def _fake_display_manager_class(engine: ScreensaverEngine, events: list, leases:
         def set_random_transition_selection(self, _selection) -> None:
             return None
 
+        def set_control_hint_memory(self, _shown_modes) -> None:
+            return None
+
         def initialize_displays(self) -> int:
             return 1
 

@@ -1,6 +1,7 @@
 """The Layout Settings tab: Arrange, saved layout slots and layout reset; Arrange is built only on demand."""
 from copy import deepcopy
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QHBoxLayout
 
 from core.settings.layout_slots import VALID_LAYOUT_SLOT_IDS, get_layout_slot_payload, save_layout_slot
@@ -11,6 +12,10 @@ from ui.widgets.styled_combo_box import StyledComboBox
 
 
 class LayoutPage(Page):
+    # This page wrote widget positions or routes (Arrange Apply, Reset Widget Layouts); Settings reloads the
+    # Widgets pages that show them, so a page built earlier never shows or saves back a stale position (1D.12 A).
+    widgetsWritten = Signal()
+
     def __init__(self, settings, parent=None):
         super().__init__(settings, parent, scrollable=True)
         self.arrange = None
@@ -40,6 +45,7 @@ class LayoutPage(Page):
             from ui.onboarding.arrange import ArrangePage
             self.arrange = ArrangePage(self.settings, self, show_slots=False)
             self.arrange.pendingChanged.connect(self._pending_changed)
+            self.arrange.applied.connect(self.widgetsWritten.emit)
             self.arrange_layout.addWidget(self.arrange)
         if checked:
             self.arrange.refresh()
@@ -105,8 +111,11 @@ class LayoutPage(Page):
             return
         from rendering.widget_descriptors import restore_all_custom_layouts_to_authored_layout
         widgets = deepcopy(self.settings.get("widgets"))
-        if restore_all_custom_layouts_to_authored_layout(widgets):
+        restored = restore_all_custom_layouts_to_authored_layout(widgets)
+        if restored:
             self.settings.set("widgets", widgets)
         if self.arrange is not None:
             self.arrange.discard()
         self.refresh()
+        if restored:
+            self.widgetsWritten.emit()

@@ -45,7 +45,9 @@ _SCHEMA_MODULES = {
 }
 #: The runtime schemas (generic modes, handed to the core at bind): mode id -> its module, as above. A mode is in one
 #: registry only.
-_RUNTIME_SCHEMA_MODULES: dict[str, str] = {}
+_RUNTIME_SCHEMA_MODULES: dict[str, str] = {
+    "devcurve": "core.visualizer_engine.devcurve_native_schema",
+}
 
 PayloadKind = Literal["codec", "native"]
 

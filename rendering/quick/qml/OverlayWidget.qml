@@ -364,7 +364,16 @@ Item {
             }
         }
 
+        // The card's one dwell fade for its hover glyphs (plan 1D.12 B).
+        HoverGlyphReveal {
+            id: ordinaryGlyphReveal
+            objectName: "ordinaryHoverGlyphReveal"
+            cardHovered: ordinaryHoverGlyphLoader.item !== null && interactionHover.hovered
+            glyphHovered: ordinaryHoverGlyphLoader.item !== null && ordinaryHoverGlyphLoader.item.glyphHovered
+        }
+
         Loader {
+            id: ordinaryHoverGlyphLoader
             objectName: "ordinaryHoverGlyphLoader"
             // Media and other accessory-bearing widgets have a smaller *real*
             // card than the retained outer widget. Chrome follows card geometry.
@@ -379,6 +388,7 @@ Item {
                 anchors.fill: parent
                 admitted: true
                 hovered: interactionHover.hovered
+                dwellLevel: ordinaryGlyphReveal.level
                 canRestore: overlayWidget.hoverRestoreEligible
                 canRotate: overlayWidget.hoverRotateEligible
                 canLock: overlayWidget.customEditableChildRoles.length > 0
