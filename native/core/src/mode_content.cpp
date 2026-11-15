@@ -1782,8 +1782,13 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
                                         "(an unknown name is refused)").arg(QString::fromLatin1(name));
                 return false;
             }
-            // N3.2: one owner a field: a block member, a draw's name or a stream.
-            if (int(declares(name)) + int(drawNames(name)) + int(streamReads(name)) > 1) {
+            // N3.2: one owner a field: a block member, a draw's name or a stream. A batched pass's batch table is the one
+            // field two readers share: the core reads its counts, the shader its bases (as a storage stream).
+            bool batchTable = false;
+            for (const ModePass &pass : passes)
+                batchTable = batchTable || (pass.batched() && pass.batches == name);
+            if (int(declares(name)) + int(drawNames(name) && !batchTable) + int(streamReads(name)) > 1
+                || (batchTable && declares(name))) {
                 *error = QStringLiteral("the record's field '%1' fills two of a block member, a draw count and a stream: "
                                         "one owner a name").arg(QString::fromLatin1(name));
                 return false;
@@ -3504,7 +3509,8 @@ void ModeContent::fillArena()
         const BlockMember *batch = pass.block.member(kBatchMember);
         const fa::Field *table = schema ? schema->field(pass.batches) : nullptr;
         const quint32 batches = qMin(resolveCount(pass.batchCount, 0), quint32(p.copies));
-        const quint32 vertices = resolveCount(pass.vertices, 0);
+        const ModeMeshes::Gpu *mesh = pass.mesh.isEmpty() ? nullptr : m_meshes.find(pass.mesh);
+        const quint32 vertices = resolveCount(pass.vertices, mesh ? mesh->vertexCount : 0u);
         for (quint32 b = 0; b < quint32(p.copies); ++b) {
             const quint32 at = p.blockOffset + b * p.blockStride;
             if (quint64(at) + quint64(bytes.size()) > quint64(m_arena.size()))
