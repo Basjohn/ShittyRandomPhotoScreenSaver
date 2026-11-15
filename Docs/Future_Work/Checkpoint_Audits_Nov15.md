@@ -436,3 +436,137 @@ them.**
 - **Real windows:** only hidden hosts were used, and no Display 1 rehearsal.
 - **Whether H1 corrupts pixels on this GPU:** not tested. The proof is the validation layer's.
 - **The fix for H1** (a pre-pass barrier for the resolve textures, as rule C does for colour) was not tried.
+
+## Checkpoint audit 3: 0382665e6 (N5.1 Spline Curve) and 6a54f5415 (1D.14), Medium
+
+The audit ran on the 3c13c76ed tree (unchanged since 0382665e6 in every N5.1 file it read) with the ABI 17 module
+copied from the main checkout, and nothing was built. It found no critical or high finding, one medium and two lows,
+all in N5.1. 1D.14 has no finding. The probes are in
+`.artifacts/evidence/native_core/checkpoint_audit_3/20261115_probes/` (run from the repository root).
+
+### Critical
+
+None.
+
+### High
+
+None.
+
+### Medium
+
+**M1. `rule_a_verdict` lets through errors the per-pixel proof does not explain**
+(`tools/visualizer_replay/owner_render_parity.py:357-370`).
+- **The gap:** any pixel 1 level off counts as "fill", with no limit on how many there are or where they sit, and
+  any pixel 2 or 3 levels off counts as "edge", whether or not it is on an edge. The proof (D12, "As built: Spline
+  Curve") explains a 1-level error only on translucent pixels (`0 < a8 < 255`). On opaque pixels, transparent ones and
+  the card's dark fill, the premultiplied rounding is exact, so a difference there is a real regression. It also
+  explains edge pixels only at the boundary between the core's triangle and the Python quad.
+- **Failure scenario:** a native regression that moves every pixel by 1 level passes rule (a). Examples are a
+  `u_fade` packed as 254/255, a hue offset rounded differently, or a colour converted twice. So does a fixed 10-pixel
+  artefact of 3 levels inside the card in every frame. `tests/test_native_devcurve.py:294` already accepts 17,000
+  pixels at 1 level in one frame.
+- **Proof:** `rule_a_probe.py` sends synthetic runs through the tool's own `frame_differences`:
+  - A +1 shift on all 20,000 pixels of 60 frames (opaque fill, opaque bar and background) gives `pass: True`.
+  - The fixed 10-pixel, 3-level interior artefact in every frame gives `pass: True`.
+  - The control, one pixel at 4 levels, gives `pass: False`.
+- **Suggested direction (not built):** allow the fill level only where the Python reference's alpha is strictly
+  between 0 and 255, require exact pixels elsewhere, and keep edge pixels within a pixel or two of a lit/unlit
+  boundary. The reference frames already carry alpha.
+
+### Low
+
+**L1. The by-value array test does not scan every product shader**
+(`tests/test_native_devcurve.py:188-202`).
+- **The gap:**
+  - It scans only the `.frag`, `.vert`, `.comp` and `.glsl` files in three folders. It misses the 12 fullscreen
+    transition fragments, which are Python strings baked to SPIR-V packs in
+    `rendering/quick/qml/shaders/transitions/` and drawn on Vulkan by the core (N5.2a). These are burn,
+    chromatic_shear, crossfade, liquid_lens, melt_drip, particle, ripple, slide, surface_tension, vhs,
+    warp_dissolve and wipe.
+  - Its pattern misses a size that is not a literal (`float c[N]`), the `float[96] c` form, and an indented
+    definition.
+- **Failure scenario:** a transition, or a mode shader that sizes its curves with a `#define`, takes back the
+  by-value copy that cost Spline Curve 1.97 ms on Vulkan, and the test stays green.
+- **Proof:** `by_value_probe.py` lists the 12 unscanned transition sources (none has the pattern today, by a broader
+  regex) and shows that the test's regex misses the three forms, which a broader one catches.
+- **The negative control holds:** the test fails on the first parent's `devcurve.frag`, which this audit ran itself.
+
+**L2. A generic program the core refuses is tried again at every update**
+(`rendering/quick/visualizer/native_route.py:670-688`).
+- **The cause:** `_ModeContent.bind` defers the real `program` and `bind` to the first `settings` call, inside
+  `_sync`'s frame stage. A `ValueError` from `NativeMode.program`, such as settings that do not fit (D12 point 4),
+  therefore becomes a `_FrameFailure`. The route retries every frame failure at the next update. Before N5.1, the
+  Spectrum program loaded in `bind`, which is the setup stage, and stayed latched until an input changed. The route's
+  own docstring (`sync`) still says the program is a setup input.
+- **Failure scenario:** a Spline Curve activation whose settings the core refuses. Each new frame repeats the
+  program JSON, the pack hand-over and the refusal on the GUI thread for the whole activation. The item stays faded
+  out and the failure is logged once, so nothing visible is wrong, but the cost repeats on every frame.
+- **Proof:** `route_probe.py` runs the route on the test doubles with a `program` that raises. Over 30 updates with
+  one identity and unchanged inputs, `program()` was called 30 times, with `failures` at 1 and the stage `frame`.
+
+### Checked, no finding
+
+- **The OpenGL product pixels are unchanged against the merge's first parent.**
+  - `tools/conventions_identity.py record --part modes --only devcurve --offers` was recorded on the merge tree and
+    again with the first parent's `devcurve.py`, `devcurve.frag` and `devcurve.frag.qsb` checked out.
+  - `compare` reports ALL IDENTICAL on 5 runs × 549 frames (variants a and b and the three audio-block-size offers),
+    with the same GL call counts.
+  - Evidence: `.artifacts/evidence/native_core/checkpoint_audit_3/20261115_python_gl_identity/`.
+  - The extracted functions match the inline code they replace member for member. The three unwritten members
+    written as 0 equal the zero-at-link block.
+- **One generic item beside Spectrum's:** `_content_of` makes one item per kind, and `prepare` makes both.
+  `route_probe.py` switches Spectrum → Spline Curve → Spectrum → Spline Curve and finds the following:
+  - Each unbind hides the outgoing item at fade 0 and then unbinds it.
+  - The generic program loads once. The second Spline Curve activation sends settings, then bind, and no program.
+  - Spectrum's program also loads once.
+  - Each first frame is placed at fade 0, and `close` destroys both items.
+  - The core drops the frame a previous stream left (`stream_source.cpp:182`), so a new binding never draws a stale
+    frame.
+- **`_admission_flags`:**
+  - `FLAG_SOURCE_CURRENT` is read only by the core's admission (`stream_source.cpp:171-172`).
+  - Setting it for a mode where `requires_authoritative_first_source` is false gives exactly
+    `render_contract.snapshot_is_render_admissible`: that rule also needs `present_frame`, and the core still
+    checks it.
+  - Stale or foreign frames are still refused by the reader's identity check (generation, activation and mode code
+    in `expect`).
+  - Spectrum keeps the frame's own bit, which the test control checks.
+- **Tests:**
+  - `test_native_devcurve.py` (10, with the module), `test_native_visualizer_route.py`,
+    `test_native_core_spectrum.py`, `test_shader_derivatives.py`, `test_native_packet_reader_sources.py`,
+    `test_quick_backend_owner.py` and `test_visualizer_viewport_scaling_contracts.py` all pass: 105 tests.
+- **1D.14, no save loses a placement.** `placement_probe.py` runs the owner and Fullscreen Edit's own `draft_value`,
+  for both overlays:
+  - A corner chosen from a moved overlay keeps `{corner, offset}` as `custom_position` and keeps the scale.
+  - A Fullscreen Edit that only resizes keeps the record. CUSTOM then restores the old position with the new scale.
+  - A Fullscreen Edit move at the new corner reads CUSTOM. The next corner choice keeps the newest position.
+  - A save while CUSTOM shows keeps the placement members (`test_every_control_writes…`, lines 130-137).
+- **Fullscreen Edit never writes `custom_position`:** `PARTS`' keys equal `PLACEMENT_KEYS` (asserted at
+  `fullscreen_overlay_edit.py:110`), which do not include it. `draft_value` only passes through the value it loaded at
+  the session's start.
+- **Defaults and old values:**
+  - The canonical default is `{}` for `preset` and `now_playing`.
+  - A value stored before the change has no key and loads `{}`, with a moved overlay still reading CUSTOM.
+  - A stored record that is not a mapping, has an unknown corner, or has non-numeric or zero offsets loads as `{}`.
+    Out-of-range offsets are clamped to the overlay's own bounds.
+  - The two-argument callers of `overlay_placement_moved` and the removed `clear_overlay_placement` have no callers
+    left.
+- **1D.14 tests:**
+  - The test file fails to collect on the first parent's owner (no `CUSTOM_POSITION_KEY`). Its scale assertion is
+    the opposite of the first parent's clearing.
+  - 176 tests pass in `test_visualizers_fullscreen_mode_pill.py`, `test_visualizer_expansion_overlay_settings.py`
+    and `test_visualizer_expansion_fullscreen_edit.py`.
+  - The other seven files naming `fullscreen_overlays` pass too (897 tests): the `expanded_display_style*` files,
+    `two_display_edit`, `expansion_overlays`, `fullscreen_visualizer_edges` and `card_clip_contract`.
+- **Rules:**
+  - Neither merge adds env flags, timers, polling or a QML signal to `@Slot(result=...)`. The only env read is
+    `devcurve_check.py`'s validation-environment record.
+  - Nothing new runs at rest: the generic item is hidden and unbound until a native mode binds.
+  - No test pins preset values or wording.
+
+### Not verified
+
+- **Native pixels:** none were rendered (no `--native` parity run, no Vulkan, no Display 1). M1 is proved on
+  synthetic runs through the tool's own code.
+- **Settings dialog and Fullscreen Edit open at once:** not checked. Fullscreen Edit's save writes the whole value
+  from its session-start copy, and the Visualizers tab writes the whole page value, so a concurrent write by the
+  other would be overwritten. That pattern predates 1D.14 (the corner already behaved so).
