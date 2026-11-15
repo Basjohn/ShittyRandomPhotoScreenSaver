@@ -47,12 +47,15 @@ layout(std140, binding = 18) uniform BubbleDraw {
     // Four compact uint32 class words from the SAME authored snapshot. Unlike a radius threshold, this respects
     // original small/big identity during musical pulses and temporary small-to-big promotion. No second hero draw is
     // needed.
-    uvec4 u_big_class_bits;
+    // A uint array, not a uvec4 (N5.1): the native record fills an array of u32 words by name; same indexing.
+    uint u_big_class_bits[4];
     vec4 u_bubbles_pos[110];
     // x = specular_size_factor, y = rotation (reserved), z = spec_ox, w = spec_oy
     vec4 u_bubbles_extra[110];
     // Trail: 3 previous (x,y,strength) samples per bubble, oldest first
-    vec3 u_bubbles_trail[330];    // 110 * 3
+    // vec4 elements read .xyz (N5.1): std140 gives a vec3 element 16 bytes anyway, and the native record fills a
+    // vec4 array by name.
+    vec4 u_bubbles_trail[330];    // 110 * 3
     float u_trail_strength;       // 0.0 = off, 1.0 = full
     float u_tail_opacity;         // max opacity ceiling for tail gradient (0.0-0.85)
     float u_trail_radial_scale;   // canonical-card wake ring geometry in current content heights
@@ -72,6 +75,10 @@ layout(std140, binding = 18) uniform BubbleDraw {
     // same content-local target (u_ambient_light below), present only while some particle glows.
     bool u_ambient_enabled;
     bool u_ambient_light_enabled;
+    // The ambient target's content size in texels (ambient_target_size). Its texture may be a larger allocation with
+    // the content at its first columns and last rows (the native core's buckets, D14 point 2); in this renderer the
+    // texture is the content's size and every ratio below is exactly 1.
+    vec2 u_ambient_px;
 
     // Ghost: one history-backed afterimage ring per bubble. The existing smear history owns temporal
     // position/strength; this shader adds no second pass or clock.
@@ -167,9 +174,16 @@ void main() {
     vec4 decor = vec4(0.0);
     vec3 particle_light = vec3(0.0);
     if (u_ambient_enabled) {
-        decor = texture(u_ambient_texture, vec2(uv.x, 1.0 - uv.y));
+        // Where the content lies in the allocation, clamped to the content's edge texel centres: a linear read's
+        // clamp-to-edge result at the content's own edges, never the allocation's cleared texels past them.
+        vec2 allocation = vec2(textureSize(u_ambient_texture, 0));
+        vec2 ratio = u_ambient_px / allocation;
+        vec2 ambient_uv = vec2(uv.x * ratio.x, 1.0 - uv.y * ratio.y);
+        ambient_uv = clamp(ambient_uv, vec2(0.5, allocation.y - u_ambient_px.y + 0.5) / allocation,
+                           vec2(u_ambient_px.x - 0.5, allocation.y - 0.5) / allocation);
+        decor = texture(u_ambient_texture, ambient_uv);
         if (u_ambient_light_enabled) {
-            particle_light = texture(u_ambient_light, vec2(uv.x, 1.0 - uv.y)).rgb;
+            particle_light = texture(u_ambient_light, ambient_uv).rgb;
         }
     }
     // ---------- No derivative below this line. ----------
@@ -330,7 +344,7 @@ void main() {
             // Process each of the 3 trail samples as a ripple source
             // age_factor: 0=oldest (most expanded/faded), 2=newest (tightest)
             for (int s = 0; s < 3; s++) {
-                vec3 sample_data = u_bubbles_trail[i * 3 + s];
+                vec3 sample_data = u_bubbles_trail[i * 3 + s].xyz;
                 float strength = sample_data.z;
                 if (strength < 0.001) continue;
 
@@ -406,7 +420,7 @@ void main() {
             float balpha = bpos.w;
             if (balpha < 0.01 || brad < 2.0 * px) continue;
 
-            vec3 history = u_bubbles_trail[i * 3];
+            vec3 history = u_bubbles_trail[i * 3].xyz;
             // The oldest sample stores 0.45 * the simulation smear strength.
             // Normalize that falloff so Ghost opacity is controlled by the
             // actual temporal strength, then shape fade speed with the setting.

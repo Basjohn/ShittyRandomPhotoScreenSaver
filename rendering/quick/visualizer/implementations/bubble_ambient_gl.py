@@ -94,6 +94,12 @@ class QuickBubbleAmbientPoints:
         self._data = np.zeros((MAX_MICROBUBBLES+MAX_PARTICLES, RECORD_STRIDE), dtype=np.float32)
         self._occluder_data = np.zeros((110 * 6, 5), dtype=np.float32)
 
+    @property
+    def target_size(self) -> tuple[int, int]:
+        """The ambient target's content size in texels (``ambient_target_size``; (0, 0) before the first draw): the
+        Bubble shader's ``u_ambient_px``, where its content lies in the texture it samples."""
+        return self._target_size
+
     def _initialize(self) -> None:
         if self._program:
             return

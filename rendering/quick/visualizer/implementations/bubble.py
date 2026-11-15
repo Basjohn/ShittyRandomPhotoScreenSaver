@@ -305,6 +305,9 @@ class QuickBubbleRenderer:
         # The ambient samplers are bound at units 0 and 1 by the shader (layout bindings).
         values["u_ambient_enabled"] = int(bool(ambient_texture))
         values["u_ambient_light_enabled"] = int(bool(ambient_light))
+        if ambient_texture:
+            # Where the content lies in the sampled texture (the whole texture in this renderer).
+            values["u_ambient_px"] = tuple(float(v) for v in self._ambient_renderer.target_size)
         values["uMatrix"] = frame.matrix_values
         values["uItemSize"] = tuple(frame.logical_size)
         content_rotation_quarters = frame.content_rotation_quarters
@@ -507,6 +510,7 @@ class QuickBubbleRenderer:
             "u_ghost_decay",
             "u_ambient_enabled",
             "u_ambient_light_enabled",
+            "u_ambient_px",
         )
         held = {name for name, _kind in BUBBLE_BLOCK.fields}
         missing = [name for name in written if name not in held]
