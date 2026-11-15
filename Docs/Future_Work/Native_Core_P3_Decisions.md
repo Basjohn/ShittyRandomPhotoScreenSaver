@@ -886,6 +886,43 @@ changes and no rebuild, a refused frame keeping the card, the latch, the fade, n
 framebuffer at 2560x1440 at 150 % on both backends, Vulkan within 1 level of OpenGL, validation clean), with N2.3's,
 N2.5's and rule (a)'s harnesses unchanged.
 
+**As built: Spline Curve (N5.1, ABI 16, no C++).** The first product mode on this content. Its record is a runtime
+schema (`core/visualizer_engine/devcurve_native_schema.py`: the four curves, the three specular slots, the specular
+alpha under the play/pause ramp and the rainbow hue, each named as its DevCurveDraw member); every other member is the
+core's or a setting from `devcurve_settings_values` (the draw order and the foreground layer follow the layer Settings;
+the foreground id can be -1, so it is a setting, never a u32 field; the three members the Python renderer never writes
+are settings at 0). The Python renderer calls the same two functions (`devcurve_settings_values`,
+`devcurve_frame_values`), so both renderers share one arithmetic. The route (`native_route.py`) draws every generic mode
+on one generic item per Visualizer item beside Spectrum's, its program retargeted by mode and bound with the first
+settings of an activation. **The admission rule for a self-animating mode** (`mode_capabilities
+.requires_authoritative_first_source` false: Spline Curve, and Bubble and Oscilloscope when ported): the core admits a
+playing frame only with `FLAG_SOURCE_CURRENT` (Spectrum's rule, `stream_source.cpp`), so the route's
+`_admission_flags` sets that bit on such a mode's frames, as the Python node admits them before their source is current;
+it stays in Python, no C++ (lead, N5.1 review). A shader passes no array to a function by value: SPIR-V copies it whole
+per call (Spline Curve's pass was 1.97 ms on Vulkan against 0.030 ms on OpenGL until its curves were read in place;
+`tests/test_native_devcurve.py` refuses the pattern in every product shader). Proved by
+`native/core/python/devcurve_check.py` (blocks byte for byte over 1,795 frames of the widened run set; the item's
+contract; Vulkan within 1 level of OpenGL at dpr 1 and 1.5) and `tools/visualizer_replay/owner_render_parity.py
+--native --mode devcurve`. Rule (a) is not byte for byte, proved per pixel: the Python node's blend rounds once from
+the fragment's 8-bit straight colour and alpha, `round(s8 a8 / 255 + d (1 - a8 / 255))`; the native item rounds the
+premultiplied product into its surface first, `round(s8 a8 / 255)`, then the composite adds `d (1 - a8 / 255)` and
+rounds again. Only a straight-alpha surface under a straight-alpha composite blend would reproduce it, exact for
+single-pass content alone (overlapping translucent passes do not compose in straight alpha): refused (lead, 15 Nov);
+the surface stays premultiplied.
+
+**The composite tolerance for translucent modes (rule (a), lead's decision, 15 Nov).** For a mode drawn through the
+composite's premultiplied surface, rule (a) is: fill pixels within 1 level (the surface's extra rounding of the
+premultiplied product), plus edge pixels within 3 levels, at most 10 in a frame (the measured worst, 7, times 1.5:
+float32 interpolation between the core's triangle and the Python quad, each such pixel within 4e-3 of a device pixel of
+its rounding boundary). It covers every mode drawn through the composite, Spectrum included (lead, 15 Nov: its
+translucent bars and glow pass through the same premultiplied surface; N2.5's "exact" was its own harness's
+comparison, not the owner route). The proof: `.artifacts/evidence/native_core/n5_1_devcurve/
+20261115_rule_a_per_pixel/` (`pixel_proof.json`, its script). Encoded once, `owner_render_parity.py` `RULE_A_*` and
+`rule_a_verdict` (used by `devcurve_check.py`). Bubble and the Oscilloscope inherit it when ported. Spectrum's owner
+runs (variants a and b, display and overscan) pass under it: 6.3M to 17.6M pixels over a run, every one at exactly 1
+level, no edge pixel; the same figures with the route as it was before N5.1
+(`.artifacts/evidence/native_core/n5_1_devcurve/20261115_rule_a_spectrum_tolerance/`, `..._spectrum_base_route/`).
+
 ## D13. The fullscreen pass and image sampling as a primitive (N4.a, 14 Nov 2026; proposed by the High agent)
 
 Supersedes D12 point 3's refusal of samplers and its "v_uv only" input; the rest of D12 stands.

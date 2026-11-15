@@ -44,7 +44,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
 at the size asked.
 - High: N5.7c, then N3. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers
   ride with the next fitting dispatch.
-- Medium: N5.1 Spline Curve.
+- Medium: 1D.14 (the Fullscreen corner fix), then the next N5 port.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -569,24 +569,8 @@ are measured above a handful per frame, one pipeline and one indirect call with 
 (`gl_DrawID`, `gl_BaseInstance`, `gl_BaseVertex`) replaces a draw per batch; the port records which backends report
 the feature (D3D11 is not stated).
 
-- [ ] N5.1 Spline Curve (`devcurve`; a fullscreen strip only; Opus Medium; N2.9's generic mode content, no C++
-  expected; Spectrum's N2.5 port and `native/core/README.md` "How a new mode is built" are the pattern):
-  - [ ] Classify first: read the Python renderer (`rendering/quick/visualizer/implementations/devcurve.py`), its
-    shader and its worker record. Classify every `DevcurveDraw` member as Settings-derived, card-derived, from the
-    frame record, or computed per frame in the Python renderer. A per-frame computation the record cannot carry
-    would need C++: stop and report it, do not build it.
-  - [ ] The record: its runtime `NativeSchema` carries what the renderer reads per frame (its `MODE_CODES` entry if
-    missing). Bound to the core at bind; no module table changes.
-  - [ ] The Settings values: one function by name from the spec and the card, with the Python renderer's own
-    arithmetic, sent when it changes and never per frame at rest.
-  - [ ] The route: Spline Curve drawn by the core on Vulkan through `rendering/quick/visualizer/native_route.py` as
-    Spectrum is; OpenGL keeps the Python renderer until the switch.
-  - [ ] The proof (port rules a to e and g): native OpenGL against the Python renderer frame by frame on recorded
-    music, byte for byte (otherwise to the lead with the figures); Vulkan against OpenGL within 1 level; dpr 1 and
-    1.5; nothing at rest; no Python thread state on the render thread; Settings and Studio parity; no rebuild for a
-    Settings or Studio change. The negative controls are seen failing.
-  - [ ] Docs: D12's "as built" line for Spline Curve, the README's mode list, the Harness Index.
-  - [ ] Lead: the Display 1 rehearsal on Vulkan with recorded music (rule f).
+- [ ] N5.1 Spline Curve leftover: its Studio is not offered on Vulkan (`STUDIO_PREVIEW_BACKENDS`), the same open
+  item as Spectrum's; both close with N5.8.
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
@@ -1067,6 +1051,16 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   `tests/test_qtquick_ordinary_widget_host.py::test_refresh_transition_clock_coalesces_arbitrary_simultaneous_consumers`.
   A third, `tests/test_qtquick_startup_reveal.py::test_startup_reveal_primes_zero_then_completes_at_one_once`,
   failed the same way in the 1D.12 merge run (4,407 tests over 33 minutes). Find the leaked state or ordering they depend on, and make each test own its preconditions.
+  The N5.1 merge run (4,529 tests, 44 minutes, one process) added twelve more of this kind; they pass alone.
+- [ ] Reds already on main, found at the N5.1 merge (each fails alone):
+  - `tests/test_extruded_bubble_empty_near.py:58`: "the populated frame must actually leave near light" reads 0.0;
+    it also fails on N3.1's base commit.
+  - `tests/test_qtquick_visualizer_clip_smoke.py:303`, the Oscilloscope reflow, reads 175 against 173. The QSG/clip
+    optimisations are protected: never retune production to satisfy this oracle; judge whether the oracle is stale.
+  - `tests/test_visualizer_extreme_viewport_scaling_audit_contract.py:38` pins Oscilloscope source text
+    (`gl.glUniform1f(beam_uniforms["uCore"], core)`) that no longer exists; rewrite it to assert behaviour.
+  - `tests/test_test_suite_durability.py` flags `tests/test_godzip_foundry_core.py:776, 789, 803` as documentation
+    prose oracles: the same item as the Foundry box in item 1.
 - [ ] Lead, Display 1: confirm R-221 in the product, Fullscreen Hide Borders with pixel shift stepping, and check
   whether the operator's lavender edge colour came from the shift.
 
