@@ -90,7 +90,12 @@ FRAME_RULE_B = pt.Tolerance("post stages frame, rule (b)", masked_level=1)
 # admits 2 texels a texture at 2 units, isolated or on an edge (measured: 1 texel of the EB scene's colour beside the
 # defocus mask, the inverted coverage's ulp carried through the gather).
 TEXTURE_RULE_A = pt.Tolerance("post stages texture, rule (a)", masked_level=1, tie_pixels=2)
-TEXTURE_RULE_B = pt.Tolerance("post stages texture, rule (b)", masked_level=1)
+# Rule (b) admits 36 texels a texture at up to 3 units (the edge class's level), isolated or on an edge: the two
+# backends' fp32 sin() differ in the last bits, and on the Oscilloscope trace's steep edge that is up to 3 float16 ulps
+# of its emission (measured: 17 texels at 2 and 7 at 3 of 827 differing, with the trace's vUv quantised to the pixel
+# grid, which took the interpolation's share out: 5 ulps before). Measured worst 24, times 1.5.
+TEXTURE_RULE_B = pt.Tolerance("post stages texture, rule (b)", masked_level=1, tie_pixels=36, tie_level=3,
+                              edge_class=True)
 # The defocus gather's unit on the texels it blends (in float16 ulps): its 96 bilinear taps land at mirrored subtexel
 # positions in the core (rows top first) and the hardware's 8-bit subtexel weights round each apart; measured worst
 # 4.84 ulps (OpenGL against Python, the highlight and the disc's edge).

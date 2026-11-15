@@ -123,8 +123,8 @@ layout(std140, binding = 18) uniform PostTrace%(n)d {
 };
 void main()
 {
-    // vUv at the aligned card's pixel centres, exactly: the trace's steep edge would otherwise turn each renderer's
-    // last-bit interpolation of vUv into several float16 ulps of emission.
+    // vUv at the aligned card's pixel centres, exactly: on the trace's steep edge each renderer's last-bit
+    // interpolation of vUv became up to 5 float16 ulps of emission between the backends (3 with this).
     vec2 uv = (floor(vUv * vec2(640.0, 384.0)) + 0.5) / vec2(640.0, 384.0);
     float y = 0.5 + u_t%(n)d_wave.x * sin(6.2831853 * u_t%(n)d_wave.y * uv.x + u_t%(n)d_wave.z);
     float d = abs(uv.y - y) * 384.0;
