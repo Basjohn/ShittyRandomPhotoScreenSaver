@@ -98,8 +98,11 @@ def test_the_core_member_and_the_abi():
     rows = dict(re.findall(r'\{ "(\w+)", (\d+), (?:true|false), \w+ \},', source))
     assert MODE_CORE_MEMBERS["u_srpss_compute"][0] == int(rows["u_srpss_compute"]) == 4
     assert (CORE / "compute_passes.cpp").read_text(encoding="utf-8").count('kComputeMember[] = "u_srpss_compute"') == 1
-    assert "#define SRPSS_NATIVE_CORE_ABI 19" in (CORE / "abi.h").read_text(encoding="utf-8")
-    assert EXPECTED_ABI == 19
+    # N3.3's entries came with ABI 19; a later ABI (N3.4's 20) keeps them (the history line stays in abi.h).
+    abi = (CORE / "abi.h").read_text(encoding="utf-8")
+    assert "// 19 (N3.3, compute passes;" in abi
+    assert EXPECTED_ABI >= 19
+    assert f"#define SRPSS_NATIVE_CORE_ABI {EXPECTED_ABI}" in abi
     module = (CORE / "module.cpp").read_text(encoding="utf-8")
     for entry in ("composite_mode_image_size", "composite_mode_storage_read", "composite_mode_storage_data",
                   "compute_control"):

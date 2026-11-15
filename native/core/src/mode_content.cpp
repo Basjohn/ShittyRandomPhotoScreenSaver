@@ -1359,6 +1359,343 @@ bool checkComputePass(ModePass &pass, const ModeProgram &program, QString *error
     return true;
 }
 
+// ------------------------------------------------------------------------------------------------- N3.4 (D17)
+
+int targetNamed(const QList<TargetDeclaration> &targets, const QByteArray &name)
+{
+    for (int t = 0; t < int(targets.size()); ++t) {
+        if (targets.at(t).name == name)
+            return t;
+    }
+    return -1;
+}
+
+QRhiGraphicsPipeline::TargetBlend blendOf(QRhiGraphicsPipeline::BlendFactor src, QRhiGraphicsPipeline::BlendFactor dst,
+                                          QRhiGraphicsPipeline::BlendFactor srcAlpha,
+                                          QRhiGraphicsPipeline::BlendFactor dstAlpha)
+{
+    QRhiGraphicsPipeline::TargetBlend b;
+    b.enable = true;
+    b.srcColor = src;
+    b.dstColor = dst;
+    b.srcAlpha = srcAlpha;
+    b.dstAlpha = dstAlpha;
+    return b;
+}
+
+PassOutput customOutput(const QRhiGraphicsPipeline::TargetBlend &blend)
+{
+    PassOutput output;
+    output.write = true;
+    output.custom = true;
+    output.customBlend = blend;
+    return output;
+}
+
+PassOutput maskedOutput()
+{
+    PassOutput output;
+    output.write = false;
+    return output;
+}
+
+// D17 point 2: a pass on a transparency target. The core fixes the accumulation's blend (ONE, ONE) and the coverage's
+// (ONE, ONE_MINUS_SRC_COLOR: coverage stored inverted, choice B); a borrowed attachment takes the pass's declaration;
+// the owner's depth is tested (less unless declared) and never written; the sorted pack is required (choice D). A pass
+// on any other target may not ship one.
+bool transparentPassState(const QJsonObject &o, ModePass &pass, const QList<TargetDeclaration> &targets, bool sorted,
+                          QString *error)
+{
+    const QString label = QString::fromLatin1(pass.name);
+    const TargetDeclaration *t = pass.target >= 0 ? &targets.at(pass.target) : nullptr;
+    if (!t || !t->transparency()) {
+        if (sorted) {
+            *error = QStringLiteral("pass '%1' ships a sorted pack, which only a pass on a transparency target draws")
+                         .arg(label);
+            return false;
+        }
+        return true;
+    }
+    if (!sorted) {
+        *error = QStringLiteral("pass '%1' on the transparency target '%2' ships its sorted pack (\"sorted\": true: what "
+                                "a device without the stage draws, D17 choice D)")
+                     .arg(label, QString::fromLatin1(t->name));
+        return false;
+    }
+    const QJsonArray attachments = o.value(QStringLiteral("attachments")).toArray();
+    for (int a = 0; a < 2 && a < int(attachments.size()); ++a) {
+        if (!attachments.at(a).toObject().isEmpty()) {
+            *error = QStringLiteral("pass '%1': the core sets the accumulation's and the coverage's blends (their "
+                                    "\"attachments\" entries are {})").arg(label);
+            return false;
+        }
+    }
+    if (pass.outputs.size() < 2) {
+        *error = QStringLiteral("pass '%1': a transparency target has its accumulation and coverage").arg(label);
+        return false;
+    }
+    pass.outputs[0] = customOutput(blendOf(QRhiGraphicsPipeline::One, QRhiGraphicsPipeline::One,
+                                           QRhiGraphicsPipeline::One, QRhiGraphicsPipeline::One));
+    pass.outputs[1] = customOutput(blendOf(QRhiGraphicsPipeline::One, QRhiGraphicsPipeline::OneMinusSrcColor,
+                                           QRhiGraphicsPipeline::One, QRhiGraphicsPipeline::OneMinusSrcColor));
+    if (!o.contains(QStringLiteral("depth")))
+        pass.depthTest = DepthTest::Less;
+    if (pass.depthTest == DepthTest::None || pass.depthWrite) {
+        *error = QStringLiteral("pass '%1': a transparent pass tests its owner's depth and never writes it").arg(label);
+        return false;
+    }
+    return true;
+}
+
+// D17 choice D: the sorted pack of a pass on a transparency target binds what the OIT pack binds (one set of bindings
+// serves both), writes the owner's attachments (location n the owner's n) and no depth. Its outputs on the owner:
+// colour 0 premultiplied over, a borrowed attachment as the pass declared it, every other one masked.
+bool checkSortedPack(ModePass &pass, const QByteArray &pack, const QList<TargetDeclaration> &targets, QString *error)
+{
+    const QString label = QString::fromLatin1(pass.name);
+    const TargetDeclaration &t = targets.at(pass.target);
+    const QShader sorted = QShader::fromSerialized(pack);
+    if (!sorted.isValid() || sorted.stage() != QShader::FragmentStage) {
+        *error = QStringLiteral("pass '%1': its sorted pack does not load as a fragment shader").arg(label);
+        return false;
+    }
+    const QShaderDescription a = pass.fragment.description();
+    const QShaderDescription b = sorted.description();
+    const QList<QShaderDescription::UniformBlock> blocksA = a.uniformBlocks();
+    const QList<QShaderDescription::UniformBlock> blocksB = b.uniformBlocks();
+    const QList<QShaderDescription::InOutVariable> samplersA = a.combinedImageSamplers();
+    const QList<QShaderDescription::InOutVariable> samplersB = b.combinedImageSamplers();
+    const QList<QShaderDescription::StorageBlock> storageA = a.storageBlocks();
+    const QList<QShaderDescription::StorageBlock> storageB = b.storageBlocks();
+    const QList<QShaderDescription::InOutVariable> inputsA = a.inputVariables();
+    const QList<QShaderDescription::InOutVariable> inputsB = b.inputVariables();
+    bool same = blocksA.size() == blocksB.size() && samplersA.size() == samplersB.size()
+        && storageA.size() == storageB.size() && inputsA.size() == inputsB.size();
+    for (qsizetype i = 0; same && i < blocksA.size(); ++i) {
+        same = blocksA.at(i).blockName == blocksB.at(i).blockName && blocksA.at(i).binding == blocksB.at(i).binding
+            && blocksA.at(i).size == blocksB.at(i).size;
+    }
+    for (qsizetype i = 0; same && i < samplersA.size(); ++i) {
+        same = samplersA.at(i).name == samplersB.at(i).name && samplersA.at(i).binding == samplersB.at(i).binding
+            && samplersA.at(i).type == samplersB.at(i).type;
+    }
+    for (qsizetype i = 0; same && i < storageA.size(); ++i)
+        same = storageA.at(i).blockName == storageB.at(i).blockName && storageA.at(i).binding == storageB.at(i).binding;
+    for (qsizetype i = 0; same && i < inputsA.size(); ++i) {
+        same = inputsA.at(i).name == inputsB.at(i).name && inputsA.at(i).location == inputsB.at(i).location
+            && inputsA.at(i).type == inputsB.at(i).type;
+    }
+    if (!same) {
+        *error = QStringLiteral("pass '%1': its sorted pack binds other blocks, samplers, storage or inputs than its "
+                                "transparency pack (one set of bindings serves both)").arg(label);
+        return false;
+    }
+    ModePass fallback;
+    fallback.name = pass.name;
+    fallback.target = t.owner;
+    if (!checkPassOutputs(fallback, targets, b, error))
+        return false;
+    if (fallback.fragDepth) {
+        *error = QStringLiteral("pass '%1': its sorted pack writes gl_FragDepth (a transparent pass never writes depth)")
+                     .arg(label);
+        return false;
+    }
+    const TargetDeclaration &owner = targets.at(t.owner);
+    pass.sorted = sorted;
+    pass.sortedOutputs.clear();
+    for (int j = 0; j < int(owner.colour.size()); ++j) {
+        if (j == 0) {
+            pass.sortedOutputs.append(customOutput(blendOf(QRhiGraphicsPipeline::One, QRhiGraphicsPipeline::OneMinusSrcAlpha,
+                                                           QRhiGraphicsPipeline::One,
+                                                           QRhiGraphicsPipeline::OneMinusSrcAlpha)));
+            continue;
+        }
+        PassOutput output = maskedOutput();
+        for (int k = 2; k < int(t.colour.size()) && k < int(pass.outputs.size()); ++k) {
+            if (t.colour.at(k).borrowed && t.colour.at(k).ownerColour == j)
+                output = pass.outputs.at(k);
+        }
+        pass.sortedOutputs.append(output);
+    }
+    return true;
+}
+
+// D17: a resolve step, a bloom step or a defocus step ({"name", <kind>: ..., ...}, an empty pack; post_stages.h).
+bool parseStageStep(const QJsonObject &o, int index, const QByteArray &pack, ModeProgram &program, bool *drawn,
+                    QList<QByteArray> *bloomSteps, int *defocusSteps, ModePass &pass, QString *error)
+{
+    const QString label = QString::fromLatin1(pass.name);
+    QList<TargetDeclaration> &targets = program.targets;
+    const bool resolve = o.contains(QStringLiteral("transparency_resolve"));
+    const bool bloom = o.contains(QStringLiteral("bloom"));
+    const bool defocus = o.contains(QStringLiteral("defocus"));
+    if (int(resolve) + int(bloom) + int(defocus) != 1 || !passName(pass.name) || !pack.isEmpty()) {
+        *error = QStringLiteral("pass %1 is one stage step (transparency_resolve, bloom or defocus) named by an "
+                                "identifier, with an empty pack").arg(index);
+        return false;
+    }
+    if (resolve) {
+        const QJsonValue alpha = o.value(QStringLiteral("alpha"));
+        const int t = targetNamed(targets, o.value(QStringLiteral("transparency_resolve")).toString().toLatin1());
+        if (o.size() != (alpha.isUndefined() ? 2 : 3) || t < 0 || !targets.at(t).transparency()
+            || (!alpha.isUndefined() && alpha.toString() != QLatin1String("coverage")
+                && alpha.toString() != QLatin1String("keep"))) {
+            *error = QStringLiteral("pass %1 is a resolve step {\"name\", \"transparency_resolve\": a transparency "
+                                    "target, \"alpha\"?: coverage or keep}").arg(index);
+            return false;
+        }
+        if (!drawn[t]) {
+            *error = QStringLiteral("resolve step '%1': no pass drew into '%2' before it")
+                         .arg(label, QString::fromLatin1(targets.at(t).name));
+            return false;
+        }
+        pass.stage = StageKind::TransparencyResolve;
+        pass.stageSource = t;
+        pass.target = targets.at(t).owner;
+        pass.conventions = true;               // fragTexel (shaders/scene_oit_resolve*.frag)
+        // Python's: colour ONE, ONE_MINUS_SRC_ALPHA; alpha ONE for an overlay (its alpha is coverage), else ZERO.
+        pass.coverageAlpha = alpha.isUndefined() || alpha.toString() == QLatin1String("coverage");
+        pass.outputs.clear();
+        for (int a = 0; a < int(targets.at(pass.target).colour.size()); ++a) {
+            pass.outputs.append(a == 0 ? customOutput(blendOf(QRhiGraphicsPipeline::One,
+                                                              QRhiGraphicsPipeline::OneMinusSrcAlpha,
+                                                              pass.coverageAlpha ? QRhiGraphicsPipeline::One
+                                                                                 : QRhiGraphicsPipeline::Zero,
+                                                              QRhiGraphicsPipeline::OneMinusSrcAlpha))
+                                       : maskedOutput());
+        }
+        drawn[pass.target] = true;
+        return true;
+    }
+    if (bloom) {
+        const QByteArray source = o.value(QStringLiteral("bloom")).toString().toLatin1();
+        const qsizetype dot = source.indexOf('.');
+        const int t = targetTextureName(source) ? targetNamed(targets, source.left(dot)) : -1;
+        const int a = t >= 0 ? targets.at(t).colourIndex(source.mid(dot + 1)) : -1;
+        if (o.size() != 2 || t < 0 || a < 0 || targets.at(t).transparency() || targets.at(t).colour.at(a).nearest) {
+            *error = QStringLiteral("pass %1 is a bloom step {\"name\", \"bloom\": \"<target>.<attachment>\" (a scene "
+                                    "target's averaged attachment)}").arg(index);
+            return false;
+        }
+        if (!drawn[t]) {
+            *error = QStringLiteral("bloom step '%1': no pass drew into '%2' before it")
+                         .arg(label, QString::fromLatin1(targets.at(t).name));
+            return false;
+        }
+        if (targetNamed(targets, pass.name) >= 0 || bloomSteps->contains(pass.name)
+            || bloomSteps->size() >= kMaxBloomStages) {
+            *error = QStringLiteral("bloom step '%1': at most %2 bloom steps, each named apart from every target (its "
+                                    "glow is \"%1.glow\")").arg(label).arg(kMaxBloomStages);
+            return false;
+        }
+        targets[t].colour[a].read = true;      // its resolve when multisampled (D14 point 8)
+        pass.stage = StageKind::Bloom;
+        pass.stageSource = t;
+        pass.stageAttachment = a;
+        pass.target = -1;
+        bloomSteps->append(pass.name);
+        return true;
+    }
+    const int near = targetNamed(targets, o.value(QStringLiteral("defocus")).toString().toLatin1());
+    const int onto = targetNamed(targets, o.value(QStringLiteral("onto")).toString().toLatin1());
+    if (o.size() != 3 || near < 0 || onto < 0 || near == onto) {
+        *error = QStringLiteral("pass %1 is a defocus step {\"name\", \"defocus\": a mipped target, \"onto\": a scene "
+                                "target}").arg(index);
+        return false;
+    }
+    const TargetDeclaration &layer = targets.at(near);
+    const TargetDeclaration &scene = targets.at(onto);
+    if (!layer.mips || layer.colour.size() < 2 || layer.colour.at(0).format != TargetFormat::RGBA16F
+        || layer.colour.at(1).format != TargetFormat::RGBA16F) {
+        *error = QStringLiteral("defocus step '%1': its layer '%2' is a mipped target with two RGBA16F attachments (the "
+                                "premultiplied light, then the circle)").arg(label, QString::fromLatin1(layer.name));
+        return false;
+    }
+    if (scene.transparency() || scene.mips || !scene.surfaceSized()) {
+        *error = QStringLiteral("defocus step '%1': it draws onto a surface-sized scene target (the layer's allocation "
+                                "is its)").arg(label);
+        return false;
+    }
+    if (!drawn[near] || !drawn[onto]) {
+        *error = QStringLiteral("defocus step '%1': passes draw into '%2' and '%3' before it")
+                     .arg(label, QString::fromLatin1(layer.name), QString::fromLatin1(scene.name));
+        return false;
+    }
+    if (*defocusSteps >= kMaxDefocusStages) {
+        *error = QStringLiteral("a program has at most %1 defocus steps").arg(kMaxDefocusStages);
+        return false;
+    }
+    pass.stage = StageKind::Defocus;
+    pass.stageSource = near;
+    pass.target = onto;
+    // Its block (u_defocus_radius, u_defocus_highlight, u_defocus_level), filled by the one rule, as the gather's
+    // shader declares it (the clip's and the sprites' declare the same).
+    pass.fragment = defocusShader(DefocusShader::Gather);
+    pass.block = BlockLayout::reflect(pass.fragment, QByteArray(kDefocusBlock));
+    pass.conventions = true;
+    const BlockMember *level = pass.block.valid() ? pass.block.member(QByteArray(kDefocusLevelMember)) : nullptr;
+    if (!level || level->type != QShaderDescription::Int || level->count != 1) {
+        *error = QStringLiteral("defocus step '%1': the core's defocus shader does not load").arg(label);
+        return false;
+    }
+    pass.outputs.clear();
+    for (int a = 0; a < int(scene.colour.size()); ++a)
+        pass.outputs.append(a == 0 ? customOutput(blendOf(QRhiGraphicsPipeline::One, QRhiGraphicsPipeline::OneMinusSrcAlpha,
+                                                          QRhiGraphicsPipeline::One, QRhiGraphicsPipeline::OneMinusSrcAlpha))
+                                   : maskedOutput());
+    ++*defocusSteps;
+    return true;
+}
+
+// D17 point 2: each transparency target's passes all precede its one resolve step; between its first pass and the
+// resolve nothing samples or captures the owner or blooms from it (the owner's borrowed attachments are resolved by the
+// owner's run that the resolve step is).
+bool checkTransparencyOrder(const ModeProgram &program, QString *error)
+{
+    for (int t = 0; t < int(program.targets.size()); ++t) {
+        const TargetDeclaration &target = program.targets.at(t);
+        if (!target.transparency())
+            continue;
+        int first = -1;
+        int last = -1;
+        int resolve = -1;
+        int resolves = 0;
+        for (int i = 0; i < int(program.passes.size()); ++i) {
+            const ModePass &pass = program.passes.at(i);
+            if (pass.stage == StageKind::None && !pass.capture && !pass.compute && pass.target == t) {
+                first = first < 0 ? i : first;
+                last = i;
+            }
+            if (pass.stage == StageKind::TransparencyResolve && pass.stageSource == t) {
+                ++resolves;
+                resolve = i;
+            }
+        }
+        if (first < 0 && resolves == 0)
+            continue;                          // declared, never drawn: nothing allocated beyond it
+        if (resolves != 1 || resolve < last) {
+            *error = QStringLiteral("transparency target '%1': its passes are followed by exactly one resolve step")
+                         .arg(QString::fromLatin1(target.name));
+            return false;
+        }
+        const QByteArray owner = program.targets.at(target.owner).name;
+        for (int i = first + 1; i < resolve; ++i) {
+            const ModePass &pass = program.passes.at(i);
+            bool reads = (pass.capture && pass.target == target.owner)
+                || (pass.stage == StageKind::Bloom && pass.stageSource == target.owner)
+                || (pass.stage == StageKind::Defocus && pass.target == target.owner);
+            for (const PassSampler &s : pass.samplers)
+                reads = reads || s.texture.startsWith(owner + '.');
+            if (reads) {
+                *error = QStringLiteral("pass '%1' reads '%2' between its transparency target's first pass and the "
+                                        "resolve step").arg(QString::fromLatin1(pass.name), QString::fromLatin1(owner));
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 bool parseDepthTest(const QString &text, DepthTest *out)
@@ -1562,12 +1899,14 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
     for (const QJsonValue &entry : declared) {
         const QJsonObject e = entry.toObject();
         const bool vertex = e.value(QStringLiteral("vertex")).toBool(false);
-        expectedPacks += 1 + (vertex ? 1 : 0) + (vertex && e.contains(QStringLiteral("batches")) ? 1 : 0);
+        expectedPacks += 1 + (vertex ? 1 : 0) + (vertex && e.contains(QStringLiteral("batches")) ? 1 : 0)
+            + (e.value(QStringLiteral("sorted")).toBool(false) ? 1 : 0); // N3.4: a transparent pass's sorted pack
     }
     if (packs.size() != expectedPacks) {
         *error = QStringLiteral("%1 pass(es) declared, %2 pack(s) given, %3 expected (a fragment pack a pass; a vertex "
-                                "pack after it for a pass with \"vertex\": true, and a draw-parameters pack after that for "
-                                "a batched one)").arg(declared.size()).arg(packs.size()).arg(expectedPacks);
+                                "pack after it for a pass with \"vertex\": true, a draw-parameters pack after that for "
+                                "a batched one, and a sorted pack last for a transparent one)").arg(declared.size())
+                     .arg(packs.size()).arg(expectedPacks);
         return false;
     }
     qsizetype packIndex = 0;
@@ -1657,6 +1996,9 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             }
             program.targets.append(target);
         }
+        // N3.4 (D17 point 2): each transparency target's owner, borrowed attachments and derived layout.
+        if (!deriveTransparencyTargets(program.targets, error))
+            return false;
     }
     const auto targetIndex = [&program](const QString &name) {
         for (int t = 0; t < int(program.targets.size()); ++t) {
@@ -1666,8 +2008,14 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
         return -1;
     };
     bool drawn[kMaxSceneTargets] = {};       // a pass drew into the target before (a capture copies what was drawn)
+    QList<QByteArray> bloomSteps;            // N3.4: the bloom steps so far (a later sampler reads "<step>.glow")
+    int defocusSteps = 0;
+    const auto glowOf = [&bloomSteps](const QByteArray &texture) {
+        const qsizetype dot = texture.indexOf('.');
+        return dot > 0 && texture.mid(dot + 1) == kGlowAttachment && bloomSteps.contains(texture.left(dot));
+    };
     for (int i = 0; i < declared.size(); ++i) {
-        const QJsonObject o = declared.at(i).toObject();
+        QJsonObject o = declared.at(i).toObject();
         ModePass pass;
         pass.name = o.value(QStringLiteral("name")).toString().toLatin1();
         const QByteArray fragmentPack = packs.at(packIndex++);
@@ -1675,7 +2023,54 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
         const QByteArray vertexPack = vertex ? packs.at(packIndex++) : QByteArray();
         const QByteArray drawParametersPack = vertex && o.contains(QStringLiteral("batches")) ? packs.at(packIndex++)
                                                                                               : QByteArray();
-        if (o.contains(QStringLiteral("capture"))) {
+        // N3.4 (D17 choice D): a transparent pass's sorted pack, last.
+        const QByteArray sortedPack = o.value(QStringLiteral("sorted")).toBool(false) ? packs.at(packIndex++)
+                                                                                     : QByteArray();
+        QShader coreFragment;                 // N3.4: a composite step's fragment is the core's
+        if (o.contains(QStringLiteral("composite"))) {
+            // N3.4 (D17 point 5): a surface pass whose fragment is the core's, its samplers named by the step.
+            CompositeForm form = CompositeForm::Overlay;
+            const QJsonValue scene = o.value(QStringLiteral("scene"));
+            const QJsonValue glow = o.value(QStringLiteral("glow"));
+            const bool withGlow = o.contains(QStringLiteral("glow"));
+            if (!parseCompositeForm(o.value(QStringLiteral("composite")).toString(), &form)
+                || o.size() != 3 + (withGlow ? 1 : 0) || !passName(pass.name) || !fragmentPack.isEmpty()
+                || !scene.isString() || !targetTextureName(scene.toString().toLatin1())
+                || withGlow != (form != CompositeForm::Overlay) || (withGlow && !glowOf(glow.toString().toLatin1()))) {
+                *error = QStringLiteral("pass %1 is a composite step {\"name\", \"composite\": overlay, overlay_glow or "
+                                        "opaque_glow, \"scene\": \"<target>.<attachment>\", \"glow\": \"<bloom step>.glow\" "
+                                        "(the glow forms only, a bloom step before it)} with an empty pack").arg(i);
+                return false;
+            }
+            coreFragment = compositeShader(form);
+            QJsonArray samplers;
+            samplers.append(QJsonObject { { QStringLiteral("name"), QStringLiteral("uScene") },
+                                          { QStringLiteral("texture"), scene.toString() },
+                                          { QStringLiteral("filter"), QStringLiteral("nearest") },
+                                          { QStringLiteral("wrap"), QStringLiteral("clamp") },
+                                          { QStringLiteral("mips"), QStringLiteral("none") } });
+            if (withGlow) {
+                samplers.append(QJsonObject { { QStringLiteral("name"), QStringLiteral("uBloom") },
+                                              { QStringLiteral("texture"), glow.toString() },
+                                              { QStringLiteral("filter"), QStringLiteral("linear") },
+                                              { QStringLiteral("wrap"), QStringLiteral("clamp") },
+                                              { QStringLiteral("mips"), QStringLiteral("none") } });
+            }
+            const char *blend = form == CompositeForm::Overlay ? "alpha"
+                : form == CompositeForm::OverlayGlow           ? "premultiplied"
+                                                               : "replace";
+            o = QJsonObject { { QStringLiteral("name"), QString::fromLatin1(pass.name) },
+                              { QStringLiteral("blend"), QLatin1String(blend) },
+                              { QStringLiteral("samplers"), samplers } };
+            pass.stage = StageKind::Composite;
+            pass.compositeForm = form;
+        }
+        if (o.contains(QStringLiteral("transparency_resolve")) || o.contains(QStringLiteral("bloom"))
+            || o.contains(QStringLiteral("defocus"))) {
+            // N3.4 (D17): a stage step with an empty pack (its shaders are the core's).
+            if (!parseStageStep(o, i, fragmentPack, program, drawn, &bloomSteps, &defocusSteps, pass, error))
+                return false;
+        } else if (o.contains(QStringLiteral("capture"))) {
             // N3.1: a capture step of a target (D14 point 5), no fragment of its own.
             pass.capture = true;
             pass.target = targetIndex(o.value(QStringLiteral("capture")).toString());
@@ -1687,6 +2082,11 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             if (!drawn[pass.target]) {
                 *error = QStringLiteral("capture '%1' copies target '%2' before any pass drew into it")
                              .arg(QString::fromLatin1(pass.name), QString::fromLatin1(program.targets.at(pass.target).name));
+                return false;
+            }
+            if (program.targets.at(pass.target).transparency() || program.targets.at(pass.target).mips) {
+                *error = QStringLiteral("capture '%1': a transparency or mipped target has no capture (N3.4)")
+                             .arg(QString::fromLatin1(pass.name));
                 return false;
             }
             TargetDeclaration &target = program.targets[pass.target];
@@ -1729,7 +2129,8 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                                                  QStringLiteral("instance_from"), QStringLiteral("storage"),
                                                  QStringLiteral("cull"), QStringLiteral("front_face"),
                                                  QStringLiteral("indirect"), QStringLiteral("draw_count"),
-                                                 QStringLiteral("batches"), QStringLiteral("batch_count") };
+                                                 QStringLiteral("batches"), QStringLiteral("batch_count"),
+                                                 QStringLiteral("sorted") }; // N3.4: a transparent pass's
             bool known = true;
             for (auto it = o.begin(); it != o.end(); ++it)
                 known = known && allowed.contains(it.key());
@@ -1751,11 +2152,22 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             }
             if (!parseGeometry(o, pass, vertex, error) // N3.2, before the outputs take the pass's blend
                 || !parseSamplers(o.value(QStringLiteral("samplers")), pass, error)
-                || !parsePassTargetState(o, pass, program.targets, error))
+                || !parsePassTargetState(o, pass, program.targets, error)
+                || !transparentPassState(o, pass, program.targets, !sortedPack.isEmpty(), error)) // N3.4
                 return false;
             for (const PassSampler &s : pass.samplers) {
                 if (!targetTextureName(s.texture))
                     continue;
+                if (glowOf(s.texture))
+                    continue;                 // N3.4: a bloom step's glow (the core's), made before this pass
+                const int read = targetIndex(QString::fromLatin1(s.texture.left(s.texture.indexOf('.'))));
+                if (read >= 0 && program.targets.at(read).transparency()) {
+                    *error = QStringLiteral("pass '%1': the sampler '%2' reads the transparency target '%3', which only "
+                                            "its resolve step reads (N3.4)").arg(QString::fromLatin1(pass.name),
+                                                                                 QString::fromLatin1(s.name),
+                                                                                 QString::fromLatin1(s.texture));
+                    return false;
+                }
                 if (!checkTargetSampler(pass, s, program.targets, error))
                     return false;
                 // Audit 2, M4: a target read before any pass of the frame drew it holds the frame before (and, at
@@ -1781,8 +2193,9 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                 return false;
             }
         }
-        if (!pass.capture && !pass.compute) {
-            pass.fragment = QShader::fromSerialized(fragmentPack);
+        if (!pass.capture && !pass.compute && pass.stage != StageKind::TransparencyResolve
+            && pass.stage != StageKind::Bloom && pass.stage != StageKind::Defocus) {
+            pass.fragment = coreFragment.isValid() ? coreFragment : QShader::fromSerialized(fragmentPack); // N3.4
             if (!pass.fragment.isValid()) {
                 *error = QStringLiteral("pass '%1': the fragment pack does not load (a .qsb from tools/regen_qrc.py's "
                                         "baker)").arg(QString::fromLatin1(pass.name));
@@ -1800,11 +2213,17 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
             }
             if (!checkPass(pass, program.targets, error))
                 return false;
+            if (!sortedPack.isEmpty() && !checkSortedPack(pass, sortedPack, program.targets, error)) // N3.4
+                return false;
             if (pass.target >= 0)
                 drawn[pass.target] = true;
         }
         program.passes.append(pass);
     }
+    // N3.4 (D17 point 2): every pass on a transparency target precedes its one resolve step, and nothing samples or
+    // captures the owner, or blooms from it, between the target's first pass and its resolve.
+    if (!checkTransparencyOrder(program, error))
+        return false;
     // Audit 2, M4: a target read as the frame before is one a pass of the frame draws (else nothing ever writes it).
     for (int t = 0; t < int(program.targets.size()); ++t) {
         if (program.targets.at(t).previousFrame && !drawn[t]) {
@@ -1922,6 +2341,20 @@ QJsonObject ModeProgram::toJson() const
         p.insert(QStringLiteral("target"), pass.target >= 0 ? QJsonValue(QString::fromLatin1(targets.at(pass.target).name))
                                                             : QJsonValue(QStringLiteral("surface")));
         p.insert(QStringLiteral("capture"), pass.capture);
+        // N3.4 (D17): a stage entry.
+        p.insert(QStringLiteral("stage"), stageKindName(pass.stage));
+        if (pass.stage == StageKind::TransparencyResolve || pass.stage == StageKind::Bloom
+            || pass.stage == StageKind::Defocus) {
+            p.insert(QStringLiteral("stage_source"), QString::fromLatin1(targets.at(pass.stageSource).name));
+        }
+        if (pass.stage == StageKind::TransparencyResolve)
+            p.insert(QStringLiteral("alpha"), pass.coverageAlpha ? QStringLiteral("coverage") : QStringLiteral("keep"));
+        if (pass.stage == StageKind::Bloom)
+            p.insert(QStringLiteral("stage_attachment"),
+                     QString::fromLatin1(targets.at(pass.stageSource).colour.at(pass.stageAttachment).name));
+        if (pass.stage == StageKind::Composite)
+            p.insert(QStringLiteral("composite"), compositeFormName(pass.compositeForm));
+        p.insert(QStringLiteral("sorted_pack"), pass.sorted.isValid());
         QJsonArray outputs;
         for (const PassOutput &output : pass.outputs)
             outputs.append(QJsonObject { { QStringLiteral("write"), output.write },
@@ -3327,11 +3760,13 @@ int ModeContent::liveResources() const
     for (const GpuTexture &texture : m_textures)
         textures += texture.texture ? 1 : 0;
     return (m_res ? m_res->objects : 0) + textures + m_targets.liveObjects() + m_meshes.live() + m_streams.live()
-        + m_storage.live();                   // N3.3
+        + m_storage.live()                    // N3.3
+        + m_post.live();                      // N3.4
 }
 
 void ModeContent::releasePipelines()
 {
+    m_post.releasePipelines();                // N3.4: the stages' pipelines and bindings (made at the build)
     if (!m_res)
         return;
     g_liveContentObjects.fetchAndAddRelaxed(-m_res->objects);
@@ -3372,6 +3807,13 @@ void ModeContent::release()
     m_stillSignature.clear();
     m_keptTarget = false;
     releasePipelines();                       // first: their bindings name the textures (and the targets' passes)
+    m_post.release();                         // N3.4: the bloom chains and read levels (they read the targets)
+    m_postObjectsSeen = 0;
+    m_specsProgram = 0;
+    m_bloomSpecs.clear();
+    m_defocusSpecs.clear();
+    m_gateRhi = nullptr;                      // the gate is decided again for the next QRhi
+    m_dormant = 0;
     m_targets.release();                      // N3.1: every scene target (D14 point 3: with the content)
     m_targetObjectsSeen = 0;
     m_meshes.release();                       // N3.2 (D15 choice A: with the content)
@@ -3943,8 +4385,16 @@ bool ModeContent::ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QStrin
 
 QRhiTexture *ModeContent::samplerTexture(const QByteArray &name) const
 {
-    if (targetTextureName(name))
-        return m_targets.sampledTexture(name); // N3.1: the core's own (its resolve when multisampled)
+    if (targetTextureName(name)) {
+        // N3.4: a bloom step's glow ("<step>.glow"; a step is never named as a target), else N3.1: a target's own (its
+        // resolve when multisampled).
+        const qsizetype dot = name.indexOf('.');
+        if (name.mid(dot + 1) == kGlowAttachment) {
+            if (QRhiTexture *glow = m_post.glow(name.left(dot)))
+                return glow;
+        }
+        return m_targets.sampledTexture(name);
+    }
     if (const ModeStorage::Image *image = m_storage.image(name))
         return image->texture.get();           // N3.3: a storage image (the core's own)
     const GpuTexture *texture = front(name);
@@ -3980,6 +4430,21 @@ bool ModeContent::passBindings(const Resources &r, int index, QList<QRhiShaderRe
     }
     if (pass.compute)
         return computeBindings(r, index, out); // N3.3
+    if (pass.stage == StageKind::TransparencyResolve) {
+        // N3.4 (D17 point 2): the conventions (fragTexel) and the transparency target's accumulation and coverage, read
+        // by texel (per sample when multisampled: the multisampled textures themselves).
+        const SceneTargets::Target *t = m_targets.target(pass.stageSource);
+        QRhiBuffer *arena = m_streams.arena();
+        if (!t || !t->ready() || t->dormant || !t->colour[0] || !t->colour[1] || !p.samplers[0] || !arena)
+            return false;
+        out->append(QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(
+            kConventionsBinding, QRhiShaderResourceBinding::FragmentStage, arena, sizeof(ConventionsBlock)));
+        out->append(QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage,
+                                                              t->colour[0].get(), p.samplers[0].get()));
+        out->append(QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage,
+                                                              t->colour[1].get(), p.samplers[0].get()));
+        return true;
+    }
     QRhiBuffer *arena = m_streams.arena();
     if (!arena)
         return false;
@@ -4056,10 +4521,15 @@ bool ModeContent::rebindTextures()
     const ModeProgram &program = m_source->drawnProgram();
     for (int i = 0; i < m_res->passCount; ++i) {
         const ModePass &pass = program.passes.at(i);
-        if (pass.samplers.isEmpty() && !pass.capture && pass.storage.isEmpty() && !pass.compute)
+        if (pass.stepOfItsOwn())
+            continue;                         // N3.4: the stages' own bindings (m_post.rebind below)
+        const bool resolve = pass.stage == StageKind::TransparencyResolve;
+        if (pass.samplers.isEmpty() && !pass.capture && pass.storage.isEmpty() && !pass.compute && !resolve)
             continue;
         Resources::Pass &p = m_res->passes[i];
-        if (!p.bindings || (!pass.capture && p.samplerCount != int(pass.samplers.size())))
+        if (resolve && !p.bindings)
+            continue;                         // N3.4: a dormant target's resolve has none (the sorted fallback)
+        if (!p.bindings || (!pass.capture && !resolve && p.samplerCount != int(pass.samplers.size())))
             return false;
         // build()'s order exactly (passBindings): the same layout over new objects.
         QList<QRhiShaderResourceBinding> bindings;
@@ -4069,6 +4539,9 @@ bool ModeContent::rebindTextures()
         if (!p.bindings->create())
             return false;                     // ensure() builds everything again
     }
+    if (!m_post.rebind(m_targets))            // N3.4: the bloom chains' and the defocus steps' bindings
+        return false;
+    m_postObjectsSeen = m_post.objectGeneration();
     m_res->textureObjects = m_textureObjects;
     ++m_report.rebinds;
     return true;
@@ -4304,7 +4777,7 @@ void ModeContent::fillArena()
 }
 
 bool ModeContent::buildGeometryPass(QRhi *rhi, Resources &r, int index, QRhiRenderPassDescriptor *renderPass,
-                                    int samples, QString *reason, int *objects)
+                                    int samples, QString *reason, int *objects, bool sorted)
 {
     const ModePass &pass = m_source->drawnProgram().passes.at(index);
     Resources::Pass &p = r.passes[index];
@@ -4361,8 +4834,9 @@ bool ModeContent::buildGeometryPass(QRhi *rhi, Resources &r, int index, QRhiRend
     // D15 point 6: a batched pass's form, decided at the build from the device (and the harness control).
     p.drawParameters = pass.batched() && pass.vertexDrawParameters.isValid() && drawParametersAvailable(rhi);
     const QShader &vertex = p.drawParameters ? pass.vertexDrawParameters : pass.vertex;
+    const QShader &fragment = sorted ? pass.sorted : pass.fragment;          // N3.4 (D17 choice D)
     QList<QRhiGraphicsPipeline::TargetBlend> blends;
-    for (const PassOutput &output : pass.outputs)
+    for (const PassOutput &output : sorted ? pass.sortedOutputs : pass.outputs)
         blends.append(outputBlend(output));
     const bool selected = pass.frontSelector.kind == DrawCount::Kind::Named;
     for (int variant = 0; variant < (selected ? 2 : 1); ++variant) {
@@ -4383,7 +4857,7 @@ bool ModeContent::buildGeometryPass(QRhi *rhi, Resources &r, int index, QRhiRend
             pipeline->setDepthWrite(pass.depthWrite);
         }
         pipeline->setSampleCount(samples);
-        pipeline->setShaderStages({ { QRhiShaderStage::Vertex, vertex }, { QRhiShaderStage::Fragment, pass.fragment } });
+        pipeline->setShaderStages({ { QRhiShaderStage::Vertex, vertex }, { QRhiShaderStage::Fragment, fragment } });
         pipeline->setVertexInputLayout(input);
         pipeline->setShaderResourceBindings(p.bindings.get());
         pipeline->setRenderPassDescriptor(renderPass);
@@ -4413,6 +4887,12 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
         offsets[blockAt] = { pass.block.binding(), p.blockOffset };
     if (pass.conventions)
         offsets[count++] = { kConventionsBinding, r.conventionsOffset };
+    if (pass.stage == StageKind::TransparencyResolve) {
+        // N3.4 (D17 point 2): nothing to resolve where the target is dormant (its passes drew their sorted packs).
+        if (!p.pipeline)
+            return;
+        countTransparencyResolve();
+    }
     if (!pass.ownVertex()) {
         cb->setGraphicsPipeline(p.pipeline.get());
         cb->setViewport(viewport);
@@ -4997,6 +5477,8 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
     res->targetClearCount = m_targets.count();
     for (int t = 0; ok && t < res->targetClearCount; ++t) {
         const SceneTargets::Target *scene = m_targets.target(t);
+        if (scene && scene->dormant)
+            continue;                         // N3.4: a transparency target not admitted holds nothing to clear
         Resources::TargetClear &c = res->targetClears[t];
         const int attachments = int(scene->decl.colour.size());
         const QShader shader = sceneClearShader(attachments);
@@ -5014,12 +5496,16 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
             0, QRhiShaderResourceBinding::FragmentStage, m_streams.arena(), kClearBlockBytes) });
         ok = ok && created(c.bindings->create());
         QList<QRhiGraphicsPipeline::TargetBlend> blends;
-        for (int a = 0; a < attachments; ++a)
-            blends.append(QRhiGraphicsPipeline::TargetBlend()); // blending off, every channel written
+        for (int a = 0; a < attachments; ++a) {
+            QRhiGraphicsPipeline::TargetBlend b; // blending off, every channel written
+            if (scene->decl.colour.at(a).borrowed)
+                b.colorWrite = QRhiGraphicsPipeline::ColorMask(); // N3.4: the owner's, never cleared by the borrower
+            blends.append(b);
+        }
         c.pipeline.reset(rhi->newGraphicsPipeline());
         c.pipeline->setName(label);
         c.pipeline->setTargetBlends(blends.cbegin(), blends.cend());
-        if (scene->decl.depth) {
+        if (scene->decl.depth && !scene->decl.transparency()) { // N3.4: the owner's depth is never cleared by it
             c.pipeline->setDepthTest(true);
             c.pipeline->setDepthOp(QRhiGraphicsPipeline::Always);
             c.pipeline->setDepthWrite(true);
@@ -5069,11 +5555,56 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
         const ModePass &pass = program.passes.at(i);
         Resources::Pass &p = res->passes[i];
         const QByteArray label = QByteArrayLiteral("srpss core mode pass ") + pass.name;
-        const SceneTargets::Target *scene = pass.target >= 0 ? m_targets.target(pass.target) : nullptr;
-        if (pass.target >= 0 && (!scene || !scene->ready())) {
+        if (pass.stepOfItsOwn())
+            continue;                         // N3.4: a bloom or defocus step's objects are the stages' (below)
+        // N3.4 (D17 point 3): a pass on a transparency target the device gate did not admit draws its sorted pack into
+        // the owner (choice D); its resolve step draws nothing.
+        const int drawnInto = effectiveTarget(i);
+        const bool fallback = drawnInto != pass.target;
+        const SceneTargets::Target *scene = drawnInto >= 0 ? m_targets.target(drawnInto) : nullptr;
+        if (drawnInto >= 0 && (!scene || !scene->ready() || scene->dormant)) {
             ok = false;
             reason = QStringLiteral("pass '%1': its scene target is not allocated").arg(QString::fromLatin1(pass.name));
             break;
+        }
+        if (pass.stage == StageKind::TransparencyResolve) {
+            const SceneTargets::Target *source = m_targets.target(pass.stageSource);
+            if (!source || source->dormant)
+                continue;                     // the sorted fallback: nothing to resolve
+            // D17 point 2: the core's resolve over the owner's render pass, per sample when multisampled (choice C;
+            // the gate admitted per-sample shading), colour 0 premultiplied over and the owner's others masked.
+            const QShader resolveShader = transparencyResolveShader(source->samples > 1, transparencyFirstSample());
+            if (!resolveShader.isValid()) {
+                ok = false;
+                reason = QStringLiteral("resolve step '%1': the core's resolve shader does not load")
+                             .arg(QString::fromLatin1(pass.name));
+                break;
+            }
+            p.samplerCount = 1;
+            p.samplers[0].reset(rhi->newSampler(QRhiSampler::Nearest, QRhiSampler::Nearest, QRhiSampler::None,
+                                                QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+            p.samplers[0]->setName(label + QByteArrayLiteral(" sampler"));
+            ok = ok && created(p.samplers[0]->create());
+            QList<QRhiShaderResourceBinding> bindings;
+            ok = ok && passBindings(*res, i, &bindings);
+            p.bindings.reset(rhi->newShaderResourceBindings());
+            p.bindings->setName(label + QByteArrayLiteral(" bindings"));
+            p.bindings->setBindings(bindings.cbegin(), bindings.cend());
+            ok = ok && created(p.bindings->create());
+            QList<QRhiGraphicsPipeline::TargetBlend> blends;
+            for (const PassOutput &output : pass.outputs)
+                blends.append(outputBlend(output));
+            p.pipeline.reset(rhi->newGraphicsPipeline());
+            p.pipeline->setName(label);
+            p.pipeline->setTargetBlends(blends.cbegin(), blends.cend());
+            p.pipeline->setShaderStages({ { QRhiShaderStage::Vertex, vs }, { QRhiShaderStage::Fragment, resolveShader } });
+            p.pipeline->setVertexInputLayout(layout(PassUv::Down));
+            p.pipeline->setCullMode(QRhiGraphicsPipeline::None);
+            p.pipeline->setSampleCount(scene->samples);
+            p.pipeline->setShaderResourceBindings(p.bindings.get());
+            p.pipeline->setRenderPassDescriptor(scene->renderPass.get());
+            ok = ok && created(p.pipeline->create());
+            continue;
         }
         if (pass.capture) {
             // N3.1: the capture (D14 point 5): its block, a nearest sampler for both sources, its pipeline over the
@@ -5140,14 +5671,18 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
             ok = ok && created(p.computePipeline->create());
             continue;
         }
-        // N3.1: differing attachment states need independent blending on the device.
-        for (int a = 1; a < int(pass.outputs.size()); ++a) {
-            if (!sameOutput(pass.outputs.at(0), pass.outputs.at(a))
-                && !rhi->isFeatureSupported(QRhi::PerRenderTargetBlending)) {
+        // N3.4 (D17 choice D): the sorted fallback's fragment and outputs on the owner.
+        const QShader &fragment = fallback ? pass.sorted : pass.fragment;
+        const QList<PassOutput> &outputs = fallback ? pass.sortedOutputs : pass.outputs;
+        // N3.1: differing attachment states need independent blending on the device. N3.4 (the latent defect D17
+        // fixes): read from the core's own device facts (independentBlend on Vulkan), never QRhi's
+        // PerRenderTargetBlending, which Vulkan reports true whatever the device.
+        for (int a = 1; ok && a < int(outputs.size()); ++a) {
+            QString why;
+            if (!sameOutput(outputs.at(0), outputs.at(a)) && !perTargetBlendReal(rhi, &why)) {
                 ok = false;
                 reason = QStringLiteral("pass '%1' writes its attachments with differing masks or blends, which needs "
-                                        "QRhi::PerRenderTargetBlending: this device does not report it")
-                             .arg(QString::fromLatin1(pass.name));
+                                        "per-attachment blending: %2").arg(QString::fromLatin1(pass.name), why);
             }
         }
         if (!ok)
@@ -5172,17 +5707,17 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
             // N3.2 (D15): its own vertex stage, geometry and pipelines.
             int made = 0;
             ok = buildGeometryPass(rhi, *res, i, scene ? scene->renderPass.get() : res->pass, scene ? scene->samples : 1,
-                                   &reason, &made);
+                                   &reason, &made, fallback);
             objects += made;
             continue;
         }
         QList<QRhiGraphicsPipeline::TargetBlend> blends;
-        for (const PassOutput &output : pass.outputs)
+        for (const PassOutput &output : outputs)
             blends.append(outputBlend(output));
         p.pipeline.reset(rhi->newGraphicsPipeline());
         p.pipeline->setName(label);
         p.pipeline->setTargetBlends(blends.cbegin(), blends.cend());
-        p.pipeline->setShaderStages({ { QRhiShaderStage::Vertex, vs }, { QRhiShaderStage::Fragment, pass.fragment } });
+        p.pipeline->setShaderStages({ { QRhiShaderStage::Vertex, vs }, { QRhiShaderStage::Fragment, fragment } });
         p.pipeline->setVertexInputLayout(layout(pass.uv));
         p.pipeline->setCullMode(QRhiGraphicsPipeline::None);
         p.pipeline->setShaderResourceBindings(p.bindings.get());
@@ -5200,7 +5735,176 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
         }
         ok = ok && created(p.pipeline->create());
     }
+    if (ok && withPasses && (!m_bloomSpecs.isEmpty() || !m_defocusSpecs.isEmpty())) {
+        // N3.4 (D17 points 4 and 6): the bloom chains' and the defocus steps' pipelines and bindings (the stages' own
+        // objects, counted by the stages: PostStages::live).
+        quint32 defocusBlock = 0;
+        for (const ModePass &pass : program.passes) {
+            if (pass.stage == StageKind::Defocus)
+                defocusBlock = quint32(qMax(0, pass.block.size()));
+        }
+        int made = 0;
+        ok = m_post.build(rhi, m_targets, vs, layout(PassUv::Up), m_streams.arena(), quint32(sizeof(ConventionsBlock)),
+                          defocusBlock, &reason, &made);
+        m_postObjectsSeen = m_post.objectGeneration();
+    }
     return finish(ok);
+}
+
+// ------------------------------------------------------------------------------------------------- N3.4 (D17)
+
+int ModeContent::effectiveTarget(int pass) const
+{
+    const ModePass &p = m_source->drawnProgram().passes.at(pass);
+    if (p.target < 0 || p.stage != StageKind::None)
+        return p.target;
+    const SceneTargets::Target *t = m_targets.target(p.target);
+    return t && t->dormant && t->decl.transparency() ? t->decl.owner : p.target;
+}
+
+void ModeContent::decideTransparencyGate(QRhi *rhi)
+{
+    // D17 point 3: decided per QRhi, program and harness control (the device's facts are read once here, never per
+    // record); a transparency target not admitted is dormant: its passes draw their sorted pack into the owner.
+    const ModeProgram &program = m_source->drawnProgram();
+    const quint64 controls = stageControlGeneration();
+    if (m_gateRhi == rhi && m_gateProgram == program.generation && m_gateControls == controls)
+        return;
+    quint32 mask = 0;
+    QStringList reasons;
+    for (int t = 0; t < int(program.targets.size()) && t < kMaxSceneTargets; ++t) {
+        const TargetDeclaration &d = program.targets.at(t);
+        if (!d.transparency())
+            continue;
+        const TransparencyGate gate = transparencyGate(rhi, d.samples > 1);
+        if (gate.admitted)
+            continue;
+        mask |= 1u << t;
+        reasons.append(QStringLiteral("%1: %2").arg(QString::fromLatin1(d.name), gate.reason));
+        if ((m_dormant & (1u << t)) == 0 || m_gateProgram != program.generation)
+            countFallback();                  // noted once per content and gate edge
+    }
+    m_targets.setDormant(mask, reasons);
+    m_dormant = mask;
+    m_gateRhi = rhi;
+    m_gateProgram = program.generation;
+    m_gateControls = controls;
+}
+
+int ModeContent::defocusLevel(int pass) const
+{
+    // The block's u_defocus_level as packed (the record's or the settings'; before a frame, the settings').
+    const QList<BlockValues> &blocks = pass < m_blocks.size() ? m_blocks : m_source->drawnSettings();
+    const int offset = pass < kMaxModePasses ? m_defocusLevelOffset[pass] : -1;
+    if (pass >= blocks.size() || offset < 0 || quint64(offset) + 4 > quint64(blocks.at(pass).bytes().size()))
+        return 0;
+    qint32 level = 0;
+    std::memcpy(&level, blocks.at(pass).bytes().constData() + offset, sizeof(level));
+    return level;
+}
+
+float ModeContent::defocusRadius(int pass) const
+{
+    const QList<BlockValues> &blocks = pass < m_blocks.size() ? m_blocks : m_source->drawnSettings();
+    const int offset = pass < kMaxModePasses ? m_defocusRadiusOffset[pass] : -1;
+    if (pass >= blocks.size() || offset < 0 || quint64(offset) + 4 > quint64(blocks.at(pass).bytes().size()))
+        return 0.0f;
+    float radius = 0.0f;
+    std::memcpy(&radius, blocks.at(pass).bytes().constData() + offset, sizeof(radius));
+    return radius;
+}
+
+bool ModeContent::syncStages(QRhi *rhi, QString *error)
+{
+    const ModeProgram &program = m_source->drawnProgram();
+    if (m_specsProgram != program.generation) {
+        // The program's steps, derived once per program (nothing per record).
+        m_bloomSpecs.clear();
+        m_defocusSpecs.clear();
+        m_stagesDeclared = false;
+        for (int i = 0; i < int(program.passes.size()) && i < kMaxModePasses; ++i) {
+            const ModePass &pass = program.passes.at(i);
+            m_defocusLevelOffset[i] = -1;
+            m_defocusRadiusOffset[i] = -1;
+            m_stagesDeclared = m_stagesDeclared || pass.stage != StageKind::None;
+            if (pass.stage == StageKind::Bloom) {
+                BloomSpec spec;
+                spec.pass = i;
+                spec.name = pass.name;
+                spec.source = pass.stageSource;
+                spec.attachment = pass.stageAttachment;
+                m_bloomSpecs.append(spec);
+            } else if (pass.stage == StageKind::Defocus) {
+                DefocusSpec spec;
+                spec.pass = i;
+                spec.near = pass.stageSource;
+                spec.onto = pass.target;
+                m_defocusSpecs.append(spec);
+                const BlockMember *level = pass.block.member(QByteArray(kDefocusLevelMember));
+                const BlockMember *radius = pass.block.member(QByteArrayLiteral("u_defocus_radius"));
+                m_defocusLevelOffset[i] = level ? level->offset : -1;
+                m_defocusRadiusOffset[i] = radius ? radius->offset : -1;
+            }
+        }
+        m_specsProgram = program.generation;
+    }
+    for (DefocusSpec &spec : m_defocusSpecs)
+        spec.level = defocusLevel(spec.pass); // in place: no list made per record
+    if (m_bloomSpecs.isEmpty() && m_defocusSpecs.isEmpty() && m_post.live() == 0)
+        return true;                          // no stage declared, nothing held: no work
+    if (!m_post.sync(rhi, m_bloomSpecs, m_defocusSpecs, m_targets, error))
+        return false;
+    if (m_post.objectGeneration() != m_postObjectsSeen) {
+        m_postObjectsSeen = m_post.objectGeneration();
+        ++m_textureObjects;                   // the passes that sample a glow, and the stages' own bindings, made again
+    }
+    return true;
+}
+
+void ModeContent::recordDefocus(QRhi *rhi, QRhiCommandBuffer *cb, int index, QRhiResourceUpdateBatch **pending,
+                                bool *cleared, bool readback)
+{
+    const ModeProgram &program = m_source->drawnProgram();
+    const ModePass &pass = program.passes.at(index);
+    Resources &r = *m_res;
+    SceneTargets::Target *layer = m_targets.target(pass.stageSource);
+    SceneTargets::Target *onto = m_targets.target(pass.target);
+    if (!m_post.hasDefocus(index) || !layer || !onto || !layer->colour[0] || !layer->colour[1] || !onto->renderTarget)
+        return;
+    if (*pending) {
+        cb->resourceUpdate(*pending);         // the record's uploads before the step's own passes
+        *pending = nullptr;
+    }
+    const QRhiCommandBuffer::VertexInput ownInput(r.vertices.get(), quint32(kTriangleFloats * sizeof(float)));
+    // D17 choice G: the layer's mips by QRhi's generateMips (Python's glGenerateTextureMipmap), this layer only.
+    QRhiResourceUpdateBatch *mips = rhi->nextResourceUpdateBatch();
+    mips->generateMips(layer->colour[0].get());
+    mips->generateMips(layer->colour[1].get());
+    countGeneratedMips(2);
+    m_post.recordDefocusClip(rhi, cb, index, ownInput, mips, r.passes[index].blockOffset, r.conventionsOffset);
+    // The onto target's run: loaded and primed as any run (rule C, depth, resolves), then the gather and the sprites.
+    QRhiTexture *textures[kMaxTargetColour];
+    primeForLoad(rhi, cb, textures, m_targets.loadedColour(pass.target, textures));
+    if (onto->depthTexture() && !skipDepthPrime() && primeDepthForLoad(rhi, cb, onto->depthTexture()))
+        countDepthPrime();
+    if (!skipResolvePrime())
+        countResolvePrimes(primeResolvesForPass(rhi, cb, textures, m_targets.averageResolves(pass.target, textures)));
+    cb->beginPass(onto->renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 });
+    if (!cleared[pass.target]) {
+        cb->setGraphicsPipeline(r.targetClears[pass.target].pipeline.get());
+        cb->setViewport(QRhiViewport(0, 0, float(onto->allocation.width()), float(onto->allocation.height())));
+        const QRhiCommandBuffer::DynamicOffset clearOffset { 0, r.targetClears[pass.target].offset };
+        cb->setShaderResources(nullptr, 1, &clearOffset);
+        cb->setVertexInput(0, 1, &ownInput);
+        cb->draw(3);
+        cleared[pass.target] = true;
+    }
+    m_post.recordDefocusOnto(cb, index, ownInput, r.passes[index].blockOffset, r.conventionsOffset,
+                             defocusRadius(index) >= 0.5f); // Python draws the sprites from half a pixel
+    cb->endPass();
+    if (!skipReadChain())
+        chainShaderReads(rhi, cb);            // the layer read in two stages: QRhi's next barrier keeps one (targets.h)
+    recordNearest(cb, pass.target, index, readback); // D14 point 10: what a later pass or the readback reads
 }
 
 bool ModeContent::syncTargets(QRhi *rhi, const ColorTarget &target, QString *error)
@@ -5208,6 +5912,7 @@ bool ModeContent::syncTargets(QRhi *rhi, const ColorTarget &target, QString *err
     const QList<TargetDeclaration> &declared = m_source->drawnTargets();
     if (declared.isEmpty() && m_targets.count() == 0)
         return true;                          // nothing declared, nothing held: no work (N2.9's programs)
+    decideTransparencyGate(rhi);              // N3.4 (D17 point 3): at its edge only
     bool relayout = false;
     bool ok = m_targets.sync(rhi, declared, target.texture->pixelSize(), &relayout, error);
     if (relayout)
@@ -5230,6 +5935,16 @@ bool ModeContent::syncTargets(QRhi *rhi, const ColorTarget &target, QString *err
     if (m_targets.objectGeneration() != m_targetObjectsSeen) {
         m_targetObjectsSeen = m_targets.objectGeneration();
         ++m_textureObjects;                   // the passes that sample a target: their bindings made again
+    }
+    // N3.4 (D17 points 4 and 6): the bloom chains and the defocus steps' read levels at the targets' sizes. A failure is
+    // the content's, latched as the targets' is (the pipelines go before the stages' objects).
+    if (!syncStages(rhi, error)) {
+        releasePipelines();
+        m_post.release();
+        m_postObjectsSeen = 0;
+        const qint64 failures = m_latch.failed(latchKey(rhi, target), *error);
+        m_source->noteFailure(*error, failures);
+        return false;
     }
     return true;
 }
@@ -5333,11 +6048,26 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             ++i;
             continue;
         }
+        if (pass.stage == StageKind::Bloom) {
+            // N3.4 (D17 point 4): the chain, each level a render pass of its own, outside any run.
+            m_post.recordBloom(rhi, cb, i, ownInput, &pending);
+            ++i;
+            continue;
+        }
+        if (pass.stage == StageKind::Defocus) {
+            // N3.4 (D17 point 6): the layer's mips and the clip, then a run on the onto target (gather, sprites).
+            recordDefocus(rhi, cb, i, &pending, cleared, readback);
+            ++i;
+            continue;
+        }
+        // N3.4: a run is the passes drawing into one target this record (a dormant transparency target's passes draw
+        // into its owner: D17 choice D).
+        const int runTarget = effectiveTarget(i);
         int last = i;
         while (last + 1 < count && !program.passes.at(last + 1).capture && !program.passes.at(last + 1).compute
-               && program.passes.at(last + 1).target == pass.target)
+               && !program.passes.at(last + 1).stepOfItsOwn() && effectiveTarget(last + 1) == runTarget)
             ++last;
-        if (pass.target < 0) {
+        if (runTarget < 0) {
             cb->beginPass(target.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
             pending = nullptr;
             if (!surfaceOpened) {
@@ -5355,24 +6085,25 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             // N3.1: a run on a scene target: its attachments primed for the load (rule C, depth too), its average
             // resolves ordered after their last store (audit 2, H1: defect B's UNDEFINED transition), cleared by a draw
             // over the whole allocation at its first run of the record, the passes over its content viewport.
-            SceneTargets::Target &t = *m_targets.target(pass.target);
+            SceneTargets::Target &t = *m_targets.target(runTarget);
             QRhiTexture *textures[kMaxTargetColour];
-            primeForLoad(rhi, cb, textures, m_targets.loadedColour(pass.target, textures));
-            if (t.depth && !skipDepthPrime() && primeDepthForLoad(rhi, cb, t.depth.get()))
+            // N3.4: a transparency target's borrowed attachments and depth (the owner's) are loaded and primed too.
+            primeForLoad(rhi, cb, textures, m_targets.loadedColour(runTarget, textures));
+            if (t.depthTexture() && !skipDepthPrime() && primeDepthForLoad(rhi, cb, t.depthTexture()))
                 countDepthPrime();
             if (!skipResolvePrime())
-                countResolvePrimes(primeResolvesForPass(rhi, cb, textures, m_targets.averageResolves(pass.target,
+                countResolvePrimes(primeResolvesForPass(rhi, cb, textures, m_targets.averageResolves(runTarget,
                                                                                                     textures)));
             cb->beginPass(t.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
             pending = nullptr;
-            if (!cleared[pass.target]) {
-                cb->setGraphicsPipeline(r.targetClears[pass.target].pipeline.get());
+            if (!cleared[runTarget]) {
+                cb->setGraphicsPipeline(r.targetClears[runTarget].pipeline.get());
                 cb->setViewport(QRhiViewport(0, 0, float(t.allocation.width()), float(t.allocation.height())));
-                const QRhiCommandBuffer::DynamicOffset clearOffset { 0, r.targetClears[pass.target].offset };
+                const QRhiCommandBuffer::DynamicOffset clearOffset { 0, r.targetClears[runTarget].offset };
                 cb->setShaderResources(nullptr, 1, &clearOffset); // N3.2: the arena
                 cb->setVertexInput(0, 1, &cardInput);
                 cb->draw(3);
-                cleared[pass.target] = true;
+                cleared[runTarget] = true;
             }
             const QRect v = contentViewport(rhi->isYUpInFramebuffer(), t.allocation, t.content);
             const QRhiViewport content(float(v.x()), float(v.y()), float(v.width()), float(v.height()));
@@ -5380,7 +6111,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             for (int k = i; k <= last; ++k)
                 drawPass(rhi, cb, k, content, input); // N3.2
             cb->endPass();
-            recordNearest(cb, pass.target, last, readback); // D14 point 10: what a later pass or the readback reads
+            recordNearest(cb, runTarget, last, readback); // D14 point 10: what a later pass or the readback reads
         }
         i = last + 1;
     }
@@ -5563,6 +6294,8 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
     noteMeshBuffers();                        // N3.2 audit 4: a draw refused at its edge in this record (else nothing)
     if (draw && !m_source->drawnStill())
         countRecordTime(recordTimer.nsecsElapsed(), streamWriteNs); // D15 point 7: the stream ring's CPU axis
+    if (draw && m_stagesDeclared)
+        countStageRecordTime(recordTimer.nsecsElapsed()); // N3.4: a record with stages, still or streamed
     const QSize size = target.texture->pixelSize();
     if (readback) {
         // N3.1, harness: every scene target's readable texture as this record left it.

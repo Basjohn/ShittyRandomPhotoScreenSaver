@@ -726,6 +726,28 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("compute_objects_created"), double(cc.objectsCreated));
     o.insert(QStringLiteral("compute_states_lost"), double(cc.statesLost));
     o.insert(QStringLiteral("compute_readbacks"), cc.readbacksPending);
+    // N3.4 (D17): the stages' objects (bloom chains, defocus read levels, their textures, bytes and pipelines), every
+    // object a stage made (flat at rest), the records of each stage, the generated mips, the transparency fallbacks
+    // noted and what the skipped-release control left behind.
+    const srpss_core::StageCounts sc = srpss_core::stageCounts();
+    o.insert(QStringLiteral("stage_bloom_chains"), sc.bloomChains);
+    o.insert(QStringLiteral("stage_defocus_steps"), sc.defocusSteps);
+    o.insert(QStringLiteral("stage_textures"), sc.textures);
+    o.insert(QStringLiteral("stage_bytes"), double(sc.bytes));
+    o.insert(QStringLiteral("stage_pipelines"), sc.pipelines);
+    o.insert(QStringLiteral("stage_objects_created"), double(sc.objectsCreated));
+    o.insert(QStringLiteral("stage_bloom_records"), double(sc.bloomRecords));
+    o.insert(QStringLiteral("stage_defocus_records"), double(sc.defocusRecords));
+    o.insert(QStringLiteral("stage_transparency_resolves"), double(sc.transparencyResolves));
+    o.insert(QStringLiteral("stage_generated_mips"), double(sc.generatedMips));
+    o.insert(QStringLiteral("stage_fallbacks"), double(sc.fallbacks));
+    o.insert(QStringLiteral("stage_left_behind"), sc.leftBehind);
+    o.insert(QStringLiteral("stage_records_timed"), double(sc.recordsTimed));
+    o.insert(QStringLiteral("stage_record_ns"), double(sc.recordNs));
+    o.insert(QStringLiteral("stage_defocus_timed"), double(sc.defocusTimed));
+    o.insert(QStringLiteral("stage_gather_gpu_ns"), double(sc.gatherGpuNs));
+    o.insert(QStringLiteral("stage_sprites_gpu_ns"), double(sc.spritesGpuNs));
+    o.insert(QStringLiteral("stage_defocus_time_skipped"), double(sc.defocusTimeSkipped));
     return pyJson(o);
 }
 
@@ -1703,7 +1725,7 @@ PyObject *composite_mode_target_read(PyObject *, PyObject *args)
 }
 
 // Harness: the readback's pixels once QRhi completed it (None before), each {"name", "size", "content", "format",
-// "samples", "data"} (rows in the texture's memory order: the image's top first).
+// "samples", "level", "data"} (rows in the texture's memory order: the image's top first).
 PyObject *composite_mode_target_pixels(PyObject *, PyObject *args)
 {
     long long handle = 0;
@@ -1729,6 +1751,7 @@ PyObject *composite_mode_target_pixels(PyObject *, PyObject *args)
         put(d, "content", Py_BuildValue("(ii)", p.content.width(), p.content.height()));
         put(d, "format", pyStr(p.format));
         put(d, "samples", PyLong_FromLong(p.samples));
+        put(d, "level", PyLong_FromLong(p.level)); // N3.4: a mipped target's level ("<name>@<level>" past 0)
         put(d, "data", PyBytes_FromStringAndSize(p.data.constData(), Py_ssize_t(p.data.size())));
         if (PyList_Append(list, d) < 0) {
             Py_DECREF(d);
@@ -1914,6 +1937,40 @@ PyObject *scene_nearest_first_sample_control(PyObject *, PyObject *args)
         return nullptr;
     srpss_core::setNearestFirstSample(firstOnly != 0);
     Py_RETURN_NONE;
+}
+
+// Harness: N3.4's (D17) negative controls by name, each on or off; False for an unknown name.
+PyObject *stage_control(PyObject *, PyObject *args)
+{
+    const char *name = nullptr;
+    int on = 0;
+    if (!PyArg_ParseTuple(args, "sp", &name, &on))
+        return nullptr;
+    const QByteArray control(name);
+    const bool value = on != 0;
+    if (control == "skip_blend_gate")
+        srpss_core::setSkipBlendGate(value);
+    else if (control == "blend_formats_missing")
+        srpss_core::setBlendFormatsMissing(value);
+    else if (control == "sample_shading_missing")
+        srpss_core::setSampleShadingMissing(value);
+    else if (control == "transparency_first_sample")
+        srpss_core::setTransparencyFirstSample(value);
+    else if (control == "skip_bloom_prime")
+        srpss_core::setSkipBloomPrime(value);
+    else if (control == "bloom_same_texture")
+        srpss_core::setBloomSameTexture(value);
+    else if (control == "skip_stage_release")
+        srpss_core::setSkipStageRelease(value);
+    else if (control == "device_without_independent_blend")
+        srpss_core::setDeviceWithoutIndependentBlend(value);
+    else if (control == "skip_read_chain")
+        srpss_core::setSkipReadChain(value);
+    else if (control == "time_defocus_draws")
+        srpss_core::setTimeDefocusDraws(value);
+    else
+        Py_RETURN_FALSE;
+    Py_RETURN_TRUE;
 }
 
 // GPU-free: D14 point 2's allocation rule, ((w, h), reason) for a current allocation ((0, 0): none) and a needed size.
@@ -2874,6 +2931,12 @@ PyMethodDef methods[] = {
     { "scene_sample_counts_control", scene_sample_counts_control, METH_VARARGS,
       "([counts]) -> None: N3.1, harness: sample counts taken out of every device's supported set (the clamp's "
       "negative control); [] restores them." },
+    { "stage_control", stage_control, METH_VARARGS,
+      "(name, on) -> bool: N3.4, harness: a D17 negative control by name (skip_blend_gate, blend_formats_missing, "
+      "sample_shading_missing, transparency_first_sample, skip_bloom_prime, bloom_same_texture, skip_stage_release, "
+      "skip_read_chain, time_defocus_draws (OpenGL), device_without_independent_blend: read at the next device's "
+      "creation); False for an unknown "
+      "name." },
     { "scene_depth_prime_control", scene_depth_prime_control, METH_VARARGS,
       "(skip) -> None: N3.1, harness: the depth's rule C prime skipped (its negative control under synchronisation "
       "validation); False restores it." },

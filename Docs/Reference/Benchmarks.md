@@ -233,3 +233,20 @@ Visualizer's own draw (ms); late is steady late %, hitches a minute.
 
 Read: under game60 the three heavy 3D modes fall below 70 fps (Extruded Bubble 61, Waveform 68, Neon Lake 70) with
 render medians of 5-11 ms; the 2D modes and the lighter 3D modes hold about 90 fps with render under 1.3 ms.
+
+**Pre-flip reference, transitions (lead, 15 Nov).** The load set chosen by measured cost (operator: parity and
+regressions are proved per port, so five transitions suffice for the load comparison): the four heaviest by the 14 Nov
+overhead baseline and Crossfade as the light control. `tools/preflip_pack.py` session mode, one invisible saver session
+per state on Display 1 (3840 x 2160, 60 Hz, so fps is vsync-capped and render time is the comparison figure),
+canonical durations pinned. Baseline `tools/baselines/preflip/20261115_transitions_python_gl.json`.
+
+| Transition | Idle render med / p90 (ms) | Idle saver CPU % | game60 render med / p90 (ms) | game60 saver CPU % |
+|---|---|---|---|---|
+| Exploding Tiles | 2.70 / 3.73 | 51.3 | 3.47 / 4.61 | 35.1 |
+| Volumetric Dissolve | 2.63 / 3.45 | 41.6 | 4.07 / 5.76 | 61.7 |
+| Disintegrate | 2.79 / 3.67 | 55.8 | 3.85 / 5.27 | 52.1 |
+| Jigsaw | 1.76 / 2.38 | 22.9 | 3.85 / 5.67 | 59.3 |
+| Crossfade | 1.37 / 1.83 | 20.3 | 2.28 / 3.11 | 29.7 |
+
+All rows held about 61 fps with 0 % late frames. The flip's acceptance reruns `tools/preflip_pack.py --compare`
+against both baselines on Vulkan and on native OpenGL.

@@ -512,9 +512,11 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [ ] Per-attachment blending: the core creates its own Vulkan device, so it enables `independentBlend` there
     whenever the physical device reports it. OpenGL 4.0+ has it already. The OIT stage is admitted only where
     `PerRenderTargetBlending` is true; elsewhere a mode's transparency falls back to its sorted path, recorded once.
-  - [ ] One clear value for all attachments: revealage is stored inverted as coverage (clear 0, output alpha, blend
-    ONE / ONE_MINUS_SRC_COLOR with the fragment alpha written to the single channel, read back as 1 - coverage), so accumulation and coverage share the clear to 0 with no
-    clearing draw. The harness proves it equal to the textbook revealage form on a known stack of layers.
+  - [ ] Revealage is stored inverted as coverage (clear 0, output alpha, blend ONE / ONE_MINUS_SRC_COLOR with the
+    fragment alpha written to the single channel, read back as 1 - coverage), for precision: half-float steps are
+    finest near 0, where faint stacks sit. The target is still cleared by rule B's clearing draw, which writes a value
+    per attachment (D17 choice B; an earlier "no clearing draw" reason here was wrong). The harness proves it equal to
+    the textbook revealage form on a known stack of layers.
   - [ ] Blendable formats: QRhi does not check them, so the core checks RGBA16F and R16F for
     `COLOR_ATTACHMENT_BLEND` at device creation (Vulkan format features; GL 4.6 guarantees both). A device without
     them falls back as above.
@@ -523,6 +525,153 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     rendering one level while sampling another is rejected). The chain is allocated with N3.1's bucket rule,
     downsampled by our own shader with `textureLod(…, 0)`, never `generateMips`, whose linear blit is not the
     designed filter.
+  Steps (Opus High agent's decomposition, 15 Nov; the consumers' file:line and choices A to I, accepted by the lead as
+  recommended, are D17 in `Docs/Future_Work/Native_Core_P3_Decisions.md`):
+  - [ ] Contract (D17): every stage is data in
+    a program beside its passes (D12's rule; D13, D14, D16's shape), absent unless declared: a program without it holds
+    no object of it and records nothing of it. Python oracles: `rendering/quick/scene3d/target.py` (`SceneTarget`'s
+    transparency, composites and HDR tone map), `post.py` (`BloomChain`), `defocus.py` (`DefocusLayer`).
+    - [ ] Transparency: a target declared `"transparency"` of a scene target owns two attachments (accumulation
+      RGBA16F, coverage R16F, both cleared to 0) and borrows the scene target's depth (loaded, tested, never written
+      or cleared by it) and the scene attachments it names (the emission: EB's and Waveform's transparent fragments
+      write it at location 2, `extruded_bubble_program.py:1110`, `ribbon.py:765`), at the owner's allocation and
+      samples. Its passes are the mode's; the core fixes their blends (accumulation ONE, ONE; coverage ONE,
+      ONE_MINUS_SRC_COLOR; a borrowed attachment as the pass declares) and refuses a depth write. A resolve step on the
+      owner (`"transparency_resolve"`) composites it onto the owner's colour 0, premultiplied, per sample when
+      multisampled. The OIT attachments cannot live in the scene target itself: the resolve samples them while drawing
+      into the owner, and QRhi refuses one texture used two ways in one pass.
+    - [ ] Bloom: a stage over a source attachment (`"<target>.<attachment>"`, its resolve when multisampled), the
+      first downsample with Python's bright pass from alpha; four RGBA16F textures, one a level, each half the last from the source's
+      allocation (Python's `max(1, w // 2)`); 13-tap downsample and 3x3 tent upsample added onto the larger level
+      (colour ONE, ONE; alpha ZERO, ONE), as `post.py`; its glow (level 0) read by a sampler as `"<stage>.glow"`.
+    - [ ] Composite step (the HDR resolve): a scene target onto the surface, the composites of `target.py` (overlay;
+      overlay with glow; opaque with glow), the glow strength and the exposure each a member the record or the settings
+      fill (the Oscilloscope's strength is per frame, `oscilloscope.py:161`), the ACES fit on straight colour and the
+      integer-hash dither where glow is added. The surface holds premultiplied colour (`composite.frag`). Oriented
+      variants wait for N3.7, the shafts' term for N4.k.
+    - [ ] Defocus: a mipped surface-sized target (premultiplied colour RGBA16F, circle RGBA16F, cleared 0; blends
+      premultiplied over and MAX) and a defocus step onto a scene target: mips by QRhi's `generateMips` (choice G), the
+      clip pass into a texture at the read level's size, the gather (premultiplied over), the highlight sprites
+      (instanced quads, one per texel of the read level, ONE, ONE on colour). The read level is a setting Python
+      resolves at the lens or card edge; the below texture's size and the sprite count are the core's, from the
+      near target's allocation and that level, never a count from Python.
+    - [ ] Device gate: the transparency stage is admitted where the per-attachment blend is real (Vulkan: the
+      physical device's `independentBlend`, which the core's device already enables when reported,
+      `vulkan_context.cpp:711-729`; QRhi reports `PerRenderTargetBlending` true on Vulkan whatever the device; OpenGL:
+      `PerRenderTargetBlending`, GL 4.0), RGBA16F and R16F carry `COLOR_ATTACHMENT_BLEND` (Vulkan format features read
+      once beside the storage formats, `vulkan_context.cpp:791-805`; GL 4.6 guarantees both), and, for the per-sample
+      resolve, `sampleRateShading`. Elsewhere the mode's transparent passes draw their sorted pack (choice D) and the
+      fallback is recorded once in the content's state with its reason. N3.1's check of differing attachment states
+      (`mode_content.cpp:5066-5074`) reads the same device facts, never QRhi's always-true flag (a latent N3.1 defect,
+      fixed in this change), with a negative control that fakes a device without `independentBlend`.
+    - [ ] What N3.4 settles for N1.8 (its first two uses; D5.6 row 7): the composites' shader average becomes
+      the resolve the composite step reads (D14 point 8); the per-sample OIT composite stays per sample (choice C).
+      The shafts' source is N4.k's; the background capture was settled by D14 point 10.
+  - [ ] C++ owner: `native/core/src/post_stages.{h,cpp}` (the stages' declarations, their parse and checks, the bloom
+    chain's and the defocus layer's objects, the counts, the harness controls), the transparency target and borrowed
+    attachments in `scene_targets.*`, the steps in `mode_content.*`'s record, the device facts in `vulkan_context.cpp`,
+    the core's shaders in `native/core/shaders/` (each held equal to its Python source by a test, as
+    `tests/test_native_backdrop.py:66` holds the backdrop's). Every object is made at a build or an allocation step,
+    none per record; a stage's objects follow its source's object generation (a resize keeps the pipelines) and go with
+    the content. Process-wide counts per stage (objects, textures, bytes, records) join `composite_live`.
+    - [ ] Every count checked against its resource: borrowed attachments within the owner's (and the transparency
+      target's own two plus them within `kMaxTargetColour`), one transparency target per owner, the resolve's target a
+      transparency target whose owner is the step's target, the bloom source an attachment a target holds, the defocus
+      level within the near target's mip count, the sprite instances within that level's texels.
+    - [ ] Python face (`rendering/native/mode.py`): the stage declarations beside `ModeTarget`, `CapturePass` and
+      `ComputePass`; GPU-free tests of the declarations, the refusals and the core's size rules through the module,
+      each with a negative control seen to fail.
+    - [ ] Limited Python API only in `module.cpp` (the entry points: the counts, the harness controls).
+  - [ ] ABI 20 (`native/core/src/abi.h` with its history line, `rendering/native/loader.py` `EXPECTED_ABI`, and the
+    tests that read it).
+  - [ ] Harness proof: `native/core/python/post_stage_check.py` (hidden host, both backends, validation given to the
+    harness process alone with `--layer-path`, `--require-validation` where that box has landed); evidence under
+    `.artifacts/evidence/native_core/n3_4/`.
+    - [ ] Rule (a) on OpenGL against the Python stages drawn in the harness's own GL context (as
+      `scene_target_check.py` does): an EB-shaped scene (opaque with emission, a capture, three overlapping
+      transparent layers at known depths and alphas, the resolve, bloom from the emission, a near layer with an edge
+      and a highlight, the HDR composite), an Oscilloscope-shaped single-sampled overlay with MAX blends and glow, and
+      an opaque scene with glow (Exploding Tiles' shape, `exploding_tiles.py:113`); at a bucket-aligned card and an
+      unaligned one; single-sampled under the shared tolerance (checkpoint audit 3's M1 and audit 4's M2 if landed,
+      else D15's tie budget); multisampled repeat-relative (D8 point 1).
+    - [ ] Rule (b): Vulkan against the native OpenGL result, the tolerance stated per stage (half-float accumulation
+      and blending). The defocus layer's mips (QRhi's `generateMips`, admitted for this layer only, D17 choice G):
+      every level read back on both backends, the odd levels included, matching Python's `glGenerateTextureMipmap`.
+    - [ ] Analytic: coverage stored inverted equals the textbook revealage (clear 1, ZERO, ONE_MINUS_SRC_COLOR) on a
+      known stack of layers within half-float rounding (the bound stated); two draw orders of the transparent layers
+      give the same picture within that rounding; light above 1 kept until the tone map; no glow where no emission;
+      the per-sample resolve equals Python's at partial-coverage pixels (the `gl_SampleMask` bands of N3.1).
+    - [ ] Each stage absent from a program that does not declare it: its counts at zero (objects, textures, bytes,
+      pipelines, records), the program's pictures unchanged bit for bit, and the existing proofs rerun with every
+      picture identical (`generic_mode_check`, `scene_target_check`, `mesh_buffer_check`, `compute_pass_check`,
+      `fullscreen_pass_check`, `background_layer_check`, `backdrop_pyramid_check`, `transition_route_check`,
+      `devcurve_check`).
+    - [ ] Nothing at rest (no record, no pass, no `generateMips` while nothing changes); a steady minute with no object
+      created and the process's private memory flat.
+    - [ ] Synchronisation validation over consecutive records with no readback between them, the layer's
+      shader-access checks on (`syncval_shader_accesses_heuristic` through `VK_EXT_layer_settings`, as
+      `compute_pass_check.py`), clean but for Qt's recorded defects; and each negative control seen to fail: the
+      borrowed depth's prime skipped (read-after-write on the transparency run's depth load); the bloom upsample's
+      colour prime skipped (read-after-write on the larger level's load); a bloom chain built as levels of one texture
+      (QRhi's "different accesses within the same pass" refusal, or the layer's layout errors); a device made without
+      `independentBlend` with the gate bypassed (the layer's differing-blend-state error), and with the gate (the stage
+      refused, the sorted pack drawn into a one-attachment harness owner, recorded once; a multi-attachment owner takes
+      the mode-level fallback, D17's lead answers); the blendable-format fact forced false (the fallback, recorded
+      once); the resolve read through an averaged resolve instead of per sample (wrong exactly at partial coverage).
+    - [ ] Retirement to zero after a destroy, a program without the stages, a mode switch, a destroy mid-resize and the
+      scene graph's invalidation, with the skipped-release control counted and then released.
+    - [ ] Cost under the layer, judged by absolute times: each stage's GPU time (the content's record with the stage
+      less without it, or N3.1b's per-run scopes if they have landed) at 2560x1440 and 4K, one and four samples, median
+      and p90 of 240 frames, against the Python stages on the same loads (GL `TIME_ELAPSED`, a `python_cost` round);
+      the render thread's record time; `nvidia-smi`, the display state and any other SRPSS process recorded with the
+      figures; OpenGL timer waits as bounded loops over counted frames.
+  - [ ] Docs: D17's "As built" (with what the proof measured); `mode_content.h` and `scene_targets.h` headers;
+    `native/core/README.md` "How a new mode is built" (declaring a stage); one showcase WebP and a "what this makes
+    possible" note in `Docs/Reference/Primitives.md`; the transparency, bloom, HDR and defocus rows of
+    `Docs/Reference/Scene3D_Resources.md`; `Docs/Reference/Harness_Index.md`; the research file's open items of
+    sections 8 and 9 answered; the 3D foundation lessons in `Docs/Reference/Transitions.md` appended.
+  - [ ] Before N3.4's High audit (the lead, 15 Nov): explain the native OpenGL defocus at 4K. The split by variants
+    (`post_stage_check.py --rounds defocus_cost python_defocus_cost`) puts the extra time in the sprites' raster: 2.6 ms
+    at 1x and 1.2 ms at 4x on OpenGL against about 0 on Vulkan, for the same sprites (53,383 texels lit on both
+    backends, frames within one level), while Python's sprites on the same driver cost 0.99 ms with their vertex
+    stage; `generateMips` is not it (0.16 ms with the clip; Python's 0.11; storage kind irrelevant); dropping the capture
+    changes nothing; only a few sprites cost nothing. Not an upload stall either (the sprites have no instance stream;
+    the few-sprites and full variants upload the same block arena: D17). Remaining steps, in order:
+    - [x] The `time_defocus_draws` control is built (6ba2776d, in `release/native_module`). Its one run so far was on
+      a GPU loaded by the operator's game (P0, 50 to 60 %; D17 has the figures): at 4K 1x the sprites' own interval
+      differs by only 0.06 ms between `full` and `no_sprites` and the gather's by 0.6, while the whole record differs
+      by 1.7 ms. That points to case (ii) below; it must be confirmed on a quiet GPU.
+    - [ ] Rerun on a quiet GPU (`nvidia-smi --query-gpu=pstate,utilization.gpu --format=csv,noheader` at P8 and under
+      15 % before and after; `nvidia-smi --query-compute-apps=process_name --format=csv` with no game; no SRPSS running,
+      no game60): `python native/core/python/post_stage_check.py --module-dir release/native_module --apis opengl
+      --rounds defocus_draws --label n34_defocus_draws`. Read `results.opengl.defocus_draws.facts`: per sample count and
+      variant (`full`, `few_sprites`, `no_sprites`) `gather_ms` and `sprites_ms` beside `record_median_ms`. Every
+      variant must have `draws_timed` at least 30 and `skipped` near 0. Then delete the run's `work` folder.
+    - [ ] Read the result. (i) If `sprites_ms` for `full` minus `no_sprites` is about the 2.6 ms (1x) the split
+      measured, the sprites' draw itself is slow on OpenGL: compare its state with Python's `DefocusLayer.composite`
+      sprite draw (`rendering/quick/scene3d/defocus.py:412-418`) one difference at a time, each measured with this round:
+      the masked second draw buffer of the onto target (Python's emission index is masked by `glColorMaski` too), the
+      viewport (the core's covers the layer's allocation, Python's the card), the blend (colour ONE, ONE; alpha ZERO,
+      ONE), the instance count (the core's is the read level's texels over the allocation). (ii) If `sprites_ms` stays
+      small while the record still carries the 2.6 ms (the loaded run's indication), the time is outside the two draws:
+      add marks in `post_stages.cpp` `markDefocus` (a fourth after `cb->endPass()` in `mode_content.cpp`
+      `recordDefocus`, and marks around the bloom step and the composite step in `recordPasses`), one C++ change and one
+      build, then the same round; the step whose interval grows with the sprites is the one to compare with Python's
+      `SceneTarget.end` (the scene colour the sprites wrote is next read by the composite; on OpenGL a texture written
+      by many overlapping blended draws may be decompressed or flushed before its next sampling).
+    - [ ] Fix it in the core if it is ours (one change, a build, the split again: `--rounds defocus_cost` on both APIs,
+      the OpenGL sprite raster near Python's and Vulkan unchanged), or record it in D17 as the driver's with the figures
+      if no state difference moves it. Then rerun `--rounds parity` (rules (a) and (b) must still pass) and record the
+      outcome in D17's "As built" cost bullet. The control stays (harness-only, off by default).
+  - [ ] Side defect (found by N3.4's proof; the lead plans the fix): Python's bloom source is sampled at
+    `_allocate_plain_texture`'s NEAREST and GL's default REPEAT (`rendering/quick/scene3d/target.py:1167-1173`); set
+    LINEAR and CLAMP_TO_EDGE on the bloom source (the scene's colour and emission and their resolves), with a stills
+    review of every bloom consumer; then `post_stage_check.py`'s rule (a) needs no corrected reference
+    (`_bloom_source_as_designed` goes).
+  - [ ] Side defect (found while rerunning N3.2's proof for N3.4): `mesh_buffer_check.py --rounds stream_ring`'s
+    absolute 0.05 ms margin over the pair's floor fails on an idle GPU (P8 at 225 MHz: the floor itself measured 0.028
+    ms against 0.015 in a warm run, the 288 KiB storage route 0.097 against 0.031), on different routes run to run;
+    judge it relative to the floor measured in the same run, or warm the GPU to a stated clock first.
 - [ ] N3.6 Lifetime: lazy creation on first use, release at retirement and at a mode switch, device loss rebuilt
   from the last packet, every state combination a pipeline built ahead and warmed gradually (Qt's pipeline cache
   file on Qt's pipelines; the core's own cache for raw ones); the working-set and GPU-memory readings of the P2
@@ -733,6 +882,10 @@ the feature (D3D11 is not stated).
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).
+  - [ ] Port decision: Waveform clears its scene colour every frame to a backdrop from its recipe
+    (`rendering/quick/scene3d/waveform.py:387`), while a native target's clear value is fixed in its declaration
+    (D14; D17 point 9). Decide the port's form (a clear value filled by a setting, or a first pass that writes the
+    backdrop) and prove it against the Python renderer under the port rule.
 - [ ] N5.6 Extruded Bubble (the drift compute of D4, transparency, HDR, the depth texture and background
   capture, the probe and defocus, N4.k, N4.g's impostors and optics; not populations).
 - [ ] N4.f2 (the reduced-resolution layers; Waveform and Extruded Bubble are native), then Expanded Visualizer M6
@@ -768,19 +921,8 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     median/p90, swap gap, late %, hitches a minute, saver CPU % of a core, GPU ms per frame, RSS and private memory,
     first-2-seconds frames.
   - [ ] Idle and loaded. game60 is only with the operator's yes on the day, 10 minutes at most, lead only.
-  - [ ] Session mode for `tools/preflip_pack.py` (lead, 15 Nov): one saver session per size and state instead of one
-    process per row. Transitions cycle in a fixed order at a short interval and each one's window is cut from the
-    frame trace by its start and end events (about 28 x 4 s plus one startup, about 5 minutes per size); modes run as
-    the 15 Nov pass did (about 10 minutes). A full capture (transitions both sizes, modes at the second size, idle and
-    game60) is then about 30 minutes and may run while the displays are on, in chunks. Per-row mode stays for
-    single-row reruns.
-  - [ ] Owed with it (operator, 15 Nov): five transitions only, a load comparison, since parity and regressions are
-    proved per port: the four heaviest by the 14 Nov overhead baseline (Exploding Tiles, Volumetric Dissolve,
-    Disintegrate, Jigsaw, the last also the heaviest prepare) and Crossfade as the light control. Invisible on
-    Display 1 only, never Display 0; idle and game60, about 2 minutes a state; plus the modes at a second size on
-    Display 1 if the invisible path gives one.
-  - [ ] Conditions recorded with every figure: displays on or off, other processes' CPU and GPU, GPU clock and
-    `nvidia-smi` state. Comparisons are within a session and control-relative (`Benchmarks.md` rules).
+  - The 15 Nov capture is done: every mode and the five-transition load set, idle and game60, on Display 1
+    (`Benchmarks.md`, `tools/baselines/preflip/`); one size only (the saver takes its display's resolution).
   - [ ] Stored as a named baseline (`tools/baselines/preflip/`) and summarised in `Docs/Reference/Benchmarks.md`; the
     flip's acceptance reruns the same matrix on Vulkan and on native OpenGL and reports the gain per row.
 - [ ] N5.2h The background family switches on OpenGL (D10 point 4): presenter, backdrop and all 28 transitions

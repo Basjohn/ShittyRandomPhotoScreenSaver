@@ -964,6 +964,19 @@ python native/core/python/mesh_buffer_check.py --module-dir release/native_modul
 # reference; record nvidia-smi and the display state)
 python native/core/python/compute_pass_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
     [--apis opengl vulkan] [--rounds facts parity trigger war copy rest steady retire barriers cost] [--label n33_compute]
+# N3.4 (D17): the shared stages on the harness scenes native/core/python/post_stages/ (eb: Extruded Bubble's shape with
+# transparency, defocus, bloom and the HDR composite; osc: the Oscilloscope's MAX blends and glow; tiles: an opaque scene
+# with glow; solo: a one-attachment owner for the sorted fallback), hidden hosts only: parity (rule (a) against the Python
+# stages under tools/pixel_tolerance.py, the bloom source sampled LINEAR/CLAMP as designed, Python's shipping NEAREST/
+# REPEAT reported apart; rule (b) with the defocus mips at every level, levels made from odd sizes reported apart; the
+# analytic checks), gate (the fallbacks by control, the defocus read level's cap), rest, steady (a minute of records,
+# the record's render-thread time), retire, barriers (Vulkan: synchronisation validation with shader accesses; controls
+# depth prime, bloom same texture, read chain and no independent blend must report their finding, the bloom prime's is
+# reported only), cost (each stage at 2560x1440 and 4K, 1x and 4x). Alone: defocus_cost (the defocus step split by
+# variants at 4K), showcase (the WebP), python_cost and python_defocus_cost (the reference child). Timing rounds only on
+# a quiet GPU (nvidia-smi is recorded in the summary).
+python native/core/python/post_stage_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan] [--rounds parity gate rest steady retire barriers cost defocus_cost showcase python_cost python_defocus_cost] [--label n34_post_stages]
 ```
 
 Tests: `tests/test_native_core_jobs.py` (the built module, GPU-free: the job service's latch, cancellation while

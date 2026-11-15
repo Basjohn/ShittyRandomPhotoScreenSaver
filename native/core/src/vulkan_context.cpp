@@ -297,6 +297,8 @@ Instance *g_instance = nullptr;
 // N3.2: each created device's facts (vulkanDeviceFacts), written on the GUI thread, read by any.
 QMutex g_factsMutex;
 QHash<quint64, QJsonObject> g_deviceFacts;
+// N3.4, harness only: the next devices made without independentBlend (setDeviceWithoutIndependentBlend).
+QAtomicInt g_withoutIndependentBlend { 0 };
 
 QByteArrayList availableInstanceExtensions(const Loader &loader, const char *layer)
 {
@@ -727,6 +729,8 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
     }
     getFeatures2(physDev, &f2);
     f2.features.robustBufferAccess = VK_FALSE;
+    if (g_withoutIndependentBlend.loadAcquire() != 0)
+        f2.features.independentBlend = VK_FALSE; // N3.4, harness only: a device that lacks the feature (D17's control)
 
     // N3.8 (D9 as built point 1): Qt's queue (index 0, priority 1.0) and, when the family has a second queue, the job
     // service's (index 1, priority 0.5: N0.6's layout, proved by N0.7). One queue: no service, every job in-frame.
@@ -802,7 +806,19 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
                 storage.insert(QLatin1String(f.name), (fp.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0);
             }
             facts.insert(QStringLiteral("storage_image_formats"), storage);
+            // N3.4 (D17 point 3): which target formats blend as colour attachments (QRhi never asks).
+            QJsonObject blend;
+            for (const auto &f : storageFormats) {
+                VkFormatProperties fp = {};
+                getFormat(physDev, f.format, &fp);
+                blend.insert(QLatin1String(f.name),
+                             (fp.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0);
+            }
+            facts.insert(QStringLiteral("color_attachment_blend"), blend);
         }
+        // N3.4 (D17 point 3): the per-attachment blend and per-sample shading features as enabled on this device.
+        facts.insert(QStringLiteral("independent_blend"), f2.features.independentBlend == VK_TRUE);
+        facts.insert(QStringLiteral("sample_rate_shading"), f2.features.sampleRateShading == VK_TRUE);
         QMutexLocker lock(&g_factsMutex);
         g_deviceFacts.insert(out->m_device, facts);
     }
@@ -852,6 +868,16 @@ QJsonObject vulkanDeviceFacts(quint64 device)
 {
     QMutexLocker lock(&g_factsMutex);
     return g_deviceFacts.value(device);
+}
+
+void setDeviceWithoutIndependentBlend(bool without)
+{
+    g_withoutIndependentBlend.storeRelease(without ? 1 : 0);
+}
+
+bool deviceWithoutIndependentBlend()
+{
+    return g_withoutIndependentBlend.loadAcquire() != 0;
 }
 
 QStringList VulkanDevice::destroy()
