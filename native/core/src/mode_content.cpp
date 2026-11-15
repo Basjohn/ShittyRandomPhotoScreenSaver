@@ -5743,10 +5743,12 @@ bool ModeContent::syncStages(QRhi *rhi, QString *error)
         // The program's steps, derived once per program (nothing per record).
         m_bloomSpecs.clear();
         m_defocusSpecs.clear();
+        m_stagesDeclared = false;
         for (int i = 0; i < int(program.passes.size()) && i < kMaxModePasses; ++i) {
             const ModePass &pass = program.passes.at(i);
             m_defocusLevelOffset[i] = -1;
             m_defocusRadiusOffset[i] = -1;
+            m_stagesDeclared = m_stagesDeclared || pass.stage != StageKind::None;
             if (pass.stage == StageKind::Bloom) {
                 BloomSpec spec;
                 spec.pass = i;
@@ -6214,6 +6216,8 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
     noteMeshBuffers();                        // N3.2 audit 4: a draw refused at its edge in this record (else nothing)
     if (draw && !m_source->drawnStill())
         countRecordTime(recordTimer.nsecsElapsed(), streamWriteNs); // D15 point 7: the stream ring's CPU axis
+    if (draw && m_stagesDeclared)
+        countStageRecordTime(recordTimer.nsecsElapsed()); // N3.4: a record with stages, still or streamed
     const QSize size = target.texture->pixelSize();
     if (readback) {
         // N3.1, harness: every scene target's readable texture as this record left it.

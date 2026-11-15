@@ -1951,6 +1951,26 @@ read once (`:770-808`).
   its own passes too (N3.1's check), so on a device without `independentBlend` the mode is not offered on that backend:
   the mode-level fallback, logged once. The harness proves the sorted fallback with a one-attachment owner.
 
+**The lead's answers to the proof's findings (15 Nov 2026, after the build of b179301a).**
+- *Python's bloom source sampler.* `SceneTarget` samples the bloom chain's source (the scene's colour or emission, or
+  their resolves) at `_allocate_plain_texture`'s NEAREST and GL's default REPEAT (`target.py:1167-1173`): light wraps in
+  from the opposite edge, and the 13-tap filter assumes bilinear taps. That is a defect of what ships today; the core
+  samples LINEAR with CLAMP_TO_EDGE. Rule (a) is judged against Python with the source sampled LINEAR/CLAMP
+  (`post_stage_check.py` `_bloom_source_as_designed`); against Python as it ships, the frames differ by up to 45 levels
+  (reported, never gated). The Python fix (LINEAR, CLAMP, with a stills review) is the lead's to plan.
+- *Odd mip levels.* QRhi's `generateMips` is the driver's filter on OpenGL and a linear blit on Vulkan; they agree on a
+  level that halves an even-sized one and not on one made from an odd size (GL 4.6 section 8.14.4 leaves it to the
+  implementation; at the 640 x 384 allocation levels 8 and 9 differ, up to 0.049 in colour and 0.40 px in circle). The
+  core caps the defocus read level at two levels above the last level made only from even-sized levels (the clip's
+  local mean and the sprites read level + 2): `defocusReadLevelCap`, derived from the near target's allocation; a
+  deeper level is refused with its reason, the content's failure latched and noted once. A consumer that ever needs a
+  deeper level gets its own downsample then.
+- *The bloom prime's negative control is not observable.* With the upsample's rule C prime skipped, synchronisation
+  validation (shader accesses on) reports nothing: QRhi's transition into the larger level has the load's stage
+  (colour attachment output) in its second scope, and the layer does not flag the access-mask gap there (it does for
+  depth, where the stages differ: early against late fragment tests). The prime stays (defect C's record), and the
+  control is reported, not required.
+
 ## D1, D2, D3 and the transport rule
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts"). The drafts, with every "today"

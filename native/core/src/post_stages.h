@@ -123,11 +123,18 @@ struct StageCounts
     qint64 generatedMips = 0;     // generateMips recorded (the defocus layer's attachments)
     qint64 fallbacks = 0;         // transparency fallbacks noted (one per content and gate edge)
     int leftBehind = 0;           // objects the skipped-release control left behind
+    qint64 recordsTimed = 0;      // records of programs with stages, timed on the render thread
+    qint64 recordNs = 0;          // their summed CPU time (the whole record: every pass and stage)
 };
 StageCounts stageCounts();
 void countTransparencyResolve();
 void countFallback();
 void countGeneratedMips(int count);
+void countStageRecordTime(qint64 recordNs);     // a record of a program with stages: the render thread's whole record
+// The deepest read level a defocus step may take over a layer of `layer` texels: two levels above the last level made
+// only from even-sized levels (the clip's local mean and the sprites read level + 2), so every level read is one both
+// backends' generateMips make alike (the lead, 15 Nov; D17 as built). A deeper level is refused with a reason.
+int defocusReadLevelCap(const QSize &layer);
 
 // A program's bloom step and defocus step as the stages need them (mode_content.cpp derives them once per program).
 struct BloomSpec

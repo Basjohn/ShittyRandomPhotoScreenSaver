@@ -113,6 +113,8 @@
 // "level" (a mipped target's every level read back); vulkan_device_facts' independent_blend, sample_rate_shading and
 // color_attachment_blend. N3.1's check of differing attachment states reads the core's device facts (independentBlend on
 // Vulkan), never QRhi's PerRenderTargetBlending. Backward compatible for every earlier program (no stage: N3.3's).
+// Within 20 (the proof's findings, before any consumer, the lead, 15 Nov): stage_control's skip_read_chain;
+// composite_live's stage_records_timed and stage_record_ns; a defocus read level past defocusReadLevelCap is refused.
 #pragma once
 
 #define SRPSS_NATIVE_CORE_ABI 20

@@ -846,6 +846,7 @@ private:
     QList<BloomSpec> m_bloomSpecs;
     QList<DefocusSpec> m_defocusSpecs;
     quint64 m_specsProgram = 0;
+    bool m_stagesDeclared = false;            // the drawn program holds a stage step (its records' time is counted)
     const QRhi *m_gateRhi = nullptr;
     quint64 m_gateProgram = 0;
     quint64 m_gateControls = 0;

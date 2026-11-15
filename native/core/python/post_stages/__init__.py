@@ -246,6 +246,18 @@ def read_level(radius: float) -> int:
     return max(int(math.floor(math.log2(max(math.sqrt(tap_area), 1.0)))), 0)
 
 
+def read_level_cap(allocation: tuple[int, int]) -> int:
+    """``post_stages.cpp`` ``defocusReadLevelCap``: two levels above the last level made only from even-sized levels."""
+    width, height = allocation
+    exact = 0
+    while width > 1 or height > 1:
+        if (width > 1 and width % 2) or (height > 1 and height % 2):
+            break
+        width, height = max(1, width // 2), max(1, height // 2)
+        exact += 1
+    return max(0, exact - 2)
+
+
 SETTINGS = {
     "u_back_colour": [0.35, 0.55, 0.8, 1.0], "u_back_gain": 2.4, "u_back_near": 0.3, "u_back_far": 0.8,
     "u_back_emission": 3.0, "u_back_edge": 0.82,

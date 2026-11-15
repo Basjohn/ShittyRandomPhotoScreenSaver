@@ -666,6 +666,16 @@ def round_gate(core, engine, app, api: str, packs: dict) -> dict:
         admitted = records(Case("solo_admitted", "solo"))
         facts["solo_admitted"] = admitted
         checks["admitted_records_no_fallback"] = not admitted["state"]["fallbacks"] and admitted["fallbacks_counted"] == 0
+        # The defocus read level's cap (the lead, 15 Nov): at the cap drawn, one past it refused with its reason.
+        from rendering.native.scene_targets import bucket_pixels
+
+        cap = _ps().read_level_cap((bucket_pixels(CARD[0]), bucket_pixels(CARD[1])))
+        at_cap = records(Case("eb_level_cap", "eb", changes={"u_defocus_level": cap}), 2)
+        past_cap = records(Case("eb_level_past_cap", "eb", changes={"u_defocus_level": cap + 1}), 2)
+        facts["defocus_read_level_cap"] = {"cap": cap, "at_cap": at_cap["state"], "past_cap": past_cap["state"]}
+        checks["defocus_read_level_at_the_cap_drawn"] = not at_cap["state"]["error"] and at_cap["frame_max"] > 0
+        checks["defocus_read_level_past_the_cap_refused"] = f"read level {cap + 1} is outside 0 to {cap}" in str(
+            past_cap["state"]["error"])
         # A program without stages (an owner pass and a plain capture-free surface pass of N3.1's harness scene).
         st = stc._scene_module()
         with tempfile.TemporaryDirectory(prefix="srpss_n34_plain_") as scratch:
@@ -751,6 +761,10 @@ def round_steady(core, engine, app, api: str, packs: dict) -> dict:
     facts = {"frames": i, "records": [state_before.get("records"), state_after.get("records")],
              "objects_created": after["stage_objects_created"] - before["stage_objects_created"],
              "stage_records": {k: after[k] - before[k] for k in RECORD_KEYS},
+             # The render thread's record time of a program with stages (EB's shape at 4x, the card's size).
+             "record_us_mean": (round((after["stage_record_ns"] - before["stage_record_ns"]) / 1e3
+                                      / max(1, after["stage_records_timed"] - before["stage_records_timed"]), 2)
+                                if "stage_record_ns" in after else None),
              "private_mib": [round(counters_before.get("private_mib", 0.0), 2),
                              round(counters_after.get("private_mib", 0.0), 2)],
              "private_mib_samples": samples}
@@ -998,12 +1012,16 @@ def round_cost(core, engine, app, api: str, packs: dict) -> dict:
                     try:
                         host.frames(4)
                         started = time.perf_counter()
+                        live = _live(core)
                         timings[variant] = stc._timed(host, scene, values, COST_FRAMES, member="u_back_gain",
                                                       step=0.001)
                         timings[variant]["wall_s"] = round(time.perf_counter() - started, 2)
-                        state = scene.mode.state()
+                        state, after = scene.mode.state(), _live(core)
                         timings[variant]["error"] = _state_facts(state)["error"]
-                        timings[variant]["record_us"] = {k: state.get(k) for k in state if "record" in k and "us" in k}
+                        # The render thread's record time (CPU), mean over the timed records of a program with stages.
+                        timed = after.get("stage_records_timed", 0) - live.get("stage_records_timed", 0)
+                        timings[variant]["record_us_mean"] = (round((after["stage_record_ns"] - live["stage_record_ns"])
+                                                                    / 1e3 / timed, 2) if timed else None)
                     finally:
                         _close(scene, host, app)
                 full = timings["full"]

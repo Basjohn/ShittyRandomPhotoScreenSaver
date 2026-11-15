@@ -45,6 +45,8 @@ QAtomicInteger<qint64> g_transparencyResolves { 0 };
 QAtomicInteger<qint64> g_generatedMips { 0 };
 QAtomicInteger<qint64> g_fallbacks { 0 };
 QAtomicInteger<int> g_leftBehindObjects { 0 };
+QAtomicInteger<qint64> g_stageRecordsTimed { 0 };
+QAtomicInteger<qint64> g_stageRecordNs { 0 };
 
 void setControl(QAtomicInteger<int> &control, bool on)
 {
@@ -306,7 +308,28 @@ StageCounts stageCounts()
     c.generatedMips = g_generatedMips.loadRelaxed();
     c.fallbacks = g_fallbacks.loadRelaxed();
     c.leftBehind = g_leftBehindObjects.loadRelaxed();
+    c.recordsTimed = g_stageRecordsTimed.loadRelaxed();
+    c.recordNs = g_stageRecordNs.loadRelaxed();
     return c;
+}
+
+void countStageRecordTime(qint64 recordNs)
+{
+    g_stageRecordsTimed.fetchAndAddRelaxed(1);
+    g_stageRecordNs.fetchAndAddRelaxed(recordNs);
+}
+
+int defocusReadLevelCap(const QSize &layer)
+{
+    // The last level made only from even-sized levels (generateMips is the driver's filter on OpenGL and a linear blit on
+    // Vulkan: they agree on a halving of an even size and not on an odd one, GL 4.6 section 8.14.4).
+    int exact = 0;
+    for (QSize s = layer; s.width() > 1 || s.height() > 1; ++exact) {
+        if ((s.width() > 1 && s.width() % 2) || (s.height() > 1 && s.height() % 2))
+            break;
+        s = QSize(qMax(1, s.width() / 2), qMax(1, s.height() / 2));
+    }
+    return qMax(0, exact - 2);                // the clip's local mean and the sprites' read level + 2
 }
 
 void countTransparencyResolve() { g_transparencyResolves.fetchAndAddRelaxed(1); }
@@ -504,12 +527,13 @@ bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<Def
             return false;
         }
         const QSize layer = near->allocation;
-        int maxLevel = 0;
-        for (int side = qMax(layer.width(), layer.height()); side > 1; side /= 2)
-            ++maxLevel;
+        const int maxLevel = defocusReadLevelCap(layer);
         if (spec.level < 0 || spec.level > maxLevel) {
-            // Checked against its resource (the layer's mips): never a read past the chain.
-            *error = QStringLiteral("defocus step %1: its read level %2 is outside the layer's mips (0 to %3 at %4 x %5)")
+            // Checked against its resource (the layer's mips): never a read past the levels both backends make alike
+            // (the lead, 15 Nov). A refusal is the content's failure, latched and noted once.
+            *error = QStringLiteral("defocus step %1: its read level %2 is outside 0 to %3 at %4 x %5 (the clip and the "
+                                    "sprites read two levels deeper, and a level made from an odd-sized one is each "
+                                    "backend's own filter: D17 as built)")
                          .arg(spec.pass).arg(spec.level).arg(maxLevel).arg(layer.width()).arg(layer.height());
             return false;
         }

@@ -742,6 +742,8 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("stage_generated_mips"), double(sc.generatedMips));
     o.insert(QStringLiteral("stage_fallbacks"), double(sc.fallbacks));
     o.insert(QStringLiteral("stage_left_behind"), sc.leftBehind);
+    o.insert(QStringLiteral("stage_records_timed"), double(sc.recordsTimed));
+    o.insert(QStringLiteral("stage_record_ns"), double(sc.recordNs));
     return pyJson(o);
 }
 

@@ -318,6 +318,27 @@ def test_the_defocus_run_chains_its_two_stage_reads() -> None:
     assert "sampledTexture(1, vertex, d.colour, d.mipSampler.get())" in stages
 
 
+def test_the_defocus_read_level_cap_keeps_reads_on_even_built_levels() -> None:
+    """The lead's cap (15 Nov): two levels above the last level made only from even-sized levels; the core's function
+    and the harness's mirror agree, and the sync refuses past it."""
+    import sys
+
+    sys.path.insert(0, str(CORE / "python"))
+    import post_stages
+
+    assert post_stages.read_level_cap((640, 384)) == 5        # 5 x 3 is level 7, made from 10 x 6
+    assert post_stages.read_level_cap((64, 64)) == 4          # down to 1 x 1, every level even-built
+    assert post_stages.read_level_cap((3840, 2176)) == 5      # 30 x 17 is level 7
+    # Negative control: a cap that ignored odd sides would allow 8 at 640 x 384.
+    assert post_stages.read_level_cap((640, 384)) != max((640).bit_length() - 2, 0)
+    stages = (CORE / "src" / "post_stages.cpp").read_text(encoding="utf-8")
+    cap = stages[stages.index("int defocusReadLevelCap("):]
+    assert "(s.width() > 1 && s.width() % 2) || (s.height() > 1 && s.height() % 2)" in cap
+    assert "return qMax(0, exact - 2);" in cap
+    sync = stages[stages.index("bool PostStages::sync("):]
+    assert "const int maxLevel = defocusReadLevelCap(layer);" in sync
+
+
 def test_the_core_reads_every_stage_shader_it_bakes() -> None:
     stages = (CORE / "src" / "post_stages.cpp").read_text(encoding="utf-8")
     for name in ("scene_oit_resolve.frag", "scene_oit_resolve_samples.frag", "scene_oit_resolve_sample0.frag",
