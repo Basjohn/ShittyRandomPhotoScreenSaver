@@ -632,6 +632,104 @@ the feature (D3D11 is not stated).
   item as Spectrum's; both close with N5.8.
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
+  Decomposition (Phase 1, 15 Nov; read at edc4c6ba1 with main merged). Follows the Native Port Playbook: the port
+  checklist, the standard proof, N4.a, E2 (with E23), E3 and E9; Spline Curve (D12 "As built") is the pattern.
+  No C++ is expected: every pass, target, stream and sampler below is data on ABI 19's primitives; the two members
+  the record cannot fill today are fixed in the shader (step 1b), not in the core. What each per-frame value is:
+  - *Record (per frame, from the logical frame, D12 point 2):* `u_bubbles_pos` and `u_bubbles_extra` (f64x4 x 110),
+    `u_bubbles_trail` (f64x4 x 330 after step 1b), `u_bubble_count` (u32, at_most 110), `u_big_class_bits` (u32 x 4
+    after step 1b), `u_trail_strength` and `u_tail_opacity` (f64: the Settings values, but 0 on a frame with no
+    trails, so per frame), `u_rainbow_hue_offset` (f64: simulation time x speed), `u_ambient_enabled` and
+    `u_ambient_light_enabled` (u32 boolean: points present; any point glows); the ambient points (f32 x 6 x 192, an
+    instance stream with its used length) and the occluders (f32 x 4 x 110, an instance stream with its used length).
+  - *Settings and card (packed on change, port rule (g)):* the layout members (`u_content_rect`, `u_visual_scale`,
+    `u_response_radius_scale`, `u_specular_reference_aspect`, `u_trail_radial_scale`,
+    `u_viewport_stroke_extra_half_px`, from `compute_quick_bubble_layout`, whose input `world_scale` rides on the frame
+    but changes only with the card), the style members (`u_specular_dir`, `u_gradient`, the five colours,
+    `u_ghost_alpha`, `u_ghost_decay`), the six members the Python renderer never writes (`u_time`, `u_playing`, the
+    four energies: settings at 0, as Spline Curve's three), and the ambient passes' `uTexelScale`, `uSpriteScale`,
+    `uGlowSpread`, `uMicroColor`, `uParticleColor`; the ambient target's explicit size (`ambient_target_size`,
+    through `NativeMode.target_size` at a card change). Core members as Spline Curve's (`uMatrix` zeros on the main
+    pass, `u_target_px` per drawn target).
+  - *N3.1 target (E3):* `ambient`, explicit size, `coverage` RGBA8 (premultiplied over) and `light` RGBA16F
+    (additive), single-sampled; the light made with the target and cleared (D14 point 6, choice F).
+  - *N3.2 instanced quads (E2, E23):* the ambient points (192 a frame at most, one instance each, `draw(4, n)`) and
+    the hero occluders (110 at most: today CPU triangles, `ambient_occluder_vertices`; each is a square in target
+    pixels, so it becomes an instanced quad too, which also drops a per-frame numpy pass).
+  - *N4.a samplers:* `u_ambient_texture` -> `ambient.coverage`, `u_ambient_light` -> `ambient.light` (linear, clamp,
+    no mips: the Python renderer's state). This closes the N2.9 leftover's Bubble half.
+  - [ ] 1. The Python conversion first (checklist 16; E2), in the Python renderer, judged against today's
+    `gl_PointSize` output; nothing in the product moves but the quads-versus-points difference D15 F accepted.
+    - [ ] 1a. Move the two ambient programs out of `bubble_ambient_gl.py`'s strings into shader files beside
+      `bubble.frag` (`bubble_ambient_points.vert/.frag`, `bubble_ambient_mask.vert/.frag`; one std140 block each,
+      baked by `tools/regen_qrc.py --shaders`), loaded by the Python renderer; hash-identical stills before quads.
+    - [ ] 1b. The two members the record cannot fill (`recordFieldFits`: f64x4 fills only a vec4, a u32 array only a
+      scalar array): `vec3 u_bubbles_trail[330]` becomes `vec4` read `.xyz` (the same std140 bytes; the renderer already
+      packs (330, 4)), `uvec4 u_big_class_bits` becomes `uint u_big_class_bits[4]` (same indexing, 64 bytes). Proved
+      bit-identical on the Python renderer at the widened run set (`tools/conventions_identity.py`).
+    - [ ] 1c. Sample the ambient target where its content lies in a bucketed allocation (E3: rows [H-h, H), columns
+      [0, w)), written as ratios that are exactly 1.0 when the texture is the content's size (the Python target), and
+      the coordinate clamped to the content's edge texel centres (clamp-to-edge's own result for a linear read; the
+      allocation's cleared texels lie past the right and upper edge). `u_ambient_px` a setting. Bit-identical on the
+      Python renderer; its negative control samples the whole allocation and fails on a padded target.
+    - [ ] 1d. Points to instanced quads: per-instance attributes (divisor 1), `srpssSpriteCorner`/`srpssSpriteClip`,
+      `gl_PointCoord` replaced by the corner varying, the `clamp(size, 1, 128)` kept; the centre from content
+      coordinates through the conventions (see choice B), not the hand-written `1 - 2y`. Occluders likewise (one
+      instance per circle, the unit-circle corner, culled when radius or alpha is 0). Figures as D15's (pixels past 0
+      and past 1 level, the worst level, at dpr 1 and 1.5, on the ambient target's two attachments and on the final
+      frame); a stills sheet before/after for the lead. The occluders' strip-against-list diagonal is a tie class
+      reported the same way.
+    - [ ] 1e. Verify the suspected stale-trail ghost (side defect, report or fix at the owner): a frame with no
+      trails leaves `u_bubbles_trail` holding an earlier frame's samples, which the ghost loop still reads
+      (`bubble.frag` ghost pass, `bubble.py` trail branch). Decide with the lead before step 2 (choice D).
+  - [ ] 2. The record and schema: `core/visualizer_engine/bubble_native_schema.py` (runtime schema, D12 point 1,
+    `_RUNTIME_SCHEMA_MODULES`), every field named as its member and filled from one shared function
+    `bubble_frame_values` that the Python renderer calls too (Spline Curve's `devcurve_frame_values` shape); the two
+    streams with their `used` fields (E2 audit 4 H2: instance streams draw exactly their used records). About 24 KB
+    a record against the route's 4096-byte slot: the route sizes the slot from the schema. Tests: encode/decode
+    round trip, the layout fingerprint pinned, range rules, the f32 fields refused as block members.
+  - [ ] 3. The Settings values: `bubble_settings_values(logical, layout)` (layout, style, ambient-pass values, the
+    never-written members at 0, `u_ambient_px`), called by the Python renderer and the route; a settings-only member
+    added and drawn with no module rebuild (rule (g)); tests derive from the spec, never presets.
+  - [ ] 4. The route (`native_route.py`): `GENERIC_MODE_SETTINGS["bubble"]`; a per-mode program builder beside it
+    (Bubble's three passes: points into `ambient`, occluders into `ambient` with the erase `BlendState` on both
+    attachments, the main pass on the surface with its two samplers; one pass for the modes that have one), the
+    target size sent at a card change, the slot from the schema, the admission flags as Spline Curve's (Bubble
+    animates by itself), `"vulkan"` in Bubble's `renderer_backends` once step 5 passes. Studio stays OpenGL-only with
+    Spectrum's and Spline Curve's (N5.8).
+  - [ ] 5. The proof (standard; N4.a, E2, E3, E9): `native/core/python/bubble_check.py` on `devcurve_check.py`'s
+    rounds (block, item, pixels) plus an `ambient` round, and `owner_render_parity.py --native --mode bubble` at
+    `mode_runs("bubble", offers=True)` plus runs with the ambience Settings switched on from the spec (glow on and off).
+    Rule (a) against step 1's quad conversion through the composite tolerance (D12), rule (b) Vulkan against native
+    OpenGL; the ambient attachments read back and judged by their own units (RGBA8 level, float16 ulp). Negative
+    controls, each seen failing in its own process: a bubble position nudged, a big-class bit flipped, a trail sample
+    changed, the sprite coordinate y up (`sprite_yup`'s shape), the whole-allocation sample (1c), an instance count
+    past `used`, the occluder pass skipped, a skipped release. Nothing at rest; retirement to zero (targets, streams,
+    textures); validation with synchronisation and the shader-access opt-in; GPU median and p90 per pass at 2560 x
+    1440 and 4K, against the Python renderer's. Earlier harnesses rerun unchanged.
+  - [ ] 6. The D1 rehearsal (lead, rule (f), D10): one bounded Vulkan run on Display 1 through `tools/d1_run.py`, the
+    Usu wallpaper and a recorded clip, ambience on and off.
+  - [ ] 7. The docs: D12 "As built: Bubble" (record, settings, passes, the figures, the tolerance used),
+    `native/core/README.md` step 6's examples, `Primitives.md` E3/E23 consumers, Transitions.md lessons if any; the
+    Python renderer retires as Spline Curve's does.
+  - Open choices (recommendation first):
+    - A. Ambience off: (1) two programs, the second without the target and its passes, retargeted at the Settings edge
+      `BubbleAmbientSimulation.enabled(settings)` (no allocation and no clear on the opt-out path, as today; a
+      pipeline build at that edge), or (2) one program with the target held at its minimum bucket and empty streams
+      (a clearing draw every frame). Recommend 1.
+    - B. The sprite centre on the ambient target: (1) a helper in the geometry include (`SRPSS_GEOMETRY_GLSL` and
+      `srpss_geometry.glsl`, held equal by their test; no module build, since only the Python composer splices it)
+      that turns a top-down content coordinate into clip with the conventions' row flip, identity in the Python
+      renderer, or (2) the same arithmetic inline in Bubble's shader. `uMatrix` does not serve: it maps item pixels
+      through the card's window maps, which an explicit-size target does not share. Recommend 1.
+    - C. The record's two unfit members: the shader change of 1b (recommend), or the core admitting u32 x 4 into a
+      uvec4 and f64x4 into a vec3 array (C++, a build round).
+    - D. The stale-trail ghost (1e), if confirmed: the shared frame-values function sends zeros for a frame with no
+      trails (both renderers; the ghost then fades with the trails' strength), recorded as a side defect with its
+      test. Recommend this over carrying the stale samples into the record.
+    - E. Points to check in Phase 2 before writing code, each a stop-and-report if it fails: `u_target_px` is the
+      explicit target's content size (not its allocation) for a pass drawing into it; a setting may fill the same name
+      in two passes' blocks (`u_response_radius_scale`); the Python block packer packs a `uint[4]`.
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).
