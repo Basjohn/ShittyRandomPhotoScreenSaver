@@ -4186,9 +4186,13 @@ bool ModeContent::buildGeometryPass(QRhi *rhi, Resources &r, int index, QRhiRend
     // The vertex input layout: binding 0 the mesh (per vertex), then the instance source (per instance, step rate 1).
     const ModeMeshes::Gpu *mesh = pass.mesh.isEmpty() ? nullptr : m_meshes.find(pass.mesh);
     const ModeStreams::Stream *instanceStream = pass.instanceFrom.isEmpty() ? nullptr : m_streams.find(pass.instanceFrom);
-    const ModeMeshes::Gpu *instanceMesh = (pass.instanceFrom.isEmpty() || instanceStream) ? nullptr
-                                                                                          : m_meshes.find(pass.instanceFrom);
+    // N3.3: or a storage buffer a compute entry writes (its declared layout).
+    const ModeStorage::Buffer *instanceStorage = (pass.instanceFrom.isEmpty() || instanceStream)
+        ? nullptr : m_storage.buffer(pass.instanceFrom);
+    const ModeMeshes::Gpu *instanceMesh = (pass.instanceFrom.isEmpty() || instanceStream || instanceStorage)
+        ? nullptr : m_meshes.find(pass.instanceFrom);
     const RecordLayout *instanceLayout = instanceStream ? &instanceStream->decl.layout
+        : instanceStorage ? &instanceStorage->decl.layout
         : (instanceMesh && instanceMesh->instanceLayout.valid() ? &instanceMesh->instanceLayout : nullptr);
     if ((!pass.mesh.isEmpty() && !mesh) || (!pass.instanceFrom.isEmpty() && !instanceLayout)) {
         *reason = QStringLiteral("pass '%1': its mesh '%2' or its instance source '%3' (a mesh with an instance stream, or "
@@ -4296,13 +4300,18 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
     cb->setViewport(viewport);
     const ModeMeshes::Gpu *mesh = p.meshBinding ? m_meshes.find(pass.mesh) : nullptr;
     const ModeStreams::Stream *instanceStream = p.instanceBinding ? m_streams.find(pass.instanceFrom) : nullptr;
-    const ModeMeshes::Gpu *instanceMesh = p.instanceBinding && !instanceStream ? m_meshes.find(pass.instanceFrom) : nullptr;
+    const ModeStorage::Buffer *instanceStorage = p.instanceBinding && !instanceStream ? m_storage.buffer(pass.instanceFrom)
+                                                                                      : nullptr; // N3.3
+    const ModeMeshes::Gpu *instanceMesh = p.instanceBinding && !instanceStream && !instanceStorage
+        ? m_meshes.find(pass.instanceFrom) : nullptr;
     QRhiCommandBuffer::VertexInput inputs[2];
     int bound = 0;
     if (mesh)
         inputs[bound++] = { mesh->vertices.get(), 0 };
     if (instanceStream)
         inputs[bound++] = { instanceStream->buffer.get(), 0 };
+    else if (instanceStorage)
+        inputs[bound++] = { instanceStorage->buffer.get(), 0 };
     else if (instanceMesh)
         inputs[bound++] = { instanceMesh->instances.get(), 0 };
     if (bound != int(p.meshBinding) + int(p.instanceBinding))
@@ -4342,10 +4351,14 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
     cb->setShaderResources(nullptr, count, offsets);
     if (!pass.indirect.isEmpty()) {
         const ModeStreams::Stream *commands = m_streams.find(pass.indirect);
-        const quint32 drawn = commands ? qMin(resolveCount(pass.drawCount, 0), commands->decl.capacity / kIndirectCommandBytes)
-                                       : 0u;
+        // N3.3: or a storage buffer a compute entry wrote (its commands checked against its size).
+        const ModeStorage::Buffer *storageCommands = commands ? nullptr : m_storage.buffer(pass.indirect);
+        QRhiBuffer *buffer = commands ? commands->buffer.get() : storageCommands ? storageCommands->buffer.get() : nullptr;
+        const quint32 capacity = commands ? commands->decl.capacity / kIndirectCommandBytes
+                                          : storageCommands ? storageCommands->bytes / kIndirectCommandBytes : 0u;
+        const quint32 drawn = buffer ? qMin(resolveCount(pass.drawCount, 0), capacity) : 0u;
         if (drawn) {
-            cb->drawIndirect(commands->buffer.get(), 0, drawn, kIndirectCommandBytes);
+            cb->drawIndirect(buffer, 0, drawn, kIndirectCommandBytes);
             countIndirectDraw();
         }
         return;
@@ -4353,9 +4366,239 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
     quint32 sourceCount = instanceMesh ? instanceMesh->instanceCount : 0u;
     if (instanceStream && instanceStream->decl.layout.stride)
         sourceCount = instanceStream->decl.capacity / instanceStream->decl.layout.stride;
-    const quint32 instances = resolveCount(pass.instances, sourceCount);
+    if (instanceStorage && instanceStorage->decl.layout.stride)
+        sourceCount = instanceStorage->bytes / instanceStorage->decl.layout.stride; // N3.3
+    quint32 instances = resolveCount(pass.instances, sourceCount);
+    if (instanceStorage)
+        instances = qMin(instances, sourceCount);  // N3.3: a count over a storage buffer is checked against it
     if (vertices && instances)
         cb->draw(vertices, instances, pass.firstVertex, directFirstInstance()); // 0 but under the harness control
+}
+
+// ------------------------------------------------------------------------------------------------- N3.3 (D16)
+
+bool ModeContent::computeBindings(const Resources &r, int index, QList<QRhiShaderResourceBinding> *out) const
+{
+    const ModePass &pass = m_source->drawnProgram().passes.at(index);
+    const Resources::Pass &p = r.passes[index];
+    const QRhiShaderResourceBinding::StageFlags cs = QRhiShaderResourceBinding::ComputeStage;
+    out->clear();
+    QRhiBuffer *arena = m_streams.arena();
+    if (pass.block.valid()) {
+        if (!arena)
+            return false;
+        out->append(QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(pass.block.binding(), cs, arena,
+                                                                              quint32(pass.block.size())));
+    }
+    // D16 point 3: each resource by its declared access, so QRhi derives its barriers. The harness's write-as-read
+    // control records a written binding as a read (QRhi then has no write to order: read-after-write's negative control).
+    const bool asRead = computeWriteAsRead();
+    for (const ComputeBinding &b : pass.computeBindings) {
+        const StorageAccess access = asRead ? StorageAccess::Read : b.access;
+        switch (b.kind) {
+        case ComputeResource::Buffer:
+        case ComputeResource::Stream:
+        case ComputeResource::Mesh: {
+            QRhiBuffer *buffer = nullptr;
+            if (b.kind == ComputeResource::Buffer) {
+                const ModeStorage::Buffer *storage = m_storage.buffer(b.resource);
+                buffer = storage ? storage->buffer.get() : nullptr;
+            } else if (b.kind == ComputeResource::Stream) {
+                const ModeStreams::Stream *stream = m_streams.find(b.resource);
+                buffer = stream ? stream->buffer.get() : nullptr;
+            } else {
+                const ModeMeshes::Gpu *mesh = m_meshes.find(b.resource);
+                buffer = mesh && mesh->storage ? mesh->vertices.get() : nullptr;
+            }
+            if (!buffer)
+                return false;
+            out->append(access == StorageAccess::Read  ? QRhiShaderResourceBinding::bufferLoad(b.binding, cs, buffer)
+                        : access == StorageAccess::Write ? QRhiShaderResourceBinding::bufferStore(b.binding, cs, buffer)
+                                                         : QRhiShaderResourceBinding::bufferLoadStore(b.binding, cs, buffer));
+            break;
+        }
+        case ComputeResource::Image: {
+            const ModeStorage::Image *image = m_storage.image(b.resource);
+            if (!image)
+                return false;
+            QRhiTexture *texture = image->texture.get();
+            out->append(access == StorageAccess::Read  ? QRhiShaderResourceBinding::imageLoad(b.binding, cs, texture, 0)
+                        : access == StorageAccess::Write ? QRhiShaderResourceBinding::imageStore(b.binding, cs, texture, 0)
+                                                         : QRhiShaderResourceBinding::imageLoadStore(b.binding, cs, texture, 0));
+            break;
+        }
+        }
+    }
+    for (int s = 0; s < int(pass.samplers.size()); ++s) {
+        const PassSampler &declared = pass.samplers.at(s);
+        QRhiTexture *texture = samplerTexture(declared.texture);
+        if (!texture || s >= p.samplerCount || !p.samplers[s])
+            return false;
+        out->append(QRhiShaderResourceBinding::sampledTexture(declared.binding, cs, texture, p.samplers[s].get()));
+    }
+    return true;
+}
+
+quint32 ModeContent::computeGroups(QRhi *rhi, const ModePass &pass, int axis) const
+{
+    quint32 groups = 0;
+    if (!pass.groupsOver.isEmpty()) {
+        // The resource's extent over the local size, rounded up (a buffer's 32-bit words along x).
+        quint64 extent = 1;
+        if (const ModeStorage::Image *image = m_storage.image(pass.groupsOver))
+            extent = quint64(image->decl.size[axis]);
+        else if (const ModeStorage::Buffer *buffer = m_storage.buffer(pass.groupsOver))
+            extent = axis == 0 ? quint64(buffer->bytes / 4u) : 1u;
+        else
+            return 0;
+        groups = quint32((extent + pass.localSize[axis] - 1) / pass.localSize[axis]);
+    } else {
+        groups = resolveCount(pass.groups[axis], 0);
+    }
+    const int limit = rhi->resourceLimit(QRhi::MaxThreadGroupsPerDimension);
+    return limit > 0 && groups > quint32(limit) ? ~0u : groups; // ~0: past the device's limit (not dispatched)
+}
+
+bool ModeContent::syncStorage(QRhi *rhi, QRhiCommandBuffer *cb, const ColorTarget &target, QString *error)
+{
+    const ModeProgram &program = m_source->drawnProgram();
+    if (program.generation != m_computeProgram) {
+        // A new program: every entry's trigger starts again (the storage itself is kept where declared the same way).
+        m_computeProgram = program.generation;
+        for (ComputeTrack &t : m_compute)
+            t = ComputeTrack();
+    }
+    if (program.buffers.isEmpty() && program.images.isEmpty() && m_storage.empty())
+        return true;                          // nothing declared, nothing held: no work
+    QRhiResourceUpdateBatch *edgeUpdates = rhi->nextResourceUpdateBatch(); // its own: the record's batch is still filling
+    bool fresh = false;
+    const bool hadStorage = !m_storage.empty();
+    if (!m_storage.sync(rhi, edgeUpdates, program.buffers, m_source->drawnImages(), program.drawSettings, &fresh, error)) {
+        edgeUpdates->release();
+        const qint64 failures = m_latch.failed(latchKey(rhi, target), *error);
+        m_source->noteFailure(*error, failures);
+        return false;
+    }
+    if (fresh) {
+        ++m_freshGeneration;
+        if (!hadStorage && !m_storageHeldHere && m_source->storageHeld()) {
+            // D16 choice I: a content made again found its storage gone; the owner is told once (the lost edge).
+            QStringList names;
+            for (const StorageBufferDeclaration &b : program.buffers)
+                names.append(QStringLiteral("state:") + QString::fromLatin1(b.name));
+            for (const StorageImageDeclaration &i : program.images)
+                names.append(QStringLiteral("state:") + QString::fromLatin1(i.name));
+            m_source->texturesLost(names);
+            countStateLost();
+        }
+    }
+    const bool holds = !m_storage.empty();
+    m_storageHeldHere = holds;
+    m_source->setStorageHeld(holds);
+    // The edge's kernels (clears, prefix copies) and the images' zeros, recorded now, before any pass of the record.
+    const bool zeros = m_storage.uploadedAtSync();
+    QRhiResourceUpdateBatch *left = m_storage.recordEdges(rhi, cb, edgeUpdates);
+    if (left && zeros)
+        cb->resourceUpdate(left);             // outside any pass: an image's zeros, before any pass reads it
+    else if (left)
+        left->release();                      // nothing in it (the common record): back to QRhi's pool
+    if (m_storage.objects() != m_storageObjectsSeen) {
+        m_storageObjectsSeen = m_storage.objects();
+        ++m_textureObjects;                   // the bindings over the storage are made again (pipelines kept)
+    }
+    if (m_storage.objects() != m_storageNoted) {
+        m_storageNoted = m_storage.objects(); // the state at an edge only, never per record
+        QJsonObject state = m_storage.stateJson();
+        state.insert(QStringLiteral("device"), computeDeviceFacts(rhi));
+        state.insert(QStringLiteral("fresh_generation"), double(m_freshGeneration));
+        m_source->noteStorage(state);
+    }
+    return true;
+}
+
+void ModeContent::decideDispatches()
+{
+    const ModeProgram &program = m_source->drawnProgram();
+    const QByteArray &record = m_source->frameRecord();
+    const RuntimeSchema *schema = m_source->drawnSchema();
+    const bool everyRecord = computeTriggerEveryRecord();
+    for (int i = 0; i < m_res->passCount && i < kMaxModePasses; ++i) {
+        const ModePass &pass = program.passes.at(i);
+        m_dispatch[i] = false;
+        if (!pass.compute)
+            continue;
+        quint64 value = m_source->frameSerial();
+        if (pass.trigger.kind == ComputeTrigger::Kind::Field) {
+            const fa::Field *field = schema ? schema->field(pass.trigger.field) : nullptr;
+            value = field ? recordU32At(record, field->offset) : 0u;
+        }
+        ComputeTrack &t = m_compute[i];
+        const bool fresh = !t.dispatched || t.freshSeen != m_freshGeneration;
+        const bool due = fresh || value != t.lastTrigger || everyRecord;
+        if (!due) {
+            countSkipped();                   // no new work: nothing dispatched (a re-record of the same frame)
+            continue;
+        }
+        m_dispatch[i] = true;
+        // u_srpss_compute: (the trigger, its value at the last dispatch, fresh, the dispatches since the storage was
+        // made), into the arena's copy (written whole after this).
+        const Resources::Pass &p = m_res->passes[i];
+        if (pass.computeMemberOffset >= 0 && p.copies > 0) {
+            const quint32 member[4] = { quint32(value), t.dispatched ? quint32(t.lastTrigger) : 0u, fresh ? 1u : 0u,
+                                        fresh ? 0u : quint32(t.dispatches) };
+            const quint64 at = quint64(p.blockOffset) + quint64(pass.computeMemberOffset);
+            if (at + sizeof(member) <= quint64(m_arena.size()))
+                std::memcpy(m_arena.data() + at, member, sizeof(member));
+        }
+        t.dispatches = fresh ? 1 : t.dispatches + 1;
+        t.dispatched = true;
+        t.lastTrigger = value;
+        t.freshSeen = m_freshGeneration;
+    }
+}
+
+void ModeContent::recordCompute(QRhi *rhi, QRhiCommandBuffer *cb, int index, QRhiResourceUpdateBatch **pending,
+                                bool *open)
+{
+    const ModePass &pass = m_source->drawnProgram().passes.at(index);
+    Resources::Pass &p = m_res->passes[index];
+    if (!m_dispatch[index] || !p.computePipeline)
+        return;
+    quint32 groups[3];
+    for (int a = 0; a < 3; ++a)
+        groups[a] = computeGroups(rhi, pass, a);
+    if (groups[0] == ~0u || groups[1] == ~0u || groups[2] == ~0u) {
+        // Every count a dispatch reads is checked: past the device's limit, nothing is dispatched (reported once).
+        const QString reason = QStringLiteral("compute entry '%1': its groups pass the device's %2 a dimension; not "
+                                              "dispatched").arg(QString::fromLatin1(pass.name))
+                                   .arg(rhi->resourceLimit(QRhi::MaxThreadGroupsPerDimension));
+        if (reason != m_computeReason) {
+            m_computeReason = reason;
+            m_source->noteRefused(reason);
+        }
+        return;
+    }
+    if (groups[0] == 0 || groups[1] == 0 || groups[2] == 0)
+        return;                               // nothing to do this record
+    if (!*open) {
+        cb->beginComputePass(*pending);       // D16 choice A: its own QRhi compute pass
+        *pending = nullptr;
+        *open = true;
+        countComputePass();
+    }
+    cb->setComputePipeline(p.computePipeline.get());
+    if (pass.block.valid()) {
+        const QRhiCommandBuffer::DynamicOffset offset { pass.block.binding(), p.blockOffset };
+        cb->setShaderResources(nullptr, 1, &offset);
+    } else {
+        cb->setShaderResources();
+    }
+    cb->dispatch(int(groups[0]), int(groups[1]), int(groups[2]));
+    countDispatch();
+    if (!computeSinglePass()) {
+        cb->endComputePass();
+        *open = false;
+    }
 }
 
 bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error)
@@ -4584,6 +4827,46 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
             ok = ok && created(p.pipeline->create());
             continue;
         }
+        if (pass.compute) {
+            // N3.3 (D16): a compute entry: its samplers, its bindings (its block, its resources by access), its pipeline.
+            if (!rhi->isFeatureSupported(QRhi::Compute)) {
+                ok = false;
+                reason = QStringLiteral("compute entry '%1': this device does not report QRhi::Compute (D16 point 6: the "
+                                        "program is refused, never assumed)").arg(QString::fromLatin1(pass.name));
+                break;
+            }
+            for (const ComputeBinding &b : pass.computeBindings) {
+                const ModeMeshes::Gpu *mesh = b.kind == ComputeResource::Mesh ? m_meshes.find(b.resource) : nullptr;
+                if (b.kind == ComputeResource::Mesh && (!mesh || !mesh->storage)) {
+                    ok = false;
+                    reason = QStringLiteral("compute entry '%1' reads the mesh '%2', which is not held with \"storage\": "
+                                            "true").arg(QString::fromLatin1(pass.name), QString::fromLatin1(b.resource));
+                }
+            }
+            if (!ok)
+                break;
+            p.samplerCount = int(pass.samplers.size());
+            for (int s = 0; ok && s < p.samplerCount; ++s) {
+                const PassSampler &declared = pass.samplers.at(s);
+                p.samplers[s].reset(rhi->newSampler(rhiFilter(declared.filter), rhiFilter(declared.filter),
+                                                    rhiMipFilter(declared.mips), rhiWrap(declared.wrap),
+                                                    rhiWrap(declared.wrap), rhiWrap(declared.wrap)));
+                p.samplers[s]->setName(label + QByteArrayLiteral(" sampler ") + declared.name);
+                ok = ok && created(p.samplers[s]->create());
+            }
+            QList<QRhiShaderResourceBinding> bindings;
+            ok = ok && passBindings(*res, i, &bindings);
+            p.bindings.reset(rhi->newShaderResourceBindings());
+            p.bindings->setName(label + QByteArrayLiteral(" bindings"));
+            p.bindings->setBindings(bindings.cbegin(), bindings.cend());
+            ok = ok && created(p.bindings->create());
+            p.computePipeline.reset(rhi->newComputePipeline());
+            p.computePipeline->setName(label);
+            p.computePipeline->setShaderStage({ QRhiShaderStage::Compute, pass.computeShader });
+            p.computePipeline->setShaderResourceBindings(p.bindings.get());
+            ok = ok && created(p.computePipeline->create());
+            continue;
+        }
         // N3.1: differing attachment states need independent blending on the device.
         for (int a = 1; a < int(pass.outputs.size()); ++a) {
             if (!sameOutput(pass.outputs.at(0), pass.outputs.at(a))
@@ -4744,9 +5027,20 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
     bool surfaceOpened = false;
     bool cleared[kMaxSceneTargets] = {};
     const int count = draw ? r.passCount : 0;
+    bool computeOpen = false;                 // N3.3: a QRhi compute pass left open (the single-pass control only)
     int i = 0;
     while (i < count) {
         const ModePass &pass = program.passes.at(i);
+        if (pass.compute) {
+            // N3.3 (D16 point 1): at its place in the list, outside any render pass, only with new work.
+            recordCompute(rhi, cb, i, &pending, &computeOpen);
+            ++i;
+            continue;
+        }
+        if (computeOpen) {
+            cb->endComputePass();
+            computeOpen = false;
+        }
         if (pass.capture) {
             // N3.1: the capture (D14 point 5): the target's pass ended; its capture's two textures primed for the load
             // (rule C: a later pass or a readback left them elsewhere) and written over the whole allocation.
@@ -4767,7 +5061,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             continue;
         }
         int last = i;
-        while (last + 1 < count && !program.passes.at(last + 1).capture
+        while (last + 1 < count && !program.passes.at(last + 1).capture && !program.passes.at(last + 1).compute
                && program.passes.at(last + 1).target == pass.target)
             ++last;
         if (pass.target < 0) {
@@ -4817,6 +5111,8 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
         }
         i = last + 1;
     }
+    if (computeOpen)
+        cb->endComputePass();                 // N3.3: the program ended on compute entries
     if (!surfaceOpened) {
         // The surface is cleared once at least (its frame is what the composite shows).
         cb->beginPass(target.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
@@ -4850,6 +5146,13 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
         quad = quad || pass.mesh == kBuiltinQuadMesh || pass.instanceFrom == kBuiltinQuadMesh;
     m_meshes.sync(rhi, updates, m_source->drawnMeshes(),
                   [this](const QByteArray &name) { return m_source->takeMeshImage(name); }, &m_meshesLost, quad);
+    // N3.3 (D16): the storage at this record, its allocation edge's kernels recorded now (before any pass).
+    for (bool &dispatch : m_dispatch)
+        dispatch = false;
+    if (!syncStorage(rhi, cb, target, error)) {
+        cb->resourceUpdate(updates);          // the uploads stand (their images are taken): nothing is lost
+        return false;
+    }
     // N3.1: the scene targets at this surface's size, made before the pipelines that draw into them.
     if (!syncTargets(rhi, target, error)) {
         cb->resourceUpdate(updates);          // the uploads stand (their images are taken): nothing is lost
@@ -4959,6 +5262,7 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
         if (!m_source->drawnStill())
             m_streams.write(rhi, updates, m_source->frameRecord());
         fillArena();
+        decideDispatches();                   // N3.3: the entries with new work, their u_srpss_compute into the copy
         m_streams.writeArena(m_arena);
         if (!m_batchShadow.isEmpty())
             m_streams.writeBatchCommands(m_batchShadow.constData(), quint32(m_batchShadow.size()));
@@ -4973,6 +5277,13 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
         m_targetReadsDone = m_source->targetReadRequests();
         QRhiResourceUpdateBatch *readbacks = rhi->nextResourceUpdateBatch();
         m_source->setTargetReadback(m_targets.startReadback(readbacks));
+        cb->resourceUpdate(readbacks);
+    }
+    if (m_source->storageReadRequests() != m_storageReadsDone) {
+        // N3.3, harness only (D16 point 8): every storage buffer and image as this record left it.
+        m_storageReadsDone = m_source->storageReadRequests();
+        QRhiResourceUpdateBatch *readbacks = rhi->nextResourceUpdateBatch();
+        m_source->setStorageReadback(m_storage.startReadback(readbacks));
         cb->resourceUpdate(readbacks);
     }
     if (m_targets.takeStateChange())          // audit 2, M5: only when it changed (an allocation edge), never per record

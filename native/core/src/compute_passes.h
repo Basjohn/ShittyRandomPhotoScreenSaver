@@ -52,6 +52,8 @@ constexpr int kMaxStorageImageSide2D = 16384;
 constexpr int kMaxStorageImageSide3D = 2048;
 // The core's kernels' local size (shaders/storage_clear.comp, storage_copy.comp).
 constexpr quint32 kStorageKernelGroup = 256;
+// Their block (StorageKernel: the destination's and source's first words, the words, a value, the stride; std140).
+constexpr quint32 kKernelBlockBytes = 32;
 // At most this many kernel operations (clears and copies) in one record: two per buffer.
 constexpr int kMaxStorageEdgeOps = 2 * kMaxStorageBuffers;
 extern const char kComputeMember[]; // "u_srpss_compute": a uvec4 (trigger, last trigger, fresh, dispatches)
@@ -224,6 +226,7 @@ public:
     // the first. Returns the batch when nothing was recorded (the caller hands it to its first pass).
     QRhiResourceUpdateBatch *recordEdges(QRhi *rhi, QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *updates);
     bool hasEdges() const { return m_opCount > 0; }
+    bool uploadedAtSync() const { return m_uploaded; } // the last sync put an image's zeros into its batch
 
     const Buffer *buffer(const QByteArray &name) const;
     const Image *image(const QByteArray &name) const;
@@ -256,6 +259,7 @@ private:
     QList<Buffer *> m_retiring;         // replaced buffers kept until their copy is recorded
     Op m_ops[kMaxStorageEdgeOps];
     int m_opCount = 0;
+    bool m_uploaded = false;
     quint64 m_objects = 0;
     QByteArray m_zeros;                 // one image slice of zeros, kept for the uploads at an edge
     // The kernels (made at the first edge that needs them): their pipelines, a block per operation in one Dynamic

@@ -92,6 +92,15 @@
 // Backward compatible for every earlier program. Within 18 (before its first use, the lead, 15 Nov): an f32 stream's
 // "used" (a u32 field under an at_most rule within its count; only the used bytes are written), mode_blocks' optional
 // clip correction, and composite_live's mesh_buffers_records_timed, _record_ns and _stream_write_ns.
+// 19 (N3.3, compute passes; D16, compute_passes.h): a program's "buffers" and "images"; a compute entry in the pass list
+// ({"name", "compute": true, "trigger", "groups", "bindings", "samplers"}, one compute pack); the core member
+// u_srpss_compute (a uvec4); a draw's "storage", "instance_from" and "indirect" naming a storage buffer, and its samplers
+// a storage image (sampler3D for a 3D one); a mesh declaration's "storage"; the lost edge's "state:<resource>" names;
+// composite_mode_image_size, composite_mode_storage_read and composite_mode_storage_data (harness), compute_control
+// (harness); composite_live's compute_* counts; composite_mode_state's storage, storage_reads_requested,
+// storage_readback_pending and storage_held; vulkan_device_facts' queue_family_compute,
+// shader_storage_image_extended_formats, max_compute_work_group_count_x, max_compute_work_group_invocations and
+// storage_image_formats. Backward compatible for every earlier program (no compute: N3.2's passes).
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 18
+#define SRPSS_NATIVE_CORE_ABI 19

@@ -534,6 +534,7 @@ bool ModeStorage::sync(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QList<
                        bool *fresh, QString *error)
 {
     *fresh = false;
+    m_uploaded = false;
     // Phase 1: every size checked and every new object made; a failure changes nothing (the storage stays drawn).
     struct Made
     {
@@ -711,6 +712,7 @@ bool ModeStorage::sync(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QList<
         QRhiTextureUploadDescription description;
         description.setEntries(entries.cbegin(), entries.cend());
         updates->uploadTexture(m->texture.get(), description);
+        m_uploaded = true;
         g_imageZeroUploads.fetchAndAddRelaxed(1);
         Image *i = new Image;
         i->decl = decl;
@@ -744,7 +746,7 @@ bool ModeStorage::ensureKernels(QRhi *rhi, QString *error)
                                 "storage_copy.comp)");
         return false;
     }
-    m_opStride = quint32(rhi->ubufAligned(16));
+    m_opStride = quint32(rhi->ubufAligned(int(kKernelBlockBytes)));
     m_opBlocks.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, m_opStride * kMaxStorageEdgeOps));
     m_opBlocks->setName(QByteArrayLiteral("srpss core storage kernel blocks"));
     m_dummy.reset(rhi->newBuffer(QRhiBuffer::Static, QRhiBuffer::StorageBuffer, 16));
@@ -753,10 +755,12 @@ bool ModeStorage::ensureKernels(QRhi *rhi, QString *error)
     bool ok = m_opBlocks->create() && m_dummy->create();
     const QRhiShaderResourceBinding::StageFlags cs = QRhiShaderResourceBinding::ComputeStage;
     m_clearLayout.reset(rhi->newShaderResourceBindings());
-    m_clearLayout->setBindings({ QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, cs, m_opBlocks.get(), 16),
+    m_clearLayout->setBindings({ QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, cs, m_opBlocks.get(),
+                                                                                           kKernelBlockBytes),
                                  QRhiShaderResourceBinding::bufferStore(1, cs, m_dummy.get()) });
     m_copyLayout.reset(rhi->newShaderResourceBindings());
-    m_copyLayout->setBindings({ QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, cs, m_opBlocks.get(), 16),
+    m_copyLayout->setBindings({ QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, cs, m_opBlocks.get(),
+                                                                                          kKernelBlockBytes),
                                 QRhiShaderResourceBinding::bufferStore(1, cs, m_dummy.get()),
                                 QRhiShaderResourceBinding::bufferLoad(2, cs, m_dummy.get()) });
     g_objectsCreated.fetchAndAddRelaxed(2);
@@ -788,19 +792,24 @@ QRhiResourceUpdateBatch *ModeStorage::recordEdges(QRhi *rhi, QRhiCommandBuffer *
         m_retiring.clear();
         return updates;
     }
-    // Each operation's block at its offset, written whole once (the fast path; never a batch update).
+    // Each operation's block at its offset, written whole once (the fast path; never a batch update): its range and the
+    // dispatch's invocations, the stride each invocation steps by.
+    const QRhiShaderResourceBinding::StageFlags cs = QRhiShaderResourceBinding::ComputeStage;
+    const quint32 maxGroups = quint32(qMax(1, qMin(rhi->resourceLimit(QRhi::MaxThreadGroupsPerDimension), 65535)));
+    const auto groupsOf = [maxGroups](quint32 words) {
+        return qMin((words + kStorageKernelGroup - 1) / kStorageKernelGroup, maxGroups);
+    };
     char *p = m_opBlocks ? m_opBlocks->beginFullDynamicBufferUpdateForCurrentFrame() : nullptr;
     if (p) {
         for (int k = 0; k < m_opCount; ++k) {
             const Op &op = m_ops[k];
-            const quint32 block[4] = { op.dstWord, op.srcWord, op.words, 0u };
+            const quint32 block[8] = { op.dstWord, op.srcWord, op.words, 0u, groupsOf(op.words) * kStorageKernelGroup,
+                                       0u, 0u, 0u };
             std::memcpy(p + quint64(k) * m_opStride, block, sizeof(block));
         }
     }
     if (m_opBlocks)
         m_opBlocks->endFullDynamicBufferUpdateForCurrentFrame();
-    const QRhiShaderResourceBinding::StageFlags cs = QRhiShaderResourceBinding::ComputeStage;
-    const quint32 maxGroups = quint32(qMax(1, rhi->resourceLimit(QRhi::MaxThreadGroupsPerDimension)));
     QRhiResourceUpdateBatch *pending = updates;
     for (int k = 0; k < m_opCount; ++k) {
         const Op &op = m_ops[k];
@@ -808,13 +817,13 @@ QRhiResourceUpdateBatch *ModeStorage::recordEdges(QRhi *rhi, QRhiCommandBuffer *
             continue;
         std::unique_ptr<QRhiShaderResourceBindings> &bindings = m_opBindings[k];
         bindings.reset(rhi->newShaderResourceBindings());
+        const QRhiShaderResourceBinding block = QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(
+            0, cs, m_opBlocks.get(), kKernelBlockBytes);
         if (op.copy) {
-            bindings->setBindings({ QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, cs, m_opBlocks.get(), 16),
-                                    QRhiShaderResourceBinding::bufferStore(1, cs, op.dst),
+            bindings->setBindings({ block, QRhiShaderResourceBinding::bufferStore(1, cs, op.dst),
                                     QRhiShaderResourceBinding::bufferLoad(2, cs, op.src) });
         } else {
-            bindings->setBindings({ QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, cs, m_opBlocks.get(), 16),
-                                    QRhiShaderResourceBinding::bufferStore(1, cs, op.dst) });
+            bindings->setBindings({ block, QRhiShaderResourceBinding::bufferStore(1, cs, op.dst) });
         }
         g_objectsCreated.fetchAndAddRelaxed(1);
         if (!bindings->create())
@@ -826,7 +835,7 @@ QRhiResourceUpdateBatch *ModeStorage::recordEdges(QRhi *rhi, QRhiCommandBuffer *
         cb->setComputePipeline(op.copy ? m_copy.get() : m_clear.get());
         const QRhiCommandBuffer::DynamicOffset offset { 0, quint32(k) * m_opStride };
         cb->setShaderResources(bindings.get(), 1, &offset);
-        cb->dispatch(int(qMin((op.words + kStorageKernelGroup - 1) / kStorageKernelGroup, maxGroups)), 1, 1);
+        cb->dispatch(int(groupsOf(op.words)), 1, 1);
         cb->endComputePass();
         countComputePass();
         (op.copy ? g_copies : g_clears).fetchAndAddRelaxed(1);
