@@ -278,23 +278,41 @@ def test_rule_a_is_the_composite_tolerance_for_every_composite_mode():
     # The lead's decision on N5.1's per-pixel proof: a fill within the fill level, edge pixels within the edge level and
     # at most the cap a frame; one rule for every mode drawn through the composite, Spectrum included. Bounds are read
     # from the harness's own constants.
+    # Judged pixel by pixel (tools/pixel_tolerance.py): the fill level only on the pixels the reference draws
+    # translucent (here its own alpha), edge pixels isolated (tests/test_pixel_tolerance.py has the rest).
+    import numpy as np
+
+    from tools import pixel_tolerance as pt
     from tools.visualizer_replay import owner_render_parity as parity
 
     fill, edge, cap = parity.RULE_A_FILL_LEVEL, parity.RULE_A_EDGE_LEVEL, parity.RULE_A_EDGE_PIXELS_PER_FRAME
+    reference = np.zeros((200, 600, 4), np.uint8)
+    reference[..., :3] = 60
+    reference[..., 3] = 128                                    # translucent content everywhere ...
+    reference[150:, :, 3] = 255                                # ... but an opaque band
+    mask = pt.translucent_by_alpha(reference)
 
-    def row(levels: dict) -> dict:
-        return {"pixels": sum(levels.values()), "max_level": max(levels), "levels": {str(k): v for k, v in levels.items()}}
+    def frame(fill_pixels: int, edge_pixels: int, edge_level: int, *, opaque: bool = False, level: int = fill):
+        drawn = reference.astype(np.int16)
+        rows = (slice(150, 200) if opaque else slice(0, 150))
+        region = drawn[rows, :, :3].copy()
+        flat = region.reshape(-1, 3)
+        flat[:fill_pixels] += level
+        drawn[rows, :, :3] = flat.reshape(region.shape)
+        for k in range(edge_pixels):
+            drawn[10 + 3 * (k % 10), 400 + 3 * (k // 10), :3] = reference[0, 0, :3] + edge_level
+        return parity.rule_a_frame(drawn.astype(np.uint8), reference, mask)
 
-    within = [row({fill: 100000, edge: cap})]
-    assert parity.rule_a_verdict("devcurve", within)["pass"]
-    assert parity.rule_a_verdict("devcurve", [])["pass"]
+    assert parity.rule_a_verdict([frame(80000, cap, edge)])["pass"]
+    assert parity.rule_a_verdict([])["pass"]
     # Controls: one edge pixel too many in a frame, one level too far.
-    assert not parity.rule_a_verdict("devcurve", [row({fill: 10, edge: cap + 1})])["pass"]
-    assert not parity.rule_a_verdict("devcurve", [row({fill: 10, edge + 1: 1})])["pass"]
-    # Spectrum under the same rule: its owner runs' shape (every differing pixel at 1 level) passes; a Spectrum frame
-    # with its pixels at 2 levels, beyond the fill bound and over the edge cap, fails.
-    assert parity.rule_a_verdict("spectrum", [row({fill: 17000})])["pass"]
-    assert not parity.rule_a_verdict("spectrum", [row({fill + 1: 17000})])["pass"]
+    assert not parity.rule_a_verdict([frame(10, cap + 1, edge)])["pass"]
+    assert not parity.rule_a_verdict([frame(10, 1, edge + 1)])["pass"]
+    # Spectrum under the same rule: its owner runs' shape (every differing pixel at 1 level, translucent) passes; a
+    # Spectrum frame with those pixels at 2 levels fails, and so do the same pixels at 1 level on opaque content.
+    assert parity.rule_a_verdict([frame(17000, 0, edge)])["pass"]
+    assert not parity.rule_a_verdict([frame(17000, 0, edge, level=fill + 1)])["pass"]
+    assert not parity.rule_a_verdict([frame(17000, 0, edge, opaque=True)])["pass"]
 
 
 # ------------------------------------------------------------------------------------------------- the route
