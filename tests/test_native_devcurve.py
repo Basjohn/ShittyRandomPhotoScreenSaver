@@ -185,7 +185,23 @@ def test_the_settings_follow_settings_and_the_card_only():
     assert _settings(_logical(0, enabled=(False,) * 4), presentation, card)["u_devcurve_foreground_layer_id"] == -1
 
 
-_ARRAY_PARAMETER = r"^\w[\w ]*\([^)]*\b\w+\s+\w+\s*\[\d*\][^)]*\)\s*\{"
+#: A function definition (indented or not, its parameters over any number of lines) with an array parameter, in either
+#: GLSL form: ``float c[N]`` (any size expression, a literal, a #define or none) or ``float[96] c``. A prototype (ending
+#: in ``;``) copies nothing and is not matched.
+_ARRAY_PARAMETER = (r"^[ \t]*\w[\w \t]*\([^;{}()]*?"
+                    r"(?:\b\w+\s+\w+\s*\[[^\]]*\]|\b\w+\s*\[[^\]]*\]\s+\w+)[^;{}()]*\)\s*\{")
+
+
+def _shader_sources() -> dict[str, str]:
+    """Every shader the product bakes or the core draws: the files of the three shader folders, and the fullscreen
+    transitions' fragments, which are Python strings baked to packs the core draws on Vulkan (N5.2a, N5.2b)."""
+    from tools.regen_qrc import transition_fragment_sources
+
+    sources = {str(path.relative_to(ROOT)): path.read_text(encoding="utf-8")
+               for folder in ("widgets/spotify_visualizer/shaders", "rendering/quick/qml/shaders", "native/core/shaders")
+               for path in (ROOT / folder).rglob("*") if path.suffix in (".frag", ".vert", ".comp", ".glsl")}
+    sources.update({f"transition {name}": text for name, text in transition_fragment_sources().items()})
+    return sources
 
 
 def test_no_product_shader_passes_an_array_to_a_function_by_value():
@@ -193,15 +209,25 @@ def test_no_product_shader_passes_an_array_to_a_function_by_value():
     # did so and its pass cost 1.97 ms on Vulkan against 0.030 ms on OpenGL at dpr 1 (N5.1).
     import re
 
-    sources = [path for folder in ("widgets/spotify_visualizer/shaders", "rendering/quick/qml/shaders",
-                                   "native/core/shaders")
-               for path in (ROOT / folder).rglob("*") if path.suffix in (".frag", ".vert", ".comp", ".glsl")]
-    assert sources
-    found = [f"{path.name}: {match.group(0)}" for path in sources
-             for match in re.finditer(_ARRAY_PARAMETER, path.read_text(encoding="utf-8"), flags=re.M)]
+    sources = _shader_sources()
+    assert any(name.startswith("transition ") for name in sources)
+    assert any(name.endswith(".frag") for name in sources)
+    found = [f"{name}: {match.group(0)}" for name, text in sources.items()
+             for match in re.finditer(_ARRAY_PARAMETER, text, flags=re.M)]
     assert found == []
-    # Control: the old signature is caught.
-    assert re.search(_ARRAY_PARAMETER, "float _sample_curve(const float curve[96], float x, int count) {", flags=re.M)
+    # Controls: the old signature, a size that is not a literal, the array-type form, an indented definition, a
+    # parameter list over two lines and a brace on the next line are caught; a prototype and a call are not.
+    for case in ("float _sample_curve(const float curve[96], float x, int count) {",
+                 "float sampleCurve(const float curve[N], float x) {",
+                 "float sampleCurve(float[96] curve, float x) {",
+                 "    float sampleCurve(const float curve[96], float x) {",
+                 "float sampleCurve(float x,\n                  const float curve[CURVE_SAMPLES])\n{"):
+        assert re.search(_ARRAY_PARAMETER, case, flags=re.M), case
+    for case in ("float sampleCurve(const float curve[96], float x);",
+                 "    if (curve[3] > x) {",
+                 "    for (int i = 0; i < count[0]; ++i) {",
+                 "float sampleCurve(int index, float x) {"):
+        assert not re.search(_ARRAY_PARAMETER, case, flags=re.M), case
 
 
 # --------------------------------------------------------------------------------------- the module's blocks
