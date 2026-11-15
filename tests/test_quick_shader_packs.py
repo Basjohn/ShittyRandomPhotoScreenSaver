@@ -210,11 +210,11 @@ def test_the_cards_draw_on_vulkan_as_on_opengl_and_not_without_spirv(tmp_path):
         assert _distance(on_vulkan[name], on_opengl[name]) < 1.0, name
     # The card's static grain is read from the fragment's pixel in one row convention (N1.4's fragPixel), so the
     # material matches pixel for pixel, not only on average. Raw gl_FragCoord (row origin differs by backend) put
-    # 2,547 of 2,704 card pixels up to 8 levels apart. A pixel whose hash sits at its fract's wrap may still flip
-    # between the two compilers (0.1%: the bound below; 0 in this region on 14 Nov).
+    # 2,547 of 2,704 card pixels up to 8 levels apart. The grain is an integer hash of the pixel (N5.2b's way), so no
+    # pixel may pass one level between the backends (the float hash flipped at its fract's wrap, up to 12 levels).
     pairs = list(zip(on_vulkan["material_pixels"], on_opengl["material_pixels"]))
     level = [max(abs(a - b) for a, b in zip(vk, gl)) for vk, gl in pairs]
-    assert sum(d > 1 for d in level) <= len(level) // 1000, sorted(level)[-10:]
+    assert sum(d > 1 for d in level) == 0, sorted(level)[-10:]
 
     # Negative control: the same QML with SPIR-V erased from its packs draws none of them on Vulkan.
     stripped = tmp_path / "qml"

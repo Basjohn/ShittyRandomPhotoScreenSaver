@@ -69,10 +69,14 @@ float roundedBox(vec2 p, vec2 halfSize, float r, out vec2 normal) {
     return length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - r;
 }
 
+// An integer hash of the pixel (R-94's class; N5.2b's way): exact on every GPU, compiler and backend, where the float
+// hash (fract of a product of the pixel) flipped by backend at the fract's wrap. Uniform in [0, 1), 24 bits, so the
+// float is exact and the mean stays 0.5.
 float grain(vec2 pixel) {
-    vec3 p3 = fract(vec3(pixel.xyx) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
+    uvec2 q = uvec2(ivec2(floor(pixel)));
+    uint x = q.x * 0x9e3779b9u ^ (q.y * 0x85ebca6bu + 0x27d4eb2fu);
+    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
+    return float(x >> 8) * (1.0 / 16777216.0);
 }
 
 // The card surface at card-local point p (origin at the card centre), sampled through the
