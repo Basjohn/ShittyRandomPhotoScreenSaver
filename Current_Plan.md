@@ -282,6 +282,13 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [ ] One helper beside `configure_offline_controller` sets the framed view of the card a host models
     (`resolve_framed_view`); each host above calls it (the worker gates send it as `VIS_SET_VIEW`).
   - [ ] Guard: a Waveform tick in each of those hosts has a view span (negative control: today's hosts have none).
+- [ ] Retire the P1 spike from the build path (lead, 15 Nov; operator asked its value): `native/spike_p1` was the P1
+  proof and its N0.6 and N0.7 rounds are recorded (D6, `Native_Core_N06_N07_Qt_Facts.md`). The core now owns its
+  Vulkan device and has its own hidden-host harnesses, so the N0.6 leftovers below are retargeted to `native/core`
+  (`host_check.py` and `composite_check.py` gain the visible translucent round and the fail-closed validation
+  rule), then the `native_spike` selection is removed from `tools/build_runner.py`, `tools/github_remote_build.py`,
+  the workflow and their tests. The source stays in the repository as evidence (the keep-useful-tools rule; it adds
+  nothing to the product); the validation-layer folder under `D:/Temp/Scratch/SRPSS/native_spike/` keeps its name.
 - [ ] N0.6 D6's proof (harness rounds 1 to 6 merged; the record is D6's "As proved" in the decisions document;
   evidence `.artifacts/evidence/native_core/n06/`). The validation layer (Khronos's Windows build in
   `D:/Temp/Scratch/SRPSS/native_spike/validation_layers/extracted/`) is given to the harness process alone with
@@ -657,11 +664,12 @@ are measured above a handful per frame, one pipeline and one indirect call with 
 (`gl_DrawID`, `gl_BaseInstance`, `gl_BaseVertex`) replaces a draw per batch; the port records which backends report
 the feature (D3D11 is not stated).
 
-- [ ] Side defect from the shared tolerance (`tools/pixel_tolerance.py`, D12 "The pixel tolerance"): six harnesses
-  still accept rule (a) or (b) at "max level at most 1 everywhere", so a uniform 1-level shift passes them
-  (`devcurve_check.py:474`, `spectrum_check`, `generic_mode_check`, `fullscreen_pass_check`, `background_layer_check`,
-  `backdrop_pyramid_check`). Route each through the shared tolerance with its own mask or scatter cap; the audit
-  probes' uniform shift must fail each.
+- [ ] The glass cards' grain on Vulkan (found routing `backdrop_pyramid_check` through the shared tolerance): the
+  card material's grain uses a float hash that differs by backend, up to 12 levels on at most 8 pixels a region,
+  still judged by the old `CARD_OUTLIER_SHARE` (levels unbounded, audit 4 L1). Fix as N5.2b did: an integer hash
+  from the pixel in the card grain shader, so both backends agree; the lead reviews before/after stills on bright and
+  dark wallpapers (the grain pattern changes once); then the class is judged by the shared tolerance and
+  `CARD_OUTLIER_SHARE` is deleted.
 - [ ] N5.1 Spline Curve leftover: its Studio is not offered on Vulkan (`STUDIO_PREVIEW_BACKENDS`), the same open
   item as Spectrum's; both close with N5.8.
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
@@ -1122,6 +1130,24 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   Settings and Studio box.
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
+
+### 1D.15 Seeded transitions mirror across displays (operator, 15 Nov; Opus Medium, small)
+
+- [ ] Root cause, proved: `engine/display_manager.py:4913-4926` resolves one transition spec per batch from one
+  `_next_batch_seed`, so every display gets the same seed, and Liquid Lens (and every seeded transition: Crumble,
+  Glass Shatter, Jigsaw, Particle...) follows the same path or pattern on both displays at once. Confirm on a
+  two-display hidden host.
+- [ ] Fix at the owner: the batch keeps one transition type and its Settings, but each display's run gets its own
+  seed, derived from the batch seed and that display's stable identity (never its index order, which a display
+  move changes). The ahead-of-time preparation (`prepare_next_transition`, `_prepare_transition_run_geometry`, the
+  idle warm seed at about line 5003) prepares each display's own geometry, still one unit per spaced frame
+  (gradual warm-up rule).
+- [ ] Guard: two displays in one batch get different seeds and different Liquid Lens plans; the same display gets the
+  same seed for the same batch seed (reproducible); negative control on today's shared seed. The native route
+  (N5.2a/b) receives the per-display seed through the same request.
+- [ ] Docs (operator, 15 Nov): a short note in `Docs/Reference/Transitions.md` when it lands: seeds are per display,
+  and the heavy-geometry transitions (Glass Shatter, Crumble, Jigsaw) now prepare one geometry set per display in
+  the idle gap. Record the measured prepare time per display, so a later performance question has its baseline.
 
 ### 1D.13 Side defects found at its merge (15 Nov; Opus Medium when a slot is free of native work)
 
