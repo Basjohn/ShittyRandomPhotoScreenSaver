@@ -648,8 +648,11 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       `tests/test_native_packet_reader_sources.py`), the C++ reader's admission of the kind, the Python reference
       decoder; an `f32` array admitted only with its used-length `u32` field and `at_most` rule (the stream's `"used"`,
       refused without one, past the capacity or on a u32 stream; only the used bytes written each record: the lead,
-      15 Nov; `mesh_buffer_check.py --rounds used` proves the bytes written, the bytes past it untouched and a record
-      past its rule writing nothing).
+      15 Nov; a storage stream's bytes past the used length are an earlier record's, an instance stream is drawn
+      exactly its used records and any other instance count is refused: checkpoint audit 4, H2;
+      `mesh_buffer_check.py --rounds used` proves the bytes written, a storage stream's bytes past it untouched, an
+      instance stream drawn exactly its used records with no frame-slot difference (control `instances_past_used`: the
+      Vulkan frames alternate), another instance count refused, and a record past its rule writing nothing).
     - [ ] Python face: `rendering/native/mode.py` (`ModeMesh`, `ModeStream`, `ModePass` gaining the vertex pack,
       geometry, draw, storage bindings, cull, front face and blend declaration; `program_json` carrying them;
       `NativeMode.set_mesh`/`remove_mesh`; `state()`'s meshes, streams and arena); a GPU-free mirror of the arena's

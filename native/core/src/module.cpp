@@ -707,6 +707,7 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("mesh_buffers_records_timed"), double(mb.recordsTimed));
     o.insert(QStringLiteral("mesh_buffers_record_ns"), double(mb.recordNs));
     o.insert(QStringLiteral("mesh_buffers_stream_write_ns"), double(mb.streamWriteNs));
+    o.insert(QStringLiteral("mesh_buffers_draws_refused"), double(mb.drawsRefused)); // audit 4 H2, M1
     return pyJson(o);
 }
 
@@ -1410,7 +1411,8 @@ PyObject *mesh_buffer_control(PyObject *, PyObject *args)
         return nullptr;
     const QJsonObject o = QJsonDocument::fromJson(QByteArray(json, qsizetype(length))).object();
     static const QStringList keys = { QStringLiteral("hide_draw_parameters"), QStringLiteral("direct_first_instance"),
-                                      QStringLiteral("recreate_streams"), QStringLiteral("skip_mesh_release") };
+                                      QStringLiteral("recreate_streams"), QStringLiteral("skip_mesh_release"),
+                                      QStringLiteral("instances_past_used") };
     for (auto it = o.begin(); it != o.end(); ++it) {
         if (!keys.contains(it.key())) {
             PyErr_Format(PyExc_ValueError, "unknown control '%s' (%s)", it.key().toUtf8().constData(),
@@ -1426,6 +1428,8 @@ PyObject *mesh_buffer_control(PyObject *, PyObject *args)
         srpss_core::setRecreateStreams(o.value(QStringLiteral("recreate_streams")).toBool());
     if (o.contains(QStringLiteral("skip_mesh_release")))
         srpss_core::setSkipMeshRelease(o.value(QStringLiteral("skip_mesh_release")).toBool());
+    if (o.contains(QStringLiteral("instances_past_used")))
+        srpss_core::setInstancesPastUsed(o.value(QStringLiteral("instances_past_used")).toBool());
     Py_RETURN_NONE;
 }
 
@@ -2725,7 +2729,7 @@ PyMethodDef methods[] = {
       "(handle, name) -> None: N3.2, the mesh goes (its buffers at the next record). KeyError when there is none." },
     { "mesh_buffer_control", mesh_buffer_control, METH_VARARGS,
       "(controls_json) -> None: N3.2, harness: the proofs' negative controls (hide_draw_parameters, "
-      "direct_first_instance, recreate_streams, skip_mesh_release), process-wide." },
+      "direct_first_instance, recreate_streams, skip_mesh_release, instances_past_used), process-wide." },
     { "mesh_buffer_arena_layout", mesh_buffer_arena_layout, METH_VARARGS,
       "([block sizes], alignment) -> ([offsets], size): D15 point 3's block arena layout (GPU-free)." },
     { "vulkan_device_facts", vulkan_device_facts, METH_VARARGS,

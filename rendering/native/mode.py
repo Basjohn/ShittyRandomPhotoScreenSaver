@@ -292,7 +292,9 @@ class ModeStream:
     per instance), ``storage`` (read in a buffer block) or ``indirect`` (u32 commands of four: vertices, instances,
     first vertex, 0). An f32 field names its ``used`` length: a u32 field counting the elements in use, under an
     ``at_most`` rule no larger than the field's count; only those bytes are written each record (the core refuses an
-    f32 stream without one, and a u32 stream with one)."""
+    f32 stream without one, and a u32 stream with one). Only a storage stream keeps the bytes past its used length
+    from an earlier record; an instance stream is drawn exactly its used records (its pass's instance count is the
+    used records, and any other count refuses the draw: checkpoint audit 4, H2)."""
 
     name: str
     field: str
@@ -319,7 +321,7 @@ class ModeStream:
 class PassGeometry:
     """N3.2 (D15 point 1): a pass's own vertex stage and geometry. Counts are a number or a name the record (a u32
     field) or the settings fill; ``vertices`` may be ``"mesh"`` (the mesh's), ``instances`` ``"mesh"`` (the instance
-    source's; the default with one). ``front_face`` is ``ccw``, ``cw`` or a name choosing per record (0 ccw, 1 cw). An
+    source's; the default with one: an instance stream's used records this record). ``front_face`` is ``ccw``, ``cw`` or a name choosing per record (0 ccw, 1 cw). An
     indirect draw names an indirect stream and its ``draw_count``; a batched draw (D15 point 6) names the record's u32
     {first, count} pairs and its ``batch_count``, and may give a ``draw_parameters_pack`` (one multi-draw where the
     device reports the features; the plain ``vertex_pack`` draws one draw a batch with ``u_srpss_batch`` set)."""

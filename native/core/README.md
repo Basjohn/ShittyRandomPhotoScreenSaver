@@ -241,8 +241,10 @@ worked example (harness-only); a product mode does the same in the product's pla
    uploads it, `conventions.front_face_clockwise`), an `indirect` stream with its `draw_count`, or a batched draw's
    `batches`/`batch_count` with an optional draw-parameters pack (SPIR-V and GLSL only)). Meshes by
    `NativeMode.mesh(name, vertices, RecordLayout, instances=, instance_layout=)`; streams (`ModeStream`) from the
-   record's `f32` fields (the std430 bytes the Python renderer packs, verbatim). The block's `uMatrix` is item pixels to
-   the drawn target's clip space, corrected once; `srpssVertexIndex`/`srpssInstanceIndex` read the same numbers on both
+   record's `f32` fields (the std430 bytes the Python renderer packs, verbatim). Only a storage stream keeps the bytes
+   past its used length from an earlier record; an instance stream is drawn exactly its used records (its pass's
+   instance count is the stream's used records, and any other count refuses the draw: checkpoint audit 4, H2). The
+   block's `uMatrix` is item pixels to the drawn target's clip space, corrected once; `srpssVertexIndex`/`srpssInstanceIndex` read the same numbers on both
    backends (`firstInstance` is always 0). Sprites are instanced quads (`//@srpss_geometry` after
    `//@srpss_conventions`: `srpssSpriteCorner`, `srpssSpriteClip`, `srpssSpriteCulled`; the sprite coordinate has
    `gl_PointCoord`'s orientation), converted first in the Python renderer and judged against that conversion. Every

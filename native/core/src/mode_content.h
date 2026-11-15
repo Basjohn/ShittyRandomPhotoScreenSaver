@@ -628,6 +628,10 @@ private:
                   const QRhiCommandBuffer::VertexInput &triangle);
     // N3.2: a count or a selector for this record (a number, the mesh's, a record u32 field, a setting).
     quint32 resolveCount(const DrawCount &count, quint32 meshCount) const;
+    // N3.2 audit 4 (H2, M1): pass `index`'s draw refused this record: `what` (a DrawRefusal) asked `asked` of a buffer
+    // holding `held`. The reason is made, and noted in the mesh-buffer state, once at the refusal's edge; the record's
+    // reason names it.
+    void refuseDraw(int index, int what, quint64 asked, quint64 held);
     // N3.2: the passes' blocks into the arena's CPU copy (a batched pass: one copy a batch, its u_srpss_batch set).
     void fillArena();
     // N3.2: the drawn passes' meshes all uploaded.

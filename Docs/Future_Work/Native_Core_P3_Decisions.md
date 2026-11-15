@@ -1444,10 +1444,23 @@ core's plan mirrored) and the geometry include (`srpss_geometry.glsl`, `SRPSS_GE
   or a rule past the capacity) and a u32 stream with one; the used length is the stream's (never also a block member
   or a draw count). Each record writes only the used bytes (none at 0): the storage route uploads a view of them
   (`QByteArray::fromRawData` over the bytes kept across records, no copy, nothing allocated), the instance route
-  writes them by the fast path; bytes past the used length keep what an earlier record wrote. A variable-length
-  consumer (Waveform's cohorts) pays for what it carries, never the capacity. Proved on e95d9306 (`--rounds used`, both
-  backends): 40 of 192 sprites write 960 bytes a record; a beam drawn past its used points equals the composite of the
-  two records exactly; a record whose used length breaks its rule is refused by the reader and writes nothing.
+  writes them by the fast path. A variable-length consumer (Waveform's cohorts) pays for what it carries, never the
+  capacity. Proved on e95d9306 (`--rounds used`, both backends): 40 of 192 sprites write 960 bytes a record; a beam
+  drawn past its used points equals the composite of the two records exactly; a record whose used length breaks its
+  rule is refused by the reader and writes nothing.
+- *Narrowed by the lead after checkpoint audit 4 (H2, 15 Nov): only a storage stream keeps the bytes past its used
+  length.* A storage stream is one buffer written by `uploadStaticBuffer` of the used bytes, so the bytes past them are
+  an earlier record's. An instance stream is a `Dynamic` buffer written by the fast path, which Qt documents as a
+  whole-buffer update: on Vulkan it is one buffer per frame slot, so the bytes past the used length are the record two
+  frames back (or uninitialised in a slot not yet written), and on OpenGL QRhi maps with `GL_MAP_INVALIDATE_BUFFER_BIT`,
+  so they are undefined. The audit measured it: an instance stream drawn 120 records with 40 used differed from the
+  composite record on 94,698 pixels on Vulkan in alternate frames. So an instance stream draws exactly its used records:
+  its pass's instance count is the stream's used records this record (`"mesh"`, the default), and any other count
+  (a number, a record field or a setting) refuses that pass's draw with the reason, noted once in the mesh-buffer state
+  (`draws_refused`) and named in the record's reason; nothing past the used length is ever read. The `used` round
+  proves it on the sprites' instance stream (three records of 40 used after one of 120 each equal a fresh 40-sprite
+  frame; another count is refused), and its control `instances_past_used` (the named count drawn past the used
+  records) shows the alternating frames on Vulkan.
 - *The draw parameters' values* (read back as colour from the multi-draw, first vertex 4): `gl_DrawID` is the batch
   and `gl_BaseInstance` 0 on both backends; `gl_BaseVertex` is 4 on Vulkan (the command's first vertex) and 0 on
   OpenGL (`ARB_shader_draw_parameters`: a non-indexed draw has no base vertex), so a shader never reads

@@ -27,8 +27,10 @@ Rounds:
              the colour of the multi-draw (first vertex 4) where it is recorded. The device facts (Vulkan) and
              research Q5's bake facts.
   used       (each API) D15 point 4: an f32 stream writes only its used elements (the bytes written per record), a
-             storage stream's bytes past its used length are the earlier record's (nothing past it uploaded), a record
-             whose used length breaks its at_most rule writes nothing.
+             storage stream's bytes past its used length are the earlier record's (nothing past it uploaded), an
+             instance stream is drawn exactly its used records and another instance count is refused (audit 4 H2;
+             control instances_past_used: the Vulkan frames alternate), a record whose used length breaks its
+             at_most rule writes nothing.
   rest       (each API) nothing uploaded, written or recorded over frames at rest; control: a new record writes.
   steady     (each API) frames of new records: the core's buffers created, mesh, stream and ownership counts flat, the
              process's private bytes recorded; control: streams made again every record (the counts grow).
@@ -404,7 +406,9 @@ def round_used(core, engine, app, api: str, packs: dict) -> dict:
     """D15 point 4 (the lead, 15 Nov): an f32 stream writes only its used elements. The bytes written per record are
     the used bytes (sprites: 40 of 192 records); a storage stream's bytes past the used length keep the earlier
     record's (the beam drawn past its used points equals the composite of both records: nothing past was uploaded);
-    a record whose used length breaks its at_most rule is refused by the reader and writes nothing."""
+    an instance stream is drawn exactly its used records, another count refused (checkpoint audit 4, H2: only a
+    storage stream keeps the bytes past its used length); a record whose used length breaks its at_most rule is refused
+    by the reader and writes nothing."""
     import struct as _struct
 
     mb = _scenes()
@@ -445,6 +449,11 @@ def round_used(core, engine, app, api: str, packs: dict) -> dict:
         facts["beam_partial_against_b"] = _compare(partial, plain_b)
         checks["bytes_past_the_used_length_were_not_uploaded"] = (_compare(partial, composed)["exact"]
                                                                   and not _compare(partial, plain_b)["exact"])
+        # Checkpoint audit 4, H2: an instance stream is drawn exactly its used records (QRhi's fast path is a
+        # whole-buffer update: past the used length are another frame slot's bytes on Vulkan, undefined on OpenGL).
+        instance = _instance_used(core, engine, app, api, packs, host)
+        facts["instance_stream"] = instance["facts"]
+        checks.update(instance["checks"])
         # A record past its rule: refused at the reader, nothing written, the last frame kept.
         scene = Scene(core, engine, host, spec)
         try:
@@ -463,6 +472,66 @@ def round_used(core, engine, app, api: str, packs: dict) -> dict:
         host.close()
         host_check._flush_deletes(app)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def _instance_used(core, engine, app, api: str, packs: dict, host) -> dict:
+    """Audit 4 H2 on the sprites' instance stream: record A (every sprite), then three records B of 40 used sprites
+    each equal a fresh item's 40-sprite frame (nothing of A, no frame-slot difference); an instance count other than the
+    used records is refused (nothing drawn, the reason given). Control ``instances_past_used``: the count of 120 drawn
+    over 40 used records reads past the used length, and on Vulkan the frames alternate between the frame slots."""
+    import struct as _struct
+
+    mb = _scenes()
+    pack = (lambda values: _struct.pack(f"<{len(values)}f", *values))
+    used = 40
+    b_rows = mb.points(5)
+    spec = spec_for("sprites", packs, api)
+    checks, facts = {}, {}
+    scene = Scene(core, engine, host, spec)
+    try:
+        scene.pixels(app)                                      # record A, every sprite used
+        b = [scene.pixels(app, point_rows=pack(b_rows), point_count=used, point_floats=6 * used) for _ in range(3)]
+        before = core.composite_live().get("mesh_buffers_draws_refused", 0)
+        refused = scene.pixels(app, point_count=mb.POINTS)     # another count than the 40 used records
+        state = scene.mode.state()
+        facts["refused"] = {"lit": int((refused[..., :4].max(axis=2) > 0).sum()),
+                            "draws_refused": core.composite_live().get("mesh_buffers_draws_refused", 0) - before,
+                            "last_reason": state.get("last_reason"),
+                            "state": (state.get("mesh_buffers") or {}).get("draws_refused")}
+    finally:
+        _close(scene, host, app)
+    fresh_record = dict(spec.record, point_rows=pack(b_rows), point_count=used, point_floats=6 * used)
+    scene = Scene(core, engine, host, replace(spec, record=fresh_record))
+    try:
+        fresh = scene.pixels(app)
+    finally:
+        _close(scene, host, app)
+    facts["b_against_fresh"] = [_compare(frame, fresh) for frame in b]
+    checks["an_instance_stream_draws_exactly_its_used_records"] = (
+        all(c["exact"] for c in facts["b_against_fresh"]) and int((fresh[..., :3].max(axis=2) > 8).sum()) > 200)
+    checks["another_instance_count_is_refused"] = (facts["refused"]["lit"] == 0 and facts["refused"]["draws_refused"] > 0
+                                                   and "used record" in str(facts["refused"]["last_reason"]))
+    # The control: the count of 120 drawn over the 40 used records, past the used length.
+    core.module.mesh_buffer_control(json.dumps({"instances_past_used": True}))
+    try:
+        scene = Scene(core, engine, host, spec)
+        try:
+            scene.pixels(app)                                  # record A in one slot
+            past = [scene.pixels(app, point_rows=pack(b_rows), point_floats=6 * used) for _ in range(3)]
+        finally:
+            _close(scene, host, app)
+    finally:
+        core.module.mesh_buffer_control(json.dumps({"instances_past_used": False}))
+    facts["control_past_used"] = {
+        "frame1_vs_frame2": _compare(past[0], past[1]), "frame2_vs_frame3": _compare(past[1], past[2]),
+        "frame1_vs_fresh_40": _compare(past[0], fresh)}
+    differs = facts["control_past_used"]["frame1_vs_frame2"]["past1"] > 100
+    if api == "vulkan":
+        checks["control_past_used_alternates_on_vulkan"] = differs
+    else:
+        facts["control_past_used"]["opengl_frames_differ"] = differs  # undefined bytes: recorded, not judged
+    checks["control_past_used_draws_past_the_40"] = not facts["control_past_used"]["frame1_vs_fresh_40"]["exact"]
+    return {"checks": checks, "facts": facts}
 
 
 # --------------------------------------------------------------------------------------------------- the reference

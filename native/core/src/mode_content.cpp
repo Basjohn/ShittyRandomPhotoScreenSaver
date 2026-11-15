@@ -2620,6 +2620,10 @@ struct ModeContent::Resources
         bool meshBinding = false;
         bool instanceBinding = false;
         bool drawParameters = false;
+        // Audit 4 (H2, M1): the last refusal of its draw (a count its buffers do not hold), its reason made once at the
+        // refusal's edge (nothing allocated by the records that repeat it).
+        int refusal = 0;
+        QString refusalReason;
     };
 
     // N3.1: a scene target's clearing draw (its clear values, its pipeline over the target's render pass).
@@ -3485,6 +3489,42 @@ quint32 recordU32At(const QByteArray &record, quint32 offset)
     return value;
 }
 
+// N3.2 audit 4: why a pass's draw is refused (H2: an instance stream drawn other than its used records; M1: a count past
+// the buffer it reads).
+enum DrawRefusal {
+    RefusedNone = 0,
+    RefusedInstancesNotUsed,     // an instance stream's pass asked another count than the stream's used records
+    RefusedInstancesPastSource,  // instances past the instance source's records
+    RefusedVerticesPastMesh,     // first vertex plus vertices past the mesh's vertices
+    RefusedBatchesPastTable,     // batches past the batch table's pairs
+    RefusedCommandsPastStream,   // indirect commands past the indirect stream's
+    RefusedCommandVertices,      // a record command's first vertex plus vertices past the mesh's
+    RefusedCommandInstances,     // a record command's instances past the instance source's records
+};
+
+const char *drawRefusalText(int what)
+{
+    switch (what) {
+    case RefusedInstancesNotUsed:
+        return "draws %1 instance(s) from its instance stream, which holds %2 used record(s) this record: an instance "
+               "stream is drawn exactly its used records";
+    case RefusedInstancesPastSource:
+        return "draws %1 instance(s) from an instance source of %2 record(s)";
+    case RefusedVerticesPastMesh:
+        return "draws to vertex %1 of a mesh of %2 vertices";
+    case RefusedBatchesPastTable:
+        return "draws %1 batch(es) from a batch table of %2 pair(s)";
+    case RefusedCommandsPastStream:
+        return "draws %1 indirect command(s) from a stream of %2";
+    case RefusedCommandVertices:
+        return "has an indirect command drawing to vertex %1 of a mesh of %2 vertices";
+    case RefusedCommandInstances:
+        return "has an indirect command drawing %1 instance(s) from an instance source of %2 record(s)";
+    default:
+        return "is refused (%1 of %2)";
+    }
+}
+
 } // namespace
 
 // ------------------------------------------------------------------------------------------------- N3.2 (D15)
@@ -3514,6 +3554,13 @@ void ModeContent::noteMeshBuffers()
     QJsonObject o = m_streams.stateJson();
     o.insert(QStringLiteral("meshes"), m_meshes.stateJson());
     o.insert(QStringLiteral("meshes_lost"), QJsonArray::fromStringList(m_meshesLost));
+    // Audit 4 (H2, M1): each pass's draw refusal of this build, noted at its edge only.
+    QJsonArray refused;
+    for (int i = 0; m_res && i < m_res->passCount; ++i) {
+        if (!m_res->passes[i].refusalReason.isEmpty())
+            refused.append(m_res->passes[i].refusalReason);
+    }
+    o.insert(QStringLiteral("draws_refused"), refused);
     m_source->noteMeshBuffers(o);
 }
 
@@ -3534,6 +3581,21 @@ quint32 ModeContent::resolveCount(const DrawCount &count, quint32 meshCount) con
         return recordU32At(m_source->frameRecord(), field->offset);
     const double value = m_source->drawnProgram().drawSettings.value(count.name, 0.0);
     return value > 0.0 && value < 4294967295.0 ? quint32(value) : 0u;
+}
+
+void ModeContent::refuseDraw(int index, int what, quint64 asked, quint64 held)
+{
+    countDrawRefused();
+    Resources::Pass &p = m_res->passes[index];
+    if (p.refusal != what) {
+        // The edge (once per kind a build): the reason made and noted in the state, never again per record.
+        p.refusal = what;
+        p.refusalReason = QStringLiteral("pass '%1' %2 (N3.2 audit 4): its draw is refused")
+                              .arg(QString::fromLatin1(m_source->drawnProgram().passes.at(index).name),
+                                   QString::fromLatin1(drawRefusalText(what)).arg(asked).arg(held));
+        m_meshBuffersNoted = ~quint64(0);     // the state is noted again after this record (noteMeshBuffers)
+    }
+    m_reason = p.refusalReason;               // the record's reason (a shared copy: nothing allocated)
 }
 
 void ModeContent::fillArena()
@@ -3757,9 +3819,20 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
         return;
     }
     quint32 sourceCount = instanceMesh ? instanceMesh->instanceCount : 0u;
-    if (instanceStream && instanceStream->decl.layout.stride)
-        sourceCount = instanceStream->decl.capacity / instanceStream->decl.layout.stride;
+    if (instanceStream && instanceStream->decl.layout.stride) {
+        // Audit 4 H2: an instance stream is drawn exactly its used records (the bytes past them are another frame
+        // slot's on Vulkan, undefined on OpenGL); the harness control draws past them, up to its capacity.
+        sourceCount = instanceStream->used / instanceStream->decl.layout.stride;
+    }
     const quint32 instances = resolveCount(pass.instances, sourceCount);
+    if (instanceStream && instances != sourceCount) {
+        const quint32 capacity = instanceStream->decl.layout.stride
+            ? instanceStream->decl.capacity / instanceStream->decl.layout.stride : 0u;
+        if (!instancesPastUsed() || instances > capacity) {
+            refuseDraw(index, RefusedInstancesNotUsed, instances, sourceCount);
+            return;
+        }
+    }
     if (vertices && instances)
         cb->draw(vertices, instances, pass.firstVertex, directFirstInstance()); // 0 but under the harness control
 }
@@ -4373,6 +4446,7 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
         streamWriteNs = recordTimer.nsecsElapsed() - writesFrom;
     }
     recordPasses(rhi, cb, target, updates, draw, readback);
+    noteMeshBuffers();                        // N3.2 audit 4: a draw refused at its edge in this record (else nothing)
     if (draw && !m_source->drawnStill())
         countRecordTime(recordTimer.nsecsElapsed(), streamWriteNs); // D15 point 7: the stream ring's CPU axis
     const QSize size = target.texture->pixelSize();

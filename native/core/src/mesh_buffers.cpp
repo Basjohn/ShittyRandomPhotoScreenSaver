@@ -42,6 +42,8 @@ QAtomicInteger<int> g_hideDrawParameters { 0 };
 QAtomicInteger<quint32> g_directFirstInstance { 0 };
 QAtomicInteger<int> g_recreateStreams { 0 };
 QAtomicInteger<int> g_skipMeshRelease { 0 };
+QAtomicInteger<int> g_instancesPastUsed { 0 };
+QAtomicInteger<qint64> g_drawsRefused { 0 };
 
 // The item quad of the Python host (render_host.py _ensure_quad): (0,0), (1,0), (0,1), (1,1), a strip.
 constexpr float kQuadVertices[8] = { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f };
@@ -468,6 +470,7 @@ MeshBufferCounts meshBufferCounts()
     c.recordsTimed = g_recordsTimed.loadRelaxed();
     c.recordNs = g_recordNs.loadRelaxed();
     c.streamWriteNs = g_streamWriteNs.loadRelaxed();
+    c.drawsRefused = g_drawsRefused.loadRelaxed();
     return c;
 }
 
@@ -479,6 +482,7 @@ void countRecordTime(qint64 recordNs, qint64 streamWriteNs)
 }
 
 void countIndirectDraw() { g_indirectDraws.fetchAndAddRelaxed(1); }
+void countDrawRefused() { g_drawsRefused.fetchAndAddRelaxed(1); }
 void countBatched(bool indirect) { (indirect ? g_batchedIndirect : g_batchedLoop).fetchAndAddRelaxed(1); }
 void meshesCountUpload() { g_meshUploads.fetchAndAddRelaxed(1); }
 
@@ -490,6 +494,8 @@ void setRecreateStreams(bool recreate) { g_recreateStreams.storeRelaxed(recreate
 bool recreateStreams() { return g_recreateStreams.loadRelaxed() != 0; }
 void setSkipMeshRelease(bool skip) { g_skipMeshRelease.storeRelaxed(skip ? 1 : 0); }
 bool skipMeshRelease() { return g_skipMeshRelease.loadRelaxed() != 0; }
+void setInstancesPastUsed(bool past) { g_instancesPastUsed.storeRelaxed(past ? 1 : 0); }
+bool instancesPastUsed() { return g_instancesPastUsed.loadRelaxed() != 0; }
 
 bool drawParametersAvailable(QRhi *rhi)
 {
@@ -768,6 +774,7 @@ bool ModeStreams::build(QRhi *rhi, const QList<StreamDeclaration> &streams,
 void ModeStreams::write(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QByteArray &record)
 {
     for (Stream *s : m_streams) {
+        s->used = 0;                          // a stream not written this record draws nothing (audit 4 H2)
         if (recreateStreams() && s->decl.kind != StreamKind::Storage) {
             // The no-allocation proof's control: a stream made again at every record (the counts grow). Not a storage
             // stream: the pass's bindings name it (an instance or indirect stream is given per draw).

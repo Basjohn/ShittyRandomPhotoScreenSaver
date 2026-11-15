@@ -91,7 +91,11 @@
 // vulkan_device_facts; composite_live's mesh_buffers_* counts; composite_mode_state's meshes and mesh_buffers.
 // Backward compatible for every earlier program. Within 18 (before its first use, the lead, 15 Nov): an f32 stream's
 // "used" (a u32 field under an at_most rule within its count; only the used bytes are written), mode_blocks' optional
-// clip correction, and composite_live's mesh_buffers_records_timed, _record_ns and _stream_write_ns.
+// clip correction, and composite_live's mesh_buffers_records_timed, _record_ns and _stream_write_ns. Within 18 after
+// checkpoint audit 4 (the lead, 15 Nov; no consumer yet): an instance stream is drawn exactly its used records (another
+// instance count refuses the draw), the draws' counts are checked against their buffers at the record (a count past
+// one refuses the draw), mesh_buffer_control's instances_past_used, composite_live's mesh_buffers_draws_refused and
+// the mesh-buffer state's draws_refused.
 #pragma once
 
 #define SRPSS_NATIVE_CORE_ABI 18
