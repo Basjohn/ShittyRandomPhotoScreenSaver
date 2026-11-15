@@ -316,7 +316,7 @@ def test_scene_main_shadows_actual_contribution_centroid_not_fixed_depth(qt_app)
     # Control only noise density and sample jitter. Keep production main wiring,
     # envelope, integration, phase and four-proxy attenuation unchanged.
     source = _constant_pattern(SHAFT_FRAGMENT)
-    jitter = 'float jitter = fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))));'
+    jitter = 'float jitter = fract(52.9829189*fract(dot(fragPixel(uFrameSize),vec2(0.06711056,0.00583715))));'
     assert source.count(jitter) == 1
     source = source.replace(jitter, 'float jitter = 0.25;')
     former = source.replace('sceneTransmittance(rayOrigin+ray*atDistance)', 'sceneTransmittance(rayOrigin+ray*18.0)')

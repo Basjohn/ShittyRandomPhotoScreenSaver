@@ -9,7 +9,7 @@ there (lighting and albedo folded in). It is evaluated once per cell per update;
 ``fog_inject_source`` wraps it. ``FOG_INTEGRATE_COMPUTE`` accumulates in-scatter and transmittance front to back,
 exactly per slice (radiance x (1 - exp(-extinction x length))), into the texture ``MIST_GLSL`` samples.
 """
-from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_GLSL
+from rendering.gl_programs.conventions import SRPSS_CONVENTIONS_FRAGMENT_GLSL
 from rendering.gl_programs.portable import portable_program
 from rendering.gl_programs.scene3d import SCENE3D_COMPUTE_BLOCK_BINDING, Scene3DBlockLayout
 
@@ -126,9 +126,9 @@ uniform vec4 uMarch;             // maximum steps, maximum extinction, erosion, 
 uniform vec4 uMarchShade;        // shadow reach (world), shadow strength, ground height, ground enabled
 uniform vec3 uMarchStep;         // view-depth step inside the medium, through clear air; least self-shadow
 uniform vec4 uMarchEdge;         // extra light on thin eroded wisps (curl rims), 0 off; unboosted base radiance
-uniform vec2 uViewportSize;
+uniform vec2 uViewportSize;     // the march target's pixels (fragPixel's target)
 layout(location=0) out vec4 FragColor;
-""" + FOG_DEPTH_MAPPING_GLSL + SRPSS_CONVENTIONS_GLSL + """
+""" + FOG_DEPTH_MAPPING_GLSL + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 vec3 coarseUvw(vec3 world) {
     vec3 v=(uFogView*vec4(world,1.0)).xyz;
     float depth=uFogLens.w>0.0?-v.z:max(-v.z,1e-4);
@@ -163,8 +163,9 @@ void main() {
         end=min(end,max((uMarchShade.z-origin.y)/direction.y/stretch,uFogRange.x));
     // Adaptive steps along view depth: long through clear air, short inside the medium, where the eroded detail
     // lives (exponential steps were ~2 units long at the mist and aliased billows into speckle). The start is
-    // offset per pixel by an unstructured hash: interleaved gradient noise drew diagonal hatching.
-    uvec2 cell=uvec2(gl_FragCoord.xy);
+    // offset per pixel by an unstructured hash: interleaved gradient noise drew diagonal hatching. The pixel comes
+    // from fragPixel (N1.4), so the seed is the same texel on every backend.
+    uvec2 cell=uvec2(fragPixel(uViewportSize));
     uint bits=cell.x*1973u+cell.y*9277u+89173u;
     bits=(bits<<13u)^bits; bits=bits*(bits*bits*15731u+789221u)+1376312589u;
     float jitter=float(bits&0x00ffffffu)/16777216.0;
@@ -265,7 +266,8 @@ uniform vec2 uFogCrackleSeed;    // the line's bloom share; unused
 uniform sampler2D uFogCrackleLimit; // per screen column: the lowest screen v (0..1, up) the line may reach
 uniform int uFogCrackleLimited;
 uniform float uFogFringeSmoothing; // extra march-texel footprint; 0 preserves the original composite
-""" + SRPSS_CONVENTIONS_GLSL + """
+uniform vec2 uTargetSize;        // the pixels of the target the composite draws into (fragPixel's target)
+""" + SRPSS_CONVENTIONS_FRAGMENT_GLSL + """
 float crackleHash(vec2 p) { p=fract(p*vec2(0.1031,0.1030)); p+=dot(p,p.yx+33.33); return fract((p.x+p.y)*p.x); }
 float crackleNoise(vec2 x) {
     vec2 i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
@@ -299,7 +301,7 @@ vec3 crackle(vec2 uv, vec4 fog) {
     // Faces lit from below (the light lies above the edge, toward the bank): the bank's underside facing the waveform.
     // Its top against the dark sky stays dark, as in the mock. uFogCrackleSeed.y blends toward all edges.
     edge*=mix(smoothstep(0.1,0.6,normal.y),1.0,uFogCrackleSeed.y);
-    vec2 p=gl_FragCoord.xy;
+    vec2 p=fragPixel(uTargetSize);   // the filaments' noise is seeded by this pixel, the same texel on every backend
     // Coordinates stretched along the edge: filaments run with it and wander across it.
     // Only the bright side of the edge: the gradient points into the light, so step against it and compare.
     float here=crackleLum(uv,t);
