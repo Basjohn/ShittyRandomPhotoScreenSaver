@@ -208,3 +208,28 @@ plan (§3, "Lead, the quiet machine").
     +16 % of a core (below) was one unalternated pair and did not repeat.
 - **Card materials** (`5_card_materials/`, one Glass/Normal pair): Glass costs about +16 % of a core on the render
   thread (53.7 against 37.5), publish->swap +3 ms, hitches 2.46 against 2.05 a minute, at the same late %.
+
+**Pre-flip reference, Visualizer modes (lead, 15 Nov; the "before" side of the native flip).** The Python OpenGL
+renderers on the engine worker, measured before N5.2h deletes them. `tools/visualizer_live_check.py`, invisible saver,
+each mode at the profile's own preset, 45 s, recorded music (`anything_mixed2`), at commit `01cac56f`. Idle is the
+operator's general use (other processes about 9-19 % CPU, GPU util 13-59 % median during the runs, displays on); game60
+is the load generator (GPU 50-100 % util at about 2760 MHz, other processes 69-85 % CPU). Baseline
+`tools/baselines/preflip/20261115_modes_python_gl.json`; per-mode evidence under
+`.artifacts/evidence/performance/preflip/20261115_modes_{idle,game60}/`. The full matrix (every transition, both sizes,
+`tools/preflip_pack.py`) is owed and runs only while the operator's displays are off. Render times are the
+Visualizer's own draw (ms); late is steady late %, hitches a minute.
+
+| Mode | Idle fps | Idle render med / p90 | Idle late % | game60 fps | game60 render med / p90 | game60 late % | game60 hitches | game60 GPU util % |
+|---|---|---|---|---|---|---|---|---|
+| spectrum | 92.5 | 0.34 / 0.47 | 0.1 | 92.3 | 0.5 / 0.66 | 0.1 | 0.0 | 50.0 |
+| devcurve | 92.8 | 0.5 / 0.71 | 0.0 | 92.1 | 0.85 / 1.11 | 0.1 | 0.0 | 67.0 |
+| bubble | 91.7 | 0.77 / 1.2 | 0.1 | 90.0 | 1.29 / 1.93 | 0.1 | 1.6 | 100.0 |
+| oscilloscope | 93.3 | 0.57 / 0.85 | 0.0 | 91.7 | 1.0 / 1.51 | 0.1 | 1.59 | 63.0 |
+| sphere | 90.4 | 0.47 / 0.74 | 0.0 | 90.1 | 0.76 / 1.25 | 0.1 | 1.6 | 61.0 |
+| extruded_spectrum | 90.4 | 0.48 / 0.71 | 0.1 | 94.8 | 0.84 / 1.59 | 0.1 | 0.0 | 60.0 |
+| extruded_bubble | 91.4 | 4.56 / 6.07 | 0.1 | 61.2 | 6.84 / 9.06 | 2.9 | 1.63 | 100.0 |
+| waveform_ribbon | 89.4 | 7.15 / 8.88 | 0.1 | 67.6 | 11.08 / 13.71 | 0.7 | 4.83 | 58.0 |
+| shockwave_grid | 91.6 | 2.33 / 3.23 | 0.0 | 69.8 | 5.28 / 7.1 | 0.2 | 1.66 | 100.0 |
+
+Read: under game60 the three heavy 3D modes fall below 70 fps (Extruded Bubble 61, Waveform 68, Neon Lake 70) with
+render medians of 5-11 ms; the 2D modes and the lighter 3D modes hold about 90 fps with render under 1.3 ms.

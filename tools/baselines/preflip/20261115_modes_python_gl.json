@@ -1,0 +1,247 @@
+{
+ "name": "20261115_modes_python_gl",
+ "renderer": "Python OpenGL renderers (the product before the native flip), engine worker",
+ "commit": "01cac56f6",
+ "capture": "tools/visualizer_live_check.py, invisible saver, profile's own preset per mode, 45 s per mode, clip anything_mixed2 (first 20 s looped), --resource-readings",
+ "states": {
+  "idle": "general-use load, displays on, agents' harness work running lightly",
+  "game60": "tools gpu_load_generator game60 (lead, operator yes on 15 Nov)"
+ },
+ "evidence": ".artifacts/evidence/performance/preflip/20261115_modes_{idle,game60}/<mode>/summary.json and nvidia_smi.csv",
+ "modes": {
+  "spectrum": {
+   "idle": {
+    "fps": 92.5,
+    "render_med": 0.34,
+    "render_p90": 0.47,
+    "swap_med": 11.02,
+    "late": 0.1,
+    "hitch": 0.0,
+    "tick": 0.72,
+    "cpu_others": 12.4,
+    "gpu_util": 13.5,
+    "gpu_clock": 375.0
+   },
+   "game60": {
+    "fps": 92.3,
+    "render_med": 0.5,
+    "render_p90": 0.66,
+    "swap_med": 11.03,
+    "late": 0.1,
+    "hitch": 0.0,
+    "tick": 1.18,
+    "cpu_others": 73.2,
+    "gpu_util": 50.0,
+    "gpu_clock": 2775.0
+   }
+  },
+  "devcurve": {
+   "idle": {
+    "fps": 92.8,
+    "render_med": 0.5,
+    "render_p90": 0.71,
+    "swap_med": 10.99,
+    "late": 0.0,
+    "hitch": 0.0,
+    "tick": 2.96,
+    "cpu_others": 14.4,
+    "gpu_util": 22.0,
+    "gpu_clock": 630.0
+   },
+   "game60": {
+    "fps": 92.1,
+    "render_med": 0.85,
+    "render_p90": 1.11,
+    "swap_med": 11.0,
+    "late": 0.1,
+    "hitch": 0.0,
+    "tick": 4.2,
+    "cpu_others": 76.0,
+    "gpu_util": 67.0,
+    "gpu_clock": 2775.0
+   }
+  },
+  "bubble": {
+   "idle": {
+    "fps": 91.7,
+    "render_med": 0.77,
+    "render_p90": 1.2,
+    "swap_med": 10.84,
+    "late": 0.1,
+    "hitch": 1.58,
+    "tick": 3.63,
+    "cpu_others": 18.3,
+    "gpu_util": 51.5,
+    "gpu_clock": 2760.0
+   },
+   "game60": {
+    "fps": 90.0,
+    "render_med": 1.29,
+    "render_p90": 1.93,
+    "swap_med": 11.03,
+    "late": 0.1,
+    "hitch": 1.6,
+    "tick": 5.15,
+    "cpu_others": 84.6,
+    "gpu_util": 100.0,
+    "gpu_clock": 2760.0
+   }
+  },
+  "oscilloscope": {
+   "idle": {
+    "fps": 93.3,
+    "render_med": 0.57,
+    "render_p90": 0.85,
+    "swap_med": 10.99,
+    "late": 0.0,
+    "hitch": 0.0,
+    "tick": 1.2,
+    "cpu_others": 8.7,
+    "gpu_util": 16.0,
+    "gpu_clock": 750.0
+   },
+   "game60": {
+    "fps": 91.7,
+    "render_med": 1.0,
+    "render_p90": 1.51,
+    "swap_med": 11.01,
+    "late": 0.1,
+    "hitch": 1.59,
+    "tick": 2.08,
+    "cpu_others": 74.1,
+    "gpu_util": 63.0,
+    "gpu_clock": 2775.0
+   }
+  },
+  "sphere": {
+   "idle": {
+    "fps": 90.4,
+    "render_med": 0.47,
+    "render_p90": 0.74,
+    "swap_med": 11.09,
+    "late": 0.0,
+    "hitch": 0.0,
+    "tick": 0.65,
+    "cpu_others": 13.3,
+    "gpu_util": 16.0,
+    "gpu_clock": 600.0
+   },
+   "game60": {
+    "fps": 90.1,
+    "render_med": 0.76,
+    "render_p90": 1.25,
+    "swap_med": 11.1,
+    "late": 0.1,
+    "hitch": 1.6,
+    "tick": 0.86,
+    "cpu_others": 69.8,
+    "gpu_util": 61.0,
+    "gpu_clock": 2760.0
+   }
+  },
+  "extruded_spectrum": {
+   "idle": {
+    "fps": 90.4,
+    "render_med": 0.48,
+    "render_p90": 0.71,
+    "swap_med": 11.08,
+    "late": 0.1,
+    "hitch": 0.0,
+    "tick": 0.61,
+    "cpu_others": 14.9,
+    "gpu_util": 13.0,
+    "gpu_clock": 570.0
+   },
+   "game60": {
+    "fps": 94.8,
+    "render_med": 0.84,
+    "render_p90": 1.59,
+    "swap_med": 10.87,
+    "late": 0.1,
+    "hitch": 0.0,
+    "tick": 0.91,
+    "cpu_others": 68.8,
+    "gpu_util": 60.0,
+    "gpu_clock": 2760.0
+   }
+  },
+  "extruded_bubble": {
+   "idle": {
+    "fps": 91.4,
+    "render_med": 4.56,
+    "render_p90": 6.07,
+    "swap_med": 10.94,
+    "late": 0.1,
+    "hitch": 1.58,
+    "tick": 4.02,
+    "cpu_others": 16.8,
+    "gpu_util": 59.0,
+    "gpu_clock": 2760.0
+   },
+   "game60": {
+    "fps": 61.2,
+    "render_med": 6.84,
+    "render_p90": 9.06,
+    "swap_med": 15.61,
+    "late": 2.9,
+    "hitch": 1.63,
+    "tick": 5.5,
+    "cpu_others": 78.8,
+    "gpu_util": 100.0,
+    "gpu_clock": 2760.0
+   }
+  },
+  "waveform_ribbon": {
+   "idle": {
+    "fps": 89.4,
+    "render_med": 7.15,
+    "render_p90": 8.88,
+    "swap_med": 10.96,
+    "late": 0.1,
+    "hitch": 1.58,
+    "tick": 4.3,
+    "cpu_others": 19.0,
+    "gpu_util": 33.0,
+    "gpu_clock": 1185.0
+   },
+   "game60": {
+    "fps": 67.6,
+    "render_med": 11.08,
+    "render_p90": 13.71,
+    "swap_med": 14.3,
+    "late": 0.7,
+    "hitch": 4.83,
+    "tick": 6.77,
+    "cpu_others": 75.7,
+    "gpu_util": 58.0,
+    "gpu_clock": 2760.0
+   }
+  },
+  "shockwave_grid": {
+   "idle": {
+    "fps": 91.6,
+    "render_med": 2.33,
+    "render_p90": 3.23,
+    "swap_med": 11.02,
+    "late": 0.0,
+    "hitch": 0.0,
+    "tick": 0.93,
+    "cpu_others": 8.5,
+    "gpu_util": 49.0,
+    "gpu_clock": 2775.0
+   },
+   "game60": {
+    "fps": 69.8,
+    "render_med": 5.28,
+    "render_p90": 7.1,
+    "swap_med": 14.4,
+    "late": 0.2,
+    "hitch": 1.66,
+    "tick": 1.72,
+    "cpu_others": 82.6,
+    "gpu_util": 100.0,
+    "gpu_clock": 2760.0
+   }
+  }
+ }
+}
