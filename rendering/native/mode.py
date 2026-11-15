@@ -189,13 +189,16 @@ class TargetAttachment:
 class ModeTarget:
     """N3.1 (D14): a scene target a program's passes draw into: its name, its size (None: the surface's device pixels;
     else explicit pixels, changed later with :meth:`NativeMode.target_size`), its colour attachments, whether it has a
-    depth (one D32F texture) and its requested samples (``rendering.gl_programs.scene3d.scene_samples``)."""
+    depth (one D32F texture) and its requested samples (``rendering.gl_programs.scene3d.scene_samples``).
+    ``previous_frame``: a pass may sample it before any pass of the frame drew it, reading the frame before
+    (single-sampled only; the core refuses such a read otherwise, audit 2 M4)."""
 
     name: str
     colour: tuple[TargetAttachment, ...]
     size: tuple[int, int] | None = None
     depth: bool = False
     samples: int = 1
+    previous_frame: bool = False
 
     def __post_init__(self) -> None:
         if not 1 <= len(self.colour) <= MAX_TARGET_COLOUR:
@@ -211,6 +214,8 @@ class ModeTarget:
             entry["depth"] = True
         if int(self.samples) != 1:
             entry["samples"] = int(self.samples)
+        if self.previous_frame:
+            entry["previous_frame"] = True
         return entry
 
 
@@ -562,8 +567,9 @@ class NativeMode:
 
     def target_size(self, name: str, size: tuple[int, int]) -> None:
         """N3.1: an explicit-size scene target's size (Bubble's ambient target follows its card) with no new program;
-        the core's allocation follows at the next record. ValueError for a target the program does not declare with an
-        explicit size."""
+        the core's allocation follows at the next record, until the next :meth:`program`, whose declarations size its
+        targets again (``state()["target_sizes"]`` holds the sizes set since the program). ValueError for a target the
+        program does not declare with an explicit size."""
         self._module.composite_mode_target_size(self._handle(), str(name), (int(size[0]), int(size[1])))
 
     def read_targets(self) -> None:

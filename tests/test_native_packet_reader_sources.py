@@ -53,8 +53,14 @@ def test_the_header_carries_every_schema_and_the_reference_decoder_uses_its_tabl
     from core.visualizer_engine import native_schema
 
     text = header_tool.render()
-    for schema in native_schema.native_schemas().values():
+    compiled = native_schema.compiled_schemas()
+    assert compiled
+    for schema in compiled.values():
         assert f'0x{schema.schema_id:X}u, {schema.layout.size}, "{schema.layout.fingerprint()}"' in text
+    # A runtime schema (D12: handed to the core at bind) is never compiled into the header.
+    for schema in native_schema.runtime_schemas().values():
+        assert f'0x{schema.schema_id:X}u, {schema.layout.size}' not in text
+    for schema in native_schema.native_schemas().values():
         assert schema.fields and set(name for name, _kind, _limit in schema.checks) <= set(schema.fields)
         for name, kind, _limit in schema.checks:
             assert kind in native_schema.FIELD_CHECK_KINDS and schema.layout.field(name).kind == "u32"

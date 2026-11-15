@@ -340,8 +340,9 @@ struct ModeProgram
                    QList<BlockValues> &blocks, QString *error, const QList<QSize> *passTargets = nullptr,
                    const float *clipCorrection = nullptr) const;
     // N3.1: each pass's target content size for a surface of `surface` pixels (a surface-sized target's is the surface's)
-    // under `targets` (the program's own when null: ModeSource::drawnTargets carries the sizes set since).
-    QList<QSize> passTargetSizes(const QSize &surface, const QList<TargetDeclaration> *targets = nullptr) const;
+    // under `targets` (the program's own when null: ModeSource::drawnTargets carries the sizes set since), into `out`
+    // in place (audit 2, M5: no new list per frame once its capacity holds the passes).
+    void passTargetSizes(const QSize &surface, const QList<TargetDeclaration> *targets, QList<QSize> *out) const;
 };
 
 // GPU-free: what the content uploads for one record (each pass's block bytes), with the same refusals; `facts` names
@@ -503,8 +504,9 @@ public:
     quint64 targetReadRequests() const { return m_targetReads.loadAcquire(); }
     void setTargetReadback(const std::shared_ptr<SceneReadback> &readback);
     bool takeTargetPixels(QList<SceneTargetPixels> *out);
-    // N3.1: the scene targets' state (render thread writes it; the state's "scene_targets").
-    void noteTargets(const QJsonObject &state);
+    // N3.1: the scene targets' state (render thread writes it when it changed; the state's "scene_targets", made into
+    // JSON only when the state is asked for: audit 2, M5).
+    void noteTargets(const SceneTargetsState &state);
 
     static int liveSources();
 
@@ -552,7 +554,7 @@ private:
     mutable QMutex m_textureReportMutex;        // guards the texture report
     TextureReport m_textureReport;
     QList<ImageChangeRecord> m_imageChanges;
-    QJsonObject m_targetsState;                 // N3.1, under m_textureReportMutex
+    SceneTargetsState m_targetsState;           // N3.1, under m_textureReportMutex
     std::shared_ptr<SceneReadback> m_targetReadback; // N3.1, under m_textureReportMutex
     QAtomicInteger<quint64> m_targetReads { 0 };
     QJsonObject m_meshBuffersState;             // N3.2, under m_textureReportMutex

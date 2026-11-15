@@ -9,9 +9,9 @@
 // or one D32F texture: D14 point 5, choice C); a requested sample count (D14 point 7: rendering/gl_programs/scene3d.py
 // owns the request, the core's clamp here is the only place it meets a device).
 //
-// Allocation per size (D14 point 2, choice A): 64 px buckets; the allocation grows at once whenever the needed size passes
-// it on either axis, and shrinks only when the needed size falls two or more buckets below it on either axis, decided at
-// the size edge (the record that sees a new surface or explicit size), never by a timer. An allocation is made one
+// Allocation per size (D14 point 2, choice A): 64 px buckets, each axis on its own (audit 2, L1); an axis grows at once
+// whenever the needed size passes it, and shrinks only when the needed size falls two or more buckets below it, decided
+// at the size edge (the record that sees a new surface or explicit size), never by a timer. An allocation is made one
 // attachment per step (allocateStep: N3.6 schedules the steps as warm-up units; until then the record runs them all).
 // The content sits at image rows [H-h, H) and columns [0, w) of the allocation (the Python renderer's GL bottom-left), so
 // a read past the content's edge reads what Python's reads; contentViewport gives QRhi's viewport per backend.
@@ -28,6 +28,8 @@
 // reads every sample of the multisampled texture and writes the minimum into a single-sampled R32F texture, which the
 // samplers and the capture read; nothing sets a depth resolve texture, so the multisampled depth is stored and loaded
 // across a capture. It runs after a run of passes on the target only when a later pass reads it (or a readback asks).
+// QRhi's average resolves are ordered after their last store before every run (targets.h primeResolvesForPass; audit 2,
+// H1: a resolve attachment's render pass transitions it from UNDEFINED with no external dependency).
 // Every target keeps its contents (targets.h rule B, depth too) and is cleared by a draw.
 //
 // Render thread only, but the counts (any thread) and the readback's results (taken by the GUI thread through
@@ -87,6 +89,11 @@ struct TargetDeclaration
     bool depthRead = false;           // derived: a sampler or the capture reads the depth (its nearest resolve when multisampled)
     bool depthSampled = false;        // derived: a sampler reads the depth
     int samples = 1;                  // the request (1 to kMaxSceneSamples)
+    // Audit 2, M4: a pass may sample the target before any pass of the frame drew it (it reads the frame before) only
+    // when the target declares so, single-sampled only (a multisampled target's nearest resolves are made after the
+    // runs that read them: before its first run a pass would read memory nothing wrote). The first frame after an
+    // allocation reads what the new textures hold.
+    bool previousFrame = false;
     bool capture = false;             // derived: a capture step reads this target
 
     bool surfaceSized() const { return size.isEmpty(); }
@@ -97,7 +104,7 @@ struct TargetDeclaration
 };
 
 // {"name", "size": "surface" | [w, h], "colour": [{"name", "format", "clear"?: [r, g, b, a], "resolve"?: "average" |
-// "nearest"}, ...], "depth"?: bool, "samples"?: n}; false with the reason.
+// "nearest"}, ...], "depth"?: bool, "samples"?: n, "previous_frame"?: bool (single-sampled only)}; false with the reason.
 bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QString *error);
 
 // D14 point 2, choice A (GPU-free): the bucket of a size, and the next allocation for `needed` given `current` (empty:
@@ -113,6 +120,8 @@ int clampSamples(const QList<int> &supported, int requested);
 // The harness's control of the clamp (its negative control): counts taken out of every device's supported set.
 void setRemovedSampleCounts(const QList<int> &removed);
 QList<int> removedSampleCounts();
+// A new number at every setRemovedSampleCounts (a target set reads QRhi's counts again only then: audit 2, M5).
+quint64 removedSampleCountsGeneration();
 // QRhi's supported sample counts less the control's.
 QList<int> supportedSampleCounts(QRhi *rhi);
 // The harness's control of the depth's rule C (its negative control: a run with synchronisation validation shows what the
@@ -120,6 +129,11 @@ QList<int> supportedSampleCounts(QRhi *rhi);
 void setSkipDepthPrime(bool skip);
 bool skipDepthPrime();
 void countDepthPrime();
+// The same for the resolves' prime (audit 2, H1: targets.h primeResolvesForPass; its negative control under
+// synchronisation validation), and the count of resolve barriers recorded (process-wide).
+void setSkipResolvePrime(bool skip);
+bool skipResolvePrime();
+void countResolvePrimes(int primed);
 // The harness's control of the nearest resolve (its negative control: sample 0 instead of the minimum), read when a
 // content builds its resolve passes; and the count of nearest resolves recorded (process-wide).
 void setNearestFirstSample(bool firstOnly);
@@ -136,6 +150,7 @@ struct SceneTargetCounts
     qint64 steps = 0;      // allocation steps run
     int readbacksPending = 0;
     qint64 depthPrimes = 0; // depth transitions recorded by the core before a load (rule C for depth)
+    qint64 resolvePrimes = 0; // resolve barriers recorded by the core before a run (audit 2, H1)
     qint64 nearestResolves = 0; // nearest resolve passes recorded
 };
 SceneTargetCounts sceneTargetCounts();
@@ -152,6 +167,38 @@ struct SceneTargetPixels
     int samples = 1;       // the target's effective samples (a multisampled attachment is read through its resolve)
     QByteArray data;
 };
+
+// A content's targets as plain values (audit 2, M5): copied by the render thread only when they changed (a new
+// allocation, a step, a new size or layout, a release: never per record), made into JSON only when the state is asked
+// for (sceneTargetsStateJson, the GUI thread).
+struct SceneTargetsState
+{
+    struct Entry
+    {
+        TargetDeclaration decl;
+        QSize content;
+        QSize allocation;
+        int samples = 1;
+        qint64 bytes = 0;
+        int textures = 0;
+        quint64 generation = 0;
+        bool ready = false;
+        QString lastReason;
+    };
+    bool noted = false;                // false: nothing noted yet (the state's "scene_targets" is {})
+    QList<int> supported;
+    QString backend;
+    bool yUpInFramebuffer = false;
+    bool resolveDepthStencil = false;
+    bool perRenderTargetBlending = false;
+    bool multisampleTexture = false;
+    qint64 allocations = 0;
+    qint64 steps = 0;
+    quint64 layoutGeneration = 0;
+    quint64 objectGeneration = 0;
+    QList<Entry> targets;
+};
+QJsonObject sceneTargetsStateJson(const SceneTargetsState &state);
 
 // A readback of every readable texture of a content's targets: written by QRhi at a frame's end, read by the GUI thread.
 struct SceneReadback
@@ -216,7 +263,8 @@ public:
               QString *error);
     // Render thread: one step of what sync left (one colour attachment with its resolve, the depth with its resolve, the
     // render target, the capture). True once nothing is left (`done`), false with the reason when an object could not be
-    // made (every object of that target goes).
+    // made: the caller then releases the pipelines built over the targets' descriptors and then the targets (release()),
+    // in that order (audit 2, L5: a same-layout resize keeps its descriptor and its pipelines until then).
     bool allocateStep(bool *done, QString *error);
     bool complete() const;
 
@@ -227,8 +275,12 @@ public:
     // The texture a sampler named "<target>.<attachment>" reads (an attachment, "depth", "capture_colour",
     // "capture_depth"); null when there is none.
     QRhiTexture *sampledTexture(const QByteArray &name) const;
-    // The textures a run on target `index` loads (its colour attachments; rule C primes them) and its depth.
-    QList<QRhiTexture *> loadedColour(int index) const;
+    // The textures a run on target `index` loads (its colour attachments; rule C primes them), into `out` (room for
+    // kMaxTargetColour); returns how many. Nothing allocated (audit 2, M5).
+    int loadedColour(int index, QRhiTexture **out) const;
+    // The resolve textures a run on target `index` writes (QRhi's average of a read multisampled attachment; audit 2,
+    // H1: primed before every run), into `out` (room for kMaxTargetColour); returns how many.
+    int averageResolves(int index, QRhiTexture **out) const;
 
     quint64 layoutGeneration() const { return m_layoutGeneration; }
     quint64 objectGeneration() const { return m_objectGeneration; }
@@ -240,8 +292,10 @@ public:
     // Render thread, after the record's passes: a readback of every readable texture (harness only).
     std::shared_ptr<SceneReadback> startReadback(QRhiResourceUpdateBatch *updates);
 
-    // The targets' state (render thread writes it into the source's report).
-    QJsonObject stateJson(QRhi *rhi) const;
+    // The targets' state as values (render thread; the caller hands it to the source's report), and whether it changed
+    // since the last call that returned true (audit 2, M5: the report is written only then, never per record).
+    SceneTargetsState state(QRhi *rhi) const;
+    bool takeStateChange();
 
 private:
     void releaseTarget(Target &t);
@@ -255,6 +309,10 @@ private:
     qint64 m_allocations = 0;
     qint64 m_steps = 0;
     QList<int> m_supported;
+    const QRhi *m_supportedRhi = nullptr;     // m_supported is this QRhi's ...
+    quint64 m_supportedControl = 0;           // ... under this generation of the clamp's control (M5: not per record)
+    quint64 m_stateVersion = 0;               // a change of what state() reports
+    quint64 m_stateNoted = 0;
 };
 
 } // namespace srpss_core

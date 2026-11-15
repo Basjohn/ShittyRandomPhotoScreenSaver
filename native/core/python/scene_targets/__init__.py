@@ -130,6 +130,31 @@ def cost_part_program(packs: dict[str, bytes], part: str, *, samples: int):
     return passes, (target,), values
 
 
+def previous_frame_program(packs: dict[str, bytes], *, declared: bool = True, samples: int = 1):
+    """Audit 2, M4: a ``probe`` pass first, into a target of its own, sampling ``scene.colour`` (nearest, at the
+    content's texel centres) before the scene's passes: it reads the frame before when ``scene`` declares
+    ``previous_frame`` (``declared``), and the core refuses it otherwise; the probe's own target records what it read,
+    which no readback's forced resolve can stand in for. (passes, targets, settings)."""
+    from rendering.native.mode import CapturePass, ModePass, ModeTarget, PassOutput, PassSampler, TargetAttachment
+
+    scene = ModeTarget("scene", (TargetAttachment("colour", "rgba16f"), TargetAttachment("emission", "rgba16f")),
+                       depth=True, samples=int(samples), previous_frame=bool(declared))
+    probe = ModeTarget("probe", (TargetAttachment("colour", "rgba16f"),))
+    passes = (
+        ModePass("probe", packs["show_colour"], "replace", target="probe",
+                 samplers=(PassSampler("u_scene", "scene.colour", "nearest"),)),
+        ModePass("planes", packs["planes"], "replace", target="scene", depth_test="always", depth_write=True),
+        ModePass("nearer", packs["nearer"], "replace", target="scene",
+                 outputs=(PassOutput(True, "replace"), PassOutput(False)), depth_test="less", depth_write=True),
+        CapturePass("background", "scene"),
+        ModePass("after", packs["after"], "alpha", target="scene",
+                 outputs=(PassOutput(True, "alpha"), PassOutput(False)), depth_test="less_equal", depth_write=False),
+    )
+    values = {k: v for k, v in SETTINGS.items()
+              if any(k in shader_text(dict(FRAGMENTS)[n]) for n in ("planes", "nearer", "after"))}
+    return passes, (scene, probe), values
+
+
 def settings(*, ambient_size: tuple[int, int] = (300, 170), with_show: bool = True) -> dict:
     values = dict(SETTINGS)
     if with_show:

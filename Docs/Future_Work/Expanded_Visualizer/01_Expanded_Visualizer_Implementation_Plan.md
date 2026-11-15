@@ -1077,6 +1077,11 @@ can most geometry normally."
   it still points into the display from the new corner (right of a left corner, left of a right one, below a top
   corner, above a bottom one), so the overlay stays in bounds the same distance in from the new anchor's edge; an axis
   that would push the overlay out past the new anchor's edge resets to zero. The Fullscreen Mode page uses it.
+  Superseded for a moved overlay, 15 Nov (operator, 14 Nov: the CUSTOM entry; Current_Plan 1D.14): the Corner choice
+  is about position only. A moved overlay (a non-zero offset) reads CUSTOM; a corner returns only its position to the
+  corner (zero offset) and keeps the moved position as the overlay's `custom_position` (corner and offset), and CUSTOM
+  restores it (`place_overlay_at_corner`, `restore_custom_position`). Scale, text box, `base_width` and child layout
+  are never changed by it. The rebase rule above is what re-anchors an overlay that is not moved.
 - *Other displays (decided).* They keep running as they are, without Edit chrome: Fullscreen Edit edits only the
   overlays (§0.8). One Save/Cancel therefore never touches them, which makes the byte-identity structural rather
   than a check. ~~Their ordinary layout is edited from an ordinary Edit after collapsing.~~ Superseded 11 Nov

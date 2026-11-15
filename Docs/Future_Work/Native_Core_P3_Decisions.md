@@ -886,6 +886,43 @@ changes and no rebuild, a refused frame keeping the card, the latch, the fade, n
 framebuffer at 2560x1440 at 150 % on both backends, Vulkan within 1 level of OpenGL, validation clean), with N2.3's,
 N2.5's and rule (a)'s harnesses unchanged.
 
+**As built: Spline Curve (N5.1, ABI 16, no C++).** The first product mode on this content. Its record is a runtime
+schema (`core/visualizer_engine/devcurve_native_schema.py`: the four curves, the three specular slots, the specular
+alpha under the play/pause ramp and the rainbow hue, each named as its DevCurveDraw member); every other member is the
+core's or a setting from `devcurve_settings_values` (the draw order and the foreground layer follow the layer Settings;
+the foreground id can be -1, so it is a setting, never a u32 field; the three members the Python renderer never writes
+are settings at 0). The Python renderer calls the same two functions (`devcurve_settings_values`,
+`devcurve_frame_values`), so both renderers share one arithmetic. The route (`native_route.py`) draws every generic mode
+on one generic item per Visualizer item beside Spectrum's, its program retargeted by mode and bound with the first
+settings of an activation. **The admission rule for a self-animating mode** (`mode_capabilities
+.requires_authoritative_first_source` false: Spline Curve, and Bubble and Oscilloscope when ported): the core admits a
+playing frame only with `FLAG_SOURCE_CURRENT` (Spectrum's rule, `stream_source.cpp`), so the route's
+`_admission_flags` sets that bit on such a mode's frames, as the Python node admits them before their source is current;
+it stays in Python, no C++ (lead, N5.1 review). A shader passes no array to a function by value: SPIR-V copies it whole
+per call (Spline Curve's pass was 1.97 ms on Vulkan against 0.030 ms on OpenGL until its curves were read in place;
+`tests/test_native_devcurve.py` refuses the pattern in every product shader). Proved by
+`native/core/python/devcurve_check.py` (blocks byte for byte over 1,795 frames of the widened run set; the item's
+contract; Vulkan within 1 level of OpenGL at dpr 1 and 1.5) and `tools/visualizer_replay/owner_render_parity.py
+--native --mode devcurve`. Rule (a) is not byte for byte, proved per pixel: the Python node's blend rounds once from
+the fragment's 8-bit straight colour and alpha, `round(s8 a8 / 255 + d (1 - a8 / 255))`; the native item rounds the
+premultiplied product into its surface first, `round(s8 a8 / 255)`, then the composite adds `d (1 - a8 / 255)` and
+rounds again. Only a straight-alpha surface under a straight-alpha composite blend would reproduce it, exact for
+single-pass content alone (overlapping translucent passes do not compose in straight alpha): refused (lead, 15 Nov);
+the surface stays premultiplied.
+
+**The composite tolerance for translucent modes (rule (a), lead's decision, 15 Nov).** For a mode drawn through the
+composite's premultiplied surface, rule (a) is: fill pixels within 1 level (the surface's extra rounding of the
+premultiplied product), plus edge pixels within 3 levels, at most 10 in a frame (the measured worst, 7, times 1.5:
+float32 interpolation between the core's triangle and the Python quad, each such pixel within 4e-3 of a device pixel of
+its rounding boundary). It covers every mode drawn through the composite, Spectrum included (lead, 15 Nov: its
+translucent bars and glow pass through the same premultiplied surface; N2.5's "exact" was its own harness's
+comparison, not the owner route). The proof: `.artifacts/evidence/native_core/n5_1_devcurve/
+20261115_rule_a_per_pixel/` (`pixel_proof.json`, its script). Encoded once, `owner_render_parity.py` `RULE_A_*` and
+`rule_a_verdict` (used by `devcurve_check.py`). Bubble and the Oscilloscope inherit it when ported. Spectrum's owner
+runs (variants a and b, display and overscan) pass under it: 6.3M to 17.6M pixels over a run, every one at exactly 1
+level, no edge pixel; the same figures with the route as it was before N5.1
+(`.artifacts/evidence/native_core/n5_1_devcurve/20261115_rule_a_spectrum_tolerance/`, `..._spectrum_base_route/`).
+
 ## D13. The fullscreen pass and image sampling as a primitive (N4.a, 14 Nov 2026; proposed by the High agent)
 
 Supersedes D12 point 3's refusal of samplers and its "v_uv only" input; the rest of D12 stands.
@@ -1012,7 +1049,9 @@ to the GL limits.
    allocation is keyed by (allocated size, effective samples, the declaration), its size in 64 px buckets (choice A):
    it grows at once, to the needed size's buckets, whenever the needed size passes the allocation on either axis; it
    shrinks, to the needed size's buckets, only when the needed size falls two or more buckets below the allocation on
-   either axis, so a drag across one bucket boundary does not reallocate back and forth. Both are decided at the size
+   either axis, so a drag across one bucket boundary does not reallocate back and forth. Each axis is decided on its
+   own (audit 2, L1): a grow on one axis keeps the other axis's allocation unless that one passes or falls two buckets
+   below it too. Both are decided at the size
    edge (a new card or explicit size reaching the item's sync), never by a timer or a settle poll. An allocation is
    made one attachment per step (N3.6 schedules the steps as warm-up units; until then the first record makes them),
    never per frame. The content sits at image rows [H-h, H) and columns [0, w) of a bucketed allocation, the Python renderer's GL
@@ -1025,8 +1064,8 @@ to the GL limits.
    pipelines kept (N3.8's rebind); a sample-count or format change needs a new render-pass descriptor and so new
    pipelines. Everything is released with the content (the node's deletion, a mode switch, retirement, the scene graph's
    invalidation) on the render thread, the QRhi alive; process-wide counts (targets, attachments, bytes, allocations)
-   join `composite_live` and the destruction barrier's reading. Nothing at rest: a target is recorded only when its
-   surface is dirty.
+   join `composite_live` (the destruction barrier reads only the jobs in flight, `rendering/native/loader.py`; audit 2,
+   L4). Nothing at rest: a target is recorded only when its surface is dirty.
 4. *The HDR intermediate is RGBA16F* (the Python renderer's: colour, emission, the HDR capture, Bubble's light). No
    R11G11B10F: QRhi lacks it and D5.3's formats service is admitted only on a measured cost. The tone map into the
    surface is N3.4's HDR resolve, not this primitive. Rules B and C hold for every attachment: preserved, cleared by a
@@ -1160,6 +1199,21 @@ the rules for the GPU-free tests and `scene3d.scene_samples` is the one sampling
   660 MB at 4K, where the Python renderer's `glClear` is a fast clear). The capture split adds 0.36 / 0.30 ms (the
   second run, the nearest resolve, the capture, a second colour resolve), as Python's `background()` does its own.
   The fast clear this pointed to was built and rejected (point 12); the figures above stand (point 13).
+- Checkpoint audit 2 (agent-a6aa6ac5's `Docs/Future_Work/Checkpoint_Audits_Nov15.md`), fixed:
+  - H1: QRhi gives a resolve attachment an UNDEFINED initial layout with no external dependency whatever the flags,
+    so the validation above was clean only because the gate's rounds read back between records. The core orders a
+    target's average resolves before every run on Vulkan (`primeResolvesForPass`, ALL_COMMANDS in the second scope);
+    `prime_control` holds its negative control (40 consecutive 4x records), and a Vulkan cost round without the
+    validation layer fails.
+  - M3: a new program clears the sizes `target_size` set before it (`state()["target_sizes"]`).
+  - M4: a pass may sample a target before any pass of the frame drew it only when the target declares
+    `"previous_frame": true` (it reads the frame before), never on a multisampled target (its nearest resolves come
+    after the runs that read them) nor on one no pass draws. The first frame after an allocation reads what the new
+    textures hold.
+  - M5: the targets' state is copied as values only when it changes and made into JSON only when asked for; no
+    per-record list, JSON or byte-array copy is left in the N3.1 paths of the record.
+  - L1 (point 2's per-axis rule) and L5: a failed allocation step leaves the target's objects to the content, which
+    releases the pipelines first.
 
 ## D15. Meshes and buffers (N3.2, decided 15 Nov 2026; proposed by the High agent, choices A to J answered by the lead)
 

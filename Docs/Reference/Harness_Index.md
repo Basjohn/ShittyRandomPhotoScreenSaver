@@ -789,6 +789,28 @@ The work folder beside its summary holds the captured frames and references; del
 `tests/test_native_core_spectrum.py` (no build: the card's target map at every quarter turn, the Python face, the shader
 baked from the product's file, the port's constants and block members against the Python renderer).
 
+### Native Spline Curve (N5.1)
+
+```powershell
+# Spline Curve (devcurve) on the generic mode content, an OpenGL child then a Vulkan child; the OpenGL child captures
+# every frame the production owner draws through the widened run set (variants a and b, every Choice offer) with the
+# Python renderer: block (each frame's mode_blocks against the Python renderer's DevCurveDraw, member by member, uMatrix
+# aside; every member from one source; controls: a curve sample and the card's fade change the block), item (one record
+# per accepted frame, nothing at rest, the drop edge, a refused NaN frame keeping the card, an unbind keeping the frame,
+# a Settings and a record change shown on the same program, no Python thread state on the render thread with the
+# GUI-thread host as control, nothing left), pixels (samples against the Python renderer's own draw into a transparent
+# target at dpr 1 and 1.5 on OpenGL; Vulkan against native OpenGL within 1 level; GPU time per pass); Vulkan validated
+python native/core/python/devcurve_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan] [--rounds block item pixels] [--sample-every 40] [--label n51_devcurve]
+
+# Rule (a) through the product's route for any native mode (Spectrum's run above with --mode spectrum, the default)
+python tools/visualizer_replay/owner_render_parity.py --native --mode devcurve --module-dir release/native_module --offers --out <dir>
+```
+
+Tests: `tests/test_native_devcurve.py` (the record's fields and layout, one source per member with a control, the
+settings following Settings and the card only, the module's block equal to the Python renderer's at dpr 1 and 1.5 with
+controls, the admission of a self-animating mode's frames with Spectrum as control, the route's generic item).
+
 ### Generic mode content (N2.9)
 
 ```powershell
@@ -890,8 +912,10 @@ python native/core/python/transition_route_check.py --module-dir release/native_
 # ambient owner's states driving the same fragments, rule (b) Vulkan against OpenGL), msaa (2x/4x/8x, the count created,
 # resolves equal to single-sampled without partial coverage, D14 point 10's nearest resolve against the analytic depth
 # with gl_SampleMask bands, means (a) and (b), its sample-0 negative control, the clamp's control), rest, resize
-# (800 -> 1000 -> 800 px against D14's rule), retire, cost (2560x1440 and 4K, 1x and 4x; the light attachment's clear);
-# Vulkan validated. Alone: --rounds prime_control (--apis vulkan; rule C for depth's negative control, 1x and 4x),
+# (800 -> 1000 -> 800 px against D14's rule), retire, cost (2560x1440 and 4K, 1x and 4x, timed until 30 GPU times
+# arrive; the light attachment's clear; on Vulkan the gate's synchronisation proof, failed without the layer); parity
+# also holds audit 2's previous_frame control (M4); Vulkan validated. Alone: --rounds prime_control (--apis vulkan; rule
+# C for depth's negative control, 1x and 4x, and the resolves' prime's over 40 consecutive 4x records, audit 2 H1),
 # cost_parts (where the 4K four-sample time goes), python_cost (the Python SceneTarget's 4x minus 1x on the same load)
 python native/core/python/scene_target_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
     [--apis opengl vulkan] [--rounds parity msaa rest resize retire cost] [--label n31_scene_targets]

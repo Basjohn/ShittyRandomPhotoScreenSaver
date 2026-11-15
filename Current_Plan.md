@@ -44,7 +44,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
 at the size asked.
 - High: N5.7c, then N3. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers
   ride with the next fitting dispatch.
-- Medium: N5.1 Spline Curve.
+- Medium: the next N5 port (Oscilloscope or Bubble once N3.2's instanced quads land).
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -500,8 +500,12 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     - [ ] The sampling request's one owner beside the tier table (`rendering/gl_programs/scene3d.py`); its callers
       `extruded_bubble.py:131`, `sphere_voxel.py:122`, `shockwave_grid.py:104`, `extruded_spectrum.py:63`,
       `scene3d/waveform.py:377` and `oscilloscope.py:165` call it, Waveform's 4 and the Oscilloscope's 1 kept as declared
-      requests (choice D); `tools/conventions_identity.py` identical before and after for every mode and transition
-      (this closes N1's last box). Transitions keep `scene3d_samples` as the request.
+      requests (choice D); no pixel moves, proved GPU-free by
+      `tests/test_native_scene_targets.py::test_every_visualizer_request_is_its_former_expression` (every caller's
+      request equals its former expression for every tier; `shockwave_quality`'s `scene_samples(detail)` is checked
+      there through the owner, not through the function). `tools/conventions_identity.py` cannot see a sample request:
+      it forces every `SceneTarget` to one sample (`owner_render_parity.single_sample_scene_targets`; audit 2, L4).
+      This closes N1's last box. Transitions keep `scene3d_samples` as the request.
   - [ ] ABI 17: `abi.h`'s comment and `SRPSS_NATIVE_CORE_ABI`, `rendering/native/loader.py` `EXPECTED_ABI` (with
     `tests/test_native_core_loader.py`); the program declaration's targets and pass fields, the harness readback of a
     target's attachments (`composite_mode_target_read`: RGBA8, half floats and R32F as stored), the clamp control,
@@ -535,7 +539,9 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     - [ ] Retirement without leaks: the content released (a mode switch, the node deleted, the scene graph
       invalidated, the item destroyed mid-allocation between steps): targets, attachments, bytes and resolves back to
       zero, the destruction barrier's reading zero; Vulkan validation with synchronisation validation clean through
-      create, resize, capture, multisample and teardown (Qt 6.12.0's defect A only, by its id).
+      create, resize, capture, multisample (consecutive multisampled records with no readback between them: the cost
+      round under the layer, and `prime_control`'s resolve phases; audit 2, H1) and teardown (Qt 6.12.0's defect A
+      only, by its id).
     - [ ] Cost and threads: GPU time per pass (the GPU timer) median and p90 at 2560x1440 and 4K, single and 4x; the
       allocation steps' render-thread CPU time at 4K (the units N3.6 will space); the thread probe: zero calls with a
       Python thread state.
@@ -561,6 +567,23 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [ ] Fix what the scopes show, if it brings Vulkan's 4K 4x minus 1x to the Python path's or below with parity
     exact and validation clean; otherwise the figure and its cause go to the lead with the operator's look question
     (4K defaulting to fewer samples).
+- [ ] N3.1c Checkpoint audit 2's open lows (agent-a6aa6ac5's `Docs/Future_Work/Checkpoint_Audits_Nov15.md`, L2 and
+  L3; before N3.2 draws anything but a full-screen triangle into a scene target).
+  - [ ] L2, the content viewport and its scissor: D14 point 2 and the contract box above put the function in
+    `conventions.h` with QRhi's viewport *and scissor*; it is `contentViewport` in `native/core/src/scene_targets.h`
+    and no pass sets a scissor. Today a full-screen triangle is clipped by the viewport, so nothing is wrong; N3.2's
+    points, lines or a guard-band rasteriser can write into the slack, which a linear read past the content's edge then
+    samples (the slack must hold the clear, the `slack_holds_the_far_plane` check). Decide one place (move it to
+    `conventions.h`, or correct D14 point 2 and the box), set the scissor to the content rect on every pass into a
+    scene target (`QRhiGraphicsPipeline::UsesScissor` on its pipelines, `cb->setScissor` per run), and prove it with a
+    harness pass that draws a quad past the content's edge: the slack keeps the clear, with a control (the scissor off:
+    the slack written).
+  - [ ] L3, `scene_target_check.py`'s missing or weaker controls, each built and seen to fail on its broken case:
+    rule (a)'s negative control (the content placed at the image top: the edge reads differ against the Python
+    oracle); a bucket-aligned card beside 480x270 and 720x405 (both unaligned today: slack present at both); the drag
+    in 1 px steps (`DRAG`'s step is 2 px); the resize control as a 1 px bucket (it re-buckets at every change today);
+    the retirements "item destroyed mid-allocation between steps" and "scene graph invalidated" exercised (every step
+    runs in one record today, and `release()` covers both by construction only).
 - [ ] N3.2 Mesh and buffer resources: static meshes built once and kept, dynamic buffers with dynamic offsets,
   instancing, pre-built resource bindings per ring slot (no allocation per frame), instanced quads in place of
   point sprites (Bubble, Neon Lake's marks, Waveform's sparks use `gl_PointSize`).
@@ -807,24 +830,8 @@ are measured above a handful per frame, one pipeline and one indirect call with 
 (`gl_DrawID`, `gl_BaseInstance`, `gl_BaseVertex`) replaces a draw per batch; the port records which backends report
 the feature (D3D11 is not stated).
 
-- [ ] N5.1 Spline Curve (`devcurve`; a fullscreen strip only; Opus Medium; N2.9's generic mode content, no C++
-  expected; Spectrum's N2.5 port and `native/core/README.md` "How a new mode is built" are the pattern):
-  - [ ] Classify first: read the Python renderer (`rendering/quick/visualizer/implementations/devcurve.py`), its
-    shader and its worker record. Classify every `DevcurveDraw` member as Settings-derived, card-derived, from the
-    frame record, or computed per frame in the Python renderer. A per-frame computation the record cannot carry
-    would need C++: stop and report it, do not build it.
-  - [ ] The record: its runtime `NativeSchema` carries what the renderer reads per frame (its `MODE_CODES` entry if
-    missing). Bound to the core at bind; no module table changes.
-  - [ ] The Settings values: one function by name from the spec and the card, with the Python renderer's own
-    arithmetic, sent when it changes and never per frame at rest.
-  - [ ] The route: Spline Curve drawn by the core on Vulkan through `rendering/quick/visualizer/native_route.py` as
-    Spectrum is; OpenGL keeps the Python renderer until the switch.
-  - [ ] The proof (port rules a to e and g): native OpenGL against the Python renderer frame by frame on recorded
-    music, byte for byte (otherwise to the lead with the figures); Vulkan against OpenGL within 1 level; dpr 1 and
-    1.5; nothing at rest; no Python thread state on the render thread; Settings and Studio parity; no rebuild for a
-    Settings or Studio change. The negative controls are seen failing.
-  - [ ] Docs: D12's "as built" line for Spline Curve, the README's mode list, the Harness Index.
-  - [ ] Lead: the Display 1 rehearsal on Vulkan with recorded music (rule f).
+- [ ] N5.1 Spline Curve leftover: its Studio is not offered on Vulkan (`STUDIO_PREVIEW_BACKENDS`), the same open
+  item as Spectrum's; both close with N5.8.
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
@@ -1284,20 +1291,6 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
 
-### 1D.14 Checkpoint audit 1 fixes (15 Nov; `Docs/Future_Work/Checkpoint_Audits_Nov15.md`; the next Opus Medium opening, before more side work)
-
-- [ ] High: choosing a corner in Visualizers > Fullscreen wipes the overlay's whole Fullscreen Edit placement
-  (`ui/tabs/visualizers_fullscreen_page.py:213-229`, `core/settings/fullscreen_overlays.py:386`). The lead's brief
-  caused it by saying "clears". Decided: the dropdown is about position, so "moved" means a non-zero offset only. A
-  corner choice keeps scale, text box, base width and child layout, and returns only the position to the corner.
-  The moved offsets are kept through the one owner (`normalize_fullscreen_overlays`) as the overlay's stored custom
-  position, so choosing CUSTOM again restores it, as ordinary widgets keep their custom geometry. Restore the
-  pre-merge test's assertion that scale and artwork survive a corner change, with a note saying why it changed back.
-- The medium (the hint replays after a move back to a display whose card is reused) is accepted as it is (operator,
-  15 Nov); L2 goes with it.
-- L1 (the tie budget caps a count, not a level) is recorded, not fixed: a regression confined to 8 isolated pixels
-  a frame is invisible, and N5.2a's seven stay exact.
-
 ### 1D.13 Side defects found at its merge (15 Nov; Opus Medium when a slot is free of native work)
 
 - [ ] Two tests fail only inside one long same-process pytest run (2,413 tests over 14 minutes), and pass alone:
@@ -1305,6 +1298,16 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   `tests/test_qtquick_ordinary_widget_host.py::test_refresh_transition_clock_coalesces_arbitrary_simultaneous_consumers`.
   A third, `tests/test_qtquick_startup_reveal.py::test_startup_reveal_primes_zero_then_completes_at_one_once`,
   failed the same way in the 1D.12 merge run (4,407 tests over 33 minutes). Find the leaked state or ordering they depend on, and make each test own its preconditions.
+  The N5.1 merge run (4,529 tests, 44 minutes, one process) added twelve more of this kind; they pass alone.
+- [ ] Reds already on main, found at the N5.1 merge (each fails alone):
+  - `tests/test_extruded_bubble_empty_near.py:58`: "the populated frame must actually leave near light" reads 0.0;
+    it also fails on N3.1's base commit.
+  - `tests/test_qtquick_visualizer_clip_smoke.py:303`, the Oscilloscope reflow, reads 175 against 173. The QSG/clip
+    optimisations are protected: never retune production to satisfy this oracle; judge whether the oracle is stale.
+  - `tests/test_visualizer_extreme_viewport_scaling_audit_contract.py:38` pins Oscilloscope source text
+    (`gl.glUniform1f(beam_uniforms["uCore"], core)`) that no longer exists; rewrite it to assert behaviour.
+  - `tests/test_test_suite_durability.py` flags `tests/test_godzip_foundry_core.py:776, 789, 803` as documentation
+    prose oracles: the same item as the Foundry box in item 1.
 - [ ] Lead, Display 1: confirm R-221 in the product, Fullscreen Hide Borders with pixel shift stepping, and check
   whether the operator's lavender edge colour came from the shift.
 

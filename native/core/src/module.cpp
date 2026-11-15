@@ -23,6 +23,7 @@
 #include "abi.h"
 #include "backdrop.h"
 #include "composite.h"
+#include "gpu_timer.h"
 #include "host_adapter.h"
 #include "item_notifier.h"
 #include "job_service.h"
@@ -682,6 +683,7 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("scene_target_steps"), double(scenes.steps));
     o.insert(QStringLiteral("scene_target_readbacks"), scenes.readbacksPending);
     o.insert(QStringLiteral("scene_target_depth_primes"), double(scenes.depthPrimes));
+    o.insert(QStringLiteral("scene_target_resolve_primes"), double(scenes.resolvePrimes));
     o.insert(QStringLiteral("scene_target_nearest_resolves"), double(scenes.nearestResolves));
     // N3.2 (D15): the meshes (resident buffers, bytes, the core's copies, uploads), the streams and arenas (buffers,
     // bytes, writes), every buffer created (the no-allocation proof), and the indirect and batched draws recorded.
@@ -1279,6 +1281,23 @@ PyObject *job_counts(PyObject *, PyObject *)
     return pyJson(jobCountsObject());
 }
 
+// R-223, GPU-free: the GPU timer's ring over `frames` edges whose results arrive `lag` edges late (< 0: never), with or
+// without abandoning a slot unread for longer than the ring.
+PyObject *gpu_timer_ring_simulation(PyObject *, PyObject *args)
+{
+    int ring = 0, frames = 0, lag = 0, abandon = 1;
+    if (!PyArg_ParseTuple(args, "iiip", &ring, &frames, &lag, &abandon))
+        return nullptr;
+    const srpss_core::GpuRingSimulation s = srpss_core::simulateGpuRing(ring, frames, lag, abandon != 0);
+    QJsonObject o;
+    o.insert(QStringLiteral("timed"), s.timed);
+    o.insert(QStringLiteral("results"), s.results);
+    o.insert(QStringLiteral("busy"), s.busy);
+    o.insert(QStringLiteral("abandoned"), s.abandoned);
+    o.insert(QStringLiteral("ring_frames"), srpss_core::GpuTimer::kRingFrames);
+    return pyJson(o);
+}
+
 PyObject *job_services_state(PyObject *, PyObject *args)
 {
     int withLog = 0;
@@ -1742,6 +1761,17 @@ PyObject *scene_depth_prime_control(PyObject *, PyObject *args)
     if (!PyArg_ParseTuple(args, "p", &skip))
         return nullptr;
     srpss_core::setSkipDepthPrime(skip != 0);
+    Py_RETURN_NONE;
+}
+
+// Harness: the resolves' prime before each run switched off (audit 2, H1: its negative control under synchronisation
+// validation), or on again.
+PyObject *scene_resolve_prime_control(PyObject *, PyObject *args)
+{
+    int skip = 0;
+    if (!PyArg_ParseTuple(args, "p", &skip))
+        return nullptr;
+    srpss_core::setSkipResolvePrime(skip != 0);
     Py_RETURN_NONE;
 }
 
@@ -2608,6 +2638,10 @@ PyMethodDef methods[] = {
     { "window_edges_self_test", window_edges_self_test, METH_NOARGS,
       "() -> JSON str: audit N38 M1, GPU-free: a window's frame count with two drivers' edges in each of two frames "
       "(edges seen, total): one per frame." },
+    { "gpu_timer_ring_simulation", gpu_timer_ring_simulation, METH_VARARGS,
+      "(ring, frames, lag, abandon) -> JSON str: R-223, GPU-free: the GPU timer's ring over frames whose results "
+      "arrive lag edges late (< 0: never), with or without abandoning a slot unread longer than the ring "
+      "({timed, results, busy, abandoned, ring_frames})." },
     { "job_counts", job_counts, METH_NOARGS,
       "() -> JSON str: N3.8, the job services' process-wide counts (services, threads, jobs queued and running, images "
       "held and their bytes, releases pending, wake-ups) and the windows' retiring images." },
@@ -2680,6 +2714,9 @@ PyMethodDef methods[] = {
     { "scene_depth_prime_control", scene_depth_prime_control, METH_VARARGS,
       "(skip) -> None: N3.1, harness: the depth's rule C prime skipped (its negative control under synchronisation "
       "validation); False restores it." },
+    { "scene_resolve_prime_control", scene_resolve_prime_control, METH_VARARGS,
+      "(skip) -> None: N3.1 audit 2 (H1), harness: the resolves' prime before each run skipped (its negative control "
+      "under synchronisation validation); False restores it." },
     { "scene_nearest_first_sample_control", scene_nearest_first_sample_control, METH_VARARGS,
       "(first_only) -> None: N3.1 (D14 point 10), harness: the nearest resolve takes sample 0 instead of the minimum "
       "(its negative control) in contents built after the call; False restores it." },

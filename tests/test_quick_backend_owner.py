@@ -559,6 +559,8 @@ _HIDDEN_HOST_HARNESSES = frozenset({
     "native/core/python/background_layer_check.py",
     "native/core/python/backdrop_pyramid_check.py",
     "native/core/python/transition_route_check.py",     # its hosts through background_layer_check._host
+    "native/core/python/devcurve_check.py",
+    "native/core/python/scene_target_check.py",
 })
 _SKIPPED_DIRS = frozenset({"tests", "release", "build", "dist", "node_modules", "__pycache__"})
 

@@ -69,7 +69,30 @@ def test_the_allocation_grows_at_once_and_shrinks_only_two_buckets_below():
     assert next_allocation((128, 128), (128, 128)) == ((128, 128), "")
     assert next_allocation((256, 256), (130, 250)) == ((256, 256), "")          # one bucket below: kept
     assert next_allocation((256, 256), (128, 250)) == ((128, 256), "shrunk")    # two buckets below on one axis
-    assert next_allocation((1024, 640), (900, 100)) == ((960, 128), "shrunk")
+    # Each axis on its own (audit 2, L1): one bucket below on the width is kept while the height shrinks.
+    assert next_allocation((1024, 640), (900, 100)) == ((1024, 128), "shrunk")
+
+
+def _both_axes_at_once(current, needed):
+    """The control: the rule before audit 2's L1, a grow or shrink on either axis re-bucketing both."""
+    bucketed = (bucket_pixels(needed[0]), bucket_pixels(needed[1]))
+    if current[0] <= 0 or current[1] <= 0:
+        return bucketed, "made"
+    if needed[0] > current[0] or needed[1] > current[1]:
+        return bucketed, "grown"
+    if current[0] - bucketed[0] >= 2 * SCENE_BUCKET or current[1] - bucketed[1] >= 2 * SCENE_BUCKET:
+        return bucketed, "shrunk"
+    return tuple(current), ""
+
+
+def test_a_grow_on_one_axis_keeps_the_other_axis():
+    """Audit 2, L1 (the auditor's sizes): a diagonal resize whose height dips one bucket while the width grows keeps
+    the height's allocation, so the next small move reallocates nothing."""
+    sizes = [(1000, 1000), (1030, 950), (1030, 970)]
+    assert next_allocation((1024, 1024), (1030, 950)) == ((1088, 1024), "grown")
+    assert _drag(next_allocation, sizes) == 2                                   # made, then grown once
+    # The control: re-bucketing both axes at a grow reallocates again at the dip's return (1088 x 960, then x 1024).
+    assert _drag(_both_axes_at_once, sizes) == 3
 
 
 def test_a_drag_across_one_bucket_boundary_does_not_thrash():
@@ -216,8 +239,8 @@ def core():
 
 @built
 def test_the_modules_rules_are_the_python_reference(core):
-    for current in ((0, 0), (128, 128), (256, 192), (1024, 640)):
-        for needed in ((1, 1), (100, 70), (129, 70), (130, 250), (128, 250), (900, 100), (1025, 641)):
+    for current in ((0, 0), (128, 128), (256, 192), (1024, 640), (1024, 1024)):
+        for needed in ((1, 1), (100, 70), (129, 70), (130, 250), (128, 250), (900, 100), (1025, 641), (1030, 950)):
             assert core.scene_target_next_allocation(current, needed) == next_allocation(current, needed)
     for allocation, content in (((128, 128), (100, 70)), ((320, 192), (301, 131)), ((64, 64), (64, 64))):
         for y_up in (True, False):
@@ -275,7 +298,10 @@ def test_the_admission_refuses_with_its_reasons(core, packs, qt_app):
                              depth_test="always", depth_write=True),), (scene,), "attachments")
     _refused(core, (CapturePass("background", "scene"), planes), (scene,), "before any pass drew")
     show = scene_targets.passes(packs)[-1]
-    _refused(core, (planes, show), (scene, ambient), "before a capture step")
+    ambient_pass = next(p for p in scene_targets.passes(packs) if getattr(p, "target", None) == "ambient")
+    # The ambient pass draws its target first, so only the missing capture step is wrong (audit 2, M4 refuses an
+    # undrawn target's read before it gets that far).
+    _refused(core, (planes, ambient_pass, show), (scene, ambient), "before a capture step")
     reads_own = ModePass("planes", packs["planes"], "replace", target="scene", depth_test="always", depth_write=True,
                          samplers=(PassSampler("u_x", "scene.colour"),))
     _refused(core, (reads_own,), (scene,), "the target the pass draws into")     # never its own target's attachment
@@ -287,6 +313,61 @@ def test_the_admission_refuses_with_its_reasons(core, packs, qt_app):
         PassSampler("u_scene", "scene.velocity"), PassSampler("u_depth", "scene.depth"),
         PassSampler("u_cover", "ambient.coverage"), PassSampler("u_light", "ambient.light")))), (scene, ambient),
              "has no attachment")
+
+
+@built
+@pytest.mark.qt
+def test_a_target_read_before_any_pass_drew_it_is_declared_and_single_sampled(core, packs, qt_app):
+    """Audit 2, M4: a pass sampling a target before any pass of the frame drew it reads the frame before (at more than
+    one sample, resolves nothing wrote). Refused unless the target declares ``previous_frame``; the declaration is
+    refused on a multisampled target and on one no pass draws."""
+    import scene_targets
+
+    passes, targets, _values = scene_targets.previous_frame_program(packs)
+    layout = core.mode_program_layout(passes, targets)                             # declared, one sample: admitted
+    assert layout["targets"][0]["previous_frame"] is True
+    _refused(core, *scene_targets.previous_frame_program(packs, declared=False)[:2], "before any pass of the frame drew")
+    _refused(core, *scene_targets.previous_frame_program(packs, samples=4)[:2], "only single-sampled")
+    # A target declared and read but never drawn is refused alike: undeclared, then declared.
+    scene, probe = targets
+    undrawn = ModeTarget("scene", scene.colour, depth=True)
+    _refused(core, passes[:1], (undrawn, probe), "before any pass of the frame drew")
+    _refused(core, passes[:1], (scene, probe), "no pass draws into it")
+    # The control: the harness program reads its targets after their passes and declares nothing.
+    core.mode_program_layout(scene_targets.passes(packs), scene_targets.targets(samples=4))
+    assert ModeTarget("scene", scene.colour).declaration().get("previous_frame") is None
+
+
+@built
+@pytest.mark.qt
+def test_a_new_program_clears_the_sizes_set_before_it(core, packs, qt_app):
+    """Audit 2, M3: an explicit size set through ``target_size`` holds until the next program, whose declarations size
+    its targets (before the fix the old size went on being drawn: the audit's probe drew 400 x 220 for a program
+    declaring 500 x 280)."""
+    import scene_targets
+    from PySide6.QtQuick import QQuickItem
+
+    parent = QQuickItem()
+    mode = core.mode(parent)
+    try:
+        mode.still()
+        settings = scene_targets.settings(ambient_size=(300, 170))
+        mode.program(scene_targets.passes(packs), settings, targets=scene_targets.targets(ambient_size=(300, 170)))
+        assert mode.state()["target_sizes"] == {}
+        mode.target_size("ambient", (400, 220))
+        assert mode.state()["target_sizes"] == {"ambient": [400, 220]}       # the control: the size is held
+        mode.program(scene_targets.passes(packs), settings, targets=scene_targets.targets(ambient_size=(500, 280)))
+        assert mode.state()["target_sizes"] == {}
+        declared = {t["name"]: t["size"] for t in mode.state()["program"]["targets"]}
+        assert declared["ambient"] == [500, 280]
+        # A refused program keeps the program and the sizes set for it.
+        mode.target_size("ambient", (410, 230))
+        with pytest.raises(ValueError):
+            mode.program(scene_targets.passes(packs), {"u_no_such_member": 1.0},
+                         targets=scene_targets.targets(ambient_size=(520, 290)))
+        assert mode.state()["target_sizes"] == {"ambient": [410, 230]}
+    finally:
+        mode.composite.destroy()
 
 
 @built

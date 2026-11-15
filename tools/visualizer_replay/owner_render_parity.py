@@ -340,6 +340,36 @@ def card_placement(name: str):
         _PLACED["name"] = "display"
 
 
+#: Rule (a)'s tolerance for a mode drawn through the composite's premultiplied surface (lead's decision, N5.1 review;
+#: the per-pixel proof: .artifacts/evidence/native_core/n5_1_devcurve/20261115_rule_a_per_pixel/, D12 "As built: Spline
+#: Curve"). The Python node rounds once, round(s8 a8 / 255 + d (1 - a8 / 255)); the native item rounds the premultiplied
+#: product into its surface first, so a translucent fill pixel may sit RULE_A_FILL_LEVEL off. Edge pixels flip on float32
+#: interpolation between the core's triangle and the Python quad (each within 4e-3 of a device pixel of its rounding
+#: boundary): within RULE_A_EDGE_LEVEL, at most RULE_A_EDGE_PIXELS_PER_FRAME pixels above the fill level in one frame
+#: (the measured worst, 7 in one frame of Spline Curve's widened run set and overscan runs on 15 Nov, times 1.5, whole
+#: pixels). One rule for every mode drawn through the composite, Spectrum included (lead, 15 Nov: its translucent bars
+#: and glow pass through the same surface; its owner runs sit at exactly 1 level with no edge pixel).
+RULE_A_FILL_LEVEL = 1
+RULE_A_EDGE_LEVEL = 3
+RULE_A_EDGE_PIXELS_PER_FRAME = 10
+
+
+def rule_a_verdict(mode: str, rows: list[dict]) -> dict:
+    """Rule (a) over ``rows`` (``frame_differences``' per-input rows: pixels, max_level, levels) for ``mode``, within
+    the composite's tolerance (one rule for every composite mode). Returns pass, the bound and the worst figures."""
+    del mode                                       # one rule for all composite content
+    above = [sum(count for level, count in row["levels"].items() if int(level) > RULE_A_FILL_LEVEL) for row in rows]
+    worst_level = max((row["max_level"] for row in rows), default=0)
+    worst_edge = max(above, default=0)
+    # A row's level histogram keeps its first 8 levels; any level beyond them is above RULE_A_EDGE_LEVEL and fails by
+    # max_level.
+    return {"bound": {"fill_level": RULE_A_FILL_LEVEL, "edge_level": RULE_A_EDGE_LEVEL,
+                      "edge_pixels_per_frame": RULE_A_EDGE_PIXELS_PER_FRAME},
+            "pass": worst_level <= RULE_A_EDGE_LEVEL and worst_edge <= RULE_A_EDGE_PIXELS_PER_FRAME,
+            "max_level": worst_level, "edge_pixels_worst_frame": worst_edge,
+            "frames_over_the_edge_cap": sum(1 for count in above if count > RULE_A_EDGE_PIXELS_PER_FRAME)}
+
+
 #: ``--surface-format``: the native item's surface texels for this run (None: the route's own choice).
 NATIVE_SURFACE_FORMAT: str | None = None
 #: ``--unprimed``: the window is not rendered before the owner exists and the route is not prepared at attach (audit
@@ -374,17 +404,18 @@ class _ParityRoute:
         route = Route(core, content_host)
         if NATIVE_SURFACE_FORMAT is not None:
             route.surface_format = NATIVE_SURFACE_FORMAT      # rule (a)'s target-format measurement (round 5)
-            spectrum = core.spectrum                           # checked on the first item the route creates
 
-            def checked(parent, _make=spectrum):
-                item = _make(parent)
-                item.composite.set(surface_format=NATIVE_SURFACE_FORMAT)
-                held = item.composite.state()["config"].get("surface_format", "rgba8")
-                if held != NATIVE_SURFACE_FORMAT:
-                    raise RuntimeError(f"the module draws its surface as {held}: build round 5")
-                return item
+            def checking(make):                                # checked on each item the route creates
+                def checked(parent):
+                    item = make(parent)
+                    item.composite.set(surface_format=NATIVE_SURFACE_FORMAT)
+                    held = item.composite.state()["config"].get("surface_format", "rgba8")
+                    if held != NATIVE_SURFACE_FORMAT:
+                        raise RuntimeError(f"the module draws its surface as {held}: build round 5")
+                    return item
+                return staticmethod(checked)
 
-            route._core = type("Core", (), {"spectrum": staticmethod(checked)})()
+            route._core = type("Core", (), {"spectrum": checking(core.spectrum), "mode": checking(core.mode)})()
         return route
 
 
@@ -723,8 +754,14 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     classified (``classes``). ``placement``: where both runs put the card (``PLACEMENTS``)."""
     script = parity_script(clip_frames, mode)
     with single_sample_scene_targets(), card_placement(placement):
-        python, mappings = _python_mappings_run(mode, script, settings)
-        native = native_drawn_run(mode, script, settings=settings, core=core, python_mappings=mappings)
+        if mode == "spectrum":
+            python, mappings = _python_mappings_run(mode, script, settings)
+        else:
+            # A generic mode's card maps nothing per fragment (its uv is the core's, N29 round 2 M6): no mapping control.
+            python, mappings = drawn_run(mode, script, worker=False, supervisor=None, namespace=None,
+                                         settings=settings), []
+        native = native_drawn_run(mode, script, settings=settings, core=core,
+                                  python_mappings=mappings if mode == "spectrum" else None)
     paths = pair_difference(native, python)
     rows = frame_differences(native, python)
     switch_at = next(i for i, (kind, _v) in enumerate(script) if kind == "mode")
@@ -748,6 +785,10 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
                "python_hashes": [entry["hash"] for entry in python["pixels"]]}
     verdict["identical"] = bool(paths["first"] is None and verdict["digests_identical"]
                                 and verdict["native_published"] > 0)
+    # Rule (a)'s verdict: exact, or the composite's tolerance for a translucent mode (RULE_A_*).
+    verdict["rule_a"] = rule_a_verdict(mode, rows)
+    verdict["pass"] = bool(verdict["rule_a"]["pass"] and verdict["digests_identical"] and verdict["native_published"] > 0
+                           and paths["regions_equal"] and len(python["pixels"]) == len(native["pixels"]))
     verdict["split"] = _split_rows(rows, switch_input)
     verdict["mapping"] = dict(native["mapping"], python_frames=len(mappings))
     verdict["classes"] = classify_differences(native, python, switch_input)
@@ -760,10 +801,11 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
 
 
 def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
-               against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS) -> dict:
-    """``native_parity`` over Spectrum's widened run set (``conventions_identity.mode_runs``) at the rig's own
-    placement, and ``OVERSCAN_RUNS`` again at each other placement of ``placements`` (keyed ``run@placement``); the
-    report. ``against``: an accepted report this one is compared with (``against_baseline``)."""
+               against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS, mode: str = "spectrum") -> dict:
+    """``native_parity`` over ``mode``'s widened run set (``conventions_identity.mode_runs``; a mode of the route's
+    ``NATIVE_MODE_IDS``) at the rig's own placement, and ``OVERSCAN_RUNS`` again at each other placement of
+    ``placements`` (keyed ``run@placement``); the report. ``against``: an accepted report this one is compared with
+    (``against_baseline``)."""
     baseline = json.loads(Path(against).read_text(encoding="utf-8")) if against is not None else None
     import tools.expanded_visualizer_evidence as evidence
     from rendering.native import load
@@ -774,28 +816,35 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     clip = evidence.shipped_clip(seconds)
-    report: dict = {"mode": "spectrum", "offers": offers, "seconds": seconds, "display": list(DISPLAY), "results": {}}
+    from rendering.quick.visualizer.native_route import NATIVE_MODE_IDS
+
+    if mode not in NATIVE_MODE_IDS:
+        raise ValueError(f"the native route draws {sorted(NATIVE_MODE_IDS)}, not {mode!r}")
+    report: dict = {"mode": mode, "offers": offers, "seconds": seconds, "display": list(DISPLAY), "results": {}}
     started = time.perf_counter()
-    runs = conventions_identity.mode_runs("spectrum", offers)
+    runs = conventions_identity.mode_runs(mode, offers)
     planned = [(suffix, settings, "display") for suffix, settings in runs] if "display" in placements else []
     planned += [(suffix, settings, placement) for placement in placements if placement != "display"
                 for suffix, settings in runs if suffix in OVERSCAN_RUNS]
     try:
         for suffix, settings, placement in planned:
-            key = f"spectrum{suffix}" if placement == "display" else f"spectrum{suffix}@{placement}"
+            key = f"{mode}{suffix}" if placement == "display" else f"{mode}{suffix}@{placement}"
             if only and key not in only:
                 continue
             engine_worker_link.reset_run_state_for_testing()
-            verdict = native_parity(core, "spectrum", suffix, settings, clip.frames, out, placement=placement)
+            verdict = native_parity(core, mode, suffix, settings, clip.frames, out, placement=placement)
             report["results"][key] = verdict
             print(f"[NATIVE] {key:48s} {verdict['frames_drawn']} frames, native {verdict['native_published']}"
                   f" published; differing inputs {verdict['differing_inputs']}, pixels "
                   f"{verdict['differing_pixels_total']}, max level {verdict['max_level']}; card origin "
                   f"{verdict['outer_origin']} (device fraction {verdict['outer_origin_device_fraction']}); "
-                  f"{'IDENTICAL' if verdict['identical'] else 'DIFFERENT'}", flush=True)
+                  f"{'IDENTICAL' if verdict['identical'] else 'DIFFERENT'}; edge pixels in the worst frame "
+                  f"{verdict['rule_a']['edge_pixels_worst_frame']}; rule (a) {verdict['rule_a']['bound']}: "
+                  f"{'PASS' if verdict['pass'] else 'FAIL'}", flush=True)
     finally:
         report["elapsed_s"] = round(time.perf_counter() - started, 1)
         report["identical"] = bool(report["results"]) and all(v["identical"] for v in report["results"].values())
+        report["pass"] = bool(report["results"]) and all(v["pass"] for v in report["results"].values())
         if baseline is not None:
             report["against"] = {"baseline": str(against), **against_baseline(baseline, report)}
             for key, entry in report["against"]["runs"].items():
@@ -933,7 +982,9 @@ def main(argv=None) -> int:
     parser.add_argument("--module-dir", type=Path, default=Path("release/native_module"))
     parser.add_argument("--offers", action="store_true",
                         help="with --native: the widened run set (both variants and every Choice offer)")
-    parser.add_argument("--runs", nargs="*", default=(), help="with --native: only these run keys (spectrum[:...])")
+    parser.add_argument("--runs", nargs="*", default=(), help="with --native: only these run keys (<mode>[:...])")
+    parser.add_argument("--mode", default="spectrum",
+                        help="with --native: the native mode drawn (the route's NATIVE_MODE_IDS: spectrum, devcurve)")
     parser.add_argument("--surface-format", choices=("rgba8", "rgba16f"), default=None,
                         help="with --native: the native item's surface texels (default: the route's own)")
     parser.add_argument("--unprimed", action="store_true",
@@ -968,7 +1019,7 @@ def main(argv=None) -> int:
             report = run_native(args.out, module_dir=args.module_dir.resolve(), offers=args.offers,
                                 seconds=args.seconds, only=tuple(args.runs),
                                 against=None if args.against is None else args.against.resolve(),
-                                placements=tuple(args.placements))
+                                placements=tuple(args.placements), mode=args.mode)
         else:
             report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
                          seconds=args.seconds, controls=not args.skip_controls)
@@ -980,6 +1031,8 @@ def main(argv=None) -> int:
     evidence_media.finish(0)
     if "against" in report:
         return 0 if report["against"]["same"] else 1
+    if "pass" in report:                                  # --native: rule (a)'s verdict (rule_a_verdict)
+        return 0 if report["pass"] else 1
     return 0 if report["identical"] else 1
 
 

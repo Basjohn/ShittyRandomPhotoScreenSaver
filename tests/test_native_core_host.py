@@ -134,7 +134,10 @@ def test_no_core_source_uses_the_stls_dll_backed_types():
 
 
 # `QList<T> name(qsizetype(n));` declares a function, not a sized container (build round 1 of N2.2 failed on five).
-_VEXING_PARSE = re.compile(r"^\s*(?!return\b)[\w:<>,* ]+?\s+(\w+)\(\s*[\w:]+\(\s*\w+\s*\)\s*\)\s*;", re.M)
+# The declaration's type starts at the line's first non-blank character: the indent is matched whole (no backtracking
+# into it), so a `return f(g(x));` is never read as the type "return" (N3.1 audit 2, M2: scene_targets.cpp's
+# `return textureBytesPerSample(targetRhiFormat(format));` was).
+_VEXING_PARSE = re.compile(r"^[ \t]*+(?!return\b)[\w:<>,* ]+?\s+(\w+)\(\s*[\w:]+\(\s*\w+\s*\)\s*\)\s*;", re.M)
 
 
 def vexing_parses(text: str) -> list[str]:
@@ -147,7 +150,11 @@ def test_no_core_source_declares_a_function_where_it_meant_a_sized_object():
     assert {name: hits for name, hits in found.items() if hits} == {}
     # Negative control: round 1's declaration is found; a return statement and an explicit size are not.
     assert vexing_parses("    QList<VkLayerProperties> props(qsizetype(n));\n")
+    assert vexing_parses("QList<int> counts(qsizetype(n));\n")                   # unindented too
     assert vexing_parses("    return QStringLiteral(\"x\").arg(int(r));\n    props.resize(qsizetype(n));\n") == []
+    # A return of a call of a call, at any indent (audit 2, M2's false positive).
+    assert vexing_parses("    return textureBytesPerSample(targetRhiFormat(format));\n") == []
+    assert vexing_parses("return f(g(x));\n\treturn f(g(x));\n") == []
 
 
 # ------------------------------------------------------------------------------------------------- the probe's analysis

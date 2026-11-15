@@ -1383,8 +1383,25 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                 || !parsePassTargetState(o, pass, program.targets, error))
                 return false;
             for (const PassSampler &s : pass.samplers) {
-                if (targetTextureName(s.texture) && !checkTargetSampler(pass, s, program.targets, error))
+                if (!targetTextureName(s.texture))
+                    continue;
+                if (!checkTargetSampler(pass, s, program.targets, error))
                     return false;
+                // Audit 2, M4: a target read before any pass of the frame drew it holds the frame before (and, at
+                // more than one sample, resolves nothing wrote): only where the target declares that it is read so.
+                const qsizetype dot = s.texture.indexOf('.');
+                const QByteArray attachment = s.texture.mid(dot + 1);
+                const int t = targetIndex(QString::fromLatin1(s.texture.left(dot)));
+                if (t >= 0 && !drawn[t] && attachment != "capture_colour" && attachment != "capture_depth"
+                    && !program.targets.at(t).previousFrame) {
+                    *error = QStringLiteral("pass '%1': the sampler '%2' reads '%3' before any pass of the frame drew "
+                                            "target '%4' (a target read as the frame before declares "
+                                            "\"previous_frame\": true)")
+                                 .arg(QString::fromLatin1(pass.name), QString::fromLatin1(s.name),
+                                      QString::fromLatin1(s.texture),
+                                      QString::fromLatin1(program.targets.at(t).name));
+                    return false;
+                }
             }
         }
         for (const ModePass &earlier : program.passes) {
@@ -1416,6 +1433,14 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                 drawn[pass.target] = true;
         }
         program.passes.append(pass);
+    }
+    // Audit 2, M4: a target read as the frame before is one a pass of the frame draws (else nothing ever writes it).
+    for (int t = 0; t < int(program.targets.size()); ++t) {
+        if (program.targets.at(t).previousFrame && !drawn[t]) {
+            *error = QStringLiteral("target '%1' is read as the frame before, but no pass draws into it")
+                         .arg(QString::fromLatin1(program.targets.at(t).name));
+            return false;
+        }
     }
     // N3.1: a capture is read only after a capture step of its target made it in the same record.
     bool captured[kMaxSceneTargets] = {};
@@ -1568,15 +1593,16 @@ QList<QByteArray> ModeProgram::sampledTextures() const
     return names;
 }
 
-QList<QSize> ModeProgram::passTargetSizes(const QSize &surface, const QList<TargetDeclaration> *sized) const
+void ModeProgram::passTargetSizes(const QSize &surface, const QList<TargetDeclaration> *sized,
+                                  QList<QSize> *out) const
 {
     const QList<TargetDeclaration> &list = sized && sized->size() == targets.size() ? *sized : targets;
-    QList<QSize> sizes;
-    for (const ModePass &pass : passes) {
+    out->resize(passes.size());               // in place: no allocation once the capacity holds the passes
+    for (qsizetype p = 0; p < passes.size(); ++p) {
+        const ModePass &pass = passes.at(p);
         const TargetDeclaration *target = pass.target >= 0 ? &list.at(pass.target) : nullptr;
-        sizes.append(target && !target->surfaceSized() ? target->size : surface);
+        (*out)[p] = target && !target->surfaceSized() ? target->size : surface;
     }
-    return sizes;
 }
 
 QString ModeProgram::textureFits(const QByteArray &texture, bool mips) const
@@ -2132,6 +2158,9 @@ bool ModeSource::setProgram(const ModeProgram &program, const QJsonObject *setti
     m_program.drawSettings = program.drawSettingNumbers(kept ? *kept : QJsonObject()); // N3.2
     m_packedSettings = packed;
     m_ready = ready;
+    // N3.1 audit 2, M3: the new program's declarations size its targets; a size set through setTargetSize before it
+    // was the old program's.
+    m_targetSizes.clear();
     ++m_generation;
     ++m_buildGeneration;
     return true;
@@ -2410,7 +2439,7 @@ bool ModeSource::takeTargetPixels(QList<SceneTargetPixels> *out)
     return true;
 }
 
-void ModeSource::noteTargets(const QJsonObject &state)
+void ModeSource::noteTargets(const SceneTargetsState &state)
 {
     QMutexLocker lock(&m_textureReportMutex);
     m_targetsState = state;
@@ -2499,6 +2528,10 @@ void ModeSource::stateInto(QJsonObject &o) const
     o.insert(QStringLiteral("schema"), m_schema ? QJsonValue(m_schema->toJson()) : QJsonValue());
     o.insert(QStringLiteral("still"), m_still);
     o.insert(QStringLiteral("program"), m_program.toJson());
+    QJsonObject targetSizes;                  // N3.1: the explicit sizes set since the program (audit 2, M3)
+    for (const TargetDeclaration &set : m_targetSizes)
+        targetSizes.insert(QString::fromLatin1(set.name), QJsonArray { set.size.width(), set.size.height() });
+    o.insert(QStringLiteral("target_sizes"), targetSizes);
     o.insert(QStringLiteral("settings"), m_hasSettings ? QJsonValue(m_settings) : QJsonValue());
     o.insert(QStringLiteral("ready"), m_ready);
     o.insert(QStringLiteral("card"), m_card.toJson());
@@ -2541,8 +2574,8 @@ void ModeSource::stateInto(QJsonObject &o) const
     jobs.insert(QStringLiteral("rebinds"), double(r.rebinds));
     o.insert(QStringLiteral("texture_jobs"), jobs);
     o.insert(QStringLiteral("still_kept"), double(r.stillKept));
-    o.insert(QStringLiteral("scene_targets"), m_targetsState);                       // N3.1
-    o.insert(QStringLiteral("mesh_buffers"), m_meshBuffersState);                    // N3.2
+    o.insert(QStringLiteral("scene_targets"), sceneTargetsStateJson(m_targetsState)); // N3.1 (made here: M5)
+    o.insert(QStringLiteral("mesh_buffers"), m_meshBuffersState);                    // N3.2 (noted on object change)
     o.insert(QStringLiteral("target_reads_requested"), double(m_targetReads.loadAcquire()));
     o.insert(QStringLiteral("target_readback_pending"), m_targetReadback && !m_targetReadback->done());
     QJsonArray changes;
@@ -3174,10 +3207,15 @@ void ModeContent::pack(QRhi *rhi, const ColorTarget &target)
     }
     const ModeProgram &program = source.drawnProgram();
     const fa::Schema &schema = still ? stillSchema() : source.drawnSchema()->schema();
-    m_passTargets = program.passTargetSizes(target.texture->pixelSize(), &source.drawnTargets()); // N3.1
+    // N3.1: each pass's target size, filled in place, for a program with targets only (N2.9's: the surface's for all).
+    const QList<QSize> *passTargets = nullptr;
+    if (!program.targets.isEmpty()) {
+        program.passTargetSizes(target.texture->pixelSize(), &source.drawnTargets(), &m_passTargets);
+        passTargets = &m_passTargets;
+    }
     const QMatrix4x4 correction = targetCorrection(rhi); // N3.2: a vertex stage's uMatrix, corrected once (rule 1)
     if (!program.packFrame(schema, still ? QByteArray() : source.frameRecord(), source.drawnCard(),
-                           target.texture->pixelSize(), m_blocks, &m_reason, &m_passTargets, correction.constData())) {
+                           target.texture->pixelSize(), m_blocks, &m_reason, passTargets, correction.constData())) {
         m_refused = true;                     // a value with no defined conversion: the frame is refused (M4)
         m_blocksGeneration = 0;               // the next frame starts from the packed settings again
         return;
@@ -4012,13 +4050,15 @@ bool ModeContent::syncTargets(QRhi *rhi, const ColorTarget &target, QString *err
     while (ok && !done)                       // every step now; N3.6 spaces them over warm-up frames
         ok = m_targets.allocateStep(&done, error);
     if (!ok) {
-        // The content's failure, latched like a build's (the targets go; the frame in the surface stays).
+        // The content's failure, latched like a build's (the targets go; the frame in the surface stays). The pipelines
+        // go before the targets' descriptors (audit 2, L5: allocateStep leaves a failed target's objects to this).
         releasePipelines();
         m_targets.release();
         m_targetObjectsSeen = 0;
         const qint64 failures = m_latch.failed(latchKey(rhi, target), *error);
         m_source->noteFailure(*error, failures);
-        m_source->noteTargets(m_targets.stateJson(rhi));
+        m_targets.takeStateChange();
+        m_source->noteTargets(m_targets.state(rhi));
         return false;
     }
     if (m_targets.objectGeneration() != m_targetObjectsSeen) {
@@ -4049,15 +4089,18 @@ void ModeContent::recordNearest(QRhiCommandBuffer *cb, int target, int last, boo
         if (later.capture && later.target == target)
             needed[kNearestDepthSlot] = true;
         for (const PassSampler &s : later.samplers) {
-            const qsizetype dot = s.texture.indexOf('.');
-            if (dot <= 0 || s.texture.left(dot) != t.decl.name)
+            // Views, not copies: this runs every record (audit 2, M5).
+            const QByteArrayView texture(s.texture);
+            const qsizetype dot = texture.indexOf('.');
+            if (dot <= 0 || texture.first(dot) != QByteArrayView(t.decl.name))
                 continue;
-            const QByteArray attachment = s.texture.mid(dot + 1);
-            if (attachment == "depth")
+            const QByteArrayView attachment = texture.sliced(dot + 1);
+            if (attachment == QByteArrayView("depth"))
                 needed[kNearestDepthSlot] = true;
-            const int colour = t.decl.colourIndex(attachment);
-            if (colour >= 0)
-                needed[colour] = true;
+            for (int c = 0; c < int(t.decl.colour.size()) && c < kMaxTargetColour; ++c) {
+                if (attachment == QByteArrayView(t.decl.colour.at(c).name))
+                    needed[c] = true;
+            }
         }
     }
     const QRhiViewport whole(0, 0, float(t.allocation.width()), float(t.allocation.height()));
@@ -4098,7 +4141,8 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             // N3.1: the capture (D14 point 5): the target's pass ended; its capture's two textures primed for the load
             // (rule C: a later pass or a readback left them elsewhere) and written over the whole allocation.
             const SceneTargets::Target &t = *m_targets.target(pass.target);
-            primeForLoad(rhi, cb, QList<QRhiTexture *> { t.captureColour.get(), t.captureDepth.get() });
+            QRhiTexture *const captured[2] = { t.captureColour.get(), t.captureDepth.get() };
+            primeForLoad(rhi, cb, captured, 2); // no list per capture (audit 2, M5)
             cb->beginPass(t.captureTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
             pending = nullptr;
             cb->setGraphicsPipeline(r.passes[i].pipeline.get());
@@ -4131,12 +4175,17 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                 drawPass(rhi, cb, k, surfaceViewport, cardInput); // N3.2
             cb->endPass();
         } else {
-            // N3.1: a run on a scene target: its attachments primed for the load (rule C, depth too), cleared by a draw
+            // N3.1: a run on a scene target: its attachments primed for the load (rule C, depth too), its average
+            // resolves ordered after their last store (audit 2, H1: defect B's UNDEFINED transition), cleared by a draw
             // over the whole allocation at its first run of the record, the passes over its content viewport.
             SceneTargets::Target &t = *m_targets.target(pass.target);
-            primeForLoad(rhi, cb, m_targets.loadedColour(pass.target));
+            QRhiTexture *textures[kMaxTargetColour];
+            primeForLoad(rhi, cb, textures, m_targets.loadedColour(pass.target, textures));
             if (t.depth && !skipDepthPrime() && primeDepthForLoad(rhi, cb, t.depth.get()))
                 countDepthPrime();
+            if (!skipResolvePrime())
+                countResolvePrimes(primeResolvesForPass(rhi, cb, textures, m_targets.averageResolves(pass.target,
+                                                                                                    textures)));
             cb->beginPass(t.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
             pending = nullptr;
             if (!cleared[pass.target]) {
@@ -4316,8 +4365,8 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
         m_source->setTargetReadback(m_targets.startReadback(readbacks));
         cb->resourceUpdate(readbacks);
     }
-    if (m_targets.count() > 0 || readback)
-        m_source->noteTargets(m_targets.stateJson(rhi));
+    if (m_targets.takeStateChange())          // audit 2, M5: only when it changed (an allocation edge), never per record
+        m_source->noteTargets(m_targets.state(rhi));
     if (draw) {
         m_drawnTexture = target.texture.get();
         m_drawnSize = size;

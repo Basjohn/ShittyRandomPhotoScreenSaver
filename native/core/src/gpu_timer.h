@@ -18,7 +18,9 @@
 // the timer reads the slots whose results are available (Vulkan without VK_QUERY_RESULT_WAIT_BIT, with availability;
 // OpenGL GL_QUERY_RESULT_AVAILABLE first). A slot is reused only once its frame completed (QRhi never runs more than
 // FramesInFlight frames ahead, and the ring is longer); a slot whose results are still not available when its turn comes
-// again is skipped for that frame, never overwritten. `waitForResults` is the harness's negative control: the blocking
+// again is skipped for that frame, never overwritten, until it has stayed unread for more frames than the ring is long:
+// then it is abandoned (counted, reused, its late result never read; R-223: a GPU that falls behind without bound, as
+// the OpenGL hidden host's did, left every slot pending for good). `waitForResults` is the harness's negative control: the blocking
 // read the service never does (Vulkan: every earlier frame's results with VK_QUERY_RESULT_WAIT_BIT at the edge; OpenGL
 // also the naive read right after the pass in its own frame, because Qt's OpenGL loop has already finished the previous
 // frame on the GPU by the next edge, so a wait there has nothing to show).
@@ -54,6 +56,22 @@ enum class GpuPassKind : int {
 };
 
 QString gpuPassKindName(GpuPassKind kind);
+
+// The ring's rule for a frame's slot (GPU-free; R-223): take it when free; leave the frame untimed while the slot's
+// results are unread (Busy); abandon the slot once they have stayed unread for more frames than the ring is long (its
+// late result is never read: the slot's queries are reused), so the timer keeps timing every frame it can.
+enum class GpuSlotUse { Take, Busy, Abandon };
+GpuSlotUse gpuSlotUse(bool pending, qint64 slotEdge, qint64 edge, int ringFrames);
+// GPU-free: the ring over `frames` edges whose results become available `lag` edges after their frame (lag < 0: never),
+// abandoning or not (the safety net's negative control); the counts the tests read.
+struct GpuRingSimulation
+{
+    int timed = 0;      // frames whose pass was bracketed
+    int results = 0;    // results read
+    int busy = 0;       // frames left untimed, their slot unread
+    int abandoned = 0;  // slots given up on
+};
+GpuRingSimulation simulateGpuRing(int ringFrames, int frames, int lag, bool abandon);
 
 struct GpuTimerConfig
 {
@@ -94,8 +112,9 @@ private:
 class GpuTimer
 {
 public:
-    // Frame slots: longer than any QRhi's FramesInFlight plus one, and than the OpenGL hidden host's lag (its offscreen
-    // frames only flush: build round 1 read results up to 5 frames late and left 3 of 30 frames untimed with 4 slots).
+    // Frame slots: longer than any QRhi's FramesInFlight plus one, and than OpenGL's read lag (build round 1 read results
+    // up to 5 frames late and left 3 of 30 frames untimed with 4 slots; the hidden host then only flushed its OpenGL
+    // frames and ran ahead without bound, R-223: it now finishes them, and a slot unread past the ring is abandoned).
     static constexpr int kRingFrames = 8;
     static constexpr int kMaxScopes = 16;  // timed passes per frame; more are recorded untimed and counted
 
@@ -181,6 +200,7 @@ private:
     qint64 m_notReadyReads = 0;    // a slot read whose results were not all available yet (read again later)
     qint64 m_blockingReads = 0;    // reads that waited (the negative control only)
     qint64 m_slotBusyFrames = 0;   // frames left untimed because their slot still held unread results
+    qint64 m_abandonedSlots = 0;   // slots given up on, unread for more frames than the ring (R-223's safety net)
     qint64 m_overCapacity = 0;     // passes left untimed because the frame's slot was full
     qint64 m_releaseWaits = 0;     // releases that waited for the queue (a detach inside a frame)
     qint64 m_resolveNsMax = 0;     // CPU time of one edge's reads, the longest

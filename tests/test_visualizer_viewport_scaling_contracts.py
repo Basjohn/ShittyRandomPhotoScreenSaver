@@ -493,8 +493,8 @@ class OtherModeViewportScalingTests(unittest.TestCase):
         # specular width/offset apply it to the closed clamp expression, and the
         # foreground-shadow offset applies it to the already-clamped `value`.
         self.assertIn("value *= layout.normalized_y_scale", source)
-        self.assertIn(")\n            * layout.normalized_x_scale,", source)
-        self.assertIn(")\n            * layout.normalized_y_scale,", source)
+        self.assertIn(") * layout.normalized_x_scale", source)
+        self.assertIn(") * layout.normalized_y_scale", source)
 
         # Concrete default at the user's ~2.9x-tall viewport: the old shader
         # floor forced 0.028 * (272/792) back up to 0.010. The projected floor

@@ -36,11 +36,15 @@ Rounds:
              pass) median and p90, single-sampled and 4x (the 4x minus 1x difference bounds the resolves: choice G's
              budget, 0.3 ms at 2560x1440 and 0.6 ms at 4K); the light attachment's clear (the ambient target at 2048 x
              1152 with and without its light attachment, nothing glowing: choice F); the first frame's wall time with a
-             new allocation against a steady one; the thread probe (no Python thread state on the render thread).
+             new allocation against a steady one; the thread probe (no Python thread state on the render thread). On
+             Vulkan it is the gate's synchronisation proof (audit 2, H1: its runs of consecutive multisampled records
+             have no readback between them to order a resolve), so a Vulkan cost round without the validation layer
+             fails.
 Run alone (not in the default set):
   prime_control  (--apis vulkan) rule C for depth's negative control: the scene with the depth prime skipped, then with
              it, at one sample and at 4x; synchronisation validation shows read-after-write hazards on the depth load
-             only where it was skipped.
+             only where it was skipped. Then the resolves' prime (audit 2, H1): 40 consecutive 4x records with it
+             skipped show write-after-write hazards on the resolves (defect B's UNDEFINED transition), none with it.
   cost_parts (each API) where the four-sample time goes at 4K: a clearing draw and plane, three passes, a colour read,
              the capture split; each at 1x and 4x.
   python_cost (the reference child, OpenGL) the Python renderer's ``SceneTarget`` on the same load at 2560x1440 and 4K,
@@ -92,8 +96,10 @@ DRAG = (800, 1000, 2)              # the resize round's widths (start, end, step
 DRAG_HEIGHT = 400
 COST_HOSTS = ((2560, 1440), (3840, 2160))
 COST_AMBIENT = (2048, 1152)
-COST_FRAMES = 240
+COST_FRAMES = 240                   # the records timed at least
 COST_MIN_SAMPLES = 30               # Qt's OpenGL backend reports a GPU time only for frames whose query was ready
+COST_MAX_FRAMES = 1200              # ... so the records go on until this many times arrived, at most this many records
+RESOLVE_CONTROL_FRAMES = 40         # prime_control's consecutive 4x records per phase (audit 2, H1)
 PYTHON_COST_FRAMES = 120            # the Python path's timed frames per size and count (python_cost)
 RESOLVE_BUDGET_MS = {(2560, 1440): 0.3, (3840, 2160): 0.6}   # choice G (D7's budgets, until the lead sets another)
 CLEAR_BUDGET_MS = 0.05             # choice F: "negligible" (the lead's word), stated here as 0.05 ms at 2048 x 1152
@@ -353,12 +359,71 @@ def round_parity(core, engine, app, api: str, packs: dict, out: Path) -> dict:
                 host.frames(2)
                 host_check._flush_deletes(app)
         host.set_device_pixel_ratio(1.0)
+        result = _previous_frame(core, engine, app, host, packs)
+        facts["previous_frame"] = result["facts"]
+        checks.update({f"previous_frame_{k}": v for k, v in result["checks"].items()})
     finally:
         host.close()
         host_check._flush_deletes(app)
     _save(out, f"parity_{api}", frames)
     _sheet(out, api, frames)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def _previous_frame(core, engine, app, host, packs: dict) -> dict:
+    """Audit 2, M4: a pass sampling a target before any pass of the frame drew it. Refused unless the target declares
+    ``previous_frame``, and refused when that target is multisampled. Declared at one sample, it reads the frame
+    before: the probe pass writes what it sampled into a target of its own, so the proof is the pass's own read and
+    never a readback's forced resolve. Three readback records, the nearer plane's colour changed between each: the
+    probe of each equals the scene of the record before (clamped as the probe writes it) and, the control, differs
+    from its own record's scene."""
+    import numpy as np
+
+    st = _scene_module()
+    checks, facts = {}, {}
+
+    def refused(passes, targets) -> str:
+        try:
+            core.mode_program_layout(passes, targets)
+        except ValueError as exc:
+            return str(exc)
+        return ""
+
+    undeclared = refused(*st.previous_frame_program(packs, declared=False)[:2])
+    multisampled = refused(*st.previous_frame_program(packs, samples=4)[:2])
+    admitted = refused(*st.previous_frame_program(packs)[:2])
+    facts["refusals"] = {"undeclared": undeclared, "declared_at_4x": multisampled, "declared_at_1x": admitted}
+    checks["undeclared_read_before_any_draw_refused"] = "before any pass of the frame drew" in undeclared
+    checks["declared_at_4x_refused"] = "only single-sampled" in multisampled
+    checks["declared_at_1x_admitted"] = admitted == ""
+    passes, targets, values = st.previous_frame_program(packs)
+    colours = ([0.1, 0.6, 0.9, 1.0], [0.6, 0.2, 0.3, 1.0], [0.1, 0.6, 0.9, 1.0])
+    scene = Scene(core, engine, host, CARD, 1.0, packs, passes=passes, targets=targets,
+                  settings=dict(values, u_nearer_colour=colours[0]))
+    reads = []
+    try:
+        reads.append(scene.targets(app))
+        for colour in colours[1:]:
+            scene.mode.settings(dict(values, u_nearer_colour=colour))
+            reads.append(scene.targets(app))
+    finally:
+        scene.close(app)
+        host.frames(2)
+        host_check._flush_deletes(app)
+
+    def rgb(entry):
+        return np.clip(_content(entry).astype(np.float32)[..., :3], 0.0, 1.0)
+
+    equal, control = [], []
+    for before, now in zip(reads, reads[1:]):
+        probe = _content(now["probe.colour"]).astype(np.float32)[..., :3]
+        equal.append(float(np.abs(probe - rgb(before["scene.colour"])).max()))
+        control.append(int((np.abs(probe - rgb(now["scene.colour"])).max(axis=2) > 1e-3).sum()))
+    facts["probe_minus_the_scene_before_max"] = equal
+    facts["probe_pixels_off_its_own_records_scene"] = control
+    checks["declared_at_1x_reads_the_frame_before"] = all(e == 0.0 for e in equal)
+    checks["control_the_frames_differ"] = all(c > 0 for c in control)
+    return {"checks": checks, "facts": facts}
 
 
 MASK_BAND = 0.08                   # D14 point 10's proof: each partial-coverage band's height (vUv)
@@ -698,12 +763,37 @@ def round_prime_control(core, engine, app, packs: dict) -> dict:
             finally:
                 core.scene_depth_prime_control(False)
             facts[label] = {"depth_primes": core.composite_live()["scene_target_depth_primes"] - before}
+        # Audit 2, H1: the resolves' prime. Consecutive 4x records with no readback between them (a readback orders the
+        # resolve and hides the hazard), the resolves' prime skipped, then with it.
+        base = _scene_module().settings(ambient_size=AMBIENT)
+        for label, skip in (("skipped", True), ("primed", False)):
+            core.set_vulkan_phase(f"n31 resolve prime {label}")
+            core.scene_resolve_prime_control(skip)
+            before = core.composite_live()["scene_target_resolve_primes"]
+            try:
+                scene = Scene(core, engine, host, CARD, 1.0, packs, samples=4)
+                try:
+                    host.frames(2)
+                    for index in range(RESOLVE_CONTROL_FRAMES):
+                        scene.mode.settings(dict(base, u_hdr_gain=2.0 + (0.2 if index % 2 else 0.0)))
+                        host.frames(1)
+                    records = scene.mode.state().get("records")
+                finally:
+                    scene.close(app)
+                    host.frames(2)
+                    host_check._flush_deletes(app)
+            finally:
+                core.scene_resolve_prime_control(False)
+            facts[f"resolve_{label}"] = {"resolve_primes": core.composite_live()["scene_target_resolve_primes"] - before,
+                                         "records": records}
     finally:
         host.close()
         host_check._flush_deletes(app)
-    return {"pass": facts["skipped"]["depth_primes"] == 0 and facts["primed"]["depth_primes"] > 0, "facts": facts,
-            "checks": {"the_control_records_no_prime_and_the_product_path_does":
-                       facts["skipped"]["depth_primes"] == 0 and facts["primed"]["depth_primes"] > 0}}
+    checks = {"the_control_records_no_prime_and_the_product_path_does":
+              facts["skipped"]["depth_primes"] == 0 and facts["primed"]["depth_primes"] > 0,
+              "the_resolve_control_records_no_prime_and_the_product_path_does":
+              facts["resolve_skipped"]["resolve_primes"] == 0 and facts["resolve_primed"]["resolve_primes"] > 0}
+    return {"pass": all(checks.values()), "facts": facts, "checks": checks}
 
 
 COST_PARTS = ("clear", "planes2", "draws", "read", "capture")
@@ -767,18 +857,31 @@ def _ambient_cover_only(packs: dict, folder: Path):
     return target, ambient_pass
 
 
-def _timed(host, scene, settings: dict, frames: int) -> dict:
-    """The surface's GPU time (kind 2) over ``frames`` records, each forced by a setting that alternates."""
+def _timed(host, scene, settings: dict, frames: int, member: str = "u_hdr_gain", step: float = 0.001) -> dict:
+    """The surface's GPU time (kind 2) over at least ``frames`` records, each forced by a setting (``member``) that
+    alternates. Qt's OpenGL backend reads a TIME_ELAPSED result only once it is ready and drops it when the timer's ring
+    wraps first (never a wait), so the records go on past ``frames`` until COST_MIN_SAMPLES times have arrived, at most
+    COST_MAX_FRAMES records: counted, never slept (audit 2, M1; generic_mode_check's timer control)."""
     host.set_gpu_timer(True)
     host.frames(4)
     host.gpu_samples()
-    for index in range(frames):
-        scene.mode.settings(dict(settings, u_hdr_gain=settings["u_hdr_gain"] + (0.001 if index % 2 else 0.0)))
+    times: list[int] = []
+    drawn = 0
+    while drawn < COST_MAX_FRAMES and (drawn < frames or len(times) < COST_MIN_SAMPLES):
+        scene.mode.settings(dict(settings, **{member: settings[member] + (step if drawn % 2 else 0.0)}))
         host.frames(1)
+        drawn += 1
+        times.extend(s.nanoseconds for s in host.gpu_samples() if s.kind == 2)
     host.frames(4)
-    times = sorted(s.nanoseconds for s in host.gpu_samples() if s.kind == 2)
+    times.extend(s.nanoseconds for s in host.gpu_samples() if s.kind == 2)
+    timer = (host.state().get("driver") or {}).get("gpu_timer") or {}
     host.set_gpu_timer(False)
-    return _time_summary(times)
+    summary = _time_summary(sorted(times))
+    summary["records"] = drawn
+    # R-223: the timer's own counts (slots given up on, frames left untimed) beside the figure.
+    summary["abandoned_slots"] = timer.get("abandoned_slots")
+    summary["slot_busy_frames"] = timer.get("slot_busy_frames")
+    return summary
 
 
 def _time_summary(times: list[int]) -> dict:
@@ -828,6 +931,11 @@ def round_cost(core, engine, app, packs: dict, folder: Path) -> dict:
             low1, low4 = timings["x1"]["p10_ms"], timings["x4"]["p10_ms"]
             facts[label]["resolve_bound_p10_ms"] = None if low1 is None or low4 is None else round(low4 - low1, 4)
             checks[f"{label}_timed"] = all(timings[key]["samples"] >= COST_MIN_SAMPLES for key in ("x1", "x4"))
+            # R-223: with the host's frames finished on every backend the times arrive well inside the cap (at most
+            # twice the minimum records), and no slot is given up on.
+            checks[f"{label}_timed_well_inside_the_cap"] = all(
+                timings[key]["records"] <= 2 * COST_FRAMES and not timings[key].get("abandoned_slots")
+                for key in ("x1", "x4"))
             checks[f"{label}_4x_minus_1x_within_the_resolve_budget"] = bound is not None and bound <= RESOLVE_BUDGET_MS[
                 size]
         finally:
@@ -849,17 +957,9 @@ def round_cost(core, engine, app, packs: dict, folder: Path) -> dict:
                           settings=settings)
             try:
                 host.frames(3)
-                host.set_gpu_timer(True)
-                host.frames(4)
-                host.gpu_samples()
-                for index in range(COST_FRAMES):
-                    scene.mode.settings(dict(settings, u_radius=0.08 + (0.0001 if index % 2 else 0.0)))
-                    host.frames(1)
-                host.frames(4)
-                times = sorted(s.nanoseconds for s in host.gpu_samples() if s.kind == 2)
-                host.set_gpu_timer(False)
-                clear[label] = {"samples": len(times),
-                                "median_ms": round(times[len(times) // 2] / 1e6, 4) if times else None}
+                timed = _timed(host, scene, settings, COST_FRAMES, member="u_radius", step=0.0001)
+                clear[label] = {"samples": timed["samples"], "median_ms": timed["median_ms"],
+                                "records": timed["records"]}
             finally:
                 scene.close(app)
                 host.frames(2)
@@ -1281,12 +1381,21 @@ def prime_control_validation(record: dict) -> dict:
         return sum(int(g.get("count", 0)) for g in groups
                    if g.get("phase") == phase and str(g.get("id", "")).startswith("SYNC-HAZARD"))
 
+    skipped_phases = ("n31 prime skipped", "n31 resolve prime skipped")
     other = sorted({str(g.get("id")) for g in groups if g.get("severity") == "error" and not g.get("qt_defect")
-                    and g.get("phase") != "n31 prime skipped"})
+                    and g.get("phase") not in skipped_phases})
+    # Anything unexcused outside the skipped phases (a recorded Qt defect included: B is excused only in 'discard').
+    elsewhere = sorted({f"{g.get('phase')}: {g.get('id')}" for g in groups
+                        if g.get("severity") == "error" and g.get("phase") not in skipped_phases
+                        and not g.get("excused") and g.get("qt_defect") != "A"})
     skipped, primed = hazards("n31 prime skipped"), hazards("n31 prime primed")
+    resolve_skipped, resolve_primed = hazards("n31 resolve prime skipped"), hazards("n31 resolve prime primed")
     return {"hazards_with_the_prime_skipped": skipped, "hazards_with_the_prime": primed,
-            "other_unexplained_errors": other, "pass": skipped > 0 and primed == 0 and not other
-            and bool((record.get("validation") or {}).get("layer_loaded"))}
+            "hazards_with_the_resolve_prime_skipped": resolve_skipped,
+            "hazards_with_the_resolve_prime": resolve_primed,
+            "other_unexplained_errors": other, "unexcused_outside_the_skipped_phases": elsewhere,
+            "pass": skipped > 0 and primed == 0 and resolve_skipped > 0 and resolve_primed == 0 and not other
+            and not elsewhere and bool((record.get("validation") or {}).get("layer_loaded"))}
 
 
 def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool, list[str]]:
@@ -1298,6 +1407,12 @@ def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool,
             failed.append(f"reference: {record.get('error')}")
         return not failed, failed
     ok, failed = host_check.api_verdict(api, record, require_validation)
+    if (api == "vulkan" and "cost" in (record.get("rounds") or []) and record.get("instance_created")
+            and not (record.get("validation") or {}).get("layer_loaded")):
+        # Audit 2, H1: the cost round draws the only long runs of consecutive multisampled records (no readback between
+        # them to order a resolve), so it is the gate's synchronisation proof: never judged without the layer.
+        failed.append("vulkan cost: the validation layer did not load (the cost round's consecutive multisampled "
+                      "records are the gate's synchronisation proof; pass --layer-path)")
     if api == "vulkan" and "prime_control" in (record.get("rounds") or []):
         # The negative control is expected to make validation unclean in its skipped phase, and only there.
         control = prime_control_validation(record)
