@@ -1708,6 +1708,194 @@ harness's), and `tools/regen_qrc.py` bakes a mode's `.comp` as it bakes its frag
   not N3.3: fragPixel's target is the window's on the Python route and the core's own target on the native one, so
   the round now expects the card's target size there, as `tests/test_native_devcurve.py` does, and passes.
 
+## N3.4 draft: transparency and post-processing as shared stages (proposed by the High agent, 15 Nov 2026; for the lead)
+
+*A draft, not a decision: it becomes D17 with the lead's answers to A to I. It builds on the lead's decided designs in
+the plan's N3.4 box (per-attachment blending with `independentBlend`, coverage stored inverted, the blendable-format
+check, the depth prime, one texture per bloom level), on D14 to D16 as built (ABI 19), and on
+`Native_Core_QRhi_Research_N3.md` sections 3, 8 and 9. The plan's N3.4 box carries the steps.*
+
+**What the consumers do today (read at 0b63e9a3e).**
+- *Extruded Bubble* (`rendering/quick/visualizer/implementations/extruded_bubble.py`): one overlay scope with bloom,
+  a depth texture, transparency and HDR at exposure 1 (`:684-685`; bloom 0.55, `:87`; samples from the tier, `:131-133`;
+  the warm-up `:494-499`, its programs `:430-435`). Inside it: the backdrop and the specks under `emission_writes`
+  (specks added, ONE, ONE on colour, ZERO, ONE on alpha, no depth write, `:696-713`); the capture (`:714`); the shells,
+  clusters, beads and trails under `transparent_writes` (`:717-746`), their fragments writing `sceneTransparent` and an
+  emission at location 2 (`rendering/gl_programs/extruded_bubble_program.py:1110`, `:1257`, `:1898`); then the near
+  layer (`DefocusLayer`, `:400`): near shells and clusters drawn sharp with `sceneDefocusWrite`
+  (`extruded_bubble_program.py:1091,1102,1240,1249`; the circle from `sceneDefocusRadius`, `:690`) and composited onto
+  the scene at `_near_spread` (`:751-764`). Leaving the scope resolves the emission, blurs it and tone maps the overlay.
+- *The scene target's OIT* (`rendering/quick/scene3d/target.py`): `SCENE_OIT_GLSL` (`:175-188`: McGuire and Bavoil's
+  weight on view depth, capped so a layer's weighted light stays at most 2048 in half float; revealage written as
+  alpha); the attachments, accumulation RGBA16F and revealage R16F at the scene's samples in a framebuffer of their
+  own that shares the scene's depth and, with bloom, its emission at location 2 (`:1229-1246`); `transparent_writes`
+  clears accumulation 0 and revealage 1 at each entry (`:712-713`), blends accumulation ONE, ONE, revealage ZERO,
+  ONE_MINUS_SRC_COLOR, emission ONE, ONE, depth tested and not written (`:714-722`); the resolve
+  (`_OIT_RESOLVE_FRAGMENT` `:191-203`, and per sample `_OIT_RESOLVE_SAMPLES_FRAGMENT` `:204-217`, run once per sample
+  through `gl_SampleID`) composites the weighted average over colour 0 only, premultiplied (colour ONE,
+  ONE_MINUS_SRC_ALPHA; alpha ONE for an overlay, whose alpha is coverage, else ZERO), discarding below 1/1024
+  coverage (`:765-809`).
+- *Bloom and the HDR resolve*: `post.py` `BloomChain` (`:84-190`): four RGBA16F textures, one a level, each half the
+  last from the scene's allocation (`:145-166`), a 13-tap downsample whose first pass keeps only the emitted light
+  (colour scaled to alpha's brightness, `:46-65`), and a 3x3 tent upsample added onto the next larger level
+  (`:67-81`, `:124-132` under `passes.py:11-23`'s blend: colour ONE, ONE; alpha ZERO, ONE); the glow is level 0, half
+  size, read linearly. `SceneTarget.end` (`:931-1007`) runs it from the resolved scene (opaque scenes: emitted
+  brightness in alpha) or from the emission resolve (overlays, `:1109-1123`), then composites: the overlay with glow
+  (`_OVERLAY_BLOOM_GLSL` `:222-243`; premultiplied under ONE, ONE_MINUS_SRC_ALPHA, `:1084-1086`), with HDR the ACES fit
+  on straight colour at the exposure (`:224-236`, `:1064-1065`, `:1072`) and an integer-hash dither where glow was
+  added (`:240`); the plain overlay (`:281-299`); the opaque composite with glow (`:142-153`). The HDR intermediate is
+  the RGBA16F colour (`:1190`), its capture and its resolve. Consumers: Extruded Bubble (above); Waveform Ribbon
+  (`rendering/quick/scene3d/waveform.py:382-383`: overlay, bloom unless flat, transparency, HDR at the recipe's exposure;
+  4 samples fixed, `:34`; emission under `emission_writes` `:391-398` and `:402-425`, its light, sparks and strays added;
+  the ribbon body under `transparent_writes` with `restore=False`, `:400-401`, `:42`, its fragment
+  `rendering/gl_programs/ribbon.py:765-770`); the Oscilloscope (`rendering/quick/visualizer/implementations/oscilloscope.py`:
+  one sample fixed, `:52`; bloom only when its glow setting is above 0, `:120`, with a strength that changes every
+  frame, `:161`; MAX blends on colour and emission, `:171-173`, `:213-217`); later Neon Lake (`shockwave_grid.py:413`, with
+  shafts, N4.k) and the opaque-scene transitions (`exploding_tiles.py:113`).
+- *The defocus layer* (`rendering/quick/scene3d/defocus.py`): `SCENE_DEFOCUS_GLSL` (`:44-51`: premultiplied colour at
+  location 0, the alpha-weighted circle at location 1); two full mip chains of RGBA16F at the card's exact size,
+  reallocated at every size (`:250-297`); `begin` clears both to 0 and blends premultiplied over on colour and MAX on
+  the circle (`:322-350`); `composite` (`:366-431`): `glGenerateTextureMipmap` on both (`:386-387`), a clip pass of the
+  read level into a texture of that level's size (`:393-402`, `:433-448`; the level from the radius, `:316-320`), the
+  gather over the bound target, premultiplied over (64 taps reading levels through `textureLod` plus 32 fine taps,
+  `:82-135`, `:405-411`), and the highlight sprites, one instanced quad per texel of the read level, added on colour
+  (`:163-212`, `:412-418`).
+- *N1.8's per-sample reads* (the plan's N1.8, D5.6 rows 7 and 15): the composites' shader average `_RESOLVE_GLSL`
+  (`target.py:114-121`, used by `:156-161`, `:251-256`, `:294-299`, the resolve `:348-353` and the emission resolve
+  `:1114`); the per-sample OIT composite (`:204-217`); the shafts' source (`shafts.py:54`, N4.k); the capture's nearest
+  depth (`target.py:326-343`, settled by D14 point 10).
+
+**What the core has already.** Per-attachment write masks and blends with a pass's outputs, refused without
+`QRhi::PerRenderTargetBlending` (`mode_content.cpp:5066-5074`); full blend declarations with MAX and MIN (D15
+point 1); per-attachment clear values written by the target's clearing draw (`TargetAttachment::clear`,
+`shaders/scene_clear{1..4}.frag`, rule B); RGBA16F and R16F targets; rule C primes for colour and depth
+(`primeForLoad`, `primeDepthForLoad`); `texelFetch` on a `sampler2DMS` read on both backends (D14 point 10, means
+(a)); a device that enables every feature the physical device reports (`vulkan_context.cpp:699-729`) with its facts
+read once (`:770-808`).
+
+**The proposal.**
+1. *Stages are data in a program* (D12's rule; D13, D14 and D16's shape), each absent unless declared: a program
+   without it holds no object of it, records nothing of it and draws the same picture bit for bit. A mode turns a stage
+   on or off by its program, which Python chooses at the Settings edge (the Oscilloscope's and Neon Lake's glow at 0,
+   Waveform's flat view), never per record (choice E).
+2. *Transparency.* A target declared `"transparency": {"of": <scene target>, "borrow": [<attachment>, ...]}` owns two
+   attachments, accumulation RGBA16F and coverage R16F, and borrows the owner's depth and the named attachments: the
+   same textures, at the owner's allocation and samples, in a render target of its own (D14 point 9 left room for it).
+   Its layout is accumulation (location 0), coverage (1), then the borrowed attachments in order, so EB's and
+   Waveform's transparent fragments keep their emission at location 2. Its passes are the mode's ordinary passes (N3.2's
+   own vertex stage, storage, instancing); the core fixes their blends on its two attachments (accumulation ONE, ONE on
+   colour and alpha; coverage ONE, ONE_MINUS_SRC_COLOR), takes a borrowed attachment's blend from the pass (EB's
+   emission: additive), and refuses a depth write. The mode's `sceneTransparent` is unchanged: it writes alpha into the
+   coverage channel; only the blend and the resolve's read change (the lead's inverted coverage: c' = a + c(1 - a), so
+   1 - c is the textbook revealage). Its clearing draw writes its own two attachments only (borrowed masked, depth
+   neither tested nor written; choice B). Its run loads the borrowed depth through `primeDepthForLoad` and the
+   borrowed colour through `primeForLoad`. A resolve step on the owner (`{"name", "transparency_resolve": <target>,
+   "alpha": "coverage" | "keep"}`) composites it onto the owner's colour 0, the owner's other attachments masked: the
+   core's shader, `target.py`'s resolve with `coverage = texelFetch(...).r` in place of `1 - revealage`, per sample when
+   multisampled (choice C). Why not attachments of the scene target itself: the resolve samples them while drawing into
+   the owner, and QRhi refuses a texture used two ways in one pass (research section 9). A borrowed attachment that a
+   later pass samples is resolved by the owner's run that follows (the resolve step is always one), so the borrower
+   sets no resolve texture; the program's check refuses a transparency target whose run is not followed by its resolve
+   step before anything samples the owner.
+3. *The gate and the fallback.* The stage is admitted where the per-attachment blend is real and the formats blend.
+   Vulkan: the physical device's `independentBlend` (the core's device enables it when reported; QRhi reports
+   `PerRenderTargetBlending` true on Vulkan whatever the device, research section 8, so N3.1's check at
+   `mode_content.cpp:5066-5074` reads this gate too: on a device without the feature it would admit an invalid
+   pipeline today), `VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT` on RGBA16F and R16F (optimal tiling, read with the
+   storage formats at `vulkan_context.cpp:791-805`), and, for the per-sample resolve, `sampleRateShading` (SPIR-V's
+   `SampleRateShading` capability behind `gl_SampleID`). OpenGL: `QRhi::PerRenderTargetBlending` (GL 4.0; GL 4.6
+   guarantees both formats blend; per-sample shading is GL 4.0 core). Where a fact is missing the content records the
+   fallback once in its state with the reason (choice D); this machine admits the stage on both backends, so only the
+   harness's controls reach the fallback.
+4. *Bloom.* A stage `{"name", "bloom": {"source": "<target>.<attachment>"}}`: four
+   RGBA16F textures, one a level (never levels of one texture), each `max(1, w / 2)` of the last from the source's
+   allocation, so the chain follows N3.1's bucket rule through its source and is made again with the source's objects
+   (pipelines kept); the 13-tap downsample (the first level's with Python's bright pass, which keeps the light alpha
+   names: an opaque scene's emitted brightness, or an emission's own luminance from `sceneEmission`) and the
+   3x3 tent upsample added onto the larger level (colour ONE, ONE; alpha ZERO, ONE), each level a single-level render
+   target sampled whole, reading by `textureLod(…, 0.0)` (the same texels as Python's `texture()` on a one-level
+   texture); no `generateMips`. A larger level loaded by an upsample is primed (rule C). The glow is `"<stage>.glow"`
+   (level 0) for a sampler. The source is the attachment's resolve when multisampled (D14 point 8: Python's shader
+   average becomes QRhi's average resolve). Four levels is Python's `BLOOM_LEVELS`, a constant, not a declaration.
+5. *The composite step and the HDR resolve* (choice F). `{"name", "composite": <scene target>, "form": "overlay" |
+   "opaque", "glow"?: <bloom stage>, "strength"?: <member>, "exposure"?: <member>}` draws the target onto the surface
+   with `target.py`'s composites: the overlay (straight colour times the fade, under the surface's alpha blend), the
+   overlay with glow and optional tone map (premultiplied; the ACES fit on straight colour at the exposure; the dither
+   where glow was added, its integer hash exact on every backend, R-94), and the opaque composite with glow. The scene
+   is read through its resolve (N1.8's first use answered by D14 point 8). Strength and exposure are members filled by
+   the record or the settings (the Oscilloscope's strength is per frame); the fade is the core member. The surface holds
+   premultiplied colour (`composite.frag`). Oriented composites are N3.7's; the shafts' term joins at N4.k.
+6. *Defocus.* A target declared `"mips": true`, surface-sized (colour RGBA16F premultiplied, circle RGBA16F, both
+   cleared 0) and drawn by the mode's near passes with premultiplied-over on colour and MAX on the circle (D15's full
+   blends), and a step `{"name", "defocus": <near target>, "onto": <scene target>, "radius": <member>, "level":
+   <member>, "highlight"?: <member>}`: after the near target's run, `generateMips` on both textures (choice G); the clip
+   pass into a texture the stage owns at the read level's size; the gather onto the scene target (premultiplied over);
+   the highlight sprites (one instanced quad per texel of the read level, ONE, ONE on colour, ZERO, ONE on alpha),
+   their count the core's from that level's size (choice I). The near target is allocated by N3.1's rule (choice H).
+   Every read of a level is in a pass that renders elsewhere, so QRhi's whole-texture tracking holds.
+7. *Shaders* (choice A): the stages' shaders are the core's (`native/core/shaders/`, baked by CMake as the capture's and
+   the nearest resolve's are), each held equal to its Python source by a test (as `tests/test_native_backdrop.py:66`
+   holds the backdrop's), with the conventions' `fragTexel` and the core's bindings. None holds a Settings value: every
+   strength, exposure, radius and level is a member.
+8. *Counts against resources*: borrowed attachments within the owner's (the transparency target's two plus them within
+   `kMaxTargetColour`), one transparency target per owner, the resolve's target a transparency target of the step's
+   target, the bloom source an attachment a target holds, the defocus level within the near target's mip count and its
+   sprites within that level's texels. Every object is made at a build or an allocation step (N3.6 spaces them), none
+   per record; the counts per stage join `composite_live`.
+9. *Not built here*: the shafts (N4.k), motion blur (N4.i), the reduced-resolution layers (N4.f2), the oriented
+   composites (N3.7), the warm-up schedule (N3.6). Waveform clears its colour each frame to a backdrop from its recipe
+   (`waveform.py:387`), while a target's clear value is fixed in its declaration: Waveform's port (N5.4) settles that
+   (a clear value filled by a setting, or a first pass that writes it).
+
+**Open choices, with the agent's recommendation for each.**
+- **A. Whose shaders.** (1) The core's, held equal to Python's text by tests; tuning a stage's filter needs a module
+  build, but no Settings value lives in them (port rule (g) holds). (2) The mode's product packs, one set per mode,
+  loaded at runtime. *Recommend (1):* the stages are shared (one Python source in `target.py`, `post.py`, `defocus.py`
+  for every mode), and the capture and nearest resolve set the precedent.
+- **B. The transparency target's clear.** The lead decided coverage stored inverted "so accumulation and coverage share
+  the clear to 0 with no clearing draw". As built, rule B already clears every target by a draw that writes a value per
+  attachment (`scene_clearN.frag`), so a shared value is not needed for the clear; a load-op clear would need a
+  non-preserving render target, which brings back Qt's defect B (`createOffscreenRenderPass` without an external
+  dependency) and is the fast clear D14 point 12 rejected, and the transparency target borrows the emission, which must
+  load. (1) Rule B's clearing draw over the target's own two attachments (borrowed masked, depth untouched), both to 0,
+  coverage still inverted (its half-float steps are finest near 0, where faint stacks sit; the harness's textbook
+  comparison stands). (2) The decision's literal form: the transparent passes' emission into a third attachment of the
+  target's own, added onto the scene's emission by the resolve step, and the whole target load-op cleared to 0; this
+  needs the lead's line against D14 point 12. *Recommend (1).*
+- **C. The per-sample resolve** (N1.8's second use). (1) Per sample, as Python: the core's resolve reads accumulation
+  and coverage with `texelFetch` on a `sampler2DMS` at `gl_SampleID` (D14 point 10 proved the read on both backends;
+  Vulkan needs `sampleRateShading`, enabled when reported). (2) Resolve first: average both, composite per pixel; it
+  differs from Python at every partially covered pixel. *Recommend (1)*, with (2) only where `sampleRateShading` is
+  missing, recorded once; no look question is left.
+- **D. The fallback where the stage is not admitted.** (1) A transparent pass ships two packs, its OIT pack and its
+  sorted pack (`SCENE_OIT_GLSL` under a define writing premultiplied colour at location 0 and the emission at 1), and
+  the core draws the sorted pack into the owner with premultiplied-over, depth tested and not written, in the mode's
+  own order (a mode sorts in its worker if it wants to; neither EB nor Waveform has a sorted path today). (2) Refuse the
+  program on such a device. *Recommend (1)*, the lead's "falls back to its sorted path", as D15's batched pass ships its
+  plain pack; the harness proves it under the gate's control.
+- **E. Turning a stage off.** (1) By program only (Python picks the program at the Settings edge); within a program the
+  stage records with every record. (2) Also skipped per record at strength 0, the composite then reading no glow. *Recommend
+  (1)*: no consumer's strength reaches 0 within a program (the Oscilloscope's is at least 0.55 times its glow setting,
+  EB's a constant, Waveform's from its recipe), and Python's overlay composite reads the glow unconditionally.
+- **F. The composite into the surface.** (1) A core step with `target.py`'s composites. (2) Each mode's own last pass.
+  *Recommend (1)*: those composites are shared by every 3D mode, carry the HDR resolve and the dither, and are where
+  N3.7's orientation and N4.k's shafts join.
+- **G. The defocus layer's mips.** (1) QRhi's `generateMips`: Python's own `glGenerateTextureMipmap`, the same call on
+  QRhi's OpenGL backend; on Vulkan a linear blit, equal to the 2x2 box on even levels, and the 64 px bucket makes
+  levels 1 to 6 exact halves. (2) The core's downsample into one texture per level: the gather's `textureLod` at a level
+  computed in the shader becomes per-level samplers, a different shader from Python's. *Recommend (1)* for the defocus
+  layer only; the lead's "never `generateMips`" stands for bloom and HDR chains, where the designed filter is not a box.
+- **H. The defocus layer's allocation.** (1) N3.1's bucket rule (no reallocation per drag step; Python reallocates at
+  every size, about 8 ms at 4K a step, `defocus.py:299-304`). (2) Python's exact card size. *Recommend (1)*. At a
+  bucket-aligned card it equals Python's layer exactly; at an unaligned one Python's own odd levels are not a uniform
+  grid (1000 px: level 4 is 62 texels of 16.13 px), so rule (a) there is judged and the difference reported, not made
+  exact.
+- **I. The read level's texture and the sprite count.** (1) The core derives both from the near target's allocation
+  and the level (a member Python resolves from the radius at the lens or card edge, as `_read_size` does). (2) The
+  below texture as an explicit-size target from Python and the count as a member. *Recommend (1)*: an explicit size is
+  bucketed (D14 point 2) while the clip must draw exactly the level's texels, and a sprite count past the level reads
+  past the texture (robust access is off); the core checks every count against its resource.
+
 ## D1, D2, D3 and the transport rule
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts"). The drafts, with every "today"
