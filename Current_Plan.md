@@ -354,6 +354,11 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   (`scene3d/target.py`, RG16F kept; RGBA16F would add 127.5 MiB per 4K display at 4x, 255 MiB at 8x). Built with the
   substrate when the scene target ports (N3), or reconsidered if N1.8's resolve-first rule removes the multisampled
   velocity.
+  Lead, 15 Nov (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 14): QRhi has no RG16F, so "RG16F kept" cannot be built natively. The native
+  velocity is two R16F attachments, the same bytes as RG16F; RGBA16F only if the measurement shows two
+  attachments cost more. A biased RG16 is refused: the single MRT clear value cannot encode zero velocity in it.
+  The velocity resolve differs by backend (Vulkan averages, OpenGL blits nearest), so velocity resolves through
+  the core's own per-sample pass (D14 point 10), nearest, on both.
 - [ ] D5.6 row 13's control was not run: fill the widened targets' unused channels with non-zero values in a test, so
   a consumer that reads them fails (the scan and source checks show only `.rg`/`.xy`/`.rgb` reads today).
 - [ ] N1.8 Per-sample multisample reads (`sampler2DMS`, `gl_SampleID`): each use resolves first and reads the
@@ -576,8 +581,15 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
 - [ ] N4.d Planar reflections and rough receivers (Waveform's floor), the scene probe (Extruded Bubble),
   wet-surface masks (high potential). Neon Lake's water reflection is analytic in its own basin shader and needs
   none of this.
+  Lead, 15 Nov (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 15): a cube renders as six passes, one render target per face (`setLayer`);
+  multiview cannot render into a cube. Rough-receiver prefiltering is the core's own shader, never `generateMips`
+  (a linear blit chain). The harness reads every face back on both backends first: face orientation may be
+  mirrored between OpenGL and Vulkan.
 - [ ] N4.e Heightfields and refined terrain meshes (the authored heightfield resource; Neon Lake's tile-refined
   basin; the grid a dynamic surface field will share).
+  Lead, 15 Nov (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 16): vertex-stage sampling uses the binding's `VertexStage` flag with
+  `textureLod`/`texelFetch` (QRhi has no feature flag for it); the heightfield is R16F or R32F read with
+  `texelFetch`, so 32-bit float filtering is never required.
 - [ ] N4.f1 The fog volume port (Waveform draws it today, so N5.4 cannot reach parity without it): ported just
   before its first consumer, N5.4, like every N4 item. The fog detail march (written and tested, runs nowhere in
   production: too costly at full size in the Python path) is the base of N6.3 and stays with N4.f2's reduced path.
@@ -589,12 +601,24 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
 - [ ] N4.h Shared shadows (one fitted directional depth map, bounded soft filtering, caster and receiver
   admission, measured tiers). **High potential: built without a consumer**, proved on a harness scene; not a
   revival of the rejected Extruded cast shadows, and no mode turns it on without its own review.
+  Lead, 15 Nov (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 13): comparison sampling through `QRhiSampler` compare ops on a depth-only
+  pass (legal on both backends). The shader branches on `isClipDepthZeroToOne()`. Depth bias is tuned per backend
+  and measured, never one shared number (the offset unit is implementation-defined, and Qt sets Vulkan's bias clamp
+  to 0). Outside the light frustum is handled in the shader (no clamp-to-border in QRhi).
 - [ ] N4.i Motion blur and trails (a velocity attachment, the tile-max compute, trails and motion uniforms): five
   transitions.
+  Lead, 15 Nov (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 14): the velocity is the formats-service decision above (two R16F); the
+  tile-max runs as compute over a storage image (D16) in a format the research lists as load-store on both
+  backends.
 - [ ] N4.j Photo and backdrop environments (`PhotoEnvironment`: ten transitions; `BackdropEnvironment`: Extruded
   Spectrum and Sphere's wallpaper reflection).
 - [ ] N4.k Light shafts: the shared owner (Neon Lake today) and Extruded Bubble's own second implementation
   merged onto it, one owner (high potential); ported with Extruded Bubble, then used by Neon Lake.
+  Lead, 15 Nov (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 17): volumes are written by compute (one pass, D16), never by per-slice
+  rendering (one pass per slice, and Vulkan 1.1 instance API for slices).
+- Topology rule for every N4 primitive (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md` section 18): triangle lists or degenerate strips, never a restart
+  index (OpenGL restarts every topology, Vulkan only strips); no wide lines (false on the OpenGL core profile);
+  lines and points are instanced quads (D15).
 - [ ] N4.l Silhouette shadows (Extruded Spectrum's directional silhouette and Sphere's own pass) as one shared
   primitive, distinct from N4.h; the bendable grid (Membrane, Page Curl); Exploding Tiles' planar shadows and
   particles.
