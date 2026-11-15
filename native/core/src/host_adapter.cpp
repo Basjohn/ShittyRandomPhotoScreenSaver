@@ -14,6 +14,7 @@
 #include <QtCore/QPointer>
 #include <QtCore/QThread>
 #include <QtGui/QOpenGLContext>
+#include <QtGui/QOpenGLFunctions>
 #include <QtQuick/QQuickGraphicsConfiguration>
 #include <QtQuick/QQuickItem>
 #include <QtQuick/QQuickRenderControl>
@@ -595,13 +596,18 @@ bool HiddenHost::renderFrames(int count, QuickReadback *readLast, QString *error
                 cb->resourceUpdate(batch);
             }
             s.control->endFrame(); // an offscreen frame: Vulkan's waits for the GPU, readbacks complete
-            // A probe readback recorded in this frame completes now, outside the frame (QRhi::finish). On OpenGL every
-            // frame does (R-223): QRhi's OpenGL offscreen frame only flushes, so with nothing throttling the hidden host
-            // the CPU ran ahead of the GPU without bound (timer results 12 to 220 frames late at 4K, and a timer ring
-            // that never came free: "a GPU time about one frame in twenty" since N2.6). The host's frame is
-            // synchronous on every backend, as Vulkan's already was.
-            if (read || (driver && driver->readbackPending()) || rhi->backend() == QRhi::OpenGLES2)
+            // A probe readback recorded in this frame completes now, outside the frame (QRhi::finish).
+            if (read || (driver && driver->readbackPending()))
                 rhi->finish();
+            // R-223: QRhi's OpenGL offscreen frame only flushes, and QRhi::finish() outside a frame waits for nothing
+            // either (measured on the fe718e59 module: no timer result in 1200 4K records), so with nothing throttling
+            // the hidden host the CPU ran ahead of the GPU without bound (timer results 12 to 220 frames late, a timer
+            // ring that never came free: "a GPU time about one frame in twenty" since N2.6). The host waits for its
+            // OpenGL frame itself, so its frame is synchronous on every backend, as Vulkan's offscreen frame already was.
+            if (rhi->backend() == QRhi::OpenGLES2 && rhi->makeThreadLocalNativeContextCurrent()) {
+                if (QOpenGLContext *context = QOpenGLContext::currentContext())
+                    context->functions()->glFinish();
+            }
             if (read) {
                 read->rgba = result.data;
                 read->width = result.pixelSize.width();

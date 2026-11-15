@@ -445,17 +445,19 @@ def test_a_ring_whose_results_never_arrive_keeps_timing_by_abandoning():
 
 
 def test_the_opengl_hidden_host_finishes_every_frame():
-    """R-223's cause: QRhi's OpenGL offscreen frame only flushes, so the hidden host finishes each OpenGL frame itself
-    (as Vulkan's offscreen frame waits); the control is the reading of the same source without the clause."""
+    """R-223's cause: QRhi's OpenGL offscreen frame only flushes and QRhi::finish() outside a frame does not wait, so
+    the hidden host waits for each OpenGL frame itself (glFinish on its context, as Vulkan's offscreen frame waits);
+    the controls are the same source without the wait, and with QRhi::finish() in its place (the fe718e59 attempt)."""
     source = (CORE / "src" / "host_adapter.cpp").read_text(encoding="utf-8")
     start = source.index("bool HiddenHost::renderFrames(")
     body = source[start:source.index("\n}\n", start)]
 
     def finishes_opengl(text: str) -> bool:
-        return bool(re.search(r"if \([^;{]*rhi->backend\(\) == QRhi::OpenGLES2\)\s*\n\s*rhi->finish\(\);", text))
+        return bool(re.search(r"if \(rhi->backend\(\) == QRhi::OpenGLES2[^{]*\{[^}]*->glFinish\(\);", text))
 
     assert finishes_opengl(body)
-    assert not finishes_opengl(body.replace(" || rhi->backend() == QRhi::OpenGLES2", ""))
+    assert not finishes_opengl(body.replace("->glFinish();", ";"))
+    assert not finishes_opengl("if (rhi->backend() == QRhi::OpenGLES2)\n    rhi->finish();\n")
 
 
 def test_the_module_lists_what_the_face_calls():

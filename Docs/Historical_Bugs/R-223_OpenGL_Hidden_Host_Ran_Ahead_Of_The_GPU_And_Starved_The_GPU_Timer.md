@@ -1,12 +1,12 @@
 # R-223 | The OpenGL hidden host ran ahead of the GPU without bound, so the GPU timer reported "about one frame in twenty"
 
-**Status:** fixed 15 Nov 2026 (N3.1's checkpoint audit 2, the cost round's M1 follow-up; build of the commit after
-005fcdfb6, unbuilt at the time of writing). The OpenGL hidden host finishes every frame (`QRhi::finish()`), as the Vulkan
-one's offscreen frame already waited for the GPU; and the GPU timer abandons a slot left unread for more frames than its
-ring is long, so a GPU that falls behind again can never stop the timer for good. Regression bar:
-`tests/test_native_core_timer.py` (the ring simulated GPU-free: every frame timed with a 3-frame lag; with results that
-never arrive, the old rule times the first 8 frames and nothing after, the new one keeps timing and counts every slot
-given up; the hidden host's OpenGL frame finishes, read from the source with its control) and
+**Status:** fixed 15 Nov 2026 (N3.1's checkpoint audit 2, the cost round's M1 follow-up; the wait is unbuilt at the time
+of writing, the safety net built and proved at fe718e59). The OpenGL hidden host waits for every frame itself (`glFinish`
+on its context), as the Vulkan one's offscreen frame already waited for the GPU; and the GPU timer abandons a slot left
+unread for more frames than its ring is long, so a GPU that falls behind again can never stop the timer for good.
+Regression bar: `tests/test_native_core_timer.py` (the ring simulated GPU-free: every frame timed with a 3-frame lag;
+with results that never arrive, the old rule times the first 8 frames and nothing after, the new one keeps timing and
+counts every slot given up; the hidden host's OpenGL frame waits, read from the source with its controls) and
 `native/core/python/scene_target_check.py`'s cost round (`<size>_timed_well_inside_the_cap`: 30 times within twice the
 minimum records, no slot abandoned, at 2560 x 1440 and 4K, 1x and 4x, OpenGL and Vulkan).
 
@@ -30,8 +30,11 @@ the GPU was more than 8 frames behind and falling further back, all 8 slots stay
 untimed: 22 times in the first 300 records, then 0 in the next 1200 (885 of 904 frames `slot_busy_frames`, 7108
 not-ready reads). At smaller loads the GPU caught up now and then, which gave the "one in twenty".
 
-The queries themselves were valid: one `QRhi::finish()` resolved all 8 stuck slots at once, and finishing after every
-record timed 119 of 120 records, each read exactly 3 frames later (`gl_timer_cause_probe.py`).
+The queries themselves were valid: one `host.read()` (a 4K readback, then `QRhi::finish()`) resolved all 8 stuck slots
+at once, and a readback after every record timed 119 of 120 records, each read exactly 3 frames later
+(`gl_timer_cause_probe.py`). The first fix (fe718e59) put `QRhi::finish()` after every OpenGL frame and was wrong: out
+of a frame on OpenGL it does not wait for the GPU (the readback's `glReadPixels` had done the waiting), and the 4K cost
+round still got no time in 1200 records (the safety net abandoned 596 slots instead: `20261115_r223_cost`).
 
 ## Why it stayed hidden
 
@@ -43,8 +46,8 @@ GPU", which is true only on Vulkan.
 
 ## Fix
 
-- `native/core/src/host_adapter.cpp`: the hidden host calls `QRhi::finish()` after every OpenGL frame (it already did
-  after a frame with a readback), so its frame is synchronous on every backend.
+- `native/core/src/host_adapter.cpp`: the hidden host calls `glFinish` on its context after every OpenGL frame, so its
+  frame is synchronous on every backend.
 - `native/core/src/gpu_timer.{h,cpp}`: `gpuSlotUse` (take, busy, abandon): a slot unread for more frames than the ring
   is long is abandoned, counted in the state's `abandoned_slots`, and reused, so its late result is never read; the
   timer keeps timing every frame it can. `simulateGpuRing` and the module's `gpu_timer_ring_simulation` run the rule
