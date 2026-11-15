@@ -1638,6 +1638,76 @@ write-after-read pair recorded in one QRhi pass must report write-after-read); O
 clear; retirement to zero; cost at 2560x1440 and 4K against the Python path, by absolute times on a quiet GPU with
 `nvidia-smi` and the display state recorded, the cost round also once under the layer.
 
+**As built (N3.3, ABI 19; proved on the merged head 686ae09c, 15 Nov 2026).** `native/core/src/compute_passes.*` holds
+the storage declarations and their parse, `ModeStorage` (the content's buffers and images, made, kept, made again,
+released), the clear and copy kernels (`shaders/storage_clear.comp`, `storage_copy.comp`), the device's compute facts,
+the counts and the harness controls and readback; `mode_content.*` holds the compute entry in the pass model, its
+checks, the trigger decision (`decideDispatches`), the recording (`recordCompute`, one QRhi compute pass an entry) and
+the draws reading storage. The Python face is `rendering/native/mode.py` (`StorageBuffer`, `StorageImage`,
+`ComputeBinding`, `ComputePass`, `NativeMode.image_size`, `on_state_lost`; `read_storage` and `storage_data` are the
+harness's), and `tools/regen_qrc.py` bakes a mode's `.comp` as it bakes its fragments. Beyond the points above:
+- *Access against the reflection (D, settled on the GPU).* `qsb` records `readonly` and `writeonly` for storage blocks
+  (`qualifierFlags` 1 and 2) and images (`imageFlags` likewise), unqualified 0, and reflects a declared block the
+  shader never uses, so the check runs on every pack. Refused with the reason, on both backends: a readonly block
+  declared write, a writeonly block declared read, a read-and-written block declared read, a writeonly image declared
+  read, an image of another format or dimension than its storage image, a block the program binds to nothing. Qt
+  6.12.0's `qsb -d` prints an rgba16f image as "rgba16" (its dump's name table); the reflected enum is right.
+- *3D storage images (L, settled on the GPU).* QRhi makes 3D load-store images and their `sampler3D` views correctly on
+  both backends: the fog scene's 3D RGBA16F and R16F images, written over their slices and integrated along z, read
+  back per slice equal the Python seam's (rule (a)) and each other (rule (b)) exactly. Every storage image is made with
+  `UsedAsTransferSource` beside `UsedWithLoadStore`, which only the harness's readback needs (Vulkan validates the
+  copy's source usage).
+- *N3.2's narrowed rules hold for storage (the lead, after checkpoint audit 4).* A storage buffer a compute entry
+  writes is one `Static` buffer. Every count a draw reads from storage is checked when the pass is drawn: instances
+  from a storage buffer within its bytes over its stride, an indirect draw count within its bytes over 16 (a count
+  past either refuses that pass's draw, with its reason made at the edge only); a dispatch's groups past the device's
+  limit a dimension are not dispatched, the reason likewise made once. *The commands a compute entry writes for
+  `drawIndirect` are the mode's own trusted shader output (the lead, 15 Nov):* the core cannot read them without a
+  readback, does not check their vertex and instance counts or force their `firstInstance`, and adds no GPU-side guard.
+- *A resize's replaced buffer goes a record later.* QRhi's OpenGL backend runs a frame's commands at its end and its
+  Vulkan backend writes a pass's barriers for its tracked buffers at the next pass, so the buffer a prefix copy reads
+  is released at the next record's storage sync, never inside the record that recorded the copy (found by the first
+  run: OpenGL lost the prefix, Vulkan barriered a null handle).
+- *Triggers and `fresh` (E).* Over 20 records the frame trigger dispatched 20 times; 15 re-records of one frame (a fade
+  step, a settings and a card change) dispatched nothing and counted 15 skips; the drift-shaped state, stepped 100
+  times through a record field, equals the CPU reference; the `trigger_every_record` control integrates twice
+  (dispatches 400, state wrong). A content made again finds its storage zeroed, dispatches with `fresh` 1 and tells
+  the owner once (`on_state_lost` with the buffer names).
+- *Copy and clear (C).* A resize from 256 to 512 rows ran two copies and two clears and kept the prefix exactly; a
+  buffer is zeroed by the clear kernel at creation, an image by one zero upload.
+- *The proof* (`native/core/python/compute_pass_check.py`, every round PASS on both backends, N33 VERDICT PASS, evidence
+  `native_core/n3_3/20261115_20261115_n33_built`): rules (a) and (b) exact on every resource and pixel of the field,
+  chain, volume and population scenes (the indirect population equal to the direct one); the write-after-read pair
+  clean across two passes; nothing at rest; a steady minute with no object created (OpenGL 29,970 state records,
+  59,940 dispatches; Vulkan 16,310 and 32,620; the population and volume scenes likewise); retirement to zero after a
+  destroy, a program without storage and a destroy mid-resize, the skipped-release control counted and then released.
+  Barriers: consecutive records with no readback between them clean under synchronisation validation with the layer's
+  shader-access checks on (`syncval_shader_accesses_heuristic`, off by default in the layer, enabled for the harness
+  through `VK_EXT_layer_settings`: without it the controls report nothing), and both controls seen to fail: a written
+  binding declared read reports `SYNC-HAZARD-READ-AFTER-WRITE` (20 errors), the write-after-read pair in one QRhi pass
+  `SYNC-HAZARD-WRITE-AFTER-READ` (10). The only other messages are Qt 6.12.0's recorded texture-create defect (A,
+  `vk_validation.py`). This settles research Q7's open pairing: a buffer a draw reads, written by the next record's
+  compute pass, is barriered correctly.
+- *Cost* (`--rounds cost`, once, under the layer, evidence `native_core/n3_3/20261115_n33_cost`; the GPU was not
+  quiet: an SRPSS process the agent did not start held the RTX 4090 at 47 to 57 % before and 48 % after, P5, driver
+  617.42, one display active). GPU time of the content's whole record (its compute passes, its draws and the surface
+  pass), median of 240 frames, 2560x1440 then 4K: Vulkan field 0.035 and 0.071 ms, chain 0.038 and 0.073, the fog
+  volume (128x72x32) 0.041 and 0.083, the drift-shaped state (216,000 rows) 0.129 and 0.155, the population (262,144)
+  0.112 and 0.128; OpenGL field 0.064 and 0.128, chain 0.066 and 0.131, volume 0.076 and 0.136, state 0.148 and 0.155,
+  population 0.157 and 0.211. The render thread's record 0.008 to 0.015 ms on both. The Python seam's own dispatches
+  on the same loads (GL `TIME_ELAPSED`, dispatches only): field 0.005, chain 0.007, volume 0.015, population 0.013 ms.
+  The whole record less N3.2's floor for a record of that size (Vulkan 0.025 to 0.031 ms, OpenGL 0.055 to 0.065 ms at
+  2560x1440) leaves the compute within a few microseconds of the Python seam's on the field, chain and volume, so
+  choice H stands (QRhi's class-wide OpenGL barriers cost nothing visible) and choice A's alternative is not measured.
+  The population's and the state's figures include their draws of 262,144 members and 216,000 rows, which the
+  reference does not time. A quiet-GPU run without the layer was not possible here and is the Watchlist's.
+- *Regressions on 686ae09c:* generic_mode_check, scene_target_check (rules (a) and (b) exact), mesh_buffer_check
+  (parity, forms, used, rest, steady, retire), fullscreen_pass_check, background_layer_check, backdrop_pyramid_check,
+  transition_route_check and devcurve_check all PASS with validation (their cost rounds not rerun: the GPU was busy).
+  devcurve_check's block round first failed on `u_target_px` alone, a harness defect from main's N1.4 merge (bad5e2a53),
+  not N3.3: fragPixel's target is the window's on the Python route and the core's own target on the native one, so
+  the round now expects the card's target size there, as `tests/test_native_devcurve.py` does, and passes.
+
 ## D1, D2, D3 and the transport rule
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts"). The drafts, with every "today"

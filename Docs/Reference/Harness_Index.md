@@ -934,6 +934,24 @@ python native/core/python/scene_target_check.py --module-dir release/native_modu
 # recorded before and after)
 python native/core/python/mesh_buffer_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
     [--apis opengl vulkan] [--rounds parity forms rest steady retire cost stream_ring] [--label n32_mesh_buffers]
+# N3.3 (D16): compute passes on the harness scenes native/core/python/compute_passes (field: Waveform's body field, the
+# knots as a storage stream into a 2D RGBA32F image a pass samples; chain: the floor give field, store then an imageLoad
+# blur; volume: the fog, 3D RGBA16F and R16F images integrated along z and sampled through sampler3D; state: the drift's
+# shape, a read-write state buffer under a record trigger, two entries writing halves of one output, resized by a
+# setting with its prefix kept; population/population_direct: the product's count, scan and scatter ending in a
+# compute-written indirect command, and the direct draw; war: read X write Y, then write X; refusal: access and format
+# refusals), every input dyadic so both rules are exact, hidden hosts only, results read back in the harness only: facts (qsb's
+# readonly/writeonly reflection, the device's compute facts, every admission refusal), parity (rule (a) against the
+# Python seam's GL compute through PyOpenGL and rule (b) between the backends, exact on every resource, 3D read back per
+# slice), trigger (frame and field triggers; a fade, settings or card re-record dispatches nothing; fresh after a
+# content made again; the trigger_every_record control), war, copy (the clear and prefix-copy kernels at a resize), rest,
+# steady, retire (destroyed, a program without storage, destroyed mid-resize; the skip_storage_release control and its
+# release after), barriers (consecutive records with no readback between them under synchronisation validation with the
+# layer's shader-access checks on, vulkan_instance(shader_accesses=True); the write_as_read control must report
+# READ-AFTER-WRITE and single_pass WRITE-AFTER-READ), cost (each scene's whole record at 2560x1440 and 4K against the
+# reference; record nvidia-smi and the display state)
+python native/core/python/compute_pass_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan] [--rounds facts parity trigger war copy rest steady retire barriers cost] [--label n33_compute]
 ```
 
 Tests: `tests/test_native_core_jobs.py` (the built module, GPU-free: the job service's latch, cancellation while

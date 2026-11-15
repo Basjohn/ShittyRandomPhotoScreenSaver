@@ -801,6 +801,27 @@ Each foundation slice adds what it learned here.
   instance route can cost more CPU than the storage route: measure a floor (the record with the data resident plus one
   copy into mapped memory), never one route against another.
 
+**Native compute passes (N3.3, 15 Nov; D16)**
+- Synchronisation validation is silent about shader storage hazards by default: the layer's
+  `syncval_shader_accesses_heuristic` is off, so a barrier proof between compute passes reports nothing whether or not
+  the barrier is there. Turn it on (the harness's `vulkan_instance(shader_accesses=True)`, through
+  `VK_EXT_layer_settings`) and keep the negative controls that must report a hazard; a clean run with silent controls
+  proves nothing.
+- A resource a recorded command names must outlive the record: QRhi's OpenGL backend runs the frame's commands at its
+  end, and its Vulkan backend writes a pass's barriers for its tracked buffers at the next pass. A resized buffer
+  released in the record whose prefix copy read it lost the prefix on OpenGL and left a barrier on a null handle on
+  Vulkan; the replaced buffer now goes at the next record.
+- A storage image the harness reads back needs `UsedAsTransferSource` (Vulkan validates the copy's source usage and
+  layout); OpenGL does not care, so only the Vulkan run finds it.
+- HLSL has no `gl_NumWorkGroups`: a kernel that strides over its range takes the stride in its block. `qsb -d` of Qt
+  6.12.0 prints an rgba16f image as "rgba16" (its dump's name table); the reflected enum is right, so read the enum.
+- `qsb` records `readonly` and `writeonly` (qualifier flags 1 and 2; unqualified 0) for storage blocks and images, and
+  reflects declared blocks a shader never uses, so declared access can be checked against the shader.
+- One `draw(n)` publishes one record however many frames it waits: a proof of state carried from record to record
+  needs n records, or the earlier record it compares against never existed.
+- A control that leaks (a skipped release) must be released again before the device goes, or the leak is the
+  validation layer's error at `vkDestroyDevice` instead of the counted figure the proof wants.
+
 ## Operator-triggered appearance review (reference checklist)
 
 Automated image differences are not aesthetic acceptance. Previously implemented work is operator-accepted; use the following reference checks **only if** a newly observed regression or new transition tranche requires targeted appearance review:
