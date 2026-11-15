@@ -9,9 +9,9 @@
 // or one D32F texture: D14 point 5, choice C); a requested sample count (D14 point 7: rendering/gl_programs/scene3d.py
 // owns the request, the core's clamp here is the only place it meets a device).
 //
-// Allocation per size (D14 point 2, choice A): 64 px buckets; the allocation grows at once whenever the needed size passes
-// it on either axis, and shrinks only when the needed size falls two or more buckets below it on either axis, decided at
-// the size edge (the record that sees a new surface or explicit size), never by a timer. An allocation is made one
+// Allocation per size (D14 point 2, choice A): 64 px buckets, each axis on its own (audit 2, L1); an axis grows at once
+// whenever the needed size passes it, and shrinks only when the needed size falls two or more buckets below it, decided
+// at the size edge (the record that sees a new surface or explicit size), never by a timer. An allocation is made one
 // attachment per step (allocateStep: N3.6 schedules the steps as warm-up units; until then the record runs them all).
 // The content sits at image rows [H-h, H) and columns [0, w) of the allocation (the Python renderer's GL bottom-left), so
 // a read past the content's edge reads what Python's reads; contentViewport gives QRhi's viewport per backend.

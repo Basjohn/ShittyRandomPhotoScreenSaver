@@ -339,18 +339,30 @@ QSize nextAllocation(const QSize &current, const QSize &needed, QString *reason)
         *reason = QStringLiteral("made");
         return bucketed;
     }
-    if (needed.width() > current.width() || needed.height() > current.height()) {
+    // Each axis on its own (audit 2, L1): grown at once past the allocation, shrunk only two or more buckets below it,
+    // else kept (a grow on one axis never re-buckets the other one down).
+    bool grown = false;
+    bool shrunk = false;
+    const auto axis = [&](int have, int need, int bucket) {
+        if (need > have) {
+            grown = true;
+            return bucket;
+        }
+        if (have - bucket >= 2 * kSceneBucket) {
+            shrunk = true;
+            return bucket;
+        }
+        return have;
+    };
+    const QSize next(axis(current.width(), needed.width(), bucketed.width()),
+                     axis(current.height(), needed.height(), bucketed.height()));
+    if (grown)
         *reason = QStringLiteral("grown");
-        return bucketed;
-    }
-    // Shrink only with hysteresis: two or more buckets below the allocation on either axis.
-    if (current.width() - bucketed.width() >= 2 * kSceneBucket
-        || current.height() - bucketed.height() >= 2 * kSceneBucket) {
+    else if (shrunk)
         *reason = QStringLiteral("shrunk");
-        return bucketed;
-    }
-    reason->clear();
-    return current;
+    else
+        reason->clear();
+    return next;
 }
 
 QRect contentViewport(bool yUpInFramebuffer, const QSize &allocation, const QSize &content)

@@ -69,7 +69,30 @@ def test_the_allocation_grows_at_once_and_shrinks_only_two_buckets_below():
     assert next_allocation((128, 128), (128, 128)) == ((128, 128), "")
     assert next_allocation((256, 256), (130, 250)) == ((256, 256), "")          # one bucket below: kept
     assert next_allocation((256, 256), (128, 250)) == ((128, 256), "shrunk")    # two buckets below on one axis
-    assert next_allocation((1024, 640), (900, 100)) == ((960, 128), "shrunk")
+    # Each axis on its own (audit 2, L1): one bucket below on the width is kept while the height shrinks.
+    assert next_allocation((1024, 640), (900, 100)) == ((1024, 128), "shrunk")
+
+
+def _both_axes_at_once(current, needed):
+    """The control: the rule before audit 2's L1, a grow or shrink on either axis re-bucketing both."""
+    bucketed = (bucket_pixels(needed[0]), bucket_pixels(needed[1]))
+    if current[0] <= 0 or current[1] <= 0:
+        return bucketed, "made"
+    if needed[0] > current[0] or needed[1] > current[1]:
+        return bucketed, "grown"
+    if current[0] - bucketed[0] >= 2 * SCENE_BUCKET or current[1] - bucketed[1] >= 2 * SCENE_BUCKET:
+        return bucketed, "shrunk"
+    return tuple(current), ""
+
+
+def test_a_grow_on_one_axis_keeps_the_other_axis():
+    """Audit 2, L1 (the auditor's sizes): a diagonal resize whose height dips one bucket while the width grows keeps
+    the height's allocation, so the next small move reallocates nothing."""
+    sizes = [(1000, 1000), (1030, 950), (1030, 970)]
+    assert next_allocation((1024, 1024), (1030, 950)) == ((1088, 1024), "grown")
+    assert _drag(next_allocation, sizes) == 2                                   # made, then grown once
+    # The control: re-bucketing both axes at a grow reallocates again at the dip's return (1088 x 960, then x 1024).
+    assert _drag(_both_axes_at_once, sizes) == 3
 
 
 def test_a_drag_across_one_bucket_boundary_does_not_thrash():
@@ -216,8 +239,8 @@ def core():
 
 @built
 def test_the_modules_rules_are_the_python_reference(core):
-    for current in ((0, 0), (128, 128), (256, 192), (1024, 640)):
-        for needed in ((1, 1), (100, 70), (129, 70), (130, 250), (128, 250), (900, 100), (1025, 641)):
+    for current in ((0, 0), (128, 128), (256, 192), (1024, 640), (1024, 1024)):
+        for needed in ((1, 1), (100, 70), (129, 70), (130, 250), (128, 250), (900, 100), (1025, 641), (1030, 950)):
             assert core.scene_target_next_allocation(current, needed) == next_allocation(current, needed)
     for allocation, content in (((128, 128), (100, 70)), ((320, 192), (301, 131)), ((64, 64), (64, 64))):
         for y_up in (True, False):

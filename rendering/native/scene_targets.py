@@ -2,9 +2,10 @@
 ``native/core/src/scene_targets.h``), in Python: the reference the module's GPU-free entries are held to
 (``tests/test_native_scene_targets.py``) and what a harness uses to place a target's content in a readback.
 
-- Allocation (D14 point 2, choice A): 64 px buckets; the allocation grows at once, to the needed size's buckets,
-  whenever the needed size passes it on either axis, and shrinks, to the needed size's buckets, only when the needed
-  size falls two or more buckets below it on either axis; decided at the size edge, never by a timer.
+- Allocation (D14 point 2, choice A): 64 px buckets, each axis on its own; an axis grows at once, to the needed size's
+  bucket, whenever the needed size passes it, and shrinks, to the needed size's bucket, only when the needed size falls
+  two or more buckets below it (audit 2, L1: a grow on one axis never re-buckets the other one down); decided at the
+  size edge, never by a timer.
 - Placement (D14 point 2): the content sits at image rows ``[H-h, H)`` and columns ``[0, w)`` of the allocation (the
   Python renderer's GL bottom-left), so a read past the content's edge reads what the Python renderer's reads. QRhi's
   viewport counts from the framebuffer's bottom-left; on OpenGL the core's targets are flipped (F1: memory row 0 is the
@@ -30,11 +31,19 @@ def next_allocation(current: tuple[int, int], needed: tuple[int, int]) -> tuple[
     bucketed = (bucket_pixels(needed[0]), bucket_pixels(needed[1]))
     if current[0] <= 0 or current[1] <= 0:
         return bucketed, "made"
-    if needed[0] > current[0] or needed[1] > current[1]:
-        return bucketed, "grown"
-    if current[0] - bucketed[0] >= 2 * SCENE_BUCKET or current[1] - bucketed[1] >= 2 * SCENE_BUCKET:
-        return bucketed, "shrunk"
-    return (int(current[0]), int(current[1])), ""
+    # Each axis on its own (audit 2, L1): a grow on one axis never re-buckets the other one down.
+    grown = shrunk = False
+    axes = []
+    for have, need, bucket in zip(current, needed, bucketed):
+        if need > have:
+            grown = True
+            axes.append(bucket)
+        elif have - bucket >= 2 * SCENE_BUCKET:
+            shrunk = True
+            axes.append(bucket)
+        else:
+            axes.append(int(have))
+    return (axes[0], axes[1]), "grown" if grown else "shrunk" if shrunk else ""
 
 
 def content_viewport(y_up_in_framebuffer: bool, allocation: tuple[int, int],
