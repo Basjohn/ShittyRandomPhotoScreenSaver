@@ -42,9 +42,9 @@ after the operator's yes on a question card; agents never run load (invisible ch
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked.
-- High: N5.7c, then N3.4 (transparency and post-processing), then N3.6. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers
+- High: N3.4 (transparency and post-processing), then N3.6. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers
   ride with the next fitting dispatch.
-- Medium: the next N5 port (Oscilloscope or Bubble once N3.2's instanced quads land).
+- Medium: the shared tolerance (checkpoint audits 3 and 4), then N3.3's audit-5 fixes, then the Oscilloscope or Bubble port.
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
