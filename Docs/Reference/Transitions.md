@@ -780,8 +780,10 @@ Each foundation slice adds what it learned here.
 **Native meshes and buffers (N3.2, 15 Nov; D15)**
 - An edge through an exact pixel centre is a tie, and the core's Y flip (F1) resolves it the other way: the fill
   rule's top edge becomes a bottom edge, so whole rows of a box or a voxel move between the Python renderer and the
-  core. Keep harness data's edges off pixel centres; judge geometry by the tie budget (8 pixels past 1 level), not
-  exact. Blended and additive pixels sum per-layer roundings of SPIRV-Cross's GLSL against the source's own.
+  core. Keep harness data's edges off pixel centres; judge geometry by the shared pixel tolerance
+  (`tools/pixel_tolerance.py`, D12 "The pixel tolerance"), not exact: one level only on the pixels a blend wrote, ties
+  capped at 2 levels and isolated or on an edge. Blended and additive pixels sum per-layer roundings of SPIRV-Cross's
+  GLSL against the source's own.
 - Prove the per-record front face by pictures, not by the rule alone: with depth testing, the box culled must equal the
   box unculled, and the opposite winding must show the inside faces. The rule is N0.3's on the matrix as uploaded
   (mirrored by the correction on both of the core's backends): clockwise on the core's OpenGL, counter-clockwise on

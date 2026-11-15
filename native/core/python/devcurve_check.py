@@ -380,8 +380,10 @@ def round_pixels(core, engine, app, host, api: str, records: list[dict], referen
         scene = None
         stream = Stream()
         stats = {"compared": 0, "differing": 0, "max_level": 0, "worst": None}
-        rows: list[dict] = []
+        judged: list[dict] = []
         timings = []
+        from tools import pixel_tolerance
+        from tools.visualizer_replay import owner_render_parity as parity
         try:
             host.set_device_pixel_ratio(float(dpr))
             scene = Scene(core, engine, host)
@@ -402,8 +404,11 @@ def round_pixels(core, engine, app, host, api: str, records: list[dict], referen
                 delta = np.abs(drawn[..., :3].astype(np.int16) - reference[..., :3]).max(axis=2)
                 level = int(delta.max())
                 if level:
-                    rows.append({"pixels": int((delta > 0).sum()), "max_level": level,
-                                 "levels": {str(v): int((delta == v).sum()) for v in sorted(set(delta[delta > 0].tolist()))}})
+                    # The reference is drawn into a transparent target: its own alpha is the translucency mask.
+                    verdict = parity.rule_a_frame(drawn[..., :3], reference[..., :3],
+                                                  pixel_tolerance.translucent_by_alpha(reference))
+                    verdict["index"] = index
+                    judged.append(verdict)
                     stats["differing"] += 1
                     if level > stats["max_level"]:
                         stats["max_level"] = level
@@ -422,10 +427,8 @@ def round_pixels(core, engine, app, host, api: str, records: list[dict], referen
                         "median_ms": round(ordered[len(ordered) // 2] / 1e6, 4) if ordered else None,
                         "p90_ms": round(ordered[int(len(ordered) * 0.9)] / 1e6, 4) if ordered else None}
         # Rule (a) under the composite's tolerance for a translucent mode (owner_render_parity.rule_a_verdict, the
-        # lead's decision on N5.1's per-pixel proof).
-        from tools.visualizer_replay import owner_render_parity as parity
-
-        stats["rule_a"] = parity.rule_a_verdict(MODE_ID, rows)
+        # lead's decision on N5.1's per-pixel proof), pixel by pixel through the shared tolerance.
+        stats["rule_a"] = parity.rule_a_verdict(judged)
         by_dpr[str(dpr)] = stats
         _sheet(out, api, dpr, references[dpr][:4], native_frames)
     np.savez_compressed(_work(out) / f"native_{api}.npz", **native_frames)

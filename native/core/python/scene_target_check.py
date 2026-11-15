@@ -73,8 +73,13 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
+ROOT = HERE.parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import vk_validation  # noqa: E402  (native/core/python)
 import host_check  # noqa: E402
+from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("parity", "msaa", "rest", "resize", "retire", "cost")
@@ -92,6 +97,14 @@ HALF_ULP = 2.0 ** -10              # one float16 ulp, relative
 RULE_A_LEVELS = 1                  # RGBA8 (the tie budget of D13: a NativeFragmentPass within 1 level)
 RULE_A_TIE_PIXELS = 8
 DEPTH_TOLERANCE = 2e-7             # N0.3 scene 2's bound
+# Rules (a) and (b), judged by the shared pixel tolerance (tools/pixel_tolerance.py, D12 "The pixel tolerance"):
+# an RGBA8 texture may sit 1 level off only where the reference is translucent (its alpha strictly between 0 and 255);
+# a float texture's unit is its own rounding (one float16 ulp of the larger value, or the depth bound), which every
+# texel may reach (each renderer rounds its fp32 value into the format). Past that, rule (a) admits RULE_A_TIE_PIXELS
+# texels a texture at 2 units at most, isolated or on an edge (measured: 3 texels of scene.colour at 1.41 ulps, dpr 1),
+# rule (b) none.
+SCENE_RULE_A = pt.Tolerance("scene target, rule (a)", masked_level=1, tie_pixels=RULE_A_TIE_PIXELS)
+SCENE_RULE_B = pt.Tolerance("scene target, rule (b)", masked_level=1)
 DRAG = (800, 1000, 2)              # the resize round's widths (start, end, step); its card is 400 px high
 DRAG_HEIGHT = 400
 COST_HOSTS = ((2560, 1440), (3840, 2160))
@@ -235,6 +248,29 @@ def compare(a: dict, b: dict) -> dict:
     if past.ndim == 3:
         past = past.any(axis=2)
     return {"exact": bool((diff == 0).all()), "max": float(diff.max()), "past": int(past.sum())}
+
+
+def judged(candidate: dict, reference: dict, tolerance) -> dict:
+    """``tolerance`` (``SCENE_RULE_A`` or ``SCENE_RULE_B``) over two readbacks of one texture: RGBA8 in levels with the
+    reference's translucent texels as the mask; a float texture in its own units (``compare``'s tolerance), every texel
+    in the mask."""
+    import numpy as np
+
+    x, y = candidate["array"], reference["array"]
+    if x.shape != y.shape:
+        return {"pass": False, "reasons": ["shapes differ"], "differing": -1}
+    if candidate["format"] == "rgba8":
+        return pt.judge(x, y, tolerance, mask=pt.translucent_by_alpha(y))
+    fx, fy = x.astype(np.float64), y.astype(np.float64)
+    if candidate["format"] == "r32f":
+        units = np.abs(fx - fy) / DEPTH_TOLERANCE
+    else:
+        units = np.abs(fx - fy) / (np.maximum(np.abs(fx), np.abs(fy)) * HALF_ULP + 1e-7)
+    delta = np.ceil(units)
+    if delta.ndim == 3:
+        delta = delta.max(axis=2)
+    edges = pt.content_edges(fy * 255.0, tolerance.edge_contrast)
+    return pt.judge_delta(delta.astype(np.int64), tolerance, mask=np.ones(delta.shape, bool), edges=edges)
 
 
 def _content(entry: dict):
@@ -1244,9 +1280,12 @@ def cross_compare(out: Path) -> dict:
                 if texture not in b.get(case, {}):
                     continue                              # the surface's own textures (show) are not in the reference
                 c = compare(a[case][texture], b[case][texture])
+                tolerance = SCENE_RULE_A if rule == "rule_a" else SCENE_RULE_B
+                c["tolerance"] = judged(a[case][texture], b[case][texture], tolerance)
                 per[f"{case}|{texture}"] = c
-                ok = ok and c["past"] <= (RULE_A_TIE_PIXELS if rule == "rule_a" else 0) and c["past"] >= 0
+                ok = ok and c["tolerance"]["pass"]
         result[rule] = {"pass": ok and bool(per), "compared": per,
+                        "bound": (SCENE_RULE_A if rule == "rule_a" else SCENE_RULE_B).bound(),
                         "exact": sorted(k for k, v in per.items() if v["exact"])}
     return result
 
