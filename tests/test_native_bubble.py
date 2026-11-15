@@ -88,9 +88,9 @@ def _card(presentation) -> dict:
 
 
 def _settings(logical, presentation, card) -> dict:
-    from rendering.quick.visualizer.native_route import GENERIC_MODE_SETTINGS
+    from rendering.quick.visualizer.native_route import BUBBLE_SETTINGS
 
-    return GENERIC_MODE_SETTINGS["bubble"](SimpleNamespace(logical=logical, presentation=presentation), card)
+    return BUBBLE_SETTINGS(SimpleNamespace(logical=logical, presentation=presentation), card)
 
 
 def _members(filename: str, block: str) -> set[str]:
@@ -320,7 +320,11 @@ def test_the_route_draws_bubble_with_its_target_streams_and_three_passes(monkeyp
     from rendering.native import program_values
     from rendering.quick.visualizer import native_route
 
-    assert "bubble" in native_route.NATIVE_MODE_IDS
+    # Not offered until its rule (a) passes (D10); registered here as the port's last step registers it.
+    assert "bubble" not in native_route.NATIVE_MODE_IDS
+    monkeypatch.setattr(native_route, "GENERIC_MODE_SETTINGS",
+                        {**native_route.GENERIC_MODE_SETTINGS, "bubble": native_route.BUBBLE_SETTINGS})
+    monkeypatch.setattr(native_route, "NATIVE_MODE_IDS", native_route.NATIVE_MODE_IDS | {"bubble"})
     monkeypatch.setattr(program_values, "mode_fragment_pack", lambda _mode: b"pack")
     monkeypatch.setattr(native_route, "_shader_pack", lambda _name: b"pack")
     window = SimpleNamespace(width=lambda: 1707, height=lambda: 960,
