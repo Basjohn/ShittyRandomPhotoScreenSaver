@@ -1012,7 +1012,9 @@ to the GL limits.
    allocation is keyed by (allocated size, effective samples, the declaration), its size in 64 px buckets (choice A):
    it grows at once, to the needed size's buckets, whenever the needed size passes the allocation on either axis; it
    shrinks, to the needed size's buckets, only when the needed size falls two or more buckets below the allocation on
-   either axis, so a drag across one bucket boundary does not reallocate back and forth. Both are decided at the size
+   either axis, so a drag across one bucket boundary does not reallocate back and forth. Each axis is decided on its
+   own (audit 2, L1): a grow on one axis keeps the other axis's allocation unless that one passes or falls two buckets
+   below it too. Both are decided at the size
    edge (a new card or explicit size reaching the item's sync), never by a timer or a settle poll. An allocation is
    made one attachment per step (N3.6 schedules the steps as warm-up units; until then the first record makes them),
    never per frame. The content sits at image rows [H-h, H) and columns [0, w) of a bucketed allocation, the Python renderer's GL
@@ -1025,8 +1027,8 @@ to the GL limits.
    pipelines kept (N3.8's rebind); a sample-count or format change needs a new render-pass descriptor and so new
    pipelines. Everything is released with the content (the node's deletion, a mode switch, retirement, the scene graph's
    invalidation) on the render thread, the QRhi alive; process-wide counts (targets, attachments, bytes, allocations)
-   join `composite_live` and the destruction barrier's reading. Nothing at rest: a target is recorded only when its
-   surface is dirty.
+   join `composite_live` (the destruction barrier reads only the jobs in flight, `rendering/native/loader.py`; audit 2,
+   L4). Nothing at rest: a target is recorded only when its surface is dirty.
 4. *The HDR intermediate is RGBA16F* (the Python renderer's: colour, emission, the HDR capture, Bubble's light). No
    R11G11B10F: QRhi lacks it and D5.3's formats service is admitted only on a measured cost. The tone map into the
    surface is N3.4's HDR resolve, not this primitive. Rules B and C hold for every attachment: preserved, cleared by a
@@ -1160,6 +1162,21 @@ the rules for the GPU-free tests and `scene3d.scene_samples` is the one sampling
   660 MB at 4K, where the Python renderer's `glClear` is a fast clear). The capture split adds 0.36 / 0.30 ms (the
   second run, the nearest resolve, the capture, a second colour resolve), as Python's `background()` does its own.
   The fast clear this pointed to was built and rejected (point 12); the figures above stand (point 13).
+- Checkpoint audit 2 (agent-a6aa6ac5's `Docs/Future_Work/Checkpoint_Audits_Nov15.md`), fixed:
+  - H1: QRhi gives a resolve attachment an UNDEFINED initial layout with no external dependency whatever the flags,
+    so the validation above was clean only because the gate's rounds read back between records. The core orders a
+    target's average resolves before every run on Vulkan (`primeResolvesForPass`, ALL_COMMANDS in the second scope);
+    `prime_control` holds its negative control (40 consecutive 4x records), and a Vulkan cost round without the
+    validation layer fails.
+  - M3: a new program clears the sizes `target_size` set before it (`state()["target_sizes"]`).
+  - M4: a pass may sample a target before any pass of the frame drew it only when the target declares
+    `"previous_frame": true` (it reads the frame before), never on a multisampled target (its nearest resolves come
+    after the runs that read them) nor on one no pass draws. The first frame after an allocation reads what the new
+    textures hold.
+  - M5: the targets' state is copied as values only when it changes and made into JSON only when asked for; no
+    per-record list, JSON or byte-array copy is left in the N3.1 paths of the record.
+  - L1 (point 2's per-axis rule) and L5: a failed allocation step leaves the target's objects to the content, which
+    releases the pipelines first.
 
 ## D1, D2, D3 and the transport rule
 

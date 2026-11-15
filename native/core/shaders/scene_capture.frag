@@ -3,8 +3,8 @@
 // target's passes drew so far, copied texel for texel over the whole allocation into the capture's two textures, as the
 // Python renderer's SceneTarget.background() does (rendering/quick/scene3d/target.py _BACKGROUND_FRAGMENT): the colour
 // (attachment 0, or its resolve when multisampled) and the nearest window depth through viewDepthFromDepthTexture (the
-// depth, or its resolve: one sample's depth, D14 point 8), the far plane (1) for a target without depth. The capture
-// target is the scene's allocation, so a texel's own pixel is its source's.
+// depth, or when multisampled the core's nearest resolve: the minimum over the samples, D14 point 10), the far plane (1)
+// for a target without depth. The capture target is the scene's allocation, so a texel's own pixel is its source's.
 #define SRPSS_NATIVE_CORE
 #define SRPSS_CONVENTIONS_FRAGMENT
 //@srpss_conventions

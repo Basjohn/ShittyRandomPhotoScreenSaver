@@ -494,8 +494,12 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     - [ ] The sampling request's one owner beside the tier table (`rendering/gl_programs/scene3d.py`); its callers
       `extruded_bubble.py:131`, `sphere_voxel.py:122`, `shockwave_grid.py:104`, `extruded_spectrum.py:63`,
       `scene3d/waveform.py:377` and `oscilloscope.py:165` call it, Waveform's 4 and the Oscilloscope's 1 kept as declared
-      requests (choice D); `tools/conventions_identity.py` identical before and after for every mode and transition
-      (this closes N1's last box). Transitions keep `scene3d_samples` as the request.
+      requests (choice D); no pixel moves, proved GPU-free by
+      `tests/test_native_scene_targets.py::test_every_visualizer_request_is_its_former_expression` (every caller's
+      request equals its former expression for every tier; `shockwave_quality`'s `scene_samples(detail)` is checked
+      there through the owner, not through the function). `tools/conventions_identity.py` cannot see a sample request:
+      it forces every `SceneTarget` to one sample (`owner_render_parity.single_sample_scene_targets`; audit 2, L4).
+      This closes N1's last box. Transitions keep `scene3d_samples` as the request.
   - [ ] ABI 17: `abi.h`'s comment and `SRPSS_NATIVE_CORE_ABI`, `rendering/native/loader.py` `EXPECTED_ABI` (with
     `tests/test_native_core_loader.py`); the program declaration's targets and pass fields, the harness readback of a
     target's attachments (`composite_mode_target_read`: RGBA8, half floats and R32F as stored), the clamp control,
@@ -529,7 +533,9 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     - [ ] Retirement without leaks: the content released (a mode switch, the node deleted, the scene graph
       invalidated, the item destroyed mid-allocation between steps): targets, attachments, bytes and resolves back to
       zero, the destruction barrier's reading zero; Vulkan validation with synchronisation validation clean through
-      create, resize, capture, multisample and teardown (Qt 6.12.0's defect A only, by its id).
+      create, resize, capture, multisample (consecutive multisampled records with no readback between them: the cost
+      round under the layer, and `prime_control`'s resolve phases; audit 2, H1) and teardown (Qt 6.12.0's defect A
+      only, by its id).
     - [ ] Cost and threads: GPU time per pass (the GPU timer) median and p90 at 2560x1440 and 4K, single and 4x; the
       allocation steps' render-thread CPU time at 4K (the units N3.6 will space); the thread probe: zero calls with a
       Python thread state.
@@ -555,6 +561,23 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [ ] Fix what the scopes show, if it brings Vulkan's 4K 4x minus 1x to the Python path's or below with parity
     exact and validation clean; otherwise the figure and its cause go to the lead with the operator's look question
     (4K defaulting to fewer samples).
+- [ ] N3.1c Checkpoint audit 2's open lows (agent-a6aa6ac5's `Docs/Future_Work/Checkpoint_Audits_Nov15.md`, L2 and
+  L3; before N3.2 draws anything but a full-screen triangle into a scene target).
+  - [ ] L2, the content viewport and its scissor: D14 point 2 and the contract box above put the function in
+    `conventions.h` with QRhi's viewport *and scissor*; it is `contentViewport` in `native/core/src/scene_targets.h`
+    and no pass sets a scissor. Today a full-screen triangle is clipped by the viewport, so nothing is wrong; N3.2's
+    points, lines or a guard-band rasteriser can write into the slack, which a linear read past the content's edge then
+    samples (the slack must hold the clear, the `slack_holds_the_far_plane` check). Decide one place (move it to
+    `conventions.h`, or correct D14 point 2 and the box), set the scissor to the content rect on every pass into a
+    scene target (`QRhiGraphicsPipeline::UsesScissor` on its pipelines, `cb->setScissor` per run), and prove it with a
+    harness pass that draws a quad past the content's edge: the slack keeps the clear, with a control (the scissor off:
+    the slack written).
+  - [ ] L3, `scene_target_check.py`'s missing or weaker controls, each built and seen to fail on its broken case:
+    rule (a)'s negative control (the content placed at the image top: the edge reads differ against the Python
+    oracle); a bucket-aligned card beside 480x270 and 720x405 (both unaligned today: slack present at both); the drag
+    in 1 px steps (`DRAG`'s step is 2 px); the resize control as a 1 px bucket (it re-buckets at every change today);
+    the retirements "item destroyed mid-allocation between steps" and "scene graph invalidated" exercised (every step
+    runs in one record today, and `release()` covers both by construction only).
 - [ ] N3.2 Mesh and buffer resources: static meshes built once and kept, dynamic buffers with dynamic offsets,
   instancing, pre-built resource bindings per ring slot (no allocation per frame), instanced quads in place of
   point sprites (Bubble, Neon Lake's marks, Waveform's sparks use `gl_PointSize`).
