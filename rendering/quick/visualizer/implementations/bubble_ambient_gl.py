@@ -21,14 +21,16 @@ shader performs the final content/stencil clip, including rotation.
 from __future__ import annotations
 
 import ctypes
+from pathlib import Path
 
 import numpy as np
 from OpenGL import GL as gl
 
-from rendering.gl_programs.portable import pack_block, portable_program
+from rendering.gl_programs.portable import block_declaration, block_layout_from_glsl, pack_block
 from rendering.quick.render.gl_resources import compile_program, delete_program
 from rendering.quick.scene3d.uniforms import PassBlocks
 from rendering.quick import gl_query
+from widgets.spotify_visualizer import shaders as shader_package
 from widgets.spotify_visualizer.bubble_ambient import (
     MAX_MICROBUBBLES, MAX_PARTICLES, RECORD_STRIDE,
 )
@@ -37,166 +39,27 @@ from widgets.spotify_visualizer.bubble_ambient_geometry import (
 )
 
 
-_POINT_VERTEX = """#version 460 core
-layout(location=0) in vec4 aPoint;  // normalized x/y, logical diameter px, opacity
-layout(location=1) in vec2 aOther;  // glow, class 0 microbubble / 1 particle
-uniform float uTexelScale;
-uniform float uSpriteScale;
-uniform float uGlowSpread;
-out float vOpacity;
-out float vGlow;
-out float vClass;
-out float vCoreRatio;
-out float vSpriteRadius;  // texels
-out float vCoreRadius;    // texels, the authored physical core
-out float vHaloRadius;    // texels, where the light reaches zero
-void main() {
-    // The FBO is in the unrotated *content* coordinate system. Sampling from
-    // Bubble's logical UV maps the decoration through the same physical camera,
-    // including quarter turns and extreme CUSTOM viewport shape changes.
-    gl_Position = vec4(aPoint.x * 2.0 - 1.0, 1.0 - aPoint.y * 2.0, 0.0, 1.0);
-    float coreDiameterPx = aPoint.z * uTexelScale * uSpriteScale;
-    float size = coreDiameterPx;
-    vHaloRadius = 0.0;
-    if (aOther.y > 0.5) {
-        // The core's drawn extent: at least 2.2 texels across (spread below
-        // that), plus its filter edge (>= 1 texel each side) and a texel margin.
-        float coreExtent = 2.0 * max(0.3875 * coreDiameterPx, 1.1) + 2.0 * max(1.0, 0.1375 * coreDiameterPx) + 2.0;
-        // Light-only footprint, explicitly tunable. It follows the light (the
-        // glow strength and Glow Spread) and never the musical core size, and
-        // a sub-texel core keeps a legible halo (sized from its 2-texel floor).
-        float haloDiameter = aOther.x > 0.001
-            ? max(coreDiameterPx, 2.0) * mix(8.0, 12.0, clamp(aOther.x / 6.0, 0.0, 1.0))
-                * clamp(uGlowSpread, 0.6, 2.0)
-            : 0.0;
-        size = max(coreExtent, haloDiameter);
-        vHaloRadius = 0.5 * min(haloDiameter, 128.0);
-    }
-    gl_PointSize = clamp(size, 1.0, 128.0);
-    vSpriteRadius = 0.5 * gl_PointSize;
-    vCoreRadius = 0.5 * coreDiameterPx;
-    vCoreRatio = min(1.0, coreDiameterPx / gl_PointSize);
-    vOpacity = aPoint.w;
-    vGlow = aOther.x;
-    vClass = aOther.y;
-}
-"""
+def _ambient_programs():
+    """The two ambient programs' sources from their shader files beside ``bubble.frag`` (one source for this renderer
+    and the native core's bake, ``tools/regen_qrc.py --shaders``), composed as the loader composes them, and the points'
+    block layout read from its own declaration."""
+    from widgets.spotify_visualizer.shaders import compose_shader_source
 
-_POINT_FRAGMENT = """#version 460 core
-in float vOpacity;
-in float vGlow;
-in float vClass;
-in float vCoreRatio;
-in float vSpriteRadius;
-in float vCoreRadius;
-in float vHaloRadius;
-uniform vec4 uMicroColor;
-uniform vec4 uParticleColor;
-layout(location=0) out vec4 fragColor;   // premultiplied sRGB coverage (8-bit)
-layout(location=1) out vec4 fragLight;   // linear-light radiance (half float .rgb), additive
+    folder = Path(shader_package.__file__).resolve().parent
+    sources = {name: compose_shader_source(folder / name) for name in AMBIENT_SHADER_FILES}
+    points_block = block_layout_from_glsl(block_declaration(sources["bubble_ambient_points.frag"],
+                                                            "BubbleAmbientPoints"))
+    return sources, points_block
 
-vec3 srgbToLinear(vec3 c) {
-    return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
-}
 
-void main() {
-    vec2 p = 2.0 * (gl_PointCoord - vec2(0.5));
-    float d = length(p);
-    if (d > 1.0) discard;
-    float alpha;
-    vec3 rgb;
-    vec3 light = vec3(0.0);
-    if (vClass < 0.5) {
-        float ring = smoothstep(0.43,0.68,d) * (1.0-smoothstep(0.68,0.96,d));
-        float glass = (1.0-smoothstep(0.10,0.90,d))*0.10;
-        float glint = (1.0-smoothstep(0.0,0.30,length(p-vec2(-0.38,0.32))))*0.60;
-        alpha = clamp(ring + glass + glint,0.0,1.0) * uMicroColor.a;
-        rgb = mix(uMicroColor.rgb,vec3(1.0),glint*0.28);
-    } else {
-        // Distances in texels from the true (sub-pixel) centre: gl_PointCoord is
-        // exact, so the profile is shift-invariant as the particle drifts.
-        float r = d * vSpriteRadius;
-        // Fixed physical core, never breathing. It keeps the accepted edge
-        // (half coverage at 0.775 of the authored radius, softening with size),
-        // but a core too small to sample is spread to a 1.1-texel radius with
-        // its area share of the light and an edge of at least one texel, so
-        // its total light no longer depends on where it falls between pixel
-        // centres (sub-pixel cores used to twinkle and vanish). Coverage blends
-        // in sRGB, so its share takes the display-gamma inverse: on dark water
-        // the spread core keeps the same total light.
-        float edgeRadius = 0.775 * vCoreRadius;
-        float coreRadius = max(edgeRadius, 1.1);
-        float coreEnergy = min(1.0, (edgeRadius * edgeRadius) / (coreRadius * coreRadius));
-        float edge = max(1.0, 0.275 * vCoreRadius);
-        float coreShape = 1.0 - smoothstep(coreRadius - edge, coreRadius + edge, r);
-        alpha = pow(coreEnergy, 1.0 / 2.2) * coreShape * uParticleColor.a;
-        rgb = uParticleColor.rgb;
-        float response = clamp(max(0.0, vGlow) / 3.0, 0.0, 1.0);
-        if (response > 0.0 && vHaloRadius > 0.0) {
-            // Emitted light in LINEAR light: a hot core (the core itself shining,
-            // so it can exceed its own surface colour) and one smooth halo that
-            // falls monotonically from the core (no dark moat), with a tight bloom
-            // and a soft inverse-square-like tail, in the particle's own hue with
-            // its chroma deepened (neutral colours stay neutral).
-            vec3 lin = srgbToLinear(uParticleColor.rgb);
-            float luma = dot(lin, vec3(0.2126, 0.7152, 0.0722));
-            vec3 hue = max(mix(vec3(luma), lin, 1.6), vec3(0.0));
-            float x = r / vHaloRadius;
-            float bloom = exp(-x * x * 30.0);
-            float tail = 1.0 / (1.0 + 25.0 * x * x);
-            float fade = 1.0 - smoothstep(0.5, 1.0, x);
-            float halo = (0.5 * bloom + 0.5 * tail) * fade;
-            light = (lin * coreEnergy * coreShape * 1.6 + hue * halo) * response * uParticleColor.a;
-        }
-    }
-    alpha = clamp(alpha*vOpacity,0.0,1.0);
-    light *= vOpacity;
-    if (alpha < 0.002 && max(max(light.r, light.g), light.b) <= 0.0) discard;
-    // Coverage keeps the accepted premultiplied over-blend; light is additive
-    // radiance that may exceed 1 where halos overlap (the Bubble shader maps it).
-    fragColor = vec4(rgb * alpha, alpha);
-    fragLight = vec4(light, 0.0);
-}
-"""
-
-_OCCLUDER_VERTEX = """#version 460 core
-layout(location=0) in vec2 aPosition;
-layout(location=1) in vec2 aUnitCircle;
-layout(location=2) in float aOcclusionAlpha;
-out vec2 vUnitCircle;
-out float vOcclusionAlpha;
-void main() {
-    gl_Position = vec4(aPosition.x*2.0-1.0, 1.0-aPosition.y*2.0, 0.0, 1.0);
-    vUnitCircle = aUnitCircle;
-    vOcclusionAlpha = aOcclusionAlpha;
-}
-"""
-
-_OCCLUDER_FRAGMENT = """#version 460 core
-in vec2 vUnitCircle;
-in float vOcclusionAlpha;
-layout(location=0) out vec4 fragColor;
-layout(location=1) out vec4 fragLight;
-void main() {
-    float distanceFromCentre = length(vUnitCircle);
-    float aa = max(fwidth(distanceFromCentre), 0.0001);
-    float coverage = (1.0-smoothstep(1.0-aa, 1.0+aa, distanceFromCentre))
-        * clamp(vOcclusionAlpha, 0.0, 1.0);
-    if (coverage <= 0.0) discard;
-    // With GL_ZERO / GL_ONE_MINUS_SRC_ALPHA this removes ONLY the ambience
-    // (its coverage and its light) under actual hero surfaces; the gradient
-    // and Bubble remain intact.
-    fragColor = vec4(0.0, 0.0, 0.0, coverage);
-    fragLight = vec4(0.0, 0.0, 0.0, coverage);
-}
-"""
-
-# Their loose uniforms are one std140 pass block each (N1.6: the points' values, none for the mask), their varyings
-# located (``portable_program``); the points' owner packs the block with the values it set as uniforms.
-_POINT_VERTEX, (_POINT_FRAGMENT,), _POINT_BLOCK = portable_program(
-    _POINT_VERTEX, (_POINT_FRAGMENT,), block="BubbleAmbientPoints", samplers={})
-_OCCLUDER_VERTEX, (_OCCLUDER_FRAGMENT,), _ = portable_program(
-    _OCCLUDER_VERTEX, (_OCCLUDER_FRAGMENT,), block="BubbleAmbientMask", samplers={})
+#: The ambient layer's shader files (``widgets/spotify_visualizer/shaders``): the points and the hero-bubble mask.
+AMBIENT_SHADER_FILES = ("bubble_ambient_points.vert", "bubble_ambient_points.frag",
+                        "bubble_ambient_mask.vert", "bubble_ambient_mask.frag")
+_SOURCES, _POINT_BLOCK = _ambient_programs()
+_POINT_VERTEX = _SOURCES["bubble_ambient_points.vert"]
+_POINT_FRAGMENT = _SOURCES["bubble_ambient_points.frag"]
+_OCCLUDER_VERTEX = _SOURCES["bubble_ambient_mask.vert"]
+_OCCLUDER_FRAGMENT = _SOURCES["bubble_ambient_mask.frag"]
 
 
 # The state fence reads through ``rendering.quick.gl_query`` (the GL entry points directly, as the shared
