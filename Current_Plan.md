@@ -7,6 +7,9 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 
 ## 0. Scope and rules
 
+**Interim agent, 15 to 20 Nov 2026:** read `handoff.md` (repository root) first: the route for the week, the
+state at handoff and the mistakes to avoid. The last known-good pre-flip state is tag `preflip-checkpoint-20261115`.
+
 **If you are the lead (orchestrator):** read `Docs/Guides/Orchestrator_Handbook.md` before anything else, and run `tools/agent_handover.py` to see every agent worktree, its journal and its unmerged work. Agents read `Docs/Guardrails/Agent_Worktree_Rules.md`, then their item here.
 
 **Accepted baseline (not live work):** original Bubble, Extruded Bubble, Neon Lake (`shockwave_grid`),
@@ -38,15 +41,18 @@ Live checklist: every open step is its own box, ticked boxes are deleted, and a 
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Now (in flight):** nothing in flight.
+**Now (in flight):** nothing in flight. No agent worktrees (15 Nov wind-down; check with `tools/agent_handover.py`).
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
-at the size asked.
-- High: N3.4 (transparency and post-processing), then N3.6. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers
-  ride with the next fitting dispatch.
-- Medium: the Bubble port (N5.1; the Oscilloscope after N3.4's bloom), then the Python bloom sampler fix.
-- Docs (Sonnet): only when a step needs a document.
-- Audit: an Opus High behind each merge, scaled to its risk.
+at the size asked. The interim week's order is `handoff.md` section 3.
+- High: N3.4's two open steps (the OpenGL defocus diagnosis on a quiet GPU, then its High audit; item 8b, N3.4
+  box), then N3.6. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers ride
+  with the next fitting dispatch.
+- Medium: the Bubble port (N5.1 Bubble box: classify rule (a)'s 8-level residual first), then the Oscilloscope
+  (only after N3.4's audit, since it consumes bloom).
+- Sonnet: the spike retirement box (not its visible-window part), N3.1c's lows, the `stream_ring` margin side
+  defect, stale reds (`test_extruded_bubble_empty_near`; `clip_smoke` only by asserting the protected behaviour).
+- Audit: an Opus High behind each merge, scaled to its risk; N3.4's audit is owed.
 
 ### Item 0. Operator defects of 11 Nov: section 1B, in its own order, ahead of everything below
 
@@ -661,8 +667,8 @@ the feature (D3D11 is not stated).
   item as Spectrum's; both close with N5.8.
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
-  **Where it stands (15 Nov, branch `worktree-agent-ad4262463b52b074a`, head after main's N3.4 merge; no C++, no
-  build needed: it runs on main's ABI 20 module as built).** Root cause of the last failure, fixed: the route sized the
+  **Where it stands (15 Nov; merged dormant into main at 22a99fa45, worktree retired; no C++, no build needed: it
+  runs on main's ABI 20 module as built).** Root cause of the last failure, fixed: the route sized the
   ambient target from the frame's parameters (`BubbleAmbientSimulation.enabled`), whose keys are not the runtime's
   ambience switches, so the target sat at 1 x 1 and the native card drew no ambience (owner rule (a) worst 152 levels);
   it now follows whether the drawn frame carries ambient points (worst 8 levels). Bubble is **not offered on Vulkan**
@@ -670,7 +676,7 @@ the feature (D3D11 is not stated).
   (`native_route.BUBBLE_SETTINGS`, `bubble_program`, `_bubble_target_sizes`, `GENERIC_MODE_PROGRAMS`,
   `GENERIC_MODE_TARGET_SIZES`, `_slot_bytes`) and `tests/test_native_bubble.py` registers them by monkeypatch.
   Follows the Native Port Playbook: the port checklist, the standard proof, N4.a, E2 (E23), E3, E9.
-  Done (each commit on the branch; the Python renderer's frames proved identical by `tools/conventions_identity.py`):
+  Done (each commit in the merge; the Python renderer's frames proved identical by `tools/conventions_identity.py`):
   - The ambient programs are shader files (`widgets/spotify_visualizer/shaders/bubble_ambient_{points,mask}.{vert,frag}`
     and packs); the points and the hero mask are instanced quads (D15 F; figures in D15 "Bubble's measured case",
     accepted); `srpssTopDownClip` added to both geometry-include copies; the CPU occluder triangles deleted.
@@ -687,7 +693,7 @@ the feature (D3D11 is not stated).
   Proved so far: the three E confirmations (source reading, in the commit log); `tests/test_native_bubble.py`
   (schema, sources, settings, sizes, route), `tests/test_bubble_stale_trail_ghost.py`,
   `tests/test_bubble_ambient_big_occlusion.py` (the mask's shape on the GPU, control seen failing); owner rule (a) on
-  variant a (`.artifacts/evidence/native_core/n5_1_bubble/20261115_rule_a_variant_a/`, in the branch's worktree):
+  variant a (`.artifacts/evidence/native_core/n5_1_bubble/20261115_rule_a_variant_a/`, in main's evidence):
   549 frames, 350 differing inputs, worst 8 levels, 101 edge pixels in the worst frame, all on microbubble clusters
   and halo edges: FAIL under the composite tolerance (10 ties at 3 levels).
   Remaining, in order (each command from the repository root with the venv's python, the module at
