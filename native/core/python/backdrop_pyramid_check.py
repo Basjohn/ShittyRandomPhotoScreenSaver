@@ -16,8 +16,9 @@ Rounds (one child process per API; OpenGL first, its levels and stills kept for 
   cards     each material's card (Acrylic, Glass, Frosted, Mica, Smoked: the product's MaterialSurface.qml, unchanged)
             over both photos: OpenGL with the Python pyramid (today's), OpenGL with the native pyramid, Vulkan with the
             native pyramid. OpenGL native against today's exact (CARD_RULE_A) inside the cards; Vulkan against OpenGL
-            native: the one-level pixels per material under CARD_RULE_B, and the share of card pixels more than 1 level
-            apart (the material's float grain hash, accepted 14 Nov on the composite) at most CARD_OUTLIER_SHARE. One sheet per photo for the lead's look review.
+            native: every card region pixel by pixel under CARD_RULE_B (the shared tolerance), with two controls on the
+            Vulkan frames themselves (a uniform one-level shift and a 12-level artefact on 8 pixels must both fail).
+            One sheet per photo for the lead's look review.
   cost      the build's GPU time (the core's GPU timer, kind 4 "backdrop") and render-thread CPU time at 2560 x 1440 and
             3840 x 2160, against D7 point 3's budgets (0.3 ms and 0.6 ms, p90).
   rest      nothing at rest (no build, no GPU sample); a photo change builds once (at the commit's frame: on Vulkan the
@@ -82,7 +83,6 @@ COST_SIZES = ((2560, 1440), (3840, 2160))
 BUDGET_MS = {(2560, 1440): 0.3, (3840, 2160): 0.6}   # D7 point 3, per build, the development GPU
 TIMED_BUILDS = 60
 MAX_TIMED_BUILDS = 600           # the cost round's bound while OpenGL's GPU times are still arriving
-CARD_OUTLIER_SHARE = 0.001          # Vulkan cards: share of card pixels more than 1 level from OpenGL's
 
 
 def _cap(measured: int) -> int:
@@ -112,12 +112,12 @@ LEVEL_RULE_B = {name: pt.Tolerance(f"backdrop level {name}, Vulkan against OpenG
                 for name, worst in LEVEL_RULE_B_WORST.items()}
 #: The cards. OpenGL native against today's (rule (a)): bit for bit the same (measured: 0 differing pixels in all ten
 #: card regions). Vulkan against OpenGL native (rule (b)): the one-level pixels are scatter, per material (measured
-#: worst a card region of 50,224 pixels: acrylic 1,565, glass 549, frosted 1,238, mica 809, smoked 605); the pixels
-#: past one level (the material's float grain hash, accepted 14 Nov on the composite, measured up to 12 levels, at most
-#: 8 pixels a region) stay bounded only by CARD_OUTLIER_SHARE: the shared tolerance has no class for them (its ties
-#: stop at 2 levels), so routing them is the lead's decision (D12).
+#: worst a card region of 50,224 pixels, both photos: acrylic 1,358, glass 549, frosted 961, mica 809, smoked 567: the
+#: backdrop's rounding, as in the levels). The grain is an integer hash of the pixel (R-94's class; N5.2b's way), so it
+#: no longer differs by backend: no pixel past one level (the float hash had up to 12 levels on at most 8 pixels a
+#: region), no ties, no flips.
 CARD_RULE_A = pt.EXACT
-CARD_RULE_B_WORST = {"acrylic": 1565, "glass": 549, "frosted": 1238, "mica": 809, "smoked": 605}
+CARD_RULE_B_WORST = {"acrylic": 1358, "glass": 549, "frosted": 961, "mica": 809, "smoked": 567}
 CARD_RULE_B = {name: pt.Tolerance(f"backdrop card {name}, Vulkan against OpenGL (rule b, one-level pixels)",
                                   scatter_pixels=_cap(worst)) for name, worst in CARD_RULE_B_WORST.items()}
 MAX_WAIT_FRAMES = 30
@@ -667,8 +667,9 @@ def vulkan_cards_against_opengl(work: Path) -> dict:
     if not (vk_path.exists() and gl_path.exists()):
         return {"pass": False, "error": "both APIs' card frames are needed"}
     vk, gl = np.load(vk_path), np.load(gl_path)
-    results, outliers, pixels = {}, 0, 0
+    results = {}
     judged: list[dict] = []
+    controls: dict = {}
     for label, _n in PHOTOS:
         key = f"native|{label}"
         if key not in vk.files or key not in gl.files:
@@ -677,24 +678,33 @@ def vulkan_cards_against_opengl(work: Path) -> dict:
         gl_regions = BackdropScene.card_regions(_RegionsOnly(1.0), gl[key])
         per = {m: compare(vk_regions[m], gl_regions[m]) for m in MATERIALS}
         results[label] = per
-        outliers += sum(c["over_1"] for c in per.values())
-        pixels += sum(c["pixels"] for c in per.values())
         for m in MATERIALS:
             if vk_regions[m].shape != gl_regions[m].shape:
                 judged.append({"pass": False, "reasons": [f"{label} {m}: card regions differ in shape"]})
                 continue
-            # The one-level pixels (scatter) per material; the delta is clipped to one level so that the grain hash's
-            # pixels past it stay with the share rule below (see CARD_RULE_B).
-            one = np.minimum(pt.levels(vk_regions[m][..., :3], gl_regions[m][..., :3]), 1)
-            judged.append(pt.judge_delta(one, CARD_RULE_B[m]))
+            candidate, reference = vk_regions[m][..., :3], gl_regions[m][..., :3]
+            judged.append(pt.judge(candidate, reference, CARD_RULE_B[m]))
+            if (label, m) == (PHOTOS[0][0], "frosted") or (label, m) == (PHOTOS[-1][0], "acrylic"):
+                # Controls on the real Vulkan frames: a uniform one-level shift, and 12 levels on 8 pixels (the float
+                # grain hash's measured artefact). Each must fail the same tolerance (never a pass, never a skip).
+                shifted = np.clip(candidate.astype(np.int16) + 1, 0, 255).astype(np.uint8)
+                artefact = candidate.copy()
+                flat = artefact.reshape(-1, artefact.shape[-1])
+                for index in range(8):
+                    spot = (index * 7919 + 101) % flat.shape[0]
+                    flat[spot] = np.clip(flat[spot].astype(np.int16) + 12, 0, 255).astype(np.uint8)
+                controls[f"{label}|{m}"] = {
+                    "uniform_shift_fails": not pt.judge(shifted, reference, CARD_RULE_B[m])["pass"],
+                    "twelve_level_artefact_fails": not pt.judge(artefact, reference, CARD_RULE_B[m])["pass"]}
         if "python|" + label in gl.files:
             results[label + "_against_today"] = {
                 m: compare(vk_regions[m], BackdropScene.card_regions(_RegionsOnly(1.0), gl["python|" + label])[m])
                 for m in MATERIALS}
-    share = outliers / pixels if pixels else 1.0
     tolerance = pt.summarise(judged)
-    return {"pass": bool(results) and share <= CARD_OUTLIER_SHARE and tolerance["pass"], "outlier_share": share,
-            "tolerance": tolerance, "bounds": [t.bound() for t in CARD_RULE_B.values()], "cards": results}
+    controls_hold = bool(controls) and all(all(c.values()) for c in controls.values())
+    return {"pass": bool(results) and tolerance["pass"] and controls_hold, "tolerance": tolerance,
+            "controls": controls, "controls_hold": controls_hold,
+            "bounds": [t.bound() for t in CARD_RULE_B.values()], "cards": results}
 
 
 # --------------------------------------------------------------------------------------------------- cost
@@ -1149,7 +1159,9 @@ def main(argv: list[str] | None = None) -> int:
                                               encoding="utf-8")
         failed = ([] if levels.get("pass") else [f"rule (b): Vulkan levels against OpenGL native, worst "
                                                  f"{levels.get('worst_level')} levels"])
-        failed += ([] if cards.get("pass") else [f"Vulkan cards against OpenGL native: {cards.get('outlier_share')}"])
+        failed += ([] if cards.get("pass") else [f"Vulkan cards against OpenGL native: "
+                                                 f"{(cards.get('tolerance') or {}).get('first_reasons')}, controls "
+                                                 f"{cards.get('controls')}"])
         print(f"review sheets: {cards['review_sheets']}")
         print("N57B COMPARE " + ("PASS" if not failed else "FAIL: " + "; ".join(failed)))
         return 0
@@ -1194,9 +1206,9 @@ def main(argv: list[str] | None = None) -> int:
             comparisons["cards"] = vulkan_cards_against_opengl(out / "work")
             comparisons["cards"]["review_sheets"] = review_sheets(out / "work", out)
             if not comparisons["cards"].get("pass"):
-                failed.append(f"Vulkan cards against OpenGL native: {comparisons['cards'].get('outlier_share')} of "
-                              "card pixels more than 1 level apart, "
-                              f"{(comparisons['cards'].get('tolerance') or {}).get('first_reasons')}")
+                failed.append("Vulkan cards against OpenGL native: "
+                              f"{(comparisons['cards'].get('tolerance') or {}).get('first_reasons')}, controls "
+                              f"{comparisons['cards'].get('controls')}")
     if not environment["clean"]:
         failed.append(f"environment: {', '.join(environment['contaminating_set'])} set")
     summary = {"apis": args.apis, "rounds": args.rounds, "environment": environment,

@@ -628,12 +628,6 @@ are measured above a handful per frame, one pipeline and one indirect call with 
 (`gl_DrawID`, `gl_BaseInstance`, `gl_BaseVertex`) replaces a draw per batch; the port records which backends report
 the feature (D3D11 is not stated).
 
-- [ ] The glass cards' grain on Vulkan (found routing `backdrop_pyramid_check` through the shared tolerance): the
-  card material's grain uses a float hash that differs by backend, up to 12 levels on at most 8 pixels a region,
-  still judged by the old `CARD_OUTLIER_SHARE` (levels unbounded, audit 4 L1). Fix as N5.2b did: an integer hash
-  from the pixel in the card grain shader, so both backends agree; the lead reviews before/after stills on bright and
-  dark wallpapers (the grain pattern changes once); then the class is judged by the shared tolerance and
-  `CARD_OUTLIER_SHARE` is deleted.
 - [ ] N5.1 Spline Curve leftover: its Studio is not offered on Vulkan (`STUDIO_PREVIEW_BACKENDS`), the same open
   item as Spectrum's; both close with N5.8.
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
