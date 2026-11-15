@@ -564,8 +564,9 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
 - [ ] N3.2 Mesh and buffer resources: static meshes built once and kept, dynamic buffers with dynamic offsets,
   instancing, pre-built resource bindings per ring slot (no allocation per frame), instanced quads in place of
   point sprites (Bubble, Neon Lake's marks, Waveform's sparks use `gl_PointSize`).
-  - The design and its open choices A to J: decisions doc, "N3.2 draft" (15 Nov). No C++ before the lead answers them.
-    Phase 2 starts by merging main (N3.1, ABI 17, must be in).
+  - The design: decisions doc D15 (decided 15 Nov; the lead accepted A to J, G built now with no consumer: the batched
+    draw with its two packs). Built on N3.1's branch merged in under audit; main is merged when N3.1 lands. C's move to
+    the block arena stops and is reported if any listed proof moves a pixel.
   - [ ] Contract: the lead's answers to A to J folded into the decisions doc as "D15, decided", the draft's text
     replaced, not kept beside it. It states: a pass's own vertex stage and its geometry (topology: triangles or a
     triangle strip, points refused; vertex count, a number or the mesh's; instance count by name from the record or a
@@ -604,6 +605,10 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       resources), offsets given at each `setShaderResources`; draws recorded `draw(vertices, instances, firstVertex, 0)`,
       `drawIndirect` from the indirect stream; the content latch keyed on the meshes' and streams' generations too; the
       state's meshes, streams and arena.
+    - [ ] The batched draw (choice G, built with no consumer): a pass's table of batches (first instance, instance
+      count, block values) recorded as one `drawIndirect` with `gl_DrawID` over core-written commands where
+      `DrawIndirect`, `DrawIndirectMulti` and `ShaderDrawParameters` are reported, else one draw a batch with its block
+      at its dynamic offset; the pass's two packs (`draw_parameters` and plain), refused without the plain one.
     - [ ] Core member for vertex stages (choice H): item pixels to the drawn target's clip space, from the card and
       the target with the conventions' clip Y, in `kModeCoreMembers` with its own row; a GPU-free test of both
       backends' values against the Python renderer's `uMatrix` for a card at the target's origin.
@@ -671,6 +676,9 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     - [ ] Regressions on the same module: `generic_mode_check.py`, `fullscreen_pass_check.py`,
       `background_layer_check.py`, `backdrop_pyramid_check.py`, `transition_route_check.py`, `scene_target_check.py`
       verdicts unchanged, outputs bit-identical after the move to the block arena (choice C).
+      - [ ] Spline Curve's `devcurve_check.py` too, once it is on main; any proof that moves a pixel stops the work.
+    - [ ] The batched draw: the indirect form equals the per-batch form pixel for pixel on each backend that reports
+      the features; the per-batch form on a device control that hides them.
   - [ ] The stream ring: QRhi dynamic buffers against the persistent-mapped pair (D5.3) at the product's ring
     sizes on both backends; the pair is built only if it wins by 0.05 ms or more (D8 plus 8).
     - [ ] Measured in `mesh_buffer_check.py --rounds stream_ring`, on a quiet GPU (`nvidia-smi` utilisation before
