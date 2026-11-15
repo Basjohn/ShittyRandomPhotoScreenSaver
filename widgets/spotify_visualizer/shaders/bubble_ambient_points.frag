@@ -5,6 +5,7 @@ layout(std140, binding = 18) uniform BubbleAmbientPoints {
     float uGlowSpread;
     vec4 uMicroColor;
     vec4 uParticleColor;
+    vec2 u_target_px;
 };
 layout(location = 0) in float vOpacity;
 layout(location = 1) in float vGlow;
@@ -13,6 +14,7 @@ layout(location = 3) in float vCoreRatio;
 layout(location = 4) in float vSpriteRadius;
 layout(location = 5) in float vCoreRadius;
 layout(location = 6) in float vHaloRadius;
+layout(location = 7) in vec2 vSpriteCoord;  // gl_PointCoord's orientation
 
 
 layout(location=0) out vec4 fragColor;   // premultiplied sRGB coverage (8-bit)
@@ -23,7 +25,7 @@ vec3 srgbToLinear(vec3 c) {
 }
 
 void main() {
-    vec2 p = 2.0 * (gl_PointCoord - vec2(0.5));
+    vec2 p = 2.0 * (vSpriteCoord - vec2(0.5));
     float d = length(p);
     if (d > 1.0) discard;
     float alpha;
@@ -36,7 +38,7 @@ void main() {
         alpha = clamp(ring + glass + glint,0.0,1.0) * uMicroColor.a;
         rgb = mix(uMicroColor.rgb,vec3(1.0),glint*0.28);
     } else {
-        // Distances in texels from the true (sub-pixel) centre: gl_PointCoord is
+        // Distances in texels from the true (sub-pixel) centre: the sprite coordinate is
         // exact, so the profile is shift-invariant as the particle drifts.
         float r = d * vSpriteRadius;
         // Fixed physical core, never breathing. It keeps the accepted edge
