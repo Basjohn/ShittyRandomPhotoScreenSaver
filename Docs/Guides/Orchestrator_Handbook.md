@@ -194,6 +194,8 @@ Added 12 Nov 2026 with the native core's direction (`Docs/Future_Work/Native_Cor
 
   Agents never start a build, remote included. The lead's frozen products and installer payloads go through
   GitHub; the operator may compile locally (including the installer, since no installer is compiled on GitHub).
+- **Port briefs cite playbook sections, not restated rules**: `Docs/Guides/Native_Port_Playbook.md` holds the port
+  checklist, the standard proof and each primitive's contract, traps and proof; a brief names the sections it uses.
 - **A port is audited on both backends.** Beside section 4's checks: the OpenGL parity record against the Python
   renderer, the Vulkan record against the native OpenGL result (hidden host), the thread probe (no call with a
   Python thread state), GPU time per pass, and the Python renderer deleted in the same change (a transition's at
