@@ -1445,7 +1445,13 @@ core's plan mirrored) and the geometry include (`srpss_geometry.glsl`, `SRPSS_GE
   or a draw count). Each record writes only the used bytes (none at 0): the storage route uploads a view of them
   (`QByteArray::fromRawData` over the bytes kept across records, no copy, nothing allocated), the instance route
   writes them by the fast path; bytes past the used length keep what an earlier record wrote. A variable-length
-  consumer (Waveform's cohorts) pays for what it carries, never the capacity.
+  consumer (Waveform's cohorts) pays for what it carries, never the capacity. Proved on e95d9306 (`--rounds used`, both
+  backends): 40 of 192 sprites write 960 bytes a record; a beam drawn past its used points equals the composite of the
+  two records exactly; a record whose used length breaks its rule is refused by the reader and writes nothing.
+- *The draw parameters' values* (read back as colour from the multi-draw, first vertex 4): `gl_DrawID` is the batch
+  and `gl_BaseInstance` 0 on both backends; `gl_BaseVertex` is 4 on Vulkan (the command's first vertex) and 0 on
+  OpenGL (`ARB_shader_draw_parameters`: a non-indexed draw has no base vertex), so a shader never reads
+  `gl_BaseVertex` for a non-indexed draw. A culled sprite (`srpssSpriteCulled`) draws nothing on both backends.
 - The built-in `quad` is made only for a program that draws it (a program without it holds no mesh).
 - A content whose program draws a mesh the item no longer holds draws nothing, its reason naming the mesh.
 - The record's render-thread time is counted (`mesh_buffers_records_timed`, `_record_ns`, `_stream_write_ns`), timed

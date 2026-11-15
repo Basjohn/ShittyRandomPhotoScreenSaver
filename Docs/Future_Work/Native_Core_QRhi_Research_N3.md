@@ -567,7 +567,9 @@ What this means for N3.x:
 - Q5: answered by the same proof: `qsb` bakes `gl_DrawID`, `gl_BaseInstance` and `gl_BaseVertex` for SPIR-V and GLSL
   460 and 430, and HLSL 5.0 refuses them ("Unsupported builtin in HLSL: 4426"), so draw-parameter packs are SPIR-V and
   GLSL only (D15). QRhi reports `DrawIndirect`, `DrawIndirectMulti` and `ShaderDrawParameters` on both of this
-  machine's backends, and the multi-draw with `gl_DrawID` is recorded on both and equals the per-batch form. A direct
+  machine's backends, and the multi-draw with `gl_DrawID` is recorded on both and equals the per-batch form. Read back
+  per backend (first vertex 4): `gl_DrawID` the batch and `gl_BaseInstance` 0 on both; `gl_BaseVertex` 4 on Vulkan and
+  0 on OpenGL (a non-indexed draw has no base vertex there). A direct
   draw's `firstInstance` 3 is ignored on OpenGL and moves the instance index on Vulkan (the reason for D15's "always
   0"). `firstInstance` in indirect commands on GL 4.0/4.1 is not tested (no such device here; the core never sets it).
 - Q6: measured (`mesh_buffer_check.py --rounds stream_ring`, 15 Nov 2026): every QRhi route at 4 KiB to 288 KiB is
