@@ -647,20 +647,28 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     stage; `generateMips` is not it (0.16 ms with the clip; Python's 0.11; storage kind irrelevant); dropping the capture
     changes nothing; only a few sprites cost nothing. Not an upload stall either (the sprites have no instance stream;
     the few-sprites and full variants upload the same block arena: D17). Remaining steps, in order:
-    - [ ] Build the head with the `time_defocus_draws` control (f2495f1b0 or later: the constructor fix for 51adb6ed6's
-      MSVC error) and run, on a quiet GPU (`nvidia-smi` at P8 and under 15 %, no SRPSS running, no game60):
-      `python native/core/python/post_stage_check.py --module-dir release/native_module --apis opengl --rounds
-      defocus_draws --label n34_defocus_draws`. Read `results.opengl.defocus_draws.facts`: per sample count and variant
-      (`full`, `few_sprites`, `no_sprites`) the gather's and the sprites' own GPU time (`gather_ms`, `sprites_ms`) beside
-      the whole record (`record_median_ms`). Every variant must have `draws_timed` at least 30 and `skipped` small.
+    - [x] The `time_defocus_draws` control is built (6ba2776d, in `release/native_module`). Its one run so far was on
+      a GPU loaded by the operator's game (P0, 50 to 60 %; D17 has the figures): at 4K 1x the sprites' own interval
+      differs by only 0.06 ms between `full` and `no_sprites` and the gather's by 0.6, while the whole record differs
+      by 1.7 ms. That points to case (ii) below; it must be confirmed on a quiet GPU.
+    - [ ] Rerun on a quiet GPU (`nvidia-smi --query-gpu=pstate,utilization.gpu --format=csv,noheader` at P8 and under
+      15 % before and after; `nvidia-smi --query-compute-apps=process_name --format=csv` with no game; no SRPSS running,
+      no game60): `python native/core/python/post_stage_check.py --module-dir release/native_module --apis opengl
+      --rounds defocus_draws --label n34_defocus_draws`. Read `results.opengl.defocus_draws.facts`: per sample count and
+      variant (`full`, `few_sprites`, `no_sprites`) `gather_ms` and `sprites_ms` beside `record_median_ms`. Every
+      variant must have `draws_timed` at least 30 and `skipped` near 0. Then delete the run's `work` folder.
     - [ ] Read the result. (i) If `sprites_ms` for `full` minus `no_sprites` is about the 2.6 ms (1x) the split
       measured, the sprites' draw itself is slow on OpenGL: compare its state with Python's `DefocusLayer.composite`
-      sprite draw (`rendering/quick/scene3d/defocus.py:412-418`) one difference at a time, each a harness-only change
-      measured with this round: the masked second draw buffer of the onto target (Python's emission index is masked by
-      `glColorMaski` too), the viewport (the core's covers the layer's allocation, Python's the card), the blend
-      (colour ONE, ONE; alpha ZERO, ONE), the instance count (the core's is the read level's texels over the
-      allocation). (ii) If `sprites_ms` is small and the record still carries the 2.6 ms, the time is outside the two
-      draws (look at the onto run's end and `recordNearest` next, with the same marks moved).
+      sprite draw (`rendering/quick/scene3d/defocus.py:412-418`) one difference at a time, each measured with this round:
+      the masked second draw buffer of the onto target (Python's emission index is masked by `glColorMaski` too), the
+      viewport (the core's covers the layer's allocation, Python's the card), the blend (colour ONE, ONE; alpha ZERO,
+      ONE), the instance count (the core's is the read level's texels over the allocation). (ii) If `sprites_ms` stays
+      small while the record still carries the 2.6 ms (the loaded run's indication), the time is outside the two draws:
+      add marks in `post_stages.cpp` `markDefocus` (a fourth after `cb->endPass()` in `mode_content.cpp`
+      `recordDefocus`, and marks around the bloom step and the composite step in `recordPasses`), one C++ change and one
+      build, then the same round; the step whose interval grows with the sprites is the one to compare with Python's
+      `SceneTarget.end` (the scene colour the sprites wrote is next read by the composite; on OpenGL a texture written
+      by many overlapping blended draws may be decompressed or flushed before its next sampling).
     - [ ] Fix it in the core if it is ours (one change, a build, the split again: `--rounds defocus_cost` on both APIs,
       the OpenGL sprite raster near Python's and Vulkan unchanged), or record it in D17 as the driver's with the figures
       if no state difference moves it. Then rerun `--rounds parity` (rules (a) and (b) must still pass) and record the

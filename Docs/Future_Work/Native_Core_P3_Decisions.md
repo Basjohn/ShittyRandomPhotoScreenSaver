@@ -2037,9 +2037,16 @@ Python face is `rendering/native/mode.py` (`TransparencyTarget`, `TransparencyRe
     buffer, does not hold: the sprites have no instance stream (their pipeline has an empty vertex input layout; each
     instance reads its texel by `gl_InstanceIndex`), the record's only upload is the block arena, and the "few sprites"
     and "full" variants upload the same arena (they differ only in `u_defocus_highlight`) yet differ by the whole 2.6
-    ms. Its variants (a still record, a storage stream, a mesh) therefore have nothing to move. Next, built for the
-    following run: the `time_defocus_draws` control (OpenGL; GL timestamps before the gather, between, after the
-    sprites, read back latched) and `post_stage_check.py --apis opengl --rounds defocus_draws`.
+    ms. Its variants (a still record, a storage stream, a mesh) therefore have nothing to move. The `time_defocus_draws`
+    control (OpenGL; GL timestamps before the gather, between it and the sprites, after them, read back latched; built
+    at 6ba2776d) ran once, on a GPU loaded by a game the operator was playing (P0, 50 to 60 %; evidence
+    `native_core/n3_4/20261115_n34_defocus_draws_loaded`, so the absolute figures are inflated about 1.5 to 3 times):
+    at 4K 1x the sprites' own interval was 3.14 ms with the sprites, 2.99 with the highlight's few and 3.08 with none
+    (the vertex stage over 2.09 million instances, culled or not), and the gather's 3.67, 3.13 and 3.05, while the
+    whole record took 10.68, 8.95 and 8.98 ms. So the record's extra time with the sprites (1.7 ms here) lies mostly
+    outside the sprites' own timestamp interval (only 0.06 ms of it; 0.6 in the gather's). GL's timestamp is taken
+    once the previous commands are "fully realized", so the raster itself is not the cost; where it lands is the
+    plan box's next step, on a quiet GPU.
   - The render thread's record (`stage_record_ns`, the whole record of a program with stages): on OpenGL 19 to 20 us
     for EB's shape at every size and count (6.7 to 9.5 us with no stage), 33 us mean over the steady minute at 4x; on
     Vulkan 1.1 to 1.4 ms, which is the validation layer's own CPU work (22 us with no stage under the same layer); the
