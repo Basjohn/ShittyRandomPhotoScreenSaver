@@ -429,6 +429,20 @@ Each foundation slice adds what it learned here.
 - Prepare while the displays are idle, never at the image change: that resolves its transition ~14 ms before the
   first frame. The next transition is settled when the previous one completes (a reserved Random pick and a batch
   seed), so the batch meets the spec that was warmed and the geometry COMPUTE built.
+- Seeds are per display (1D.15, 15 Nov 2026). A batch shares one type, its Settings and its direction; each
+  display's run re-draws its run seeds (`RUN_SEED_FIELDS`) from the batch seed and that display's `screen_key`
+  (`ResolvedQuickTransitionSpec.for_display`), never its index, so Liquid Lens, Glass Shatter, Crumble, Jigsaw,
+  Particle and every other seeded transition take a different path or pattern on each display, and a display keeps
+  its own sequence across a display move. The heavy-geometry transitions (Glass Shatter, Crumble, Jigsaw) therefore
+  prepare one geometry set per display in the idle gap: the first display's when the next run is settled, each next
+  display's when the spaced warm chain reaches it (one set per step), and admission builds only what is still missing.
+  Measured cost (hidden host, two 2560x1440 displays, canonical Settings, COMPUTE timed synchronously, 12 batches,
+  median / p90 ms): before, one set shared per batch: Glass Shatter 33.5 / 38.5, Crumble 6.9 / 7.6, Jigsaw 100.8 /
+  111.0; after, per display: Glass Shatter 28.5 / 29.6, Crumble 5.6 / 6.0, Jigsaw 82.7 / 85.0, so 57 / 11 / 166 ms
+  per batch for two displays (the builder is unchanged; the per-set difference between the runs is machine noise).
+  In both runs every display's set was already prepared when its batch was admitted. Evidence:
+  `.artifacts/evidence/transitions/per_display_seeds/prepare_time/`; re-measure with
+  `per_display_seeds_probe.py prepare` beside it (no window).
 - Compile gradually on frames the window renders anyway: one program per step, steps at least 0.2 s apart. No
   startup work, no bursts, no timers, no threads, no polling, no forced frames, and no driver parallel-compile
   threads.
