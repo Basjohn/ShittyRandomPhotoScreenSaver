@@ -526,13 +526,15 @@ def _instance_used(core, engine, app, api: str, packs: dict, host) -> dict:
         core.module.mesh_buffer_control(json.dumps({"instances_past_used": False}))
     facts["control_past_used"] = {
         "frame1_vs_frame2": _compare(past[0], past[1]), "frame2_vs_frame3": _compare(past[1], past[2]),
-        "frame1_vs_fresh_40": _compare(past[0], fresh)}
+        "against_fresh_40": [_compare(frame, fresh) for frame in past]}
     differs = facts["control_past_used"]["frame1_vs_frame2"]["past1"] > 100
     if api == "vulkan":
         checks["control_past_used_alternates_on_vulkan"] = differs
     else:
         facts["control_past_used"]["opengl_frames_differ"] = differs  # undefined bytes: recorded, not judged
-    checks["control_past_used_draws_past_the_40"] = not facts["control_past_used"]["frame1_vs_fresh_40"]["exact"]
+    # Some frame reads past the 40 (on Vulkan a slot not yet written holds zeros, so that frame can equal the 40).
+    checks["control_past_used_draws_past_the_40"] = not all(
+        c["exact"] for c in facts["control_past_used"]["against_fresh_40"])
     return {"checks": checks, "facts": facts}
 
 
