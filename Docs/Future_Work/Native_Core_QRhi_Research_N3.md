@@ -359,7 +359,7 @@ What this means for N3.x:
   revealage inverted instead (clear 0, blend `One,One,Add` of coverage, resolve with `1 - r`), or clear it with a
   fullscreen draw. Decide in the OIT design; this is a QRhi limit, not a backend one.
 - Do not use `Src1*` factors: GL has none.
-- UNSETTLED: that RGBA16F, R16F and R8 are blendable colour attachments on every device. QRhi does not check. Vulkan
+- SETTLED by N3.4 (below): that RGBA16F, R16F and R8 are blendable colour attachments on every device. QRhi does not check. Vulkan
   guarantees blend support for the common 16-bit-float and 8-bit-UNORM colour formats by specification (from the
   Vulkan format-requirements tables; not fetched here); GL 3.0+ makes float colour buffers renderable and blendable.
   A one-time device probe (`vkGetPhysicalDeviceFormatProperties` blend bit) settles it.
@@ -408,6 +408,27 @@ What this means for N3.x:
 - Do not count on `textureLod` into a texture while that texture is a render target on GL.
 - Layout and barriers are QRhi's for the chain: each pass start emits one whole-image barrier per texture; a chain of
   K levels in separate textures costs K barriers, no more.
+
+**Settled by N3.4 (D17, proved on the GitHub build 4c0ee9b7, 15 Nov 2026; `post_stage_check.py`).**
+- Section 8, blendability: the core reads `VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT` for RGBA8, RGBA16F, RGBA32F,
+  R16F and R32F once per device it creates (`vulkan_device_facts`' `color_attachment_blend`); the RTX 4090 reports all.
+  `independentBlend` and `sampleRateShading` are read from the device the core enables (D6) and gate the stage; QRhi's
+  `PerRenderTargetBlending` is true on Vulkan whatever the device, so N3.1's check of differing attachment states reads
+  the core's facts too. A device made without `independentBlend` with the gate bypassed draws pipelines the layer reports
+  (`VUID-VkPipelineColorBlendStateCreateInfo-pAttachments-00605`).
+- Section 8, the clears: the transparency target is cleared by rule B's draw (a value per attachment), coverage stored
+  inverted for half-float precision (D17 choice B); the stored coverage equals the textbook revealage's complement within
+  0.56 ulp on the harness's stack.
+- Section 8, the depth load: the transparency run's load of the borrowed depth after the capture sampled it is the Q3
+  hazard (READ_AFTER_WRITE on depth attachment 3 with the prime skipped); `primeDepthForLoad` removes it.
+- Section 9: the bloom chain is one texture a level (the "same texture" control: the layer's layout errors
+  `VUID-vkCmdDraw-imageLayout-00344` and its barrier errors). `generateMips` is admitted for the defocus layer alone:
+  OpenGL's equals Python's `glGenerateTextureMipmap` at every level; Vulkan's linear blit equals it wherever a level
+  halves an even size and differs on a level made from an odd size (the read level is capped there). Qt 6.12.0's pass
+  tracker keeps the earlier of two shader stages that read one texture in one pass (the defocus gather and sprites), so
+  the next barrier on it leaves the later stage's reads out of its first scope (WRITE_AFTER_READ at a readback's
+  transition); the core chains them after that pass (`targets.h` `chainShaderReads`).
+- Section 9, the GL feedback loop on a sampled level: not exercised (no pass samples a texture it renders into).
 
 ---
 
@@ -846,8 +867,9 @@ What this means for N4.b and the other N4 primitives:
 
 ## Open items in one place
 - D14 was not found (see the top); re-check this file against it.
-- Round 2: section 8, device probe for blend support of the OIT formats and enabling `independentBlend`, `dualSrcBlend`
-  not needed. Section 9, GL feedback loop on a sampled level behaviour on the 4090. Section 10, two-window cache
+- Round 2: section 8 settled by N3.4 (the blend facts read per device, the gate, `dualSrcBlend` not needed). Section 9
+  settled by N3.4 but for the GL feedback loop on a sampled level (not exercised: the core never samples a texture it
+  renders into). Section 10, two-window cache
   sharing. Section 11, `setGraphicsDevice` after loss and its threading, GL loss detection. Section 12, nothing open.
 - Round 3: section 13, compare direction (one-texel test on both backends), `D32_SFLOAT` attachment and linear-filter
   facts, vertex-only GL pipeline link, colourless GL framebuffer read buffer. Section 14, no `RG16F` in QRhi (choose

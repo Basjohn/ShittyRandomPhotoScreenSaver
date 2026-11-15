@@ -50,6 +50,12 @@ int vulkanLiveDevices();
 // maxDescriptorSetUniformBuffersDynamic, and the multiDrawIndirect, drawIndirectFirstInstance and
 // shaderDrawParameters features it enabled (every supported one: Qt's feature set).
 QJsonObject vulkanDeviceFacts(quint64 device);
+// N3.4 (D17 point 3): the facts also hold independent_blend and sample_rate_shading (the features as enabled) and
+// color_attachment_blend (per target format: VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT, optimal tiling).
+// Harness only (D17's negative control): the next devices are created with independentBlend off and their fact false,
+// a device that lacks the feature; false restores it. Read at each device's creation.
+void setDeviceWithoutIndependentBlend(bool without);
+bool deviceWithoutIndependentBlend();
 
 // One VkDevice for one Qt Quick window, on the process instance.
 class VulkanDevice

@@ -140,6 +140,14 @@ never ships.
     trigger has new work (`frame`, or a record `u32` field), `u_srpss_compute` telling the shader (trigger, last trigger,
     fresh, dispatches); every barrier QRhi's, from each binding's declared access, checked against the pack's
     qualifiers. The harness readback and controls (`compute_control`). Counted in `composite_live` (`compute_*`).
+  - `post_stages.*` (N3.4, decision D17): transparency and post-processing as stages of a program, each absent unless
+    declared: the device gate (`transparencyGate`, from the core's own device facts; N3.1's per-attachment check reads
+    them too, `perTargetBlendReal`), the bloom chains (four RGBA16F textures, one a level, never `generateMips`), the
+    defocus steps (the read level's texture; the layer's mips by QRhi's `generateMips`, the read level capped by
+    `defocusReadLevelCap`), the core's stage shaders (`scene_oit_resolve*`, `bloom_*`, `composite_*`, `defocus_*`, each
+    held to its Python source by `tests/test_native_post_stages.py`), the counts (`composite_live`'s `stage_*`, the
+    record's render-thread time among them) and the harness controls (`stage_control`). The transparency targets and
+    the mipped layer live in `scene_targets.*`, the steps in `mode_content.*`'s record.
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
     loader's runtime rule); Qt's types instead.
@@ -207,6 +215,15 @@ never ships.
   readback re-record; the state against a CPU reference; the fresh dispatch and the lost edge of a node made again);
   copy and clear; nothing at rest; no object in steady records; retirement; synchronisation validation over consecutive
   records with the two controls' hazards in their own phases; cost against the Python path).
+- `python/post_stage_check.py`: N3.4's proof on the harness scenes `python/post_stages/` (Extruded Bubble's shape:
+  opaque with emission, a capture, three transparent discs, the resolve, a near layer and its defocus, bloom, the HDR
+  composite; the Oscilloscope's: MAX blends and glow; an opaque scene with glow; a one-attachment owner for the sorted
+  fallback): rule (a) against the Python stages (`SceneTarget`, `BloomChain`, `DefocusLayer`) under the shared pixel
+  tolerance and rule (b), the defocus layer's every mip level; the analytic checks (inverted coverage, two draw orders,
+  light past 1, no glow without emission, the per-sample resolve and its first-sample control); the gate's fallbacks by
+  control and the defocus read level's cap; nothing at rest; a steady minute; retirement; synchronisation validation
+  with each control in its own phase; cost against the Python stages; `--rounds defocus_cost python_defocus_cost`: the
+  defocus step's cost split; `--rounds showcase`: the primitive's WebP).
 - `python/timer_check.py`: N2.6's proof (off is free by count, a known-cost pass scaled N times and its empty-bracket
   control, QRhi's frame figure, latched reads in a real window with the waiting read as control, the frame trace and
   its report, the two forms against each other, validation; `timer_analysis.py`).
@@ -282,6 +299,22 @@ worked example (harness-only); a product mode does the same in the product's pla
    restarts its history when fresh; the owner hears of a lost state through `NativeMode.on_state_lost`. Images follow
    their surface through `NativeMode.image_size`. Nothing is read back in the product (the drift's pair self-check is
    the one named exception, D16 choice G).
+4f. **Its transparency and post-processing** (N3.4, decision D17, when it draws order-independent transparency, glow,
+   an HDR tone map or a defocused near layer): stages in the program, each absent unless declared. A
+   `TransparencyTarget(name, of, borrow)` over a surface-sized scene target with depth; its passes write
+   `SCENE_OIT_GLSL`'s accumulation and coverage at locations 0 and 1 and a borrowed attachment at 2 on (the core fixes
+   the first two blends and depth tests against the owner's depth, never writing it), and each ships its `sorted_pack`
+   (the same bindings, premultiplied colour at location 0 and the borrowed attachments after it, no `gl_FragDepth`): what
+   a device the gate does not admit draws into the owner. A `TransparencyResolve` follows the target's passes, before
+   anything samples the owner. A `BloomStep(name, "<target>.<attachment>")` makes `"<name>.glow"`; a
+   `CompositeStep(name, form, scene, glow)` draws the surface with the core's composite (`overlay`, `overlay_glow` with
+   `u_bloom_strength` and `u_hdr_exposure`, `opaque_glow`); a mipped `ModeTarget(..., mips=True)` with a colour and a
+   circle (both RGBA16F, drawn premultiplied over and MAX) and a `DefocusStep(name, layer, onto)` with
+   `u_defocus_radius`, `u_defocus_highlight` and `u_defocus_level` (Python resolves the level, `defocus.py`
+   `_read_size`; the core refuses one past `defocusReadLevelCap`). Members are settings or record fields by the one
+   rule; a stage is turned on or off by the program, never per record. On a device without `independentBlend` a pass
+   writing its attachments with differing states is refused: the mode is not offered on that backend (logged once by
+   Python).
 5. **What is refused, with its reason:** a setting or a record field no pass declares (unknown); a member no source
    fills (unfilled); a name with two owners (a setting or a field naming a core member, a setting naming a field); a
    value of the wrong size or without a defined conversion (a refused frame keeps the last drawn one); a sampler the

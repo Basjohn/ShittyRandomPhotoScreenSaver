@@ -52,6 +52,12 @@ QRhi compute pass and dispatches only when its trigger has new work (``u_srpss_c
 its last value, whether the storage is fresh, and the dispatches since). Draws read a storage buffer as storage, per
 instance or as indirect commands, and an image through a sampler. Nothing is read back in the product; a content made
 again finds its storage gone and the owner's :meth:`NativeMode.on_state_lost` is told once.
+Stages (N3.4, decision D17; ``native/core/src/post_stages.h``), each data in the program and absent unless declared:
+depth-aware order-independent transparency (:class:`TransparencyTarget`, its passes with their sorted packs, and a
+:class:`TransparencyResolve`), bloom (:class:`BloomStep`), the composite onto the card with the HDR tone map
+(:class:`CompositeStep`) and the defocus layer (a ``mips`` :class:`ModeTarget` and a :class:`DefocusStep`). The core's
+shaders draw them (the Python oracles: ``rendering/quick/scene3d/target.py``, ``post.py``, ``defocus.py``); their
+strengths, exposure, radius and level are block members the settings or the record fill.
 """
 from __future__ import annotations
 
@@ -207,12 +213,17 @@ class ModeTarget:
     depth: bool = False
     samples: int = 1
     previous_frame: bool = False
+    #: N3.4 (D17 point 6): a mipped target (the defocus layer): single-sampled, surface-sized, without depth; its mips
+    #: are QRhi's generateMips when a :class:`DefocusStep` reads it (D17 choice G: this layer only).
+    mips: bool = False
 
     def __post_init__(self) -> None:
         if not 1 <= len(self.colour) <= MAX_TARGET_COLOUR:
             raise ValueError(f"a target has 1 to {MAX_TARGET_COLOUR} colour attachments")
         if not 1 <= int(self.samples) <= MAX_TARGET_SAMPLES:
             raise ValueError(f"a target requests 1 to {MAX_TARGET_SAMPLES} samples")
+        if self.mips and (int(self.samples) != 1 or self.size is not None or self.depth or self.previous_frame):
+            raise ValueError("a mipped target is single-sampled, surface-sized, without depth or previous_frame")
 
     def declaration(self) -> dict:
         entry: dict[str, Any] = {"name": self.name,
@@ -224,7 +235,29 @@ class ModeTarget:
             entry["samples"] = int(self.samples)
         if self.previous_frame:
             entry["previous_frame"] = True
+        if self.mips:
+            entry["mips"] = True
         return entry
+
+
+@dataclass(frozen=True)
+class TransparencyTarget:
+    """N3.4 (D17 point 2): a transparency target of the scene target ``of`` (declared before it, surface-sized, with
+    depth): its own accumulation (``accum``, RGBA16F) and coverage (``coverage``, R16F: the revealage stored inverted,
+    choice B), both cleared to 0, then the owner's attachments it ``borrow`` s (never the owner's colour 0), at the
+    owner's size and samples, over the owner's depth (loaded, tested, never written). Its passes write
+    ``SCENE_OIT_GLSL``'s outputs at locations 0 and 1 and a borrowed attachment at 2 on; the core fixes the first two
+    blends. A :class:`TransparencyResolve` composites it onto the owner."""
+
+    name: str
+    of: str
+    borrow: tuple[str, ...] = ()
+
+    def declaration(self) -> dict:
+        transparency: dict[str, Any] = {"of": self.of}
+        if self.borrow:
+            transparency["borrow"] = list(self.borrow)
+        return {"name": self.name, "transparency": transparency}
 
 
 #: N3.2 (D15): a pass's topology (points are refused: instanced quads, D5.6 row 11), cull, stream kinds, blend operations
@@ -419,6 +452,9 @@ class ModePass:
     depth_test: str | None = None
     depth_write: bool = False
     geometry: PassGeometry | None = None   # N3.2: its own vertex stage (None: the core's triangle)
+    #: N3.4 (D17 choice D): a pass on a :class:`TransparencyTarget` ships its sorted pack, what a device the gate does not
+    #: admit draws into the owner (premultiplied over); it binds what ``pack`` binds and writes the owner's attachments.
+    sorted_pack: bytes | None = None
 
     def __post_init__(self) -> None:
         _blend_declaration(self.blend)
@@ -429,12 +465,18 @@ class ModePass:
         entry: dict[str, Any] = {"name": self.name, "blend": _blend_declaration(self.blend)}
         if self.geometry is not None:
             entry.update(self.geometry.declaration())
+        if self.sorted_pack is not None:
+            entry["sorted"] = True
         if self.samplers:
             entry["samplers"] = [s.declaration() for s in self.samplers]
         if self.target is not None:
             entry["target"] = self.target
         if self.outputs:
             entry["attachments"] = [o.declaration() for o in self.outputs]
+            if self.sorted_pack is not None:
+                # A transparent pass: the accumulation's and the coverage's blends are the core's (D17 point 2), so
+                # their entries are {}; a borrowed attachment (location 2 on) keeps its declaration.
+                entry["attachments"][:2] = [{} for _ in entry["attachments"][:2]]
         if self.depth_test is not None:
             entry["depth"] = {"test": self.depth_test, "write": bool(self.depth_write)}
         return entry
@@ -566,14 +608,102 @@ class CapturePass:
         return {"name": self.name, "capture": self.target}
 
 
-def program_json(passes: Sequence[ModePass | CapturePass | ComputePass], targets: Sequence[ModeTarget] = (),
+#: N3.4 (D17 point 5): the composite step's forms, and the alpha a transparency resolve writes.
+COMPOSITE_FORMS = ("overlay", "overlay_glow", "opaque_glow")
+RESOLVE_ALPHAS = ("coverage", "keep")
+#: N3.4: the bloom chain's levels (``post.py`` ``BLOOM_LEVELS``), and the most bloom and defocus steps a program takes.
+BLOOM_LEVELS = 4
+MAX_BLOOM_STEPS = 2
+MAX_DEFOCUS_STEPS = 2
+
+
+@dataclass(frozen=True)
+class TransparencyResolve:
+    """N3.4 (D17 point 2): the step compositing the :class:`TransparencyTarget` ``target`` onto its owner's colour 0,
+    premultiplied, per sample when multisampled (choice C); ``alpha`` ``coverage`` adds the layer's coverage to the
+    owner's alpha (an overlay's, Python's ONE), ``keep`` keeps it (ZERO). It follows every pass on the target."""
+
+    name: str
+    target: str
+    alpha: str = "coverage"
+
+    def __post_init__(self) -> None:
+        if self.alpha not in RESOLVE_ALPHAS:
+            raise ValueError(f"unknown resolve alpha {self.alpha!r} (they are {', '.join(RESOLVE_ALPHAS)})")
+
+    def declaration(self) -> dict:
+        entry: dict[str, Any] = {"name": self.name, "transparency_resolve": self.target}
+        if self.alpha != "coverage":
+            entry["alpha"] = self.alpha
+        return entry
+
+
+@dataclass(frozen=True)
+class BloomStep:
+    """N3.4 (D17 point 4): the bloom chain of ``source`` (``"<target>.<attachment>"``, its resolve when multisampled):
+    ``BLOOM_LEVELS`` RGBA16F textures, one a level, the first downsample with the bright pass; its glow is read by a
+    later sampler as ``"<name>.glow"`` (half the source's allocation, linear)."""
+
+    name: str
+    source: str
+
+    def declaration(self) -> dict:
+        return {"name": self.name, "bloom": self.source}
+
+
+@dataclass(frozen=True)
+class CompositeStep:
+    """N3.4 (D17 point 5): the scene ``scene`` (``"<target>.<attachment>"``) onto the card's surface with the core's
+    composite (``COMPOSITE_FORMS``): ``overlay`` (straight colour times the fade), ``overlay_glow`` (premultiplied, the
+    glow at ``u_bloom_strength``, tone mapped at ``u_hdr_exposure`` when above 0, dithered where glow is added) or
+    ``opaque_glow``. ``glow`` is a :class:`BloomStep`'s ``"<name>.glow"`` (the glow forms only). Its block's
+    ``u_bloom_strength`` and ``u_hdr_exposure`` are settings or record fields, by the one rule."""
+
+    name: str
+    form: str
+    scene: str
+    glow: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.form not in COMPOSITE_FORMS:
+            raise ValueError(f"unknown composite {self.form!r} (the forms are {', '.join(COMPOSITE_FORMS)})")
+        if (self.glow is None) != (self.form == "overlay"):
+            raise ValueError("the glow forms read a bloom step's glow; the overlay reads none")
+
+    def declaration(self) -> dict:
+        entry: dict[str, Any] = {"name": self.name, "composite": self.form, "scene": self.scene}
+        if self.glow is not None:
+            entry["glow"] = self.glow
+        return entry
+
+
+@dataclass(frozen=True)
+class DefocusStep:
+    """N3.4 (D17 point 6): the defocus layer ``layer`` (a mipped target: premultiplied light, then the circle of
+    confusion, both RGBA16F) spread onto the scene target ``onto``: its mips (QRhi's generateMips), the clip at the read
+    level, the gather and the highlight sprites. Its block's ``u_defocus_radius``, ``u_defocus_highlight`` and
+    ``u_defocus_level`` (``defocus.py`` ``_read_size``: the read level for the radius) are settings or record fields;
+    the read level's texture and the sprite count are the core's."""
+
+    name: str
+    layer: str
+    onto: str
+
+    def declaration(self) -> dict:
+        return {"name": self.name, "defocus": self.layer, "onto": self.onto}
+
+
+_STEPS = (CapturePass, TransparencyResolve, BloomStep, CompositeStep, DefocusStep)
+
+
+def program_json(passes: Sequence[Any], targets: Sequence[ModeTarget | TransparencyTarget] = (),
                  streams: Sequence[ModeStream] = (), buffers: Sequence[StorageBuffer] = (),
                  images: Sequence[StorageImage] = ()) -> tuple[str, list[bytes]]:
     """The program's declaration and its packs, in pass order (a pass with samplers declares them; one without has no
     ``samplers`` key, N2.9's declaration as it was; N3.1: ``targets`` when there are any, a capture's pack empty; N3.2:
     ``streams`` when there are any, and after a geometry pass's fragment pack its vertex pack, then a batched one's
     draw-parameters pack; N3.3: ``buffers`` and ``images`` when there are any, a compute entry's pack its compute
-    shader)."""
+    shader; N3.4: a stage step's pack empty (its shaders are the core's), and a transparent pass's sorted pack last)."""
     declared = [p.declaration() for p in passes]
     program: dict[str, Any] = {"passes": declared}
     if targets:
@@ -586,9 +716,11 @@ def program_json(passes: Sequence[ModePass | CapturePass | ComputePass], targets
         program["images"] = [i.declaration() for i in images]
     packs: list[bytes] = []
     for p in passes:
-        packs.append(b"" if isinstance(p, CapturePass) else bytes(p.pack))
+        packs.append(b"" if isinstance(p, _STEPS) else bytes(p.pack))
         if isinstance(p, ModePass) and p.geometry is not None:
             packs.extend(p.geometry.packs())
+        if isinstance(p, ModePass) and p.sorted_pack is not None:
+            packs.append(bytes(p.sorted_pack))
     return json.dumps(program), packs
 
 

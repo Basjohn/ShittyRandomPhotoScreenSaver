@@ -79,6 +79,13 @@ int primeResolvesForPass(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *const *t
 // write in its second scope and tells QRhi the layout; elsewhere nothing. True when it recorded one.
 bool primeDepthForLoad(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *depth);
 
+// N3.4: a pass that samples one texture in both its vertex and its fragment stage (the defocus step's gather and
+// sprites read the layer). Qt 6.12.0's pass tracker keeps the earlier stage (vertex) as the texture's last use, so its
+// next barrier on it (generateMips' transition) leaves the fragment reads out of its first scope (synchronisation
+// validation's WRITE_AFTER_READ). On Vulkan this records, after that pass, an execution dependency from every vertex and
+// fragment shader stage to every later one, which QRhi's barrier chains after; elsewhere nothing. True when recorded.
+bool chainShaderReads(QRhi *rhi, QRhiCommandBuffer *cb);
+
 // The same for a texture outside any frame: an offscreen frame of its own, waited on (a target's creation edge before
 // any frame of the host exists, the hidden host's Quick target).
 QString primeForLoadOutsideFrame(QRhi *rhi, QRhiTexture *texture);

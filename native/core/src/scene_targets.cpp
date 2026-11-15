@@ -84,9 +84,17 @@ qint64 textureBytes(const QRhiTexture *texture)
 {
     if (!texture)
         return 0;
-    const QSize size = texture->pixelSize();
-    return qint64(size.width()) * qint64(size.height()) * qint64(textureBytesPerSample(texture->format()))
-        * qint64(qMax(1, texture->sampleCount()));
+    QSize size = texture->pixelSize();
+    const qint64 perTexel = qint64(textureBytesPerSample(texture->format())) * qint64(qMax(1, texture->sampleCount()));
+    qint64 bytes = qint64(size.width()) * qint64(size.height()) * perTexel;
+    if (texture->flags().testFlag(QRhiTexture::MipMapped)) {
+        // N3.4: a mipped target's every level (the defocus layer).
+        while (size.width() > 1 || size.height() > 1) {
+            size = QSize(qMax(1, size.width() / 2), qMax(1, size.height() / 2));
+            bytes += qint64(size.width()) * qint64(size.height()) * perTexel;
+        }
+    }
+    return bytes;
 }
 
 } // namespace
@@ -135,12 +143,14 @@ bool TargetDeclaration::sameLayout(const TargetDeclaration &o) const
 {
     if (name != o.name || depth != o.depth || depthRead != o.depthRead || depthSampled != o.depthSampled
         || samples != o.samples || capture != o.capture || colour.size() != o.colour.size()
-        || surfaceSized() != o.surfaceSized())
+        || surfaceSized() != o.surfaceSized()
+        || transparencyOf != o.transparencyOf || owner != o.owner || borrow != o.borrow || mips != o.mips) // N3.4
         return false;
     for (qsizetype i = 0; i < colour.size(); ++i) {
         const TargetAttachment &a = colour.at(i);
         const TargetAttachment &b = o.colour.at(i);
-        if (a.name != b.name || a.format != b.format || a.read != b.read || a.nearest != b.nearest)
+        if (a.name != b.name || a.format != b.format || a.read != b.read || a.nearest != b.nearest
+            || a.borrowed != b.borrowed || a.ownerColour != b.ownerColour)
             return false;
         for (int c = 0; c < 4; ++c) {
             if (a.clear[c] != b.clear[c])
@@ -175,6 +185,7 @@ QJsonObject TargetDeclaration::toJson() const
         c.insert(QStringLiteral("clear"), QJsonArray { a.clear[0], a.clear[1], a.clear[2], a.clear[3] });
         c.insert(QStringLiteral("read"), a.read);
         c.insert(QStringLiteral("resolve"), a.nearest ? QStringLiteral("nearest") : QStringLiteral("average"));
+        c.insert(QStringLiteral("borrowed"), a.borrowed); // N3.4
         list.append(c);
     }
     o.insert(QStringLiteral("colour"), list);
@@ -184,7 +195,119 @@ QJsonObject TargetDeclaration::toJson() const
     o.insert(QStringLiteral("samples"), samples);
     o.insert(QStringLiteral("previous_frame"), previousFrame);
     o.insert(QStringLiteral("capture"), capture);
+    // N3.4 (D17)
+    o.insert(QStringLiteral("transparency_of"), transparency() ? QJsonValue(QString::fromLatin1(transparencyOf))
+                                                               : QJsonValue());
+    QJsonArray borrowed;
+    for (const QByteArray &b : borrow)
+        borrowed.append(QString::fromLatin1(b));
+    o.insert(QStringLiteral("borrow"), borrowed);
+    o.insert(QStringLiteral("mips"), mips);
     return o;
+}
+
+// N3.4 (D17 point 2): {"name", "transparency": {"of": <owner>, "borrow"?: [<owner attachment>, ...]}}, nothing else (its
+// layout is derived from the owner by deriveTransparencyTargets).
+static bool parseTransparencyDeclaration(const QJsonObject &o, TargetDeclaration *d, QString *error)
+{
+    const QString label = QString::fromLatin1(d->name);
+    const QString shape = QStringLiteral("target '%1': a transparency target is {\"name\", \"transparency\": {\"of\": "
+                                         "a scene target declared before it, \"borrow\"?: [its attachments]}} and "
+                                         "nothing else (its size, samples and depth are its owner's)").arg(label);
+    if (o.size() != 2 || !o.value(QStringLiteral("transparency")).isObject()) {
+        *error = shape;
+        return false;
+    }
+    const QJsonObject t = o.value(QStringLiteral("transparency")).toObject();
+    const QJsonValue of = t.value(QStringLiteral("of"));
+    const QJsonValue borrow = t.value(QStringLiteral("borrow"));
+    if (t.size() != (borrow.isUndefined() ? 1 : 2) || !of.isString() || !identifier(of.toString().toLatin1())
+        || (!borrow.isUndefined() && !borrow.isArray())) {
+        *error = shape;
+        return false;
+    }
+    d->transparencyOf = of.toString().toLatin1();
+    for (const QJsonValue &entry : borrow.toArray()) {
+        const QByteArray name = entry.toString().toLatin1();
+        if (!entry.isString() || !identifier(name) || d->borrow.contains(name)) {
+            *error = QStringLiteral("target '%1' borrows an attachment by its name, each once").arg(label);
+            return false;
+        }
+        d->borrow.append(name);
+    }
+    // Its own two attachments (Python's oit_accum and oit_reveal, the reveal stored inverted as coverage: both clear
+    // to 0, D17 choice B).
+    TargetAttachment accum;
+    accum.name = QByteArrayLiteral("accum");
+    accum.format = TargetFormat::RGBA16F;
+    TargetAttachment coverage;
+    coverage.name = QByteArrayLiteral("coverage");
+    coverage.format = TargetFormat::R16F;
+    d->colour = { accum, coverage };
+    d->depth = true;                          // the owner's (deriveTransparencyTargets checks it has one)
+    return true;
+}
+
+bool deriveTransparencyTargets(QList<TargetDeclaration> &targets, QString *error)
+{
+    for (int i = 0; i < int(targets.size()); ++i) {
+        TargetDeclaration &d = targets[i];
+        if (!d.transparency())
+            continue;
+        const QString label = QString::fromLatin1(d.name);
+        int owner = -1;
+        for (int o = 0; o < i; ++o) {
+            if (targets.at(o).name == d.transparencyOf)
+                owner = o;
+        }
+        if (owner < 0) {
+            *error = QStringLiteral("transparency target '%1': its owner '%2' is no target declared before it")
+                         .arg(label, QString::fromLatin1(d.transparencyOf));
+            return false;
+        }
+        const TargetDeclaration &o = targets.at(owner);
+        if (o.transparency() || o.mips || !o.surfaceSized() || !o.depth) {
+            *error = QStringLiteral("transparency target '%1': its owner '%2' is a surface-sized scene target with depth "
+                                    "(not a transparency or mipped target)").arg(label, QString::fromLatin1(o.name));
+            return false;
+        }
+        for (int other = 0; other < i; ++other) {
+            if (targets.at(other).transparency() && targets.at(other).owner == owner) {
+                *error = QStringLiteral("target '%1' has two transparency targets").arg(QString::fromLatin1(o.name));
+                return false;
+            }
+        }
+        QList<TargetAttachment> colour = d.colour.mid(0, 2);
+        for (const QByteArray &name : d.borrow) {
+            const int index = o.colourIndex(name);
+            if (index <= 0) {
+                *error = QStringLiteral("transparency target '%1' borrows '%2': %3")
+                             .arg(label, QString::fromLatin1(name),
+                                  index == 0 ? QStringLiteral("the owner's colour 0 is what the resolve draws into")
+                                             : QStringLiteral("the owner '%1' has no such attachment")
+                                                   .arg(QString::fromLatin1(o.name)));
+                return false;
+            }
+            TargetAttachment a = o.colour.at(index);
+            a.borrowed = true;
+            a.ownerColour = index;
+            a.read = false;                   // the owner resolves it; the borrower sets no resolve
+            a.nearest = false;
+            colour.append(a);
+        }
+        if (colour.size() > kMaxTargetColour) {
+            *error = QStringLiteral("transparency target '%1' has %2 attachments with those it borrows: at most %3")
+                         .arg(label).arg(colour.size()).arg(kMaxTargetColour);
+            return false;
+        }
+        d.owner = owner;
+        d.colour = colour;
+        d.size = o.size;
+        d.samples = o.samples;
+        d.depth = true;
+        d.previousFrame = false;
+    }
+    return true;
 }
 
 bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QString *error)
@@ -201,7 +324,8 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
     }
     const QJsonObject o = value.toObject();
     const QStringList keys = { QStringLiteral("name"), QStringLiteral("size"), QStringLiteral("colour"),
-                               QStringLiteral("depth"), QStringLiteral("samples"), QStringLiteral("previous_frame") };
+                               QStringLiteral("depth"), QStringLiteral("samples"), QStringLiteral("previous_frame"),
+                               QStringLiteral("transparency"), QStringLiteral("mips") }; // N3.4
     for (auto it = o.begin(); it != o.end(); ++it) {
         if (!keys.contains(it.key())) {
             *error = QStringLiteral("unknown target key '%1': %2").arg(it.key(), shape);
@@ -215,6 +339,19 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
         return false;
     }
     const QString label = QString::fromLatin1(d.name);
+    if (o.contains(QStringLiteral("transparency"))) {
+        // N3.4 (D17 point 2): its layout is its owner's (deriveTransparencyTargets, once every target is parsed).
+        if (!parseTransparencyDeclaration(o, &d, error))
+            return false;
+        *out = d;
+        return true;
+    }
+    const QJsonValue mips = o.value(QStringLiteral("mips"));
+    if (!mips.isUndefined() && !mips.isBool()) {
+        *error = QStringLiteral("target '%1': mips is true or false").arg(label);
+        return false;
+    }
+    d.mips = mips.toBool(false);
     const QJsonValue size = o.value(QStringLiteral("size"));
     if (size.isString() && size.toString() == QLatin1String("surface")) {
         d.size = QSize();
@@ -319,6 +456,18 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
                                 "samples: before its first run a pass would read resolves nothing wrote)")
                      .arg(label).arg(d.samples);
         return false;
+    }
+    if (d.mips) {
+        // N3.4 (D17 point 6): the defocus layer's shape: single-sampled, surface-sized (it shares the scene's
+        // allocation), no nearest attachment, no depth.
+        bool nearest = false;
+        for (const TargetAttachment &a : d.colour)
+            nearest = nearest || a.nearest;
+        if (d.samples != 1 || !d.surfaceSized() || nearest || d.depth || d.previousFrame) {
+            *error = QStringLiteral("target '%1': a mipped target is single-sampled, surface-sized, without depth, "
+                                    "nearest resolves or previous_frame").arg(label);
+            return false;
+        }
     }
     *out = d;
     return true;
@@ -510,6 +659,22 @@ QRhiTexture *SceneTargets::Target::readableDepth() const
     return samples > 1 ? depthNearest.get() : depth.get();
 }
 
+QRhiTexture *SceneTargets::Target::colourTexture(int colourIndex) const
+{
+    if (colourIndex < 0 || colourIndex >= int(decl.colour.size()) || colourIndex >= kMaxTargetColour)
+        return nullptr;
+    return decl.colour.at(colourIndex).borrowed ? borrowedColour[colourIndex] : colour[colourIndex].get();
+}
+
+void SceneTargets::setDormant(quint32 mask, const QStringList &reasons)
+{
+    if (mask == m_dormant && reasons == m_fallbacks)
+        return;
+    m_dormant = mask;
+    m_fallbacks = reasons;
+    ++m_stateVersion;
+}
+
 bool SceneTargets::Target::nearestActive(int slot) const
 {
     if (samples <= 1)
@@ -569,7 +734,9 @@ void SceneTargets::releaseTarget(Target &t)
     for (int i = kMaxTargetColour - 1; i >= 0; --i) {
         t.resolve[i].reset();
         t.colour[i].reset();
+        t.borrowedColour[i] = nullptr;        // N3.4: the owner's, never ours
     }
+    t.borrowedDepth = nullptr;
     if (t.textures > 0 || t.bytes > 0)
         g_targets.fetchAndAddRelaxed(-1);
     g_textures.fetchAndAddRelaxed(-t.textures);
@@ -617,6 +784,7 @@ bool SceneTargets::sync(QRhi *rhi, const QList<TargetDeclaration> &declarations,
     if (m_count != int(declarations.size()))
         ++m_stateVersion;
     m_count = int(declarations.size());
+    bool relaid[kMaxSceneTargets] = {};       // N3.4: a target whose objects are made anew this sync (a borrower follows)
     for (int i = 0; i < m_count; ++i) {
         const TargetDeclaration &d = declarations.at(i);
         if (!m_targets[i]) {
@@ -624,15 +792,46 @@ bool SceneTargets::sync(QRhi *rhi, const QList<TargetDeclaration> &declarations,
             ++m_stateVersion;
         }
         Target &t = *m_targets[i];
-        const QSize needed = d.surfaceSized() ? surface : d.size;
+        const bool dormant = d.transparency() && (m_dormant & (1u << i)) != 0;
+        if (dormant != t.dormant) {
+            // N3.4 (D17 point 3): a transparency target not admitted holds nothing; admitted again, it is made anew.
+            if (t.renderPass)
+                *relayout = true;
+            releaseTarget(t);
+            t.renderTarget.reset();
+            t.dormant = dormant;
+            t.decl = TargetDeclaration();
+            t.allocation = QSize();
+            ++m_stateVersion;
+            ++m_layoutGeneration;             // the pipelines of its passes are built again (into it, or the owner)
+        }
+        if (dormant) {
+            t.decl = d;
+            t.content = QSize();
+            continue;
+        }
+        const Target *owner = d.transparency() && d.owner >= 0 && d.owner < i ? m_targets[d.owner].get() : nullptr;
+        if (d.transparency() && (!owner || owner->dormant)) {
+            *error = QStringLiteral("transparency target '%1' has no owner allocated").arg(QString::fromLatin1(d.name));
+            return false;
+        }
+        const QSize needed = owner ? owner->content : d.surfaceSized() ? surface : d.size;
         if (needed.width() < 1 || needed.height() < 1) {
             *error = QStringLiteral("target '%1' has no size (the surface has none yet)").arg(QString::fromLatin1(d.name));
             return false;
         }
-        const int samples = clampSamples(m_supported, d.samples);
-        const bool layoutChanged = !t.decl.sameLayout(d) || samples != t.samples || !t.renderPass;
+        // N3.4: a transparency target is its owner's allocation and samples, made again whenever its owner's are.
+        const int samples = owner ? owner->samples : clampSamples(m_supported, d.samples);
+        const bool layoutChanged = !t.decl.sameLayout(d) || samples != t.samples || !t.renderPass
+            || (owner && relaid[d.owner]);
         QString reason;
-        const QSize allocation = nextAllocation(layoutChanged ? QSize() : t.allocation, needed, &reason);
+        QSize allocation = nextAllocation(layoutChanged ? QSize() : t.allocation, needed, &reason);
+        if (owner) {
+            // Its owner's allocation (the owner, declared before it, was decided above): a new owner allocation is a new
+            // one here, so the borrower's render target is made again over the owner's re-made objects.
+            allocation = owner->allocation;
+            reason = owner->allocation != t.allocation ? owner->lastReason : QString();
+        }
         if (allocation.width() > sizeMax || allocation.height() > sizeMax) {
             *error = QStringLiteral("target '%1' needs %2 x %3, past the device's %4 a side")
                          .arg(QString::fromLatin1(d.name)).arg(allocation.width()).arg(allocation.height()).arg(sizeMax);
@@ -655,11 +854,14 @@ bool SceneTargets::sync(QRhi *rhi, const QList<TargetDeclaration> &declarations,
         } else {
             t.newLayout = false;              // the same objects at the new size
         }
+        relaid[i] = layoutChanged;
         t.decl = d;
         t.samples = samples;
         t.allocation = allocation;
         t.stepsDone = 0;
-        t.stepsTotal = int(d.colour.size()) + (d.depth ? 1 : 0) + 1 + (d.capture ? 1 : 0);
+        // N3.4: a transparency target makes no depth of its own (its owner's) and has no capture.
+        t.stepsTotal = d.transparency() ? int(d.colour.size()) + 1
+                                        : int(d.colour.size()) + (d.depth ? 1 : 0) + 1 + (d.capture ? 1 : 0);
         t.generation = nextTargetGeneration();
         t.lastReason = layoutChanged && reason == QLatin1String("made") ? QStringLiteral("made") : reason;
         ++m_allocations;
@@ -722,9 +924,15 @@ bool SceneTargets::step(Target &t, int index, QString *error)
         m_objectGeneration += 1;
         return texture->create();
     };
-    const QRhiTexture::Flags readableFlags = QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource;
+    QRhiTexture::Flags readableFlags = QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource;
+    if (t.decl.mips)
+        readableFlags |= QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips; // N3.4 (D17 choice G)
+    const Target *owner = t.decl.transparency() && t.decl.owner >= 0 && t.decl.owner < m_count
+        ? m_targets[t.decl.owner].get() : nullptr;
     if (k < colourCount) {
         const TargetAttachment &a = t.decl.colour.at(k);
+        if (a.borrowed)
+            return true;                      // N3.4: the owner's (taken at the render target's step)
         const QRhiTexture::Format format = targetRhiFormat(a.format);
         const QByteArray name = label + QByteArrayLiteral(".") + a.name;
         bool ok = make(t.colour[k], format, t.samples, t.samples > 1 ? QRhiTexture::RenderTarget : readableFlags, name);
@@ -740,7 +948,7 @@ bool SceneTargets::step(Target &t, int index, QString *error)
         return ok;
     }
     int next = colourCount;
-    if (t.decl.depth) {
+    if (t.decl.depth && !t.decl.transparency()) {
         if (k == next) {
             bool ok = make(t.depth, QRhiTexture::D32F, t.samples, QRhiTexture::RenderTarget, label + ".depth");
             // D14 point 10: a read multisampled depth's nearest resolve (R32F window depth), written by the core's pass.
@@ -756,20 +964,43 @@ bool SceneTargets::step(Target &t, int index, QString *error)
     }
     if (k == next) {
         // The render target over every attachment (rule B: colour and depth preserved, cleared by a draw).
+        if (owner) {
+            // N3.4 (D17 point 2): the owner's borrowed attachments and depth, as the owner holds them now (its objects
+            // were made before this target's: it is declared first).
+            for (int i = 0; i < colourCount; ++i) {
+                const TargetAttachment &a = t.decl.colour.at(i);
+                t.borrowedColour[i] = a.borrowed ? owner->colour[a.ownerColour].get() : nullptr;
+                if (a.borrowed && !t.borrowedColour[i]) {
+                    *error = QStringLiteral("transparency target '%1': its owner's attachment '%2' is not made")
+                                 .arg(QString::fromLatin1(t.decl.name), QString::fromLatin1(a.name));
+                    return false;
+                }
+            }
+            t.borrowedDepth = owner->depth.get();
+            if (!t.borrowedDepth) {
+                *error = QStringLiteral("transparency target '%1': its owner's depth is not made")
+                             .arg(QString::fromLatin1(t.decl.name));
+                return false;
+            }
+        }
         if (t.newLayout || !t.renderTarget) {
+            // N3.4: a transparency target's borrowed attachments are its owner's textures (no resolve: the owner's run
+            // that follows resolves them), its depth the owner's. The owner's objects re-made in place at a new size keep
+            // their addresses, so the description stays true and create() below follows them; a new owner layout is a
+            // new layout here too (sync).
             QList<QRhiColorAttachment> attachments;
             for (int i = 0; i < colourCount; ++i) {
-                QRhiColorAttachment attachment(t.colour[i].get());
-                if (t.samples > 1 && !t.decl.colour.at(i).nearest)
+                QRhiColorAttachment attachment(t.colourTexture(i));
+                if (t.samples > 1 && !t.decl.colour.at(i).nearest && !t.decl.colour.at(i).borrowed)
                     attachment.setResolveTexture(t.resolve[i].get()); // QRhi's average (null: not read)
                 attachments.append(attachment);
             }
             QRhiTextureRenderTargetDescription description;
             description.setColorAttachments(attachments.cbegin(), attachments.cend());
-            if (t.depth)
-                description.setDepthTexture(t.depth.get()); // never a depth resolve: the samples are stored (D14 10)
+            if (t.depthTexture())
+                description.setDepthTexture(t.depthTexture()); // never a depth resolve: the samples are stored (D14 10)
             QRhiTextureRenderTarget::Flags flags = QRhiTextureRenderTarget::PreserveColorContents;
-            if (t.depth)
+            if (t.depthTexture())
                 flags |= QRhiTextureRenderTarget::PreserveDepthStencilContents;
             t.renderTarget.reset(rhi->newTextureRenderTarget(description, flags));
             t.renderTarget->setName(label);
@@ -890,8 +1121,8 @@ int SceneTargets::loadedColour(int index, QRhiTexture **out) const
     const Target *t = target(index);
     int n = 0;
     for (int i = 0; t && i < int(t->decl.colour.size()) && i < kMaxTargetColour; ++i) {
-        if (t->colour[i])
-            out[n++] = t->colour[i].get();
+        if (QRhiTexture *texture = t->colourTexture(i)) // N3.4: a borrowed attachment is loaded too (the owner's)
+            out[n++] = texture;
     }
     return n;
 }
@@ -945,26 +1176,37 @@ std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiResourceUpdateBat
     pruneReadbacks();
     auto set = std::make_shared<SceneReadback>();
     SceneReadback *raw = set.get();
-    const auto add = [&](const Target &t, const QString &name, QRhiTexture *texture, const QString &format) {
-        if (!texture || raw->count >= int(sizeof(raw->results) / sizeof(raw->results[0])))
+    const int capacity = int(sizeof(raw->results) / sizeof(raw->results[0]));
+    const auto levelCount = [](const Target &t) {
+        // N3.4: a mipped target's every level (the defocus layer's mips, D17 choice G's proof), else its base.
+        int levels = 1;
+        for (QSize s = t.allocation; t.decl.mips && (s.width() > 1 || s.height() > 1); ++levels)
+            s = QSize(qMax(1, s.width() / 2), qMax(1, s.height() / 2));
+        return levels;
+    };
+    const auto add = [&](const Target &t, const QString &name, QRhiTexture *texture, const QString &format,
+                         int level = 0) {
+        if (!texture || raw->count >= capacity)
             return;
         SceneTargetPixels p;
-        p.name = name;
-        p.size = t.allocation;
+        p.name = level ? name + QLatin1Char('@') + QString::number(level) : name;
+        p.size = QSize(qMax(1, t.allocation.width() >> level), qMax(1, t.allocation.height() >> level));
         p.content = t.content;
         p.format = format;
         p.samples = t.samples;
+        p.level = level;
         raw->pixels.append(p);
         ++raw->count;
     };
     for (int i = 0; i < m_count; ++i) {
         const Target &t = *m_targets[i];
-        if (!t.ready())
+        if (!t.ready() || t.dormant)
             continue;
         const QString base = QString::fromLatin1(t.decl.name);
         for (int c = 0; c < int(t.decl.colour.size()); ++c) {
-            add(t, base + QLatin1Char('.') + QString::fromLatin1(t.decl.colour.at(c).name), t.readable(c),
-                targetFormatName(t.decl.colour.at(c).format));
+            for (int level = 0; level < levelCount(t); ++level)
+                add(t, base + QLatin1Char('.') + QString::fromLatin1(t.decl.colour.at(c).name), t.readable(c),
+                    targetFormatName(t.decl.colour.at(c).format), level);
         }
         if (t.depthNearest)
             add(t, base + QStringLiteral(".depth"), t.depthNearest.get(), QStringLiteral("r32f"));
@@ -982,29 +1224,31 @@ std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiResourceUpdateBat
     int r = 0;
     for (int i = 0; i < m_count && r < raw->count; ++i) {
         const Target &t = *m_targets[i];
-        if (!t.ready())
+        if (!t.ready() || t.dormant)
             continue;
-        QList<QRhiTexture *> textures;
+        QList<QPair<QRhiTexture *, int>> textures; // (texture, level), in the order the pixels were listed
         for (int c = 0; c < int(t.decl.colour.size()); ++c) {
-            if (t.readable(c))
-                textures.append(t.readable(c));
+            for (int level = 0; t.readable(c) && level < levelCount(t); ++level)
+                textures.append({ t.readable(c), level });
         }
         if (t.depthNearest)
-            textures.append(t.depthNearest.get());
+            textures.append({ t.depthNearest.get(), 0 });
         if (t.decl.capture) {
             if (t.captureColour)
-                textures.append(t.captureColour.get());
+                textures.append({ t.captureColour.get(), 0 });
             if (t.captureDepth)
-                textures.append(t.captureDepth.get());
+                textures.append({ t.captureDepth.get(), 0 });
         }
-        for (QRhiTexture *texture : textures) {
+        for (const QPair<QRhiTexture *, int> &texture : textures) {
             if (r >= raw->count)
                 break;
             raw->results[r].completed = [raw]() {
                 if (raw->pending.fetchAndAddOrdered(-1) == 1)
                     g_readbacksPending.fetchAndAddRelaxed(-1);
             };
-            updates->readBackTexture(QRhiReadbackDescription(texture), &raw->results[r]);
+            QRhiReadbackDescription description(texture.first);
+            description.setLevel(texture.second);
+            updates->readBackTexture(description, &raw->results[r]);
             ++r;
         }
     }
@@ -1043,6 +1287,7 @@ SceneTargetsState SceneTargets::state(QRhi *rhi) const
         e.lastReason = t.lastReason;
         s.targets.append(e);
     }
+    s.fallbacks = m_fallbacks;                // N3.4
     return s;
 }
 
@@ -1096,6 +1341,7 @@ QJsonObject sceneTargetsStateJson(const SceneTargetsState &s)
         targets.append(e);
     }
     o.insert(QStringLiteral("targets"), targets);
+    o.insert(QStringLiteral("transparency_fallbacks"), QJsonArray::fromStringList(s.fallbacks)); // N3.4 (D17 point 3)
     return o;
 }
 
