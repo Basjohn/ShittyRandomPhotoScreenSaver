@@ -96,8 +96,9 @@ DRAG = (800, 1000, 2)              # the resize round's widths (start, end, step
 DRAG_HEIGHT = 400
 COST_HOSTS = ((2560, 1440), (3840, 2160))
 COST_AMBIENT = (2048, 1152)
-COST_FRAMES = 240
+COST_FRAMES = 240                   # the records timed at least
 COST_MIN_SAMPLES = 30               # Qt's OpenGL backend reports a GPU time only for frames whose query was ready
+COST_MAX_FRAMES = 1200              # ... so the records go on until this many times arrived, at most this many records
 RESOLVE_CONTROL_FRAMES = 40         # prime_control's consecutive 4x records per phase (audit 2, H1)
 PYTHON_COST_FRAMES = 120            # the Python path's timed frames per size and count (python_cost)
 RESOLVE_BUDGET_MS = {(2560, 1440): 0.3, (3840, 2160): 0.6}   # choice G (D7's budgets, until the lead sets another)
@@ -797,18 +798,27 @@ def _ambient_cover_only(packs: dict, folder: Path):
     return target, ambient_pass
 
 
-def _timed(host, scene, settings: dict, frames: int) -> dict:
-    """The surface's GPU time (kind 2) over ``frames`` records, each forced by a setting that alternates."""
+def _timed(host, scene, settings: dict, frames: int, member: str = "u_hdr_gain", step: float = 0.001) -> dict:
+    """The surface's GPU time (kind 2) over at least ``frames`` records, each forced by a setting (``member``) that
+    alternates. Qt's OpenGL backend reads a TIME_ELAPSED result only once it is ready and drops it when the timer's ring
+    wraps first (never a wait), so the records go on past ``frames`` until COST_MIN_SAMPLES times have arrived, at most
+    COST_MAX_FRAMES records: counted, never slept (audit 2, M1; generic_mode_check's timer control)."""
     host.set_gpu_timer(True)
     host.frames(4)
     host.gpu_samples()
-    for index in range(frames):
-        scene.mode.settings(dict(settings, u_hdr_gain=settings["u_hdr_gain"] + (0.001 if index % 2 else 0.0)))
+    times: list[int] = []
+    drawn = 0
+    while drawn < COST_MAX_FRAMES and (drawn < frames or len(times) < COST_MIN_SAMPLES):
+        scene.mode.settings(dict(settings, **{member: settings[member] + (step if drawn % 2 else 0.0)}))
         host.frames(1)
+        drawn += 1
+        times.extend(s.nanoseconds for s in host.gpu_samples() if s.kind == 2)
     host.frames(4)
-    times = sorted(s.nanoseconds for s in host.gpu_samples() if s.kind == 2)
+    times.extend(s.nanoseconds for s in host.gpu_samples() if s.kind == 2)
     host.set_gpu_timer(False)
-    return _time_summary(times)
+    summary = _time_summary(sorted(times))
+    summary["records"] = drawn
+    return summary
 
 
 def _time_summary(times: list[int]) -> dict:
@@ -879,17 +889,9 @@ def round_cost(core, engine, app, packs: dict, folder: Path) -> dict:
                           settings=settings)
             try:
                 host.frames(3)
-                host.set_gpu_timer(True)
-                host.frames(4)
-                host.gpu_samples()
-                for index in range(COST_FRAMES):
-                    scene.mode.settings(dict(settings, u_radius=0.08 + (0.0001 if index % 2 else 0.0)))
-                    host.frames(1)
-                host.frames(4)
-                times = sorted(s.nanoseconds for s in host.gpu_samples() if s.kind == 2)
-                host.set_gpu_timer(False)
-                clear[label] = {"samples": len(times),
-                                "median_ms": round(times[len(times) // 2] / 1e6, 4) if times else None}
+                timed = _timed(host, scene, settings, COST_FRAMES, member="u_radius", step=0.0001)
+                clear[label] = {"samples": timed["samples"], "median_ms": timed["median_ms"],
+                                "records": timed["records"]}
             finally:
                 scene.close(app)
                 host.frames(2)
