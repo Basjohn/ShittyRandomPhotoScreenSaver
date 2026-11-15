@@ -732,6 +732,25 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     native mesh and stream rows; `Docs/Reference/Harness_Index.md` (the command); `Native_Core_QRhi_Research_N3.md`'s
     open items Q4 to Q6 answered from the proof; the 3D foundation lessons in `Docs/Reference/Transitions.md` (appended
     after the slice).
+  - [ ] Checkpoint audit 4's three open lows (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 4";
+    recorded, not fixed, by the lead's decision of 15 Nov):
+    - [ ] L1, the draw-parameters pack's interface: `checkGeometryPass` (`mode_content.cpp`) checks only a batched
+      pass's draw-parameters pack's stage; its blocks, storage, samplers, inputs and outputs are compared with the
+      plain pack's, and a pack that differs is refused with the reason (today it reaches the device as a pipeline
+      whose layout does not match its shader). GPU-free test through `mode_blocks` with a pack of another input or
+      block; negative control on the pre-change module (admitted).
+    - [ ] L2, a mesh replaced by one of the same layout retargets instead of rebuilding: the latch key and
+      `ensure()` tell a mesh's layout (stride and attributes) from its buffer (`ModeMeshes::objects()` counts both, so
+      `meshObjects` forces `releasePipelines`, which releases the streams and the arena too, losing the storage
+      streams' bytes past their used length); the vertex buffers are given per draw, so only a layout change needs new
+      pipelines. Proof: `probe_replace.py`'s box replaced by its own bytes and layout creates only the mesh's buffer
+      and keeps the streams' build generation (today 3 buffers and generation 1 to 2).
+    - [ ] L6, three tests made as strong as their boxes (`tests/test_native_mesh_buffers.py`):
+      `test_umatrix_follows_the_cards_rotation_and_window_map` against the Python renderer's `uMatrix` (the
+      Oscilloscope's `physicalPoint` inverted and the card's `item_from_window`), not `_item_clip`'s copy of
+      `itemClipMatrix`; `test_the_core_arena_rule_is_the_mirror_s` calling the module's `mesh_buffer_arena_layout`
+      instead of matching source text; a test comparing the C++ reader's decode of an `f32` field with Python's
+      (fields equal, bytes round-trip with inf, -0 and a denormal: the audit's `probe_f32_reader.py`).
 - [ ] N3.3 Compute passes: dispatch only when there is new work, storage buffers shared with draws, barriers from
   the binding access types, no readback in the product.
 - [ ] N3.4 Transparency and post-processing as shared stages, each opt-in and absent from a mode that does not use
