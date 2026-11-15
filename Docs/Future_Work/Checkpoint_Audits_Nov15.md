@@ -570,3 +570,283 @@ None.
 - **Settings dialog and Fullscreen Edit open at once:** not checked. Fullscreen Edit's save writes the whole value
   from its session-start copy, and the Visualizers tab writes the whole page value, so a concurrent write by the
   other would be overwritten. That pattern predates 1D.14 (the corner already behaved so).
+
+## Checkpoint audit 4 (N3.2, High)
+
+Branch `worktree-agent-a7f0682cd8743d5f4` at 5c7699ef1 against `main` (meshes and buffers, C++ at ABI 18, D15), High
+effort. Nothing was fixed. The auditor merged the branch into its own worktree and ran the branch's GitHub-built module
+(`release/native_module`, manifest commit e95d93063; the two commits after it change only the decisions doc and the
+research file). No build was started. Line numbers are the branch's. Evidence is in the auditor's worktree under
+`.artifacts/evidence/native_core/` (`n3_2/20261115_audit4_gate`, `n3_2/20261115_audit4_probes`,
+`n3_1/20261115_audit4_gate`, `n3_1/20261115_audit4_prime_control`, `n2_9/20261115_audit4_generic`,
+`n4_a/20261115_audit4_fullscreen`). The probe scripts are kept beside their results in `20261115_audit4_probes`. Run
+`probe_n32.py` first, because it bakes the packs the other probes read.
+
+**Verdict: do not merge as is.** The harness proof reproduces, and the arena migration is bit-identical. Two
+findings block the merge:
+
+- **H1:** a stream bound again under a new schema keeps pointers into the old schema. This is a use-after-free on
+  the render thread, and the product's generic route does exactly this on a rebind.
+- **H2:** the contract that "bytes past the used length keep what an earlier record wrote" is false for instance
+  streams on Vulkan. Proved by pixels: the two backends differ on 94,698 pixels.
+
+Neither has a consumer yet. Both are in the contract that N5's ports will build on.
+
+**Reruns on the copied module** (the GPU was 42 % busy before the first run and 16 % after it):
+
+| Proof | APIs | Result | Negative controls seen failing |
+| --- | --- | --- | --- |
+| `mesh_buffer_check` parity, forms, used, rest, steady, retire (`--require-validation`) | OpenGL, Vulkan, reference | PASS. Rule (a): 4 of 10 exact, the worst `streaks` at dpr 1.5 with 132 pixels past 0, 1 past 1, max 2. Rule (b): 8 of 10 exact. | Out-of-step instance stream: 124,808 and 226,170 pixels differ. First offset for every batch: 29,040. Wrong front face, y-up sprite and uncull: differ. `hide_draw_parameters`: the loop form recorded (indirect 0). `firstInstance` 3: ignored on OpenGL, 70 pixels moved on Vulkan. Used past its rule: refused, 0 writes. Recreated streams: 600 buffers in 600 records. Skipped release: 1 mesh, 864 bytes left. |
+| the same: steady | both | No buffer created in 158,647 (OpenGL) and 102,343 (Vulkan) sprite records, nor in the box, beam, cells and indirect streaks runs. Vulkan validation, synchronisation included, clean through every round: 10 defect-A errors only, excused by id. | |
+| `scene_target_check` gate (default rounds) and `--rounds prime_control` (Vulkan) | both | PASS. Rule (a) 5 exact, rule (b) 16 exact. prime_control PASS. | |
+| `generic_mode_check` blocks, reader, draw, framebuffer, uv, attached | both | PASS. Vulkan against OpenGL: 8 compared, max level 0. | |
+| `fullscreen_pass_check` (default rounds) | both | PASS. Vulkan against OpenGL: 256 compared, max level 1, uv bits identical. | |
+
+**Choice C (the arena migration) is bit-identical.** Each sheet the three regression proofs wrote is pixel-identical
+to main's last evidence in the main checkout: `n3_1/20261115_r223b_gate` (both APIs), `n2_9/20261115_r223_generic_mode`
+(rings and uv probe, both APIs) and `n4_a/20261115_n4a_fullscreen_pass` (both APIs). `compare_sheets.py` gives
+`identical=True max=0` for all eight pairs.
+
+**Focused tests:** the native sweep (every `tests/test_native_*.py` except `_sdk_fetch` and `_spike_n03`) gives 436
+passed.
+
+### Critical
+
+None.
+
+### High
+
+**H1. A stream bound again under a new schema keeps reading the old schema's fields: a use-after-free on the render
+thread, and wrong data with no refusal.**
+
+- **Where:**
+  - `native/core/src/mesh_buffers.h:273-274`: `Stream::field` and `usedField` are raw `const frame_abi::Field *`
+    pointers into the drawn `RuntimeSchema`.
+  - `mesh_buffers.cpp:676-702`: they are taken once, at `ModeStreams::build`.
+  - `mode_content.cpp:2125-2129`: `acceptStream` bumps only `m_buildGeneration`.
+  - `mode_content.cpp:2467`: `ModeSource::sync` replaces `m_drawnSchema`, so the old schema can be freed.
+  - `mode_content.cpp:3287-3298`: `ensure()` rebuilds on a new rhi, pass, program generation, scene layout, mesh
+    objects or texture objects, but never on a new schema.
+  - `mesh_buffers.cpp:766-776`: `ModeStreams::write` then reads `s->usedField->offset`, `s->field->offset` and
+    `s->decl.capacity` from the old build.
+- **Failure scenario:**
+  1. A geometry mode is drawn from a stream with streams declared.
+  2. The stream is bound again with its program kept. Worker replacement and capacity commit both do this (D1 point
+     3), and so does the product route: `rendering/quick/visualizer/native_route.py:676-687` calls `item.bind(...,
+     schema_for_mode(mode_id))` and only `settings()` when `_program_mode == mode_id`.
+  3. Each bind parses a new `RuntimeSchema`, and the old one goes once the retired reader and `m_drawnSchema` release
+     it.
+  4. Every later record dereferences freed memory. Even with an identical schema the pointers dangle.
+  5. With a changed schema (another offset or count), the stream keeps its old capacity, reads its bytes at the old
+     offsets, and the state reports nothing.
+- **Proof:** `probe_n32.py` P2, on both APIs (`probe_opengl.json`, `probe_vulkan.json`).
+  - The sprites scene is bound, unbound, and bound again under a schema with `point_rows` at 576 floats and the used
+    length moved from offset 4628 to 2324.
+  - After the rebind, the state's stream capacity is still 4608 bytes. A fresh item on the new schema has 2304.
+  - The rebound frame differs from the fresh item's: 52,870 pixels on OpenGL and 56,801 on Vulkan. The old used
+    offset lies past the new record, so nothing was written and the stale instances were drawn.
+  - `last_reason` is empty: no refusal.
+  - The use-after-free itself is read from the code. No sanitizer build exists.
+
+**H2. An instance stream drawn past its used length reads another frame slot's bytes on Vulkan, and the backends
+differ.** D15's "as built" (`Native_Core_P3_Decisions.md:1447`) and the plan's f32 box (`Current_Plan.md:651`) promise
+"bytes past the used length keep what an earlier record wrote", and the instance count is a separate name from the
+used length. That holds only for storage streams.
+
+- **Where:** `mesh_buffers.cpp:778-793` writes only `used` bytes of a `Dynamic` vertex buffer through
+  `beginFullDynamicBufferUpdateForCurrentFrame`.
+  - **Vulkan:** one buffer per frame slot (research Q6), so the bytes past `used` are those of the record two frames
+    back. They are uninitialised memory in a slot not yet written.
+  - **OpenGL:** QRhi maps with `GL_MAP_INVALIDATE_BUFFER_BIT` (research Q6), so the bytes past `used` are undefined.
+    NVIDIA happened to keep them in this run.
+  - Qt documents the fast path as a whole-buffer update.
+- **Failure scenario:**
+  1. A port, for example Bubble's points or Extruded Spectrum's bars in the instance form, sends a record whose used
+     length is shorter than its instance count.
+  2. D15 says the remaining instances keep the earlier record's data.
+  3. On Vulkan they alternate between the records of the two slots (flicker), or are garbage on the first frames.
+  4. On OpenGL they are whatever the driver's orphaned storage holds.
+  5. Rule (b) fails, and pixels change between frames with no new data.
+- **Proof:** `probe_n32.py` P1. The sprites scene draws record A (120 sprites), then three records B with 40 used and
+  the count kept at 120. They are compared with the composite record, B's 40 followed by A's 80.
+  - **OpenGL:** all three B frames equal the composite exactly.
+  - **Vulkan:**
+    - The first and third B frames differ on 94,698 pixels past 1 level, with 49,154 lit against 122,152.
+    - The second B frame (the slot A wrote) equals the composite.
+  - The harness's `used` round (`mesh_buffer_check.py:429-447`) proves the property for the storage beam only, so it
+    could not see this.
+
+### Medium
+
+**M1. Draw counts are bounded by nothing, so a draw can fetch past its buffers with `robustBufferAccess` off.**
+
+- **Where:**
+  - `mode_content.cpp:1822-1834`: a draw's name must only be a u32 scalar, with no `at_most` rule required and no bound
+    against what it indexes.
+  - `mode_content.cpp:3513-3530`: `resolveCount` takes the record value or any setting below 2^32.
+  - `mode_content.cpp:3752-3757`: the instance count is not clamped to the instance stream's or mesh's records, nor
+    the vertex count to the mesh's.
+  - `mesh_buffers.cpp:780-793`, with `mode_content.cpp:3742-3749`: record-written indirect commands are uploaded
+    verbatim (vertex count, instance count, first vertex and `firstInstance`). Only the command count is clamped.
+  - `vulkan_context.cpp:690`: the core's device has `robustBufferAccess` off.
+- **Failure scenario:**
+  - An owner bug, such as a count field without a rule or a setting of 1e6 instances, makes the GPU fetch per-instance
+    attributes past the end of a `VertexBuffer`. That is undefined on both backends, and on some drivers a device loss
+    or a TDR on the screensaver.
+  - A record command with `firstInstance` 3 moves the instance index on both of this machine's backends. That breaks
+    D15's "`firstInstance` is always 0", which the core enforces only for its own draws.
+  - Research Q5's "the core never sets it" (`Native_Core_QRhi_Research_N3.md:574`) does not hold for record commands.
+- **Proof:** `probe_n32.py`.
+  - **P3:** a sprites schema whose `point_count` has no rule is admitted. A record with 400 instances draws from a
+    192-record stream (`last_reason` empty, 1 record, a lit frame) on both APIs, and validation reports nothing.
+  - **P4:** `streaks_indirect` with command `(4, 900, 0, 3)` is admitted and differs from `(4, 900, 0, 0)` on 70
+    pixels on OpenGL and on Vulkan.
+
+**M2. The tie budget of rules (a) and (b) admits regressions it does not explain** (the class of audit 3's M1, in a
+second place).
+
+- **Where:** `native/core/python/mesh_buffer_check.py:87,695,710`. A frame passes when `past1 <= TIE_PIXELS` (8),
+  with no bound on how many pixels are 1 level off and none on how far the 8 may be off. It matches the lead's
+  wording in D15 ("at most 8 pixels past 1 level", `Native_Core_P3_Decisions.md:1416`). D15 also says "a port's own
+  data is judged under the same budget", so every geometry port inherits the gap.
+- **Failure scenario:** a native regression that moves every pixel by one level passes, for example a fade packed as
+  254/255 or an sRGB step applied twice. So do 8 pixels inverted in every frame.
+- **Proof:** `probe_tie_budget.py` sends synthetic opaque frames through the harness's own `_compare` and predicate:
+  - +1 on all 129,600 pixels: `passes_rule: true`.
+  - 8 pixels off by up to 207 levels: `true`.
+  - The control, 9 pixels black: `false`.
+
+### Low
+
+**L1. A batched pass's draw-parameters pack is never checked.** `checkGeometryPass` (`mode_content.cpp:744-751`) checks
+only its stage. Its blocks, storage, samplers, inputs and outputs are not compared with the plain pack's, yet form 3
+builds it over the plain pack's bindings and vertex input layout (`:3631-3632`). The two packs are meant to come from
+one source, so this is only a gap. A pack that differs reaches the device as a pipeline whose layout does not match
+its shader, instead of a refusal with a reason. Proof: read from the code.
+
+**L2. A mesh replaced by one of the same layout tears down and rebuilds the whole content.**
+
+- **Where:** `mesh_buffers.cpp:584` (`++m_objects`), `mode_content.cpp:3289,3294` (`meshObjects` forces
+  `releasePipelines`) and `:2751` (which releases the streams and the arena too).
+- **What happens:** every pipeline and SRB is built again inside a visible record. New stream and arena buffers are
+  made, and the storage streams' bytes past their used length are lost.
+- **Why it matters:** the standing rule is no teardown and rebuild where a live owner can be retargeted. The vertex
+  buffers are given per draw, so only a layout change needs new pipelines.
+- **Proof:** `probe_replace.py`, the box replaced by its own bytes and layout: 3 buffers created (the mesh, the
+  `bars` stream and the arena), and the streams' build generation goes from 1 to 2.
+
+**L3. The core allocates per record, contrary to D15's "by construction"** (`Native_Core_P3_Decisions.md:1473-1474`).
+
+- **Where:** `record()` calls `meshesReady()` every record (`mode_content.cpp:4257`). That calls
+  `ModeProgram::drawnMeshes()` (`:3494`, `:1651-1668`), which builds a new `QList` for any program that draws a mesh.
+- **Why the proof missed it:** the steady proof cannot see heap allocations. The counting allocator and QRhi's
+  resource counts, both in the plan's box, were not built. The proof counts only `QRhiBuffer`s the core makes.
+- **Proof:** read from the code. `pack()`'s per-record `m_facts` JSON predates N3.2 (audit 2, M5).
+
+**L4. D15's limits are declared but not enforced.**
+
+- `kMaxDynamicOffsetBlocks` (`mesh_buffers.h:54`) is used nowhere. It holds today by construction: at most two
+  dynamic blocks a draw.
+- No block is checked against `MaxUniformBufferRange` (D15 point 3).
+- An indirect-stream pass is recorded with `drawIndirect` on any device (`mode_content.cpp:3742-3749`), with no
+  `QRhi::DrawIndirect` check or refusal.
+- `batchCapacity` silently caps a batch table at 64 pairs (`:3489`), so batches past 64 are not drawn and nothing is
+  reported.
+
+Proof: read from the code. All of them are unreachable on this machine's devices and data.
+
+**L5. A failed mesh upload leaves the old mesh drawn while the mesh is reported lost.**
+
+- **Where:** `mesh_buffers.cpp:561-564` returns before the old buffer is released, so the slot keeps the old
+  generation and vertices.
+- **What happens:** at the next record `take()` returns null (the image was moved) and the mesh is listed lost, yet
+  `find()` (`:509`) still returns the old buffer. `meshesReady()` is true and the old mesh is drawn, possibly with its
+  old layout under the new declaration.
+- **Proof:** read from the code. A `create()` failure was not provoked.
+
+**L6. Three tests are weaker than their plan boxes.**
+
+- `test_umatrix_follows_the_cards_rotation_and_window_map` (`tests/test_native_mesh_buffers.py:220-243,305-317`)
+  compares the core with `_item_clip`, which copies `itemClipMatrix`'s formula, not the Python renderer's `uMatrix`.
+  The plan asks for the Python renderer's. By reading, the rotation is the inverse of the Oscilloscope's
+  `physicalPoint` (`oscilloscope_program.py:263-269`) and `item_from_window` is oriented (`spectrum.py:140-141`), so it
+  is correct.
+- `test_the_core_arena_rule_is_the_mirror_s` (`:51-57`) matches source text instead of calling the module's
+  `mesh_buffer_arena_layout`.
+- No test compares the C++ reader's decode of an f32 field with Python's. `probe_f32_reader.py` shows they agree
+  (fields equal, bytes round-trip including inf, -0 and a denormal).
+
+**L7. The documents disagree with the code.**
+
+- The plan's device-facts box asks for the facts "into the host state", and D15 point 3 says they are logged "in the
+  host state". They are in a separate map read by `vulkan_device_facts` (`vulkan_context.cpp:730-746`). QRhi's
+  per-backend facts (`ubufAlignment()`, `BaseInstance`, `DrawIndirect`, `DrawIndirectMulti`, `ShaderDrawParameters`,
+  `MaxUniformBufferRange`) are recorded nowhere. D15's "QRhi reports ... on both backends" is inferred from form 3
+  being recorded.
+- `native/core/shaders/srpss_geometry.glsl` is not spliced by the core's own bake (`cmake/compose_shader.cmake:8`
+  replaces only `//@srpss_conventions`). The README's `//@srpss_geometry` works only through the Python composer.
+- "A program without it holds no mesh" (D15 "as built") is true only for a content that never drew the quad. The quad
+  slot is outside `ModeMeshes::sync`'s retire loop (`mesh_buffers.h:325`) and stays until the content goes.
+- `ModeMeshes::sync`'s comment says "a drawn mesh with a new generation is uploaded". It uploads every mesh the item
+  holds (`mesh_buffers.h:335-358`), and reports an undrawn one lost on a content made again.
+
+### Checked, no finding
+
+- **Ownership and retirement:**
+  - Meshes, streams, the arena and the batched commands are owned by `ModeContent`. They are released by `release()`
+    (streams with the pipelines), and the counts reach zero after a mode switch, a program without geometry,
+    destruction, and destruction before a first draw.
+  - A released `QRhiBuffer` goes through QRhi's deferred release. A mesh is released only at a record's start, before
+    any draw that names it.
+  - Every new `create()` is checked: meshes, the quad, streams, the arena, the batched commands, bindings and both
+    front-face pipelines.
+- **Arena and offsets:**
+  - Offsets come from `rhi->ubufAlignment()` (64 on the RTX 4090's Vulkan, 1 on OpenGL).
+  - A batched pass's copies sit one aligned stride apart.
+  - Every `memcpy` into the arena and the command shadow is bounds-checked.
+  - At most two dynamic offsets go to one `setShaderResources`, inside OpenGL's 8 and the device's 15.
+  - The arena, instance, indirect and command buffers are written only by the fast path, never mixed with a batch
+    update.
+  - Sixteen draws at sixteen offsets equal sixteen passes bit for bit.
+- **Streams:**
+  - `write` bounds the used length by the capacity and the record.
+  - A record past its `at_most` rule is refused by the reader before any write.
+  - The storage route's `fromRawData` view over the kept `staging` is safe on both backends: Vulkan copies it at the
+    batch, and OpenGL's deferred `glBufferSubData` runs at this frame's end, before the next record writes `staging`.
+- **`firstInstance`:** 0 on every draw the core makes: direct, form 2, and form 3's commands
+  (`mode_content.cpp:3572`, `:3736`, `:3757` under the harness control). `gl_DrawID` reads the batch and
+  `gl_BaseInstance` 0 on both backends.
+- **Synchronisation (the N3.1 H1 class):**
+  - Storage streams re-uploaded every record, read in the vertex stage, give no hazard over 16,157 to 102,343
+    consecutive records per scene under synchronisation validation. That covers the box with depth on a scene target,
+    the storage beam, two storage streams in the cells pass, the instance sprites and the indirect streaks.
+  - Mesh replacement and removal are validated in the retire round.
+  - Storage is bound read-only (`bufferLoad`), so passes sharing a stream only read it.
+- **Threads:** zero calls with a Python thread state (the rest round). The mesh state is noted only when objects
+  change, under `m_textureReportMutex`, and read under it. No per-record JSON is added by N3.2.
+- **`uMatrix` and the clip correction:**
+  - `itemClipMatrix` composes the item pixel through the oriented coordinate to the target's clip space, and the
+    correction is applied once.
+  - The core's triangle keeps zeros, which the bit-identical regressions confirm.
+  - `clipTopDown` is derived from `targetCorrection`.
+  - `mode_blocks`' optional correction uses the limited API's `PySequence_*` functions, with its reference released
+    and the error checked.
+- **The f32 kind:** consistent across `native_schema.py` (2 MiB records, 262,144 elements), `mode_schema.cpp`, the
+  generated header, `program_blocks.cpp` (it fills no block member), the module's decode, and the reader's rule (a
+  range rule on a u32 scalar only).
+- **The built-in quad:** `(0,0) (1,0) (0,1) (1,1)` as `aPosition`, equal to `render_host.py:524-533`.
+- **ABI 18:** `abi.h`, `EXPECTED_ABI`, the build and loader tests and the module entries agree, and nothing assumes
+  ABI 17.
+- **Rules:** no environment flags, timers or polling in product code; no preset names; the protected clip commits
+  untouched. D5's ownership table is amended for choice A.
+
+### Not verified
+
+- **Rounds not rerun:** `mesh_buffer_check`'s `cost` and `stream_ring` rounds, so neither D5.3's stream-ring figures
+  nor the GPU times. Also `background_layer_check`, `backdrop_pyramid_check`, `transition_route_check` and
+  `devcurve_check`, which the plan lists but the brief did not.
+- **What the probes did not cover:**
+  - H1's use-after-free as a crash (no sanitizer build).
+  - M1's out-of-bounds fetch as a fault (only its admission).
+  - A device without `DrawIndirect`, `DrawIndirectMulti` or `ShaderDrawParameters`.
+- **Real windows:** hidden hosts only, and no Display 1 rehearsal.
