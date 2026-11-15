@@ -136,6 +136,11 @@ What ours should do better, using what the widget material track has built or is
   corners truly see-through (Current_Plan 1B.9).
 - Vibrancy as a theme token, not baked colour: the accent glow under selected and playing items comes from the
   semantic accent, so every theme, light themes included, gets a correct one.
+- **16 Nov clarification:** the mock does not prescribe fixed radii, spacing, materials or motion. The first SMP
+  QML panes use plan 02 section 8.2A's typed semantic shape/surface/typography/state roles, including sharp-to-pill
+  outer and inner radii and split-corner treatments. Motion defaults reuse the Studios' Qt Quick bounce/OutBack,
+  hover and colour transitions; theme authors can later adjust motion presets and reduced-motion behaviour
+  without rebuilding the UI.
 - The Visualizer pane is the live Visualizer on the same material, so the window's most vivid element is real.
 - Cost: one backdrop capture shared by all panes of the window, no per-pane blur passes; dormant when the window
   is hidden or minimised.
@@ -292,8 +297,9 @@ section 5 sets the library's. P6 adds or sharpens:
 - **Upmixing and downmixing:** explicit channel-layout handling in the DSP chain (stereo to multichannel and
   multichannel to stereo with stated coefficients, bit-transparent when source and device layouts match).
 - **The equalizer is a first-class feature** with presets and per-device memory, not only a stage in a list.
-- **A well indexed, growable library database:** schema versioned with migrations, indexes for every browse and
-  sort the UI offers, incremental scan, and measured behaviour at large sizes (plan 02 section 5 and its budgets).
+- **A well indexed, growable library database:** schema versioned with migrations, mandatory shipped SQLite FTS5,
+  search/browse/sort indexes, stable paged read models, one-writer WAL transactions, resilient metadata edit/file
+  tag journal, incremental scan and measured 50k/250k-track behaviour (plan 02 section 3.3 and its budgets).
 - **Full modern music-player parity without giving up what is ours:** the live Visualizer as a section, the
   theme and material system, Edit-grade rearrangement. Parity is a checklist to be written against named players
   when SMP is scheduled, not before.

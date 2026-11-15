@@ -850,6 +850,11 @@ Port-readiness rules bind all new GPU code now (the backend decision). Expanded 
   Multimedia playback prototype or a later backend migration. Native audio shares core tooling and
   engineering contracts with the QRhi Native Core, but never its GPU/GUI thread, clock or lifetime;
   Python retains application policy, not real-time sample delivery. Plan 02 §4/§13 and PCM seam 03 bind.
+  **SMP visual/library foundations (operator, 16 Nov):** M0/M1 must define/consume versioned semantic shape,
+  surface, type and motion tokens before building the panes, including full sharp-to-pill radii, inner junctions,
+  and reuse of Studio Qt Quick bounce/hover transitions with reduced-motion policy. Theme editor follows later.
+  M2 keeps SQLite with mandatory FTS5, indexed virtualised pages, bounded edits and measured 50k/250k-track
+  concurrency/recovery; no custom database core. Plan 02 §3.3 and §8.2A govern.
 - [ ] New modes (Reactive Liquid / Melt Pool, Concrete Rain, Usu Moonscape; section 7, lab first) are built on
   the native core only, after it.
 - [ ] Very low priority, after the native core and its new primitives (operator, 14 Nov): Extruded Bubble's arctic
