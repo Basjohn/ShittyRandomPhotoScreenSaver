@@ -61,6 +61,11 @@ meets it before the operator does.
   (``waveform_pcm_receipt``): in process from the body's input rows, on the worker path from the frames main rendered
   (a live body with passage above zero; ``waveform_frame_receipt``).
 
+* **Pre-flip reference pack** (``tools/preflip_pack.py`` drives this tool per row): ``--display N`` runs on one screen
+  (a measured size), ``--setting DOTTED.KEY=JSON`` writes any persisted setting into the copy, ``--no-updates`` keeps
+  the network out, ``--mode none`` measures the saver without a Visualizer figure, and ``--process-samples`` adds
+  ``summary['process']`` (CPU of a core, GPU engine utilisation, RSS and private memory of the tree, steady window).
+
 Runs take ``--seconds`` plus ~30 s (profile copy, load calibration, startup, teardown). Stop strays by exact PID.
 """
 from __future__ import annotations
@@ -201,6 +206,15 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path:
             begin_mode[r] = ts
         elif e == 13 and r in begin_mode:
             render_mode.append((ts - begin_mode.pop(r)) / 1e6)
+    # Quick's own render phase (before_rendering -> after_rendering): the render time of a frame whatever it draws, so
+    # a saver without a Visualizer (a transition row) still has one; ``render_mode_ms`` is the Visualizer's own draw.
+    quick_render, quick_begin = [], None
+    for ts, e, _ in steady:
+        if e == 51:
+            quick_begin = ts
+        elif e == 54 and quick_begin is not None:
+            quick_render.append((ts - quick_begin) / 1e6)
+            quick_begin = None
     early = [ts for ts, e, _ in events if e == 6 and startup_end <= ts < start]
     early_gaps = [(b - a) / 1e6 for a, b in zip(early, early[1:])]
     steady_publishes = [(ts, r) for ts, e, r in steady if e == 1]
@@ -228,6 +242,8 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path:
                                            if worker_path else "newer publications than the one the sync consumed"),
         "publish_to_swap_ms": _stats(to_swap),
         "render_mode_ms": _stats(render_mode),
+        "quick_render_ms": _stats(quick_render),
+        "steady_window_ns": [start, stop],
         "swap_gap_ms": _stats(gaps),
         "steady_late_pct": round(100.0 * sum(g > LATE_MS for g in gaps) / max(len(gaps), 1), 1),
         "hitches_per_min": round(60.0 * sum(g > 50.0 for g in gaps) / seconds, 2),
@@ -235,6 +251,32 @@ def analyse_trace(path: Path, *, steady_stop_ns: int | None = None, worker_path:
         "post_startup_late_pct": round(100.0 * sum(g > LATE_MS for g in early_gaps) / max(len(early_gaps), 1), 1),
         "sync_admissions_per_s": round(sum(1 for _, e, _ in steady if e == 74) / seconds, 1),
     }
+
+
+def summarise_process_samples(samples: list[dict], window_ns: tuple[int, int] | None, fps: float | None) -> dict | None:
+    """The saver tree's own cost from the parent's once-a-second samples (``--process-samples``), steady window only.
+
+    ``cpu_core_pct`` is the tree's CPU time as a percentage of one core (100 = one core busy), ``gpu_pct`` the tree's
+    GPU engine utilisation (Windows ``GPU Engine`` counters, summed over engines and processes), ``rss_mb`` and
+    ``private_mb`` the tree's totals. ``gpu_ms_per_frame`` is derived, not measured per frame: the median utilisation
+    over the median frame period; None where the counters are unavailable (it is a share of wall time summed over
+    engines, an estimate to compare runs by, never an exact frame cost)."""
+    chosen = [s for s in samples if window_ns is None or window_ns[0] <= s["perf_ns"] < window_ns[1]]
+    if not chosen:
+        return None
+
+    def column(name):
+        return [s[name] for s in chosen if s.get(name) is not None]
+
+    def median(name):
+        values = column(name)
+        return round(statistics.median(values), 2) if values else None
+
+    gpu = median("gpu_pct")
+    return {"samples": len(chosen), "cpu_core_pct": median("cpu_core_pct"), "gpu_pct": gpu,
+            "gpu_ms_per_frame": round(gpu / 100.0 * 1000.0 / fps, 3) if gpu is not None and fps else None,
+            "rss_mb": median("rss_mb"), "private_mb": median("private_mb"),
+            "rss_mb_max": max(column("rss_mb"), default=None), "private_mb_max": max(column("private_mb"), default=None)}
 
 
 #: How the recorded clip reaches the engine on each path (the tick's cost depends on it: phase-locked blocks never
@@ -412,7 +454,7 @@ class _ProcessGpu:
                                                  ctypes.byref(self._counter)) == 0)
         self.available = ok and self._pdh.PdhCollectQueryData(self._query) == 0
 
-    def sample(self, pids: set[int]) -> float | None:
+    def _readings(self) -> list[tuple[str, float]] | None:
         if not self.available or self._pdh.PdhCollectQueryData(self._query) != 0:
             return None
 
@@ -426,9 +468,26 @@ class _ProcessGpu:
                                                    buffer) != 0:
             return None
         items = ctypes.cast(buffer, ctypes.POINTER(Item))
+        return [(items[i].name, items[i].value) for i in range(count.value) if items[i].name]
+
+    def sample(self, pids: set[int]) -> float | None:
+        readings = self._readings()
+        if readings is None:
+            return None
         prefixes = tuple(f"pid_{pid}_" for pid in pids)
-        return round(sum(items[i].value for i in range(count.value)
-                         if items[i].name and items[i].name.startswith(prefixes)), 2)
+        return round(sum(value for name, value in readings if name.startswith(prefixes)), 2)
+
+    def by_pid(self) -> dict[int, float] | None:
+        """GPU engine utilisation summed per process id (every process on the machine), None when unavailable."""
+        readings = self._readings()
+        if readings is None:
+            return None
+        totals: dict[int, float] = {}
+        for name, value in readings:
+            match = re.match(r"pid_(\d+)_", name)
+            if match:
+                totals[int(match.group(1))] = totals.get(int(match.group(1)), 0.0) + value
+        return {pid: round(value, 2) for pid, value in totals.items()}
 
 
 def _tree_cpu_seconds(pids: set[int]) -> float:
@@ -593,7 +652,8 @@ def install_recorded_music(stack, clip: Path, *, clip_start: float, seconds: flo
 def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_start: float, mode: str,
             display_off: list[tuple[float, float]] | None = None,
             settings_roundtrip: list[float] | None = None, roundtrip_memory: tuple[str, ...] = (),
-            app_args: tuple[str, ...] = (), mode_switch: list[float] | None = None) -> None:
+            app_args: tuple[str, ...] = (), mode_switch: list[float] | None = None, display: int | None = None,
+            settings: tuple[tuple[str, object], ...] = (), no_updates: bool = False) -> None:
     import contextlib
 
     began = time.monotonic()
@@ -607,9 +667,22 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
 
     isolate_profile_paths(out)
     # --usage as the operator always runs: its sampler is part of the live shape (a 15 s GIL-held hitch, 2026-10-31).
+    # ``display``: the product's RUN flag naming one screen (the saver's logs number them), so a run measures one size.
     sys.argv = [str(ROOT / "main_mc.py"), "--perf", "--usage", "--frame-trace", "--exit-after", str(int(seconds)),
-                *app_args, "/s"]
+                *(["--noupdates"] if no_updates else []), *(["--only-display", str(display)] if display is not None
+                                                           else []), *app_args, "/s"]
     phases.production_startup()
+    if settings:
+        # Written through the real SettingsManager of the copied profile and read back, as ``tools/d1_run.py`` does.
+        from tools.d1_run import apply_settings
+
+        try:
+            applied = apply_settings(list(settings), application="Screensaver_MC")
+        except (KeyError, ValueError, RuntimeError) as exc:
+            (out / "settings_refused.txt").write_text(str(exc), encoding="utf-8")
+            print(f"REFUSED setting: {exc}", file=sys.stderr)
+            raise SystemExit(6) from None
+        (out / "applied_settings.json").write_text(json.dumps(applied, indent=1, default=str), encoding="utf-8")
     if not visible:
         install_invisible_windows()
     stack = contextlib.ExitStack()
@@ -819,7 +892,21 @@ def _start_load(profile: str, seconds: float, out: Path) -> subprocess.Popen:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--mode", required=True)
+    parser.add_argument("--mode", required=True,
+                        help="a Visualizer mode id, or 'none': the profile's Visualizer is left as it is and no "
+                             "Visualizer figure is required (a transition row; pair it with --setting "
+                             "widgets.spotify_visualizer.enabled=false)")
+    parser.add_argument("--display", type=int, metavar="N",
+                        help="run on screen N only (the product's --only-display, windows still invisible): one "
+                             "measured size; default every display the profile selects")
+    parser.add_argument("--setting", action="append", default=[], type=parse_setting, metavar="DOTTED.KEY=JSON",
+                        help="any persisted setting, written to the copied profile through SettingsManager and read "
+                             "back (as tools/d1_run.py --setting); a refused key fails the run (exit 6)")
+    parser.add_argument("--no-updates", action="store_true",
+                        help="the saver's --noupdates: cached feeds, mail and weather, no live network")
+    parser.add_argument("--process-samples", action="store_true",
+                        help="sample the saver tree once a second (CPU of a core, GPU engine utilisation, RSS and "
+                             "private memory) and report the steady window as summary['process']")
     parser.add_argument("--preset", type=int, help="curated preset, 1-based (default: the profile's own)")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=JSON",
                         help="visualizer setting override, written into the copied profile only")
@@ -859,6 +946,17 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def parse_setting(text: str) -> tuple[str, object]:
+    """``DOTTED.KEY=JSON`` -> (key, value)."""
+    key, separator, raw = str(text).partition("=")
+    if not separator or not key.strip():
+        raise argparse.ArgumentTypeError(f"expected KEY=JSON, got {text!r}")
+    try:
+        return key.strip(), json.loads(raw)
+    except json.JSONDecodeError:
+        raise argparse.ArgumentTypeError(f"{key}: the value must be JSON (e.g. 5, true, \"text\"), got {raw!r}") from None
+
+
 def parse_app_arg(text: str) -> str:
     """An experiment admission for the saver's argv (``core.diagnostics.experiment_flags``); nothing else reaches it
     (a mode, display or log-root token could make the run visible or move its logs away from the report)."""
@@ -877,6 +975,9 @@ def runner_command(args, out: Path, clip: Path | None) -> list[str]:
     return ([sys.executable, str(Path(__file__).resolve()), "--runner", "--mode", args.mode, "--seconds",
              str(args.seconds), "--out", str(out), "--clip", str(clip or "none"), "--clip-start",
              str(args.clip_start)] + (["--visible"] if args.visible else [])
+            + (["--display", str(args.display)] if args.display is not None else [])
+            + (["--no-updates"] if args.no_updates else [])
+            + [f"--setting={key}={json.dumps(value)}" for key, value in args.setting]
             + (["--display-off", args.display_off] if args.display_off else [])
             + (["--settings-roundtrip", ",".join(f"{at:g}" for at in args.settings_roundtrip)]
                if args.settings_roundtrip else [])
@@ -888,7 +989,8 @@ def runner_command(args, out: Path, clip: Path | None) -> list[str]:
 
 def default_out(args) -> Path:
     label = args.label or artifact_paths.run_label(f"p{args.preset}" if args.preset else "profile")
-    return artifact_paths.evidence_dir(f"visualizers/{args.mode}", "live_check", artifact_paths.slug(label))
+    area = "performance" if args.mode == "none" else f"visualizers/{args.mode}"
+    return artifact_paths.evidence_dir(area, "live_check", artifact_paths.slug(label))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -898,7 +1000,7 @@ def main(argv: list[str] | None = None) -> int:
         _runner(args.out, args.seconds, args.visible, clip, args.clip_start, args.mode,
                 parse_display_off(args.display_off) if args.display_off else None, args.settings_roundtrip,
                 args.roundtrip_memory if (args.settings_roundtrip or args.mode_switch) else (), tuple(args.app_arg),
-                args.mode_switch)
+                args.mode_switch, args.display, tuple(args.setting), args.no_updates)
         return 0
     out = artifact_paths.checked_output(args.out) if args.out is not None else default_out(args)
     if clip is not None and not clip.exists():
@@ -916,13 +1018,14 @@ def _measure(args, out: Path, clip: Path | None) -> int:
     from tools.bench_stability import SystemSampler, summarise_environment
 
     overrides = {key: json.loads(value) for key, value in (item.split("=", 1) for item in args.set)}
-    _prepare_profile(out, args.mode, args.preset, overrides)
-    load = None if args.load == "none" else _start_load(args.load, args.seconds + 60, out)
+    _prepare_profile(out, None if args.mode == "none" else args.mode, args.preset, overrides)
+    load =None if args.load == "none" else _start_load(args.load, args.seconds + 60, out)
     command = runner_command(args, out, clip)
     if args.display_off:
         parse_display_off(args.display_off)
     sampler, conditions = SystemSampler(), []
-    gpu, power_samples, cpu_previous = (_ProcessGpu() if args.display_off else None), [], None
+    sampled = bool(args.display_off or args.process_samples)
+    gpu, power_samples, cpu_previous = (_ProcessGpu() if sampled else None), [], None
     runner = subprocess.Popen(command, cwd=ROOT, stdout=(out / "runner.txt").open("w"),
                               stderr=subprocess.STDOUT)
     violation, tree, started = None, None, time.monotonic()
@@ -938,6 +1041,11 @@ def _measure(args, out: Path, clip: Path | None) -> int:
                 pids = _process_tree(runner.pid)
                 now_ns, cpu_now = time.perf_counter_ns(), _tree_cpu_seconds(pids)
                 row = {"perf_ns": now_ns, "gpu_pct": gpu.sample(pids), "cpu_others": conditions[-1]["cpu_others"]}
+                if args.process_samples:
+                    memory = [r for r in (live_check_resources._process_row(p)
+                                          for p in live_check_resources._tree(runner.pid)) if r]
+                    row["rss_mb"] = round(sum(r["rss_mb"] for r in memory), 1)
+                    row["private_mb"] = round(sum(r["private_mb"] for r in memory), 1)
                 if cpu_previous is not None:
                     row["cpu_core_pct"] = round(100.0 * (cpu_now - cpu_previous[1])
                                                 / max((now_ns - cpu_previous[0]) / 1e9, 1e-9), 1)
@@ -1017,13 +1125,17 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
     worker_path = engine_worker_path(args.app_arg)
     summary.update(analyse_trace(trace, steady_stop_ns=edges[0]["perf_ns"] if edges else None,
                                  worker_path=worker_path))
-    if worker_path and not summary["publish_records_per_s"]:
+    if worker_path and not summary["publish_records_per_s"] and args.mode != "none":
         # Fail closed: without the worker's publish stamps the age chain would read as empty, not as measured.
         raise RuntimeError("engine-worker run recorded no publish in the trace (no publish_ns reached the main side)")
-    if args.display_off:
+    if args.display_off or args.process_samples:
         (out / "power_samples.jsonl").write_text("".join(json.dumps(row) + "\n" for row in power_samples),
                                                  encoding="utf-8")
+    if args.display_off:
         summary["display_power"] = analyse_display_power(trace, edges, power_samples)
+    if args.process_samples:
+        summary["process"] = summarise_process_samples(power_samples, tuple(summary["steady_window_ns"]),
+                                                       summary["frames_per_s"])
     summary["hud_age_ms"] = hud_ages(out / "logs" / "screensaver_perf.log", args.mode)
     usage = usage_summary(out / "logs" / "screensaver_usage.log")
     summary["usage"] = usage
@@ -1056,7 +1168,7 @@ def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dic
     (out / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     for key, value in summary.items():
         if key not in ("render_stages_ms", "process_tree", "actual_waveform_configuration", "display_power",
-                       "settings_roundtrip"):
+                       "settings_roundtrip", "steady_window_ns"):
             print(f"{key:28s} {value}")
     for key, limit, message in _FLAGS:
         if key == "main_wall_share" and summary.get("tick_process") == "main":
