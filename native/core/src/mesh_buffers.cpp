@@ -33,6 +33,9 @@ QAtomicInteger<qint64> g_buffersCreated { 0 };
 QAtomicInteger<qint64> g_indirectDraws { 0 };
 QAtomicInteger<qint64> g_batchedIndirect { 0 };
 QAtomicInteger<qint64> g_batchedLoop { 0 };
+QAtomicInteger<qint64> g_recordsTimed { 0 };
+QAtomicInteger<qint64> g_recordNs { 0 };
+QAtomicInteger<qint64> g_streamWriteNs { 0 };
 QAtomicInteger<quint64> g_meshGenerations { 0 };
 QAtomicInteger<int> g_hideDrawParameters { 0 };
 QAtomicInteger<quint32> g_directFirstInstance { 0 };
@@ -433,7 +436,17 @@ MeshBufferCounts meshBufferCounts()
     c.indirectDraws = g_indirectDraws.loadRelaxed();
     c.batchedIndirect = g_batchedIndirect.loadRelaxed();
     c.batchedLoop = g_batchedLoop.loadRelaxed();
+    c.recordsTimed = g_recordsTimed.loadRelaxed();
+    c.recordNs = g_recordNs.loadRelaxed();
+    c.streamWriteNs = g_streamWriteNs.loadRelaxed();
     return c;
+}
+
+void countRecordTime(qint64 recordNs, qint64 streamWriteNs)
+{
+    g_recordsTimed.fetchAndAddRelaxed(1);
+    g_recordNs.fetchAndAddRelaxed(recordNs);
+    g_streamWriteNs.fetchAndAddRelaxed(streamWriteNs);
 }
 
 void countIndirectDraw() { g_indirectDraws.fetchAndAddRelaxed(1); }

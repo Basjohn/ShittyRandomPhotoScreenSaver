@@ -175,10 +175,18 @@ struct MeshBufferCounts
     qint64 indirectDraws = 0;  // drawIndirect calls recorded
     qint64 batchedIndirect = 0; // batched passes recorded as one multi-draw (D15 point 6, form 3)
     qint64 batchedLoop = 0;     // batched passes recorded as one draw a batch (form 2)
+    // The stream ring's CPU axis (D15 point 7): the render thread's time in the drawn records of a stream-bound
+    // content (the whole record, the batch QRhi runs at the pass's begin included) and in their stream and arena
+    // writes alone, summed; the harness reads the differences over a counted run. Timed with the record's own timer
+    // (N3.8's), so nothing is added at rest.
+    qint64 recordsTimed = 0;
+    qint64 recordNs = 0;
+    qint64 streamWriteNs = 0;
 };
 MeshBufferCounts meshBufferCounts();
 void countIndirectDraw();
 void countBatched(bool indirect);
+void countRecordTime(qint64 recordNs, qint64 streamWriteNs);
 
 // Harness controls (each the negative control of one proof; process-wide, the harness's only).
 // - hide the draw-parameters features: a batched pass is recorded one draw a batch on every device;
@@ -223,10 +231,12 @@ public:
     ModeMeshes &operator=(const ModeMeshes &) = delete;
 
     // At a record: a mesh the item no longer holds goes; a drawn mesh with a new generation is uploaded into `updates`
-    // (its image taken through `take`); the built-in quad is made once. `lost` names the drawn meshes with no image to
-    // upload from (a content made again). False with the reason when a buffer could not be created (that mesh lost).
+    // (its image taken through `take`); the built-in quad is made once, when a pass draws it (`quad`). `lost` names the
+    // drawn meshes with no image to upload from (a content made again). False with the reason when a buffer could not
+    // be created (that mesh lost).
     template <typename Take>
-    void sync(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QList<ModeMesh> &drawn, Take take, QStringList *lost);
+    void sync(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QList<ModeMesh> &drawn, Take take, QStringList *lost,
+              bool quad);
     const Gpu *find(const QByteArray &name) const;
     bool uploadedThisRecord() const { return m_uploaded; }
     quint64 objects() const { return m_objects; } // a buffer made or gone (the latch key and the still signature)
@@ -297,10 +307,11 @@ void meshesCountUpload();
 
 template <typename Take>
 void ModeMeshes::sync(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QList<ModeMesh> &drawn, Take take,
-                      QStringList *lost)
+                      QStringList *lost, bool quad)
 {
     m_uploaded = false;
-    ensureQuad(rhi, updates);
+    if (quad)
+        ensureQuad(rhi, updates);                 // only for a program that draws it (none of N2.9's or N3.1's)
     // The retire path: a mesh the item no longer holds goes now.
     for (int i = 0; i < kMaxModeMeshes; ++i) {
         Gpu &gpu = m_meshes[i];

@@ -4186,8 +4186,11 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
     reportTextures();
     // N3.2 (D15 point 2): each new mesh once, before the passes that draw it; a mesh the item no longer holds goes.
     m_meshesLost.clear();
+    bool quad = false;                        // the built-in quad, made only for a program that draws it
+    for (const ModePass &pass : m_source->drawnProgram().passes)
+        quad = quad || pass.mesh == kBuiltinQuadMesh || pass.instanceFrom == kBuiltinQuadMesh;
     m_meshes.sync(rhi, updates, m_source->drawnMeshes(),
-                  [this](const QByteArray &name) { return m_source->takeMeshImage(name); }, &m_meshesLost);
+                  [this](const QByteArray &name) { return m_source->takeMeshImage(name); }, &m_meshesLost, quad);
     // N3.1: the scene targets at this surface's size, made before the pipelines that draw into them.
     if (!syncTargets(rhi, target, error)) {
         cb->resourceUpdate(updates);          // the uploads stand (their images are taken): nothing is lost
@@ -4206,8 +4209,15 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
             : QStringLiteral("lost: %1 (the owner sends the image again)")
                   .arg(m_texturesLost.join(QStringLiteral(", ")));
         if (texturesReady() && !meshesReady()) {
+            // Every mesh the program draws that the content does not hold: lost with a content made again, or one the
+            // owner removed while the program still draws it (the sync's list names only the first).
+            QStringList missing;
+            for (const QByteArray &name : m_source->drawnProgram().drawnMeshes()) {
+                if (!m_meshes.find(name))
+                    missing.append(QString::fromLatin1(name));
+            }
             m_reason = QStringLiteral("lost: mesh(es) %1 (the owner sends them again)")
-                           .arg(m_meshesLost.join(QStringLiteral(", ")));
+                           .arg(missing.join(QStringLiteral(", ")));
         }
     }
     noteMeshBuffers();                        // N3.2: only when the meshes' or streams' objects changed
@@ -4253,6 +4263,7 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
             std::memcpy(m_arena.data() + r.conventionsOffset, &conventions, sizeof(conventions)); // N3.2: the arena
         r.staticUploaded = true;
     }
+    qint64 streamWriteNs = 0;                 // N3.2: the stream and arena writes of this record
     if (!r.targetsUploaded) {
         // N3.1: the targets' clear values and the captures' blocks, once per build (they come with the program).
         for (int t = 0; t < r.targetClearCount; ++t) {
@@ -4285,14 +4296,18 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
     if (draw) {
         // N3.2 (D15 points 3, 4 and 6): the streams from the record, every block into the arena's copy (the batched
         // passes' commands with them), then the arena whole by the fast path (one copy; never a batch update).
+        const qint64 writesFrom = recordTimer.nsecsElapsed();
         if (!m_source->drawnStill())
             m_streams.write(rhi, updates, m_source->frameRecord());
         fillArena();
         m_streams.writeArena(m_arena);
         if (!m_batchShadow.isEmpty())
             m_streams.writeBatchCommands(m_batchShadow.constData(), quint32(m_batchShadow.size()));
+        streamWriteNs = recordTimer.nsecsElapsed() - writesFrom;
     }
     recordPasses(rhi, cb, target, updates, draw, readback);
+    if (draw && !m_source->drawnStill())
+        countRecordTime(recordTimer.nsecsElapsed(), streamWriteNs); // D15 point 7: the stream ring's CPU axis
     const QSize size = target.texture->pixelSize();
     if (readback) {
         // N3.1, harness: every scene target's readable texture as this record left it.

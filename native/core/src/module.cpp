@@ -702,6 +702,9 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("mesh_buffers_indirect_draws"), double(mb.indirectDraws));
     o.insert(QStringLiteral("mesh_buffers_batched_indirect"), double(mb.batchedIndirect));
     o.insert(QStringLiteral("mesh_buffers_batched_loop"), double(mb.batchedLoop));
+    o.insert(QStringLiteral("mesh_buffers_records_timed"), double(mb.recordsTimed));
+    o.insert(QStringLiteral("mesh_buffers_record_ns"), double(mb.recordNs));
+    o.insert(QStringLiteral("mesh_buffers_stream_write_ns"), double(mb.streamWriteNs));
     return pyJson(o);
 }
 

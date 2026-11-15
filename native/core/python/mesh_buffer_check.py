@@ -87,7 +87,8 @@ COST_MIN_SAMPLES = 30
 COST_MAX_FRAMES = 1500             # Qt's OpenGL timer returns a time for about one frame in 20: a bounded loop
 RING_PAYLOADS = (("4KiB", 4096), ("bubble_4.6KB", 4608), ("oscilloscope_48KiB", 49152),
                  ("waveform_160KiB", 163840), ("waveform_288KiB", 294912))
-RING_FRAMES = 240
+RING_FRAMES = 600                  # the ring's timed records a route (the CPU axis: window means of 20)
+COST_FRAMES = 240
 FLOOR_MARGIN_MS = 0.05
 _ALLOWED_ENV: set[str] = set()
 
@@ -876,6 +877,9 @@ def round_retire(core, engine, app, api: str, packs: dict) -> dict:
     checks["replaced_holds_one_mesh_and_draws"] = (replaced["mesh_buffers_meshes"] == held["mesh_buffers_meshes"]
                                                    and facts["replaced_lit"] > 200)
     checks["removed_releases_the_mesh"] = removed["mesh_buffers_meshes"] == held["mesh_buffers_meshes"] - 1
+    checks["removed_reason_names_the_mesh"] = "box" in str(facts.get("removed_reason"))
+    # The built-in quad is made only for a program that draws it: the box and the flat program hold none.
+    checks["no_builtin_quad_unless_drawn"] = held["mesh_buffers_meshes"] == 1 and plain["mesh_buffers_meshes"] == 0
     checks["a_program_without_geometry_releases_the_streams"] = plain["mesh_buffers_streams"] == 0
     checks["destruction_leaves_nothing"] = all(gone.get(k) == 0 for k in keys)
     checks["destroyed_before_its_first_draw_leaves_nothing"] = all(early.get(k) == 0 for k in keys)
@@ -912,7 +916,11 @@ def _timed(host, scene, *, min_samples: int = COST_MIN_SAMPLES, frames: int = RI
     host.gpu_samples()
     gpu: list[int] = []
     wall: list[float] = []
+    record_ms: list[float] = []      # the render thread's record (the core's own timer), mean per window of 20
+    write_ms: list[float] = []       # its stream and arena writes alone
     drawn = 0
+    last = core_counts = scene.mode._module.composite_live()
+    timed = "mesh_buffers_records_timed" in core_counts
     while drawn < COST_MAX_FRAMES and (drawn < frames or len(gpu) < min_samples):
         scene.publish()
         scene.mode.update()
@@ -922,6 +930,14 @@ def _timed(host, scene, *, min_samples: int = COST_MIN_SAMPLES, frames: int = RI
         drawn += 1
         if drawn % 20 == 0:
             gpu += [s.nanoseconds for s in host.gpu_samples() if s.kind == 2]
+            if timed:
+                now = scene.mode._module.composite_live()
+                records = now["mesh_buffers_records_timed"] - last["mesh_buffers_records_timed"]
+                if records > 0:
+                    record_ms.append((now["mesh_buffers_record_ns"] - last["mesh_buffers_record_ns"]) / records / 1e6)
+                    write_ms.append((now["mesh_buffers_stream_write_ns"] - last["mesh_buffers_stream_write_ns"])
+                                    / records / 1e6)
+                last = now
     host.frames(4)
     gpu += [s.nanoseconds for s in host.gpu_samples() if s.kind == 2]
     host.set_gpu_timer(False)
@@ -929,6 +945,12 @@ def _timed(host, scene, *, min_samples: int = COST_MIN_SAMPLES, frames: int = RI
     result = _summary(gpu)
     result.update({"frames": drawn, "wall_median_ms": round(wall[len(wall) // 2], 4),
                    "wall_p10_ms": round(wall[int(len(wall) * 0.1)], 4)})
+    if record_ms:
+        record_ms.sort()
+        write_ms.sort()
+        result.update({"record_cpu_median_ms": round(record_ms[len(record_ms) // 2], 4),
+                       "record_cpu_p10_ms": round(record_ms[int(len(record_ms) * 0.1)], 4),
+                       "write_cpu_median_ms": round(write_ms[len(write_ms) // 2], 4)})
     return result
 
 
@@ -948,7 +970,7 @@ def round_cost(core, engine, app, api: str, packs: dict) -> dict:
                     scene = Scene(core, engine, host, spec_for(name, packs, api), dpr=dpr)
                     try:
                         key = name + ("_loop" if loop else "")
-                        facts[label][key] = _timed(host, scene)
+                        facts[label][key] = _timed(host, scene, frames=COST_FRAMES)
                         state = scene.mode.state()
                         facts[label][key]["last_reason"] = state.get("last_reason")
                         checks[f"{label}_{key}_timed"] = facts[label][key]["samples"] >= COST_MIN_SAMPLES
@@ -983,12 +1005,16 @@ def round_stream_ring(core, engine, app, api: str, packs: dict) -> dict:
             if size == 0:
                 continue
             floor = entry["floor"]
-            cpu_floor = entry["instance"]["wall_median_ms"]
+            # The CPU axis: the render thread's record (the core's timer) where the module counts it, else the frame's
+            # wall time on the GUI thread (a module before the counter: noisier, the whole frame).
+            cpu_key = "record_cpu_median_ms" if "record_cpu_median_ms" in entry["instance"] else "wall_median_ms"
+            cpu_floor = entry["instance"][cpu_key]
+            entry["cpu_axis"] = cpu_key
             for route in ("instance", "storage"):
                 got = entry[route]
                 ok_gpu = (got["median_ms"] is not None and floor["median_ms"] is not None
                           and got["median_ms"] - floor["median_ms"] < FLOOR_MARGIN_MS)
-                ok_cpu = got["wall_median_ms"] - cpu_floor < FLOOR_MARGIN_MS
+                ok_cpu = got[cpu_key] - cpu_floor < FLOOR_MARGIN_MS
                 entry[f"{route}_within_floor"] = {"gpu": ok_gpu, "cpu": ok_cpu}
                 checks[f"{label}_{route}_within_0.05ms_of_the_floor"] = ok_gpu and ok_cpu
     finally:
