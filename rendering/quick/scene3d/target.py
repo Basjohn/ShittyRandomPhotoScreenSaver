@@ -444,6 +444,9 @@ def warm_run_resources(target: "SceneTarget", trails, size: tuple[int, int] | No
     return not with_trails or trails.warm(target)
 
 
+# The plain textures the bloom chain samples (its source: the scene, its resolve, the emission, its resolve).
+_BLOOM_SOURCE_KEYS = frozenset({"colour", "emission", "resolve_texture", "emission_resolve"})
+
 _COMPOSITE_DEFAULTS = {"uBloomScale": (0.0, 0.0), "uBloomStrength": 0.0, "uOpacity": 0.0, "uHdrExposure": 0.0,
                        "uShaftColour": (0.0, 0.0, 0.0), "uSamples": 0}
 
@@ -562,7 +565,7 @@ class SceneTarget:
             raise ValueError(f"{self.label}: an HDR scene target tone maps in its overlay bloom composite")
         self.begin(frame, samples, rect, motion_blur, overlay=overlay,
                    emission=overlay is not None and bloom > 0.0, shafts=shafts, depth_texture=depth_texture,
-                   oit=oit, hdr=hdr is not None)
+                   oit=oit, hdr=hdr is not None, bloom=bloom > 0.0)
         self._exposure = 0.0 if hdr is None else max(float(hdr), 1e-3)
         try:
             yield
@@ -887,7 +890,8 @@ class SceneTarget:
 
     def begin(self, frame: SceneFrame, samples: int, rect: tuple[int, int, int, int] | None = None,
               motion_blur: bool = False, overlay: float | None = None, emission: bool = False,
-              shafts: bool = False, depth_texture: bool = False, oit: bool = False, hdr: bool = False) -> None:
+              shafts: bool = False, depth_texture: bool = False, oit: bool = False, hdr: bool = False,
+              bloom: bool = False) -> None:
         x, y, width, height = tuple(int(v) for v in (rect if rect is not None else item_pixel_rect(frame)))
         if width <= 0 or height <= 0:
             raise ValueError(f"{self.label} scene target needs a positive rect, got {(x, y, width, height)}")
@@ -913,8 +917,10 @@ class SceneTarget:
         gl.glDisable(gl.GL_SCISSOR_TEST)
         clear = gl_query.get_floats(gl.GL_COLOR_CLEAR_VALUE, 4)
         try:
-            # The motion attachment clears to no motion; an overlay's colour to transparent.
-            gl.glClearColor(0.0, 0.0, 0.0, 0.0 if self._overlay is not None else 1.0)
+            # The motion attachment clears to no motion; an overlay's colour to transparent. With bloom alpha is
+            # emitted light, so nothing drawn is no light: the bloom source is read bilinear, and a cleared alpha
+            # of 1 would blend into the neighbouring drawn pixels as emission (the composite writes opaque alpha).
+            gl.glClearColor(0.0, 0.0, 0.0, 0.0 if self._overlay is not None or bloom else 1.0)
             gl.glClearDepth(1.0)
             gl.glDepthMask(gl.GL_TRUE)
             gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
@@ -1168,8 +1174,14 @@ class SceneTarget:
         """Register a plain attachment before configuring immutable storage for cleanup retry."""
         texture = _new_texture(gl.GL_TEXTURE_2D, f"{self.label} scene target")
         self._names[key] = texture
+        # The bloom chain's 13-tap filter reads these with texture(): bilinear taps, and an edge that clamps so
+        # light never wraps in from the opposite side. Every other plain texture is fetched by texel.
+        bloom_read = key in _BLOOM_SOURCE_KEYS
         for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
-            gl.glTextureParameteri(texture, parameter, gl.GL_NEAREST)
+            gl.glTextureParameteri(texture, parameter, gl.GL_LINEAR if bloom_read else gl.GL_NEAREST)
+        if bloom_read:
+            for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
+                gl.glTextureParameteri(texture, wrap, gl.GL_CLAMP_TO_EDGE)
         gl.glTextureStorage2D(texture, 1, internal, width, height)
 
     def _allocate_attachment(self, key: str, samples: int, width: int, height: int, internal: int) -> None:
