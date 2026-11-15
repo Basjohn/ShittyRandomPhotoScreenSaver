@@ -9,6 +9,8 @@ registered (like ``probe_rings``). A still (no stream): its program, settings an
 - ``ambient``: explicit size, ``coverage`` RGBA8 (premultiplied over) and ``light`` RGBA16F (added): Bubble's ambient
   target's shape (``bubble_ambient_gl.py``); ``u_glow`` 0 writes no light (the attachment holds its clear).
 - ``show``: the surface's pass, sampling the captures and the ambient target (a look, not a parity record).
+- ``lin_program`` (D14 point 10's means (b) beside (a)), ``cost_part_program`` (the cost breakdown) and ``u_mask_band``
+  (the nearer plane's two bands of partial coverage through ``gl_SampleMask``; 0 everywhere but the msaa round).
 
 The fragments are product-shaped (``vUv`` y up over the pass's content, one block each at binding 18) so the Python
 reference (``SceneTarget`` and a GL target with the ambient owner's states) draws the same files.
