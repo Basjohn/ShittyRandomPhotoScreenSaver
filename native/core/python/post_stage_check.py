@@ -37,7 +37,13 @@ Rounds:
   cost     (each API) the EB scene at 2560x1440 and 3840x2160, one and four samples, each stage's GPU time (the record
            with it less without it), median and p90 of 240 records; on Vulkan under the validation layer.
 Run alone:
-  python_cost (the reference child, OpenGL) the Python stages on the same loads.
+  defocus_cost (each API) the defocus step's GPU time at 4K split by variants (the near pass; generateMips with the
+           clip; the gather's taps with the sprites' vertex stage; the sprites' raster, with and without the capture,
+           and with the highlight's few sprites only).
+  showcase (each API) the primitive's animated WebP.
+  big_frames (each API) the EB scene's targets and frame at 4K with and without the sprites (the cost's diagnosis).
+  python_cost, python_defocus_cost (the reference child, OpenGL) the Python stages on the same loads; the Python
+           defocus steps each timed by GL timestamps, and glGenerateTextureMipmap on immutable and mutable storage.
 
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/post_stage_check.py --module-dir release/native_module --require-validation
@@ -72,7 +78,7 @@ from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("parity", "gate", "rest", "steady", "retire", "barriers", "cost")
-ALONE_ROUNDS = ("defocus_cost", "showcase")
+ALONE_ROUNDS = ("defocus_cost", "showcase", "big_frames")
 PYTHON_ROUNDS = ("python_cost", "python_defocus_cost")
 CHILD_TIMEOUT_S = 2400
 MARGIN = stc.MARGIN
@@ -148,6 +154,7 @@ class Case:
     changes: dict = field(default_factory=dict)
     reference: str | None = "same"      # "same": the Python stages; "sorted": the sorted packs; None: native only
     against: str | None = None          # a native-only case's comparison case
+    capture: bool = True                # the EB scene's capture step (the cost split's no-capture variants drop it)
 
 
 DARK = {"u_back_emission": 0.0, "u_l1_light": [0.0, 0.0, 0.0, 3.0], "u_l2_light": [0.0, 0.0, 0.0, 5.0]}
@@ -176,7 +183,7 @@ def build(case: Case, packs: dict):
     ps = _ps()
     options = {}
     if case.scene == "eb":
-        options = {"samples": case.samples, "variant": case.variant, "order": case.order}
+        options = {"samples": case.samples, "variant": case.variant, "order": case.order, "capture": case.capture}
     elif case.scene in ("tiles", "solo"):
         options = {"samples": case.samples}
     passes, targets = ps.program(case.scene, packs, **options)
@@ -1081,9 +1088,17 @@ DEFOCUS_SPLIT = (
     ("radius_0", "full", {"u_defocus_radius": 0.4}),      # + generateMips, the clip, a gather that returns its own texel
     ("no_sprites", "full", {"u_defocus_highlight": 1e6}),  # + the gather's 96 taps, the sprites' vertex stage (culled)
     ("full", "full", {}),                                 # + the sprites' raster
+    # The same two without the capture step (which samples the scene's colour earlier in the record): whether the
+    # sprites' raster depends on what else read the target it draws into.
+    ("no_sprites_no_capture", "full", {"u_defocus_highlight": 1e6, "capture": False}),
+    ("full_no_capture", "full", {"capture": False}),
+    # Only the highlight spot's texels above the threshold (a few dozen sprites, against the disc's edge's many).
+    ("few_sprites", "full", {"u_defocus_highlight": 2.0}),
 )
 DEFOCUS_STEPS = (("near_pass", "near_only", "no_defocus"), ("mips_clip_trivial_gather", "radius_0", "near_only"),
-                 ("gather_taps_and_sprite_vertices", "no_sprites", "radius_0"), ("sprite_raster", "full", "no_sprites"))
+                 ("gather_taps_and_sprite_vertices", "no_sprites", "radius_0"), ("sprite_raster", "full", "no_sprites"),
+                 ("sprite_raster_no_capture", "full_no_capture", "no_sprites_no_capture"),
+                 ("few_sprites_raster", "few_sprites", "no_sprites"))
 
 
 def _split_steps(timings: dict) -> dict:
@@ -1106,7 +1121,10 @@ def round_defocus_cost(core, engine, app, api: str, packs: dict) -> dict:
         for samples in (1, 4):
             timings = {}
             for label, variant, changes in DEFOCUS_SPLIT:
-                case = Case(f"split_{label}", "eb", card=size, samples=samples, variant=variant, changes=changes)
+                changes = dict(changes)
+                capture = bool(changes.pop("capture", True))
+                case = Case(f"split_{label}", "eb", card=size, samples=samples, variant=variant, changes=changes,
+                            capture=capture)
                 passes, targets, values = build(case, packs)
                 scene = stc.Scene(core, engine, host, size, 1.0, packs, passes=passes, targets=targets,
                                   settings=values)
@@ -1123,6 +1141,24 @@ def round_defocus_cost(core, engine, app, api: str, packs: dict) -> dict:
         host.close()
         host_check._flush_deletes(app)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def round_big_frames(core, engine, app, api: str, packs: dict, out: Path) -> dict:
+    """The EB scene's targets and frame at 3840 x 2160, one sample, with the sprites and without (their highlight past
+    any light), saved per API for the defocus cost's diagnosis (``post_big_<api>``)."""
+    size = COST_HOSTS[-1]
+    host = core.hidden_host(size[0] + 2 * MARGIN, size[1] + 2 * MARGIN)
+    frames = {}
+    try:
+        for label, changes in (("full", {}), ("no_sprites", {"u_defocus_highlight": 1e6})):
+            run = run_case(core, engine, app, host, packs, Case(f"big_{label}", "eb", card=size, changes=changes))
+            frames[label] = {k: v for k, v in run["textures"].items() if k in ("frame", "scene.colour")
+                             or k.startswith("near.colour")}
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    stc._save(out, f"post_big_{api}", frames)
+    return {"pass": True, "cases": sorted(frames)}
 
 
 SHOWCASE_FRAMES = 72
@@ -1909,7 +1945,8 @@ def child(args) -> dict:
                           "barriers": lambda: round_barriers(core, engine, app, args.api, packs),
                           "cost": lambda: round_cost(core, engine, app, args.api, packs),
                           "defocus_cost": lambda: round_defocus_cost(core, engine, app, args.api, packs),
-                          "showcase": lambda: round_showcase(core, engine, app, args.api, packs, out)}
+                          "showcase": lambda: round_showcase(core, engine, app, args.api, packs, out),
+                          "big_frames": lambda: round_big_frames(core, engine, app, args.api, packs, out)}
                 for name in args.rounds:
                     if vulkan:
                         core.set_vulkan_phase(f"n34 {name}")

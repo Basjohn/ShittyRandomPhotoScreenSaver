@@ -640,6 +640,23 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     possible" note in `Docs/Reference/Primitives.md`; the transparency, bloom, HDR and defocus rows of
     `Docs/Reference/Scene3D_Resources.md`; `Docs/Reference/Harness_Index.md`; the research file's open items of
     sections 8 and 9 answered; the 3D foundation lessons in `Docs/Reference/Transitions.md` appended.
+  - [ ] Before N3.4's High audit (the lead, 15 Nov): explain the native OpenGL defocus at 4K. The split by variants
+    (`post_stage_check.py --rounds defocus_cost python_defocus_cost`) puts the extra time in the sprites' raster: 2.6 ms
+    at 1x and 1.2 ms at 4x on OpenGL against about 0 on Vulkan, for the same sprites (53,383 texels lit on both
+    backends, frames within one level), while Python's sprites on the same driver cost 0.99 ms with their vertex
+    stage; `generateMips` is not it (0.16 ms with the clip; Python's 0.11; storage kind irrelevant); dropping the capture
+    changes nothing; only a few sprites cost nothing. Next: time the sprites' draw alone inside the core on OpenGL (an
+    opt-in harness control recording GL timestamps around it), then try the hypotheses one at a time (the pass's other
+    draw buffers' state on the draw, the instanced strip's draw call, the blend into RGBA16F); fix it if it is ours.
+  - [ ] Side defect (found by N3.4's proof; the lead plans the fix): Python's bloom source is sampled at
+    `_allocate_plain_texture`'s NEAREST and GL's default REPEAT (`rendering/quick/scene3d/target.py:1167-1173`); set
+    LINEAR and CLAMP_TO_EDGE on the bloom source (the scene's colour and emission and their resolves), with a stills
+    review of every bloom consumer; then `post_stage_check.py`'s rule (a) needs no corrected reference
+    (`_bloom_source_as_designed` goes).
+  - [ ] Side defect (found while rerunning N3.2's proof for N3.4): `mesh_buffer_check.py --rounds stream_ring`'s
+    absolute 0.05 ms margin over the pair's floor fails on an idle GPU (P8 at 225 MHz: the floor itself measured 0.028
+    ms against 0.015 in a warm run, the 288 KiB storage route 0.097 against 0.031), on different routes run to run;
+    judge it relative to the floor measured in the same run, or warm the GPU to a stated clock first.
 - [ ] N3.6 Lifetime: lazy creation on first use, release at retirement and at a mode switch, device loss rebuilt
   from the last packet, every state combination a pipeline built ahead and warmed gradually (Qt's pipeline cache
   file on Qt's pipelines; the core's own cache for raw ones); the working-set and GPU-memory readings of the P2

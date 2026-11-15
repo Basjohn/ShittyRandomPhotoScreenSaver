@@ -147,7 +147,14 @@
 //   settings'), its blend the form's (overlay: alpha; overlay_glow: premultiplied; opaque_glow: replace);
 // - a defocus step ({"name", "defocus": <mips target>, "onto": <scene target>}, an empty pack): the layer's mips, the
 //   clip, the gather and the highlight sprites; its block (u_defocus_radius, u_defocus_highlight, u_defocus_level) filled
-//   by the one rule.
+//   by the one rule. The read level is at most post_stages.h defocusReadLevelCap of the layer's allocation (a deeper
+//   one is the content's failure, latched, with its reason); the run that draws the gather and the sprites is followed
+//   by targets.h chainShaderReads (the layer is read in two shader stages of one pass).
+// A device that does not admit the transparency stage (post_stages.h transparencyGate) leaves the transparency target
+// dormant and draws its passes' sorted packs; the fallback is noted once in the targets' state. A program whose passes
+// write attachments with differing states is refused where per-attachment blending is not real (the core's device facts,
+// never QRhi's flag): the mode-level fallback, Python's to log. A record of a program with stages is timed on the render
+// thread (composite_live's stage_records_timed, stage_record_ns).
 #pragma once
 
 #include "compute_passes.h"

@@ -1971,6 +1971,73 @@ read once (`:770-808`).
   depth, where the stages differ: early against late fragment tests). The prime stays (defect C's record), and the
   control is reported, not required.
 
+**As built (N3.4, ABI 20; proved on the GitHub build 4c0ee9b7, 15 Nov 2026).** `native/core/src/post_stages.*` holds the
+device gate (`transparencyGate`, `perTargetBlendReal`), the bloom chains, the defocus steps (`defocusReadLevelCap`), the
+stage shaders' getters, the counts and the harness controls (`stage_control`); `scene_targets.*` holds the transparency
+targets (`deriveTransparencyTargets`, borrowed attachments and depth, dormancy) and the mipped layer (every level read
+back); `mode_content.*` holds the steps' parse and checks, the composite step as an ordinary surface pass with the core's
+fragment, the fallback's sorted pipelines, and the record (`recordDefocus`, `effectiveTarget`, `decideTransparencyGate`);
+`vulkan_context.cpp` reads `independent_blend`, `sample_rate_shading` and `color_attachment_blend` once per device; the
+Python face is `rendering/native/mode.py` (`TransparencyTarget`, `TransparencyResolve`, `BloomStep`, `CompositeStep`,
+`DefocusStep`, `ModeTarget.mips`, `ModePass.sorted_pack`). Beyond the points above:
+- *The core's shaders are Python's* (`tests/test_native_post_stages.py`, 17 GPU-free tests): the resolve with coverage
+  read as stored, the 13-tap and tent filters with their taps mirrored to top-first rows, the clip, the gather (its
+  sine negated), the sprites, the composites' ACES fit and integer-hash dither keyed at Python's pixel.
+- *Two fixes the proof found.* The defocus run reads its layer in two shader stages (the gather's fragment, the sprites'
+  vertex) and Qt 6.12.0's pass tracker keeps the earlier as the texture's last use, so the next barrier on the layer
+  (a readback's transition) left the gather's reads unordered (`SYNC-HAZARD-WRITE-AFTER-READ` on `near.colour`): the
+  core chains both stages' reads after that run (`targets.h` `chainShaderReads`; control `skip_read_chain`). The
+  skipped-release control's objects stayed in the stages' counts after their release; they now leave the counts when
+  left behind.
+- *A transparent pass's first two "attachments" entries are `{}`* (the core's blends); the Python face writes them so
+  and keeps a borrowed attachment's own entry.
+- *The proof* (`native/core/python/post_stage_check.py` on `native/core/python/post_stages/`; every round PASS on both
+  backends with synchronisation validation and its shader-access checks, clean outside the control phases; evidence
+  `native_core/n3_4/20261115_n34_proof_4c0ee9b7`, `_n34_gate_barriers_4c0ee9b7`, `_n34_cost_4c0ee9b7`):
+  - Rule (a), OpenGL against the Python stages under D12's pixel tolerance, the frame's mask from the reference (its
+    translucent pixels and the pixels its glow, transparent layers and defocus blend into): every single-sampled case
+    within one level on the mask and exact elsewhere; the transparency accumulation and every defocus mip level bit for
+    bit; tiles and the one-attachment owner (admitted and as the sorted fallback) bit for bit; float textures within one
+    float16 ulp (floored at 1/256) but the defocus-blended texels (5 ulps: the gather's 96 bilinear taps land at mirrored
+    subtexel positions, measured 4.84) and 2 texels at 2 ulps. Multisampled cases repeat exactly (D8 point 1).
+  - Rule (b), Vulkan against OpenGL: the EB, tiles and one-attachment frames exact, the Oscilloscope's within one level;
+    float textures within one ulp but 36 texels at up to 3 (the backends' `sin()` on the trace's steep edge, measured 24);
+    the defocus mips exact at every level made from even sizes.
+  - Analytic: the stored coverage against Python's revealage within 0.56 ulp; two draw orders within 1 ulp and one level;
+    light up to 4.4 kept before the tone map; with no emission, no glow and no dither; the per-sample resolve within 0.96
+    ulp of Python's on 4,247 band pixels, and the first-sample control wrong on exactly those and nowhere else.
+  - The gate: blend formats forced false falls back (one-attachment owner and EB's shape, recorded once, the
+    transparency target holding nothing); sample shading forced false falls back at 4x and not at 1x; a Vulkan device
+    made without `independentBlend` falls back for the one-attachment owner and refuses EB's shape by N3.1's check
+    ("this Vulkan device does not enable independentBlend"); with the gate bypassed the layer reports
+    `VUID-VkPipelineColorBlendStateCreateInfo-pAttachments-00605`. The read level's cap: at it drawn, past it refused.
+  - Nothing recorded at rest; one setting change records each stage once; a steady minute of records creates no stage
+    object; retirement to zero after a destroy, a program without stages, a switch to another program, a destroy
+    mid-resize, the scene graph's invalidation and the skipped-release control.
+  - Controls in their own phases: the depth prime skipped (READ_AFTER_WRITE on the transparency run's own depth load,
+    attachment 3); the bloom chain as levels of one texture (layout and barrier errors); the read chain skipped
+    (WRITE_AFTER_READ on `near.colour`); the device without `independentBlend` (00605); the bloom prime's not observable.
+  - Cost (GPU time, median ms of 240 records; Vulkan under the validation layer; RTX 4090 at P8 and 9 % before the run,
+    displays on, no SRPSS running; the stage is the record with it less without it), EB's shape:
+
+    | | OpenGL 1440p 1x / 4x | OpenGL 4K 1x / 4x | Vulkan 1440p 1x / 4x | Vulkan 4K 1x / 4x | Python 4K 1x / 4x |
+    |---|---|---|---|---|---|
+    | transparency | 0.10 / 0.22 | 0.12 / 0.53 | 0.07 / 0.18 | 0.15 / 0.44 | noise / 0.21 |
+    | bloom and glow composite | 0.06 / 0.14 | noise / 0.24 | 0.04 / 0.10 | 0.07 / 0.23 | 0.32 / 0.32 |
+    | defocus | 1.54 / 1.58 | 4.95 / 3.71 | 0.97 / 0.99 | 2.10 / 2.18 | 2.98 / 2.36 |
+    | whole record | 1.82 / 2.14 | 5.54 / 5.03 | 1.20 / 1.49 | 2.61 / 3.37 | 3.39 / 3.38 |
+
+    The defocus split at 4K (variants): the near pass 0.09 ms, `generateMips` with the clip 0.16 ms (Python's two
+    `glGenerateTextureMipmap` 0.11 ms; immutable and mutable storage time the same), the gather's taps and the sprites'
+    vertex stage 2.04 ms on OpenGL and 1.90 on Vulkan (Python's gather 1.02 plus its sprites 0.99), and the sprites'
+    raster 2.6 ms at 1x (1.2 at 4x) on OpenGL against about 0 on Vulkan, for the same sprites (53,383 texels lit on both
+    backends, the frames within one level). With only the highlight's few sprites the raster costs nothing. Why native
+    OpenGL rasterises them so slowly where Python on the same driver does not is not yet known (the plan's box).
+  - The render thread's record (`stage_record_ns`, the whole record of a program with stages): on OpenGL 19 to 20 us
+    for EB's shape at every size and count (6.7 to 9.5 us with no stage), 33 us mean over the steady minute at 4x; on
+    Vulkan 1.1 to 1.4 ms, which is the validation layer's own CPU work (22 us with no stage under the same layer); the
+    harness fails closed without the layer, so no layer-free Vulkan figure is recorded.
+
 ## D1, D2, D3 and the transport rule
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts"). The drafts, with every "today"

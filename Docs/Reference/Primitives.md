@@ -125,7 +125,11 @@ Dissolve (transitions); Oscilloscope, Neon Lake, Extruded Bubble, Extruded Spect
 Tests: `test_scene3d_target.py` (G1, G3A, shafts, scale, lifetime), `test_scene3d_dsa_targets.py`. Native: N3.1
 (D14, `native/core/src/scene_targets.*`, ABI 17: targets as program data, sampled D32F depth, the capture step, MRT with
 per-attachment blends, one sampling request owner `scene3d.scene_samples` and the core's clamp; proved single-sampled
-on both backends by `scene_target_check.py`, multisampled through the core's nearest resolve, D14 point 10) and N3.4 (OIT, bloom, HDR as opt-in stages);
+on both backends by `scene_target_check.py`, multisampled through the core's nearest resolve, D14 point 10) and N3.4
+(D17, `native/core/src/post_stages.*`, ABI 20: the transparency target and its per-sample resolve, the composite step
+with the HDR tone map and dither, the device gate with the sorted fallback; proved by `post_stage_check.py`; what this
+makes possible: order-independent transparency, glow and the HDR look for any native mode as program data, the Python
+owners' pictures on both backends; showcase `native_core/n3_4/20261115_n34_showcase_4c0ee9b7/showcase_post_stages_vulkan.webp`);
 the eight composites in `target.py:125-286` keep raw `gl_FragCoord` and are never converted (D5.2 replaces them;
 item 8b, N1.4's remainder). Notes: allocation rounds to 64 px; no `glBlitFramebuffer` resolves (about 0.5 ms at 1440p; Lessons line
 176-177); per-sample reads (`sampler2DMS`, `gl_SampleID`) are the N1.8 resolve-first set and the one thing QRhi
@@ -138,7 +142,10 @@ formats service (N1.7's box); Waveform hard-codes 4 samples (`scene3d/waveform.p
 emitted light then tent upsamples, RGBA16F, about a third of a full-screen pass; only emitted light glows (alpha in a
 bloom target). Consumers: through `SceneTarget` (every bloom-enabled consumer in E3). The full-screen vertex source is
 also used by Environment, Motion, Shafts and Trails: it is the Python seed of **N4.a** (the fullscreen pass and image
-sampling, `Current_Plan.md` item 8b, N4.a's box). Test: `test_scene3d_dsa_targets.py:97`, `test_transition_warmup.py:54`. Native: N3.4.
+sampling, `Current_Plan.md` item 8b, N4.a's box). Test: `test_scene3d_dsa_targets.py:97`, `test_transition_warmup.py:54`. Native: N3.4
+(a bloom step: four RGBA16F textures, one a level, the core's 13-tap and tent shaders held to `post.py` by
+`tests/test_native_post_stages.py`; exact against Python with its source sampled LINEAR/CLAMP; Python's own source
+sampler, NEAREST with REPEAT, is a recorded defect, D17).
 Notes: photographs write 0 emitted light so endpoints stay exact (Lessons line 180-181).
 
 ### E5. Motion blur (velocity plus tile max)
@@ -297,7 +304,8 @@ compilers reject derivatives in a vertex shader.
 `rendering/quick/scene3d/defocus.py` (`DefocusLayer`). Depth of field for objects near the lens: an RGBA16F colour
 plus alpha-weighted circle of confusion, a 64-tap golden-angle gather (light conserved) and an optional highlight
 split into instanced discs. Consumer: Extruded Bubble. Test: `test_scene3d_defocus.py`. Native: N3.4 ("the defocus
-layer") and N5.6. No class stated. Notes: the EB abyss near defocus measured 3.3 ms of its GPU budget (largely the
+layer": a mipped target and a defocus step, mips by QRhi's `generateMips`, every level equal to Python's on OpenGL, the
+read level capped where levels come from odd sizes; D17) and N5.6. No class stated. Notes: the EB abyss near defocus measured 3.3 ms of its GPU budget (largely the
 near shells drawn into the layer; `Scene3D_Resources.md:529-533`); masks are per draw-buffer index (a masked emission
 index once dropped every circle); the RG16F circle storage was widened by N1.7.
 

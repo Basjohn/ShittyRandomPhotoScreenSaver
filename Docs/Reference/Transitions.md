@@ -824,6 +824,27 @@ Each foundation slice adds what it learned here.
 - A control that leaks (a skipped release) must be released again before the device goes, or the leak is the
   validation layer's error at `vkDestroyDevice` instead of the counted figure the proof wants.
 
+**Native transparency and post-processing stages (N3.4, 15 Nov; D17)**
+- Judge against the oracle's intent, not its accidents, and say which: Python samples the bloom source NEAREST with
+  REPEAT (`_allocate_plain_texture`'s filter and GL's default wrap), so its glow differs from the 13-tap filter's design
+  by up to 45 levels and wraps light in from the opposite edge. The proof gates against the source sampled as designed
+  and reports the shipping one apart; the Python fix is a decision of its own.
+- `generateMips` agrees across backends only where a level halves an even size; a level made from an odd size is the
+  driver's filter on OpenGL and a linear blit on Vulkan. Read every level back on both backends before trusting a
+  mipped read, and cap the reads where the sizes go odd.
+- QRhi's pass tracker keeps the earlier of two shader stages that read one texture in one pass, so its next barrier on
+  that texture leaves the later stage's reads unordered. A pass that samples a texture in its vertex and fragment stages
+  needs the core's execution dependency after it (`chainShaderReads`). The hazard shows only at a later transition
+  (a readback's), so the negative control must run with readbacks.
+- The messenger keeps the first message of each id in a phase: a control whose finding must be placed (which run's
+  depth load) has to make that finding the phase's first, by settling the scene before the phase starts.
+- A control can be unobservable: with the bloom upsample's prime skipped, synchronisation validation reports nothing
+  (the transition's second scope has the load's stage). Record it as not observable rather than pass it.
+- Float targets are judged in float16 ulps floored at a value under one output step (1/256): below that, fp32
+  cancellation in a steep `smoothstep` tail differs per compiler and backend by many relative ulps of nothing visible.
+- Variants split a GPU cost by difference: the native OpenGL defocus at 4K spends its extra time in the sprites' raster
+  (the same sprites on both backends, Vulkan's raster about 0), not in `generateMips` (0.16 ms with the clip).
+
 ## Operator-triggered appearance review (reference checklist)
 
 Automated image differences are not aesthetic acceptance. Previously implemented work is operator-accepted; use the following reference checks **only if** a newly observed regression or new transition tranche requires targeted appearance review:
