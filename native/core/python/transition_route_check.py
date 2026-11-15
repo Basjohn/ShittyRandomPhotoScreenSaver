@@ -47,8 +47,13 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
+ROOT = HERE.parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import background_layer_check as blc  # noqa: E402  (native/core/python)
 import fullscreen_pass_check as fsc  # noqa: E402
+from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 CHILD_TIMEOUT_S = 1800
@@ -59,11 +64,23 @@ DPRS = blc.DPRS
 PROGRESS = fsc.PROGRESS
 DURATION_MS = fsc.DURATION_MS
 VULKAN_TOLERANCE = 1
-#: Lead decision (14 Nov, N5.2b): a NativeFragmentPass fragment, whose pack the core compiles from translated GLSL,
-#: may sit within VULKAN_TOLERANCE of its Python renderer (rule a), and under either rule at most TIE_PIXELS pixels a
-#: frame may pass that level where a threshold ties (a highlight where pools pinch, a slice edge). N5.2a's seven stay
-#: exact under rule (a) and within VULKAN_TOLERANCE everywhere under rule (b).
-TIE_PIXELS = 8  # the measured worst is 5 (Liquid Lens Flood at dpr 1, 2 levels)
+#: Lead decision (14 Nov, N5.2b), judged by the shared pixel tolerance (``tools/pixel_tolerance.py``, D12 "The pixel
+#: tolerance"; checkpoint audit 4 M2): a NativeFragmentPass fragment, whose pack the core compiles from translated
+#: GLSL, may differ from its Python renderer (rule a) by single levels where the two compilers round a value within
+#: float error of a half level (scatter: the measured worst 48 pixels a frame, Surface Tension with options at 0.80 and
+#: dpr 1.5, times 1.5), at most TIE_PIXELS pixels a frame past that at 2 levels at most, isolated or on an edge, and
+#: the one specular flip where pools pinch (Surface Tension with options at 0.80: one pixel a frame, a value its
+#: neighbours hold). N5.2a's seven stay exact under rule (a).
+TIE_PIXELS = 8
+FRAGMENT_PASS_RULE_A = pt.Tolerance("native fragment pass against its Python renderer (rule a)", scatter_pixels=72,
+                                    tie_pixels=TIE_PIXELS, flip_pixels=1)
+#: Rule (b), Vulkan against OpenGL, both native on one pack: the two drivers round single values differently (scatter;
+#: measured worst 736 pixels a frame of N5.2a's seven, Warp at dpr 1, and 1,317 of the five, VHS at dpr 1, times
+#: 1.5). The seven have no pixel past one level; the five at most TIE_PIXELS a frame at 2 levels (measured 5, Liquid
+#: Lens Flood at dpr 1).
+SEVEN_RULE_B = pt.Tolerance("fullscreen transition, Vulkan against OpenGL (rule b)", scatter_pixels=1100)
+FRAGMENT_PASS_RULE_B = pt.Tolerance("native fragment pass, Vulkan against OpenGL (rule b)", scatter_pixels=2000,
+                                    tie_pixels=TIE_PIXELS)
 REST_FRAMES = 4
 #: The variant driven through the product's route: the first of these the run drew (N5.2b's: arrays in its block).
 ROUTE_VARIANTS = ("burn_options", "surface_tension_options")
@@ -213,9 +230,12 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
                     rows = scene.display_rows(scene.read())
                     frames[f"dpr{dpr}_{variant}_{progress:.2f}"] = rows
                     if not vulkan:
-                        entry[f"{progress:.2f}"] = blc.compare(rows, expected[(variant, progress)])
-                        entry[f"{progress:.2f}"]["over_tolerance"] = _over(
-                            rows, expected[(variant, progress)], VULKAN_TOLERANCE)
+                        reference = expected[(variant, progress)]
+                        entry[f"{progress:.2f}"] = blc.compare(rows, reference)
+                        entry[f"{progress:.2f}"]["over_tolerance"] = _over(rows, reference, VULKAN_TOLERANCE)
+                        entry[f"{progress:.2f}"]["tolerance"] = pt.judge(
+                            rows[..., :3], reference[..., :3],
+                            FRAGMENT_PASS_RULE_A if _is_fragment_pass(variant) else pt.EXACT)
                 if not vulkan:
                     entry["control_next_progress_differs"] = not blc.compare(
                         frames[f"dpr{dpr}_{variant}_{PROGRESS[4]:.2f}"], expected[(variant, PROGRESS[5])])["equal"]
@@ -242,9 +262,13 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
             facts.setdefault("host_close", []).append(blc._close_host(app, host))
     keys = list(facts["variants"])
     if not vulkan:
+        # Exact for the seven; the shared tolerance for a NativeFragmentPass (FRAGMENT_PASS_RULE_A).
         checks["rule_a_equal_to_the_python_renderer"] = all(
-            facts["variants"][k][f"{p:.2f}"]["over_tolerance"] <= TIE_PIXELS if _is_fragment_pass(k)
-            else facts["variants"][k][f"{p:.2f}"]["equal"] for k in keys for p in PROGRESS)
+            facts["variants"][k][f"{p:.2f}"]["tolerance"]["pass"]
+            and (_is_fragment_pass(k) or facts["variants"][k][f"{p:.2f}"]["equal"]) for k in keys for p in PROGRESS)
+        facts["rule_a_tolerance"] = {
+            "bounds": [FRAGMENT_PASS_RULE_A.bound(), pt.EXACT.bound()],
+            **pt.summarise(facts["variants"][k][f"{p:.2f}"]["tolerance"] for k in keys for p in PROGRESS)}
         checks["control_another_progress_differs"] = all(facts["variants"][k]["control_next_progress_differs"]
                                                          for k in keys)
         worst = max(((k, p, facts["variants"][k][f"{p:.2f}"]) for k in keys for p in PROGRESS),
@@ -331,6 +355,7 @@ def vulkan_against_opengl(work: Path) -> dict:
     vk, gl = np.load(vk_path), np.load(gl_path)
     per_variant: dict = {}
     worst = 0
+    judged: dict = {}
     for key in sorted(set(vk.files) & set(gl.files)):
         result = blc.compare(vk[key], gl[key])
         variant = key.rsplit("_", 1)[0]
@@ -340,11 +365,13 @@ def vulkan_against_opengl(work: Path) -> dict:
         entry["max_level"] = max(entry["max_level"], result.get("max_level", 0))
         entry["max_over"] = max(entry["max_over"], _over(vk[key], gl[key], VULKAN_TOLERANCE))
         worst = max(worst, result.get("max_level", 255))
-    ok = bool(per_variant) and all(
-        (e["max_over"] <= TIE_PIXELS) if _is_fragment_pass(v.split("_", 1)[1])
-        else e["max_level"] <= VULKAN_TOLERANCE
-        for v, e in per_variant.items())
-    return {"pass": ok, "worst_level": worst, "variants": per_variant}
+        tolerance = FRAGMENT_PASS_RULE_B if _is_fragment_pass(variant.split("_", 1)[1]) else SEVEN_RULE_B
+        judged.setdefault(variant, []).append(pt.judge(vk[key][..., :3], gl[key][..., :3], tolerance))
+    for variant, frames in judged.items():
+        per_variant[variant]["tolerance"] = pt.summarise(frames)
+    ok = bool(per_variant) and all(e["tolerance"]["pass"] for e in per_variant.values())
+    return {"pass": ok, "worst_level": worst, "variants": per_variant,
+            "bounds": [SEVEN_RULE_B.bound(), FRAGMENT_PASS_RULE_B.bound()]}
 
 
 # --------------------------------------------------------------------------------------------------- the child
