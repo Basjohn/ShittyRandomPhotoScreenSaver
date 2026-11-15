@@ -195,7 +195,7 @@ pipeline with QRhi as the glue. The list of services is closed; adding one takes
 | Service | Why QRhi is not enough (6.11.2) | Admitted when |
 |---|---|---|
 | GPU timer (per pass) | QRhi times the whole frame only | built with the substrate (D8 plus 2); opt-in, no objects when off |
-| Stream ring (persistent mapped) | QRhi stages and copies dynamic buffers | measured against QRhi dynamic buffers at the product's ring sizes; QRhi stays if the difference is under 0.05 ms |
+| Stream ring (persistent mapped) | QRhi stages and copies dynamic buffers | measured against QRhi dynamic buffers at the product's ring sizes; QRhi stays if the difference is under 0.05 ms. **Measured 15 Nov 2026 (N3.2, `mesh_buffer_check.py --rounds stream_ring`, ABI 18 at 07764f4d; the GPU 46 to 49% busy before and 24% after with another SRPSS process drawing, display on): not built.** Against the pair's floor (CPU: the record with the data resident plus one copy of the payload into mapped memory; GPU: the same pass over the data resident in a mesh), the worst medians: 288 KiB on OpenGL, the instance stream +0.033 ms CPU (QRhi's GL fast path is itself a buffer update call) and the storage stream +0.023 ms GPU; 288 KiB on Vulkan, the storage stream +0.024 ms CPU and +0.016 ms GPU; everything at 48 KiB and below within +0.012 ms. Watch: OpenGL's storage route at 160 and 288 KiB shows p90 GPU times of 0.11 to 0.13 ms (medians 0.029 and 0.040) on that busy GPU; recheck on a quiet one before a Waveform port relies on it |
 | Indirect and count draws | no indirect draw in 6.11 (*header*) | measured against "draw the maximum, cull in the vertex shader" on the population harness; gone if D11 moves to a Qt that has it. **Retired 12 Nov 2026:** the project is on Qt 6.12, whose QRhi has `QRhiCommandBuffer::drawIndirect`/`drawIndexedIndirect` (feature `QRhi::DrawIndirect`; several draws per call where `DrawIndirectMulti` is reported); the core uses QRhi's form, and "draw the maximum, cull in the vertex shader" remains only for a backend that does not report `DrawIndirect` |
 | Per-sample multisample reads | QRhi forbids sampling a resolved multisample texture | only if resolve-first fails a mode's look or cost; parity is single-sampled |
 | Formats (RG16F, RG32F, R11G11B10F) | not in QRhi's format list | only where widening to RGBA16F or RGBA32F measurably costs memory or time (N1.7 widens first) |
@@ -1427,6 +1427,39 @@ choices the build made where D15 left room:
 - *Draw-parameters packs are SPIR-V and GLSL only*: `qsb` bakes `gl_DrawID`, `gl_BaseInstance` and `gl_BaseVertex` for
   SPIR-V and GLSL 460 and 430, and HLSL 5.0 refuses them ("Unsupported builtin in HLSL: 4426"), research Q5. Nothing
   shipped draws with D3D, so form 3 is a Vulkan and OpenGL form; elsewhere the plain pack's per-batch form stands.
+
+**As built (N3.2, ABI 18; proved on the merged head 07764f4d, 15 Nov 2026).** `native/core/src/mesh_buffers.*` holds the
+meshes (`ModeMeshes`), the streams, the arena and the batched commands (`ModeStreams`), the counts and the harness
+controls; `mode_content.*` holds the pass model (its own vertex stage, geometry, the front-face pipeline pair, full
+blends), the arena's plan and fill, and the draws. The Python face is `rendering/native/mode.py` (`PassGeometry`,
+`ModeStream`, `RecordLayout`, `BlendState`, `NativeMode.mesh`), `rendering/native/streams.py` (`arena_layout`, the
+core's plan mirrored) and the geometry include (`srpss_geometry.glsl`, `SRPSS_GEOMETRY_GLSL`). Beyond the points above:
+- The built-in `quad` is made only for a program that draws it (a program without it holds no mesh).
+- A content whose program draws a mesh the item no longer holds draws nothing, its reason naming the mesh.
+- The record's render-thread time is counted (`mesh_buffers_records_timed`, `_record_ns`, `_stream_write_ns`), timed
+  with the record's own N3.8 timer: the stream ring's CPU axis, nothing at rest.
+- QRhi reports `DrawIndirect`, `DrawIndirectMulti` and `ShaderDrawParameters` on both of this machine's backends, so
+  form 3 is recorded on OpenGL and Vulkan alike; the RTX 4090's device facts: dynamic offset alignment 64, 15 dynamic
+  uniform buffers a set, a 64 KiB uniform range.
+- The proof (`native/core/python/mesh_buffer_check.py`, all rounds PASS on both backends, Vulkan validation clean):
+  rules (a) and (b) as decided above; the batched draw's two forms, one direct draw and sixteen passes equal bit for bit
+  (the first-offset control differs); `drawIndirect` equals the direct draw; nothing at rest; no buffer created over a
+  steady minute (the remade-streams control: one a record); retirement to zero (the skipped-release control leaves its
+  meshes counted). GPU time per scene (the content's whole record), Vulkan 0.025 to 0.031 ms at 2560x1440 and 0.051 to
+  0.064 ms at 4K, OpenGL 0.055 to 0.065 ms and 0.107 to 0.122 ms; the record's render-thread time 0.005 to 0.010 ms, and
+  about 0.025 ms on OpenGL where a `Dynamic` vertex or indirect buffer is written (QRhi's GL fast path is a buffer
+  update call). The stream ring: D5.3's row (not built).
+- Choice I, as measured: over the steady minute (a per-record instance stream, 159,696 records on OpenGL and 103,056
+  on Vulkan) no buffer was created and the process's private memory moved by one step (OpenGL 910.4 to 913.0 MiB,
+  Vulkan 1,010.6 to 1,011.5 MiB) and was flat on either side of it, so neither QRhi's `Static` route nor the driver
+  grows per record. Not built: a counting allocator for the core's own heap (the core allocates nothing per record
+  by construction: the arena, streams and commands are sized at the build); the two Qt points of point 4
+  (`QRhiBufferData::assign`'s heap reuse, VMA's mapping of the staging) are therefore read only through that flat
+  private memory, not counted directly.
+- Choice C: N2.9's and N3.1's passes moved to the arena with their proofs' pictures unchanged (generic_mode_check,
+  scene_target_check, fullscreen_pass_check, background_layer_check, backdrop_pyramid_check, transition_route_check and
+  devcurve_check on 07764f4d against main's last evidence: every picture identical, every comparison figure the same;
+  their contents hold fewer QRhi objects, the per-pass block buffers gone).
 
 ## D1, D2, D3 and the transport rule
 

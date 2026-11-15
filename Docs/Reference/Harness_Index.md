@@ -919,6 +919,21 @@ python native/core/python/transition_route_check.py --module-dir release/native_
 # cost_parts (where the 4K four-sample time goes), python_cost (the Python SceneTarget's 4x minus 1x on the same load)
 python native/core/python/scene_target_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
     [--apis opengl vulkan] [--rounds parity msaa rest resize retire cost] [--label n31_scene_targets]
+# N3.2 (D15): meshes and buffers on the harness scenes native/core/python/mesh_buffers (passes with their own vertex
+# stage into a surface-sized RGBA8 scene target), hidden hosts only: parity (box over storage records with depth and the
+# per-record front face, static instance stream, sprites as instanced quads, a strip with blend MAX, 900 streaks over
+# the built-in quad, dpr 1 and 1.5; rule (a) against the Python owners' GL calls and rule (b), both within the tie
+# budget; sprites against gl_PointSize; cull, wrong front face, y-up sprite and out-of-step stream controls), forms (the
+# batched draw's multi-draw and per-batch forms, one direct draw and sixteen passes equal; the first-offset control;
+# drawIndirect against direct; firstInstance 3's control; the device facts; the draw-parameter bake facts), rest,
+# steady (a minute of records: nothing created, counts flat, private memory sampled; the remade-streams control),
+# retire (replace, remove, a program without geometry, destroy, destroyed before a first draw; the skipped-release
+# control), cost (each scene at 2560x1440 and 4K, timed until 30 GPU times arrive); Vulkan validated. stream_ring
+# (D15 point 7): payloads of 4 KiB to 288 KiB as instance and storage streams against the pair's floor (CPU: the
+# record's render-thread time; GPU: the same pass over a resident mesh stream); run it on a quiet GPU (nvidia-smi is
+# recorded before and after)
+python native/core/python/mesh_buffer_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    [--apis opengl vulkan] [--rounds parity forms rest steady retire cost stream_ring] [--label n32_mesh_buffers]
 ```
 
 Tests: `tests/test_native_core_jobs.py` (the built module, GPU-free: the job service's latch, cancellation while

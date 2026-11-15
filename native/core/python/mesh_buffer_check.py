@@ -919,7 +919,12 @@ def _timed(host, scene, *, min_samples: int = COST_MIN_SAMPLES, frames: int = RI
     record_ms: list[float] = []      # the render thread's record (the core's own timer), mean per window of 20
     write_ms: list[float] = []       # its stream and arena writes alone
     drawn = 0
-    last = core_counts = scene.mode._module.composite_live()
+
+    def live() -> dict:
+        raw = scene.mode._module.composite_live()
+        return json.loads(raw) if isinstance(raw, str) else dict(raw)
+
+    last = core_counts = live()
     timed = "mesh_buffers_records_timed" in core_counts
     while drawn < COST_MAX_FRAMES and (drawn < frames or len(gpu) < min_samples):
         scene.publish()
@@ -931,7 +936,7 @@ def _timed(host, scene, *, min_samples: int = COST_MIN_SAMPLES, frames: int = RI
         if drawn % 20 == 0:
             gpu += [s.nanoseconds for s in host.gpu_samples() if s.kind == 2]
             if timed:
-                now = scene.mode._module.composite_live()
+                now = live()
                 records = now["mesh_buffers_records_timed"] - last["mesh_buffers_records_timed"]
                 if records > 0:
                     record_ms.append((now["mesh_buffers_record_ns"] - last["mesh_buffers_record_ns"]) / records / 1e6)
@@ -984,6 +989,22 @@ def round_cost(core, engine, app, api: str, packs: dict) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
+def _copy_ms(size: int, repeats: int = 400) -> float:
+    """One copy of ``size`` bytes into a buffer already allocated and touched (the median of ``repeats``), ms."""
+    import numpy as np
+
+    source = np.frombuffer(bytes(range(256)) * (size // 256 + 1), np.uint8)[:size].copy()
+    target = np.empty_like(source)
+    np.copyto(target, source)
+    times = []
+    for _ in range(repeats):
+        started = time.perf_counter_ns()
+        np.copyto(target, source)
+        times.append(time.perf_counter_ns() - started)
+    times.sort()
+    return round(times[len(times) // 2] / 1e6, 4)
+
+
 def round_stream_ring(core, engine, app, api: str, packs: dict) -> dict:
     """D15 point 7: each payload through QRhi's routes against the pair's floor (module notes)."""
     mb = _scenes()
@@ -1008,7 +1029,16 @@ def round_stream_ring(core, engine, app, api: str, packs: dict) -> dict:
             # The CPU axis: the render thread's record (the core's timer) where the module counts it, else the frame's
             # wall time on the GUI thread (a module before the counter: noisier, the whole frame).
             cpu_key = "record_cpu_median_ms" if "record_cpu_median_ms" in entry["instance"] else "wall_median_ms"
-            cpu_floor = entry["instance"][cpu_key]
+            if cpu_key == "record_cpu_median_ms":
+                # The pair's CPU floor: the record with the data resident (the floor scene) plus one copy of the
+                # payload into memory already mapped (timed here, the copy a persistent mapping would cost). Not the
+                # instance route's own write: on OpenGL QRhi's Dynamic fast path is itself a buffer update call.
+                copy_ms = _copy_ms(size)
+                cpu_floor = floor[cpu_key] + copy_ms
+                entry["cpu_floor_ms"] = {"floor_record_ms": floor[cpu_key], "payload_copy_ms": copy_ms,
+                                         "floor_ms": round(cpu_floor, 4)}
+            else:
+                cpu_floor = entry["instance"][cpu_key]
             entry["cpu_axis"] = cpu_key
             for route in ("instance", "storage"):
                 got = entry[route]
