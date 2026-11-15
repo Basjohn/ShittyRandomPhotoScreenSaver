@@ -452,6 +452,8 @@ void PostStages::releaseDrawTimer()
 
 // ------------------------------------------------------------------------------------------------- the stages' objects
 
+PostStages::PostStages() = default;
+
 PostStages::~PostStages()
 {
     release();

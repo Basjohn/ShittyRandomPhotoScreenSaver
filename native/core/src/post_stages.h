@@ -174,8 +174,8 @@ struct DefocusSpec
 class PostStages
 {
 public:
-    PostStages() = default;
-    ~PostStages();
+    PostStages();                 // defined in post_stages.cpp, where DrawTimer is complete (MSVC: the constructor's
+    ~PostStages();                // unwinding destroys the unique_ptr member)
     PostStages(const PostStages &) = delete;
     PostStages &operator=(const PostStages &) = delete;
 
