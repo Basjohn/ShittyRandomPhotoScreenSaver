@@ -681,6 +681,7 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("scene_target_steps"), double(scenes.steps));
     o.insert(QStringLiteral("scene_target_readbacks"), scenes.readbacksPending);
     o.insert(QStringLiteral("scene_target_depth_primes"), double(scenes.depthPrimes));
+    o.insert(QStringLiteral("scene_target_resolve_primes"), double(scenes.resolvePrimes));
     o.insert(QStringLiteral("scene_target_nearest_resolves"), double(scenes.nearestResolves));
     return pyJson(o);
 }
@@ -1614,6 +1615,17 @@ PyObject *scene_depth_prime_control(PyObject *, PyObject *args)
     Py_RETURN_NONE;
 }
 
+// Harness: the resolves' prime before each run switched off (audit 2, H1: its negative control under synchronisation
+// validation), or on again.
+PyObject *scene_resolve_prime_control(PyObject *, PyObject *args)
+{
+    int skip = 0;
+    if (!PyArg_ParseTuple(args, "p", &skip))
+        return nullptr;
+    srpss_core::setSkipResolvePrime(skip != 0);
+    Py_RETURN_NONE;
+}
+
 // Harness: the nearest resolve's negative control (sample 0 instead of the minimum), read when a content builds.
 PyObject *scene_nearest_first_sample_control(PyObject *, PyObject *args)
 {
@@ -2531,6 +2543,9 @@ PyMethodDef methods[] = {
     { "scene_depth_prime_control", scene_depth_prime_control, METH_VARARGS,
       "(skip) -> None: N3.1, harness: the depth's rule C prime skipped (its negative control under synchronisation "
       "validation); False restores it." },
+    { "scene_resolve_prime_control", scene_resolve_prime_control, METH_VARARGS,
+      "(skip) -> None: N3.1 audit 2 (H1), harness: the resolves' prime before each run skipped (its negative control "
+      "under synchronisation validation); False restores it." },
     { "scene_nearest_first_sample_control", scene_nearest_first_sample_control, METH_VARARGS,
       "(first_only) -> None: N3.1 (D14 point 10), harness: the nearest resolve takes sample 0 instead of the minimum "
       "(its negative control) in contents built after the call; False restores it." },

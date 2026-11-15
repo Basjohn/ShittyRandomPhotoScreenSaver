@@ -387,6 +387,27 @@ void countDepthPrime()
 }
 
 namespace {
+QAtomicInteger<int> g_skipResolvePrime { 0 };
+QAtomicInteger<qint64> g_resolvePrimes { 0 };
+} // namespace
+
+void setSkipResolvePrime(bool skip)
+{
+    g_skipResolvePrime.storeRelease(skip ? 1 : 0);
+}
+
+bool skipResolvePrime()
+{
+    return g_skipResolvePrime.loadAcquire() != 0;
+}
+
+void countResolvePrimes(int primed)
+{
+    if (primed > 0)
+        g_resolvePrimes.fetchAndAddRelaxed(primed);
+}
+
+namespace {
 QAtomicInteger<int> g_nearestFirstSample { 0 };
 QAtomicInteger<qint64> g_nearestResolves { 0 };
 } // namespace
@@ -432,6 +453,7 @@ SceneTargetCounts sceneTargetCounts()
     c.steps = g_steps.loadRelaxed();
     c.readbacksPending = g_readbacksPending.loadRelaxed();
     c.depthPrimes = g_depthPrimes.loadRelaxed();
+    c.resolvePrimes = g_resolvePrimes.loadRelaxed();
     c.nearestResolves = g_nearestResolves.loadRelaxed();
     return c;
 }
@@ -805,17 +827,28 @@ QRhiTexture *SceneTargets::sampledTexture(const QByteArray &name) const
     return t->readable(t->decl.colourIndex(attachment));
 }
 
-QList<QRhiTexture *> SceneTargets::loadedColour(int index) const
+int SceneTargets::loadedColour(int index, QRhiTexture **out) const
 {
-    QList<QRhiTexture *> list;
     const Target *t = target(index);
-    if (!t)
-        return list;
-    for (int i = 0; i < int(t->decl.colour.size()); ++i) {
+    int n = 0;
+    for (int i = 0; t && i < int(t->decl.colour.size()) && i < kMaxTargetColour; ++i) {
         if (t->colour[i])
-            list.append(t->colour[i].get());
+            out[n++] = t->colour[i].get();
     }
-    return list;
+    return n;
+}
+
+int SceneTargets::averageResolves(int index, QRhiTexture **out) const
+{
+    const Target *t = target(index);
+    int n = 0;
+    if (!t || t->samples <= 1)
+        return 0;
+    for (int i = 0; i < int(t->decl.colour.size()) && i < kMaxTargetColour; ++i) {
+        if (!t->decl.colour.at(i).nearest && t->resolve[i])   // the render target's resolve (step's attachments)
+            out[n++] = t->resolve[i].get();
+    }
+    return n;
 }
 
 int SceneTargets::liveObjects() const

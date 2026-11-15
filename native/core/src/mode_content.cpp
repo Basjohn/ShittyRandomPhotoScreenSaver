@@ -2934,12 +2934,17 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             }
             cb->endPass();
         } else {
-            // N3.1: a run on a scene target: its attachments primed for the load (rule C, depth too), cleared by a draw
+            // N3.1: a run on a scene target: its attachments primed for the load (rule C, depth too), its average
+            // resolves ordered after their last store (audit 2, H1: defect B's UNDEFINED transition), cleared by a draw
             // over the whole allocation at its first run of the record, the passes over its content viewport.
             SceneTargets::Target &t = *m_targets.target(pass.target);
-            primeForLoad(rhi, cb, m_targets.loadedColour(pass.target));
+            QRhiTexture *textures[kMaxTargetColour];
+            primeForLoad(rhi, cb, textures, m_targets.loadedColour(pass.target, textures));
             if (t.depth && !skipDepthPrime() && primeDepthForLoad(rhi, cb, t.depth.get()))
                 countDepthPrime();
+            if (!skipResolvePrime())
+                countResolvePrimes(primeResolvesForPass(rhi, cb, textures, m_targets.averageResolves(pass.target,
+                                                                                                    textures)));
             cb->beginPass(t.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
             pending = nullptr;
             if (!cleared[pass.target]) {

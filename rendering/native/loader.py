@@ -223,6 +223,11 @@ class NativeCore:
         validation) or restored."""
         self.module.scene_depth_prime_control(bool(skip))
 
+    def scene_resolve_prime_control(self, skip: bool) -> None:
+        """N3.1 audit 2 (H1), harness only: the resolves' prime before each run skipped (``True``: its negative control
+        under synchronisation validation) or restored."""
+        self.module.scene_resolve_prime_control(bool(skip))
+
     def scene_nearest_first_sample_control(self, first_only: bool) -> None:
         """N3.1 (D14 point 10), harness only: the nearest resolve takes sample 0 instead of the minimum (``True``: its
         negative control) in contents built after the call, or the minimum again."""

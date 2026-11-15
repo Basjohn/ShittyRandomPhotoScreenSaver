@@ -36,11 +36,15 @@ Rounds:
              pass) median and p90, single-sampled and 4x (the 4x minus 1x difference bounds the resolves: choice G's
              budget, 0.3 ms at 2560x1440 and 0.6 ms at 4K); the light attachment's clear (the ambient target at 2048 x
              1152 with and without its light attachment, nothing glowing: choice F); the first frame's wall time with a
-             new allocation against a steady one; the thread probe (no Python thread state on the render thread).
+             new allocation against a steady one; the thread probe (no Python thread state on the render thread). On
+             Vulkan it is the gate's synchronisation proof (audit 2, H1: its runs of consecutive multisampled records
+             have no readback between them to order a resolve), so a Vulkan cost round without the validation layer
+             fails.
 Run alone (not in the default set):
   prime_control  (--apis vulkan) rule C for depth's negative control: the scene with the depth prime skipped, then with
              it, at one sample and at 4x; synchronisation validation shows read-after-write hazards on the depth load
-             only where it was skipped.
+             only where it was skipped. Then the resolves' prime (audit 2, H1): 40 consecutive 4x records with it
+             skipped show write-after-write hazards on the resolves (defect B's UNDEFINED transition), none with it.
   cost_parts (each API) where the four-sample time goes at 4K: a clearing draw and plane, three passes, a colour read,
              the capture split; each at 1x and 4x.
   python_cost (the reference child, OpenGL) the Python renderer's ``SceneTarget`` on the same load at 2560x1440 and 4K,
@@ -94,6 +98,7 @@ COST_HOSTS = ((2560, 1440), (3840, 2160))
 COST_AMBIENT = (2048, 1152)
 COST_FRAMES = 240
 COST_MIN_SAMPLES = 30               # Qt's OpenGL backend reports a GPU time only for frames whose query was ready
+RESOLVE_CONTROL_FRAMES = 40         # prime_control's consecutive 4x records per phase (audit 2, H1)
 PYTHON_COST_FRAMES = 120            # the Python path's timed frames per size and count (python_cost)
 RESOLVE_BUDGET_MS = {(2560, 1440): 0.3, (3840, 2160): 0.6}   # choice G (D7's budgets, until the lead sets another)
 CLEAR_BUDGET_MS = 0.05             # choice F: "negligible" (the lead's word), stated here as 0.05 ms at 2048 x 1152
@@ -698,12 +703,37 @@ def round_prime_control(core, engine, app, packs: dict) -> dict:
             finally:
                 core.scene_depth_prime_control(False)
             facts[label] = {"depth_primes": core.composite_live()["scene_target_depth_primes"] - before}
+        # Audit 2, H1: the resolves' prime. Consecutive 4x records with no readback between them (a readback orders the
+        # resolve and hides the hazard), the resolves' prime skipped, then with it.
+        base = _scene_module().settings(ambient_size=AMBIENT)
+        for label, skip in (("skipped", True), ("primed", False)):
+            core.set_vulkan_phase(f"n31 resolve prime {label}")
+            core.scene_resolve_prime_control(skip)
+            before = core.composite_live()["scene_target_resolve_primes"]
+            try:
+                scene = Scene(core, engine, host, CARD, 1.0, packs, samples=4)
+                try:
+                    host.frames(2)
+                    for index in range(RESOLVE_CONTROL_FRAMES):
+                        scene.mode.settings(dict(base, u_hdr_gain=2.0 + (0.2 if index % 2 else 0.0)))
+                        host.frames(1)
+                    records = scene.mode.state().get("records")
+                finally:
+                    scene.close(app)
+                    host.frames(2)
+                    host_check._flush_deletes(app)
+            finally:
+                core.scene_resolve_prime_control(False)
+            facts[f"resolve_{label}"] = {"resolve_primes": core.composite_live()["scene_target_resolve_primes"] - before,
+                                         "records": records}
     finally:
         host.close()
         host_check._flush_deletes(app)
-    return {"pass": facts["skipped"]["depth_primes"] == 0 and facts["primed"]["depth_primes"] > 0, "facts": facts,
-            "checks": {"the_control_records_no_prime_and_the_product_path_does":
-                       facts["skipped"]["depth_primes"] == 0 and facts["primed"]["depth_primes"] > 0}}
+    checks = {"the_control_records_no_prime_and_the_product_path_does":
+              facts["skipped"]["depth_primes"] == 0 and facts["primed"]["depth_primes"] > 0,
+              "the_resolve_control_records_no_prime_and_the_product_path_does":
+              facts["resolve_skipped"]["resolve_primes"] == 0 and facts["resolve_primed"]["resolve_primes"] > 0}
+    return {"pass": all(checks.values()), "facts": facts, "checks": checks}
 
 
 COST_PARTS = ("clear", "planes2", "draws", "read", "capture")
@@ -1281,12 +1311,21 @@ def prime_control_validation(record: dict) -> dict:
         return sum(int(g.get("count", 0)) for g in groups
                    if g.get("phase") == phase and str(g.get("id", "")).startswith("SYNC-HAZARD"))
 
+    skipped_phases = ("n31 prime skipped", "n31 resolve prime skipped")
     other = sorted({str(g.get("id")) for g in groups if g.get("severity") == "error" and not g.get("qt_defect")
-                    and g.get("phase") != "n31 prime skipped"})
+                    and g.get("phase") not in skipped_phases})
+    # Anything unexcused outside the skipped phases (a recorded Qt defect included: B is excused only in 'discard').
+    elsewhere = sorted({f"{g.get('phase')}: {g.get('id')}" for g in groups
+                        if g.get("severity") == "error" and g.get("phase") not in skipped_phases
+                        and not g.get("excused") and g.get("qt_defect") != "A"})
     skipped, primed = hazards("n31 prime skipped"), hazards("n31 prime primed")
+    resolve_skipped, resolve_primed = hazards("n31 resolve prime skipped"), hazards("n31 resolve prime primed")
     return {"hazards_with_the_prime_skipped": skipped, "hazards_with_the_prime": primed,
-            "other_unexplained_errors": other, "pass": skipped > 0 and primed == 0 and not other
-            and bool((record.get("validation") or {}).get("layer_loaded"))}
+            "hazards_with_the_resolve_prime_skipped": resolve_skipped,
+            "hazards_with_the_resolve_prime": resolve_primed,
+            "other_unexplained_errors": other, "unexcused_outside_the_skipped_phases": elsewhere,
+            "pass": skipped > 0 and primed == 0 and resolve_skipped > 0 and resolve_primed == 0 and not other
+            and not elsewhere and bool((record.get("validation") or {}).get("layer_loaded"))}
 
 
 def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool, list[str]]:
@@ -1298,6 +1337,12 @@ def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool,
             failed.append(f"reference: {record.get('error')}")
         return not failed, failed
     ok, failed = host_check.api_verdict(api, record, require_validation)
+    if (api == "vulkan" and "cost" in (record.get("rounds") or []) and record.get("instance_created")
+            and not (record.get("validation") or {}).get("layer_loaded")):
+        # Audit 2, H1: the cost round draws the only long runs of consecutive multisampled records (no readback between
+        # them to order a resolve), so it is the gate's synchronisation proof: never judged without the layer.
+        failed.append("vulkan cost: the validation layer did not load (the cost round's consecutive multisampled "
+                      "records are the gate's synchronisation proof; pass --layer-path)")
     if api == "vulkan" and "prime_control" in (record.get("rounds") or []):
         # The negative control is expected to make validation unclean in its skipped phase, and only there.
         control = prime_control_validation(record)

@@ -28,6 +28,8 @@
 // reads every sample of the multisampled texture and writes the minimum into a single-sampled R32F texture, which the
 // samplers and the capture read; nothing sets a depth resolve texture, so the multisampled depth is stored and loaded
 // across a capture. It runs after a run of passes on the target only when a later pass reads it (or a readback asks).
+// QRhi's average resolves are ordered after their last store before every run (targets.h primeResolvesForPass; audit 2,
+// H1: a resolve attachment's render pass transitions it from UNDEFINED with no external dependency).
 // Every target keeps its contents (targets.h rule B, depth too) and is cleared by a draw.
 //
 // Render thread only, but the counts (any thread) and the readback's results (taken by the GUI thread through
@@ -120,6 +122,11 @@ QList<int> supportedSampleCounts(QRhi *rhi);
 void setSkipDepthPrime(bool skip);
 bool skipDepthPrime();
 void countDepthPrime();
+// The same for the resolves' prime (audit 2, H1: targets.h primeResolvesForPass; its negative control under
+// synchronisation validation), and the count of resolve barriers recorded (process-wide).
+void setSkipResolvePrime(bool skip);
+bool skipResolvePrime();
+void countResolvePrimes(int primed);
 // The harness's control of the nearest resolve (its negative control: sample 0 instead of the minimum), read when a
 // content builds its resolve passes; and the count of nearest resolves recorded (process-wide).
 void setNearestFirstSample(bool firstOnly);
@@ -136,6 +143,7 @@ struct SceneTargetCounts
     qint64 steps = 0;      // allocation steps run
     int readbacksPending = 0;
     qint64 depthPrimes = 0; // depth transitions recorded by the core before a load (rule C for depth)
+    qint64 resolvePrimes = 0; // resolve barriers recorded by the core before a run (audit 2, H1)
     qint64 nearestResolves = 0; // nearest resolve passes recorded
 };
 SceneTargetCounts sceneTargetCounts();
@@ -227,8 +235,12 @@ public:
     // The texture a sampler named "<target>.<attachment>" reads (an attachment, "depth", "capture_colour",
     // "capture_depth"); null when there is none.
     QRhiTexture *sampledTexture(const QByteArray &name) const;
-    // The textures a run on target `index` loads (its colour attachments; rule C primes them) and its depth.
-    QList<QRhiTexture *> loadedColour(int index) const;
+    // The textures a run on target `index` loads (its colour attachments; rule C primes them), into `out` (room for
+    // kMaxTargetColour); returns how many. Nothing allocated (audit 2, M5).
+    int loadedColour(int index, QRhiTexture **out) const;
+    // The resolve textures a run on target `index` writes (QRhi's average of a read multisampled attachment; audit 2,
+    // H1: primed before every run), into `out` (room for kMaxTargetColour); returns how many.
+    int averageResolves(int index, QRhiTexture **out) const;
 
     quint64 layoutGeneration() const { return m_layoutGeneration; }
     quint64 objectGeneration() const { return m_objectGeneration; }

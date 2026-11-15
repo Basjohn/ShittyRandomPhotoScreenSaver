@@ -29,7 +29,9 @@ QT_DEFECTS = {
     "B": "SYNC-HAZARD-WRITE-AFTER-WRITE at vkCmdBeginRenderPass: QRhiVulkan::createOffscreenRenderPass gives a texture "
          "target without PreserveColorContents initialLayout UNDEFINED and no VK_SUBPASS_EXTERNAL dependency, so the "
          "pass's layout transition is unordered against the previous frame's storeOp. Excused only in phases named "
-         "'discard' (the evidence hosts that do not preserve); every core target preserves (native/core/src/targets.h).",
+         "'discard' (the evidence hosts that do not preserve); every core target preserves (native/core/src/targets.h). "
+         "A resolve attachment has the same UNDEFINED initial layout whatever the flags: the core orders a scene "
+         "target's resolves before every run (targets.cpp primeResolvesForPass, N3.1 audit 2 H1).",
     "C": "SYNC-HAZARD-READ-AFTER-WRITE at vkCmdBeginRenderPass (loadOp LOAD): QRhiVulkan's pass resource tracker "
          "transitions a colour target with dstAccessMask COLOR_ATTACHMENT_WRITE only (TexColorOutput), so a loading "
          "pass reads after an unordered layout transition. Never excused: the core primes its targets "
