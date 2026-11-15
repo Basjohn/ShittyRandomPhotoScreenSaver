@@ -769,7 +769,9 @@ Each foundation slice adds what it learned here.
 - A harness cost breakdown before a fix: the 4K four-sample time was mostly the capture split's QRhi depth resolve
   (Vulkan 0.98 ms to about 0.5 ms once the core's nearest resolve replaced it), not the passes or a colour resolve;
   measure the parts (`cost_parts`) before redesigning one. On the operator's machine the GPU is shared (a game ran at
-  40% through round 3): compare p10 figures taken back to back, never medians from different runs.
+  40% through part of round 3): check `nvidia-smi` before a cost run and judge only figures from a quiet GPU taken
+  back to back; under load even p10s moved by 0.15 ms. On a quiet GPU a second full-screen draw at four samples cost
+  nothing measurable while the target's first write (a clearing draw after a load) cost most of the four-sample time.
 
 ## Operator-triggered appearance review (reference checklist)
 

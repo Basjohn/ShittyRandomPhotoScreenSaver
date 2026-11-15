@@ -1131,16 +1131,21 @@ the rules for the GPU-free tests and `scene3d.scene_samples` is the one sampling
 - Rule C for depth's negative control (`--rounds prime_control`, Vulkan, 1x and 4x): with the prime skipped,
   synchronisation validation reports read-after-write hazards on the depth load (3 at one sample, 7 with 4x, where
   the nearest resolve reads the depth before the load); with it, none.
-- Cost (GPU, the harness scene's passes; the operator's machine ran a game at about 40% GPU through every round-3
-  figure, so medians move by tenths of a millisecond between runs: the p10 is reported beside them). The light
-  attachment's clear at 2048 x 1152 adds 0.02 to 0.04 ms (choice F: negligible). Four samples minus one at 4K, p10:
-  the Python renderer 0.26 to 0.42 ms over three runs (OpenGL, `python_cost`); native, the full scene, Vulkan 0.50 ms
-  and OpenGL 0.40 ms (`20261115_round3_cost2`, beside a Python 0.26). Round 2's Vulkan 1.25 ms was QRhi's depth
-  resolve: the capture split's 4x minus 1x went from 0.98 ms to about 0.5 ms (`cost_parts`). Native OpenGL is level
-  with Python within its run-to-run spread; Vulkan sits 0.1 to 0.2 ms above it. The clearing draw (rule B writes every
-  sample where `glClear` is a fast clear) is the remaining candidate, but `cost_parts` cannot separate 0.1 ms under
-  the load (its clear-and-plane part read 0.21 to 0.25 ms while the same part with a second plane read 0.09); a quiet
-  GPU or a load-op clear build decides it.
+- Cost (GPU, the harness scene's passes, module de12cb82; on a quiet GPU, `20261115_round3_quiet_parts` and
+  `_quiet_cost`; figures taken while a game held 40% of the GPU moved by tenths of a millisecond and are kept only as
+  evidence). The light attachment's clear at 2048 x 1152 adds 0.01 to 0.02 ms (choice F: negligible). Four samples
+  minus one at 4K: the Python renderer 0.41 ms (OpenGL, `python_cost`); native, the scene with its capture, OpenGL
+  0.45 ms and Vulkan 0.58 ms (the full scene with the ambient target and the surface pass: Vulkan 0.58, OpenGL 0.44 at
+  p10); at 2560 x 1440 Python 0.15, native OpenGL 0.19, Vulkan 0.22. Round 2's Vulkan 1.25 ms was QRhi's depth
+  resolve. What is left, by part (`cost_parts`, 4x minus 1x, Vulkan / OpenGL): the clearing draw and a plane 0.29 /
+  0.13 ms, while a second full plane adds nothing at four samples (0.19 / 0.07 for both) and the other passes little:
+  the four-sample cost points to the target's first write of every sample (the parts cannot tell the clearing draw
+  from the load before it), the clearing draw over contents loaded first
+  (rule B: `PreserveColorContents` loads, then the draw writes every sample of two RGBA16F attachments and the D32F, about
+  660 MB at 4K, where the Python renderer's `glClear` is a fast clear). The capture split adds 0.36 / 0.30 ms (the
+  second run, the nearest resolve, the capture, a second colour resolve), as Python's `background()` does its own.
+  Proposed (not built, the lead's call): the first run of a target clears through its pass's load op (a fast clear,
+  no load), the later runs load; parity must hold.
 
 ## D1, D2, D3 and the transport rule
 
