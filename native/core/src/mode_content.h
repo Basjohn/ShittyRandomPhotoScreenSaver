@@ -113,8 +113,23 @@
 // given as dynamic offsets; firstInstance is always 0. The core member uMatrix (item pixels, the item's own unrotated
 // coordinates, to the drawn target's clip space, corrected once: conventions.h rule 1) is filled for a pass with its own
 // vertex stage; on the core's triangle it stays zeros (nothing reads it there).
+//
+// Compute passes (N3.3, D16; compute_passes.h): a program may declare storage buffers and images ({"buffers": [...],
+// "images": [...]}) and compute entries in its pass list ({"name", "compute": true, "trigger": "frame" or {"field"},
+// "groups": [x, y, z] or {"over": a resource}, "bindings": [{"name": the shader's buffer block or image, "buffer" |
+// "image" | "stream" | "mesh": the resource, "access": read, write or read_write}], "samplers"?: [...]}, one compute pack
+// each). An entry is recorded at its place as its own QRhi compute pass, outside any render pass, only when its trigger
+// has new work (a re-record for the card, the settings, a texture or a harness readback dispatches nothing). A draw reads
+// a storage buffer as storage ("storage": [{"name", "stream": the buffer}]), per instance ("instance_from") or as its
+// indirect commands ("indirect"), and an image through a sampler naming it (sampler2D, or sampler3D for a 3D image).
+// Every count a draw or a dispatch reads over a storage buffer is checked against that buffer; a named group count is a
+// record u32 under an at_most rule (or a setting); groups past the device's limit are not dispatched. The content owns
+// the storage (ModeStorage); it survives a pipeline rebuild and a new program that declares it the same way. A content
+// made again finds its storage gone: it is made zeroed, the entries dispatch fresh, and the owner is told once through
+// the lost edge with the names "state:<resource>" (NativeMode.on_state_lost). A still draws no compute.
 #pragma once
 
+#include "compute_passes.h"
 #include "mesh_buffers.h"
 #include "mode_schema.h"
 #include "packet_reader.h"
@@ -211,6 +226,7 @@ struct PassSampler
     SamplerWrap wrap = SamplerWrap::Clamp;
     SamplerMips mips = SamplerMips::None;
     int stages = 0;       // N3.2: QRhiShaderResourceBinding::StageFlags the pass's stages read it in (0: the fragment)
+    int dimensions = 2;   // N3.3: 3 for a sampler3D (it reads a 3D storage image)
 
     QJsonObject toJson() const;
 };
@@ -288,6 +304,15 @@ struct ModePass
     DrawCount drawCount;                             // its commands drawn
     QByteArray batches;                              // a batched draw's u32 {first, count} pairs (D15 point 6)
     DrawCount batchCount;                            // how many batches the record holds
+    // N3.3 (D16): a compute entry (its pack is `computeShader`; no fragment, no target).
+    bool compute = false;
+    QShader computeShader;
+    ComputeTrigger trigger;
+    DrawCount groups[3];                             // each a number or a name (record u32 under at_most, or a setting)
+    QByteArray groupsOver;                           // or the extent of this resource over the local size
+    QList<ComputeBinding> computeBindings;
+    quint32 localSize[3] = { 1, 1, 1 };              // reflected
+    int computeMemberOffset = -1;                    // u_srpss_compute's offset in its block (-1: not declared)
 
     bool ownVertex() const { return vertex.isValid(); }
     bool batched() const { return !batches.isEmpty(); }
@@ -298,6 +323,8 @@ struct ModeProgram
     QList<ModePass> passes;
     QList<TargetDeclaration> targets; // N3.1: its scene targets (reads derived from the samplers and captures)
     QList<StreamDeclaration> streams; // N3.2: its streams (a record field each)
+    QList<StorageBufferDeclaration> buffers; // N3.3: its storage buffers
+    QList<StorageImageDeclaration> images;   // N3.3: its storage images
     // N3.2: the numbers of the settings the draws name (counts and selectors), set where the settings are admitted.
     QHash<QByteArray, double> drawSettings;
     quint64 generation = 0; // a new program rebuilds the pipelines at the next record
@@ -312,8 +339,12 @@ struct ModeProgram
     // N3.2: whether a draw names `name` (a count or a selector a record field or a setting fills), or a stream reads it.
     bool drawNames(const QByteArray &name) const;
     bool streamReads(const QByteArray &field) const;
-    // N3.2: the meshes the passes draw (each once; never the built-in quad).
+    // N3.2: the meshes the passes draw (each once; never the built-in quad). N3.3: and the meshes compute reads.
     QList<QByteArray> drawnMeshes() const;
+    // N3.3: the declared storage by name (null: none), and whether any pass is a compute entry.
+    const StorageBufferDeclaration *storageBuffer(const QByteArray &name) const;
+    const StorageImageDeclaration *storageImage(const QByteArray &name) const;
+    bool hasCompute() const;
     // N3.2: the settings' numbers the draws name, from `settings`.
     QHash<QByteArray, double> drawSettingNumbers(const QJsonObject &settings) const;
     bool needsCard() const;
@@ -512,6 +543,25 @@ public:
     // JSON only when the state is asked for: audit 2, M5).
     void noteTargets(const SceneTargetsState &state);
 
+    // N3.3, GUI thread: a storage image's size ([w, h] or [w, h, d]) with no new program (Waveform's fog grid follows
+    // its surface): the image is made again at the next record. Refused for an image the program does not declare or
+    // a size outside its bounds.
+    bool setImageSize(const QByteArray &name, const int *size, QString *error);
+    // Render thread: the drawn program's images with the sizes set since.
+    const QList<StorageImageDeclaration> &drawnImages() const { return m_drawnImages; }
+    // N3.3, render thread: whether a content of this source held storage before (a content made again finds it lost).
+    bool storageHeld() const { return m_storageHeld.loadRelaxed() != 0; }
+    void setStorageHeld(bool held) { m_storageHeld.storeRelaxed(held ? 1 : 0); }
+    // N3.3, harness: a readback of every storage buffer and image at the next record (GUI thread; the caller asks the
+    // item for a frame), and its bytes once QRhi completed it (any thread; taken once). The record it rides on
+    // dispatches nothing (no new work).
+    void requestStorageRead();
+    quint64 storageReadRequests() const { return m_storageReads.loadAcquire(); }
+    void setStorageReadback(const std::shared_ptr<StorageReadback> &readback);
+    bool takeStoragePixels(QList<StoragePixels> *out);
+    // N3.3: the storage's state and the device's compute facts (render thread, at an edge only).
+    void noteStorage(const QJsonObject &state);
+
     static int liveSources();
 
 protected:
@@ -535,6 +585,7 @@ private:
     QList<ModeTexture> m_textures;              // N4.a: the item's textures, their images until taken
     QList<TargetDeclaration> m_targetSizes;     // N3.1: explicit sizes set since the program (name and size only)
     QList<ModeMesh> m_meshes;                   // N3.2: the item's meshes, their bytes until taken
+    QList<StorageImageDeclaration> m_imageSizes; // N3.3: sizes set since the program (name and size only)
     quint64 m_generation = 0;                   // a stream, program, settings, card or texture change
     quint64 m_buildGeneration = 0;              // the same but the card
 
@@ -551,7 +602,9 @@ private:
     QList<ModeTexture> m_drawnTextures;
     QList<TargetDeclaration> m_drawnTargets;    // N3.1
     QList<ModeMesh> m_drawnMeshes;              // N3.2
+    QList<StorageImageDeclaration> m_drawnImages; // N3.3
     quint64 m_takenJobsFinished = 0;            // N3.8: the notifier's count at the last sync
+    QAtomicInteger<int> m_storageHeld { 0 };    // N3.3
 
     const std::shared_ptr<ItemNotifier> m_notifier;
 
@@ -562,6 +615,9 @@ private:
     std::shared_ptr<SceneReadback> m_targetReadback; // N3.1, under m_textureReportMutex
     QAtomicInteger<quint64> m_targetReads { 0 };
     QJsonObject m_meshBuffersState;             // N3.2, under m_textureReportMutex
+    QJsonObject m_storageState;                 // N3.3, under m_textureReportMutex
+    std::shared_ptr<StorageReadback> m_storageReadback; // N3.3, under m_textureReportMutex
+    QAtomicInteger<quint64> m_storageReads { 0 };
 };
 
 class ModeContent final : public SurfaceContent
@@ -638,6 +694,21 @@ private:
     bool meshesReady() const;
     // Which passes' meshes are missing (bit 2 * pass its mesh, the next its instance source; 0: none), read in place.
     quint64 missingMeshMask() const;
+    // N3.3 (D16): the storage at this record (made, kept or made again; its edge kernels recorded now, before any pass);
+    // false with the reason (the content's failure, latched like a build's).
+    bool syncStorage(QRhi *rhi, QRhiCommandBuffer *cb, const ColorTarget &target, QString *error);
+    // N3.3: which compute entries dispatch at this drawn record (their trigger has new work), u_srpss_compute filled into
+    // the arena's copy for each.
+    void decideDispatches();
+    // N3.3: one compute entry's dispatch (its own QRhi compute pass; under the single-pass control the pass stays open
+    // for the next entry). `open`: a compute pass is open; `pending`: the record's uploads, for the first pass.
+    void recordCompute(QRhi *rhi, QRhiCommandBuffer *cb, int index, QRhiResourceUpdateBatch **pending, bool *open);
+    // N3.3: a compute entry's group count on one axis for this record (0: nothing to dispatch).
+    quint32 computeGroups(QRhi *rhi, const ModePass &pass, int axis) const;
+    // N3.3: a storage buffer's record count for a draw reading it (its bytes over `stride`).
+    const ModeStorage::Buffer *storageBuffer(const QByteArray &name) const { return m_storage.buffer(name); }
+    // N3.3: a compute entry's bindings (its block, its resources by access, its samplers), in build()'s order.
+    bool computeBindings(const Resources &r, int index, QList<QRhiShaderResourceBinding> *out) const;
     void pack(QRhi *rhi, const ColorTarget &target);
     // The QRhi objects of the passes only: a rebuild (a new program, a failed build) keeps the record of the frame in the
     // target, so a failure leaves that frame for the route to fade the card out over (round 2, M4).
@@ -714,6 +785,24 @@ private:
     quint64 m_targetObjectsSeen = 0;         // the targets' object generation the bindings were made over
     quint64 m_targetReadsDone = 0;           // N3.1, harness: readback requests served
     QList<QSize> m_passTargets;              // N3.1: each pass's target content size (packed with the frame)
+    // N3.3 (D16): the storage (choice B: the content's), its trigger bookkeeping per compute entry and the harness's
+    // readbacks served.
+    struct ComputeTrack
+    {
+        bool dispatched = false;             // since the storage was made (or the program came)
+        quint64 lastTrigger = 0;
+        quint64 freshSeen = 0;               // the storage's fresh generation at its last dispatch
+        quint64 dispatches = 0;
+    };
+    ModeStorage m_storage;
+    ComputeTrack m_compute[kMaxModePasses];
+    bool m_dispatch[kMaxModePasses] = {};
+    quint64 m_computeProgram = 0;            // the program the tracks are of
+    quint64 m_freshGeneration = 0;           // the storage made again (fresh) this many times
+    quint64 m_storageObjectsSeen = 0;        // the storage's objects the bindings were made over
+    quint64 m_storageNoted = ~quint64(0);    // the storage's objects the state was last noted for
+    bool m_storageHeldHere = false;          // this content made storage (a later one of the source finds it lost)
+    quint64 m_storageReadsDone = 0;          // harness readbacks served
 };
 
 } // namespace srpss_core

@@ -98,6 +98,7 @@ set(_sources
     src/mode_content.cpp
     src/scene_targets.cpp
     src/mesh_buffers.cpp
+    src/compute_passes.cpp
     src/job_service.cpp
     src/item_notifier.cpp
     src/program_blocks.cpp

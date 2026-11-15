@@ -447,6 +447,14 @@ them (background base draw, clip begin, Spectrum, clip end); its GL count includ
 read between helpers neither hides nor adds a call (7 Nov, checklist AC-08: 187 GL calls before and after, Python
 calls 1609 -> 1216, render-thread CPU 0.68 -> 0.51 ms; baselines `tools/baselines/overhead/2026-11-07_*_node-path.json`).
 
+**No readback in the product.** Nothing the product draws or computes on the GPU is read back to the CPU, and no
+frame waits on a fence for it (the native core's rule, `Docs/Future_Work/Native_Core_P3_Decisions.md` D5's "What a
+mode's native renderer may not do" and D16 point 8); readbacks belong to harnesses and tools. **The one named
+exception** (lead, 15 Nov 2026, D16 choice G): Extruded Bubble's drift pair self-check (D4 "Consequences"), once per
+device at its warm-up edge, never waited on, its result logged. On OpenGL QRhi reads it synchronously when its batch
+runs; that stall is lifecycle, not steady state, and is never counted as a steady-state hitch. Any other readback needs
+its own line here and in D16.
+
 Work prepared off the render thread for a renderer (for example `run_geometry` keys) must key on the renderer's own inputs: transition renderers draw at the background item's logical size, which is not `display_bounds`: it is the monitor's device-exact rectangle inside the R-63 window (1706.67 logical px where Qt's rounded screen geometry says 1707), or the whole overscanned window before the native rectangle is known. Prove a hit, not just a build — a key that never matches fails silently into a render-thread rebuild (R-95).
 
 The R-63 overscanned window is protected (operator, 15 Nov 2026): it is the only measure that has stopped flicker and artefacts while windows initialise. An edge or placement defect is fixed by placing content on the monitor's device-exact rectangle inside that window, never by removing, shrinking or reshaping the overscan.

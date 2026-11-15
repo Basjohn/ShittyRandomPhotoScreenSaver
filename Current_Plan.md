@@ -742,7 +742,112 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       instead of matching source text; a test comparing the C++ reader's decode of an `f32` field with Python's
       (fields equal, bytes round-trip with inf, -0 and a denormal: the audit's `probe_f32_reader.py`).
 - [ ] N3.3 Compute passes: dispatch only when there is new work, storage buffers shared with draws, barriers from
-  the binding access types, no readback in the product.
+  the binding access types, no readback in the product. Builds on N3.2's streams and pass model (D15, ABI 18; not
+  merged when this was written). The design and its open choices A to L: decisions doc, "N3.3 draft" (15 Nov). No C++
+  before the lead answers them. Consumers, as they dispatch today:
+  - Waveform Ribbon (N5.4): five programs, seven dispatches a fogged frame, all writing images the draws sample:
+    `waveform_field.py:54-55` (the body field, RGBA32F, reads the knot packet at storage binding 0),
+    `floor_give.py:79-88` (sections RGBA32F, then a blur reading them by `imageLoad`), `fog_volume.py:155-167`
+    (inject writes 3D RGBA16F and R16F, integrate reads inject and writes 3D RGBA16F), run twice
+    (`waveform.py:288-300`: the main and the reflected volume). The fog grid follows the surface size
+    (`waveform.py:338`).
+  - Extruded Bubble's drift (D4, N5.6): `extruded_bubble_drift_solver.py:680-752` dispatches only for steps newer
+    than the last applied serial (`:705`, nothing at `:716-717`); one dispatch a family (`:845-875`) over persistent
+    read-write state and one shared output; reallocation clears and copies a kept prefix (`:650-678`, `:817-843`:
+    `glClearNamedBufferData`, `glCopyNamedBufferSubData`); the pair self-check reads back once per solver (`:555-614`).
+  - Compacted populations (N4.c): `population.py:216-243`, count, scan and scatter over storage buffers, the scan
+    writing the indirect command a `glDrawArraysIndirect` draws (`:243`).
+  - The job service: uploads and mips only (`job_service.cpp:722-776`, N3.2's head), no compute. N0.7's edge field
+    (`native/spike_p1/src/vk_n07.cpp:436-459`) proved a compute job body, one QRhi compute pass per dispatch. D9's
+    class (a) (transition preparation: edge and propagation fields, population scan) is N5.2g's job form; class (c)
+    (the drift, Waveform's passes, fog) stays in the frame (D9 point 2).
+  - [ ] Contract: the lead's answers to A to L folded into the decisions doc as "D16. Compute passes", the draft's
+    text replaced, not kept beside it. It states: a compute entry in a program's pass list (its pack, block, group
+    counts, trigger, bindings with their access), the storage buffers and images a program declares (name, size,
+    format, usage, clear), their scope and lifetime, how a draw reads them (N3.2's storage, vertex and indirect
+    bindings; samplers naming an image), the access each binding declares and the barrier it yields on each backend,
+    the trigger rule and the core member it fills, the copy and clear kernels, what the product may read back (choice G),
+    and every refusal with its reason.
+  - [ ] C++ owner (render thread; `native/core/src`; no STL, Qt types, as the README says):
+    - [ ] `compute_passes.{h,cpp}`: the declarations (any thread; parse and check like `mesh_buffers.h`), the
+      content's storage buffers and images (`ModeStorage`: Static buffers with their declared usage, textures with
+      `UsedWithLoadStore`, sized at the build or a size edge, zeroed at creation), the core's copy and clear kernels
+      (choice C: compute shaders of the core's, both backends, used at allocation edges only), the process-wide counts
+      (buffers, images, bytes, dispatches, compute passes, copies, clears, buffers created) and the harness controls (a
+      binding's declared access overridden, a run recorded as one QRhi pass, the trigger forced every record, the
+      release skipping storage).
+    - [ ] `mode_content.{h,cpp}`: compute entries admitted (D12's one rule for the block, the groups and the trigger;
+      bindings by name to a storage buffer, an image or a storage stream; a write the reflection shows refused when
+      declared read); recorded at their place in the pass list, each as its own QRhi compute pass (choice A), outside
+      any render pass; skipped when the trigger has not changed (choice E); `u_srpss_compute` filled; a draw reading a
+      storage buffer (`bufferLoad`, vertex input, `drawIndirect`) or sampling an image (`sampler2D`, `sampler3D`);
+      the latch and the state's storage noted only at an edge (never per record).
+    - [ ] `mesh_buffers.{h,cpp}`: N3.2's storage stream bindable in the compute stage; a mesh with storage usage
+      (D3's geometry, once per revision, read by compute).
+    - [ ] Device facts: `QRhi::Compute`, `ThreeDimensionalTextures`, the compute limits, and on Vulkan the
+      `STORAGE_IMAGE` format feature of each declared format (R16F needs the extended formats) read once at device
+      creation and logged in the host state; a program needing one the device lacks is refused with the reason.
+    - [ ] Python face: `rendering/native/mode.py` (`ComputePass`, `StorageBuffer`, `StorageImage`, image sizes set at a
+      size edge as N3.1's `setTargetSize`), `program_json`, `NativeMode.state()`'s storage and the lost-state edge
+      (`on_state_lost`, choice I); `tools/regen_qrc.py` bakes compute packs as it bakes fragments.
+  - [ ] ABI 19: `abi.h`'s comment and `SRPSS_NATIVE_CORE_ABI`, `rendering/native/loader.py` `EXPECTED_ABI` (with
+    `tests/test_native_core_loader.py`); the compute entries and storage declarations, the harness readback of a
+    storage buffer or image as stored (`composite_mode_storage_read`: u32 words, f32, half floats), the harness
+    controls, `composite_live`'s storage counts, `composite_mode_state`'s storage, the host state's compute facts. Every
+    new Python entry is limited API, in `module.cpp` only. Then the lead's GitHub build (`--select native_module`) at
+    the commit; agents never build.
+  - [ ] Harness proof `native/core/python/compute_pass_check.py` (hidden host, OpenGL and Vulkan on the module's
+    device; harness compute shaders in the product shape under `native/core/python/compute_passes/`; evidence
+    `.artifacts/evidence/native_core/n3_3/`). Every result is read back in the harness only. Scenes, one per consumer
+    shape: a field (a storage stream in, a 2D RGBA32F image out, a draw sampling it); a two-dispatch image chain
+    (store, then `imageLoad` in the next dispatch); a 3D pair (RGBA16F and R16F, a draw through `sampler3D`); a
+    stateful buffer advanced per trigger, two dispatches writing disjoint regions of one shared output, resized with
+    its prefix kept; a population (count, scan, scatter, a compute-written command drawn by `drawIndirect`, the vertex
+    stage reading ids and states):
+    - [ ] Rule (a): native OpenGL against the Python owners (`compute.py`'s seam, `population.py`) driving the same
+      sources in the production GL host, outputs compared as stored. Integer outputs and copies exact; float outputs
+      exact, any difference reported with its ULP distance and the shader operation, and judged by the lead (no
+      tolerance granted ahead: checkpoint audit 3's M1). A negative control that must differ: one input element
+      changed.
+    - [ ] Rule (b): Vulkan against native OpenGL, under the same rule. D4's pair-check kernel (`PROGRAMS[2]`) through
+      `qsb` exact on both backends (`precise` survives the bake).
+    - [ ] Dispatch only when there is new work: a frame trigger dispatches once per accepted record and never for a
+      card, settings or fade re-record; a field trigger only when its field changes; the stateful scene's state after
+      200 records equals a CPU reference, and the control (the trigger forced every record) integrates twice and
+      differs. A content made again dispatches with `fresh` set and the owner's edge fires once.
+    - [ ] Nothing at rest: a minute at rest records no compute pass and no dispatch (counts unchanged); control: a
+      content dirtied every frame.
+    - [ ] Barriers under Vulkan synchronisation validation, consecutive records with no readback between them (N3.1's
+      lesson: a readback hides a hazard), clean through every scene: compute to compute (read-after-write,
+      write-after-write on the shared output), compute to draw (storage read, vertex input, indirect command, a sampled
+      image), and draw to the next record's compute (the research's Q7 open point). Negative control: a written
+      binding declared read (the barrier skipped) must report `SYNC-HAZARD-READ-AFTER-WRITE`.
+    - [ ] Write-after-read: dispatch 1 reads a buffer and dispatch 2 writes it, in both forms the research names (two
+      passes, the default; two buffers, a ping-pong); clean. Control: the same two dispatches recorded as one QRhi pass
+      (the run control) must report `SYNC-HAZARD-WRITE-AFTER-READ` (QRhi's gap: no barrier keyed on a read).
+    - [ ] OpenGL's barriers: every scene's outputs equal on OpenGL with QRhi's own `glMemoryBarrier` calls (no
+      validation layer exists there: values are the proof). The barrier calls per record counted against Python's on
+      the same scene.
+    - [ ] Copy and clear: a resized buffer keeps its prefix bit-exact and reads zero past it, on both backends; a
+      created buffer and image read zero.
+    - [ ] Retirement without leaks: the content released (a mode switch, the node deleted, the scene graph
+      invalidated, the item destroyed between a resize's allocation and its copy): buffers, images, bytes back to zero,
+      the destruction barrier's reading zero; control: the skipped-release control leaves them counted. No buffer or
+      image created over a steady minute.
+    - [ ] Cost: GPU time per compute pass (N3.1b's per-run scopes if landed, else the record's), median and p90, at
+      2560x1440 and 4K, at Waveform's fogged-frame shape (a 128x72 grid, both volumes) and the drift at 216,000 specks
+      (D4 point 5), against the Python path on the same load, judged by absolute times; the render thread's record
+      time (N3.8's timer). A quiet GPU, `nvidia-smi` and the display state recorded with the figures; OpenGL timer
+      waits are bounded loops over counted frames. The cost round runs once under the validation layer too
+      (consecutive records), its times taken from the run without it.
+    - [ ] The thread probe: zero calls with a Python thread state. Regressions on the same module:
+      `generic_mode_check.py`, `scene_target_check.py`, `mesh_buffer_check.py`, `fullscreen_pass_check.py`,
+      `background_layer_check.py`, `backdrop_pyramid_check.py`, `transition_route_check.py` verdicts unchanged.
+  - [ ] Docs: the decisions doc's "As built (N3.3)" under D16; `native/core/README.md` (`compute_passes.*`, the proof,
+    "How a new mode is built" gains a compute step); `Docs/Reference/Primitives.md` (the compute seam's native line);
+    `Docs/Reference/Scene3D_Resources.md`'s storage rows; `Docs/Reference/Harness_Index.md` (the command); the
+    research doc's Q7 open point closed with the result; the 3D foundation lessons in `Docs/Reference/Transitions.md`
+    (appended after the slice).
 - [ ] N3.4 Transparency and post-processing as shared stages, each opt-in and absent from a mode that does not use
   it: depth-aware order-independent transparency, bloom and the HDR resolve, the defocus layer.
   Decided by the lead, 15 Nov, from `Docs/Future_Work/Native_Core_QRhi_Research_N3.md` sections 3, 8 and 9:

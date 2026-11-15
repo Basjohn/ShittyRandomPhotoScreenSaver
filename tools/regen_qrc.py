@@ -403,7 +403,8 @@ def ensure_qrc_current(
 
 # ---- the Qt Quick shader packs ---------------------------------------------------------------------------------------
 
-QUICK_SHADER_SUFFIXES = (".vert", ".frag")
+# N3.3 (D16 point 1): a mode's compute shader is baked the same way (its pack beside it), for the core's compute entries.
+QUICK_SHADER_SUFFIXES = (".vert", ".frag", ".comp")
 
 
 @dataclass(frozen=True)

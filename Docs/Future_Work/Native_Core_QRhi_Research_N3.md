@@ -311,10 +311,9 @@ What this means for N3.x:
 - Vulkan compute needs the queue family compute bit: with our own device (D6) the graphics queue family must be a
   graphics+compute family (true for NVIDIA's universal family). `QRhi::Compute` false means N3.3 is absent on that
   device; the product must degrade by feature flag, never by assumption.
-- UNSETTLED: that the pass-boundary barriers have the correct source stage when the last user was a draw reading the
-  buffer as vertex input and the next pass writes it in compute (write-after-read across passes). The tracker emits a
-  barrier because the access changes, but I did not prove its stage/access pairing for that direction; one validated
-  run (draw reads buffer, then compute writes it, next frame) settles it.
+- SETTLED (N3.3, 15 Nov 2026; "Open items" Q7): the pass-boundary barriers are correct when the last user was a draw
+  reading the buffer and the next pass writes it in compute (write-after-read across passes), clean under validation
+  with shader-access checks on.
 
 ---
 
@@ -576,4 +575,9 @@ What this means for N3.x:
 - Q6: measured (`mesh_buffer_check.py --rounds stream_ring`, 15 Nov 2026): every QRhi route at 4 KiB to 288 KiB is
   within 0.05 ms of the pair's floor on both axes on both backends (the figures are in D5.3's stream ring row), so the
   pair is not built.
-- Q7: write-after-read across a pass boundary (buffer read in a draw, written by the next compute pass).
+- Q7: answered by N3.3's proof (`compute_pass_check.py --rounds barriers`, 15 Nov 2026, the module of 686ae09c):
+  consecutive records in which a draw reads what the next record's compute pass writes (vertex input, `drawIndirect`,
+  storage and `sampler3D` reads) are clean under synchronisation validation with the layer's shader-access checks on
+  (`syncval_shader_accesses_heuristic`, off by default: without it nothing is reported either way). The in-pass gap is
+  real: a write-after-read pair recorded in one QRhi compute pass reports `SYNC-HAZARD-WRITE-AFTER-READ`, which is why
+  D16 gives every compute entry its own pass.

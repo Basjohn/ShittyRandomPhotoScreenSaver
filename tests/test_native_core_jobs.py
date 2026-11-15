@@ -329,8 +329,10 @@ def test_the_mode_face_passes_the_in_frame_control_and_the_lost_listener():
     mode.texture("new", b"\0" * 16, (2, 2), mips=True)
     mode.texture("new", b"\0" * 16, (2, 2), in_frame=True)
 
+    delivered = []
+
     def listener(names):
-        return names
+        delivered.append(list(names))
 
     mode.on_textures_lost(listener)
     mode.on_textures_lost(None)
@@ -339,7 +341,12 @@ def test_the_mode_face_passes_the_in_frame_control_and_the_lost_listener():
     default, control = calls[0][1], calls[1][1]
     assert default == (9, "new", (2, 2), b"\0" * 16, True)          # the device's own route: no control sent
     assert control == (9, "new", (2, 2), b"\0" * 16, False, True)   # the harness control, last
-    assert calls[2][1] == (9, listener) and calls[3][1] == (9, None)
+    # N3.3: the core's one lost edge goes through the face, which hands the owner exactly the textures' names.
+    handle, given = calls[2][1]
+    assert handle == 9 and callable(given) and calls[3][1] == (9, None)
+    mode.on_textures_lost(listener)
+    given(["new"])
+    assert delivered == [["new"]]
 
 
 def test_pending_native_work_names_only_the_work_in_flight():

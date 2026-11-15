@@ -131,6 +131,15 @@ never ships.
     offsets), batched draws (one multi-draw with `gl_DrawID` where the device reports the features, else one draw a
     batch at its dynamic offset) and the harness controls. Counted in `composite_live` (`mesh_buffers_*`, the record's
     render-thread time among them).
+  - `compute_passes.*` (N3.3, decision D16): a program's compute entries and storage, owned by its content
+    (`ModeStorage`): storage buffers (`Static`, usage storage plus vertex or indirect where a draw reads them so) and
+    storage images (2D and 3D, RGBA8, RGBA16F, RGBA32F, R16F, R32F), created zeroed (a buffer by the core's clear kernel
+    `shaders/storage_clear.comp`, an image by one upload of zeros), a resized buffer keeping its prefix through the copy
+    kernel `shaders/storage_copy.comp` (QRhi has neither a buffer clear nor a buffer copy), kept across pipeline rebuilds
+    and programs that declare them the same way; each compute entry recorded as its own QRhi compute pass only when its
+    trigger has new work (`frame`, or a record `u32` field), `u_srpss_compute` telling the shader (trigger, last trigger,
+    fresh, dispatches); every barrier QRhi's, from each binding's declared access, checked against the pack's
+    qualifiers. The harness readback and controls (`compute_control`). Counted in `composite_live` (`compute_*`).
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
     loader's runtime rule); Qt's types instead.
@@ -191,6 +200,13 @@ never ships.
   forms, sixteen passes and the indirect draw equal; firstInstance's control; nothing at rest; no allocation over a
   steady minute; retirement; validation; cost; `--rounds stream_ring`: QRhi's routes against the pair's floor, D15
   point 7).
+- `python/compute_pass_check.py`: N3.3's proof on the harness scenes `python/compute_passes/` (Waveform's field, floor
+  give chain and fog volume shapes, the drift's stateful buffer, the product's compacted population with its indirect
+  draw, a write-after-read pair): every storage resource read back, rule (a) against the Python owners' compute calls
+  and rule (b), exact; the qualifiers and their admission refusals; the triggers (no dispatch for a card, settings or
+  readback re-record; the state against a CPU reference; the fresh dispatch and the lost edge of a node made again);
+  copy and clear; nothing at rest; no object in steady records; retirement; synchronisation validation over consecutive
+  records with the two controls' hazards in their own phases; cost against the Python path).
 - `python/timer_check.py`: N2.6's proof (off is free by count, a known-cost pass scaled N times and its empty-bracket
   control, QRhi's frame figure, latched reads in a real window with the waiting read as control, the frame trace and
   its report, the two forms against each other, validation; `timer_analysis.py`).
@@ -255,6 +271,17 @@ worked example (harness-only); a product mode does the same in the product's pla
    judged against that conversion. Every
    block lives in the content's arena; a blend may be a full `BlendState` (`max`, `min` included). A record field fills
    exactly one of a block member, a draw count or selector, and a stream (a batched draw's table is read both ways).
+4e. **Its compute** (N3.3, decision D16, when a step runs on the GPU: a field, a volume, a simulation, a population):
+   `StorageBuffer`s and `StorageImage`s given with the program (`NativeMode.program(..., buffers=, images=)`) and
+   `ComputePass` entries in the pass list at their place (each one compute pack, `.comp` baked like a fragment; its
+   `bindings` by the shader's names, each with its access `read`, `write` or `read_write`, matching the shader's
+   `readonly`/`writeonly`; its `groups` three counts or `over` a resource; its `trigger`, `"frame"` or a record `u32`
+   field for a stateful step, which must never integrate twice). A draw reads a buffer as storage, `instance_from` (a
+   buffer with a `layout`) or `indirect` (a buffer with `indirect=True`), and an image through a sampler (`sampler3D`
+   for a 3D one). A stateful shader reads `u_srpss_compute` (a `uvec4`: trigger, last trigger, fresh, dispatches) and
+   restarts its history when fresh; the owner hears of a lost state through `NativeMode.on_state_lost`. Images follow
+   their surface through `NativeMode.image_size`. Nothing is read back in the product (the drift's pair self-check is
+   the one named exception, D16 choice G).
 5. **What is refused, with its reason:** a setting or a record field no pass declares (unknown); a member no source
    fills (unfilled); a name with two owners (a setting or a field naming a core member, a setting naming a field); a
    value of the wrong size or without a defined conversion (a refused frame keeps the last drawn one); a sampler the

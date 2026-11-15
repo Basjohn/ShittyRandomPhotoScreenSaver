@@ -163,11 +163,12 @@ struct ModeMesh
     RecordLayout instanceLayout;      // invalid: no instance stream
     quint32 vertexCount = 0;
     quint32 instanceCount = 0;
+    bool storage = false;             // N3.3 (D16 point 2): also a StorageBuffer a compute entry reads (D3's geometry)
     QSharedPointer<MeshImage> image;  // the core's copy, until the render thread takes it
 
     QJsonObject toJson() const;
 };
-// GUI thread: a mesh from its declaration ({"vertices": layout, "instances"?: layout}) and bytes; refused with the reason
+// GUI thread: a mesh from its declaration ({"vertices": layout, "instances"?: layout, "storage"?: true}) and bytes; refused with the reason
 // (a bad name, layout or byte count, past kMaxMeshBytes, the built-in name).
 bool makeModeMesh(const QByteArray &name, const QByteArray &declaration, const QByteArray &vertices,
                   const QByteArray &instances, ModeMesh *out, QString *error);
@@ -243,6 +244,7 @@ public:
         RecordLayout instanceLayout;
         quint32 vertexCount = 0;
         quint32 instanceCount = 0;
+        bool storage = false;         // N3.3: its vertices are also a StorageBuffer (compute reads them)
         std::unique_ptr<QRhiBuffer> vertices;
         std::unique_ptr<QRhiBuffer> instances;
         qint64 bytes = 0;

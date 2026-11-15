@@ -344,8 +344,8 @@ QList<const char *> pointers(const QByteArrayList &list)
     return v;
 }
 
-bool createVkInstance(Instance *inst, bool wantValidation, QByteArrayList *extensionsOut, QByteArrayList *layersOut,
-                      QJsonObject *o)
+bool createVkInstance(Instance *inst, bool wantValidation, bool wantShaderAccesses, QByteArrayList *extensionsOut,
+                      QByteArrayList *layersOut, QJsonObject *o)
 {
     auto createInstance = inst->loader.get<PFN_vkCreateInstance>(nullptr, "vkCreateInstance");
     if (!createInstance) {
@@ -369,6 +369,7 @@ bool createVkInstance(Instance *inst, bool wantValidation, QByteArrayList *exten
 
     QByteArrayList layers;
     bool syncValidation = false;
+    bool shaderAccesses = false;
     QString validation;
     if (!wantValidation) {
         validation = QStringLiteral("not requested");
@@ -385,7 +386,22 @@ bool createVkInstance(Instance *inst, bool wantValidation, QByteArrayList *exten
             validation = QStringLiteral("enabled without synchronisation validation "
                                         "(the layer offers no VK_EXT_validation_features)");
         }
+#ifdef VK_EXT_layer_settings
+        if (wantShaderAccesses && syncValidation
+            && layerExtensions.contains(QByteArrayLiteral("VK_EXT_layer_settings"))) {
+            extensions.append(QByteArrayLiteral("VK_EXT_layer_settings"));
+            shaderAccesses = true;
+        }
+#endif
     }
+    QString shaderAccessesNote;
+    if (!wantShaderAccesses)
+        shaderAccessesNote = QStringLiteral("not requested");
+    else if (shaderAccesses)
+        shaderAccessesNote = QStringLiteral("enabled (syncval_shader_accesses_heuristic)");
+    else
+        shaderAccessesNote = QStringLiteral("requested, but synchronisation validation or VK_EXT_layer_settings is "
+                                            "unavailable");
     const bool debugUtils = extensions.contains(QByteArrayLiteral("VK_EXT_debug_utils"));
 
     const QList<const char *> extensionPtrs = pointers(extensions);
@@ -421,8 +437,29 @@ bool createVkInstance(Instance *inst, bool wantValidation, QByteArrayList *exten
         *tail = &messengerInfo;
         tail = &messengerInfo.pNext;
     }
-    if (syncValidation)
+    if (syncValidation) {
         *tail = &validationFeatures;
+        tail = &validationFeatures.pNext;
+    }
+#ifdef VK_EXT_layer_settings
+    // The layer's shader-access hazard checks are off by default (the layer says the heuristic can report false
+    // positives); a harness proving barriers between compute passes needs them on to see a missing barrier at all.
+    const VkBool32 shaderAccessesOn = VK_TRUE;
+    VkLayerSettingEXT shaderAccessesSetting = {};
+    shaderAccessesSetting.pLayerName = kValidationLayer;
+    shaderAccessesSetting.pSettingName = "syncval_shader_accesses_heuristic";
+    shaderAccessesSetting.type = VK_LAYER_SETTING_TYPE_BOOL32_EXT;
+    shaderAccessesSetting.valueCount = 1;
+    shaderAccessesSetting.pValues = &shaderAccessesOn;
+    VkLayerSettingsCreateInfoEXT layerSettings = {};
+    layerSettings.sType = VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT;
+    layerSettings.settingCount = 1;
+    layerSettings.pSettings = &shaderAccessesSetting;
+    if (shaderAccesses) {
+        *tail = &layerSettings;
+        tail = &layerSettings.pNext;
+    }
+#endif
 
     const VkResult created = createInstance(&ci, nullptr, &inst->instance);
     o->insert(QStringLiteral("api_version"), QStringLiteral("1.2"));
@@ -432,6 +469,8 @@ bool createVkInstance(Instance *inst, bool wantValidation, QByteArrayList *exten
     o->insert(QStringLiteral("validation"), validation);
     o->insert(QStringLiteral("validation_layer_loaded"), !layers.isEmpty());
     o->insert(QStringLiteral("synchronisation_validation"), syncValidation);
+    o->insert(QStringLiteral("synchronisation_shader_accesses"), shaderAccesses);
+    o->insert(QStringLiteral("synchronisation_shader_accesses_note"), shaderAccessesNote);
     *extensionsOut = extensions;
     *layersOut = layers;
     if (created != VK_SUCCESS) {
@@ -474,7 +513,7 @@ void destroyInstanceObjects(Instance *inst, QJsonArray *steps)
 
 } // namespace
 
-QByteArray vulkanInstanceCreateJson(bool validation)
+QByteArray vulkanInstanceCreateJson(bool validation, bool shaderAccesses)
 {
     QJsonObject root;
     if (g_instance) {
@@ -492,7 +531,7 @@ QByteArray vulkanInstanceCreateJson(bool validation)
     QByteArrayList extensions;
     QByteArrayList layers;
     QJsonObject created;
-    bool ok = createVkInstance(inst.get(), validation, &extensions, &layers, &created);
+    bool ok = createVkInstance(inst.get(), validation, shaderAccesses, &extensions, &layers, &created);
     if (ok) {
         inst->validationLoaded = !layers.isEmpty();
         // Adopt: the exact lists we enabled (Qt does not query an adopted instance) and the API version, without which
@@ -741,6 +780,29 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
                      f2.features.drawIndirectFirstInstance == VK_TRUE);
         facts.insert(QStringLiteral("shader_draw_parameters"), f11.shaderDrawParameters == VK_TRUE);
         facts.insert(QStringLiteral("device_name"), QString::fromUtf8(props.deviceName));
+        // N3.3 (D16 point 6): compute needs the graphics family's compute bit (QRhi::Compute), and a storage image its
+        // format's STORAGE_IMAGE feature (R16F needs the extended storage formats); read once here, never assumed.
+        facts.insert(QStringLiteral("queue_family_compute"), (families[family].queueFlags & VK_QUEUE_COMPUTE_BIT) != 0);
+        facts.insert(QStringLiteral("shader_storage_image_extended_formats"),
+                     f2.features.shaderStorageImageExtendedFormats == VK_TRUE);
+        facts.insert(QStringLiteral("max_compute_work_group_count_x"), double(props.limits.maxComputeWorkGroupCount[0]));
+        facts.insert(QStringLiteral("max_compute_work_group_invocations"),
+                     double(props.limits.maxComputeWorkGroupInvocations));
+        auto getFormat = inst->loader.get<PFN_vkGetPhysicalDeviceFormatProperties>(vk,
+                                                                                  "vkGetPhysicalDeviceFormatProperties");
+        if (getFormat) {
+            const struct { const char *name; VkFormat format; } storageFormats[] = {
+                { "rgba8", VK_FORMAT_R8G8B8A8_UNORM }, { "rgba16f", VK_FORMAT_R16G16B16A16_SFLOAT },
+                { "rgba32f", VK_FORMAT_R32G32B32A32_SFLOAT }, { "r16f", VK_FORMAT_R16_SFLOAT },
+                { "r32f", VK_FORMAT_R32_SFLOAT } };
+            QJsonObject storage;
+            for (const auto &f : storageFormats) {
+                VkFormatProperties fp = {};
+                getFormat(physDev, f.format, &fp);
+                storage.insert(QLatin1String(f.name), (fp.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0);
+            }
+            facts.insert(QStringLiteral("storage_image_formats"), storage);
+        }
         QMutexLocker lock(&g_factsMutex);
         g_deviceFacts.insert(out->m_device, facts);
     }

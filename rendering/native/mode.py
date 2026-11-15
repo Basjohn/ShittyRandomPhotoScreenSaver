@@ -45,6 +45,13 @@ indirect or batched draw); an item holds meshes (:meth:`NativeMode.mesh`: interl
 declares streams (:class:`ModeStream`: a record field each, read as per-instance attributes, storage or indirect
 commands); a blend may be a full declaration (:class:`BlendState`). Every block lives in one arena at aligned offsets
 (``rendering.native.streams.arena_layout`` mirrors the core's plan); ``firstInstance`` is always 0.
+Compute passes (N3.3, decision D16; ``native/core/src/compute_passes.h``): a program may declare storage buffers
+(:class:`StorageBuffer`) and images (:class:`StorageImage`, 2D or 3D) and compute entries in its pass list
+(:class:`ComputePass`: one compute pack, its trigger, groups and bindings, each with its access); each entry is its own
+QRhi compute pass and dispatches only when its trigger has new work (``u_srpss_compute`` tells the shader the trigger,
+its last value, whether the storage is fresh, and the dispatches since). Draws read a storage buffer as storage, per
+instance or as indirect commands, and an image through a sampler. Nothing is read back in the product; a content made
+again finds its storage gone and the owner's :meth:`NativeMode.on_state_lost` is told once.
 """
 from __future__ import annotations
 
@@ -88,6 +95,7 @@ MODE_CORE_MEMBERS = {
     "uOriented": (2, True),
     "uQuarters": (1, True),
     "u_srpss_batch": (1, False),   # N3.2 (D15 point 6): a batched pass's batch
+    "u_srpss_compute": (4, False), # N3.3 (D16 point 7): a compute entry's (trigger, last trigger, fresh, dispatches)
 }
 #: The card's keys (``ModeCard::fromJson``).
 MODE_CARD_KEYS = ("quarters", "item_size", "oriented_size", "dpr", "content_fade", "border_width", "window_from_target",
@@ -432,6 +440,119 @@ class ModePass:
         return entry
 
 
+#: N3.3 (D16): a compute binding's access and resource kinds, a storage image's formats and dimensions.
+STORAGE_ACCESS = ("read", "write", "read_write")
+COMPUTE_RESOURCES = ("buffer", "image", "stream", "mesh")
+STORAGE_IMAGE_FORMATS = ("rgba8", "rgba16f", "rgba32f", "r16f", "r32f")
+MAX_STORAGE_BUFFERS = 8
+MAX_STORAGE_IMAGES = 8
+MAX_COMPUTE_BINDINGS = 8
+#: The lost edge's prefix for storage a content made again found gone (``mode_content.h``).
+_STATE_LOST = "state:"
+
+
+@dataclass(frozen=True)
+class StorageBuffer:
+    """N3.3 (D16 point 2): a storage buffer the program's compute entries write and its draws read: its name, its bytes
+    (a multiple of 4, or a setting's name: a record field never sizes it), and whether a draw also reads it per instance
+    (``layout``: its records) or as indirect commands. Created zeroed; a size change keeps its prefix."""
+
+    name: str
+    bytes: int | str
+    layout: RecordLayout | None = None
+    indirect: bool = False
+
+    def __post_init__(self) -> None:
+        if isinstance(self.bytes, int) and (self.bytes <= 0 or self.bytes % 4):
+            raise ValueError("a storage buffer's bytes are a positive multiple of 4 (or a setting's name)")
+
+    def declaration(self) -> dict:
+        entry: dict[str, Any] = {"name": self.name, "bytes": self.bytes}
+        usage = (["vertex"] if self.layout is not None else []) + (["indirect"] if self.indirect else [])
+        if usage:
+            entry["usage"] = usage
+        if self.layout is not None:
+            entry["layout"] = self.layout.declaration()
+        return entry
+
+
+@dataclass(frozen=True)
+class StorageImage:
+    """N3.3 (D16 point 2, choice L): a storage image: its name, its size ``(w, h)`` or ``(w, h, d)`` (a 3D image; changed
+    later with :meth:`NativeMode.image_size`) and its format (``STORAGE_IMAGE_FORMATS``). Created zeroed."""
+
+    name: str
+    size: tuple[int, ...]
+    format: str = "rgba16f"
+
+    def __post_init__(self) -> None:
+        if len(self.size) not in (2, 3) or min(int(v) for v in self.size) < 1:
+            raise ValueError("a storage image's size is (w, h) or (w, h, d), each at least 1")
+        if self.format not in STORAGE_IMAGE_FORMATS:
+            raise ValueError(f"unknown format {self.format!r} (the formats are {', '.join(STORAGE_IMAGE_FORMATS)})")
+
+    def declaration(self) -> dict:
+        return {"name": self.name, "dimensions": len(self.size), "format": self.format,
+                "size": [int(v) for v in self.size]}
+
+
+@dataclass(frozen=True)
+class ComputeBinding:
+    """N3.3: one binding of a compute entry: the shader's buffer block or image (``name``) bound to a resource of
+    ``kind`` (``COMPUTE_RESOURCES``: a storage buffer, a storage image, a storage stream or a mesh held with
+    ``storage=True``, the last two read only), with its ``access`` (``STORAGE_ACCESS``), from which QRhi derives the
+    barriers. The core refuses an access the shader's qualifiers contradict (a block it can write declared ``read``)."""
+
+    name: str
+    resource: str
+    kind: str = "buffer"
+    access: str = "read"
+
+    def __post_init__(self) -> None:
+        if self.kind not in COMPUTE_RESOURCES:
+            raise ValueError(f"unknown resource kind {self.kind!r} (the kinds are {', '.join(COMPUTE_RESOURCES)})")
+        if self.access not in STORAGE_ACCESS:
+            raise ValueError(f"unknown access {self.access!r} (the accesses are {', '.join(STORAGE_ACCESS)})")
+        if self.kind in ("stream", "mesh") and self.access != "read":
+            raise ValueError("a stream or a mesh is read only")
+
+    def declaration(self) -> dict:
+        return {"name": self.name, self.kind: self.resource, "access": self.access}
+
+
+@dataclass(frozen=True)
+class ComputePass:
+    """N3.3 (D16 point 1): a compute entry: its name, its compute pack (bytes of a ``.qsb``), its trigger (``"frame"``: a
+    newly accepted record; or the name of a record u32 field: dispatched when it changes), its groups (three counts,
+    each a number or a name the record (a u32 under an at_most rule) or the settings fill; or ``over``: a resource's
+    extent over the pack's local size), its bindings and its samplers."""
+
+    name: str
+    pack: bytes
+    bindings: tuple[ComputeBinding, ...] = ()
+    groups: tuple[int | str, int | str, int | str] | None = None
+    over: str | None = None
+    trigger: str = "frame"
+    samplers: tuple[PassSampler, ...] = ()
+
+    def __post_init__(self) -> None:
+        if (self.groups is None) == (self.over is None):
+            raise ValueError("a compute entry's groups are three counts or `over` a resource, one of the two")
+        if self.groups is not None and len(self.groups) != 3:
+            raise ValueError("a compute entry's groups are three counts")
+        if len(self.bindings) > MAX_COMPUTE_BINDINGS:
+            raise ValueError(f"a compute entry binds at most {MAX_COMPUTE_BINDINGS} resources")
+
+    def declaration(self) -> dict:
+        entry: dict[str, Any] = {"name": self.name, "compute": True,
+                                 "trigger": "frame" if self.trigger == "frame" else {"field": self.trigger},
+                                 "groups": {"over": self.over} if self.over is not None else list(self.groups),
+                                 "bindings": [b.declaration() for b in self.bindings]}
+        if self.samplers:
+            entry["samplers"] = [s.declaration() for s in self.samplers]
+        return entry
+
+
 @dataclass(frozen=True)
 class CapturePass:
     """N3.1 (D14 point 5): a capture step of ``target``: what its passes drew so far, copied (colour, nearest window
@@ -445,18 +566,24 @@ class CapturePass:
         return {"name": self.name, "capture": self.target}
 
 
-def program_json(passes: Sequence[ModePass | CapturePass], targets: Sequence[ModeTarget] = (),
-                 streams: Sequence[ModeStream] = ()) -> tuple[str, list[bytes]]:
+def program_json(passes: Sequence[ModePass | CapturePass | ComputePass], targets: Sequence[ModeTarget] = (),
+                 streams: Sequence[ModeStream] = (), buffers: Sequence[StorageBuffer] = (),
+                 images: Sequence[StorageImage] = ()) -> tuple[str, list[bytes]]:
     """The program's declaration and its packs, in pass order (a pass with samplers declares them; one without has no
     ``samplers`` key, N2.9's declaration as it was; N3.1: ``targets`` when there are any, a capture's pack empty; N3.2:
     ``streams`` when there are any, and after a geometry pass's fragment pack its vertex pack, then a batched one's
-    draw-parameters pack)."""
+    draw-parameters pack; N3.3: ``buffers`` and ``images`` when there are any, a compute entry's pack its compute
+    shader)."""
     declared = [p.declaration() for p in passes]
     program: dict[str, Any] = {"passes": declared}
     if targets:
         program["targets"] = [t.declaration() for t in targets]
     if streams:
         program["streams"] = [s.declaration() for s in streams]
+    if buffers:
+        program["buffers"] = [b.declaration() for b in buffers]
+    if images:
+        program["images"] = [i.declaration() for i in images]
     packs: list[bytes] = []
     for p in passes:
         packs.append(b"" if isinstance(p, CapturePass) else bytes(p.pack))
@@ -485,6 +612,21 @@ class NativeMode:
     def __init__(self, module: ModuleType, composite: CompositeItem) -> None:
         self._module = module
         self.composite = composite
+        # The core's one lost edge carries textures' names and (N3.3) "state:<resource>" names: split here.
+        self._textures_lost: Callable[[list[str]], None] | None = None
+        self._state_lost: Callable[[list[str]], None] | None = None
+
+    def _lost(self, names: list[str]) -> None:
+        state = [name[len(_STATE_LOST):] for name in names if name.startswith(_STATE_LOST)]
+        textures = [name for name in names if not name.startswith(_STATE_LOST)]
+        if textures and self._textures_lost is not None:
+            self._textures_lost(textures)
+        if state and self._state_lost is not None:
+            self._state_lost(state)
+
+    def _listen(self) -> None:
+        listening = self._textures_lost is not None or self._state_lost is not None
+        self._module.composite_mode_on_lost(self._handle(), self._lost if listening else None)
 
     def _handle(self) -> int:
         return self.composite._live()
@@ -511,12 +653,14 @@ class NativeMode:
         """The stream retires (D1); the owner's lost-texture listener goes with it (audit N38 L4)."""
         self._module.composite_mode_retire(self._handle())
 
-    def program(self, passes: Sequence[ModePass | CapturePass], settings: Mapping[str, Any] | None = None, *,
-                targets: Sequence[ModeTarget] = (), streams: Sequence[ModeStream] = ()) -> None:
-        """The passes (N3.1: and the scene targets they draw into; N3.2: and the streams they read); ``settings`` with
-        them (a shader that adds a member comes with its value), else the ones given before. Refused (ValueError), the
-        drawn program kept, when they do not fit."""
-        declared, packs = program_json(passes, targets, streams)
+    def program(self, passes: Sequence[ModePass | CapturePass | ComputePass], settings: Mapping[str, Any] | None = None,
+                *, targets: Sequence[ModeTarget] = (), streams: Sequence[ModeStream] = (),
+                buffers: Sequence[StorageBuffer] = (), images: Sequence[StorageImage] = ()) -> None:
+        """The passes (N3.1: and the scene targets they draw into; N3.2: and the streams they read; N3.3: and the
+        storage buffers and images its compute entries write); ``settings`` with them (a shader that adds a member comes
+        with its value), else the ones given before. Refused (ValueError), the drawn program kept, when they do not
+        fit."""
+        declared, packs = program_json(passes, targets, streams, buffers, images)
         if settings is None:
             self._module.composite_mode_program(self._handle(), declared, packs)
         else:
@@ -549,22 +693,48 @@ class NativeMode:
         """The owner's lost-texture edge (N3.8, N4.a's leftover): ``callback`` is called on the GUI thread with the
         names of textures found lost (a node made again, a texture that could not be created), once per loss; the
         owner sends them again. None removes it."""
-        self._module.composite_mode_on_lost(self._handle(), callback)
+        self._textures_lost = callback
+        self._listen()
+
+    def on_state_lost(self, callback: Callable[[list[str]], None] | None) -> None:
+        """N3.3 (D16 choice I): the owner's lost-state edge: ``callback`` is called on the GUI thread, once, with the
+        storage buffers and images a content made again found gone (they are made zeroed and the compute entries
+        dispatch fresh: a history restarts as at its first frame). None removes it."""
+        self._state_lost = callback
+        self._listen()
+
+    def image_size(self, name: str, size: tuple[int, ...]) -> None:
+        """N3.3: a storage image's size ``(w, h)`` or ``(w, h, d)`` with no new program (Waveform's fog grid follows its
+        surface); the image is made again, zeroed, at the next record. ValueError for an image the program does not
+        declare or a size outside its bounds."""
+        self._module.composite_mode_image_size(self._handle(), str(name), tuple(int(v) for v in size))
+
+    def read_storage(self) -> None:
+        """N3.3, harness only: every storage buffer and image read back at the next record (which dispatches nothing)."""
+        self._module.composite_mode_storage_read(self._handle())
+
+    def storage_data(self) -> list[dict] | None:
+        """N3.3, harness only: the last storage readback once complete (None before), each ``{"name", "kind", "format",
+        "size", "data"}``: a buffer's bytes, or an image's texels as stored (rows top first, slices in order)."""
+        return self._module.composite_mode_storage_data(self._handle())
 
     def remove_texture(self, name: str) -> None:
         """The texture goes; the render thread releases it at the next record (KeyError: no such texture)."""
         self._module.composite_mode_texture_remove(self._handle(), str(name))
 
     def mesh(self, name: str, vertices: bytes, layout: RecordLayout, *, instances: bytes | None = None,
-             instance_layout: RecordLayout | None = None) -> None:
+             instance_layout: RecordLayout | None = None, storage: bool = False) -> None:
         """N3.2 (D15 point 2): the item's mesh ``name``: interleaved f32 ``vertices`` of ``layout`` and optionally an
         instance stream; copied once into the core and uploaded once at the next record, never again at rest. Refused
-        (ValueError) for a bad name (or ``quad``, the built-in), layout or byte count, or too many meshes."""
+        (ValueError) for a bad name (or ``quad``, the built-in), layout or byte count, or too many meshes. N3.3:
+        ``storage`` also lets a compute entry read the vertices (D3's geometry, once per revision)."""
         declaration: dict[str, Any] = {"vertices": layout.declaration()}
         if (instances is None) != (instance_layout is None):
             raise ValueError("a mesh's instance stream comes with its layout")
         if instance_layout is not None:
             declaration["instances"] = instance_layout.declaration()
+        if storage:
+            declaration["storage"] = True
         self._module.composite_mode_mesh(self._handle(), str(name), json.dumps(declaration), bytes(vertices),
                                          None if instances is None else bytes(instances))
 
@@ -620,7 +790,9 @@ def mode_blocks(module: ModuleType, schema: Any, passes: Sequence[ModePass], set
     return [bytes(block) for block in blocks], json.loads(facts)
 
 
-__all__ = ["BLEND_FACTORS", "BLEND_OPS", "BUILTIN_QUAD_MESH", "BlendState", "CULL_MODES", "CapturePass", "DEPTH_TESTS",
+__all__ = ["BLEND_FACTORS", "BLEND_OPS", "BUILTIN_QUAD_MESH", "BlendState", "COMPUTE_RESOURCES", "CULL_MODES",
+           "CapturePass", "ComputeBinding", "ComputePass", "DEPTH_TESTS", "MAX_COMPUTE_BINDINGS", "MAX_STORAGE_BUFFERS",
+           "MAX_STORAGE_IMAGES", "STORAGE_ACCESS", "STORAGE_IMAGE_FORMATS", "StorageBuffer", "StorageImage",
            "MAX_BATCHES", "MAX_TARGETS", "MAX_TARGET_COLOUR", "MAX_TARGET_SAMPLES", "MODE_CARD_KEYS", "MODE_CORE_MEMBERS",
            "MeshAttribute", "ModePass", "ModeStream", "ModeTarget", "NativeMode", "PASS_BLENDS", "PassGeometry",
            "PassOutput", "PassSampler", "RecordLayout", "STREAM_KINDS", "TOPOLOGIES",

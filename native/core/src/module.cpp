@@ -141,9 +141,10 @@ PyObject *process_counters(PyObject *, PyObject *)
 PyObject *vulkan_instance_create(PyObject *, PyObject *args)
 {
     int validation = 0;
-    if (!PyArg_ParseTuple(args, "|p", &validation))
+    int shaderAccesses = 0;
+    if (!PyArg_ParseTuple(args, "|pp", &validation, &shaderAccesses))
         return nullptr;
-    return pyJson(srpss_core::vulkanInstanceCreateJson(validation != 0));
+    return pyJson(srpss_core::vulkanInstanceCreateJson(validation != 0, shaderAccesses != 0));
 }
 
 PyObject *vulkan_instance_destroy(PyObject *, PyObject *)
@@ -708,6 +709,23 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("mesh_buffers_record_ns"), double(mb.recordNs));
     o.insert(QStringLiteral("mesh_buffers_stream_write_ns"), double(mb.streamWriteNs));
     o.insert(QStringLiteral("mesh_buffers_draws_refused"), double(mb.drawsRefused)); // audit 4 H2, M1
+    // N3.3 (D16): the storage (resident buffers and images, bytes), the dispatches and compute passes recorded, the
+    // entries a drawn record did not dispatch, the edge kernels, every object created (flat at rest), the states found
+    // lost and the harness's readbacks in flight.
+    const srpss_core::ComputeCounts cc = srpss_core::computeCounts();
+    o.insert(QStringLiteral("compute_buffers"), cc.buffers);
+    o.insert(QStringLiteral("compute_buffer_bytes"), double(cc.bufferBytes));
+    o.insert(QStringLiteral("compute_images"), cc.images);
+    o.insert(QStringLiteral("compute_image_bytes"), double(cc.imageBytes));
+    o.insert(QStringLiteral("compute_dispatches"), double(cc.dispatches));
+    o.insert(QStringLiteral("compute_passes"), double(cc.computePasses));
+    o.insert(QStringLiteral("compute_skipped"), double(cc.skipped));
+    o.insert(QStringLiteral("compute_clears"), double(cc.clears));
+    o.insert(QStringLiteral("compute_copies"), double(cc.copies));
+    o.insert(QStringLiteral("compute_image_zero_uploads"), double(cc.imageZeroUploads));
+    o.insert(QStringLiteral("compute_objects_created"), double(cc.objectsCreated));
+    o.insert(QStringLiteral("compute_states_lost"), double(cc.statesLost));
+    o.insert(QStringLiteral("compute_readbacks"), cc.readbacksPending);
     return pyJson(o);
 }
 
@@ -1722,6 +1740,115 @@ PyObject *composite_mode_target_pixels(PyObject *, PyObject *args)
     return list;
 }
 
+// ---------------------------------------------------------------- compute passes (N3.3, D16)
+
+// A storage image's size ([w, h] or [w, h, d]) with no new program (the image is made again at the next record).
+PyObject *composite_mode_image_size(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    const char *name = nullptr;
+    PyObject *size = nullptr;
+    if (!PyArg_ParseTuple(args, "LsO", &handle, &name, &size))
+        return nullptr;
+    srpss_core::ModeSource *source = modeOf(handle);
+    if (!source)
+        return nullptr;
+    QList<int> values;
+    if (!intsArgument(size, &values, "an image's size"))
+        return nullptr;
+    if (values.size() != 2 && values.size() != 3) {
+        PyErr_SetString(PyExc_ValueError, "an image's size is (w, h) or (w, h, d)");
+        return nullptr;
+    }
+    const int sides[3] = { values.at(0), values.at(1), values.size() == 3 ? values.at(2) : 1 };
+    QString error;
+    if (!source->setImageSize(QByteArray(name), sides, &error)) {
+        PyErr_SetString(PyExc_ValueError, error.toUtf8().constData());
+        return nullptr;
+    }
+    compositeOf(handle)->update();
+    Py_RETURN_NONE;
+}
+
+// Harness: a readback of every storage buffer and image at the next record (it dispatches nothing).
+PyObject *composite_mode_storage_read(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::ModeSource *source = modeOf(handle);
+    if (!source)
+        return nullptr;
+    source->requestStorageRead();
+    compositeOf(handle)->update();
+    Py_RETURN_NONE;
+}
+
+// Harness: the storage readback once QRhi completed it (None before), each {"name", "kind", "format", "size", "data"}
+// (a buffer's bytes; an image's texels as stored, rows top first, slices in order).
+PyObject *composite_mode_storage_data(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::ModeSource *source = modeOf(handle);
+    if (!source)
+        return nullptr;
+    QList<srpss_core::StoragePixels> items;
+    if (!source->takeStoragePixels(&items))
+        Py_RETURN_NONE;
+    PyObject *list = PyList_New(0);
+    if (!list)
+        return nullptr;
+    for (const srpss_core::StoragePixels &p : items) {
+        PyObject *d = PyDict_New();
+        if (!d) {
+            Py_DECREF(list);
+            return nullptr;
+        }
+        put(d, "name", pyStr(p.name));
+        put(d, "kind", pyStr(p.kind));
+        put(d, "format", pyStr(p.format));
+        put(d, "size", Py_BuildValue("(iii)", p.size[0], p.size[1], p.size[2]));
+        put(d, "data", PyBytes_FromStringAndSize(p.data.constData(), Py_ssize_t(p.data.size())));
+        if (PyList_Append(list, d) < 0) {
+            Py_DECREF(d);
+            Py_DECREF(list);
+            return nullptr;
+        }
+        Py_DECREF(d);
+    }
+    return list;
+}
+
+// N3.3, harness: the proofs' negative controls (compute_passes.h), each process-wide; a key left out keeps its value.
+PyObject *compute_control(PyObject *, PyObject *args)
+{
+    const char *json = "";
+    Py_ssize_t length = 0;
+    if (!PyArg_ParseTuple(args, "s#", &json, &length))
+        return nullptr;
+    const QJsonObject o = QJsonDocument::fromJson(QByteArray(json, qsizetype(length))).object();
+    static const QStringList keys = { QStringLiteral("write_as_read"), QStringLiteral("single_pass"),
+                                      QStringLiteral("trigger_every_record"), QStringLiteral("skip_storage_release") };
+    for (auto it = o.begin(); it != o.end(); ++it) {
+        if (!keys.contains(it.key())) {
+            PyErr_Format(PyExc_ValueError, "unknown control '%s' (%s)", it.key().toUtf8().constData(),
+                         keys.join(QStringLiteral(", ")).toUtf8().constData());
+            return nullptr;
+        }
+    }
+    if (o.contains(QStringLiteral("write_as_read")))
+        srpss_core::setComputeWriteAsRead(o.value(QStringLiteral("write_as_read")).toBool());
+    if (o.contains(QStringLiteral("single_pass")))
+        srpss_core::setComputeSinglePass(o.value(QStringLiteral("single_pass")).toBool());
+    if (o.contains(QStringLiteral("trigger_every_record")))
+        srpss_core::setComputeTriggerEveryRecord(o.value(QStringLiteral("trigger_every_record")).toBool());
+    if (o.contains(QStringLiteral("skip_storage_release")))
+        srpss_core::setSkipStorageRelease(o.value(QStringLiteral("skip_storage_release")).toBool());
+    Py_RETURN_NONE;
+}
+
 // A sequence of ints (the limited API's calls only).
 bool intsArgument(PyObject *object, QList<int> *out, const char *what)
 {
@@ -2727,6 +2854,16 @@ PyMethodDef methods[] = {
       "once at the next record. ValueError when refused." },
     { "composite_mode_mesh_remove", composite_mode_mesh_remove, METH_VARARGS,
       "(handle, name) -> None: N3.2, the mesh goes (its buffers at the next record). KeyError when there is none." },
+    { "composite_mode_image_size", composite_mode_image_size, METH_VARARGS,
+      "composite_mode_image_size(handle, name, (w, h[, d])): N3.3, a storage image's size (made again at the next "
+      "record)" },
+    { "composite_mode_storage_read", composite_mode_storage_read, METH_VARARGS,
+      "composite_mode_storage_read(handle): N3.3 harness, read every storage buffer and image back at the next record" },
+    { "composite_mode_storage_data", composite_mode_storage_data, METH_VARARGS,
+      "composite_mode_storage_data(handle) -> list | None: N3.3 harness, the storage readback once completed" },
+    { "compute_control", compute_control, METH_VARARGS,
+      "compute_control(json): N3.3 harness, the compute proofs' negative controls (write_as_read, single_pass, "
+      "trigger_every_record, skip_storage_release)" },
     { "mesh_buffer_control", mesh_buffer_control, METH_VARARGS,
       "(controls_json) -> None: N3.2, harness: the proofs' negative controls (hide_draw_parameters, "
       "direct_first_instance, recreate_streams, skip_mesh_release, instances_past_used), process-wide." },

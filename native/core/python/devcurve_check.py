@@ -220,6 +220,14 @@ def round_block(core, records: list[dict]) -> dict:
                               if (rows.get(name) or [None, None, None])[2] != offset}
         compared += 1
         expected = entry["python_block"]
+        if "u_target_px" in members:
+            # fragPixel's target is the render target's pixels (N1.4): the window's on the Python route, the core's own
+            # target on the native one (as tests/test_native_devcurve.py's _python_block expects).
+            offset = members["u_target_px"][0]
+            if len(expected) >= offset + 8:
+                patched = bytearray(expected)
+                struct.pack_into("<2f", patched, offset, float(target[0]), float(target[1]))
+                expected = bytes(patched)
         names = [name for name, (offset, size) in members.items() if name != "uMatrix"
                  and (len(expected) < offset + size or block[offset:offset + size] != expected[offset:offset + size])]
         for name in names:

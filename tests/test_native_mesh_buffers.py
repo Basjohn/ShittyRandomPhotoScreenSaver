@@ -166,10 +166,11 @@ def test_the_module_declares_n3_2_s_entries_at_abi_18():
     for entry in ("composite_mode_mesh", "composite_mode_mesh_remove", "mesh_buffer_control",
                   "mesh_buffer_arena_layout", "vulkan_device_facts"):
         assert f'{{ "{entry}", {entry}, METH_VARARGS,' in module, entry
-    assert "#define SRPSS_NATIVE_CORE_ABI 18" in (CORE / "abi.h").read_text(encoding="utf-8")
+    # Since 18 (N3.3 moved the ABI to 19: tests/test_native_compute_passes.py pins the current number).
+    assert "// 18 (N3.2, meshes and buffers;" in (CORE / "abi.h").read_text(encoding="utf-8")
     from rendering.native.loader import EXPECTED_ABI
 
-    assert EXPECTED_ABI == 18
+    assert EXPECTED_ABI >= 18
 
 
 # --------------------------------------------------------------------------------------------- on the built module
