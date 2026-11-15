@@ -1447,26 +1447,29 @@ bool checkSortedPack(ModePass &pass, const QByteArray &pack, const QList<TargetD
     }
     const QShaderDescription a = pass.fragment.description();
     const QShaderDescription b = sorted.description();
-    bool same = a.uniformBlocks().size() == b.uniformBlocks().size()
-        && a.combinedImageSamplers().size() == b.combinedImageSamplers().size()
-        && a.storageBlocks().size() == b.storageBlocks().size() && a.inputVariables().size() == b.inputVariables().size();
-    for (qsizetype i = 0; same && i < a.uniformBlocks().size(); ++i) {
-        const auto &x = a.uniformBlocks().at(i);
-        const auto &y = b.uniformBlocks().at(i);
-        same = x.blockName == y.blockName && x.binding == y.binding && x.size == y.size;
+    const QList<QShaderDescription::UniformBlock> blocksA = a.uniformBlocks();
+    const QList<QShaderDescription::UniformBlock> blocksB = b.uniformBlocks();
+    const QList<QShaderDescription::InOutVariable> samplersA = a.combinedImageSamplers();
+    const QList<QShaderDescription::InOutVariable> samplersB = b.combinedImageSamplers();
+    const QList<QShaderDescription::StorageBlock> storageA = a.storageBlocks();
+    const QList<QShaderDescription::StorageBlock> storageB = b.storageBlocks();
+    const QList<QShaderDescription::InOutVariable> inputsA = a.inputVariables();
+    const QList<QShaderDescription::InOutVariable> inputsB = b.inputVariables();
+    bool same = blocksA.size() == blocksB.size() && samplersA.size() == samplersB.size()
+        && storageA.size() == storageB.size() && inputsA.size() == inputsB.size();
+    for (qsizetype i = 0; same && i < blocksA.size(); ++i) {
+        same = blocksA.at(i).blockName == blocksB.at(i).blockName && blocksA.at(i).binding == blocksB.at(i).binding
+            && blocksA.at(i).size == blocksB.at(i).size;
     }
-    for (qsizetype i = 0; same && i < a.combinedImageSamplers().size(); ++i) {
-        const auto &x = a.combinedImageSamplers().at(i);
-        const auto &y = b.combinedImageSamplers().at(i);
-        same = x.name == y.name && x.binding == y.binding && x.type == y.type;
+    for (qsizetype i = 0; same && i < samplersA.size(); ++i) {
+        same = samplersA.at(i).name == samplersB.at(i).name && samplersA.at(i).binding == samplersB.at(i).binding
+            && samplersA.at(i).type == samplersB.at(i).type;
     }
-    for (qsizetype i = 0; same && i < a.storageBlocks().size(); ++i)
-        same = a.storageBlocks().at(i).blockName == b.storageBlocks().at(i).blockName
-            && a.storageBlocks().at(i).binding == b.storageBlocks().at(i).binding;
-    for (qsizetype i = 0; same && i < a.inputVariables().size(); ++i) {
-        const auto &x = a.inputVariables().at(i);
-        const auto &y = b.inputVariables().at(i);
-        same = x.name == y.name && x.location == y.location && x.type == y.type;
+    for (qsizetype i = 0; same && i < storageA.size(); ++i)
+        same = storageA.at(i).blockName == storageB.at(i).blockName && storageA.at(i).binding == storageB.at(i).binding;
+    for (qsizetype i = 0; same && i < inputsA.size(); ++i) {
+        same = inputsA.at(i).name == inputsB.at(i).name && inputsA.at(i).location == inputsB.at(i).location
+            && inputsA.at(i).type == inputsB.at(i).type;
     }
     if (!same) {
         *error = QStringLiteral("pass '%1': its sorted pack binds other blocks, samplers, storage or inputs than its "
@@ -5663,7 +5666,7 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
                 defocusBlock = quint32(qMax(0, pass.block.size()));
         }
         int made = 0;
-        ok = m_post.build(rhi, m_targets, vs, layout(PassUv::Up), m_streams.arena(), sizeof(ConventionsBlock),
+        ok = m_post.build(rhi, m_targets, vs, layout(PassUv::Up), m_streams.arena(), quint32(sizeof(ConventionsBlock)),
                           defocusBlock, &reason, &made);
         m_postObjectsSeen = m_post.objectGeneration();
     }
