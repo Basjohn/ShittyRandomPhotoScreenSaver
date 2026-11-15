@@ -27,7 +27,8 @@ from widgets.spotify_visualizer.render_state import (
     VisualizerRenderSnapshot,
 )
 from widgets.spotify_visualizer.shaders import load_fragment_shader
-from widgets.spotify_visualizer.bubble_ambient_geometry import ambient_sprite_scale
+from widgets.spotify_visualizer.bubble_ambient import RECORD_STRIDE as BUBBLE_AMBIENT_RECORD_STRIDE
+from widgets.spotify_visualizer.bubble_ambient_geometry import ambient_sprite_scale, ambient_target_size
 
 from rendering.quick import gl_query
 from ..implementation_values import parameter, rgba, safe_hue
@@ -182,6 +183,10 @@ def resolve_quick_bubble_payload(
     mode_state = snapshot.logical.mode_state
     if not isinstance(mode_state, BubbleFrame):
         raise TypeError("Bubble payload resolver received another mode frame")
+    return _payload_of(mode_state)
+
+
+def _payload_of(mode_state: BubbleFrame) -> QuickBubblePayload:
     bubble_count = min(_MAX_BUBBLES, mode_state.bubble_count)
     required = bubble_count * 4
     required_trails = bubble_count * 9
@@ -208,6 +213,152 @@ def resolve_quick_bubble_payload(
 
 
 
+def bubble_presentation_layout(presentation, logical_content_rect: Sequence[object],
+                               world_scale: float) -> QuickBubbleLayout:
+    """The layout of a drawn card: ``presentation`` with its content rect in the oriented item (the Python renderer's
+    ``frame.logical_content_rect``; the native card's ``content_rect``) and the frame's capacity zoom."""
+    return compute_quick_bubble_layout(
+        local_content_rect=logical_content_rect,
+        visual_scale=presentation.uniform_visual_scale,
+        viewport_extent=presentation.logical_viewport_extent,
+        baseline_viewport_size=presentation.baseline_viewport_size,
+        world_scale=world_scale,
+    )
+
+
+def _bubble_frame(logical) -> BubbleFrame:
+    mode_state = logical.mode_state
+    if not isinstance(mode_state, BubbleFrame):
+        raise TypeError("Bubble renderer received another mode frame")
+    return mode_state
+
+
+def _gradient_values(parameters, layout: QuickBubbleLayout) -> tuple[float, float, float, float]:
+    """Named recipes retain their vectors; custom nodes use the shared physical projection."""
+    direction = str(parameter(parameters, "bubble_gradient_direction"))
+    if direction == 'custom':
+        return (*project_linear_gradient(parameter(parameters, 'bubble_gradient_endpoints'), layout.aspect_ratio), 0.)
+    return tuple(project_bubble_gradient(direction))
+
+
+#: BubbleDraw's members the Python renderer never writes (declared by the shader, read by none of its Quick paths):
+#: zero, as its uniforms were at link. The native core takes them as settings, since it fills no member silently (D12).
+BUBBLE_UNWRITTEN_MEMBERS = ("u_time", "u_playing", "u_overall_energy", "u_bass_energy", "u_mid_energy",
+                            "u_high_energy")
+
+#: BubbleDraw's per-frame members (``bubble_frame_values``): the native record's block fields
+#: (``core.visualizer_engine.bubble_native_schema``). The ambient points and occluders are the record's two streams.
+BUBBLE_FRAME_MEMBERS = ("u_bubbles_pos", "u_bubbles_extra", "u_bubbles_trail", "u_bubble_count", "u_big_class_bits",
+                        "u_trail_strength", "u_tail_opacity", "u_rainbow_hue_offset", "u_ambient_enabled",
+                        "u_ambient_light_enabled")
+
+
+def _points_glow(points: Sequence[float]) -> bool:
+    """True when any ambient particle emits light (glow is the record's fifth field)."""
+    return max(points[4::BUBBLE_AMBIENT_RECORD_STRIDE], default=0.0) > 0.0
+
+
+def bubble_ambient_settings_values(logical, layout: QuickBubbleLayout, dpr: float) -> dict[str, object]:
+    """The ambient points' block (``BubbleAmbientPoints``) from Settings and the card, as the Python renderer passes it
+    to its ambient pass (read only while the layer draws: a frame of the ambience's Settings carries these)."""
+    parameters = _bubble_frame(logical).parameters
+    return {
+        "uTexelScale": ambient_target_size(layout.content_rect, dpr)[2],
+        "uSpriteScale": ambient_sprite_scale(layout.effect_scale),
+        "uGlowSpread": float(parameter(parameters, "bubble_particle_glow_spread")),
+        "uMicroColor": tuple(rgba(parameter(parameters, "bubble_outline_color"))),
+        "uParticleColor": tuple(rgba(parameter(parameters, "bubble_particle_color"))),
+    }
+
+
+def bubble_settings_values(logical, layout: QuickBubbleLayout, dpr: float) -> dict[str, object]:
+    """Every BubbleDraw member that comes from Settings or the card, by name, as the Python renderer writes it
+    (``QuickBubbleRenderer.render`` calls this): its layout and style and the ambient target's content size.
+    ``layout``: ``bubble_presentation_layout`` of the drawn card; ``dpr``: the drawn card's. The core members
+    (``MODE_CORE_MEMBERS``) are not here; the ambient pass's are ``bubble_ambient_settings_values``."""
+    mode_state = _bubble_frame(logical)
+    parameters = mode_state.parameters
+    ghost_alpha = 0.0
+    if bool(parameter(parameters, "bubble_ghosting_enabled")):
+        ghost_alpha = max(0.0, min(1.0, float(parameter(parameters, "bubble_ghost_alpha"))))
+    width, height, _texel_scale = ambient_target_size(layout.content_rect, dpr)
+    values: dict[str, object] = {
+        "u_content_rect": tuple(layout.content_rect),
+        "u_visual_scale": layout.effect_scale,
+        "u_response_radius_scale": layout.response_radius_scale,
+        "u_specular_reference_aspect": layout.specular_reference_aspect,
+        "u_trail_radial_scale": layout.trail_radial_scale,
+        "u_viewport_stroke_extra_half_px": layout.viewport_stroke_extra_half_px,
+        "u_specular_dir": tuple(get_bubble_specular_shader_vector(
+            str(parameter(parameters, "bubble_specular_direction")))),
+        "u_gradient": _gradient_values(parameters, layout),
+        "u_ghost_alpha": ghost_alpha,
+        "u_ghost_decay": max(0.1, min(1.0, float(parameter(parameters, "bubble_ghost_decay")))),
+        # The ambient target's content size (ambient_target_size): where its content lies in the texture sampled.
+        "u_ambient_px": (float(width), float(height)),
+    }
+    for uniform_name, parameter_name in (
+        ("u_outline_color", "bubble_outline_color"),
+        ("u_specular_color", "bubble_specular_color"),
+        ("u_gradient_light", "bubble_gradient_light"),
+        ("u_gradient_dark", "bubble_gradient_dark"),
+        ("u_pop_color", "bubble_pop_color"),
+    ):
+        values[uniform_name] = tuple(rgba(parameter(parameters, parameter_name)))
+    for name in BUBBLE_UNWRITTEN_MEMBERS:
+        values[name] = 0
+    return values
+
+
+def bubble_frame_scalars(mode_state: BubbleFrame, payload: QuickBubblePayload) -> dict[str, object]:
+    """BubbleDraw's per-frame scalars, as the Python renderer writes them and the native record carries them: the
+    count, the big-class words, the wake's strength and opacity (0 on a frame with no trail samples), the rainbow's
+    hue (the simulation clock times the speed) and the ambient layer's two switches."""
+    parameters = mode_state.parameters
+    trail_strength = tail_opacity = 0.0
+    if payload.trails and payload.bubble_count:
+        trail_strength = max(0.0, min(1.5, float(parameter(parameters, "bubble_trail_strength"))))
+        tail_opacity = max(0.0, min(0.85, float(parameter(parameters, "bubble_tail_opacity"))))
+    hue = 0.0
+    if bool(parameter(parameters, "rainbow_enabled")):
+        speed = max(0.01, min(5.0, float(parameter(parameters, "rainbow_speed"))))
+        hue = safe_hue(mode_state.simulation_timestamp * speed * 0.1)
+    return {
+        "u_bubble_count": payload.bubble_count,
+        "u_big_class_bits": tuple(payload.big_class_bits),
+        "u_trail_strength": trail_strength,
+        "u_tail_opacity": tail_opacity,
+        "u_rainbow_hue_offset": hue,
+        "u_ambient_enabled": int(bool(payload.ambient_points)),
+        "u_ambient_light_enabled": int(_points_glow(payload.ambient_points)),
+    }
+
+
+def bubble_frame_values(logical) -> dict[str, object]:
+    """Every per-frame value of Bubble's native record (``BUBBLE_FRAME_MEMBERS`` and the ambient streams), by name, in
+    double precision (the core rounds each to float as the Python block packer does): the arrays padded with zeros past
+    the count (the shader reads only the first count), the trail samples zero on a frame without them (R-225), the
+    ambient points and hero occluders as the float32 bytes the Python renderer uploads, with their used lengths."""
+    mode_state = _bubble_frame(logical)
+    payload = _payload_of(mode_state)
+    values = bubble_frame_scalars(mode_state, payload)
+    count = payload.bubble_count
+
+    def rows(flat: Sequence[float], used: int, total: int, width: int) -> tuple[tuple[float, ...], ...]:
+        out = [tuple(float(v) for v in flat[i * width:(i + 1) * width]) + (0.0,) * (4 - width) for i in range(used)]
+        return tuple(out) + ((0.0, 0.0, 0.0, 0.0),) * (total - used)
+
+    values["u_bubbles_pos"] = rows(payload.positions, count, _MAX_BUBBLES, 4)
+    values["u_bubbles_extra"] = rows(payload.extras, count, _MAX_BUBBLES, 4)
+    samples = count * 3 if payload.trails else 0
+    values["u_bubbles_trail"] = rows(payload.trails, samples, _MAX_BUBBLES * 3, 3)
+    values["ambient_points"] = np.asarray(payload.ambient_points, dtype=np.float32).tobytes()
+    values["ambient_point_floats"] = len(payload.ambient_points)
+    values["ambient_occluders"] = np.asarray(payload.ambient_occluders, dtype=np.float32).tobytes()
+    values["ambient_occluder_floats"] = len(payload.ambient_occluders)
+    return values
+
+
 class QuickBubbleRenderer:
     mode_id = "bubble"
 
@@ -226,19 +377,13 @@ class QuickBubbleRenderer:
         # The trail samples in the block's std140 form (a vec3 element takes 16 bytes): the samples a frame uploads
         # are copied in, the rest keep what they held, as the uniform array's elements did.
         self._trail_block = np.zeros((_BUBBLE_TRAIL_SIZE // 3, 4), dtype=np.float32)
+        self._trail_samples_held = False      # the block's trail samples are a frame's (cleared on a frame without)
         self._layout_cache_key: tuple[object, ...] | None = None
         self._layout_cache: QuickBubbleLayout | None = None
 
     @property
     def has_resources(self) -> bool:
         return bool(self._program) or self._blocks.has_resources
-
-    def _gradient_parameters(self, parameters, layout: QuickBubbleLayout):
-        """Named recipes retain their vectors; custom nodes use the shared physical projection."""
-        direction = str(parameter(parameters, "bubble_gradient_direction"))
-        if direction == 'custom':
-            return (*project_linear_gradient(parameter(parameters, 'bubble_gradient_endpoints'), layout.aspect_ratio), 0.)
-        return project_bubble_gradient(direction)
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         trace = frame.trace_context
@@ -256,13 +401,7 @@ class QuickBubbleRenderer:
             mode_state.world_scale,
         )
         if self._layout_cache_key != layout_key or self._layout_cache is None:
-            self._layout_cache = compute_quick_bubble_layout(
-                local_content_rect=local_content_rect,
-                visual_scale=presentation.uniform_visual_scale,
-                viewport_extent=presentation.logical_viewport_extent,
-                baseline_viewport_size=presentation.baseline_viewport_size,
-                world_scale=mode_state.world_scale,
-            )
+            self._layout_cache = bubble_presentation_layout(presentation, local_content_rect, mode_state.world_scale)
             self._layout_cache_key = layout_key
         layout = self._layout_cache
         payload = resolve_quick_bubble_payload(snapshot)
@@ -273,10 +412,10 @@ class QuickBubbleRenderer:
         if trace is not None:
             trace.mark(FrameTraceEvent.BUBBLE_PROGRAM_READY)
 
-        parameters = mode_state.parameters
         # The program's values persist between frames as its uniforms did; the whole block is bound for the draw
-        # (N1.6).
+        # (N1.6). Settings and per-frame scalars come from the functions the native route and record share (N5.1).
         values = self._values
+        settings = bubble_settings_values(snapshot.logical, layout, presentation.dpr)
         # Draw a small, content-local ambient texture BEFORE the Bubble draw.
         # The canonical Bubble shader then inserts it between the background
         # gradient and all existing wake, ghost and 110-body contributions.
@@ -287,12 +426,13 @@ class QuickBubbleRenderer:
                 # Loaded on this edge only: the opt-out path never imports the ambient GL module.
                 from .bubble_ambient_gl import QuickBubbleAmbientPoints
                 self._ambient_renderer = QuickBubbleAmbientPoints()
+            ambient = bubble_ambient_settings_values(snapshot.logical, layout, presentation.dpr)
             ambient_texture, ambient_light = self._ambient_renderer.render_texture(
                 layout.content_rect, presentation.dpr, payload.ambient_points,
-                sprite_scale=ambient_sprite_scale(layout.effect_scale),
-                glow_spread=float(parameter(parameters, "bubble_particle_glow_spread")),
-                micro_color=rgba(parameter(parameters, "bubble_outline_color")),
-                particle_color=rgba(parameter(parameters, "bubble_particle_color")),
+                sprite_scale=ambient["uSpriteScale"],
+                glow_spread=ambient["uGlowSpread"],
+                micro_color=ambient["uMicroColor"],
+                particle_color=ambient["uParticleColor"],
                 occluders=payload.ambient_occluders,
                 response_radius_scale=layout.response_radius_scale,
             )
@@ -303,8 +443,8 @@ class QuickBubbleRenderer:
             self._ambient_renderer = None
         gl.glUseProgram(self._program)
         # The ambient samplers are bound at units 0 and 1 by the shader (layout bindings).
-        values["u_ambient_enabled"] = int(bool(ambient_texture))
-        values["u_ambient_light_enabled"] = int(bool(ambient_light))
+        values.update(settings)
+        values.update(bubble_frame_scalars(mode_state, payload))
         values["uMatrix"] = frame.matrix_values
         values["uItemSize"] = tuple(frame.logical_size)
         content_rotation_quarters = frame.content_rotation_quarters
@@ -317,16 +457,8 @@ class QuickBubbleRenderer:
         values["u_quick_item_coords"] = 1
         # fragPixel's target (the window's framebuffer here; its row flip is 0 in this renderer, N1.4).
         values["u_target_px"] = (float(frame.viewport[2]), float(frame.viewport[3]))
-        values["u_content_rect"] = tuple(layout.content_rect)
-        values["u_visual_scale"] = layout.effect_scale
-        values["u_response_radius_scale"] = layout.response_radius_scale
-        values["u_specular_reference_aspect"] = layout.specular_reference_aspect
         values["u_border_width"] = presentation.border_width
         values["u_fade"] = presentation.content_fade
-        values["u_bubble_count"] = payload.bubble_count
-        # Four uint32 words (16 bytes), not a per-hero uniform array or
-        # additional pass. Uses true is_big classes from the same snapshot.
-        values["u_big_class_bits"] = tuple(payload.big_class_bits)
         if trace is not None:
             trace.mark(FrameTraceEvent.BUBBLE_COMMON_UNIFORMS_READY)
         if payload.bubble_count:
@@ -345,20 +477,6 @@ class QuickBubbleRenderer:
             values["u_bubbles_pos"] = position_buffer.tobytes()
             values["u_bubbles_extra"] = extra_buffer.tobytes()
 
-        trail_strength = max(
-            0.0,
-            min(
-                1.5,
-                float(parameter(parameters, "bubble_trail_strength")),
-            ),
-        )
-        tail_opacity = max(
-            0.0,
-            min(
-                0.85,
-                float(parameter(parameters, "bubble_tail_opacity")),
-            ),
-        )
         if payload.trails and payload.bubble_count:
             trail_buffer = _copy_uniform_float_buffer(
                 self._trail_uniform_buffer,
@@ -368,61 +486,17 @@ class QuickBubbleRenderer:
             samples = payload.bubble_count * 3
             self._trail_block[:samples, :3] = trail_buffer[:samples * 3].reshape(samples, 3)
             values["u_bubbles_trail"] = self._trail_block.tobytes()
-        else:
-            trail_strength = 0.0
-            tail_opacity = 0.0
-        values["u_trail_strength"] = trail_strength
-        values["u_tail_opacity"] = tail_opacity
-        values["u_trail_radial_scale"] = layout.trail_radial_scale
-        values["u_viewport_stroke_extra_half_px"] = layout.viewport_stroke_extra_half_px
+            self._trail_samples_held = True
+        elif self._trail_samples_held:
+            # No trail samples this frame: the ghost pass reads the oldest sample whatever the wake does, so an
+            # earlier frame's samples would draw a ghost frozen where that frame left it (R-225). Cleared once at
+            # this edge; nothing is written again while the trails stay inactive.
+            self._trail_block.fill(0.0)
+            values["u_bubbles_trail"] = self._trail_block.tobytes()
+            self._trail_samples_held = False
         if trace is not None:
             trace.mark(FrameTraceEvent.BUBBLE_REACTIVE_UNIFORMS_READY)
 
-        specular_direction = get_bubble_specular_shader_vector(
-            str(parameter(parameters, "bubble_specular_direction"))
-        )
-        values["u_specular_dir"] = tuple(specular_direction)
-        values["u_gradient"] = tuple(self._gradient_parameters(parameters, layout))
-
-        color_parameters = (
-            ("u_outline_color", "bubble_outline_color"),
-            ("u_specular_color", "bubble_specular_color"),
-            ("u_gradient_light", "bubble_gradient_light"),
-            ("u_gradient_dark", "bubble_gradient_dark"),
-            ("u_pop_color", "bubble_pop_color"),
-        )
-        for uniform_name, parameter_name in color_parameters:
-            values[uniform_name] = tuple(rgba(parameter(parameters, parameter_name)))
-
-        ghost_alpha = 0.0
-        if bool(parameter(parameters, "bubble_ghosting_enabled")):
-            ghost_alpha = max(
-                0.0,
-                min(
-                    1.0,
-                    float(parameter(parameters, "bubble_ghost_alpha")),
-                ),
-            )
-        values["u_ghost_alpha"] = ghost_alpha
-        ghost_decay = max(
-            0.1,
-            min(
-                1.0,
-                float(parameter(parameters, "bubble_ghost_decay")),
-            ),
-        )
-        values["u_ghost_decay"] = ghost_decay
-        hue = 0.0
-        if bool(parameter(parameters, "rainbow_enabled")):
-            speed = max(
-                0.01,
-                min(
-                    5.0,
-                    float(parameter(parameters, "rainbow_speed")),
-                ),
-            )
-            hue = safe_hue(mode_state.simulation_timestamp * speed * 0.1)
-        values["u_rainbow_hue_offset"] = hue
         if trace is not None:
             trace.mark(FrameTraceEvent.BUBBLE_STYLE_UNIFORMS_READY)
         with self._blocks.bound(pack_block(BUBBLE_BLOCK, values)):
@@ -507,6 +581,7 @@ class QuickBubbleRenderer:
             "u_ghost_decay",
             "u_ambient_enabled",
             "u_ambient_light_enabled",
+            "u_ambient_px",
         )
         held = {name for name, _kind in BUBBLE_BLOCK.fields}
         missing = [name for name in written if name not in held]
@@ -523,6 +598,13 @@ def create_visualizer_renderer() -> QuickBubbleRenderer:
 
 
 __all__ = [
+    "BUBBLE_FRAME_MEMBERS",
+    "BUBBLE_UNWRITTEN_MEMBERS",
+    "bubble_ambient_settings_values",
+    "bubble_frame_scalars",
+    "bubble_frame_values",
+    "bubble_presentation_layout",
+    "bubble_settings_values",
     "QuickBubbleLayout",
     "QuickBubblePayload",
     "QuickBubbleRenderer",

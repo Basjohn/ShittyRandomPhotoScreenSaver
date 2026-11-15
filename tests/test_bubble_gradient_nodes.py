@@ -27,12 +27,12 @@ def test_custom_nodes_roundtrip_model_snapshot_import_and_runtime_projection():
     normalized = normalize_visualizer_mode_payload('bubble', config)
     assert normalized['bubble_gradient_endpoints'] == points
     assert normalize_visualizer_mode_payload('bubble', normalized) == normalized
-    renderer = QuickBubbleRenderer()
+    from rendering.quick.visualizer.implementations import bubble as bubble_module
     from core.settings.bubble_gradient_semantics import project_bubble_gradient
     with pytest.raises(ValueError, match='endpoint projection'):
         project_bubble_gradient('custom')
     for aspect in (.5, 2., 4.):
-        assert renderer._gradient_parameters(config, SimpleNamespace(aspect_ratio=aspect)) == (
+        assert bubble_module._gradient_values(config, SimpleNamespace(aspect_ratio=aspect)) == (
             *project_linear_gradient(points, aspect), 0.)
 
 

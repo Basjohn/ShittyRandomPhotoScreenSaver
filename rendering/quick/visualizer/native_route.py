@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import uuid
 import weakref
+from pathlib import Path
 from typing import Any, Callable
 
 from core.logging.logger import get_logger
@@ -52,18 +53,127 @@ def _devcurve_settings(snapshot: Any, card: dict) -> dict:
     return devcurve_settings_values(snapshot.logical, layout)
 
 
+def _bubble_settings(snapshot: Any, card: dict) -> dict:
+    """Bubble's Settings- and card-derived members of every pass (N5.1): the Python renderer's own
+    ``bubble_settings_values`` (BubbleDraw) and ``bubble_ambient_settings_values`` (the ambient points' block) under the
+    card's content rect, the drawn dpr and the frame's capacity zoom."""
+    from rendering.quick.visualizer.implementations.bubble import (
+        bubble_ambient_settings_values,
+        bubble_presentation_layout,
+        bubble_settings_values,
+    )
+
+    presentation = snapshot.presentation
+    layout = bubble_presentation_layout(presentation, card["content_rect"], snapshot.logical.mode_state.world_scale)
+    values = bubble_settings_values(snapshot.logical, layout, presentation.dpr)
+    values.update(bubble_ambient_settings_values(snapshot.logical, layout, presentation.dpr))
+    return values
+
+
+def _shader_pack(filename: str) -> bytes:
+    """A pack of the Visualizer modes' shader folder (``tools/regen_qrc.py --shaders`` bakes it beside its source)."""
+    from widgets.spotify_visualizer import shaders
+
+    path = Path(shaders.__file__).resolve().parent / f"{filename}.qsb"
+    if not path.is_file():
+        raise FileNotFoundError(f"{path.name} is missing: run tools/regen_qrc.py --shaders")
+    return path.read_bytes()
+
+
+#: Bubble's ambient target (D14 point 6): coverage premultiplied over, light added, at the size of its content.
+BUBBLE_AMBIENT_TARGET = "ambient"
+#: The size the ambient target holds while the ambience's Settings are off: the smallest (one 64-pixel bucket); its two
+#: passes then draw no instance (lead's choice A is open: see Current_Plan.md, N5.1 Bubble).
+_AMBIENT_IDLE_SIZE = (1, 1)
+
+
+def _bubble_target_sizes(snapshot: Any, settings: dict) -> dict:
+    """The ambient target's size: its content's (``u_ambient_px``) while the drawn frame carries ambient points (the
+    simulation publishes them only while the ambience's Settings are on; its enable switches are read from the runtime's
+    own settings, whose keys the frame's parameters do not share)."""
+    if not snapshot.logical.mode_state.ambient_points:
+        return {BUBBLE_AMBIENT_TARGET: _AMBIENT_IDLE_SIZE}
+    width, height = settings["u_ambient_px"]
+    return {BUBBLE_AMBIENT_TARGET: (int(width), int(height))}
+
+
+def bubble_program(pack: bytes, sizes: dict) -> dict:
+    """Bubble's program (N5.1): the ambient points and the hero-circle mask as instanced quads into the ambient target
+    (two attachments), then the card's pass sampling both (``bubble.frag``, straight alpha over as the Python render
+    host blends). ``pack``: ``bubble.frag``'s; ``sizes``: ``_bubble_target_sizes``."""
+    from rendering.native.mode import (
+        BlendState,
+        MeshAttribute,
+        ModePass,
+        ModeStream,
+        ModeTarget,
+        PassGeometry,
+        PassOutput,
+        PassSampler,
+        RecordLayout,
+        TargetAttachment,
+    )
+
+    ambient = ModeTarget(BUBBLE_AMBIENT_TARGET, (TargetAttachment("coverage", "rgba8"),
+                                                 TargetAttachment("light", "rgba16f")),
+                         size=tuple(sizes[BUBBLE_AMBIENT_TARGET]))
+    points = RecordLayout(24, (MeshAttribute("aPoint", 4, 0), MeshAttribute("aOther", 2, 16)))
+    occluders = RecordLayout(16, (MeshAttribute("aOccluder", 4, 0),))
+    erase = BlendState(("add", "zero", "one_minus_src_alpha"), ("add", "zero", "one_minus_src_alpha"))
+    passes = [
+        ModePass("bubble_ambient_points", _shader_pack("bubble_ambient_points.frag"), "premultiplied",
+                 target=BUBBLE_AMBIENT_TARGET,
+                 outputs=(PassOutput(True, "premultiplied"), PassOutput(True, "additive")),
+                 geometry=PassGeometry(_shader_pack("bubble_ambient_points.vert"), topology="triangle_strip",
+                                       vertices=4, instance_from="ambient_points")),
+        ModePass("bubble_ambient_mask", _shader_pack("bubble_ambient_mask.frag"), erase,
+                 target=BUBBLE_AMBIENT_TARGET, outputs=(PassOutput(True, erase), PassOutput(True, erase)),
+                 geometry=PassGeometry(_shader_pack("bubble_ambient_mask.vert"), topology="triangle_strip",
+                                       vertices=4, instance_from="ambient_occluders")),
+        ModePass("bubble", pack, "alpha", samplers=(
+            PassSampler("u_ambient_texture", f"{BUBBLE_AMBIENT_TARGET}.coverage", "linear"),
+            PassSampler("u_ambient_light", f"{BUBBLE_AMBIENT_TARGET}.light", "linear"))),
+    ]
+    streams = [ModeStream("ambient_points", "ambient_points", "instance", points, used="ambient_point_floats"),
+               ModeStream("ambient_occluders", "ambient_occluders", "instance", occluders,
+                          used="ambient_occluder_floats")]
+    return {"passes": passes, "targets": [ambient], "streams": streams}
+
+
 #: The generic modes the core draws from data alone (D12, ``rendering.native.mode``): mode id -> its settings function
 #: ``(snapshot, card) -> members by name``. Its program is its own fragment pack (one pass, straight alpha over, as the
 #: Python render host blends), its record its runtime schema (``native_schema.schema_for_mode``).
 GENERIC_MODE_SETTINGS: dict[str, Callable[[Any, dict], dict]] = {
     "devcurve": _devcurve_settings,
 }
+#: Bubble's settings function, registered in ``GENERIC_MODE_SETTINGS`` (and Vulkan offered in its descriptor) once its
+#: rule (a) passes (N5.1 Bubble, Current_Plan.md): until then the route never draws it and Vulkan never offers it (D10).
+BUBBLE_SETTINGS = _bubble_settings
+#: A generic mode with more than its one fragment pass (N5.1, Bubble): mode id -> ``(fragment pack, target sizes) ->
+#: {"passes", "targets", "streams"}``, and its explicit-size targets' sizes ``(snapshot, settings) -> {target: size}``,
+#: sent when they change (``NativeMode.target_size``) and again after a new program.
+GENERIC_MODE_PROGRAMS: dict[str, Callable[[bytes, dict], dict]] = {
+    "bubble": bubble_program,
+}
+GENERIC_MODE_TARGET_SIZES: dict[str, Callable[[Any, dict], dict]] = {
+    "bubble": _bubble_target_sizes,
+}
 #: The modes the native core draws (D10: a mode offers ``vulkan`` once its port passes; see
 #: ``visualizer_mode_registry`` ``renderer_backends``): Spectrum's hand-written item (N2.5) and the generic modes.
 NATIVE_MODE_IDS = frozenset({"spectrum", *GENERIC_MODE_SETTINGS})
 
-#: One slot of a native mode's stream (Spectrum's record is 1488 bytes, Spline Curve's 3200; the slot shape rounds it).
+#: One slot of a native mode's stream (Spectrum's record is 1488 bytes, Spline Curve's 3200; the slot shape rounds it);
+#: a larger record (Bubble's) takes whole multiples of it (``_slot_bytes``).
 _SLOT_BYTES = 4096
+
+
+def _slot_bytes(mode_id: str) -> int:
+    """The slot size of ``mode_id``'s stream: its record and the slot's own words, in whole 4096-byte steps."""
+    from core.visualizer_engine.native_schema import schema_for_mode
+    from core.visualizer_engine.packet_abi import SLOT_OVERHEAD
+
+    needed = schema_for_mode(mode_id).layout.size + SLOT_OVERHEAD
+    return max(_SLOT_BYTES, -(-needed // _SLOT_BYTES) * _SLOT_BYTES)
 #: How long the native item fades in and out (fade, never vanish: audit N29 M1): the Visualizer's own activation fade,
 #: read from its owner (round 2, L5).
 FAILURE_FADE_MS = round(ACTIVATION_SCENE_FADE_DURATION_S * 1000.0)
@@ -178,7 +288,7 @@ class NativeVisualizerRoute:
         values = {"runtime_generation": int(identity.runtime_generation),
                   "engine_generation": int(identity.engine_generation),
                   "activation_id": int(identity.activation_id)}
-        memory = create_frame_mapping(generation=values["runtime_generation"], slot_bytes=_SLOT_BYTES,
+        memory = create_frame_mapping(generation=values["runtime_generation"], slot_bytes=_slot_bytes(mode_id),
                                       engine_generation=values["engine_generation"],
                                       activation_id=values["activation_id"], mode_code=code,
                                       token=f"route{uuid.uuid4().hex[:10]}")
@@ -459,9 +569,10 @@ class NativeVisualizerRoute:
                 sent = True
             settings = self.settings(drawn, full)
             if settings != self._settings:
-                content.settings(settings)           # by name; re-packed by the core only when they change
+                content.settings(settings, drawn)    # by name; re-packed by the core only when they change
                 self._settings = settings
                 sent = True
+            sent = content.target_sizes(drawn, settings) or sent
             if snapshot is not None:
                 logical = snapshot.logical
                 payload, payload_schema = content.encode(logical)
@@ -612,8 +723,11 @@ class _SpectrumContent:
     def present(self, card: dict) -> None:
         self.item.present_raw(card)
 
-    def settings(self, values: dict) -> None:
+    def settings(self, values: dict, snapshot: Any = None) -> None:
         self.item.settings(values)
+
+    def target_sizes(self, snapshot: Any, settings: dict) -> bool:
+        return False
 
     def encode(self, logical: Any) -> tuple[bytes, int]:
         from core.visualizer_engine import spectrum_native_schema
@@ -641,6 +755,7 @@ class _ModeContent:
         self._program_mode: str | None = None             # the mode whose program the item holds
         self._pending: tuple[str, str, dict] | None = None   # (mode, mapping name, expect): bound at its first settings
         self._bound = False
+        self._sizes: dict | None = None                     # the explicit targets' sizes sent since the program
 
     def load(self, mode_id: str) -> None:
         if self._pack is None or self._pack[0] != mode_id:
@@ -669,7 +784,7 @@ class _ModeContent:
     def present(self, card: dict) -> None:
         self.item.card(card)
 
-    def settings(self, values: dict) -> None:
+    def settings(self, values: dict, snapshot: Any = None) -> None:
         pending = self._pending
         if pending is None:
             self.item.settings(values)
@@ -681,7 +796,15 @@ class _ModeContent:
             if self._pack is None or self._pack[0] != mode_id:
                 self.load(mode_id)
             try:
-                self.item.program([ModePass(mode_id, self._pack[1], "alpha")], values)
+                build = GENERIC_MODE_PROGRAMS.get(mode_id)
+                if build is None:
+                    self.item.program([ModePass(mode_id, self._pack[1], "alpha")], values)
+                else:
+                    sizes = GENERIC_MODE_TARGET_SIZES[mode_id](snapshot, values)
+                    program = build(self._pack[1], sizes)
+                    self.item.program(program["passes"], values, targets=program["targets"],
+                                      streams=program["streams"])
+                    self._sizes = dict(sizes)                  # the program's declarations hold them
             except Exception as exc:
                 # A setup input (checkpoint audit 3 L2): latched by the route until one of its inputs changes, as
                 # Spectrum's program at its bind, never tried again at every update.
@@ -694,6 +817,20 @@ class _ModeContent:
         self.item.bind(mapping_name, schema_for_mode(mode_id), expect=expect)
         self._bound = True
         self._pending = None
+
+    def target_sizes(self, snapshot: Any, settings: dict) -> bool:
+        """The bound mode's explicit-size targets follow its card and Settings (Bubble's ambient target, N5.1): sent
+        when they change, never per frame. True when something was sent."""
+        sizer = GENERIC_MODE_TARGET_SIZES.get(str(self._program_mode))
+        if sizer is None or self._pending is not None:
+            return False
+        sizes = sizer(snapshot, settings)
+        if sizes == self._sizes:
+            return False
+        for name, size in sizes.items():
+            self.item.target_size(name, size)
+        self._sizes = dict(sizes)
+        return True
 
     def encode(self, logical: Any) -> tuple[bytes, int]:
         from core.visualizer_engine.native_schema import schema_for_mode

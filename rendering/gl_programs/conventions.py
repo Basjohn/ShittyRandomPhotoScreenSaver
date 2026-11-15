@@ -135,6 +135,15 @@ vec4 srpssSpriteClip(vec4 clipCentre, vec2 corner, float sizePx, vec2 targetPx) 
     if (srpssConventions.z > 0.5) d.y = -d.y;
     return vec4(clipCentre.xy + d * clipCentre.w, clipCentre.zw);
 }
+// The clip position of a point given top-down over the drawn target (x right, y down, 0 to 1): the target's top row
+// where the conventions put it, so a pass that places its geometry by hand (a sprite's centre in an explicit-size
+// target, which the item matrix does not map) draws the same image on every backend; in the OpenGL renderer it is
+// the authored `(x * 2 - 1, 1 - y * 2)`.
+vec2 srpssTopDownClip(vec2 topDown) {
+    vec2 ndc = vec2(topDown.x * 2.0 - 1.0, 1.0 - topDown.y * 2.0);
+    if (srpssConventions.z > 0.5) ndc.y = -ndc.y;
+    return ndc;
+}
 // A culled sprite: every corner outside the clip volume, a degenerate quad.
 vec4 srpssSpriteCulled() { return vec4(2.0, 2.0, 2.0, 1.0); }
 // A batched draw's batch (D15 point 6): gl_DrawID in the pass's draw-parameters pack (one multi-draw indirect call;

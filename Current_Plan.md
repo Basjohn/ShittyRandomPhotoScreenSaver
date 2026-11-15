@@ -661,6 +661,80 @@ the feature (D3D11 is not stated).
   item as Spectrum's; both close with N5.8.
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
+  **Where it stands (15 Nov, branch `worktree-agent-ad4262463b52b074a`, head after main's N3.4 merge; no C++, no
+  build needed: it runs on main's ABI 20 module as built).** Root cause of the last failure, fixed: the route sized the
+  ambient target from the frame's parameters (`BubbleAmbientSimulation.enabled`), whose keys are not the runtime's
+  ambience switches, so the target sat at 1 x 1 and the native card drew no ambience (owner rule (a) worst 152 levels);
+  it now follows whether the drawn frame carries ambient points (worst 8 levels). Bubble is **not offered on Vulkan**
+  and not in `GENERIC_MODE_SETTINGS` yet (D10's invariant): the route's Bubble pieces exist
+  (`native_route.BUBBLE_SETTINGS`, `bubble_program`, `_bubble_target_sizes`, `GENERIC_MODE_PROGRAMS`,
+  `GENERIC_MODE_TARGET_SIZES`, `_slot_bytes`) and `tests/test_native_bubble.py` registers them by monkeypatch.
+  Follows the Native Port Playbook: the port checklist, the standard proof, N4.a, E2 (E23), E3, E9.
+  Done (each commit on the branch; the Python renderer's frames proved identical by `tools/conventions_identity.py`):
+  - The ambient programs are shader files (`widgets/spotify_visualizer/shaders/bubble_ambient_{points,mask}.{vert,frag}`
+    and packs); the points and the hero mask are instanced quads (D15 F; figures in D15 "Bubble's measured case",
+    accepted); `srpssTopDownClip` added to both geometry-include copies; the CPU occluder triangles deleted.
+  - `bubble.frag`: `vec4 u_bubbles_trail[330]` read `.xyz`, `uint u_big_class_bits[4]`, the ambient read placed in a
+    bucketed allocation (`u_ambient_px`, ratios exactly 1 in Python), clamped to the content's edge texels, rows in the
+    target's own order by `srpssConventions.z` (identical on all 38 widened runs before the row fix, variants a and b
+    after it).
+  - R-225 (stale-trail ghost) fixed with its test and index row.
+  - The record: `core/visualizer_engine/bubble_native_schema.py` (runtime schema v1, 24,048 bytes, fingerprint pinned
+    in the test); f64x4 arrays now pack every element (`native_schema.py`). Shared functions in `bubble.py`:
+    `bubble_frame_values`, `bubble_frame_scalars`, `bubble_settings_values`, `bubble_ambient_settings_values`,
+    `bubble_presentation_layout` (the Python renderer calls them).
+  - The route's program (3 passes, the `ambient` target, 2 instance streams), the target size sent on change only.
+  Proved so far: the three E confirmations (source reading, in the commit log); `tests/test_native_bubble.py`
+  (schema, sources, settings, sizes, route), `tests/test_bubble_stale_trail_ghost.py`,
+  `tests/test_bubble_ambient_big_occlusion.py` (the mask's shape on the GPU, control seen failing); owner rule (a) on
+  variant a (`.artifacts/evidence/native_core/n5_1_bubble/20261115_rule_a_variant_a/`, in the branch's worktree):
+  549 frames, 350 differing inputs, worst 8 levels, 101 edge pixels in the worst frame, all on microbubble clusters
+  and halo edges: FAIL under the composite tolerance (10 ties at 3 levels).
+  Remaining, in order (each command from the repository root with the venv's python, the module at
+  `release/native_module`, ABI 20):
+  - [ ] Classify the 8-level residual before asking for a bound. Read the worst frames (`bubble_input244_*` in that
+    folder): suspects, in order, (1) the light attachment's float16 sums against Python's (additive halos overlapping),
+    (2) the hero mask's erase blend: the content state reports the mask's attachments as `replace` with a
+    `blend_state` beside them (`.artifacts/evidence/native_core/n5_1_bubble/20261115_diagnostics/diag_route.py` prints
+    the program), check the core applies the per-attachment `BlendState`, (3) sprite edges at dpr 1 (quads judged
+    against the Python quads, so no point/quad term should remain). One variable at a time:
+    `python tools/visualizer_replay/owner_render_parity.py --out .artifacts/evidence/native_core/n5_1_bubble/<date>_<label>
+    --native --mode bubble --runs bubble --placements display` (needs Bubble registered: the next box's two lines, kept
+    uncommitted while diagnosing). If a class remains that is not a defect, report its figures to the lead for a bound
+    (D12 "The pixel tolerance": a new class or wider bound is the lead's decision), never widen it yourself.
+  - [ ] Register: add `"bubble": _bubble_settings` to `GENERIC_MODE_SETTINGS` (drop `BUBBLE_SETTINGS`' comment) and
+    `renderer_backends=("opengl", "vulkan")` to Bubble's descriptor in `core/settings/visualizer_mode_registry.py`;
+    in `tests/test_native_bubble.py` turn the route test's monkeypatches into `assert "bubble" in NATIVE_MODE_IDS`.
+    Run `tests/test_native_bubble.py tests/test_native_visualizer_route.py tests/test_backend_availability.py
+    tests/test_visualizers_tab_backend_modes.py`.
+  - [ ] Owner rule (a) over the widened set at both placements: `owner_render_parity.py --native --mode bubble
+    --offers` (variants a and b, every Choice offer, display and overscan), every run PASS.
+  - [ ] Rule (b) and the item's contract: `native/core/python/bubble_check.py`, a copy of `devcurve_check.py` with
+    `MODE_ID = "bubble"`, the program from `native_route.bubble_program` (`Scene.place` calls `program(passes,
+    settings, targets=, streams=)` then `target_size` from `_bubble_target_sizes`), `SLOT_BYTES` from
+    `native_route._slot_bytes("bubble")`, the capture hooking `QuickBubbleRenderer.render`, the block round on the
+    `bubble` pass comparing only the elements the shader reads (positions and extras `count`, trail samples `3 count`;
+    `u_ambient_px` only when `u_ambient_enabled`), the item round's Settings change on `u_outline_color` and record
+    change on `u_bubbles_pos`. Negative controls, each in its own process: a position nudged, a big-class bit flipped,
+    the sprite coordinate y up (bake a variant of `bubble_ambient_points.frag` with `vSpriteCoord.y` flipped through
+    `probe_rings.bake`), the whole-allocation sample (a `bubble.frag` variant with `ratio = vec2(1.0)`), the mask pass
+    dropped, a skipped release. Run `python native/core/python/bubble_check.py --module-dir release/native_module
+    --require-validation --layer-path D:\Temp\Scratch\SRPSS\native_spike\validation_layers\extracted`.
+  - [ ] GPU median and p90 per pass at 2560 x 1440 and 4K against the Python renderer's (checklist 11), nothing at
+    rest, retirement to zero.
+  - [ ] The D1 rehearsal (lead, rule (f), D10): one bounded Vulkan run on Display 1 through `tools/d1_run.py`, the
+    Usu wallpaper and a recorded clip, ambience on and off.
+  - [ ] Docs: D12 "As built: Bubble" (record, settings, passes, figures, the tolerance), `native/core/README.md` step 6
+    (a mode with targets and streams uses `GENERIC_MODE_PROGRAMS`), `Primitives.md` E3/E23 consumers. The Python
+    renderer retires as Spline Curve's does.
+  - Decided (lead, 15 Nov): choice A is superseded by ONE program. An ambience-off program without the samplers and
+    ambient streams is refused by the core (every record field needs a reader; every declared sampler must be bound),
+    and a second schema plus a sampler-free shader variant doubles what must be kept equal for about 32 KB saved. So:
+    one program, the ambient target held at the smallest bucket (64 x 64) while the frame carries no ambient points,
+    its two passes drawing no instance. Record this in D15/the Bubble port notes as the reason.
+    - [ ] In the GPU cost step, measure the ambience-off cost of the two empty passes at 4K (median and p90 of 240
+      frames, OpenGL and Vulkan). If above 0.02 ms, the core skips a pass whose instance count is 0 (one C++ change,
+      one build, a test that the pass is not begun); otherwise nothing more.
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).

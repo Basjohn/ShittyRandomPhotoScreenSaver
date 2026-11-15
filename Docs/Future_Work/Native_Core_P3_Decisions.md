@@ -1463,6 +1463,13 @@ choices the build made where D15 left room:
   same amounts: at dpr 1, 41 to 42 pixels past 0 and 6 past 1 level (at most 3 levels); at dpr 1.5, 151 to 153 past 0
   and 70 past 1 level (at most 7). Accepted. Each port's parity is judged against its own quad conversion, made first in
   the Python renderer (point 5, choice F), never against its points.
+  *Bubble's measured case (N5.1, accepted by the lead 15 Nov):* its ambient points (up to 192, with soft halos) and its
+  hero-circle mask became instanced quads in the Python renderer (`903396393`). Over 15 sampled frames of variant a
+  (the ambience and its glow on): the final frame 4,850 pixels past 0 and 675 past 1 level at dpr 1 (at most 104 past 1
+  in a frame, worst 5 levels; 117,600 pixels a frame), 8,599 and 533 at dpr 1.5 (at most 81, worst 5); the RGBA8
+  coverage attachment worst 9 levels; the RGBA16F light at most 0.0012 in radiance (its float16 rounding), never past
+  1/255. Every difference lies on a microbubble ring's or halo's edge, no shift
+  (`.artifacts/evidence/native_core/n5_1_bubble/20261115_quads_vs_points/`).
 - *Draw-parameters packs are SPIR-V and GLSL only*: `qsb` bakes `gl_DrawID`, `gl_BaseInstance` and `gl_BaseVertex` for
   SPIR-V and GLSL 460 and 430, and HLSL 5.0 refuses them ("Unsupported builtin in HLSL: 4426"), research Q5. Nothing
   shipped draws with D3D, so form 3 is a Vulkan and OpenGL form; elsewhere the plain pack's per-batch form stands.

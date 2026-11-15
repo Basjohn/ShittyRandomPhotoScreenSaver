@@ -46,9 +46,8 @@ def test_existing_gradient_pixels_match_the_original_formula_on_the_driver(qt_ap
         # A real bias must affect pixels: the fixture discriminates the new input.
         snapshot = snapshots[5]
         original = draw()
-        renderer = host._implementations["bubble"]
-        project = renderer._gradient_parameters
-        monkeypatch.setattr(renderer, "_gradient_parameters", lambda p, l: (*project(p, l)[:2], .25, 0.))
+        project = bubble._gradient_values
+        monkeypatch.setattr(bubble, "_gradient_values", lambda p, l: (*project(p, l)[:2], .25, 0.))
         assert np.any(draw() != original)
     finally:
         try:
