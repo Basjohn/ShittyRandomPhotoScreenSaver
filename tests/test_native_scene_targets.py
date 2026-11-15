@@ -198,12 +198,6 @@ def test_a_nearest_attachment_declares_its_resolve():
     assert lin == {"name": "lin", "format": "r32f", "clear": [1.0, 1.0, 1.0, 1.0], "resolve": "nearest"}
 
 
-def test_a_persisting_target_says_so():
-    """D14 point 12: "persist" is declared only when set (the default first run clears through its load op)."""
-    assert "persist" not in ModeTarget("a", (TargetAttachment("c"),)).declaration()
-    assert ModeTarget("a", (TargetAttachment("c"),), persist=True).declaration()["persist"] is True
-
-
 # ------------------------------------------------------------------------------------------------- the built module
 
 built = pytest.mark.skipif(
@@ -249,7 +243,6 @@ def test_the_harness_program_is_admitted_with_its_reads(core, packs, qt_app):
     scene, ambient = layout["targets"]
     assert scene["capture"] and scene["depth_read"] and scene["colour"][0]["read"]
     assert not scene["colour"][1]["read"]                                       # emission: never sampled
-    assert scene.get("reloaded") is True and ambient.get("reloaded") is False  # the capture splits the scene's runs
     assert ambient["colour"][0]["read"] and ambient["colour"][1]["read"]
     by_name = {p["name"]: p for p in layout["passes"]}
     assert by_name["planes"]["frag_depth"] and by_name["planes"]["target"] == "scene"
@@ -311,24 +304,3 @@ def test_the_nearest_resolve_is_admitted_where_it_applies(core, packs, qt_app):
     first = ModeTarget("lin", (TargetAttachment("lin", "r32f", resolve="nearest"), TargetAttachment("colour")),
                        depth=True, samples=4)
     _refused(core, passes[:1], (first,), "past the first")
-
-
-@built
-@pytest.mark.qt
-def test_the_fast_clear_applies_where_one_clear_value_serves(core, packs, qt_app):
-    """D14 point 12: a target whose attachments share one clear value QColor holds, and that does not persist, clears
-    through its load op; differing clear values, a value QColor cannot hold, or "persist" keep the clearing draw."""
-    import scene_targets
-
-    scene, ambient = scene_targets.targets()
-    planes = scene_targets.passes(packs)[:1]
-
-    def fast(target) -> bool:
-        return core.mode_program_layout(planes, (target,))["targets"][0]["fast_clear"]
-
-    assert fast(scene)
-    assert not fast(ModeTarget("scene", scene.colour, depth=True, persist=True))
-    assert not fast(ModeTarget("scene", (TargetAttachment("colour", "rgba16f"),
-                                         TargetAttachment("emission", "rgba16f", (0.0, 0.0, 0.0, 1.0))), depth=True))
-    assert not fast(ModeTarget("scene", (TargetAttachment("colour", "rgba16f", (0.3, 0.3, 0.3, 0.3)),
-                                         TargetAttachment("emission", "rgba16f", (0.3, 0.3, 0.3, 0.3))), depth=True))

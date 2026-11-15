@@ -134,8 +134,7 @@ int targetFormatBytes(TargetFormat format)
 bool TargetDeclaration::sameLayout(const TargetDeclaration &o) const
 {
     if (name != o.name || depth != o.depth || depthRead != o.depthRead || depthSampled != o.depthSampled
-        || samples != o.samples || capture != o.capture || persist != o.persist || reloaded != o.reloaded
-        || colour.size() != o.colour.size()
+        || samples != o.samples || capture != o.capture || colour.size() != o.colour.size()
         || surfaceSized() != o.surfaceSized())
         return false;
     for (qsizetype i = 0; i < colour.size(); ++i) {
@@ -145,22 +144,6 @@ bool TargetDeclaration::sameLayout(const TargetDeclaration &o) const
             return false;
         for (int c = 0; c < 4; ++c) {
             if (a.clear[c] != b.clear[c])
-                return false;
-        }
-    }
-    return true;
-}
-
-bool TargetDeclaration::fastClear() const
-{
-    if (persist || colour.isEmpty())
-        return false;
-    for (const TargetAttachment &a : colour) {
-        for (int c = 0; c < 4; ++c) {
-            const float v = a.clear[c];
-            // One clear value for every attachment (QRhi's beginPass takes one colour), held exactly by QColor's 16 bits.
-            if (v != colour.at(0).clear[c] || !(v >= 0.0f && v <= 1.0f)
-                || double(v) * 65535.0 != std::floor(double(v) * 65535.0))
                 return false;
         }
     }
@@ -200,9 +183,6 @@ QJsonObject TargetDeclaration::toJson() const
     o.insert(QStringLiteral("depth_sampled"), depthSampled);
     o.insert(QStringLiteral("samples"), samples);
     o.insert(QStringLiteral("capture"), capture);
-    o.insert(QStringLiteral("persist"), persist);
-    o.insert(QStringLiteral("reloaded"), reloaded);
-    o.insert(QStringLiteral("fast_clear"), fastClear());
     return o;
 }
 
@@ -212,15 +192,14 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
                                          "\"colour\": [{\"name\", \"format\": rgba8, rgba16f, r16f or r32f, "
                                          "\"clear\"?: [r, g, b, a], \"resolve\"?: average or nearest}, 1 to %1], "
                                          "\"depth\"?: true or false, "
-                                         "\"samples\"?: 1 to %2, \"persist\"?: true or false}")
-                              .arg(kMaxTargetColour).arg(kMaxSceneSamples);
+                                         "\"samples\"?: 1 to %2}").arg(kMaxTargetColour).arg(kMaxSceneSamples);
     if (!value.isObject()) {
         *error = shape;
         return false;
     }
     const QJsonObject o = value.toObject();
     const QStringList keys = { QStringLiteral("name"), QStringLiteral("size"), QStringLiteral("colour"),
-                               QStringLiteral("depth"), QStringLiteral("samples"), QStringLiteral("persist") };
+                               QStringLiteral("depth"), QStringLiteral("samples") };
     for (auto it = o.begin(); it != o.end(); ++it) {
         if (!keys.contains(it.key())) {
             *error = QStringLiteral("unknown target key '%1': %2").arg(it.key(), shape);
@@ -325,12 +304,6 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
         }
         d.samples = int(n);
     }
-    const QJsonValue persist = o.value(QStringLiteral("persist"));
-    if (!persist.isUndefined() && !persist.isBool()) {
-        *error = QStringLiteral("target '%1': persist is true or false").arg(label);
-        return false;
-    }
-    d.persist = persist.toBool(false);
     *out = d;
     return true;
 }
@@ -433,15 +406,6 @@ void countNearestResolve()
     g_nearestResolves.fetchAndAddRelaxed(1);
 }
 
-namespace {
-QAtomicInteger<qint64> g_fastClears { 0 };
-} // namespace
-
-void countFastClear()
-{
-    g_fastClears.fetchAndAddRelaxed(1);
-}
-
 QList<int> supportedSampleCounts(QRhi *rhi)
 {
     QList<int> counts;
@@ -469,7 +433,6 @@ SceneTargetCounts sceneTargetCounts()
     c.readbacksPending = g_readbacksPending.loadRelaxed();
     c.depthPrimes = g_depthPrimes.loadRelaxed();
     c.nearestResolves = g_nearestResolves.loadRelaxed();
-    c.fastClears = g_fastClears.loadRelaxed();
     return c;
 }
 
@@ -493,17 +456,7 @@ bool SceneTargets::Target::nearestActive(int slot) const
         return false;
     if (slot == kNearestDepthSlot)
         return decl.depth && decl.depthRead;
-    if (slot < 0 || slot >= int(decl.colour.size()) || !decl.colour.at(slot).read)
-        return false;
-    return decl.colour.at(slot).nearest || averageSlot(slot);
-}
-
-bool SceneTargets::Target::averageSlot(int slot) const
-{
-    // D14 point 12: a read colour attachment of a multisampled, fast-cleared target that a later run loads: its first
-    // run's resolve is the core's average (the twin resolves nothing; see step()).
-    return samples > 1 && slot >= 0 && slot < int(decl.colour.size()) && decl.colour.at(slot).read
-        && !decl.colour.at(slot).nearest && decl.reloaded && decl.fastClear();
+    return slot >= 0 && slot < int(decl.colour.size()) && decl.colour.at(slot).nearest && decl.colour.at(slot).read;
 }
 
 QRhiTexture *SceneTargets::Target::nearestSource(int slot) const
@@ -549,8 +502,6 @@ void SceneTargets::releaseTarget(Target &t)
         t.nearestTarget[s].reset();
         t.nearestRenderPass[s].reset();
     }
-    t.clearTarget.reset();
-    t.clearRenderPass.reset();
     t.renderTarget.reset();
     t.renderPass.reset();
     t.depthNearest.reset();
@@ -744,31 +695,10 @@ bool SceneTargets::step(Target &t, int index, QString *error)
             t.renderTarget->setName(label);
             t.renderPass.reset(t.renderTarget->newCompatibleRenderPassDescriptor());
             t.renderTarget->setRenderPassDescriptor(t.renderPass.get());
-            // D14 point 12: the fast clear's twin over the same attachments, no preserve flags (the load op clears).
-            t.clearTarget.reset();
-            t.clearRenderPass.reset();
-            if (t.decl.fastClear()) {
-                // A multisampled target loaded again by a later run: QRhi's Vulkan backend stores a multisampled colour
-                // attachment that has a resolve only when its contents are preserved (build round 4's persist control:
-                // the second run loaded undefined samples), so the twin resolves nothing and the core's average resolve
-                // makes what a pass reads before the next run (D14 point 12). Vulkan ignores the resolve references
-                // in a single-subpass render pass's compatibility.
-                QRhiTextureRenderTargetDescription twin = description;
-                if (t.samples > 1 && t.decl.reloaded) {
-                    QList<QRhiColorAttachment> plain;
-                    for (int i = 0; i < colourCount; ++i)
-                        plain.append(QRhiColorAttachment(t.colour[i].get()));
-                    twin.setColorAttachments(plain.cbegin(), plain.cend());
-                }
-                t.clearTarget.reset(rhi->newTextureRenderTarget(twin));
-                t.clearTarget->setName(label + QByteArrayLiteral(" cleared"));
-                t.clearRenderPass.reset(t.clearTarget->newCompatibleRenderPassDescriptor());
-                t.clearTarget->setRenderPassDescriptor(t.clearRenderPass.get());
-            }
             ++m_layoutGeneration;
         }
         m_objectGeneration += 1;
-        if (!t.renderTarget->create() || (t.clearTarget && !t.clearTarget->create())) {
+        if (!t.renderTarget->create()) {
             *error = QStringLiteral("target '%1': its render target could not be created at %2 x %3")
                          .arg(QString::fromLatin1(t.decl.name)).arg(t.allocation.width()).arg(t.allocation.height());
             return false;
@@ -895,7 +825,7 @@ int SceneTargets::liveObjects() const
         if (!m_targets[i])
             continue;
         objects += m_targets[i]->textures + (m_targets[i]->renderTarget ? 2 : 0)
-            + (m_targets[i]->captureTarget ? 2 : 0) + (m_targets[i]->clearTarget ? 2 : 0);
+            + (m_targets[i]->captureTarget ? 2 : 0);
         for (int s = 0; s < kNearestSlots; ++s)
             objects += m_targets[i]->nearestTarget[s] ? 2 : 0;
     }
@@ -1024,7 +954,6 @@ QJsonObject SceneTargets::stateJson(QRhi *rhi) const
         e.insert(QStringLiteral("generation"), double(t.generation));
         e.insert(QStringLiteral("ready"), t.ready());
         e.insert(QStringLiteral("last_reason"), t.lastReason);
-        e.insert(QStringLiteral("clear_target"), t.clearTarget != nullptr); // D14 point 12: the fast clear's twin made
         if (rhi) {
             const QRect v = contentViewport(rhi->isYUpInFramebuffer(), t.allocation, t.content);
             e.insert(QStringLiteral("viewport"), QJsonArray { v.x(), v.y(), v.width(), v.height() });

@@ -540,6 +540,21 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     the class the lead gives it; `Docs/Reference/Scene3D_Resources.md`'s native scene target row;
     `Docs/Reference/Harness_Index.md` (the command); the 3D foundation lessons in `Docs/Reference/Transitions.md`
     (appended after the slice).
+- [ ] N3.1b The four-sample capture cost on Vulkan (D14 point 13; settled before N5.6, Extruded Bubble, the first
+  consumer of a four-sample capture). At 4K Vulkan's 4x minus 1x is 0.58 ms against the Python path's 0.41 (OpenGL
+  0.45 is within noise, accepted); `cost_parts` puts about 0.5 ms of it in the capture step at four samples against
+  0.08 ms single-sampled, and cannot split it further. The load-op fast clear is rejected (D14 point 12): do not retry it.
+  - [ ] Per-run GPU timing inside a content: the GPU timer's scopes around each run of passes on a scene target, each
+    core resolve (nearest, and QRhi's resolve at a run's end) and each capture, opt-in with the timer (no queries and
+    no work when it is off: `core/diagnostics` rule), reported per scope in the content's state and the frame trace;
+    a GPU-free test of the scope list and a harness check that the scopes sum to the surface's time within 5%.
+  - [ ] Locate the capture step's 4x cost on Vulkan at 4K on a quiet GPU (`nvidia-smi` recorded with the figures),
+    by scope: the nearest pass reading the multisampled D32F, the depth's layout switch (shader read to attachment,
+    rule C's prime) before the second run, the second run's load of the multisampled attachments, the second colour
+    resolve. Each candidate gets a harness control that removes it (with its pixels judged) before any fix.
+  - [ ] Fix what the scopes show, if it brings Vulkan's 4K 4x minus 1x to the Python path's or below with parity
+    exact and validation clean; otherwise the figure and its cause go to the lead with the operator's look question
+    (4K defaulting to fewer samples).
 - [ ] N3.2 Mesh and buffer resources: static meshes built once and kept, dynamic buffers with dynamic offsets,
   instancing, pre-built resource bindings per ring slot (no allocation per frame), instanced quads in place of
   point sprites (Bubble, Neon Lake's marks, Waveform's sparks use `gl_PointSize`).

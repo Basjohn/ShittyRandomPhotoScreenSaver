@@ -1106,24 +1106,21 @@ to the GL limits.
     (`scene_target_check.py --rounds python_cost`); the native figure is accepted when no worse, and a worse figure is
     a defect whose time is found (`--rounds cost_parts`). Whether 4K defaults to fewer samples is the operator's look
     call later; it blocks nothing.
-12. *The fast clear* (the lead after build round 3's cost report, 15 Nov 2026). A target's first run in a record
-    clears through its pass's load op whenever that run's first pass would clear anyway (the content does not need the
-    previous frame): the clearing draw and rule B's load go for that run, and later runs keep loading under rules B
-    and C. A target whose content must outlive the frame is declared `"persist": true` and keeps today's path (the load
-    and the clearing draw). Built as a second render target over the same attachments without the preserve flags
-    (`clearTarget`; its descriptor differs only in load ops, which Vulkan's render-pass compatibility ignores, so the
-    passes' pipelines draw into both). QRhi's `beginPass` takes one colour clear value, so the fast clear applies when
-    every attachment declares the same clear value and QColor holds it exactly (16 bits a channel: 0 and 1 always);
-    otherwise the clearing draw stays. Parity stays exact (rule (a) 5 exact, rule (b) 16 exact), validation clean,
-    the depth-prime control passing; the goal is Python's 4x minus 1x or better on both backends at 4K and 2560 x 1440.
-    `persist` stays an opt-out of the fast clear only (today's path also clears at the first run of every record); a
-    true cross-frame persist (no clear at all) is decided when a consumer such as trails exists (N4.i).
-    Build round 4 found that QRhi's Vulkan backend stores a multisampled colour attachment that has a resolve only when
-    its contents are preserved: a fast-cleared first run with QRhi's resolves left the second run loading undefined
-    samples (NaN in the final resolve at 2x, 4x and 8x; the persist control caught it, OpenGL unaffected). Round 5: a
-    multisampled target that a later run loads (`reloaded`, derived from the program's runs) gets a twin without
-    resolves, and the core's resolve pass averages the colour attachments a pass reads before the next run (uMode 2 of
-    `scene_nearest.frag`); its later runs keep QRhi's resolves.
+12. *The fast clear: tried, measured, rejected* (the lead, 15 Nov 2026; build rounds 4 `1dfac891` and 5 `844e5681`,
+    reverted, so the core keeps round 3's clearing draw over the loaded contents). The attempt: a target's first run in
+    a record cleared through its pass's load op (a second render target over the same attachments without the preserve
+    flags; a `persist` declaration opting out), its later runs loading. Measured on a quiet GPU at 4K
+    (`20261115_round4_quiet_cost`; Python's 4x minus 1x 0.40 ms): it lowered the single-sampled baseline more than the
+    four-sample time (a clearing draw and a plane, Vulkan: 0.14 ms at 1x against 0.20 with the clearing draw, 0.42 at
+    4x against 0.49), so the 4x minus 1x figure grew (OpenGL 0.61 ms, Vulkan 0.93 ms); it slowed the capture variant at
+    4x (OpenGL 0.99 against 0.91 ms, Vulkan 1.31 against 1.01); and QRhi's Vulkan backend does not store a
+    multisampled colour attachment that has a resolve unless its contents are preserved, so the run after a capture
+    loaded undefined samples (NaN in the final resolve at 2x, 4x and 8x; the persist control caught it; OpenGL
+    unaffected). Round 5's fix (a twin without resolves and the core's average) was never built.
+13. *Accepted at round 3's figures* (the lead, 15 Nov 2026). OpenGL's 4K 4x minus 1x 0.45 ms against Python's 0.41 is
+    within run noise. Vulkan's 0.58 ms is 0.17 ms over at 4K and stays open as a plan box under N3: per-run GPU timing
+    inside a content, then the capture step's four-sample cost located (the nearest pass, the depth's layout switch or
+    the second run's load), settled before N5.6 (Extruded Bubble), the first consumer of a four-sample capture.
 
 **As built (N3.1, 15 Nov 2026).** `native/core/src/scene_targets.*` holds the rules (`bucketPixels`, `nextAllocation`,
 `contentViewport`, `clampSamples`) and `SceneTargets`, the content's owner; `rendering/native/scene_targets.py` mirrors
@@ -1162,8 +1159,7 @@ the rules for the GPU-free tests and `scene3d.scene_samples` is the one sampling
   (rule B: `PreserveColorContents` loads, then the draw writes every sample of two RGBA16F attachments and the D32F, about
   660 MB at 4K, where the Python renderer's `glClear` is a fast clear). The capture split adds 0.36 / 0.30 ms (the
   second run, the nearest resolve, the capture, a second colour resolve), as Python's `background()` does its own.
-  Proposed (not built, the lead's call): the first run of a target clears through its pass's load op (a fast clear,
-  no load), the later runs load; parity must hold.
+  The fast clear this pointed to was built and rejected (point 12); the figures above stand (point 13).
 
 ## D1, D2, D3 and the transport rule
 

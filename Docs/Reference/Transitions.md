@@ -772,6 +772,10 @@ Each foundation slice adds what it learned here.
   40% through part of round 3): check `nvidia-smi` before a cost run and judge only figures from a quiet GPU taken
   back to back; under load even p10s moved by 0.15 ms. On a quiet GPU a second full-screen draw at four samples cost
   nothing measurable while the target's first write (a clearing draw after a load) cost most of the four-sample time.
+- A load-op clear is not free speed (D14 point 12, rejected): it lowered the single-sampled time more than the
+  four-sample one and slowed a capture split at 4x; and QRhi's Vulkan backend keeps a multisampled colour attachment
+  that has a resolve only when its target preserves contents, so a later run in the same record loads undefined
+  samples. Judge a clearing change by both counts' absolute times, never by 4x minus 1x alone.
 
 ## Operator-triggered appearance review (reference checklist)
 

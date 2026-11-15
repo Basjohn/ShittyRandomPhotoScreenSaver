@@ -188,9 +188,6 @@ class ModeTarget:
     size: tuple[int, int] | None = None
     depth: bool = False
     samples: int = 1
-    #: D14 point 12: the content must outlive the frame, so its first run never clears through the load op (the
-    #: default, a fast clear, applies when the attachments share one clear value).
-    persist: bool = False
 
     def __post_init__(self) -> None:
         if not 1 <= len(self.colour) <= MAX_TARGET_COLOUR:
@@ -206,8 +203,6 @@ class ModeTarget:
             entry["depth"] = True
         if int(self.samples) != 1:
             entry["samples"] = int(self.samples)
-        if self.persist:
-            entry["persist"] = True
         return entry
 
 
