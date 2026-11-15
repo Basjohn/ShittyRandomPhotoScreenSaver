@@ -226,6 +226,7 @@ class QuickBubbleRenderer:
         # The trail samples in the block's std140 form (a vec3 element takes 16 bytes): the samples a frame uploads
         # are copied in, the rest keep what they held, as the uniform array's elements did.
         self._trail_block = np.zeros((_BUBBLE_TRAIL_SIZE // 3, 4), dtype=np.float32)
+        self._trail_samples_held = False      # the block's trail samples are a frame's (cleared on a frame without)
         self._layout_cache_key: tuple[object, ...] | None = None
         self._layout_cache: QuickBubbleLayout | None = None
 
@@ -371,9 +372,17 @@ class QuickBubbleRenderer:
             samples = payload.bubble_count * 3
             self._trail_block[:samples, :3] = trail_buffer[:samples * 3].reshape(samples, 3)
             values["u_bubbles_trail"] = self._trail_block.tobytes()
+            self._trail_samples_held = True
         else:
             trail_strength = 0.0
             tail_opacity = 0.0
+            if self._trail_samples_held:
+                # No trail samples this frame: the ghost pass reads the oldest sample whatever the wake does, so an
+                # earlier frame's samples would draw a ghost frozen where that frame left it (R-225). Cleared once at
+                # this edge; nothing is written again while the trails stay inactive.
+                self._trail_block.fill(0.0)
+                values["u_bubbles_trail"] = self._trail_block.tobytes()
+                self._trail_samples_held = False
         values["u_trail_strength"] = trail_strength
         values["u_tail_opacity"] = tail_opacity
         values["u_trail_radial_scale"] = layout.trail_radial_scale
