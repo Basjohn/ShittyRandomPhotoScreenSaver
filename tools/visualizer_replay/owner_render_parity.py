@@ -347,21 +347,20 @@ def card_placement(name: str):
 #: interpolation between the core's triangle and the Python quad (each within 4e-3 of a device pixel of its rounding
 #: boundary): within RULE_A_EDGE_LEVEL, at most RULE_A_EDGE_PIXELS_PER_FRAME pixels above the fill level in one frame
 #: (the measured worst, 7 in one frame of Spline Curve's widened run set and overscan runs on 15 Nov, times 1.5, whole
-#: pixels). The modes in RULE_A_EXACT_MODES stay exact (Spectrum: opaque bars, proved byte for byte in N2.5).
+#: pixels). One rule for every mode drawn through the composite, Spectrum included (lead, 15 Nov: its translucent bars
+#: and glow pass through the same surface; its owner runs sit at exactly 1 level with no edge pixel).
 RULE_A_FILL_LEVEL = 1
 RULE_A_EDGE_LEVEL = 3
 RULE_A_EDGE_PIXELS_PER_FRAME = 10
-RULE_A_EXACT_MODES = frozenset({"spectrum"})
 
 
 def rule_a_verdict(mode: str, rows: list[dict]) -> dict:
-    """Rule (a) over ``rows`` (``frame_differences``' per-input rows: pixels, max_level, levels): exact for
-    RULE_A_EXACT_MODES, else within the composite's tolerance. Returns pass, the bound applied and the worst figures."""
+    """Rule (a) over ``rows`` (``frame_differences``' per-input rows: pixels, max_level, levels) for ``mode``, within
+    the composite's tolerance (one rule for every composite mode). Returns pass, the bound and the worst figures."""
+    del mode                                       # one rule for all composite content
     above = [sum(count for level, count in row["levels"].items() if int(level) > RULE_A_FILL_LEVEL) for row in rows]
     worst_level = max((row["max_level"] for row in rows), default=0)
     worst_edge = max(above, default=0)
-    if mode in RULE_A_EXACT_MODES:
-        return {"bound": "exact", "pass": not rows, "max_level": worst_level, "edge_pixels_worst_frame": worst_edge}
     # A row's level histogram keeps its first 8 levels; any level beyond them is above RULE_A_EDGE_LEVEL and fails by
     # max_level.
     return {"bound": {"fill_level": RULE_A_FILL_LEVEL, "edge_level": RULE_A_EDGE_LEVEL,

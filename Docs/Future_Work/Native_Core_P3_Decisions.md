@@ -914,12 +914,14 @@ the surface stays premultiplied.
 composite's premultiplied surface, rule (a) is: fill pixels within 1 level (the surface's extra rounding of the
 premultiplied product), plus edge pixels within 3 levels, at most 10 in a frame (the measured worst, 7, times 1.5:
 float32 interpolation between the core's triangle and the Python quad, each such pixel within 4e-3 of a device pixel of
-its rounding boundary). Spectrum stays exact. The proof: `.artifacts/evidence/native_core/n5_1_devcurve/
+its rounding boundary). It covers every mode drawn through the composite, Spectrum included (lead, 15 Nov: its
+translucent bars and glow pass through the same premultiplied surface; N2.5's "exact" was its own harness's
+comparison, not the owner route). The proof: `.artifacts/evidence/native_core/n5_1_devcurve/
 20261115_rule_a_per_pixel/` (`pixel_proof.json`, its script). Encoded once, `owner_render_parity.py` `RULE_A_*` and
-`rule_a_verdict` (used by `devcurve_check.py`). Bubble and the Oscilloscope inherit it when ported. Open (15 Nov):
-under the same verdict Spectrum is not exact: every frame within 1 level (6.3M to 17.6M pixels over a run, none above
-1), the same figures with the route as it was before N5.1, so it predates this work; Spectrum's bound is the lead's
-call.
+`rule_a_verdict` (used by `devcurve_check.py`). Bubble and the Oscilloscope inherit it when ported. Spectrum's owner
+runs (variants a and b, display and overscan) pass under it: 6.3M to 17.6M pixels over a run, every one at exactly 1
+level, no edge pixel; the same figures with the route as it was before N5.1
+(`.artifacts/evidence/native_core/n5_1_devcurve/20261115_rule_a_spectrum_tolerance/`, `..._spectrum_base_route/`).
 
 ## D13. The fullscreen pass and image sampling as a primitive (N4.a, 14 Nov 2026; proposed by the High agent)
 
