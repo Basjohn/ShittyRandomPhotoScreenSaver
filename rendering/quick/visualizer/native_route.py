@@ -88,10 +88,10 @@ _AMBIENT_IDLE_SIZE = (1, 1)
 
 
 def _bubble_target_sizes(snapshot: Any, settings: dict) -> dict:
-    """The ambient target's size: its content's (``u_ambient_px``) while the ambience's Settings are on."""
-    from widgets.spotify_visualizer.bubble_ambient import BubbleAmbientSimulation
-
-    if not BubbleAmbientSimulation.enabled(snapshot.logical.mode_state.parameters):
+    """The ambient target's size: its content's (``u_ambient_px``) while the drawn frame carries ambient points (the
+    simulation publishes them only while the ambience's Settings are on; its enable switches are read from the runtime's
+    own settings, whose keys the frame's parameters do not share)."""
+    if not snapshot.logical.mode_state.ambient_points:
         return {BUBBLE_AMBIENT_TARGET: _AMBIENT_IDLE_SIZE}
     width, height = settings["u_ambient_px"]
     return {BUBBLE_AMBIENT_TARGET: (int(width), int(height))}

@@ -225,10 +225,15 @@ def test_the_ambient_target_follows_its_content_and_rests_at_the_smallest_with_t
     settings = _settings(snapshot.logical, presentation, card)
     width, height, _scale = ambient_target_size(card["content_rect"], presentation.dpr)
     assert sizer(snapshot, settings) == {"ambient": (width, height)}
+    # A frame without ambient points (the ambience off) rests the target at the smallest size.
+    quiet = SimpleNamespace(logical=_logical(ambient=False), presentation=presentation)
+    assert sizer(quiet, settings)["ambient"] < (width, height)
+    # Control (the owner run's defect, 15 Nov): the frame's parameters with every ambience switch off still draw the
+    # target at its content's size while the frame carries points (the switches are the runtime's, not the frame's).
     off = {name: False for name in ("bubble_microbubble_stream", "bubble_microbubble_drift", "bubble_particle_stream",
                                     "bubble_particle_drift", "bubble_particle_glow")}
-    quiet = SimpleNamespace(logical=_logical(ambient=False, **off), presentation=presentation)
-    assert sizer(quiet, settings)["ambient"] < (width, height)
+    carried = SimpleNamespace(logical=_logical(**off), presentation=presentation)
+    assert sizer(carried, settings) == {"ambient": (width, height)}
 
 
 # ------------------------------------------------------------------------------------------------- the route
