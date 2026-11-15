@@ -375,8 +375,9 @@ class NativeMode:
 
     def target_size(self, name: str, size: tuple[int, int]) -> None:
         """N3.1: an explicit-size scene target's size (Bubble's ambient target follows its card) with no new program;
-        the core's allocation follows at the next record. ValueError for a target the program does not declare with an
-        explicit size."""
+        the core's allocation follows at the next record, until the next :meth:`program`, whose declarations size its
+        targets again (``state()["target_sizes"]`` holds the sizes set since the program). ValueError for a target the
+        program does not declare with an explicit size."""
         self._module.composite_mode_target_size(self._handle(), str(name), (int(size[0]), int(size[1])))
 
     def read_targets(self) -> None:

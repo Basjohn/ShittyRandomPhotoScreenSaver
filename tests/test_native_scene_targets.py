@@ -291,6 +291,38 @@ def test_the_admission_refuses_with_its_reasons(core, packs, qt_app):
 
 @built
 @pytest.mark.qt
+def test_a_new_program_clears_the_sizes_set_before_it(core, packs, qt_app):
+    """Audit 2, M3: an explicit size set through ``target_size`` holds until the next program, whose declarations size
+    its targets (before the fix the old size went on being drawn: the audit's probe drew 400 x 220 for a program
+    declaring 500 x 280)."""
+    import scene_targets
+    from PySide6.QtQuick import QQuickItem
+
+    parent = QQuickItem()
+    mode = core.mode(parent)
+    try:
+        mode.still()
+        settings = scene_targets.settings(ambient_size=(300, 170))
+        mode.program(scene_targets.passes(packs), settings, targets=scene_targets.targets(ambient_size=(300, 170)))
+        assert mode.state()["target_sizes"] == {}
+        mode.target_size("ambient", (400, 220))
+        assert mode.state()["target_sizes"] == {"ambient": [400, 220]}       # the control: the size is held
+        mode.program(scene_targets.passes(packs), settings, targets=scene_targets.targets(ambient_size=(500, 280)))
+        assert mode.state()["target_sizes"] == {}
+        declared = {t["name"]: t["size"] for t in mode.state()["program"]["targets"]}
+        assert declared["ambient"] == [500, 280]
+        # A refused program keeps the program and the sizes set for it.
+        mode.target_size("ambient", (410, 230))
+        with pytest.raises(ValueError):
+            mode.program(scene_targets.passes(packs), {"u_no_such_member": 1.0},
+                         targets=scene_targets.targets(ambient_size=(520, 290)))
+        assert mode.state()["target_sizes"] == {"ambient": [410, 230]}
+    finally:
+        mode.composite.destroy()
+
+
+@built
+@pytest.mark.qt
 def test_the_nearest_resolve_is_admitted_where_it_applies(core, packs, qt_app):
     """D14 point 10: the lin program (a nearest R32F attachment and a sampled depth) is admitted with both read; a
     nearest attachment in first place (the capture's averaged colour) is refused with its reason."""

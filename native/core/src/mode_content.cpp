@@ -1399,6 +1399,9 @@ bool ModeSource::setProgram(const ModeProgram &program, const QJsonObject *setti
     m_program = program;
     m_packedSettings = packed;
     m_ready = ready;
+    // N3.1 audit 2, M3: the new program's declarations size its targets; a size set through setTargetSize before it
+    // was the old program's.
+    m_targetSizes.clear();
     ++m_generation;
     ++m_buildGeneration;
     return true;
@@ -1693,6 +1696,10 @@ void ModeSource::stateInto(QJsonObject &o) const
     o.insert(QStringLiteral("schema"), m_schema ? QJsonValue(m_schema->toJson()) : QJsonValue());
     o.insert(QStringLiteral("still"), m_still);
     o.insert(QStringLiteral("program"), m_program.toJson());
+    QJsonObject targetSizes;                  // N3.1: the explicit sizes set since the program (audit 2, M3)
+    for (const TargetDeclaration &set : m_targetSizes)
+        targetSizes.insert(QString::fromLatin1(set.name), QJsonArray { set.size.width(), set.size.height() });
+    o.insert(QStringLiteral("target_sizes"), targetSizes);
     o.insert(QStringLiteral("settings"), m_hasSettings ? QJsonValue(m_settings) : QJsonValue());
     o.insert(QStringLiteral("ready"), m_ready);
     o.insert(QStringLiteral("card"), m_card.toJson());
