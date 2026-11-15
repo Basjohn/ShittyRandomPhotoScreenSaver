@@ -968,6 +968,20 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
         }
         program.passes.append(pass);
     }
+    // D14 point 12: a target that a later run loads again (recordPasses' runs: consecutive passes on one target, broken
+    // by a capture or another target).
+    int runs[kMaxSceneTargets] = {};
+    for (int i = 0; i < int(program.passes.size()); ++i) {
+        const ModePass &pass = program.passes.at(i);
+        if (pass.capture || pass.target < 0)
+            continue;
+        const bool continues = i > 0 && !program.passes.at(i - 1).capture
+            && program.passes.at(i - 1).target == pass.target;
+        if (!continues)
+            ++runs[pass.target];
+    }
+    for (int t = 0; t < int(program.targets.size()) && t < kMaxSceneTargets; ++t)
+        program.targets[t].reloaded = runs[t] > 1;
     // N3.1: a capture is read only after a capture step of its target made it in the same record.
     bool captured[kMaxSceneTargets] = {};
     for (const ModePass &pass : program.passes) {
@@ -2829,7 +2843,7 @@ bool ModeContent::syncTargets(QRhi *rhi, const ColorTarget &target, QString *err
     return true;
 }
 
-void ModeContent::recordNearest(QRhiCommandBuffer *cb, int target, int last, bool readback)
+void ModeContent::recordNearest(QRhiCommandBuffer *cb, int target, int last, bool readback, bool fastRun)
 {
     const SceneTargets::Target &t = *m_targets.target(target);
     if (t.samples <= 1)
@@ -2847,8 +2861,10 @@ void ModeContent::recordNearest(QRhiCommandBuffer *cb, int target, int last, boo
             laterRun = true;
             break;
         }
-        if (later.capture && later.target == target)
+        if (later.capture && later.target == target) {
             needed[kNearestDepthSlot] = true;
+            needed[0] = true;                       // the capture's colour (an average slot after a fast run)
+        }
         for (const PassSampler &s : later.samplers) {
             const qsizetype dot = s.texture.indexOf('.');
             if (dot <= 0 || s.texture.left(dot) != t.decl.name)
@@ -2867,6 +2883,8 @@ void ModeContent::recordNearest(QRhiCommandBuffer *cb, int target, int last, boo
         const Resources::NearestResolve &n = r.nearest[target][s];
         if (!n.pipeline || !t.nearestTarget[s] || !(needed[s] || (readback && !laterRun)))
             continue;
+        if (t.averageSlot(s) && !fastRun)
+            continue;                               // a loading run resolved it through QRhi at its end
         cb->beginPass(t.nearestTarget[s].get(), QColor(255, 0, 0, 255), { 1.0f, 0 });
         cb->setGraphicsPipeline(n.pipeline.get());
         cb->setViewport(whole);
@@ -2937,7 +2955,8 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             // N3.1: a run on a scene target: its attachments primed for the load (rule C, depth too), cleared by a draw
             // over the whole allocation at its first run of the record, the passes over its content viewport.
             SceneTargets::Target &t = *m_targets.target(pass.target);
-            if (!cleared[pass.target] && t.clearTarget) {
+            const bool fastRun = !cleared[pass.target] && t.clearTarget;
+            if (fastRun) {
                 // D14 point 12: the first run clears through its load op (a fast clear): no load, so no prime and no
                 // clearing draw; every attachment to the one shared clear value, the depth to the far plane.
                 const float *c = t.decl.colour.at(0).clear;
@@ -2971,7 +2990,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                 cb->draw(3);
             }
             cb->endPass();
-            recordNearest(cb, pass.target, last, readback); // D14 point 10: what a later pass or the readback reads
+            recordNearest(cb, pass.target, last, readback, fastRun); // D14 points 10, 12: what a later pass reads
         }
         i = last + 1;
     }
@@ -3070,10 +3089,13 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
             if (r.targetClears[t].block)
                 updates->updateDynamicBuffer(r.targetClears[t].block.get(), 0, kClearBlockBytes, values);
             // D14 point 10: the nearest resolves' blocks (the target's samples; the harness's sample-0 control).
-            const qint32 nearestBlock[4] = { scene ? scene->samples : 1, nearestFirstSample() ? 1 : 0, 0, 0 };
+            // uMode: 0 the minimum, 1 sample 0 alone (the harness's control), 2 the average (D14 point 12's slots).
             for (int s = 0; s < kNearestSlots; ++s) {
-                if (r.nearest[t][s].block)
-                    updates->updateDynamicBuffer(r.nearest[t][s].block.get(), 0, kNearestBlockBytes, nearestBlock);
+                if (!r.nearest[t][s].block)
+                    continue;
+                const qint32 mode = scene && scene->averageSlot(s) ? 2 : (nearestFirstSample() ? 1 : 0);
+                const qint32 nearestBlock[4] = { scene ? scene->samples : 1, mode, 0, 0 };
+                updates->updateDynamicBuffer(r.nearest[t][s].block.get(), 0, kNearestBlockBytes, nearestBlock);
             }
         }
         const ModeProgram &program = m_source->drawnProgram();

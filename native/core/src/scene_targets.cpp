@@ -134,7 +134,8 @@ int targetFormatBytes(TargetFormat format)
 bool TargetDeclaration::sameLayout(const TargetDeclaration &o) const
 {
     if (name != o.name || depth != o.depth || depthRead != o.depthRead || depthSampled != o.depthSampled
-        || samples != o.samples || capture != o.capture || persist != o.persist || colour.size() != o.colour.size()
+        || samples != o.samples || capture != o.capture || persist != o.persist || reloaded != o.reloaded
+        || colour.size() != o.colour.size()
         || surfaceSized() != o.surfaceSized())
         return false;
     for (qsizetype i = 0; i < colour.size(); ++i) {
@@ -200,6 +201,7 @@ QJsonObject TargetDeclaration::toJson() const
     o.insert(QStringLiteral("samples"), samples);
     o.insert(QStringLiteral("capture"), capture);
     o.insert(QStringLiteral("persist"), persist);
+    o.insert(QStringLiteral("reloaded"), reloaded);
     o.insert(QStringLiteral("fast_clear"), fastClear());
     return o;
 }
@@ -491,7 +493,17 @@ bool SceneTargets::Target::nearestActive(int slot) const
         return false;
     if (slot == kNearestDepthSlot)
         return decl.depth && decl.depthRead;
-    return slot >= 0 && slot < int(decl.colour.size()) && decl.colour.at(slot).nearest && decl.colour.at(slot).read;
+    if (slot < 0 || slot >= int(decl.colour.size()) || !decl.colour.at(slot).read)
+        return false;
+    return decl.colour.at(slot).nearest || averageSlot(slot);
+}
+
+bool SceneTargets::Target::averageSlot(int slot) const
+{
+    // D14 point 12: a read colour attachment of a multisampled, fast-cleared target that a later run loads: its first
+    // run's resolve is the core's average (the twin resolves nothing; see step()).
+    return samples > 1 && slot >= 0 && slot < int(decl.colour.size()) && decl.colour.at(slot).read
+        && !decl.colour.at(slot).nearest && decl.reloaded && decl.fastClear();
 }
 
 QRhiTexture *SceneTargets::Target::nearestSource(int slot) const
@@ -736,7 +748,19 @@ bool SceneTargets::step(Target &t, int index, QString *error)
             t.clearTarget.reset();
             t.clearRenderPass.reset();
             if (t.decl.fastClear()) {
-                t.clearTarget.reset(rhi->newTextureRenderTarget(description));
+                // A multisampled target loaded again by a later run: QRhi's Vulkan backend stores a multisampled colour
+                // attachment that has a resolve only when its contents are preserved (build round 4's persist control:
+                // the second run loaded undefined samples), so the twin resolves nothing and the core's average resolve
+                // makes what a pass reads before the next run (D14 point 12). Vulkan ignores the resolve references
+                // in a single-subpass render pass's compatibility.
+                QRhiTextureRenderTargetDescription twin = description;
+                if (t.samples > 1 && t.decl.reloaded) {
+                    QList<QRhiColorAttachment> plain;
+                    for (int i = 0; i < colourCount; ++i)
+                        plain.append(QRhiColorAttachment(t.colour[i].get()));
+                    twin.setColorAttachments(plain.cbegin(), plain.cend());
+                }
+                t.clearTarget.reset(rhi->newTextureRenderTarget(twin));
                 t.clearTarget->setName(label + QByteArrayLiteral(" cleared"));
                 t.clearRenderPass.reset(t.clearTarget->newCompatibleRenderPassDescriptor());
                 t.clearTarget->setRenderPassDescriptor(t.clearRenderPass.get());

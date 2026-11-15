@@ -92,6 +92,7 @@ struct TargetDeclaration
     int samples = 1;                  // the request (1 to kMaxSceneSamples)
     bool capture = false;             // derived: a capture step reads this target
     bool persist = false;             // "persist": its content must outlive the frame (no fast clear; D14 point 12)
+    bool reloaded = false;            // derived: a later run of the program loads the target again (a capture split)
 
     bool surfaceSized() const { return size.isEmpty(); }
     // D14 point 12: the first run clears through its load op (no persist, one shared clear value QColor holds exactly).
@@ -212,6 +213,9 @@ public:
         QRhiTexture *readableDepth() const;
         // A nearest resolve slot in use (multisampled, and read): its multisampled source and its R32F destination.
         bool nearestActive(int slot) const;
+        // D14 point 12: the slot is a colour attachment resolved by the core's average after the fast-cleared first
+        // run (a multisampled target loaded again later), not by the minimum.
+        bool averageSlot(int slot) const;
         QRhiTexture *nearestSource(int slot) const;
         QRhiTexture *nearestDest(int slot) const;
     };

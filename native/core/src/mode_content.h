@@ -505,8 +505,9 @@ private:
     // D14 point 10: a nearest resolve's bindings (its block, the conventions, the multisampled source).
     bool nearestBindings(const Resources &r, int target, int slot, QList<QRhiShaderResourceBinding> *out) const;
     // D14 point 10: after a run of passes on `target` ending at pass `last`, the nearest resolves a later pass reads (or
-    // the readback, after the target's last run).
-    void recordNearest(QRhiCommandBuffer *cb, int target, int last, bool readback);
+    // the readback, after the target's last run). `fastRun`: the run was the fast-cleared first one, after which the
+    // core's average resolves stand in for QRhi's (D14 point 12).
+    void recordNearest(QRhiCommandBuffer *cb, int target, int last, bool readback, bool fastRun);
     // N3.1: the program's targets at this surface's size, allocated (every step, until N3.6 spaces them); false with the
     // reason (the content's failure).
     bool syncTargets(QRhi *rhi, const ColorTarget &target, QString *error);

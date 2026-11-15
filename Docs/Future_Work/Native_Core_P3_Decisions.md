@@ -1116,6 +1116,14 @@ to the GL limits.
     every attachment declares the same clear value and QColor holds it exactly (16 bits a channel: 0 and 1 always);
     otherwise the clearing draw stays. Parity stays exact (rule (a) 5 exact, rule (b) 16 exact), validation clean,
     the depth-prime control passing; the goal is Python's 4x minus 1x or better on both backends at 4K and 2560 x 1440.
+    `persist` stays an opt-out of the fast clear only (today's path also clears at the first run of every record); a
+    true cross-frame persist (no clear at all) is decided when a consumer such as trails exists (N4.i).
+    Build round 4 found that QRhi's Vulkan backend stores a multisampled colour attachment that has a resolve only when
+    its contents are preserved: a fast-cleared first run with QRhi's resolves left the second run loading undefined
+    samples (NaN in the final resolve at 2x, 4x and 8x; the persist control caught it, OpenGL unaffected). Round 5: a
+    multisampled target that a later run loads (`reloaded`, derived from the program's runs) gets a twin without
+    resolves, and the core's resolve pass averages the colour attachments a pass reads before the next run (uMode 2 of
+    `scene_nearest.frag`); its later runs keep QRhi's resolves.
 
 **As built (N3.1, 15 Nov 2026).** `native/core/src/scene_targets.*` holds the rules (`bucketPixels`, `nextAllocation`,
 `contentViewport`, `clampSamples`) and `SceneTargets`, the content's owner; `rendering/native/scene_targets.py` mirrors

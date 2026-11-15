@@ -249,6 +249,7 @@ def test_the_harness_program_is_admitted_with_its_reads(core, packs, qt_app):
     scene, ambient = layout["targets"]
     assert scene["capture"] and scene["depth_read"] and scene["colour"][0]["read"]
     assert not scene["colour"][1]["read"]                                       # emission: never sampled
+    assert scene.get("reloaded") is True and ambient.get("reloaded") is False  # the capture splits the scene's runs
     assert ambient["colour"][0]["read"] and ambient["colour"][1]["read"]
     by_name = {p["name"]: p for p in layout["passes"]}
     assert by_name["planes"]["frag_depth"] and by_name["planes"]["target"] == "scene"

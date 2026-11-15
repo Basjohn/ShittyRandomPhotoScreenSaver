@@ -378,10 +378,10 @@ def round_parity(core, engine, app, api: str, packs: dict, out: Path) -> dict:
                 persist_scene.close(app)
                 host.frames(2)
                 host_check._flush_deletes(app)
-            same = {key: compare(fast[key], persisted[key])["exact"] for key in fast}
+            same = {key: compare(fast[key], persisted[key]) for key in fast if key in persisted}
             facts[f"persist_control_x{samples}"] = same
             checks[f"persist_control_x{samples}_draws_the_same_through_the_clearing_draw"] = (
-                all(same.values()) and set(fast) == set(persisted)
+                all(c["exact"] for c in same.values()) and set(fast) == set(persisted)
                 and not any(t.get("clear_target") for t in persist_state))
     finally:
         host.close()
