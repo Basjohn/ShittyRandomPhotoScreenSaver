@@ -1842,20 +1842,21 @@ PyObject *mode_blocks(PyObject *, PyObject *args)
     float correction[16] = {};
     const bool corrected = correctionArgument && correctionArgument != Py_None;
     if (corrected) {
-        PyObject *sequence = PySequence_Fast(correctionArgument, "a clip correction is 16 numbers");
-        if (!sequence)
-            return nullptr;
-        if (PySequence_Fast_GET_SIZE(sequence) != 16) {
-            Py_DECREF(sequence);
+        // The limited API's function forms (the module builds against it), as the other sequence arguments here.
+        if (!PySequence_Check(correctionArgument) || PySequence_Size(correctionArgument) != 16) {
             PyErr_SetString(PyExc_ValueError, "a clip correction is 16 numbers (column-major)");
             return nullptr;
         }
         for (Py_ssize_t k = 0; k < 16; ++k) {
-            correction[k] = float(PyFloat_AsDouble(PySequence_Fast_GET_ITEM(sequence, k)));
+            PyObject *item = PySequence_GetItem(correctionArgument, k); // a new reference
+            if (!item)
+                return nullptr;
+            const double value = PyFloat_AsDouble(item);
+            Py_DECREF(item);
+            if (PyErr_Occurred())
+                return nullptr;
+            correction[k] = float(value);
         }
-        Py_DECREF(sequence);
-        if (PyErr_Occurred())
-            return nullptr;
     }
     const QSharedPointer<const srpss_core::RuntimeSchema> schema = schemaArgument(schemaJson, schemaLength);
     srpss_core::ModeProgram program;
