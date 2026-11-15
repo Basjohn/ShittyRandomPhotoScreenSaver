@@ -182,6 +182,7 @@ QJsonObject TargetDeclaration::toJson() const
     o.insert(QStringLiteral("depth_read"), depthRead);
     o.insert(QStringLiteral("depth_sampled"), depthSampled);
     o.insert(QStringLiteral("samples"), samples);
+    o.insert(QStringLiteral("previous_frame"), previousFrame);
     o.insert(QStringLiteral("capture"), capture);
     return o;
 }
@@ -192,14 +193,15 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
                                          "\"colour\": [{\"name\", \"format\": rgba8, rgba16f, r16f or r32f, "
                                          "\"clear\"?: [r, g, b, a], \"resolve\"?: average or nearest}, 1 to %1], "
                                          "\"depth\"?: true or false, "
-                                         "\"samples\"?: 1 to %2}").arg(kMaxTargetColour).arg(kMaxSceneSamples);
+                                         "\"samples\"?: 1 to %2, \"previous_frame\"?: true or false}")
+                                .arg(kMaxTargetColour).arg(kMaxSceneSamples);
     if (!value.isObject()) {
         *error = shape;
         return false;
     }
     const QJsonObject o = value.toObject();
     const QStringList keys = { QStringLiteral("name"), QStringLiteral("size"), QStringLiteral("colour"),
-                               QStringLiteral("depth"), QStringLiteral("samples") };
+                               QStringLiteral("depth"), QStringLiteral("samples"), QStringLiteral("previous_frame") };
     for (auto it = o.begin(); it != o.end(); ++it) {
         if (!keys.contains(it.key())) {
             *error = QStringLiteral("unknown target key '%1': %2").arg(it.key(), shape);
@@ -303,6 +305,20 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
             return false;
         }
         d.samples = int(n);
+    }
+    const QJsonValue previous = o.value(QStringLiteral("previous_frame"));
+    if (!previous.isUndefined() && !previous.isBool()) {
+        *error = QStringLiteral("target '%1': previous_frame is true or false").arg(label);
+        return false;
+    }
+    d.previousFrame = previous.toBool(false);
+    if (d.previousFrame && d.samples > 1) {
+        // Audit 2, M4: a multisampled target's nearest resolves are made after the runs that read them, so a pass
+        // before its first run would read memory nothing wrote.
+        *error = QStringLiteral("target '%1' is read as the frame before only single-sampled (it requests %2 "
+                                "samples: before its first run a pass would read resolves nothing wrote)")
+                     .arg(label).arg(d.samples);
+        return false;
     }
     *out = d;
     return true;

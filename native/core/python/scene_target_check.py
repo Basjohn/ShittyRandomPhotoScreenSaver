@@ -359,12 +359,71 @@ def round_parity(core, engine, app, api: str, packs: dict, out: Path) -> dict:
                 host.frames(2)
                 host_check._flush_deletes(app)
         host.set_device_pixel_ratio(1.0)
+        result = _previous_frame(core, engine, app, host, packs)
+        facts["previous_frame"] = result["facts"]
+        checks.update({f"previous_frame_{k}": v for k, v in result["checks"].items()})
     finally:
         host.close()
         host_check._flush_deletes(app)
     _save(out, f"parity_{api}", frames)
     _sheet(out, api, frames)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def _previous_frame(core, engine, app, host, packs: dict) -> dict:
+    """Audit 2, M4: a pass sampling a target before any pass of the frame drew it. Refused unless the target declares
+    ``previous_frame``, and refused when that target is multisampled. Declared at one sample, it reads the frame
+    before: the probe pass writes what it sampled into a target of its own, so the proof is the pass's own read and
+    never a readback's forced resolve. Three readback records, the nearer plane's colour changed between each: the
+    probe of each equals the scene of the record before (clamped as the probe writes it) and, the control, differs
+    from its own record's scene."""
+    import numpy as np
+
+    st = _scene_module()
+    checks, facts = {}, {}
+
+    def refused(passes, targets) -> str:
+        try:
+            core.mode_program_layout(passes, targets)
+        except ValueError as exc:
+            return str(exc)
+        return ""
+
+    undeclared = refused(*st.previous_frame_program(packs, declared=False)[:2])
+    multisampled = refused(*st.previous_frame_program(packs, samples=4)[:2])
+    admitted = refused(*st.previous_frame_program(packs)[:2])
+    facts["refusals"] = {"undeclared": undeclared, "declared_at_4x": multisampled, "declared_at_1x": admitted}
+    checks["undeclared_read_before_any_draw_refused"] = "before any pass of the frame drew" in undeclared
+    checks["declared_at_4x_refused"] = "only single-sampled" in multisampled
+    checks["declared_at_1x_admitted"] = admitted == ""
+    passes, targets, values = st.previous_frame_program(packs)
+    colours = ([0.1, 0.6, 0.9, 1.0], [0.6, 0.2, 0.3, 1.0], [0.1, 0.6, 0.9, 1.0])
+    scene = Scene(core, engine, host, CARD, 1.0, packs, passes=passes, targets=targets,
+                  settings=dict(values, u_nearer_colour=colours[0]))
+    reads = []
+    try:
+        reads.append(scene.targets(app))
+        for colour in colours[1:]:
+            scene.mode.settings(dict(values, u_nearer_colour=colour))
+            reads.append(scene.targets(app))
+    finally:
+        scene.close(app)
+        host.frames(2)
+        host_check._flush_deletes(app)
+
+    def rgb(entry):
+        return np.clip(_content(entry).astype(np.float32)[..., :3], 0.0, 1.0)
+
+    equal, control = [], []
+    for before, now in zip(reads, reads[1:]):
+        probe = _content(now["probe.colour"]).astype(np.float32)[..., :3]
+        equal.append(float(np.abs(probe - rgb(before["scene.colour"])).max()))
+        control.append(int((np.abs(probe - rgb(now["scene.colour"])).max(axis=2) > 1e-3).sum()))
+    facts["probe_minus_the_scene_before_max"] = equal
+    facts["probe_pixels_off_its_own_records_scene"] = control
+    checks["declared_at_1x_reads_the_frame_before"] = all(e == 0.0 for e in equal)
+    checks["control_the_frames_differ"] = all(c > 0 for c in control)
+    return {"checks": checks, "facts": facts}
 
 
 MASK_BAND = 0.08                   # D14 point 10's proof: each partial-coverage band's height (vUv)

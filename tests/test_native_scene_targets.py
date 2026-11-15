@@ -291,6 +291,29 @@ def test_the_admission_refuses_with_its_reasons(core, packs, qt_app):
 
 @built
 @pytest.mark.qt
+def test_a_target_read_before_any_pass_drew_it_is_declared_and_single_sampled(core, packs, qt_app):
+    """Audit 2, M4: a pass sampling a target before any pass of the frame drew it reads the frame before (at more than
+    one sample, resolves nothing wrote). Refused unless the target declares ``previous_frame``; the declaration is
+    refused on a multisampled target and on one no pass draws."""
+    import scene_targets
+
+    passes, targets, _values = scene_targets.previous_frame_program(packs)
+    layout = core.mode_program_layout(passes, targets)                             # declared, one sample: admitted
+    assert layout["targets"][0]["previous_frame"] is True
+    _refused(core, *scene_targets.previous_frame_program(packs, declared=False)[:2], "before any pass of the frame drew")
+    _refused(core, *scene_targets.previous_frame_program(packs, samples=4)[:2], "only single-sampled")
+    # A target declared and read but never drawn is refused alike: undeclared, then declared.
+    scene, probe = targets
+    undrawn = ModeTarget("scene", scene.colour, depth=True)
+    _refused(core, passes[:1], (undrawn, probe), "before any pass of the frame drew")
+    _refused(core, passes[:1], (scene, probe), "no pass draws into it")
+    # The control: the harness program reads its targets after their passes and declares nothing.
+    core.mode_program_layout(scene_targets.passes(packs), scene_targets.targets(samples=4))
+    assert ModeTarget("scene", scene.colour).declaration().get("previous_frame") is None
+
+
+@built
+@pytest.mark.qt
 def test_a_new_program_clears_the_sizes_set_before_it(core, packs, qt_app):
     """Audit 2, M3: an explicit size set through ``target_size`` holds until the next program, whose declarations size
     its targets (before the fix the old size went on being drawn: the audit's probe drew 400 x 220 for a program

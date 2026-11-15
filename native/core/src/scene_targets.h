@@ -89,6 +89,11 @@ struct TargetDeclaration
     bool depthRead = false;           // derived: a sampler or the capture reads the depth (its nearest resolve when multisampled)
     bool depthSampled = false;        // derived: a sampler reads the depth
     int samples = 1;                  // the request (1 to kMaxSceneSamples)
+    // Audit 2, M4: a pass may sample the target before any pass of the frame drew it (it reads the frame before) only
+    // when the target declares so, single-sampled only (a multisampled target's nearest resolves are made after the
+    // runs that read them: before its first run a pass would read memory nothing wrote). The first frame after an
+    // allocation reads what the new textures hold.
+    bool previousFrame = false;
     bool capture = false;             // derived: a capture step reads this target
 
     bool surfaceSized() const { return size.isEmpty(); }
@@ -99,7 +104,7 @@ struct TargetDeclaration
 };
 
 // {"name", "size": "surface" | [w, h], "colour": [{"name", "format", "clear"?: [r, g, b, a], "resolve"?: "average" |
-// "nearest"}, ...], "depth"?: bool, "samples"?: n}; false with the reason.
+// "nearest"}, ...], "depth"?: bool, "samples"?: n, "previous_frame"?: bool (single-sampled only)}; false with the reason.
 bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QString *error);
 
 // D14 point 2, choice A (GPU-free): the bucket of a size, and the next allocation for `needed` given `current` (empty:

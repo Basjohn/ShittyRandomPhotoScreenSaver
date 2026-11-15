@@ -944,8 +944,25 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                 || !parsePassTargetState(o, pass, program.targets, error))
                 return false;
             for (const PassSampler &s : pass.samplers) {
-                if (targetTextureName(s.texture) && !checkTargetSampler(pass, s, program.targets, error))
+                if (!targetTextureName(s.texture))
+                    continue;
+                if (!checkTargetSampler(pass, s, program.targets, error))
                     return false;
+                // Audit 2, M4: a target read before any pass of the frame drew it holds the frame before (and, at
+                // more than one sample, resolves nothing wrote): only where the target declares that it is read so.
+                const qsizetype dot = s.texture.indexOf('.');
+                const QByteArray attachment = s.texture.mid(dot + 1);
+                const int t = targetIndex(QString::fromLatin1(s.texture.left(dot)));
+                if (t >= 0 && !drawn[t] && attachment != "capture_colour" && attachment != "capture_depth"
+                    && !program.targets.at(t).previousFrame) {
+                    *error = QStringLiteral("pass '%1': the sampler '%2' reads '%3' before any pass of the frame drew "
+                                            "target '%4' (a target read as the frame before declares "
+                                            "\"previous_frame\": true)")
+                                 .arg(QString::fromLatin1(pass.name), QString::fromLatin1(s.name),
+                                      QString::fromLatin1(s.texture),
+                                      QString::fromLatin1(program.targets.at(t).name));
+                    return false;
+                }
             }
         }
         for (const ModePass &earlier : program.passes) {
@@ -967,6 +984,14 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
                 drawn[pass.target] = true;
         }
         program.passes.append(pass);
+    }
+    // Audit 2, M4: a target read as the frame before is one a pass of the frame draws (else nothing ever writes it).
+    for (int t = 0; t < int(program.targets.size()); ++t) {
+        if (program.targets.at(t).previousFrame && !drawn[t]) {
+            *error = QStringLiteral("target '%1' is read as the frame before, but no pass draws into it")
+                         .arg(QString::fromLatin1(program.targets.at(t).name));
+            return false;
+        }
     }
     // N3.1: a capture is read only after a capture step of its target made it in the same record.
     bool captured[kMaxSceneTargets] = {};
