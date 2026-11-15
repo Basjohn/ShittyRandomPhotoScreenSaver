@@ -518,6 +518,8 @@ bool ModeStorage::unchanged(const QList<StorageBufferDeclaration> &buffers, cons
     if (!m_retiring.isEmpty() || m_opCount != 0 || buffers.size() != m_buffers.size()
         || images.size() != m_images.size())
         return false;
+    if (!holds() && (m_clear || m_copy || m_opBlocks))
+        return false;                         // kernels with nothing to serve: the full sync releases them
     for (const StorageBufferDeclaration &decl : buffers) {
         double bytes = decl.bytes.number;
         if (decl.bytes.kind == DrawCount::Kind::Named) {
@@ -715,7 +717,7 @@ bool ModeStorage::sync(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QList<
             return false;
         }
     }
-    QList<Made *> made;                      // owned until phase 2 (Qt containers only)
+    QList<Made *> made;                       // owned until phase 2 (Qt containers only)
     QList<MadeImage *> madeImages;
     const auto drop = [&made, &madeImages]() {
         for (Made *m : made)
