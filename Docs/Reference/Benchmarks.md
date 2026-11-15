@@ -10,6 +10,7 @@ baseline is required), `Docs/Reference/Harness_Index.md` (all harnesses), `Docs/
 | Tool | Answers | Typical run |
 |---|---|---|
 | `tools/overhead_baseline.py` | What every showcase transition and Visualizer mode costs, before and after a change | 4-8 min (all), seconds (`--match`) |
+| `tools/preflip_pack.py` | The live-saver matrix (every mode and transition, two sizes, idle or `--load game60`) stored as a named baseline and compared per row; a thin driver over `visualizer_live_check.py` | `--list` prints rows and minutes; about 64 min a size idle, 79 loaded (lead, real displays) |
 | `tools/visualizer_cost_probe.py` | What one Visualizer mode costs with given parameters | ~10 s |
 | `tests/test_transition_lifecycle_contract.py` | Whether warm-up, park and release keep their contract (no timing) | ~6 s |
 | `tools/gl_object_ledger.py` | Which GL objects are alive (used by the contract; usable in any harness) | n/a |

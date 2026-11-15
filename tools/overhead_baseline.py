@@ -427,6 +427,8 @@ def main() -> int:
                                         "the file is named after it and comparisons cover only those cases")
     parser.add_argument("--compare", type=Path, help="older baseline to compare the new one against")
     parser.add_argument("--compare-only", nargs=2, type=Path, metavar=("OLD", "NEW"))
+    parser.add_argument("--out", type=Path, help="write the baseline here instead of tools/baselines/overhead/ "
+                                                 "(tools/preflip_pack.py reads its session control from a run of this)")
     args = parser.parse_args()
     if args.compare_only:
         old, new = (json.loads(p.read_text(encoding="utf-8")) for p in args.compare_only)
@@ -469,11 +471,11 @@ def main() -> int:
           f"{load.get('cpu_others_max', '?')}%), memory {load.get('memory_used_median', '?')}%, GPU busy "
           f"{load.get('gpu_util_median', '?')}% (max {load.get('gpu_util_max', '?')}%), GPU clock "
           f"{load.get('gpu_clock_mhz_median', '?')} MHz, {load.get('gpu_temp_c_median', '?')} C")
-    OUT.mkdir(parents=True, exist_ok=True)
     suffix = f"_{''.join(c if c.isalnum() else '-' for c in args.match)}" if args.match else ""
-    path = OUT / f"{_dt.date.today().isoformat()}_{data['commit']}{suffix}.json"
+    path = args.out or OUT / f"{_dt.date.today().isoformat()}_{data['commit']}{suffix}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=1) + "\n", encoding="utf-8")
-    print(f"\nwrote {path.relative_to(ROOT)}")
+    print(f"\nwrote {path.relative_to(ROOT) if path.is_relative_to(ROOT) else path}")
     if args.compare:
         return 1 if compare(json.loads(args.compare.read_text(encoding="utf-8")), data) else 0
     return 0
