@@ -1,0 +1,27 @@
+#version 440
+// N3.3 (D16 choice C): the core's copy kernel. QRhi has no buffer-to-buffer copy, so a resized storage buffer keeps its
+// prefix through this dispatch at its allocation edge only (compute_passes.h), never per frame. The groups are capped;
+// each invocation strides over the range.
+layout(local_size_x = 256) in;
+
+layout(std140, binding = 0) uniform StorageKernel {
+    uint uDstWord;
+    uint uSrcWord;
+    uint uWords;
+    uint uValue;
+};
+
+layout(std430, binding = 1) writeonly buffer StorageDst {
+    uint dstWords[];
+};
+
+layout(std430, binding = 2) readonly buffer StorageSrc {
+    uint srcWords[];
+};
+
+void main()
+{
+    uint stride = gl_NumWorkGroups.x * 256u;
+    for (uint i = gl_GlobalInvocationID.x; i < uWords; i += stride)
+        dstWords[uDstWord + i] = srcWords[uSrcWord + i];
+}

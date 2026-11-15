@@ -741,6 +741,29 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
                      f2.features.drawIndirectFirstInstance == VK_TRUE);
         facts.insert(QStringLiteral("shader_draw_parameters"), f11.shaderDrawParameters == VK_TRUE);
         facts.insert(QStringLiteral("device_name"), QString::fromUtf8(props.deviceName));
+        // N3.3 (D16 point 6): compute needs the graphics family's compute bit (QRhi::Compute), and a storage image its
+        // format's STORAGE_IMAGE feature (R16F needs the extended storage formats); read once here, never assumed.
+        facts.insert(QStringLiteral("queue_family_compute"), (families[family].queueFlags & VK_QUEUE_COMPUTE_BIT) != 0);
+        facts.insert(QStringLiteral("shader_storage_image_extended_formats"),
+                     f2.features.shaderStorageImageExtendedFormats == VK_TRUE);
+        facts.insert(QStringLiteral("max_compute_work_group_count_x"), double(props.limits.maxComputeWorkGroupCount[0]));
+        facts.insert(QStringLiteral("max_compute_work_group_invocations"),
+                     double(props.limits.maxComputeWorkGroupInvocations));
+        auto getFormat = inst->loader.get<PFN_vkGetPhysicalDeviceFormatProperties>(vk,
+                                                                                  "vkGetPhysicalDeviceFormatProperties");
+        if (getFormat) {
+            const struct { const char *name; VkFormat format; } storageFormats[] = {
+                { "rgba8", VK_FORMAT_R8G8B8A8_UNORM }, { "rgba16f", VK_FORMAT_R16G16B16A16_SFLOAT },
+                { "rgba32f", VK_FORMAT_R32G32B32A32_SFLOAT }, { "r16f", VK_FORMAT_R16_SFLOAT },
+                { "r32f", VK_FORMAT_R32_SFLOAT } };
+            QJsonObject storage;
+            for (const auto &f : storageFormats) {
+                VkFormatProperties fp = {};
+                getFormat(physDev, f.format, &fp);
+                storage.insert(QLatin1String(f.name), (fp.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0);
+            }
+            facts.insert(QStringLiteral("storage_image_formats"), storage);
+        }
         QMutexLocker lock(&g_factsMutex);
         g_deviceFacts.insert(out->m_device, facts);
     }
