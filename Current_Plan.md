@@ -676,8 +676,11 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     the 15 Nov pass did (about 10 minutes). A full capture (transitions both sizes, modes at the second size, idle and
     game60) is then about 30 minutes and may run while the displays are on, in chunks. Per-row mode stays for
     single-row reruns.
-  - [ ] Owed with it: the transitions at both sizes, and the modes at the second size (the 15 Nov pass ran at the
-    saver's own Visualizer display).
+  - [ ] Owed with it (operator, 15 Nov): five transitions only, a load comparison, since parity and regressions are
+    proved per port: the four heaviest by the 14 Nov overhead baseline (Exploding Tiles, Volumetric Dissolve,
+    Disintegrate, Jigsaw, the last also the heaviest prepare) and Crossfade as the light control. Invisible on
+    Display 1 only, never Display 0; idle and game60, about 2 minutes a state; plus the modes at a second size on
+    Display 1 if the invisible path gives one.
   - [ ] Conditions recorded with every figure: displays on or off, other processes' CPU and GPU, GPU clock and
     `nvidia-smi` state. Comparisons are within a session and control-relative (`Benchmarks.md` rules).
   - [ ] Stored as a named baseline (`tools/baselines/preflip/`) and summarised in `Docs/Reference/Benchmarks.md`; the
