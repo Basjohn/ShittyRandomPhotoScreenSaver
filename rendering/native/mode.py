@@ -473,6 +473,10 @@ class ModePass:
             entry["target"] = self.target
         if self.outputs:
             entry["attachments"] = [o.declaration() for o in self.outputs]
+            if self.sorted_pack is not None:
+                # A transparent pass: the accumulation's and the coverage's blends are the core's (D17 point 2), so
+                # their entries are {}; a borrowed attachment (location 2 on) keeps its declaration.
+                entry["attachments"][:2] = [{} for _ in entry["attachments"][:2]]
         if self.depth_test is not None:
             entry["depth"] = {"test": self.depth_test, "write": bool(self.depth_write)}
         return entry
