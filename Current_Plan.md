@@ -670,19 +670,8 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
     median/p90, swap gap, late %, hitches a minute, saver CPU % of a core, GPU ms per frame, RSS and private memory,
     first-2-seconds frames.
   - [ ] Idle and loaded. game60 is only with the operator's yes on the day, 10 minutes at most, lead only.
-  - [ ] Session mode for `tools/preflip_pack.py` (lead, 15 Nov): one saver session per size and state instead of one
-    process per row. Transitions cycle in a fixed order at a short interval and each one's window is cut from the
-    frame trace by its start and end events (about 28 x 4 s plus one startup, about 5 minutes per size); modes run as
-    the 15 Nov pass did (about 10 minutes). A full capture (transitions both sizes, modes at the second size, idle and
-    game60) is then about 30 minutes and may run while the displays are on, in chunks. Per-row mode stays for
-    single-row reruns.
-  - [ ] Owed with it (operator, 15 Nov): five transitions only, a load comparison, since parity and regressions are
-    proved per port: the four heaviest by the 14 Nov overhead baseline (Exploding Tiles, Volumetric Dissolve,
-    Disintegrate, Jigsaw, the last also the heaviest prepare) and Crossfade as the light control. Invisible on
-    Display 1 only, never Display 0; idle and game60, about 2 minutes a state; plus the modes at a second size on
-    Display 1 if the invisible path gives one.
-  - [ ] Conditions recorded with every figure: displays on or off, other processes' CPU and GPU, GPU clock and
-    `nvidia-smi` state. Comparisons are within a session and control-relative (`Benchmarks.md` rules).
+  - The 15 Nov capture is done: every mode and the five-transition load set, idle and game60, on Display 1
+    (`Benchmarks.md`, `tools/baselines/preflip/`); one size only (the saver takes its display's resolution).
   - [ ] Stored as a named baseline (`tools/baselines/preflip/`) and summarised in `Docs/Reference/Benchmarks.md`; the
     flip's acceptance reruns the same matrix on Vulkan and on native OpenGL and reports the gain per row.
 - [ ] N5.2h The background family switches on OpenGL (D10 point 4): presenter, backdrop and all 28 transitions
