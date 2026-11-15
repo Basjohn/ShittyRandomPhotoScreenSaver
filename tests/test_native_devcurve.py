@@ -272,6 +272,26 @@ def test_the_modules_block_is_the_python_renderers(dpr, qt_app):
     assert compared == 3 * (len(DEVCURVE_BLOCK.fields) - 1)
 
 
+def test_rule_a_is_exact_for_spectrum_and_the_composite_tolerance_for_a_translucent_mode():
+    # The lead's decision on N5.1's per-pixel proof: a translucent fill within the fill level, edge pixels within the
+    # edge level and at most the cap a frame; Spectrum exact. Bounds are read from the harness's own constants.
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    fill, edge, cap = parity.RULE_A_FILL_LEVEL, parity.RULE_A_EDGE_LEVEL, parity.RULE_A_EDGE_PIXELS_PER_FRAME
+
+    def row(levels: dict) -> dict:
+        return {"pixels": sum(levels.values()), "max_level": max(levels), "levels": {str(k): v for k, v in levels.items()}}
+
+    within = [row({fill: 100000, edge: cap})]
+    assert parity.rule_a_verdict("devcurve", within)["pass"]
+    assert parity.rule_a_verdict("devcurve", [])["pass"]
+    # Controls: one edge pixel too many in a frame, one level too far, and Spectrum with any difference.
+    assert not parity.rule_a_verdict("devcurve", [row({fill: 10, edge: cap + 1})])["pass"]
+    assert not parity.rule_a_verdict("devcurve", [row({fill: 10, edge + 1: 1})])["pass"]
+    assert not parity.rule_a_verdict("spectrum", [row({fill: 1})])["pass"]
+    assert parity.rule_a_verdict("spectrum", [])["pass"]
+
+
 # ------------------------------------------------------------------------------------------------- the route
 
 def test_a_self_animating_modes_frames_are_admitted_without_a_current_source():

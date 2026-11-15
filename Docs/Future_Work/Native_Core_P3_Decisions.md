@@ -906,8 +906,20 @@ contract; Vulkan within 1 level of OpenGL at dpr 1 and 1.5) and `tools/visualize
 --native --mode devcurve`. Rule (a) is not byte for byte, proved per pixel: the Python node's blend rounds once from
 the fragment's 8-bit straight colour and alpha, `round(s8 a8 / 255 + d (1 - a8 / 255))`; the native item rounds the
 premultiplied product into its surface first, `round(s8 a8 / 255)`, then the composite adds `d (1 - a8 / 255)` and
-rounds again. Only a straight-alpha surface (the pass blend `replace`) under a straight-alpha composite blend reproduces
-it, which is a C++ change of the composite (Current_Plan.md item 8b, the lead's call).
+rounds again. Only a straight-alpha surface under a straight-alpha composite blend would reproduce it, exact for
+single-pass content alone (overlapping translucent passes do not compose in straight alpha): refused (lead, 15 Nov);
+the surface stays premultiplied.
+
+**The composite tolerance for translucent modes (rule (a), lead's decision, 15 Nov).** For a mode drawn through the
+composite's premultiplied surface, rule (a) is: fill pixels within 1 level (the surface's extra rounding of the
+premultiplied product), plus edge pixels within 3 levels, at most 10 in a frame (the measured worst, 7, times 1.5:
+float32 interpolation between the core's triangle and the Python quad, each such pixel within 4e-3 of a device pixel of
+its rounding boundary). Spectrum stays exact. The proof: `.artifacts/evidence/native_core/n5_1_devcurve/
+20261115_rule_a_per_pixel/` (`pixel_proof.json`, its script). Encoded once, `owner_render_parity.py` `RULE_A_*` and
+`rule_a_verdict` (used by `devcurve_check.py`). Bubble and the Oscilloscope inherit it when ported. Open (15 Nov):
+under the same verdict Spectrum is not exact: every frame within 1 level (6.3M to 17.6M pixels over a run, none above
+1), the same figures with the route as it was before N5.1, so it predates this work; Spectrum's bound is the lead's
+call.
 
 ## D13. The fullscreen pass and image sampling as a primitive (N4.a, 14 Nov 2026; proposed by the High agent)
 

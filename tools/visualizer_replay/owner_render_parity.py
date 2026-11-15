@@ -340,6 +340,37 @@ def card_placement(name: str):
         _PLACED["name"] = "display"
 
 
+#: Rule (a)'s tolerance for a mode drawn through the composite's premultiplied surface (lead's decision, N5.1 review;
+#: the per-pixel proof: .artifacts/evidence/native_core/n5_1_devcurve/20261115_rule_a_per_pixel/, D12 "As built: Spline
+#: Curve"). The Python node rounds once, round(s8 a8 / 255 + d (1 - a8 / 255)); the native item rounds the premultiplied
+#: product into its surface first, so a translucent fill pixel may sit RULE_A_FILL_LEVEL off. Edge pixels flip on float32
+#: interpolation between the core's triangle and the Python quad (each within 4e-3 of a device pixel of its rounding
+#: boundary): within RULE_A_EDGE_LEVEL, at most RULE_A_EDGE_PIXELS_PER_FRAME pixels above the fill level in one frame
+#: (the measured worst, 7 in one frame of Spline Curve's widened run set and overscan runs on 15 Nov, times 1.5, whole
+#: pixels). The modes in RULE_A_EXACT_MODES stay exact (Spectrum: opaque bars, proved byte for byte in N2.5).
+RULE_A_FILL_LEVEL = 1
+RULE_A_EDGE_LEVEL = 3
+RULE_A_EDGE_PIXELS_PER_FRAME = 10
+RULE_A_EXACT_MODES = frozenset({"spectrum"})
+
+
+def rule_a_verdict(mode: str, rows: list[dict]) -> dict:
+    """Rule (a) over ``rows`` (``frame_differences``' per-input rows: pixels, max_level, levels): exact for
+    RULE_A_EXACT_MODES, else within the composite's tolerance. Returns pass, the bound applied and the worst figures."""
+    above = [sum(count for level, count in row["levels"].items() if int(level) > RULE_A_FILL_LEVEL) for row in rows]
+    worst_level = max((row["max_level"] for row in rows), default=0)
+    worst_edge = max(above, default=0)
+    if mode in RULE_A_EXACT_MODES:
+        return {"bound": "exact", "pass": not rows, "max_level": worst_level, "edge_pixels_worst_frame": worst_edge}
+    # A row's level histogram keeps its first 8 levels; any level beyond them is above RULE_A_EDGE_LEVEL and fails by
+    # max_level.
+    return {"bound": {"fill_level": RULE_A_FILL_LEVEL, "edge_level": RULE_A_EDGE_LEVEL,
+                      "edge_pixels_per_frame": RULE_A_EDGE_PIXELS_PER_FRAME},
+            "pass": worst_level <= RULE_A_EDGE_LEVEL and worst_edge <= RULE_A_EDGE_PIXELS_PER_FRAME,
+            "max_level": worst_level, "edge_pixels_worst_frame": worst_edge,
+            "frames_over_the_edge_cap": sum(1 for count in above if count > RULE_A_EDGE_PIXELS_PER_FRAME)}
+
+
 #: ``--surface-format``: the native item's surface texels for this run (None: the route's own choice).
 NATIVE_SURFACE_FORMAT: str | None = None
 #: ``--unprimed``: the window is not rendered before the owner exists and the route is not prepared at attach (audit
@@ -755,6 +786,10 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
                "python_hashes": [entry["hash"] for entry in python["pixels"]]}
     verdict["identical"] = bool(paths["first"] is None and verdict["digests_identical"]
                                 and verdict["native_published"] > 0)
+    # Rule (a)'s verdict: exact, or the composite's tolerance for a translucent mode (RULE_A_*).
+    verdict["rule_a"] = rule_a_verdict(mode, rows)
+    verdict["pass"] = bool(verdict["rule_a"]["pass"] and verdict["digests_identical"] and verdict["native_published"] > 0
+                           and paths["regions_equal"] and len(python["pixels"]) == len(native["pixels"]))
     verdict["split"] = _split_rows(rows, switch_input)
     verdict["mapping"] = dict(native["mapping"], python_frames=len(mappings))
     verdict["classes"] = classify_differences(native, python, switch_input)
@@ -804,10 +839,13 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
                   f" published; differing inputs {verdict['differing_inputs']}, pixels "
                   f"{verdict['differing_pixels_total']}, max level {verdict['max_level']}; card origin "
                   f"{verdict['outer_origin']} (device fraction {verdict['outer_origin_device_fraction']}); "
-                  f"{'IDENTICAL' if verdict['identical'] else 'DIFFERENT'}", flush=True)
+                  f"{'IDENTICAL' if verdict['identical'] else 'DIFFERENT'}; edge pixels in the worst frame "
+                  f"{verdict['rule_a']['edge_pixels_worst_frame']}; rule (a) {verdict['rule_a']['bound']}: "
+                  f"{'PASS' if verdict['pass'] else 'FAIL'}", flush=True)
     finally:
         report["elapsed_s"] = round(time.perf_counter() - started, 1)
         report["identical"] = bool(report["results"]) and all(v["identical"] for v in report["results"].values())
+        report["pass"] = bool(report["results"]) and all(v["pass"] for v in report["results"].values())
         if baseline is not None:
             report["against"] = {"baseline": str(against), **against_baseline(baseline, report)}
             for key, entry in report["against"]["runs"].items():
@@ -994,6 +1032,8 @@ def main(argv=None) -> int:
     evidence_media.finish(0)
     if "against" in report:
         return 0 if report["against"]["same"] else 1
+    if "pass" in report:                                  # --native: rule (a)'s verdict (rule_a_verdict)
+        return 0 if report["pass"] else 1
     return 0 if report["identical"] else 1
 
 

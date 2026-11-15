@@ -24,8 +24,9 @@ Rounds:
           with the same program (its generation unchanged).
   pixels  (each API) a sample of the captured frames drawn by the native item against the Python renderer's own draw
           of the same frame into a transparent target of the item's size (OpenGL child; premultiplied over black is the
-          same colour), at dpr 1 and 1.5: equal byte for byte on OpenGL (rule (a)'s first form, before the owner-level
-          run ``owner_render_parity.py --native --mode devcurve``); on Vulkan, against the native OpenGL frames within
+          same colour), at dpr 1 and 1.5: on OpenGL within the composite's tolerance for a translucent mode
+          (``owner_render_parity.rule_a_verdict``: rule (a)'s first form, before the owner-level run
+          ``owner_render_parity.py --native --mode devcurve``); on Vulkan, against the native OpenGL frames within
           VULKAN_TOLERANCE levels (rule (b)). The surface's GPU time per pass (N2.6's timer) at each dpr.
 
 Usage (repository venv, from the checkout holding the built module):
@@ -371,6 +372,7 @@ def round_pixels(core, engine, app, host, api: str, records: list[dict], referen
         scene = None
         stream = Stream()
         stats = {"compared": 0, "differing": 0, "max_level": 0, "worst": None}
+        rows: list[dict] = []
         timings = []
         try:
             host.set_device_pixel_ratio(float(dpr))
@@ -392,6 +394,8 @@ def round_pixels(core, engine, app, host, api: str, records: list[dict], referen
                 delta = np.abs(drawn[..., :3].astype(np.int16) - reference[..., :3]).max(axis=2)
                 level = int(delta.max())
                 if level:
+                    rows.append({"pixels": int((delta > 0).sum()), "max_level": level,
+                                 "levels": {str(v): int((delta == v).sum()) for v in sorted(set(delta[delta > 0].tolist()))}})
                     stats["differing"] += 1
                     if level > stats["max_level"]:
                         stats["max_level"] = level
@@ -409,13 +413,18 @@ def round_pixels(core, engine, app, host, api: str, records: list[dict], referen
         stats["gpu"] = {"surface_passes": len(ordered),
                         "median_ms": round(ordered[len(ordered) // 2] / 1e6, 4) if ordered else None,
                         "p90_ms": round(ordered[int(len(ordered) * 0.9)] / 1e6, 4) if ordered else None}
+        # Rule (a) under the composite's tolerance for a translucent mode (owner_render_parity.rule_a_verdict, the
+        # lead's decision on N5.1's per-pixel proof).
+        from tools.visualizer_replay import owner_render_parity as parity
+
+        stats["rule_a"] = parity.rule_a_verdict(MODE_ID, rows)
         by_dpr[str(dpr)] = stats
         _sheet(out, api, dpr, references[dpr][:4], native_frames)
     np.savez_compressed(_work(out) / f"native_{api}.npz", **native_frames)
     checks = {f"samples_compared_dpr{dpr}": by_dpr[str(dpr)]["compared"] == len(references[dpr]) > 0 for dpr in DPRS}
     if api == "opengl":
         for dpr in DPRS:
-            checks[f"equal_to_the_python_renderer_dpr{dpr}"] = by_dpr[str(dpr)]["differing"] == 0
+            checks[f"rule_a_within_the_composite_tolerance_dpr{dpr}"] = by_dpr[str(dpr)]["rule_a"]["pass"]
     return {"pass": all(checks.values()), "checks": checks, "by_dpr": by_dpr}
 
 
