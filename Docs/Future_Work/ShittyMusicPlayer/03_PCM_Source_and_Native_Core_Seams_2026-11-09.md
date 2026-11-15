@@ -1,6 +1,7 @@
 # SMP | Existing P2 worker and future P3 native-core integration seams
 
 **Status:** implementation-facing supplement to `02_ShittyMusicPlayer_Implementation_Plan.md`, 9 Nov 2026; source baseline `9872ca18140c`. **No SMP `PlaybackService`, library workspace, decoded PCM source or `core/smp.py` product gate exists yet.** These are contracts and future integration points, not completed SMP functionality.
+**Audio decision (16 Nov 2026):** direct native C++ audio engine at M3; no Qt Multimedia playback prototype, fallback-first plan or migration phase. This changes the backend choice, not the M1/M2 prerequisites or post-native-flip start gate.
 
 ## 1. What already exists, and what must stay independent
 
@@ -23,7 +24,8 @@
 
 ## 3. Playback output is a separate responsibility
 
-- [ ] Begin SMP's actual player with the 02 plan's measured Qt Multimedia/FFmpeg trial; retain a backend abstraction if source formats, output quality, gapless behaviour or timing require native FFmpeg + dedicated WASAPI output.
+- [ ] Start the first audible M3 milestone with one native C++ engine: FFmpeg libraries decode off the real-time thread, native bounded/preallocated PCM buffers feed a native DSP and sample-clock scheduler, and event-driven WASAPI shared/exclusive delivers samples. Build this vertical path immediately rather than prototyping in Qt Multimedia and migrating later; preserve a small native decoder interface for future codec-library changes.
+- [ ] Python/PySide6 owns playback commands, UI, library/queue policy and immutable state snapshots, never the steady-state PCM pump. The WASAPI render service does not invoke Python/GIL, Qt, decoder callbacks, disk I/O, blocking locks or rendering. Native decode and DSP worker scheduling cannot starve output; output failure and underrun counters are observable.
 - [ ] WASAPI **shared and exclusive output** is a distinct audio-output implementation from SRPSS's PyAudioWPatch **capture**. Do not infer bit-perfect exclusive playback, codec coverage or sample-accurate seeking from the loopback worker.
 - [ ] One application-owned `PlaybackService` and `QueueController` live above display/Settings generations; output and queue survive disabling the Visualizer, selecting another external Media provider, and closing/moving the Library and Playlist panes.
 - [ ] Internal SMP provider is typed separately from external GSMTC sessions. Outbound Windows SMTC publishing is not the existing inbound GSMTC reader, and SMP must never discover/control its own external session through a loop.
@@ -32,6 +34,7 @@
 ## 4. Native core and compositor seam
 
 - [ ] SMP docked and pop-out Visualizers reuse the **one** native QRhi render core and packet ABI after P3, with one active rendering host, shared mode catalogue and one logical worker. The core is a general SRPSS custom-renderer, not owned by the screensaver product entry point.
+- [ ] The native SMP audio engine shares build/extension, trace, ownership and performance conventions with the QRhi Native Core, **not** its render thread, GPU device, event loop, lifetime or failure domain. GPU device loss, Settings teardown, hidden or destroyed Visualizer and display rehosting cannot interrupt audible playback.
 - [ ] P3 additionally ports **transitions, image presenter and background custom nodes**, not just modes. This permits the MC/Standard display composer to run one QRhi backend and keeps SMP free to use its own native desktop host without a duplicate GL/Vulkan renderer.
 - [ ] One Qt Quick backend per window; no raw-GL Visualizer in a Vulkan window. OpenGL remains a selectable QRhi backend after pixel-parity migration. Keep full UI material/Qt Quick controls on their existing owners; they are not reimplemented as custom draw calls.
 - [ ] Keep a clean render-admission lifecycle for independent SMP desktop host and SRPSS/MC display windows: mapping quiescence before unmap, native reader ownership, no two frame acknowledgers, no second DSP clock. Closing the SMP pop-out must never retire application-owned playback.
@@ -39,7 +42,7 @@
 ## 5. Milestone/acceptance insertion into plan 02
 
 - **M1/M2:** UI panes and indexed offline Library/Playlists first. Do not conflate existence of the app service tier with completed library leases/storage.
-- **M3:** player output and queue; implement source descriptor/transaction and decoded PCM adapter at the *same time*; validate latency and device recovery with one active source and Visualizer-off playback. Source switching is not postponed to a later cosmetic phase.
+- **M3:** build native FFmpeg decode + WASAPI/DSP output and the single player/queue authority; implement source descriptor/transaction and decoded PCM adapter at the *same time*. Prove native hardware-buffer independence from Python/Qt/rendering, latency, gapless and device recovery with one active source and Visualizer-off playback. Source switching is not postponed to a later cosmetic phase.
 - **M5:** typed internal Media adapter plus outbound SMTC, with independent external GSMTC selection and no self-feedback.
 - **M7:** profile/desktop host reuses P3 QRhi core, native packet/renderer lifetime and SMP-owned service, avoiding an SMP-specific render pipeline.
 - **M8/M9:** live Settings persistence, teardown and multi-process DB lifecycle; physical audio and frozen builds; no false completion from mocks.

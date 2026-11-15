@@ -845,6 +845,11 @@ Port-readiness rules bind all new GPU code now (the backend decision). Expanded 
   modes. Reasons on record: that work closes reliably without visual sign-off, gives the Visualizer decoded
   audio with look-ahead instead of a loopback capture, and proves "one Visualizer owner, any surface". The visual
   track meanwhile finishes what is open and stays on the primitives track of item 8b.
+  **Audio implementation decision (operator, 16 Nov):** M3 begins with one native C++ SMP audio engine
+  (FFmpeg native decoding, own PCM/DSP scheduling, event-driven WASAPI shared/exclusive), not a Qt
+  Multimedia playback prototype or a later backend migration. Native audio shares core tooling and
+  engineering contracts with the QRhi Native Core, but never its GPU/GUI thread, clock or lifetime;
+  Python retains application policy, not real-time sample delivery. Plan 02 §4/§13 and PCM seam 03 bind.
 - [ ] New modes (Reactive Liquid / Melt Pool, Concrete Rain, Usu Moonscape; section 7, lab first) are built on
   the native core only, after it.
 - [ ] Very low priority, after the native core and its new primitives (operator, 14 Nov): Extruded Bubble's arctic

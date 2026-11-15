@@ -6,7 +6,8 @@ tracked; this file is the one source of truth). Reviewed 7 Nov against `a295697c
 gate, the phase ladder with entry/exit gates, owners, dormancy, lifecycle, budgets and risks; §13-16 hold the  
 operator's box items (audio quality, the SMP Settings tab with pills, the icon and artwork rules, full rearrangement)  
 as live checklist targets. Sections 0-12 are the original plan, corrected where the review found drift.  
-**Status (12 Nov 2026, lead's decision):** admitted in order by `Current_Plan.md` item 9: SMP's foundations come after the native core's flip; `Current_Plan.md` governs the order. Do not implement ahead of that item.  
+**Status (12 Nov 2026, lead's decision):** admitted in order by `Current_Plan.md` item 9: SMP's foundations come after the native core's flip; `Current_Plan.md` governs the order. Do not implement ahead of that item.
+**Audio architecture decision (16 Nov 2026, operator):** M3 starts with the intended **native C++ audio engine**, not a disposable Qt Multimedia player or Qt-first feasibility trial. Native FFmpeg decoding, native PCM scheduling/DSP, and event-driven WASAPI output are built in vertical slices behind the single `PlaybackService`; Qt/PySide6 stays in UI/application policy only. The established SRPSS Native Core makes shared tooling, ownership and profiling conventions practical, but the audio engine is independently owned and scheduled. Preserve the existing post-NF milestone order.  
 **Entry gates (12 Nov 2026):** the native core's flip (`Current_Plan.md` item 8b, NF) comes first. Waveform Ribbon and the Expanded Visualizer are accepted and are no longer gates (its display-takeover and dormant-resource contracts are needed by M6, not by M1-M5); the prerequisite phases in §0A.1 still land before the milestone each precedes.
 **First visible implementation:** **Library + Playlists**, two independently placeable/resizable/movable MC panes that are **ONE widget entry** and ONE feature/capability in Settings. **Not** a playback-only stub followed by the library later.  
 **Pre-profile gate:** deliver **Expanded Media in MC**, reusing the earlier display-takeover semantics, before creating a standalone SMP build/profile.  
@@ -54,7 +55,7 @@ P1 and P2 **must land before SMP work starts** (M1). P3-P5 land before the miles
 | **M0** audit and baseline | P1, P2 merged; operator admits plan 02 | source SHA and changed contracts inventoried; two-pane fake-family integration tests written; Standard+MC idle import/service/thread/widget counts recorded | lead |
 | **M1** `music_workspace` family, two panes | M0; `--smp` gate built | two rectangles moved onto different monitors and restored; one Settings row; one family; `test_music_workspace_family.py`, `_qml_native.py` green; dormancy test green with the gate off | agent |
 | **M2** offline library + playlists | M1; P2 | a real folder (≥ 5,000 tracks) indexed with the GUI responsive (no GUI stall > 16 ms in the stall sampler); every action survives restart and Settings; no audio file altered (hashes before/after) | lead |
-| **M3** playback service, queue, PCM source | M2; P4 | codec matrix measured (§13); playback survives pane close, Settings teardown, mode switch; one DSP lane; PCM-to-audible latency calibrated (§13); `tools/music_backend_native_smoke.py` report | lead + operator listen |
+| **M3** native audio engine, playback service, queue, PCM source | M2; P4 | one native C++ decoder-to-WASAPI playback path, codec/gapless/exclusive/DSP gates measured (§13); playback survives pane close, Settings teardown and mode switch; one Visualizer DSP lane; PCM-to-audible latency calibrated; `tools/music_backend_native_smoke.py` report | lead + operator listen |
 | **M4** library UX, metadata, art, groups | M3 | three-membership limit under concurrent writes; favourites survive rescans; art cache bounded (bytes); tag-edit corpus undamaged | agent |
 | **M5** internal Media provider + outbound SMTC | M4 | SMP plays while Media shows Spotify; exactly one media-key recipient; own session excluded from GSMTC reading | agent |
 | **M6** Expanded Media in MC | M5; plan 01 accepted | cross-feature tests (EB expanded <-> Media expanded) green; two-display visual acceptance | operator |
@@ -70,7 +71,8 @@ P1 and P2 **must land before SMP work starts** (M1). P3-P5 land before the miles
 | `music_workspace` family, two member ids | `core/settings/widget_family_catalog.py` + `rendering/widget_descriptors.py` | a second capability, a third pane identity without operator authorisation |
 | `widgets.music_workspace.*` (enabled, per-pane visible/monitor/position, appearance) | canonical defaults + `SettingsManager`, profile-scoped | the library DB, a sidecar |
 | library, playlists, favourites, groups, art cache index | `LibraryRepository` (SQLite in the shared non-settings data root), application-service tier (P2) | `settings_v2.json`, tags, QML |
-| playback, queue, output device, state revision | `PlaybackService` + `QueueController` in the service tier; one per process that activates it | Media widget, playlist pane, SMTC, GSMTC |
+| playback, queue, state revision | `PlaybackService` + `QueueController` in the application-service tier; one per process that activates it | Media widget, playlist pane, SMTC, GSMTC |
+| real-time PCM delivery, DSP, device clock and output | independent native C++ SMP audio engine leased by `PlaybackService` | Python callbacks, Qt Multimedia, QML or the QRhi render core |
 | decoded-PCM analysis source | `AudioAnalysisSource` adapter into the one controller-owned BeatEngine source boundary (P4) | a second engine, a loopback of SMP's own output |
 | Media provider kind (`external_gsmtc` / `internal_service`) | `core/media/provider_registry.py` typed descriptor | an AUMID spoof |
 | SMP Settings tab and pills | the tab registry descriptor (P1), §14 | per-tab if/elif chains |
@@ -146,7 +148,8 @@ Prove at every milestone (`test_smp_cross_product_dormancy.py`) and record in th
 
 | Risk | Likelihood | Impact | Mitigation |
 | --- | --- | --- | --- |
-| Qt Multimedia cannot deliver gapless / exclusive / bit-perfect output | high | high (audio quality is the operator's bar) | §13 measures first; the backend behind `PlaybackService` is private and replaceable; custom WASAPI output is admitted when the trial fails a measured criterion |
+| Native real-time playback underruns or blocks on Python, decoder, render or GUI | medium | high | event-driven WASAPI engine; preallocated bounded PCM buffers; decode ahead on separate native workers; callback no GIL, allocation, I/O or blocking locks; underrun/latency counters and §13 soaks |
+| Native codec/DLL, license or packaging drift | medium | high | pin audited FFmpeg native libraries and license configuration; decode fixture corpus; deterministic frozen-build dependency/payload checks; narrow replaceable decoder seam |
 | two writers on the shared DB (MC + SMP) | medium | high | one write policy, WAL, lock tests before M7 |
 | playback dies with Settings teardown | certain without P2 | high | P2 before M2 |
 | SMP tab bloats Settings or copies the hidden-owner pattern | medium | medium | P1 registry; §14 pills; no hidden QWidgets |
@@ -209,7 +212,7 @@ SRPSS Standard / MC / future SMP entry point (profile + host selection)
   |
   +-- Optional PlaybackService [one process owner, independent of panes]
   |     +-- QueueController and PlaybackState publication
-  |     +-- QMediaPlayer backend candidate + output device
+  |     +-- native SMP audio engine (FFmpeg decoder workers, PCM/DSP, WASAPI output)
   |     +-- internal PCM -> existing Visualizer source selector
   |     +-- optional Windows SMTC publisher (outbound, not GSMTC reader)
   |     +-- internal Media provider adapter (existing Media widget can opt in)
@@ -290,16 +293,21 @@ entry with the pane, not a second widget (§4.1; mock R10).
 
 ### 4.1 Service/queue contracts
 
-*Qt 6.12 (the project's Qt since 12 Nov 2026; `Docs/Future_Work/Qt_6_12_Gains.md`):* if playback uses Qt
-Multimedia's `QAudioSink`, its buffer period is settable since 6.12 (`setNativePeriodFrameCount()`, powers of two from
-32 to 4096 frames, only while stopped; on Windows it maps to the audio client's buffer duration, default about 1024
-frames). Choose the period once from the Visualizer's latency budget and the PCM source seam
-(`03_PCM_Source_and_Native_Core_Seams_2026-11-09.md`), measured, not left at the default.
+**Native-first output decision:** SMP does not construct a `QMediaPlayer`, `QAudioOutput`, `QAudioSink` or
+`QAudioBufferOutput` playback pipeline, even provisionally. The first audible M3 slice uses a native C++
+engine and Windows WASAPI event-driven output, with buffer period, sample format and device latency
+negotiated and measured on real hardware. Qt Quick/PySide6 remains the UI and application-service
+control layer, not the audio clock or buffer delivery mechanism. The PCM source contract lives in
+`03_PCM_Source_and_Native_Core_Seams_2026-11-09.md`.
 
 Define small interfaces first (illustrative, not new business superclasses): `PlaybackService` (output, commands, state and exactly-once retirement), `QueueController` (ordered track references, shuffle/repeat/history), `LibraryRepository` (read-only queries/transactions), `AudioAnalysisSource` (timestamped decoded PCM adapter), `PlaybackStateSnapshot` (immutable revision, track identity, provider, position, playing, audio generation). Clear player lifecycle is distinct from window and display lifetime.
 
 - [ ] Begin with local file play/pause/stop/seek/volume, one player-owned stream, one queue and one persisted player state. If media missing/unsupported, fail action with visible reason while preserving queue and library.
-- [ ] `QMediaPlayer` + `QAudioOutput` and FFmpeg-based `QAudioBufferOutput` under pinned Qt/PySide6 is a **candidate**, not guaranteed format/gapless/latency acceptance. Build a native Qt/Windows smoke using actual MP3, FLAC, Ogg/Vorbis, Opus, WAV and AAC fixtures available legally. Measure codec load, play, seek, rate, duration and repeat. Document unverified formats as unsupported until proven.
+- [ ] **One permanent native audio path, no throwaway Qt prototype:** start with native WAV/PCM to event-driven WASAPI shared playback, then add directly linked FFmpeg decoding, gapless queue scheduling, exclusive output, DSP and the Visualizer PCM tap as successive M3 vertical slices. Every slice extends the same shipped-intent engine; probes verify that engine rather than creating a parallel player.
+- [ ] **Decoding is delegated, not rewritten:** call pinned, audited FFmpeg libraries (`libavformat`/`libavcodec` and needed format conversion) directly from C++ decode workers. No Python `subprocess` player, Python-side PCM pump or Qt Multimedia decoder in the critical path. Put codec-specific padding, seek and stream format behind a small replaceable native decoder interface; do not implement our own MP3/FLAC/AAC decoders. Review FFmpeg LGPL/GPL build selections and bundled DLL reachability for frozen builds.
+- [ ] **Real-time boundary:** the native engine owns the audio device clock, sample-frame positions, bounded/preallocated PCM queues, prebuffered next-track data and native DSP scheduling. The WASAPI render service must never acquire the GIL, call Qt/Quick, wait for the decoder/Visualizer, perform file or network I/O, dynamically allocate in steady state or take a potentially blocking lock. Control/state messages are sparse, versioned/generation-fenced transactions; publish underruns and device timing as diagnostics.
+- [ ] **Native output:** implement event-driven WASAPI shared and exclusive backends with format/device negotiation, output buffer accounting, hot-unplug/reopen recovery and an explicit bit-transparent bypass route. The player persists through all UI/display/QRhi lifecycle changes. Keep output API seams narrow enough for a later Linux backend without introducing a second audio engine.
+- [ ] **Actual codec evidence:** run `tools/music_backend_native_smoke.py` on legal MP3, FLAC, Ogg/Vorbis, Opus, WAV and AAC fixtures for decode, audible play, seek, rate, duration, repeat, gapless and device behaviour. Declare unsupported formats honestly. No production acceptance based solely on mock PCM or an isolated codec benchmark.
 - [ ] Decoded PCM is captured **once** and timestamped at the media owner boundary, not by a second WASAPI loopback of SMP playback. Calibrate decoder buffer timestamps to audible output with device latency measurements; a PCM signal being emitted is not proof speaker sound played then.
 - [ ] Feed the **existing** BeatEngine/analysis worker via a single selected source descriptor and its one-in-flight + newest-pending rule. Preserve floor/ramp, freshness, pauses, silence and all mode numerical reactivity. Avoid a new per-song FFT or visualizer-specific gain overlay.
 - [ ] Stream/player device switching is an explicit, retryable service transaction. Preserve queue and intended playback position when possible, but do not promise sample-exact continuation if the backend cannot guarantee it.
@@ -350,8 +358,8 @@ Current `core/media/provider_registry.py` encodes explicit external Windows GSMT
 
 ### 5.2 Artwork and metadata
 
-*Qt 6.12:* where Qt Multimedia reads a file's metadata, cover art is `QMediaMetaData::CoverArtImage`;
-`ThumbnailImage` is deprecated in 6.12 and is not used.
+Metadata and cover-art parsing are independent of the native playback engine; use a validated metadata parser
+(e.g. the §5.2 Mutagen candidate) on background workers. SMP does not instantiate Qt Multimedia merely to read tags or artwork.
 
 - [ ] Art precedence: the operator's order in §15 (embedded, `artist.*`, `album.*`, `folder.*`, other images in the folder, opt-in fetch); explicit user override outranks auto discovery.Original assets untouched. Cache bounded variants (row, album tile, mosaic, detail) keyed by stable source identity/version. Verify dimension/file/decoder caps and error handling; never permit remote art to be a mandatory paint dependency.
 - [ ] Local tags: title, artist, album artist, album, track/disc numbers, year/date, genre, comments, composer, artwork and technical properties when format supports. Use a tested parser library candidate such as Mutagen only after source/build reachability is demonstrated. All reads off GUI/render.
@@ -420,7 +428,7 @@ This is a **new hard milestone** added by the operator. It reuses Plan 01's disp
 - [ ] Settings profile, runtime host and frozen build flavour are three independent axes. New entrypoint calls shared core initialisation/service registration but **never** starts/screensaver engine just to paint a music library. No `--dev` env special case, no separate defaults file hardcoded by UI, no duplicate SettingsManager.
 - [ ] Shared non-settings data root contains DB/artwork/theme/preset stores intentionally common to MC/SMP, with atomic multi-process writes; separate SMP settings directory holds player-window position, pane arrangement, source preference, output device, display target, playlist selection and app theme/layout choices as decided. Keep Standard and MC existing paths and defaults untouched.
 - [ ] Profile-aware defaults/repair/reset/export/import are explicit; test unseen/inactive settings retain values through other profiles. Isolated `StorageRoot` tests cannot open real user DB or credentials.
-- [ ] SMP runtime imports no image-saver source workers, wallpaper transitions, screen capture, monitor stagger, screensaver screens or subreddit/mail/Steam families merely for shared registry/Settings UI. Package reachability audits confirm excluded code only where truly absent; keep mandatory Qt Multimedia/QtOpenGL/Qt Quick substrate.
+- [ ] SMP runtime imports no image-saver source workers, wallpaper transitions, screen capture, monitor stagger, screensaver screens or subreddit/mail/Steam families merely for shared registry/Settings UI. Package reachability audits confirm excluded code only where truly absent; keep the required Qt Quick/rendering substrate and explicitly package the pinned native audio engine, FFmpeg decoder libraries and WASAPI integration without importing Qt Multimedia for playback.
 - [ ] Build Foundry/Runner/installer definitions are updated **only after** runtime tests pass. Operator alone runs Nuitka/Inno builds and supplies physical evidence; code editing agents must not invoke product builds.
 
 ### 8.2 Real desktop UI and pane geometry
@@ -519,7 +527,8 @@ This is a **new hard milestone** added by the operator. It reuses Plan 01's disp
 
 **M3 | Independent PlaybackService + Queue + decoded-PCM Visualizer adapter**
 
-- [ ] `QMediaPlayer` trial, output service, ordered queue, seek/device/repeat/shuffle, latest-source freshness and one-player-owner shutdown. Library/playlist pane actions can now play/queue.
+- [ ] Permanent native C++ decoder/PCM/DSP/WASAPI engine brought up through measured M3 slices (shared PCM -> FFmpeg formats -> gapless queue -> exclusive output -> DSP -> calibrated analysis tap); ordered queue, seek/device/repeat/shuffle, latest-source freshness and exactly-once retirement. Library/playlist actions now play/queue through one `PlaybackService`, with no Qt Multimedia player in any phase.
+- [ ] Native callback isolation proven (no Python/GIL, Qt, QRhi or decoder dependency while servicing a hardware buffer); real-device underrun counters, source-format and exclusive-mode rejection/recovery evidence. No second visualizer DSP or SMP-specific rendering engine.
 - [ ] Player continues through pane close, MC Settings full display teardown/recreation, EB mode switching and source/monitor routing. External WASAPI unaffected.
 - [ ] **Gate M3:** real local codecs/seek and source timing measured; no double DSP, playback restart, orphan worker/device or stale callback.
 
@@ -604,7 +613,7 @@ New tests must assert behaviour, native retained paint and actual DB/lifetime tr
 
 ### Decisions that must stay evidence-gated
 
-- **Audio backend choice:** Qt Multimedia is a trial; if it cannot deliver accepted precision/format/device behaviour, change only the private backend behind service interface after a proven failure. Do not create a new per-mode DSP engine.
+- **Native audio engine is a decided architecture, not a trial:** M3 goes directly to native C++ decoding orchestration, PCM/DSP and WASAPI output behind `PlaybackService`. Evidence gates select implementation details (buffer period, device policy, codec support, DSP kernels) but cannot silently replace this with a temporary Qt Multimedia player. The decoder dependency remains replaceable; do not create a second Visualizer DSP/clock or bind real-time output to the GPU core.
 - **Library identity:** decide rename/move fingerprint reconciliation on real file fixtures before migration. Don't guess from filename alone.
 - **Wallpaper suspension:** if Plan 01 accepted only a narrower no-effect background contract, MC Expanded Media inherits that exact accepted behaviour. It cannot promise stronger suspension without an additional E0/E1 proof.
 - **Database sharing:** isolated test roots and one multi-process write policy required before MC and SMP concurrent access. Shared root != uncontrolled shared mutable service object.
@@ -621,17 +630,24 @@ No podcasts, no auto-lyrics scraping, no mandatory online artwork, no built-in a
 
 Operator: "aim for quality, compatible and adjustable audio as on par or beyond with apps like Music Bee as possible.
 Do not shy away from custom work when it will improve quality/performance/ux." The bar is measured, not promised.
-Qt Multimedia remains the first trial (§4.1); each criterion below is a gate the backend passes or the private
-backend behind `PlaybackService` is replaced with custom work (FFmpeg decode through the pinned Qt build or a
-dedicated decoder, plus our own WASAPI output; `utils/audio_capture.py` already owns the WASAPI capture side and its
-device/format negotiation is the model). No second DSP engine for the Visualizer; the analysis source stays the one
-decoded-PCM adapter.
+**Implementation choice is settled before M3:** build one native C++ SMP audio engine directly, not a Qt
+Multimedia test player followed by migration. FFmpeg's native libraries supply decoding; SMP owns native PCM
+buffering, sample-clock/queue scheduling, DSP and event-driven WASAPI shared/exclusive output. The existing
+`utils/audio_capture.py` handles *capture*, not audio output, and its device/format negotiation is only
+reference evidence. Learn from SRPSS's QRhi Native Core: reuse proven C++ extension packaging, ownership,
+telemetry, teardown and performance-testing patterns, but keep audio threads, clock, lifecycle and recovery
+independent of GPU resources or GUI/display generations. Python owns library/queue policy, settings and
+commands; it never feeds individual audio buffers or runs the real-time callback. No second DSP engine for
+the Visualizer: the bounded post-DSP PCM analysis tap feeds its existing worker and is never allowed to
+backpressure playback. Native implementation is incremental, but every increment is the final architecture.
 
 - [ ] **Output modes:** WASAPI shared and **exclusive** (bit-perfect, event-driven), selectable output device with
   hot-unplug recovery, sample rate follows the source in exclusive mode (44.1 / 48 / 88.2 / 96 / 176.4 / 192 kHz)
   and the device's mix format in shared mode; 16/24/32-bit and float; a measured latency readout per device.
-  **Evidence:** a loopback null test (digital capture of the output against the decoded file) is bit-identical in
-  exclusive mode with DSP off.
+  **Evidence:** compare native decoder PCM with the exact samples submitted to WASAPI in format-compatible,
+  DSP-bypassed exclusive mode; require bit-exact internal PCM-path equality. Where hardware/driver permits,
+  use a suitable digital-output capture to verify the external path. Ordinary WASAPI loopback captures
+  shared-mode audio and cannot validate exclusive-mode output. Record supported and refused device formats.
 - [ ] **Gapless playback** across tracks of the same stream format (0 ms gap, measured on a recorded loopback of a
   known gapless album), with LAME/iTunes encoder delay and padding honoured for MP3/AAC; **crossfade** (0-12 s,
   equal-power, optional auto-only-between-albums) as an alternative; pre-buffered next track.
@@ -657,8 +673,9 @@ decoded-PCM adapter.
 - [ ] **Beyond MusicBee where cheap:** per-device remembered settings; an audio-path readout ("FLAC 96 kHz 24-bit ->
   exclusive 96 kHz 24-bit, bit-perfect") in the Media card and the SMP transport; loudness-aware crossfade; a
   visualizer analysis tap after the DSP chain so the picture reacts to what is heard.
-- [ ] **Gate:** M3 cannot close without the null test, the gapless measurement and the codec matrix; M9 cannot close
-  without the 30-minute underrun soak at every mode.
+- [ ] **Gate:** M3 cannot close without the native PCM-path null test (plus real-device output checks), gapless measurement,
+  real codec matrix, calibrated audible timing and proof that audio continues through GUI/render teardown. M9 cannot
+  close without the 30-minute underrun soak at every supported output mode and sample rate.
 
 ## 14. The SMP Settings tab with pills (operator box item, live target)
 
