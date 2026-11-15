@@ -3281,16 +3281,23 @@ bool ModeContent::ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QStrin
 {
     const ModeProgram &program = m_source->drawnProgram();
     const quint64 layout = m_targets.layoutGeneration(); // N3.1: the scene targets' render-pass descriptors
+    // N3.2 audit 4 H1: the streams, the arena's batch copies and the batched commands are sized from the bound schema; a
+    // stream bound again under another layout (its fingerprint) builds them again. With no stream bound (an unbind)
+    // nothing is drawn, so what was built stays for the next bind to be compared against.
+    const RuntimeSchema *bound = m_source->drawnStill() ? nullptr : m_source->drawnSchema();
+    const bool schemaHolds = (!bound && !m_source->drawnStill()) || m_streams.builtFor(bound);
     // N3.8: a texture object made or gone under the same program, pass and QRhi: only the passes' bindings are made
     // again over the new objects (the pipelines stay: layout-compatible), the render thread's cost of an image change.
     // N3.1: a scene target re-created at a new size is such an object too.
     if (m_res && m_res->rhi == rhi && m_res->pass == target.renderPass.get() && m_res->generation == program.generation
         && m_res->sceneLayout == layout && m_res->passesBuilt && withPasses
         && m_res->meshObjects == m_meshes.objects() // N3.2
+        && schemaHolds                              // N3.2 audit 4 H1
         && m_res->textureObjects != m_textureObjects && rebindTextures())
         return true;
     if (m_res && (m_res->rhi != rhi || m_res->pass != target.renderPass.get() || m_res->generation != program.generation
                   || m_res->sceneLayout != layout || m_res->passesBuilt != withPasses
+                  || !schemaHolds                                              // N3.2 audit 4 H1: a new layout
                   || (withPasses && m_res->meshObjects != m_meshes.objects()) // N3.2: the vertex input layouts
                   || (withPasses && m_res->textureObjects != m_textureObjects)))
         releasePipelines(); // a new program, or bindings that could not be made again: the pipelines and bindings again
@@ -3848,9 +3855,11 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
                 || (declared.batched() && declared.vertexDrawParameters.isValid() && drawParametersAvailable(rhi));
         }
         const quint32 batchBytes = batchedForm3 ? quint32(res->passCount) * kMaxBatches * kIndirectCommandBytes : 0u;
-        const RuntimeSchema *schema = m_source->drawnStill() ? nullptr : m_source->drawnSchema();
-        ok = ok && m_streams.build(rhi, program.streams, schema ? &schema->schema() : nullptr, plan.size, batchBytes,
-                                   &reason);
+        // Audit 4 H1: the streams hold the schema they are built from (their fields point into it).
+        ok = ok && m_streams.build(rhi, program.streams,
+                                   m_source->drawnStill() ? QSharedPointer<const RuntimeSchema>()
+                                                          : m_source->drawnSchemaShared(),
+                                   plan.size, batchBytes, &reason);
         m_arena = QByteArray(qsizetype(plan.size), '\0');
         m_batchShadow = QByteArray(qsizetype(batchBytes), '\0');
         m_meshBuffersNoted = ~quint64(0);

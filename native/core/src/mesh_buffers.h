@@ -13,7 +13,9 @@
 //   Dynamic VertexBuffer read as per-instance attributes, written by the fast path), a storage stream (a Static
 //   StorageBuffer, uploadStaticBuffer of the used bytes through a QByteArray the stream keeps across records), or an
 //   indirect stream (a Dynamic IndirectBuffer of 16-byte commands {vertexCount, instanceCount, firstVertex, 0}). Each is
-//   sized at the build from its field's capacity and never resized; written only by a record that draws.
+//   sized at the build from its field's capacity and never resized; written only by a record that draws. The streams
+//   hold the schema they were built from (audit 4 H1: their fields point into it) and are built again when the bound
+//   schema's fingerprint changes.
 // - The block arena (D15 point 3, choices C and D): every block of a content in one Dynamic UniformBuffer at offsets
 //   rounded up with QRhi::ubufAligned, given per draw as dynamic offsets; written whole once per record from the content's
 //   CPU copy through beginFullDynamicBufferUpdateForCurrentFrame, never a batch update.
@@ -42,6 +44,7 @@ namespace frame_abi {
 struct Field;
 struct Schema;
 }
+class RuntimeSchema;
 
 constexpr int kMaxModeMeshes = 8;
 constexpr int kMaxModeStreams = 8;
@@ -270,8 +273,8 @@ public:
     struct Stream
     {
         StreamDeclaration decl;
-        const frame_abi::Field *field = nullptr; // the bound schema's (outlives the build: the drawn schema)
-        const frame_abi::Field *usedField = nullptr; // an f32 stream's used length (D15 point 4)
+        const frame_abi::Field *field = nullptr; // into the schema the streams hold (m_schema: audit 4 H1)
+        const frame_abi::Field *usedField = nullptr; // an f32 stream's used length (D15 point 4), the same
         std::unique_ptr<QRhiBuffer> buffer;
         QByteArray staging;                       // a storage stream's bytes, kept across records (D15 point 4)
         quint32 used = 0;                         // bytes written by the last record
@@ -282,10 +285,14 @@ public:
     ModeStreams(const ModeStreams &) = delete;
     ModeStreams &operator=(const ModeStreams &) = delete;
 
-    // At a build: one buffer per declared stream, sized from its field, and the arena of `arenaBytes` (0: none). False
-    // with the reason (the content's failure).
-    bool build(QRhi *rhi, const QList<StreamDeclaration> &streams, const frame_abi::Schema *schema, quint32 arenaBytes,
-               quint32 indirectBatchBytes, QString *error);
+    // At a build: one buffer per declared stream, sized from its field, and the arena of `arenaBytes` (0: none). The
+    // streams hold `schema` (shared: their fields point into it) until they are released. False with the reason (the
+    // content's failure).
+    bool build(QRhi *rhi, const QList<StreamDeclaration> &streams, const QSharedPointer<const RuntimeSchema> &schema,
+               quint32 arenaBytes, quint32 indirectBatchBytes, QString *error);
+    // Whether the streams were built for a schema of `schema`'s layout (the same table, or the same fingerprint);
+    // false: the content builds them again (audit 4 H1). Nothing is allocated.
+    bool builtFor(const RuntimeSchema *schema) const;
     // At a record that draws: each stream's bytes from the record: an f32 stream's used elements (its used-length
     // field, at most its capacity; none written at 0), a u32 stream's whole field.
     void write(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QByteArray &record);
@@ -304,6 +311,7 @@ public:
 
 private:
     QList<Stream *> m_streams;  // owned (Qt containers only)
+    QSharedPointer<const RuntimeSchema> m_schema; // the schema they were built from (audit 4 H1)
     std::unique_ptr<QRhiBuffer> m_arena;
     std::unique_ptr<QRhiBuffer> m_batchCommands;
     quint32 m_arenaBytes = 0;

@@ -2,6 +2,7 @@
 #include "mesh_buffers.h"
 
 #include "frame_abi_generated.h"
+#include "mode_schema.h"
 
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonParseError>
@@ -646,6 +647,17 @@ void ModeStreams::release()
         countBuffer(g_streams, g_streamBytes, qint64(m_batchCommands->size()), -1);
     m_batchCommands.reset();
     m_arenaBytes = 0;
+    m_schema.reset();                         // after the streams whose fields pointed into it
+}
+
+bool ModeStreams::builtFor(const RuntimeSchema *schema) const
+{
+    const RuntimeSchema *built = m_schema.data();
+    if (built == schema)
+        return true;
+    if (!built || !schema)
+        return false;
+    return built->fingerprint() == schema->fingerprint(); // the same layout: the fields' offsets and counts hold
 }
 
 int ModeStreams::live() const
@@ -666,11 +678,15 @@ const ModeStreams::Stream *ModeStreams::find(const QByteArray &name) const
     return nullptr;
 }
 
-bool ModeStreams::build(QRhi *rhi, const QList<StreamDeclaration> &streams, const fa::Schema *schema,
-                        quint32 arenaBytes, quint32 indirectBatchBytes, QString *error)
+bool ModeStreams::build(QRhi *rhi, const QList<StreamDeclaration> &streams,
+                        const QSharedPointer<const RuntimeSchema> &bound, quint32 arenaBytes, quint32 indirectBatchBytes,
+                        QString *error)
 {
     release();
     ++m_generation;
+    // Audit 4 H1: the streams' fields point into this schema, so they hold it (a rebind may free the drawn one).
+    m_schema = bound;
+    const fa::Schema *schema = bound ? &bound->schema() : nullptr;
     for (const StreamDeclaration &decl : streams) {
         const fa::Field *field = nullptr;
         for (quint32 i = 0; schema && i < schema->fieldCount; ++i) {

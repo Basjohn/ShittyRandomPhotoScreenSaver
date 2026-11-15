@@ -469,6 +469,8 @@ public:
     const ModeProgram &drawnProgram() const { return m_drawnProgram; }
     const QList<BlockValues> &drawnSettings() const { return m_drawnSettings; }
     const RuntimeSchema *drawnSchema() const { return m_drawnSchema.data(); }
+    // N3.2 audit 4 H1: the drawn schema, shared with what is built from it (the streams point into its fields).
+    const QSharedPointer<const RuntimeSchema> &drawnSchemaShared() const { return m_drawnSchema; }
     bool drawnStill() const { return m_drawnStill; }
     const ModeCard &drawnCard() const { return m_drawnCard; }
     bool drawnReady() const { return m_drawnReady; }
