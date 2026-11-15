@@ -665,13 +665,14 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       (`MeshResources.mesh` with an instance stream, `StreamRing` storage and pass blocks, `glDrawArraysInstanced`):
       a box mesh instanced over storage records, a static per-instance stream (Sphere's shape), an instance stream
       written per frame (Bubble's shape), a vertex-pulled strip (the Oscilloscope's shape) with blend MAX, and the
-      built-in `quad` under 900 culled and live instances (Beam's shape); exact, at dpr 1 and 1.5; negative control: an
-      instance stream offset by one record (the pixels differ).
-    - [ ] Rule (b): Vulkan against native OpenGL within 1 level on every scene above.
+      built-in `quad` under 900 culled and live instances (Beam's shape); within the transitions' tie budget (at most
+      8 pixels a frame past 1 level; D15, the lead's decision of 15 Nov), at dpr 1 and 1.5, the harness data's edges
+      off exact pixel centres; negative control: an instance stream read out of step (the pixels differ).
+    - [ ] Rule (b): Vulkan against native OpenGL within the same tie budget on every scene above.
     - [ ] Sprites: the instanced-quad form against the Python renderer's `gl_PointSize` points at sizes 1.0, 1.7, 2.1,
       12.5 and 128 px and sub-pixel centres, both sprite-coordinate users (a ring and a radial profile); the figures (pixels
       past 0 and past 1 level) to the lead (the conversion's look question); the same quad form drawn by the Python
-      renderer equals the core's exactly (rule a proper); the culled sprite draws nothing; negative control: the
+      renderer equals the core's within the tie budget (rule a proper); the culled sprite draws nothing; negative control: the
       sprite coordinate with y up (the ring's glint moves).
     - [ ] Dynamic offsets: sixteen draws of one pipeline in one pass, each with its own block at its offset, equal
       bit for bit to sixteen passes each with its own buffer (N3.1's form); the shader-resource-bindings count is one;

@@ -1412,6 +1412,22 @@ choices the build made where D15 left room:
 - *Pack order*: a pass's fragment pack, then its vertex pack ("vertex": true), then a batched pass's draw-parameters pack
   (empty bytes: none).
 
+**Decided by the lead from the first proofs (15 Nov 2026, `mesh_buffer_check.py` on 3a7fb6d3).**
+- *Rules (a) and (b) take the transitions' tie budget*: a frame passes with at most 8 pixels past 1 level. Exact is not
+  reachable for every scene: a blended or additive pixel sums per-layer roundings (SPIRV-Cross's GLSL against the
+  source's own, each within 1 level), and an edge through an exact pixel centre is a tie the core's Y flip resolves
+  the other way (the fill rule's top edge is its bottom edge under the flip), so whole rows can move. The harness data
+  keeps edges off exact pixel centres; a port's own data is judged under the same budget. Measured: the box and the
+  voxels exact under both rules; sprites, beam and streaks at most 7 pixels at 1 level and one additive streaks pixel at
+  2 levels (dpr 1.5).
+- *Sprites against `gl_PointSize`* differ as quads and points inherently do, the Python renderer's own quads by the
+  same amounts: at dpr 1, 41 to 42 pixels past 0 and 6 past 1 level (at most 3 levels); at dpr 1.5, 151 to 153 past 0
+  and 70 past 1 level (at most 7). Accepted. Each port's parity is judged against its own quad conversion, made first in
+  the Python renderer (point 5, choice F), never against its points.
+- *Draw-parameters packs are SPIR-V and GLSL only*: `qsb` bakes `gl_DrawID`, `gl_BaseInstance` and `gl_BaseVertex` for
+  SPIR-V and GLSL 460 and 430, and HLSL 5.0 refuses them ("Unsupported builtin in HLSL: 4426"), research Q5. Nothing
+  shipped draws with D3D, so form 3 is a Vulkan and OpenGL form; elsewhere the plain pack's per-batch form stands.
+
 ## D1, D2, D3 and the transport rule
 
 *Decided by the lead, 12 Nov 2026 (answers in "Lead decisions on the N0 drafts"). The drafts, with every "today"
