@@ -667,6 +667,19 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
 - [ ] N5.2f Disintegrate, Volumetric Dissolve (N4.c).
 - [ ] N5.2g Edge Bloom, Capillary Bloom (N4.g); their fields are the first transition preparation run as an async
   job (D9, consumer class a).
+- [ ] Pre-flip reference pack (operator, 15 Nov: "measure the gain instead of just telling ourselves it is good"):
+  captured while the Python renderers are still the product, and **before N5.2h deletes them** (after that the
+  "before" side cannot be measured). One script (extending `tools/visualizer_live_check.py` and
+  `tools/overhead_baseline.py`, not a new system) runs the same matrix before and after the flip:
+  - [ ] Every Visualizer mode (its default preset) and every transition, on Display 1 at 3840 x 2160 and on Display 0's
+    size at 2560 x 1440, invisible saver, recorded music (`anything_mixed2`) over the Usu wallpaper: fps, render time
+    median/p90, swap gap, late %, hitches a minute, saver CPU % of a core, GPU ms per frame, RSS and private memory,
+    first-2-seconds frames.
+  - [ ] Idle and loaded. game60 is only with the operator's yes on the day, 10 minutes at most, lead only.
+  - [ ] Conditions recorded with every figure: displays on or off, other processes' CPU and GPU, GPU clock and
+    `nvidia-smi` state. Comparisons are within a session and control-relative (`Benchmarks.md` rules).
+  - [ ] Stored as a named baseline (`tools/baselines/preflip/`) and summarised in `Docs/Reference/Benchmarks.md`; the
+    flip's acceptance reruns the same matrix on Vulkan and on native OpenGL and reports the gain per row.
 - [ ] N5.2h The background family switches on OpenGL (D10 point 4): presenter, backdrop and all 28 transitions
   native in production; the native backdrop compared with the blit on the same frames; the Python presenter, the
   Python transitions, the blit backdrop and the wrapped-texture bridge deleted in that change.
