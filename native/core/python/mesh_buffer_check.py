@@ -15,14 +15,20 @@ Rounds:
              (the built-in quad, 900 instances, a third culled) at dpr 1 and 1.5. Rule (a): native OpenGL against the
              reference; rule (b): native Vulkan against native OpenGL within 1 level. Native checks: the box culled
              equals the box unculled (depth tested), the wrong front face differs; the sprite coordinate with y up
-             differs (negative control). The reference also draws the sprites as gl_PointSize points (the figures) and
-             with its instance stream offset by one record (the negative control: the pixels differ).
+             differs (negative control); a culled sprite draws nothing (control: the same records without the
+             cull draw). The reference also draws the sprites as gl_PointSize points (the figures) and with its
+             instance stream read out of step (the negative control: the pixels differ).
   forms      (each API) the batched draw (D15 point 6): sixteen batches as one multi-draw with gl_DrawID (form 3, where
              the device reports the features), one draw a batch at its dynamic offset (form 2: the control that hides
              the features), one direct draw, and sixteen passes each with its own block: equal bit for bit; negative
              control: every batch given the first batch's index. Indirect: drawIndirect from record-written commands
              equals the direct draw. firstInstance 3 on a direct draw (the control): ignored on OpenGL, moved on Vulkan
-             (the reason firstInstance is always 0). The device facts (Vulkan) and research Q5's bake facts.
+             (the reason firstInstance is always 0). gl_DrawID, gl_BaseInstance and gl_BaseVertex read back as
+             the colour of the multi-draw (first vertex 4) where it is recorded. The device facts (Vulkan) and
+             research Q5's bake facts.
+  used       (each API) D15 point 4: an f32 stream writes only its used elements (the bytes written per record), a
+             storage stream's bytes past its used length are the earlier record's (nothing past it uploaded), a record
+             whose used length breaks its at_most rule writes nothing.
   rest       (each API) nothing uploaded, written or recorded over frames at rest; control: a new record writes.
   steady     (each API) frames of new records: the core's buffers created, mesh, stream and ownership counts flat, the
              process's private bytes recorded; control: streams made again every record (the counts grow).
@@ -33,14 +39,16 @@ Rounds:
              and 3840x2160 (the card at dpr 5.33 and 8), and the batched forms; the thread probe.
   stream_ring (each API) D15 point 7, D5.3: payloads at the product's sizes through QRhi's routes (instance stream by
              the fast path; storage by uploadStaticBuffer) with a pass that reads them as the consumer does, against
-             the pair's floor (CPU: the fast path's write; GPU: the same instanced pass over a resident mesh instance
-             stream, no copy); per frame: the frame's wall time on the GUI thread (host.frames, the render thread's
-             whole record) and the GPU time. The pair is built only if a route misses the floor by 0.05 ms or more.
+             the pair's floor (CPU: the record with the data resident plus one copy of the payload into mapped
+             memory; GPU: the same instanced pass over a resident mesh instance stream, no copy); per frame the
+             record's render-thread time (the core's counter) and the GPU time; and Waveform's 288 KiB capacity
+             carrying 4 KiB. The pair is built only if a route misses the floor by 0.05 ms or more.
 
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/mesh_buffer_check.py --module-dir release/native_module --require-validation
       --layer-path D:\\Temp\\Scratch\\SRPSS\\native_spike\\validation_layers\\extracted
-  [--apis opengl vulkan] [--rounds parity forms rest steady retire cost stream_ring] [--label n32_mesh_buffers]
+  [--apis opengl vulkan] [--rounds parity forms used rest steady retire cost stream_ring] [--label n32_mesh_buffers]
+  [--ring-payloads waveform_288KiB waveform_288KiB_used_4KiB ...]
 Evidence: .artifacts/evidence/native_core/n3_2/<date>_<label>/ (summary.json; sheet_<api>.png). Exit 0 whenever the
 harness ran; the verdict is the last printed line ("N32 VERDICT PASS" or "N32 VERDICT FAIL: ...").
 """
@@ -68,7 +76,7 @@ import vk_validation  # noqa: E402  (native/core/python)
 import host_check  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("parity", "forms", "rest", "steady", "retire", "cost", "stream_ring")
+ROUNDS = ("parity", "forms", "used", "rest", "steady", "retire", "cost", "stream_ring")
 CHILD_TIMEOUT_S = 1800
 MARGIN = 8
 DPRS = (1.0, 1.5)
@@ -87,6 +95,8 @@ COST_MIN_SAMPLES = 30
 COST_MAX_FRAMES = 1500             # Qt's OpenGL timer returns a time for about one frame in 20: a bounded loop
 RING_PAYLOADS = (("4KiB", 4096), ("bubble_4.6KB", 4608), ("oscilloscope_48KiB", 49152),
                  ("waveform_160KiB", 163840), ("waveform_288KiB", 294912))
+# The lead's partial case (D15 point 4): Waveform's 288 KiB capacity carrying 4 KiB, through the storage route.
+RING_PARTIAL = ("waveform_288KiB_used_4KiB", 294912, 1024)
 RING_FRAMES = 600                  # the ring's timed records a route (the CPU axis: window means of 20)
 COST_FRAMES = 240
 FLOOR_MARGIN_MS = 0.05
@@ -351,8 +361,107 @@ def round_parity(core, engine, app, api: str, packs: dict, out: Path) -> dict:
                                        "box_vs_wrong_front": _compare(box, wrong),
                                        "sprites_vs_y_up": _compare(frames["sprites" + tag],
                                                                    frames["sprites.y_up" + tag])}
+    # The plan's "a culled sprite draws nothing": every record of kind 2 (srpssSpriteCulled), against the control
+    # without the cull (the same records draw).
+    culled = _culled_sprites(core, engine, app, api, packs)
+    facts["culled_sprites"] = culled
+    checks["a_culled_sprite_draws_nothing"] = culled["culled_lit"] == 0 and culled["control_lit"] > 200
     np.savez_compressed(_work(out) / f"parity_{api}.npz", **frames)
     _sheet(out, f"sheet_{api}.png", {k: v for k, v in frames.items() if "." not in k.split("|")[0]})
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def _culled_sprites(core, engine, app, api: str, packs: dict) -> dict:
+    import struct as _struct
+
+    mb = _scenes()
+    rows = list(mb.points())
+    for i in range(mb.POINTS):
+        rows[6 * i + 5] = 2.0                                  # every sprite of the cull's kind
+    spec = spec_for("sprites", packs, api)
+    record = dict(spec.record, point_rows=_struct.pack(f"<{len(rows)}f", *rows))
+    out = {}
+    host = _host(core)
+    try:
+        for label, pack in (("culled", None), ("control", packs["sprite_nocull.vert"])):
+            variant = spec if pack is None else replace(spec, passes=(replace(
+                spec.passes[0], geometry=replace(spec.passes[0].geometry, vertex_pack=pack)),))
+            scene = Scene(core, engine, host, replace(variant, record=record))
+            try:
+                pixels = scene.pixels(app)
+                out[f"{label}_lit"] = int((pixels[..., :4].max(axis=2) > 0).sum())
+            finally:
+                _close(scene, host, app)
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    return out
+
+
+# --------------------------------------------------------------------------------------------------- used lengths
+
+def round_used(core, engine, app, api: str, packs: dict) -> dict:
+    """D15 point 4 (the lead, 15 Nov): an f32 stream writes only its used elements. The bytes written per record are
+    the used bytes (sprites: 40 of 192 records); a storage stream's bytes past the used length keep the earlier
+    record's (the beam drawn past its used points equals the composite of both records: nothing past was uploaded);
+    a record whose used length breaks its at_most rule is refused by the reader and writes nothing."""
+    import struct as _struct
+
+    mb = _scenes()
+    checks, facts = {}, {}
+    host = _host(core)
+    try:
+        # The bytes written: 40 sprites' 240 floats a record, not the field's 1,152.
+        spec = spec_for("sprites", packs, api)
+        scene = Scene(core, engine, host, spec)
+        try:
+            scene.draw(3, point_count=40, point_floats=240)
+            before = core.composite_live()
+            for _ in range(10):
+                scene.draw(1)
+            after = core.composite_live()
+            written = after["mesh_buffers_stream_bytes_written"] - before["mesh_buffers_stream_bytes_written"]
+            writes = after["mesh_buffers_stream_writes"] - before["mesh_buffers_stream_writes"]
+            facts["sprites_40"] = {"writes": writes, "bytes_written": written}
+            checks["only_the_used_bytes_are_written"] = writes == 10 and written == 10 * 240 * 4
+        finally:
+            _close(scene, host, app)
+        # Past the used length the storage keeps the last full record's bytes.
+        spec = spec_for("beam", packs, api)
+        full_a = list(mb.trace(0))
+        full_b = list(mb.trace(7))
+        half = mb.TRACE_POINTS // 2
+        composite = full_b[:2 * half] + full_a[2 * half:]
+        pack = (lambda values: _struct.pack(f"<{len(values)}f", *values))
+        scene = Scene(core, engine, host, spec)
+        try:
+            scene.pixels(app)                                  # record A, every point used
+            partial = scene.pixels(app, trace_rows=pack(full_b), trace_floats=2 * half)
+            composed = scene.pixels(app, trace_rows=pack(composite), trace_floats=2 * mb.TRACE_POINTS)
+            plain_b = scene.pixels(app, trace_rows=pack(full_b), trace_floats=2 * mb.TRACE_POINTS)
+        finally:
+            _close(scene, host, app)
+        facts["beam_partial_against_composite"] = _compare(partial, composed)
+        facts["beam_partial_against_b"] = _compare(partial, plain_b)
+        checks["bytes_past_the_used_length_were_not_uploaded"] = (_compare(partial, composed)["exact"]
+                                                                  and not _compare(partial, plain_b)["exact"])
+        # A record past its rule: refused at the reader, nothing written, the last frame kept.
+        scene = Scene(core, engine, host, spec)
+        try:
+            kept = scene.pixels(app)
+            before = core.composite_live()
+            scene.draw(3, trace_floats=2 * 256 + 1)
+            after = core.composite_live()
+            state = scene.mode.state()
+            facts["past_the_rule"] = {"writes": after["mesh_buffers_stream_writes"] - before[
+                "mesh_buffers_stream_writes"], "last_reason": state.get("last_reason"),
+                "refusal": state.get("refusal") or (state.get("reader") or {}).get("refusal")}
+            checks["a_used_length_past_its_rule_writes_nothing"] = facts["past_the_rule"]["writes"] == 0
+        finally:
+            _close(scene, host, app)
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
@@ -675,6 +784,11 @@ def round_forms(core, engine, app, api: str, packs: dict, facts_in: dict) -> dic
         run("streaks", spec_for("streaks", packs, api))
         run("streaks_indirect", spec_for("streaks_indirect", packs, api))
         run("streaks_first3", spec_for("streaks", packs, api), {"direct_first_instance": 3})
+        if "cell_ids.vert" in packs:
+            # gl_DrawID, gl_BaseInstance and gl_BaseVertex drawn as the colour by the multi-draw (first vertex 4).
+            base = spec_for("cells", packs, api)
+            geometry = replace(base.passes[0].geometry, draw_parameters_pack=packs["cell_ids.vert"], first_vertex=4)
+            run("cells_ids", replace(base, passes=(replace(base.passes[0], blend="replace", geometry=geometry),)))
     finally:
         host.close()
         host_check._flush_deletes(app)
@@ -686,6 +800,27 @@ def round_forms(core, engine, app, api: str, packs: dict, facts_in: dict) -> dic
     checks["batched_equals_direct"] = c["cells"]["exact"]
     checks["sixteen_passes_equal_the_batched_draw"] = c["cells_passes"]["exact"]
     checks["control_first_offset_differs"] = c["cells_flat"]["past1"] > 50
+    if "cells_ids" in frames and live["cells_ids"]["mesh_buffers_batched_indirect"] > 0:
+        mb = _scenes()
+        decoded = []
+        for i in range(mb.CELLS):
+            x, y = 30.0 + (i % 16) * 27.0, 40.0 + (i // 16) * 50.0
+            r, g, b, _a = (int(v) for v in frames["cells_ids"][int(y), int(x)])
+            decoded.append((i // 4, r, g, b))
+        facts["draw_parameters_read_back"] = {
+            "draw_id_is_the_batch": all(r == batch for batch, r, _g, _b in decoded),
+            "base_instance": sorted({g for _batch, _r, g, _b in decoded}),
+            "base_vertex": sorted({b for _batch, _r, _g, b in decoded}), "first_vertex": 4}
+        checks["gl_draw_id_reads_the_batch"] = facts["draw_parameters_read_back"]["draw_id_is_the_batch"]
+        checks["gl_base_instance_reads_0"] = facts["draw_parameters_read_back"]["base_instance"] == [0]
+        # gl_BaseVertex of a non-indexed draw: Vulkan's is the command's first vertex; OpenGL's (ARB_shader_draw_
+        # parameters) has no baseVertex parameter there and reads 0. Both recorded; each backend held to its rule.
+        expected_base_vertex = [4] if api == "vulkan" else [0]
+        facts["draw_parameters_read_back"]["expected_base_vertex"] = expected_base_vertex
+        checks["gl_base_vertex_reads_its_backends_value"] = (facts["draw_parameters_read_back"]["base_vertex"]
+                                                            == expected_base_vertex)
+    else:
+        facts["draw_parameters_read_back"] = "not recorded (no form 3 on this backend, or no pack)"
     checks["control_hide_draws_the_loop"] = (live["cells_loop"]["mesh_buffers_batched_loop"] > 0
                                              and live["cells_loop"]["mesh_buffers_batched_indirect"] == 0)
     form3 = live["cells"]["mesh_buffers_batched_indirect"] > 0
@@ -1005,17 +1140,21 @@ def _copy_ms(size: int, repeats: int = 400) -> float:
     return round(times[len(times) // 2] / 1e6, 4)
 
 
-def round_stream_ring(core, engine, app, api: str, packs: dict) -> dict:
+def round_stream_ring(core, engine, app, api: str, packs: dict, only=None) -> dict:
     """D15 point 7: each payload through QRhi's routes against the pair's floor (module notes)."""
     mb = _scenes()
     checks, facts = {}, {}
     host = _host(core)
     try:
-        for label, size in (("none", 0),) + RING_PAYLOADS:
+        payloads = (("none", 0, None),) + tuple((label, size, None) for label, size in RING_PAYLOADS) + (RING_PARTIAL,)
+        for label, size, used in payloads:
+            if only and label not in only and label != "none":
+                continue
             entry = {}
-            kinds = ("none",) if size == 0 else ("instance", "storage", "floor")
+            kinds = ("none",) if size == 0 else (("storage", "floor") if used is not None else
+                                                 ("instance", "storage", "floor"))
             for kind in kinds:
-                spec = mb.ring_scene(packs, size // 4, kind)
+                spec = mb.ring_scene(packs, size // 4, kind, used_floats=used if kind == "storage" else None)
                 scene = Scene(core, engine, host, spec)
                 try:
                     entry[kind] = _timed(host, scene)
@@ -1028,19 +1167,23 @@ def round_stream_ring(core, engine, app, api: str, packs: dict) -> dict:
             floor = entry["floor"]
             # The CPU axis: the render thread's record (the core's timer) where the module counts it, else the frame's
             # wall time on the GUI thread (a module before the counter: noisier, the whole frame).
-            cpu_key = "record_cpu_median_ms" if "record_cpu_median_ms" in entry["instance"] else "wall_median_ms"
+            first = entry.get("instance") or entry["storage"]
+            cpu_key = "record_cpu_median_ms" if "record_cpu_median_ms" in first else "wall_median_ms"
             if cpu_key == "record_cpu_median_ms":
                 # The pair's CPU floor: the record with the data resident (the floor scene) plus one copy of the
                 # payload into memory already mapped (timed here, the copy a persistent mapping would cost). Not the
-                # instance route's own write: on OpenGL QRhi's Dynamic fast path is itself a buffer update call.
-                copy_ms = _copy_ms(size)
+                # instance route's own write: on OpenGL QRhi's Dynamic fast path is itself a buffer update call. A
+                # partial payload's floor copies only its used bytes.
+                copy_ms = _copy_ms(4 * used if used is not None else size)
                 cpu_floor = floor[cpu_key] + copy_ms
                 entry["cpu_floor_ms"] = {"floor_record_ms": floor[cpu_key], "payload_copy_ms": copy_ms,
                                          "floor_ms": round(cpu_floor, 4)}
             else:
-                cpu_floor = entry["instance"][cpu_key]
+                cpu_floor = first[cpu_key]
             entry["cpu_axis"] = cpu_key
-            for route in ("instance", "storage"):
+            if used is not None:
+                entry["used_bytes"] = 4 * used
+            for route in [r for r in ("instance", "storage") if r in entry]:
                 got = entry[route]
                 ok_gpu = (got["median_ms"] is not None and floor["median_ms"] is not None
                           and got["median_ms"] - floor["median_ms"] < FLOOR_MARGIN_MS)
@@ -1116,7 +1259,9 @@ def child(args) -> dict:
                     elif name == "cost":
                         record[name] = round_cost(core, engine, app, args.api, packs)
                     elif name == "stream_ring":
-                        record[name] = round_stream_ring(core, engine, app, args.api, packs)
+                        record[name] = round_stream_ring(core, engine, app, args.api, packs, args.ring_payloads)
+                    elif name == "used":
+                        record[name] = round_used(core, engine, app, args.api, packs)
                 except Exception:
                     record[name] = {"pass": False, "error": traceback.format_exc()}
     finally:
@@ -1173,6 +1318,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--apis", nargs="+", default=list(APIS), choices=APIS)
     parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=ROUNDS)
     parser.add_argument("--label", default="n32_mesh_buffers")
+    parser.add_argument("--ring-payloads", nargs="+", default=None,
+                        choices=[label for label, _size in RING_PAYLOADS] + [RING_PARTIAL[0]],
+                        help="stream_ring: only these payloads (default: every one)")
     parser.add_argument("--layer-path", type=Path, default=None,
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")
     parser.add_argument("--require-validation", action="store_true",
@@ -1209,7 +1357,7 @@ def main(argv: list[str] | None = None) -> int:
         child_json = out / f"child_{api}.json"
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
-                   "--rounds", *args.rounds]
+                   "--rounds", *args.rounds] + (["--ring-payloads", *args.ring_payloads] if args.ring_payloads else [])
         started = time.monotonic()
         try:
             proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(root))

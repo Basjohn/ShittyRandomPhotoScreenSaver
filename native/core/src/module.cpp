@@ -1834,9 +1834,29 @@ PyObject *mode_blocks(PyObject *, PyObject *args)
     Py_ssize_t cardLength = 0;
     int targetWidth = 0;
     int targetHeight = 0;
-    if (!PyArg_ParseTuple(args, "s#s#Os#y#z#(ii)", &schemaJson, &schemaLength, &json, &length, &packs, &settingsJson,
-                          &settingsLength, &record, &recordLength, &cardJson, &cardLength, &targetWidth, &targetHeight))
+    PyObject *correctionArgument = nullptr;   // N3.2: an optional clip correction (16 floats, column-major)
+    if (!PyArg_ParseTuple(args, "s#s#Os#y#z#(ii)|O", &schemaJson, &schemaLength, &json, &length, &packs, &settingsJson,
+                          &settingsLength, &record, &recordLength, &cardJson, &cardLength, &targetWidth, &targetHeight,
+                          &correctionArgument))
         return nullptr;
+    float correction[16] = {};
+    const bool corrected = correctionArgument && correctionArgument != Py_None;
+    if (corrected) {
+        PyObject *sequence = PySequence_Fast(correctionArgument, "a clip correction is 16 numbers");
+        if (!sequence)
+            return nullptr;
+        if (PySequence_Fast_GET_SIZE(sequence) != 16) {
+            Py_DECREF(sequence);
+            PyErr_SetString(PyExc_ValueError, "a clip correction is 16 numbers (column-major)");
+            return nullptr;
+        }
+        for (Py_ssize_t k = 0; k < 16; ++k) {
+            correction[k] = float(PyFloat_AsDouble(PySequence_Fast_GET_ITEM(sequence, k)));
+        }
+        Py_DECREF(sequence);
+        if (PyErr_Occurred())
+            return nullptr;
+    }
     const QSharedPointer<const srpss_core::RuntimeSchema> schema = schemaArgument(schemaJson, schemaLength);
     srpss_core::ModeProgram program;
     QJsonObject settings;
@@ -1848,7 +1868,8 @@ PyObject *mode_blocks(PyObject *, PyObject *args)
     QJsonObject facts;
     QString reason;
     if (!srpss_core::modeBlocks(*schema, program, settings, card, QSize(targetWidth, targetHeight),
-                                QByteArray(record, qsizetype(recordLength)), &blocks, &facts, &reason)) {
+                                QByteArray(record, qsizetype(recordLength)), &blocks, &facts, &reason,
+                                corrected ? correction : nullptr)) {
         PyErr_SetString(PyExc_ValueError, reason.toUtf8().constData());
         return nullptr;
     }

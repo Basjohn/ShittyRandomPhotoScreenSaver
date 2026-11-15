@@ -347,9 +347,11 @@ struct ModeProgram
 
 // GPU-free: what the content uploads for one record (each pass's block bytes), with the same refusals; `facts` names
 // each pass's block and which source filled each member.
+// N3.2: `clipCorrection` (16 floats, column-major; null: none) is a target's correction of a vertex stage's uMatrix
+// (the GPU-free test gives each backend's, as targetCorrection makes it).
 bool modeBlocks(const RuntimeSchema &schema, const ModeProgram &program, const QJsonObject &settings,
                 const ModeCard &card, const QSize &target, const QByteArray &record, QList<QByteArray> *blocksOut,
-                QJsonObject *facts, QString *reason);
+                QJsonObject *facts, QString *reason, const float *clipCorrection = nullptr);
 
 int modeContentObjects();
 

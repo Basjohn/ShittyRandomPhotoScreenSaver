@@ -267,6 +267,8 @@ QJsonObject StreamDeclaration::toJson() const
     o.insert(QStringLiteral("kind"), streamKindName(kind));
     if (kind == StreamKind::Instance)
         o.insert(QStringLiteral("layout"), layout.toJson());
+    if (!used.isEmpty())
+        o.insert(QStringLiteral("used"), QString::fromLatin1(used));
     o.insert(QStringLiteral("capacity"), double(capacity));
     return o;
 }
@@ -283,10 +285,13 @@ bool parseStreamDeclaration(const QJsonValue &value, StreamDeclaration *out, QSt
         : kind == QLatin1String("indirect") ? StreamKind::Indirect
                                             : StreamKind::Storage;
     const bool known = instance || kind == QLatin1String("storage") || kind == QLatin1String("indirect");
-    if (!value.isObject() || !known || o.size() != (instance ? 4 : 3) || !identifier(s.name, false)
-        || !identifier(s.field, false)) {
+    const bool withUsed = o.contains(QStringLiteral("used"));
+    s.used = o.value(QStringLiteral("used")).toString().toLatin1();
+    if (!value.isObject() || !known || o.size() != (instance ? 4 : 3) + (withUsed ? 1 : 0) || !identifier(s.name, false)
+        || !identifier(s.field, false) || (withUsed && !identifier(s.used, false)) || s.used == s.field) {
         *error = QStringLiteral("a stream is {\"name\", \"field\": the record's array field, \"kind\": instance, storage "
-                                "or indirect, \"layout\": {...} (instance only)}");
+                                "or indirect, \"layout\": {...} (instance only), \"used\": the u32 field counting an f32 "
+                                "field's used elements}");
         return false;
     }
     if (instance && !parseRecordLayout(o.value(QStringLiteral("layout")), &s.layout,
@@ -311,6 +316,29 @@ QString streamFieldFits(const StreamDeclaration &stream, const fa::Field &field)
     const quint32 bytes = 4u * field.count;
     if (stream.kind == StreamKind::Instance && bytes % stream.layout.stride != 0)
         return QStringLiteral("%1: %2 bytes are not whole %3-byte records").arg(label).arg(bytes).arg(stream.layout.stride);
+    return QString();
+}
+
+QString streamUsedFits(const StreamDeclaration &stream, const fa::Field &field, const fa::Field *used)
+{
+    const QString label = QStringLiteral("stream '%1' (field '%2')")
+                              .arg(QString::fromLatin1(stream.name), QLatin1String(field.name));
+    if (field.kind != fa::FieldKind::F32) {
+        return stream.used.isEmpty() ? QString()
+                                     : QStringLiteral("%1: a used length belongs to an f32 field").arg(label);
+    }
+    if (stream.used.isEmpty())
+        return QStringLiteral("%1: an f32 stream names its used length (\"used\": a u32 field)").arg(label);
+    if (!used) {
+        return QStringLiteral("%1: the record has no used-length field '%2'")
+            .arg(label, QString::fromLatin1(stream.used));
+    }
+    if (used->kind != fa::FieldKind::U32 || used->count != 1)
+        return QStringLiteral("%1: the used length '%2' is a u32 scalar").arg(label, QString::fromLatin1(stream.used));
+    if (used->check != fa::FieldCheck::AtMost || used->limit > field.count) {
+        return QStringLiteral("%1: the used length '%2' takes an at_most rule within the field's %3 elements")
+            .arg(label, QString::fromLatin1(stream.used)).arg(field.count);
+    }
     return QString();
 }
 
@@ -655,11 +683,23 @@ bool ModeStreams::build(QRhi *rhi, const QList<StreamDeclaration> &streams, cons
             release();
             return false;
         }
+        const fa::Field *usedField = nullptr;
+        for (quint32 i = 0; schema && !decl.used.isEmpty() && i < schema->fieldCount; ++i) {
+            if (decl.used == schema->fields[i].name)
+                usedField = &schema->fields[i];
+        }
+        const QString usedFits = streamUsedFits(decl, *field, usedField); // the program's check refused it already
+        if (!usedFits.isEmpty()) {
+            *error = usedFits;
+            release();
+            return false;
+        }
         const quint32 bytes = 4u * field->count;
         std::unique_ptr<Stream> s(new Stream);
         s->decl = decl;
         s->decl.capacity = bytes;
         s->field = field;
+        s->usedField = usedField;
         switch (decl.kind) {
         case StreamKind::Instance:
             s->buffer.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, bytes));
@@ -723,22 +763,34 @@ void ModeStreams::write(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QByte
             if (!s->buffer->create())
                 continue;
         }
-        const quint32 bytes = s->decl.capacity;
+        quint32 bytes = s->decl.capacity;
+        if (s->usedField) {
+            // D15 point 4: the used elements only (the reader admitted the record under the at_most rule; bounded here
+            // all the same).
+            quint32 used = 0;
+            if (quint64(s->usedField->offset) + 4u <= quint64(record.size()))
+                std::memcpy(&used, record.constData() + s->usedField->offset, sizeof(used));
+            bytes = quint32(qMin(quint64(4u) * quint64(used), quint64(s->decl.capacity)));
+        }
         if (quint64(s->field->offset) + bytes > quint64(record.size()))
             continue;                         // the record is the schema's (checked at its accept): never reached
+        s->used = bytes;
+        if (bytes == 0)
+            continue;                         // nothing used: nothing written (the draw's count reads none)
         const char *data = record.constData() + s->field->offset;
         if (s->decl.kind == StreamKind::Storage) {
-            // The QByteArray overload with bytes kept across records (D15 point 4): the batch takes a reference; the
-            // write below detaches only if a batch still holds the last record's (it was released with its frame).
+            // The QByteArray overload (D15 point 4) over bytes kept across records: a view of the used bytes, so the
+            // batch holds no copy and nothing is allocated (the staging is written again only at the next record, after
+            // the batch ran in this record's frame).
             std::memcpy(s->staging.data(), data, bytes);
-            updates->uploadStaticBuffer(s->buffer.get(), 0, s->staging);
+            updates->uploadStaticBuffer(s->buffer.get(), 0, QByteArray::fromRawData(s->staging.constData(),
+                                                                                    qsizetype(bytes)));
         } else {
             char *p = s->buffer->beginFullDynamicBufferUpdateForCurrentFrame();
             if (p)
                 std::memcpy(p, data, bytes);
             s->buffer->endFullDynamicBufferUpdateForCurrentFrame();
         }
-        s->used = bytes;
         g_streamWrites.fetchAndAddRelaxed(1);
         g_streamBytesWritten.fetchAndAddRelaxed(bytes);
     }

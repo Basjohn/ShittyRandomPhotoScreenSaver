@@ -122,6 +122,10 @@ void main()
     float size = clamp(aPoint.z * u_dpr * u_sprite_scale, 1.0, 128.0);
     vec2 corner = srpssSpriteCorner(srpssVertexIndex);
     gl_Position = srpssSpriteClip(centre, corner, size, u_target_px);
+#ifndef SPRITE_NO_CULL
+    if (aOther.y > 1.5)
+        gl_Position = srpssSpriteCulled();     // a culled sprite (kind 2): every corner outside the clip volume
+#endif
     vCoord = corner;
     vAlpha = aPoint.w;
     vKind = aOther.y;
@@ -276,6 +280,9 @@ void main()
     vec2 corner = vec2(float(srpssVertexIndex & 1), float((srpssVertexIndex >> 1) & 1));
     gl_Position = uMatrix * vec4(c.xy + (corner - 0.5) * c.z, 0.0, 1.0);
     vColour = vec4(hue(c.w + 0.06 * float(batch)) * u_tint.rgb, u_tint.a);
+#ifdef CELLS_IDS
+    vColour = vec4(float(gl_DrawID), float(gl_BaseInstance), float(gl_BaseVertex), 255.0) / 255.0;
+#endif
 }
 """
 CELL_VERT = HEADER + "//@srpss_conventions\n" + CELL_BODY
@@ -290,6 +297,8 @@ def cell_pass_vert(batch: int) -> str:
 
 
 SPRITE_FRAG_Y_UP = "#version 440\n#define SPRITE_Y_UP\n" + SPRITE_BLOCK + SPRITE_FRAG_BODY
+# The culled sprite's control: the same vertex stage without the cull (a kind-2 sprite then draws as a particle).
+SPRITE_VERT_NO_CULL = SPRITE_VERT.replace("//@srpss_conventions\n", "#define SPRITE_NO_CULL\n//@srpss_conventions\n", 1)
 SPRITE_FRAG_POINTS = "#version 440\n#define SPRITE_POINTS\n" + SPRITE_BLOCK + SPRITE_FRAG_BODY
 # Research Q5: qsb compiles the draw parameters (gl_DrawID, gl_BaseInstance, gl_BaseVertex) for which targets.
 DRAW_PARAMETERS_PROBE = """#version 460
@@ -359,11 +368,13 @@ SHADERS = {
     "streak.vert": STREAK_VERT, "streak.frag": STREAK_FRAG, "cell.vert": CELL_VERT,
     "cell_direct.vert": CELL_VERT_DIRECT, "cell_flat.vert": CELL_VERT_FLAT, "cell.frag": CELL_FRAG,
     "ring.vert": RING_VERT, "ring.frag": RING_FRAG, "ring_instance.vert": RING_INSTANCE_VERT,
-    "ring_storage.vert": RING_STORAGE_VERT, "sprite_yup.frag": SPRITE_FRAG_Y_UP,
+    "ring_storage.vert": RING_STORAGE_VERT, "sprite_nocull.vert": SPRITE_VERT_NO_CULL, "sprite_yup.frag": SPRITE_FRAG_Y_UP,
     **{f"cell_pass{b}.vert": cell_pass_vert(b) for b in range(16)},
 }
 #: Baked apart: a failure is a fact (research Q5), not the harness's end.
-OPTIONAL_SHADERS = {"cell_dp.vert": CELL_VERT_DP, "draw_parameters.vert": DRAW_PARAMETERS_PROBE}
+CELL_VERT_IDS = HEADER_460 + "#define SRPSS_DRAW_PARAMETERS\n#define CELLS_IDS\n//@srpss_conventions\n" + CELL_BODY
+OPTIONAL_SHADERS = {"cell_dp.vert": CELL_VERT_DP, "draw_parameters.vert": DRAW_PARAMETERS_PROBE,
+                    "cell_ids.vert": CELL_VERT_IDS}
 
 
 def compose(text: str) -> str:
@@ -552,12 +563,12 @@ def scene(name: str, packs: dict, *, front_cw: int = 0, form: str = "") -> Scene
                                 cull="back", front_face="u_front_cw")
         passes = (ModePass("box", packs["box.frag"], "replace", target="scene", depth_test="less", depth_write=True,
                            geometry=geometry),)
-        return SceneSpec(name, passes, (_target(depth=True),), (ModeStream("bars", "bar_rows"),),
+        return SceneSpec(name, passes, (_target(depth=True),), (ModeStream("bars", "bar_rows", used="bar_floats"),),
                          {"u_box": [11.3, 249.71, 0.6, 0.55], "u_light": [0.4, -0.6, 0.7, 0.0],
                           "u_front_cw": int(front_cw)},
-                         schema(name, (("bar_rows", "f32", 4 * 64), ("bar_count", "u32", 1)),
-                                (("bar_count", "at_most", 64),)),
-                         {"bar_rows": _f32(bars()), "bar_count": BARS},
+                         schema(name, (("bar_rows", "f32", 4 * 64), ("bar_count", "u32", 1), ("bar_floats", "u32", 1)),
+                                (("bar_count", "at_most", 64), ("bar_floats", "at_most", 4 * 64))),
+                         {"bar_rows": _f32(bars()), "bar_count": BARS, "bar_floats": 4 * BARS},
                          (("box", box_mesh(), box_layout(), None, None),))
     if name == "voxels":
         cell_layout = RecordLayout(16, (MeshAttribute("aCell", 4, 0),))
@@ -571,21 +582,25 @@ def scene(name: str, packs: dict, *, front_cw: int = 0, form: str = "") -> Scene
         geometry = PassGeometry(packs["sprite.vert"], topology="triangle_strip", vertices=4, instances="point_count",
                                 instance_from="points")
         passes = (ModePass("sprites", packs["sprite.frag"], "premultiplied", target="scene", geometry=geometry),)
-        return SceneSpec(name, passes, (_target(),), (ModeStream("points", "point_rows", "instance", layout),),
+        return SceneSpec(name, passes, (_target(),),
+                         (ModeStream("points", "point_rows", "instance", layout, used="point_floats"),),
                          {"u_sprite_scale": 1.0, "u_colour": [0.9, 0.95, 1.0, 1.0]},
-                         schema(name, (("point_rows", "f32", 6 * 192), ("point_count", "u32", 1)),
-                                (("point_count", "at_most", 192),)),
-                         {"point_rows": _f32(points()), "point_count": POINTS})
+                         schema(name, (("point_rows", "f32", 6 * 192), ("point_count", "u32", 1),
+                                       ("point_floats", "u32", 1)),
+                                (("point_count", "at_most", 192), ("point_floats", "at_most", 6 * 192))),
+                         {"point_rows": _f32(points()), "point_count": POINTS, "point_floats": 6 * POINTS})
     if name == "beam":
         geometry = PassGeometry(packs["beam.vert"], topology="triangle_strip", vertices=4, instances="segments",
                                 storage=(("Trace", "trace"),))
         max_blend = BlendState(("max", "one", "one"), ("max", "one", "one"))
         passes = (ModePass("beam", packs["beam.frag"], max_blend, target="scene", geometry=geometry),)
-        return SceneSpec(name, passes, (_target(),), (ModeStream("trace", "trace_rows"),),
+        return SceneSpec(name, passes, (_target(),), (ModeStream("trace", "trace_rows", used="trace_floats"),),
                          {"u_beam": [2.5, 1.5, 0.0, 0.0], "u_colour": [0.35, 1.0, 0.55, 1.0]},
-                         schema(name, (("trace_rows", "f32", 2 * 256), ("segments", "u32", 1)),
-                                (("segments", "at_most", 255),)),
-                         {"trace_rows": _f32(trace()), "segments": TRACE_POINTS - 1})
+                         schema(name, (("trace_rows", "f32", 2 * 256), ("segments", "u32", 1),
+                                       ("trace_floats", "u32", 1)),
+                                (("segments", "at_most", 255), ("trace_floats", "at_most", 2 * 256))),
+                         {"trace_rows": _f32(trace()), "segments": TRACE_POINTS - 1,
+                          "trace_floats": 2 * TRACE_POINTS})
     if name in ("streaks", "streaks_indirect"):
         indirect = name == "streaks_indirect"
         geometry = (PassGeometry(packs["streak.vert"], topology="triangle_strip", mesh="quad", vertices="mesh",
@@ -600,7 +615,7 @@ def scene(name: str, packs: dict, *, front_cw: int = 0, form: str = "") -> Scene
                          {"u_spread": [6.0, 36.0], "u_colour": [1.0, 0.7, 0.35, 1.0]},
                          schema(name, entries, (("command_count", "at_most", 1),) if indirect else ()), record)
     if name in ("cells", "cells_direct", "cells_flat"):
-        streams = (ModeStream("cells", "cell_rows"), ModeStream("batches", "batch_table"))
+        streams = (ModeStream("cells", "cell_rows", used="cell_floats"), ModeStream("batches", "batch_table"))
         storage = (("Cells", "cells"), ("Batches", "batches"))
         if name == "cells":
             geometry = PassGeometry(packs["cell.vert"], topology="triangle_strip", vertices=4, storage=storage,
@@ -610,14 +625,17 @@ def scene(name: str, packs: dict, *, front_cw: int = 0, form: str = "") -> Scene
             geometry = PassGeometry(packs["cell_direct.vert" if name == "cells_direct" else "cell_flat.vert"],
                                     topology="triangle_strip", vertices=4, instances=CELLS, storage=storage)
         passes = (ModePass("cells", packs["cell.frag"], "alpha", target="scene", geometry=geometry),)
-        entries = (("cell_rows", "f32", 4 * CELLS), ("batch_table", "u32", 2 * BATCHES), ("batch_len", "u32", 1))
-        record = {"cell_rows": _f32(cells()), "batch_table": tuple(batch_table()), "batch_len": BATCHES}
+        entries = (("cell_rows", "f32", 4 * CELLS), ("batch_table", "u32", 2 * BATCHES), ("cell_floats", "u32", 1),
+                   ("batch_len", "u32", 1))
+        record = {"cell_rows": _f32(cells()), "batch_table": tuple(batch_table()), "cell_floats": 4 * CELLS,
+                  "batch_len": BATCHES}
+        checks = (("cell_floats", "at_most", 4 * CELLS), ("batch_len", "at_most", BATCHES))
         if name != "cells":
-            entries = entries[:2]
+            entries = entries[:3]
             record.pop("batch_len")
+            checks = checks[:1]
         return SceneSpec(name, passes, (_target(),), streams, {"u_tint": [1.0, 0.9, 0.8, 0.85]},
-                         schema(name, entries, (("batch_len", "at_most", BATCHES),) if name == "cells" else ()),
-                         record)
+                         schema(name, entries, checks), record)
     raise KeyError(name)
 
 
@@ -632,7 +650,7 @@ def ring_rows(count: int) -> bytes:
 RING_CORNERS = _f32([0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0])
 
 
-def ring_scene(packs: dict, payload_floats: int, kind: str):
+def ring_scene(packs: dict, payload_floats: int, kind: str, used_floats: int | None = None):
     """The stream ring's measurement (D15 point 7), a payload of ``payload_floats`` floats (rows of four) read as its
     consumer reads it: ``instance`` (an instance stream: QRhi's Dynamic fast path, the pair's CPU floor), ``storage``
     (a storage stream read with neighbours: QRhi's Static route, ``uploadStaticBuffer``), ``floor`` (the instance pass
@@ -644,29 +662,36 @@ def ring_scene(packs: dict, payload_floats: int, kind: str):
     corner = RecordLayout(8, (MeshAttribute("aCorner", 2, 0),))
     row = RecordLayout(16, (MeshAttribute("aRow", 4, 0),))
     entries = [("u_frame", "f64", 1)]
+    checks: list = []
     record: dict = {"u_frame": 0.0}
     streams: tuple = ()
     meshes: tuple = ()
     if kind == "none":
         geometry = PassGeometry(packs["ring.vert"], topology="triangle_strip", vertices=4, instances=8,
                                 storage=(("Small", "small"),))
-        streams = (ModeStream("small", "small_rows"),)
-        entries.append(("small_rows", "f32", 32))
+        streams = (ModeStream("small", "small_rows", used="small_floats"),)
+        entries += [("small_rows", "f32", 32), ("small_floats", "u32", 1)]
+        checks.append(("small_floats", "at_most", 32))
+        record["small_floats"] = 32
         record["small_rows"] = _f32([40.0 + 50.0 * i if j == 0 else (60.0 if j == 1 else (30.0 if j == 2 else 0.0))
                                      for i in range(8) for j in range(4)])
     elif kind == "instance":
         geometry = PassGeometry(packs["ring_instance.vert"], topology="triangle_strip", mesh="ring_quad",
                                 vertices="mesh", instance_from="payload")
-        streams = (ModeStream("payload", "payload", "instance", row),)
+        streams = (ModeStream("payload", "payload", "instance", row, used="payload_floats"),)
         meshes = (("ring_quad", RING_CORNERS, corner, None, None),)
-        entries.append(("payload", "f32", 4 * rows))
+        entries += [("payload", "f32", 4 * rows), ("payload_floats", "u32", 1)]
+        checks.append(("payload_floats", "at_most", 4 * rows))
         record["payload"] = ring_rows(rows)
+        record["payload_floats"] = 4 * rows if used_floats is None else int(used_floats)
     elif kind == "storage":
         geometry = PassGeometry(packs["ring_storage.vert"], topology="triangle_strip", vertices=4, instances=rows - 1,
                                 storage=(("Rows", "payload"),))
-        streams = (ModeStream("payload", "payload"),)
-        entries.append(("payload", "f32", 4 * rows))
+        streams = (ModeStream("payload", "payload", used="payload_floats"),)
+        entries += [("payload", "f32", 4 * rows), ("payload_floats", "u32", 1)]
+        checks.append(("payload_floats", "at_most", 4 * rows))
         record["payload"] = ring_rows(rows)
+        record["payload_floats"] = 4 * rows if used_floats is None else int(used_floats)
     elif kind == "floor":
         geometry = PassGeometry(packs["ring_instance.vert"], topology="triangle_strip", mesh="ring_floor",
                                 vertices="mesh", instance_from="ring_floor")
@@ -675,7 +700,8 @@ def ring_scene(packs: dict, payload_floats: int, kind: str):
         raise KeyError(kind)
     passes = (ModePass("ring", packs["ring.frag"], "alpha", target="scene", geometry=geometry),)
     return SceneSpec(f"ring_{kind}_{payload_floats}", passes, (_target(),), streams,
-                     {"u_colour": [0.6, 0.8, 1.0, 0.9]}, schema("ring", tuple(entries)), record, meshes)
+                     {"u_colour": [0.6, 0.8, 1.0, 0.9]}, schema("ring", tuple(entries), tuple(checks)), record,
+                     meshes)
 
 
 __all__ = ["CARD", "SHADERS", "SceneSpec", "bake_all", "compose", "ring_scene", "scene", "schema"]

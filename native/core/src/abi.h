@@ -89,7 +89,9 @@
 // the conventions block's z (clipTopDown); every block in one arena given by dynamic offsets (N2.9 and N3.1's passes
 // too, their outputs unchanged); mesh_buffer_control (harness), mesh_buffer_arena_layout (GPU-free) and
 // vulkan_device_facts; composite_live's mesh_buffers_* counts; composite_mode_state's meshes and mesh_buffers.
-// Backward compatible for every earlier program.
+// Backward compatible for every earlier program. Within 18 (before its first use, the lead, 15 Nov): an f32 stream's
+// "used" (a u32 field under an at_most rule within its count; only the used bytes are written), mode_blocks' optional
+// clip correction, and composite_live's mesh_buffers_records_timed, _record_ns and _stream_write_ns.
 #pragma once
 
 #define SRPSS_NATIVE_CORE_ABI 18

@@ -1642,7 +1642,7 @@ bool ModeProgram::drawNames(const QByteArray &name) const
 bool ModeProgram::streamReads(const QByteArray &field) const
 {
     for (const StreamDeclaration &s : streams) {
-        if (s.field == field)
+        if (s.field == field || s.used == field)  // the data and its used length (D15 point 4): the stream's
             return true;
     }
     return false;
@@ -1833,7 +1833,16 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
                 }
             }
             for (const StreamDeclaration &stream : streams) {
-                const QString fits = stream.field == name ? streamFieldFits(stream, field) : QString();
+                QString fits = stream.field == name ? streamFieldFits(stream, field) : QString();
+                if (fits.isEmpty() && stream.field == name) {
+                    // D15 point 4: an f32 stream's used length, a u32 scalar under an at_most rule within its count.
+                    const fa::Field *used = nullptr;
+                    for (quint32 u = 0; !stream.used.isEmpty() && u < schema->fieldCount; ++u) {
+                        if (stream.used == schema->fields[u].name)
+                            used = &schema->fields[u];
+                    }
+                    fits = streamUsedFits(stream, field, used);
+                }
                 if (!fits.isEmpty()) {
                     *error = fits;
                     return false;
@@ -2007,7 +2016,7 @@ bool ModeProgram::packFrame(const fa::Schema &schema, const QByteArray &record, 
 
 bool modeBlocks(const RuntimeSchema &schema, const ModeProgram &program, const QJsonObject &settings,
                 const ModeCard &card, const QSize &target, const QByteArray &record, QList<QByteArray> *blocksOut,
-                QJsonObject *facts, QString *reason)
+                QJsonObject *facts, QString *reason, const float *clipCorrection)
 {
     bool ready = false;
     if (!program.check(&schema.schema(), &settings, &ready, reason))
@@ -2022,7 +2031,7 @@ bool modeBlocks(const RuntimeSchema &schema, const ModeProgram &program, const Q
     }
     QList<BlockValues> blocks;
     if (!program.packSettings(settings, &blocks, reason)
-        || !program.packFrame(schema.schema(), record, card, target, blocks, reason))
+        || !program.packFrame(schema.schema(), record, card, target, blocks, reason, nullptr, clipCorrection))
         return false;
     blocksOut->clear();
     QJsonArray passes;

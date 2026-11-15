@@ -290,12 +290,15 @@ class RecordLayout:
 class ModeStream:
     """N3.2 (D15 point 4): a record's array field bound by name as a stream: ``instance`` (f32 records of ``layout`` read
     per instance), ``storage`` (read in a buffer block) or ``indirect`` (u32 commands of four: vertices, instances,
-    first vertex, 0)."""
+    first vertex, 0). An f32 field names its ``used`` length: a u32 field counting the elements in use, under an
+    ``at_most`` rule no larger than the field's count; only those bytes are written each record (the core refuses an
+    f32 stream without one, and a u32 stream with one)."""
 
     name: str
     field: str
     kind: str = "storage"
     layout: RecordLayout | None = None
+    used: str | None = None
 
     def __post_init__(self) -> None:
         if self.kind not in STREAM_KINDS:
@@ -307,6 +310,8 @@ class ModeStream:
         entry: dict[str, Any] = {"name": self.name, "field": self.field, "kind": self.kind}
         if self.layout is not None:
             entry["layout"] = self.layout.declaration()
+        if self.used is not None:
+            entry["used"] = self.used
         return entry
 
 
@@ -596,14 +601,20 @@ class NativeMode:
 
 
 def mode_blocks(module: ModuleType, schema: Any, passes: Sequence[ModePass], settings: Mapping[str, Any],
-                record: bytes, card: Mapping[str, Any] | None, target: tuple[int, int]) -> tuple[list[bytes], dict]:
+                record: bytes, card: Mapping[str, Any] | None, target: tuple[int, int], *,
+                streams: Sequence[ModeStream] = (),
+                correction: Sequence[float] | None = None) -> tuple[list[bytes], dict]:
     """Each pass's block bytes the core uploads for ``record`` under ``card`` into a ``target`` of these pixels
     (GPU-free), and the facts (each pass's members by source, the program's reflected blocks, the schema as the core
-    holds it). ValueError with the reason when refused."""
+    holds it). ValueError with the reason when refused. N3.2: the program's ``streams``, and ``correction`` (16 floats,
+    column-major): a target's clip correction of a vertex stage's ``uMatrix`` (None: none)."""
     table = schema if isinstance(schema, Mapping) else schema_table_entry(schema)
-    declared, packs = program_json(passes)
-    blocks, facts = module.mode_blocks(json.dumps(dict(table)), declared, packs, _settings(settings), bytes(record),
-                                       None if card is None else _card(card), (int(target[0]), int(target[1])))
+    declared, packs = program_json(passes, (), streams)
+    arguments = [json.dumps(dict(table)), declared, packs, _settings(settings), bytes(record),
+                 None if card is None else _card(card), (int(target[0]), int(target[1]))]
+    if correction is not None:
+        arguments.append([float(v) for v in correction])
+    blocks, facts = module.mode_blocks(*arguments)
     return [bytes(block) for block in blocks], json.loads(facts)
 
 

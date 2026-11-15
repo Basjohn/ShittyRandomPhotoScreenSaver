@@ -101,15 +101,23 @@ struct StreamDeclaration
     QByteArray field;          // the record's array field (f32, or u32 for storage and indirect)
     StreamKind kind = StreamKind::Storage;
     RecordLayout layout;       // an instance stream's records
+    // D15 point 4 (the lead, 15 Nov): an f32 stream's used length, a record u32 scalar counting the field's f32
+    // elements, with an at_most rule no larger than the field's count; only those bytes are written each record (a
+    // variable-length consumer never pays the capacity). Required for an f32 field, refused for a u32 one.
+    QByteArray used;
     quint32 capacity = 0;      // derived at the check: the field's bytes
 
     QJsonObject toJson() const;
 };
-// {"name", "field", "kind": "instance" | "storage" | "indirect", "layout"?: {...} (instance only)}.
+// {"name", "field", "kind": "instance" | "storage" | "indirect", "layout"?: {...} (instance only), "used"?: a u32
+// field (an f32 field's used elements)}.
 bool parseStreamDeclaration(const QJsonValue &value, StreamDeclaration *out, QString *error);
 // Why the record's `field` cannot feed `stream` (empty: it can): an array of f32 or u32 (indirect: u32 in fours), a
 // whole number of an instance stream's records.
 QString streamFieldFits(const StreamDeclaration &stream, const frame_abi::Field &field);
+// Why `stream`'s used length does not fit (empty: it does): an f32 field names a u32 scalar `used` whose at_most rule
+// bounds it within the field's count; a u32 field names none. `used` is null when the schema has no such field.
+QString streamUsedFits(const StreamDeclaration &stream, const frame_abi::Field &field, const frame_abi::Field *used);
 
 // A full blend declaration (D15 point 1): {"color": [op, src, dst], "alpha": [op, src, dst]}.
 bool parseBlendObject(const QJsonValue &value, QRhiGraphicsPipeline::TargetBlend *out);
@@ -263,6 +271,7 @@ public:
     {
         StreamDeclaration decl;
         const frame_abi::Field *field = nullptr; // the bound schema's (outlives the build: the drawn schema)
+        const frame_abi::Field *usedField = nullptr; // an f32 stream's used length (D15 point 4)
         std::unique_ptr<QRhiBuffer> buffer;
         QByteArray staging;                       // a storage stream's bytes, kept across records (D15 point 4)
         quint32 used = 0;                         // bytes written by the last record
@@ -277,8 +286,8 @@ public:
     // with the reason (the content's failure).
     bool build(QRhi *rhi, const QList<StreamDeclaration> &streams, const frame_abi::Schema *schema, quint32 arenaBytes,
                quint32 indirectBatchBytes, QString *error);
-    // At a record that draws: each stream's bytes from the record (an indirect stream's and a storage stream's used
-    // length from its field's whole size; an instance stream's too: the draw's count bounds what is read).
+    // At a record that draws: each stream's bytes from the record: an f32 stream's used elements (its used-length
+    // field, at most its capacity; none written at 0), a u32 stream's whole field.
     void write(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QByteArray &record);
     // The arena written whole from `bytes` (its size), the fast path.
     void writeArena(const QByteArray &bytes);

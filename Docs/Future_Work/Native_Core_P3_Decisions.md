@@ -1434,6 +1434,18 @@ controls; `mode_content.*` holds the pass model (its own vertex stage, geometry,
 blends), the arena's plan and fill, and the draws. The Python face is `rendering/native/mode.py` (`PassGeometry`,
 `ModeStream`, `RecordLayout`, `BlendState`, `NativeMode.mesh`), `rendering/native/streams.py` (`arena_layout`, the
 core's plan mirrored) and the geometry include (`srpss_geometry.glsl`, `SRPSS_GEOMETRY_GLSL`). Beyond the points above:
+- *Accepted as built (the lead, 15 Nov):* the meshes and the streams share one file pair, `mesh_buffers.{h,cpp}` (the
+  plan named `meshes.*` and `streams.*`); and the proof does not count shader-resource-bindings objects (the core
+  reports no such count), so "one bindings object for sixteen draws" stands on the construction (one per pass, given
+  its offsets at each `setShaderResources`) and on the sixteen-draws-against-sixteen-passes picture.
+- *The used length (point 4, the lead's decision of 15 Nov, built in the round after the first proofs):* an f32 stream
+  names `"used"`, a record u32 scalar counting the field's elements in use, under an `at_most` rule no larger than the
+  field's count; the core refuses an f32 stream without one (or with one that is not a u32 scalar, has no such rule,
+  or a rule past the capacity) and a u32 stream with one; the used length is the stream's (never also a block member
+  or a draw count). Each record writes only the used bytes (none at 0): the storage route uploads a view of them
+  (`QByteArray::fromRawData` over the bytes kept across records, no copy, nothing allocated), the instance route
+  writes them by the fast path; bytes past the used length keep what an earlier record wrote. A variable-length
+  consumer (Waveform's cohorts) pays for what it carries, never the capacity.
 - The built-in `quad` is made only for a program that draws it (a program without it holds no mesh).
 - A content whose program draws a mesh the item no longer holds draws nothing, its reason naming the mesh.
 - The record's render-thread time is counted (`mesh_buffers_records_timed`, `_record_ns`, `_stream_write_ns`), timed
