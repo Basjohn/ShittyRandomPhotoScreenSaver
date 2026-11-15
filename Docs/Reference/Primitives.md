@@ -107,8 +107,11 @@ flip at the substrate boundary (Decisions line 1353-1357).
 `warm_pass_blocks`). Named programs, uniform locations, immutable DSA meshes, the image underlay and camera plane,
 one `glBindTextures` per frame bind, compute programs through `compile_compute_program`, gradual warm-up entries.
 Consumers: every scene3d user (also `offscreen_target.py:107`). Test: `test_scene3d_resources.py`,
-`test_transition_warmup.py` (counts warm-up units). Native: N3.2 (static meshes, dynamic buffers, instancing, srb per
-ring slot) and N3.6 (lifetime, warm-up). Notes: a failed program is cached and re-raised, never recompiled until
+`test_transition_warmup.py` (counts warm-up units). Native: N3.2 (D15, `native/core/src/mesh_buffers.*`, ABI 18:
+meshes as program data uploaded once and content-owned, instance, storage and indirect streams from record `f32`
+fields, every block in one arena at dynamic offsets, a pass's own vertex stage with per-record front face, instanced
+quads in place of point sprites, indirect and batched draws; proved on both backends by `mesh_buffer_check.py`) and
+N3.6 (lifetime, warm-up). Notes: a failed program is cached and re-raised, never recompiled until
 release (`resources.py:23-26`); no texture-binding cache because Qt changes inherited state (`Scene3D_Resources.md:60-64`);
 `MeshResources.uniforms` caches the first uniform-name list per program (Lessons line 322).
 
@@ -171,7 +174,9 @@ allocates the complete mip chain; allocation or copy failure invalidates the cac
 Consumers: Extruded Spectrum, Extruded Bubble's drift solver, Oscilloscope, Neon Lake, Sphere, the ribbon primitive and
 bursts, Disintegrate, Exploding Tiles, Volumetric Dissolve, and every `UniformBlock` / `PassBlocks` (E9). Test:
 `test_scene3d_stream.py`. Native: one of D5.3's services ("Stream ring"), built **only if** it beats QRhi dynamic
-buffers by 0.05 ms at the product's ring sizes (N3.2, N3.2's box; Decisions D8 row 8). Notes: a new transport earns its
+buffers by 0.05 ms at the product's ring sizes; **measured 15 Nov (N3.2) and not built**: every QRhi route from 4 KiB
+to 288 KiB is within 0.05 ms of the pair's floor on both axes and both backends (D5.3's row has the figures; the
+native core's streams are QRhi `Dynamic` and `Static` buffers, D15 point 4). Notes: a new transport earns its
 place by removed calls, not by being modern (Lessons line 221-222); never rewrite bytes a submitted draw may still
 read (line 220); `restore=False` is for scenes that own their whole frame's state (`Scene3D_Resources.md:269-282`).
 
@@ -397,7 +402,8 @@ the product module holds today.
 | **No Python on the core's threads** (D5.4) | line 232-234 | decided; rechecked at every port | frame pacing independent of the GIL (D8 plus 1) |
 | **Module location** (D5.7) | line 236-238 | built: `native/core/`, module `_srpss_native_core` (N2.1) | exact-Qt import guard, one Python importer (`rendering/native/`) |
 | **GPU timer per pass** (D5.3 row 1) | line 217; N2.6 | built and proved 13 Nov (`native/core/src/gpu_timer.*`, `rendering/native/gpu_timing.py`, `timer_check.py`) | per-pass figures in the frame trace; off means no query objects; every later port measured per pass |
-| **Stream ring service** (D5.3 row 2) | line 218; N3.2 | built only if it wins by 0.05 ms | larger histories and denser strands at one copy per frame |
+| **Stream ring service** (D5.3 row 2) | line 218; N3.2 | **measured 15 Nov, not built**: QRhi's routes within 0.05 ms of the pair's floor at 4 KiB to 288 KiB on both backends (`mesh_buffer_check.py --rounds stream_ring`; D5.3's row) | larger histories and denser strands at one copy per frame, through QRhi's own buffers |
+| **Meshes, streams and the block arena** (D15, N3.2) | Decisions D15; `native/core/src/mesh_buffers.*` | built and proved 15 Nov (ABI 18; `mesh_buffer_check.py`: rules (a) and (b) within the tie budget, nothing at rest, no allocation per record, retirement, validation) | a mode's geometry as data with no per-mode C++: meshes, instanced and vertex-pulled draws, per-record front face, full blend declarations (`max`, `min`), instanced quads for point sprites (`srpss_geometry.glsl`), indirect draws from record commands, batched draws (one multi-draw with `gl_DrawID` where reported, else one draw a batch). Class: high potential (the lead, choice G: built with no consumer) |
 | **Indirect and count draws** (D5.3 row 3) | line 219 | **retired 12 Nov**: QRhi 6.12 has `drawIndirect` and `DrawIndirectMulti`; N4.c queries support at runtime (N4.c's box) | GPU-driven populations of 10^5 to 10^6 without a raw service |
 | **Per-sample reads** (D5.3 row 4) | line 220; N1.8; D14 point 10 | **decided 15 Nov** (the lead, after N3.1's build round 2: QRhi's depth resolve gave wrong values on both backends): the scene target's nearest resolve, a QRhi pass reading every sample (`scene_nearest.frag`), built and proved in N3.1's round 3 on both backends (the multisampled D32F sampled directly; an R32F attachment declared "nearest" beside it) | Extruded Bubble's nearest-depth `background()` (N1.8's A/B settled: the nearest depth, as Python) |
 | **Formats service** (D5.3 row 5) | line 221; N1.7 widened first | one listed use, the multisampled velocity attachment (N1.7's box) | RG16F, RG32F, R11G11B10F without doubling memory |

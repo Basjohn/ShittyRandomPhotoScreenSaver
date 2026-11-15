@@ -81,6 +81,17 @@
 // scene_target_allocations, scene_target_steps and scene_target_readbacks; composite_mode_state's scene_targets,
 // target_reads_requested and target_readback_pending; a program's layout JSON carries targets and each pass's target,
 // capture, attachments, depth and frag_depth. Backward compatible for every earlier program (no targets: N2.9's passes).
+// 18 (N3.2, meshes and buffers; D15, mesh_buffers.h): a pass's "vertex" (its vertex pack after its fragment's; a batched
+// pass's draw-parameters pack after that) and geometry ("topology", "vertices", "instances", "first_vertex", "mesh",
+// "instance_from", "storage", "cull", "front_face", "indirect", "draw_count", "batches", "batch_count"); a blend as a
+// full declaration; a program's "streams"; the record's f32 field kind (frame_abi_generated.h); composite_mode_mesh and
+// composite_mode_mesh_remove; the core member uMatrix filled for a pass with its own vertex stage and u_srpss_batch;
+// the conventions block's z (clipTopDown); every block in one arena given by dynamic offsets (N2.9 and N3.1's passes
+// too, their outputs unchanged); mesh_buffer_control (harness), mesh_buffer_arena_layout (GPU-free) and
+// vulkan_device_facts; composite_live's mesh_buffers_* counts; composite_mode_state's meshes and mesh_buffers.
+// Backward compatible for every earlier program. Within 18 (before its first use, the lead, 15 Nov): an f32 stream's
+// "used" (a u32 field under an at_most rule within its count; only the used bytes are written), mode_blocks' optional
+// clip correction, and composite_live's mesh_buffers_records_timed, _record_ns and _stream_write_ns.
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 17
+#define SRPSS_NATIVE_CORE_ABI 18

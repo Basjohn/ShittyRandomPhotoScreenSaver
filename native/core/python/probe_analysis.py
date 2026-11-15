@@ -128,8 +128,10 @@ def fact_checks(facts: Mapping[str, Any]) -> dict:
         "front_face_rule_matches_python": front_face_clockwise(facts["uploaded"], ndc_y_up=ndc_up) == rule_cw,
         "front_face_matches_decision": rule_cw == fb_up,
         "front_face_used_is_the_rule": facts.get("front_face") == facts.get("front_face_rule_on_uploaded"),
+        # z (N3.2, D15 point 5): 1 where the OpenGL-form top (+Y) lands at clip -Y after the correction.
         "conventions_block_decided": [float(v) for v in facts["conventions_block"]]
-        == [0.0, 1.0 if (ndc_up and not fb_up) else 0.0, 0.0, 0.0],
+        == [0.0, 1.0 if (ndc_up and not fb_up) else 0.0,
+            1.0 if float((correction @ np.array([0.0, 1.0, 0.0, 1.0]))[1]) < 0.0 else 0.0, 0.0],
     }
 
 
