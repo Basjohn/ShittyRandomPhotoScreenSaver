@@ -54,8 +54,6 @@ at the size asked.
 
 - Foundry UX (operator, 14 Nov): `Docs/Future_Work/Foundry_UX_Audit_2026-11-14.md`; open from it, for the operator's
   pick: its remaining high and medium findings and the Build Foundry's port from Tkinter to PySide6.
-  - [ ] Side defect: `tests/test_godzip_foundry_core.py` and `test_godzip_foundry_script_runner.py` pin button
-    wording; assert structure (the button exists, its action) instead.
 - [~] Defect (operator, 14 Nov): a Studio window's taskbar icon in frozen builds is Windows' default box. The static
   cause is unproven (likely an icon Qt could not decode). Lead: check the next GitHub frozen build's `[ICON]` startup
   line, any no-icon warning for a shown Studio window, and the taskbar.
@@ -1107,10 +1105,6 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
     it also fails on N3.1's base commit.
   - `tests/test_qtquick_visualizer_clip_smoke.py:303`, the Oscilloscope reflow, reads 175 against 173. The QSG/clip
     optimisations are protected: never retune production to satisfy this oracle; judge whether the oracle is stale.
-  - `tests/test_visualizer_extreme_viewport_scaling_audit_contract.py:38` pins Oscilloscope source text
-    (`gl.glUniform1f(beam_uniforms["uCore"], core)`) that no longer exists; rewrite it to assert behaviour.
-  - `tests/test_test_suite_durability.py` flags `tests/test_godzip_foundry_core.py:776, 789, 803` as documentation
-    prose oracles: the same item as the Foundry box in item 1.
 - [ ] Lead, Display 1: confirm R-221 in the product, Fullscreen Hide Borders with pixel shift stepping, and check
   whether the operator's lavender edge colour came from the shift.
 
