@@ -1879,6 +1879,11 @@ PyObject *recordElement(const char *data, srpss_core::frame_abi::FieldKind kind,
             PyTuple_SetItem(tuple, i, PyFloat_FromDouble(recordF64(data, offset + quint32(i) * 8))); // steals
         return tuple;
     }
+    case FieldKind::F32: { // D15 choice B: one float of a stream's bytes
+        float value = 0.0f;
+        std::memcpy(&value, data + offset, sizeof(value));
+        return PyFloat_FromDouble(double(value));
+    }
     }
     Py_RETURN_NONE;
 }
@@ -1886,7 +1891,7 @@ PyObject *recordElement(const char *data, srpss_core::frame_abi::FieldKind kind,
 quint32 elementBytes(srpss_core::frame_abi::FieldKind kind)
 {
     using srpss_core::frame_abi::FieldKind;
-    return kind == FieldKind::U32 ? 4u : kind == FieldKind::F64 ? 8u : 32u;
+    return kind == FieldKind::U32 || kind == FieldKind::F32 ? 4u : kind == FieldKind::F64 ? 8u : 32u;
 }
 
 // The record's fields by name in the reference decoder's order (header words excluded): the C++ decode the parity
@@ -2152,7 +2157,7 @@ PyObject *frame_schemas(PyObject *, PyObject *)
         modes.insert(QLatin1String(mode.modeId), double(mode.code));
     o.insert(QStringLiteral("mode_codes"), modes);
     QJsonArray schemas;
-    static const char *kinds[] = { "u32", "f64", "f64x4" };
+    static const char *kinds[] = { "u32", "f64", "f64x4", "f32" };
     static const char *checks[] = { "", "at_most", "boolean", "enum" };
     for (const fa::Schema &schema : fa::kSchemas) {
         QJsonObject s;

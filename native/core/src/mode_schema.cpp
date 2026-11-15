@@ -16,9 +16,12 @@ namespace fa = frame_abi;
 
 namespace {
 
-constexpr quint32 kMaxRecordBytes = 65536; // far above any record (Spectrum's is 1488); a slot must hold it anyway
+// D15 choice B: a record may carry f32 streams (Waveform's packet and cohorts, 288 KiB): 2 MiB at most; a slot must
+// hold it anyway. native_schema.py MAX_RECORD_BYTES, MAX_FIELD_COUNT and MAX_STREAM_FIELD_COUNT hold the same.
+constexpr quint32 kMaxRecordBytes = 1u << 21;
 constexpr int kMaxFields = 256;
 constexpr quint32 kMaxCount = 4096;
+constexpr quint32 kMaxStreamCount = 262144;
 
 const char *kindName(fa::FieldKind kind)
 {
@@ -26,6 +29,7 @@ const char *kindName(fa::FieldKind kind)
     case fa::FieldKind::U32: return "u32";
     case fa::FieldKind::F64: return "f64";
     case fa::FieldKind::F64x4: return "f64x4";
+    case fa::FieldKind::F32: return "f32";
     }
     return "";
 }
@@ -43,7 +47,7 @@ const char *checkName(fa::FieldCheck check)
 
 quint32 elementBytes(fa::FieldKind kind)
 {
-    return kind == fa::FieldKind::U32 ? 4u : kind == fa::FieldKind::F64 ? 8u : 32u;
+    return kind == fa::FieldKind::U32 || kind == fa::FieldKind::F32 ? 4u : kind == fa::FieldKind::F64 ? 8u : 32u;
 }
 
 // native_schema.NativeLayout.build's alignment: arrays and four-component values 16, an f64 8, a u32 4.
@@ -210,14 +214,17 @@ QSharedPointer<const RuntimeSchema> RuntimeSchema::fromJson(const QJsonObject &o
             field.kind = fa::FieldKind::F64;
         else if (kind == QLatin1String("f64x4"))
             field.kind = fa::FieldKind::F64x4;
+        else if (kind == QLatin1String("f32"))
+            field.kind = fa::FieldKind::F32; // D15 choice B: a stream's bytes
         else {
-            *error = QStringLiteral("field '%1': kind '%2' is not u32, f64 or f64x4").arg(name, kind);
+            *error = QStringLiteral("field '%1': kind '%2' is not u32, f64, f64x4 or f32").arg(name, kind);
             return {};
         }
-        if (!u32Value(row.at(2), &field.count) || field.count < 1 || field.count > kMaxCount
+        const quint32 maxCount = field.kind == fa::FieldKind::F32 ? kMaxStreamCount : kMaxCount;
+        if (!u32Value(row.at(2), &field.count) || field.count < 1 || field.count > maxCount
             || !u32Value(row.at(3), &field.offset) || !u32Value(row.at(5), &field.limit)) {
             *error = QStringLiteral("field '%1': count (1 to %2), offset and limit are u32 numbers").arg(name)
-                         .arg(kMaxCount);
+                         .arg(maxCount);
             return {};
         }
         const QString check = row.at(4).toString();

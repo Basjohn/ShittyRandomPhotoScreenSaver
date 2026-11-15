@@ -87,17 +87,27 @@ def parse_native_schema_id(schema: int) -> tuple[int, int] | None:
 # --------------------------------------------------------------------------------------------- record layouts
 
 #: kind -> (struct format of one element, element bytes, alignment)
+#: ``f32`` (D15 choice B): an array of 32-bit floats a stream takes verbatim (the std430 bytes the Python renderer packs);
+#: it fills no block member, only a stream (``rendering.native.mode.ModeStream``), and its used length is a ``u32``
+#: field beside it with an ``at_most`` rule.
 _KINDS = {
     "u32": ("I", 4, 4),
     "f64": ("d", 8, 8),
     "f64x4": ("4d", 32, NATIVE_ALIGNMENT),
+    "f32": ("f", 4, 4),
 }
+#: The most elements a field holds: 4096, or 262,144 for an ``f32`` stream (1 MiB, Waveform's packet and cohorts with
+#: room); the C++ reader's ``mode_schema.cpp`` holds the same.
+MAX_FIELD_COUNT = 4096
+MAX_STREAM_FIELD_COUNT = 262144
+#: The largest record (the C++ reader's ``kMaxRecordBytes``).
+MAX_RECORD_BYTES = 1 << 21
 
 
 @dataclass(frozen=True, slots=True)
 class NativeField:
     name: str
-    kind: str          # "u32", "f64" or "f64x4"
+    kind: str          # "u32", "f64", "f64x4" or "f32"
     count: int         # 1, or the array length
     offset: int
 
@@ -123,6 +133,10 @@ class NativeLayout:
         names = [name for name, _kind, _count in fields]
         if len(set(names)) != len(names) or {"payload_schema", "record_bytes"} & set(names):
             raise ValueError("native layout field names must be unique and not the header's")
+        for name, kind, count in fields:
+            limit = MAX_STREAM_FIELD_COUNT if kind == "f32" else MAX_FIELD_COUNT
+            if kind not in _KINDS or not 1 <= int(count) <= limit:
+                raise ValueError(f"native layout field {name!r}: kind {kind!r} with {count} element(s) is not admitted")
 
         def alignment(entry) -> int:
             _name, kind, count = entry
@@ -169,6 +183,12 @@ class NativeLayout:
             element = _KINDS[f.kind][0]
             if f.kind == "f64x4":
                 struct.pack_into("<4d", out, f.offset, *value)
+            elif f.kind == "f32" and isinstance(value, (bytes, bytearray, memoryview)):
+                # A stream's bytes as the renderer packed them (D15 choice B): copied verbatim, the rest zero.
+                data = bytes(value)
+                if len(data) > f.size or len(data) % 4:
+                    raise NativeSchemaError(f"{f.name}: {len(data)} bytes do not fit its {f.count} f32 elements")
+                out[f.offset:f.offset + len(data)] = data
             elif f.count > 1:
                 struct.pack_into(f"<{f.count}{element}", out, f.offset, *value)
             else:
