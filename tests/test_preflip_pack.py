@@ -16,7 +16,7 @@ MODES = ["mode_a", "mode_b", "mode_c"]
 TRANSITIONS = [("t_one", "T One"), ("t_two", "T Two")]
 
 
-def rows(sizes=("2160p", "1440p"), state="idle"):
+def rows(sizes=("2160p",), state="idle"):
     return pack.enumerate_rows(sizes, state, modes=MODES, transitions=TRANSITIONS)
 
 
@@ -24,25 +24,30 @@ def rows(sizes=("2160p", "1440p"), state="idle"):
 
 def test_matrix_is_every_mode_and_transition_at_every_size_and_state():
     matrix = rows()
-    assert len(matrix) == 2 * (len(MODES) + len(TRANSITIONS))
+    assert len(matrix) == len(MODES) + len(TRANSITIONS)
     assert len({row.key for row in matrix}) == len(matrix)
-    for size in ("2160p", "1440p"):
+    for size in pack.SIZES:
         assert {r.ident for r in matrix if r.size == size and r.kind == "visualizer"} == set(MODES)
         assert {r.ident for r in matrix if r.size == size and r.kind == "transition"} == {i for i, _ in TRANSITIONS}
     assert {r.state for r in rows(state="loaded")} == {"loaded"}
     assert all(r.key.endswith("/loaded") for r in rows(state="loaded"))
 
 
-def test_registry_enumeration_reads_the_registries_not_a_list_of_its_own():
+def test_modes_come_from_the_registry_and_transitions_are_the_named_set_resolved_through_it():
     from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
     from rendering.transition_registry import iter_transition_descriptors
 
     assert pack.registry_visualizer_modes() == [d.mode_id for d in iter_visualizer_mode_descriptors()]
-    assert [ident for ident, _ in pack.registry_transitions()] == [
-        d.stable_id for d in iter_transition_descriptors() if d.available]
+    labels = {d.stable_id: d.setting_name for d in iter_transition_descriptors() if d.available}
+    assert pack.registry_transitions() == [(name, labels[name]) for name in pack.SESSION_TRANSITIONS]
     matrix = pack.enumerate_rows(["2160p"], "idle")
     assert {r.ident for r in matrix if r.kind == "visualizer"} == set(pack.registry_visualizer_modes())
-    assert {r.ident for r in matrix if r.kind == "transition"} == {i for i, _ in pack.registry_transitions()}
+    assert [r.ident for r in matrix if r.kind == "transition"] == list(pack.SESSION_TRANSITIONS)
+
+
+def test_a_named_transition_the_registry_no_longer_offers_is_an_error_not_a_silent_gap():
+    with pytest.raises(ValueError):
+        pack.registry_transitions(("not_a_transition",))
 
 
 def test_a_new_registry_entry_becomes_a_row_without_editing_the_driver():
@@ -64,7 +69,7 @@ def test_filter_by_glob_and_report_patterns_that_match_nothing():
     assert {r.key for r in chosen} == {r.key for r in matrix if r.kind == "visualizer" and r.size == "2160p"}
     assert unmatched == []
     chosen, unmatched = pack.filter_rows(matrix, ["transition/t_one/*", "nothing/*"])
-    assert {r.ident for r in chosen} == {"t_one"} and len(chosen) == 2
+    assert {r.ident for r in chosen} == {"t_one"} and len(chosen) == 1
     assert unmatched == ["nothing/*"]
     assert pack.filter_rows(matrix, None) == (matrix, [])
     assert pack.split_patterns(" a/* , ,b/* ") == ["a/*", "b/*"]
@@ -113,7 +118,7 @@ def test_measurement_is_resumable_one_saved_row_at_a_time(tmp_path):
 
     kwargs = dict(conditions_fn=lambda: {"c": 1}, displays_fn=lambda: [{"index": 1, "width": 3840, "height": 2160,
                                                                        "primary": False}],
-                  allow_primary=False, out_dir_fn=lambda row: tmp_path / row.ident, save=save)
+                  out_dir_fn=lambda row, session=False: tmp_path / row.ident, save=save)
     with pytest.raises(KeyboardInterrupt):
         pack.measure_rows(matrix, baseline, path, measure=measure, **kwargs)
     assert len(saves) == 2 and len(saves[-1]) == 2          # each finished row was on disk before the next began
@@ -127,45 +132,44 @@ def test_measurement_is_resumable_one_saved_row_at_a_time(tmp_path):
 
 
 def test_failed_row_is_recorded_and_retried_and_a_missing_display_skips_without_blocking(tmp_path):
-    matrix = rows(["2160p", "1440p"])
+    matrix = rows(["2160p"])
     baseline = pack.new_baseline("b", commit="abc", load=None, backend=None)
     only_d1 = [{"index": 1, "width": 3840, "height": 2160, "primary": False}]
     out = pack.measure_rows(matrix[:1], baseline, tmp_path / "b.json", measure=lambda r, o: (3, None),
-                            conditions_fn=dict, displays_fn=lambda: only_d1, allow_primary=False,
-                            out_dir_fn=lambda r: tmp_path / "x", save=lambda *a: None)
+                            conditions_fn=dict, displays_fn=lambda: only_d1,
+                            out_dir_fn=lambda r, session=False: tmp_path / "x", save=lambda *a: None)
     assert out["failed"] == [matrix[0].key] and baseline["rows"][matrix[0].key]["status"] == "failed"
     assert pack.pending_rows(matrix[:1], baseline) == matrix[:1]
-    d0_rows = [r for r in matrix if r.size == "1440p"]
-    out = pack.measure_rows(d0_rows, baseline, tmp_path / "b.json", measure=lambda r, o: (0, _summary()),
-                            conditions_fn=dict, displays_fn=lambda: only_d1, allow_primary=True,
-                            out_dir_fn=lambda r: tmp_path / "y", save=lambda *a: None)
-    assert set(out["skipped"]) == {r.key for r in d0_rows} and not out["ok"]
+    out = pack.measure_rows(matrix, baseline, tmp_path / "b.json", measure=lambda r, o: (0, _summary()),
+                            conditions_fn=dict, displays_fn=lambda: [], redo=True,
+                            out_dir_fn=lambda r, session=False: tmp_path / "y", save=lambda *a: None)
+    assert set(out["skipped"]) == {r.key for r in matrix} and not out["ok"]
 
 
 def test_display_problem_names_missing_wrong_size_and_primary():
-    d1, d0 = pack.SIZES["2160p"], pack.SIZES["1440p"]
+    d1, d0 = pack.SIZES["2160p"], pack.Size("primary_view", 0, 2560, 1440)
     shown = [{"index": 0, "width": 2560, "height": 1440, "primary": True},
              {"index": 1, "width": 3840, "height": 2160, "primary": False}]
-    assert pack.display_problem(d1, shown, allow_primary=False) is None
-    assert "primary" in pack.display_problem(d0, shown, allow_primary=False)
-    assert pack.display_problem(d0, shown, allow_primary=True) is None
-    assert "not present" in pack.display_problem(d1, shown[:1], allow_primary=False)
+    assert pack.display_problem(d1, shown) is None
+    assert "primary" in pack.display_problem(d0, shown)             # the primary is refused outright, no override
+    assert "not present" in pack.display_problem(d1, shown[:1])
     wrong = [{"index": 1, "width": 1920, "height": 1080, "primary": False}]
-    assert "1920 x 1080" in pack.display_problem(d1, wrong, allow_primary=False)
+    assert "1920 x 1080" in pack.display_problem(d1, wrong)
+    assert all(size.display != 0 for size in pack.SIZES.values())    # nothing in the matrix is on Display 0
 
 
 # -- the live check's command line -----------------------------------------------------------------------------------------
 
 def test_row_command_is_one_size_invisible_and_never_loaded_by_default(tmp_path):
     viz = next(r for r in rows(["2160p"]) if r.kind == "visualizer")
-    trans = next(r for r in rows(["1440p"]) if r.kind == "transition")
+    trans = next(r for r in rows(["2160p"]) if r.kind == "transition")
     cmd = pack.row_command(viz, tmp_path, preset_slot=lambda mode: 7)
     assert cmd[cmd.index("--mode") + 1] == viz.ident and cmd[cmd.index("--preset") + 1] == "7"
     assert cmd[cmd.index("--display") + 1] == str(pack.SIZES["2160p"].display)
     assert "--visible" not in cmd and "--load" not in cmd and "--no-updates" in cmd and "--process-samples" in cmd
     cmd = pack.row_command(trans, tmp_path)
     assert cmd[cmd.index("--mode") + 1] == "none" and "--preset" not in cmd
-    assert cmd[cmd.index("--display") + 1] == str(pack.SIZES["1440p"].display)
+    assert cmd[cmd.index("--display") + 1] == str(pack.SIZES["2160p"].display)
     settings = dict(pack.row_settings(trans))
     assert settings["transitions.type"] == trans.label and settings["transitions.random_always"] is False
     assert settings[f"transitions.activation.{trans.label}"] is True
@@ -204,7 +208,8 @@ def test_compare_run_covers_only_rows_the_old_baseline_holds():
 
 def test_estimate_scales_with_rows_and_load():
     matrix = rows(["2160p"])
-    idle, loaded = pack.estimate_seconds(matrix), pack.estimate_seconds(matrix, loaded=True)
+    idle = pack.estimate_seconds(matrix, per_row=True)
+    loaded = pack.estimate_seconds(matrix, loaded=True, per_row=True)
     assert idle == sum(r.seconds + pack.ROW_OVERHEAD_S for r in matrix)
     assert loaded - idle == pytest.approx(len(matrix) * pack.LOAD_CALIBRATION_S)
 
@@ -295,7 +300,7 @@ def test_compare_flags_rows_measured_under_different_conditions_and_a_missing_co
 # -- conditions block ------------------------------------------------------------------------------------------------------
 
 def test_conditions_record_displays_processes_gpu_clock_and_smi_state():
-    required = {"2160p": pack.SIZES["2160p"], "1440p": pack.SIZES["1440p"]}
+    required = {"2160p": pack.SIZES["2160p"], "other": pack.Size("other", 0, 2560, 1440)}
     shown = [{"index": 0, "width": 2560, "height": 1440, "primary": True},
              {"index": 1, "width": 3840, "height": 2160, "primary": False}]
     block = pack.collect_conditions(
@@ -311,7 +316,7 @@ def test_conditions_record_displays_processes_gpu_clock_and_smi_state():
 
 
 def test_a_missing_or_resized_display_reads_as_off_and_a_failing_source_never_stops_the_row():
-    required = {"2160p": pack.SIZES["2160p"], "1440p": pack.SIZES["1440p"]}
+    required = {"2160p": pack.SIZES["2160p"], "other": pack.Size("other", 0, 2560, 1440)}
 
     def broken():
         raise OSError("counter gone")
