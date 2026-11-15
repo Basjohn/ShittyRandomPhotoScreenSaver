@@ -2937,11 +2937,21 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             // N3.1: a run on a scene target: its attachments primed for the load (rule C, depth too), cleared by a draw
             // over the whole allocation at its first run of the record, the passes over its content viewport.
             SceneTargets::Target &t = *m_targets.target(pass.target);
-            primeForLoad(rhi, cb, m_targets.loadedColour(pass.target));
-            if (t.depth && !skipDepthPrime() && primeDepthForLoad(rhi, cb, t.depth.get()))
-                countDepthPrime();
-            cb->beginPass(t.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
-            pending = nullptr;
+            if (!cleared[pass.target] && t.clearTarget) {
+                // D14 point 12: the first run clears through its load op (a fast clear): no load, so no prime and no
+                // clearing draw; every attachment to the one shared clear value, the depth to the far plane.
+                const float *c = t.decl.colour.at(0).clear;
+                cb->beginPass(t.clearTarget.get(), QColor::fromRgbF(c[0], c[1], c[2], c[3]), { 1.0f, 0 }, pending);
+                pending = nullptr;
+                cleared[pass.target] = true;
+                countFastClear();
+            } else {
+                primeForLoad(rhi, cb, m_targets.loadedColour(pass.target));
+                if (t.depth && !skipDepthPrime() && primeDepthForLoad(rhi, cb, t.depth.get()))
+                    countDepthPrime();
+                cb->beginPass(t.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
+                pending = nullptr;
+            }
             if (!cleared[pass.target]) {
                 cb->setGraphicsPipeline(r.targetClears[pass.target].pipeline.get());
                 cb->setViewport(QRhiViewport(0, 0, float(t.allocation.width()), float(t.allocation.height())));

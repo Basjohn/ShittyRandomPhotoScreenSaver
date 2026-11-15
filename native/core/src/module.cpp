@@ -682,6 +682,7 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("scene_target_readbacks"), scenes.readbacksPending);
     o.insert(QStringLiteral("scene_target_depth_primes"), double(scenes.depthPrimes));
     o.insert(QStringLiteral("scene_target_nearest_resolves"), double(scenes.nearestResolves));
+    o.insert(QStringLiteral("scene_target_fast_clears"), double(scenes.fastClears));
     return pyJson(o);
 }
 

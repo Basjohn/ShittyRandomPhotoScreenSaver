@@ -348,11 +348,41 @@ def round_parity(core, engine, app, api: str, packs: dict, out: Path) -> dict:
                 checks[f"{case}_scene_content_is_the_surface"] = content == _pixels(CARD, dpr)
                 checks[f"{case}_ambient_content_is_its_explicit_size"] = (
                     frames[case]["ambient.coverage"]["content"] == AMBIENT)
+                # D14 point 12: both targets share one clear value and do not persist, so their first runs clear
+                # through the load op (the parity above is drawn that way).
+                checks[f"{case}_targets_clear_through_their_load_op"] = all(
+                    t.get("clear_target") and t.get("fast_clear") for t in state["scene_targets"]["targets"])
             finally:
                 scene.close(app)
                 host.frames(2)
                 host_check._flush_deletes(app)
         host.set_device_pixel_ratio(1.0)
+        # D14 point 12's control: the same targets declared "persist" keep the load and the clearing draw, and draw
+        # the same pixels as the fast clear (single-sampled and at 4x).
+        from dataclasses import replace
+
+        for samples in (1, 4):
+            fast_scene = Scene(core, engine, host, CARD, 1.0, packs, samples=samples)
+            try:
+                fast = fast_scene.targets(app)
+            finally:
+                fast_scene.close(app)
+                host.frames(2)
+                host_check._flush_deletes(app)
+            kept = tuple(replace(t, persist=True) for t in st.targets(samples=samples, ambient_size=AMBIENT))
+            persist_scene = Scene(core, engine, host, CARD, 1.0, packs, targets=kept)
+            try:
+                persisted = persist_scene.targets(app)
+                persist_state = persist_scene.mode.state()["scene_targets"]["targets"]
+            finally:
+                persist_scene.close(app)
+                host.frames(2)
+                host_check._flush_deletes(app)
+            same = {key: compare(fast[key], persisted[key])["exact"] for key in fast}
+            facts[f"persist_control_x{samples}"] = same
+            checks[f"persist_control_x{samples}_draws_the_same_through_the_clearing_draw"] = (
+                all(same.values()) and set(fast) == set(persisted)
+                and not any(t.get("clear_target") for t in persist_state))
     finally:
         host.close()
         host_check._flush_deletes(app)
@@ -706,7 +736,7 @@ def round_prime_control(core, engine, app, packs: dict) -> dict:
                        facts["skipped"]["depth_primes"] == 0 and facts["primed"]["depth_primes"] > 0}}
 
 
-COST_PARTS = ("clear", "planes2", "draws", "read", "capture")
+COST_PARTS = ("clear", "clear_persist", "planes2", "draws", "read", "capture", "capture_persist")
 
 
 def round_cost_parts(core, engine, app, packs: dict) -> dict:

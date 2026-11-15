@@ -417,9 +417,6 @@ N2.8, whose rehearsal closes N2.5's rule (f) and releases the Python renderer's 
     target and bloom, not `oscilloscope.frag`, so its N5 port needs those primitives (or returns to the 2D shader).
 - [ ] N2.8 leftovers (the first rehearsal on Display 1 passed 14 Nov for Spectrum, rule (f); the Python renderer
   retires in the switch change):
-  - [ ] Side defect: N29's `control_a_drawn_surface_is_timed` (OpenGL, attached round) failed once with another GPU
-    harness running (no GL timer sample within 6 frames) and passed alone: bound the control by the timer's own result
-    edge, not a frame count, with a test.
   - [ ] With no admitted mode renderable on the backend (before N2.5), the Visualizer card shows as a thin empty
     purple frame beside Spotify. Find its owner and decide: a card with nothing to draw fades out, never sits as an
     empty frame. OpenGL unchanged.

@@ -28,7 +28,10 @@
 // reads every sample of the multisampled texture and writes the minimum into a single-sampled R32F texture, which the
 // samplers and the capture read; nothing sets a depth resolve texture, so the multisampled depth is stored and loaded
 // across a capture. It runs after a run of passes on the target only when a later pass reads it (or a readback asks).
-// Every target keeps its contents (targets.h rule B, depth too) and is cleared by a draw.
+// Every target keeps its contents (targets.h rule B, depth too). Its first run in a record clears it (D14 point 12, the
+// lead after build round 3): through the pass's load op (a fast clear: no load, no clearing draw) when its attachments
+// share one clear value QColor holds exactly and the program did not declare it "persist"; otherwise by a draw over
+// the loaded contents, as before. Later runs load (rules B and C).
 //
 // Render thread only, but the counts (any thread) and the readback's results (taken by the GUI thread through
 // SceneReadback's own lock).
@@ -88,8 +91,11 @@ struct TargetDeclaration
     bool depthSampled = false;        // derived: a sampler reads the depth
     int samples = 1;                  // the request (1 to kMaxSceneSamples)
     bool capture = false;             // derived: a capture step reads this target
+    bool persist = false;             // "persist": its content must outlive the frame (no fast clear; D14 point 12)
 
     bool surfaceSized() const { return size.isEmpty(); }
+    // D14 point 12: the first run clears through its load op (no persist, one shared clear value QColor holds exactly).
+    bool fastClear() const;
     // Everything but the size: a change needs new objects and a new render-pass descriptor.
     bool sameLayout(const TargetDeclaration &other) const;
     QJsonObject toJson() const;
@@ -97,7 +103,7 @@ struct TargetDeclaration
 };
 
 // {"name", "size": "surface" | [w, h], "colour": [{"name", "format", "clear"?: [r, g, b, a], "resolve"?: "average" |
-// "nearest"}, ...], "depth"?: bool, "samples"?: n}; false with the reason.
+// "nearest"}, ...], "depth"?: bool, "samples"?: n, "persist"?: bool}; false with the reason.
 bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QString *error);
 
 // D14 point 2, choice A (GPU-free): the bucket of a size, and the next allocation for `needed` given `current` (empty:
@@ -137,7 +143,9 @@ struct SceneTargetCounts
     int readbacksPending = 0;
     qint64 depthPrimes = 0; // depth transitions recorded by the core before a load (rule C for depth)
     qint64 nearestResolves = 0; // nearest resolve passes recorded
+    qint64 fastClears = 0;      // first runs cleared through their load op (D14 point 12)
 };
+void countFastClear();
 SceneTargetCounts sceneTargetCounts();
 
 // One attachment's pixels as read back (harness only): RGBA8 bytes, half floats or floats as stored, rows in the
@@ -178,6 +186,11 @@ public:
         std::unique_ptr<QRhiTexture> depthNearest;              // the depth's nearest resolve (R32F window depth)
         std::unique_ptr<QRhiRenderPassDescriptor> renderPass;
         std::unique_ptr<QRhiTextureRenderTarget> renderTarget;
+        // D14 point 12: the same attachments without the preserve flags (cleared by the load op), for the first run of a
+        // fast-clear target; its descriptor differs from renderPass only in load ops (Vulkan's compatibility ignores
+        // them), so the passes' pipelines built over renderPass draw into it.
+        std::unique_ptr<QRhiRenderPassDescriptor> clearRenderPass;
+        std::unique_ptr<QRhiTextureRenderTarget> clearTarget;
         // The nearest resolves' render targets (slot: a colour attachment, or kNearestDepthSlot).
         std::unique_ptr<QRhiRenderPassDescriptor> nearestRenderPass[kNearestSlots];
         std::unique_ptr<QRhiTextureRenderTarget> nearestTarget[kNearestSlots];

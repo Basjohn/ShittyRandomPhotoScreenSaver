@@ -74,7 +74,8 @@
 // control) and composite_live's scene_target_depth_primes (still 17: round 2 of the same unmerged N3.1); round 3 (D14
 // point 10, still 17): an attachment's "resolve" ("average" or "nearest"), the core's nearest resolve in place of
 // QRhi's depth resolve, scene_nearest_first_sample_control (its control), composite_live's
-// scene_target_nearest_resolves and the readback's "<target>.depth" when multisampled; scene_target_next_allocation, scene_target_viewport and
+// scene_target_nearest_resolves and the readback's "<target>.depth" when multisampled; round 4 (D14 point 12, still
+// 17): a target's "persist", its state's fast_clear and clear_target, composite_live's scene_target_fast_clears; scene_target_next_allocation, scene_target_viewport and
 // scene_target_clamp (GPU-free); composite_live's scene_targets, scene_target_textures, scene_target_bytes,
 // scene_target_allocations, scene_target_steps and scene_target_readbacks; composite_mode_state's scene_targets,
 // target_reads_requested and target_readback_pending; a program's layout JSON carries targets and each pass's target,

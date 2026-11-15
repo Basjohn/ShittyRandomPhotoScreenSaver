@@ -85,6 +85,7 @@ IDENTITY = {"runtime_generation": 5, "engine_generation": 2, "activation_id": 9}
 RADIUS_TOLERANCE_PX = 1.5
 TIMED_FRAMES = 60
 STEADY_FRAMES = 60               # the attached round's steady frames, each half
+CONTROL_TIMING_FRAMES = 240      # the attached round's timer control: the most frames it draws waiting for a GPU time
 FADE_MS = 200                    # the draw round's fade (short: the harness pumps until it ends)
 FRAMEBUFFER_HOST = (2560, 1440, 1.5)
 INT_MEMBERS = ("ring_count",)    # the shaders' int members (every other one is float)
@@ -1027,10 +1028,18 @@ def round_attached(core, engine, app) -> dict:
         composite.update()                              # control: one update is one synchronisation
         host.frames(2)
         control = composite.state()
-        # Control: the same item given a rect draws its surface (the pattern pass), which the timer times.
-        composite.set(rect=[0.0, 0.0, 64.0, 64.0], visible=True)
-        host.frames(6)
-        control_samples = host.gpu_samples()
+        # Control: the same item given a rect draws its surface (the pattern pass), which the timer times. Qt's OpenGL
+        # backend hands a GPU time back for about one frame in twenty (a result is read once ready; a frame whose ring
+        # slot still waits goes untimed), so the control draws again each frame (the rect nudged by a pixel) until a
+        # surface time has arrived, at most CONTROL_TIMING_FRAMES frames: counted, never slept.
+        control_samples = []
+        control_frames = 0
+        for control_frames in range(1, CONTROL_TIMING_FRAMES + 1):
+            composite.set(rect=[0.0, 0.0, 64.0 + float(control_frames % 2), 64.0], visible=True)
+            host.frames(1)
+            control_samples.extend(host.gpu_samples())
+            if any(s.kind == 2 for s in control_samples):
+                break
         host.set_gpu_timer(False)
         host.frames(2)
         surface_samples = [s for s in samples if s.kind == 2]
@@ -1042,6 +1051,7 @@ def round_attached(core, engine, app) -> dict:
                  "surface": [before.get("surface"), after.get("surface")],
                  "spectrum_source": after.get("spectrum") is not None, "mode_source": after.get("mode") is not None,
                  "surface_gpu_samples": len(surface_samples), "control_surface_gpu_samples": len(control_surface),
+                 "control_timing_frames": control_frames,
                  "all_gpu_samples_by_kind": sorted({s.kind for s in samples}),
                  "route": {"waits": route.waits, "published": route.published, "failures": route.failures,
                            "edges_armed": sorted(name for name, edge in route._edges.items() if edge)},

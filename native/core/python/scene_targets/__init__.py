@@ -110,8 +110,12 @@ def cost_part_program(packs: dict[str, bytes], part: str, *, samples: int):
     with the capture between nearer and after: the depth read, resolves at both runs). (passes, targets, settings)."""
     from rendering.native.mode import CapturePass, ModePass, ModeTarget, PassOutput, PassSampler, TargetAttachment
 
+    # "<part>_persist": the same part on a target declared "persist" (D14 point 12's control: the load and the
+    # clearing draw instead of the fast clear).
+    persist = part.endswith("_persist")
+    part = part.removesuffix("_persist")
     target = ModeTarget("scene", (TargetAttachment("colour", "rgba16f"), TargetAttachment("emission", "rgba16f")),
-                        depth=True, samples=int(samples))
+                        depth=True, samples=int(samples), persist=persist)
     planes = ModePass("planes", packs["planes"], "replace", target="scene", depth_test="always", depth_write=True)
     nearer = ModePass("nearer", packs["nearer"], "replace", target="scene",
                       outputs=(PassOutput(True, "replace"), PassOutput(False)), depth_test="less", depth_write=True)

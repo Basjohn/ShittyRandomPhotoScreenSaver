@@ -114,7 +114,9 @@ never ships.
     surface-sized or explicit-size target of 1 to 4 colour attachments (RGBA8, RGBA16F, R16F, R32F) and an optional
     D32F depth, allocated in 64 px buckets (grown at once, shrunk only two buckets below, at the size edge), the content
     at the allocation's image rows `[H-h, H)` (the Python renderer's GL bottom-left; `contentViewport` gives QRhi's
-    viewport per backend), cleared by a draw, primed for the load on Vulkan (rule C for colour and depth), the capture
+    viewport per backend), cleared at its first run in a record through the load op (D14 point 12's fast clear; a
+    clearing draw where the attachments' clear values differ or the program declares `persist`), primed for the load
+    of every later run on Vulkan (rule C for colour and depth), the capture
     step (Python's `SceneTarget.background()`), the sample request clamped to the device's list (the count reported
     is the count created), multisampled colour resolved by QRhi (only what is read) and a read multisampled depth by
     the core's nearest resolve (D14 point 10), released with the content. Counted in `composite_live`

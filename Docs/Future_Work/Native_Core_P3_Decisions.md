@@ -1106,6 +1106,16 @@ to the GL limits.
     (`scene_target_check.py --rounds python_cost`); the native figure is accepted when no worse, and a worse figure is
     a defect whose time is found (`--rounds cost_parts`). Whether 4K defaults to fewer samples is the operator's look
     call later; it blocks nothing.
+12. *The fast clear* (the lead after build round 3's cost report, 15 Nov 2026). A target's first run in a record
+    clears through its pass's load op whenever that run's first pass would clear anyway (the content does not need the
+    previous frame): the clearing draw and rule B's load go for that run, and later runs keep loading under rules B
+    and C. A target whose content must outlive the frame is declared `"persist": true` and keeps today's path (the load
+    and the clearing draw). Built as a second render target over the same attachments without the preserve flags
+    (`clearTarget`; its descriptor differs only in load ops, which Vulkan's render-pass compatibility ignores, so the
+    passes' pipelines draw into both). QRhi's `beginPass` takes one colour clear value, so the fast clear applies when
+    every attachment declares the same clear value and QColor holds it exactly (16 bits a channel: 0 and 1 always);
+    otherwise the clearing draw stays. Parity stays exact (rule (a) 5 exact, rule (b) 16 exact), validation clean,
+    the depth-prime control passing; the goal is Python's 4x minus 1x or better on both backends at 4K and 2560 x 1440.
 
 **As built (N3.1, 15 Nov 2026).** `native/core/src/scene_targets.*` holds the rules (`bucketPixels`, `nextAllocation`,
 `contentViewport`, `clampSamples`) and `SceneTargets`, the content's owner; `rendering/native/scene_targets.py` mirrors
