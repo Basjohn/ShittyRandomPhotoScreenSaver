@@ -72,7 +72,8 @@ from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("parity", "gate", "rest", "steady", "retire", "barriers", "cost")
-PYTHON_ROUNDS = ("python_cost",)
+ALONE_ROUNDS = ("defocus_cost", "showcase")
+PYTHON_ROUNDS = ("python_cost", "python_defocus_cost")
 CHILD_TIMEOUT_S = 2400
 MARGIN = stc.MARGIN
 CARD = (640, 384)                  # bucket-aligned: the defocus layer equals Python's exact-size layer (choice H)
@@ -627,7 +628,10 @@ def round_gate(core, engine, app, api: str, packs: dict) -> dict:
             scene = stc.Scene(core, engine, host, case.card, 1.0, packs, passes=passes, targets=targets,
                               settings=values)
             try:
-                textures = scene.targets(app)
+                try:
+                    textures = scene.targets(app)
+                except RuntimeError:
+                    textures = {}             # a refused program draws nothing: no readback (its state says why)
                 bump = BUMP[case.scene]
                 for i in range(count):
                     scene.mode.settings(dict(values, **{bump: values[bump] * (0.9 if i % 2 == 0 else 1.0)}))
@@ -898,13 +902,28 @@ def round_barriers(core, engine, app, api: str, packs: dict) -> dict:
                      CASE["solo_fallback_1x"], Case("eb_band", "eb", samples=4, band=BAND)):
             facts[f"records_{case.name}"] = _records(core, engine, app, host, packs, case, BARRIER_RECORDS)
         if vulkan:
-            phase("n34 control depth prime")
-            core.scene_depth_prime_control(True)
+            # The depth prime: the scene drawn first with it (its depth created and settled), then records without it.
+            # Within a record the only depth load after a sampled read is then the transparency run's (the capture
+            # samples the owner's depth just before it), so the phase's first finding is that run's (the messenger
+            # keeps the first message of each id).
+            passes, targets, values = build(CASE["eb_1x"], packs)
+            scene = stc.Scene(core, engine, host, CARD, 1.0, packs, passes=passes, targets=targets, settings=values)
             try:
-                for case in (CASE["eb_1x"], CASE["solo_1x"]):
-                    _records(core, engine, app, host, packs, case, CONTROL_RECORDS)
+                for i in range(3):
+                    scene.mode.settings(dict(values, u_back_gain=values["u_back_gain"] * (0.9 if i % 2 else 1.0)))
+                    host.frames(1)
+                phase("n34 control depth prime")
+                core.scene_depth_prime_control(True)
+                try:
+                    for i in range(CONTROL_RECORDS):
+                        scene.mode.settings(dict(values, u_back_gain=values["u_back_gain"] * (0.9 if i % 2 else 1.0)))
+                        host.frames(1)
+                finally:
+                    core.scene_depth_prime_control(False)
+                phase("n34 after controls")
+                host.frames(2)
             finally:
-                core.scene_depth_prime_control(False)
+                _close(scene, host, app)
             phase("n34 control bloom prime")
             facts["control_bloom_prime"] = _records(core, engine, app, host, packs,
                                                     Case("eb", "eb", controls=("skip_bloom_prime",)), CONTROL_RECORDS)
@@ -912,9 +931,22 @@ def round_barriers(core, engine, app, api: str, packs: dict) -> dict:
             facts["control_bloom_same_texture"] = _records(core, engine, app, host, packs,
                                                            Case("osc", "osc", controls=("bloom_same_texture",),
                                                                 changes={"u_hdr_exposure": 0.0}), CONTROL_RECORDS)
+            # The read chain: records each read back (the readback's transition of the layer is the barrier whose first
+            # scope leaves the gather's reads out without the chain; generateMips' own transition does not show it).
             phase("n34 control read chain")
-            facts["control_read_chain"] = _records(core, engine, app, host, packs,
-                                                   Case("eb", "eb", controls=("skip_read_chain",)), CONTROL_RECORDS)
+            _controls(core, ("skip_read_chain",), True)
+            try:
+                passes, targets, values = build(CASE["eb_1x"], packs)
+                scene = stc.Scene(core, engine, host, CARD, 1.0, packs, passes=passes, targets=targets,
+                                  settings=values)
+                try:
+                    for i in range(4):
+                        scene.mode.settings(dict(values, u_back_gain=values["u_back_gain"] * (0.9 if i % 2 else 1.0)))
+                        scene.targets(app)
+                finally:
+                    _close(scene, host, app)
+            finally:
+                _controls(core, ("skip_read_chain",), False)
             phase("n34 after controls")
     finally:
         host.close()
@@ -1039,6 +1071,263 @@ def round_cost(core, engine, app, api: str, packs: dict) -> dict:
             host.close()
             host_check._flush_deletes(app)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+#: The defocus cost split (the lead, 15 Nov: native OpenGL's defocus at 4K against Python's): variants of the EB
+#: scene whose differences are the steps. (label, eb variant, setting changes.)
+DEFOCUS_SPLIT = (
+    ("no_defocus", "no_defocus", {}),
+    ("near_only", "near_only", {}),                       # + the near pass into the mipped layer
+    ("radius_0", "full", {"u_defocus_radius": 0.4}),      # + generateMips, the clip, a gather that returns its own texel
+    ("no_sprites", "full", {"u_defocus_highlight": 1e6}),  # + the gather's 96 taps, the sprites' vertex stage (culled)
+    ("full", "full", {}),                                 # + the sprites' raster
+)
+DEFOCUS_STEPS = (("near_pass", "near_only", "no_defocus"), ("mips_clip_trivial_gather", "radius_0", "near_only"),
+                 ("gather_taps_and_sprite_vertices", "no_sprites", "radius_0"), ("sprite_raster", "full", "no_sprites"))
+
+
+def _split_steps(timings: dict) -> dict:
+    steps = {}
+    for step, more, less in DEFOCUS_STEPS:
+        a, b = timings[more].get("median_ms"), timings[less].get("median_ms")
+        a10, b10 = timings[more].get("p10_ms"), timings[less].get("p10_ms")
+        steps[step] = {"median_ms": None if a is None or b is None else round(a - b, 4),
+                       "p10_ms": None if a10 is None or b10 is None else round(a10 - b10, 4)}
+    return steps
+
+
+def round_defocus_cost(core, engine, app, api: str, packs: dict) -> dict:
+    """The defocus step's GPU time split by variants at 3840 x 2160, one and four samples (median and p10 of 240
+    records each); the steps are the variants' differences (``DEFOCUS_STEPS``)."""
+    size = COST_HOSTS[-1]
+    facts, checks = {}, {}
+    host = core.hidden_host(size[0] + 2 * MARGIN, size[1] + 2 * MARGIN)
+    try:
+        for samples in (1, 4):
+            timings = {}
+            for label, variant, changes in DEFOCUS_SPLIT:
+                case = Case(f"split_{label}", "eb", card=size, samples=samples, variant=variant, changes=changes)
+                passes, targets, values = build(case, packs)
+                scene = stc.Scene(core, engine, host, size, 1.0, packs, passes=passes, targets=targets,
+                                  settings=values)
+                try:
+                    host.frames(4)
+                    timings[label] = stc._timed(host, scene, values, COST_FRAMES, member="u_back_gain", step=0.001)
+                    timings[label]["error"] = _state_facts(scene.mode.state())["error"]
+                finally:
+                    _close(scene, host, app)
+            facts[f"x{samples}"] = {"timings": timings, "steps": _split_steps(timings)}
+            checks[f"x{samples}_timed"] = all(t.get("samples", 0) >= stc.COST_MIN_SAMPLES and not t.get("error")
+                                              for t in timings.values())
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+SHOWCASE_FRAMES = 72
+
+
+def round_showcase(core, engine, app, api: str, packs: dict, out: Path) -> dict:
+    """The primitive's showcase WebP (item 8b's standing rule): the EB scene at 4x, its three transparent discs
+    drifting through one another, the near disc's circle of confusion swelling and easing back, the glow on; frames read
+    from the hidden host, one animated WebP at 24 fps."""
+    import math
+
+    from PIL import Image
+
+    from tools import evidence_media
+
+    passes, targets, values = build(Case("showcase", "eb", samples=4), packs)
+    host = _host(core)
+    frames = []
+    try:
+        scene = stc.Scene(core, engine, host, CARD, 1.0, packs, passes=passes, targets=targets, settings=values)
+        try:
+            for i in range(SHOWCASE_FRAMES):
+                t = i / SHOWCASE_FRAMES
+                changes = {}
+                for n, phase in ((1, 0.0), (2, 2.1), (3, 4.2)):
+                    disc = list(values[f"u_l{n}_disc"])
+                    disc[0] += 0.06 * math.sin(2 * math.pi * t + phase)
+                    disc[1] += 0.05 * math.cos(2 * math.pi * t + phase)
+                    changes[f"u_l{n}_disc"] = disc
+                near = list(values["u_near_disc"])
+                near[3] = 2.0 + 10.0 * (0.5 - 0.5 * math.cos(2 * math.pi * t))
+                changes["u_near_disc"] = near
+                changes["u_defocus_radius"] = max(near[3] + 2.0, 0.5)
+                scene.mode.settings(dict(values, **changes))
+                host.frames(2)
+                frames.append(Image.fromarray(_frame(host, CARD)[..., :3].copy()))
+        finally:
+            _close(scene, host, app)
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    receipt = evidence_media.animated_webp(frames, out / f"showcase_post_stages_{api}.webp")
+    return {"pass": True, "receipt": receipt}
+
+
+def python_defocus_steps(core, packs: dict, size, samples: int, frames: int) -> dict:
+    """Python's defocus steps on the EB load, each timed by itself (GL timestamps between them, read once the frame
+    is finished: a counted loop): the near pass (``begin`` to ``end``), the two ``glGenerateTextureMipmap``, the clip,
+    the gather and the sprites (``DefocusLayer.composite``'s own calls, in its order and state)."""
+    import ctypes
+    from types import SimpleNamespace
+
+    from OpenGL import GL as gl
+
+    from rendering.quick.scene3d import defocus as dm
+    from rendering.quick.scene3d.resources import MeshResources
+    from rendering.quick.scene3d.target import SceneTarget
+
+    ps = _ps()
+    w, h = size
+    passes, _targets, values = build(Case("cost", "eb", card=size, samples=samples), packs)
+    values = dict(ps.SETTINGS, **values)
+    radius, highlight = float(values["u_defocus_radius"]), float(values["u_defocus_highlight"])
+    ref = GLReference(core, packs, size)
+    names = ("near_pass", "mips", "clip", "gather", "sprites")
+    times: dict = {n: [] for n in names}
+    with ref.target.current():
+        resources, scene, layer = MeshResources("n34 split"), SceneTarget("n34 split"), dm.DefocusLayer("n34 split")
+        frame = SimpleNamespace(viewport=(0, 0, w, h), logical_size=(w, h),
+                                matrix_values=(2 / w, 0, 0, 0, 0, -2 / h, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1),
+                                quad_vao=ref.target.vao)
+        queries = (ctypes.c_uint * 6)()
+        gl.glGenQueries(6, queries)
+        try:
+            for index in range(frames + 4):
+                gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, ref.target.fbo)
+                scene.begin(frame, samples, (0, 0, w, h), overlay=1.0, emission=True, depth_texture=True, oit=True,
+                            hdr=True)
+                gl.glEnable(gl.GL_DEPTH_TEST)
+                gl.glDepthMask(gl.GL_TRUE)
+                gl.glDisablei(gl.GL_BLEND, 0)
+                gl.glDepthFunc(gl.GL_ALWAYS)
+                with scene.emission_writes():
+                    ref.draw("backdrop", dict(values, u_back_gain=values["u_back_gain"] + 0.001 * (index % 2)))
+                gl.glQueryCounter(int(queries[0]), gl.GL_TIMESTAMP)
+                layer.begin(w, h)
+                ref.draw("near", values)
+                layer.end()
+                gl.glQueryCounter(int(queries[1]), gl.GL_TIMESTAMP)
+                # DefocusLayer.composite's calls, in its order, a timestamp after each step.
+                level, rw, rh = layer._read_size(radius)
+                gl.glGenerateTextureMipmap(layer._colour)
+                gl.glGenerateTextureMipmap(layer._circle)
+                gl.glQueryCounter(int(queries[2]), gl.GL_TIMESTAMP)
+                gl.glDisable(gl.GL_DEPTH_TEST)
+                for unit, texture in ((0, layer._colour), (1, layer._circle)):
+                    gl.glActiveTexture(gl.GL_TEXTURE0 + unit)
+                    gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+                gl.glBindVertexArray(layer._vao)
+                layer._ensure_below(rw, rh)
+                gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, layer._below_fbo)
+                gl.glViewport(0, 0, rw, rh)
+                gl.glDisablei(gl.GL_BLEND, 0)
+                gl.glUseProgram(layer._clip)
+                with layer._blocks.bound(dm._CLIP_BLOCK.pack({"uLevel": level, "uHighlight": highlight,
+                                                              "uMaxRadius": radius})):
+                    gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+                gl.glQueryCounter(int(queries[3]), gl.GL_TIMESTAMP)
+                gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, scene.framebuffer)
+                gl.glViewport(0, 0, w, h)
+                gl.glEnablei(gl.GL_BLEND, 0)
+                gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA)
+                gl.glActiveTexture(gl.GL_TEXTURE2)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, layer._below)
+                gl.glUseProgram(layer._program)
+                with layer._blocks.bound(dm._GATHER_BLOCK.pack({"uMaxRadius": radius})):
+                    gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+                gl.glQueryCounter(int(queries[4]), gl.GL_TIMESTAMP)
+                gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE)
+                gl.glUseProgram(layer._sprites)
+                with layer._blocks.bound(dm._SPRITE_BLOCK.pack({"uLevel": level, "uHighlight": highlight,
+                                                                "uMaxRadius": radius,
+                                                                "uSize": (float(layer._size[0]),
+                                                                          float(layer._size[1]))})):
+                    gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, rw * rh)
+                gl.glQueryCounter(int(queries[5]), gl.GL_TIMESTAMP)
+                gl.glDisablei(gl.GL_BLEND, 0)
+                gl.glActiveTexture(gl.GL_TEXTURE0)
+                scene.end(frame, resources, bloom=float(values["u_bloom_strength"]))
+                stamps = []
+                for q in range(6):
+                    value = (ctypes.c_uint64 * 1)()
+                    gl.glGetQueryObjectui64v(int(queries[q]), gl.GL_QUERY_RESULT, value)
+                    stamps.append(int(value[0]))
+                if index >= 4:
+                    for n, name in enumerate(names):
+                        times[name].append(stamps[n + 1] - stamps[n])
+                for buffer in ref.buffers:
+                    gl.glDeleteBuffers(1, [buffer])
+                ref.buffers = []
+        finally:
+            gl.glDeleteQueries(6, queries)
+            scene.release()
+            layer.release()
+            resources.release_resources()
+            ref.release()
+    ref.target.close()
+    return {name: stc._time_summary(sorted(values_)) for name, values_ in times.items()}
+
+
+def python_mip_storage(core, size, frames: int) -> dict:
+    """``glGenerateTextureMipmap`` on one RGBA16F texture of ``size`` with a full chain, immutable storage
+    (``glTextureStorage2D``, Python's) against mutable (``glTexImage2D`` per level), each timed alone (TIME_ELAPSED,
+    read every frame)."""
+    import ctypes
+
+    from OpenGL import GL as gl
+
+    from tools.labs.render_target import OffscreenRenderTarget
+
+    target = OffscreenRenderTarget(64, 64, label="n34-mips")
+    out = {}
+    with target.current():
+        query = (ctypes.c_uint * 1)()
+        gl.glGenQueries(1, query)
+        for label in ("immutable", "mutable"):
+            name = (ctypes.c_uint * 1)()
+            gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, name)
+            texture = int(name[0])
+            levels = max(size).bit_length()
+            if label == "immutable":
+                gl.glTextureStorage2D(texture, levels, gl.GL_RGBA16F, size[0], size[1])
+            else:
+                gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+                for level in range(levels):
+                    gl.glTexImage2D(gl.GL_TEXTURE_2D, level, gl.GL_RGBA16F, max(1, size[0] >> level),
+                                    max(1, size[1] >> level), 0, gl.GL_RGBA, gl.GL_HALF_FLOAT, None)
+                gl.glTextureParameteri(texture, gl.GL_TEXTURE_MAX_LEVEL, levels - 1)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+            gl.glClearTexImage(texture, 0, gl.GL_RGBA, gl.GL_FLOAT, (ctypes.c_float * 4)(0.3, 0.2, 0.1, 1.0))
+            times = []
+            for index in range(frames + 4):
+                gl.glBeginQuery(gl.GL_TIME_ELAPSED, int(query[0]))
+                gl.glGenerateTextureMipmap(texture)
+                gl.glEndQuery(gl.GL_TIME_ELAPSED)
+                value = (ctypes.c_uint64 * 1)()
+                gl.glGetQueryObjectui64v(int(query[0]), gl.GL_QUERY_RESULT, value)
+                if index >= 4:
+                    times.append(int(value[0]))
+            gl.glDeleteTextures([texture])
+            out[label] = stc._time_summary(sorted(times))
+        gl.glDeleteQueries(1, query)
+    target.close()
+    return out
+
+
+def round_python_defocus_cost(core, packs: dict) -> dict:
+    size = COST_HOSTS[-1]
+    from rendering.native.scene_targets import bucket_pixels
+
+    allocation = (bucket_pixels(size[0]), bucket_pixels(size[1]))
+    facts = {f"x{n}": python_defocus_steps(core, packs, size, n, PYTHON_COST_FRAMES) for n in (1, 4)}
+    facts["generate_mips_storage"] = {"card": python_mip_storage(core, size, PYTHON_COST_FRAMES),
+                                      "allocation": python_mip_storage(core, allocation, PYTHON_COST_FRAMES)}
+    return {"pass": True, "facts": facts}
 
 
 # --------------------------------------------------------------------------------------------------- the reference
@@ -1604,12 +1893,13 @@ def child(args) -> dict:
                         record["reference"] = round_reference(core, packs, out)
                     except Exception:
                         record["reference"] = {"pass": False, "error": traceback.format_exc()}
-                if "python_cost" in args.rounds:
-                    try:
-                        record["python_cost"] = round_python_cost(core, packs)
-                    except Exception:
-                        record["python_cost"] = {"pass": False, "error": traceback.format_exc()}
-                record["rounds"] = [r for r in ("reference", "python_cost") if r in record]
+                for name, run in (("python_cost", round_python_cost), ("python_defocus_cost", round_python_defocus_cost)):
+                    if name in args.rounds:
+                        try:
+                            record[name] = run(core, packs)
+                        except Exception:
+                            record[name] = {"pass": False, "error": traceback.format_exc()}
+                record["rounds"] = [r for r in ("reference", *PYTHON_ROUNDS) if r in record]
             else:
                 rounds = {"parity": lambda: round_parity(core, engine, app, args.api, packs, out),
                           "gate": lambda: round_gate(core, engine, app, args.api, packs),
@@ -1617,7 +1907,9 @@ def child(args) -> dict:
                           "steady": lambda: round_steady(core, engine, app, args.api, packs),
                           "retire": lambda: round_retire(core, engine, app, args.api, packs),
                           "barriers": lambda: round_barriers(core, engine, app, args.api, packs),
-                          "cost": lambda: round_cost(core, engine, app, args.api, packs)}
+                          "cost": lambda: round_cost(core, engine, app, args.api, packs),
+                          "defocus_cost": lambda: round_defocus_cost(core, engine, app, args.api, packs),
+                          "showcase": lambda: round_showcase(core, engine, app, args.api, packs, out)}
                 for name in args.rounds:
                     if vulkan:
                         core.set_vulkan_phase(f"n34 {name}")
@@ -1643,7 +1935,7 @@ def child(args) -> dict:
 
 def api_verdict(api: str, record: dict, require_validation: bool, rounds) -> tuple[bool, list[str]]:
     if api == "reference":
-        names = [n for n in ("reference", "python_cost") if n in record]
+        names = [n for n in ("reference", *PYTHON_ROUNDS) if n in record]
         failed = [f"{n}: {json.dumps(record[n].get('errors') or record[n].get('error') or 'failed')[-1500:]}"
                   for n in names if not record[n].get("pass")]
         if not names:
@@ -1683,7 +1975,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--module-dir", default="release/native_module")
     parser.add_argument("--repo", default=".", help="the repository root (default: the current directory)")
     parser.add_argument("--apis", nargs="+", default=list(APIS), choices=APIS)
-    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=(*ROUNDS, *PYTHON_ROUNDS))
+    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=(*ROUNDS, *ALONE_ROUNDS, *PYTHON_ROUNDS))
     parser.add_argument("--label", default="n34_post_stages")
     parser.add_argument("--layer-path", type=Path, default=None,
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")
@@ -1715,11 +2007,11 @@ def main(argv: list[str] | None = None) -> int:
     results: dict = {}
     native_rounds = [r for r in args.rounds if r not in PYTHON_ROUNDS]
     children = [a for a in APIS if a in args.apis and native_rounds]
-    if ("parity" in args.rounds and "opengl" in args.apis) or "python_cost" in args.rounds:
+    if ("parity" in args.rounds and "opengl" in args.apis) or set(PYTHON_ROUNDS) & set(args.rounds):
         children.append("reference")
     for api in children:
         child_json = out / f"child_{api}.json"
-        rounds = [r for r in args.rounds if r in ("parity", "python_cost")] if api == "reference" else native_rounds
+        rounds = [r for r in args.rounds if r in ("parity", *PYTHON_ROUNDS)] if api == "reference" else native_rounds
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
                    "--rounds", *rounds]

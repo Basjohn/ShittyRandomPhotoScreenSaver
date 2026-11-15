@@ -320,9 +320,10 @@ def eb_program(packs: dict, *, samples: int = 1, variant: str = "full", order=LA
                                        ModeTarget, PassOutput, TargetAttachment, TransparencyResolve,
                                        TransparencyTarget)
 
-    transparency = variant in ("full", "no_bloom", "no_defocus")
-    bloom = variant in ("full", "no_transparency", "no_defocus")
-    defocus = variant in ("full", "no_transparency", "no_bloom")
+    transparency = variant in ("full", "no_bloom", "no_defocus", "near_only")
+    bloom = variant in ("full", "no_transparency", "no_defocus", "near_only")
+    defocus = variant in ("full", "no_transparency", "no_bloom", "near_only")
+    step = variant != "near_only"             # near_only: the layer drawn, no defocus step (the cost split's)
     scene = ModeTarget("scene", (TargetAttachment("colour", "rgba16f"), TargetAttachment("emission", "rgba16f")),
                        depth=True, samples=int(samples))
     targets = [scene]
@@ -345,7 +346,8 @@ def eb_program(packs: dict, *, samples: int = 1, variant: str = "full", order=LA
         maximum = BlendState(("max", "one", "one"), ("max", "one", "one"))
         passes.append(ModePass("near", packs["near"], "premultiplied", target="near",
                                outputs=(PassOutput(True, "premultiplied"), PassOutput(True, maximum))))
-        passes.append(DefocusStep("defocus", "near", "scene"))
+        if step:
+            passes.append(DefocusStep("defocus", "near", "scene"))
     if bloom:
         passes.append(BloomStep("bloom", "scene.emission"))
         passes.append(CompositeStep("show", "overlay_glow", "scene.colour", "bloom.glow"))
