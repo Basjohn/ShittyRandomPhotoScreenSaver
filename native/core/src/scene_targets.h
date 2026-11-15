@@ -263,7 +263,8 @@ public:
               QString *error);
     // Render thread: one step of what sync left (one colour attachment with its resolve, the depth with its resolve, the
     // render target, the capture). True once nothing is left (`done`), false with the reason when an object could not be
-    // made (every object of that target goes).
+    // made: the caller then releases the pipelines built over the targets' descriptors and then the targets (release()),
+    // in that order (audit 2, L5: a same-layout resize keeps its descriptor and its pipelines until then).
     bool allocateStep(bool *done, QString *error);
     bool complete() const;
 

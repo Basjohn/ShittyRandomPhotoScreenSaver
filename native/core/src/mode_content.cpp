@@ -2851,7 +2851,8 @@ bool ModeContent::syncTargets(QRhi *rhi, const ColorTarget &target, QString *err
     while (ok && !done)                       // every step now; N3.6 spaces them over warm-up frames
         ok = m_targets.allocateStep(&done, error);
     if (!ok) {
-        // The content's failure, latched like a build's (the targets go; the frame in the surface stays).
+        // The content's failure, latched like a build's (the targets go; the frame in the surface stays). The pipelines
+        // go before the targets' descriptors (audit 2, L5: allocateStep leaves a failed target's objects to this).
         releasePipelines();
         m_targets.release();
         m_targetObjectsSeen = 0;

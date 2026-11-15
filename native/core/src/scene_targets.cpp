@@ -688,7 +688,8 @@ bool SceneTargets::allocateStep(bool *done, QString *error)
             releaseTarget(t);                 // the old layout's objects (the caller released the pipelines over them)
         ++m_stateVersion;
         if (!step(t, i, error)) {
-            releaseTarget(t);
+            // Audit 2, L5: the objects stay until the caller released the pipelines built over this target's
+            // render-pass descriptor, then every target (release(); the header's order).
             t.allocation = QSize();
             return false;
         }
