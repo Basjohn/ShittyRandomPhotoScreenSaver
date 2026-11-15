@@ -11,9 +11,12 @@ Each overlay's placement is its anchor corner plus an offset and a scale relativ
 overlay's size; zero offset and unit scale are the defaults). Now Playing's artwork size has one carrier, its ``artwork``
 child record (plan 1B.7d; the retired ``artwork_scale`` / ``artwork_width`` / ``artwork_height`` load into it). Fullscreen Edit (M3c)
 edits exactly these placement values: the offsets, the scales and the single-axis extents below. The corner is Settings'
-(the anchor); changing it rebases the offset (:func:`rebase_offset_for_corner`). An overlay Fullscreen Edit has moved
-(:func:`overlay_placement_moved`) reads CUSTOM in Settings' Corner choice; choosing a corner there clears its placement
-(:func:`clear_overlay_placement`, the one reset owner; plan 1D.12 A2).
+(the anchor), and its Corner choice is about position only (operator, 14 Nov): an overlay Fullscreen Edit has moved (a
+non-zero offset, :func:`overlay_placement_moved`) reads CUSTOM there. Choosing a corner (:func:`place_overlay_at_corner`)
+keeps the moved position as the overlay's ``custom_position`` and returns only the position to the corner: the scale,
+the extents and the child layout stay. Choosing CUSTOM again (:func:`restore_custom_position`) restores that position,
+as ordinary widgets keep their CUSTOM geometry under a named position (plan 1D.12 A2, 1D.14). An overlay at its corner
+is re-anchored by :func:`rebase_offset_for_corner`.
 
 Single-axis sizing (Fullscreen Edit's side handles, ordinary Edit's content box; plan 1B.7b, 1C.3): each overlay's
 parent edits its box in ems of its font size (``0`` = natural), as the Media card's content extent reflows its content.
@@ -142,6 +145,10 @@ PLACEMENT_KEYS = {"preset": ("offset_x", "offset_y", "scale", "text_width", "tex
                   "now_playing": ("offset_x", "offset_y", "scale", "text_width", "text_height", BASE_WIDTH_KEY,
                                   CHILD_GEOMETRY_KEY),
                   VOLUME_OSD_ID: ("offset_x", "offset_y", "scale")}
+#: Each overlay's stored custom position (plan 1D.14): where Fullscreen Edit had moved it (its anchor corner and
+#: offset) when Settings' Corner choice sent it to a corner, so that choosing CUSTOM restores it. ``{}`` (the canonical
+#: default) = none; a value stored before it has none (no bridge). Settings writes it, Fullscreen Edit never does.
+CUSTOM_POSITION_KEY = "custom_position"
 
 _TRUE = frozenset({"1", "true", "yes", "on"})
 _FALSE = frozenset({"0", "false", "no", "off"})
@@ -212,6 +219,8 @@ def normalize_fullscreen_overlays(value: Any, application: str | None = None) ->
             item = raw[key]
             if key == CHILD_GEOMETRY_KEY:
                 target[key] = normalize_now_playing_children(item)
+            elif key == CUSTOM_POSITION_KEY:
+                target[key] = normalize_custom_position(item)
             elif key == "media_controls_style":
                 if isinstance(item, str) and item.strip().lower() in MEDIA_CONTROLS_STYLES:
                     target[key] = item.strip().lower()
@@ -357,49 +366,85 @@ def rebase_offset_for_corner(options: Mapping[str, Any], corner: str) -> dict[st
     return result
 
 
-def overlay_placement_moved(options: Mapping[str, Any], overlay: str, application: str | None = None) -> bool:
-    """True when Fullscreen Edit has moved ``overlay`` off its bare corner (plan 1D.12 A2).
+def _offset(value: Any) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return number if math.isfinite(number) else 0.0
 
-    Moved means any member Fullscreen Edit writes (:data:`PLACEMENT_KEYS`: the offset, the scale, the box extents, Now
-    Playing's ``base_width`` and child records) differs from the canonical default, which is the overlay drawn at its
-    corner at its natural size. A Restore Size that returned the size members leaves only the offset to decide.
+
+def overlay_placement_moved(options: Mapping[str, Any]) -> bool:
+    """True when Fullscreen Edit has moved the overlay off its bare corner: a non-zero offset (plan 1D.12 A2; 1D.14).
+
+    Settings' Corner choice is about position only (operator, 14 Nov: the CUSTOM entry), so the size and layout
+    members (the scale, the box extents, Now Playing's ``base_width`` and child records) never make it CUSTOM.
     """
 
-    canonical = canonical_fullscreen_overlays(application).get(overlay)
-    if not isinstance(canonical, Mapping) or not isinstance(options, Mapping):
+    if not isinstance(options, Mapping):
         return False
-    for key in PLACEMENT_KEYS.get(overlay, ()):
-        default = canonical.get(key)
-        value = options.get(key, default)
-        if key == CHILD_GEOMETRY_KEY:
-            if normalize_now_playing_children(value) != normalize_now_playing_children(default):
-                return True
-            continue
-        try:
-            if abs(float(value) - float(default)) > 1e-9:
-                return True
-        except (TypeError, ValueError):
-            return True
-    return False
+    return any(abs(_offset(options.get(key, 0.0))) > 1e-9 for key in ("offset_x", "offset_y"))
+
+def normalize_custom_position(value: Any) -> dict[str, Any]:
+    """One stored :data:`CUSTOM_POSITION_KEY` record: ``{corner, offset_x, offset_y}`` with a known corner and a
+    non-zero offset (clamped as the overlay's own), else ``{}`` (no stored custom position)."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    corner = value.get("corner")
+    corner = corner.strip().lower() if isinstance(corner, str) else ""
+    if corner not in CORNERS:
+        return {}
+    record = {"corner": corner,
+              "offset_x": _number(value.get("offset_x"), 0.0, OFFSET_MIN, OFFSET_MAX),
+              "offset_y": _number(value.get("offset_y"), 0.0, OFFSET_MIN, OFFSET_MAX)}
+    return record if overlay_placement_moved(record) else {}
 
 
-def clear_overlay_placement(options: Mapping[str, Any], overlay: str, corner: str | None = None,
-                            application: str | None = None) -> dict[str, Any]:
-    """``overlay``'s options with its Fullscreen Edit placement cleared (the one reset owner, plan 1D.12 A2).
+def has_custom_position(options: Mapping[str, Any]) -> bool:
+    """True when Settings' CUSTOM entry has a position to show: the overlay is moved now, or a corner choice kept the
+    position it was moved to (:func:`place_overlay_at_corner`)."""
 
-    Every :data:`PLACEMENT_KEYS` member returns to its canonical default, so the overlay sits at its corner at its
-    natural size, as an ordinary widget leaves its CUSTOM geometry for a named position. ``corner`` (one of
-    :data:`CORNERS`) becomes its anchor when given. Every other option is unchanged. Pure.
+    if not isinstance(options, Mapping):
+        return False
+    return overlay_placement_moved(options) or bool(normalize_custom_position(options.get(CUSTOM_POSITION_KEY)))
+
+
+def place_overlay_at_corner(options: Mapping[str, Any], corner: str) -> dict[str, Any]:
+    """One overlay's options after Settings' Corner choice picks ``corner`` (plan 1D.14; the one owner).
+
+    The choice is about position only. A moved overlay (:func:`overlay_placement_moved`) keeps the position it was
+    moved to as its stored custom position (:data:`CUSTOM_POSITION_KEY`: its anchor corner and offset, as an ordinary
+    widget keeps its CUSTOM geometry under a named position) and sits at ``corner`` with a zero offset. An overlay at
+    its corner is re-anchored by :func:`rebase_offset_for_corner`. The scale, the box extents, ``base_width`` and the
+    child records are never changed. Pure; an unknown corner, or the overlay's own corner while it is not moved,
+    returns the options unchanged.
     """
 
-    result = dict(options)
-    canonical = canonical_fullscreen_overlays(application).get(overlay)
-    if isinstance(canonical, Mapping):
-        for key in PLACEMENT_KEYS.get(overlay, ()):
-            if key in canonical:
-                result[key] = deepcopy(canonical[key])
-    if corner is not None and str(corner) in CORNERS:
-        result["corner"] = str(corner)
+    result = deepcopy(dict(options))
+    corner = str(corner)
+    if corner not in CORNERS:
+        return result
+    if overlay_placement_moved(result):
+        result[CUSTOM_POSITION_KEY] = normalize_custom_position(
+            {"corner": result.get("corner"), "offset_x": result.get("offset_x"), "offset_y": result.get("offset_y")})
+        result.update(corner=corner, offset_x=0.0, offset_y=0.0)
+        return result
+    if result.get("corner") == corner:
+        return result
+    return rebase_offset_for_corner(result, corner)
+
+
+def restore_custom_position(options: Mapping[str, Any]) -> dict[str, Any]:
+    """One overlay's options after Settings' Corner choice picks CUSTOM: the stored custom position (its corner and
+    offset) becomes the overlay's again. Everything else, the record included, is unchanged. Pure; an overlay that is
+    moved now, or has no stored custom position, is returned unchanged."""
+
+    result = deepcopy(dict(options))
+    record = normalize_custom_position(result.get(CUSTOM_POSITION_KEY))
+    if overlay_placement_moved(result) or not record:
+        return result
+    result.update(record)
     return result
 
 
@@ -460,9 +505,13 @@ __all__ = [
     "NOW_PLAYING_CHILD_ROLES",
     "RETIRED_TEXT_ROLES",
     "VOLUME_OSD_ID",
+    "CUSTOM_POSITION_KEY",
     "canonical_fullscreen_overlays",
-    "clear_overlay_placement",
+    "has_custom_position",
+    "normalize_custom_position",
     "overlay_placement_moved",
+    "place_overlay_at_corner",
+    "restore_custom_position",
     "normalize_display_style",
     "normalize_fullscreen_overlays",
     "normalize_now_playing_children",

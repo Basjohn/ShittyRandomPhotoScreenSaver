@@ -5,9 +5,10 @@ name and Now Playing (Artist, Song and Artwork), and how the expanded card meets
 built from its one spec declaration ``DISPLAY_STYLE_CONTROL``). Every value is ``widgets.spotify_visualizer.fullscreen_overlays``
 (``core.settings.fullscreen_overlays``: one canonical owner, persisted with the Visualizer section, reset and imported
 with it); this page holds no other state. Placement offsets and scales (Fullscreen Edit, M3c) have no control here:
-they are kept as loaded and written back unchanged, except that a new Corner rebases the overlay's offset by the one
-owner's rule (``rebase_offset_for_corner``). An overlay Fullscreen Edit has moved reads CUSTOM in its Corner choice
-(``overlay_placement_moved``); choosing a corner there clears the placement (``clear_overlay_placement``; 1D.12 A2).
+they are kept as loaded and written back unchanged, except for the position the Corner choice sets. That choice is
+about position only (1D.12 A2, 1D.14): an overlay Fullscreen Edit has moved (a non-zero offset,
+``overlay_placement_moved``) reads CUSTOM; a corner returns only its position to the corner and keeps the moved one as
+its custom position (``place_overlay_at_corner``), and CUSTOM restores it (``restore_custom_position``).
 
 Layout follows the Settings bucket pattern: one bucket per overlay plus Text, closed by default, one open at a time
 (the Visualizer pages' remembered leaf), a one-sentence intro, details in tooltips.
@@ -27,10 +28,11 @@ from core.settings.fullscreen_overlays import (
     DISPLAY_STYLE_KEY,
     FONT_SIZE_MAX,
     FONT_SIZE_MIN,
-    clear_overlay_placement,
+    has_custom_position,
     normalize_fullscreen_overlays,
     overlay_placement_moved,
-    rebase_offset_for_corner,
+    place_overlay_at_corner,
+    restore_custom_position,
 )
 from rendering.widget_descriptors import CUSTOM_POSITION_OPTION_LABEL
 from ui.tabs import shared_styles
@@ -172,12 +174,13 @@ class FullscreenModePage(QWidget):
         combo.setObjectName(f"fullscreen_{overlay}_corner")
         for corner in CORNERS:
             combo.addItem(_CORNER_LABELS[corner], corner)
-        # Fullscreen Edit moved it off its bare corner (plan 1D.12 A2): offered and shown only then, as ordinary
-        # widgets show their CUSTOM slot.
+        # Fullscreen Edit moved it off its bare corner (plan 1D.12 A2): shown then, and enabled while a custom position
+        # is kept (1D.14), as ordinary widgets show their CUSTOM slot.
         combo.addItem(CUSTOM_POSITION_OPTION_LABEL, _CUSTOM)
         combo.setMinimumWidth(150)
         combo.setToolTip("Which corner of the display it sits in. Two overlays in one corner stack, the newer "
-                         "one nearer the edge. Custom: moved in Fullscreen Edit; a corner puts it back.")
+                         "one nearer the edge. Custom: where Fullscreen Edit moved it; a corner moves it back and "
+                         "keeps its size, and Custom returns it to where it was moved.")
         combo.currentIndexChanged.connect(
             lambda _index, box=combo, name=overlay: self._set_corner(name, str(box.currentData())))
         row.addWidget(combo)
@@ -185,14 +188,15 @@ class FullscreenModePage(QWidget):
         return combo
 
     def _sync_corner(self, combo: StyledComboBox, overlay: str) -> None:
-        """Show the overlay's corner, or CUSTOM while Fullscreen Edit's placement moves it (enabled only then)."""
+        """Show the overlay's corner, or CUSTOM while Fullscreen Edit has moved it; CUSTOM is enabled while there is a
+        custom position to show (moved now, or kept by a corner choice), as ordinary widgets keep their CUSTOM slot."""
 
-        moved = overlay_placement_moved(self._values[overlay], overlay)
+        moved = overlay_placement_moved(self._values[overlay])
         custom_index = combo.findData(_CUSTOM)
         model = combo.model()
         item = model.item(custom_index) if hasattr(model, "item") else None
         if item is not None:
-            item.setEnabled(moved)
+            item.setEnabled(has_custom_position(self._values[overlay]))
         with QSignalBlocker(combo):
             combo.setCurrentIndex(custom_index if moved else max(0, combo.findData(self._values[overlay]["corner"])))
 
@@ -211,22 +215,23 @@ class FullscreenModePage(QWidget):
             self._set_value(("font_family",), family)
 
     def _set_corner(self, overlay: str, corner: str) -> None:
-        """A new anchor corner rebases the overlay's Fullscreen Edit offset (the one owner's rule): kept on each axis
-        that still points into the display from the new corner, reset where it would push the overlay out."""
+        """The Corner choice is about position only (plan 1D.14, the one owner's rules): a corner returns the position
+        to it and keeps a moved position as the overlay's custom position (``place_overlay_at_corner``); CUSTOM
+        restores that position (``restore_custom_position``). The size and layout are never changed here."""
 
-        if self._loading or corner == _CUSTOM:
+        if self._loading:
             return
         combo = self.preset_corner if overlay == "preset" else self.now_playing_corner
-        if overlay_placement_moved(self._values[overlay], overlay):
-            # Leaving CUSTOM for a corner clears Fullscreen Edit's placement (the one reset owner), as an ordinary
-            # widget leaves its custom geometry for a named position.
-            self._values[overlay] = clear_overlay_placement(self._values[overlay], overlay, corner)
-        elif self._values[overlay].get("corner") == corner:
-            return
+        before = self._values[overlay]
+        if corner == _CUSTOM:
+            after = restore_custom_position(before)
         else:
-            self._values[overlay] = rebase_offset_for_corner(self._values[overlay], corner)
+            after = place_overlay_at_corner(before, corner)
+        changed = after != before
+        self._values[overlay] = after
         self._sync_corner(combo, overlay)
-        self._changed()
+        if changed:
+            self._changed()
 
     def _set_value(self, path: tuple[str, ...], value: Any) -> None:
         if self._loading:

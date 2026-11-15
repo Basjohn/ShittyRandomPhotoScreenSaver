@@ -44,7 +44,7 @@ after the operator's yes on a question card; agents never run load (invisible ch
 at the size asked.
 - High: N5.7c, then N3. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers
   ride with the next fitting dispatch.
-- Medium: 1D.14 (the Fullscreen corner fix), then the next N5 port.
+- Medium: the next N5 port (Oscilloscope or Bubble once N3.2's instanced quads land).
 - Docs (Sonnet): only when a step needs a document.
 - Audit: an Opus High behind each merge, scaled to its risk.
 
@@ -1029,20 +1029,6 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   Settings and Studio box.
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
-
-### 1D.14 Checkpoint audit 1 fixes (15 Nov; `Docs/Future_Work/Checkpoint_Audits_Nov15.md`; the next Opus Medium opening, before more side work)
-
-- [ ] High: choosing a corner in Visualizers > Fullscreen wipes the overlay's whole Fullscreen Edit placement
-  (`ui/tabs/visualizers_fullscreen_page.py:213-229`, `core/settings/fullscreen_overlays.py:386`). The lead's brief
-  caused it by saying "clears". Decided: the dropdown is about position, so "moved" means a non-zero offset only. A
-  corner choice keeps scale, text box, base width and child layout, and returns only the position to the corner.
-  The moved offsets are kept through the one owner (`normalize_fullscreen_overlays`) as the overlay's stored custom
-  position, so choosing CUSTOM again restores it, as ordinary widgets keep their custom geometry. Restore the
-  pre-merge test's assertion that scale and artwork survive a corner change, with a note saying why it changed back.
-- The medium (the hint replays after a move back to a display whose card is reused) is accepted as it is (operator,
-  15 Nov); L2 goes with it.
-- L1 (the tie budget caps a count, not a level) is recorded, not fixed: a regression confined to 8 isolated pixels
-  a frame is invisible, and N5.2a's seven stay exact.
 
 ### 1D.13 Side defects found at its merge (15 Nov; Opus Medium when a slot is free of native work)
 
