@@ -11,28 +11,38 @@ Rounds:
   facts      (parent) every pack's ``qsb -d`` reflection: the storage blocks' readonly/writeonly qualifiers, the images'
              flags and formats (D16 choice D's open fact); (each API) the admission refusals they drive (a readonly block
              declared written, a writeonly block declared read, a written block declared read, a writeonly image
-             declared read, an image of another format, a 2D image bound to an image3D, an unbound block) and the one
-             program taken; the device's compute facts.
+             declared read, an image of another format, a 2D image bound to an image3D, an unbound block, one buffer
+             bound twice with two accesses: checkpoint audit 5 M3) and the one program taken; the device's compute
+             facts.
   parity     (each API; and the reference) field, chain, volume (3D images, per-slice readback: D16's second open fact)
              and population, storage read back after three records: rule (a) native OpenGL against the reference, rule
              (b) native Vulkan against native OpenGL, exact (a difference is reported with its ULP distance); a
              negative control (one input changed) must differ. The scenes' pixels (the draws reading the storage) under
              rule (b); the indirect draw equals the direct draw of the same members; the command equals the CPU's count.
+             D4's pair-check kernel (audit 5 M4) through the core's bake equals exact arithmetic on each API and under
+             rule (b); its control (the error terms precise keeps, zeroed) must not.
   trigger    (each API) a frame trigger dispatches once per accepted record and never for a card, settings or readback
              re-record; a field trigger only when its field changes; the state after 200 records equals a CPU
              reference, and the control (every record dispatched) integrates more and differs; a node made again
-             dispatches fresh and tells the owner once (on_state_lost).
-  war        (each API) write-after-read: entry 1 reads X and writes Y, entry 2 writes X: Y holds the earlier X.
+             dispatches fresh and tells the owner once (on_state_lost); the same program sent again, and an image no
+             entry of the state binds made again, keep the entries' history (audit 5 M2).
+  war        (each API) write-after-read: entry 1 reads X and writes Y, entry 2 writes X: Y holds the earlier X; the
+             ping-pong form (audit 5 M4): entry 1 reads A and writes B, entry 2 reads B and writes A, each one past
+             what it read.
   copy       (each API) a created buffer and image read zero; a resized buffer keeps its prefix bit-exact and reads
              zero past it.
   rest       (each API) a minute at rest: no compute pass, no dispatch, no object; control: a record every frame.
   steady     (each API) new records for a while: no storage object created.
-  retire     (each API) the item destroyed, a program without storage, a destroy between a resize's allocation and
-             its copy: storage back to zero; control: the release skipping the storage (counted left behind).
+  retire     (each API) the item destroyed, a program without storage after one holding an image and after one holding
+             buffers (audit 5 M1), a destroy between a resize's allocation and its copy: storage back to zero; control:
+             the release skipping the storage (counted left behind).
   barriers   (each API; on Vulkan under synchronisation validation) consecutive records of every scene with no readback
-             between them (phase "n33 barriers": clean); the controls in their own phases: written bindings recorded
-             as reads ("n33 control write_as_read": SYNC-HAZARD-READ-AFTER-WRITE) and the write-after-read pair in one
-             QRhi pass ("n33 control single_pass": SYNC-HAZARD-WRITE-AFTER-READ). On OpenGL the same records' values.
+             between them (phase "n33 barriers": clean, the ping-pong included); the controls in their own phases:
+             written bindings recorded as reads ("n33 control write_as_read": SYNC-HAZARD-READ-AFTER-WRITE; the
+             ping-pong's, "n33 control pingpong write_as_read": SYNC-HAZARD-WRITE-AFTER-READ) and the write-after-read
+             pair in one QRhi pass ("n33 control single_pass": SYNC-HAZARD-WRITE-AFTER-READ). On OpenGL the same
+             records' values. OpenGL's glMemoryBarrier calls are not counted: QRhi makes them inside its GL backend
+             through resolved function pointers no public API counts (D16's as-built says why).
   cost       (each API; and the reference) GPU time (the content's whole record) median and p90 at 2560x1440 and
              3840x2160 for Waveform's fogged-frame shape (a 128x72x32 volume and the fields) and the drift's (216,000
              state rows), against the Python path's dispatches on the same load (GL_TIME_ELAPSED); the record's
@@ -82,7 +92,14 @@ COST_FRAMES = 240
 COST_SCENES = {"waveform": dict(volume=(128, 72, 32)), "drift": dict(state_rows=216000),
                "population": dict(population=262144)}
 CONTROL_PHASES = {"n33 control write_as_read": "SYNC-HAZARD-READ-AFTER-WRITE",
-                  "n33 control single_pass": "SYNC-HAZARD-WRITE-AFTER-READ"}
+                  "n33 control single_pass": "SYNC-HAZARD-WRITE-AFTER-READ",
+                  # Checkpoint audit 5 M4: the ping-pong's write-after-read is barriered only because QRhi knows A is
+                  # written; recorded as read, it is not.
+                  "n33 control pingpong write_as_read": "SYNC-HAZARD-WRITE-AFTER-READ"}
+# Phases recorded as facts, neither clean nor a control: the ping-pong in one QRhi pass. Expected clean by reading
+# (QRhi's in-pass read-after-write barrier on B is a compute-to-compute execution dependency, which also orders A's
+# write after its read), but not relied on: the run says what the layer found.
+FACT_PHASES = ("n33 fact single_pass pingpong",)
 _ALLOWED_ENV: set[str] = set()
 
 
@@ -345,9 +362,27 @@ def round_parity(core, engine, app, api: str, packs: dict, out: Path) -> dict:
             control = scene.storage(app)
         finally:
             _close(scene, host, app)
+        # Checkpoint audit 5 M4: D4's pair-check kernel (precise) through the core's own bake, judged against exact
+        # arithmetic as the product's warm-up check judges it; under rule (b) with the other scenes. Its control: the
+        # error terms a compiler that drops precise may lose, zeroed.
+        for name in ("pair_check", "pair_check_broken"):
+            scene = Scene(core, engine, host, spec_for(name, packs))
+            try:
+                _records(scene, PARITY_RECORDS)
+                got = scene.storage(app)
+                if name == "pair_check":
+                    storage[name] = got
+                facts[name] = dict(cp.pair_check_report(got["results"][3]),
+                                   last_reason=scene.mode.state().get("last_reason"))
+            finally:
+                _close(scene, host, app)
     finally:
         host.close()
         host_check._flush_deletes(app)
+    checks["the_pair_check_is_exact_through_the_core_bake"] = bool(facts["pair_check"]["exact"])
+    checks["control_the_pair_check_without_its_error_terms_is_not"] = bool(
+        not facts["pair_check_broken"]["exact"] and facts["pair_check_broken"]["product_mismatches"]
+        and facts["pair_check_broken"]["sum_mismatches"])
     checks["control_another_input_differs"] = not compare_storage(control, storage["field"])["field"]["exact"]
     # The population: the command is (vertices, the CPU's live count, 0, 0); the ids are the live members in id order;
     # the indirect draw equals the direct draw of the same members.
@@ -672,6 +707,42 @@ def round_trigger(core, engine, app, api: str, packs: dict) -> dict:
             finally:
                 _close(scene, host, app)
                 core.module.compute_control(json.dumps({"trigger_every_record": False}))
+        # Checkpoint audit 5 M2: fresh is per entry. The same program sent again over its kept storage, then an image no
+        # entry of the state binds made again (its size changed), restart neither entry: each step goes on from the
+        # last, not fresh. The state scene with one unrelated image beside it.
+        from rendering.native.mode import StorageImage
+
+        spec = replace(spec_for("state", packs), images=(StorageImage("unrelated", (8, 8), "r32f"),))
+        scene = Scene(core, engine, host, spec)
+        try:
+            _records(scene, 6, change=lambda i: {"step": 1 + i, "u_frame": float(i)})
+            before_rows = _state_rows(scene.storage(app))[0].tolist()
+            before = _live(core)
+            scene.mode.program(spec.passes, spec.settings, targets=spec.targets, streams=spec.streams,
+                               buffers=spec.buffers, images=spec.images)
+            scene.draw(1, step=7, u_frame=7.0)
+            resent = _state_rows(scene.storage(app))[0].tolist()
+            middle = _live(core)
+            scene.mode.image_size("unrelated", (16, 8))
+            scene.draw(1, step=8, u_frame=8.0)
+            imaged = _state_rows(scene.storage(app))
+            after = _live(core)
+            facts["kept_history"] = {
+                "row0_after_6_steps": before_rows, "row0_after_the_program_again": resent,
+                "row0_after_an_unrelated_image": imaged[0].tolist(),
+                "resend": {k: _delta(middle, before, k) for k in ("compute_objects_created", "compute_clears",
+                                                                  "compute_dispatches")},
+                "image": {k: _delta(after, middle, k) for k in ("compute_objects_created", "compute_clears",
+                                                                 "compute_dispatches")}}
+            # Row 0 is (dispatches since fresh, trigger, its last value, fresh * 1000 + dispatches before this one).
+            checks["six_steps_reach_6_6_5_5"] = before_rows == [6.0, 6.0, 5.0, 5.0]
+            checks["the_same_program_again_keeps_each_entrys_history"] = resent == [7.0, 7.0, 6.0, 6.0]
+            checks["an_image_no_entry_binds_made_again_restarts_no_entry"] = bool(
+                np.all(imaged == np.array([8.0, 8.0, 7.0, 7.0])))     # every row (both entries' halves)
+            checks["the_program_again_made_and_cleared_nothing"] = (facts["kept_history"]["resend"][
+                "compute_objects_created"] == 0 and facts["kept_history"]["resend"]["compute_clears"] == 0)
+        finally:
+            _close(scene, host, app)
         # A node made again: storage made zeroed, the entries dispatch fresh, the owner told once.
         scene = Scene(core, engine, host, spec_for("state", packs))
         calls: list = []
@@ -723,6 +794,26 @@ def round_war(core, engine, app, api: str, packs: dict) -> dict:
             facts["x0"], facts["y0"] = x[0].tolist(), y[0].tolist()
             checks["y_holds_the_earlier_x"] = bool(np.all(y == expected_y))
             checks["x_holds_this_record"] = bool(np.all(x[:, 1] == np.arange(len(x))))
+        finally:
+            _close(scene, host, app)
+        # Checkpoint audit 5 M4, the ping-pong form (two buffers): ping reads A and writes B, pong reads B and writes A,
+        # each one past what it read; after n dispatches in all A counts n, B one less, and each holds what it read.
+        scene = Scene(core, engine, host, spec_for("war_pingpong", packs))
+        try:
+            before = _live(core)
+            _records(scene, 4, change=lambda i: {"u_frame": float(i)})
+            dispatches = _delta(_live(core), before, "compute_dispatches")
+            got = scene.storage(app)
+            a = np.frombuffer(got["a"][3], "<f4").reshape(-1, 4)
+            b = np.frombuffer(got["b"][3], "<f4").reshape(-1, 4)
+            facts["pingpong"] = {"dispatches": dispatches, "a0": a[0].tolist(), "b0": b[0].tolist()}
+            checks["pingpong_dispatched_both_entries_every_record"] = dispatches == 8
+            checks["pingpong_a_counts_every_dispatch"] = bool(np.all(a[:, 0] == dispatches))
+            checks["pingpong_b_is_one_behind_and_read_a_before_a_was_written"] = bool(
+                np.all(b[:, 0] == dispatches - 1) and np.all(b[:, 2] == dispatches - 2))
+            checks["pingpong_a_read_b_after_b_was_written"] = bool(np.all(a[:, 2] == dispatches - 1))
+            checks["pingpong_rows_are_their_own"] = bool(np.all(a[:, 1] == np.arange(len(a)))
+                                                         and np.all(b[:, 1] == np.arange(len(b))))
         finally:
             _close(scene, host, app)
     finally:
@@ -878,6 +969,23 @@ def round_retire(core, engine, app, api: str, packs: dict) -> dict:
                 v == 0 for v in facts["program_without_storage"]["after"].values()))
         finally:
             _close(scene, host, app)
+        # Checkpoint audit 5 M1: the same after a program holding buffers (the population's five; the field above holds
+        # one image only). Its buffers go through a resize's delayed release: at the next record's sync, before the item
+        # goes.
+        scene = Scene(core, engine, host, spec_for("population", packs))
+        try:
+            scene.draw(3)
+            held = {k: _live(core)[k] for k in keys}
+            scene.mode.program((ModePass("plain", packs["plain.frag"], "replace", target="scene"),), {},
+                               targets=scene.spec.targets, streams=scene.spec.streams)
+            _records(scene, 3)                # three records: the first replaces them, the next releases them
+            facts["buffers_then_a_program_without_storage"] = {
+                "held": held, "after": {k: _live(core)[k] for k in keys},
+                "storage": scene.mode.state().get("storage"), "last_reason": scene.mode.state().get("last_reason")}
+            checks["a_program_without_storage_releases_the_last_programs_buffers"] = (held["compute_buffers"] > 0 and all(
+                v == 0 for v in facts["buffers_then_a_program_without_storage"]["after"].values()))
+        finally:
+            _close(scene, host, app)
         # Destroyed between a resize's allocation and its copy (the settings set, the item gone before a frame).
         scene = Scene(core, engine, host, spec_for("state", packs))
         scene.draw(3, step=1)
@@ -919,7 +1027,7 @@ def round_barriers(core, engine, app, api: str, packs: dict) -> dict:
     host = mbc._host(core)
     vulkan = api == "vulkan"
     try:
-        for name in ("field", "chain", "volume", "state", "population", "war"):
+        for name in ("field", "chain", "volume", "state", "population", "war", "war_pingpong"):
             if vulkan:
                 core.set_vulkan_phase("n33 barriers")
             scene = Scene(core, engine, host, spec_for(name, packs))
@@ -929,7 +1037,10 @@ def round_barriers(core, engine, app, api: str, packs: dict) -> dict:
             finally:
                 _close(scene, host, app)
         for phase, control, scenes in (("n33 control write_as_read", {"write_as_read": True}, ("chain", "state")),
-                                       ("n33 control single_pass", {"single_pass": True}, ("war",))):
+                                       ("n33 control single_pass", {"single_pass": True}, ("war",)),
+                                       ("n33 control pingpong write_as_read", {"write_as_read": True},
+                                        ("war_pingpong",)),
+                                       ("n33 fact single_pass pingpong", {"single_pass": True}, ("war_pingpong",))):
             if vulkan:
                 core.set_vulkan_phase(phase)
             core.module.compute_control(json.dumps(control))
@@ -956,7 +1067,8 @@ def split_validation(messages: dict) -> dict:
     """The validation summary outside the control phases (must be clean) and, per control phase, whether its expected
     hazard was reported."""
     entries = messages.get("entries", [])
-    clean_entries = [e for e in entries if (e.get("phase") or "") not in CONTROL_PHASES]
+    clean_entries = [e for e in entries if (e.get("phase") or "") not in CONTROL_PHASES
+                     and (e.get("phase") or "") not in FACT_PHASES]
     clean_errors = sum(int(e.get("count", 1)) for e in clean_entries if e.get("severity") == "error")
     clean_warnings = sum(int(e.get("count", 1)) for e in clean_entries if e.get("severity") == "warning")
     rest = dict(messages, entries=clean_entries, errors=clean_errors, warnings=clean_warnings)
@@ -966,8 +1078,10 @@ def split_validation(messages: dict) -> dict:
         found = [e for e in entries if e.get("phase") == phase]
         controls[phase] = {"expected": hazard, "found": sorted({e.get("id") for e in found if e.get("id")}),
                            "reported": any(e.get("id") == hazard for e in found)}
+    facts = {phase: sorted({e.get("id") for e in entries if e.get("phase") == phase and e.get("id")})
+             for phase in FACT_PHASES}
     return {"outside_controls": {k: v for k, v in summary.items() if k != "groups"},
-            "attribution": summary["groups"], "controls": controls}
+            "attribution": summary["groups"], "controls": controls, "facts": facts}
 
 
 # --------------------------------------------------------------------------------------------------- cost
@@ -1099,7 +1213,8 @@ def child(args) -> dict:
             record["instance_teardown"] = teardown
             record["validation"] = {"layer_loaded": bool(record["instance"].get("validation_layer_loaded")),
                                     "per_phase": messages.get("per_phase"), **split["outside_controls"],
-                                    "controls": split["controls"], "attribution": split["attribution"]}
+                                    "controls": split["controls"], "fact_phases": split["facts"],
+                                    "attribution": split["attribution"]}
         del engine
     return record
 

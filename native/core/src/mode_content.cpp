@@ -1147,6 +1147,20 @@ bool parseComputeEntry(const QJsonObject &o, ModePass &pass, QString *error)
                                                          computeResourceName(binding.kind));
             return false;
         }
+        // Checkpoint audit 5 M3: one resource bound twice with two accesses. QRhi's pass tracker keeps the first access
+        // of a resource registered twice in one pass and ignores the second, so the other's barrier would be lost (a
+        // write the next pass reads unbarriered on Vulkan). Bind it once, read_write, or use two resources.
+        for (const ComputeBinding &earlier : pass.computeBindings) {
+            if (earlier.kind == binding.kind && earlier.resource == binding.resource && earlier.access != binding.access) {
+                *error = QStringLiteral("compute entry '%1' binds the %2 '%3' twice with two accesses ('%4' %5, '%6' %7): "
+                                        "QRhi tracks one access a resource a pass, so one barrier would be lost; bind "
+                                        "it once as read_write, or use two resources")
+                             .arg(label, computeResourceName(binding.kind), QString::fromLatin1(binding.resource),
+                                  QString::fromLatin1(earlier.name), storageAccessName(earlier.access),
+                                  QString::fromLatin1(binding.name), storageAccessName(binding.access));
+                return false;
+            }
+        }
         pass.computeBindings.append(binding);
     }
     return parseSamplers(o.value(QStringLiteral("samplers")), pass, error);
@@ -4637,16 +4651,17 @@ bool ModeContent::syncStorage(QRhi *rhi, QRhiCommandBuffer *cb, const ColorTarge
 {
     const ModeProgram &program = m_source->drawnProgram();
     if (program.generation != m_computeProgram) {
-        // A new program: every entry's trigger starts again (the storage itself is kept where declared the same way).
+        // A new program: each entry it declares again by name keeps its history (audit 5 M2; the storage itself is kept
+        // where declared the same way, and an entry is fresh only when its own storage was made zeroed).
         m_computeProgram = program.generation;
-        for (ComputeTrack &t : m_compute)
-            t = ComputeTrack();
+        retrackCompute(program);
     }
+    // Audit 5 M1: empty() counts the buffers a program without storage replaced, until the next sync releases them.
     if (program.buffers.isEmpty() && program.images.isEmpty() && m_storage.empty())
         return true;                          // nothing declared, nothing held: no work
     QRhiResourceUpdateBatch *edgeUpdates = rhi->nextResourceUpdateBatch(); // its own: the record's batch is still filling
     bool fresh = false;
-    const bool hadStorage = !m_storage.empty();
+    const bool hadStorage = m_storage.holds();
     if (!m_storage.sync(rhi, edgeUpdates, program.buffers, m_source->drawnImages(), program.drawSettings, &fresh, error)) {
         edgeUpdates->release();
         const qint64 failures = m_latch.failed(latchKey(rhi, target), *error);
@@ -4666,7 +4681,7 @@ bool ModeContent::syncStorage(QRhi *rhi, QRhiCommandBuffer *cb, const ColorTarge
             countStateLost();
         }
     }
-    const bool holds = !m_storage.empty();
+    const bool holds = m_storage.holds();
     m_storageHeldHere = holds;
     m_source->setStorageHeld(holds);
     // The edge's kernels (clears, prefix copies) and the images' zeros, recorded now, before any pass of the record.
@@ -4707,8 +4722,11 @@ void ModeContent::decideDispatches()
             value = field ? recordU32At(record, field->offset) : 0u;
         }
         ComputeTrack &t = m_compute[i];
-        const bool fresh = !t.dispatched || t.freshSeen != m_freshGeneration;
-        const bool due = fresh || value != t.lastTrigger || everyRecord;
+        // Audit 5 M2: fresh per entry, from its own storage bindings (a buffer or image of another entry made again, or
+        // the same program sent again, restarts nothing).
+        const quint64 freshKey = entryFreshKey(pass);
+        const bool fresh = !t.dispatched || t.freshSeen != freshKey;
+        const bool due = fresh || t.changed || value != t.lastTrigger || everyRecord;
         if (!due) {
             countSkipped();                   // no new work: nothing dispatched (a re-record of the same frame)
             continue;
@@ -4726,8 +4744,50 @@ void ModeContent::decideDispatches()
         }
         t.dispatches = fresh ? 1 : t.dispatches + 1;
         t.dispatched = true;
+        t.changed = false;
         t.lastTrigger = value;
-        t.freshSeen = m_freshGeneration;
+        t.freshSeen = freshKey;
+    }
+}
+
+quint64 ModeContent::entryFreshKey(const ModePass &pass) const
+{
+    quint64 key = 0;
+    for (const ComputeBinding &b : pass.computeBindings)
+        key = qMax(key, m_storage.freshOf(b.kind, b.resource));
+    return key;
+}
+
+void ModeContent::retrackCompute(const ModeProgram &program)
+{
+    ComputeTrack previous[kMaxModePasses];
+    for (int i = 0; i < kMaxModePasses; ++i) {
+        previous[i] = std::move(m_compute[i]);
+        m_compute[i] = ComputeTrack();
+    }
+    for (int i = 0; i < int(program.passes.size()) && i < kMaxModePasses; ++i) {
+        const ModePass &pass = program.passes.at(i);
+        if (!pass.compute)
+            continue;
+        ComputeTrack &t = m_compute[i];
+        for (const ComputeTrack &old : previous) {
+            if (old.name.isEmpty() || old.name != pass.name)
+                continue;
+            t = old;                          // its history (dispatches, last trigger, fresh key) kept
+            bool same = old.shader == pass.computeShader && old.bindings.size() == pass.computeBindings.size()
+                && old.trigger.kind == pass.trigger.kind && old.trigger.field == pass.trigger.field;
+            for (qsizetype k = 0; same && k < pass.computeBindings.size(); ++k) {
+                const ComputeBinding &a = old.bindings.at(k);
+                const ComputeBinding &b = pass.computeBindings.at(k);
+                same = a.name == b.name && a.resource == b.resource && a.kind == b.kind && a.access == b.access;
+            }
+            t.changed = old.changed || !same; // a changed entry dispatches at the next record (not fresh)
+            break;
+        }
+        t.name = pass.name;
+        t.shader = pass.computeShader;
+        t.bindings = pass.computeBindings;
+        t.trigger = pass.trigger;
     }
 }
 
@@ -4799,6 +4859,24 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
                                     "QRhi::DrawIndirect").arg(QString::fromLatin1(pass.name),
                                                               QString::fromLatin1(pass.indirect));
             return false;
+        }
+        if (pass.compute) {
+            // Checkpoint audit 5 L3: the pack's reflected local size within the device's group limits (QRhi checks
+            // neither; a pipeline past them fails to create, or is undefined on the device).
+            const int sides[3] = { rhi->resourceLimit(QRhi::MaxThreadGroupX), rhi->resourceLimit(QRhi::MaxThreadGroupY),
+                                   rhi->resourceLimit(QRhi::MaxThreadGroupZ) };
+            const int threads = rhi->resourceLimit(QRhi::MaxThreadsPerThreadGroup);
+            const quint64 invocations = quint64(pass.localSize[0]) * pass.localSize[1] * pass.localSize[2];
+            bool fits = threads <= 0 || invocations <= quint64(threads);
+            for (int a = 0; a < 3; ++a)
+                fits = fits && (sides[a] <= 0 || pass.localSize[a] <= quint32(sides[a]));
+            if (!fits) {
+                *error = QStringLiteral("compute entry '%1': its local size %2x%3x%4 is past this device's thread group "
+                                        "(%5x%6x%7, %8 threads)").arg(QString::fromLatin1(pass.name))
+                             .arg(pass.localSize[0]).arg(pass.localSize[1]).arg(pass.localSize[2])
+                             .arg(sides[0]).arg(sides[1]).arg(sides[2]).arg(threads);
+                return false;
+            }
         }
     }
     const QShader vs = shaderFrom(mode_vert_qsb, mode_vert_qsb_size); // the full-target triangle with both quads' uv

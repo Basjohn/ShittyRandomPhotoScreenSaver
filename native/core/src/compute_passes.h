@@ -14,14 +14,22 @@
 //   (ModeStorage), created zeroed: a buffer by the core's clear kernel, an image by one upload of zeros, at its
 //   allocation edge only. A buffer whose size changes keeps its prefix through the core's copy kernel (QRhi has no
 //   buffer copy and no buffer clear); any other change makes it again, zeroed. The storage survives a pipeline rebuild
-//   and a new program that declares it the same way.
+//   and a new program that declares it the same way, and so does each entry's history over it (checkpoint audit 5 M2).
+//   A program that declares none releases what the last one held through the same delayed release as a resize: at the
+//   next record's sync (audit 5 M1). An image is at most kMaxStorageImageBytes (audit 5 L4), and its format is checked
+//   against the device's facts only when it is made (L3).
 // - The barriers (D16 points 3 and 4): every binding's access maps to QRhi's load, store or load-store binding and is
 //   checked against the pack's reflection; QRhi derives every barrier from those bindings at the pass boundaries. The
 //   core issues none of its own.
 // - The trigger (D16 point 7, choice E): "frame" (a newly accepted record; a re-record of the same one, for the card, the
-//   settings or a fade, dispatches nothing) or {"field": a record u32 scalar} (dispatched only when it changes). The
-//   storage made again is fresh: the next record dispatches every entry. The core member u_srpss_compute (a uvec4) is
-//   (the trigger's value, its value at the last dispatch, 1 when fresh, the dispatches since the storage was made).
+//   settings or a fade, dispatches nothing) or {"field": a record u32 scalar} (dispatched only when it changes). Fresh
+//   is per entry (audit 5 M2): an entry is fresh at its first dispatch and whenever a storage buffer or image it binds
+//   was made zeroed since its last dispatch (a prefix copy keeps its source's history); a fresh entry dispatches at the
+//   next record. A new program keeps the history of each entry it declares again by name; one whose pack, bindings or
+//   trigger changed dispatches at the next record, not fresh. The core member u_srpss_compute (a uvec4) is (the
+//   trigger's value, its value at the last dispatch, 1 when fresh, the dispatches before this one since it was fresh).
+// - Admission (audit 5 M3): an entry that binds one resource twice with two accesses is refused (QRhi's tracker keeps
+//   one access a resource a pass, so the other's barrier would be lost).
 // - No readback in the product (D16 point 8): the storage readback here is the harness's.
 //
 // Render thread only, but the declarations (any thread) and the process-wide counts and controls (any thread).
@@ -50,6 +58,7 @@ constexpr int kMaxComputeBindings = 8;
 constexpr qint64 kMaxStorageBufferBytes = qint64(256) << 20;
 constexpr int kMaxStorageImageSide2D = 16384;
 constexpr int kMaxStorageImageSide3D = 2048;
+constexpr qint64 kMaxStorageImageBytes = qint64(256) << 20; // audit 5 L4: as a buffer's (every slice, every texel)
 // The core's kernels' local size (shaders/storage_clear.comp, storage_copy.comp).
 constexpr quint32 kStorageKernelGroup = 256;
 // Their block (StorageKernel: the destination's and source's first words, the words, a value, the stride; std140).
@@ -89,7 +98,8 @@ struct StorageImageDeclaration
     QJsonObject toJson() const;
 };
 bool parseStorageImage(const QJsonValue &value, StorageImageDeclaration *out, QString *error);
-// An image's size from Python (size edge): refused with the reason outside its dimensions' bounds.
+// An image's size from Python (size edge): refused with the reason outside its dimensions' bounds or past
+// kMaxStorageImageBytes.
 bool storageImageSizeFits(const StorageImageDeclaration &image, const int *size, QString *error);
 QString storageFormatName(QRhiTexture::Format format);
 bool parseStorageFormat(const QString &text, QRhiTexture::Format *out);
@@ -202,12 +212,14 @@ public:
         StorageBufferDeclaration decl;
         quint32 bytes = 0;
         std::unique_ptr<QRhiBuffer> buffer;
+        quint64 fresh = 0;    // the storage serial it was made zeroed at (a resize's prefix copy keeps its source's)
     };
     struct Image
     {
         StorageImageDeclaration decl;
         std::unique_ptr<QRhiTexture> texture;
         qint64 bytes = 0;
+        quint64 fresh = 0;    // the storage serial it was made zeroed at
     };
 
     ModeStorage() = default;
@@ -217,8 +229,9 @@ public:
 
     // At a record: the declared buffers (sizes resolved from `settings`) and images (sizes as set) made, kept or made
     // again; the new ones zeroed and a resized buffer's prefix copied (queued as kernel operations for `recordEdges`;
-    // an image's zeros into `updates`). `fresh` is set when any resource was made (none kept from before). False with
-    // the reason (the content's failure: nothing is drawn, the storage stays as it was).
+    // an image's zeros into `updates`). `fresh` is set when any resource was made zeroed (the content's lost edge; each
+    // entry's own fresh is freshOf). False with the reason (the content's failure: nothing is drawn, the storage stays
+    // as it was). A record whose declarations are all kept returns before any allocation (audit 5 L1).
     bool sync(QRhi *rhi, QRhiResourceUpdateBatch *updates, const QList<StorageBufferDeclaration> &buffers,
               const QList<StorageImageDeclaration> &images, const QHash<QByteArray, double> &settings, bool *fresh,
               QString *error);
@@ -230,9 +243,16 @@ public:
 
     const Buffer *buffer(const QByteArray &name) const;
     const Image *image(const QByteArray &name) const;
+    // The serial a buffer or image was last made zeroed at (0: none of that name); an entry is fresh when the largest
+    // over its bindings changed since its last dispatch (audit 5 M2).
+    quint64 freshOf(ComputeResource kind, const QByteArray &name) const;
     quint64 objects() const { return m_objects; } // a buffer or image made or gone (the bindings follow)
     int live() const;
-    bool empty() const { return m_buffers.isEmpty() && m_images.isEmpty(); }
+    // Declared resources held (the lost edge's "held").
+    bool holds() const { return !m_buffers.isEmpty() || !m_images.isEmpty(); }
+    // Nothing held at all: no resource, no replaced buffer awaiting its release, no kernel (audit 5 M1: a sync is still
+    // needed while any is held, so a program without storage releases the last one's).
+    bool empty() const { return !holds() && m_retiring.isEmpty() && !m_clear && !m_copy && !m_opBlocks; }
     void release();
     QJsonObject stateJson() const;
 
@@ -249,6 +269,10 @@ private:
         quint32 srcWord = 0;
         quint32 words = 0;
     };
+    // Every declaration matches what is held (sizes resolved from `settings`) and nothing waits for a release: the
+    // record's sync has no work (no allocation, audit 5 L1).
+    bool unchanged(const QList<StorageBufferDeclaration> &buffers, const QList<StorageImageDeclaration> &images,
+                   const QHash<QByteArray, double> &settings) const;
     bool ensureKernels(QRhi *rhi, QString *error);
     void releaseKernels();
     void releaseBuffer(Buffer *b);
@@ -262,7 +286,7 @@ private:
     int m_opCount = 0;
     bool m_uploaded = false;
     quint64 m_objects = 0;
-    QByteArray m_zeros;                 // one image slice of zeros, kept for the uploads at an edge
+    quint64 m_freshSerial = 0;          // bumped by every buffer or image made zeroed
     // The kernels (made at the first edge that needs them): their pipelines, a block per operation in one Dynamic
     // uniform buffer, and a bindings object per operation (made at the edge, released after it).
     QRhi *m_kernelRhi = nullptr;

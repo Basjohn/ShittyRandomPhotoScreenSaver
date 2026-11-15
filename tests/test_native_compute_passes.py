@@ -118,6 +118,113 @@ def test_the_core_records_one_qrhi_compute_pass_per_entry_and_never_a_barrier_of
     assert "if (!computeSinglePass()) {\n        cb->endComputePass();" in body
 
 
+def _body(text: str, start: str, end: str) -> str:
+    return text[text.index(start):text.index(end, text.index(start))]
+
+
+def test_a_program_without_storage_releases_the_last_programs_buffers():
+    """Checkpoint audit 5 M1: the content's early return ("nothing declared, nothing held") counts the buffers a program
+    without storage replaced and the kernels, so the next record's sync releases them (a resize's delayed release)."""
+    header = (CORE / "compute_passes.h").read_text(encoding="utf-8")
+    empty = re.search(r"bool empty\(\) const \{([^}]*)\}", header).group(1)
+    assert "m_retiring" in empty and "m_clear" in empty and "holds()" in empty
+    content = (CORE / "mode_content.cpp").read_text(encoding="utf-8")
+    sync = _body(content, "bool ModeContent::syncStorage(", "void ModeContent::decideDispatches(")
+    assert "m_storage.empty())\n        return true;" in sync
+    assert "!m_storage.empty()" not in sync                      # "held" is declared resources: holds()
+
+
+def test_fresh_is_per_entry_and_a_new_program_keeps_each_entrys_history():
+    """Checkpoint audit 5 M2: an entry is fresh from its own storage bindings' serials (a prefix copy keeps its
+    source's), never from a content-wide generation, and a new program keeps the track of each entry it names again."""
+    content = (CORE / "mode_content.cpp").read_text(encoding="utf-8")
+    decide = _body(content, "void ModeContent::decideDispatches(", "quint64 ModeContent::entryFreshKey(")
+    assert "m_freshGeneration" not in decide and "entryFreshKey(pass)" in decide
+    sync = _body(content, "bool ModeContent::syncStorage(", "void ModeContent::decideDispatches(")
+    assert "retrackCompute(program)" in sync and "t = ComputeTrack()" not in sync
+    retrack = _body(content, "void ModeContent::retrackCompute(", "void ModeContent::recordCompute(")
+    assert "old.name != pass.name" in retrack and "t = old;" in retrack
+    storage = (CORE / "compute_passes.cpp").read_text(encoding="utf-8")
+    sync = _body(storage, "bool ModeStorage::sync(", "bool ModeStorage::ensureKernels(")
+    assert "b->fresh = m->existing->fresh;" in sync and sync.count("++m_freshSerial") == 2
+
+
+def test_one_resource_bound_twice_with_two_accesses_is_refused_with_its_reason():
+    """Checkpoint audit 5 M3, and its harness case (the facts round expects it refused)."""
+    content = (CORE / "mode_content.cpp").read_text(encoding="utf-8")
+    assert "earlier.resource == binding.resource && earlier.access != binding.access" in content
+    import sys
+
+    sys.path.insert(0, str(ROOT / "native" / "core" / "python"))
+    import compute_passes
+
+    packs = {name: b"" for name in compute_passes.shaders()}
+    programs = compute_passes.refusal_programs(packs)
+    twice = [label for label, (entry, _b, _i) in programs.items()
+             if len({(b.kind, b.resource) for b in entry.bindings}) < len(entry.bindings)]
+    assert len(twice) == 1 and twice[0] != "accepted"
+    entry = programs[twice[0]][0]
+    accesses = {}
+    for b in entry.bindings:
+        accesses.setdefault((b.kind, b.resource), set()).add(b.access)
+    assert any(len(a) == 2 for a in accesses.values())
+
+
+def test_the_storage_sync_allocates_nothing_when_everything_is_kept():
+    """Checkpoint audit 5 L1: the record's sync returns before any list is built when every declaration is kept, and
+    the left-behind control's mutex is taken only while it left anything."""
+    storage = (CORE / "compute_passes.cpp").read_text(encoding="utf-8")
+    sync = _body(storage, "bool ModeStorage::sync(", "bool ModeStorage::ensureKernels(")
+    assert sync.index("if (unchanged(buffers, images, settings))") < sync.index("QList<quint32> sizes;")
+    unchanged = _body(storage, "bool ModeStorage::unchanged(", "void ModeStorage::releaseBuffer(")
+    assert "QList" not in unchanged.split("{", 1)[1] and "QString" not in unchanged
+    left = _body(storage, "void releaseLeftBehind(", "} // namespace")
+    assert left.index("g_leftBehindCount.loadAcquire() == 0") < left.index("QMutexLocker")
+
+
+def test_storage_images_have_a_byte_bound_and_their_format_is_checked_when_made():
+    """Checkpoint audit 5 L3 and L4: an image's bytes are bounded as a buffer's; its format is asked only of an image
+    to be made, from the Vulkan facts the core read at device creation; the local size meets the device's limits."""
+    header = (CORE / "compute_passes.h").read_text(encoding="utf-8")
+    assert re.search(r"kMaxStorageImageBytes = qint64\(\d+\) << 20;", header)
+    storage = (CORE / "compute_passes.cpp").read_text(encoding="utf-8")
+    fits = _body(storage, "bool storageImageSizeFits(", "bool parseStorageImage(")
+    assert "kMaxStorageImageBytes" in fits
+    sync = _body(storage, "bool ModeStorage::sync(", "bool ModeStorage::ensureKernels(")
+    assert "isTextureFormatSupported" not in sync and "storageImageUsable(rhi, decl)" in sync
+    usable = _body(storage, "bool storageImageUsable(", "} // namespace")
+    assert "vulkanDeviceFacts(" in usable and '"storage_image_formats"' in usable
+    content = (CORE / "mode_content.cpp").read_text(encoding="utf-8")
+    build = _body(content, "bool ModeContent::build(", "const QShader vs = ")
+    for limit in ("MaxThreadGroupX", "MaxThreadGroupY", "MaxThreadGroupZ", "MaxThreadsPerThreadGroup"):
+        assert limit in build, limit
+
+
+def test_the_pair_check_scene_judges_as_the_product_and_its_control_differs():
+    """Checkpoint audit 5 M4: the harness's pair-check kernel is the product's verbatim, its broken twin differs, and
+    the report the harness judges it by tells exact arithmetic from lost error terms."""
+    import sys
+
+    import numpy as np
+
+    sys.path.insert(0, str(ROOT / "native" / "core" / "python"))
+    import compute_passes
+    from rendering.quick.visualizer.implementations.extruded_bubble_drift_solver import PROGRAMS, pair_check_cases
+
+    source, broken = compute_passes.pair_check_sources()
+    assert source == PROGRAMS[2][1] and broken != source and "precise" in source
+    cases, expected = pair_check_cases()
+    record = compute_passes.pair_check_record()
+    assert record["case_floats"] == cases.size and len(record["case_rows"]) == 4 * cases.size
+    exact = np.zeros((len(cases), 4), np.float32)
+    exact[:, 0], exact[:, 1], exact[:, 2] = expected["fraction"], expected["product"], expected["sum"]
+    assert compute_passes.pair_check_report(exact.tobytes())["exact"]
+    lost = exact.copy()
+    lost[:, 1:3] = 0.0                                          # what zeroed error terms leave
+    report = compute_passes.pair_check_report(lost.tobytes())
+    assert not report["exact"] and report["product_mismatches"] and report["sum_mismatches"]
+
+
 def test_the_kernels_are_shaders_the_cmake_bake_finds():
     cmake = (ROOT / "native" / "core" / "CMakeLists.txt").read_text(encoding="utf-8")
     assert '"${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.comp"' in cmake
