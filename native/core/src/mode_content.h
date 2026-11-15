@@ -636,6 +636,8 @@ private:
     void fillArena();
     // N3.2: the drawn passes' meshes all uploaded.
     bool meshesReady() const;
+    // Which passes' meshes are missing (bit 2 * pass its mesh, the next its instance source; 0: none), read in place.
+    quint64 missingMeshMask() const;
     void pack(QRhi *rhi, const ColorTarget &target);
     // The QRhi objects of the passes only: a rebuild (a new program, a failed build) keeps the record of the frame in the
     // target, so a failure leaves that frame for the route to fade the card out over (round 2, M4).
@@ -699,6 +701,14 @@ private:
     ModeStreams m_streams;                   // N3.2: the streams and the block arena
     QByteArray m_arena;                      // N3.2: the arena's CPU copy, written whole per drawn record (choice D)
     QStringList m_meshesLost;                // N3.2: drawn meshes with nothing to upload from (a content made again)
+    // N3.2 audit 4's side defect: the waiting reason (textures uploading or lost, meshes lost), made at its edge only,
+    // and what it was made for.
+    bool m_waitingValid = false;
+    quint64 m_waitingProgram = 0;
+    int m_waitingJobs = 0;
+    quint64 m_waitingMeshes = 0;
+    QStringList m_waitingLost;
+    QString m_waitingReason;
     QByteArray m_batchShadow;                // N3.2: the batched passes' indirect commands (form 3), written per record
     quint64 m_meshBuffersNoted = ~quint64(0); // N3.2: the meshes' and streams' objects the state was last noted for
     quint64 m_targetObjectsSeen = 0;         // the targets' object generation the bindings were made over

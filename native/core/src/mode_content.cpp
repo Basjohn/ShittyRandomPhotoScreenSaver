@@ -2775,6 +2775,7 @@ void ModeContent::release()
     m_meshes.release();                       // N3.2 (D15 choice A: with the content)
     m_arena.clear();
     m_meshesLost.clear();
+    m_waitingValid = false;                   // the waiting reason is made again at the next wait
     for (GpuTexture &texture : m_textures) {
         dropCandidate(texture);               // N3.8: its job cancelled (nothing waits on this thread)
         releaseFront(texture);                // an imported one to the window's retire list
@@ -3547,7 +3548,15 @@ int ModeContent::batchCapacity(const ModePass &pass) const
 
 bool ModeContent::meshesReady() const
 {
-    // Every record: the passes' mesh and instance source read in place (audit 4 L3: drawnMeshes() builds a list).
+    return missingMeshMask() == 0;
+}
+
+quint64 ModeContent::missingMeshMask() const
+{
+    // Every record: the passes' mesh and instance source read in place (audit 4 L3: drawnMeshes() builds a list); bit
+    // 2 * pass for a pass's mesh, the next bit for its instance source (kMaxModePasses 16: 32 bits).
+    static_assert(2 * kMaxModePasses <= 64, "a pass's two mesh names are bits of a quint64");
+    quint64 mask = 0;
     const ModeProgram &program = m_source->drawnProgram();
     const auto isStream = [&program](const QByteArray &name) {
         for (const StreamDeclaration &s : program.streams) {
@@ -3556,13 +3565,16 @@ bool ModeContent::meshesReady() const
         }
         return false;
     };
-    for (const ModePass &pass : program.passes) {
-        for (const QByteArray *name : { &pass.mesh, &pass.instanceFrom }) {
-            if (!name->isEmpty() && *name != kBuiltinQuadMesh && !isStream(*name) && !m_meshes.find(*name))
-                return false;
+    for (int i = 0; i < int(program.passes.size()) && i < kMaxModePasses; ++i) {
+        const ModePass &pass = program.passes.at(i);
+        const QByteArray *names[2] = { &pass.mesh, &pass.instanceFrom };
+        for (int slot = 0; slot < 2; ++slot) {
+            const QByteArray &name = *names[slot];
+            if (!name.isEmpty() && name != kBuiltinQuadMesh && !isStream(name) && !m_meshes.find(name))
+                mask |= quint64(1) << (2 * i + slot);
         }
     }
-    return true;
+    return mask;
 }
 
 void ModeContent::noteMeshBuffers()
@@ -4417,22 +4429,40 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
     }
     const bool draw = m_draw && withPasses;   // packed by keepsTarget for this record
     if (m_draw && !withPasses) {
-        m_reason = m_report.jobsPending > 0 && m_texturesLost.isEmpty()
-            ? QStringLiteral("waiting: the item's textures are uploading (%1 job(s) in flight)")
-                  .arg(m_report.jobsPending)
-            : QStringLiteral("lost: %1 (the owner sends the image again)")
-                  .arg(m_texturesLost.join(QStringLiteral(", ")));
-        if (texturesReady() && !meshesReady()) {
-            // Every mesh the program draws that the content does not hold: lost with a content made again, or one the
-            // owner removed while the program still draws it (the sync's list names only the first).
-            QStringList missing;
-            for (const QByteArray &name : m_source->drawnProgram().drawnMeshes()) {
-                if (!m_meshes.find(name))
-                    missing.append(QString::fromLatin1(name));
+        // The waiting reason, made only at its edge (audit 4's side defect: a string and a mesh list every record while
+        // the content waits): what it names is compared in place (the program, the jobs in flight, the lost textures,
+        // and which passes' meshes are missing), and the reason kept is reused while that holds.
+        const bool meshesWaiting = texturesReady() && !meshesReady();
+        const quint64 missingMask = meshesWaiting ? missingMeshMask() : 0u;
+        const quint64 program = m_source->drawnProgram().generation;
+        if (!m_waitingValid || m_waitingProgram != program || m_waitingJobs != m_report.jobsPending
+            || m_waitingMeshes != missingMask || m_waitingLost != m_texturesLost) {
+            m_waitingValid = true;
+            m_waitingProgram = program;
+            m_waitingJobs = m_report.jobsPending;
+            m_waitingMeshes = missingMask;
+            m_waitingLost = m_texturesLost;   // a shared copy, at the edge only
+            if (meshesWaiting) {
+                // Every mesh the program draws that the content does not hold: lost with a content made again, or one
+                // the owner removed while the program still draws it (the sync's list names only the first).
+                QStringList missing;
+                for (const QByteArray &name : m_source->drawnProgram().drawnMeshes()) {
+                    if (!m_meshes.find(name))
+                        missing.append(QString::fromLatin1(name));
+                }
+                m_waitingReason = QStringLiteral("lost: mesh(es) %1 (the owner sends them again)")
+                                      .arg(missing.join(QStringLiteral(", ")));
+            } else {
+                m_waitingReason = m_report.jobsPending > 0 && m_texturesLost.isEmpty()
+                    ? QStringLiteral("waiting: the item's textures are uploading (%1 job(s) in flight)")
+                          .arg(m_report.jobsPending)
+                    : QStringLiteral("lost: %1 (the owner sends the image again)")
+                          .arg(m_texturesLost.join(QStringLiteral(", ")));
             }
-            m_reason = QStringLiteral("lost: mesh(es) %1 (the owner sends them again)")
-                           .arg(missing.join(QStringLiteral(", ")));
         }
+        m_reason = m_waitingReason;           // a shared copy: nothing allocated while the content waits
+    } else {
+        m_waitingValid = false;               // the next wait is an edge again
     }
     noteMeshBuffers();                        // N3.2: only when the meshes' or streams' objects changed
     Resources &r = *m_res;
