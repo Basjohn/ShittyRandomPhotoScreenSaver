@@ -551,11 +551,310 @@ What this means for N3.x:
 
 ---
 
+## Round 3: N4 primitives
+
+Same sources and marks as above (Qt 6.12.0 tag; `qrhi.cpp`, `qrhi.h`, `qrhivulkan.cpp` `VK`, `qrhigles2.cpp` `GL`; plus
+`src/gui/opengl/qopenglfunctions.cpp` `QGLF` for the desktop GL extension flags). Sections 13 to 18 continue the
+numbering; each answers one question of the N4 list in `Current_Plan.md` item 8b. Written 15 Nov 2026, research only.
+Where a claim rests on my recollection of the Vulkan or OpenGL specification and not on a Qt line, it is tagged
+`[DERIVED]` and its settling probe is named.
+
+Findings that change a plan box before any section is read:
+- `QRhiTexture::Format` has no two-channel float format (`qrhi.h:932-964`; the Vulkan map `VK qrhivulkan.cpp:1358-1417`
+  has `R16F`, `R32F`, `RGBA16F`, `RGBA32F` and the unorm `RG8`, `RG16`, but no `R16G16_SFLOAT`). N4.i's "RG16F velocity
+  attachment" cannot be created through QRhi. Section 14 gives the three ways out.
+- The core's Vulkan device enables every supported feature (`native/core/src/vulkan_context.cpp:711-749`, same policy as
+  Qt's own device, `VK qrhivulkan.cpp:895-913`), so the features QRhi reports from the physical device
+  (`VK :984-995`, `wideLines`, `depthClamp`, `multiDrawIndirect`) are also enabled on the adopted device. Qt reports
+  these from `vkGetPhysicalDeviceFeatures`, never from what an imported device enabled: if the core ever narrows its
+  feature list, QRhi will still report them as true.
+- `QRhiSampler` has no clamp-to-border address mode (`qrhi.cpp:5015-5021`: Repeat, ClampToEdge, Mirror only).
+
+## N4.h shadow maps
+
+**Section 13. Depth comparison sampling, depth-only passes, bias.**
+- Compare ops. `QRhiSampler::setTextureCompareOp` (`qrhi.cpp:5024-5035`, `5128`; `qrhi.h:1104-1105`) takes Never
+  (default, meaning compare off), Less, Equal, LessOrEqual, Greater, NotEqual, GreaterOrEqual, Always. Vulkan:
+  `compareEnable = (op != Never)`, `compareOp = toVkTextureCompareOp(op)` (`VK :7879-7880`); the sampler is the combined
+  image sampler of the binding. OpenGL: the compare state is a TEXTURE parameter, not a sampler object. When the bound
+  sampler's op is not `GL_NEVER` QRhi sets `GL_TEXTURE_COMPARE_MODE = GL_COMPARE_REF_TO_TEXTURE` and
+  `GL_TEXTURE_COMPARE_FUNC`, otherwise `GL_NONE` (`GL :4538-4554`, mapping `:3223-3241`), only when the texture's cached
+  sampler state differs from the sampler's (`:4508`). The capability `caps.textureCompareMode` is true on desktop GL and
+  ES 3.0+ (`:1057-1060`).
+- Filtering. A `Linear` mag/min filter with a compare op gives the hardware 2x2 comparison filter on both backends
+  (Vulkan: linear filter on a compare sampler; GL: linear filter with compare mode) [DERIVED]. Vulkan requires the
+  format to support linear filtering for that; QRhi checks only `VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT`
+  (`VK :5517-5520`), never the filter bit.
+- Depth formats. `QRhiTexture::D16`, `D24`, `D24S8`, `D32F`, `D32FS8` (`qrhi.cpp:4630-4638`); Vulkan
+  `D16_UNORM`, `X8_D24_UNORM_PACK32`, `D24_UNORM_S8_UINT`, `D32_SFLOAT`, `D32_SFLOAT_S8_UINT` (`VK :1408-1417`). A depth
+  texture is sampled with a view whose aspect mask has the stencil bit removed (`VK :7643-7646`), so D24S8 and D32FS8
+  sample as depth. A depth texture created with the `RenderTarget` flag gets `DEPTH_STENCIL_ATTACHMENT` usage plus
+  `SAMPLED` (`VK :7713-7718`); that is all a shadow map needs, and Qt's own example does exactly this with `D32F`
+  (`qrhi.cpp:2643-2651`). GL: D16 and D32F and D32FS8 need `caps.depthTexture` (GL 3.0, `GL :996`, `:1578-1581`), D24 needs
+  `caps.depth24` (always true on desktop, `:1023`, `:1583-1584`), D24S8 also `caps.packedDepthStencil` (`:1586-1587`).
+  QRhi checks neither the depth-attachment feature nor the filter feature on Vulkan.
+- Depth-only passes. A `QRhiTextureRenderTargetDescription` with a depth texture and zero colour attachments is legal:
+  both backends assert only `colorAttachmentCount() > 0 || depthTexture()` (`VK :8282`, `GL :6579`), the render target
+  takes its pixel size and sample count from the depth texture (`VK :8367-8370`, `GL :6811-6814`), and Vulkan builds a
+  render pass with no colour reference. GL binds `glDrawBuffers(GL_NONE)` for a target with no colour attachment
+  (`GL :3759-3780`, the append at `:3768`). Vulkan gives the pipeline one default blend-attachment state when the pipeline
+  has no `TargetBlend` (`VK :8935-8941`); with a subpass that has no colour attachments the attachment count is not
+  checked [DERIVED], so the depth-only pipeline sets no `TargetBlend`.
+- Bias. `setDepthBias(int)` and `setSlopeScaledDepthBias(float)` (`qrhi.cpp:7419-7437`, default 0) are baked into the
+  pipeline: Vulkan sets `depthBiasEnable`, `depthBiasConstantFactor = float(bias)`, `depthBiasSlopeFactor` and leaves
+  `depthBiasClamp` at 0 (`VK :8890-8894`); depth bias is not in the dynamic-state list (`VK :8828-8836`: viewport,
+  scissor, blend constants, stencil reference, shading rate). OpenGL: `glPolygonOffset(slope, bias)` with
+  `GL_POLYGON_OFFSET_FILL` (`GL :4402-4417`). No limit or clamp is imposed by QRhi on either. A different bias is a
+  different pipeline. Both backends use `offset = slope * m + bias * r`, but `r` (the smallest resolvable depth step) is
+  implementation-defined, and for a float depth buffer is not the same quantity on the two APIs [DERIVED], so the same
+  integer is not the same bias in the two backends.
+- Depth range. `QRhi::isClipDepthZeroToOne()` is true on Vulkan and false on OpenGL (`VK :5477-5480`, `GL :1394-1397`);
+  `clipSpaceCorrMatrix()` remaps Z to 0..1 and flips Y on Vulkan, identity on GL (`VK :5482-5494`, `GL :1399-1402`).
+  Qt's doc names shadow mapping as a case that must branch (`qrhi.cpp:11107-11113`).
+- Cull. `QRhiGraphicsPipeline` cull mode Front is available; front-face culling is an alternative to bias for closed
+  casters, not a replacement.
+
+What this means for N4.h:
+- Build the shadow map as `D32F`, `RenderTarget`, no colour attachment, one `QRhiTextureRenderTarget` with its own
+  render-pass descriptor, sampled through a `Linear` sampler with `LessOrEqual` (or `GreaterOrEqual` for reversed Z).
+  Compare direction (reference compared against the texel, "lit when reference <= stored" for `LessOrEqual`) is the
+  same on both backends [DERIVED]; settle it with a one-texel test on both backends before any shader depends on it.
+- The light matrix must be the corrected one (`clipSpaceCorrMatrix() * lightProjection * lightView`) for BOTH the depth
+  pass and the lookup; the lookup reference then is `ndc.z` on Vulkan and `ndc.z * 0.5 + 0.5` on GL, branched on
+  `isClipDepthZeroToOne()` (pass it in a uniform, never a shader define: one shader, two backends). With the same
+  corrected matrix on both sides, the Y flip needs no further handling in `uv = ndc.xy * 0.5 + 0.5` [DERIVED].
+- No border colour exists: outside the light frustum the lookup clamps to the edge texel. Fit the frustum so every
+  receiver is inside, or test the lookup against 0..1 in the shader and treat outside as lit.
+- Bias is per pipeline and is not portable as one number: author the constant in device-independent terms (a world
+  or texel-size value turned into the integer per backend) and store the slope factor separately, then measure the
+  acne/peter-panning balance on both backends. Do not promise bit parity of the two shadow images.
+- GL stores compare state on the texture: one depth texture sampled by both a compare sampler and a plain sampler in
+  one frame re-sets the texture parameters at each bind (`GL :4538-4554`). Keep a shadow map on one sampler.
+- Give the depth pass a trivial fragment stage. UNSETTLED whether a vertex-only QRhi pipeline links on GL (Qt's
+  validation does not decide it; it links one program from the stages given); the cost of an empty fragment shader is
+  nil, so do not find out.
+- UNSETTLED, and settled by one probe at device creation, recorded next to the existing facts
+  (`native/core/src/vulkan_context.cpp:783-805`): `D32_SFLOAT` for `DEPTH_STENCIL_ATTACHMENT` and
+  `SAMPLED_IMAGE_FILTER_LINEAR`, because Qt checks neither. Fail closed to `D16` (mandatory for sampling and depth
+  attachment in Vulkan [DERIVED]) if the probe says no.
+- UNSETTLED: whether a depth-only GL framebuffer is complete without `glReadBuffer(GL_NONE)` on the 4090's driver (QRhi
+  never calls `glReadBuffer` for a colourless target; it does so only in the resolve blit, `GL :4071`, `:4149`).
+  Qt's documented example creates one (`qrhi.cpp:2646-2650`), so it works in practice; the first shadow harness frame
+  settles it.
+
+## N4.i motion blur and trails
+
+**Section 14. Velocity attachment, mixed MRT, tile-max over storage images.**
+- Formats. There is no `RG16F`. Candidates: `R16F` x2 (two attachments), `RG16` (UNORM), `RGBA16F` (8 bytes). `R16F`,
+  `RGBA16F` need `floatFormats` (GL 3.0, `GL :994`, `:1614-1620`); `RG16`, `R16` need `caps.r16Format`
+  (`:993`, `:1608-1612`), true on desktop GL always (`QGLF qopenglfunctions.cpp:454-457`). Vulkan maps them to
+  `R16_SFLOAT`, `R16G16_UNORM`, `R16G16B16A16_SFLOAT` (`VK :1377-1382`, `:1372-1373`).
+- Mixed MRT. One `QRhiColorAttachment` per target, each its own texture, resolve texture and format; `MaxColorAttachments`
+  is `maxDrawBuffers` / `maxColorAttachments` (earlier section 8). Both attachments of an MSAA target need the same
+  sample count; a multisample 2D texture is `MultisampleTexture` (true on both). Each attachment resolves to its own
+  resolve texture: Vulkan in the render pass, GL with one `glBlitFramebuffer` per attachment (earlier section Q2), a
+  box average (Vulkan) or a nearest blit (GL, `GL :4075-4078`, `:4153-4156`): an average of velocities across an edge is
+  a wrong velocity on Vulkan and an arbitrary sample on GL. The two backends do not give the same resolved velocity at
+  silhouettes [DERIVED].
+- Clear. One `colorClearValue` writes every colour attachment (earlier section 8). A velocity of zero must therefore be
+  the colour the main attachment clears to (usually zero), which excludes `RG16` UNORM with a 0.5 bias (a clear of 0
+  would mean maximal negative velocity) unless the encoding is chosen so zero is no motion.
+- Blend. `setTargetBlends` takes one entry per attachment (section 8; `PerRenderTargetBlending` on GL 4.0+): colour with
+  blending, velocity with `enable = false` and `colorWrite = R|G` (last writer wins, translucent surfaces overwrite).
+  Qt does not check blendability of a format; the core's device probe settles it (section 8 UNSETTLED).
+- Storage images and the tile-max. `QRhiTexture::UsedWithLoadStore` (`qrhi.h`, Vulkan `VK :7724-7725` adds
+  `STORAGE_BIT`; GL `GL :6363-6377` uses immutable `glTexStorage*`, refuses compressed formats `:6258-6261`, and the
+  feature needs `caps.imageLoadStore` = desktop GL 4.2+, `:988-991`, `:1574-1575`). The image binding on GL is
+  `glBindImageTexture(binding, tex, level, layered, 0, access, glsizedintformat)` (`GL :4886-4904`): the shader's `layout(...)`
+  format must match the texture's sized format. Vulkan's `isTextureFormatSupported` checks only the sampled bit
+  (`VK :5517-5520`), but an unsupported usage fails `vmaCreateImage` and `create()` returns false with a warning
+  (`VK :7735-7746`), which is fail-closed. GL silently accepts and reports a GL error later.
+- Valid storage formats. Not stated in Qt. Vulkan guarantees storage-image support for the 8-bit RGBA, 16-bit and 32-bit
+  float RGBA and 32-bit single-channel formats; two-channel and `R16F`/`R16`/`RG16`/`R8` need the device feature
+  `shaderStorageImageExtendedFormats` [DERIVED, from the Vulkan format tables, not fetched]. The core already reads that
+  feature and `STORAGE_IMAGE` for rgba8, rgba16f, rgba32f, r16f, r32f (`vulkan_context.cpp:783-805`). GL 4.2 images take
+  rgba32f, rgba16f, rg32f, rg16f, r32f, r16f, rgba16, rg16, r16, rgba8, rg8, r8 and the integer forms [DERIVED]; Qt
+  maps only the ones in `QRhiTexture::Format`.
+- The reduction. A compute pass can read the velocity texture as an ordinary SAMPLED binding (`texelFetch`, feature
+  `TexelFetch`, `GL :1071`, `:1680`; Vulkan always) and write one storage image at tile resolution; the velocity
+  texture then does not need `UsedWithLoadStore`. Each compute entry takes its own pass (N3.3, D16).
+
+What this means for N4.i:
+- Do not plan on `RG16F`. Decide between (a) two `R16F` attachments (4 bytes per sample, zero is zero, the same memory as
+  `RG16F`, one more attachment and resolve), (b) `RGBA16F` (8 bytes, simplest, doubles the bandwidth), (c) `RG16`
+  with an encoding whose zero is no motion (for example sign-magnitude or squared-and-signed, or clear the velocity
+  with a fullscreen draw). Prefer (a); measure it against (b) on the harness. This is an engineering choice and is
+  made by measurement.
+- The tile-max output is `R16F` or `RGBA16F` (storage-valid on both backends and already in the core's facts); extend the
+  facts probe with the final choice before it is built, and write `layout(r16f)` or `layout(rgba16f)` to match
+  `glsizedintformat`.
+- Resolving velocity: the MSAA resolve is not a velocity-correct filter. Either render the velocity attachment without
+  MSAA (a second, single-sample target: a different pass) or accept silhouette error and cap it in the blur shader with
+  the neighbour-max. UNSETTLED which; it is a visual choice settled on the harness.
+- UNSETTLED: sample counts for `R16F`/`RGBA16F` multisample targets per format on Vulkan (earlier Q1 UNSETTLED applies).
+
+## N4.d planar reflections and probes
+
+**Section 15. Cube render targets, `samplerCube`, mips.**
+- Cube textures. `QRhiTexture::CubeMap` (`qrhi.h`), six layers. Vulkan: `CUBE_COMPATIBLE`, `arrayLayers = 6`, a cube
+  sampling view with `layerCount 6` (`VK :7684-7685`, `:7708`, `:7633`, `:7652`); multisample cubes are refused
+  (`VK :7564-7568`). GL: `GL_TEXTURE_CUBE_MAP`, six `glTexImage2D` faces (`GL :6243`, `:6341-6350`), and seamless cube
+  filtering on desktop 3.2+ (`GL :1162-1163`); Vulkan cube sampling is seamless by default [DERIVED].
+- Render to a face. `QRhiColorAttachment::setLayer(face)` ("cubemap face or array layer", `qrhi.cpp:2459-2466`).
+  Vulkan makes a 2D view per attachment with `baseArrayLayer = layer`, `baseMipLevel = level`, one level and one layer
+  (`VK :8303-8318`). GL: `glFramebufferTexture2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + layer, ..., level)` (`GL :6654-6656`).
+  One `QRhiTextureRenderTarget` per face, all sharing one render-pass descriptor (`newCompatibleRenderPassDescriptor`
+  of the first); six passes. A shared depth RENDERBUFFER is cleared per pass and needs no layout handling (earlier
+  Q3: Vulkan adds an explicit barrier for renderbuffers).
+- Not multiview. Multiview is only for 2D texture arrays (`qrhi.cpp:1026-1044`); the GL multiview branch is selected
+  only for `ThreeDimensional` or `TextureArray` (`GL :6611-6637`). A cube needs six passes; a six-layer 2D array
+  rendered with multiview and sampled as an array with a manual direction-to-face function is a different design and
+  needs `QRhi::MultiView` (GL: `GL_OVR_multiview2`, `GL :1167-1170`; Vulkan: `multiview` feature, `VK :997-1008`), which
+  is not assumed here.
+- Tracking. QRhi tracks one usage state per texture, not per face (earlier section 9, `VK :5367-5441`): six
+  passes writing six faces of one cube are six whole-image barriers, then one sampled barrier. Sampling the cube while a
+  face of the same cube is attached is a feedback loop QRhi rejects in one pass ("Texture used with different accesses
+  within the same pass", `qrhi.cpp:12151-12164`).
+- Mips. `generateMips` needs `MipMapped` and `UsedWithGenerateMips` (`qrhi.cpp:10094-10095`). Vulkan blits per face and
+  per level with `VK_FILTER_LINEAR` (`VK :4669-4749`, face loop `:4682`); GL `glGenerateMipmap(GL_TEXTURE_CUBE_MAP)`
+  (`GL :4161-4164`). Both are plain box-like downsamples with no cube-edge awareness, not a roughness prefilter. QRhi
+  cannot guarantee a format is blit-filterable (`qrhi.cpp:10097-10100`); `RGBA16F` is.
+- Orientation. Each backend writes its framebuffer with its own Y convention (`isYUpInFramebuffer` true on GL, false on
+  Vulkan, `GL :1384-1387`; `isYUpInNDC` the same, `VK :5467-5475`); cube-face sampling by direction is the same on both
+  APIs [DERIVED], so a face rendered with the same view matrix on both can come out vertically mirrored on one of them.
+  UNSETTLED until a per-face readback compares both backends; the fix is a per-backend up vector or applying
+  `clipSpaceCorrMatrix()` to the face projection.
+- Planar reflection (the other half of N4.d). The reflected camera renders to a 2D texture; sampling it by screen
+  position must use the same convention the render used: take the lookup `uv` from the main camera's clip position
+  (`ndc.xy * 0.5 + 0.5` after `clipSpaceCorrMatrix`), never from `gl_FragCoord / resolution` (origin lower-left on GL,
+  upper-left on Vulkan) [DERIVED]. A mirrored view reverses winding: set the cull face for the reflection pass
+  explicitly.
+
+What this means for N4.d:
+- The probe is six passes into one cube, then `generateMips` if mips are wanted for rough lookups (a prefilter is not
+  free: if roughness is needed, an own compute prefilter is the same cost class as the six passes and writes the cube
+  as a storage image, which is valid on GL (`GL :4892-4903`, `layered`) and Vulkan).
+- Plan the probe refresh as a budgeted job: one face per frame is 6x cheaper per frame than six; the six-pass cost is
+  not a QRhi limit but six render-pass starts, six barriers (one per face) and six FBO binds.
+- Add a face-orientation parity test to the N4.d box (render the six faces with a distinct colour each on both backends,
+  read back, compare), before a shader trusts a direction lookup.
+- Reflection textures are 2D targets sampled in a later pass: standard, no feature gate.
+
+## N4.e heightfields
+
+**Section 16. Vertex-stage texture sampling.**
+- There is no QRhi feature flag for it: the `QRhi::Feature` enum (`qrhi.h:1928-1982`) has no vertex-texture entry, and a
+  search of `qrhi.cpp`, `qrhivulkan.cpp` and `qrhigles2.cpp` finds no vertex-texture limit being read. It is expressed
+  as the binding's stage flags: `QRhiShaderResourceBinding::sampledTexture(binding, VertexStage | FragmentStage, tex,
+  sampler)`.
+- Vulkan: the stage flag becomes the descriptor's `stageFlags` (`VK :7164-7170`, `:8598`), and the pass tracker has a
+  vertex-stage texture use with `VK_PIPELINE_STAGE_VERTEX_SHADER_BIT` (`VK :5312-5313`), so the barrier from a prior
+  render or compute write is correct for a vertex read. Limits are `maxPerStageDescriptor*`, which QRhi never reads
+  [DERIVED: large on desktop devices].
+- OpenGL: sampler uniforms are program-wide, matched to a binding by combined binding number (`GL :4848-4872`); stage
+  flags are ignored and the texture unit counter starts at 1 (`GL :4563`). The limit is `GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS`
+  (at least 16 on desktop GL 3.x [DERIVED]); QRhi does not query it. Vertex and fragment textures take distinct units.
+- Shader. Use `textureLod(tex, uv, 0.0)` or `texelFetch` in the vertex shader; derivatives do not exist there. A bare
+  `texture()` in a vertex shader is an implicit-LOD call that is not valid in the Vulkan vertex stage, and depending on
+  the compiler may be rewritten or rejected [DERIVED]; do not rely on it. `texelFetch` is `QRhi::TexelFetch` (GL 3.0+,
+  `GL :1071`, `:1680`; Vulkan always, `VK :5566`); `qsb` bakes it for SPIR-V and GLSL (the same family as N3.4's
+  `textureLod`).
+- Formats and filtering. `R16F`/`RGBA16F` filter linearly on both backends; `R32F`/`RGBA32F` linear filtering is
+  optional in Vulkan [DERIVED] and QRhi checks only the sampled bit (`VK :5517-5520`). A 32-bit heightfield is read with
+  `texelFetch` plus manual bilinear, or the facts probe confirms `SAMPLED_IMAGE_FILTER_LINEAR` for it.
+- The texture a compute pass writes and the vertex stage reads: tracked (storage write to vertex-shader read), the same
+  mechanism proved for `sampler3D` and vertex-input reads in N3.3's barrier proof (earlier Q7).
+
+What this means for N4.e:
+- A displaced grid needs no new primitive: an `R16F` or `R32F` heightfield, one binding with `VertexStage`, a shader with
+  `textureLod`. Gate nothing on a feature flag; gate the format on the facts probe.
+- Normals: compute them in the vertex shader from four `texelFetch` neighbours, or write a normal texture in the
+  same compute pass; both are the same stage binding.
+- The heightfield is a texture the host updates per frame (an upload batch or a compute write): count it in the
+  per-frame budget like any stream.
+
+## N4.k light shafts and N4.f fog
+
+**Section 17. 3D textures: sampling and slice rendering.**
+- Sampling. `QRhi::ThreeDimensionalTextures`: Vulkan always, GL `caps.texture3D` = GL 3.0 (`VK :5582-5583`,
+  `GL :1094`, `:1696-1697`). A `ThreeDimensional` texture takes `QRhiTexture::setDepth`; the sampler's `addressW` is
+  applied (`VK :7877`, `GL :4543-4544`: `GL_TEXTURE_WRAP_R`). A `sampler3D` in the fragment (or vertex) stage is an
+  ordinary sampled binding; N3.3 already proved `sampler3D` reads of a compute write on both backends (earlier Q7).
+  A 3D texture cannot be multisample, cube or array (`VK :7569-7585`, `GL :6209-6215`).
+- Mips. `ThreeDimensionalTextureMipmaps` (since Qt 6.10, true on both, `qrhi.cpp:1022-1024`, `VK :5604-5605`,
+  `GL :1718-1719`); Vulkan's blit halves Z as well (`VK :4685-4727`).
+- Render to a slice. `QRhi::RenderTo3DTextureSlice` (`qrhi.cpp:928-931`): GL `caps.texture3D`, so true
+  (`GL :1698-1699`, attach with `glFramebufferTextureLayer(..., level, layer)`, `:6611-6614`); Vulkan
+  `caps.texture3DSliceAs2D`, which is `apiVersion >= 1.1` (`VK :988`, `:5584-5585`), because the image is created with
+  `VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT` when it is a 3D render target and QRhi makes a 2D view of one slice
+  (`VK :7687-7700`, view `:8303-8318` with `baseArrayLayer = slice`). Qt warns, and the validation layer complains, if
+  the instance was created with API 1.0 (`VK :7693-7694`). `caps.apiVersion` is the instance's, lowered to the device's
+  (`VK :649-662`): for the core's adopted instance it is what the `QVulkanInstance` reports. UNSETTLED: that number on
+  this machine's adopted instance; the core's facts probe reads it once (one more line next to
+  `vulkan_context.cpp:783`).
+- One render target per slice, one pass per slice: a 64-slice froxel volume is 64 render-pass starts and 64 whole-image
+  barriers (QRhi tracks per texture, earlier section 9), each with its own FBO bind on GL. A compute pass writing the
+  volume as a 3D storage image is one pass: `UsedWithLoadStore` on a 3D texture is valid on GL (`glTexStorage3D`,
+  `GL :6369-6371`; bound layered, `:4892-4903`) and Vulkan (`VK :7724-7725`, 3D view for the storage binding
+  `:7808-7821`).
+- Formats: as sections 14 and 16 (`R16F`/`RGBA16F` filter on both; storage `rgba16f` and `r16f` are in the core's
+  facts).
+
+What this means for N4.k and N4.f:
+- Prefer compute-written 3D volumes (one pass) over slice rendering (one pass per slice) for both fog volume and
+  light-shaft density. Slice rendering is only the path for a backend with no `QRhi::Compute`; both of this
+  machine's backends report it.
+- Sample the volume with `sampler3D` with `ClampToEdge` on all three axes (no border mode, section header).
+  The shaft/fog march samples at a few dozen points per pixel: use `RGBA16F` or `R16F` with a linear sampler, not a
+  32-bit float without the filter probe.
+- Gate nothing on `RenderTo3DTextureSlice` unless a slice path is built; if it is, read the flag at run time and take
+  the fail-closed fallback to compute.
+- The N4.f2 reduced-resolution volume is a normal 2D reduced target plus this 3D texture; nothing here needs a feature
+  beyond those already named.
+
+## Topology, lines and points
+
+**Section 18. Primitive restart, line width, point size.**
+- Restart. `QRhi::PrimitiveRestart` (`qrhi.cpp:762-775`). Vulkan: always true, `primitiveRestartEnable` set only for
+  TriangleStrip and LineStrip (`VK :5538-5539`, `:8853`), restart index `0xFFFF` / `0xFFFFFFFF` by index type. GL:
+  fixed-index restart, true on desktop GL 4.3+ and ES 3.0+ (`GL :964-977`, `:1647-1648`), enabled once for the context
+  and then ALWAYS on, for every topology (`:975`). Qt's doc guarantees identical behaviour only for LineStrip and
+  TriangleStrip (`qrhi.cpp:772-775`). So, on GL, an index buffer for a list topology that contains `0xFFFF` is
+  interpreted as a restart, while Vulkan treats it as a vertex.
+- Line width. `QRhi::WideLines` (`qrhi.cpp:817-822`): Vulkan `physDevFeatures.wideLines` (`VK :986`, `:5552-5553`), the
+  pipeline's width is forced to 1.0 when false (`VK :8895`); GL `!caps.coreProfile` (`GL :1661-1662`) and the width is
+  applied through `glLineWidth` for the `Lines`/`LineStrip` topologies only (`GL :4419-4425`). QRhi never reads the
+  device's `lineWidthRange` (Vulkan) or `GL_ALIASED_LINE_WIDTH_RANGE`, so a width outside the range is on us. The core
+  device enables `wideLines` when supported (all features are enabled, first section). Whether the product's GL context is
+  a core or compatibility profile decides `WideLines` on GL: UNSETTLED here, read it from the live `QRhi`.
+- Points. `QRhi::VertexShaderPointSize` is unconditionally true (`GL :1663-1664`, `VK :5554-5555`); GL enables
+  `GL_VERTEX_PROGRAM_POINT_SIZE` (and point sprite in non-core) for desktop (`GL :1153-1157`); Vulkan needs
+  `gl_PointSize` written in the vertex shader, and sizes above 1 need the `largePoints` feature (enabled by the core's
+  all-features policy). The maximum point size is device-dependent and unread by QRhi.
+
+What this means for N4.b and the other N4 primitives:
+- The primitives in N4 draw triangles, instanced quads and compute-expanded geometry, none of which needs restart, wide
+  lines or large points. Ribbon (N4.b) is a triangle strip or an expanded quad list: if a strip is used, write
+  degenerate triangles (repeat an index) instead of the restart value, which is identical on every backend, or use an
+  indexed triangle list. A restart index is therefore not used; if a primitive ever needs it, gate it on the live
+  `PrimitiveRestart` flag and use strip topologies only.
+- Lines of width other than 1 are not used: draw lines as camera-facing quads (N4.b's width variant). If one is needed,
+  read `WideLines` at run time and store the device's line-width range in the facts; a fallback is a quad.
+- Points above size 1 as `gl_PointSize`: avoid; use instanced quads (N4.c's sprites already are).
+
+---
+
 ## Open items in one place
 - D14 was not found (see the top); re-check this file against it.
 - Round 2: section 8, device probe for blend support of the OIT formats and enabling `independentBlend`, `dualSrcBlend`
   not needed. Section 9, GL feedback loop on a sampled level behaviour on the 4090. Section 10, two-window cache
   sharing. Section 11, `setGraphicsDevice` after loss and its threading, GL loss detection. Section 12, nothing open.
+- Round 3: section 13, compare direction (one-texel test on both backends), `D32_SFLOAT` attachment and linear-filter
+  facts, vertex-only GL pipeline link, colourless GL framebuffer read buffer. Section 14, no `RG16F` in QRhi (choose
+  two `R16F`, `RGBA16F` or biased `RG16` by measurement), velocity resolve at silhouettes, storage-format facts for the
+  tile-max output. Section 15, cube face orientation parity (per-face readback on both backends). Section 16, 32-bit
+  height formats and linear filtering (facts probe). Section 17, the adopted instance's `apiVersion` for
+  `RenderTo3DTextureSlice`. Section 18, GL profile (`WideLines`) and the device's line-width range.
 - Q1: per-format Vulkan sample counts for the HDR format (check once per device).
 - Q2: a depth-only format with the GL blit mask `DEPTH|STENCIL` (test D32F once, or use D24S8).
 - Q3: depth `LOAD` hazard after a prior pass: a validated hidden-host run settles it.
