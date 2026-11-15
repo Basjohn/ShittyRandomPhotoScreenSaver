@@ -42,7 +42,7 @@ Rounds:
   attached (each API) the Visualizer item with its native route attached and prepared (``attach_native_route``), no
           activation: zero syncs, draws, records and surface GPU samples over steady frames and the item's own
           updates. Controls: an update of the native item is a sync the counters see; a drawn surface is timed.
-Then Vulkan's frames against OpenGL's (within VULKAN_TOLERANCE levels; both native).
+Then Vulkan's frames against OpenGL's (VULKAN_RULE_B, exact; both native).
 
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/generic_mode_check.py --module-dir release/native_module --require-validation
@@ -69,8 +69,13 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
+ROOT = HERE.parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import vk_validation  # noqa: E402  (native/core/python)
 import host_check  # noqa: E402
+from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("blocks", "reader", "draw", "framebuffer", "uv", "attached")
@@ -79,7 +84,10 @@ MARGIN = 8
 CARD = (480, 270)                # the item's logical size
 DPRS = (1.0, 1.5)                # the draw round's ratios (1.5: fragPixel at a fractional ratio)
 REST_FRAMES = 3
-VULKAN_TOLERANCE = 1             # 8-bit levels, native Vulkan against native OpenGL
+#: Rule (b), judged pixel by pixel by the shared tolerance (``tools/pixel_tolerance.py``, D12 "The pixel tolerance"):
+#: Probe Rings' eight frames (draw round, both ratios, every change) are bit for bit the same on the two APIs
+#: (measured: 0 differing pixels in every frame), so the bound is exact: no mask, no scatter, no tie.
+VULKAN_RULE_B = pt.EXACT
 SLOT_BYTES = 1024                # one Probe Rings record (208 bytes) per slot, with room
 IDENTITY = {"runtime_generation": 5, "engine_generation": 2, "activation_id": 9}
 RADIUS_TOLERANCE_PX = 1.5
@@ -1297,13 +1305,17 @@ def vulkan_against_opengl(out: Path) -> dict:
         return {"pass": False, "error": "a native frame set is missing"}
     gl, vk = np.load(gl_path), np.load(vk_path)
     compared = max_level = 0
+    judged: list[dict] = []
     for key in gl.files:
         if key not in vk.files or gl[key].shape != vk[key].shape:
             return {"pass": False, "error": f"frame {key} is missing or differs in shape"}
         compared += 1
-        max_level = max(max_level, int(np.abs(gl[key][..., :3].astype(np.int16) - vk[key][..., :3]).max()))
-    return {"pass": compared > 0 and max_level <= VULKAN_TOLERANCE, "compared": compared, "max_level": max_level,
-            "tolerance": VULKAN_TOLERANCE}
+        verdict = pt.judge(vk[key][..., :3], gl[key][..., :3], VULKAN_RULE_B)
+        judged.append(verdict)
+        max_level = max(max_level, int(verdict["max_level"]))
+    tolerance = pt.summarise(judged)
+    return {"pass": compared > 0 and tolerance["pass"], "compared": compared, "max_level": max_level,
+            "tolerance": tolerance, "bound": VULKAN_RULE_B.bound()}
 
 
 # --------------------------------------------------------------------------------------------------- the child

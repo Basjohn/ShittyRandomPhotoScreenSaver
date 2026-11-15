@@ -27,7 +27,7 @@ Rounds:
           same colour), at dpr 1 and 1.5: on OpenGL within the composite's tolerance for a translucent mode
           (``owner_render_parity.rule_a_verdict``: rule (a)'s first form, before the owner-level run
           ``owner_render_parity.py --native --mode devcurve``); on Vulkan, against the native OpenGL frames within
-          VULKAN_TOLERANCE levels (rule (b)). The surface's GPU time per pass (N2.6's timer) at each dpr.
+          VULKAN_RULE_B, pixel by pixel with the reference's alpha as the mask (rule (b)). The surface's GPU time per pass (N2.6's timer) at each dpr.
 
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/devcurve_check.py --module-dir release/native_module --require-validation
@@ -56,8 +56,13 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
+ROOT = HERE.parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import vk_validation  # noqa: E402  (native/core/python)
 import host_check  # noqa: E402
+from tools import pixel_tolerance as pt  # noqa: E402
 
 MODE_ID = "devcurve"
 APIS = ("opengl", "vulkan")
@@ -67,7 +72,12 @@ MARGIN = 8                       # logical pixels between the display's corner a
 DPRS = (1.0, 1.5)
 HOST_PIXELS = (int(math.ceil((1920 + 2 * MARGIN) * 1.5)), int(math.ceil((1080 + 2 * MARGIN) * 1.5)))
 REST_FRAMES = 3
-VULKAN_TOLERANCE = 1             # 8-bit levels, native Vulkan against native OpenGL (rule (b))
+#: Rule (b), judged pixel by pixel by the shared tolerance (``tools/pixel_tolerance.py``, D12 "The pixel tolerance"):
+#: the two drivers round a translucent pixel (the reference's own alpha strictly between 0 and 255: the mask, saved by
+#: the OpenGL child as work/references.npz) one level apart, and a few opaque ones where a value lies within float
+#: error of a half level. Measured over the 90 sampled frames (dpr 1 and 1.5): 14 differ, by at most 2 pixels, every
+#: one exactly one level off; at most 1 of them outside the mask (scatter, 1 times 1.5 rounded up). No tie.
+VULKAN_RULE_B = pt.Tolerance("spline curve, Vulkan against OpenGL (rule b)", masked_level=1, scatter_pixels=2)
 SLOT_BYTES = 4096                # one Spline Curve record (3200 bytes) per slot, with room
 IDENTITY = {"runtime_generation": 7, "engine_generation": 3, "activation_id": 11}
 _ALLOWED_ENV: set[str] = set()
@@ -462,20 +472,27 @@ def vulkan_against_opengl(out: Path) -> dict:
 
     work = _work(out)
     gl_path, vk_path = work / "native_opengl.npz", work / "native_vulkan.npz"
-    if not gl_path.exists() or not vk_path.exists():
-        return {"pass": False, "error": "a native frame set is missing"}
-    gl, vk = np.load(gl_path), np.load(vk_path)
+    ref_path = work / "references.npz"
+    if not gl_path.exists() or not vk_path.exists() or not ref_path.exists():
+        return {"pass": False, "error": "a native frame set or the references (the mask's source) is missing"}
+    gl, vk, refs = np.load(gl_path), np.load(vk_path), np.load(ref_path)
     compared = differing = max_level = missing = 0
+    judged: list[dict] = []
     for key in gl.files:
-        if key not in vk.files or gl[key].shape != vk[key].shape:
+        if key not in vk.files or key not in refs.files or gl[key].shape != vk[key].shape \
+                or refs[key].shape[:2] != gl[key].shape[:2]:
             missing += 1
             continue
         compared += 1
-        level = int(np.abs(gl[key][..., :3].astype(np.int16) - vk[key][..., :3]).max())
-        differing += int(level > 0)
-        max_level = max(max_level, level)
-    return {"pass": compared > 0 and not missing and max_level <= VULKAN_TOLERANCE, "compared": compared,
-            "differing": differing, "missing": missing, "max_level": max_level, "tolerance": VULKAN_TOLERANCE}
+        verdict = pt.judge(vk[key][..., :3], gl[key][..., :3], VULKAN_RULE_B,
+                           mask=pt.translucent_by_alpha(refs[key]))
+        judged.append(verdict)
+        differing += int(verdict["differing"] > 0)
+        max_level = max(max_level, int(verdict["max_level"]))
+    tolerance = pt.summarise(judged)
+    return {"pass": compared > 0 and not missing and tolerance["pass"], "compared": compared,
+            "differing": differing, "missing": missing, "max_level": max_level, "tolerance": tolerance,
+            "bound": VULKAN_RULE_B.bound()}
 
 
 # --------------------------------------------------------------------------------------------------------- item

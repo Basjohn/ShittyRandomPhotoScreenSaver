@@ -12,7 +12,7 @@ Rounds (one child process per API; OpenGL first, its frames kept for Vulkan's co
   draw      every photo and fit at both dprs: OpenGL's Python presenter (the product's ``BackgroundRenderItem``, its
             retained ``QSGImageNode``) is the reference, drawn in a hidden host of its own; the native layer in another
             (the frame driver's probe clean of Python): rule (a) OpenGL native equal to the Python presenter, pixel for
-            pixel over the whole window; rule (b) Vulkan native within VULKAN_TOLERANCE of OpenGL native (and of the
+            pixel over the whole window; rule (b) Vulkan native equal to OpenGL native under VULKAN_RULE_B (and, as a fact, of the
             Python reference); a stale image (processed for dpr 1, shown at 1.5: both stretch it by the one placement
             owner) recorded against the Python presenter's (a fact); the negative control: a native frame against
             another photo's reference differs.
@@ -59,6 +59,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
+ROOT = HERE.parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("draw", "change", "rest", "edges", "cost", "lifetime")
@@ -78,7 +83,10 @@ OFFSET = (1, 2)                     # the display's origin in the window, in dev
 DPRS = (1.0, 1.5)
 CHANGE_SIZE = (3840, 2160)
 COST_SIZE = (2560, 1440)
-VULKAN_TOLERANCE = 1                # 8-bit levels, native Vulkan against native OpenGL (rule (b))
+#: Rule (b), judged pixel by pixel by the shared tolerance (``tools/pixel_tolerance.py``, D12 "The pixel tolerance"):
+#: the layer draws an opaque photo unfiltered, and the two APIs' frames are bit for bit the same (measured: 0 differing
+#: pixels in every one of the 13 frames), so the bound is exact: no mask, no scatter, no tie.
+VULKAN_RULE_B = pt.EXACT
 STALE_TOLERANCE = 1                 # a stretched stale image, native against the Python presenter
 MAX_WAIT_FRAMES = 600
 REST_FRAMES = 6
@@ -428,12 +436,17 @@ def vulkan_against_opengl(work: Path) -> dict:
     vk, gl = np.load(vk_path), np.load(gl_path)
     py = np.load(py_path) if py_path.exists() else None
     results = {}
+    judged: list[dict] = []
     for key in sorted(set(vk.files) & set(gl.files)):
         results[key] = {"opengl_native": compare(vk[key], gl[key])}
         if py is not None and key in py.files:
             results[key]["python"] = compare(vk[key], py[key])
+        # A frame of another shape fails (judge reports it): compare() above has already said so.
+        judged.append(pt.judge(vk[key][..., :3], gl[key][..., :3], VULKAN_RULE_B))
     worst = max((r["opengl_native"]["max_level"] for r in results.values()), default=255)
-    return {"pass": bool(results) and worst <= VULKAN_TOLERANCE, "worst_level": worst, "frames": results}
+    tolerance = pt.summarise(judged)
+    return {"pass": bool(results) and tolerance["pass"], "worst_level": worst, "tolerance": tolerance,
+            "bound": VULKAN_RULE_B.bound(), "frames": results}
 
 
 # --------------------------------------------------------------------------------------------------- change and rest

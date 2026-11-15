@@ -9,15 +9,15 @@ pixel inside an overscanned window), at dpr 1 and 1.5, on real PERSONALSET wallp
 Rounds (one child process per API; OpenGL first, its levels and stills kept for Vulkan's comparison):
   levels    every level of the pyramid (1/2 .. 1/32, the 1/16 scratch, the output's light and heavy levels) read back
             from the core and, on OpenGL, from the Python pyramid in the same scene (its ``BackdropPipeline`` read on the
-            render thread right after its refresh): rule (a) OpenGL native against Python within RULE_A_TOLERANCE (exact
-            recorded as a fact), with no dimming; dimming 0.35 recorded against Python (the Python pyramid reads the
-            8-bit blend, the core blends once: a fact); rule (b) Vulkan native against OpenGL native within
-            VULKAN_TOLERANCE (main); a negative control (another photo's level differs). Rows normalised top-down.
+            render thread right after its refresh): rule (a) OpenGL native against Python under LEVEL_RULE_A, pixel by
+            pixel (exact recorded as a fact), with no dimming; dimming 0.35 recorded against Python (the Python pyramid
+            reads the 8-bit blend, the core blends once: a fact); rule (b) Vulkan native against OpenGL native under
+            LEVEL_RULE_B (main); a negative control (another photo's level differs). Rows normalised top-down.
   cards     each material's card (Acrylic, Glass, Frosted, Mica, Smoked: the product's MaterialSurface.qml, unchanged)
             over both photos: OpenGL with the Python pyramid (today's), OpenGL with the native pyramid, Vulkan with the
-            native pyramid. OpenGL native against today's within RULE_A_TOLERANCE inside the cards; Vulkan against
-            OpenGL native: the share of card pixels more than 1 level apart (the material's float grain hash, accepted
-            14 Nov on the composite) at most CARD_OUTLIER_SHARE. One sheet per photo for the lead's look review.
+            native pyramid. OpenGL native against today's exact (CARD_RULE_A) inside the cards; Vulkan against OpenGL
+            native: the one-level pixels per material under CARD_RULE_B, and the share of card pixels more than 1 level
+            apart (the material's float grain hash, accepted 14 Nov on the composite) at most CARD_OUTLIER_SHARE. One sheet per photo for the lead's look review.
   cost      the build's GPU time (the core's GPU timer, kind 4 "backdrop") and render-thread CPU time at 2560 x 1440 and
             3840 x 2160, against D7 point 3's budgets (0.3 ms and 0.6 ms, p90).
   rest      nothing at rest (no build, no GPU sample); a photo change builds once (at the commit's frame: on Vulkan the
@@ -54,6 +54,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
+ROOT = HERE.parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("levels", "cards", "cost", "rest", "transition", "route", "lifetime")
@@ -77,9 +82,44 @@ COST_SIZES = ((2560, 1440), (3840, 2160))
 BUDGET_MS = {(2560, 1440): 0.3, (3840, 2160): 0.6}   # D7 point 3, per build, the development GPU
 TIMED_BUILDS = 60
 MAX_TIMED_BUILDS = 600           # the cost round's bound while OpenGL's GPU times are still arriving
-RULE_A_TOLERANCE = 1                # 8-bit levels: OpenGL native against the Python pyramid
-VULKAN_TOLERANCE = 1                # 8-bit levels: Vulkan native against OpenGL native (rule (b))
 CARD_OUTLIER_SHARE = 0.001          # Vulkan cards: share of card pixels more than 1 level from OpenGL's
+
+
+def _cap(measured: int) -> int:
+    """A scatter cap: the measured worst times 1.5, rounded up (D12, "The pixel tolerance")."""
+    return -(-measured * 3 // 2)
+
+
+#: The pyramid's levels are judged pixel by pixel by the shared tolerance (``tools/pixel_tolerance.py``, D12 "The
+#: pixel tolerance"), each level against its own measured worst: the levels differ in size by a factor of 1000, so one
+#: pixel count for all would let a whole small level shift. Every level is opaque (no mask). The pixels that differ are
+#: single values within float error of a half level (scatter), exactly one level off.
+#: Rule (a), OpenGL native against the Python pyramid, undimmed (the dimmed case stays a fact: the Python pyramid reads
+#: the 8-bit blend, the core blends once). Measured worst a frame over both photos at three placements: eighth 545,
+#: half 9,759 (and one tie, 2 levels, at the product's odd window: the GL blit's fixed-point positions put a first-level
+#: texel on a sharp edge), heavy 493, light 2,123, quarter 2,257, scratch 121, sixteenth 147, thirty_second 34.
+LEVEL_RULE_A_WORST = {"eighth": 545, "half": 9759, "heavy": 493, "light": 2123, "quarter": 2257, "scratch": 121,
+                      "sixteenth": 147, "thirty_second": 34}
+LEVEL_RULE_A_TIES = {"half": 1}
+LEVEL_RULE_A = {name: pt.Tolerance(f"backdrop level {name}, OpenGL native against Python (rule a)",
+                                   scatter_pixels=_cap(worst), tie_pixels=_cap(LEVEL_RULE_A_TIES.get(name, 0)))
+                for name, worst in LEVEL_RULE_A_WORST.items()}
+#: Rule (b), Vulkan native against OpenGL native (all seven cases): eighth 305, half 2, heavy 790, light 1,328, quarter
+#: 1,125, scratch 192, sixteenth 80, thirty_second 35; no tie.
+LEVEL_RULE_B_WORST = {"eighth": 305, "half": 2, "heavy": 790, "light": 1328, "quarter": 1125, "scratch": 192,
+                      "sixteenth": 80, "thirty_second": 35}
+LEVEL_RULE_B = {name: pt.Tolerance(f"backdrop level {name}, Vulkan against OpenGL (rule b)", scatter_pixels=_cap(worst))
+                for name, worst in LEVEL_RULE_B_WORST.items()}
+#: The cards. OpenGL native against today's (rule (a)): bit for bit the same (measured: 0 differing pixels in all ten
+#: card regions). Vulkan against OpenGL native (rule (b)): the one-level pixels are scatter, per material (measured
+#: worst a card region of 50,224 pixels: acrylic 1,565, glass 549, frosted 1,238, mica 809, smoked 605); the pixels
+#: past one level (the material's float grain hash, accepted 14 Nov on the composite, measured up to 12 levels, at most
+#: 8 pixels a region) stay bounded only by CARD_OUTLIER_SHARE: the shared tolerance has no class for them (its ties
+#: stop at 2 levels), so routing them is the lead's decision (D12).
+CARD_RULE_A = pt.EXACT
+CARD_RULE_B_WORST = {"acrylic": 1565, "glass": 549, "frosted": 1238, "mica": 809, "smoked": 605}
+CARD_RULE_B = {name: pt.Tolerance(f"backdrop card {name}, Vulkan against OpenGL (rule b, one-level pixels)",
+                                  scatter_pixels=_cap(worst)) for name, worst in CARD_RULE_B_WORST.items()}
 MAX_WAIT_FRAMES = 30
 REST_FRAMES = 6
 SHEET_TILE = (320, 180)
@@ -101,6 +141,30 @@ def compare(a, b) -> dict:
     return {"equal": int(difference.max()) == 0, "max_level": int(difference.max()),
             "differing_pixels": int(np.count_nonzero(difference)),
             "over_1": int(np.count_nonzero(difference > 1)), "pixels": int(difference.size)}
+
+
+def _level_name(name: str) -> str:
+    """The pyramid level of a stored name (``<case>|<level>`` in the level sets; a bare ``<level>`` in a case's dict)."""
+    return name.rsplit("|", 1)[-1]
+
+
+def judge_levels_rule_a(native: dict, reference: dict, cases) -> dict:
+    """Rule (a): every level of each case (``native[case][level]`` against ``reference[case][level]``, top-down RGBA
+    rows) under its own ``LEVEL_RULE_A`` bound, pixel by pixel. A level with no bound fails."""
+    judged = []
+    for case in cases:
+        for name, rows in native[case].items():
+            tolerance = LEVEL_RULE_A.get(name)
+            judged.append(pt.judge(rows[..., :3], reference[case][name][..., :3], tolerance) if tolerance is not None
+                          else {"pass": False, "reasons": [f"no bound for level {name}"]})
+    return pt.summarise(judged)
+
+
+def judge_cards_rule_a(native_regions: dict, today_regions: dict) -> dict:
+    """Rule (a) in the cards: every material's card region of the native pyramid against today's (Python pyramid),
+    exact; ``native_regions[photo][material]``."""
+    return pt.summarise(pt.judge(native_regions[label][m][..., :3], today_regions[label][m][..., :3], CARD_RULE_A)
+                        for label in native_regions for m in MATERIALS)
 
 
 def _levels_top_down(levels: dict, rows_up: bool) -> dict:
@@ -430,13 +494,12 @@ def round_levels(core, engine, app, api: str, work: Path, out: Path) -> dict:
             comparisons[key] = {name: compare(native[key][name], reference[key][name]) for name in native[key]}
         facts["rule_a"] = comparisons
         undimmed = [key for key in native if key.endswith("dim0.0")]
-        # The outputs (what the cards sample) within RULE_A_TOLERANCE; every level within one more (at the product's
-        # odd window the GL blit's own fixed-point positions put single first-level texels on a sharp edge 2 levels
-        # from any shader tap: emulated with five coordinate forms before round 2, none closer).
-        checks["rule_a_outputs_within_tolerance"] = all(
-            comparisons[key][name]["max_level"] <= RULE_A_TOLERANCE for key in undimmed for name in ("light", "heavy"))
-        checks["rule_a_every_level_within_tolerance_plus_one"] = all(
-            c["max_level"] <= RULE_A_TOLERANCE + 1 for key in undimmed for c in comparisons[key].values())
+        # Every level (the outputs the cards sample included) under LEVEL_RULE_A, pixel by pixel (at the product's odd
+        # window the GL blit's own fixed-point positions put single first-level texels on a sharp edge 2 levels from
+        # any shader tap: emulated with five coordinate forms before round 2, none closer; the one tie of 'half').
+        facts["rule_a_tolerance"] = judge_levels_rule_a(native, reference, undimmed)
+        facts["rule_a_bounds"] = [t.bound() for t in LEVEL_RULE_A.values()]
+        checks["rule_a_every_level_within_the_shared_tolerance"] = facts["rule_a_tolerance"]["pass"]
         facts["rule_a_levels_over_tolerance"] = {
             f"{key}|{name}": c["over_1"] for key in undimmed for name, c in comparisons[key].items() if c["over_1"]}
         facts["rule_a_exact"] = all(c["equal"] for key in undimmed for c in comparisons[key].values())
@@ -472,12 +535,19 @@ def vulkan_levels_against_opengl(work: Path) -> dict:
     vk, gl = np.load(vk_path), np.load(gl_path)
     py = np.load(py_path) if py_path.exists() else None
     results = {}
+    judged: list[dict] = []
     for key in sorted(set(vk.files) & set(gl.files)):
         results[key] = {"opengl_native": compare(vk[key], gl[key])}
         if py is not None and key in py.files:
             results[key]["python"] = compare(vk[key], py[key])
+        # Stored as ``<case>|<level>``: each level against its own bound; a level this harness does not know fails.
+        tolerance = LEVEL_RULE_B.get(_level_name(key))
+        judged.append(pt.judge(vk[key][..., :3], gl[key][..., :3], tolerance) if tolerance is not None else
+                      {"pass": False, "reasons": [f"no bound for level {key}"]})
     worst = max((r["opengl_native"]["max_level"] for r in results.values()), default=255)
-    return {"pass": bool(results) and worst <= VULKAN_TOLERANCE, "worst_level": worst, "levels": results}
+    tolerance = pt.summarise(judged)
+    return {"pass": bool(results) and tolerance["pass"], "worst_level": worst, "tolerance": tolerance,
+            "bounds": [t.bound() for t in LEVEL_RULE_B.values()], "levels": results}
 
 
 # --------------------------------------------------------------------------------------------------- cards
@@ -523,12 +593,14 @@ def round_cards(core, engine, app, api: str, work: Path, out: Path) -> dict:
     regions_of = lambda rows: BackdropScene.card_regions(_RegionsOnly(1.0), rows)  # noqa: E731
     if not vulkan:
         comparison = {}
+        today_regions, native_regions = {}, {}
         for label, _n in PHOTOS:
             today, native = regions_of(frames[f"python|{label}"]), regions_of(frames[f"native|{label}"])
+            today_regions[label], native_regions[label] = today, native
             comparison[label] = {m: compare(native[m], today[m]) for m in MATERIALS}
         facts["native_against_today"] = comparison
-        checks["opengl_native_cards_equal_todays_within_tolerance"] = all(
-            c["max_level"] <= RULE_A_TOLERANCE for per in comparison.values() for c in per.values())
+        facts["native_against_today_tolerance"] = judge_cards_rule_a(native_regions, today_regions)
+        checks["opengl_native_cards_equal_todays"] = facts["native_against_today_tolerance"]["pass"]
         facts["todays_first_publish_against_steady"] = {
             label: {m: compare(regions_of(frames[f"python_first|{label}"])[m], regions_of(frames[f"python|{label}"])[m])[
                 "max_level"] for m in MATERIALS} for label, _n in PHOTOS}
@@ -596,6 +668,7 @@ def vulkan_cards_against_opengl(work: Path) -> dict:
         return {"pass": False, "error": "both APIs' card frames are needed"}
     vk, gl = np.load(vk_path), np.load(gl_path)
     results, outliers, pixels = {}, 0, 0
+    judged: list[dict] = []
     for label, _n in PHOTOS:
         key = f"native|{label}"
         if key not in vk.files or key not in gl.files:
@@ -606,12 +679,22 @@ def vulkan_cards_against_opengl(work: Path) -> dict:
         results[label] = per
         outliers += sum(c["over_1"] for c in per.values())
         pixels += sum(c["pixels"] for c in per.values())
+        for m in MATERIALS:
+            if vk_regions[m].shape != gl_regions[m].shape:
+                judged.append({"pass": False, "reasons": [f"{label} {m}: card regions differ in shape"]})
+                continue
+            # The one-level pixels (scatter) per material; the delta is clipped to one level so that the grain hash's
+            # pixels past it stay with the share rule below (see CARD_RULE_B).
+            one = np.minimum(pt.levels(vk_regions[m][..., :3], gl_regions[m][..., :3]), 1)
+            judged.append(pt.judge_delta(one, CARD_RULE_B[m]))
         if "python|" + label in gl.files:
             results[label + "_against_today"] = {
                 m: compare(vk_regions[m], BackdropScene.card_regions(_RegionsOnly(1.0), gl["python|" + label])[m])
                 for m in MATERIALS}
     share = outliers / pixels if pixels else 1.0
-    return {"pass": bool(results) and share <= CARD_OUTLIER_SHARE, "outlier_share": share, "cards": results}
+    tolerance = pt.summarise(judged)
+    return {"pass": bool(results) and share <= CARD_OUTLIER_SHARE and tolerance["pass"], "outlier_share": share,
+            "tolerance": tolerance, "bounds": [t.bound() for t in CARD_RULE_B.values()], "cards": results}
 
 
 # --------------------------------------------------------------------------------------------------- cost
@@ -1112,7 +1195,8 @@ def main(argv: list[str] | None = None) -> int:
             comparisons["cards"]["review_sheets"] = review_sheets(out / "work", out)
             if not comparisons["cards"].get("pass"):
                 failed.append(f"Vulkan cards against OpenGL native: {comparisons['cards'].get('outlier_share')} of "
-                              "card pixels more than 1 level apart")
+                              "card pixels more than 1 level apart, "
+                              f"{(comparisons['cards'].get('tolerance') or {}).get('first_reasons')}")
     if not environment["clean"]:
         failed.append(f"environment: {', '.join(environment['contaminating_set'])} set")
     summary = {"apis": args.apis, "rounds": args.rounds, "environment": environment,
