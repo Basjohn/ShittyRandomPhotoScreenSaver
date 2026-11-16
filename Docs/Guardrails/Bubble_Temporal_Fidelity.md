@@ -689,6 +689,10 @@ Purpose:
 - trajectory;
 - event semantics.
 
+For admitted, performance-only Bubble optimisations, §24 adds an exact **real-music frame-by-frame
+byte-parity lock** under immutable Presets 1 and 2, normally across four complete operator
+recordings. This strengthens Layer 1; it does NOT waive Layers 2–4 or prove real-time delivery.
+
 ### Layer 2 — runtime-shaped temporal lock
 
 Use the real cadence/scheduler ownership shape.
@@ -961,15 +965,15 @@ values during unrelated work.
 
 ### 23.4 Optimization, exactness and remaining acceptance
 
-- `Current_Plan.md` §8 owns **one short, symptom-and-measurement-driven performance check** of the optional
-  target, glow fill, all-bubble occlusion and shared foreground loop. It is *not* permission to remove
-  accepted features, reduce visual response, flatten glow, change authored presets or start a large refactor.
-- **Byte-for-byte is an output/regression condition, not a speed metric.** For a later performance-only
-  optimization, establish the accepted Bubble candidate as the oracle and compare identical logical
-  frame payload bytes (where deterministic) and, if a fixed same-GPU readback is reproducible,
-  renderer-output RGBA bytes. Also separately measure GPU and CPU timings, p95 tails, cadence/latency,
-  resource lifetime and rendering under other-display load. Baseline-versus-current images are *not*
-  byte-identical because the operator explicitly changed motion, occlusion and art direction.
+- `Current_Plan.md` **item 8b → N5.1 Bubble** owns the native GPU-cost measurement and, immediately
+  afterwards, the **conditional recorded-parity optimisation gate in §24**. A bounded optimisation is
+  allowed when a real measured Bubble-owned cost justifies it, not because an agent suspects the shader
+  or simulation is expensive. Preserve accepted features, response, glow, presets and ~90 Hz cadence.
+- **Byte-for-byte is an output/regression condition, not a speed metric.** Freeze the accepted
+  implementation and run §24's complete per-frame logical/physics/snapshot/payload comparisons;
+  separately establish GPU/CPU improvement and live delivery/reactivity. Renderer pixels must retain
+  the native port's approved parity limits. Current accepted art direction, motion and occlusion,
+  rather than older historical images, form the baseline.
 - Any separately deferred **scalar-to-range** Builder migration remains unfinished and must preserve
   authored preset values. It is not part of the completed normal-drift improvement or the bounded perf check.
   Bubble's existing visuals should not be reopened without an explicit operator request or reproduced defect.
@@ -980,3 +984,77 @@ values during unrelated work.
   `widgets/spotify_visualizer/shaders/bubble.frag`, `core/settings/visualizer_mode_settings.py`,
   and `ui/tabs/media/bubble_builder.py`. The dated `Docs/Audits/Bubble_*` slice records are forensic
   context rather than active task or stronger product authority.
+
+## 24. Recorded-music exact-parity gate for measured Bubble optimisations (16 Nov 2026)
+
+**Permitted, not compulsory.** The Performance Optimization Contract and BTF still bind.
+A measured, attributable performance problem may justify ONE bounded change to Bubble's
+simulation arithmetic, allocations, transport or native rendering. Visual complexity,
+overall Windows GPU percentages and the presence of 110-body loops are not diagnoses.
+This gate is scheduled in `Current_Plan.md` **8b → N5.1 Bubble**, after the native
+OpenGL/Vulkan port's parity and GPU-cost measurements, before N5.4 and NF.
+If no avoidable, material cost is identified, close with a documented no-change result.
+
+**Recorded inputs and frozen settings.**
+- Use the four existing operator-recorded ~60-second native schema-2 clips at
+  `logs/visualizer_recordings/`: `nightsolong_acousticsoft1`,
+  `ragdoll_quiet_intro_loud_end1`, `human_heavy1`, `anything_mixed2`.
+  Each includes PCM capture history and typed musical events/onsets. Normally all
+  four are mandatory; THREE is an absolute exception only when the lead explicitly
+  accepts an evidenced missing/unusable fourth recording. Every accepted clip
+  must have a verified full-duration timeline and complete audio/event payload.
+  Short extracts, silent event stripping and synthetic inputs do not count.
+- Exercise **both fully resolved curated Preset 1 (Deep Sea Abyss) and Preset 2
+  (Going Down)** across all clips. The existing frozen
+  `tests/fixtures/visualizer_frozen_settings/bubble.json` has Preset 1-like
+  values; verify the entire resolved preset before calling it equivalent and
+  do not overwrite the accepted fixture. Add a second immutable, versioned
+  Preset 2 fixture. Save each input/fixture SHA-256 and resolved-settings digest
+  from the **accepted pre-change implementation**, not mutable current user
+  Settings or a candidate-rebuilt golden. Check the clip SHA-256, schema, actual
+  length, timebase and event/onset presence before comparing.
+- Use the SAME deterministic seed, source timeline, recorded event/order and
+  replay path before and after. Ordinary replay uses the recorder's
+  Sphere-profile post-DSP bands; when changing Bubble source/DSP calculations,
+  run the existing explicit PCM reanalysis with Bubble's configured production
+  settings and establish its own comparable baseline. Offline PCM reconstruction
+  does not recreate unavailable real-device callback jitter.
+
+**Byte-exact comparison.**
+- Extend `tools/visualizer_replay/bubble_parity.py` only as needed to run the
+  two frozen profiles. It already defaults to the four named clips, records
+  lossless canonical per-frame logical and Quick snapshot/renderer payloads,
+  identity-preserving Bubble physics observations and first-difference hashes.
+  Normally run eight full 60-second cases, approximately **43,200** frame
+  comparisons at 90 Hz. Require identical frame counts and canonical serialized
+  bytes at every tick, including every logical field, physics identity,
+  reactive event consequence, published snapshot and renderer payload, with
+  zero differences even at a float's last bit. Require negative controls that
+  change a float and delay/drop one event to prove the oracle can fail.
+- Logical byte identity is distinct from GPU pixel identity: native renderer
+  changes additionally require the port's Python/native OpenGL and
+  Vulkan/native OpenGL output parity against the existing D12-approved pixel
+  tolerances. Same-GPU/back-end RGBA bytes must match exactly where a repeatable
+  fixed readback makes that claim valid; the existing tool's optional three GPU
+  snapshots per recording are **samples, not all-frame pixel proof**. Never
+  silently broaden tolerance, regenerate a baseline or claim cross-API
+  floating-point bit identity as a universal requirement.
+
+**Independent performance and temporal acceptance.**
+- Before touching code, attribute cost to the correct native GPU pass,
+  Python logical/GIL owner, data transfer or allocation. Compare paired
+  before/after per-pass GPU median/p90 at 2560x1440 and 4K (ambient on/off)
+  or the measured CPU/GIL owner, plus resource lifecycle, dormancy and p95/p99
+  tails. Work should yield a meaningful observed improvement, not just
+  favourable microbenchmark numbers.
+- Layers 2–4 remain binding: ~90 Hz authored integration, every source/event
+  edge, snapshot freshness, input-to-visible attack, elasticity, loud and
+  low-energy behaviour, ghost/tail motion, installation pacing and mixed
+  displays. Identical offline frames can still be presented too late.
+  Live active-music physical review is mandatory where timing or visuals
+  can be affected; offline hashes cannot substitute for it.
+- One bounded experiment at a time. Reject/revert the candidate if any frame
+  differs, native pixel evidence violates the approved bar, an event becomes
+  late/stale, delivery worsens, or there is no defensible measured win.
+  The lead closes the gate and returns to the native ladder, not an open-ended
+  Bubble optimisation campaign.

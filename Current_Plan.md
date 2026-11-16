@@ -728,6 +728,48 @@ the feature (D3D11 is not stated).
     --require-validation --layer-path D:\Temp\Scratch\SRPSS\native_spike\validation_layers\extracted`.
   - [ ] GPU median and p90 per pass at 2560 x 1440 and 4K against the Python renderer's (checklist 11), nothing at
     rest, retirement to zero.
+  - [ ] **N5.1 Bubble conditional optimisation gate (operator, 16 Nov; AFTER accepted native OpenGL/Vulkan parity
+    and the per-pass cost check above, BEFORE N5.4 and NF):** recorded music now allows controlled, bounded
+    performance-only optimisation without assuming that Bubble's calculations are the cause of any observed GPU
+    utilisation. First name the measured Bubble-owned GPU pass, CPU/GIL, transfer or allocation problem and its
+    baseline; if nothing significant is attributable to Bubble, record a no-change result and close the gate.
+    Do NOT speculatively optimise the old Python/OpenGL renderer being retired, retune motion or response, or
+    rewrite the 110-body shader on theoretical complexity alone. The relevant owner is the accepted native path,
+    or the surviving Python logical simulation where that owner is independently shown to be costly.
+    - [ ] **Baseline before editing:** freeze two *fully resolved* independent settings cases from the accepted
+      curated **Preset 1 (Deep Sea Abyss)** and **Preset 2 (Going Down)**. Keep the existing
+      `tests/fixtures/visualizer_frozen_settings/bubble.json` and its consumers intact; it has Preset 1-like
+      values but must be checked against the entire current resolved profile before being called exact.
+      Create an immutable versioned Preset 2 fixture, with SHA-256 for both frozen files and resolved models.
+      Preserve the pre-change acceptance and commit/fixture provenance. Never resolve from the mutable Studio
+      state on each run or regenerate baselines from the candidate implementation.
+    - [ ] **Music/event matrix:** normally replay ALL FOUR existing ~60-second schema-2 operator takes with PCM
+      histories, typed events and onsets: `nightsolong_acousticsoft1`,
+      `ragdoll_quiet_intro_loud_end1`, `human_heavy1`, `anything_mixed2`, under EACH frozen preset
+      (eight full replay cases, approximately 43,200 ticks at 90 Hz). THREE full, distinct recordings
+      are the absolute minimum only if one is unavailable and the lead explicitly accepts a documented
+      reason. Validate file SHA-256, actual span and event/onset completeness rather than assuming a filename
+      proves 60 seconds. Do not use a short excerpt, older schema-1 clip or synthetic input as a substitute.
+      Extend existing `tools/visualizer_replay/bubble_parity.py` narrowly for two immutable profiles while
+      retaining its four default clips, per-frame hashes, first difference, and negative controls.
+      Use configured Bubble-band PCM reanalysis for an audio-analysis/input optimisation, not merely the
+      recorder's Sphere-profile post-DSP bands.
+    - [ ] **Exact logical fidelity:** pin seed/timebase/inputs/event consumption and compare the complete
+      canonical bytes at EVERY frame: published logical frame, identity-preserving physics, reactive event
+      consequences, Quick snapshot and renderer payload. Zero differing frames, timestamps, values or event
+      order; even a float last-bit change rejects an output-preserving optimisation. A deliberately perturbed
+      float and a late/missing one-shot event must fail the gate. Byte-parity is about computed results,
+      not proof of on-monitor latency. If the change affects shaders/passes, also retain N5.1's approved
+      Python/native OpenGL and Vulkan/OpenGL pixel oracles; same-device raw RGBA equality where repeatable,
+      otherwise the existing D12 pixel bounds without silently widening tolerance.
+    - [ ] **Independent speed and reactivity proof:** paired measurements of the named CPU/GIL owner or native
+      GPU pass at 2560x1440 and 4K, ambience on/off, GPU median/p90, frame latency p95/p99, resource
+      lifetime/dormancy, source/snapshot age, authored ~90 Hz cadence, event-to-visible attack, loud/quiet
+      elasticity and motion/ghost/tail feel on the installed system (including mixed-display load).
+      Retain the 240-frame ambience-off empty-pass control below. No slowdown, timing regression or
+      fidelity alteration may be excused by matching offline hashes. Lead/operator acceptance or revert;
+      one bounded candidate at a time, then return to the native migration ladder. BTF §24 binds.
+
   - [ ] The D1 rehearsal (lead, rule (f), D10): one bounded Vulkan run on Display 1 through `tools/d1_run.py`, the
     Usu wallpaper and a recorded clip, ambience on and off.
   - [ ] Docs: D12 "As built: Bubble" (record, settings, passes, figures, the tolerance), `native/core/README.md` step 6
