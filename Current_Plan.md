@@ -47,8 +47,9 @@ under the operator's 16 Nov request for another Sol 6.1 High native-core agent. 
 an independent verified slice may land while an earlier native build is running.
 For this session, compact completed checkbox text inline and retain every checkbox for later review.
 
-**Now (in flight):** N3.4 `stream_ring` measurement contract, `n34-streamring` (Sol 6.1 Medium);
-then 1D.13 near-light. L3 and L6 source/proof checkpoints are complete; ABI 21 is installed on main.
+**Now (in flight):** lead's current-ABI N3.4 `stream_ring` proof, after the measurement contract and exact native
+record coverage passed audit. Near-light's fixture-only checkpoint passed the merged offscreen test and visual review.
+L3 and L6 source/proof checkpoints are complete; ABI 21 is installed on main.
 `native-harness-workhorse` (Terra 6.1 Medium) completed the non-conflicting R-226 harness sweep; remaining callers
 are owned by the scene-target and mesh-buffer slices.
 Lead verification and Terra 6.1 High audit precede landing. P1 source slice passed 219 focused tests plus
@@ -304,9 +305,8 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   removed, source retained as evidence (16 Nov; durable route: Handbook 8a / Harness Index).
   - [x] Baseline teardown guard: validate dormant job-service quiescence before device destruction; Terra High
     audited, 28 host tests and required-validation hidden rounds PASS on OpenGL/Vulkan (16 Nov).
-  - [ ] R-226 caller sweep: reproduce and close stale-child/ignored-exit false passes in the remaining native
-    proof harnesses `scene_target_check.py` and `mesh_buffer_check.py`. Keep each repair with its owning harness;
-    no verdict from an old record.
+  - [x] R-226 caller sweep: scene-target and mesh-buffer launchers/reference verdicts reject stale records and
+    failed child exits; reproducing regressions PASS, Terra High audited (16 Nov).
     - [x] Eleven other launchers, including compute/post-stage reference verdicts: repaired, Terra High audited,
       26 failed-child regressions PASS on merged tree (16 Nov).
 - [ ] N0.6 D6's proof (harness rounds 1 to 6 merged; the record is D6's "As proved" in the decisions document;
@@ -1292,10 +1292,10 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   A third, `tests/test_qtquick_startup_reveal.py::test_startup_reveal_primes_zero_then_completes_at_one_once`,
   failed the same way in the 1D.12 merge run (4,407 tests over 33 minutes). Find the leaked state or ordering they depend on, and make each test own its preconditions.
   The N5.1 merge run (4,529 tests, 44 minutes, one process) added twelve more of this kind; they pass alone.
-- [ ] Reds already on main, found at the N5.1 merge (each fails alone):
-  - `tests/test_extruded_bubble_empty_near.py:58`: "the populated frame must actually leave near light" reads 0.0;
-    it also fails on N3.1's base commit.
-  - `tests/test_qtquick_visualizer_clip_smoke.py:303`, the Oscilloscope reflow, reads 175 against 173. The QSG/clip
+- [ ] Known red checks found at the N5.1 merge (each originally failed alone):
+  - [x] Near-light fixture uses canonical camera/aperture and test-owned visible defocus; original alpha0 reproduced,
+    stale-composite mutation detected, offscreen pixels/resources preserved. Terra High audited, merged test PASS (16 Nov).
+  - [ ] `tests/test_qtquick_visualizer_clip_smoke.py:303`, the Oscilloscope reflow, reads 175 against 173. The QSG/clip
     optimisations are protected: never retune production to satisfy this oracle; judge whether the oracle is stale.
 - [ ] Lead, Display 1: confirm R-221 in the product, Fullscreen Hide Borders with pixel shift stepping, and check
   whether the operator's lavender edge colour came from the shift.

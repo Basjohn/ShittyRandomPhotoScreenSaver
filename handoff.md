@@ -24,7 +24,13 @@ independent agents may overlap. ABI **21** is installed on main from GitHub run 
   timing/other-vendor gates remain separate; this slice proves the named L3 contracts only.
 - [x] Audit 4 L6's three executable native/Python oracles; 27 tests, mutation controls and High audit; rechecked in
   the ABI 21 merged gate. Concession: GPU-free matrix/packet tests establish those contracts, not visual/performance acceptance.
-- [ ] Finish stream_ring uncertainty/relative-floor repair and mesh R-226 caller, then 1D.13 near-light.
+- [x] Mesh R-226 caller and stream_ring source contract: exact native record coverage, median admission with
+  bracketing-floor sensitivity; 41 focused cases and High audit. Current-ABI native proving run is in progress.
+- [x] 1D.13 near-light: stale fixture corrected with test-owned visible optics and canonical camera; original alpha0
+  reproduced, real stale-composite mutation caught, exact empty/return pixels and resource reuse proved offscreen.
+  Concession: product rendering is unchanged; this closes the oracle defect, not a new visual/performance acceptance.
+- [ ] Finish the current-ABI stream_ring run and review raw medians, bracket drift, record coverage and validation.
+  Existing harness convention: process exit0 means the harness ran; acceptance reads `summary.pass` / printed verdict.
 
 For this session retain every completed plan checkbox, compact inline. Record any incomplete or unsatisfactory
 outcome beside its completed item with the reason, so a successor can challenge it; continue work beyond this handoff.
