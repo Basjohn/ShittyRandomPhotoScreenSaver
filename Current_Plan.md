@@ -47,13 +47,15 @@ under the operator's 16 Nov request for another Sol 6.1 High native-core agent. 
 an independent verified slice may land while an earlier native build is running.
 For this session, compact completed checkbox text inline and retain every checkbox for later review.
 
-**Now:** the five requested source/proof slices are complete and audited; ABI 21 is installed on main. P1 desktop
+**Now:** the five requested source/proof slices are complete and audited; ABI 22 is installed on main. P1 desktop
 validation remains at N0.6. The repaired `stream_ring` harness passes on OpenGL/Vulkan with exact record coverage;
 quiet-GPU performance admission remains a separate N3.4 box. Near-light's fixture-only repair passes offscreen.
 The interim week's remaining route is in `handoff.md` section 3; heavy ports and the flip remain held there.
 Operator continuation (16 Nov): implement N3.1c L2 with Sol High and independent Terra High audit; lead runs
 N3.4 `defocus_draws` concurrently under available ambient GPU activity, as explicitly authorised. Record conditions
 and compare within-run variants; do not hold diagnosis for the former quiet-GPU precondition.
+ABI 22 post-stage parity/rest/retire passes both backends. L2's dedicated slack controls remain to run; ABI 23's
+individual diagnostic boundary controls are in source review before the next GitHub build.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim week's order is `handoff.md` section 3.

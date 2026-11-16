@@ -2164,6 +2164,18 @@ Python face is `rendering/native/mode.py` (`TransparencyTarget`, `TransparencyRe
     outside the sprites' own timestamp interval (only 0.06 ms of it; 0.6 in the gather's). GL's timestamp is taken
     once the previous commands are "fully realized", so the raster itself is not the cost; where it lands is the
     plan box's next step, on a quiet GPU.
+    **16 Nov diagnostic continuation (operator authorised available GPU activity):** ABI 21's unmarked split
+    reproduced +2.5785 ms at 1x and +0.9595 ms at 4x; the draw-query run did not. Its gather/sprite intervals are
+    means of 239 query results, not medians, and the high-threshold variant still submits the same instanced draw.
+    ABI 22 adds a boundary-only control at the same three sites, plus the required `ExternalContent` declaration
+    with one sync snapshot for flags and all marks. In `20261116_n34_boundaries_abi22`, off-before/off-after excess
+    was about 2.67/2.69 ms (1x) and 1.28/1.22 ms (4x); boundary-only and query modes were about 0.01/0.02 ms.
+    Every phase's pixels exactly match its corresponding off baseline; only query mode recorded queries (239,
+    skipped 0). Reported GPU conditions: 0% at 240 MHz before, 6% at 2775 MHz after, displays on, no SRPSS process.
+    This implicates the external-command boundaries, not timestamp retrieval alone; it does not identify a driver
+    defect or admit a production flush. Qt 6.12's [OpenGL implementation](https://github.com/qt/qtbase/blob/v6.12.0/src/gui/rhi/qrhigles2.cpp)
+    executes queued commands in `beginExternal` and resets cached state and pass tracking in `endExternal`.
+    Next: isolate each boundary with executed-boundary counters, preserve pixels, then compare the affected state.
   - The render thread's record (`stage_record_ns`, the whole record of a program with stages): on OpenGL 19 to 20 us
     for EB's shape at every size and count (6.7 to 9.5 us with no stage), 33 us mean over the steady minute at 4x; on
     Vulkan 1.1 to 1.4 ms, which is the validation layer's own CPU work (22 us with no stage under the same layer); the

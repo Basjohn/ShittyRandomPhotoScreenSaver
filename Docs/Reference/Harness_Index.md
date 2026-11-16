@@ -996,10 +996,12 @@ python native/core/python/compute_pass_check.py --module-dir release/native_modu
 # the record's render-thread time), retire, barriers (Vulkan: synchronisation validation with shader accesses; controls
 # depth prime, bloom same texture, read chain and no independent blend must report their finding, the bloom prime's is
 # reported only), cost (each stage at 2560x1440 and 4K, 1x and 4x). Alone: defocus_cost (the defocus step split by
-# variants at 4K), showcase (the WebP), python_cost and python_defocus_cost (the reference child). Timing rounds only on
-# a quiet GPU (nvidia-smi is recorded in the summary).
+# variants at 4K), defocus_draws (latched draw queries), defocus_boundaries (bracketed off/boundary/query phases with
+# exact pixels and counter checks), showcase (the WebP), python_cost and python_defocus_cost (the reference child).
+# Timing rounds normally use a quiet GPU; operator-authorised ambient diagnostics retain recorded conditions and
+# compare within-run controls (nvidia-smi is recorded in the summary).
 python native/core/python/post_stage_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
-    [--apis opengl vulkan] [--rounds parity gate rest steady retire barriers cost defocus_cost showcase python_cost python_defocus_cost] [--label n34_post_stages]
+    [--apis opengl vulkan] [--rounds parity gate rest steady retire barriers cost defocus_cost defocus_draws defocus_boundaries showcase python_cost python_defocus_cost] [--label n34_post_stages]
 ```
 
 Tests: `tests/test_native_core_jobs.py` (the built module, GPU-free: the job service's latch, cancellation while

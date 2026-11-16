@@ -12,8 +12,9 @@ force-push or rewrite main.
 ## 16 Nov continuation journal (keep short; Current_Plan.md owns active work)
 
 The operator's current route is P1 spike → N3.1c L3 → N3.2 Audit 4 L6 → N3.4 stream_ring → 1D.13 near-light;
-independent agents may overlap. ABI **21** is installed on main from GitHub run `43849213847`, native commit
-`2b63f4752`. Section 2 below is the original 15 Nov snapshot, not current ABI or agent status.
+independent agents may overlap. ABI **22** is installed on main from GitHub run `43857531372`, native commit
+`59901a5b1`; source ABI 23's individual boundary controls await audit/build. Section 2 below is the original
+15 Nov snapshot, not current ABI or agent status.
 
 - [x] P1 build retirement + fail-closed core harness migration; 219 focused tests, OpenGL/Vulkan checks, High audit.
   Concession: desktop composed alpha, DPI and sleep/wake remain Awaiting Validation; offscreen pixels cannot prove them.
@@ -39,6 +40,9 @@ For this session retain every completed plan checkbox, compact inline. Record an
 outcome beside its completed item with the reason, so a successor can challenge it; continue work beyond this handoff.
 Current continuation (operator, 16 Nov): N3.1c L2 scissor fix and N3.4 defocus diagnosis. Available ambient GPU
 activity is explicitly authorised for the diagnosis; section 3's original quiet-GPU stop does not apply to this run.
+- [x] ABI 22 stage parity/rest/retire PASS on OpenGL/Vulkan, rules (a)/(b) and analytic checks; 145 focused tests PASS.
+- [x] Defocus excess reproduced unmarked; bracketed off/boundary-only/query/off run keeps exact pixels but removes
+  the excess with command boundaries alone. No production workaround admitted; individual-site isolation follows (D17).
 
 ## 1. Read these first, in this order
 
