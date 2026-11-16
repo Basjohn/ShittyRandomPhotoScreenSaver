@@ -1975,10 +1975,29 @@ PyObject *scene_nearest_first_sample_control(PyObject *, PyObject *args)
 PyObject *stage_control(PyObject *, PyObject *args)
 {
     const char *name = nullptr;
-    int on = 0;
-    if (!PyArg_ParseTuple(args, "sp", &name, &on))
+    PyObject *argument = nullptr;
+    if (!PyArg_ParseTuple(args, "sO", &name, &argument))
         return nullptr;
     const QByteArray control(name);
+    if (control == "fail_allocation") {
+        if (!PyLong_Check(argument) || PyBool_Check(argument)) {
+            PyErr_SetString(PyExc_TypeError, "fail_allocation requires an integer attempt (0: off)");
+            return nullptr;
+        }
+        const long attempt = PyLong_AsLong(argument);
+        if (attempt == -1 && PyErr_Occurred())
+            return nullptr;
+        if (attempt < 0 || attempt > srpss_core::kMaxStageAllocationAttempts) {
+            PyErr_Format(PyExc_ValueError, "fail_allocation attempt must be between 0 and %d",
+                         srpss_core::kMaxStageAllocationAttempts);
+            return nullptr;
+        }
+        srpss_core::setStageAllocationFailure(int(attempt));
+        Py_RETURN_TRUE;
+    }
+    const int on = PyObject_IsTrue(argument); // preserve every existing boolean control's truth/error semantics
+    if (on < 0)
+        return nullptr;
     const bool value = on != 0;
     if (control == "skip_blend_gate")
         srpss_core::setSkipBlendGate(value);
@@ -2982,7 +3001,7 @@ PyMethodDef methods[] = {
       "skip_read_chain, time_defocus_draws, flush_defocus_draws, flush_defocus_before_gather, "
       "flush_defocus_between_draws, flush_defocus_after_sprites (OpenGL), device_without_independent_blend: read at the next device's "
       "creation); False for an unknown "
-      "name." },
+      "name. fail_allocation accepts an integer create-attempt ordinal (0: off), bounded by the stage limits." },
     { "scene_depth_prime_control", scene_depth_prime_control, METH_VARARGS,
       "(skip) -> None: N3.1, harness: the depth's rule C prime skipped (its negative control under synchronisation "
       "validation); False restores it." },

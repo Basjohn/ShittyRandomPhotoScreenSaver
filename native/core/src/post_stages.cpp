@@ -32,6 +32,7 @@ QAtomicInteger<int> g_skipBloomPrime { 0 };
 QAtomicInteger<int> g_bloomSameTexture { 0 };
 QAtomicInteger<int> g_skipStageRelease { 0 };
 QAtomicInteger<int> g_skipReadChain { 0 };
+QAtomicInteger<int> g_stageAllocationFailure { 0 };
 QAtomicInteger<int> g_timeDefocusDraws { 0 }; // bit 0: queries; bits 1..3: individual boundary-only sites
 QAtomicInteger<qint64> g_defocusFlushes { 0 };
 QAtomicInteger<qint64> g_defocusTimed { 0 };
@@ -298,6 +299,11 @@ void setSkipStageRelease(bool skip) { setControl(g_skipStageRelease, skip); }
 bool skipStageRelease() { return g_skipStageRelease.loadAcquire() != 0; }
 void setSkipReadChain(bool skip) { setControl(g_skipReadChain, skip); }
 bool skipReadChain() { return g_skipReadChain.loadAcquire() != 0; }
+void setStageAllocationFailure(int attempt)
+{
+    g_stageAllocationFailure.storeRelease(attempt);
+    g_controlGeneration.fetchAndAddOrdered(1);
+}
 static void setDefocusDrawControl(int bit, bool on)
 {
     if (on)
@@ -560,6 +566,23 @@ void PostStages::releaseDefocus(Defocus &d)
 bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<DefocusSpec> &defocus,
                       const SceneTargets &targets, QString *error)
 {
+    // Harness fault injection follows the actual create-failure branches. At rest no create is attempted; with the
+    // control off the attempt counter never advances. Destroy also makes a resize fault retire its previous storage.
+    const int failAllocation = g_stageAllocationFailure.loadAcquire();
+    int allocationAttempt = 0;
+    bool injected = false;
+    const auto create = [&](auto *resource) {
+        if (failAllocation && ++allocationAttempt == failAllocation) {
+            resource->destroy();
+            injected = true;
+            return false;
+        }
+        return resource->create();
+    };
+    const auto noteFault = [&]() {
+        if (injected)
+            *error += QStringLiteral(" [harness fail_allocation=%1]").arg(failAllocation);
+    };
     if (m_rhi && m_rhi != rhi)
         release();                            // another QRhi: every object again (a node made again)
     m_rhi = rhi;
@@ -628,9 +651,10 @@ bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<Def
             } else {
                 b.levels[k]->setPixelSize(sizes[k]); // the same object at the new size (bindings follow)
             }
-            if (!b.levels[k]->create()) {
+            if (!create(b.levels[k].get())) {
                 *error = QStringLiteral("bloom step '%1': level %2 could not be created at %3 x %4")
                              .arg(QString::fromLatin1(spec.name)).arg(k).arg(sizes[k].width()).arg(sizes[k].height());
+                noteFault();
                 return false;
             }
             if (!b.targets[k]) {
@@ -643,9 +667,10 @@ bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<Def
                 b.targets[k]->setRenderPassDescriptor(b.passes[k].get());
                 g_objectsCreated.fetchAndAddRelaxed(2);
             }
-            if (!b.targets[k]->create()) {
+            if (!create(b.targets[k].get())) {
                 *error = QStringLiteral("bloom step '%1': level %2's render target could not be created")
                              .arg(QString::fromLatin1(spec.name)).arg(k);
+                noteFault();
                 return false;
             }
             b.sizes[k] = sizes[k];
@@ -708,9 +733,10 @@ bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<Def
         } else {
             d.below->setPixelSize(below);
         }
-        if (!d.below->create()) {
+        if (!create(d.below.get())) {
             *error = QStringLiteral("defocus step %1: its read level's texture could not be created at %2 x %3")
                          .arg(spec.pass).arg(below.width()).arg(below.height());
+            noteFault();
             return false;
         }
         if (!d.belowTarget) {
@@ -722,8 +748,9 @@ bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<Def
             d.belowTarget->setRenderPassDescriptor(d.belowPass.get());
             g_objectsCreated.fetchAndAddRelaxed(2);
         }
-        if (!d.belowTarget->create()) {
+        if (!create(d.belowTarget.get())) {
             *error = QStringLiteral("defocus step %1: its read level's render target could not be created").arg(spec.pass);
+            noteFault();
             return false;
         }
         const qint64 bytes = levelBytes(below, 8);

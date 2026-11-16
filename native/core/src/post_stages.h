@@ -48,6 +48,7 @@ namespace srpss_core {
 constexpr int kBloomLevels = 4;            // post.py BLOOM_LEVELS
 constexpr int kMaxBloomStages = 2;
 constexpr int kMaxDefocusStages = 2;
+constexpr int kMaxStageAllocationAttempts = 2 * (kMaxBloomStages * kBloomLevels + kMaxDefocusStages);
 
 // A pass entry's stage (mode_content.h ModePass::stage); None for a mode's own pass.
 enum class StageKind { None = 0, TransparencyResolve = 1, Bloom = 2, Defocus = 3, Composite = 4 };
@@ -105,6 +106,8 @@ void setSkipStageRelease(bool skip);            // the stages' objects left behi
 bool skipStageRelease();
 void setSkipReadChain(bool skip);               // the defocus run's chainShaderReads skipped (read per record)
 bool skipReadChain();
+// Harness only: fail this texture/target create attempt in one sync (0: off). The bound follows the stage limits.
+void setStageAllocationFailure(int attempt);
 // The defocus cost's diagnosis (the lead, 15 Nov), OpenGL only: GL timestamps before the gather, between it and the
 // sprites, and after them, read back latched (never waited for) at a later record; their sums join composite_live
 // (stage_defocus_timed, stage_gather_gpu_ns, stage_sprites_gpu_ns). Off: no query object and no call.
