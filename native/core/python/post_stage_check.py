@@ -38,6 +38,9 @@ Rounds:
   cost     (each API) the EB scene at 2560x1440 and 3840x2160, one and four samples, each stage's GPU time (the record
            with it less without it), median and p90 of 240 records; on Vulkan under the validation layer.
 Run alone:
+  accounting (each API) actual texture/target create failures (cold and resize), sampler/SRB/pipeline failures
+           (cold and rebind), exact release to baseline and a fresh successful allocation/rebind/release. Partial
+           skipped-release controls count the actual held wrappers and fail the same retirement predicate.
   defocus_cost (each API) the defocus step's GPU time at 4K split by variants (the near pass; generateMips with the
            clip; the gather's taps with the sprites' vertex stage; the sprites' raster, with and without the capture,
            and with the highlight's few sprites only).
@@ -57,6 +60,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 import sys
 import tempfile
@@ -79,7 +83,7 @@ from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("parity", "gate", "rest", "steady", "retire", "barriers", "cost")
-ALONE_ROUNDS = ("defocus_cost", "showcase", "big_frames", "defocus_draws", "defocus_boundaries")
+ALONE_ROUNDS = ("defocus_cost", "showcase", "big_frames", "defocus_draws", "defocus_boundaries", "accounting")
 PYTHON_ROUNDS = ("python_cost", "python_defocus_cost")
 CHILD_TIMEOUT_S = 2400
 MARGIN = stc.MARGIN
@@ -266,6 +270,12 @@ def _state_facts(state: dict) -> dict:
             "records": state.get("records")}
 
 
+def _effective_sample_counts(state: dict) -> dict:
+    # A deliberately refused program has already released its targets. Gate checks below still require
+    # the expected owner count; unrelated refusal cases can report the empty allocation honestly.
+    return {t["name"]: t["effective_samples"] for t in (state.get("scene_targets") or {}).get("targets", ())}
+
+
 # --------------------------------------------------------------------------------------------------- comparisons
 
 def _rgb(entry):
@@ -280,12 +290,31 @@ def judge_texture(candidate: dict, reference: dict, tolerance, unit=None) -> dic
 
     if candidate["format"] == "rgba8" or candidate["array"].shape != reference["array"].shape:
         return stc.judged(candidate, reference, tolerance)
-    units = float_units(candidate["array"], reference["array"])
-    delta = np.ceil(units / (1.0 if unit is None else unit))
-    fy = reference["array"].astype(np.float64)
-    edges = pt.content_edges(fy * 255.0, tolerance.edge_contrast)
-    result = pt.judge_delta(delta.astype(np.int64), tolerance, mask=np.ones(delta.shape, bool), edges=edges)
-    diff = np.abs(candidate["array"].astype(np.float64) - fy)
+    fx = np.asarray(candidate["array"], dtype=np.float64)
+    fy = np.asarray(reference["array"], dtype=np.float64)
+    invalid = {"candidate": int((~np.isfinite(fx)).sum()), "reference": int((~np.isfinite(fy)).sum())}
+    shape = fx.shape[:2] if fx.ndim == 3 else fx.shape
+    if not any(invalid.values()):
+        units = float_units(fx, fy)
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+            delta = np.ceil(units / (1.0 if unit is None else unit))
+        invalid["delta"] = int((~np.isfinite(delta)).sum())
+    else:
+        invalid["delta"] = 0
+    if any(invalid.values()):
+        result = pt.judge_delta(np.zeros(shape, dtype=np.int64), tolerance, mask=np.ones(shape, bool))
+        result["pass"] = False
+        result["reasons"].append(f"nonfinite float comparison: {invalid}")
+        result.update(invalid_counts=invalid, max_abs=None, max_ulps=None)
+        return result
+    # Saturate only values beyond any meaningful tolerance before integer conversion.
+    delta = np.clip(delta, -float(2**62), float(2**62)).astype(np.int64)
+    limit = np.finfo(np.float64).max
+    edges = pt.content_edges(np.clip(fy, -limit / 1024.0, limit / 1024.0) * 255.0, tolerance.edge_contrast)
+    result = pt.judge_delta(delta, tolerance, mask=np.ones(delta.shape, bool), edges=edges)
+    with np.errstate(over="ignore"):
+        diff = np.minimum(np.abs(fx - fy), limit)
+    result["invalid_counts"] = invalid
     result["max_abs"] = float(diff.max()) if diff.size else 0.0
     result["max_ulps"] = round(float(units.max()), 3) if units.size else 0.0
     return result
@@ -298,7 +327,11 @@ def float_units(a, b):
     import numpy as np
 
     fx, fy = np.asarray(a, np.float64), np.asarray(b, np.float64)
-    units = np.abs(fx - fy) / (np.maximum(np.maximum(np.abs(fx), np.abs(fy)), FLOAT_FLOOR) * HALF_ULP)
+    scale = np.maximum(np.maximum(np.abs(fx), np.abs(fy)), FLOAT_FLOOR)
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        difference = np.abs(fx - fy)
+        units = np.where(np.isfinite(difference), difference / (scale * HALF_ULP),
+                         np.abs(fx / scale - fy / scale) / HALF_ULP)
     return units.max(axis=2) if units.ndim == 3 else units
 
 
@@ -652,6 +685,8 @@ def round_gate(core, engine, app, api: str, packs: dict) -> dict:
         finally:
             _controls(core, case.controls, False)
         return {"state": _state_facts(state), "names": sorted(textures),
+                "effective_samples": _effective_sample_counts(state),
+                "supported_samples": (state.get("scene_targets") or {}).get("supported_samples", []),
                 "fallbacks_counted": held["stage_fallbacks"] - before["stage_fallbacks"],
                 "stage_textures": held["stage_textures"], "frame_max": int(frame[..., :3].max())}
 
@@ -671,13 +706,38 @@ def round_gate(core, engine, app, api: str, packs: dict) -> dict:
         facts["sample_shading_missing_4x"] = shading
         checks["sample_shading_missing_falls_back_at_4x"] = (
             len(shading["state"]["fallbacks"] or []) == 1 and "sampleRateShading" in shading["state"]["fallbacks"][0]
-            and shading["fallbacks_counted"] == 1 and not shading["state"]["error"])
+            and shading["fallbacks_counted"] == 1 and not shading["state"]["error"]
+            and shading["effective_samples"].get("solo") == 4)
         single = records(Case("solo_shading_1x", "solo", controls=("sample_shading_missing",)))
         facts["sample_shading_missing_1x"] = single
         checks["sample_shading_missing_admits_1x"] = not single["state"]["fallbacks"] and single["fallbacks_counted"] == 0
         admitted = records(Case("solo_admitted", "solo"))
         facts["solo_admitted"] = admitted
         checks["admitted_records_no_fallback"] = not admitted["state"]["fallbacks"] and admitted["fallbacks_counted"] == 0
+        # The gate follows the same device clamp as allocation, including its generation when a control changes.
+        _controls(core, ("sample_shading_missing",), True)
+        try:
+            passes, targets, values = build(Case("solo_shading_clamp_changes", "solo", samples=4), packs)
+            scene = stc.Scene(core, engine, host, CARD, 1.0, packs, passes=passes, targets=targets, settings=values)
+            try:
+                # Same item/program and stage controls: only the canonical sample-count generation changes.
+                removed = [n for n in admitted["supported_samples"] if n > 1]
+                for phase, excluded, expected in (("before", [], 4), ("clamped", removed, 1), ("restored", [], 4)):
+                    core.scene_sample_counts_control(excluded)
+                    scene.targets(app)
+                    state = scene.mode.state()
+                    gate = _state_facts(state)
+                    counts = _effective_sample_counts(state)
+                    facts[f"sample_shading_missing_clamp_{phase}"] = {"state": gate, "effective_samples": counts}
+                    checks[f"sample_shading_missing_clamp_{phase}"] = (
+                        not gate["error"] and counts.get("solo") == expected
+                        and (bool(gate["fallbacks"]) if expected > 1 else not gate["fallbacks"])
+                        and (expected > 1 or counts.get("solo_glass") == 1))
+            finally:
+                _close(scene, host, app)
+        finally:
+            core.scene_sample_counts_control([])
+            _controls(core, ("sample_shading_missing",), False)
         # The defocus read level's cap (the lead, 15 Nov): at the cap drawn, one past it refused with its reason.
         from rendering.native.scene_targets import bucket_pixels
 
@@ -873,6 +933,162 @@ def round_retire(core, engine, app, api: str, packs: dict) -> dict:
     facts["end"] = snapshot()
     checks["nothing_left"] = zero(facts["end"])
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+ACCOUNTING_KEYS = STAGE_KEYS + ("stage_left_behind",)
+
+
+def stage_accounting_verdict(actual: dict, baseline: dict, expected: dict) -> dict:
+    """Exact ownership deltas; negative, missing or nonfinite counts never establish a baseline."""
+    checks = {}
+    for key in ACCOUNTING_KEYS:
+        values = (actual.get(key), baseline.get(key), expected.get(key))
+        valid = all(isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and math.isfinite(value) and value >= 0 and value == int(value) for value in values)
+        checks[key] = valid and actual[key] == baseline[key] + expected[key]
+    return {"pass": all(checks.values()), "checks": checks,
+            "actual": {key: actual.get(key) for key in ACCOUNTING_KEYS},
+            "baseline": {key: baseline.get(key) for key in ACCOUNTING_KEYS}, "expected_delta": expected}
+
+
+def _stage_accounting_expected(stage: str, state: dict, values: dict) -> dict:
+    from rendering.quick.scene3d.post import BLOOM_LEVELS
+
+    expected = dict.fromkeys(ACCOUNTING_KEYS, 0)
+    name = "scene" if stage == "bloom" else "near"
+    source = next(target for target in state["scene_targets"]["targets"] if target["name"] == name)
+    width, height = source["allocation"]
+    if stage == "bloom":
+        expected.update(stage_bloom_chains=1, stage_textures=BLOOM_LEVELS,
+                        stage_pipelines=1 + (2 * BLOOM_LEVELS - 1) + 3,
+                        stage_bytes=sum(max(1, width >> level) * max(1, height >> level) * 8
+                                        for level in range(1, BLOOM_LEVELS + 1)))
+    else:
+        level = int(values["u_defocus_level"])
+        expected.update(stage_defocus_steps=1, stage_textures=1, stage_pipelines=2 + 3 + 3,
+                        stage_bytes=max(1, width >> level) * max(1, height >> level) * 8)
+    return expected
+
+
+def _allocation_fault_case(core, engine, app, host, packs: dict, stage: str, control: str, attempt: int,
+                           *, resize: bool = False, skipped_release: bool = False) -> dict:
+    """Fail the real owner, close to baseline, then allocate/rebind/release successfully on the same QRhi."""
+    zero = dict.fromkeys(ACCOUNTING_KEYS, 0)
+    baseline = _live(core)
+    checks = {"baseline_clear": stage_accounting_verdict(baseline, zero, zero)["pass"]}
+    facts = {}
+    case = Case("accounting", "tiles") if stage == "bloom" else Case("accounting", "eb", variant="no_bloom")
+    passes, targets, values = build(case, packs)
+    scene = None
+
+    def fault(name, ordinal):
+        if not core.module.stage_control(name, ordinal):
+            raise RuntimeError(f"unknown stage fault control {name!r}")
+
+    try:
+        fault("fail_allocation", 0)
+        fault("fail_build", 0)
+        _controls(core, ("skip_stage_release",), False)
+        if not resize:
+            fault(control, attempt)
+            _controls(core, ("skip_stage_release",), skipped_release)
+        scene = stc.Scene(core, engine, host, CARD, 1.0, packs, passes=passes, targets=targets, settings=values)
+        if resize:
+            scene.targets(app)
+            checks["populated_before_resize"] = stage_accounting_verdict(
+                _live(core), baseline, _stage_accounting_expected(stage, scene.mode.state(), values))["pass"]
+            fault(control, attempt)
+            scene.resize((768, 512))
+        host.frames(3)                  # no readback is requested from a deliberately failed frame
+        state, failed = scene.mode.state(), _live(core)
+        facts["failure"] = {**_state_facts(state), "live": {key: failed.get(key) for key in ACCOUNTING_KEYS},
+                            "build_failures": failed.get("stage_build_failures"),
+                            "rebind_failures": failed.get("stage_rebind_failures")}
+        checks["intended_create_failed_loudly"] = f"[harness {control}={attempt}]" in facts["failure"]["error"]
+        if control == "fail_build":
+            checks["actual_build_failure_reached"] = (
+                failed["stage_build_failures"] - baseline["stage_build_failures"] == 1)
+            checks["actual_rebind_failure_reached"] = (
+                failed["stage_rebind_failures"] - baseline["stage_rebind_failures"] == int(resize))
+        if skipped_release:
+            level = (attempt - 1) // 2
+            held = 3 * level + (1 if attempt % 2 else 3) if stage == "bloom" else (1 if attempt == 1 else 3)
+            expected = {**zero, "stage_left_behind": held}
+            facts["partial_skipped_release"] = stage_accounting_verdict(failed, baseline, expected)
+            checks["partial_skipped_release_count_exact"] = facts["partial_skipped_release"]["pass"]
+            checks["positive_retirement_rejects_partial_skipped_release"] = not stage_accounting_verdict(
+                failed, baseline, zero)["pass"]
+        _close(scene, host, app)
+        scene = None
+        fault("fail_allocation", 0)
+        fault("fail_build", 0)
+        _controls(core, ("skip_stage_release",), False)
+        if not skipped_release:
+            facts["released_after_failure"] = stage_accounting_verdict(_live(core), baseline, zero)
+            checks["failure_releases_exactly_to_baseline"] = facts["released_after_failure"]["pass"]
+        # A new content clears the skipped-release control's real held objects on this same QRhi, then allocates.
+        scene = stc.Scene(core, engine, host, CARD, 1.0, packs, passes=passes, targets=targets, settings=values)
+        scene.targets(app)
+        facts["successful_allocation"] = stage_accounting_verdict(
+            _live(core), baseline, _stage_accounting_expected(stage, scene.mode.state(), values))
+        checks["successful_allocation_accounts_all_owned_objects"] = facts["successful_allocation"]["pass"]
+        before_resize = _live(core)
+        before_state = scene.mode.state()
+        scene.resize((768, 512))
+        scene.targets(app)
+        after_resize = _live(core)
+        facts["successful_rebind"] = stage_accounting_verdict(
+            after_resize, baseline, _stage_accounting_expected(stage, scene.mode.state(), values))
+        checks["successful_rebind_accounts_all_owned_objects"] = facts["successful_rebind"]["pass"]
+        checks["successful_resize_reuses_bindings_without_churn"] = (
+            after_resize["stage_objects_created"] == before_resize["stage_objects_created"]
+            and scene.mode.state().get("texture_jobs", {}).get("rebinds", -1)
+            > before_state.get("texture_jobs", {}).get("rebinds", -1))
+        _close(scene, host, app)
+        scene = None
+        facts["released_after_success"] = stage_accounting_verdict(_live(core), baseline, zero)
+        checks["success_releases_exactly_to_baseline"] = facts["released_after_success"]["pass"]
+    finally:
+        fault("fail_allocation", 0)
+        fault("fail_build", 0)
+        _controls(core, ("skip_stage_release",), False)
+        if scene is not None:
+            _close(scene, host, app)
+        if skipped_release and _live(core).get("stage_left_behind", 0) > baseline.get("stage_left_behind", 0):
+            # Even an interrupted negative must reclaim its held wrappers while this QRhi is still alive.
+            reclaim = stc.Scene(core, engine, host, CARD, 1.0, packs, passes=passes, targets=targets, settings=values)
+            try:
+                host.frames(3)
+            finally:
+                _close(reclaim, host, app)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def round_accounting(core, engine, app, api: str, packs: dict) -> dict:
+    """Allocation/binding faults use real owner paths; no synthetic counter mutation or pixel verdict."""
+    cases = []
+    for stage, attempts in (("bloom", (1, 2, 5, 6)), ("defocus", (1, 2))):
+        for resize in (False, True):
+            cases.extend((stage, "fail_allocation", attempt, resize, False) for attempt in attempts)
+    for stage, attempts in (("bloom", (1, 4, 10)), ("defocus", (1, 4, 7))):
+        cases.extend((stage, "fail_build", attempt, False, False) for attempt in attempts)
+    cases.extend((stage, "fail_build", attempt, True, False)
+                 for stage, attempts in (("bloom", (1, 4)), ("defocus", (1, 2))) for attempt in attempts)
+    cases.extend((stage, "fail_allocation", attempt, False, True)
+                 for stage, attempts in (("bloom", (1, 2, 5)), ("defocus", (1, 2))) for attempt in attempts)
+    host = _host(core, (768, 512))
+    results = {}
+    try:
+        for stage, control, attempt, resize, skipped in cases:
+            label = f"{stage}_{control}_{attempt}_{'resize' if resize else 'cold'}{'_skip_release' if skipped else ''}"
+            if api == "vulkan":
+                core.set_vulkan_phase(f"n34 accounting {label}")
+            results[label] = _allocation_fault_case(core, engine, app, host, packs, stage, control, attempt,
+                                                    resize=resize, skipped_release=skipped)
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    return {"pass": bool(results) and all(result["pass"] for result in results.values()), "cases": results}
 
 
 def _records(core, engine, app, host, packs: dict, case: Case, count: int) -> dict:
@@ -1156,11 +1372,15 @@ def round_defocus_boundaries(core, engine, app, api: str, packs: dict) -> dict:
     try:
         for samples in (1, 4):
             baseline = {}
-            for phase, flush, query in (("off_before", False, False), ("boundaries", True, False),
-                                         ("queries", False, True), ("off_after", False, False)):
+            for phase, control, expected in (("off_before", None, 0), ("boundaries", "flush_defocus_draws", 3),
+                                              ("before_gather", "flush_defocus_before_gather", 1),
+                                              ("between_draws", "flush_defocus_between_draws", 1),
+                                              ("after_sprites", "flush_defocus_after_sprites", 1),
+                                              ("queries", "time_defocus_draws", 0), ("off_after", None, 0)):
                 _controls(core, ("time_defocus_draws",), False)
-                _controls(core, ("flush_defocus_draws",), flush)
-                _controls(core, ("time_defocus_draws",), query)
+                _controls(core, ("flush_defocus_draws",), False)
+                if control:
+                    _controls(core, (control,), True)
                 timings = {}
                 for label, changes in (("full", {}), ("no_sprites", {"u_defocus_highlight": 1e6})):
                     case = Case(f"boundaries_{label}", "eb", card=size, samples=samples, changes=changes)
@@ -1181,13 +1401,18 @@ def round_defocus_boundaries(core, engine, app, api: str, packs: dict) -> dict:
                         _close(scene, host, app)
                     n = after["stage_defocus_timed"] - before["stage_defocus_timed"]
                     skipped = after["stage_defocus_time_skipped"] - before["stage_defocus_time_skipped"]
-                    timings[label] = {"timing": timed, "draws_timed": n, "skipped": skipped, "state": state}
+                    records = after["stage_defocus_records"] - before["stage_defocus_records"]
+                    flushes = after["stage_defocus_flushes"] - before["stage_defocus_flushes"]
+                    timings[label] = {"timing": timed, "draws_timed": n, "skipped": skipped, "state": state,
+                                      "defocus_records": records, "boundary_flushes": flushes}
                     metrics = (timed.get("median_ms"), timed.get("p10_ms"), timed.get("p90_ms"))
                     checks[f"x{samples}_{phase}_{label}"] = (
                         timed.get("samples", 0) >= stc.COST_MIN_SAMPLES and not state.get("content_failing")
                         and not state.get("error") and not timed.get("error")
                         and all(isinstance(v, (int, float)) and math.isfinite(v) for v in metrics)
-                        and (n >= stc.COST_MIN_SAMPLES and skipped == 0 if query else n == 0 and skipped == 0))
+                        and records > 0 and flushes == expected * records
+                        and (n >= stc.COST_MIN_SAMPLES and skipped == 0 if phase == "queries"
+                             else n == 0 and skipped == 0))
                     if phase == "off_before":
                         baseline[label] = frame
                     checks[f"x{samples}_{phase}_{label}_pixels"] = bool((frame == baseline[label]).all())
@@ -2046,6 +2271,7 @@ def child(args) -> dict:
                           "rest": lambda: round_rest(core, engine, app, args.api, packs),
                           "steady": lambda: round_steady(core, engine, app, args.api, packs),
                           "retire": lambda: round_retire(core, engine, app, args.api, packs),
+                          "accounting": lambda: round_accounting(core, engine, app, args.api, packs),
                           "barriers": lambda: round_barriers(core, engine, app, args.api, packs),
                           "cost": lambda: round_cost(core, engine, app, args.api, packs),
                           "defocus_cost": lambda: round_defocus_cost(core, engine, app, args.api, packs),
@@ -2131,6 +2357,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", help=argparse.SUPPRESS)
     parser.add_argument("--child-json", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+
+    if "accounting" in args.rounds and len(args.rounds) != 1:
+        parser.error("accounting runs alone in its own child process")
 
     if args.child:
         try:

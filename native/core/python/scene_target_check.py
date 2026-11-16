@@ -33,6 +33,9 @@ Rounds:
              makes them again; destruction between attachment steps and actual scene-graph invalidation release the
              targets before host close; skipped edges fail the same retirement predicate; with Vulkan
              validation (synchronisation validation) through every round.
+  scissor    (each API) an actual four-vertex quad at 1x and 4x: natural content viewport, deliberately enlarged
+             allocation viewport with the same content scissor, then natural again. Content is drawn, colour/depth
+             slack keeps its clear, captures match, and changing the viewport allocates nothing.
   cost       (each API) at 2560x1440 and 3840x2160: the surface's GPU time (the content's whole record: every target
              pass) median and p90, single-sampled and 4x (the 4x minus 1x difference bounds the resolves: choice G's
              budget, 0.3 ms at 2560x1440 and 0.6 ms at 4K); the light attachment's clear (the ambient target at 2048 x
@@ -42,6 +45,12 @@ Rounds:
              have no readback between them to order a resolve), so a Vulkan cost round without the validation layer
              fails.
 Run alone (not in the default set):
+  readback_metadata (each API) complete enumeration beyond the former fixed callback capacity, then bounded
+             readbacks with unaligned content and odd mip extents. Checks normalized-UV mip metadata and byte shapes,
+             subsequent readback and release; no non-base pixel parity or filtering-fringe containment claim.
+  scissor_control (each API) the same enlarged viewport and quad, with UsesScissor disabled: actual colour and depth
+             writes fill the slack and fail the positive predicate. Restoring scissor on the same item restores the
+             frame (pipeline flags must rebuild), without reallocating targets. Controls reset in finally.
   placement_control (--apis opengl) put content at the image top; rule (a) rejects the edge reads against the unchanged
              independent Python renderer. Parity includes an aligned 512x320 scene beside 480x270 and 720x405.
   resize_control (each API) the native owner uses a true one-pixel allocation bucket, including two-pixel shrink
@@ -89,10 +98,10 @@ import host_check  # noqa: E402
 from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("parity", "msaa", "rest", "resize", "retire", "cost")
+ROUNDS = ("parity", "msaa", "rest", "resize", "retire", "scissor", "cost")
 # Run on its own (its skipped phase is expected to show hazards): --apis vulkan --rounds prime_control
 CONTROL_ROUNDS = ("prime_control", "cost_parts", "placement_control", "resize_control",
-                  "partial_retire_control", "invalidation_control")
+                  "partial_retire_control", "invalidation_control", "scissor_control", "readback_metadata")
 # The Python renderer's cost on the same load (the reference child, OpenGL): --rounds python_cost
 PYTHON_ROUNDS = ("python_cost",)
 CHILD_TIMEOUT_S = 1500
@@ -289,6 +298,50 @@ def _content(entry: dict):
     return entry["array"][rows - height:, :width]
 
 
+def readback_metadata_contract(pixels: list[dict], names, allocation, content) -> dict:
+    """Exact RGBA8 mip enumeration and nominal bottom-anchored content metadata, not pixel/filter validity."""
+    levels = max(allocation).bit_length()
+    expected = {}
+    for name in names:
+        for level in range(levels):
+            size = tuple(max(1, dimension >> level) for dimension in allocation)
+            projected = tuple(min(size[axis], (content[axis] * size[axis] + allocation[axis] - 1)
+                                  // allocation[axis]) for axis in range(2))
+            expected[name + (f"@{level}" if level else "")] = (level, size, projected)
+    well_formed = isinstance(pixels, list) and all(isinstance(p, dict) and isinstance(p.get("name"), str)
+                                                  for p in pixels)
+    actual = {p["name"]: p for p in pixels} if well_formed else {}
+    checks = {"complete_unique_enumeration": bool(expected) and well_formed and len(pixels) == len(expected)
+              and len(actual) == len(pixels) and actual.keys() == expected.keys(),
+              "level_relative_size_and_normalized_content": True, "rgba8_byte_shapes": True,
+              "base_metadata_preserved": True, "nominal_bottom_anchored_rects_in_bounds": True}
+    facts = {"expected_entries": len(expected), "actual_entries": len(pixels) if well_formed else None,
+             "levels_per_attachment": levels, "allocation": allocation, "content": content,
+             "missing_names": sorted(expected.keys() - actual.keys()),
+             "unexpected_names": sorted(actual.keys() - expected.keys()), "entries": []}
+    for name, (level, size, projected) in expected.items():
+        p = actual.get(name, {})
+        metadata_ok = (p.get("level") == level and type(p.get("level")) is int
+                       and p.get("size") in (size, list(size)) and p.get("content") in (projected, list(projected)))
+        checks["level_relative_size_and_normalized_content"] &= metadata_ok
+        data = p.get("data")
+        shape_ok = (p.get("format") == "rgba8" and p.get("samples") == 1
+                    and isinstance(data, (bytes, bytearray, memoryview)) and len(data) == size[0] * size[1] * 4)
+        checks["rgba8_byte_shapes"] &= shape_ok
+        if level == 0:
+            checks["base_metadata_preserved"] &= metadata_ok
+        # This describes the nominal slice only; no claim that mip filtering cannot bleed beyond it.
+        rows = (size[1] - projected[1], size[1])
+        checks["nominal_bottom_anchored_rects_in_bounds"] &= (metadata_ok and 0 <= rows[0] < rows[1]
+                                                            and 0 < projected[0] <= size[0])
+        facts["entries"].append({"name": name, "level": p.get("level"), "size": p.get("size"),
+                                 "content": p.get("content"), "content_image_rows": rows,
+                                 "content_image_columns": (0, projected[0]),
+                                 "format": p.get("format"), "samples": p.get("samples"),
+                                 "data_bytes": len(data) if isinstance(data, (bytes, bytearray, memoryview)) else None})
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
 def analytic(frames: dict, settings: dict) -> dict:
     """The native frame's own checks (see the module notes)."""
     import numpy as np
@@ -338,6 +391,79 @@ def analytic(frames: dict, settings: dict) -> dict:
 
 
 # --------------------------------------------------------------------------------------------------- the rounds
+
+def _readback_metadata_program(packs: dict, target_count: int):
+    from rendering.native.mode import ModePass, ModeTarget, PassSampler, TargetAttachment
+
+    targets = tuple(ModeTarget(f"readback{index}", tuple(TargetAttachment(f"colour{channel}", "rgba8")
+                                                      for channel in range(4)), mips=True)
+                    for index in range(target_count))
+    passes = tuple(ModePass(f"write{index}", packs["readback_metadata"], "replace", target=target.name)
+                   for index, target in enumerate(targets))
+    passes += tuple(ModePass(f"show{index}", packs["show_colour"], "replace",
+                            samplers=(PassSampler("u_scene", f"{target.name}.{target.colour[0].name}", "nearest"),))
+                    for index, target in enumerate(targets))
+    return passes, targets
+
+
+def _metadata_readback(scene, timeout_s: float = 10.0) -> list[dict]:
+    """Keep the list intact: converting to name->array would hide duplicate callbacks."""
+    scene.mode.read_targets()
+    scene.mode.update()
+    deadline = time.monotonic() + timeout_s
+    while True:
+        scene.host.frames(1)
+        pixels = scene.mode.target_pixels()
+        if pixels is not None:
+            return pixels
+        if time.monotonic() > deadline:
+            raise RuntimeError("metadata readback did not complete within its bound")
+
+
+def round_readback_metadata(core, engine, app, packs: dict, folder: Path) -> dict:
+    """Audit 6: metadata/completeness beyond the old fixed callback capacity, never non-base pixel parity."""
+    import probe_rings
+    from rendering.native.scene_targets import next_allocation
+
+    packs = dict(packs, readback_metadata=probe_rings.bake(_scene_module().shader_text("readback_metadata.frag"),
+                                                         "readback_metadata.frag", folder))
+    cases = (("large", (1024, 1024), 4), ("bounded_after_large", (83, 47), 1),
+             ("odd_mip_extents", (321, 257), 1))
+    host = core.hidden_host(*_host_size([case[1] for case in cases]))
+    checks, facts = {}, {"scope": "metadata/completeness only; non-base mips not generated or pixel-judged"}
+    try:
+        for label, card, target_count in cases:
+            passes, targets = _readback_metadata_program(packs, target_count)
+            names = tuple(f"{target.name}.{attachment.name}" for target in targets for attachment in target.colour)
+            allocation, _ = next_allocation((0, 0), card)
+            scene = Scene(core, engine, host, card, 1.0, packs, passes=passes, targets=targets, settings={})
+            try:
+                result = readback_metadata_contract(_metadata_readback(scene), names, allocation, card)
+                facts[label] = result["facts"]
+                checks.update({f"{label}_{key}": value for key, value in result["checks"].items()})
+                live = core.composite_live()
+                facts[label]["readbacks_pending_after_completion"] = live.get("scene_target_readbacks")
+                checks[f"{label}_callbacks_complete"] = live.get("scene_target_readbacks") == 0
+                if label == "bounded_after_large":
+                    repeated = readback_metadata_contract(_metadata_readback(scene), names, allocation, card)
+                    checks[f"{label}_subsequent_readback_succeeds"] = repeated["pass"]
+                    facts[label]["subsequent_readback"] = repeated["facts"]
+                    checks[f"{label}_subsequent_callbacks_complete"] = core.composite_live().get(
+                        "scene_target_readbacks") == 0
+            finally:
+                scene.close(app)
+                host.frames(3)
+                host_check._flush_deletes(app)
+            gone = core.composite_live()
+            facts[label]["released"] = {key: gone.get(key) for key in
+                ("scene_targets", "scene_target_textures", "scene_target_bytes", "scene_target_readbacks",
+                 "mode_resources", "mode_sources")}
+            checks[f"{label}_resources_released"] = _targets_retired(gone) and gone.get("mode_sources") == 0
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
 
 PARITY_CASES = (("dpr1", CARD, 1.0, 1.0), ("dpr1.5", CARD, 1.5, 1.0),
                 ("aligned", ALIGNED_CARD, 1.0, 1.0), ("glow_off", CARD, 1.0, 0.0))
@@ -419,6 +545,141 @@ def round_parity(core, engine, app, api: str, packs: dict, out: Path, *, top_con
     # The broken form's pixel verdict belongs to the parent, against its independent Python child.
     return {"pass": True if top_control else all(checks.values()), "checks": {} if top_control else checks,
             "facts": {**facts, **({"broken_analytic_checks": checks} if top_control else {})}}
+
+
+def scissor_contract(frames: dict, requested_samples: int = 1) -> dict:
+    """One predicate for guarded frames and their broken control; placement is the independent image-row rule."""
+    import numpy as np
+
+    colour, capture, depth = (frames[name] for name in ("scene.colour", "scene.capture_colour", "scene.capture_depth"))
+    width, height = colour["content"]
+    pixels = colour["array"]
+    slack = np.ones(pixels.shape[:2], bool)
+    slack[pixels.shape[0] - height:, :width] = False
+    quad = np.array([255, 0, 255, 255], dtype=np.uint8)
+    checks = {
+        "actual_sample_count_is_requested": all(entry.get("samples") == requested_samples
+                                                for entry in (colour, capture, depth)),
+        "slack_on_both_axes": pixels.shape[1] > width > 0 and pixels.shape[0] > height > 0,
+        "content_is_the_quad": bool((_content(colour) == quad).all()),
+        "content_depth_is_the_quad": bool((_content(depth) == 0.25).all()),
+        "slack_colour_keeps_clear": bool(slack.any() and (pixels[slack] == 0).all()),
+        "slack_depth_keeps_far_plane": bool(slack.any() and (depth["array"][slack] == 1.0).all()),
+        "capture_is_the_scene": bool(np.array_equal(pixels, capture["array"])),
+    }
+    written_colour = np.all(pixels[slack] == quad, axis=-1)
+    written_depth = depth["array"][slack] == 0.25
+    return {"pass": all(checks.values()), "checks": checks,
+            "facts": {"allocation": colour["size"], "content": colour["content"],
+                      "requested_samples": requested_samples,
+                      "actual_samples": {key: frames[key].get("samples") for key in frames},
+                      "slack_texels": int(slack.sum()), "slack_quad_colour_texels": int(written_colour.sum()),
+                      "slack_quad_depth_texels": int(written_depth.sum())}}
+
+
+def _scissor_program(folder: Path, samples: int):
+    import probe_rings
+    from rendering.native.mode import CapturePass, ModePass, ModeTarget, PassGeometry, TargetAttachment
+
+    st = _scene_module()
+    vertex = probe_rings.bake(st.shader_text("scissor_quad.vert"), "scissor_quad.vert", folder)
+    fragment = probe_rings.bake(st.shader_text("scissor_quad.frag"), "scissor_quad.frag", folder)
+    quad = ModePass("quad", fragment, "replace", target="scene", depth_test="always", depth_write=True,
+                    geometry=PassGeometry(vertex, topology="triangle_strip", vertices=4))
+    return (quad, CapturePass("background", "scene")), (
+        ModeTarget("scene", (TargetAttachment("colour", "rgba8"),), depth=True, samples=samples),)
+
+
+def round_scissor(core, engine, app, api: str, folder: Path, out: Path, *, skip_control: bool = False) -> dict:
+    """The enlarged viewport is explicit harness instrumentation, not a claim that clipped triangles exceed it."""
+    import numpy as np
+
+    card = (83, 47)             # slack on both axes; deliberately independent of authorable settings
+    host = core.hidden_host(*_host_size([card]))
+    checks, facts, sheet = {}, {}, {}
+    try:
+        for samples in (1, 4):
+            core.scene_target_control("oversize_viewport", 0)
+            core.scene_target_control("skip_scissor", 0)
+            passes, targets = _scissor_program(folder, samples)
+            scene = Scene(core, engine, host, card, 1.0, {}, passes=passes, targets=targets, settings={})
+            try:
+                natural = scene.targets(app)
+                initial = core.composite_live()
+                natural_result = scissor_contract(natural, samples)
+                checks[f"x{samples}_natural"] = natural_result["pass"]
+                facts[f"x{samples}_natural"] = natural_result
+                core.scene_target_control("oversize_viewport", 1)
+                if skip_control:
+                    core.scene_target_control("skip_scissor", 1)
+                enlarged = scene.targets(app)
+                judged = scissor_contract(enlarged, samples)
+                facts[f"x{samples}_enlarged"] = judged
+                checks[f"x{samples}_enlarged_uses_requested_samples"] = judged["checks"][
+                    "actual_sample_count_is_requested"]
+                sheet[f"x{samples}_natural"] = natural
+                sheet[f"x{samples}_enlarged_{'unguarded' if skip_control else 'guarded'}"] = enlarged
+                if skip_control:
+                    f = judged["facts"]
+                    checks[f"x{samples}_positive_predicate_rejects_missing_scissor"] = not judged["pass"]
+                    checks[f"x{samples}_quad_actually_writes_all_colour_and_depth_slack"] = (
+                        f["slack_texels"] > 0
+                        and f["slack_quad_colour_texels"] == f["slack_quad_depth_texels"] == f["slack_texels"])
+                    # Same item, same program: restoring the flag must rebuild the pipeline before its next draw.
+                    core.scene_target_control("skip_scissor", 0)
+                    guarded = scene.targets(app)
+                    guarded_result = scissor_contract(guarded, samples)
+                    checks[f"x{samples}_restored_scissor"] = guarded_result["pass"]
+                    facts[f"x{samples}_restored_scissor"] = guarded_result
+                    sheet[f"x{samples}_restored_scissor"] = guarded
+                else:
+                    checks[f"x{samples}_enlarged_viewport_keeps_slack_clear"] = judged["pass"]
+                core.scene_target_control("oversize_viewport", 0)
+                restored = scene.targets(app)
+                restored_result = scissor_contract(restored, samples)
+                checks[f"x{samples}_restored_natural"] = restored_result["pass"]
+                facts[f"x{samples}_restored_natural"] = restored_result
+                checks[f"x{samples}_natural_frame_restored_exactly"] = all(
+                    np.array_equal(natural[key]["array"], restored[key]["array"]) for key in natural)
+                final = core.composite_live()
+                checks[f"x{samples}_targets_not_reallocated"] = all(
+                    initial[key] == final[key] for key in ("scene_target_allocations", "scene_target_steps",
+                                                           "scene_target_bytes", "scene_target_textures"))
+                facts[f"x{samples}_allocation_counts"] = {
+                    key: [initial[key], final[key]] for key in ("scene_target_allocations", "scene_target_steps")}
+            finally:
+                scene.close(app)
+                host.frames(2)
+                host_check._flush_deletes(app)
+    finally:
+        core.scene_target_control("oversize_viewport", 0)
+        core.scene_target_control("skip_scissor", 0)
+        host.close()
+        host_check._flush_deletes(app)
+    _scissor_sheet(out, api, sheet, control=skip_control)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def _scissor_sheet(out: Path, api: str, frames: dict, *, control: bool) -> None:
+    """One labelled sheet of full allocations; raw frames are not retained."""
+    from PIL import Image, ImageDraw
+    import numpy as np
+
+    rows = []
+    for name, textures in frames.items():
+        row = Image.new("RGB", (512, 154), "#202020")
+        ImageDraw.Draw(row).text((4, 3), name, fill="white")
+        for index, key in enumerate(("scene.colour", "scene.capture_depth")):
+            pixels = textures[key]["array"]
+            if pixels.ndim == 2:
+                pixels = np.repeat((pixels[..., None] * 255).astype(np.uint8), 3, axis=-1)
+            tile = Image.fromarray(pixels[..., :3]).resize((256, 128), Image.Resampling.NEAREST)
+            row.paste(tile, (index * 256, 24))
+        rows.append(row)
+    sheet = Image.new("RGB", (512, 154 * len(rows)))
+    for index, row in enumerate(rows):
+        sheet.paste(row, (0, index * 154))
+    sheet.save(out / f"scissor_{'control_' if control else ''}{api}.png")
 
 
 def _previous_frame(core, engine, app, host, packs: dict) -> dict:
@@ -1520,6 +1781,11 @@ def child(args) -> dict:
                                 core.scene_target_control("one_pixel_bucket", 0)
                         elif name == "retire":
                             record[name] = round_retire(core, engine, app, packs, folder)
+                        elif name == "readback_metadata":
+                            record[name] = round_readback_metadata(core, engine, app, packs, folder)
+                        elif name in ("scissor", "scissor_control"):
+                            record[name] = round_scissor(core, engine, app, args.api, folder, out,
+                                                         skip_control=name == "scissor_control")
                         elif name in ("partial_retire_control", "invalidation_control"):
                             case = "mid_allocation" if name == "partial_retire_control" else "scene_graph_invalidated"
                             record[name] = _retire_edge(core, engine, app, packs, case, skip_control=True)
@@ -1627,7 +1893,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.child and "placement_control" in args.rounds and args.apis != ["opengl"]:
         parser.error("placement_control uses --apis opengl (its oracle is the Python OpenGL renderer)")
-    for control in ("placement_control", "resize_control", "partial_retire_control", "invalidation_control"):
+    for control in ("placement_control", "resize_control", "partial_retire_control", "invalidation_control",
+                    "scissor_control", "readback_metadata"):
         if control in args.rounds and len(args.rounds) != 1:
             parser.error(f"{control} runs alone in its own child process")
 
