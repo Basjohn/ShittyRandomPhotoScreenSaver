@@ -601,6 +601,19 @@ the feature (D3D11 is not stated).
   retains unchanged bounds at DPR1.5. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
   eliminated suspicions and evidence. Follow the Native Port Playbook; no registration or tolerance widening yet.
   - [x] Class-word upload and portable unsigned-vector admission proved on both APIs; unchanged wire record (R-238).
+  - [ ] Retain and document the replay, fade-input, attachment and reference-fringe diagnostics as reusable repository
+    tools for correctness and later optimisation, preserving provenance, negative controls and distinct verdicts.
+    Current promotion: `tools/visualizer_replay/bubble_native_diagnostics.py`, private `_bubble_native_*.py` helpers
+    and `tests/test_bubble_native_diagnostics.py`; finish the independent receipt-provenance audit before landing.
+  - [ ] **In progress: shared mask antialias support.** Validate the unlanded
+    `widgets/spotify_visualizer/shaders/bubble_ambient_mask.vert` and `.vert.qsb` candidate through a complete owner
+    replay and old/new Python reference-fringe comparison, then land only the proved slice. The focused regression is
+    `tests/test_bubble_ambient_big_occlusion.py`; the old shader fails and the candidate passes its focused checks.
+    Resume from `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` and
+    `.artifacts/evidence/native_core/n5_1_bubble/20261116_mask_support_candidate/`.
+    The pending archive/fringe helper is
+    `.artifacts/evidence/native_core/n5_1_bubble/20261116_reference_archive_prep/archive_reference.py`;
+    finish its independent provenance/owner-completion review before the serial hidden runs.
   - [ ] Resolve the remaining one-level steady ties and seven fade pixels above one level (maximum five) with
     unchanged D12 bounds. Validate shared mask-quad antialias support at the proved post-mask residual; all532
     larger steady errors are gone and the Python reference is unchanged. Preserve the full replay sequence:
