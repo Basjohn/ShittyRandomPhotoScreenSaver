@@ -145,6 +145,9 @@ QSize nextAllocation(const QSize &current, const QSize &needed, QString *reason)
 // rows [H-h, H) and columns [0, w) of an allocation of `allocation` pixels. On a Y-up framebuffer (OpenGL, whose core
 // targets are flipped by F1 so memory row 0 is the image's top) QRhi's y = H - h; elsewhere y = 0.
 QRect contentViewport(bool yUpInFramebuffer, const QSize &allocation, const QSize &content);
+// Harness only; defaults preserve the product path. A nonzero allocation limit bounds one record's warm-up steps.
+bool setSceneTargetControl(const QByteArray &name, int value);
+int sceneAllocationStepLimit();
 // D14 point 7: the largest count in `supported` not above `requested`, 1 when there is none.
 int clampSamples(const QList<int> &supported, int requested);
 // The harness's control of the clamp (its negative control): counts taken out of every device's supported set.
@@ -173,7 +176,7 @@ void countNearestResolve();
 // The process's scene targets (lifecycle proofs, composite_live, the destruction barrier's reading).
 struct SceneTargetCounts
 {
-    int targets = 0;       // targets holding objects
+    int targets = 0;       // targets holding objects, including between allocation steps
     int textures = 0;      // their QRhiTextures (colour, resolves, depth, captures)
     qint64 bytes = 0;      // their bytes (every sample)
     qint64 allocations = 0; // allocations made (a new size or layout)

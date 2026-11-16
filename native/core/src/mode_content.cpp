@@ -5918,8 +5918,13 @@ bool ModeContent::syncTargets(QRhi *rhi, const ColorTarget &target, QString *err
     if (relayout)
         releasePipelines();                   // before the descriptors they were built over go (allocateStep)
     bool done = m_targets.complete();
-    while (ok && !done)                       // every step now; N3.6 spaces them over warm-up frames
+    const int stepLimit = done ? 0 : sceneAllocationStepLimit(); // harness only; no work at rest
+    int steps = 0;
+    while (ok && !done && (!stepLimit || steps < stepLimit)) // N3.6 will schedule the product's warm-up units
+    {
         ok = m_targets.allocateStep(&done, error);
+        ++steps;
+    }
     if (!ok) {
         // The content's failure, latched like a build's (the targets go; the frame in the surface stays). The pipelines
         // go before the targets' descriptors (audit 2, L5: allocateStep leaves a failed target's objects to this).
@@ -5930,6 +5935,13 @@ bool ModeContent::syncTargets(QRhi *rhi, const ColorTarget &target, QString *err
         m_source->noteFailure(*error, failures);
         m_targets.takeStateChange();
         m_source->noteTargets(m_targets.state(rhi));
+        return false;
+    }
+    if (!done) {
+        // A harness record stopped between attachment allocations. Never build a pipeline over partial targets.
+        if (m_targets.takeStateChange())
+            m_source->noteTargets(m_targets.state(rhi));
+        *error = QStringLiteral("harness: scene target allocation paused between steps");
         return false;
     }
     if (m_targets.objectGeneration() != m_targetObjectsSeen) {

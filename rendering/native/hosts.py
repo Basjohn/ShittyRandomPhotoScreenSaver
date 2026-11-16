@@ -185,6 +185,10 @@ class HiddenHost(Host):
         """Renders ``count`` frames (the GIL is released while the render thread works)."""
         self._module.host_frames(self._live(), int(count))
 
+    def invalidate_scene_graph(self) -> None:
+        """Harness only: actual render-thread scene-graph invalidation. Rendering is refused afterward; close next."""
+        self._module.host_invalidate_scene_graph(self._live())
+
     def set_device_pixel_ratio(self, dpr: float) -> None:
         """Qt Quick renders the host's device pixels at this ratio (its render target's); the content is resized to
         the new logical size."""

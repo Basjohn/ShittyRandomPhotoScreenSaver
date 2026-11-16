@@ -46,7 +46,7 @@ from rendering.native.spectrum import NativeSpectrum, spectrum_block
 MODULE_NAME = "_srpss_native_core"
 PACKAGE_MODULE = f"{__package__}.{MODULE_NAME}"
 #: The ABI this package speaks; ``SRPSS_NATIVE_CORE_ABI`` in ``native/core/src/abi.h`` (a test holds them equal).
-EXPECTED_ABI = 20
+EXPECTED_ABI = 21
 HOST_KINDS = ("window", "hidden")
 
 
@@ -217,6 +217,10 @@ class NativeCore:
         """N3.1, harness only: sample counts taken out of every device's supported set (the clamp's negative control);
         ``()`` restores them."""
         self.module.scene_sample_counts_control([int(v) for v in removed])
+
+    def scene_target_control(self, name: str, value: int = 0) -> None:
+        """Harness only: content_at_top / one_pixel_bucket (0/1), allocation_steps (0..32; 0 restores all steps)."""
+        self.module.scene_target_control(str(name), int(value))
 
     def scene_depth_prime_control(self, skip: bool) -> None:
         """N3.1, harness only: the depth's rule C prime skipped (``True``: its negative control under synchronisation

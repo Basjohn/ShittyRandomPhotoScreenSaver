@@ -129,6 +129,9 @@ public:
     bool frames(int count, QString *error);
     // One frame, with Qt Quick's target read back at its end. Call with the GIL released.
     bool readFrame(QuickReadback *out, QString *error);
+    // Harness only: invalidate Qt's actual scene graph on the render thread, with the driver still connected.
+    // Terminal for rendering; close remains required and idempotent.
+    bool invalidateSceneGraph(QString *error);
     // Detaches, invalidates Qt's scene graph on the render thread, deletes the render control (Qt's QRhi) and the window,
     // then destroys the device (Vulkan). Call with the GIL released. Idempotent.
     QJsonObject close();

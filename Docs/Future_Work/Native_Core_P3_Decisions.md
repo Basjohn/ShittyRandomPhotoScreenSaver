@@ -1115,7 +1115,8 @@ to the GL limits.
    pipelines. Everything is released with the content (the node's deletion, a mode switch, retirement, the scene graph's
    invalidation) on the render thread, the QRhi alive; process-wide counts (targets, attachments, bytes, allocations)
    join `composite_live` (the destruction barrier reads only the jobs in flight, `rendering/native/loader.py`; audit 2,
-   L4). Nothing at rest: a target is recorded only when its surface is dirty.
+   L4). Counts include partial allocations after every attachment step, including a failed step awaiting release;
+   they are updated only at allocation/release edges. Nothing at rest: a target is recorded only when its surface is dirty.
 4. *The HDR intermediate is RGBA16F* (the Python renderer's: colour, emission, the HDR capture, Bubble's light). No
    R11G11B10F: QRhi lacks it and D5.3's formats service is admitted only on a measured cost. The tone map into the
    surface is N3.4's HDR resolve, not this primitive. Rules B and C hold for every attachment: preserved, cleared by a
@@ -1215,6 +1216,14 @@ to the GL limits.
 `contentViewport`, `clampSamples`) and `SceneTargets`, the content's owner; `rendering/native/scene_targets.py` mirrors
 the rules for the GPU-free tests and `scene3d.scene_samples` is the one sampling request. The proof is
 `native/core/python/scene_target_check.py` (evidence under `.artifacts/evidence/native_core/n3_1/`):
+- N3.1c L3 (ABI 21, 16 Nov): parity includes a bucket-aligned card beside both unaligned DPR cases; the 1px-step
+  drag matches the allocation rule and the true native 1px-bucket control. The content-at-top control is rejected by
+  independent Python-renderer edge reads. Actual item destruction between attachment steps and render-thread scene
+  graph invalidation retire targets before host close; their skipped-edge controls fail the same zero-resource predicate
+  in separate processes. Partial objects are counted at every allocation edge ([R-227](../Historical_Bugs/R-227_Partial_Scene_Allocations_Invisible_To_Accounting.md)).
+  Evidence: `20261116_l3_positive`, `20261116_l3_placement_control`, `20261116_l3_resize_control`,
+  `20261116_l3_retire_after_accounting`, `20261116_l3_partial_control_after_accounting` and
+  `20261116_l3_invalidation_control_after_accounting`; Vulkan validation has only the recorded Qt defect A.
 - Single-sampled, both backends pass: rule (a) against the Python `SceneTarget` (exact but for `scene.colour`, 3 px one
   float16 step past, and coverage one level), rule (b) Vulkan against OpenGL (exact but the light, one float16 step),
   the analytic checks (captured depth within 1e-7, after-pass drawn only behind loaded depth, HDR above 1 kept,

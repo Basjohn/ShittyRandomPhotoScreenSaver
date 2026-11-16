@@ -15,6 +15,9 @@ QAtomicInteger<qint64> g_bytes { 0 };
 QAtomicInteger<qint64> g_allocations { 0 };
 QAtomicInteger<qint64> g_steps { 0 };
 QAtomicInteger<int> g_readbacksPending { 0 };
+QAtomicInteger<int> g_contentAtTop { 0 };
+QAtomicInteger<int> g_onePixelBucket { 0 };
+QAtomicInteger<int> g_allocationStepLimit { 0 };
 
 QMutex &removedMutex()
 {
@@ -95,6 +98,34 @@ qint64 textureBytes(const QRhiTexture *texture)
         }
     }
     return bytes;
+}
+
+void countTargetObjects(SceneTargets::Target &t)
+{
+    qint64 bytes = 0;
+    int textures = 0;
+    const auto add = [&](const std::unique_ptr<QRhiTexture> &texture) {
+        if (texture) {
+            ++textures;
+            bytes += textureBytes(texture.get());
+        }
+    };
+    for (int i = 0; i < kMaxTargetColour; ++i) {
+        add(t.colour[i]);
+        add(t.resolve[i]);
+    }
+    add(t.depth);
+    add(t.depthNearest);
+    add(t.captureColour);
+    add(t.captureDepth);
+    if ((textures > 0) != (t.textures > 0))
+        g_targets.fetchAndAddRelaxed(textures > 0 ? 1 : -1);
+    if (textures != t.textures)
+        g_textures.fetchAndAddRelaxed(textures - t.textures);
+    if (bytes != t.bytes)
+        g_bytes.fetchAndAddRelaxed(bytes - t.bytes);
+    t.textures = textures;
+    t.bytes = bytes;
 }
 
 } // namespace
@@ -478,6 +509,8 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
 int bucketPixels(int pixels)
 {
     const int p = qMax(1, pixels);
+    if (g_onePixelBucket.loadAcquire())
+        return p;
     return qMax(kSceneBucket, ((p + kSceneBucket - 1) / kSceneBucket) * kSceneBucket);
 }
 
@@ -492,12 +525,13 @@ QSize nextAllocation(const QSize &current, const QSize &needed, QString *reason)
     // else kept (a grow on one axis never re-buckets the other one down).
     bool grown = false;
     bool shrunk = false;
+    const int bucketSize = g_onePixelBucket.loadAcquire() ? 1 : kSceneBucket;
     const auto axis = [&](int have, int need, int bucket) {
         if (need > have) {
             grown = true;
             return bucket;
         }
-        if (have - bucket >= 2 * kSceneBucket) {
+        if (have - bucket >= 2 * bucketSize) {
             shrunk = true;
             return bucket;
         }
@@ -518,7 +552,27 @@ QRect contentViewport(bool yUpInFramebuffer, const QSize &allocation, const QSiz
 {
     const int w = qMin(content.width(), allocation.width());
     const int h = qMin(content.height(), allocation.height());
-    return QRect(0, yUpInFramebuffer ? allocation.height() - h : 0, w, h);
+    const int slack = allocation.height() - h;
+    return QRect(0, g_contentAtTop.loadAcquire() ? (yUpInFramebuffer ? 0 : slack)
+                                              : (yUpInFramebuffer ? slack : 0), w, h);
+}
+
+bool setSceneTargetControl(const QByteArray &name, int value)
+{
+    if (name == "content_at_top" && (value == 0 || value == 1))
+        g_contentAtTop.storeRelease(value);
+    else if (name == "one_pixel_bucket" && (value == 0 || value == 1))
+        g_onePixelBucket.storeRelease(value);
+    else if (name == "allocation_steps" && value >= 0 && value <= 32)
+        g_allocationStepLimit.storeRelease(value);
+    else
+        return false;
+    return true;
+}
+
+int sceneAllocationStepLimit()
+{
+    return g_allocationStepLimit.loadAcquire();
 }
 
 int clampSamples(const QList<int> &supported, int requested)
@@ -822,7 +876,10 @@ bool SceneTargets::sync(QRhi *rhi, const QList<TargetDeclaration> &declarations,
         }
         // N3.4: a transparency target is its owner's allocation and samples, made again whenever its owner's are.
         const int samples = owner ? owner->samples : clampSamples(m_supported, d.samples);
-        const bool layoutChanged = !t.decl.sameLayout(d) || samples != t.samples || !t.renderPass
+        // A planned layout can be between attachment steps, before its final render-pass descriptor exists.
+        // Its nonempty allocation identifies that in-progress plan; a matching sync must preserve its steps.
+        const bool layoutChanged = !t.decl.sameLayout(d) || samples != t.samples
+            || (!t.renderPass && t.allocation.isEmpty())
             || (owner && relaid[d.owner]);
         QString reason;
         QSize allocation = nextAllocation(layoutChanged ? QSize() : t.allocation, needed, &reason);
@@ -889,7 +946,11 @@ bool SceneTargets::allocateStep(bool *done, QString *error)
         if (t.stepsDone == 0 && t.newLayout)
             releaseTarget(t);                 // the old layout's objects (the caller released the pipelines over them)
         ++m_stateVersion;
-        if (!step(t, i, error)) {
+        const bool ok = step(t, i, error);
+        // Counts describe every owned texture, including a partial allocation or failed step awaiting release.
+        // This runs at allocation edges only; completed targets do no bookkeeping per record.
+        countTargetObjects(t);
+        if (!ok) {
             // Audit 2, L5: the objects stay until the caller released the pipelines built over this target's
             // render-pass descriptor, then every target (release(); the header's order).
             t.allocation = QSize();
@@ -1037,23 +1098,6 @@ bool SceneTargets::step(Target &t, int index, QString *error)
                 return false;
             }
         }
-        if (!t.decl.capture) {
-            // The last step: the counts follow the objects.
-            qint64 bytes = 0;
-            int textures = 0;
-            for (int i = 0; i < colourCount; ++i) {
-                bytes += textureBytes(t.colour[i].get()) + textureBytes(t.resolve[i].get());
-                textures += (t.colour[i] ? 1 : 0) + (t.resolve[i] ? 1 : 0);
-            }
-            bytes += textureBytes(t.depth.get()) + textureBytes(t.depthNearest.get());
-            textures += (t.depth ? 1 : 0) + (t.depthNearest ? 1 : 0);
-            if (t.textures == 0 && t.bytes == 0)
-                g_targets.fetchAndAddRelaxed(1);
-            g_textures.fetchAndAddRelaxed(textures - t.textures);
-            g_bytes.fetchAndAddRelaxed(bytes - t.bytes);
-            t.textures = textures;
-            t.bytes = bytes;
-        }
         return true;
     }
     // The capture (D14 point 5): the colour as attachment 0's format, linear; the nearest window depth R32F, nearest.
@@ -1080,21 +1124,6 @@ bool SceneTargets::step(Target &t, int index, QString *error)
                      .arg(QString::fromLatin1(t.decl.name)).arg(t.allocation.width()).arg(t.allocation.height());
         return false;
     }
-    qint64 bytes = 0;
-    int textures = 0;
-    for (int i = 0; i < colourCount; ++i) {
-        bytes += textureBytes(t.colour[i].get()) + textureBytes(t.resolve[i].get());
-        textures += (t.colour[i] ? 1 : 0) + (t.resolve[i] ? 1 : 0);
-    }
-    bytes += textureBytes(t.depth.get()) + textureBytes(t.depthNearest.get()) + textureBytes(t.captureColour.get())
-        + textureBytes(t.captureDepth.get());
-    textures += (t.depth ? 1 : 0) + (t.depthNearest ? 1 : 0) + 2;
-    if (t.textures == 0 && t.bytes == 0)
-        g_targets.fetchAndAddRelaxed(1);
-    g_textures.fetchAndAddRelaxed(textures - t.textures);
-    g_bytes.fetchAndAddRelaxed(bytes - t.bytes);
-    t.textures = textures;
-    t.bytes = bytes;
     return true;
 }
 

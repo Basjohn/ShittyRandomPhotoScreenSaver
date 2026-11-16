@@ -119,4 +119,6 @@
 // and stage_defocus_time_skipped (the defocus cost's diagnosis).
 #pragma once
 
-#define SRPSS_NATIVE_CORE_ABI 20
+// 21 (N3.1c L3): scene_target_control (placement, one-pixel allocation bucket, bounded allocation steps) and
+// host_invalidate_scene_graph (hidden-host harness; actual render-thread QQuickRenderControl invalidation).
+#define SRPSS_NATIVE_CORE_ABI 21
