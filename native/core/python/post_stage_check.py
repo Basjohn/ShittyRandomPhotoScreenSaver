@@ -280,12 +280,31 @@ def judge_texture(candidate: dict, reference: dict, tolerance, unit=None) -> dic
 
     if candidate["format"] == "rgba8" or candidate["array"].shape != reference["array"].shape:
         return stc.judged(candidate, reference, tolerance)
-    units = float_units(candidate["array"], reference["array"])
-    delta = np.ceil(units / (1.0 if unit is None else unit))
-    fy = reference["array"].astype(np.float64)
-    edges = pt.content_edges(fy * 255.0, tolerance.edge_contrast)
-    result = pt.judge_delta(delta.astype(np.int64), tolerance, mask=np.ones(delta.shape, bool), edges=edges)
-    diff = np.abs(candidate["array"].astype(np.float64) - fy)
+    fx = np.asarray(candidate["array"], dtype=np.float64)
+    fy = np.asarray(reference["array"], dtype=np.float64)
+    invalid = {"candidate": int((~np.isfinite(fx)).sum()), "reference": int((~np.isfinite(fy)).sum())}
+    shape = fx.shape[:2] if fx.ndim == 3 else fx.shape
+    if not any(invalid.values()):
+        units = float_units(fx, fy)
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+            delta = np.ceil(units / (1.0 if unit is None else unit))
+        invalid["delta"] = int((~np.isfinite(delta)).sum())
+    else:
+        invalid["delta"] = 0
+    if any(invalid.values()):
+        result = pt.judge_delta(np.zeros(shape, dtype=np.int64), tolerance, mask=np.ones(shape, bool))
+        result["pass"] = False
+        result["reasons"].append(f"nonfinite float comparison: {invalid}")
+        result.update(invalid_counts=invalid, max_abs=None, max_ulps=None)
+        return result
+    # Saturate only values beyond any meaningful tolerance before integer conversion.
+    delta = np.clip(delta, -float(2**62), float(2**62)).astype(np.int64)
+    limit = np.finfo(np.float64).max
+    edges = pt.content_edges(np.clip(fy, -limit / 1024.0, limit / 1024.0) * 255.0, tolerance.edge_contrast)
+    result = pt.judge_delta(delta, tolerance, mask=np.ones(delta.shape, bool), edges=edges)
+    with np.errstate(over="ignore"):
+        diff = np.minimum(np.abs(fx - fy), limit)
+    result["invalid_counts"] = invalid
     result["max_abs"] = float(diff.max()) if diff.size else 0.0
     result["max_ulps"] = round(float(units.max()), 3) if units.size else 0.0
     return result
@@ -298,7 +317,11 @@ def float_units(a, b):
     import numpy as np
 
     fx, fy = np.asarray(a, np.float64), np.asarray(b, np.float64)
-    units = np.abs(fx - fy) / (np.maximum(np.maximum(np.abs(fx), np.abs(fy)), FLOAT_FLOOR) * HALF_ULP)
+    scale = np.maximum(np.maximum(np.abs(fx), np.abs(fy)), FLOAT_FLOOR)
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        difference = np.abs(fx - fy)
+        units = np.where(np.isfinite(difference), difference / (scale * HALF_ULP),
+                         np.abs(fx / scale - fy / scale) / HALF_ULP)
     return units.max(axis=2) if units.ndim == 3 else units
 
 
