@@ -48,7 +48,8 @@ For this session, compact completed checkbox text inline and retain every checkb
 
 **Now (in flight):** N3.1c L3, `n31c-l3` (Sol 6.1 High, audited ABI 21 source building on GitHub);
 N3.2 Audit 4 L6, `n32-l6` (Sol 6.1 Medium, tests only).
-`native-harness-workhorse` (Terra 6.1 Medium) applies the audited R-226 repair to non-conflicting native harnesses.
+`native-harness-workhorse` (Terra 6.1 Medium) completed the non-conflicting R-226 harness sweep; remaining callers
+are owned by the scene-target and mesh-buffer slices.
 Lead verification and Terra 6.1 High audit precede landing. P1 source slice passed 219 focused tests plus
 OpenGL/Vulkan host and composite checks; its desktop validation remains at N0.6 below.
 The orchestrator handbook's original sections are preserved; additive section 8a records the retired build route.
@@ -303,8 +304,10 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [x] Baseline teardown guard: validate dormant job-service quiescence before device destruction; Terra High
     audited, 28 host tests and required-validation hidden rounds PASS on OpenGL/Vulkan (16 Nov).
   - [ ] R-226 caller sweep: reproduce and close stale-child/ignored-exit false passes in the remaining native
-    proof harnesses (`scene_target_check.py`, `mesh_buffer_check.py`, `compute_pass_check.py`, `post_stage_check.py`
-    have the same read-after-failure pattern). Keep each repair with its owning harness; no verdict from an old record.
+    proof harnesses `scene_target_check.py` and `mesh_buffer_check.py`. Keep each repair with its owning harness;
+    no verdict from an old record.
+    - [x] Eleven other launchers, including compute/post-stage reference verdicts: repaired, Terra High audited,
+      26 failed-child regressions PASS on merged tree (16 Nov).
 - [ ] N0.6 D6's proof (harness rounds 1 to 6 merged; the record is D6's "As proved" in the decisions document;
   evidence `.artifacts/evidence/native_core/n06/`). The validation layer (Khronos's Windows build in
   `D:/Temp/Scratch/SRPSS/native_spike/validation_layers/extracted/`) is given to the harness process alone with
@@ -566,9 +569,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     absolute 0.05 ms margin over the pair's floor fails on an idle GPU (P8 at 225 MHz: the floor itself measured 0.028
     ms against 0.015 in a warm run, the 288 KiB storage route 0.097 against 0.031), on different routes run to run;
     judge it relative to the floor measured in the same run, or warm the GPU to a stated clock first.
-  - [ ] Harness ownership inventory (16 Nov baseline): `test_quick_backend_owner.py::test_every_hidden_host_user_goes_through_the_owner`
-    rejects `native/core/python/post_stage_check.py`; check its shared graphics setup and register this core proof
-    harness in the existing allowlist during the N3.4 harness slice.
+  - [x] Harness ownership inventory: post-stage uses canonical graphics setup and is registered in the existing
+    core proof allowlist; focused ownership scan PASS on merged tree (16 Nov).
 - [ ] N3.6 Lifetime: lazy creation on first use, release at retirement and at a mode switch, device loss rebuilt
   from the last packet, every state combination a pipeline built ahead and warmed gradually (Qt's pipeline cache
   file on Qt's pipelines; the core's own cache for raw ones); the working-set and GPU-memory readings of the P2
