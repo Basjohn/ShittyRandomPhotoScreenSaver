@@ -608,6 +608,9 @@ the feature (D3D11 is not stated).
     --native --mode bubble --runs bubble --placements display` (use the investigation's process-local dormant
     registration wrapper while diagnosing). If a class remains that is not a defect, report its figures to the lead for a bound
     (D12 "The pixel tolerance": a new class or wider bound is the lead's decision), never widen it yourself.
+  - [ ] Non-blocking contract follow-up: compare an actual non-unit inherited scene opacity on both paths before
+    admitting a repair. Python folds it into shader fade while native composites it afterward; the current failing
+    fixture has inherited opacity1 and equal shader fades, so this source distinction does not explain that failure.
   - [ ] Register: add `"bubble": _bubble_settings` to `GENERIC_MODE_SETTINGS` (drop `BUBBLE_SETTINGS`' comment) and
     `renderer_backends=("opengl", "vulkan")` to Bubble's descriptor in `core/settings/visualizer_mode_registry.py`;
     in `tests/test_native_bubble.py` turn the route test's monkeypatches into `assert "bubble" in NATIVE_MODE_IDS`.
