@@ -481,8 +481,13 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
         valid shared, stage-only and pack-local alias controls on the current official module.
       - [ ] Compare each resource present in both stages at admission using the shared deep predicates; keep
         stage-only resources legal and preserve the one buffer/layout and existing stage flags.
+      - [ ] Reproduce and enforce geometry storage's existing read-only and unique-binding contracts at this
+        same owner; retain distinct stage-only resources at distinct bindings as the positive control.
       - [ ] Official build, focused alternate/cross-stage regressions and hidden GL/Vulkan live shared-buffer proof;
         independent High review, durable contract/history and compact handoff before closure.
+    - [ ] Reserved resource admission follow-up: reproduce malformed stage-only SrpssConventions layouts and
+      unsupported descriptor sets before any broader canonical-layout check; shared-stage equality alone cannot
+      establish these reserved-resource contracts.
     - [ ] L2, a mesh replaced by one of the same layout retargets instead of rebuilding: the latch key and
       `ensure()` tell a mesh's layout (stride and attributes) from its buffer (`ModeMeshes::objects()` counts both, so
       `meshObjects` forces `releasePipelines`, which releases the streams and the arena too, losing the storage
