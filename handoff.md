@@ -58,6 +58,9 @@ activity is explicitly authorised for the diagnosis; section 3's original quiet-
   before a core change. No production flush or tracking exception admitted; 145 focused core tests PASS.
 - [x] ABI25 final parity/gate/rest/retire, reference and rules (a)/(b) PASS; sheets reviewed, independent High
   closeout. Source audit complete; performance gate open. Non-gating bloom-source/odd-mip differences remain in D17.
+- [x] Actual 1x GL trace with unchanged pixel/sample/counter guards PASS; High reviewed. Boundary adds a memory
+  barrier plus state/FBO replay; no inter-draw glFlush/glFinish. Next existing-control combination isolates the
+  barrier, then untraced measurements. Trace/replay timing did not establish the cause or performance acceptance.
 
 ## 1. Read these first, in this order
 

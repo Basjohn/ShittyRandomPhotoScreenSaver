@@ -2188,7 +2188,16 @@ Python face is `rendering/native/mode.py` (`TransparencyTarget`, `TransparencyRe
     GPU 14%/405 MHz before, 5%/2775 MHz after, displays on. Independent High evidence review.
     Qt's boundary combines queued-command execution, cached-state reset, buffer/VAO unbinding and framebuffer
     rebinding; it does not run EndFrame's attribute-disable loop. These facts do not identify which change matters.
-    Next compare the actual warmed GL command/state streams at that boundary; trace timing is not acceptance.
+    Actual 1x command trace `20261116_n34_gl_trace` compares off/between/off and full/high-threshold, each with
+    16 changing records, exact pixels, actual sample/counter guards and zero final live resources; High reviewed.
+    The between boundary adds VAO/buffer unbinds, a memory barrier, same-FBO/draw-buffer rebind and full state replay.
+    Example steady calls: off gather8274→sprite8290; boundary gather32052→barrier32057→sprite32089.
+    Neither interval has glFlush/glFinish. Official apitrace14 late attach avoids its startup loader hook stripping
+    Python DLL-search flags; it also disables program-binary formats. Headless replay's individual draw profiling
+    does not reproduce the record-level excess, so neither capture nor replay timing is acceptance.
+    Pinned Qt's `enqueueBindFramebuffer` registers attachments only while `passNeedsResourceTracking` is true;
+    combine the existing between-boundary and tracking-disabled controls to remove that barrier while retaining
+    state replay. Confirm the actual commands first, then measure untraced bracketed 1x records in a no-compute scene.
     No production flush or tracking exception admitted.
   - The render thread's record (`stage_record_ns`, the whole record of a program with stages): on OpenGL 19 to 20 us
     for EB's shape at every size and count (6.7 to 9.5 us with no stage), 33 us mean over the steady minute at 4x; on

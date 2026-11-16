@@ -541,9 +541,13 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       Evidence: n3_4/20261116_n34_individual_sites_abi23 (preserved in main). No production flush admitted (D17).
     - [x] ABI25 declaration/tracker isolation PASS: actual 1x/4x, exact pixels, no compute, zero flush/query counts.
       Both flags retain ~2.3/1.2 ms excess; between-draw boundary removes it. Independent High evidence review (D17).
-    - [ ] Compare actual warmed OpenGL command/state streams at gather→sprites for normal versus between-only
-      boundary, with existing pixel/sample/counter guards. Establish which execution/state/FBO difference matters
-      before a core fix; tracing perturbs timings, so its cost is not performance acceptance.
+    - [x] Actual 1x GL trace compares normal/between/normal, full/high-threshold, 16 changing records each: exact
+      pixels/counters PASS, independently reviewed. Boundary adds a barrier, VAO/buffer unbind, FBO rebind and state
+      replay; no glFlush/glFinish between those draws. Trace timing is not performance acceptance (D17).
+    - [ ] Combine existing between-draw and tracking-disabled controls in a no-compute 1x scene: first trace to
+      confirm the extra barrier alone disappears while boundary state replay remains, then run untraced bracketed
+      240-record full/high-threshold comparisons. Exact pixels/counters/sample guards must remain unchanged;
+      isolate the causal difference before choosing a core repair. No new native build or production flag change.
     - [ ] Fix it in the core if it is ours (one change, a build, the split again: `--rounds defocus_cost` on both APIs,
       the OpenGL sprite raster near Python's and Vulkan unchanged), or record it in D17 as the driver's with the figures
       if no state difference moves it. Then rerun `--rounds parity` (rules (a) and (b) must still pass) and record the
