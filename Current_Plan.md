@@ -471,17 +471,20 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
 - [x] N3.1c L2 scissor and L3 allocation proofs complete (D14, R-227, checkpoint audit 2).
 - [x] N3.2 Mesh and buffer resources proved (D15).
 - [ ] N3.2 remaining checkpoint audit 4 findings:
-  - [ ] Checkpoint audit 4's three open lows (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 4";
+  - [ ] Checkpoint audit 4's remaining lows (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 4";
     recorded, not fixed, by the lead's decision of 15 Nov):
     - [ ] L1, the draw-parameters pack's interface: `checkGeometryPass` (`mode_content.cpp`) checks only a batched
       pass's draw-parameters pack's stage; its blocks, storage, samplers, inputs and outputs are compared with the
       plain pack's, and a pack that differs is refused with the reason (today it reaches the device as a pipeline
       whose layout does not match its shader). GPU-free test through `mode_blocks` with a pack of another input or
       block; negative control on the pre-change module (admitted).
-      - [ ] Reproduce acceptance of an incompatible pack on ABI25 through `mode_blocks`, without a GPU.
+      - [x] ABI25 accepts nine incompatible interfaces; valid and reordered controls pass (GPU-free).
       - [ ] Compare the full reflected interface at admission, including nested block layout and resources; permit
         the draw-parameters built-ins that intentionally differ. Reject with a useful reason before pipeline creation.
       - [ ] Run focused regressions on the official built module, matching-pack positive controls and High review.
+    - [ ] Related admission defect: `checkSortedPack` compares only outer block names/bindings/sizes, not nested
+      layout. Reproduce equal-size, different-member-layout acceptance before choosing its bounded repair; do not
+      silently include it in L1's batched-vertex change.
     - [ ] L2, a mesh replaced by one of the same layout retargets instead of rebuilding: the latch key and
       `ensure()` tell a mesh's layout (stride and attributes) from its buffer (`ModeMeshes::objects()` counts both, so
       `meshObjects` forces `releasePipelines`, which releases the streams and the arena too, losing the storage

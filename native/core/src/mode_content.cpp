@@ -17,6 +17,7 @@
 #include <QtGui/QColor>
 #include <QtGui/QVector3D>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
@@ -740,6 +741,37 @@ int inputComponents(QShaderDescription::VariableType type)
     }
 }
 
+// Both batched vertex forms use the plain pack's bindings and vertex layout. Qt's equality operators include nested
+// block members, offsets, strides, descriptor sets and storage qualifiers; declaration order does not change the
+// interface. Input built-ins intentionally differ (draw parameters versus the plain pack's per-batch uniform);
+// those built-ins and arbitrary shader semantics are outside this resource/interface check.
+const char *vertexInterfaceDifference(const QShaderDescription &a, const QShaderDescription &b)
+{
+    const auto same = [](const auto &left, const auto &right) {
+        return std::is_permutation(left.cbegin(), left.cend(), right.cbegin(), right.cend());
+    };
+    if (!same(a.uniformBlocks(), b.uniformBlocks()))
+        return "uniform blocks";
+    if (!same(a.storageBlocks(), b.storageBlocks()))
+        return "storage blocks";
+    if (!same(a.combinedImageSamplers(), b.combinedImageSamplers()))
+        return "samplers";
+    if (!same(a.inputVariables(), b.inputVariables()))
+        return "inputs";
+    if (!same(a.outputVariables(), b.outputVariables())
+        || !same(a.outputBuiltinVariables(), b.outputBuiltinVariables()))
+        return "outputs";
+    if (!same(a.separateImages(), b.separateImages()))
+        return "separate images";
+    if (!same(a.separateSamplers(), b.separateSamplers()))
+        return "separate samplers";
+    if (!same(a.storageImages(), b.storageImages()))
+        return "storage images";
+    if (!same(a.pushConstantBlocks(), b.pushConstantBlocks()))
+        return "push constants";
+    return nullptr;
+}
+
 // A pass with its own vertex stage (mode_content.h's header): the pass's block in either stage or both (the same block),
 // the conventions block, samplers and storage in either stage, bound by name; the vertex stage's float inputs (bound at
 // the build to its mesh's and instance source's attributes by name); the fragment's inputs carried by the vertex stage's
@@ -755,6 +787,13 @@ bool checkGeometryPass(ModePass &pass, const QList<TargetDeclaration> &targets, 
     }
     const QShaderDescription f = pass.fragment.description();
     const QShaderDescription v = pass.vertex.description();
+    if (pass.vertexDrawParameters.isValid()) {
+        if (const char *difference = vertexInterfaceDifference(v, pass.vertexDrawParameters.description())) {
+            *error = QStringLiteral("pass '%1': its draw-parameters pack has different %2 from its plain vertex pack "
+                                    "(one interface serves both)").arg(name, QLatin1String(difference));
+            return false;
+        }
+    }
     struct Stage
     {
         const QShaderDescription *d;

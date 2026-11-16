@@ -58,22 +58,20 @@ consumer below (the unconsumed ones on the primitives track)"). An N4 item whose
 background track therefore moves with that consumer; an unconsumed one (the N4.c, N4.h, N4.m high-potential items,
 and N4.d's wet-surface masks) runs on the primitives track. N6 runs only on the primitives track, native only.
 
-Status today (item 8b, "State" paragraph, 14 Nov): N0's contracts decided; **N0.3, N0.6 and N0.7 proved** (D6 and D9
-accepted); N1.6 merged to ratchet 24 (Neon Lake, Extruded Spectrum and Sphere in flight; Extruded Bubble's traced
-glass converts at its port); **N2.1, N2.2, N2.4 and N2.6** merged and proved; **N2.3** (Spectrum's native schema and
-the C++ packet reader, module ABI 5) merged and proved 14 Nov; **N2.7** (the backend owner) and its first leftovers
-merged; N2.5 in flight; N2.8's Vulkan pre-check done. Updated 15 Nov: N3.1 (D14, ABI 17), N3.2 (D15, ABI 18) and N3.3 (D16, ABI 19) are built and proved, N3.4 (D17, ABI 20) is built and proved but merged pre-audit (no consumer until its audit), and N4.a (D13), N5.1, N5.2a and b and N5.7a and b run as data on the core; N3.6, N3.7, N3.9, NF and every N4 and N6 primitive are open or decided and not built (the module holds the host adapter, frame driver, composite node, GPU timer, packet reader, generic mode content, textures, scene targets, meshes and buffers, and compute passes). `native/spike_p1` is evidence, never a shipped renderer (item 8b, N2's heading). Step by step:
+Current state and remaining gates are maintained in `Current_Plan.md` item 8b. The native core provides the host, composite, targets, mesh and buffer, compute and post-stage substrate; see `native/core/README.md` for its current services. Spectrum and Spline Curve use native routes; Bubble's native route remains dormant pending parity. N3.4's source audit and native repair proofs are complete, and its performance gate remains open (D17); no mode may consume it until the plan's N3.4 gate closes. `native/spike_p1` is evidence, never a shipped renderer.
 
-| Step | State (plan, 14 Nov) | Primitive relevance |
+Step by step:
+
+| Step | State (see item 8b for live gates) | Primitive relevance |
 |---|---|---|
 | N0.3 conventions, three scenes | proved 12 Nov on Vulkan, OpenGL, D3D11 and D3D12 (Metal on the Watchlist) | the conventions include is proved on every backend we ship |
 | N0.4 camera | decided (D5.5); remainder built with N5.4 then N5.6 (N0.4's remainder box) | one camera owner, see section 7 |
 | N0.6 Vulkan device | proved; validation clean apart from Qt 6.12.0 defects A, B, D (N0.6's box) | the device the core runs on |
 | N0.7 async jobs | proved; verdict "jobs for compute on this vendor, and uploads" (Decisions line 569-612) | D9 service; AMD and Intel unmeasured (N0.7's box) |
 | N1 portable shaders | in flight: D4 landed; N1.6 at ratchet 24 (the 3D modes left); N1.4 include remainder and N1.8 resolve-first open (the N1 boxes) | what makes existing primitives bakeable |
-| N2.1 to N2.8 | N2.1 to N2.4, N2.6 and N2.7 merged (leftover boxes open); N2.5 in flight; N2.8 open (the N2 boxes) | host adapter, frame driver, packet reader, composite, timer, rehearsal path |
+| N2.1 to N2.8 | N2 services and Spectrum built; remaining work and rehearsals in the N2 boxes | host adapter, frame driver, packet reader, composite, timer, rehearsal path |
 | N2b: N4.a, N3.8 jobs, N5.7a/b/c | N4.a (D13), N5.7a and N5.7b (D7) built and proved 14 Nov; N3.8 jobs built (section 4); N5.7c leftovers open | fullscreen pass, job service, background layer, backdrop pyramid |
-| N3.1 to N3.9 | N3.1 to N3.3 built and proved 15 Nov (D14 to D16); N3.4 built, acceptance pending; N3.6, N3.7 and N3.9 open; there is no N3.5 in the plan (numbering skips from N3.4 to N3.6) | targets, meshes, compute, post stages, lifetime, orientation, display move |
+| N3.1 to N3.9 | N3.1 to N3.3 proved (D14 to D16); N3.4 audited and proved, performance gate open (D17); N3.6, N3.7 and N3.9 open; there is no N3.5 in the plan (numbering skips from N3.4 to N3.6) | targets, meshes, compute, post stages, lifetime, orientation, display move |
 | N4.b to N4.m | open (the N4 boxes) | ported with first consumer, or on the primitives track |
 | N6.1 to N6.6 | open (the N6 boxes) | never built, native only |
 
@@ -127,14 +125,14 @@ Tests: `test_scene3d_target.py` (G1, G3A, shafts, scale, lifetime), `test_scene3
 (D14, `native/core/src/scene_targets.*`, ABI 17: targets as program data, sampled D32F depth, the capture step, MRT with
 per-attachment blends, one sampling request owner `scene3d.scene_samples` and the core's clamp; proved single-sampled
 on both backends by `scene_target_check.py`, multisampled through the core's nearest resolve, D14 point 10) and N3.4
-(D17, `native/core/src/post_stages.*`, ABI 20: the transparency target and its per-sample resolve, the composite step
+(D17, `native/core/src/post_stages.*`: the transparency target and its per-sample resolve, the composite step
 with the HDR tone map and dither, the device gate with the sorted fallback; proved by `post_stage_check.py`; what this
 makes possible: order-independent transparency, glow and the HDR look for any native mode as program data, the Python
 owners' pictures on both backends; showcase `native_core/n3_4/20261115_n34_showcase_4c0ee9b7/showcase_post_stages_vulkan.webp`);
 the eight composites in `target.py:125-286` keep raw `gl_FragCoord` and are never converted (D5.2 replaces them;
 item 8b, N1.4's remainder). Notes: allocation rounds to 64 px; no `glBlitFramebuffer` resolves (about 0.5 ms at 1440p; Lessons line
 176-177); per-sample reads (`sampler2DMS`, `gl_SampleID`) are the N1.8 resolve-first set; QRhi's own depth resolve is wrong on both backends, so the core's nearest pass reads every sample, and `texelFetch` on a multisampled D32F works on both (D14 point 10, proved at N3.1 round 3); the multisampled velocity attachment is the only listed use of D5.3's formats service and natively it is two R16F attachments (`Current_Plan.md` item 8b, formats box; Research section 14); Waveform's 4 samples and the Oscilloscope's 1 are declared fixed requests of `scene3d.scene_samples` (D14 point 7); a 1-sample multisampled renderbuffer does not rasterise like a direct draw (Lessons line 178-179).
-Native status: built (D14, N3.1, ABI 17); OIT, bloom and HDR are N3.4: built at ABI 20 (D17), merged pre-audit. Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e3).
+Native status: targets are built (D14, N3.1); OIT, bloom and HDR are built and audited (N3.4, D17), with the performance gate open. No consumer until the plan’s N3.4 gate closes. Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e3).
 
 <a id="e4"></a>
 ### E4. Bloom chain
@@ -147,7 +145,7 @@ sampling, `Current_Plan.md` item 8b, N4.a's box). Test: `test_scene3d_dsa_target
 `tests/test_native_post_stages.py`; exact against Python with its source sampled LINEAR/CLAMP; Python's own source
 sampler, NEAREST with REPEAT, is a recorded defect, D17).
 Notes: photographs write 0 emitted light so endpoints stay exact (Lessons line 180-181).
-Native status: built at ABI 20 (N3.4, D17 "As built"), merged pre-audit; no consumer until the plan's N3.4 box closes. Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e4).
+Native status: built and audited (N3.4, D17); performance gate open, with no consumer until the plan’s N3.4 gate closes. Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e4).
 
 <a id="e5"></a>
 ### E5. Motion blur (velocity plus tile max)
@@ -338,7 +336,7 @@ layer": a mipped target and a defocus step, mips by QRhi's `generateMips`, every
 read level capped where levels come from odd sizes; D17) and N5.6. No class stated. Notes: the EB abyss near defocus measured 3.3 ms of its GPU budget (largely the
 near shells drawn into the layer; `Scene3D_Resources.md:529-533`); masks are per draw-buffer index (a masked emission
 index once dropped every circle); the RG16F circle storage was widened by N1.7.
-Native status: built at ABI 20 (N3.4, D17), merged pre-audit; its OpenGL cost at 4K is open (the plan's N3.4 box). Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e4).
+Native status: built and audited (N3.4, D17); performance gate open, with no consumer until the plan’s N3.4 gate closes. Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e4).
 
 <a id="e20"></a>
 ### E20. Light shafts

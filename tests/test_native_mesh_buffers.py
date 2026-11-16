@@ -488,7 +488,7 @@ def test_the_used_length_is_the_streams_alone(core, mb_packs):
               ModeStream("trace", "trace_rows", used="segments"))
 
 
-def _cells(core, mb_packs, pairs):
+def _cells(core, mb_packs, pairs, draw_parameters_pack=b""):
     """The harness's batched cells pass over a batch table of ``pairs`` {first, count} pairs, through mode_blocks."""
     from rendering.native.mode import ModePass, ModeStream, PassGeometry, mode_blocks
 
@@ -497,7 +497,7 @@ def _cells(core, mb_packs, pairs):
     mb = _mb()
     geometry = PassGeometry(mb_packs["cell.vert"], topology="triangle_strip", vertices=4,
                             storage=(("Cells", "cells"), ("Batches", "batches")), batches="batch_table",
-                            batch_count="batch_len")
+                            batch_count="batch_len", draw_parameters_pack=draw_parameters_pack)
     passes = (ModePass("cells", mb_packs["cell.frag"], "alpha", geometry=geometry),)
     entries = (("cell_rows", "f32", 4 * mb.CELLS), ("batch_table", "u32", 2 * pairs), ("cell_floats", "u32", 1),
                ("batch_len", "u32", 1))
@@ -518,3 +518,79 @@ def test_a_batch_table_past_the_batch_cap_is_refused(core, mb_packs):
     _cells(core, mb_packs, 64)
     with pytest.raises(ValueError, match="1 to 64"):
         _cells(core, mb_packs, 65)
+
+
+@pytest.fixture(scope="module")
+def cell_pack_baker(tmp_path_factory):
+    """Bake only requested variants with the canonical qsb; draw-parameter builtins target GL/Vulkan."""
+    import subprocess
+    from tools import regen_qrc
+
+    mb = _mb()
+    folder = tmp_path_factory.mktemp("cell_interfaces")
+    qsb = regen_qrc.quick_shader_baker(sys.executable)
+
+    def bake(source, name, *, draw_parameters=False):
+        path = folder / (name + ".vert")
+        path.write_text(mb.compose(source), encoding="utf-8")
+        output = folder / (name + ".qsb")
+        targets = ("--glsl", regen_qrc.quick_shader_targets()[1]) if draw_parameters else regen_qrc.quick_shader_targets()
+        regen_qrc._bake_quick_shader(qsb, path, output, targets, subprocess.run)
+        return output.read_bytes()
+
+    return bake
+
+
+def _cell_interface_variant(source, case):
+    cells = "layout(std430, binding = 3) readonly buffer Cells { vec4 cells[]; };"
+    batches = "layout(std430, binding = 4) readonly buffer Batches { uvec2 batches[]; };"
+    replacements = {
+        "block_binding": ("binding = 18", "binding = 19"),
+        "block_members": ("vec4 u_tint;\n    int u_srpss_batch;", "int u_srpss_batch;\n    vec4 u_tint;"),
+        "storage_binding": (cells, cells.replace("binding = 3", "binding = 7")),
+        "storage_members": (cells, cells.replace("vec4 cells[];", "vec4 prefix; vec4 cells[];")),
+        "storage_access": (cells, cells.replace("readonly buffer", "buffer")),
+        "samplers": ("void main()", "layout(binding = 6) uniform sampler2D extra;\nvoid main()"),
+        "inputs": ("void main()", "layout(location = 0) in vec2 a_extra;\nvoid main()"),
+        "outputs": ("layout(location = 0) out vec4 vColour;", "layout(location = 1) out vec4 vColour;"),
+        "output_builtin": ("gl_Position = uMatrix", "gl_PointSize = 1.0;\n    gl_Position = uMatrix"),
+        "storage_order": (cells + "     // x, y px, size px, hue\n" + batches,
+                          batches + "\n" + cells),
+    }
+    old, new = replacements[case]
+    assert source.count(old) == 1
+    source = source.replace(old, new)
+    if case in ("samplers", "inputs"):
+        extra = "textureLod(extra, vec2(0.5), 0.0).xy" if case == "samplers" else "a_extra"
+        source = source.replace("vec4 c = cells[index];", "vec4 c = cells[index];\n    c.xy += " + extra + ";")
+    return source
+
+
+@built
+@pytest.mark.parametrize("case,category", [
+    ("block_binding", "blocks"), ("block_members", "blocks"),
+    ("storage_binding", "storage"), ("storage_members", "storage"), ("storage_access", "storage"),
+    ("samplers", "samplers"), ("inputs", "inputs"), ("outputs", "outputs"), ("output_builtin", "outputs"),
+])
+def test_draw_parameters_pack_rejects_different_interface(core, mb_packs, cell_pack_baker, case, category):
+    mb = _mb()
+    variant = cell_pack_baker(_cell_interface_variant(mb.CELL_VERT, case), case, draw_parameters=True)
+    if case == "block_members":
+        plain, _ = core.program_block_pack(mb_packs["cell.vert"], "CellDraw", {})
+        changed, _ = core.program_block_pack(variant, "CellDraw", {})
+        assert len(plain) == len(changed), "equal outer size must not hide different member offsets"
+    with pytest.raises(ValueError, match=r"draw.parameters pack.*" + category):
+        _cells(core, mb_packs, 1, variant)
+
+
+@built
+@pytest.mark.parametrize("case", ["plain", "builtin", "storage_order"])
+def test_draw_parameters_pack_accepts_equivalent_interfaces(core, mb_packs, cell_pack_baker, case):
+    mb = _mb()
+    if case == "plain":
+        pack = mb_packs["cell.vert"]
+    elif case == "builtin":
+        pack = cell_pack_baker(mb.CELL_VERT_DP, "cell_dp", draw_parameters=True)
+    else:
+        pack = cell_pack_baker(_cell_interface_variant(mb.CELL_VERT, case), case)
+    _cells(core, mb_packs, 1, pack)

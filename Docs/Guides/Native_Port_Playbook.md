@@ -5,7 +5,7 @@ the five checkpoint audits (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Audi
 (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md`, "Research Qn / section n"), the "3D foundation lessons"
 (`Docs/Reference/Transitions.md`, "Lessons"), `native/core/README.md` ("How a new mode is built") and `Current_Plan.md`
 item 8b's N3.4 and N4 decisions of 15 Nov ("Plan"). It decides nothing: every rule here is cited, and the cited text
-wins when the two differ. D17 (N3.4) is on main (merged pre-audit at ABI 20; its "As built" is the source for N3.4 stages).
+wins when the two differ. D17 describes the N3.4 stages; the current gate is in Plan N3.4.
 
 ## How to use it
 
@@ -172,9 +172,9 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
 
 <a id="pb-e4"></a>
 ### E4 and E19 Bloom, HDR, OIT and the defocus layer (N3.4; catalogue: [E4](../Reference/Primitives.md#e4), [E19](../Reference/Primitives.md#e19))
-- Status: built and proved at ABI 20 (D17 "As built"; `native/core/src/post_stages.*`; harness
-  `native/core/python/post_stage_check.py`), merged PRE-AUDIT: no mode may consume it until the plan's N3.4 box's
-  two open steps (OpenGL defocus cost at 4K, then the High audit) are done. Declaring a stage: `native/core/README.md`.
+- Status: source audit and native repair proofs complete (D17; `native/core/src/post_stages.*`; harness
+  `native/core/python/post_stage_check.py`); the performance gate remains open. No mode may consume it until the
+  plan's N3.4 gate closes. Declaring a stage: `native/core/README.md`.
 - Note: as built, the defocus layer's mips DO use QRhi's `generateMips` (D17 choice G, this layer only); bloom and
   HDR chains never do.
 - Contract: each stage is opt-in and absent from a mode that does not use it; OIT only where

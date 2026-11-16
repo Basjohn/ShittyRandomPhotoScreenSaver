@@ -22,6 +22,32 @@ read in the Qt 6.11.2 SDK headers the P1 spike uses (`D:\Temp\Scratch\SRPSS\nati
 *unverified* are from knowledge of Qt's source and are proved in the step named beside them before anything is
 built on them.
 
+## Scope and progress assessment (16 Nov 2026)
+
+These are rough effort-weighted estimates, not checkbox counts, measured completion or a schedule. Completed
+items have been removed from the live plan, and a large mode port weighs more than a small validation repair.
+The scopes overlap and must not be added.
+
+| Scope | Estimated complete | Estimated remaining |
+|---|---:|---:|
+| Shared core substrate and foundation | 65–80% | 20–35% |
+| Production migration through the Vulkan flip (NF) | 30–45% | 55–70% |
+| Full admitted pre-SMP native/compositor/primitive programme | 20–35% | 65–80% |
+
+The foundation already supplies hosts, frame/packet services, generic programs, compositing, targets, mesh/buffer,
+compute, post stages and async jobs. Spectrum and Spline Curve use native routes; Bubble remains dormant pending
+parity. Most mode/transition ports, lifetime/device-loss and orientation/display-history work, shared N4 primitives,
+Studio/tools migration and installed acceptance remain. The full scope additionally includes admitted N6 high-potential
+primitives and compositor/material work before SMP. Conditional mesh-shader work and low-potential primitives
+without a consumer are not an indefinite blocker. `Current_Plan.md` owns admission and ordering; the actual routes
+are in `rendering/quick/visualizer/native_route.py`.
+
+Recent gains are correctness and reusable capability: partial-resource accounting, sample/capability admission,
+complete and correctly bounded mip readbacks, finite parity checks, scissor controls and executable byte/matrix
+oracles. These do not establish an overall product speedup. D17 and R-232 retain the defocus performance findings
+and uncertainty. The next bounded correctness target is audit 4 L1's incompatible draw-parameters pack admission;
+N3.4 shader/uniform research proceeds independently without profiler repair as a prerequisite.
+
 **The operator's direction these decisions answer to (11 and 12 Nov 2026, verbatim):**
 
 - "Vulkan is not the fallback backend, it needs to be the front strong stable face." OpenGL stays selectable as
@@ -1404,7 +1430,15 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
    dynamic offset. The pass ships two packs, its `draw_parameters` pack for (3) and its plain pack for (2); the core
    records (3) only where the device reports `DrawIndirect`, `DrawIndirectMulti` and `ShaderDrawParameters`, (2)
    everywhere else, and the two forms are proved equal pixel for pixel. A batched pass without its plain pack is
-   refused. The indirect draw itself (`drawIndirect`; `drawIndexedIndirect` waits for indexed meshes) is built here
+   refused. Both packs must expose the same reflected resource and vertex-to-fragment interface: uniform and
+   storage blocks (including nested member layouts, access flags and descriptor sets), samplers, user inputs/outputs
+   and output built-ins. Top-level declaration order is irrelevant. Input built-ins intentionally differ between
+   the draw-parameters and loop forms; arbitrary shader semantics remain the caller's parity obligation. Admission
+   checks this before constructing a pipeline, even when the current device would choose the plain form.
+   The comparison uses Qt6.12's deep reflection equality, rather than duplicating member-layout rules
+   ([Qt source](https://github.com/qt/qtbase/blob/v6.12.0/src/gui/rhi/qshaderdescription.cpp)); it runs at program
+   admission, never per frame. Audit4 L1's build proof remains in the live plan until the official module passes.
+   The indirect draw itself (`drawIndirect`; `drawIndexedIndirect` waits for indexed meshes) is built here
    with commands from a record field or from a batched draw's table (a `Dynamic` `IndirectBuffer`); compute-written
    commands are N3.3's (`StorageBuffer | IndirectBuffer`, `Static`), and the populations' 1:1 port of
    `glDrawArraysIndirect` is N4.c's. The harness settles research Q5's open points: `qsb` compiles `gl_DrawID`,
