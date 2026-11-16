@@ -1311,6 +1311,9 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
     stale-composite mutation detected, offscreen pixels/resources preserved. Terra High audited, merged test PASS (16 Nov).
   - [ ] `tests/test_qtquick_visualizer_clip_smoke.py:303`, the Oscilloscope reflow, reads 175 against 173. The QSG/clip
     optimisations are protected: never retune production to satisfy this oracle; judge whether the oracle is stale.
+    Read-only trace (16 Nov): this is exact thresholded lit-row count, not the owner-resolved clip extent; horizontal
+    sampling/AA/bloom can move threshold crossings. Next retain hidden captures and assert canonical vertical
+    geometry/trace scale, with an actual wrong-vertical-geometry negative; no tolerance or product change admitted.
 - [ ] Lead, Display 1: confirm R-221 in the product, Fullscreen Hide Borders with pixel shift stepping, and check
   whether the operator's lavender edge colour came from the shift.
 
