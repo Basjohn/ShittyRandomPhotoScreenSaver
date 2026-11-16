@@ -1444,6 +1444,11 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
    rejection falsifiers, valid built-in/reordered controls, and exact batched/loop/direct/sixteen-pass pixels on
    OpenGL and Vulkan. Both backends actually record form3; Vulkan synchronisation validation has zero unexplained
    errors/warnings (ten recorded Qt defectA errors excluded). R-233 retains evidence and the initial rejected candidate.
+   Independently baked vertex and fragment stages also share one binding plan: any resource common to both
+   must agree under the same deep predicates before a packing layout is selected. Stage-only resources remain
+   legal. Geometry storage is readonly in each declaring stage, and distinct storage resources require distinct
+   bindings. R-235 owns the reproduction and build/runtime proof; canonical reserved-block shape is a separate
+   admission contract, not implied by equality between stages.
    The indirect draw itself (`drawIndirect`; `drawIndexedIndirect` waits for indexed meshes) is built here
    with commands from a record field or from a batched draw's table (a `Dynamic` `IndirectBuffer`); compute-written
    commands are N3.3's (`StorageBuffer | IndirectBuffer`, `Static`), and the populations' 1:1 port of

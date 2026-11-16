@@ -477,12 +477,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     - [ ] Related cross-stage admission: reproduce equal-size vertex/fragment uniform-layout mismatch before
       repairing `checkGeometryPass`'s shallow shared-block union. Inspect conventions and storage layouts at that
       same boundary; packing currently selects the fragment layout for both stages. Keep separate from alternate packs.
-      - [ ] Reproduce mismatched shared uniform/conventions/storage layouts through GPU-free admission, retaining
-        valid shared, stage-only and pack-local alias controls on the current official module.
-      - [ ] Compare each resource present in both stages at admission using the shared deep predicates; keep
-        stage-only resources legal and preserve the one buffer/layout and existing stage flags.
-      - [ ] Reproduce and enforce geometry storage's existing read-only and unique-binding contracts at this
-        same owner; retain distinct stage-only resources at distinct bindings as the positive control.
+      - [x] Old-module proof: eight unsafe interfaces admitted; sixteen valid controls pass (R-235).
+      - [x] Source reviewed: common resources use deep predicates; readonly and unique storage bindings enforced.
       - [ ] Official build, focused alternate/cross-stage regressions and hidden GL/Vulkan live shared-buffer proof;
         independent High review, durable contract/history and compact handoff before closure.
     - [ ] Reserved resource admission follow-up: reproduce malformed stage-only SrpssConventions layouts and

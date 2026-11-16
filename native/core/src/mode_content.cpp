@@ -747,33 +747,37 @@ bool sameShaderDeclarations(const QList<T> &left, const QList<T> &right)
     return std::is_permutation(left.cbegin(), left.cend(), right.cbegin(), right.cend());
 }
 
+bool sameUniformInterface(QShaderDescription::UniformBlock left, QShaderDescription::UniformBlock right)
+{
+    // structName is the translated shader's instance identifier (_42, _100, ...), not the binding
+    // contract. Qt resolves that name from the active pack; separate compilations need not share it.
+    left.structName.clear();
+    right.structName.clear();
+    return left == right;
+}
+
+bool sameStorageInterface(QShaderDescription::StorageBlock left, QShaderDescription::StorageBlock right)
+{
+    // The block name identifies the resource; its GLSL instance alias is local to each shader. QRhi binds
+    // storage by descriptor binding, not this alias. Keep every other field under Qt's deep equality.
+    left.instanceName.clear();
+    right.instanceName.clear();
+    return left == right;
+}
+
 // Alternate packs share resource bindings and user inputs. Qt's equality includes nested member layouts,
 // descriptor sets and storage qualifiers; top-level declaration order does not change the interface. Outputs
 // are checked by the caller: batched vertex forms agree, whereas sorted fragments write their owner's outputs.
 // Input built-ins and arbitrary shader semantics are outside this resource/interface check.
 const char *shaderInterfaceDifference(const QShaderDescription &a, const QShaderDescription &b)
 {
-    const auto sameUniform = [](QShaderDescription::UniformBlock left, QShaderDescription::UniformBlock right) {
-        // structName is the translated shader's instance identifier (_42, _100, ...), not the binding
-        // contract. Qt resolves that name from the active pack; separate compilations need not share it.
-        left.structName.clear();
-        right.structName.clear();
-        return left == right;
-    };
     const auto aUniforms = a.uniformBlocks();
     const auto bUniforms = b.uniformBlocks();
-    if (!std::is_permutation(aUniforms.cbegin(), aUniforms.cend(), bUniforms.cbegin(), bUniforms.cend(), sameUniform))
+    if (!std::is_permutation(aUniforms.cbegin(), aUniforms.cend(), bUniforms.cbegin(), bUniforms.cend(), sameUniformInterface))
         return "uniform blocks";
-    const auto sameStorage = [](QShaderDescription::StorageBlock left, QShaderDescription::StorageBlock right) {
-        // The block name identifies the resource; its GLSL instance alias is local to each shader. QRhi binds
-        // storage by descriptor binding, not this alias. Keep every other field under Qt's deep equality.
-        left.instanceName.clear();
-        right.instanceName.clear();
-        return left == right;
-    };
     const auto aStorage = a.storageBlocks();
     const auto bStorage = b.storageBlocks();
-    if (!std::is_permutation(aStorage.cbegin(), aStorage.cend(), bStorage.cbegin(), bStorage.cend(), sameStorage))
+    if (!std::is_permutation(aStorage.cbegin(), aStorage.cend(), bStorage.cbegin(), bStorage.cend(), sameStorageInterface))
         return "storage blocks";
     if (!sameShaderDeclarations(a.combinedImageSamplers(), b.combinedImageSamplers()))
         return "samplers";
@@ -800,6 +804,32 @@ const char *vertexInterfaceDifference(const QShaderDescription &a, const QShader
     return nullptr;
 }
 
+// A geometry pass binds a union of vertex/fragment resources. Only the identities used by both stages must
+// have the same interface; a resource used by one stage alone remains legal. The pack-local names above do
+// not change the shared buffer layout. Admission precedes selection of either stage's layout for packing.
+const char *sharedStageInterfaceDifference(const QShaderDescription &vertex, const QShaderDescription &fragment)
+{
+    for (const auto &a : vertex.uniformBlocks()) {
+        for (const auto &b : fragment.uniformBlocks()) {
+            if (a.blockName == b.blockName && !sameUniformInterface(a, b))
+                return "uniform blocks";
+        }
+    }
+    for (const auto &a : vertex.storageBlocks()) {
+        for (const auto &b : fragment.storageBlocks()) {
+            if (a.blockName == b.blockName && !sameStorageInterface(a, b))
+                return "storage blocks";
+        }
+    }
+    for (const auto &a : vertex.combinedImageSamplers()) {
+        for (const auto &b : fragment.combinedImageSamplers()) {
+            if (a.name == b.name && !(a == b))
+                return "samplers";
+        }
+    }
+    return nullptr;
+}
+
 // A pass with its own vertex stage (mode_content.h's header): the pass's block in either stage or both (the same block),
 // the conventions block, samplers and storage in either stage, bound by name; the vertex stage's float inputs (bound at
 // the build to its mesh's and instance source's attributes by name); the fragment's inputs carried by the vertex stage's
@@ -815,6 +845,11 @@ bool checkGeometryPass(ModePass &pass, const QList<TargetDeclaration> &targets, 
     }
     const QShaderDescription f = pass.fragment.description();
     const QShaderDescription v = pass.vertex.description();
+    if (const char *difference = sharedStageInterfaceDifference(v, f)) {
+        *error = QStringLiteral("pass '%1': its vertex and fragment stages declare different shared %2 "
+                                "(one resource layout serves both)").arg(name, QLatin1String(difference));
+        return false;
+    }
     if (pass.vertexDrawParameters.isValid()) {
         if (const char *difference = vertexInterfaceDifference(v, pass.vertexDrawParameters.description())) {
             *error = QStringLiteral("pass '%1': its draw-parameters pack has different %2 from its plain vertex pack "
@@ -878,6 +913,11 @@ bool checkGeometryPass(ModePass &pass, const QList<TargetDeclaration> &targets, 
     }
     for (const Stage &s : stages) {
         for (const QShaderDescription::StorageBlock &block : s.d->storageBlocks()) {
+            if (!block.qualifierFlags.testFlag(QShaderDescription::QualifierReadOnly)) {
+                *error = QStringLiteral("pass '%1': storage block '%2' is not readonly (geometry binds read-only storage)")
+                             .arg(name, QString::fromLatin1(block.blockName));
+                return false;
+            }
             PassStorage *bound = nullptr;
             for (PassStorage &st : pass.storage) {
                 if (st.name == block.blockName)
@@ -904,6 +944,13 @@ bool checkGeometryPass(ModePass &pass, const QList<TargetDeclaration> &targets, 
             *error = QStringLiteral("unknown: pass '%1' binds the buffer block '%2', which its shaders do not declare")
                          .arg(name, QString::fromLatin1(st.name));
             return false;
+        }
+        for (const PassStorage &other : pass.storage) {
+            if (&other != &st && other.binding == st.binding) {
+                *error = QStringLiteral("pass '%1': storage blocks '%2' and '%3' share binding %4 (doubly bound)")
+                             .arg(name, QString::fromLatin1(st.name), QString::fromLatin1(other.name)).arg(st.binding);
+                return false;
+            }
         }
     }
     // Samplers in either stage, each bound by name once.
