@@ -922,7 +922,14 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     verdict["identical"] = bool(paths["first"] is None and verdict["digests_identical"]
                                 and verdict["native_published"] > 0)
     # Rule (a)'s verdict: the composite's tolerance (RULE_A_*), pixel by pixel with the translucency mask.
-    verdict["rule_a"] = rule_a_verdict(rule_a_frames(native, python, masks, mode), mode)
+    judged = rule_a_frames(native, python, masks, mode)
+    verdict["rule_a"] = rule_a_verdict(judged, mode)
+    # The mode's shown span in halves (before the switch): adaptive state (Dynamic Floor, normalisers) drifts with a
+    # clip's length, so a late divergence shows in the second half's figures, not in the whole run's worst.
+    half = switch_input // 2
+    verdict["rule_a_halves"] = {
+        name: {"inputs": [lo, hi], **rule_a_verdict([f for f in judged if lo <= f.get("input", -1) < hi], mode)}
+        for name, lo, hi in (("first", 0, half), ("second", half, switch_input))}
     verdict["rule_a"]["mask_inputs"] = len(masks)
     verdict["rule_a"]["backdrop_frames"] = len(backdrop["pixels"])
     verdict["pass"] = bool(verdict["rule_a"]["pass"] and verdict["digests_identical"] and verdict["native_published"] > 0

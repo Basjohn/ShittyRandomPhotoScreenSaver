@@ -29,6 +29,8 @@ After the port lands, Bubble is optimised on OpenGL and Vulkan; these tools, `to
 - **(c) Where hashes differ:** `fade-inputs` and `components` classify where.
 - **(d) Cost:** the port's per-pass GPU timing, `tools/overhead_baseline.py`, and `preflip_pack.py --compare`.
 
+Long-clip runs keep the frozen settings exactly as set, adaptive ones included (the replay's Bubble settings run Dynamic Floor, Adaptive Sensitivity and AGC on; never switch them off for a run). Each clip runs continuously from a cold owner with no reset of any adaptive state between frames or segments. Adaptive state drifts with clip length, so late-clip results are reported separately: the owner report's `rule_a_halves` gives rule (a) for the first and second half of the mode's shown span, and a second half worse than the first is classified before anything else.
+
 An optimisation that cannot hold byte parity (reordered float math, half floats, merged passes) is a tier-2 change: it needs the shared tolerance (`tools/pixel_tolerance.py`) and the operator's sign-off, never a silent pass. The `replay` recipe's current limits (synthetic clip, one variant, no hash-only compare) are an open plan item.
 
 For an optimization investigation, capture a matched before/after pair and use these probes to classify changes in final fragments, ambient attachments and fades, retaining the original owner judge and provenance. They are not GPU benchmarks and do not replace BTF §24's recorded-music matrix, exact logical fidelity, independent performance/reactivity measurement and live operator acceptance. The separate fringe/archived research helper remains ignored research pending promotion; it is not a durable CLI command.
