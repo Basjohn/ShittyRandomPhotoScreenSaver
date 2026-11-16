@@ -18,7 +18,8 @@
 // or an f64 one number an element, an f64x4 four), at the member's reflected offset, type and stride. A field fits a
 // member only exactly (recordFieldFits): an f64 a float, an f64x4 a vec4, a u32 a uint or bool, or an int or float
 // under a range rule that keeps it exact (at_most within int32 or 2^24, or boolean: audit N29 L7), an array the same
-// length; nothing is truncated or padded.
+// length; a u32 sequence of 2/3/4 fills one matching uvec2/3/4, including a length-one array, never a multi-element
+// or multidimensional array of vectors. Nothing is truncated or padded.
 #pragma once
 
 #include "frame_abi_generated.h"

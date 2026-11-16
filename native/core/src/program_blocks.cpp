@@ -279,6 +279,17 @@ const char *fieldKindName(frame_abi::FieldKind kind)
 QString recordFieldFits(const BlockMember &member, const frame_abi::Field &field)
 {
     const auto type = QShaderDescription::VariableType(member.type);
+    // A wire sequence of u32s can also fill one unsigned vector, without changing the record's schema or
+    // float32 loss (the packer's double intermediate is exact). Multi-element arrays of vectors and
+    // multi-dimensional members are different shapes; an array of one vector has the same component count.
+    const bool unsignedVector = field.kind == frame_abi::FieldKind::U32
+        && (type == QShaderDescription::Uint2 || type == QShaderDescription::Uint3 || type == QShaderDescription::Uint4);
+    if (unsignedVector) {
+        if (member.count == 1 && member.components() > 0 && field.count == quint32(member.components()))
+            return QString();
+        return QStringLiteral("'%1': the record's %2 u32 element(s) do not fill one unsigned vector of %3 components")
+            .arg(QString::fromLatin1(member.name)).arg(field.count).arg(member.components());
+    }
     bool typeFits = false;
     switch (field.kind) {
     case frame_abi::FieldKind::U32:

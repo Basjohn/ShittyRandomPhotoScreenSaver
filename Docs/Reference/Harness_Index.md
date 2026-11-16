@@ -968,6 +968,9 @@ python native/core/python/scene_target_check.py --module-dir release/native_modu
 # fresh geometry and retained storage tails, static-instance/layout/removal/re-add and actual scene-graph/device
 # reconstruction controls; cached compute SRBs retarget, refuse lost/nonstorage meshes and recover, and update a
 # simultaneous 2x2-to-4x4 sampled-texture object edge. The existing child owns packs, validation and retirement.
+# uniform_vectors (optional, not a default round): all uvec2/3/4 components from full-range u32 records,
+# exact R32F low/high16-bit readback, last-component mutations and restoration, refusal/retirement guards.
+# Run it explicitly with --rounds uniform_vectors; uniform_vector_check.py defines no separate CLI/owner.
 # stream_ring (D15 point 7): payloads of 4 KiB to 288 KiB as instance and storage streams against the pair's floor (CPU: the
 # native record plus one memory copy; GPU: the same pass over a resident mesh stream), bracketing each route with
 # resident floors. Raw ms, ratios and floor-median drift sensitivity retain the 0.05 ms median admission signal;

@@ -47,8 +47,8 @@ layout(std140, binding = 18) uniform BubbleDraw {
     // Four compact uint32 class words from the SAME authored snapshot. Unlike a radius threshold, this respects
     // original small/big identity during musical pulses and temporary small-to-big promotion. No second hero draw is
     // needed.
-    // A uint array, not a uvec4 (N5.1): the native record fills an array of u32 words by name; same indexing.
-    uint u_big_class_bits[4];
+    // Four u32 record words fill this one vector; both block packers preserve their unsigned bits and indexing.
+    uvec4 u_big_class_bits;
     vec4 u_bubbles_pos[110];
     // x = specular_size_factor, y = rotation (reserved), z = spec_ox, w = spec_oy
     vec4 u_bubbles_extra[110];

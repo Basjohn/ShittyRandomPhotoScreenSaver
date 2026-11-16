@@ -387,6 +387,26 @@ void main() {
 }
 """
 
+UNIFORM_VECTOR_FRAG = """#version 440
+layout(std140, binding = 18) uniform UniformVectors {
+    uvec2 uWords2;
+    uvec3 uWords3;
+    uvec4 uWords4;
+};
+layout(location = 0) in vec2 v_uv;
+layout(location = 0) out float value;
+void main() {
+    // Nine components, each split into exact float32 low/high 16-bit halves. Every row is identical.
+    int column = clamp(int(floor(v_uv.x * 18.0)), 0, 17);
+    int component = column / 2;
+    uint word;
+    if (component < 2) word = uWords2[component];
+    else if (component < 5) word = uWords3[component - 2];
+    else word = uWords4[component - 5];
+    value = float((word >> (uint(column % 2) * 16u)) & 65535u);
+}
+"""
+
 SHADERS = {
     "box.vert": BOX_VERT, "box.frag": BOX_FRAG, "voxel.vert": VOXEL_VERT, "voxel.frag": VOXEL_FRAG,
     "sprite.vert": SPRITE_VERT, "sprite.frag": SPRITE_FRAG, "beam.vert": BEAM_VERT, "beam.frag": BEAM_FRAG,
@@ -395,6 +415,7 @@ SHADERS = {
     "ring.vert": RING_VERT, "ring.frag": RING_FRAG, "ring_instance.vert": RING_INSTANCE_VERT,
     "ring_storage.vert": RING_STORAGE_VERT, "sprite_nocull.vert": SPRITE_VERT_NO_CULL, "sprite_yup.frag": SPRITE_FRAG_Y_UP,
     "mesh_read.comp": MESH_READ_COMP, "mesh_texture.comp": MESH_TEXTURE_COMP,
+    "uniform_vectors.frag": UNIFORM_VECTOR_FRAG,
     **{f"cell_pass{b}.vert": cell_pass_vert(b) for b in range(16)},
 }
 #: Baked apart: a failure is a fact (research Q5), not the harness's end.

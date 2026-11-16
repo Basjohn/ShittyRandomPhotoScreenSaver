@@ -879,7 +879,10 @@ only, through its generic mode content").
    `u_item_from_frag*`, `u_window_from_target*` and `u_target_px`), read from the item's card (`NativeMode.card`) and
    the target; the settings (the spec's values and anything mode-derived, from Python, packed when they change); and
    the record's fields (packed per accepted frame by `packRecordField`: an f64 a float, an f64x4 a vec4, a u32 a uint,
-   a bool, or an int or float under a range rule that fits it (L7), arrays the same length). Refused with a reason: a
+   a bool, or an int or float under a range rule that fits it (L7), arrays the same length). A sequence of exactly
+   two, three or four u32 elements also fills one matching unsigned vector, including a length-one vector array;
+   it never fills a multi-element or multidimensional vector array. All uint32 bits survive the exact double
+   intermediate; no float32 coercion or wire-schema change is involved. Refused with a reason: a
    setting or a record field no pass declares (unknown); a member no source fills (unfilled); a name with two owners (a
    setting or a field naming a core member, a setting naming a field); a pass declaring a core member at another size.
    Checked when the program meets the schema (at bind and at program) and when settings arrive, so a mode whose data
@@ -1458,6 +1461,10 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
    only its pack-local alias. Every supported reflected uniform/storage/sampler/image resource uses descriptor set0
    in geometry, fullscreen and compute programs: QRhi provides one set-zero SRB layout. Compute still has no
    conventions block. These absolute admission checks are distinct from stage equality; R-237 owns their proof.
+   Multi-element unsigned/bool uniform leaf arrays are refused across these same program owners while pinned
+   Qt6.12's OpenGL uniform emulation uploads only one element. Length-one arrays remain legal; an enclosing
+   struct array does not itself make a scalar leaf unsupported. This restriction does not apply to storage-buffer
+   arrays or CPU block-layout introspection. Bubble uses one canonical unsigned vector for its four class words.
    The indirect draw itself (`drawIndirect`; `drawIndexedIndirect` waits for indexed meshes) is built here
    with commands from a record field or from a batched draw's table (a `Dynamic` `IndirectBuffer`); compute-written
    commands are N3.3's (`StorageBuffer | IndirectBuffer`, `Static`), and the populations' 1:1 port of

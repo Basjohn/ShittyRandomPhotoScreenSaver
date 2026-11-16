@@ -215,7 +215,8 @@ build selection; current host and composite proof lives here.
   steady minute; retirement; validation; cost; `--rounds retarget`: fresh geometry, retained tails, compatible-layout
   allocation/generation guards, lost/recreated meshes and compute mesh/texture rebinding through the same child
   and validation owner (`mesh_retarget_check.py`, no separate CLI); `--rounds stream_ring`: QRhi's routes against the pair's floor, D15
-  point 7).
+  point 7). Optional `--rounds uniform_vectors` proves exact full-range uvec2/3/4 record uploads, actual last-component
+  mutations and restoration using the existing readback/retirement owners (`uniform_vector_check.py`, no separate CLI).
 - `python/compute_pass_check.py`: N3.3's proof on the harness scenes `python/compute_passes/` (Waveform's field, floor
   give chain and fog volume shapes, the drift's stateful buffer, the product's compacted population with its indirect
   draw, a write-after-read pair): every storage resource read back, rule (a) against the Python owners' compute calls

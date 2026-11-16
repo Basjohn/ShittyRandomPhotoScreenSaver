@@ -377,6 +377,30 @@ bool sameUniformInterface(QShaderDescription::UniformBlock left, QShaderDescript
     return left == right;
 }
 
+QString unsupportedUniformArray(const QList<QShaderDescription::BlockVariable> &members,
+                                const QByteArray &prefix = {})
+{
+    for (const auto &member : members) {
+        bool array = false;
+        for (int dimension : member.arrayDims)
+            array = array || dimension > 1;
+        const QByteArray name = prefix.isEmpty() ? member.name : prefix + '.' + member.name;
+        const auto type = member.type;
+        const bool unsignedOrBool = type == QShaderDescription::Uint || type == QShaderDescription::Uint2
+            || type == QShaderDescription::Uint3 || type == QShaderDescription::Uint4
+            || type == QShaderDescription::Bool || type == QShaderDescription::Bool2
+            || type == QShaderDescription::Bool3 || type == QShaderDescription::Bool4;
+        if (array && unsignedOrBool)
+            return QString::fromLatin1(name);
+        // Qt expands an enclosing struct array into separately named leaves. Only the leaf's own array
+        // dimensions reach the unsigned/bool upload cases that hardcode one element.
+        const QString nested = unsupportedUniformArray(member.structMembers, name);
+        if (!nested.isEmpty())
+            return nested;
+    }
+    return {};
+}
+
 bool checkResourceDescriptors(const QShaderDescription &description, const QString &pass, QString *error)
 {
     // QRhi has one SRB descriptor set, bound at set 0 on Vulkan, for graphics and compute alike.
@@ -390,6 +414,15 @@ bool checkResourceDescriptors(const QShaderDescription &description, const QStri
     for (const auto &block : description.uniformBlocks()) {
         if (!checkSet(block.descriptorSet, block.blockName))
             return false;
+        // Qt 6.12's GLES backend uploads only one element of unsigned/bool uniform arrays. Refuse these at
+        // portable program admission, not in generic CPU block reflection/packing or storage-buffer layout.
+        const QString unsupported = unsupportedUniformArray(block.members);
+        if (!unsupported.isEmpty()) {
+            *error = QStringLiteral("pass '%1': uniform block '%2' member '%3' is a multi-element unsigned/bool "
+                                    "array (Qt OpenGL uploads only one element; use a single vector or storage buffer)")
+                         .arg(pass, QString::fromLatin1(block.blockName), unsupported);
+            return false;
+        }
         if (block.blockName == kConventionsBlock) {
             // Reflect the embedded production include, rather than maintaining a second member-layout schema.
             // The capture consumes fragTexel, so its pack retains this block. Own the value, not a temporary-list pointer.

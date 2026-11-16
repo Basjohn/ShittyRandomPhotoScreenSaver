@@ -236,3 +236,98 @@ def test_stream_round_brackets_each_route_and_never_passes_unresolved(status, mo
             assert comparison["cpu"]["status"] == "invalid"
         else:
             assert comparison["gpu"]["status"] == status
+
+@pytest.mark.parametrize("name,width", (("uWords2", 2), ("uWords3", 3), ("uWords4", 4)))
+def test_unsigned_vector_oracle_requires_every_last_component_and_real_mutations(name, width):
+    import numpy as np
+    import uniform_vector_check as proof
+
+    original = proof.expected(proof.VALUES)
+    assert all(proof.pixel_checks(original, proof.VALUES).values())
+    changed = dict(proof.VALUES)
+    words = list(changed[name])
+    words[-1] ^= 0x80000001
+    changed[name] = tuple(words)
+    mutated = proof.expected(changed)
+    assert not all(proof.pixel_checks(mutated, proof.VALUES).values())
+    assert all(proof.pixel_checks(mutated, changed).values())
+    assert all(proof.pixel_checks(original, proof.VALUES).values())
+    # A stale/missing final component cannot satisfy the complete-vector positive predicate.
+    preceding = 0
+    for field, components in proof.WIDTHS:
+        if field == name:
+            break
+        preceding += components
+    column = 2 * (preceding + width - 1)
+    dropped = original.copy()
+    dropped[:, column:column+2] = 0
+    assert not proof.pixel_checks(dropped, proof.VALUES)["exact_components"]
+    # Every low/high half reconstructs the full u32, including bit31, without lossy float32 coercion of the word.
+    halves = original[0].astype(np.uint32).reshape(-1, 2)
+    reconstructed = halves[:, 0] | (halves[:, 1] << 16)
+    assert reconstructed.tolist() == [word for field, _ in proof.WIDTHS for word in proof.VALUES[field]]
+
+
+@pytest.mark.parametrize("bad", ("shape", "float64", "nan", "different_row"))
+def test_unsigned_vector_oracle_fails_closed_on_malformed_pixels(bad):
+    import numpy as np
+    import uniform_vector_check as proof
+
+    image = proof.expected(proof.VALUES)
+    if bad == "shape":
+        image = image[:, :-1]
+    elif bad == "float64":
+        image = image.astype(np.float64)
+    elif bad == "nan":
+        image[0, 0] = np.nan
+    else:
+        image[-1, -1] += 1
+    assert not all(proof.pixel_checks(image, proof.VALUES).values())
+
+
+def test_unsigned_vector_readback_uses_bottom_content_and_checks_metadata(monkeypatch):
+    import numpy as np
+    import scene_target_check
+    import uniform_vector_check as proof
+    from types import SimpleNamespace
+
+    expected = proof.expected(proof.VALUES)
+    allocation = np.full((8, 32), -123, dtype=np.float32)
+    allocation[-proof.SIZE[1]:, :proof.SIZE[0]] = expected
+    entry = {"name": "scene.colour", "level": 0, "format": "r32f", "size": [32, 8],
+             "content": proof.SIZE, "data": allocation.tobytes()}
+    published = []
+    scene = SimpleNamespace(publish=lambda **record: published.append(record))
+    monkeypatch.setattr(scene_target_check, "_metadata_readback", lambda _: [entry])
+    assert np.array_equal(proof._readback(scene, proof.VALUES), expected)
+    assert published == [proof.VALUES]
+    entry["data"] = entry["data"][:-4]
+    with pytest.raises(RuntimeError, match="byte count"):
+        proof._readback(scene, proof.VALUES)
+    entry["format"] = "rgba8"
+    with pytest.raises(RuntimeError, match="metadata"):
+        proof._readback(scene, proof.VALUES)
+
+
+def test_unsigned_vector_round_is_explicitly_selectable_but_not_a_default(monkeypatch, tmp_path):
+    from tools import artifact_paths
+
+    monkeypatch.setattr(artifact_paths, "evidence_dir", lambda *_: tmp_path)
+    monkeypatch.setattr(harness, "_gpu_conditions", lambda: {})
+    monkeypatch.setattr(harness, "bake_packs", lambda *_: {})
+    monkeypatch.setattr(harness, "cross_compare", lambda *_: {
+        key: {"pass": True} for key in ("rule_a", "rule_b", "control_offset_stream_differs")})
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command)
+        child_path = Path(command[command.index("--child-json") + 1])
+        child_path.write_text(json.dumps({"module_loaded": False, "rounds": []}), encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(harness.subprocess, "run", run)
+    harness.main(["--apis", "opengl"])
+    assert commands and all("uniform_vectors" not in command for command in commands)
+    commands.clear()
+    harness.main(["--apis", "opengl", "--rounds", "uniform_vectors"])
+    assert len(commands) == 1 and commands[0][-2:] == ["--rounds", "uniform_vectors"]

@@ -176,6 +176,25 @@ def test_a_four_number_array_field_packs_every_element():
         layout.pack(7, {"rows": rows[:2], "one": (0.0,) * 4})
 
 
+def test_class_words_round_trip_into_the_shader_block_without_unsigned_or_stride_loss():
+    import struct
+
+    from core.visualizer_engine import bubble_native_schema as schema_module
+    from rendering.gl_programs.portable import pack_block
+    from rendering.quick.visualizer.implementations.bubble import BUBBLE_BLOCK
+
+    # Synthetic membership boundaries, including the high bit of each word and nonzero later words.
+    words = tuple((1 << 31) | (1 << index) for index in range(4))
+    logical = _logical()
+    object.__setattr__(logical.mode_state, "big_class_bits", words)
+    record = schema_module.decode(schema_module.encode(logical))
+    assert record["u_big_class_bits"] == words
+    layout = BUBBLE_BLOCK
+    index = next(i for i, (name, _kind) in enumerate(layout.fields) if name == "u_big_class_bits")
+    packed = pack_block(layout, record)
+    assert struct.unpack_from("<4I", packed, layout.offsets[index]) == words
+
+
 # ------------------------------------------------------------------------------------------------- the sources
 
 def test_every_member_of_every_pass_has_exactly_one_source():

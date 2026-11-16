@@ -39,6 +39,9 @@ Rounds:
              closed and recover. Cached compute mesh bindings read fresh bytes; lost/nonstorage meshes dispatch
              nothing and recover; a simultaneous resized texture and fresh mesh retarget together. The checks live
              in mesh_retarget_check (no CLI, validation or lifecycle owner of its own).
+  uniform_vectors (optional; each API) every component of uvec2/uvec3/uvec4 from full-range u32 record sequences,
+             split into exact low/high 16-bit halves in R32F; last-component mutations and exact restore. The round
+             uses uniform_vector_check under this harness's child, readback, validation and lifecycle owners.
   rest       (each API) nothing uploaded, written or recorded over frames at rest; control: a new record writes.
   steady     (each API) frames of new records: the core's buffers created, mesh, stream and ownership counts flat, the
              process's private bytes recorded; control: streams made again every record (the counts grow).
@@ -59,7 +62,8 @@ Rounds:
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/mesh_buffer_check.py --module-dir release/native_module --require-validation
       --layer-path D:\\Temp\\Scratch\\SRPSS\\native_spike\\validation_layers\\extracted
-  [--apis opengl vulkan] [--rounds parity forms used retarget rest steady retire cost stream_ring] [--label n32_mesh_buffers]
+  [--apis opengl vulkan] [--rounds parity forms used retarget uniform_vectors rest steady retire cost stream_ring]
+  [--label n32_mesh_buffers]
   [--ring-payloads waveform_288KiB waveform_288KiB_used_4KiB ...]
 Evidence: .artifacts/evidence/native_core/n3_2/<date>_<label>/ (summary.json; sheet_<api>.png). Exit 0 whenever the
 harness ran; the verdict is the last printed line ("N32 VERDICT PASS" or "N32 VERDICT FAIL: ...").
@@ -94,6 +98,7 @@ from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("parity", "forms", "used", "retarget", "rest", "steady", "retire", "cost", "stream_ring")
+OPTIONAL_ROUNDS = ("uniform_vectors",)
 CHILD_TIMEOUT_S = 1800
 MARGIN = 8
 DPRS = (1.0, 1.5)
@@ -1470,6 +1475,11 @@ def child(args) -> dict:
 
                         record[name] = mesh_retarget_check.round_retarget(
                             sys.modules[__name__], core, engine, app, args.api, packs, out)
+                    elif name == "uniform_vectors":
+                        import uniform_vector_check
+
+                        record[name] = uniform_vector_check.round_uniform_vectors(
+                            sys.modules[__name__], core, engine, app, args.api, packs, out)
                 except Exception:
                     record[name] = {"pass": False, "error": traceback.format_exc()}
     finally:
@@ -1526,7 +1536,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--module-dir", default="release/native_module")
     parser.add_argument("--repo", default=".", help="the repository root (default: the current directory)")
     parser.add_argument("--apis", nargs="+", default=list(APIS), choices=APIS)
-    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=ROUNDS)
+    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=ROUNDS + OPTIONAL_ROUNDS)
     parser.add_argument("--label", default="n32_mesh_buffers")
     parser.add_argument("--ring-payloads", nargs="+", default=None,
                         choices=[label for label, _size in RING_PAYLOADS] + [RING_PARTIAL[0]],
