@@ -822,12 +822,12 @@ Port-readiness rules bind all new GPU code now (the backend decision). Expanded 
   Python retains application policy, not real-time sample delivery. Plan 02 §4/§13 and PCM seam 03 bind.
   **SMP visual/library foundations (operator, 16 Nov):** M0/M1 must define/consume versioned semantic shape,
   surface, type and motion tokens before building the panes, including full sharp-to-pill radii, inner junctions,
-  and reuse of Studio Qt Quick bounce/hover transitions with reduced-motion policy. Theme editor follows later.
+  and reuse of Studio Qt Quick bounce/hover transitions with reduced-motion policy. **Pre-SMP 1B.8 M4 unifies Settings and Widget themes immediately after M3 material borders; SMP M0/M1 adds scoped ZIP skin support.** The full visual Theme & Skin Studio comes after the first usable SMP release at M10. Design and boundaries: plan 02 §8.2B and document 05.
   M2 keeps SQLite with mandatory FTS5, indexed virtualised pages, bounded edits and measured 50k/250k-track
   concurrency/recovery; no custom database core. Plan 02 §3.3 and §8.2A govern.
   **Pre-SMP admission (operator, 16 Nov):** NF (the native flip) is necessary but not sufficient: finish the
   *admitted* native-core, compositor and planned N4/N6 primitive work before entering SMP foundations, including
-  the Context Menu backdrop-source defect in 1B.8 and any chosen N5.9 material solution. Do not make hypothetical
+  the Context Menu backdrop-source defect, M3 material borders and M4 unified themes in 1B.8, and any chosen N5.9 material solution. Do not make hypothetical
   unadmitted future primitives an indefinite blocker.
 - [ ] New modes (Reactive Liquid / Melt Pool, Concrete Rain, Usu Moonscape; section 7, lab first) are built on
   the native core only, after it.
@@ -928,6 +928,11 @@ follow-ups with their evidence folders).
 
 - [ ] Each step: `.qsb` regenerated, the SURFACE block kept identical across its three shader files, one focused
   GPU before/after, lead pixel review on the operator's two wallpapers.
+
+- [ ] **M4 Unified Appearance Theme (operator, 16 Nov):** after 1B.8 M3 / 1.7b material-border rendering and its proof, and **before SMP M0**. Consolidate the separately selected Settings and Widget themes into ONE typed, versioned Appearance Theme, one chosen ID and one global selector. Keep separate actual native Settings-HWND and Qt Quick rendering projections. Current linked pairs and mirror generation are transitional, not the desired permanent architecture.
+  - [ ] Shared semantic roles with independently authored Settings / Widget / optional SMP scopes: surface colour/material, **surface transparency bias** (neutral 0), border-surface colour/material, **border transparency bias** (neutral 0), **border thickness** and **four-corner curvature** (correct concentric inner edge), plus typography/contrast. The skinning system does not own these global renderers. Neutral user Style Overrides inherit the authored theme value; nonzero user biases are relative adjustments applied once.
+  - [ ] Regenerate curated themes semantically into the new format; preserving old bundled .srtheme/.srwtheme pairs byte-for-byte is not required. Retire the duplicate catalogues/mirror sync after accepted projection. Convert user-authored themes and Custom values in a bounded one-time importer where possible; otherwise back up the originals and report a safe fallback. No silent deletion of personal files.
+  - [ ] Prove dark/light/material themes, Settings, Context Menu, Media and ordinary widgets; neutral and non-neutral surface/border bias, border width/curves, flat/material fallback, DPR 100/125/150/200%, real bright/dark backgrounds, hot selection, legibility and no extra underlay capture. The M3 material-border pass and native corner constraints remain independent renderer contracts. See SMP document 05.
 
 ### 1B.9 Settings and Studio window corners bleed (continues 1.9)
 

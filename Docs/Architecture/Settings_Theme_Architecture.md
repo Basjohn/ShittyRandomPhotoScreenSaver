@@ -175,6 +175,15 @@ affine in the desktop colour, so those two bound every wallpaper). Bar:
 `tests/test_theme_material_legibility_contract.py`. Dark themes on untinted Glass or a light Acrylic tint do not
 meet that bar over a bright wallpaper; that is recorded in `Current_Plan.md`, not hidden. Mirrors use the same stable-ID projection authority as the original pack. Dark-text light/light-metal Widget mirrors also establish a high-opacity light runtime card floor because, unlike the Settings HWND, runtime cards sit directly over arbitrary wallpaper. Regeneration must remain deterministic; mirrors change only when their semantic source/mapping intentionally changes.
 
+## Planned M4 unified Appearance Theme (after border M3, before SMP)
+
+**Future design, not yet the current runtime.** The two Settings/Widget catalogues, `.srtheme`/`.srwtheme` and their Linked/Independent selector described above are transitional. Current Plan 1B.8 M4 replaces these **after** M3's material-aware border ring is accepted, **before** SMP M0. The long-term system has ONE authored Appearance Theme, one catalogue and one selected theme ID, with independently assignable `settings.*`, `widgets.*` and later SMP semantic scopes. Its actual native Windows Settings and retained Qt Quick widget rendering projections stay separate; neither invents backdrop pixels to imitate glass.
+
+Theme-authored semantic controls include surface material/colour and **surface transparency bias** (neutral 0), border-surface material/colour and **border transparency bias** (neutral 0), **border thickness**, and **four-corner curvature** (correct inner/outer relationship), plus other existing palettes and typography. A neutral user Style Override inherits the authored theme value rather than cancelling it; a nonzero user adjustment applies relative to that baseline once. Preserve useful family-specific settings and existing contrast rules.
+
+Curated theme pairs can be regenerated into the new single schema without byte-preserving the originals or maintaining the old mirror catalogue indefinitely. Protect user-created files and Custom state via one-time import/backup with diagnostics and safe fallback. SMP Skin ZIPs are an optional SECOND presentation layer, scoped to supported and user-enabled targets only, not a third global theme. Normal Settings/ordinary widgets remain fully themeable even where skin artwork is unsupported. The full visual authoring Studio is SMP M10, not another theme-engine unification milestone. Design: SMP document 05.
+
+
 ## Proven Windows backdrop mapping
 
 Material density calibration belongs to runtime semantic composition, not authored catalogue files.
