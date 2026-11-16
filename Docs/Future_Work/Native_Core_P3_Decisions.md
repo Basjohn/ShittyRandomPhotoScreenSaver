@@ -283,7 +283,8 @@ run of a real window on Display 1 by the lead (swapchain, resize, DPI change, sl
   (failing closed when the layer is missing in a harness run), adopted with `QVulkanInstance::setVkInstance` and
   `setApiVersion(1, 2)` (the default is 1.0, and QRhi would treat the device as 1.0).
   `QQuickGraphicsConfiguration::setDebugLayer` and its device extensions do nothing when the instance and device
-  are supplied, and no environment variable is used (the project forbids them).
+  are supplied. The sole harness-only environment exception is `VK_ADD_LAYER_PATH`, admitted only by an explicit
+  `--layer-path` argument for that process and its children; no registry or persistent setting is changed.
 - Lifetime: the device outlives the `QQuickWindow` object, not only its visibility; after our `vkDestroyDevice`,
   `QVulkanInstance::resetDeviceFunctions(device)` (QRhi does not call it for an imported device).
 - Translucent windows: Qt's Vulkan swapchain asks for `PRE_MULTIPLIED` composite alpha when the window has an alpha
@@ -319,6 +320,14 @@ History file, "D6"):
 
 Long-term risk (driver variance): on NVIDIA 617.42 a device rebuild costs 3 process handles that are never returned,
 so the product never rebuilds a device except on device loss or window replacement (point 4 already says so).
+
+**Current proof owner:** `native/core/python/host_check.py` and `composite_check.py` replace the P1 build path.
+Both accept `--require-validation` and `--layer-path`; required validation aborts before any round if its layer did
+not load. Their default rounds stay invisible. The explicit `--rounds translucent --display <exact Qt screen name>
+--visible-seconds <1..60> --backdrop none|system|glass` round refuses a missing or primary display and is bounded by
+the child watchdog. It uses the module's own device, with a half-opacity native surface in `composite_check`.
+No Vulkan `grabWindow` is used (defect D is avoided). The record marks desktop see-through, resize, DPI change and
+sleep/wake as operator review; harness PASS does not prove composed desktop alpha. The P1 source remains evidence.
 
 ## D7. The card-material backdrop on the native core (decided 12 Nov 2026)
 

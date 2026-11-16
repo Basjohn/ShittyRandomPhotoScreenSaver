@@ -3,7 +3,7 @@
 
 The module (``release/native_module``, built on GitHub) is loaded the product's way and driven in one child process per
 graphics API (Qt Quick's API is process-wide): OpenGL, Vulkan on the module's own instance and devices (D6), D3D11 and
-D3D12. No window is ever visible: the hidden host never shows one, and the window round's window is kept off screen by
+D3D12. Default rounds are invisible: the hidden host never shows one, and the window round's window is kept off screen by
 the tests' pattern (``tests/_invisible_windows.py``).
 
 The scene stands for the product's card (``VisualizerPresentation.qml``): a display background with a top-left marker,
@@ -34,6 +34,8 @@ Rounds (each per API, at 100 %, 125 % and 150 % on one hidden host of HOST_PIXEL
   window    a real Qt Quick window rendered by Qt's render loop, kept off screen: the composite's surface recorded once on
             Qt's render thread with no Python thread state and never again at rest while the window animates; the window
             destroyed while it animates releases the surface on the render thread.
+  translucent  explicit lead-only bounded named-secondary-display rehearsal (host_check's shared round), adding a
+            half-opacity native composite; actual desktop see-through and lifecycle appearance need operator review.
 After every round the process holds no composite surface or QRhi object of the core's. On Vulkan the instance has the
 Khronos validation layer with synchronisation validation when --layer-path gives it; every message is attributed and only
 Qt 6.12.0's recorded defects are excused, by id (vk_validation.py).
@@ -77,7 +79,6 @@ MARKER_PX = 6                      # logical
 ORIGIN = (24.0, 40.0)              # the ordinary card's requested origin (plus the contract's off-grid offset)
 PIXEL_SHIFTS = (1, 2, 3)           # logical pixels, as pixel shift moves cards
 CUSTOM_SCALES = (0.85, 1.37)
-_ALLOWED_ENV: set[str] = set()
 
 SCENE_QML = b"""import QtQuick
 Rectangle {
@@ -603,6 +604,10 @@ def child(args) -> dict:
             record["error"] = f"the Vulkan instance failed: {instance.get('instance', {}).get('error')}"
             return record
         record["instance_created"] = True
+        if args.require_validation and not instance.get("validation_layer_loaded"):
+            record["error"] = "the validation layer did not load (--require-validation); no round ran"
+            record["instance_teardown"] = core.destroy_vulkan_instance()
+            return record
     engine = QQmlEngine()
     host = None
     try:
@@ -610,7 +615,7 @@ def child(args) -> dict:
             if vulkan:
                 core.set_vulkan_phase("n24 environment")
             record["qt_alone_window_frames"] = host_check.qt_alone_window_frames(app, engine)
-        hidden_rounds = [name for name in args.rounds if name != "window"]
+        hidden_rounds = [name for name in args.rounds if name not in ("window", host_check.VISIBLE_ROUND)]
         if hidden_rounds:
             # One hidden host for every hidden round (an OpenGL hidden host is created once and kept: facts J1).
             host = core.hidden_host(*HOST_PIXELS)
@@ -625,6 +630,8 @@ def child(args) -> dict:
                     record[name] = round_contract(core, engine, app, args.api, host, out)
                 elif name == "overflow":
                     record[name] = round_overflow(core, engine, app, args.api, host, out)
+                elif name == host_check.VISIBLE_ROUND:
+                    record[name] = host_check.round_translucent(core, engine, app, args.api, args, with_composite=True)
                 else:
                     record[name] = round_window(core, engine, app, args.api, out)
             except Exception:
@@ -677,7 +684,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--module-dir", default="release/native_module")
     parser.add_argument("--repo", default=".", help="the repository root (default: the current directory)")
     parser.add_argument("--apis", nargs="+", default=list(APIS), choices=APIS)
-    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=ROUNDS)
+    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=(*ROUNDS, host_check.VISIBLE_ROUND))
+    host_check.add_translucent_arguments(parser)
     parser.add_argument("--label", default="n24_composite")
     parser.add_argument("--layer-path", type=Path, default=None,
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")
@@ -688,6 +696,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", help=argparse.SUPPRESS)
     parser.add_argument("--child-json", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    try:
+        host_check.validate_translucent_arguments(args)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     if args.child:
         try:
@@ -698,22 +710,29 @@ def main(argv: list[str] | None = None) -> int:
         args.child_json.write_text(json.dumps(record, indent=2, default=str), encoding="utf-8")
         return 0
 
-    vk_validation.use_layer_path(args.layer_path, _ALLOWED_ENV)   # inherited by the children
+    allowed_env: set[str] = set()
+    vk_validation.use_layer_path(args.layer_path, allowed_env)   # inherited by the children
     root = host_check._root(args.repo)
     from tools import artifact_paths
 
     out = artifact_paths.evidence_dir("native_core", "n2_4", args.label)
     out.mkdir(parents=True, exist_ok=True)
-    environment = vk_validation.environment_record(_ALLOWED_ENV)
+    environment = vk_validation.environment_record(allowed_env)
     results: dict = {}
     for api in args.apis:
         child_json = out / f"child_{api}.json"
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
                    "--rounds", *args.rounds]
+        if host_check.VISIBLE_ROUND in args.rounds:
+            command += ["--display", args.display, "--visible-seconds", str(args.visible_seconds),
+                        "--backdrop", args.backdrop]
+        if args.require_validation:
+            command.append("--require-validation")
         started = time.monotonic()
         try:
-            proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(root))
+            timeout = args.visible_seconds + host_check.WAIT_S if host_check.VISIBLE_ROUND in args.rounds else CHILD_TIMEOUT_S
+            proc = subprocess.run(command, capture_output=True, text=True, timeout=timeout, cwd=str(root))
             exit_code, stderr = proc.returncode, proc.stderr
         except subprocess.TimeoutExpired as exc:
             exit_code, stderr = "timeout", (exc.stderr or b"").decode(errors="replace") if isinstance(

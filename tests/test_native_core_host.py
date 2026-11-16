@@ -382,6 +382,103 @@ def test_device_retirement_checks_the_dormant_job_service_before_the_device():
             ["job service stopped: " + json.dumps(incomplete), *suffix], {"job_service": True}), key
 
 
+@pytest.mark.parametrize("seconds", [0, -1, float("inf"), float("nan"), 61])
+def test_translucent_requires_a_named_display_and_a_finite_bound(seconds):
+    args = SimpleNamespace(rounds=["translucent"], display="secondary", visible_seconds=seconds)
+    with pytest.raises(ValueError):
+        host_check.validate_translucent_arguments(args)
+
+
+def test_translucent_is_explicit_and_separate_from_hidden_proof():
+    assert host_check.VISIBLE_ROUND not in host_check.ROUNDS
+    args = SimpleNamespace(rounds=["translucent"], display="secondary", visible_seconds=1)
+    host_check.validate_translucent_arguments(args)
+    for changes in ({"display": None}, {"rounds": ["hidden"]}, {"rounds": ["translucent", "hidden"]}):
+        with pytest.raises(ValueError):
+            host_check.validate_translucent_arguments(SimpleNamespace(**(vars(args) | changes)))
+
+
+def test_translucent_resolves_exact_secondary_name_through_both_d1_guards(monkeypatch):
+    from tools import d1_run
+
+    screens = [SimpleNamespace(name=lambda: "primary"), SimpleNamespace(name=lambda: "secondary")]
+    app = SimpleNamespace(screens=lambda: screens)
+    displays = [d1_run.Display(i, screen.name(), i == 0, i * 100, 0, 100, 100, 1.0)
+                for i, screen in enumerate(screens)]
+    monitors = [d1_run.Monitor(i * 100, 0, (i + 1) * 100, 100, i == 0, screen.name())
+                for i, screen in enumerate(screens)]
+    monkeypatch.setattr(d1_run, "enumerate_displays", lambda: displays)
+    monkeypatch.setattr(d1_run, "win32_monitors", lambda: monitors)
+    assert host_check.translucent_screen(app, "secondary") is screens[1]
+    with pytest.raises(d1_run.Refusal):
+        host_check.translucent_screen(app, "primary")
+    with pytest.raises(ValueError):
+        host_check.translucent_screen(app, "second")
+    monitors[1] = d1_run.Monitor(100, 0, 200, 100, True, "secondary")
+    with pytest.raises(d1_run.Refusal):
+        host_check.translucent_screen(app, "secondary")
+
+
+@pytest.mark.parametrize("tool_name", ["host_check", "composite_check"])
+def test_native_harness_forwards_visible_bound_and_requires_validation(tool_name, monkeypatch, tmp_path):
+    import importlib
+    import subprocess
+    from tools import artifact_paths
+    import vk_validation
+
+    tool = importlib.import_module(tool_name)
+    calls = []
+    monkeypatch.setattr(artifact_paths, "evidence_dir", lambda *_a: tmp_path)
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        path = Path(command[command.index("--child-json") + 1])
+        record = {"api": "vulkan", "rounds": ["translucent"], "module_loaded": True, "instance_created": True,
+                  "translucent": {"pass": True}, "instance_teardown": {"ok": True},
+                  "validation": {"layer_loaded": False}}
+        path.write_text(json.dumps(record), encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(tool.subprocess, "run", run)
+    # The argument admits the variable for this invocation only. An inherited value without it is contamination.
+    monkeypatch.delenv(vk_validation.LAYER_PATH_VARIABLE, raising=False)
+    argv = ["--apis", "vulkan", "--rounds", "translucent", "--display", "secondary", "--visible-seconds", "1",
+            "--backdrop", "glass", "--require-validation", "--layer-path", str(tmp_path)]
+    assert tool.main(argv) == 0     # harness verdict, not process status, owns this existing CLI contract
+    summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    assert not summary["pass"]
+    assert "validation layer did not load" in " ".join(summary["verdicts"]["vulkan"]["failed"])
+    assert summary["environment"]["allowed_set_by_argument"] == [vk_validation.LAYER_PATH_VARIABLE]
+    command, kwargs = calls[0]
+    assert "--require-validation" in command
+    for flag, value in (("--display", "secondary"), ("--visible-seconds", "1.0"), ("--backdrop", "glass")):
+        assert command[command.index(flag) + 1] == value
+    assert kwargs["timeout"] == 1 + host_check.WAIT_S
+    tool.main(argv[:-2])
+    inherited = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    assert vk_validation.LAYER_PATH_VARIABLE in inherited["environment"]["contaminating_set"]
+
+
+@pytest.mark.parametrize("tool_name", ["host_check", "composite_check"])
+def test_required_validation_aborts_before_any_host_or_visible_window(tool_name, monkeypatch, tmp_path):
+    import importlib
+    from rendering import native
+    from PySide6 import QtGui, QtQml, QtQuick
+
+    tool = importlib.import_module(tool_name)
+    core = SimpleNamespace(info={}, vulkan_instance=lambda **_k: {"ok": True, "validation_layer_loaded": False},
+                           destroy_vulkan_instance=lambda: {"ok": True})
+    monkeypatch.setattr(native, "load", lambda _p: core)
+    monkeypatch.setattr(QtGui, "QGuiApplication", lambda _a: object())
+    monkeypatch.setattr(QtQuick.QQuickWindow, "setGraphicsApi", lambda _api: None)
+    monkeypatch.setattr(QtQml, "QQmlEngine", lambda: pytest.fail("a missing required layer must abort before QML"))
+    args = SimpleNamespace(repo=str(ROOT), module_dir=str(tmp_path), api="vulkan", rounds=["translucent"],
+                           out_dir=str(tmp_path), require_validation=True)
+    result = tool.child(args)
+    assert result["instance_created"] and result["instance_teardown"]["ok"]
+    assert "no round ran" in result["error"] and "translucent" not in result
+
+
 def test_the_lifecycle_judges_the_core_against_qt_alone_on_the_same_api():
     def series(handles, users, trough, span):
         return {"handle_slope_per_cycle": handles, "user_object_slope_per_cycle": users,
