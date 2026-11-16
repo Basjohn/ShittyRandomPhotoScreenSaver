@@ -46,7 +46,8 @@ after the operator's yes on a question card; agents never run load (invisible ch
 under the operator's 16 Nov request for another Sol 6.1 High native-core agent. Review and land slices in order.
 For this session, compact completed checkbox text inline and retain every checkbox for later review.
 
-**Now (in flight):** N3.1c L3, `n31c-l3` (Sol 6.1 High); N3.2 Audit 4 L6 next, Sol 6.1 Medium.
+**Now (in flight):** N3.1c L3, `n31c-l3` (Sol 6.1 High, audited ABI 21 source building on GitHub);
+N3.2 Audit 4 L6, `n32-l6` (Sol 6.1 Medium, tests only).
 `native-harness-workhorse` (Terra 6.1 Medium) applies the audited R-226 repair to non-conflicting native harnesses.
 Lead verification and Terra 6.1 High audit precede landing. P1 source slice passed 219 focused tests plus
 OpenGL/Vulkan host and composite checks; its desktop validation remains at N0.6 below.
