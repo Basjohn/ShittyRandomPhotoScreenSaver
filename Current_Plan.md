@@ -57,7 +57,9 @@ and compare within-run variants; do not hold diagnosis for the former quiet-GPU 
 L2 scissor/negative controls pass both backends. ABI 24's readback completeness/metadata, sample clamp gate,
 post-stage parity/rest/retire and 136 focused tests pass. Full accounting closeout awaits the rebind report fix;
 ownership/fault/release checks already pass all 27 cases per backend. Defocus flag/tracker isolation follows.
-Source ABI25's flag controls and rebind-report repair are High reviewed/merged; combined GitHub build is next.
+Source ABI25's flag controls and rebind-report repair are High reviewed/merged. Combined build commit7717614d1
+was dispatched with token20261116_150121_942441; GitHub has not exposed its run after the client's timeout.
+Recover that request when visible; do not dispatch a duplicate. ABI24 source/evidence closeout is High reviewed.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim week's order is `handoff.md` section 3.
