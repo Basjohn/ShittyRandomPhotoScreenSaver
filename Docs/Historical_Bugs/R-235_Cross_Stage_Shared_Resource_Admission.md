@@ -1,6 +1,6 @@
 # R-235: Vertex and fragment stages disagreed about a shared resource
 
-**16 November 2026. Source repair; official build and runtime proof pending.**
+**16 November 2026. Repaired and proved on official build `b1451eb11`; independent High review.**
 
 `checkGeometryPass` joined independently baked vertex/fragment resource declarations into one binding plan.
 Its own uniform block comparison checked name, binding and total size, then selected the fragment layout to
@@ -22,8 +22,27 @@ copies by the same predicates used for alternate packs. Stage-only resources rem
 storage declaration must be readonly and distinct storage blocks must have distinct bindings. Checks happen
 at program admission; no per-record work, ABI change, fallback or render-state workaround is introduced.
 
-`tests/test_native_cross_stage_interface.py` retains reflected negative and valid controls. Official-build
-regressions, separate OpenGL/Vulkan shared-buffer draws and independent evidence review remain required.
+`tests/test_native_cross_stage_interface.py` retains all 24 reflected negative and valid controls. The official
+build passes all 99 focused cross-stage, sorted-pack, mesh-buffer, generic-mode and post-stage tests without skips.
+Run43929409887/token20261116_202944_090456 built `b1451eb11`; the retained manifest matches the installed binary.
+
+Hidden OpenGL and Vulkan draws each pass 211 guards across shared baseline, different stage-local aliases,
+and vertex-only/fragment-only UBO or SSBO variants. Independent mutations move the triangle exactly eight
+pixels through its UBO or five through storage, and change its constant colour by the expected distinct amounts.
+Absent-stage mutations leave pixels exact; each restore is exact; corresponding alias frames are exact.
+Actual qsb reflection, settings, raw frames, clear/covered pixels and ownership receipts are retained under
+`n3_2/20261116_cross_stage_runtime/`. All checked resources and hosts retire to zero. The lead inspected both sheets.
+Vulkan validation loaded: ten recorded Qt defectA errors are excused, zero unexplained errors/warnings;
+the instance-creation loader warning remains attributed. This is synthetic offscreen proof, not broad visual
+acceptance, a performance claim, or a D3D/Metal result.
+
+Canonical batched/loop/direct form regression passes on both backends and actually records form3. Post-stage
+gate/parity also passes with the Python reference, rule(a), rule(b) and analytic checks; the lead inspected both
+native sheets. Each Vulkan regression retains ten known Qt defectA errors and zero unexplained findings.
+Evidence under `.artifacts/evidence/native_core/`: `n3_2/20261116_cross_stage_fixed/` holds XML/manifest;
+`n3_2/20261116_cross_stage_b1451eb11/` holds draw forms;
+`n3_4/20261116_cross_stage_b1451eb11/` holds post-stage regression.
+
 D15 owns the contract. This repair does not establish the canonical shape of a malformed stage-only
 `SrpssConventions` block or admit unsupported descriptor sets; those separate reproductions remain in the plan.
 

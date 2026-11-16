@@ -45,8 +45,8 @@ are in `rendering/quick/visualizer/native_route.py`.
 Recent gains are correctness and reusable capability: partial-resource accounting, sample/capability admission,
 complete and correctly bounded mip readbacks, finite parity checks, scissor controls and executable byte/matrix
 oracles. These do not establish an overall product speedup. D17 and R-232 retain the defocus performance findings
-and uncertainty. Alternate vertex and sorted-fragment interface admission are proved; the next bounded correctness
-target is the vertex/fragment shared-block layout admission defect. N3.4 compiled-shader research proceeds
+and uncertainty. Alternate vertex, sorted-fragment and cross-stage shared-resource admission are proved;
+the next bounded correctness/performance target is same-layout mesh retargeting. N3.4 compiled-shader research proceeds
 independently without profiler repair as a prerequisite.
 
 **The operator's direction these decisions answer to (11 and 12 Nov 2026, verbatim):**
@@ -1447,7 +1447,8 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
    Independently baked vertex and fragment stages also share one binding plan: any resource common to both
    must agree under the same deep predicates before a packing layout is selected. Stage-only resources remain
    legal. Geometry storage is readonly in each declaring stage, and distinct storage resources require distinct
-   bindings. R-235 owns the reproduction and build/runtime proof; canonical reserved-block shape is a separate
+   bindings. R-235 retains eight old-module rejection falsifiers, sixteen valid controls, 99 focused passes and
+   211 live shared/stage-only/alias guards per backend on official `b1451eb11`; canonical reserved-block shape is a separate
    admission contract, not implied by equality between stages.
    The indirect draw itself (`drawIndirect`; `drawIndexedIndirect` waits for indexed meshes) is built here
    with commands from a record field or from a batched draw's table (a `Dynamic` `IndirectBuffer`); compute-written

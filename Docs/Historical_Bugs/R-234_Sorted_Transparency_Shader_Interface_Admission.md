@@ -59,8 +59,8 @@ official manifest (run43921798161, token20261116_194557_828140); `n3_4/20261116_
 holds gate/parity results and native/reference sheets; `n3_4/20261116_sorted_pack_runtime/` holds the bounded
 `alias_check.py`, actual backend receipts and raw frames. D17 owns the durable contract.
 
-The adjacent vertex/fragment shared-block union is a separately recorded follow-up: it selects one packed layout
-for both stages but compares only outer metadata. Do not claim this alternate-pack repair fixes that boundary.
+The adjacent vertex/fragment shared-block union was a separate defect, subsequently repaired and proved in R-235.
+This alternate-pack repair did not itself fix that boundary.
 
 Primary source: [Qt6.12 reflection equality](https://github.com/qt/qtbase/blob/v6.12.0/src/gui/rhi/qshaderdescription.cpp).
 D17 owns the durable sorted-pack contract; Current_Plan.md owns remaining work.

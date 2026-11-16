@@ -11,7 +11,8 @@ Never rewrite main or force-push.
 - [x] Sprite uniform control and real wrong-input negative proved; uniform storage alone did not reproduce excess.
 - [x] N3.2 L1 shader-interface admission proved on the official build and both backends (R-233).
 - [x] Sorted-pack resource/layout admission and live SSBO aliases proved on both backends (R-234).
-- [ ] Cross-stage admission reproduced (R-235); source reviewed, official build and GL/Vulkan proof pending.
+- [x] Cross-stage shared-resource admission proved on official build and both backends (R-235).
+- [ ] Next correctness/performance slice: N3.2 L2 same-layout mesh retarget; preparation reviewed, native proof pending.
 - [x] Texture-size control and real wrong-mip negative proved; size derivation alone did not reproduce excess.
 - [ ] Select the next N3.4 falsifier of remaining generated gather/control-flow or native submission differences.
   Overlap/contention remains unproved; hardware counters are optional. R-232 retains the investigation. No production barrier

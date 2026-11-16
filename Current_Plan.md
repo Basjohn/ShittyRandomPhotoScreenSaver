@@ -41,7 +41,7 @@ Live checklist: every open step is its own box; retain only useful, brief native
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Active native focus:** N3.2's cross-stage layout admission defect; N3.4 compiled-shader research continues
+**Active native focus:** N3.2 L2 same-layout mesh retargeting; N3.4 compiled-shader research continues
 independently, without profiler repair. Then the admitted ports and side defects below; keep the interim
 holds in `handoff.md`. Independent native work may overlap under the operator's request for a Sol 6.1 High agent;
 review every slice before landing.
@@ -53,7 +53,7 @@ held by the interim route in `handoff.md`.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim holds are in `handoff.md`.
-- [ ] High: reproduce and repair the vertex/fragment shared-layout admission defect; continue the bounded
+- [ ] High: prove and implement the same-layout mesh retarget boundary; continue the bounded
   N3.4 source comparison independently, then N3.6 when the hold lifts.
   Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers ride
   with the next fitting dispatch.
@@ -474,13 +474,7 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [ ] Finish the shared mesh/program follow-ups (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 4"):
     - [x] L1 shader-interface admission and both-backend batched-draw proofs complete (D15, R-233).
     - [x] Sorted-pack deep interface admission and both-backend live SSBO alias proofs complete (D17, R-234).
-    - [ ] Related cross-stage admission: reproduce equal-size vertex/fragment uniform-layout mismatch before
-      repairing `checkGeometryPass`'s shallow shared-block union. Inspect conventions and storage layouts at that
-      same boundary; packing currently selects the fragment layout for both stages. Keep separate from alternate packs.
-      - [x] Old-module proof: eight unsafe interfaces admitted; sixteen valid controls pass (R-235).
-      - [x] Source reviewed: common resources use deep predicates; readonly and unique storage bindings enforced.
-      - [ ] Official build, focused alternate/cross-stage regressions and hidden GL/Vulkan live shared-buffer proof;
-        independent High review, durable contract/history and compact handoff before closure.
+    - [x] Cross-stage shared layouts, readonly storage and binding admission proved on both backends (D15, R-235).
     - [ ] Reserved resource admission follow-up: reproduce malformed stage-only SrpssConventions layouts and
       unsupported descriptor sets before any broader canonical-layout check; shared-stage equality alone cannot
       establish these reserved-resource contracts.
@@ -490,8 +484,11 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       streams' bytes past their used length); the vertex buffers are given per draw, so only a layout change needs new
       pipelines. Proof: `probe_replace.py`'s box replaced by its own bytes and layout creates only the mesh's buffer
       and keeps the streams' build generation (today 3 buffers and generation 1 to 2).
-      - [ ] Independent second Sol High: prepare the exact retarget/invalidate boundary and focused falsifier;
-        no overlapping C++ edits or build while the cross-stage admission slice is in flight.
+      - [x] Independent Sol High preparation and High source review complete; implementation/proof remain pending.
+      - [ ] Prove old-module churn and retained-tail loss, then implement exact consumed-layout comparison and
+        mesh-dependent compute SRB retargeting; preserve redraw/retry generations and fail closed on rebind failure.
+      - [ ] Official-build GL/Vulkan fresh-byte/tail/instance/layout/remove/readd/device controls, live compute A→B
+        plus failed-rebind/storage-usage and simultaneous texture edges; use canonical validation/retirement owners.
     - [x] L6 native/Python matrix and packet oracles proved (checkpoint audit 4).
 - [x] N3.3 Compute passes: proved and audited (D16).
 - [ ] N3.4 Transparency and post-processing (D17): source/proof complete; performance gate open. No consumer
