@@ -48,3 +48,34 @@ def test_the_parent_removes_stale_child_proof_before_launch(tmp_path, monkeypatc
     result = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
     assert removed_at_launch == [True]
     assert not result["pass"]
+
+
+def test_the_placement_control_needs_real_oracle_edge_disagreement(tmp_path):
+    import numpy as np
+
+    reference = {}
+    for name, _card, _dpr, _glow in check.PARITY_CASES:
+        pixels = np.zeros((8, 8, 4), dtype=np.float16)
+        pixels[2:, :6] = 0.75
+        reference[name] = {"scene.colour": {"array": pixels, "content": (6, 6), "size": (8, 8),
+                                             "samples": 1, "format": "rgba16f"}}
+    check._save(tmp_path, "parity_reference", reference)
+    check._save(tmp_path, "placement_control", reference)
+    # Merely running the control is insufficient: unchanged pixels must fail its expected rejection verdict.
+    assert not check.placement_control_verdict(tmp_path)["pass"]
+    broken = {name: {"scene.colour": {**textures["scene.colour"],
+                                     "array": np.roll(textures["scene.colour"]["array"], -2, axis=0)}}
+              for name, textures in reference.items()}
+    check._save(tmp_path, "placement_control", broken)
+    judged = check.placement_control_verdict(tmp_path)
+    assert judged["pass"] and judged["edge_reads_rejected_by_rule_a"]
+
+
+@pytest.mark.parametrize("key", ["scene_targets", "scene_target_textures", "scene_target_bytes",
+                                  "scene_target_readbacks", "mode_resources"])
+def test_the_retirement_predicate_rejects_each_held_resource(key):
+    zero = dict.fromkeys(("scene_targets", "scene_target_textures", "scene_target_bytes",
+                         "scene_target_readbacks", "mode_resources"), 0)
+    assert check._targets_retired(zero)
+    assert not check._targets_retired({**zero, key: 1})
+    assert not check._targets_retired({})

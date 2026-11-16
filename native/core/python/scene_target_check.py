@@ -25,12 +25,13 @@ Rounds:
              nearest depth; the negative control (sample 0 alone) is wrong exactly in the first band; the clamp's
              control (8 taken out: 8 drawn as 4, reported). ``QRhi::ResolveDepthStencil`` is recorded as a fact only.
   rest       (each API) nothing recorded and nothing allocated over frames at rest; control: a setting change records.
-  resize     (each API) the card dragged 800 -> 1000 -> 800 px wide in 2 px steps: the scene's allocation after each
+  resize     (each API) the card dragged 800 -> 1000 -> 800 px wide in 1 px steps: the scene's allocation after each
              step equals D14's rule (grown at once, shrunk only two buckets below), the reallocations counted against a
-             rule that re-buckets at every change (the control), the explicit-size target never reallocated; after the
+             true one-pixel buckets (resize_control), the explicit-size target never reallocated; after the
              drag the content equals a fresh item's at that size.
   retire     (each API) a program without targets releases them on a live item (counts to zero) and one with targets
-             makes them again; the item's destruction leaves nothing (targets, textures, bytes, readbacks); with Vulkan
+             makes them again; destruction between attachment steps and actual scene-graph invalidation release the
+             targets before host close; skipped edges fail the same retirement predicate; with Vulkan
              validation (synchronisation validation) through every round.
   cost       (each API) at 2560x1440 and 3840x2160: the surface's GPU time (the content's whole record: every target
              pass) median and p90, single-sampled and 4x (the 4x minus 1x difference bounds the resolves: choice G's
@@ -41,6 +42,12 @@ Rounds:
              have no readback between them to order a resolve), so a Vulkan cost round without the validation layer
              fails.
 Run alone (not in the default set):
+  placement_control (--apis opengl) put content at the image top; rule (a) rejects the edge reads against the unchanged
+             independent Python renderer. Parity includes an aligned 512x320 scene beside 480x270 and 720x405.
+  resize_control (each API) the native owner uses a true one-pixel allocation bucket, including two-pixel shrink
+             hysteresis; its allocations match the independent control oracle and fail the normal 64px rule.
+  partial_retire_control / invalidation_control (each API, separate runs) skip the destruction between steps or the
+             scene-graph invalidation; actual held resources fail the positive round's zero-resource predicate.
   prime_control  (--apis vulkan) rule C for depth's negative control: the scene with the depth prime skipped, then with
              it, at one sample and at 4x; synchronisation validation shows read-after-write hazards on the depth load
              only where it was skipped. Then the resolves' prime (audit 2, H1): 40 consecutive 4x records with it
@@ -84,12 +91,14 @@ from tools import pixel_tolerance as pt  # noqa: E402
 APIS = ("opengl", "vulkan")
 ROUNDS = ("parity", "msaa", "rest", "resize", "retire", "cost")
 # Run on its own (its skipped phase is expected to show hazards): --apis vulkan --rounds prime_control
-CONTROL_ROUNDS = ("prime_control", "cost_parts")
+CONTROL_ROUNDS = ("prime_control", "cost_parts", "placement_control", "resize_control",
+                  "partial_retire_control", "invalidation_control")
 # The Python renderer's cost on the same load (the reference child, OpenGL): --rounds python_cost
 PYTHON_ROUNDS = ("python_cost",)
 CHILD_TIMEOUT_S = 1500
 MARGIN = 8
 CARD = (480, 270)                  # the item's logical size (parity, msaa, rest, retire)
+ALIGNED_CARD = (512, 320)           # no scene slack on either axis (one independent parity case)
 DPRS = (1.0, 1.5)
 AMBIENT = (300, 170)               # the ambient target's explicit size (parity)
 REST_FRAMES = 4
@@ -105,7 +114,7 @@ DEPTH_TOLERANCE = 2e-7             # N0.3 scene 2's bound
 # rule (b) none.
 SCENE_RULE_A = pt.Tolerance("scene target, rule (a)", masked_level=1, tie_pixels=RULE_A_TIE_PIXELS)
 SCENE_RULE_B = pt.Tolerance("scene target, rule (b)", masked_level=1)
-DRAG = (800, 1000, 2)              # the resize round's widths (start, end, step); its card is 400 px high
+DRAG = (800, 1000, 1)              # the resize round's widths (start, end, step); its card is 400 px high
 DRAG_HEIGHT = 400
 COST_HOSTS = ((2560, 1440), (3840, 2160))
 COST_AMBIENT = (2048, 1152)
@@ -330,7 +339,8 @@ def analytic(frames: dict, settings: dict) -> dict:
 
 # --------------------------------------------------------------------------------------------------- the rounds
 
-PARITY_CASES = (("dpr1", 1.0, 1.0), ("dpr1.5", 1.5, 1.0), ("glow_off", 1.0, 0.0))
+PARITY_CASES = (("dpr1", CARD, 1.0, 1.0), ("dpr1.5", CARD, 1.5, 1.0),
+                ("aligned", ALIGNED_CARD, 1.0, 1.0), ("glow_off", CARD, 1.0, 0.0))
 
 
 def _save(out: Path, name: str, frames: dict) -> None:
@@ -371,14 +381,14 @@ def _work(out: Path) -> Path:
     return path
 
 
-def round_parity(core, engine, app, api: str, packs: dict, out: Path) -> dict:
+def round_parity(core, engine, app, api: str, packs: dict, out: Path, *, top_control: bool = False) -> dict:
     st = _scene_module()
-    host = core.hidden_host(*_host_size([CARD], DPRS))
+    host = core.hidden_host(*_host_size([CARD, ALIGNED_CARD], DPRS))
     checks, facts, frames = {}, {}, {}
     try:
-        for case, dpr, glow in PARITY_CASES:
+        for case, card, dpr, glow in PARITY_CASES:
             host.set_device_pixel_ratio(dpr)
-            scene = Scene(core, engine, host, CARD, dpr, packs, glow=glow)
+            scene = Scene(core, engine, host, card, dpr, packs, glow=glow)
             try:
                 frames[case] = scene.targets(app)
                 state = scene.mode.state()
@@ -387,7 +397,9 @@ def round_parity(core, engine, app, api: str, packs: dict, out: Path) -> dict:
                 facts[f"{case}_analytic"] = result
                 checks[f"{case}_analytic"] = result["pass"]
                 content = frames[case]["scene.colour"]["content"]
-                checks[f"{case}_scene_content_is_the_surface"] = content == _pixels(CARD, dpr)
+                checks[f"{case}_scene_content_is_the_surface"] = content == _pixels(card, dpr)
+                if case == "aligned":
+                    checks["aligned_scene_has_no_slack"] = tuple(frames[case]["scene.colour"]["size"]) == content
                 checks[f"{case}_ambient_content_is_its_explicit_size"] = (
                     frames[case]["ambient.coverage"]["content"] == AMBIENT)
             finally:
@@ -395,15 +407,18 @@ def round_parity(core, engine, app, api: str, packs: dict, out: Path) -> dict:
                 host.frames(2)
                 host_check._flush_deletes(app)
         host.set_device_pixel_ratio(1.0)
-        result = _previous_frame(core, engine, app, host, packs)
-        facts["previous_frame"] = result["facts"]
-        checks.update({f"previous_frame_{k}": v for k, v in result["checks"].items()})
+        if not top_control:
+            result = _previous_frame(core, engine, app, host, packs)
+            facts["previous_frame"] = result["facts"]
+            checks.update({f"previous_frame_{k}": v for k, v in result["checks"].items()})
     finally:
         host.close()
         host_check._flush_deletes(app)
-    _save(out, f"parity_{api}", frames)
+    _save(out, "placement_control" if top_control else f"parity_{api}", frames)
     _sheet(out, api, frames)
-    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+    # The broken form's pixel verdict belongs to the parent, against its independent Python child.
+    return {"pass": True if top_control else all(checks.values()), "checks": {} if top_control else checks,
+            "facts": {**facts, **({"broken_analytic_checks": checks} if top_control else {})}}
 
 
 def _previous_frame(core, engine, app, host, packs: dict) -> dict:
@@ -646,8 +661,8 @@ def round_rest(core, engine, app, packs: dict) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
-def round_resize(core, engine, app, packs: dict) -> dict:
-    from rendering.native.scene_targets import bucket_pixels, next_allocation
+def round_resize(core, engine, app, packs: dict, *, one_pixel_control: bool = False) -> dict:
+    from rendering.native.scene_targets import next_allocation
 
     start, end, step = DRAG
     widths = list(range(start, end + 1, step)) + list(range(end - step, start - 1, -step))
@@ -690,12 +705,15 @@ def round_resize(core, engine, app, packs: dict) -> dict:
     def reallocations(sequence) -> int:
         return sum(1 for a, b in zip(sequence, sequence[1:]) if a != b) + 1
 
-    control, previous = [], None
+    control = []
+    previous = (0, 0)
     for width in widths:
-        previous = (bucket_pixels(width), bucket_pixels(DRAG_HEIGHT))
+        # Independent one-pixel-bucket oracle: the same two-bucket hysteresis is now two pixels.
+        previous = tuple(need if have <= 0 or need > have or have - need >= 2 else have
+                         for have, need in zip(previous, (width, DRAG_HEIGHT)))
         control.append(previous)
     checks["allocation_follows_the_rule_at_every_step"] = observed == expected
-    checks["fewer_reallocations_than_rebucketing_every_change"] = reallocations(observed) < reallocations(control)
+    checks["fewer_reallocations_than_one_pixel_buckets"] = reallocations(observed) < reallocations(control)
     checks["the_explicit_target_never_reallocated"] = ambient_changes == 0
     content_equal = {}
     for key in ("scene.colour", "scene.emission", "scene.capture_colour", "scene.capture_depth", "ambient.coverage",
@@ -709,6 +727,11 @@ def round_resize(core, engine, app, packs: dict) -> dict:
                   "first_mismatch": next(([w, o, e] for w, o, e in zip(widths, observed, expected) if o != e), None),
                   "allocations_seen": sorted(set(observed)), "content_equal": content_equal,
                   "final_allocation": [list(dragged["scene.colour"]["size"]), list(fresh["scene.colour"]["size"])]})
+    if one_pixel_control:
+        facts["normal_rule_checks_on_broken_form"] = checks
+        checks = {"native_control_is_a_true_one_pixel_bucket": observed == control,
+                  "normal_rule_rejects_one_pixel_buckets": observed != expected,
+                  "one_pixel_buckets_reallocate_more": reallocations(observed) > reallocations(expected)}
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
@@ -768,7 +791,74 @@ def round_retire(core, engine, app, packs: dict, folder: Path) -> dict:
     checks["a_program_with_targets_makes_them_again"] = again["scene_targets"] == 2
     checks["the_items_destruction_leaves_nothing"] = all(gone.get(k) == 0 for k in keys) and gone.get(
         "mode_resources") == 0 and gone.get("mode_sources") == 0
+    for case in ("mid_allocation", "scene_graph_invalidated"):
+        result = _retire_edge(core, engine, app, packs, case)
+        facts[case] = result["facts"]
+        checks.update({f"{case}_{key}": value for key, value in result["checks"].items()})
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def _targets_retired(live: dict) -> bool:
+    return all(live.get(key) == 0 for key in ("scene_targets", "scene_target_textures", "scene_target_bytes",
+                                             "scene_target_readbacks", "mode_resources"))
+
+
+def _retire_edge(core, engine, app, packs: dict, case: str, *, skip_control: bool = False) -> dict:
+    """Measure the actual edge before host close; a separately run control deliberately skips that edge."""
+    host = core.hidden_host(*_host_size([CARD]))
+    scene = None
+    checks, facts = {}, {}
+    try:
+        if case == "mid_allocation":
+            core.scene_target_control("allocation_steps", 1)
+        scene = Scene(core, engine, host, CARD, 1.0, packs)
+        if case == "mid_allocation":
+            states = []
+            for _ in range(2):
+                scene.mode.update()
+                host.frames(1)
+                states.append(scene.mode.state()["scene_targets"])
+            first, second = states
+            checks["one_attachment_step_per_record"] = second["steps"] == first["steps"] + 1
+            checks["same_allocation_plan_between_records"] = (
+                second["allocations"] == first["allocations"]
+                and [t["generation"] for t in second["targets"]] == [t["generation"] for t in first["targets"]])
+            checks["destroyed_while_targets_are_incomplete"] = not all(t["ready"] for t in second["targets"])
+            facts["states_before_destruction"] = states
+        else:
+            scene.targets(app)
+        held = core.composite_live()
+        if skip_control:
+            # Broken form: omit this edge, leaving the actual native objects alive. Apply the positive round's
+            # predicate before cleanup; a synthetic edited counter is never the negative control.
+            checks["skipped_release_is_rejected"] = not _targets_retired(held) and held["scene_target_textures"] > 0
+            facts["skipped_release_live"] = held
+            facts["normal_retirement_predicate_pass"] = _targets_retired(held)
+            return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+        if case == "mid_allocation":
+            scene.close(app)
+            scene = None
+            host.frames(2)
+            host_check._flush_deletes(app)
+        else:
+            host.invalidate_scene_graph()
+            state = host.state()
+            facts["host_before_close"] = state
+            driver = state.get("driver") or {}
+            checks["actual_scene_graph_signal_released_on_render_thread"] = (
+                driver.get("release_reason") == "scene graph invalidated"
+                and driver.get("released_on_gui_thread") is False)
+            checks["invalidation_keeps_the_item_alive"] = core.composite_live()["mode_sources"] > 0
+        gone = core.composite_live()  # before host.close: close cannot supply the proof
+        facts.update({"held_before_edge": held, "released_before_host_close": gone})
+        checks["edge_retires_all_target_resources"] = _targets_retired(gone)
+    finally:
+        core.scene_target_control("allocation_steps", 0)
+        if scene is not None:
+            scene.close(app)
+        host.close()
+        host_check._flush_deletes(app)
+    return {"checks": checks, "facts": facts}
 
 
 def round_prime_control(core, engine, app, packs: dict) -> dict:
@@ -1026,7 +1116,7 @@ void main()
 """
 
 
-def reference_frames(core, packs: dict, case_dpr: float, glow: float) -> dict:
+def reference_frames(core, packs: dict, case_dpr: float, glow: float, card: tuple[int, int] = CARD) -> dict:
     """The Python renderer's owners drawing the same fragments: SceneTarget (depth_texture, background(), hdr: Extruded
     Bubble's scope) and a GL target with the ambient owner's formats and blend states; read back as the core reads its
     own (rows flipped to the image's top first)."""
@@ -1043,7 +1133,7 @@ def reference_frames(core, packs: dict, case_dpr: float, glow: float) -> dict:
     from tools.labs.render_target import OffscreenRenderTarget
 
     st = _scene_module()
-    width, height = _pixels(CARD, case_dpr)
+    width, height = _pixels(card, case_dpr)
     settings = dict(st.settings(ambient_size=AMBIENT, with_show=False), u_glow=float(glow))
     target_gl = OffscreenRenderTarget(width, height, label="n31-reference")
     frames: dict = {}
@@ -1259,10 +1349,10 @@ def round_python_cost(core, packs: dict) -> dict:
 
 def round_reference(core, packs: dict, out: Path) -> dict:
     frames = {}
-    for case, dpr, glow in PARITY_CASES:
-        frames[case] = reference_frames(core, packs, dpr, glow)
+    for case, card, dpr, glow in PARITY_CASES:
+        frames[case] = reference_frames(core, packs, dpr, glow, card)
     _save(out, "parity_reference", frames)
-    return {"pass": True, "cases": [c for c, _d, _g in PARITY_CASES]}
+    return {"pass": True, "cases": [c for c, _card, _d, _g in PARITY_CASES]}
 
 
 def cross_compare(out: Path) -> dict:
@@ -1288,6 +1378,35 @@ def cross_compare(out: Path) -> dict:
                         "bound": (SCENE_RULE_A if rule == "rule_a" else SCENE_RULE_B).bound(),
                         "exact": sorted(k for k, v in per.items() if v["exact"])}
     return result
+
+
+def placement_control_verdict(out: Path) -> dict:
+    """Hold the native content-at-top broken form to the unchanged Python renderer's edge reads."""
+    import numpy as np
+
+    candidate, reference = _load(out, "placement_control"), _load(out, "parity_reference")
+    compared = {}
+    for case in (name for name, _card, _dpr, _glow in PARITY_CASES if name != "aligned"):
+        for texture, expected in reference.get(case, {}).items():
+            actual = candidate.get(case, {}).get(texture)
+            if actual is None:
+                return {"pass": False, "error": f"missing broken-form frame: {case}|{texture}"}
+            width, height = expected["content"]
+            aw, ah = expected["size"]
+            # The correct content's first/last row, the slack beside it, and the right edge. Derive solely from
+            # the independent oracle; never shift either frame into agreement with the candidate.
+            mask = np.zeros((ah, aw), dtype=bool)
+            for row in (ah - height - 1, ah - height, ah - 1):
+                if 0 <= row < ah:
+                    mask[row, :min(aw, width + 1)] = True
+            mask[ah - height:, max(0, width - 1):min(aw, width + 1)] = True
+            channels = actual["array"].shape[2:]  # keep a two-dimensional pixel grid for shared tolerance masks
+            a = {**actual, "array": actual["array"][mask].reshape((-1, 1, *channels))}
+            b = {**expected, "array": expected["array"][mask].reshape((-1, 1, *channels))}
+            compared[f"{case}|{texture}"] = judged(a, b, SCENE_RULE_A)
+    rejected = [name for name, result in compared.items() if not result["pass"]]
+    return {"pass": bool(rejected), "edge_reads_rejected_by_rule_a": rejected, "compared": compared,
+            "bound": SCENE_RULE_A.bound()}
 
 
 def _sheet(out: Path, api: str, frames: dict) -> None:
@@ -1362,7 +1481,7 @@ def child(args) -> dict:
         packs = _scene_module().bake_all(folder)
         try:
             if args.api == "reference":
-                if "parity" in args.rounds:
+                if "parity" in args.rounds or "placement_control" in args.rounds:
                     record["reference"] = round_reference(core, packs, out)
                 if "python_cost" in args.rounds:
                     try:
@@ -1376,14 +1495,29 @@ def child(args) -> dict:
                     try:
                         if name == "parity":
                             record[name] = round_parity(core, engine, app, args.api, packs, out)
+                        elif name == "placement_control":
+                            core.scene_target_control("content_at_top", 1)
+                            try:
+                                record[name] = round_parity(core, engine, app, args.api, packs, out, top_control=True)
+                            finally:
+                                core.scene_target_control("content_at_top", 0)
                         elif name == "msaa":
                             record[name] = round_msaa(core, engine, app, args.api, packs)
                         elif name == "rest":
                             record[name] = round_rest(core, engine, app, packs)
                         elif name == "resize":
                             record[name] = round_resize(core, engine, app, packs)
+                        elif name == "resize_control":
+                            core.scene_target_control("one_pixel_bucket", 1)
+                            try:
+                                record[name] = round_resize(core, engine, app, packs, one_pixel_control=True)
+                            finally:
+                                core.scene_target_control("one_pixel_bucket", 0)
                         elif name == "retire":
                             record[name] = round_retire(core, engine, app, packs, folder)
+                        elif name in ("partial_retire_control", "invalidation_control"):
+                            case = "mid_allocation" if name == "partial_retire_control" else "scene_graph_invalidated"
+                            record[name] = _retire_edge(core, engine, app, packs, case, skip_control=True)
                         elif name == "cost":
                             record[name] = round_cost(core, engine, app, packs, folder)
                         elif name == "prime_control" and vulkan:
@@ -1486,6 +1620,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--child-json", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
+    if not args.child and "placement_control" in args.rounds and args.apis != ["opengl"]:
+        parser.error("placement_control uses --apis opengl (its oracle is the Python OpenGL renderer)")
+    for control in ("placement_control", "resize_control", "partial_retire_control", "invalidation_control"):
+        if control in args.rounds and len(args.rounds) != 1:
+            parser.error(f"{control} runs alone in its own child process")
+
     if args.child:
         try:
             record = child(args)
@@ -1504,7 +1644,8 @@ def main(argv: list[str] | None = None) -> int:
     environment = vk_validation.environment_record(_ALLOWED_ENV)
     results: dict = {}
     children = [a for a in APIS if a in args.apis and set(args.rounds) - set(PYTHON_ROUNDS)]
-    if ("parity" in args.rounds and "opengl" in args.apis) or "python_cost" in args.rounds:
+    if (("parity" in args.rounds or "placement_control" in args.rounds) and "opengl" in args.apis) \
+            or "python_cost" in args.rounds:
         children.append("reference")
     for api in children:
         child_json = out / f"child_{api}.json"
@@ -1531,6 +1672,9 @@ def main(argv: list[str] | None = None) -> int:
     verdicts = {api: api_verdict(api, record, args.require_validation) for api, record in results.items()}
     failed = [reason for _ok, reasons in verdicts.values() for reason in reasons]
     cross = None
+    placement_control = placement_control_verdict(out) if "placement_control" in args.rounds else None
+    if placement_control is not None and not placement_control["pass"]:
+        failed.append("content-at-top control: the Python oracle did not reject the broken edge reads")
     if "parity" in args.rounds:
         cross = cross_compare(out)
         for rule in ("rule_a", "rule_b"):
@@ -1541,7 +1685,7 @@ def main(argv: list[str] | None = None) -> int:
     if not environment["clean"]:
         failed.append(f"environment: {', '.join(environment['contaminating_set'])} set")
     summary = {"apis": args.apis, "rounds": args.rounds, "environment": environment,
-               "require_validation": args.require_validation, "cross": cross,
+               "require_validation": args.require_validation, "cross": cross, "placement_control": placement_control,
                "verdicts": {api: {"pass": ok, "failed": reasons} for api, (ok, reasons) in verdicts.items()},
                "results": results, "pass": not failed}
     (out / "summary.json").write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")

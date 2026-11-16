@@ -250,6 +250,26 @@ def test_the_modules_rules_are_the_python_reference(core):
             assert core.scene_target_clamp(supported, requested) == clamp_samples(supported, requested)
 
 
+@built
+def test_the_modules_one_pixel_control_changes_the_real_allocation_rule(core):
+    sizes = [(width, 70) for width in range(100, 108)] + [(width, 70) for width in range(106, 99, -1)]
+    current = expected = (0, 0)
+    try:
+        core.scene_target_control("one_pixel_bucket", 1)
+        for needed in sizes:
+            expected = tuple(need if have <= 0 or need > have or have - need >= 2 else have
+                             for have, need in zip(expected, needed))
+            current, _reason = core.scene_target_next_allocation(current, needed)
+            assert current == expected
+        assert current != next_allocation((0, 0), sizes[-1])[0]  # the normal rule rejects this broken form
+        for name, value in (("missing_control", 1), ("content_at_top", 2), ("allocation_steps", -1)):
+            with pytest.raises(ValueError):
+                core.scene_target_control(name, value)
+    finally:
+        core.scene_target_control("one_pixel_bucket", 0)
+    assert core.scene_target_next_allocation((0, 0), sizes[0]) == next_allocation((0, 0), sizes[0])
+
+
 @pytest.fixture(scope="module")
 def packs(tmp_path_factory):
     import scene_targets

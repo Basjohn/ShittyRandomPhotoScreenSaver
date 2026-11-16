@@ -924,11 +924,18 @@ python native/core/python/transition_route_check.py --module-dir release/native_
 # ambient owner's states driving the same fragments, rule (b) Vulkan against OpenGL), msaa (2x/4x/8x, the count created,
 # resolves equal to single-sampled without partial coverage, D14 point 10's nearest resolve against the analytic depth
 # with gl_SampleMask bands, means (a) and (b), its sample-0 negative control, the clamp's control), rest, resize
-# (800 -> 1000 -> 800 px against D14's rule), retire, cost (2560x1440 and 4K, 1x and 4x, timed until 30 GPU times
+# (800 -> 1000 -> 800 px in 1px steps against D14's rule), retire (partial allocation between steps and actual
+# render-thread scene-graph invalidation, resources measured before host close; skipped edges rejected), cost
+# (2560x1440 and 4K, 1x and 4x, timed until 30 GPU times
 # arrive; the light attachment's clear; on Vulkan the gate's synchronisation proof, failed without the layer); parity
-# also holds audit 2's previous_frame control (M4); Vulkan validated. Alone: --rounds prime_control (--apis vulkan; rule
+# also holds audit 2's previous_frame control (M4) and a bucket-aligned scene beside the unaligned DPR cases;
+# Vulkan validated. Alone: --rounds placement_control --apis opengl (content at the image top, rejected by independent
+# Python-oracle edge reads); --rounds resize_control (actual native 1px buckets, including 2px shrink hysteresis);
+# --rounds prime_control (--apis vulkan; rule
 # C for depth's negative control, 1x and 4x, and the resolves' prime's over 40 consecutive 4x records, audit 2 H1),
 # cost_parts (where the 4K four-sample time goes), python_cost (the Python SceneTarget's 4x minus 1x on the same load)
+# --rounds partial_retire_control / --rounds invalidation_control (separate runs: skip each real edge and require
+# the normal zero-resource predicate to fail on actual held resources, before cleanup).
 python native/core/python/scene_target_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
     [--apis opengl vulkan] [--rounds parity msaa rest resize retire cost] [--label n31_scene_targets]
 # N3.2 (D15): meshes and buffers on the harness scenes native/core/python/mesh_buffers (passes with their own vertex
