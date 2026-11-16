@@ -67,7 +67,7 @@ const char *const kFormNames[] = { "overlay", "overlay_glow", "opaque_glow" };
 
 qint64 levelBytes(const QSize &size, int bytesPerTexel)
 {
-    return qint64(size.width()) * qint64(size.height()) * qint64(bytesPerTexel);
+    return size.isEmpty() ? 0 : qint64(size.width()) * qint64(size.height()) * qint64(bytesPerTexel);
 }
 
 // The skipped-release control's objects (the retirement proof's): kept, counted, until a later sync on their QRhi with
@@ -536,6 +536,7 @@ void PostStages::releaseBloom(Bloom &b)
         b.passes[k].reset();
         textures += b.levels[k] ? 1 : 0;
         b.levels[k].reset();
+        b.sizes[k] = QSize();
     }
     count(-textures, -b.bytes, textures ? -1 : 0, 0);
     b.bytes = 0;
@@ -637,8 +638,6 @@ bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<Def
         }
         if (!resized)
             continue;
-        qint64 bytes = 0;
-        int made = 0;
         for (int k = 0; k < kBloomLevels; ++k) {
             const QByteArray label = QByteArrayLiteral("srpss core bloom ") + spec.name + QByteArrayLiteral(" level ")
                 + QByteArray::number(k);
@@ -646,12 +645,19 @@ bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<Def
                 b.levels[k].reset(rhi->newTexture(QRhiTexture::RGBA16F, sizes[k], 1,
                                                   QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
                 b.levels[k]->setName(label);
-                ++made;
+                // Ownership exists even if create fails. Level 0 is made first, so it owns the chain's one count.
+                count(1, 0, k == 0 ? 1 : 0, 0);
                 g_objectsCreated.fetchAndAddRelaxed(1);
             } else {
                 b.levels[k]->setPixelSize(sizes[k]); // the same object at the new size (bindings follow)
             }
-            if (!create(b.levels[k].get())) {
+            const qint64 oldBytes = levelBytes(b.sizes[k], 8);
+            const bool textureReady = create(b.levels[k].get());
+            b.sizes[k] = textureReady ? sizes[k] : QSize();
+            const qint64 delta = levelBytes(b.sizes[k], 8) - oldBytes;
+            b.bytes += delta;
+            count(0, delta, 0, 0);            // before the target create can fail, including a partial resize
+            if (!textureReady) {
                 *error = QStringLiteral("bloom step '%1': level %2 could not be created at %3 x %4")
                              .arg(QString::fromLatin1(spec.name)).arg(k).arg(sizes[k].width()).arg(sizes[k].height());
                 noteFault();
@@ -673,11 +679,7 @@ bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<Def
                 noteFault();
                 return false;
             }
-            b.sizes[k] = sizes[k];
-            bytes += levelBytes(sizes[k], 8);
         }
-        count(made, bytes - b.bytes, made == kBloomLevels ? 1 : 0, 0);
-        b.bytes = bytes;
         ++m_objectGeneration;
     }
     // The defocus steps: the read level's texture at the near target's allocation and level (D17 choice I).
@@ -723,17 +725,21 @@ bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<Def
         if (d.below && d.belowSize == below)
             continue;
         const QByteArray label = QByteArrayLiteral("srpss core defocus read level ") + QByteArray::number(spec.pass);
-        int made = 0;
         if (!d.below) {
             d.below.reset(rhi->newTexture(QRhiTexture::RGBA16F, below, 1,
                                           QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
             d.below->setName(label);
-            made = 1;
+            count(1, 0, 0, 1);                // the owned wrapper survives a failed texture/target create until release
             g_objectsCreated.fetchAndAddRelaxed(1);
         } else {
             d.below->setPixelSize(below);
         }
-        if (!create(d.below.get())) {
+        const qint64 oldBytes = d.bytes;
+        const bool textureReady = create(d.below.get());
+        d.belowSize = textureReady ? below : QSize();
+        d.bytes = textureReady ? levelBytes(below, 8) : 0;
+        count(0, d.bytes - oldBytes, 0, 0);
+        if (!textureReady) {
             *error = QStringLiteral("defocus step %1: its read level's texture could not be created at %2 x %3")
                          .arg(spec.pass).arg(below.width()).arg(below.height());
             noteFault();
@@ -753,10 +759,6 @@ bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<Def
             noteFault();
             return false;
         }
-        const qint64 bytes = levelBytes(below, 8);
-        count(made, bytes - d.bytes, 0, made);
-        d.bytes = bytes;
-        d.belowSize = below;
         ++m_objectGeneration;
     }
     return true;
