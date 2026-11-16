@@ -64,6 +64,8 @@ activity is explicitly authorised for the diagnosis; section 3's original quiet-
 - [x] Combined-control native 1x proof and single-call replay isolate the tracking/barrier effect; primary
   Khronos/Qt/NVIDIA research finds no required barrier and supports a still-unproved overlap/contention hypothesis.
   Next: compatible hardware counters, no production barrier or driver change. Full figures/limits stay in D17.
+- [x] Compatible signed Nsight2026.3.1 extracted without installation; CPU launch works after removing the
+  Qt-conflicting `--platform` argument. Hardware-counter capture remains open; exact CLI/help/logs retained in scratch.
 
 ## 1. Read these first, in this order
 

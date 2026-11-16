@@ -554,6 +554,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       timing and unchanged pixels. Khronos/Qt establish no missing visibility barrier here; NVIDIA documents
       harmful shared-resource overlap, but current evidence does not establish that mechanism or a driver bug.
       Driver617.42 supports Nsight Graphics2026.3 (requires615+); use that release without changing the driver.
+      Signed2026.3.1 package extracted without installation; CPU launch verified. Omit ngfx's `--platform`
+      argument: Qt consumes it as a QPA plugin name and caused the startup dialog. Create output directory first.
     - [ ] Fix it in the core if it is ours (one change, a build, the split again: `--rounds defocus_cost` on both APIs,
       the OpenGL sprite raster near Python's and Vulkan unchanged), or record it in D17 as the driver's with the figures
       if no state difference moves it. Then rerun `--rounds parity` (rules (a) and (b) must still pass) and record the
