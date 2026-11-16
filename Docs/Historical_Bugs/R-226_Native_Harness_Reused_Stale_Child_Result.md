@@ -16,14 +16,18 @@ nonzero exit and timeout, even if the current child wrote successful JSON before
 diagnostic evidence but cannot overrule process failure.
 
 The caller sweep covers timer, spectrum, generic mode, devcurve, fullscreen pass, job service, background layer,
-backdrop pyramid, transition route, compute pass and post-stage harnesses. Compute and post-stage reference
-verdicts also reject failed processes, independently of the shared native verdict.
+backdrop pyramid, transition route, compute pass, post-stage and mesh-buffer harnesses. Compute, post-stage and
+mesh-buffer reference verdicts also reject failed processes, independently of the shared native verdict.
 
 Regression bar: `tests/test_native_core_host.py::test_native_harness_never_accepts_stale_or_failed_child_success`,
 parameterized across both harnesses and timeout/nonzero exit. `tests/test_native_harness_child_results.py` applies
 the same controls to the caller sweep and reference verdicts. Each seeds stale success, requires its removal before
 launch, writes another success during the failed call, and requires FAIL. The pre-fix versions fail at the stale
 record assertion. The focused host/composite gate passes all 99 tests after repair.
+
+`tests/test_native_mesh_buffer_harness.py` covers mesh-buffer native and reference launches and reference verdicts:
+all six controls failed before its repair (four stale records survived launch, two failed reference processes
+passed), then passed with pre-launch unlink and an independent failed-exit guard.
 
 Lesson: a proof record belongs to one successful execution. File presence and successful checks cannot establish
 that execution when its process failed.

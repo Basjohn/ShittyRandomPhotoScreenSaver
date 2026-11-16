@@ -46,7 +46,9 @@ Rounds:
              the pair's floor (CPU: the record with the data resident plus one copy of the payload into mapped
              memory; GPU: the same instanced pass over a resident mesh instance stream, no copy); per frame the
              record's render-thread time (the core's counter) and the GPU time; and Waveform's 288 KiB capacity
-             carrying 4 KiB. The pair is built only if a route misses the floor by 0.05 ms or more.
+             carrying 4 KiB. Bracketing floor medians report baseline-drift sensitivity of the median excess;
+             p10/p90 tails remain descriptive. An unresolved 0.05 ms median excess requires a repeat. A material
+             excess is reported to the lead, never automatic pair admission.
 
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/mesh_buffer_check.py --module-dir release/native_module --require-validation
@@ -1181,13 +1183,39 @@ def _timed(host, scene, *, min_samples: int = COST_MIN_SAMPLES, frames: int = RI
     record_ms: list[float] = []      # the render thread's record (the core's own timer), mean per window of 20
     write_ms: list[float] = []       # its stream and arena writes alone
     drawn = 0
+    records_measured = 0
 
     def live() -> dict:
         raw = scene.mode._module.composite_live()
         return json.loads(raw) if isinstance(raw, str) else dict(raw)
 
-    last = core_counts = live()
-    timed = "mesh_buffers_records_timed" in core_counts
+    counter_keys = ("mesh_buffers_records_timed", "mesh_buffers_record_ns", "mesh_buffers_stream_write_ns")
+
+    def counts() -> dict:
+        state = live()
+        for key in counter_keys:
+            value = state.get(key)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise RuntimeError(f"required native timing counter missing/invalid: {key}")
+        return state
+
+    last = counts()
+
+    def sample_cpu_batch(requested_frames):
+        nonlocal last, records_measured
+        now = counts()
+        if any(now[key] < last[key] for key in counter_keys):
+            raise RuntimeError("native timing counters regressed during measurement")
+        records = now["mesh_buffers_records_timed"] - last["mesh_buffers_records_timed"]
+        if records != requested_frames:
+            raise RuntimeError(f"native record timing batch ending at frame {drawn}: expected {requested_frames} "
+                               f"new records, observed {records}")
+        record_ms.append((now["mesh_buffers_record_ns"] - last["mesh_buffers_record_ns"]) / records / 1e6)
+        write_ms.append((now["mesh_buffers_stream_write_ns"] - last["mesh_buffers_stream_write_ns"])
+                        / records / 1e6)
+        records_measured += records
+        last = now
+
     while drawn < COST_MAX_FRAMES and (drawn < frames or len(gpu) < min_samples):
         scene.publish()
         scene.mode.update()
@@ -1197,14 +1225,11 @@ def _timed(host, scene, *, min_samples: int = COST_MIN_SAMPLES, frames: int = RI
         drawn += 1
         if drawn % 20 == 0:
             gpu += [s.nanoseconds for s in host.gpu_samples() if s.kind == 2]
-            if timed:
-                now = live()
-                records = now["mesh_buffers_records_timed"] - last["mesh_buffers_records_timed"]
-                if records > 0:
-                    record_ms.append((now["mesh_buffers_record_ns"] - last["mesh_buffers_record_ns"]) / records / 1e6)
-                    write_ms.append((now["mesh_buffers_stream_write_ns"] - last["mesh_buffers_stream_write_ns"])
-                                    / records / 1e6)
-                last = now
+            sample_cpu_batch(20)
+    if drawn % 20:
+        sample_cpu_batch(drawn % 20)
+    if records_measured != drawn:
+        raise RuntimeError(f"native record timing coverage: expected {drawn}, observed {records_measured}")
     host.frames(4)
     gpu += [s.nanoseconds for s in host.gpu_samples() if s.kind == 2]
     host.set_gpu_timer(False)
@@ -1212,12 +1237,18 @@ def _timed(host, scene, *, min_samples: int = COST_MIN_SAMPLES, frames: int = RI
     result = _summary(gpu)
     result.update({"frames": drawn, "wall_median_ms": round(wall[len(wall) // 2], 4),
                    "wall_p10_ms": round(wall[int(len(wall) * 0.1)], 4)})
-    if record_ms:
-        record_ms.sort()
-        write_ms.sort()
-        result.update({"record_cpu_median_ms": round(record_ms[len(record_ms) // 2], 4),
-                       "record_cpu_p10_ms": round(record_ms[int(len(record_ms) * 0.1)], 4),
-                       "write_cpu_median_ms": round(write_ms[len(write_ms) // 2], 4)})
+    if not record_ms:
+        raise RuntimeError("native record timing counter did not advance; no CPU measurement")
+    record_ms.sort()
+    write_ms.sort()
+    result.update({"record_cpu_median_ms": round(record_ms[len(record_ms) // 2], 4),
+                   "record_cpu_p10_ms": round(record_ms[int(len(record_ms) * 0.1)], 4),
+                   "record_cpu_p90_ms": round(record_ms[int(len(record_ms) * 0.9)], 4),
+                   "record_cpu_samples": len(record_ms),
+                   "record_cpu_expected_samples": (drawn + 19) // 20,
+                   "record_cpu_sampled_frames": records_measured,
+                   "record_cpu_records": records_measured,
+                   "write_cpu_median_ms": round(write_ms[len(write_ms) // 2], 4)})
     return result
 
 
@@ -1251,8 +1282,8 @@ def round_cost(core, engine, app, api: str, packs: dict) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
-def _copy_ms(size: int, repeats: int = 400) -> float:
-    """One copy of ``size`` bytes into a buffer already allocated and touched (the median of ``repeats``), ms."""
+def _copy_summary(size: int, repeats: int = 400) -> dict:
+    """Observed copy times into allocated/touched memory; one payload copy is the CPU lower bound."""
     import numpy as np
 
     source = np.frombuffer(bytes(range(256)) * (size // 256 + 1), np.uint8)[:size].copy()
@@ -1263,8 +1294,52 @@ def _copy_ms(size: int, repeats: int = 400) -> float:
         started = time.perf_counter_ns()
         np.copyto(target, source)
         times.append(time.perf_counter_ns() - started)
-    times.sort()
-    return round(times[len(times) // 2] / 1e6, 4)
+    return _summary(times)
+
+
+def _floor_comparison(route: dict, before: dict, after: dict, copy: dict | None = None) -> dict:
+    """Gate median excess on bracketing baseline drift; observed quantile spread is descriptive, not a CI."""
+    result = {"margin_ms": FLOOR_MARGIN_MS, "status": "invalid",
+              "criterion": "median excess with bracketing floor-median drift sensitivity"}
+    for measurement in (route, before, after) + ((copy,) if copy is not None else ()):
+        values = [measurement.get(key) for key in ("p10_ms", "median_ms", "p90_ms")]
+        if (type(measurement.get("samples")) is not int or measurement["samples"] < COST_MIN_SAMPLES
+                or measurement.get("coverage_valid") is False
+                or any(not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0
+                       for value in values) or not values[0] <= values[1] <= values[2]):
+            result["reason"] = "missing/nonfinite/unordered timing or insufficient samples/CPU batch coverage; repeat required"
+            return result
+    copy = copy or {"p10_ms": 0, "median_ms": 0, "p90_ms": 0}
+    floor_median = (before["median_ms"] + after["median_ms"]) / 2 + copy["median_ms"]
+    floor_low = min(before["p10_ms"], after["p10_ms"]) + copy["p10_ms"]
+    floor_high = max(before["p90_ms"], after["p90_ms"]) + copy["p90_ms"]
+    excess = route["median_ms"] - floor_median
+    low = route["median_ms"] - (max(before["median_ms"], after["median_ms"]) + copy["median_ms"])
+    high = route["median_ms"] - (min(before["median_ms"], after["median_ms"]) + copy["median_ms"])
+    status = "within" if high < FLOOR_MARGIN_MS else "material" if low >= FLOOR_MARGIN_MS else "inconclusive"
+    result.update(status=status, route_median_ms=route["median_ms"], floor_median_ms=floor_median,
+                  floor_observed_spread_ms=[floor_low, floor_high], raw_median_excess_ms=excess,
+                  raw_median_exceeds_margin=excess >= FLOOR_MARGIN_MS,
+                  median_excess_floor_drift_sensitivity_ms=[low, high],
+                  excess_observed_spread_ms=[route["p10_ms"] - floor_high, route["p90_ms"] - floor_low],
+                  route_to_floor_median_ratio=route["median_ms"] / floor_median if floor_median > 0 else None,
+                  floor_bracket_median_change_ms=after["median_ms"] - before["median_ms"])
+    if status != "within":
+        result["reason"] = ("material median excess: report evidence to lead; no automatic native-pair admission"
+                            if status == "material" else "floor median drift crosses median-excess margin; repeat required")
+    return result
+
+
+def _record_metric(measurement: dict) -> dict:
+    metric = {key: measurement.get("record_cpu_" + key) for key in ("samples", "p10_ms", "median_ms", "p90_ms")}
+    frames = measurement.get("frames")
+    expected = (frames + 19) // 20 if type(frames) is int and frames > 0 else None
+    records = measurement.get("record_cpu_records")
+    metric["coverage_valid"] = (expected is not None and metric["samples"] == expected
+                                and measurement.get("record_cpu_expected_samples") == expected
+                                and measurement.get("record_cpu_sampled_frames") == frames
+                                and type(records) is int and records == frames)
+    return metric
 
 
 def round_stream_ring(core, engine, app, api: str, packs: dict, only=None) -> dict:
@@ -1278,45 +1353,40 @@ def round_stream_ring(core, engine, app, api: str, packs: dict, only=None) -> di
             if only and label not in only and label != "none":
                 continue
             entry = {}
-            kinds = ("none",) if size == 0 else (("storage", "floor") if used is not None else
-                                                 ("instance", "storage", "floor"))
-            for kind in kinds:
+            def measure(kind):
                 spec = mb.ring_scene(packs, size // 4, kind, used_floats=used if kind == "storage" else None)
                 scene = Scene(core, engine, host, spec)
                 try:
-                    entry[kind] = _timed(host, scene)
-                    entry[kind]["last_reason"] = scene.mode.state().get("last_reason")
+                    measured = _timed(host, scene)
+                    measured["last_reason"] = scene.mode.state().get("last_reason")
+                    return measured
                 finally:
                     _close(scene, host, app)
             facts[label] = entry
             if size == 0:
+                entry["none"] = measure("none")
+                checks["none_timed"] = entry["none"]["samples"] >= COST_MIN_SAMPLES
                 continue
-            floor = entry["floor"]
-            # The CPU axis: the render thread's record (the core's timer) where the module counts it, else the frame's
-            # wall time on the GUI thread (a module before the counter: noisier, the whole frame).
-            first = entry.get("instance") or entry["storage"]
-            cpu_key = "record_cpu_median_ms" if "record_cpu_median_ms" in first else "wall_median_ms"
-            if cpu_key == "record_cpu_median_ms":
-                # The pair's CPU floor: the record with the data resident (the floor scene) plus one copy of the
-                # payload into memory already mapped (timed here, the copy a persistent mapping would cost). Not the
-                # instance route's own write: on OpenGL QRhi's Dynamic fast path is itself a buffer update call. A
-                # partial payload's floor copies only its used bytes.
-                copy_ms = _copy_ms(4 * used if used is not None else size)
-                cpu_floor = floor[cpu_key] + copy_ms
-                entry["cpu_floor_ms"] = {"floor_record_ms": floor[cpu_key], "payload_copy_ms": copy_ms,
-                                         "floor_ms": round(cpu_floor, 4)}
-            else:
-                cpu_floor = first[cpu_key]
-            entry["cpu_axis"] = cpu_key
+            entry["cpu_axis"] = "native render-thread record plus one allocated/touched memory copy (ms)"
+            entry["gpu_axis"] = "surface pass GPU timestamp (ms)"
             if used is not None:
                 entry["used_bytes"] = 4 * used
-            for route in [r for r in ("instance", "storage") if r in entry]:
-                got = entry[route]
-                ok_gpu = (got["median_ms"] is not None and floor["median_ms"] is not None
-                          and got["median_ms"] - floor["median_ms"] < FLOOR_MARGIN_MS)
-                ok_cpu = got[cpu_key] - cpu_floor < FLOOR_MARGIN_MS
-                entry[f"{route}_within_floor"] = {"gpu": ok_gpu, "cpu": ok_cpu}
-                checks[f"{label}_{route}_within_0.05ms_of_the_floor"] = ok_gpu and ok_cpu
+            for route in (("storage",) if used is not None else ("instance", "storage")):
+                # Every route has its own adjacent resident floors. A later floor alone can confuse changing
+                # GPU clocks/load with route cost. Preserve all three raw measurements for review/repeat.
+                before = measure("floor")
+                got = measure(route)
+                after = measure("floor")
+                copy = _copy_summary(4 * used if used is not None else size)
+                comparisons = {"gpu": _floor_comparison(got, before, after),
+                               "cpu": _floor_comparison(_record_metric(got), _record_metric(before),
+                                                        _record_metric(after), copy)}
+                entry[route] = {"measurement": got, "floor_before": before, "floor_after": after,
+                                "payload_copy": copy, "comparison": comparisons}
+                enough = all(m["samples"] >= COST_MIN_SAMPLES for m in (before, got, after))
+                checks[f"{label}_{route}_timed"] = enough
+                for axis, comparison in comparisons.items():
+                    checks[f"{label}_{route}_{axis}_resolved_within_margin"] = comparison["status"] == "within"
     finally:
         host.close()
         host_check._flush_deletes(app)
@@ -1411,6 +1481,8 @@ def child(args) -> dict:
 
 
 def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool, list[str]]:
+    if record.get("exit_code", 0) != 0:
+        return False, [f"{api}: child process failed ({record['exit_code']}); no successful proof"]
     if api == "reference":
         entry = record.get("reference") or {}
         return bool(entry.get("pass")), ([] if entry.get("pass") else
@@ -1482,6 +1554,7 @@ def main(argv: list[str] | None = None) -> int:
         children.append("reference")
     for api in children:
         child_json = out / f"child_{api}.json"
+        child_json.unlink(missing_ok=True)   # R-226: never accept a previous run's successful record
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
                    "--rounds", *args.rounds] + (["--ring-payloads", *args.ring_payloads] if args.ring_payloads else [])
