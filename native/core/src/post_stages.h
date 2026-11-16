@@ -49,6 +49,7 @@ constexpr int kBloomLevels = 4;            // post.py BLOOM_LEVELS
 constexpr int kMaxBloomStages = 2;
 constexpr int kMaxDefocusStages = 2;
 constexpr int kMaxStageAllocationAttempts = 2 * (kMaxBloomStages * kBloomLevels + kMaxDefocusStages);
+constexpr int kMaxStageBuildAttempts = kMaxBloomStages * (2 * kBloomLevels + 3) + kMaxDefocusStages * 8;
 
 // A pass entry's stage (mode_content.h ModePass::stage); None for a mode's own pass.
 enum class StageKind { None = 0, TransparencyResolve = 1, Bloom = 2, Defocus = 3, Composite = 4 };
@@ -108,6 +109,7 @@ void setSkipReadChain(bool skip);               // the defocus run's chainShader
 bool skipReadChain();
 // Harness only: fail this texture/target create attempt in one sync (0: off). The bound follows the stage limits.
 void setStageAllocationFailure(int attempt);
+void setStageBuildFailure(int attempt);         // the build/rebind's sampler, binding or pipeline create attempt
 // The defocus cost's diagnosis (the lead, 15 Nov), OpenGL only: GL timestamps before the gather, between it and the
 // sprites, and after them, read back latched (never waited for) at a later record; their sums join composite_live
 // (stage_defocus_timed, stage_gather_gpu_ns, stage_sprites_gpu_ns). Off: no query object and no call.
@@ -126,7 +128,9 @@ struct StageCounts
     int defocusSteps = 0;         // defocus steps holding their read level's texture
     int textures = 0;             // the stages' own QRhiTextures (bloom levels, read-level textures)
     qint64 bytes = 0;
-    int pipelines = 0;            // the stages' QRhi pipelines and bindings alive
+    int pipelines = 0;            // owned pipeline, sampler and shader-resource-binding wrappers (partial builds too)
+    qint64 buildFailures = 0;     // harness-injected failures only, to prove which actual edge was reached
+    qint64 rebindFailures = 0;
     qint64 objectsCreated = 0;    // every QRhi object a stage made (flat at rest)
     qint64 bloomRecords = 0;      // bloom chains recorded
     qint64 defocusRecords = 0;    // defocus steps recorded
@@ -270,6 +274,22 @@ private:
     Defocus *defocusFor(int pass) const;
     bool bloomBindings(Bloom &b);
     bool defocusBindings(Defocus &d);
+    void beginBuildAttempts(bool rebinding = false);
+    void noteBuildFailure();
+    template<typename Resource> bool createBuildResource(Resource *resource)
+    {
+        if (m_failBuild && ++m_buildAttempt == m_failBuild) {
+            resource->destroy();
+            noteBuildFailure();
+            return false;
+        }
+        return resource->create();
+    }
+    void countPipelineObjects(int delta);
+    void releaseBloomPipelines(Bloom &b);
+    void releaseDefocusPipelines(Defocus &d);
+    static int allocationObjects(const Bloom &b);
+    static int allocationObjects(const Defocus &d);
     void releaseBloom(Bloom &b);
     void releaseDefocus(Defocus &d);
     void count(int textures, qint64 bytes, int chains, int steps);
@@ -285,6 +305,10 @@ private:
     quint32 m_conventionsBytes = 0;
     quint32 m_defocusBlockBytes = 0;
     int m_pipelineObjects = 0;
+    int m_failBuild = 0;            // harness snapshot; only build/rebind edges advance attempts
+    int m_buildAttempt = 0;
+    bool m_buildInjected = false;
+    bool m_rebinding = false;
     quint64 m_objectGeneration = 1;
 };
 

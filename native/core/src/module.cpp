@@ -753,6 +753,8 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("stage_textures"), sc.textures);
     o.insert(QStringLiteral("stage_bytes"), double(sc.bytes));
     o.insert(QStringLiteral("stage_pipelines"), sc.pipelines);
+    o.insert(QStringLiteral("stage_build_failures"), double(sc.buildFailures));
+    o.insert(QStringLiteral("stage_rebind_failures"), double(sc.rebindFailures));
     o.insert(QStringLiteral("stage_objects_created"), double(sc.objectsCreated));
     o.insert(QStringLiteral("stage_bloom_records"), double(sc.bloomRecords));
     o.insert(QStringLiteral("stage_defocus_records"), double(sc.defocusRecords));
@@ -1979,20 +1981,24 @@ PyObject *stage_control(PyObject *, PyObject *args)
     if (!PyArg_ParseTuple(args, "sO", &name, &argument))
         return nullptr;
     const QByteArray control(name);
-    if (control == "fail_allocation") {
+    if (control == "fail_allocation" || control == "fail_build") {
         if (!PyLong_Check(argument) || PyBool_Check(argument)) {
-            PyErr_SetString(PyExc_TypeError, "fail_allocation requires an integer attempt (0: off)");
+            PyErr_Format(PyExc_TypeError, "%s requires an integer attempt (0: off)", name);
             return nullptr;
         }
         const long attempt = PyLong_AsLong(argument);
         if (attempt == -1 && PyErr_Occurred())
             return nullptr;
-        if (attempt < 0 || attempt > srpss_core::kMaxStageAllocationAttempts) {
-            PyErr_Format(PyExc_ValueError, "fail_allocation attempt must be between 0 and %d",
-                         srpss_core::kMaxStageAllocationAttempts);
+        const int limit = control == "fail_allocation" ? srpss_core::kMaxStageAllocationAttempts
+                                                       : srpss_core::kMaxStageBuildAttempts;
+        if (attempt < 0 || attempt > limit) {
+            PyErr_Format(PyExc_ValueError, "%s attempt must be between 0 and %d", name, limit);
             return nullptr;
         }
-        srpss_core::setStageAllocationFailure(int(attempt));
+        if (control == "fail_allocation")
+            srpss_core::setStageAllocationFailure(int(attempt));
+        else
+            srpss_core::setStageBuildFailure(int(attempt));
         Py_RETURN_TRUE;
     }
     const int on = PyObject_IsTrue(argument); // preserve every existing boolean control's truth/error semantics
@@ -3001,7 +3007,8 @@ PyMethodDef methods[] = {
       "skip_read_chain, time_defocus_draws, flush_defocus_draws, flush_defocus_before_gather, "
       "flush_defocus_between_draws, flush_defocus_after_sprites (OpenGL), device_without_independent_blend: read at the next device's "
       "creation); False for an unknown "
-      "name. fail_allocation accepts an integer create-attempt ordinal (0: off), bounded by the stage limits." },
+      "name. fail_allocation (texture/target sync) and fail_build (sampler/bindings/pipeline build or rebind) accept "
+      "integer create-attempt ordinals (0: off), bounded by the stage limits." },
     { "scene_depth_prime_control", scene_depth_prime_control, METH_VARARGS,
       "(skip) -> None: N3.1, harness: the depth's rule C prime skipped (its negative control under synchronisation "
       "validation); False restores it." },

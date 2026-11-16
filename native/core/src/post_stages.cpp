@@ -33,6 +33,7 @@ QAtomicInteger<int> g_bloomSameTexture { 0 };
 QAtomicInteger<int> g_skipStageRelease { 0 };
 QAtomicInteger<int> g_skipReadChain { 0 };
 QAtomicInteger<int> g_stageAllocationFailure { 0 };
+QAtomicInteger<int> g_stageBuildFailure { 0 };
 QAtomicInteger<int> g_timeDefocusDraws { 0 }; // bit 0: queries; bits 1..3: individual boundary-only sites
 QAtomicInteger<qint64> g_defocusFlushes { 0 };
 QAtomicInteger<qint64> g_defocusTimed { 0 };
@@ -47,6 +48,8 @@ QAtomicInteger<int> g_textures { 0 };
 QAtomicInteger<qint64> g_bytes { 0 };
 QAtomicInteger<int> g_pipelines { 0 };
 QAtomicInteger<qint64> g_objectsCreated { 0 };
+QAtomicInteger<qint64> g_buildFailures { 0 };
+QAtomicInteger<qint64> g_rebindFailures { 0 };
 QAtomicInteger<qint64> g_bloomRecords { 0 };
 QAtomicInteger<qint64> g_defocusRecords { 0 };
 QAtomicInteger<qint64> g_transparencyResolves { 0 };
@@ -304,6 +307,11 @@ void setStageAllocationFailure(int attempt)
     g_stageAllocationFailure.storeRelease(attempt);
     g_controlGeneration.fetchAndAddOrdered(1);
 }
+void setStageBuildFailure(int attempt)
+{
+    g_stageBuildFailure.storeRelease(attempt);
+    g_controlGeneration.fetchAndAddOrdered(1);
+}
 static void setDefocusDrawControl(int bit, bool on)
 {
     if (on)
@@ -330,6 +338,8 @@ StageCounts stageCounts()
     c.textures = g_textures.loadRelaxed();
     c.bytes = g_bytes.loadRelaxed();
     c.pipelines = g_pipelines.loadRelaxed();
+    c.buildFailures = g_buildFailures.loadRelaxed();
+    c.rebindFailures = g_rebindFailures.loadRelaxed();
     c.objectsCreated = g_objectsCreated.loadRelaxed();
     c.bloomRecords = g_bloomRecords.loadRelaxed();
     c.defocusRecords = g_defocusRecords.loadRelaxed();
@@ -518,18 +528,45 @@ QRhiTexture *PostStages::glow(const QByteArray &step) const
     return nullptr;
 }
 
-void PostStages::releaseBloom(Bloom &b)
+void PostStages::countPipelineObjects(int delta)
 {
-    // The pipelines and bindings first (they name the render pass and the textures), then the targets, the
-    // descriptors and the textures.
+    m_pipelineObjects += delta;
+    g_pipelines.fetchAndAddRelaxed(delta);
+}
+
+void PostStages::beginBuildAttempts(bool rebinding)
+{
+    m_failBuild = g_stageBuildFailure.loadAcquire();
+    m_buildAttempt = 0;
+    m_buildInjected = false;
+    m_rebinding = rebinding;
+}
+
+void PostStages::noteBuildFailure()
+{
+    m_buildInjected = true;
+    (m_rebinding ? g_rebindFailures : g_buildFailures).fetchAndAddRelaxed(1);
+}
+
+void PostStages::releaseBloomPipelines(Bloom &b)
+{
+    int objects = (b.upAdd ? 1 : 0) + (b.downRest ? 1 : 0) + (b.downFirst ? 1 : 0) + (b.sampler ? 1 : 0);
     b.upAdd.reset();
     b.downRest.reset();
     b.downFirst.reset();
     for (int k = kBloomLevels - 1; k >= 0; --k) {
+        objects += (b.up[k] ? 1 : 0) + (b.down[k] ? 1 : 0);
         b.up[k].reset();
         b.down[k].reset();
     }
     b.sampler.reset();
+    countPipelineObjects(-objects);
+}
+
+void PostStages::releaseBloom(Bloom &b)
+{
+    // References first, then targets, descriptors and textures; the same subtractor covers partial builds.
+    releaseBloomPipelines(b);
     int textures = 0;
     for (int k = kBloomLevels - 1; k >= 0; --k) {
         b.targets[k].reset();
@@ -543,8 +580,11 @@ void PostStages::releaseBloom(Bloom &b)
     b.source = nullptr;
 }
 
-void PostStages::releaseDefocus(Defocus &d)
+void PostStages::releaseDefocusPipelines(Defocus &d)
 {
+    const int objects = (d.sprites ? 1 : 0) + (d.gather ? 1 : 0) + (d.clip ? 1 : 0)
+        + (d.spriteBindings ? 1 : 0) + (d.gatherBindings ? 1 : 0) + (d.clipBindings ? 1 : 0)
+        + (d.linearSampler ? 1 : 0) + (d.mipSampler ? 1 : 0);
     d.sprites.reset();
     d.gather.reset();
     d.clip.reset();
@@ -553,6 +593,12 @@ void PostStages::releaseDefocus(Defocus &d)
     d.clipBindings.reset();
     d.linearSampler.reset();
     d.mipSampler.reset();
+    countPipelineObjects(-objects);
+}
+
+void PostStages::releaseDefocus(Defocus &d)
+{
+    releaseDefocusPipelines(d);
     d.belowTarget.reset();
     d.belowPass.reset();
     const bool held = d.below != nullptr;
@@ -772,12 +818,13 @@ bool PostStages::bloomBindings(Bloom &b)
             return false;
         if (!b.down[k]) {
             b.down[k].reset(m_rhi->newShaderResourceBindings());
+            countPipelineObjects(1);
             b.down[k]->setName(QByteArrayLiteral("srpss core bloom down bindings"));
             g_objectsCreated.fetchAndAddRelaxed(1);
         }
         b.down[k]->setBindings({ QRhiShaderResourceBinding::sampledTexture(
             1, QRhiShaderResourceBinding::FragmentStage, source, b.sampler.get()) });
-        if (!b.down[k]->create())
+        if (!createBuildResource(b.down[k].get()))
             return false;
         if (k == 0)
             continue;
@@ -786,12 +833,13 @@ bool PostStages::bloomBindings(Bloom &b)
         QRhiTexture *smaller = bloomSameTexture() ? b.levels[k - 1].get() : b.levels[k].get();
         if (!b.up[k]) {
             b.up[k].reset(m_rhi->newShaderResourceBindings());
+            countPipelineObjects(1);
             b.up[k]->setName(QByteArrayLiteral("srpss core bloom up bindings"));
             g_objectsCreated.fetchAndAddRelaxed(1);
         }
         b.up[k]->setBindings({ QRhiShaderResourceBinding::sampledTexture(
             1, QRhiShaderResourceBinding::FragmentStage, smaller, b.sampler.get()) });
-        if (!b.up[k]->create())
+        if (!createBuildResource(b.up[k].get()))
             return false;
     }
     return true;
@@ -811,6 +859,7 @@ bool PostStages::defocusBindings(Defocus &d)
     for (std::unique_ptr<QRhiShaderResourceBindings> *srb : { &d.clipBindings, &d.gatherBindings, &d.spriteBindings }) {
         if (!*srb) {
             srb->reset(m_rhi->newShaderResourceBindings());
+            countPipelineObjects(1);
             (*srb)->setName(QByteArrayLiteral("srpss core defocus bindings"));
             g_objectsCreated.fetchAndAddRelaxed(1);
         }
@@ -825,7 +874,8 @@ bool PostStages::defocusBindings(Defocus &d)
     d.spriteBindings->setBindings({ block(vertex),
         QRhiShaderResourceBinding::sampledTexture(1, vertex, d.colour, d.mipSampler.get()),
         QRhiShaderResourceBinding::sampledTexture(2, vertex, d.circle, d.mipSampler.get()) });
-    return d.clipBindings->create() && d.gatherBindings->create() && d.spriteBindings->create();
+    return createBuildResource(d.clipBindings.get()) && createBuildResource(d.gatherBindings.get())
+        && createBuildResource(d.spriteBindings.get());
 }
 
 bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs, const QRhiVertexInputLayout &layout,
@@ -833,6 +883,7 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
                        int *objects)
 {
     releasePipelines();
+    beginBuildAttempts();
     m_arena = arena;
     m_conventionsBytes = conventionsBytes;
     m_defocusBlockBytes = defocusBlockBytes;
@@ -842,10 +893,10 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
         return ok;
     };
     const auto finish = [&](bool ok) {
-        m_pipelineObjects = made;
-        g_pipelines.fetchAndAddRelaxed(made);
         g_objectsCreated.fetchAndAddRelaxed(made);
         *objects += made;
+        if (!ok && m_buildInjected)
+            *reason += QStringLiteral(" [harness fail_build=%1]").arg(m_failBuild);
         return ok;
     };
     bool ok = true;
@@ -862,8 +913,9 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
             const QByteArray label = QByteArrayLiteral("srpss core bloom ") + b.spec.name;
             b.sampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
                                             QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+            countPipelineObjects(1);
             b.sampler->setName(label + QByteArrayLiteral(" sampler"));
-            ok = created(b.sampler->create()) && bloomBindings(b);
+            ok = created(createBuildResource(b.sampler.get())) && bloomBindings(b);
             if (!ok) {
                 *reason = QStringLiteral("bloom step '%1': its sampler or bindings could not be created")
                               .arg(QString::fromLatin1(b.spec.name));
@@ -872,6 +924,7 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
             const auto pipeline = [&](std::unique_ptr<QRhiGraphicsPipeline> &p, const QShader &fragment,
                                       const QRhiGraphicsPipeline::TargetBlend &blend, const char *name) {
                 p.reset(rhi->newGraphicsPipeline());
+                countPipelineObjects(1);
                 p->setFlags(QRhiGraphicsPipeline::UsesScissor);
                 p->setName(label + QByteArray(name));
                 p->setTargetBlends({ blend });
@@ -880,7 +933,7 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
                 p->setCullMode(QRhiGraphicsPipeline::None);
                 p->setShaderResourceBindings(b.down[0].get()); // every binding set has this layout
                 p->setRenderPassDescriptor(b.passes[0].get()); // every level's render pass is compatible (RGBA16F)
-                return created(p->create());
+                return created(createBuildResource(p.get()));
             };
             ok = pipeline(b.downFirst, downFirst, QRhiGraphicsPipeline::TargetBlend(), " down first")
                 && pipeline(b.downRest, down, QRhiGraphicsPipeline::TargetBlend(), " down")
@@ -911,11 +964,14 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
             // Python's layer sampler: LINEAR_MIPMAP_NEAREST min, LINEAR mag, clamped; the read level's: LINEAR.
             d.mipSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Nearest,
                                                QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+            countPipelineObjects(1);
             d.mipSampler->setName(label + QByteArrayLiteral(" layer sampler"));
             d.linearSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
                                                   QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+            countPipelineObjects(1);
             d.linearSampler->setName(label + QByteArrayLiteral(" read level sampler"));
-            ok = created(d.mipSampler->create()) && created(d.linearSampler->create()) && defocusBindings(d);
+            ok = created(createBuildResource(d.mipSampler.get())) && created(createBuildResource(d.linearSampler.get()))
+                && defocusBindings(d);
             if (!ok) {
                 *reason = QStringLiteral("defocus step %1: its samplers or bindings could not be created").arg(d.spec.pass);
                 break;
@@ -929,6 +985,7 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
                 added.append(a == 0 ? lightAdded() : masked());
             }
             d.clip.reset(rhi->newGraphicsPipeline());
+            countPipelineObjects(1);
             d.clip->setFlags(QRhiGraphicsPipeline::UsesScissor);
             d.clip->setName(label + QByteArrayLiteral(" clip"));
             d.clip->setTargetBlends({ QRhiGraphicsPipeline::TargetBlend() });
@@ -937,8 +994,9 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
             d.clip->setCullMode(QRhiGraphicsPipeline::None);
             d.clip->setShaderResourceBindings(d.clipBindings.get());
             d.clip->setRenderPassDescriptor(d.belowPass.get());
-            ok = created(d.clip->create());
+            ok = created(createBuildResource(d.clip.get()));
             d.gather.reset(rhi->newGraphicsPipeline());
+            countPipelineObjects(1);
             d.gather->setFlags(QRhiGraphicsPipeline::UsesScissor);
             d.gather->setName(label + QByteArrayLiteral(" gather"));
             d.gather->setTargetBlends(over.cbegin(), over.cend());
@@ -948,8 +1006,9 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
             d.gather->setSampleCount(onto->samples);
             d.gather->setShaderResourceBindings(d.gatherBindings.get());
             d.gather->setRenderPassDescriptor(onto->renderPass.get());
-            ok = ok && created(d.gather->create());
+            ok = ok && created(createBuildResource(d.gather.get()));
             d.sprites.reset(rhi->newGraphicsPipeline());
+            countPipelineObjects(1);
             d.sprites->setFlags(QRhiGraphicsPipeline::UsesScissor);
             d.sprites->setName(label + QByteArrayLiteral(" sprites"));
             d.sprites->setTopology(QRhiGraphicsPipeline::TriangleStrip);
@@ -961,7 +1020,7 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
             d.sprites->setSampleCount(onto->samples);
             d.sprites->setShaderResourceBindings(d.spriteBindings.get());
             d.sprites->setRenderPassDescriptor(onto->renderPass.get());
-            ok = ok && created(d.sprites->create());
+            ok = ok && created(createBuildResource(d.sprites.get()));
             if (!ok)
                 *reason = QStringLiteral("defocus step %1: its pipelines could not be created").arg(d.spec.pass);
         }
@@ -972,6 +1031,7 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
 bool PostStages::rebind(const SceneTargets &targets)
 {
     Q_UNUSED(targets);
+    beginBuildAttempts(true);
     for (int i = 0; i < m_bloomCount; ++i) {
         if (m_blooms[i] && m_blooms[i]->sampler && !bloomBindings(*m_blooms[i]))
             return false;
@@ -986,33 +1046,13 @@ bool PostStages::rebind(const SceneTargets &targets)
 void PostStages::releasePipelines()
 {
     for (int i = 0; i < kMaxBloomStages; ++i) {
-        if (!m_blooms[i])
-            continue;
-        Bloom &b = *m_blooms[i];
-        b.upAdd.reset();
-        b.downRest.reset();
-        b.downFirst.reset();
-        for (int k = kBloomLevels - 1; k >= 0; --k) {
-            b.up[k].reset();
-            b.down[k].reset();
-        }
-        b.sampler.reset();
+        if (m_blooms[i])
+            releaseBloomPipelines(*m_blooms[i]);
     }
     for (int i = 0; i < kMaxDefocusStages; ++i) {
-        if (!m_defocus[i])
-            continue;
-        Defocus &d = *m_defocus[i];
-        d.sprites.reset();
-        d.gather.reset();
-        d.clip.reset();
-        d.spriteBindings.reset();
-        d.gatherBindings.reset();
-        d.clipBindings.reset();
-        d.linearSampler.reset();
-        d.mipSampler.reset();
+        if (m_defocus[i])
+            releaseDefocusPipelines(*m_defocus[i]);
     }
-    g_pipelines.fetchAndAddRelaxed(-m_pipelineObjects);
-    m_pipelineObjects = 0;
     m_arena = nullptr;
 }
 
@@ -1038,7 +1078,7 @@ void PostStages::release()
                     textures += m_blooms[i]->levels[k] ? 1 : 0;
                 count(-textures, -m_blooms[i]->bytes, textures ? -1 : 0, 0);
             }
-            objects += m_blooms[i] ? 3 * kBloomLevels : 0;
+            objects += m_blooms[i] ? allocationObjects(*m_blooms[i]) : 0;
             held->blooms[i] = std::move(m_blooms[i]);
         }
         for (int i = 0; i < kMaxDefocusStages; ++i) {
@@ -1046,7 +1086,7 @@ void PostStages::release()
                 const bool below = m_defocus[i]->below != nullptr;
                 count(below ? -1 : 0, -m_defocus[i]->bytes, 0, below ? -1 : 0);
             }
-            objects += m_defocus[i] ? 3 : 0;
+            objects += m_defocus[i] ? allocationObjects(*m_defocus[i]) : 0;
             held->defocus[i] = std::move(m_defocus[i]);
         }
         LeftBehind left;
@@ -1078,18 +1118,30 @@ void PostStages::release()
     ++m_objectGeneration;
 }
 
+int PostStages::allocationObjects(const Bloom &b)
+{
+    int objects = 0;
+    for (int k = 0; k < kBloomLevels; ++k)
+        objects += (b.levels[k] ? 1 : 0) + (b.targets[k] ? 1 : 0) + (b.passes[k] ? 1 : 0);
+    return objects;
+}
+
+int PostStages::allocationObjects(const Defocus &d)
+{
+    return (d.below ? 1 : 0) + (d.belowTarget ? 1 : 0) + (d.belowPass ? 1 : 0);
+}
+
 int PostStages::live() const
 {
     int objects = m_pipelineObjects;
     for (int i = 0; i < kMaxBloomStages; ++i) {
         if (!m_blooms[i])
             continue;
-        for (int k = 0; k < kBloomLevels; ++k)
-            objects += (m_blooms[i]->levels[k] ? 1 : 0) + (m_blooms[i]->targets[k] ? 2 : 0);
+        objects += allocationObjects(*m_blooms[i]);
     }
     for (int i = 0; i < kMaxDefocusStages; ++i) {
         if (m_defocus[i])
-            objects += (m_defocus[i]->below ? 1 : 0) + (m_defocus[i]->belowTarget ? 2 : 0);
+            objects += allocationObjects(*m_defocus[i]);
     }
     return objects;
 }
