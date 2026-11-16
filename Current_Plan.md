@@ -530,15 +530,11 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       a GPU loaded by the operator's game (P0, 50 to 60 %; D17 has the figures): at 4K 1x the sprites' own interval
       differs by only 0.06 ms between `full` and `no_sprites` and the gather's by 0.6, while the whole record differs
       by 1.7 ms. That points to case (ii) below; it must be confirmed on a quiet GPU.
-    - [ ] Rerun with GPU conditions recorded (operator, 16 Nov: available ambient activity is authorised; the former
-      quiet-GPU prerequisite below no longer blocks this diagnostic). Original comparable baseline condition:
-      `nvidia-smi --query-gpu=pstate,utilization.gpu --format=csv,noheader` at P8 and under
-      15 % before and after; `nvidia-smi --query-compute-apps=process_name --format=csv` with no game; no SRPSS running,
-      no game60. Command: `python native/core/python/post_stage_check.py --module-dir release/native_module --apis opengl
-      --rounds defocus_draws --label n34_defocus_draws`. Read `results.opengl.defocus_draws.facts`: per sample count and
-      variant (`full`, `few_sprites`, `no_sprites`) `gather_ms` and `sprites_ms` beside `record_median_ms`. Every
-      variant must have `draws_timed` at least 30 and `skipped` near 0. Then delete the run's `work` folder.
-    - [ ] Read the result. (i) If `sprites_ms` for `full` minus `no_sprites` is about the 2.6 ms (1x) the split
+    - [x] Available-GPU draw timing repeated (operator authorised, 16 Nov): 239 queries/0 skipped per variant;
+      marked full-minus-no-sprites record delta 0.0164 ms at 1x / 0.0031 ms at 4x. Unmarked repeat still costs
+      2.5785 / 0.9595 ms. GPU conditions retained in summaries; this is within-run diagnosis, not quiet-GPU admission.
+      Evidence: n3_4/20261116_n34_defocus_draws_available and 20261116_n34_defocus_split_available (D17).
+    - [x] Read the result. (i) If `sprites_ms` for `full` minus `no_sprites` is about the 2.6 ms (1x) the split
       measured, the sprites' draw itself is slow on OpenGL: compare its state with Python's `DefocusLayer.composite`
       sprite draw (`rendering/quick/scene3d/defocus.py:412-418`) one difference at a time, each measured with this round:
       the masked second draw buffer of the onto target (Python's emission index is masked by `glColorMaski` too), the
@@ -551,8 +547,14 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       `SceneTarget.end` (the scene colour the sprites wrote is next read by the composite; on OpenGL a texture written
       by many overlapping blended draws may be decompressed or flushed before its next sampling).
       Current evidence (16 Nov): unmarked 1x excess 2.5785 ms; marked excess 0.0164 ms. First isolate the
-      timing probes' command boundaries with a harness-only boundary-without-queries control, bracketed by
-      unmarked runs; preserve pixel parity. Do not treat the perturbed measurement as a production fix (D17).
+      timing probes' command boundaries isolated without queries, bracketed by unmarked runs. Individual ABI23
+      sites prove only the gather→sprites boundary removes the excess (1x about 2.2–2.5→0 ms; 4x 1.2→0 ms),
+      with exact pixels and 239 actual flushes/records. Evidence: 20261116_n34_individual_sites_abi23 in root
+      n34-abi23-check. Explain that state/command transition next; no production flush workaround admitted (D17).
+    - [ ] Isolate the remaining declaration/tracker effects without external calls: bracket an ExternalContent-only
+      phase and a DoNotTrackResourcesForCompute-only phase against normal full/no-sprites at actual 1x/4x;
+      the latter proof scene must contain no compute pass (pinned Qt precondition). Exact pixels, actual records,
+      zero external flush/query counts. Sol High implements harness-only controls; independent Terra High review.
     - [ ] Fix it in the core if it is ours (one change, a build, the split again: `--rounds defocus_cost` on both APIs,
       the OpenGL sprite raster near Python's and Vulkan unchanged), or record it in D17 as the driver's with the figures
       if no state difference moves it. Then rerun `--rounds parity` (rules (a) and (b) must still pass) and record the
