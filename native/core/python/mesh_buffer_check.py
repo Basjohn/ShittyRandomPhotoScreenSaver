@@ -1182,6 +1182,7 @@ def _timed(host, scene, *, min_samples: int = COST_MIN_SAMPLES, frames: int = RI
     record_ms: list[float] = []      # the render thread's record (the core's own timer), mean per window of 20
     write_ms: list[float] = []       # its stream and arena writes alone
     drawn = 0
+    records_measured = 0
 
     def live() -> dict:
         raw = scene.mode._module.composite_live()
@@ -1198,6 +1199,21 @@ def _timed(host, scene, *, min_samples: int = COST_MIN_SAMPLES, frames: int = RI
         return state
 
     last = counts()
+
+    def sample_cpu_batch():
+        nonlocal last, records_measured
+        now = counts()
+        if any(now[key] < last[key] for key in counter_keys):
+            raise RuntimeError("native timing counters regressed during measurement")
+        records = now["mesh_buffers_records_timed"] - last["mesh_buffers_records_timed"]
+        if records <= 0:
+            raise RuntimeError(f"native record timing counter did not advance in batch ending at frame {drawn}")
+        record_ms.append((now["mesh_buffers_record_ns"] - last["mesh_buffers_record_ns"]) / records / 1e6)
+        write_ms.append((now["mesh_buffers_stream_write_ns"] - last["mesh_buffers_stream_write_ns"])
+                        / records / 1e6)
+        records_measured += records
+        last = now
+
     while drawn < COST_MAX_FRAMES and (drawn < frames or len(gpu) < min_samples):
         scene.publish()
         scene.mode.update()
@@ -1207,15 +1223,9 @@ def _timed(host, scene, *, min_samples: int = COST_MIN_SAMPLES, frames: int = RI
         drawn += 1
         if drawn % 20 == 0:
             gpu += [s.nanoseconds for s in host.gpu_samples() if s.kind == 2]
-            now = counts()
-            if any(now[key] < last[key] for key in counter_keys):
-                raise RuntimeError("native timing counters regressed during measurement")
-            records = now["mesh_buffers_records_timed"] - last["mesh_buffers_records_timed"]
-            if records > 0:
-                record_ms.append((now["mesh_buffers_record_ns"] - last["mesh_buffers_record_ns"]) / records / 1e6)
-                write_ms.append((now["mesh_buffers_stream_write_ns"] - last["mesh_buffers_stream_write_ns"])
-                                / records / 1e6)
-            last = now
+            sample_cpu_batch()
+    if drawn % 20:
+        sample_cpu_batch()
     host.frames(4)
     gpu += [s.nanoseconds for s in host.gpu_samples() if s.kind == 2]
     host.set_gpu_timer(False)
@@ -1231,6 +1241,9 @@ def _timed(host, scene, *, min_samples: int = COST_MIN_SAMPLES, frames: int = RI
                    "record_cpu_p10_ms": round(record_ms[int(len(record_ms) * 0.1)], 4),
                    "record_cpu_p90_ms": round(record_ms[int(len(record_ms) * 0.9)], 4),
                    "record_cpu_samples": len(record_ms),
+                   "record_cpu_expected_samples": (drawn + 19) // 20,
+                   "record_cpu_sampled_frames": drawn,
+                   "record_cpu_records": records_measured,
                    "write_cpu_median_ms": round(write_ms[len(write_ms) // 2], 4)})
     return result
 
@@ -1285,10 +1298,11 @@ def _floor_comparison(route: dict, before: dict, after: dict, copy: dict | None 
     result = {"margin_ms": FLOOR_MARGIN_MS, "status": "invalid"}
     for measurement in (route, before, after) + ((copy,) if copy is not None else ()):
         values = [measurement.get(key) for key in ("p10_ms", "median_ms", "p90_ms")]
-        if (not isinstance(measurement.get("samples"), int) or measurement["samples"] <= 0
+        if (type(measurement.get("samples")) is not int or measurement["samples"] < COST_MIN_SAMPLES
+                or measurement.get("coverage_valid") is False
                 or any(not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0
                        for value in values) or not values[0] <= values[1] <= values[2]):
-            result["reason"] = "missing, nonfinite, unordered or empty timing measurement; repeat required"
+            result["reason"] = "missing/nonfinite/unordered timing or insufficient samples/CPU batch coverage; repeat required"
             return result
     copy = copy or {"p10_ms": 0, "median_ms": 0, "p90_ms": 0}
     floor_median = (before["median_ms"] + after["median_ms"]) / 2 + copy["median_ms"]
@@ -1310,7 +1324,15 @@ def _floor_comparison(route: dict, before: dict, after: dict, copy: dict | None 
 
 
 def _record_metric(measurement: dict) -> dict:
-    return {key: measurement.get("record_cpu_" + key) for key in ("samples", "p10_ms", "median_ms", "p90_ms")}
+    metric = {key: measurement.get("record_cpu_" + key) for key in ("samples", "p10_ms", "median_ms", "p90_ms")}
+    frames = measurement.get("frames")
+    expected = (frames + 19) // 20 if type(frames) is int and frames > 0 else None
+    records = measurement.get("record_cpu_records")
+    metric["coverage_valid"] = (expected is not None and metric["samples"] == expected
+                                and measurement.get("record_cpu_expected_samples") == expected
+                                and measurement.get("record_cpu_sampled_frames") == frames
+                                and type(records) is int and records >= expected)
+    return metric
 
 
 def round_stream_ring(core, engine, app, api: str, packs: dict, only=None) -> dict:

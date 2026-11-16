@@ -92,6 +92,54 @@ def test_missing_native_record_counters_cannot_use_wall_time():
         harness._timed(host, scene, frames=20, min_samples=1)
 
 
+@pytest.mark.parametrize("batches", ((20, 0, 20), (20, 20, 20), (20, 20, 20, 1)))
+def test_native_counter_batches_require_continuous_coverage(batches):
+    from types import SimpleNamespace
+
+    count = 0
+    snapshots = []
+    for advance in (0,) + batches:
+        count += advance
+        snapshots.append(dict(mesh_buffers_records_timed=count, mesh_buffers_record_ns=count * 10000,
+                              mesh_buffers_stream_write_ns=count * 1000))
+    snapshots = iter(snapshots)
+    host = SimpleNamespace(set_gpu_timer=lambda _: None, frames=lambda _: None,
+                           gpu_samples=lambda: [SimpleNamespace(kind=2, nanoseconds=20000)])
+    scene = SimpleNamespace(draw=lambda _: None, publish=lambda: None,
+                            mode=SimpleNamespace(update=lambda: None,
+                                                 _module=SimpleNamespace(composite_live=lambda: next(snapshots))))
+    if 0 in batches:
+        with pytest.raises(RuntimeError, match="did not advance.*batch"):
+            harness._timed(host, scene, frames=60, min_samples=1)
+    else:
+        result = harness._timed(host, scene, frames=sum(batches), min_samples=1)
+        assert result["record_cpu_samples"] == result["record_cpu_expected_samples"] == len(batches)
+        assert result["record_cpu_records"] == sum(batches)
+        assert result["record_cpu_sampled_frames"] == result["frames"] == sum(batches)
+
+
+@pytest.mark.parametrize("samples,frames", ((1, 20), (29, 580), (1, 600), (29, 600)))
+def test_cpu_comparison_requires_full_meaningful_batch_set(samples, frames):
+    measurement = metric(.01, .015, .02)
+    measurement.update({"record_cpu_" + key: value for key, value in metric(.01, .015, .02, samples).items()})
+    measurement.update(frames=frames, record_cpu_expected_samples=(frames + 19) // 20,
+                       record_cpu_sampled_frames=frames, record_cpu_records=frames)
+    cpu = harness._record_metric(measurement)
+    result = harness._floor_comparison(cpu, cpu, cpu, metric(.001, .001, .001))
+    assert result["status"] == "invalid"
+
+
+@pytest.mark.parametrize("field,value", (("record_cpu_expected_samples", None),
+                                         ("record_cpu_sampled_frames", 580), ("record_cpu_records", 0)))
+def test_cpu_comparison_rejects_incomplete_coverage_metadata(field, value):
+    measurement = {"record_cpu_" + key: item for key, item in metric(.01, .015, .02).items()}
+    measurement.update(frames=600, record_cpu_expected_samples=30, record_cpu_sampled_frames=600,
+                       record_cpu_records=600)
+    measurement[field] = value
+    cpu = harness._record_metric(measurement)
+    assert harness._floor_comparison(cpu, cpu, cpu)["status"] == "invalid"
+
+
 @pytest.mark.parametrize("status", ("within", "inconclusive", "material", "invalid", "missing_cpu"))
 def test_stream_round_brackets_each_route_and_never_passes_unresolved(status, monkeypatch):
     from types import SimpleNamespace
@@ -115,7 +163,9 @@ def test_stream_round_brackets_each_route_and_never_passes_unresolved(status, mo
                      "missing_cpu": metric(.02, .03, .04)}[status]
         if status == "missing_cpu":
             return value | {"wall_median_ms": .001, "wall_p10_ms": .001}
-        return value | {"record_cpu_" + key: item for key, item in metric(.01, .015, .02).items()}
+        return (value | {"record_cpu_" + key: item for key, item in metric(.01, .015, .02).items()}
+                | dict(frames=harness.RING_FRAMES, record_cpu_expected_samples=harness.RING_FRAMES // 20,
+                       record_cpu_sampled_frames=harness.RING_FRAMES, record_cpu_records=harness.RING_FRAMES))
 
     monkeypatch.setattr(harness, "_timed", measured)
     result = harness.round_stream_ring(None, None, None, "opengl", {}, only=("probe",))

@@ -1416,7 +1416,10 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
    the copy (the same pass with the data already resident). `mesh_buffer_check.py --rounds stream_ring` measures a
    resident floor immediately before and after **each** route. GPU timestamps measure the surface pass; native
    render-thread record counters measure CPU (means over 20 records). GUI wall time is diagnostic only; missing or
-   nonadvancing native counters fail loudly. The CPU floor adds the separately measured payload-copy distribution;
+   nonadvancing native counters fail loudly **at each measured batch**, including a final partial batch. Evidence
+   records the expected/observed batch count, covered frames and measured native record count; CPU comparisons
+   require full batch coverage and at least 30 batches (GPU and copy distributions also require at least 30 samples).
+   The CPU floor adds the separately measured payload-copy distribution;
    a partial payload copies only its used bytes.
 
    All times and the unchanged material-admission margin are **milliseconds**: 0.05 ms. Each axis reports the raw
