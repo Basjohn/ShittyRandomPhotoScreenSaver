@@ -1438,6 +1438,8 @@ def prime_control_validation(record: dict) -> dict:
 
 
 def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool, list[str]]:
+    if record.get("exit_code", 0) != 0:
+        return False, [f"{api}: child process failed ({record['exit_code']})"]
     if api == "reference":
         rounds = [name for name in ("reference", "python_cost") if name in record]
         failed = [f"{name}: {record[name].get('error') or 'failed'}"[:1500] for name in rounds
@@ -1506,6 +1508,7 @@ def main(argv: list[str] | None = None) -> int:
         children.append("reference")
     for api in children:
         child_json = out / f"child_{api}.json"
+        child_json.unlink(missing_ok=True)  # an interrupted earlier run cannot supply this child's proof
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
                    "--rounds", *(args.rounds if api == "reference"
