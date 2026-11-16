@@ -2964,7 +2964,8 @@ PyMethodDef methods[] = {
     { "vulkan_device_facts", vulkan_device_facts, METH_VARARGS,
       "(vk_device_handle) -> dict: N3.2, the limits and draw features of a device the core created ({} otherwise)." },
     { "scene_target_control", scene_target_control, METH_VARARGS,
-      "(name, value) -> None: harness content_at_top, one_pixel_bucket (0/1), allocation_steps (0..32; 0: all)." },
+      "(name, value) -> None: harness content_at_top, one_pixel_bucket, oversize_viewport, skip_scissor (0/1), "
+      "allocation_steps (0..32; 0: all)." },
     { "scene_sample_counts_control", scene_sample_counts_control, METH_VARARGS,
       "([counts]) -> None: N3.1, harness: sample counts taken out of every device's supported set (the clamp's "
       "negative control); [] restores them." },

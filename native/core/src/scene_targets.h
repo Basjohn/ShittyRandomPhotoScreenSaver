@@ -141,13 +141,15 @@ bool deriveTransparencyTargets(QList<TargetDeclaration> &targets, QString *error
 // none yet). `reason` names why it changed ("" when it did not).
 int bucketPixels(int pixels);
 QSize nextAllocation(const QSize &current, const QSize &needed, QString *reason);
-// D14 point 2: QRhi's viewport (x, y from the framebuffer's bottom-left, w, h) of a content of `content` pixels at image
+// D14 point 2: QRhi's viewport and scissor (x, y from the framebuffer's bottom-left, w, h) of `content` pixels at image
 // rows [H-h, H) and columns [0, w) of an allocation of `allocation` pixels. On a Y-up framebuffer (OpenGL, whose core
 // targets are flipped by F1 so memory row 0 is the image's top) QRhi's y = H - h; elsewhere y = 0.
 QRect contentViewport(bool yUpInFramebuffer, const QSize &allocation, const QSize &content);
 // Harness only; defaults preserve the product path. A nonzero allocation limit bounds one record's warm-up steps.
 bool setSceneTargetControl(const QByteArray &name, int value);
 int sceneAllocationStepLimit();
+bool sceneScissorEnabled();
+bool sceneOversizeViewport();
 // D14 point 7: the largest count in `supported` not above `requested`, 1 when there is none.
 int clampSamples(const QList<int> &supported, int requested);
 // The harness's control of the clamp (its negative control): counts taken out of every device's supported set.

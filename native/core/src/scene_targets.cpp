@@ -18,6 +18,8 @@ QAtomicInteger<int> g_readbacksPending { 0 };
 QAtomicInteger<int> g_contentAtTop { 0 };
 QAtomicInteger<int> g_onePixelBucket { 0 };
 QAtomicInteger<int> g_allocationStepLimit { 0 };
+QAtomicInteger<int> g_skipScissor { 0 };
+QAtomicInteger<int> g_oversizeViewport { 0 };
 
 QMutex &removedMutex()
 {
@@ -565,6 +567,10 @@ bool setSceneTargetControl(const QByteArray &name, int value)
         g_onePixelBucket.storeRelease(value);
     else if (name == "allocation_steps" && value >= 0 && value <= 32)
         g_allocationStepLimit.storeRelease(value);
+    else if (name == "skip_scissor" && (value == 0 || value == 1))
+        g_skipScissor.storeRelease(value);
+    else if (name == "oversize_viewport" && (value == 0 || value == 1))
+        g_oversizeViewport.storeRelease(value);
     else
         return false;
     return true;
@@ -573,6 +579,16 @@ bool setSceneTargetControl(const QByteArray &name, int value)
 int sceneAllocationStepLimit()
 {
     return g_allocationStepLimit.loadAcquire();
+}
+
+bool sceneScissorEnabled()
+{
+    return !g_skipScissor.loadAcquire();
+}
+
+bool sceneOversizeViewport()
+{
+    return g_oversizeViewport.loadAcquire();
 }
 
 int clampSamples(const QList<int> &supported, int requested)

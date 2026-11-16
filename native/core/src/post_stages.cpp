@@ -829,6 +829,7 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
             const auto pipeline = [&](std::unique_ptr<QRhiGraphicsPipeline> &p, const QShader &fragment,
                                       const QRhiGraphicsPipeline::TargetBlend &blend, const char *name) {
                 p.reset(rhi->newGraphicsPipeline());
+                p->setFlags(QRhiGraphicsPipeline::UsesScissor);
                 p->setName(label + QByteArray(name));
                 p->setTargetBlends({ blend });
                 p->setShaderStages({ { QRhiShaderStage::Vertex, vs }, { QRhiShaderStage::Fragment, fragment } });
@@ -885,6 +886,7 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
                 added.append(a == 0 ? lightAdded() : masked());
             }
             d.clip.reset(rhi->newGraphicsPipeline());
+            d.clip->setFlags(QRhiGraphicsPipeline::UsesScissor);
             d.clip->setName(label + QByteArrayLiteral(" clip"));
             d.clip->setTargetBlends({ QRhiGraphicsPipeline::TargetBlend() });
             d.clip->setShaderStages({ { QRhiShaderStage::Vertex, vs }, { QRhiShaderStage::Fragment, clip } });
@@ -894,6 +896,7 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
             d.clip->setRenderPassDescriptor(d.belowPass.get());
             ok = created(d.clip->create());
             d.gather.reset(rhi->newGraphicsPipeline());
+            d.gather->setFlags(QRhiGraphicsPipeline::UsesScissor);
             d.gather->setName(label + QByteArrayLiteral(" gather"));
             d.gather->setTargetBlends(over.cbegin(), over.cend());
             d.gather->setShaderStages({ { QRhiShaderStage::Vertex, vs }, { QRhiShaderStage::Fragment, gather } });
@@ -904,6 +907,7 @@ bool PostStages::build(QRhi *rhi, const SceneTargets &targets, const QShader &vs
             d.gather->setRenderPassDescriptor(onto->renderPass.get());
             ok = ok && created(d.gather->create());
             d.sprites.reset(rhi->newGraphicsPipeline());
+            d.sprites->setFlags(QRhiGraphicsPipeline::UsesScissor);
             d.sprites->setName(label + QByteArrayLiteral(" sprites"));
             d.sprites->setTopology(QRhiGraphicsPipeline::TriangleStrip);
             d.sprites->setTargetBlends(added.cbegin(), added.cend());
@@ -1063,7 +1067,7 @@ void PostStages::recordBloom(QRhi *rhi, QRhiCommandBuffer *cb, int pass, const Q
         cb->beginPass(b->targets[k].get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, *pending);
         *pending = nullptr;
         cb->setGraphicsPipeline(pipeline);
-        cb->setViewport(QRhiViewport(0, 0, float(b->sizes[k].width()), float(b->sizes[k].height())));
+        setViewportAndScissor(cb, QRect(QPoint(), b->sizes[k]));
         cb->setShaderResources(bindings);
         cb->setVertexInput(0, 1, &triangle);
         cb->draw(3);
@@ -1091,7 +1095,7 @@ void PostStages::recordDefocusClip(QRhi *rhi, QRhiCommandBuffer *cb, int pass,
     primeForLoad(rhi, cb, d->below.get());
     cb->beginPass(d->belowTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, mips);
     cb->setGraphicsPipeline(d->clip.get());
-    cb->setViewport(QRhiViewport(0, 0, float(d->belowSize.width()), float(d->belowSize.height())));
+    setViewportAndScissor(cb, QRect(QPoint(), d->belowSize));
     const QRhiCommandBuffer::DynamicOffset offsets[2] = { { 0, blockOffset }, { kConventionsBinding, conventionsOffset } };
     cb->setShaderResources(d->clipBindings.get(), 2, offsets);
     cb->setVertexInput(0, 1, &triangle);
@@ -1100,18 +1104,18 @@ void PostStages::recordDefocusClip(QRhi *rhi, QRhiCommandBuffer *cb, int pass,
 }
 
 void PostStages::recordDefocusOnto(QRhiCommandBuffer *cb, int pass, const QRhiCommandBuffer::VertexInput &triangle,
-                                   quint32 blockOffset, quint32 conventionsOffset, bool drawSprites)
+                                   quint32 blockOffset, quint32 conventionsOffset, bool drawSprites, const QRect &scissor)
 {
     Defocus *d = defocusFor(pass);
     if (!d || !d->gather || !d->sprites)
         return;
     // Over the layer's whole allocation, which is the onto target's (both surface-sized): the gather adds nothing where
     // the layer is empty (premultiplied over of zero), and the sprites' clip positions are over the layer's size.
-    const QRhiViewport whole(0, 0, float(d->layerSize.width()), float(d->layerSize.height()));
+    const QRect whole(QPoint(), d->layerSize);
     const QRhiCommandBuffer::DynamicOffset offsets[2] = { { 0, blockOffset }, { kConventionsBinding, conventionsOffset } };
     markDefocus(cb, 0);                       // the harness's timeDefocusDraws control only (OpenGL)
     cb->setGraphicsPipeline(d->gather.get());
-    cb->setViewport(whole);
+    setViewportAndScissor(cb, whole, scissor);
     cb->setShaderResources(d->gatherBindings.get(), 2, offsets);
     cb->setVertexInput(0, 1, &triangle);
     cb->draw(3);
@@ -1121,7 +1125,7 @@ void PostStages::recordDefocusOnto(QRhiCommandBuffer *cb, int pass, const QRhiCo
     if (drawSprites) {
         const quint32 sprites = quint32(d->belowSize.width()) * quint32(d->belowSize.height());
         cb->setGraphicsPipeline(d->sprites.get());
-        cb->setViewport(whole);
+        setViewportAndScissor(cb, whole, scissor);
         cb->setShaderResources(d->spriteBindings.get(), 1, offsets);
         cb->draw(4, sprites);
     }
