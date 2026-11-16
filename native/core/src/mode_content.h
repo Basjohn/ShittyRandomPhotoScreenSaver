@@ -696,8 +696,12 @@ private:
     };
 
     bool ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QString *error);
-    // N3.8: the passes' bindings over the current texture objects, the pipelines kept; false: build everything again.
-    bool rebindTextures();
+    // The passes' bindings over current objects, the pipelines kept; false: build everything again. A mesh-only edge
+    // retargets only compute SRBs that read meshes; graphics binds its current vertex buffers per draw.
+    bool rebindResources(bool meshesOnly);
+    bool geometryInputLayout(int index, QRhiVertexInputLayout *input, bool *meshBound, bool *instanceBound,
+                             QString *reason) const;
+    bool geometryLayoutsHold() const;
     // N4.a, N3.1: the texture a sampler reads: an item texture's front, or a scene target's ("<target>.<attachment>").
     QRhiTexture *samplerTexture(const QByteArray &name) const;
     // N3.1: a pass's bindings (its block, the conventions, its samplers; a capture's block and sources), in build()'s order.

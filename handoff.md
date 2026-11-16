@@ -12,7 +12,7 @@ Never rewrite main or force-push.
 - [x] N3.2 L1 shader-interface admission proved on the official build and both backends (R-233).
 - [x] Sorted-pack resource/layout admission and live SSBO aliases proved on both backends (R-234).
 - [x] Cross-stage shared-resource admission proved on official build and both backends (R-235).
-- [ ] Next correctness/performance slice: N3.2 L2 same-layout mesh retarget; preparation reviewed, native proof pending.
+- [ ] N3.2 L2 old churn/tail-loss reproduced and retarget source reviewed; official build/native proof pending (R-236).
 - [x] Texture-size control and real wrong-mip negative proved; size derivation alone did not reproduce excess.
 - [x] Current matched backend check confirms this GL excess absent on Vulkan (R-232).
 - [ ] Non-blocking deeper N3.4 investigation by another agent; retain R-232's stats, failed avenues and hypotheses.

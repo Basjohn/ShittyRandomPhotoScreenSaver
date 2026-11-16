@@ -266,7 +266,7 @@ public:
               bool quad);
     const Gpu *find(const QByteArray &name) const;
     bool uploadedThisRecord() const { return m_uploaded; }
-    quint64 objects() const { return m_objects; } // a buffer made or gone (the latch key and the still signature)
+    quint64 objects() const { return m_objects; } // a buffer made or gone (bindings/layout edge and still signature)
     int live() const;
     void release();
     QJsonArray stateJson() const;

@@ -4448,15 +4448,16 @@ bool ModeContent::ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QStrin
     if (m_res && m_res->rhi == rhi && m_res->pass == target.renderPass.get() && m_res->generation == program.generation
         && m_res->sceneLayout == layout && m_res->passesBuilt && withPasses
         && m_res->scissorEnabled == sceneScissorEnabled()
-        && m_res->meshObjects == m_meshes.objects() // N3.2
+        && (m_res->meshObjects == m_meshes.objects() || geometryLayoutsHold())
         && schemaHolds                              // N3.2 audit 4 H1
-        && m_res->textureObjects != m_textureObjects && rebindTextures())
+        && (m_res->textureObjects != m_textureObjects || m_res->meshObjects != m_meshes.objects())
+        && rebindResources(m_res->textureObjects == m_textureObjects))
         return true;
     if (m_res && (m_res->rhi != rhi || m_res->pass != target.renderPass.get() || m_res->generation != program.generation
                   || m_res->sceneLayout != layout || m_res->passesBuilt != withPasses
                   || m_res->scissorEnabled != sceneScissorEnabled()
                   || !schemaHolds                                              // N3.2 audit 4 H1: a new layout
-                  || (withPasses && m_res->meshObjects != m_meshes.objects()) // N3.2: the vertex input layouts
+                  || (withPasses && m_res->meshObjects != m_meshes.objects()) // layout changed or retarget failed
                   || (withPasses && m_res->textureObjects != m_textureObjects)))
         releasePipelines(); // a new program, or bindings that could not be made again: the pipelines and bindings again
     if (m_res)
@@ -4595,10 +4596,11 @@ bool ModeContent::nearestBindings(const Resources &r, int target, int slot, QLis
     return true;
 }
 
-bool ModeContent::rebindTextures()
+bool ModeContent::rebindResources(bool meshesOnly)
 {
+    bool reboundMesh = false;
     // D14 point 10: the nearest resolves' bindings over the targets' new objects (a resize of the same layout).
-    for (int t = 0; t < m_res->targetClearCount; ++t) {
+    for (int t = 0; !meshesOnly && t < m_res->targetClearCount; ++t) {
         for (int s = 0; s < kNearestSlots; ++s) {
             Resources::NearestResolve &n = m_res->nearest[t][s];
             if (!n.bindings)
@@ -4614,6 +4616,13 @@ bool ModeContent::rebindTextures()
     const ModeProgram &program = m_source->drawnProgram();
     for (int i = 0; i < m_res->passCount; ++i) {
         const ModePass &pass = program.passes.at(i);
+        if (meshesOnly) {
+            bool readsMesh = false;
+            for (const ComputeBinding &b : pass.computeBindings)
+                readsMesh = readsMesh || b.kind == ComputeResource::Mesh;
+            if (!pass.compute || !readsMesh)
+                continue; // graphics binds the latest vertex/instance buffer per draw, never in an SRB
+        }
         if (pass.stepOfItsOwn())
             continue;                         // N3.4: the stages' own bindings (m_post.rebind below)
         const bool resolve = pass.stage == StageKind::TransparencyResolve;
@@ -4631,13 +4640,20 @@ bool ModeContent::rebindTextures()
         p.bindings->setBindings(bindings.cbegin(), bindings.cend());
         if (!p.bindings->create())
             return false;                     // ensure() builds everything again
+        reboundMesh = reboundMesh || meshesOnly;
     }
-    if (!m_post.rebind(m_targets))            // N3.4: the bloom chains' and the defocus steps' bindings
-        return false;
-    m_postObjectsSeen = m_post.objectGeneration();
-    m_res->textureObjects = m_textureObjects;
-    ++m_report.rebinds;
-    reportTextures();                         // publish the completed edge; record()'s earlier report predates it
+    if (!meshesOnly) {
+        if (!m_post.rebind(m_targets))        // N3.4: the bloom chains' and the defocus steps' bindings
+            return false;
+        m_postObjectsSeen = m_post.objectGeneration();
+        m_res->textureObjects = m_textureObjects;
+        ++m_report.rebinds;
+        reportTextures();                     // the completed texture edge
+    } else if (reboundMesh) {
+        ++m_report.rebinds;
+        reportTextures();                     // publish the completed compute-mesh binding edge too
+    }
+    m_res->meshObjects = m_meshes.objects();   // observed only after all required SRBs retargeted
     return true;
 }
 
@@ -4870,11 +4886,10 @@ void ModeContent::fillArena()
     }
 }
 
-bool ModeContent::buildGeometryPass(QRhi *rhi, Resources &r, int index, QRhiRenderPassDescriptor *renderPass,
-                                    int samples, QString *reason, int *objects, bool sorted)
+bool ModeContent::geometryInputLayout(int index, QRhiVertexInputLayout *input, bool *meshBound,
+                                      bool *instanceBound, QString *reason) const
 {
     const ModePass &pass = m_source->drawnProgram().passes.at(index);
-    Resources::Pass &p = r.passes[index];
     const QString label = QString::fromLatin1(pass.name);
     // The vertex input layout: binding 0 the mesh (per vertex), then the instance source (per instance, step rate 1).
     const ModeMeshes::Gpu *mesh = pass.mesh.isEmpty() ? nullptr : m_meshes.find(pass.mesh);
@@ -4920,11 +4935,40 @@ bool ModeContent::buildGeometryPass(QRhi *rhi, Resources &r, int index, QRhiRend
         }
         attributes.append(QRhiVertexInputAttribute(binding, in.location, floatFormat(in.components), a->offset));
     }
+    input->setBindings(bindings.cbegin(), bindings.cend());
+    input->setAttributes(attributes.cbegin(), attributes.cend());
+    *meshBound = mesh != nullptr;
+    *instanceBound = instanceLayout != nullptr;
+    return true;
+}
+
+bool ModeContent::geometryLayoutsHold() const
+{
+    // Only called after a mesh object edge. Compare exactly what QRhi's pipeline consumes, using the build's owner.
+    const ModeProgram &program = m_source->drawnProgram();
+    for (int i = 0; i < m_res->passCount; ++i) {
+        const Resources::Pass &p = m_res->passes[i];
+        if (!program.passes.at(i).ownVertex() || !p.pipeline)
+            continue;
+        QRhiVertexInputLayout input;
+        bool mesh = false, instance = false;
+        QString reason;
+        if (!geometryInputLayout(i, &input, &mesh, &instance, &reason)
+            || input != p.pipeline->vertexInputLayout())
+            return false;
+    }
+    return true;
+}
+
+bool ModeContent::buildGeometryPass(QRhi *rhi, Resources &r, int index, QRhiRenderPassDescriptor *renderPass,
+                                    int samples, QString *reason, int *objects, bool sorted)
+{
+    const ModePass &pass = m_source->drawnProgram().passes.at(index);
+    Resources::Pass &p = r.passes[index];
+    const QString label = QString::fromLatin1(pass.name);
     QRhiVertexInputLayout input;
-    input.setBindings(bindings.cbegin(), bindings.cend());
-    input.setAttributes(attributes.cbegin(), attributes.cend());
-    p.meshBinding = mesh != nullptr;
-    p.instanceBinding = instanceLayout != nullptr;
+    if (!geometryInputLayout(index, &input, &p.meshBinding, &p.instanceBinding, reason))
+        return false;
     // D15 point 6: a batched pass's form, decided at the build from the device (and the harness control).
     p.drawParameters = pass.batched() && pass.vertexDrawParameters.isValid() && drawParametersAvailable(rhi);
     const QShader &vertex = p.drawParameters ? pass.vertexDrawParameters : pass.vertex;

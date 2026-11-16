@@ -481,8 +481,7 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       pipelines. Proof: `probe_replace.py`'s box replaced by its own bytes and layout creates only the mesh's buffer
       and keeps the streams' build generation (today 3 buffers and generation 1 to 2).
       - [x] Independent Sol High preparation and High source review complete; implementation/proof remain pending.
-      - [ ] Prove old-module churn and retained-tail loss, then implement exact consumed-layout comparison and
-        mesh-dependent compute SRB retargeting; preserve redraw/retry generations and fail closed on rebind failure.
+      - [x] Old-module churn/tail loss reproduced; compatible-layout and compute-SRB repair source reviewed (R-236).
       - [ ] Official-build GL/Vulkan fresh-byte/tail/instance/layout/remove/readd/device controls, live compute A→B
         plus failed-rebind/storage-usage and simultaneous texture edges; use canonical validation/retirement owners.
     - [ ] Reserved resource admission follow-up: reproduce malformed stage-only SrpssConventions layouts and
