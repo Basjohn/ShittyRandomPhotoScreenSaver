@@ -4547,6 +4547,7 @@ bool ModeContent::rebindTextures()
     m_postObjectsSeen = m_post.objectGeneration();
     m_res->textureObjects = m_textureObjects;
     ++m_report.rebinds;
+    reportTextures();                         // publish the completed edge; record()'s earlier report predates it
     return true;
 }
 

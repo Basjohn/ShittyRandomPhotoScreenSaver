@@ -1037,6 +1037,11 @@ def _allocation_fault_case(core, engine, app, host, packs: dict, stage: str, con
         scene.resize((768, 512))
         scene.targets(app)
         after_resize = _live(core)
+        facts["resize_ownership_edges"] = {
+            "before_created": before_resize["stage_objects_created"],
+            "after_created": after_resize["stage_objects_created"],
+            "before_rebinds": before_state.get("texture_jobs", {}).get("rebinds"),
+            "after_rebinds": scene.mode.state().get("texture_jobs", {}).get("rebinds")}
         facts["successful_rebind"] = stage_accounting_verdict(
             after_resize, baseline, _stage_accounting_expected(stage, scene.mode.state(), values))
         checks["successful_rebind_accounts_all_owned_objects"] = facts["successful_rebind"]["pass"]
@@ -1088,7 +1093,8 @@ def round_accounting(core, engine, app, api: str, packs: dict) -> dict:
     finally:
         host.close()
         host_check._flush_deletes(app)
-    return {"pass": bool(results) and all(result["pass"] for result in results.values()), "cases": results}
+    checks = {name: result["pass"] for name, result in results.items()}
+    return {"pass": bool(checks) and all(checks.values()), "checks": checks, "cases": results}
 
 
 def _records(core, engine, app, host, packs: dict, case: Case, count: int) -> dict:
