@@ -2069,6 +2069,13 @@ read once (`:770-808`).
   own order (a mode sorts in its worker if it wants to; neither EB nor Waveform has a sorted path today). (2) Refuse the
   program on such a device. *Recommend (1)*, the lead's "falls back to its sorted path", as D15's batched pass ships its
   plain pack; the harness proves it under the gate's control.
+  Both fragment packs must expose the same resource and user-input interface before device selection: full
+  uniform/storage member layouts, descriptor sets, access qualifiers and resource categories. Top-level declaration
+  order is irrelevant; generated uniform and explicit storage instance aliases are pack-local details. Every other
+  reflected field retains Qt's deep equality. Output declarations intentionally differ
+  and are validated against the owner target separately, with no sorted depth write. The admission comparator is
+  shared with D15's alternate vertex packs (Qt6.12 deep member equality); it runs only when admitting a program.
+  R-234 retains the sorted-pack defect and proof; the live plan owns its built-module acceptance.
 - **E. Turning a stage off.** (1) By program only (Python picks the program at the Settings edge); within a program the
   stage records with every record. (2) Also skipped per record at strength 0, the composite then reading no glow. *Recommend
   (1)*: no consumer's strength reaches 0 within a program (the Oscilloscope's is at least 0.55 times its glow setting,

@@ -741,43 +741,62 @@ int inputComponents(QShaderDescription::VariableType type)
     }
 }
 
-// Both batched vertex forms use the plain pack's bindings and vertex layout. Qt's equality operators include nested
-// block members, offsets, strides, descriptor sets and storage qualifiers; declaration order does not change the
-// interface. Input built-ins intentionally differ (draw parameters versus the plain pack's per-batch uniform);
-// those built-ins and arbitrary shader semantics are outside this resource/interface check.
-const char *vertexInterfaceDifference(const QShaderDescription &a, const QShaderDescription &b)
+template <typename T>
+bool sameShaderDeclarations(const QList<T> &left, const QList<T> &right)
 {
-    const auto same = [](const auto &left, const auto &right) {
-        return std::is_permutation(left.cbegin(), left.cend(), right.cbegin(), right.cend());
-    };
-    const auto sameUniform = [](const QShaderDescription::UniformBlock &left,
-                                const QShaderDescription::UniformBlock &right) {
+    return std::is_permutation(left.cbegin(), left.cend(), right.cbegin(), right.cend());
+}
+
+// Alternate packs share resource bindings and user inputs. Qt's equality includes nested member layouts,
+// descriptor sets and storage qualifiers; top-level declaration order does not change the interface. Outputs
+// are checked by the caller: batched vertex forms agree, whereas sorted fragments write their owner's outputs.
+// Input built-ins and arbitrary shader semantics are outside this resource/interface check.
+const char *shaderInterfaceDifference(const QShaderDescription &a, const QShaderDescription &b)
+{
+    const auto sameUniform = [](QShaderDescription::UniformBlock left, QShaderDescription::UniformBlock right) {
         // structName is the translated shader's instance identifier (_42, _100, ...), not the binding
         // contract. Qt resolves that name from the active pack; separate compilations need not share it.
-        return left.blockName == right.blockName && left.size == right.size && left.binding == right.binding
-            && left.descriptorSet == right.descriptorSet && left.members == right.members;
+        left.structName.clear();
+        right.structName.clear();
+        return left == right;
     };
     const auto aUniforms = a.uniformBlocks();
     const auto bUniforms = b.uniformBlocks();
     if (!std::is_permutation(aUniforms.cbegin(), aUniforms.cend(), bUniforms.cbegin(), bUniforms.cend(), sameUniform))
         return "uniform blocks";
-    if (!same(a.storageBlocks(), b.storageBlocks()))
+    const auto sameStorage = [](QShaderDescription::StorageBlock left, QShaderDescription::StorageBlock right) {
+        // The block name identifies the resource; its GLSL instance alias is local to each shader. QRhi binds
+        // storage by descriptor binding, not this alias. Keep every other field under Qt's deep equality.
+        left.instanceName.clear();
+        right.instanceName.clear();
+        return left == right;
+    };
+    const auto aStorage = a.storageBlocks();
+    const auto bStorage = b.storageBlocks();
+    if (!std::is_permutation(aStorage.cbegin(), aStorage.cend(), bStorage.cbegin(), bStorage.cend(), sameStorage))
         return "storage blocks";
-    if (!same(a.combinedImageSamplers(), b.combinedImageSamplers()))
+    if (!sameShaderDeclarations(a.combinedImageSamplers(), b.combinedImageSamplers()))
         return "samplers";
-    if (!same(a.inputVariables(), b.inputVariables()))
+    if (!sameShaderDeclarations(a.inputVariables(), b.inputVariables()))
         return "inputs";
-    if (!same(a.outputVariables(), b.outputVariables())
-        || !same(a.outputBuiltinVariables(), b.outputBuiltinVariables()))
-        return "outputs";
-    if (!same(a.separateImages(), b.separateImages()))
+    if (!sameShaderDeclarations(a.separateImages(), b.separateImages()))
         return "separate images";
-    if (!same(a.separateSamplers(), b.separateSamplers()))
+    if (!sameShaderDeclarations(a.separateSamplers(), b.separateSamplers()))
         return "separate samplers";
-    if (!same(a.storageImages(), b.storageImages()))
+    if (!sameShaderDeclarations(a.storageImages(), b.storageImages()))
         return "storage images";
-    if (!same(a.pushConstantBlocks(), b.pushConstantBlocks()))
+    if (!sameShaderDeclarations(a.pushConstantBlocks(), b.pushConstantBlocks()))
         return "push constants";
+    return nullptr;
+}
+
+const char *vertexInterfaceDifference(const QShaderDescription &a, const QShaderDescription &b)
+{
+    if (const char *difference = shaderInterfaceDifference(a, b))
+        return difference;
+    if (!sameShaderDeclarations(a.outputVariables(), b.outputVariables())
+        || !sameShaderDeclarations(a.outputBuiltinVariables(), b.outputBuiltinVariables()))
+        return "outputs";
     return nullptr;
 }
 
@@ -1509,33 +1528,9 @@ bool checkSortedPack(ModePass &pass, const QByteArray &pack, const QList<TargetD
     }
     const QShaderDescription a = pass.fragment.description();
     const QShaderDescription b = sorted.description();
-    const QList<QShaderDescription::UniformBlock> blocksA = a.uniformBlocks();
-    const QList<QShaderDescription::UniformBlock> blocksB = b.uniformBlocks();
-    const QList<QShaderDescription::InOutVariable> samplersA = a.combinedImageSamplers();
-    const QList<QShaderDescription::InOutVariable> samplersB = b.combinedImageSamplers();
-    const QList<QShaderDescription::StorageBlock> storageA = a.storageBlocks();
-    const QList<QShaderDescription::StorageBlock> storageB = b.storageBlocks();
-    const QList<QShaderDescription::InOutVariable> inputsA = a.inputVariables();
-    const QList<QShaderDescription::InOutVariable> inputsB = b.inputVariables();
-    bool same = blocksA.size() == blocksB.size() && samplersA.size() == samplersB.size()
-        && storageA.size() == storageB.size() && inputsA.size() == inputsB.size();
-    for (qsizetype i = 0; same && i < blocksA.size(); ++i) {
-        same = blocksA.at(i).blockName == blocksB.at(i).blockName && blocksA.at(i).binding == blocksB.at(i).binding
-            && blocksA.at(i).size == blocksB.at(i).size;
-    }
-    for (qsizetype i = 0; same && i < samplersA.size(); ++i) {
-        same = samplersA.at(i).name == samplersB.at(i).name && samplersA.at(i).binding == samplersB.at(i).binding
-            && samplersA.at(i).type == samplersB.at(i).type;
-    }
-    for (qsizetype i = 0; same && i < storageA.size(); ++i)
-        same = storageA.at(i).blockName == storageB.at(i).blockName && storageA.at(i).binding == storageB.at(i).binding;
-    for (qsizetype i = 0; same && i < inputsA.size(); ++i) {
-        same = inputsA.at(i).name == inputsB.at(i).name && inputsA.at(i).location == inputsB.at(i).location
-            && inputsA.at(i).type == inputsB.at(i).type;
-    }
-    if (!same) {
-        *error = QStringLiteral("pass '%1': its sorted pack binds other blocks, samplers, storage or inputs than its "
-                                "transparency pack (one set of bindings serves both)").arg(label);
+    if (const char *difference = shaderInterfaceDifference(a, b)) {
+        *error = QStringLiteral("pass '%1': its sorted pack has different %2 from its transparency pack "
+                                "(one set of bindings serves both)").arg(label, QLatin1String(difference));
         return false;
     }
     ModePass fallback;

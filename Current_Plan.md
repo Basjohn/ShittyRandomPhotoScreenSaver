@@ -477,12 +477,16 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     - [ ] Related admission defect: `checkSortedPack` compares only outer block names/bindings/sizes, not nested
       layout. Reproduce equal-size, different-member-layout acceptance before choosing its bounded repair; do not
       silently include it in L1's batched-vertex change.
-      - [ ] Reproduce uniform and storage layout/access mismatches through GPU-free `mode_blocks`; retain valid
-        sorted-output and reordered-resource controls on the current official module.
+      - [x] Old module admits equal-size uniform layout mismatch and rejects a valid reflected-order permutation.
+      - [x] Old module admits unsupported extra storage image and changed SSBO member offsets; valid SSBO alias passes.
+      - [x] Old module admits changed SSBO access qualifiers; real sorted-output and alias controls retained.
       - [ ] Share the reflected resource-interface comparison with L1, preserving generated uniform instance IDs
-        as pack-local names. Check sorted fragment inputs separately; its different outputs keep D17's own checks.
+        and storage aliases as pack-local names. Check sorted fragment inputs separately; different outputs keep D17's checks.
       - [ ] Prove focused regressions, L1 compatibility and both-backend sorted rendering on an official build;
         independent High review, research/history and compact handoff journal before closure.
+    - [ ] Related cross-stage admission: reproduce equal-size vertex/fragment uniform-layout mismatch before
+      repairing `checkGeometryPass`'s shallow shared-block union. Inspect conventions and storage layouts at that
+      same boundary; packing currently selects the fragment layout for both stages. Keep separate from alternate packs.
     - [ ] L2, a mesh replaced by one of the same layout retargets instead of rebuilding: the latch key and
       `ensure()` tell a mesh's layout (stride and attributes) from its buffer (`ModeMeshes::objects()` counts both, so
       `meshObjects` forces `releasePipelines`, which releases the streams and the arena too, losing the storage
@@ -497,9 +501,10 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [ ] At Qt upgrades, recheck the private QRhi outside-pass `beginExternal`/`endExternal` contract against Qt source.
   - [x] Whole-query alignment, blocking-read and populated-VAO controls proved; cause remains open (D17, R-232).
   - [x] Sprite uniform declaration control and real wrong-input negative proved; cause remains open (D17, R-232).
-  - [ ] Compare remaining qsb-translated gather/sprite bodies and conventions with Python, then select one
-    specific falsifier before another diagnostic build. Preserve corresponding pixels and timing guards. Hardware
-    counters are optional for a specific ambiguity; profiler repair is not a prerequisite (D17, R-232).
+  - [x] Compiled-source comparison: shared row-flip branch confirmed; sprite texture-size derivation selected for control.
+  - [ ] Run the sprite textureSize level0/control and level1 negative with original blocks/calls, exact corresponding
+    pixels and whole-query guards. Record the result before choosing another falsifier. Remaining compiler/body
+    differences stay open; hardware counters are optional, profiler repair is not a prerequisite (D17, R-232).
   - [ ] Resolve an established core cause, then rerun both-backend `defocus_cost` and parity; otherwise document the
     established cause and figures in D17 before closing this gate. No production barrier or tracking exception without
     proof.
