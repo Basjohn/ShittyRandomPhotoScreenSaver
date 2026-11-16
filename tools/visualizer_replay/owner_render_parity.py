@@ -142,7 +142,10 @@ def parity_script(clip_frames, mode: str) -> list:
     reflecting mode), a held-key orbit from 0.5 s to 1.2 s (a 3D mode), before the pause, the park and the switch."""
     from tools.visualizer_replay import owner_worker_gate as gate
 
-    script = gate.identity_script(clip_frames, mode)
+    # The switch at 4.2 s, or 1.3 s before the end of a longer clip (a 60 s recorded take shows the mode for its whole
+    # length, not its first 4.2 s); a clip of 5.5 s or less keeps 4.2 s exactly.
+    span = (clip_frames[-1].timestamp_us - clip_frames[0].timestamp_us) / 1e6 if len(clip_frames) else 0.0
+    script = gate.identity_script(clip_frames, mode, switch_at_s=max(4.2, span - 1.3))
     start = next(value for kind, value in script if kind == "input").timestamp_us
     out: list = [("reflect", True)] if mode in gate.REFLECTING_MODES else []
     orbit = mode in gate.VIEW_MODES
