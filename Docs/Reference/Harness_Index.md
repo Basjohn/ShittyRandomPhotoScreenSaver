@@ -947,6 +947,9 @@ python native/core/python/transition_route_check.py --module-dir release/native_
 # --rounds prime_control (--apis vulkan; rule
 # C for depth's negative control, 1x and 4x, and the resolves' prime's over 40 consecutive 4x records, audit 2 H1),
 # cost_parts (where the 4K four-sample time goes), python_cost (the Python SceneTarget's 4x minus 1x on the same load)
+# Alone: scissor and scissor_control (natural/enlarged/restored viewport, actual 1x/4x, colour/depth slack and
+# exact restoration; missing UsesScissor rejected); readback_metadata (176 mip/attachment entries, subsequent
+# bounded readback and normalized level-relative odd-extent content metadata).
 # --rounds partial_retire_control / --rounds invalidation_control (separate runs: skip each real edge and require
 # the normal zero-resource predicate to fail on actual held resources, before cleanup).
 python native/core/python/scene_target_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
@@ -992,16 +995,19 @@ python native/core/python/compute_pass_check.py --module-dir release/native_modu
 # with glow; solo: a one-attachment owner for the sorted fallback), hidden hosts only: parity (rule (a) against the Python
 # stages under tools/pixel_tolerance.py, the bloom source sampled LINEAR/CLAMP as designed, Python's shipping NEAREST/
 # REPEAT reported apart; rule (b) with the defocus mips at every level, levels made from odd sizes reported apart; the
-# analytic checks), gate (the fallbacks by control, the defocus read level's cap), rest, steady (a minute of records,
+# analytic checks), gate (the fallbacks by control, actual device sample clamp changing on the same item/program,
+# the defocus read level's cap), accounting (27 cold/resize/rebind/partial-retirement faults, exact owned objects
+# and bytes, recovery to successful allocation and zero), rest, steady (a minute of records,
 # the record's render-thread time), retire, barriers (Vulkan: synchronisation validation with shader accesses; controls
 # depth prime, bloom same texture, read chain and no independent blend must report their finding, the bloom prime's is
 # reported only), cost (each stage at 2560x1440 and 4K, 1x and 4x). Alone: defocus_cost (the defocus step split by
 # variants at 4K), defocus_draws (latched draw queries), defocus_boundaries (bracketed off/boundary/query phases with
-# exact pixels and counter checks), showcase (the WebP), python_cost and python_defocus_cost (the reference child).
+# exact pixels and counter checks, each of the three individual boundary sites), showcase (the WebP), python_cost
+# and python_defocus_cost (the reference child).
 # Timing rounds normally use a quiet GPU; operator-authorised ambient diagnostics retain recorded conditions and
 # compare within-run controls (nvidia-smi is recorded in the summary).
 python native/core/python/post_stage_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
-    [--apis opengl vulkan] [--rounds parity gate rest steady retire barriers cost defocus_cost defocus_draws defocus_boundaries showcase python_cost python_defocus_cost] [--label n34_post_stages]
+    [--apis opengl vulkan] [--rounds parity gate accounting rest steady retire barriers cost defocus_cost defocus_draws defocus_boundaries showcase python_cost python_defocus_cost] [--label n34_post_stages]
 ```
 
 Tests: `tests/test_native_core_jobs.py` (the built module, GPU-free: the job service's latch, cancellation while

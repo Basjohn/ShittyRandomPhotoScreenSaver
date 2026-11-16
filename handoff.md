@@ -13,7 +13,7 @@ force-push or rewrite main.
 
 The operator's current route is P1 spike → N3.1c L3 → N3.2 Audit 4 L6 → N3.4 stream_ring → 1D.13 near-light;
 independent agents may overlap. ABI **22** is installed on main from GitHub run `43857531372`, native commit
-`59901a5b1`; source ABI 23's individual boundary controls await audit/build. Section 2 below is the original
+`59901a5b1`; source ABI 24's audited boundary controls and ownership/gate/readback repairs await combined runtime proof. Section 2 below is the original
 15 Nov snapshot, not current ABI or agent status.
 
 - [x] P1 build retirement + fail-closed core harness migration; 219 focused tests, OpenGL/Vulkan checks, High audit.
@@ -43,6 +43,10 @@ activity is explicitly authorised for the diagnosis; section 3's original quiet-
 - [x] ABI 22 stage parity/rest/retire PASS on OpenGL/Vulkan, rules (a)/(b) and analytic checks; 145 focused tests PASS.
 - [x] Defocus excess reproduced unmarked; bracketed off/boundary-only/query/off run keeps exact pixels but removes
   the excess with command boundaries alone. No production workaround admitted; individual-site isolation follows (D17).
+- [x] L2 scissor and separate missing-flag controls PASS OpenGL/Vulkan at actual 1x/4x; exact restoration, stable
+  allocation, independent High review. Evidence currently in n34-abi22-check (preserve on retirement).
+- [x] N3.4 full High source audit found five defects; audited fixes and fault proofs merged. Old ABI 22 reproduces
+  readback truncation/invalid mip content; fixed ABI 24 native acceptance remains open, not waived.
 
 ## 1. Read these first, in this order
 

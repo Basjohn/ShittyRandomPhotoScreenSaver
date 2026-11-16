@@ -54,18 +54,18 @@ The interim week's remaining route is in `handoff.md` section 3; heavy ports and
 Operator continuation (16 Nov): implement N3.1c L2 with Sol High and independent Terra High audit; lead runs
 N3.4 `defocus_draws` concurrently under available ambient GPU activity, as explicitly authorised. Record conditions
 and compare within-run variants; do not hold diagnosis for the former quiet-GPU precondition.
-ABI 22 post-stage parity/rest/retire passes both backends. L2's dedicated slack controls remain to run; ABI 23's
-individual diagnostic boundary controls are in source review before the next GitHub build.
+ABI 22 post-stage parity/rest/retire and L2 scissor/negative controls pass both backends. Source ABI 24 includes
+audited individual-boundary controls and five audit repairs; combined native build/runtime acceptance is next.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim week's order is `handoff.md` section 3.
-- High: N3.4's two open steps (the OpenGL defocus diagnosis on a quiet GPU, then its High audit; item 8b, N3.4
+- High: N3.4's two open steps (the OpenGL defocus diagnosis under recorded GPU conditions, then audit closeout; item 8b, N3.4
   box), then N3.6. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers ride
   with the next fitting dispatch.
 - Medium: the Bubble port (N5.1 Bubble box: classify rule (a)'s 8-level residual first), then the Oscilloscope
   (only after N3.4's audit, since it consumes bloom).
-- Sonnet: N3.1c's remaining L2 scissor proof, then `clip_smoke` only by asserting the protected behaviour.
-- Audit: an Opus High behind each merge, scaled to its risk; N3.4's audit is owed.
+- Sonnet: `clip_smoke` only by asserting the protected behaviour.
+- Audit: a High audit behind each merge, scaled to its risk; N3.4's source audit is done, native repair proofs are owed.
 
 ### Item 0. Operator defects of 11 Nov: section 1B, in its own order, ahead of everything below
 
@@ -486,17 +486,13 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [ ] Fix what the scopes show, if it brings Vulkan's 4K 4x minus 1x to the Python path's or below with parity
     exact and validation clean; otherwise the figure and its cause go to the lead with the operator's look question
     (4K defaulting to fewer samples).
-- [ ] N3.1c Checkpoint audit 2's open lows (agent-a6aa6ac5's `Docs/Future_Work/Checkpoint_Audits_Nov15.md`, L2 and
+- [x] N3.1c Checkpoint audit 2's lows (agent-a6aa6ac5's `Docs/Future_Work/Checkpoint_Audits_Nov15.md`, L2 and
   L3; before N3.2 draws anything but a full-screen triangle into a scene target).
-  - [ ] L2, the content viewport and its scissor: D14 point 2 and the contract box above put the function in
-    `conventions.h` with QRhi's viewport *and scissor*; it is `contentViewport` in `native/core/src/scene_targets.h`
-    and no pass sets a scissor. Today a full-screen triangle is clipped by the viewport, so nothing is wrong; N3.2's
-    points, lines or a guard-band rasteriser can write into the slack, which a linear read past the content's edge then
-    samples (the slack must hold the clear, the `slack_holds_the_far_plane` check). Decide one place (move it to
-    `conventions.h`, or correct D14 point 2 and the box), set the scissor to the content rect on every pass into a
-    scene target (`QRhiGraphicsPipeline::UsesScissor` on its pipelines, `cb->setScissor` per run), and prove it with a
-    harness pass that draws a quad past the content's edge: the slack keeps the clear, with a control (the scissor off:
-    the slack written).
+  - [x] L2: canonical contentViewport retained in scene_targets.h, D14 corrected; UsesScissor/content rect on
+    target draws, full allocation on full-target operations, defocus allocation viewport/content scissor. High audit;
+    ABI 22 OpenGL/Vulkan scissor and separate missing-flag controls PASS at actual 1x/4x. Enlarged viewport
+    makes slack writes observable; restoring the flag restores exact colour/depth without reallocating targets.
+    Evidence: n3_1/20261116_n31_l2_scissor{,_control}_abi22 (retained in n34-abi22-check until retirement).
   - [x] L3: independent wrong-top placement, aligned card, 401 one-pixel drag positions / true 1 px bucket control,
     actual partial-allocation destruction and render-thread invalidation, with separately rejected controls;
     R-227 counts partial resources. Terra High audited; merged ABI 21 rules (a)/(b), resize/rest/retire and 109
@@ -572,12 +568,14 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       prove requested multisample clamped to 1x stays eligible without sample shading, while actual multisample falls back.
     - [ ] Make target readback metadata level-relative for nonzero mips, with the defined odd-size/bottom-anchor policy;
       prove unaligned content lies inside each returned allocation.
-    - [ ] Reject readbacks exceeding fixed callback capacity before enqueuing; no silent partial result. Prove an
-      accepted over-cap target declaration fails loudly and a subsequent bounded readback still succeeds.
+    - [ ] Complete every declared mip/attachment readback with stable callback storage; remove the arbitrary
+      92-entry truncation. Prove 176 accepted entries plus subsequent bounded/odd-extent reads on both backends.
     - [ ] Reject nonfinite FP16 parity inputs/deltas before integer conversion; finite equality and NaN/+Inf/-Inf
       negatives on both candidate/reference. Recheck retained native parity arrays after this correction.
-    - [ ] Resolve the outside-pass external-command question against pinned Qt 6.12 Vulkan source and existing
-      common-owner proof before changing synchronization; validation PASS alone does not establish API support.
+    - [x] Outside-pass external-command question resolved against pinned Qt 6.12 Vulkan beginExternal/endExternal:
+      explicit NoPass support; no synchronization change needed. Recheck at Qt upgrades (private QRhi boundary).
+    - [ ] Prove sampler/SRB/pipeline accounting and actual partial skipped-release counts through cold/rebind faults;
+      audited source and 27-case harness are merged, actual ABI 24 runtime proof remains.
   - [ ] Remote-build side defect: a successful workflow dispatch can become discoverable after the client's timeout;
     preserve the run token and recover the existing run before any retry, so late queued builds are not orphaned.
   - [x] `stream_ring` timing-margin repair: bracketing-floor median sensitivity, exact native record coverage;
