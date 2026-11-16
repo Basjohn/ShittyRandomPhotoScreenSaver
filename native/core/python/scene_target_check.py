@@ -831,6 +831,8 @@ def _retire_edge(core, engine, app, packs: dict, case: str, *, skip_control: boo
         else:
             scene.targets(app)
         held = core.composite_live()
+        checks["live_target_objects_are_counted_before_the_edge"] = (
+            held["scene_target_textures"] > 0 and held["scene_target_bytes"] > 0)
         if skip_control:
             # Broken form: omit this edge, leaving the actual native objects alive. Apply the positive round's
             # predicate before cleanup; a synthetic edited counter is never the negative control.

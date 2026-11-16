@@ -100,6 +100,34 @@ qint64 textureBytes(const QRhiTexture *texture)
     return bytes;
 }
 
+void countTargetObjects(SceneTargets::Target &t)
+{
+    qint64 bytes = 0;
+    int textures = 0;
+    const auto add = [&](const std::unique_ptr<QRhiTexture> &texture) {
+        if (texture) {
+            ++textures;
+            bytes += textureBytes(texture.get());
+        }
+    };
+    for (int i = 0; i < kMaxTargetColour; ++i) {
+        add(t.colour[i]);
+        add(t.resolve[i]);
+    }
+    add(t.depth);
+    add(t.depthNearest);
+    add(t.captureColour);
+    add(t.captureDepth);
+    if ((textures > 0) != (t.textures > 0))
+        g_targets.fetchAndAddRelaxed(textures > 0 ? 1 : -1);
+    if (textures != t.textures)
+        g_textures.fetchAndAddRelaxed(textures - t.textures);
+    if (bytes != t.bytes)
+        g_bytes.fetchAndAddRelaxed(bytes - t.bytes);
+    t.textures = textures;
+    t.bytes = bytes;
+}
+
 } // namespace
 
 // ------------------------------------------------------------------------------------------------- formats
@@ -918,7 +946,11 @@ bool SceneTargets::allocateStep(bool *done, QString *error)
         if (t.stepsDone == 0 && t.newLayout)
             releaseTarget(t);                 // the old layout's objects (the caller released the pipelines over them)
         ++m_stateVersion;
-        if (!step(t, i, error)) {
+        const bool ok = step(t, i, error);
+        // Counts describe every owned texture, including a partial allocation or failed step awaiting release.
+        // This runs at allocation edges only; completed targets do no bookkeeping per record.
+        countTargetObjects(t);
+        if (!ok) {
             // Audit 2, L5: the objects stay until the caller released the pipelines built over this target's
             // render-pass descriptor, then every target (release(); the header's order).
             t.allocation = QSize();
@@ -1066,23 +1098,6 @@ bool SceneTargets::step(Target &t, int index, QString *error)
                 return false;
             }
         }
-        if (!t.decl.capture) {
-            // The last step: the counts follow the objects.
-            qint64 bytes = 0;
-            int textures = 0;
-            for (int i = 0; i < colourCount; ++i) {
-                bytes += textureBytes(t.colour[i].get()) + textureBytes(t.resolve[i].get());
-                textures += (t.colour[i] ? 1 : 0) + (t.resolve[i] ? 1 : 0);
-            }
-            bytes += textureBytes(t.depth.get()) + textureBytes(t.depthNearest.get());
-            textures += (t.depth ? 1 : 0) + (t.depthNearest ? 1 : 0);
-            if (t.textures == 0 && t.bytes == 0)
-                g_targets.fetchAndAddRelaxed(1);
-            g_textures.fetchAndAddRelaxed(textures - t.textures);
-            g_bytes.fetchAndAddRelaxed(bytes - t.bytes);
-            t.textures = textures;
-            t.bytes = bytes;
-        }
         return true;
     }
     // The capture (D14 point 5): the colour as attachment 0's format, linear; the nearest window depth R32F, nearest.
@@ -1109,21 +1124,6 @@ bool SceneTargets::step(Target &t, int index, QString *error)
                      .arg(QString::fromLatin1(t.decl.name)).arg(t.allocation.width()).arg(t.allocation.height());
         return false;
     }
-    qint64 bytes = 0;
-    int textures = 0;
-    for (int i = 0; i < colourCount; ++i) {
-        bytes += textureBytes(t.colour[i].get()) + textureBytes(t.resolve[i].get());
-        textures += (t.colour[i] ? 1 : 0) + (t.resolve[i] ? 1 : 0);
-    }
-    bytes += textureBytes(t.depth.get()) + textureBytes(t.depthNearest.get()) + textureBytes(t.captureColour.get())
-        + textureBytes(t.captureDepth.get());
-    textures += (t.depth ? 1 : 0) + (t.depthNearest ? 1 : 0) + 2;
-    if (t.textures == 0 && t.bytes == 0)
-        g_targets.fetchAndAddRelaxed(1);
-    g_textures.fetchAndAddRelaxed(textures - t.textures);
-    g_bytes.fetchAndAddRelaxed(bytes - t.bytes);
-    t.textures = textures;
-    t.bytes = bytes;
     return true;
 }
 
