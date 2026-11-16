@@ -37,6 +37,8 @@ independent agents may overlap. ABI **21** is installed on main from GitHub run 
 
 For this session retain every completed plan checkbox, compact inline. Record any incomplete or unsatisfactory
 outcome beside its completed item with the reason, so a successor can challenge it; continue work beyond this handoff.
+Current continuation (operator, 16 Nov): N3.1c L2 scissor fix and N3.4 defocus diagnosis. Available ambient GPU
+activity is explicitly authorised for the diagnosis; section 3's original quiet-GPU stop does not apply to this run.
 
 ## 1. Read these first, in this order
 

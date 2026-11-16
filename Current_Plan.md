@@ -51,6 +51,9 @@ For this session, compact completed checkbox text inline and retain every checkb
 validation remains at N0.6. The repaired `stream_ring` harness passes on OpenGL/Vulkan with exact record coverage;
 quiet-GPU performance admission remains a separate N3.4 box. Near-light's fixture-only repair passes offscreen.
 The interim week's remaining route is in `handoff.md` section 3; heavy ports and the flip remain held there.
+Operator continuation (16 Nov): implement N3.1c L2 with Sol High and independent Terra High audit; lead runs
+N3.4 `defocus_draws` concurrently under available ambient GPU activity, as explicitly authorised. Record conditions
+and compare within-run variants; do not hold diagnosis for the former quiet-GPU precondition.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim week's order is `handoff.md` section 3.
@@ -529,9 +532,11 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       a GPU loaded by the operator's game (P0, 50 to 60 %; D17 has the figures): at 4K 1x the sprites' own interval
       differs by only 0.06 ms between `full` and `no_sprites` and the gather's by 0.6, while the whole record differs
       by 1.7 ms. That points to case (ii) below; it must be confirmed on a quiet GPU.
-    - [ ] Rerun on a quiet GPU (`nvidia-smi --query-gpu=pstate,utilization.gpu --format=csv,noheader` at P8 and under
+    - [ ] Rerun with GPU conditions recorded (operator, 16 Nov: available ambient activity is authorised; the former
+      quiet-GPU prerequisite below no longer blocks this diagnostic). Original comparable baseline condition:
+      `nvidia-smi --query-gpu=pstate,utilization.gpu --format=csv,noheader` at P8 and under
       15 % before and after; `nvidia-smi --query-compute-apps=process_name --format=csv` with no game; no SRPSS running,
-      no game60): `python native/core/python/post_stage_check.py --module-dir release/native_module --apis opengl
+      no game60. Command: `python native/core/python/post_stage_check.py --module-dir release/native_module --apis opengl
       --rounds defocus_draws --label n34_defocus_draws`. Read `results.opengl.defocus_draws.facts`: per sample count and
       variant (`full`, `few_sprites`, `no_sprites`) `gather_ms` and `sprites_ms` beside `record_median_ms`. Every
       variant must have `draws_timed` at least 30 and `skipped` near 0. Then delete the run's `work` folder.
