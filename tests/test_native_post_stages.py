@@ -357,6 +357,7 @@ def test_the_defocus_draw_timer_is_opengl_only_and_off_by_default() -> None:
     assert onto.index("markDefocus(cb, 0);") < onto.index("cb->draw(3);") < onto.index("markDefocus(cb, 1);") \
         < onto.index("cb->draw(4, sprites);") < onto.index("markDefocus(cb, 2);")
     assert "QAtomicInteger<int> g_timeDefocusDraws { 0 };" in stages
+    assert "if (control & (2 << mark))" in boundary
 
 
 def test_the_core_reads_every_stage_shader_it_bakes() -> None:

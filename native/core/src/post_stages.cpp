@@ -32,7 +32,8 @@ QAtomicInteger<int> g_skipBloomPrime { 0 };
 QAtomicInteger<int> g_bloomSameTexture { 0 };
 QAtomicInteger<int> g_skipStageRelease { 0 };
 QAtomicInteger<int> g_skipReadChain { 0 };
-QAtomicInteger<int> g_timeDefocusDraws { 0 }; // bit 0: queries; bit 1: boundary-only control (one load at each mark)
+QAtomicInteger<int> g_timeDefocusDraws { 0 }; // bit 0: queries; bits 1..3: individual boundary-only sites
+QAtomicInteger<qint64> g_defocusFlushes { 0 };
 QAtomicInteger<qint64> g_defocusTimed { 0 };
 QAtomicInteger<qint64> g_gatherGpuNs { 0 };
 QAtomicInteger<qint64> g_spritesGpuNs { 0 };
@@ -307,7 +308,12 @@ static void setDefocusDrawControl(int bit, bool on)
 }
 void setTimeDefocusDraws(bool on) { setDefocusDrawControl(1, on); }
 bool timeDefocusDraws() { return (g_timeDefocusDraws.loadAcquire() & 1) != 0; }
-void setFlushDefocusDraws(bool on) { setDefocusDrawControl(2, on); }
+void setFlushDefocusDraws(bool on) { setDefocusDrawControl(14, on); }
+void setFlushDefocusBoundary(int mark, bool on)
+{
+    if (mark >= 0 && mark < 3)
+        setDefocusDrawControl(2 << mark, on);
+}
 quint64 stageControlGeneration() { return g_controlGeneration.loadAcquire(); }
 
 StageCounts stageCounts()
@@ -331,6 +337,7 @@ StageCounts stageCounts()
     c.gatherGpuNs = g_gatherGpuNs.loadRelaxed();
     c.spritesGpuNs = g_spritesGpuNs.loadRelaxed();
     c.defocusTimeSkipped = g_defocusTimeSkipped.loadRelaxed();
+    c.defocusFlushes = g_defocusFlushes.loadRelaxed();
     return c;
 }
 
@@ -403,8 +410,11 @@ void PostStages::markDefocus(QRhiCommandBuffer *cb, int mark)
     if (!control)
         return;
     if (!(control & 1)) { // same boundaries as the query mode, no queries or result retrieval
-        cb->beginExternal();
-        cb->endExternal();
+        if (control & (2 << mark)) {
+            cb->beginExternal();
+            cb->endExternal();
+            g_defocusFlushes.fetchAndAddRelaxed(1);
+        }
         return;
     }
     if (!m_drawTimer) {

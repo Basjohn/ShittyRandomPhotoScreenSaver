@@ -122,4 +122,5 @@
 // 21 (N3.1c L3): scene_target_control (placement, one-pixel allocation bucket, bounded allocation steps) and
 // host_invalidate_scene_graph (hidden-host harness; actual render-thread QQuickRenderControl invalidation).
 // 22: scene-target scissor controls and stage_control's flush_defocus_draws (same boundaries without queries).
-#define SRPSS_NATIVE_CORE_ABI 22
+// 23: isolate the three flush_defocus_* sites; composite_live's stage_defocus_flushes proves which boundaries ran.
+#define SRPSS_NATIVE_CORE_ABI 23
