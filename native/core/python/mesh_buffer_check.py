@@ -1411,6 +1411,8 @@ def child(args) -> dict:
 
 
 def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool, list[str]]:
+    if record.get("exit_code", 0) != 0:
+        return False, [f"{api}: child process failed ({record['exit_code']}); no successful proof"]
     if api == "reference":
         entry = record.get("reference") or {}
         return bool(entry.get("pass")), ([] if entry.get("pass") else
@@ -1482,6 +1484,7 @@ def main(argv: list[str] | None = None) -> int:
         children.append("reference")
     for api in children:
         child_json = out / f"child_{api}.json"
+        child_json.unlink(missing_ok=True)   # R-226: never accept a previous run's successful record
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
                    "--rounds", *args.rounds] + (["--ring-payloads", *args.ring_payloads] if args.ring_payloads else [])
