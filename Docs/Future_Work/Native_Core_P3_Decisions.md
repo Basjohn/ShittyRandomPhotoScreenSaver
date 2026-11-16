@@ -1424,7 +1424,7 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
    resident record plus one payload copy into already allocated and touched memory on CPU, and its GPU time without
    the copy (the same pass with the data already resident). `mesh_buffer_check.py --rounds stream_ring` measures a
    resident floor immediately before and after **each** route. GPU timestamps measure the surface pass; native
-   render-thread record counters measure CPU (per-record means over each 20-frame batch). GUI wall time is diagnostic only; missing or
+   render-thread record counters measure CPU (per-record means over each 20-frame batch). GUI wall time is diagnostic only;
    native counters must advance by **exactly one record per requested frame at each measured batch**, including a
    final partial batch; missing, stalled, under-counted or over-counted batches fail loudly. Evidence records the
    expected/observed batch count, actual covered frames and native record count (both must equal requested frames); CPU comparisons
@@ -1451,6 +1451,15 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
    spans the smaller floor p10 to the larger floor p90 (plus copy p10/p90 on CPU); the descriptive excess spread is
    [route p10 minus floor high, route p90 minus floor low]. Neither spread gates the median verdict or guarantees
    unsampled frames. Large tails with stable medians therefore do not alone make the median result inconclusive.
+
+   **Current-protocol proof (16 Nov, merged ABI 21, module `2b63f4752`):**
+   `.artifacts/evidence/native_core/n3_2/20261116_n34_merged_abi21_median/` holds the summary and lead review.
+   OpenGL and Vulkan PASS: 22 CPU/GPU comparisons per backend within the unchanged margin; all 33 route/floor
+   measurements per backend cover exactly 600 requested frames, 600 native records and 30 complete CPU windows.
+   Worst raw median excess: OpenGL 0.0298 ms (160 KiB instance CPU), Vulkan 0.01875 ms (288 KiB storage GPU).
+   Required Vulkan validation is clean (only known Qt A excused). Ambient GPU activity was 43% at 1560 MHz before
+   and 28% at 1980 MHz after: this establishes the repaired harness's contracts, not quiet-GPU performance admission.
+   Repeat on a quiet GPU before a Waveform consumer, including D5.3's tail watch; the native pair remains unbuilt.
 8. *No allocation per frame.* Every QRhi object (buffers, bindings, pipelines) is made at a build or a warm-up unit,
    none per record; the arena, the streams and the meshes are fixed in size between edges. The proof reads QRhi's
    resource counts and the core's ownership counts flat over a steady minute, and the core's own heap flat (a counting

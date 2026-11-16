@@ -47,14 +47,10 @@ under the operator's 16 Nov request for another Sol 6.1 High native-core agent. 
 an independent verified slice may land while an earlier native build is running.
 For this session, compact completed checkbox text inline and retain every checkbox for later review.
 
-**Now (in flight):** lead's current-ABI N3.4 `stream_ring` proof, after the measurement contract and exact native
-record coverage passed audit. Near-light's fixture-only checkpoint passed the merged offscreen test and visual review.
-L3 and L6 source/proof checkpoints are complete; ABI 21 is installed on main.
-`native-harness-workhorse` (Terra 6.1 Medium) completed the non-conflicting R-226 harness sweep; remaining callers
-are owned by the scene-target and mesh-buffer slices.
-Lead verification and Terra 6.1 High audit precede landing. P1 source slice passed 219 focused tests plus
-OpenGL/Vulkan host and composite checks; its desktop validation remains at N0.6 below.
-The orchestrator handbook's original sections are preserved; additive section 8a records the retired build route.
+**Now:** the five requested source/proof slices are complete and audited; ABI 21 is installed on main. P1 desktop
+validation remains at N0.6. The repaired `stream_ring` harness passes on OpenGL/Vulkan with exact record coverage;
+quiet-GPU performance admission remains a separate N3.4 box. Near-light's fixture-only repair passes offscreen.
+The interim week's remaining route is in `handoff.md` section 3; heavy ports and the flip remain held there.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim week's order is `handoff.md` section 3.
@@ -63,8 +59,7 @@ at the size asked. The interim week's order is `handoff.md` section 3.
   with the next fitting dispatch.
 - Medium: the Bubble port (N5.1 Bubble box: classify rule (a)'s 8-level residual first), then the Oscilloscope
   (only after N3.4's audit, since it consumes bloom).
-- Sonnet: the spike retirement box (not its visible-window part), N3.1c's lows, the `stream_ring` margin side
-  defect, stale reds (`test_extruded_bubble_empty_near`; `clip_smoke` only by asserting the protected behaviour).
+- Sonnet: N3.1c's remaining L2 scissor proof, then `clip_smoke` only by asserting the protected behaviour.
 - Audit: an Opus High behind each merge, scaled to its risk; N3.4's audit is owed.
 
 ### Item 0. Operator defects of 11 Nov: section 1B, in its own order, ahead of everything below
@@ -560,10 +555,11 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     `git diff a553335bb 39e661d80 -- native/core rendering/native tests/test_native_post_stages.py`
     (about 6,800 lines: `post_stages.*`, `mode_content.*`, `scene_targets.*`, `module.cpp`, the shaders, the harness).
     Findings go to `Docs/Future_Work/Checkpoint_Audits_Nov15.md` as "Checkpoint audit 6"; fixes are the plan's boxes.
-  - [ ] Side defect (found while rerunning N3.2's proof for N3.4): `mesh_buffer_check.py --rounds stream_ring`'s
-    absolute 0.05 ms margin over the pair's floor fails on an idle GPU (P8 at 225 MHz: the floor itself measured 0.028
-    ms against 0.015 in a warm run, the 288 KiB storage route 0.097 against 0.031), on different routes run to run;
-    judge it relative to the floor measured in the same run, or warm the GPU to a stated clock first.
+  - [x] `stream_ring` timing-margin repair: bracketing-floor median sensitivity, exact native record coverage;
+    41 focused tests, High audit and merged ABI 21 OpenGL/Vulkan proof PASS (16 Nov; D15).
+  - [ ] Awaiting Validation before a Waveform consumer: repeat `mesh_buffer_check.py --rounds stream_ring` on a
+    quiet GPU, record load/clocks before/after and review median margins plus the D5.3 tail watch. The 16 Nov
+    proof had ambient GPU activity; it validates the repaired harness, not quiet-GPU performance admission.
   - [x] Harness ownership inventory: post-stage uses canonical graphics setup and is registered in the existing
     core proof allowlist; focused ownership scan PASS on merged tree (16 Nov).
 - [ ] N3.6 Lifetime: lazy creation on first use, release at retirement and at a mode switch, device loss rebuilt

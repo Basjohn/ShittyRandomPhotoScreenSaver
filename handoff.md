@@ -17,19 +17,22 @@ independent agents may overlap. ABI **21** is installed on main from GitHub run 
 
 - [x] P1 build retirement + fail-closed core harness migration; 219 focused tests, OpenGL/Vulkan checks, High audit.
   Concession: desktop composed alpha, DPI and sleep/wake remain Awaiting Validation; offscreen pixels cannot prove them.
-- [x] R-226 other-harness sweep + post-stage ownership entry; focused regressions and High audit. Remaining mesh
-  caller is in the active stream_ring slice; the scene-target caller is fixed with L3.
+- [x] R-226 caller sweep + post-stage ownership entry; focused regressions and High audit. Scene-target and mesh
+  callers are complete with their respective slices.
 - [x] N3.1c L3 controls + R-227 partial-resource accounting; two GitHub builds, both-backend negative controls,
   109 merged focused tests and current-module parity/resize/rest/retire PASS. Concession: L2 scissor work and
   timing/other-vendor gates remain separate; this slice proves the named L3 contracts only.
 - [x] Audit 4 L6's three executable native/Python oracles; 27 tests, mutation controls and High audit; rechecked in
   the ABI 21 merged gate. Concession: GPU-free matrix/packet tests establish those contracts, not visual/performance acceptance.
 - [x] Mesh R-226 caller and stream_ring source contract: exact native record coverage, median admission with
-  bracketing-floor sensitivity; 41 focused cases and High audit. Current-ABI native proving run is in progress.
+  bracketing-floor sensitivity; 41 focused cases and High audit; merged ABI 21 OpenGL/Vulkan proof PASS.
+  Limit: ambient GPU activity (43% before, 28% after) prevents quiet-GPU performance admission; repeat before a
+  Waveform consumer (Current_Plan N3.4 / D15). The native pair remains unbuilt; no product per-frame work was added.
 - [x] 1D.13 near-light: stale fixture corrected with test-owned visible optics and canonical camera; original alpha0
   reproduced, real stale-composite mutation caught, exact empty/return pixels and resource reuse proved offscreen.
   Concession: product rendering is unchanged; this closes the oracle defect, not a new visual/performance acceptance.
-- [ ] Finish the current-ABI stream_ring run and review raw medians, bracket drift, record coverage and validation.
+- [x] Reviewed current-ABI stream_ring medians, bracket drift, exact coverage and clean required Vulkan validation;
+  22 comparisons per backend within the unchanged 0.05 ms margin. Evidence: `20261116_n34_merged_abi21_median`.
   Existing harness convention: process exit0 means the harness ran; acceptance reads `summary.pass` / printed verdict.
 
 For this session retain every completed plan checkbox, compact inline. Record any incomplete or unsatisfactory
