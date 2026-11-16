@@ -700,6 +700,21 @@ the feature (D3D11 is not stated).
   and growth are uniform arrays).
 - [ ] N5.3 Extruded Spectrum, then Sphere (meshes, lighting, N4.j's backdrop environment, N4.l's silhouette
   shadows; neither uses bloom; no compute).
+- [ ] Re-prove the landed mode ports on long recorded music (operator, 17 Nov: a 5 s clip is no parity proof): Spectrum
+  and Spline Curve owner rule (a) at both placements over the four 60 s recorded clips, once the replay takes recorded
+  clips (the box after N5.1 Bubble), under their existing D12 bounds; frame hashes kept as their optimisation
+  before-state. An excess is classified, never answered by raising a bound.
+- [ ] Bubble GPU optimisation, after N5.1 lands (operator, 17 Nov: Bubble about 50 % GPU at 4K and Extruded Bubble
+  about 55 %, on a stale build; "all guarded gains are valuable"). Under the optimisation gate in
+  `Docs/Guides/Native_Bubble_Diagnostics.md`:
+  - [ ] Measure first: per-pass GPU time at 4K on OpenGL and Vulkan, with the GPU state and displays recorded, against the
+    pre-flip baseline (`tools/preflip_pack.py --compare`), to find which passes carry the cost.
+  - [ ] Byte-identical candidates first (culling, fewer or skipped empty passes, smaller targets where the output is
+    unchanged, buffer reuse, state changes): each one's four-clip frame hashes identical before and after, per backend,
+    and logic/reactivity unchanged (`bubble_parity.py`, BTF section 24).
+  - [ ] Any candidate that cannot hold byte parity (reordered float math, half-float, merged passes) is a tier-2 change:
+    shared tolerance plus the operator's sign-off, never a silent pass.
+  - [ ] Extruded Bubble gets the same treatment after N5.6, with its own four-clip before-state.
 
 **N5, background track (one High slot; transitions grouped by what they share; needs are in the matrix,
 section 2)**

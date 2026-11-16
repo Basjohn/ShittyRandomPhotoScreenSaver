@@ -72,6 +72,12 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
   the shared tolerance (checklist 9) with the mask named: the translucent pixels found by drawing the reference over
   two backgrounds or from its own alpha, or the pixels a blended layer sums into; float textures judged by their own
   ulp (D12 "The pixel tolerance"). Bounds are the measured worst times 1.5, stated beside their measured reasons.
+- Owner-level parity on recorded music (operator, 17 Nov): a mode port's owner rule (a), and rule (b) where the owner
+  route runs it, passes over four 60-second recorded song clips (the BTF section 24 recordings), not a short synthetic
+  clip. A 5-second synthetic recipe (Bubble's 5.5 s owner replay) is a smoke check only and never the parity proof. Keep
+  every frame's hash from these runs: they are the before-state an optimisation is later byte-compared against, per
+  backend (`Docs/Guides/Native_Bubble_Diagnostics.md`, "Optimisation gate"). A transition runs its full canonical
+  duration over several image pairs.
 - Negative controls for every rule, each seen failing on the broken form (a one-level shift on every pixel, a fixed
   artefact, the wrong order, the skipped release); `tests/test_pixel_tolerance.py` holds the tolerance's own.
 - Vulkan validation with synchronisation checks and the shader-access opt-in: `syncval_shader_accesses_heuristic` is
