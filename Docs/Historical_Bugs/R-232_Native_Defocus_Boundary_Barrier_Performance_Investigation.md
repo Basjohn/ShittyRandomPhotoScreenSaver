@@ -68,6 +68,30 @@ wrong output and is not a speedup. Buffered/loose GPU conditions were 47%/870MHz
 ambient variation; this is diagnostic evidence, not quiet-GPU admission. Combined gather/sprite lowering,
 conventions and translated-body differences remain open before selecting another bounded falsifier.
 
+## Compiled-source comparison and texture-size control
+
+Comparison of the actual submitted gather/sprite GLSL with the Python kernels found no arithmetic, loop-count,
+instance-count or discard correctness defect. Both gather paths contain the same fragment-row conditional and
+use the same x value; an earlier ignored research note's suggestion of an additional native-only conventions
+branch was corrected. The native y tap mirror is required by the row convention. Sampled expanded decimal
+literals round to the same float32 values. These checks do not establish identical GPU executables: qsb changes
+temporaries/control flow, the native rejected varyings are initialized, and index lowering still differs.
+
+The next bounded control changed only Python sprite size derivation: insert the native `textureSize(uColour,0)`
+local at main entry and use it instead of uSize in final placement. The original UBO declaration, packed values,
+PassBlocks/ring operations, shader bodies elsewhere and all steady GL calls remain intact. Actual source texture
+levels are 3840×2176 and 1920×1088 with base level 0, checked once during excluded warm-up. The unchanged
+uniform-size control and level0 query both retain all four original-baseline image hashes and every240-sample,
+244-call whole-query/composite guard with zero draw-local timestamps. Paired before/after medians are
+**0.7322/0.5908ms uniform and0.6717/0.6697ms query**. The deliberate level1 query fails exactly the two full-case
+baseline-pixel checks while both high hashes and all other guards pass. Independent High receipt review is clear.
+
+This expression alone did not reproduce native's multi-ms excess in the Python fixture. It does not prove timing
+equivalence, query hoisting, native compiler behavior or a driver cause. GPU before/after was 19%/420MHz→6%/2790MHz
+for uniform and 0%/210MHz→42%/2790MHz for level 0; these are sequential available-activity diagnostic runs. Remaining
+translated gather/body and complete submission differences need a specific next falsifier, not another profiler
+repair or a production synchronization workaround.
+
 ## Evidence and repeatable entry points
 
 The retained evidence is under `.artifacts/evidence/native_core/n3_4/`:
@@ -77,6 +101,10 @@ The retained evidence is under `.artifacts/evidence/native_core/n3_4/`:
 - `20261116_n34_boundary_tracking_combo/combo_check.py` is the bounded evidence helper. Its 16-frame mode is for tracing only; its 240-frame mode is the diagnostic comparison, and its off brackets must actually show a stable excess before drawing conclusions.
 - `20261116_n34_aligned_native_pair/` retains the aligned native repeat and machine brackets; its wrapper is `.artifacts/scratch/n34-diagnosis/aligned_native_pair.py`. `20261116_n34_python_whole_pair/` retains the executable Python helper, source hashes, guarded JSON receipt and first full/high PNGs. These are diagnostic evidence, not portable acceptance benchmarks.
 - `20261116_n34_native_wait_control/` retains the executable blocking-read wrapper, unchanged combo results and automatic invocation/source/machine/timer receipt.
+- `20261116_n34_compiled_shader_comparison/` retains submitted-source hashes, corrected conventions research and
+  `python_texture_size_pair.py` with `uniform_size/`, `query_size_0/`, `query_size_1/` receipts/images/shader diffs.
+  Use `--sprite-size-source uniform-size|query-size-0|query-size-1 --baseline-json <original-whole-pair-json>
+  --out-dir <new-directory>` with `--repo` and `--module-dir`; level1 must fail its full-output pixel predicates.
 - `20261116_n34_uniform_submission/` retains the separate `python_uniform_pair.py`, primary-source research,
   declaration-only shader diffs and `buffered/`, `loose/`, `wrong_size/` receipts/images. Use `--sprite-uniforms
   buffered|loose|wrong-size --baseline-json <original-whole-pair-json> --out-dir <new-directory> --dump-shaders`

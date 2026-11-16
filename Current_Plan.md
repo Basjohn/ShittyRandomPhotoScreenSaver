@@ -41,7 +41,7 @@ Live checklist: every open step is its own box; retain only useful, brief native
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Active native focus:** N3.2's related sorted-pack layout admission defect; N3.4 compiled-shader research continues
+**Active native focus:** N3.2's cross-stage layout admission defect; N3.4 compiled-shader research continues
 independently, without profiler repair. Then the admitted ports and side defects below; keep the interim
 holds in `handoff.md`. Independent native work may overlap under the operator's request for a Sol 6.1 High agent;
 review every slice before landing.
@@ -53,7 +53,7 @@ held by the interim route in `handoff.md`.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim holds are in `handoff.md`.
-- [ ] High: reproduce and repair the related sorted-pack layout admission defect; continue the bounded
+- [ ] High: reproduce and repair the vertex/fragment shared-layout admission defect; continue the bounded
   N3.4 source comparison independently, then N3.6 when the hold lifts.
   Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers ride
   with the next fitting dispatch.
@@ -471,19 +471,9 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
 - [x] N3.1c L2 scissor and L3 allocation proofs complete (D14, R-227, checkpoint audit 2).
 - [x] N3.2 Mesh and buffer resources proved (D15).
 - [ ] N3.2 remaining checkpoint audit 4 findings:
-  - [ ] Checkpoint audit 4's remaining lows (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 4";
-    recorded, not fixed, by the lead's decision of 15 Nov):
+  - [ ] Finish the shared mesh/program follow-ups (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 4"):
     - [x] L1 shader-interface admission and both-backend batched-draw proofs complete (D15, R-233).
-    - [ ] Related admission defect: `checkSortedPack` compares only outer block names/bindings/sizes, not nested
-      layout. Reproduce equal-size, different-member-layout acceptance before choosing its bounded repair; do not
-      silently include it in L1's batched-vertex change.
-      - [x] Old module admits equal-size uniform layout mismatch and rejects a valid reflected-order permutation.
-      - [x] Old module admits unsupported extra storage image and changed SSBO member offsets; valid SSBO alias passes.
-      - [x] Old module admits changed SSBO access qualifiers; real sorted-output and alias controls retained.
-      - [ ] Share the reflected resource-interface comparison with L1, preserving generated uniform instance IDs
-        and storage aliases as pack-local names. Check sorted fragment inputs separately; different outputs keep D17's checks.
-      - [ ] Prove focused regressions, L1 compatibility and both-backend sorted rendering on an official build;
-        independent High review, research/history and compact handoff journal before closure.
+    - [x] Sorted-pack deep interface admission and both-backend live SSBO alias proofs complete (D17, R-234).
     - [ ] Related cross-stage admission: reproduce equal-size vertex/fragment uniform-layout mismatch before
       repairing `checkGeometryPass`'s shallow shared-block union. Inspect conventions and storage layouts at that
       same boundary; packing currently selects the fragment layout for both stages. Keep separate from alternate packs.
@@ -501,10 +491,9 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [ ] At Qt upgrades, recheck the private QRhi outside-pass `beginExternal`/`endExternal` contract against Qt source.
   - [x] Whole-query alignment, blocking-read and populated-VAO controls proved; cause remains open (D17, R-232).
   - [x] Sprite uniform declaration control and real wrong-input negative proved; cause remains open (D17, R-232).
-  - [x] Compiled-source comparison: shared row-flip branch confirmed; sprite texture-size derivation selected for control.
-  - [ ] Run the sprite textureSize level0/control and level1 negative with original blocks/calls, exact corresponding
-    pixels and whole-query guards. Record the result before choosing another falsifier. Remaining compiler/body
-    differences stay open; hardware counters are optional, profiler repair is not a prerequisite (D17, R-232).
+  - [x] Compiled-source comparison and texture-size/real wrong-mip control proved; cause remains open (D17, R-232).
+  - [ ] Select one falsifier of remaining generated gather/control-flow or native submission differences; state
+    discriminating outcomes before another run. Hardware counters are optional; profiler repair is not a prerequisite.
   - [ ] Resolve an established core cause, then rerun both-backend `defocus_cost` and parity; otherwise document the
     established cause and figures in D17 before closing this gate. No production barrier or tracking exception without
     proof.

@@ -10,8 +10,10 @@ Never rewrite main or force-push.
 - [x] Whole-query/alignment, blocking-read and populated-VAO controls proved; no production speedup or established cause.
 - [x] Sprite uniform control and real wrong-input negative proved; uniform storage alone did not reproduce excess.
 - [x] N3.2 L1 shader-interface admission proved on the official build and both backends (R-233).
-- [ ] Reproduce and repair the related sorted-transparency-pack member-layout admission defect.
-- [ ] Continue N3.4 source comparison of remaining qsb-translated bodies/conventions independently.
+- [x] Sorted-pack resource/layout admission and live SSBO aliases proved on both backends (R-234).
+- [ ] Reproduce and repair vertex/fragment shared-block layout admission, including conventions/storage at that boundary.
+- [x] Texture-size control and real wrong-mip negative proved; size derivation alone did not reproduce excess.
+- [ ] Select the next N3.4 falsifier of remaining generated gather/control-flow or native submission differences.
   Overlap/contention remains unproved; hardware counters are optional. R-232 retains the investigation. No production barrier
   or tracking exception is admitted.
 - [ ] Continue the Bubble port from its N5.1 box. Oscilloscope waits for N3.4's remaining performance gate.

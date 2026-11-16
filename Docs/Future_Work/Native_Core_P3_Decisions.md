@@ -45,8 +45,8 @@ are in `rendering/quick/visualizer/native_route.py`.
 Recent gains are correctness and reusable capability: partial-resource accounting, sample/capability admission,
 complete and correctly bounded mip readbacks, finite parity checks, scissor controls and executable byte/matrix
 oracles. These do not establish an overall product speedup. D17 and R-232 retain the defocus performance findings
-and uncertainty. Audit4 L1's incompatible draw-parameters pack admission is proved; the next bounded correctness
-target is the related sorted-pack member-layout admission defect. N3.4 compiled-shader research proceeds
+and uncertainty. Alternate vertex and sorted-fragment interface admission are proved; the next bounded correctness
+target is the vertex/fragment shared-block layout admission defect. N3.4 compiled-shader research proceeds
 independently without profiler repair as a prerequisite.
 
 **The operator's direction these decisions answer to (11 and 12 Nov 2026, verbatim):**
@@ -1436,8 +1436,8 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
    and output built-ins. Top-level declaration order is irrelevant. Input built-ins intentionally differ between
    the draw-parameters and loop forms; arbitrary shader semantics remain the caller's parity obligation. Admission
    checks this before constructing a pipeline, even when the current device would choose the plain form.
-   The comparison uses Qt6.12's deep reflection equality for member layouts, excluding only a uniform block's
-   generated `structName` instance identifier (separate compilations produce different SPIR-V IDs),
+   The comparison uses Qt6.12's deep reflection equality for member layouts, excluding only uniform `structName`
+   and storage `instanceName` aliases local to each pack (generated IDs or explicit GLSL aliases),
    rather than duplicating member-layout rules
    ([Qt source](https://github.com/qt/qtbase/blob/v6.12.0/src/gui/rhi/qshaderdescription.cpp)); it runs at program
    admission, never per frame. Audit4 L1 is proved on official build `6e187d2a6`:48 focused tests, nine old-module
@@ -2075,7 +2075,9 @@ read once (`:770-808`).
   reflected field retains Qt's deep equality. Output declarations intentionally differ
   and are validated against the owner target separately, with no sorted depth write. The admission comparator is
   shared with D15's alternate vertex packs (Qt6.12 deep member equality); it runs only when admitting a program.
-  R-234 retains the sorted-pack defect and proof; the live plan owns its built-module acceptance.
+  R-234 retains the sorted-pack defect and official `14be99283` proof:75 focused tests, both-backend post-stage
+  gate/parity and actual forced-sorted SSBO alias draws with payload sensitivity and retirement checks. The live
+  plan owns remaining cross-stage admission and N3.4 performance work.
 - **E. Turning a stage off.** (1) By program only (Python picks the program at the Settings edge); within a program the
   stage records with every record. (2) Also skipped per record at strength 0, the composite then reading no glow. *Recommend
   (1)*: no consumer's strength reaches 0 within a program (the Oscilloscope's is at least 0.55 times its glow setting,
@@ -2324,6 +2326,17 @@ Python face is `rendering/native/mode.py` (`TransparencyTarget`, `TransparencyRe
     reproduce repeated Qt integer/sampler uploads, gather lowering, conventions or qsb-translated bodies, and
     does not establish the cause. Compare those remaining compiled-source differences before another control;
     no production synchronization or new core build is justified by this null result.
+    Compiled-source comparison confirms the same gather row conditional and x value in both paths; no additional
+    native-only branch, tap-count or discard defect was found. The required y mirror and sampled float32 literal
+    expansions remain consistent. A second control changes only Python sprite size derivation to native's
+    `textureSize(uColour,0)`, retaining the UBO declaration/data/ring and all steady calls. Uniform/query paired
+    medians are0.7322/0.5908ms and0.6717/0.6697ms, with all four original image hashes,240samples,244query/composite
+    calls and zero draw timestamps per case. Actual source mip0/1 and base level are checked in excluded warm-up;
+    the deliberately wrong mip1 fails only both full-case pixel checks. Independent High receipt review is clear.
+    Evidence `n3_4/20261116_n34_compiled_shader_comparison/`; GPU19%/420→6%/2790MHz for uniform,
+    0%/210→42%/2790MHz for query0. This expression alone did not reproduce native excess; no timing equivalence,
+    driver diagnosis or production improvement follows. Generated gather control flow, varying initialization and
+    full native compilation/submission remain unisolated before choosing the next falsifier (R-232).
   - The render thread's record (`stage_record_ns`, the whole record of a program with stages): on OpenGL 19 to 20 us
     for EB's shape at every size and count (6.7 to 9.5 us with no stage), 33 us mean over the steady minute at 4x; on
     Vulkan 1.1 to 1.4 ms, which is the validation layer's own CPU work (22 us with no stage under the same layer); the

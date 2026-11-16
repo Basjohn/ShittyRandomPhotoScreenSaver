@@ -53,3 +53,6 @@ comparison. Initial proof43pass/5fail and canonical shader dumps remain in
 `20261116_pack_interface_final/pytest.xml` with the matching official module manifest. Both-backend runtime
 evidence is `20261116_n32_l1_pack_interface_6e187d2a6/summary.json`. No performance or broad semantic equivalence
 claim follows from reflection admission.
+
+R-234 subsequently shared this comparison with sorted fragment packs and treated storage `instanceName` as
+pack-local too, retaining every other field under Qt equality and proving live SSBO aliases on both backends.
