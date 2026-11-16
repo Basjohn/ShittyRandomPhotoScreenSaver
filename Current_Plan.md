@@ -477,12 +477,20 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     - [ ] Related cross-stage admission: reproduce equal-size vertex/fragment uniform-layout mismatch before
       repairing `checkGeometryPass`'s shallow shared-block union. Inspect conventions and storage layouts at that
       same boundary; packing currently selects the fragment layout for both stages. Keep separate from alternate packs.
+      - [ ] Reproduce mismatched shared uniform/conventions/storage layouts through GPU-free admission, retaining
+        valid shared, stage-only and pack-local alias controls on the current official module.
+      - [ ] Compare each resource present in both stages at admission using the shared deep predicates; keep
+        stage-only resources legal and preserve the one buffer/layout and existing stage flags.
+      - [ ] Official build, focused alternate/cross-stage regressions and hidden GL/Vulkan live shared-buffer proof;
+        independent High review, durable contract/history and compact handoff before closure.
     - [ ] L2, a mesh replaced by one of the same layout retargets instead of rebuilding: the latch key and
       `ensure()` tell a mesh's layout (stride and attributes) from its buffer (`ModeMeshes::objects()` counts both, so
       `meshObjects` forces `releasePipelines`, which releases the streams and the arena too, losing the storage
       streams' bytes past their used length); the vertex buffers are given per draw, so only a layout change needs new
       pipelines. Proof: `probe_replace.py`'s box replaced by its own bytes and layout creates only the mesh's buffer
       and keeps the streams' build generation (today 3 buffers and generation 1 to 2).
+      - [ ] Independent second Sol High: prepare the exact retarget/invalidate boundary and focused falsifier;
+        no overlapping C++ edits or build while the cross-stage admission slice is in flight.
     - [x] L6 native/Python matrix and packet oracles proved (checkpoint audit 4).
 - [x] N3.3 Compute passes: proved and audited (D16).
 - [ ] N3.4 Transparency and post-processing (D17): source/proof complete; performance gate open. No consumer
