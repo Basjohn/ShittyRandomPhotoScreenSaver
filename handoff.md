@@ -59,8 +59,11 @@ activity is explicitly authorised for the diagnosis; section 3's original quiet-
 - [x] ABI25 final parity/gate/rest/retire, reference and rules (a)/(b) PASS; sheets reviewed, independent High
   closeout. Source audit complete; performance gate open. Non-gating bloom-source/odd-mip differences remain in D17.
 - [x] Actual 1x GL trace with unchanged pixel/sample/counter guards PASS; High reviewed. Boundary adds a memory
-  barrier plus state/FBO replay; no inter-draw glFlush/glFinish. Next existing-control combination isolates the
-  barrier, then untraced measurements. Trace/replay timing did not establish the cause or performance acceptance.
+  barrier plus state/FBO replay; no inter-draw glFlush/glFinish. Combination and selective replay below isolate
+  the barrier's effect; the initial per-draw profiling replay does not admit native performance.
+- [x] Combined-control native 1x proof and single-call replay isolate the tracking/barrier effect; primary
+  Khronos/Qt/NVIDIA research finds no required barrier and supports a still-unproved overlap/contention hypothesis.
+  Next: compatible hardware counters, no production barrier or driver change. Full figures/limits stay in D17.
 
 ## 1. Read these first, in this order
 

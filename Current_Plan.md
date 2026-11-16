@@ -57,7 +57,8 @@ and compare within-run variants; do not hold diagnosis for the former quiet-GPU 
 L2 scissor/negative controls pass both backends. Readback completeness/metadata, sample clamp gate and post-stage
 parity/rest/retire pass on ABI25. ABI25 accounting passes all 27 cases/backend, including unchanged no-churn and
 published rebind checks; 145 focused core tests pass. Defocus flag/tracker isolation passes: neither flag removes
-the excess. Compare actual GL commands/state at gather→sprites before choosing a core change; final parity and
+the excess. Actual command comparison and selective replay implicate the barrier; hardware-counter research
+now tests the overlap/contention hypothesis before a core change. Final parity and
 rules (a)/(b) pass both backends and reference. Non-gating bloom-source/odd-mip differences remain documented in D17.
 Build7717614d1 was recovered from original run43871856822/token20261116_150121_942441, exact manifest/import
 checks passed, one dispatch. Independent High source/evidence review is clear; performance acceptance remains open.
@@ -544,10 +545,15 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     - [x] Actual 1x GL trace compares normal/between/normal, full/high-threshold, 16 changing records each: exact
       pixels/counters PASS, independently reviewed. Boundary adds a barrier, VAO/buffer unbind, FBO rebind and state
       replay; no glFlush/glFinish between those draws. Trace timing is not performance acceptance (D17).
-    - [ ] Combine existing between-draw and tracking-disabled controls in a no-compute 1x scene: first trace to
-      confirm the extra barrier alone disappears while boundary state replay remains, then run untraced bracketed
-      240-record full/high-threshold comparisons. Exact pixels/counters/sample guards must remain unchanged;
-      isolate the causal difference before choosing a core repair. No new native build or production flag change.
+    - [x] Combined controls: trace confirms barrier removal with FBO/state replay retained; untraced 1x 240-record
+      guards PASS, excess off 2.016/2.353 ms, tracked boundary 0.038, untracked boundary 2.565. High reviewed (D17).
+    - [x] Single-call replay isolation, existing whole-record queries: omit only 34 between-draw barriers, excess
+      0.059→1.794→0.310 ms after restoration. High reviewed; replay-only causality, no native performance admission.
+    - [ ] Test the researched overlap/contention explanation with compatible NVIDIA hardware-counter tooling:
+      compare SM/TEX/L1/L2 pressure for gather+sprites versus the barrier-separated pair, retaining full-record
+      timing and unchanged pixels. Khronos/Qt establish no missing visibility barrier here; NVIDIA documents
+      harmful shared-resource overlap, but current evidence does not establish that mechanism or a driver bug.
+      Driver617.42 supports Nsight Graphics2026.3 (requires615+); use that release without changing the driver.
     - [ ] Fix it in the core if it is ours (one change, a build, the split again: `--rounds defocus_cost` on both APIs,
       the OpenGL sprite raster near Python's and Vulkan unchanged), or record it in D17 as the driver's with the figures
       if no state difference moves it. Then rerun `--rounds parity` (rules (a) and (b) must still pass) and record the

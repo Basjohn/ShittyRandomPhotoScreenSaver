@@ -2196,9 +2196,42 @@ Python face is `rendering/native/mode.py` (`TransparencyTarget`, `TransparencyRe
     Python DLL-search flags; it also disables program-binary formats. Headless replay's individual draw profiling
     does not reproduce the record-level excess, so neither capture nor replay timing is acceptance.
     Pinned Qt's `enqueueBindFramebuffer` registers attachments only while `passNeedsResourceTracking` is true;
-    combine the existing between-boundary and tracking-disabled controls to remove that barrier while retaining
-    state replay. Confirm the actual commands first, then measure untraced bracketed 1x records in a no-compute scene.
+    existing between-boundary and tracking-disabled controls therefore test barrier removal while retaining
+    state replay. Combined-control command confirmation and untraced no-compute measurements follow below.
     No production flush or tracking exception admitted.
+
+    **Research and causal isolation (16 Nov):** `20261116_n34_boundary_tracking_combo` proves the combined
+    controls remove the inter-draw barrier while retaining the FBO rebind (34/34 tracked intervals have one;
+    34/34 untracked intervals have none). Canonical and native programs are compute-free. Untraced 1x cases have
+    240 settings records / 239 defocus records and timing samples, exact corresponding pixels and expected flags.
+    Full-minus-high-threshold medians: off-before 2.0163 ms, tracked boundary 0.0378, untracked boundary 2.5651,
+    off-after 2.3531. Completion GPU22%/870 MHz, displays on; no pre-run sample was recorded. This is diagnosis,
+    not quiet-GPU admission. The flag changes tracking generally, so that result alone is not a single-call proof.
+    A headless replay then omits only the 34 captured inter-draw barrier calls, retaining every other GL command.
+    Existing whole-record elapsed queries (no per-draw profiling queries) give tracked excess
+    0.0594→1.7940→0.3103 ms for original/omitted/restored; 15 samples/case. Independent High reviewed the
+    call selection, query mapping and results. Exact invocations/exit0 receipts are recorded retrospectively in
+    `trace/replay_invocations.json`. Replay query checks may wait for availability; this establishes an effect
+    within replay, not native performance admission or a particular hardware failure.
+
+    The resource graph samples near textures10/11 and blends into scene attachment3, with no shader stores or
+    attachment feedback. [OpenGL4.6 §7.13.2](https://registry.khronos.org/OpenGL/specs/gl/glspec46.core.pdf#page=186)
+    permits read-only data without MemoryBarrier; §2.1 orders framebuffer effects. Qt6.12's
+    [pass-flag contract](https://doc.qt.io/qt-6.12/qrhicommandbuffer.html#BeginPassFlag-enum) permits the tracking
+    hint only when the whole frame has no compute. No missing correctness barrier was established. This does
+    not remove the separately proved Vulkan read-stage chaining requirement above.
+
+    NVIDIA documents [concurrent vertex/pixel shading](https://developer.nvidia.com/content/life-triangle-nvidias-logical-pipeline)
+    and [harmful overlap of workloads stressing shared cache/memory resources](https://developer.nvidia.com/blog/advanced-api-performance-async-compute-and-overlap/).
+    Its [P3 method](https://developer.nvidia.com/blog/the-peak-performance-analysis-method-for-optimizing-any-gpu-workload/)
+    identifies glMemoryBarrier as an explicit pipeline-drain control and calls for throughput/cache measurements.
+    Inference to test: gather's 96-tap fragments overlap the sprites' roughly8.36million vertex invocations,
+    contending for SM/TEX/cache resources; the barrier may prevent that overlap. Current data does not prove
+    contention or a driver defect. Python also differs in its empty VAO and real UBO updates, versus native's
+    shared VAO and loose GL uniforms. Next collect hardware counters with a compatible profiler; do not insert
+    production synchronization on this inference. Nsight Graphics2026.3 requires driver615+, so installed617.42
+    qualifies ([versioned release notes](https://archive.docs.nvidia.com/nsight-graphics/2026.3/ReleaseNotes/index.html));
+    2026.4 requires620+ and is unsuitable for this unchanged-driver investigation.
   - The render thread's record (`stage_record_ns`, the whole record of a program with stages): on OpenGL 19 to 20 us
     for EB's shape at every size and count (6.7 to 9.5 us with no stage), 33 us mean over the steady minute at 4x; on
     Vulkan 1.1 to 1.4 ms, which is the validation layer's own CPU work (22 us with no stage under the same layer); the
