@@ -2343,6 +2343,12 @@ Python face is `rendering/native/mode.py` (`TransparencyTarget`, `TransparencyRe
     0%/210→42%/2790MHz for query0. This expression alone did not reproduce native excess; no timing equivalence,
     driver diagnosis or production improvement follows. Generated gather control flow, varying initialization and
     full native compilation/submission remain unisolated before choosing the next falsifier (R-232).
+    A current official `b1451eb11` paired backend check retains OpenGL's2.3204–2.3746ms full/high excess while
+    Vulkan's is−0.0017–0.0024ms at aligned3840×2176/actual1x. All26 guards per API pass, including exact
+    corresponding bracket pixels,240/239 records/samples, no diagnostic controls/churn, provenance and retirement.
+    Vulkan validation has zero unexplained findings (ten QtA errors excused). This fixture avoids the observed
+    excess on Vulkan; it is not a mechanism finding, global guarantee or production-gate closure. R-232 owns
+    detailed timing, endpoint GPU conditions, pixel differences and limits; evidence `n3_4/20261116_backend_scope_b1451eb11/`.
   - The render thread's record (`stage_record_ns`, the whole record of a program with stages): on OpenGL 19 to 20 us
     for EB's shape at every size and count (6.7 to 9.5 us with no stage), 33 us mean over the steady minute at 4x; on
     Vulkan 1.1 to 1.4 ms, which is the validation layer's own CPU work (22 us with no stage under the same layer); the

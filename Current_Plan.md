@@ -475,9 +475,6 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     - [x] L1 shader-interface admission and both-backend batched-draw proofs complete (D15, R-233).
     - [x] Sorted-pack deep interface admission and both-backend live SSBO alias proofs complete (D17, R-234).
     - [x] Cross-stage shared layouts, readonly storage and binding admission proved on both backends (D15, R-235).
-    - [ ] Reserved resource admission follow-up: reproduce malformed stage-only SrpssConventions layouts and
-      unsupported descriptor sets before any broader canonical-layout check; shared-stage equality alone cannot
-      establish these reserved-resource contracts.
     - [ ] L2, a mesh replaced by one of the same layout retargets instead of rebuilding: the latch key and
       `ensure()` tell a mesh's layout (stride and attributes) from its buffer (`ModeMeshes::objects()` counts both, so
       `meshObjects` forces `releasePipelines`, which releases the streams and the arena too, losing the storage
@@ -489,6 +486,9 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
         mesh-dependent compute SRB retargeting; preserve redraw/retry generations and fail closed on rebind failure.
       - [ ] Official-build GL/Vulkan fresh-byte/tail/instance/layout/remove/readd/device controls, live compute A→B
         plus failed-rebind/storage-usage and simultaneous texture edges; use canonical validation/retirement owners.
+    - [ ] Reserved resource admission follow-up: reproduce malformed stage-only SrpssConventions layouts and
+      unsupported descriptor sets before any broader canonical-layout check; shared-stage equality alone cannot
+      establish these reserved-resource contracts.
     - [x] L6 native/Python matrix and packet oracles proved (checkpoint audit 4).
 - [x] N3.3 Compute passes: proved and audited (D16).
 - [ ] N3.4 Transparency and post-processing (D17): source/proof complete; performance gate open. No consumer
@@ -498,6 +498,7 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [x] Whole-query alignment, blocking-read and populated-VAO controls proved; cause remains open (D17, R-232).
   - [x] Sprite uniform declaration control and real wrong-input negative proved; cause remains open (D17, R-232).
   - [x] Compiled-source comparison and texture-size/real wrong-mip control proved; cause remains open (D17, R-232).
+  - [x] Current matched backend check: Vulkan avoids this observed GL excess; scope/limits retained in R-232.
   - [ ] Select one falsifier of remaining generated gather/control-flow or native submission differences; state
     discriminating outcomes before another run. Hardware counters are optional; profiler repair is not a prerequisite.
   - [ ] Resolve an established core cause, then rerun both-backend `defocus_cost` and parity; otherwise document the

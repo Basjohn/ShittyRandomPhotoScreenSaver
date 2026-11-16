@@ -14,6 +14,7 @@ Never rewrite main or force-push.
 - [x] Cross-stage shared-resource admission proved on official build and both backends (R-235).
 - [ ] Next correctness/performance slice: N3.2 L2 same-layout mesh retarget; preparation reviewed, native proof pending.
 - [x] Texture-size control and real wrong-mip negative proved; size derivation alone did not reproduce excess.
+- [x] Current matched backend check confirms this GL excess absent on Vulkan; cause/gate remain open (R-232).
 - [ ] Select the next N3.4 falsifier of remaining generated gather/control-flow or native submission differences.
   Overlap/contention remains unproved; hardware counters are optional. R-232 retains the investigation. No production barrier
   or tracking exception is admitted.

@@ -92,6 +92,46 @@ for uniform and 0%/210MHz→42%/2790MHz for level 0; these are sequential availa
 translated gather/body and complete submission differences need a specific next falsifier, not another profiler
 repair or a production synchronization workaround.
 
+## Current Vulkan/OpenGL scope check (16 Nov, official `b1451eb11`)
+
+The operator asked whether the native core still benefits and whether Vulkan avoids this observed excess.
+A fresh matched comparison uses the official ABI25 binary from run43929409887, manifest and loaded-module hashes
+verified. Both APIs run the same canonical passes, targets and settings at3840×2176, actual1x, with full/high
+before and after brackets. Whole-record median milliseconds:
+
+| API / bracket | Full | High threshold | Full minus high |
+|---|---:|---:|---:|
+| OpenGL / before |5.2756|2.9010|2.3746|
+| OpenGL / after |5.2306|2.9102|2.3204|
+| Vulkan / before |2.6076|2.6052|0.0024|
+| Vulkan / after |2.6052|2.6069|-0.0017|
+
+All26 structural/pixel/ownership guards pass per API; each of eight cases has exactly240 requested settings
+records and239 finite GPU samples, with zero abandoned/busy slots. Cached diagnostic controls are off; no
+draw-local queries, external/untracked passes, flushes or allocation/object churn are recorded. The canonical
+whole-record timer reports `wait_for_results=false`. The unchanged source retains the same instanced sprite draw;
+the threshold changes gather/light data and visible contributions. The difference is not isolated raster time.
+
+Corresponding before/after RGBA frames are exact within each API, with visible full/high differences. Cross-API
+PNGs differ at two full-scene pixels and one high-scene pixel, maximum one channel code; the separate canonical
+gate/parity regression on this binary passes rule(a), rule(b) and analytic checks. The lead inspected native images
+and an independent High auditor checked receipts and PNG differences. Vulkan synchronization/shader-access
+validation loaded; ten recorded Qt defectA errors are excused and zero unexplained errors/warnings remain;
+the instance-creation loader warning is retained. Scene resources return to their exact baseline and canonical
+host/module/instance teardown passes. Separate validation negative-control rounds are not part of this cost run.
+
+This current fixture avoids the observed OpenGL full/high excess on Vulkan, consistent with the older cost
+receipt. It supports continued native/Vulkan work, while leaving the OpenGL cause and performance admission
+open. It does not make defocus free, establish global Vulkan immunity, prove an overall product speedup or
+justify a production barrier. Fixed API order and one pair per backend limit inference. Endpoint GPU readings
+were0%/210MHz before each API,87%/2775MHz after GL and0%/2775MHz after Vulkan; they do not establish continuous
+quietness or matching clocks throughout. No additional load generator or profiler was launched.
+
+`20261116_backend_scope_b1451eb11/summary.json` retains timings, counters, machine facts, provenance and verdicts;
+`cross_api_pixel_diagnostic.json` retains the PNG comparison. The bounded executable helper and predeclared
+interpretation are in `20261116_backend_scope_and_next_falsifier/`, helper SHA256
+`3c667e647c69f2671368b863adb88a4204f1fc302d13de5ff9860cb802f029ef`.
+
 ## Evidence and repeatable entry points
 
 The retained evidence is under `.artifacts/evidence/native_core/n3_4/`:
