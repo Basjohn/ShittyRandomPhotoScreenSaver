@@ -1,19 +1,19 @@
 # R-233: Batched draw-parameters shader bypassed interface admission
 
-**16 November 2026. Source repair reviewed; official built-module proof pending in Current_Plan.md.**
+**16 November 2026. Repaired and proved on the official module; independent High review.**
 
 N3.2 checkpoint audit 4 L1 found that `checkGeometryPass` checked the optional draw-parameters vertex pack's stage
 but derived bindings, block packing and vertex layout only from the plain pack. A device with multi-draw support
 could therefore construct a pipeline using an incompatible shader and the plain shader's layout. Choosing the
 plain form on another device did not make the declared pair valid.
 
-The installed ABI25 module from native commit `7717614d1` accepted nine incompatible valid vertex packs through
+The old ABI25 module from native commit `7717614d1` accepted nine incompatible valid vertex packs through
 the GPU-free `mode_blocks` entry: changed uniform binding, equal-total-size reordered uniform members, storage
 binding, storage member offset, storage access qualifier, added sampler, added vertex input, moved varying output
 and an added output built-in. The final GPU-free recheck admits all nine mutations; the initial pytest run's
 equal-size fixture error is recorded below. Valid controls pass, including the actual draw-parameters built-in
-variant and reordered resource declarations. No GPU pipeline
-or undefined draw was needed to reproduce the admission defect.
+variant and reordered resource declarations. No GPU pipeline or undefined draw was needed to reproduce the
+admission defect.
 
 The repair compares the two packs' reflected interfaces before deriving resources or creating any pipeline.
 Qt6.12's exported equality operators include nested block members, offsets, sizes, array/matrix strides, matrix
@@ -25,9 +25,14 @@ There is no render-thread per-record work, API/schema change, new fallback or AB
 
 `tests/test_native_mesh_buffers.py` crosses the real admission seam, tests the nine mutations and admits equivalent
 interfaces. The equal-size block case prevents a names/binding/total-size-only comparison from blessing changed
-offsets. Source review is clear; runtime acceptance requires the official rebuilt module, the focused parser tests
-and the existing OpenGL/Vulkan batched-draw pixel/validation harness. Do not treat this source checkpoint as runtime
-proof. The shallow sorted-transparency-pack comparison is a related, separately admitted follow-up, not repaired here.
+offsets. The revised official module (`6e187d2a6`, run43902571211) passes all48 focused mesh-buffer/core-mode
+tests with no skips. The hidden `mesh_buffer_check.py --rounds forms` passes on OpenGL and Vulkan: both actually
+record form3; batched, loop, direct and sixteen-pass images match exactly; the wrong first-offset control differs.
+Vulkan synchronisation validation reports zero unexplained errors/warnings, with ten previously recorded Qt
+defectA errors excluded (shader-access instrumentation was not requested). All final live resources are zero.
+The shallow sorted-transparency-pack comparison is a separately admitted follow-up, not repaired here.
+The shader packs target OpenGL/Vulkan; HLSL cannot bake this DrawID built-in. This proof makes no D3D/Metal
+runtime claim. The instance-creation loader registry warning is retained in the validation attribution.
 
 Evidence: `.artifacts/evidence/native_core/n3_2/20261116_pack_interface_old/pytest_final.{log,xml}` records the old
 module's initial eight admitted mutations, one invalid equal-size fixture precondition and four passes. The corrected
@@ -44,5 +49,7 @@ compared generated `structName` identifiers. The valid plain and draw-parameters
 CellDraw and `_146`/`_144` for conventions despite matching bindings and layouts. The revised predicate excludes
 only this translated instance identifier and retains the block name, size, binding, set and full deep member
 comparison. Initial proof43pass/5fail and canonical shader dumps remain in
-`.artifacts/evidence/native_core/n3_2/20261116_pack_interface_fixed/`; a subsequent official build must prove the
-revised candidate. No performance or broad semantic equivalence claim follows from reflection admission.
+`.artifacts/evidence/native_core/n3_2/20261116_pack_interface_fixed/`; the passing revised parser receipt is
+`20261116_pack_interface_final/pytest.xml` with the matching official module manifest. Both-backend runtime
+evidence is `20261116_n32_l1_pack_interface_6e187d2a6/summary.json`. No performance or broad semantic equivalence
+claim follows from reflection admission.

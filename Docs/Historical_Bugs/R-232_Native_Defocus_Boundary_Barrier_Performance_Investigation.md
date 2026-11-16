@@ -43,6 +43,31 @@ The native timer's existing `wait_for_results` option then tested whole-pass blo
 
 A further Python control replaced the owner's empty VAO temporarily with an owned diagnostic VAO containing four valid vertices and enabled float2 attributes 0 and 1. Setup and attribute queries occurred before timing; the original composite body performed its usual binds/draws, with no injected calls between gather and sprites. All 244 scopes per case restored the owner's VAO, and the diagnostic resources retired in the owning context. Full-minus-high-threshold stayed at 0.6789/0.7024 ms. All four frame hashes and original owner-function hashes matched the earlier Python baseline. GPU conditions were 5%/210 MHz before and 3%/2790 MHz after; independent High review checked source and output. Enabled unused attributes in this Python setup do not reproduce native's excess. This does not reproduce the complete native VAO, shader or submission state; uniform/shader submission remains a concrete comparison boundary.
 
+## Uniform submission: measured difference, insufficient explanation
+
+The captured native GLSL uses loose struct uniforms. The pinned Qt6.12 OpenGL backend keeps QRhi uniform-buffer
+data in CPU storage and uploads reflected fields; the Python owner uses an actual std140 UBO. Trace review found
+no wrong value or missing upload. Of 102 sprite draws,96 steady draws re-upload only the level integer and two
+sampler units; the six first draws also upload radius/highlight. The actual shader bodies and gather path still
+differ, so this is a concrete comparison boundary rather than proof of an upload stall.
+
+A separate ignored helper changed only the Python sprite block declaration into four loose uniforms in both
+shader stages. Original function bodies, PassBlocks/ring writes and binds, draw, textures and blend remain intact.
+The initial uploads occur in the first excluded warm frame; actual locations, absence of the named block and
+driver-read values are checked. Buffered and loose modes preserve all four original baseline RGBA hashes, with
+240 finite samples,244 whole-query/composite calls and no draw-local timestamps per case. Full-minus-high paired
+medians before/after are **0.6902/0.7363 ms buffered and 0.7157/0.6318 ms loose**. Independent High review checked
+the helper and actual receipts. Changing this declaration/storage path alone did not reproduce native's multi-ms
+excess in this fixture. It does not reproduce Qt's repeated steady integer/sampler uploads or remaining qsb/gather
+source and submission differences, and does not establish equivalence or the performance cause.
+
+A real negative uploads half-sized uSize. It fails exactly the two full-case baseline-pixel predicates; both high
+hashes, uniform setup/readback and every other guard still pass. Its near-zero difference belongs to deliberately
+wrong output and is not a speedup. Buffered/loose GPU conditions were 47%/870MHz→12%/2775MHz and
+49%/765MHz→54%/2775MHz, with SRPSS running. Single sequential runs and fixed-order pair brackets do not remove
+ambient variation; this is diagnostic evidence, not quiet-GPU admission. Combined gather/sprite lowering,
+conventions and translated-body differences remain open before selecting another bounded falsifier.
+
 ## Evidence and repeatable entry points
 
 The retained evidence is under `.artifacts/evidence/native_core/n3_4/`:
@@ -52,6 +77,10 @@ The retained evidence is under `.artifacts/evidence/native_core/n3_4/`:
 - `20261116_n34_boundary_tracking_combo/combo_check.py` is the bounded evidence helper. Its 16-frame mode is for tracing only; its 240-frame mode is the diagnostic comparison, and its off brackets must actually show a stable excess before drawing conclusions.
 - `20261116_n34_aligned_native_pair/` retains the aligned native repeat and machine brackets; its wrapper is `.artifacts/scratch/n34-diagnosis/aligned_native_pair.py`. `20261116_n34_python_whole_pair/` retains the executable Python helper, source hashes, guarded JSON receipt and first full/high PNGs. These are diagnostic evidence, not portable acceptance benchmarks.
 - `20261116_n34_native_wait_control/` retains the executable blocking-read wrapper, unchanged combo results and automatic invocation/source/machine/timer receipt.
+- `20261116_n34_uniform_submission/` retains the separate `python_uniform_pair.py`, primary-source research,
+  declaration-only shader diffs and `buffered/`, `loose/`, `wrong_size/` receipts/images. Use `--sprite-uniforms
+  buffered|loose|wrong-size --baseline-json <original-whole-pair-json> --out-dir <new-directory> --dump-shaders`
+  with the usual `--repo` and `--module-dir`. The real wrong-size run must exit nonzero for its bad pixels.
 - `20261116_n34_python_populated_vao/` retains the guarded populated-VAO output and images; the Python helper's `--populated-vao --baseline-json <prior-json>` mode enforces corresponding baseline pixels and protects the original output directory. The original helper was extended before being archived, so `python_whole_pair_baseline_used.py` was reconstructed retrospectively by reversing that option patch; `baseline_helper_provenance.json` states that no contemporaneous whole-helper hash existed. Original JSON/PNGs and recorded owner-function hashes remain preserved and independently comparable.
 - The current harness exposes the guarded individual-site and flag diagnostic through `python native/core/python/post_stage_check.py --apis opengl --rounds defocus_boundaries --label <new-label>`. It needs a matching built native module and an available OpenGL GPU. Running it creates new evidence; it does not reproduce the historical machine conditions.
 - The saved trace can be re-analysed with `python .artifacts/evidence/native_core/n3_4/20261116_n34_boundary_tracking_combo/analyze_replay.py`; it maps the saved query logs and rewrites its analysis files. Exact replay arguments and the trace hash are in `trace/replay_invocations.json`.

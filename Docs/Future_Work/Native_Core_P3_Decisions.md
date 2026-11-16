@@ -45,8 +45,9 @@ are in `rendering/quick/visualizer/native_route.py`.
 Recent gains are correctness and reusable capability: partial-resource accounting, sample/capability admission,
 complete and correctly bounded mip readbacks, finite parity checks, scissor controls and executable byte/matrix
 oracles. These do not establish an overall product speedup. D17 and R-232 retain the defocus performance findings
-and uncertainty. The next bounded correctness target is audit 4 L1's incompatible draw-parameters pack admission;
-N3.4 shader/uniform research proceeds independently without profiler repair as a prerequisite.
+and uncertainty. Audit4 L1's incompatible draw-parameters pack admission is proved; the next bounded correctness
+target is the related sorted-pack member-layout admission defect. N3.4 compiled-shader research proceeds
+independently without profiler repair as a prerequisite.
 
 **The operator's direction these decisions answer to (11 and 12 Nov 2026, verbatim):**
 
@@ -1439,7 +1440,10 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
    generated `structName` instance identifier (separate compilations produce different SPIR-V IDs),
    rather than duplicating member-layout rules
    ([Qt source](https://github.com/qt/qtbase/blob/v6.12.0/src/gui/rhi/qshaderdescription.cpp)); it runs at program
-   admission, never per frame. Audit4 L1's build proof remains in the live plan until the official module passes.
+   admission, never per frame. Audit4 L1 is proved on official build `6e187d2a6`:48 focused tests, nine old-module
+   rejection falsifiers, valid built-in/reordered controls, and exact batched/loop/direct/sixteen-pass pixels on
+   OpenGL and Vulkan. Both backends actually record form3; Vulkan synchronisation validation has zero unexplained
+   errors/warnings (ten recorded Qt defectA errors excluded). R-233 retains evidence and the initial rejected candidate.
    The indirect draw itself (`drawIndirect`; `drawIndexedIndirect` waits for indexed meshes) is built here
    with commands from a record field or from a batched draw's table (a `Dynamic` `IndirectBuffer`); compute-written
    commands are N3.3's (`StorageBuffer | IndirectBuffer`, `Static`), and the populations' 1:1 port of
@@ -2295,7 +2299,24 @@ Python face is `rendering/native/mode.py` (`TransparencyTarget`, `TransparencyRe
     All244 query/composite/restoration checks per case and resource release pass; independent High review is clear.
     Evidence `n3_4/20261116_n34_python_populated_vao/`; GPU5%/210MHz before and3%/2790MHz after. Populated unused
     inputs in this Python setup do not reproduce native's excess; the full native shader/VAO/submission is not
-    reproduced. Next compare compiled uniform/shader submission before choosing another control or a core build.
+    reproduced. The actual native trace uses loose struct uniforms for gather and sprites; pinned Qt6.12's
+    `qrhigles2.cpp` stores QRhi uniform buffers in CPU QByteArrays and uploads reflected fields with `glUniform`.
+    The Python owner uses a real std140 UBO. This is an established submission difference, not a bad upload or
+    performance cause ([Qt buffer contract](https://doc.qt.io/qt-6/qrhibuffer.html),
+    [uniform reflection](https://doc.qt.io/qt-6/qshaderdescription-uniformblock.html)).
+    A sprite-only declaration control preserves every shader-body byte, the original owner calls and placebo
+    ring writes/binds. Actual buffered and loose modes retain all four original RGBA hashes; all cases have240
+    finite samples,244 whole-query/composite calls and zero draw-local timestamps. Full-minus-high before/after
+    medians are0.6902/0.7363ms buffered and0.7157/0.6318ms loose. The alternative's four real uniform locations
+    and values are read back, with setup in the first excluded warm frame. Deliberate half-size uSize fails exactly
+    both full-case pixel checks; both high hashes and every other guard pass. Independent High review is clear.
+    Evidence `n3_4/20261116_n34_uniform_submission/` retains helper/source hashes, shaders, research and all three
+    receipts. GPU before/after: buffered47%/870MHz→12%/2775MHz; loose49%/765MHz→54%/2775MHz;
+    negative48%/765MHz→13%/2775MHz, with SRPSS running. This is not quiet-GPU admission or timing equivalence.
+    Sprite declaration/storage alone did not reproduce native's multi-ms excess in this fixture. It does not
+    reproduce repeated Qt integer/sampler uploads, gather lowering, conventions or qsb-translated bodies, and
+    does not establish the cause. Compare those remaining compiled-source differences before another control;
+    no production synchronization or new core build is justified by this null result.
   - The render thread's record (`stage_record_ns`, the whole record of a program with stages): on OpenGL 19 to 20 us
     for EB's shape at every size and count (6.7 to 9.5 us with no stage), 33 us mean over the steady minute at 4x; on
     Vulkan 1.1 to 1.4 ms, which is the validation layer's own CPU work (22 us with no stage under the same layer); the

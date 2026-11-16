@@ -41,7 +41,7 @@ Live checklist: every open step is its own box; retain only useful, brief native
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Active native focus:** N3.2 audit 4 L1's shader-interface admission repair; N3.4 uniform/shader research continues
+**Active native focus:** N3.2's related sorted-pack layout admission defect; N3.4 compiled-shader research continues
 independently, without profiler repair. Then the admitted ports and side defects below; keep the interim
 holds in `handoff.md`. Independent native work may overlap under the operator's request for a Sol 6.1 High agent;
 review every slice before landing.
@@ -53,7 +53,7 @@ held by the interim route in `handoff.md`.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim holds are in `handoff.md`.
-- [ ] High: finish N3.2 audit 4 L1 with GPU-free rejection controls and an official build; continue the bounded
+- [ ] High: reproduce and repair the related sorted-pack layout admission defect; continue the bounded
   N3.4 source comparison independently, then N3.6 when the hold lifts.
   Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers ride
   with the next fitting dispatch.
@@ -473,17 +473,7 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
 - [ ] N3.2 remaining checkpoint audit 4 findings:
   - [ ] Checkpoint audit 4's remaining lows (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 4";
     recorded, not fixed, by the lead's decision of 15 Nov):
-    - [ ] L1, the draw-parameters pack's interface: `checkGeometryPass` (`mode_content.cpp`) checks only a batched
-      pass's draw-parameters pack's stage; its blocks, storage, samplers, inputs and outputs are compared with the
-      plain pack's, and a pack that differs is refused with the reason (today it reaches the device as a pipeline
-      whose layout does not match its shader). GPU-free test through `mode_blocks` with a pack of another input or
-      block; negative control on the pre-change module (admitted).
-      - [x] Old ABI25 admits nine final incompatible interfaces; valid/reordered controls pass (R-233).
-      - [ ] Compare the full reflected interface at admission, including nested block layout and resources; permit
-        the draw-parameters built-ins and generated uniform instance IDs that intentionally differ. Reject with a
-        useful reason before pipeline creation. The first official candidate's valid-pack rejection is corrected;
-        revised built proof remains required (R-233).
-      - [ ] Run focused regressions on the official built module, matching-pack positive controls and High review.
+    - [x] L1 shader-interface admission and both-backend batched-draw proofs complete (D15, R-233).
     - [ ] Related admission defect: `checkSortedPack` compares only outer block names/bindings/sizes, not nested
       layout. Reproduce equal-size, different-member-layout acceptance before choosing its bounded repair; do not
       silently include it in L1's batched-vertex change.
@@ -500,9 +490,10 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [x] ABI 25 gate, accounting, readback, parity, rest and retirement proofs and independent High review complete.
   - [ ] At Qt upgrades, recheck the private QRhi outside-pass `beginExternal`/`endExternal` contract against Qt source.
   - [x] Whole-query alignment, blocking-read and populated-VAO controls proved; cause remains open (D17, R-232).
-  - [ ] Compare compiled uniform/shader submission between native and Python, then choose a specific falsifier
-    before another core build. Preserve corresponding pixels and timing guards. Hardware counters are optional if a specific
-    ambiguity remains; profiler repair is not a prerequisite (D17; failed approaches in R-232).
+  - [x] Sprite uniform declaration control and real wrong-input negative proved; cause remains open (D17, R-232).
+  - [ ] Compare remaining qsb-translated gather/sprite bodies and conventions with Python, then select one
+    specific falsifier before another diagnostic build. Preserve corresponding pixels and timing guards. Hardware
+    counters are optional for a specific ambiguity; profiler repair is not a prerequisite (D17, R-232).
   - [ ] Resolve an established core cause, then rerun both-backend `defocus_cost` and parity; otherwise document the
     established cause and figures in D17 before closing this gate. No production barrier or tracking exception without
     proof.

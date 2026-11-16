@@ -73,6 +73,10 @@ context lifetime, with no steady-frame driver queries. The accepted swap interva
 Maintained render/capture diagnostics reuse `rendering.quick.bootstrap`; owned offscreen shader contexts request
 and validate the same floor.
 
+Native program, shader-interface, target, mesh/buffer, compute and post-stage contracts are in
+`Docs/Future_Work/Native_Core_P3_Decisions.md` D12–D17. `Current_Plan.md` item 8b owns their remaining admission,
+performance and rollout gates; the decisions document routes the retained proof and research.
+
 Wallpaper lookahead uses bounded source batches in the supervised speculative image worker. The parent caches only
 display-ready derivatives; requested images retain their separate foreground worker and authored quality settings.
 The construction, generation and shared-memory ownership contract lives in `Docs/Contracts.md` → Wallpaper image cache and prefetch.
