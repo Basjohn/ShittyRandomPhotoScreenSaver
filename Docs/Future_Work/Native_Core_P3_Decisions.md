@@ -2228,10 +2228,29 @@ Python face is `rendering/native/mode.py` (`TransparencyTarget`, `TransparencyRe
     Inference to test: gather's 96-tap fragments overlap the sprites' roughly8.36million vertex invocations,
     contending for SM/TEX/cache resources; the barrier may prevent that overlap. Current data does not prove
     contention or a driver defect. Python also differs in its empty VAO and real UBO updates, versus native's
-    shared VAO and loose GL uniforms. Next collect hardware counters with a compatible profiler; do not insert
+    shared VAO and loose GL uniforms. First compare whole-query native/Python pairs without draw-local queries;
+    hardware counters are optional if a specific ambiguity remains. Do not insert
     production synchronization on this inference. Nsight Graphics2026.3 requires driver615+, so installed617.42
     qualifies ([versioned release notes](https://archive.docs.nvidia.com/nsight-graphics/2026.3/ReleaseNotes/index.html));
-    2026.4 requires620+ and is unsuitable for this unchanged-driver investigation.
+    2026.4 requires620+ and is unsuitable for this unchanged-driver investigation. Profiler startup/injection
+    troubleshooting is deferred: it is not a prerequisite. [R-232](../Historical_Bugs/R-232_Native_Defocus_Boundary_Barrier_Performance_Investigation.md)
+    retains the failed approaches and the distinction between diagnostic improvement and production performance.
+    The original Python draw split inserts a timestamp between gather and sprites (`python_defocus_steps`);
+    `python_cost` has a whole-scope query but previously lacked the full/high-threshold pair. Those observations
+    cannot establish an unperturbed Python sprite-raster cost. The highlight also changes the clipped texture
+    consumed by gather, so full-minus-high-threshold is a paired-workload difference, not pure raster cost.
+    An aligned3840×2176 native repeat retains the excess: off2.3542/2.2969ms, tracked boundary−0.0615ms,
+    untracked boundary2.2456ms; exact bracket pixels, 239 samples/records per case, actual1x and all guards PASS.
+    This rules out the2160→2176 allocation mismatch as the explanation for this fixture. Evidence:
+    `n3_4/20261116_n34_aligned_native_pair/`; GPU12%/390MHz before and86%/2775MHz after, so no quiet-GPU claim.
+    The unmodified Python owner under whole-frame queries on the same3840×2176 fixture gives full-minus-high
+    0.6953/0.6339ms before/after,240 samples each,244 begin/end/result/composite calls per case,zero draw timestamps,
+    exact corresponding bracket hashes and visible full/high RGB differences. Evidence:
+    `n3_4/20261116_n34_python_whole_pair/`; GPU30%/2595MHz before and6%/2790MHz after. Root viewed the frames;
+    independent High source/evidence review agrees. This establishes a smaller paired difference without the old
+    draw timestamps, not matched submission: Python blocks on query results and uses different UBO uploads.
+    Next use the native timer's existing whole-pass `wait_for_results` control to test that cadence difference;
+    retain all current pixel/count/sample guards and add no inter-draw query or production synchronization.
   - The render thread's record (`stage_record_ns`, the whole record of a program with stages): on OpenGL 19 to 20 us
     for EB's shape at every size and count (6.7 to 9.5 us with no stage), 33 us mean over the steady minute at 4x; on
     Vulkan 1.1 to 1.4 ms, which is the validation layer's own CPU work (22 us with no stage under the same layer); the

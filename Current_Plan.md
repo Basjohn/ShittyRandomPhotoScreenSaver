@@ -1,7 +1,7 @@
 # SRPSS | Current Plan
 
 Live, ordered work only. `[ ]` work remains; `[~]` a candidate exists but is unaccepted (awaiting validation, never an
-implicit pass). When an item lands, delete it: completed work lives in source control and its durable contract in
+implicit pass). Remove completed work; retain only extremely brief, useful native-core reference boxes. Durable contracts live in
 `Spec.md` / `Docs/` (Reference, Architecture, Guardrails, Guides); rejected mechanisms in `Docs/Historical_Bugs/`. This
 is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 
@@ -37,47 +37,31 @@ items promoted to run soon are in §3. Nothing else in it is admitted until it a
 
 ## 1. Order of work (strict)
 
-Live checklist: every open step is its own box, ticked boxes are deleted, and a landed item leaves only its `[~]`
+Live checklist: every open step is its own box; retain only useful, brief native-core completion references and `[~]`
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Session order (operator, 16 Nov):** 8b P1 spike retirement → 8b N3.1c L3 → 8b N3.2 Audit 4 L6 →
-8b N3.4 `stream_ring` margin → 1D.13 near-light. Start in this order; independent implementation may overlap
-under the operator's 16 Nov request for another Sol 6.1 High native-core agent. Review each slice before landing;
-an independent verified slice may land while an earlier native build is running.
-For this session, compact completed checkbox text inline and retain every checkbox for later review.
-
-**Now:** the five requested source/proof slices are complete and audited; ABI 25 is installed on main. P1 desktop
-validation remains at N0.6. The repaired `stream_ring` harness passes on OpenGL/Vulkan with exact record coverage;
-quiet-GPU performance admission remains a separate N3.4 box. Near-light's fixture-only repair passes offscreen.
-The interim week's remaining route is in `handoff.md` section 3; heavy ports and the flip remain held there.
-Operator continuation (16 Nov): implement N3.1c L2 with Sol High and independent Terra High audit; lead runs
-N3.4 `defocus_draws` concurrently under available ambient GPU activity, as explicitly authorised. Record conditions
-and compare within-run variants; do not hold diagnosis for the former quiet-GPU precondition.
-L2 scissor/negative controls pass both backends. Readback completeness/metadata, sample clamp gate and post-stage
-parity/rest/retire pass on ABI25. ABI25 accounting passes all 27 cases/backend, including unchanged no-churn and
-published rebind checks; 145 focused core tests pass. Defocus flag/tracker isolation passes: neither flag removes
-the excess. Actual command comparison and selective replay implicate the barrier; hardware-counter research
-now tests the overlap/contention hypothesis before a core change. Final parity and
-rules (a)/(b) pass both backends and reference. Non-gating bloom-source/odd-mip differences remain documented in D17.
-Build7717614d1 was recovered from original run43871856822/token20261116_150121_942441, exact manifest/import
-checks passed, one dispatch. Independent High source/evidence review is clear; performance acceptance remains open.
+**Session order (operator, 16 Nov):** the P1 retirement, N3.1c L3, N3.2 Audit 4 L6, `stream_ring` margin and
+near-light slices are complete. Review independent slices before landing; their implementation may overlap.
+**Now:** the five requested slices and N3.1c L2 are complete and audited; ABI 25 native repairs and source audit
+are proved. P1 desktop validation remains at N0.6 and N3.4 defocus performance remains open. D17 owns the detailed
+diagnosis; available ambient GPU activity is authorised when conditions are recorded. Heavy ports and the flip remain
+held by the interim route in `handoff.md`.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
-at the size asked. The interim week's order is `handoff.md` section 3.
-- High: N3.4's two open steps (the OpenGL defocus diagnosis under recorded GPU conditions, then audit closeout; item 8b, N3.4
-  box), then N3.6. Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers ride
+at the size asked. The interim holds are in `handoff.md`.
+- [ ] High: N3.4's OpenGL defocus performance diagnosis (item 8b, N3.4), then N3.6 when the hold lifts.
+  Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers ride
   with the next fitting dispatch.
-- Medium: the Bubble port (N5.1 Bubble box: classify rule (a)'s 8-level residual first), then the Oscilloscope
-  (only after N3.4's audit, since it consumes bloom).
-- Sonnet: `clip_smoke` only by asserting the protected behaviour.
-- Audit: a High audit behind each merge, scaled to its risk; N3.4's source audit is done, native repair proofs are owed.
+- [ ] Medium: the Bubble port (N5.1 Bubble box: classify rule (a)'s 8-level residual first), then the Oscilloscope
+  after N3.4's remaining performance gate, since it consumes bloom.
+- [ ] Audit each merge at the appropriate risk; N3.4's source audit and native repair proofs are complete.
 
 ### Item 0. Operator defects of 11 Nov: section 1B, in its own order, ahead of everything below
 
 ### Item 1. Operator-reported defects first
 
-- Foundry UX (operator, 14 Nov): `Docs/Future_Work/Foundry_UX_Audit_2026-11-14.md`; open from it, for the operator's
+- [ ] Foundry UX (operator, 14 Nov): `Docs/Future_Work/Foundry_UX_Audit_2026-11-14.md`; open from it, for the operator's
   pick: its remaining high and medium findings and the Build Foundry's port from Tkinter to PySide6.
 - [~] Defect (operator, 14 Nov): a Studio window's taskbar icon in frozen builds is Windows' default box. The static
   cause is unproven (likely an icon Qt could not decode). Lead: check the next GitHub frozen build's `[ICON]` startup
@@ -105,7 +89,7 @@ Contract: `Docs/Guides/Visualizer_Reactivity_Authoring.md` (§2B, §2C, §13D). 
   §13A). Breathing is now only a faster release in soft passages.
 - [ ] The onset reward is still sized by the bus's adaptive flux threshold (about 1 s of context: the same kick right
   after a dense passage scores .22 against .61); size it on the fixed scale.
-- Group Wave's separation from Travelling Pulse and the pulse bands' colour edges: their boxes are in section
+- [ ] Group Wave's separation from Travelling Pulse and the pulse bands' colour edges: their boxes are in section
   7.1, "Reaction: travelling energy pulse".
 
 ### Item 3. Expanded Visualizer M2 onward (plan 01; operator's M1 amendment: a mode switch never re-expands)
@@ -193,11 +177,11 @@ Receipts: `.artifacts/evidence/performance/load_session/20261111_load_session/dr
   medians are nonsense (`publish_to_swap_ms` and `consumed_age_at_sync_ms` medians about -48,500 ms, p90 sane):
   records from before and after the round trip (a new worker generation, a different clock origin) are mixed.
   Report ages per generation, or only for the steady window before the first round trip as the help text says.
-- What the ten minutes did not cover is in the Watchlist ("Load runs the 11 Nov session did not cover").
+- [ ] Review the uncovered cases in the Watchlist ("Load runs the 11 Nov session did not cover") when admitted.
 
 ### Item 8. §8 Accepted-mode follow-ups
 
-- The brief Bubble performance-parity check: its boxes are in section 8.
+- [ ] Complete the Bubble performance-parity check in section 8.
 
 **Then:**
 
@@ -307,14 +291,7 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [ ] One helper beside `configure_offline_controller` sets the framed view of the card a host models
     (`resolve_framed_view`); each host above calls it (the worker gates send it as `VIS_SET_VIEW`).
   - [ ] Guard: a Waveform tick in each of those hosts has a view span (negative control: today's hosts have none).
-- [x] P1 spike build retirement: core harnesses own the remaining proof, `native_spike` build/workflow selection
-  removed, source retained as evidence (16 Nov; durable route: Handbook 8a / Harness Index).
-  - [x] Baseline teardown guard: validate dormant job-service quiescence before device destruction; Terra High
-    audited, 28 host tests and required-validation hidden rounds PASS on OpenGL/Vulkan (16 Nov).
-  - [x] R-226 caller sweep: scene-target and mesh-buffer launchers/reference verdicts reject stale records and
-    failed child exits; reproducing regressions PASS, Terra High audited (16 Nov).
-    - [x] Eleven other launchers, including compute/post-stage reference verdicts: repaired, Terra High audited,
-      26 failed-child regressions PASS on merged tree (16 Nov).
+- [x] P1 build retirement, teardown guard and R-226 caller sweep completed and audited; source retained as evidence.
 - [ ] N0.6 D6's proof (harness rounds 1 to 6 merged; the record is D6's "As proved" in the decisions document;
   evidence `.artifacts/evidence/native_core/n06/`). The validation layer (Khronos's Windows build in
   `D:/Temp/Scratch/SRPSS/native_spike/validation_layers/extracted/`) is given to the harness process alone with
@@ -326,20 +303,15 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   at creation and after every readback and is never excused. Owed:
   - [ ] The A excuse is removed when the project takes the next Qt 6.12 patch release (the branch head already uses
     `UNDEFINED`): the upgrade's rerun deletes A from `QT_DEFECTS` and every round is clean without it.
-  - [x] Core host/composite harnesses fail before QML/window if required validation did not load; child failures
-    cannot reuse a stale PASS. CLI `--layer-path` remains the one scoped loader exception (R-226).
-  - [x] D6 names the harness-only layer-path exception (16 Nov).
-  - [x] Core host/composite translucent rounds: named secondary display, bounded, automatic observed-size resize
-    proof; system/glass backdrop choices. Defaults remain offscreen (16 Nov, Terra High audited).
+  - [x] Core harness validation, child-failure and bounded translucent rounds completed and audited (D6, R-226).
   - [~] Awaiting Validation — lead, Display 1 visible and bounded, when two displays are connected: a real translucent window on the
     module's device: see-through to the desktop (D7 point 8's first route; the hidden runs cannot read the composed
     alpha), with the DWM system backdrop and the project's glass, then the swapchain under resize, DPI change and
     sleep and wake. If it is not see-through, D7's second route (DirectComposition) is tried next.
-- N0.3's three scenes: proved on Vulkan, OpenGL, D3D11 and D3D12 (the record and the decided F1 to F4 are the
-  decisions document's N0.3 "As proved" sections; evidence `.artifacts/evidence/native_core/n0_3/`). Owed:
-  - [ ] Metal: the three scenes on Metal (Watchlist; no Metal machine).
-- N0.7 D9's proof: proved in the harness and accepted 12 Nov (the verdict, jobs for compute on this vendor and
-  uploads, is D9's "Accepted by the lead"). Owed, with the Qt 6.12 checks filed here:
+- [x] N0.3's three scenes proved on Vulkan, OpenGL, D3D11 and D3D12 (decisions: N0.3).
+- [ ] N0.3: run the three scenes on Metal when a Metal machine is available (Watchlist).
+- [x] N0.7 D9 harness proof accepted (D9).
+- [ ] N0.7 remaining Qt 6.12 checks:
   - [ ] The handoff probe's inherited-state assertion was narrowed from Qt's whole sync to the item's
     `updatePaintNode` (`tests/test_qtquick_native_texture_handoff_gl.py:114-129`) on the statement that Qt 6.12's
     own sync resets the array-buffer binding; no control shows it. Add the control: a sync in which the adopting
@@ -375,9 +347,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   for every backend, not `--glsl 460` only; each group leaves the readiness ratchet in the same change. A group whose
   conversion is not pixel-identical inside one dispatch is converted at its port instead. Order: by first consumer on
   the ladder, not N5's order. Remainder (ratchet 12; every other group is merged):
-  - New conversions and ports prove at the widened run set (variants `a` and `b` and, with `--offers`, every Choice
+  - [ ] Prove new conversions and ports at the widened run set (variants `a` and `b` and, with `--offers`, every Choice
     offer: `tools/conventions_identity.py`, `tests/test_conventions_identity_runs.py`), first parent against merge.
-  - Converts at its port, not here: Neon Lake's basin (`NEON_VERTEX_SOURCE`/`NEON_FRAGMENT_SOURCE`, one 8-bit level
+  - [ ] Convert at its port, not here: Neon Lake's basin (`NEON_VERTEX_SOURCE`/`NEON_FRAGMENT_SOURCE`, one 8-bit level
     on 2-6 pixels with Glass on its block; `NEON_BLOCK` is kept as its layout) and Extruded Bubble's traced glass.
   - `rendering/gl_programs/lighting.py` belongs to N4.m: it is not a product shader (no `#version`; only its test
     draws it), and a program that includes it converts it (a 3088-byte block, about 3 KB of resources).
@@ -476,7 +448,7 @@ N2.8, whose rehearsal closes N2.5's rule (f) and releases the Python renderer's 
 Numbering kept stable for the documents that cite it: N3.5 (per-pass GPU timing) moved to N2.6, and N3.8 (the job
 service) is built in N2b, where its first job (a photo's upload) is needed.
 
-- N3.1 Scene targets: merged (3c13c76e; D14 in `Docs/Future_Work/Native_Core_P3_Decisions.md`); its leftovers are N3.1b and N3.1c.
+- [x] N3.1 Scene targets proved (D14); N3.1b remains open.
 - [ ] N3.1b The four-sample capture cost on Vulkan (D14 point 13; settled before N5.6, Extruded Bubble, the first
   consumer of a four-sample capture). At 4K Vulkan's 4x minus 1x is 0.58 ms against the Python path's 0.41 (OpenGL
   0.45 is within noise, accepted); `cost_parts` puts about 0.5 ms of it in the capture step at four samples against
@@ -492,18 +464,9 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [ ] Fix what the scopes show, if it brings Vulkan's 4K 4x minus 1x to the Python path's or below with parity
     exact and validation clean; otherwise the figure and its cause go to the lead with the operator's look question
     (4K defaulting to fewer samples).
-- [x] N3.1c Checkpoint audit 2's lows (agent-a6aa6ac5's `Docs/Future_Work/Checkpoint_Audits_Nov15.md`, L2 and
-  L3; before N3.2 draws anything but a full-screen triangle into a scene target).
-  - [x] L2: canonical contentViewport retained in scene_targets.h, D14 corrected; UsesScissor/content rect on
-    target draws, full allocation on full-target operations, defocus allocation viewport/content scissor. High audit;
-    ABI 22 OpenGL/Vulkan scissor and separate missing-flag controls PASS at actual 1x/4x. Enlarged viewport
-    makes slack writes observable; restoring the flag restores exact colour/depth without reallocating targets.
-    Evidence: n3_1/20261116_n31_l2_scissor{,_control}_abi22 (preserved in main after worktree retirement).
-  - [x] L3: independent wrong-top placement, aligned card, 401 one-pixel drag positions / true 1 px bucket control,
-    actual partial-allocation destruction and render-thread invalidation, with separately rejected controls;
-    R-227 counts partial resources. Terra High audited; merged ABI 21 rules (a)/(b), resize/rest/retire and 109
-    focused tests PASS (16 Nov; D14 / R-227). L2 remains separate.
-- N3.2 Mesh and buffer resources: merged (d43049ce; D15 in `Docs/Future_Work/Native_Core_P3_Decisions.md`). Open:
+- [x] N3.1c L2 scissor and L3 allocation proofs complete (D14, R-227, checkpoint audit 2).
+- [x] N3.2 Mesh and buffer resources proved (D15).
+- [ ] N3.2 remaining checkpoint audit 4 findings:
   - [ ] Checkpoint audit 4's three open lows (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 4";
     recorded, not fixed, by the lead's decision of 15 Nov):
     - [ ] L1, the draw-parameters pack's interface: `checkGeometryPass` (`mode_content.cpp`) checks only a batched
@@ -517,81 +480,22 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       streams' bytes past their used length); the vertex buffers are given per draw, so only a layout change needs new
       pipelines. Proof: `probe_replace.py`'s box replaced by its own bytes and layout creates only the mesh's buffer
       and keeps the streams' build generation (today 3 buffers and generation 1 to 2).
-    - [x] L6: independent real-renderer `uMatrix`, executed native arena layout and native/Python `f32` reader
-      byte parity (inf, -0, denormal); Terra High audited, 27 merged tests PASS (16 Nov, c390f8f4e).
-- N3.3 Compute passes: merged (6d87276a; D16 in `Docs/Future_Work/Native_Core_P3_Decisions.md`). Open:
-- N3.4 Transparency and post-processing as shared stages: merged PRE-AUDIT at ABI 20 (merge 15 Nov, the operator's
-  week wind-down; D17 and its "As built" in `Docs/Future_Work/Native_Core_P3_Decisions.md`; every proof round of
-  `native/core/python/post_stage_check.py` PASSED on both backends; evidence `.artifacts/evidence/native_core/n3_4/`).
-  The stages run only in harnesses: no mode consumes them yet. Open, in this order, and nothing consumes N3.4 (the
-  Oscilloscope port, N5.1) until both are done:
-  - [ ] Before N3.4's High audit (the lead, 15 Nov): explain the native OpenGL defocus at 4K. The split by variants
-    (`post_stage_check.py --rounds defocus_cost python_defocus_cost`) puts the extra time in the sprites' raster: 2.6 ms
-    at 1x and 1.2 ms at 4x on OpenGL against about 0 on Vulkan, for the same sprites (53,383 texels lit on both
-    backends, frames within one level), while Python's sprites on the same driver cost 0.99 ms with their vertex
-    stage; `generateMips` is not it (0.16 ms with the clip; Python's 0.11; storage kind irrelevant); dropping the capture
-    changes nothing; only a few sprites cost nothing. Not an upload stall either (the sprites have no instance stream;
-    the few-sprites and full variants upload the same block arena: D17). Remaining steps, in order:
-    - [x] Draw-query control built; initial loaded-GPU evidence and its limits retained in D17.
-    - [x] Available-GPU draw timing repeated (operator authorised, 16 Nov): 239 queries/0 skipped per variant;
-      marked full-minus-no-sprites record delta 0.0164 ms at 1x / 0.0031 ms at 4x. Unmarked repeat still costs
-      2.5785 / 0.9595 ms. GPU conditions retained in summaries; this is within-run diagnosis, not quiet-GPU admission.
-      Evidence: n3_4/20261116_n34_defocus_draws_available and 20261116_n34_defocus_split_available (D17).
-    - [x] Query perturbation isolated: boundary-only runs preserve pixels and remove the excess. Individual ABI23
-      sites prove only gather→sprites does so (1x about 2.2–2.5→0 ms; 4x 1.2→0 ms), with 239 actual flushes/records.
-      Evidence: n3_4/20261116_n34_individual_sites_abi23 (preserved in main). No production flush admitted (D17).
-    - [x] ABI25 declaration/tracker isolation PASS: actual 1x/4x, exact pixels, no compute, zero flush/query counts.
-      Both flags retain ~2.3/1.2 ms excess; between-draw boundary removes it. Independent High evidence review (D17).
-    - [x] Actual 1x GL trace compares normal/between/normal, full/high-threshold, 16 changing records each: exact
-      pixels/counters PASS, independently reviewed. Boundary adds a barrier, VAO/buffer unbind, FBO rebind and state
-      replay; no glFlush/glFinish between those draws. Trace timing is not performance acceptance (D17).
-    - [x] Combined controls: trace confirms barrier removal with FBO/state replay retained; untraced 1x 240-record
-      guards PASS, excess off 2.016/2.353 ms, tracked boundary 0.038, untracked boundary 2.565. High reviewed (D17).
-    - [x] Single-call replay isolation, existing whole-record queries: omit only 34 between-draw barriers, excess
-      0.059→1.794→0.310 ms after restoration. High reviewed; replay-only causality, no native performance admission.
-    - [ ] Test the researched overlap/contention explanation with compatible NVIDIA hardware-counter tooling:
-      compare SM/TEX/L1/L2 pressure for gather+sprites versus the barrier-separated pair, retaining full-record
-      timing and unchanged pixels. Khronos/Qt establish no missing visibility barrier here; NVIDIA documents
-      harmful shared-resource overlap, but current evidence does not establish that mechanism or a driver bug.
-      Driver617.42 supports Nsight Graphics2026.3 (requires615+); use that release without changing the driver.
-      Signed2026.3.1 package extracted without installation; CPU launch verified. Omit ngfx's `--platform`
-      argument: Qt consumes it as a QPA plugin name and caused the startup dialog. Create output directory first.
-    - [ ] Fix it in the core if it is ours (one change, a build, the split again: `--rounds defocus_cost` on both APIs,
-      the OpenGL sprite raster near Python's and Vulkan unchanged), or record it in D17 as the driver's with the figures
-      if no state difference moves it. Then rerun `--rounds parity` (rules (a) and (b) must still pass) and record the
-      outcome in D17's "As built" cost bullet. The control stays (harness-only, off by default).
-  - [x] The High source audit of the N3.4 merge is complete; performance acceptance above remains open. The diff is
-    `git diff a553335bb 39e661d80 -- native/core rendering/native tests/test_native_post_stages.py`
-    (about 6,800 lines: `post_stages.*`, `mode_content.*`, `scene_targets.*`, `module.cpp`, the shaders, the harness).
-    Findings and verified repairs: `Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 6".
-    Terra 6.1 High reviewed fixes and ABI25 final proof. Completed finding boxes retained for this session:
-    - [x] Partial bloom/defocus accounting follows every ownership/create edge; ABI24 first/intermediate cold/resize
-      failures, exact release and fresh recovery pass both backends. Exact old fault reproduced −3 textures/−1 chain.
-    - [x] Transparency gate uses canonical resolved samples and capability generation; old ABI22 fails clamped phase,
-      ABI24 same-item actual 4→1→4 passes both backends with missing sample shading throughout.
-    - [x] Mip readback metadata uses normalized outward projection/bottom anchoring; unaligned and odd-extent
-      content stays in bounds. Old ABI22 fails; ABI24 GL/Vulkan PASS.
-    - [x] Stable owned array completes every declared mip/attachment readback; 176 entries plus subsequent bounded
-      reads PASS on ABI24 GL/Vulkan. First vector build was rejected by the DLL import gate; owned-array rebuild PASS.
-    - [x] FP16 judge rejects NaN/±Inf inputs/deltas before conversion; 11 focused cases and all 593 retained ABI22
-      arrays rejudged finite/PASS. ABI24 fresh rules (a)/(b), analytic, rest/retire PASS (both backends).
-    - [x] Outside-pass external-command question resolved against pinned Qt 6.12 Vulkan beginExternal/endExternal:
-      explicit NoPass support; no synchronization change needed. Recheck at Qt upgrades (private QRhi boundary).
-    - [x] Sampler/SRB/pipeline ownership and actual partial held counts proved: ABI25 27/27 cases per backend,
-      cold/resize/rebind faults, recovery and release; unchanged no-churn predicates pass. Independent High evidence review.
-    - [x] Successful rebind publishes at its canonical edge: ABI24 proved stale 0→0; ABI25 proves 0→1 with no
-      new wrappers. No extra settings record or weakened predicate. Evidence: n3_4/20261116_n34_accounting_abi25_final.
-    - [x] Native target-pixel API help includes the returned mip `level` beside the other metadata.
-  - [x] Late run-name discovery: explicit recover CLI verifies target/workflow/event/commit/token, reuses canonical
-    validate/publish and preserves the log; 110 focused tests and High review. Actual ABI25 recovery succeeds from
-    run43871856822 after its generic queued title resolves; log proves one dispatch, exact validated publication.
-  - [x] `stream_ring` timing-margin repair: bracketing-floor median sensitivity, exact native record coverage;
-    41 focused tests, High audit and merged ABI 21 OpenGL/Vulkan proof PASS (16 Nov; D15).
-  - [ ] Awaiting Validation before a Waveform consumer: repeat `mesh_buffer_check.py --rounds stream_ring` on a
-    quiet GPU, record load/clocks before/after and review median margins plus the D5.3 tail watch. The 16 Nov
-    proof had ambient GPU activity; it validates the repaired harness, not quiet-GPU performance admission.
-  - [x] Harness ownership inventory: post-stage uses canonical graphics setup and is registered in the existing
-    core proof allowlist; focused ownership scan PASS on merged tree (16 Nov).
+    - [x] L6 native/Python matrix and packet oracles proved (checkpoint audit 4).
+- [x] N3.3 Compute passes: proved and audited (D16).
+- [ ] N3.4 Transparency and post-processing (D17): source/proof complete; performance gate open. No consumer
+  until the performance gate closes.
+  - [x] ABI 25 gate, accounting, readback, parity, rest and retirement proofs and independent High review complete.
+  - [ ] At Qt upgrades, recheck the private QRhi outside-pass `beginExternal`/`endExternal` contract against Qt source.
+  - [x] Aligned whole-query native/Python pairs and bracket pixels proved; submission still differs (D17, R-232).
+  - [ ] Test native whole-pass blocking-result cadence with the existing `wait_for_results` control; retain pixel,
+    count and sample guards. Select the next falsifier from that result. Hardware counters are optional if a specific
+    ambiguity remains; profiler repair is not a prerequisite (D17; failed approaches in R-232).
+  - [ ] Resolve an established core cause, then rerun both-backend `defocus_cost` and parity; otherwise document the
+    established cause and figures in D17 before closing this gate. No production barrier or tracking exception without
+    proof.
+  - [ ] Awaiting Validation before a Waveform consumer: repeat `mesh_buffer_check.py --rounds stream_ring` on a quiet
+    GPU, record load/clocks before and after, and review median margins plus the D5.3 tail watch. The available-GPU
+    proof validates the harness, not quiet-GPU performance admission.
 - [ ] N3.6 Lifetime: lazy creation on first use, release at retirement and at a mode switch, device loss rebuilt
   from the last packet, every state combination a pipeline built ahead and warmed gradually (Qt's pipeline cache
   file on Qt's pipelines; the core's own cache for raw ones); the working-set and GPU-memory readings of the P2
@@ -701,37 +605,10 @@ the feature (D3D11 is not stated).
   item as Spectrum's; both close with N5.8.
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
-  **Where it stands (15 Nov; merged dormant into main at 22a99fa45, worktree retired; no C++, no build needed: it
-  runs on main's ABI 20 module as built).** Root cause of the last failure, fixed: the route sized the
-  ambient target from the frame's parameters (`BubbleAmbientSimulation.enabled`), whose keys are not the runtime's
-  ambience switches, so the target sat at 1 x 1 and the native card drew no ambience (owner rule (a) worst 152 levels);
-  it now follows whether the drawn frame carries ambient points (worst 8 levels). Bubble is **not offered on Vulkan**
-  and not in `GENERIC_MODE_SETTINGS` yet (D10's invariant): the route's Bubble pieces exist
-  (`native_route.BUBBLE_SETTINGS`, `bubble_program`, `_bubble_target_sizes`, `GENERIC_MODE_PROGRAMS`,
-  `GENERIC_MODE_TARGET_SIZES`, `_slot_bytes`) and `tests/test_native_bubble.py` registers them by monkeypatch.
-  Follows the Native Port Playbook: the port checklist, the standard proof, N4.a, E2 (E23), E3, E9.
-  Done (each commit in the merge; the Python renderer's frames proved identical by `tools/conventions_identity.py`):
-  - The ambient programs are shader files (`widgets/spotify_visualizer/shaders/bubble_ambient_{points,mask}.{vert,frag}`
-    and packs); the points and the hero mask are instanced quads (D15 F; figures in D15 "Bubble's measured case",
-    accepted); `srpssTopDownClip` added to both geometry-include copies; the CPU occluder triangles deleted.
-  - `bubble.frag`: `vec4 u_bubbles_trail[330]` read `.xyz`, `uint u_big_class_bits[4]`, the ambient read placed in a
-    bucketed allocation (`u_ambient_px`, ratios exactly 1 in Python), clamped to the content's edge texels, rows in the
-    target's own order by `srpssConventions.z` (identical on all 38 widened runs before the row fix, variants a and b
-    after it).
-  - R-225 (stale-trail ghost) fixed with its test and index row.
-  - The record: `core/visualizer_engine/bubble_native_schema.py` (runtime schema v1, 24,048 bytes, fingerprint pinned
-    in the test); f64x4 arrays now pack every element (`native_schema.py`). Shared functions in `bubble.py`:
-    `bubble_frame_values`, `bubble_frame_scalars`, `bubble_settings_values`, `bubble_ambient_settings_values`,
-    `bubble_presentation_layout` (the Python renderer calls them).
-  - The route's program (3 passes, the `ambient` target, 2 instance streams), the target size sent on change only.
-  Proved so far: the three E confirmations (source reading, in the commit log); `tests/test_native_bubble.py`
-  (schema, sources, settings, sizes, route), `tests/test_bubble_stale_trail_ghost.py`,
-  `tests/test_bubble_ambient_big_occlusion.py` (the mask's shape on the GPU, control seen failing); owner rule (a) on
-  variant a (`.artifacts/evidence/native_core/n5_1_bubble/20261115_rule_a_variant_a/`, in main's evidence):
-  549 frames, 350 differing inputs, worst 8 levels, 101 edge pixels in the worst frame, all on microbubble clusters
-  and halo edges: FAIL under the composite tolerance (10 ties at 3 levels).
-  Remaining, in order (each command from the repository root with the venv's python, the module at
-  `release/native_module`, ABI 20):
+  Native route is merged dormant; Bubble is not offered on Vulkan until parity passes. The latest owner rule (a)
+  remains a FAIL at eight levels on edge pixels; evidence is in `native_core/n5_1_bubble/20261115_rule_a_variant_a/`.
+  Follow the Native Port Playbook and resolve the residual before registration or acceptance. The earlier ABI 20
+  proof is historical; use the current validated native module for remaining work.
   - [ ] Classify the 8-level residual before asking for a bound. Read the worst frames (`bubble_input244_*` in that
     folder): suspects, in order, (1) the light attachment's float16 sums against Python's (additive halos overlapping),
     (2) the hero mask's erase blend: the content state reports the mask's attachments as `replace` with a
@@ -945,7 +822,7 @@ Port-readiness rules bind all new GPU code now (the backend decision). Expanded 
 
 ## 1B. Operator defects and requests (11 Nov; run first, in this order)
 
-Live checklist: every open step is its own box, ticked boxes are deleted, and a landed item leaves only its
+Live checklist: every open step is its own box; retain only brief useful native-core completion references,
 `[~]` validation steps and open side defects. Order: the Edit/exit defects, the Studio work, the fullscreen
 overlay contract, window material and corners, presets last. Every fix reproduces its failure first; the lead
 judges visual items on rendered pixels and audits each branch against the pre-fix code before merging.
@@ -953,13 +830,13 @@ judges visual items on rendered pixels and audits each branch against the pre-fi
 question without a simple test is a Watchlist item, never an open phase). What needs the real product on real
 hardware is proven by the lead's harnesses in 1B.14.
 
-### 1B.1 Edit edits the display it was entered on (merged 46129166; contract: plan 01 M3c "Edit beside the view")
+### 1B.1 Edit edits the display it was entered on (contract: plan 01 M3c)
 
 - [ ] Side defect (unreproduced): in an ordinary global Edit, closing the Visualizer and then switching mode makes
   `activate_edit_visualizer_profile` return False (`rendering/quick/custom_layout_owner.py`, the `visible is None`
   branch), which looks like a forced runtime reload. Reproduce in a test or rule out.
 
-### 1B.2 Cursor keeps its changed shape after exit until a click (merged 0f8f4836; R-183; proof owed in 1B.14)
+### 1B.2 Cursor keeps its changed shape after exit until a click (R-183; proof in 1B.14)
 
 The harness reproduced the stuck shape only with Qt's pointer tracking cleared artificially: the real exit path is
 unproven.
@@ -967,7 +844,7 @@ unproven.
 - [ ] Side defect: when a hovered QML item is destroyed or left, the saver window can keep the hand or arrow
   instead of the Halo until the Halo next re-applies it.
 
-### 1B.4 Shape instrument for Spectrum and Neon Lake (merged; contract: Visualizer_Studio.md)
+### 1B.4 Shape instrument for Spectrum and Neon Lake (contract: Visualizer_Studio.md)
 
 - [~] `fft_to_bars` gained two helper calls per tick (`shape_bar_profile`, `lane_sample_positions`). The overhead
   baseline was re-recorded after 1B.4 merged (`tools/baselines/overhead/2026-11-11_4658981b.json`, with a Spectrum
@@ -975,7 +852,7 @@ unproven.
 - [ ] Admitted later if wanted (operator's call): a pop-out larger canvas; Spline Curve's layer nodes and Voxel
   Sphere's zone boundaries on the same instrument; Shift axis lock, snapping, double-click reset.
 
-### 1B.5 Neon Lake: all visible land is brush-editable (merged 33912e5ae; refinement round merged 11 Nov)
+### 1B.5 Neon Lake: all visible land is brush-editable
 
 Contract: `Docs/Reference/Neon_Lake_Basin.md`.
 
@@ -983,7 +860,7 @@ Contract: `Docs/Reference/Neon_Lake_Basin.md`.
   would rebuild and pop): no render shows whether the smallest brush aliases on far land seen up close; render
   it once, and only then decide whether anything is owed.
 
-### 1B.6 Neon Lake: smooth land reaction, Growth and Indents (merged 33912e5ae; refinement round merged 11 Nov)
+### 1B.6 Neon Lake: smooth land reaction, Growth and Indents
 
 Contract and measurements: `Docs/Reference/Neon_Lake_Basin.md`. The lead decides when the reactivity is good enough
 (operator, 11 Nov).
@@ -996,7 +873,7 @@ Contract and measurements: `Docs/Reference/Neon_Lake_Basin.md`. The lead decides
 - [ ] Side defect: the cost probe does not count GL or Python calls inside modules loaded under alias names, so
   one-session comparisons against an old renderer have meaningless call counts: count by module object.
 
-### 1B.7 Fullscreen Now Playing: one geometry contract with the Media widget (merged 189fbd36c; plan 01 M3c)
+### 1B.7 Fullscreen Now Playing: one geometry contract with the Media widget (plan 01 M3c)
 
 Contract: plan 01 M3c (what stays overlay-specific, with its reason); the old artwork-factor bridge is in
 `Docs/Architecture/Persisted_Input_Compatibility.md`.
@@ -1035,7 +912,7 @@ follow-ups with their evidence folders).
 - [ ] Each step: `.qsb` regenerated, the SURFACE block kept identical across its three shader files, one focused
   GPU before/after, lead pixel review on the operator's two wallpapers.
 
-### 1B.9 Settings and Studio window corners bleed (see-through corners merged a89ce123; continues 1.9)
+### 1B.9 Settings and Studio window corners bleed (continues 1.9)
 
 Measurements, rejected alternatives and the residue no layered window can remove:
 `Docs/Architecture/Settings_Theme_Architecture.md` (native corners).
@@ -1072,21 +949,21 @@ the lead rejects any still or showcase frame that shows one.
 - [ ] Side defect: Rim Glow measures distance to the square edge (`spectrum.frag:783-785`), so it facets at
   rounded tops.
 
-### 1B.11 Theme filter in the Linked row (merged d401b3c2; contract: Settings_Theme_Architecture.md "Theme filter")
+### 1B.11 Theme filter in the Linked row (contract: Settings_Theme_Architecture.md "Theme filter")
 
-- The theme list's and the popup's scrollbars (native black/white bars in off-screen captures): 1B.14's Settings
+- [~] The theme list's and the popup's scrollbars (native black/white bars in off-screen captures): 1B.14's Settings
   and Studio box.
 
-### 1B.12 Fullscreen glyphs relative to the Visualizer's display (merged 9bb4e806c; contract: plan 01 M3c)
+### 1B.12 Fullscreen glyphs relative to the Visualizer's display (contract: plan 01 M3c)
 
 - [ ] A display arrangement changing while the saver runs is covered only by re-admission in tests; check it on
   the topology-replacement path.
 - [ ] The Reset Camera glyph (a font character) shows coloured edge fringes in off-screen crops; confirm on a
   real display and paint it as a path like the arrows if it does there too.
 
-### 1B.13 Hold right-click to pan the live Visualizer (merged 21da6fbc; contract: Spec.md / Contracts.md input)
+### 1B.13 Hold right-click to pan the live Visualizer (contract: Spec.md / Contracts.md input)
 
-- Native pointer capture on a real foreground window (tests use a stand-in capture): 1B.14's held-right pan
+- [~] Native pointer capture on a real foreground window (tests use a stand-in capture): 1B.14's held-right pan
   box.
 
 ### 1B.14 Lead verification runs (operator, 11 Nov: "why can you not make tests that exercise these?")
@@ -1158,7 +1035,7 @@ an agent's brief is its plan item, and its report is checked against the boxes, 
 in the lead's memory. Each item below starts with a root-cause box: the cause is established on the real product
 path (an off-screen reproduction or a Display 1 run), with a negative control, before anything is changed.
 
-### 1C.2 Display moves retarget the live Visualizer (merged d14559e9, R-194; proved with both displays visible 13 Nov)
+### 1C.2 Display moves retarget the live Visualizer (R-194)
 
 Operator: "we do not want teardowns and rebuilds unless absolutely needed. They are a last resort." A display move
 attaches the session to both scenes and commits in place (decision: plan 01 M3c; rule:
@@ -1169,19 +1046,19 @@ arrangement change, a display added or removed, the owning display lost, Setting
 - [ ] PyOpenGL's `GL_TIMEOUT_IGNORED` has the wrong value (`glWaitSync` rejects it): the move uses the GL spec's
   value; record it where GL constants are shared so nothing else takes PyOpenGL's.
 
-### 1C.3 Fullscreen Now Playing: one Edit contract with the Media widget (merged 426ec4aa, R-189; accepted by the operator 12 Nov)
+### 1C.3 Fullscreen Now Playing: one Edit contract with the Media widget (R-189)
 
 Contract: plan 01 M3c; evidence `.artifacts/evidence/visualizers/shared/expanded_now_playing/20261112_1c3_after/`.
 
 - [ ] Side defect (watch): `tests/test_visualizers_fullscreen_mode_pill.py` crashed once with an access violation
   when run after overlay_settings, fullscreen_edit and overlays in one process (not reproduced with two files).
 
-### 1C.4 Spline Curve's white lines show about one pixel into the card border (fixed and proved on Display 1, 12 Nov; R-191, R-192)
+### 1C.4 Spline Curve's white lines show about one pixel into the card border (R-191, R-192)
 
 - [ ] The tests that open windows were not run on the merge (`test_qtquick_visualizer_clip_smoke.py`, Neon Lake's
   `actual_neon_qsg_pixels`): run them hidden at the next milestone run.
 
-### 1C.5 Volume child control: its drop shadow was cut off sharply (fixed and merged 12 Nov, R-187; one check left)
+### 1C.5 Volume child control: its drop shadow was cut off sharply (R-187)
 
 - [ ] The agent could not reproduce the cut at the operator's stored Media layout (no volume edits in their
   settings): a D1 run with a copy of the operator's profile (1B.14), a 4x crop of the volume bar, lead review.
@@ -1200,7 +1077,7 @@ The mock, its sixteen requirements (R1-R16), the lead's proposals and the operat
   are in the first full-player milestone; whether the wider dock model is wanted) are recorded there when given.
   Nothing waits on them.
 
-### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely (merged 290b039b, 12 Nov)
+### 1C.8 Neon Lake: the water's edge and face lines can be hidden completely
 
 Contract and evidence: `Docs/Reference/Neon_Lake_Basin.md` "Water Lines".
 
@@ -1298,14 +1175,14 @@ last because it touches the water's edge)**
   one session; lead pixel review. If the analytic edge cannot be made to look right, stop and report with the
   renders rather than shipping rocks without a shoreline.
 
-### 1C.9 Sources: RSS Pools shows which pools are active and valid (rows and restyle merged 12 Nov)
+### 1C.9 Sources: RSS Pools shows which pools are active and valid
 
 Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list style and the Sources pool rows).
 
 - [ ] The marks seen with real stored health once (a D1 or frozen run of 1B.14 after a real fetch), lead review.
 - [ ] Not rendered: a Mica theme; the onboarding lists keep their own style (decide whether they join the shared
   one when onboarding is next touched).
-- The Sources list's scrollbars (unthemed black native bars in off-screen renders; the Themes list too): 1B.14's
+- [~] The Sources list's scrollbars (unthemed black native bars in off-screen renders; the Themes list too): 1B.14's
   Settings and Studio box.
 
 ## 1D. Operator requests (12 Nov, evening; after the current agents pass audit)
@@ -1318,12 +1195,8 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   A third, `tests/test_qtquick_startup_reveal.py::test_startup_reveal_primes_zero_then_completes_at_one_once`,
   failed the same way in the 1D.12 merge run (4,407 tests over 33 minutes). Find the leaked state or ordering they depend on, and make each test own its preconditions.
   The N5.1 merge run (4,529 tests, 44 minutes, one process) added twelve more of this kind; they pass alone.
-- [x] Known red checks found at the N5.1 merge (each originally failed alone):
-  - [x] Near-light fixture uses canonical camera/aperture and test-owned visible defocus; original alpha0 reproduced,
-    stale-composite mutation detected, offscreen pixels/resources preserved. Terra High audited, merged test PASS (16 Nov).
-  - [x] Oscilloscope reflow's original 175-versus-173 clip-smoke failure passes unchanged in the focused hidden
-    run (16 Nov); no product/tolerance change. Watch for recurrence: retain captures and owner-resolved vertical
-    geometry before judging this thresholded lit-row oracle. Protected QSG/clip implementation stays unchanged.
+- [ ] Watch for recurrence of the Oscilloscope reflow clip-smoke red; retain captures and owner-resolved vertical
+  geometry before judging the thresholded lit-row oracle. Protected QSG/clip implementation stays unchanged.
 - [ ] Lead, Display 1: confirm R-221 in the product, Fullscreen Hide Borders with pixel shift stepping, and check
   whether the operator's lavender edge colour came from the shift.
 
@@ -1344,7 +1217,7 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
 - [ ] Port note (N5.6): the beads program puts its probe sampler and its `EbMaterialDrift` storage buffer
   (`extruded_bubble_program.py:1441`) both at binding 6. That collides on Vulkan's single binding namespace;
   renumber at the port.
-- The traced glass converts at its port (N5.6): converted alone it differs by one 8-bit level on 1-2 pixels in
+- [ ] Convert the traced glass at its port (N5.6): converted alone it differs by one 8-bit level on 1-2 pixels in
   14-26 of 549 frames (compiler rounding). Its probe geometry shader also stays on the ratchet (no HLSL for its
   layered `gl_Layer` write).
 
@@ -1379,9 +1252,9 @@ borderless fullscreen transfers working smoothly.
   the `core/windows/dpapi.py` rework, no plaintext fallback). Port it onto today's `dpapi.py` without changing
   Windows behaviour, with its tests and the `Linux_Plan.md` row updated.
 
-### 1D.2 Fullscreen Visualizer display styles (merged and proved on Display 1, 12 Nov)
+### 1D.2 Fullscreen Visualizer display styles
 
-- Watchlist: R-192's enclosed axis. A monitor with no exterior edge on an axis whose extent is not whole at its
+- [ ] Watch R-192's enclosed axis. A monitor with no exterior edge on an axis whose extent is not whole at its
   DPR (the middle of three in a row; the centre of a 3 x 3 grid) keeps Qt Quick's stretch there, and Borders To
   Edge's frame shows it. `test_the_enclosed_axis_stretch_is_recorded_not_hidden` records it.
 
@@ -1497,31 +1370,31 @@ One line each; the detail and evidence live in the section named. Nothing here h
 is an operator look: looks, listens and feels are the lead's proofs (1B.14), and what has no simple test is a
 Watchlist entry (operator, 11 Nov).
 
-- **Framed aperture on the saver card (8 Nov, decision):** the writer is fixed (R-181: the Visualizer's uniform-scale
+- [~] **Framed aperture on the saver card (8 Nov, decision):** the writer is fixed (R-181: the Visualizer's uniform-scale
   minimum is absolute, and settings load lifts stored cards to it). That alone does not restore the saver card's 45°
   look: the repaired 592x592 card holds a 1480x1480 world (0.4 px per world unit, aperture 5.29), still at the 90° x
   90° cap and visually the same as before (`.artifacts/evidence/architecture/framed_camera/20261108_scale_repair/`).
   45° on that card needs about 2.11 px per world unit (a 280-unit world). Decide: bound the framed aperture (or the
   vertical view) as well, or leave it to Edit (Restore Size, wheel up, side drag back to the wanted width).
-- **§1 8b P2:** decide whether to size the frame-age gain with a matched-GPU repeat game60 pair; gates 3/4 and their
+- [~] **§1 8b P2:** decide whether to size the frame-age gain with a matched-GPU repeat game60 pair; gates 3/4 and their
   measurement limits are in the design record. The Windows default and H1/H2 repairs are already integrated.
-- **Decision, Waveform Preset 4 (the reference):** sign off the fixed-scale v7 trade-offs against main and the
+- [~] **Decision, Waveform Preset 4 (the reference):** sign off the fixed-scale v7 trade-offs against main and the
   "floor first" lift (`TROUGH_LIFT_MAX` 1.5 -> 3: Preset 4's ribbon rides about .7 higher at p90 and stops dipping
   into the floor, operator: "rather it goes a bit higher when it has to than clips"), or ask for the tag's exact
   Preset 4 dynamics (numbers at 7.1, "Fixed-scale rework v7"; the lead accepted them on 6 Nov).
-- **Decision, Waveform on a small 640x560 card:** Presets 5 and 6 cannot fit it either way: crests now graze the top
+- [~] **Decision, Waveform on a small 640x560 card:** Presets 5 and 6 cannot fit it either way: crests now graze the top
   on 14-47% of frames, against floor contact before (an authoring choice; no reaction was shrunk). Sign off, or ask
   for taller-body authoring.
-- **Decision, expanded card's hover Edit lane (plan 01 M3c):** the lane (Restore Widget Size, the transfer arrows)
+- [~] **Decision, expanded card's hover Edit lane (plan 01 M3c):** the lane (Restore Widget Size, the transfer arrows)
   stays withdrawn on the display-wide card outside Edit since M2, because each edits the ordinary card's layout,
   which that view does not draw (since 1D.7 its Rotate glyph turns the expanded card outside Edit and saves at
   once). Return it, and what should each do while expanded?
-- **Decision, overlays on pause:** a pause does nothing to them (by the spec, not built): Now Playing is event-only
+- [~] **Decision, overlays on pause:** a pause does nothing to them (by the spec, not built): Now Playing is event-only
   and has already faded after its window; with Always Show it stays up by definition. Add a fade-out on pause?
-- **Decision, Audio Analysis group in the Spline Curve and Oscilloscope Studios (section 9):** keep it or hide it?
+- [~] **Decision, Audio Analysis group in the Spline Curve and Oscilloscope Studios (section 9):** keep it or hide it?
   Every offered control moves the frame (Spline Curve's; Oscilloscope's Flare and Drive, and Tone for Bar Count, Block
   Size and Input Gain), though the Oscilloscope's trace itself is the raw capture.
-- **Decision, Studio clip loops (section 9):** the clips now start and end mid-song at the chosen loop points (Human
+- [~] **Decision, Studio clip loops (section 9):** the clips now start and end mid-song at the chosen loop points (Human
   and Growing Pains on their groove) for a seamless wrap, not at the earlier quiet-to-hot windows. Keep the seam, or
   restore the quiet-to-hot arc?
 
@@ -1533,7 +1406,7 @@ boxes (operator, 11 Nov evening). Closing before opening (operator, 12 Nov): a s
 report is unreviewed or unmerged, and a dispatch is sized to finish inside a usage window. The native core's state and
 tracks are in item 8b ("Order").
 
-Live checklist: every open step is its own box, ticked boxes are deleted, and a landed item leaves only its `[~]`
+Live checklist: every open step is its own box; retain only brief useful native-core completion references, `[~]`
 validation steps and open side defects. Landed slices live in `Docs/Reference/Architecture_Checklist.md` (AC-01 to
 AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-17 to AC-23), `Docs/Reference/Benchmarks.md`
 ("Recorded sessions") and the Historical Bugs records.
@@ -1566,7 +1439,7 @@ AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-17 t
     a logical owner fails every Waveform Studio. Caught by `tests/test_waveform_studio_evaluator.py` and avoided in
     the cut (keyed by `dtype.str`); worth a line in the Studio's step-state contract.
 
-**Active or paused (resume each with a message to the same agent, which keeps its context and worktree):**
+**Active or paused:**
 
 - [ ] Repair the shared Achievement Pulse mock field IDs (`build_mock_steam_view_model`): it emits rarity/session,
   while the card accepts total/latest/playtime/previous/source/selected. Existing fixtures can test impossible rows.
@@ -1734,7 +1607,7 @@ AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-17 t
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
-Live checklist: every open step is its own box, ticked boxes are deleted, and a landed item leaves only its `[~]`
+Live checklist: every open step is its own box; retain only brief useful native-core completion references, `[~]`
 validation steps and open side defects.
 
 **Slow startup (operator, 6 Nov 10:30; owners fixed, awaiting the lead's cold start)**
