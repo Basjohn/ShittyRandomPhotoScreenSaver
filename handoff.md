@@ -51,6 +51,8 @@ activity is explicitly authorised for the diagnosis; section 3's original quiet-
 - [x] Original partial-stage fault reproduced −3 textures/−1 chain; repaired allocation/fault/release checks pass
   all 27 cases per backend. Remaining no-churn proof caught stale rebind report (0→0 with no wrapper creation);
   edge-publication repair reviewed/merged, rebuilt runtime proof owed. No assertion weakened.
+- [x] Explicit no-dispatch build recovery CLI merged, High reviewed, 110 focused tests PASS; same-token log retained.
+  ABI25 candidate43871856822 is queued under a generic name; token verification and native proof still owed.
 
 ## 1. Read these first, in this order
 

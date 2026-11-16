@@ -58,8 +58,9 @@ L2 scissor/negative controls pass both backends. ABI 24's readback completeness/
 post-stage parity/rest/retire and 136 focused tests pass. Full accounting closeout awaits the rebind report fix;
 ownership/fault/release checks already pass all 27 cases per backend. Defocus flag/tracker isolation follows.
 Source ABI25's flag controls and rebind-report repair are High reviewed/merged. Combined build commit7717614d1
-was dispatched with token20261116_150121_942441; GitHub has not exposed its run after the client's timeout.
-Recover that request when visible; do not dispatch a duplicate. ABI24 source/evidence closeout is High reviewed.
+was dispatched with token20261116_150121_942441; queued candidate43871856822 matches workflow/event/commit
+but still has the generic title, so its token identity is not yet verifiable. Follow that candidate read-only, then
+recover the exact token-bearing run; do not dispatch a duplicate. ABI24 source/evidence closeout is High reviewed.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim week's order is `handoff.md` section 3.
@@ -573,6 +574,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     preserve the run token and recover the existing run before any retry, so late queued builds are not orphaned.
     Add an explicit CLI recovery route bound to target/commit/token that reuses the existing validate/publish owner
     and never dispatches another run; focused tests must reject wrong identity and prove dispatch is never called.
+    Source route merged/High reviewed, 110 focused PASS. Actual queued candidate retains the generic workflow name
+    until startup, hiding its token from title lookup. Verify live recovery after its custom title is applied.
   - [x] `stream_ring` timing-margin repair: bracketing-floor median sensitivity, exact native record coverage;
     41 focused tests, High audit and merged ABI 21 OpenGL/Vulkan proof PASS (16 Nov; D15).
   - [ ] Awaiting Validation before a Waveform consumer: repeat `mesh_buffer_check.py --rounds stream_ring` on a
