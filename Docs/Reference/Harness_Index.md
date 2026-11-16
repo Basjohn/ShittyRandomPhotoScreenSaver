@@ -955,8 +955,10 @@ python native/core/python/scene_target_check.py --module-dir release/native_modu
 # retire (replace, remove, a program without geometry, destroy, destroyed before a first draw; the skipped-release
 # control), cost (each scene at 2560x1440 and 4K, timed until 30 GPU times arrive); Vulkan validated. stream_ring
 # (D15 point 7): payloads of 4 KiB to 288 KiB as instance and storage streams against the pair's floor (CPU: the
-# record's render-thread time; GPU: the same pass over a resident mesh stream); run it on a quiet GPU (nvidia-smi is
-# recorded before and after)
+# native record plus one memory copy; GPU: the same pass over a resident mesh stream), bracketing each route with
+# resident floors. Raw ms, ratios and observed spreads retain the 0.05 ms admission signal; inconclusive/invalid
+# measurements fail the proof and require a repeat (D15 point 7). No wall-time substitute for native counters.
+# Run under stated GPU conditions (nvidia-smi is recorded before and after); no automatic native-pair admission.
 python native/core/python/mesh_buffer_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
     [--apis opengl vulkan] [--rounds parity forms rest steady retire cost stream_ring] [--label n32_mesh_buffers]
 # N3.3 (D16): compute passes on the harness scenes native/core/python/compute_passes (field: Waveform's body field, the

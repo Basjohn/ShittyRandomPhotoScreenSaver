@@ -1410,12 +1410,29 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
    bars, events, Bubble's points) is under a microsecond. The pair is also expensive to build here: `QRhiBuffer` has no
    `createFrom` in 6.12 (point 2), so a buffer the core maps can never be bound through QRhi's bindings, and the pair
    would be a raw draw of that pass inside `beginExternal` on both backends (D5.3's service form), not a buffer swap.
-   The rule (choice E): measure QRhi's routes first and bound the pair from below without building it. The pair's floor is the
-   payload's one write into mapped memory (measured as the fast path's own write into a `Dynamic` buffer of that size)
-   and its GPU time without the copy (the same pass with the data already resident). If every QRhi route at the
-   product's sizes is within 0.05 ms of that floor on both axes (render-thread CPU, GPU), the pair cannot win by
-   0.05 ms and is not built; that is the expected outcome. If one is not, the work stops and goes to the lead with the
-   figures (handbook section 8: a native route beside QRhi needs its line first).
+   <a id="stream-ring-floor-protocol"></a>
+   The rule (choice E; current measurement protocol): measure QRhi's routes first and bound the pair from below without building it. The pair's floor is the
+   resident record plus one payload copy into already allocated and touched memory on CPU, and its GPU time without
+   the copy (the same pass with the data already resident). `mesh_buffer_check.py --rounds stream_ring` measures a
+   resident floor immediately before and after **each** route. GPU timestamps measure the surface pass; native
+   render-thread record counters measure CPU (means over 20 records). GUI wall time is diagnostic only; missing or
+   nonadvancing native counters fail loudly. The CPU floor adds the separately measured payload-copy distribution;
+   a partial payload copies only its used bytes.
+
+   All times and the unchanged material-admission margin are **milliseconds**: 0.05 ms. Each axis reports the raw
+   route and both floor p10/median/p90 values, the route/floor median ratio (unitless), the raw median excess and
+   whether that excess reaches 0.05 ms. The floor median is the mean of the two bracketing medians; its observed
+   spread spans the smaller floor p10 to the larger floor p90 (plus the copy p10/median/p90 on CPU). Excess observed
+   spread is [route p10 minus floor high, route p90 minus floor low]. This is an observed spread, **not a statistical
+   confidence interval** or a guarantee about unsampled frames. GPU load and clocks before/after remain in evidence.
+   This avoids judging cold/clock-changing runs against a single later, warmer floor without inflating the margin.
+
+   A route is `within` only when that spread's upper end is below 0.05 ms on both axes. A lower end at or above
+   0.05 ms is `material`: stop and report the figures to the lead. A crossing spread is `inconclusive`: repeat under
+   stated stable conditions (or warm to a stated clock); it fails the proof and cannot close the task. Missing,
+   nonfinite, unordered or empty measurements are `invalid` and also fail. Raw median exceedances remain visible
+   even in an inconclusive run; no automatic native-pair admission follows any outcome (handbook section 8 requires
+   the lead's line). QRhi remains until a material measured case receives that admission.
 8. *No allocation per frame.* Every QRhi object (buffers, bindings, pipelines) is made at a build or a warm-up unit,
    none per record; the arena, the streams and the meshes are fixed in size between edges. The proof reads QRhi's
    resource counts and the core's ownership counts flat over a steady minute, and the core's own heap flat (a counting
