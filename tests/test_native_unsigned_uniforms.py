@@ -53,13 +53,24 @@ def test_u32_sequence_fills_one_matching_unsigned_vector(core, bake, components,
     ("uvec2 words;", 1, "u32"), ("uvec2 words;", 3, "u32"),
     ("uvec3 words;", 2, "u32"), ("uvec4 words;", 3, "u32"),
     ("uint words;", 2, "u32"), ("uvec2 words;", 2, "f64"),
-    ("ivec2 words;", 2, "u32"), ("bvec2 words;", 2, "u32"),
+    ("ivec2 words;", 2, "u32"),
     ("vec2 words;", 2, "u32"), ("uvec2 words[2];", 4, "u32"),
     ("uvec2 words[1][1];", 2, "u32"),
 ])
 def test_unsigned_vector_does_not_relax_record_shape_or_type(core, bake, declaration, count, kind):
     with pytest.raises(ValueError, match="words"):
         _record_block(core, bake, declaration, count, kind=kind)
+
+
+def test_bool_vector_lowering_uses_the_actual_unsigned_reflected_contract(core, bake, tmp_path):
+    pack = bake("#version 440\nlayout(std140, binding = 2) uniform Probe { bvec2 words; };\n"
+                "layout(location = 0) out vec4 fragColor;\nvoid main() { fragColor = vec4(float(words.x)); }\n",
+                "bool_vector.frag")
+    member = _reflection(pack, tmp_path / "bool_vector.qsb")["uniformBlocks"][0]["members"][0]
+    assert member["type"] == "uvec2" and not member.get("arrayDims")
+    values = [0x80000000, 0xFFFFFFFF]
+    data, row = _record_block(core, bake, "bvec2 words;", 2, values=values)
+    assert struct.unpack_from("<2I", data, row[2]) == tuple(values)
 
 
 @pytest.mark.parametrize("declaration,bound", [("int words;", 2147483647), ("float words;", 16777216)])

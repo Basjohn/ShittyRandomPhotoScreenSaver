@@ -2,11 +2,18 @@
 from __future__ import annotations
 
 
-WIDTHS = (("uWords2", 2), ("uWords3", 3), ("uWords4", 4))
+WIDTHS = (("u_words2", 2), ("u_words3", 3), ("u_words4", 4))
 SIZE = (2 * sum(width for _name, width in WIDTHS), 4)
 # Synthetic transport values cover zero, bit31, all bits, and low/high16 transitions; no authored setting is pinned.
-VALUES = {"uWords2": (0, 0xffffffff), "uWords3": (0x7fffffff, 0x80000000, 0x80000001),
-          "uWords4": (0x0000ffff, 0x00010000, 0x89abcdef, 0xfedcba98)}
+VALUES = {"u_words2": (0, 0xffffffff), "u_words3": (0x7fffffff, 0x80000000, 0x80000001),
+          "u_words4": (0x0000ffff, 0x00010000, 0x89abcdef, 0xfedcba98)}
+
+
+def _schema():
+    """Build the real layout the round binds; native admission validates canonical field names."""
+    import mesh_buffers
+
+    return mesh_buffers.schema("uniform_vectors", tuple((name, "u32", width) for name, width in WIDTHS), code=250)
 
 
 def expected(record):
@@ -62,7 +69,7 @@ def round_uniform_vectors(harness, core, engine, app, api, packs, out):
     from rendering.native.mode import ModePass, ModeTarget, TargetAttachment
 
     mb = harness._scenes()
-    schema = mb.schema("uniform_vectors", tuple((name, "u32", width) for name, width in WIDTHS), code=250)
+    schema = _schema()
     spec = mb.SceneSpec("uniform_vectors", (ModePass("vectors", packs["uniform_vectors.frag"], "replace", target="scene"),),
                         (ModeTarget("scene", (TargetAttachment("colour", "r32f"),), size=SIZE),), (), {}, schema, VALUES)
     host = harness._host(core, card=SIZE)

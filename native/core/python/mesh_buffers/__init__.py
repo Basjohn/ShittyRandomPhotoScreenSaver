@@ -389,9 +389,9 @@ void main() {
 
 UNIFORM_VECTOR_FRAG = """#version 440
 layout(std140, binding = 18) uniform UniformVectors {
-    uvec2 uWords2;
-    uvec3 uWords3;
-    uvec4 uWords4;
+    uvec2 u_words2;
+    uvec3 u_words3;
+    uvec4 u_words4;
 };
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out float value;
@@ -400,9 +400,9 @@ void main() {
     int column = clamp(int(floor(v_uv.x * 18.0)), 0, 17);
     int component = column / 2;
     uint word;
-    if (component < 2) word = uWords2[component];
-    else if (component < 5) word = uWords3[component - 2];
-    else word = uWords4[component - 5];
+    if (component < 2) word = u_words2[component];
+    else if (component < 5) word = u_words3[component - 2];
+    else word = u_words4[component - 5];
     value = float((word >> (uint(column % 2) * 16u)) & 65535u);
 }
 """

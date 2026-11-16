@@ -237,7 +237,7 @@ def test_stream_round_brackets_each_route_and_never_passes_unresolved(status, mo
         else:
             assert comparison["gpu"]["status"] == status
 
-@pytest.mark.parametrize("name,width", (("uWords2", 2), ("uWords3", 3), ("uWords4", 4)))
+@pytest.mark.parametrize("name,width", (("u_words2", 2), ("u_words3", 3), ("u_words4", 4)))
 def test_unsigned_vector_oracle_requires_every_last_component_and_real_mutations(name, width):
     import numpy as np
     import uniform_vector_check as proof
@@ -331,3 +331,40 @@ def test_unsigned_vector_round_is_explicitly_selectable_but_not_a_default(monkey
     commands.clear()
     harness.main(["--apis", "opengl", "--rounds", "uniform_vectors"])
     assert len(commands) == 1 and commands[0][-2:] == ["--rounds", "uniform_vectors"]
+
+
+def test_unsigned_vector_round_constructs_and_round_trips_the_real_schema():
+    import uniform_vector_check as proof
+
+    schema = proof._schema()
+    assert schema.decode(schema.encode(proof.VALUES)) == proof.VALUES
+    assert set(schema.fields) == set(proof.VALUES)
+
+
+def test_unsigned_vector_real_schema_and_shader_pass_native_admission(tmp_path, monkeypatch):
+    from rendering import native
+    from rendering.native import loader
+    from rendering.native.mode import ModePass, ModeTarget, TargetAttachment, program_json, schema_table_entry
+    import mesh_buffers
+    import probe_rings
+    import uniform_vector_check as proof
+
+    root = Path(__file__).resolve().parents[1]
+    module_dir = root / "release/native_module"
+    if not (module_dir / f"{loader.MODULE_NAME}.pyd").is_file():
+        pytest.skip("the built native module is required for GPU-free schema admission")
+    pack = probe_rings.bake(mesh_buffers.UNIFORM_VECTOR_FRAG, "uniform_vectors.frag", tmp_path)
+    declared, packs = program_json((ModePass("vectors", pack, "replace", target="scene"),),
+                                   (ModeTarget("scene", (TargetAttachment("colour", "r32f"),), size=proof.SIZE),))
+    core = native.load(module_dir)
+    schema = proof._schema()
+    blocks, _facts = core.module.mode_blocks(json.dumps(schema_table_entry(schema)), declared, packs, "{}",
+                                           schema.encode(proof.VALUES), None, proof.SIZE)
+    assert len(blocks) == 1 and blocks[0]
+    # Python layout construction allows camelCase; the native schema owner enforces canonical field identifiers.
+    # Reproduce the former error at that real seam, before any GPU program or draw can exist.
+    monkeypatch.setattr(proof, "WIDTHS", (("invalidField", 2),))
+    invalid = proof._schema()
+    with pytest.raises(ValueError, match="field name.*identifier"):
+        core.module.mode_blocks(json.dumps(schema_table_entry(invalid)), declared, packs, "{}",
+                                invalid.encode({"invalidField": (0, 1)}), None, proof.SIZE)

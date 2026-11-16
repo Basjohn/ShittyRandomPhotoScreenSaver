@@ -57,7 +57,7 @@ at the size asked. The interim holds are in `handoff.md`.
   N3.6 waits for its interim hold to lift.
   Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers ride
   with the next fitting dispatch.
-- [ ] Medium: the Bubble port (N5.1 Bubble box: classify rule (a)'s 8-level residual first), then the Oscilloscope.
+- [ ] Medium: the Bubble port (N5.1 Bubble box: close the remaining rule-(a) residuals), then the Oscilloscope.
 - [ ] Audit each merge at the appropriate risk; N3.4's source audit and native repair proofs are complete.
 
 ### Item 0. Operator defects of 11 Nov: section 1B, in its own order, ahead of everything below
@@ -597,14 +597,13 @@ the feature (D3D11 is not stated).
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
   Native route is merged dormant; Bubble is not offered on Vulkan until parity passes. The latest owner rule (a)
-  remains a FAIL at eight levels in a local cluster outside the existing edge allowance; official ABI25 replay
-  reproduces it at DPR1.5. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
+  remains a FAIL on smaller steady ties and fade differences after the class-word repair; official ABI25 replay
+  retains unchanged bounds at DPR1.5. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
   eliminated suspicions and evidence. Follow the Native Port Playbook; no registration or tolerance widening yet.
-  - [ ] Repair the proved class-word upload defect: Qt6.12 OpenGL uploads only the first unsigned uniform-array
-    element; actual GPU readback loses later words while Vulkan passes. Use one canonical `uvec4` for the four
-    class words, preserving the record schema; refuse unsupported unsigned/bool uniform arrays at shared admission.
-    Prove real position/class mutations and restoration on both APIs, then rerun the full owner sequence with
-    unchanged D12 bounds. The investigation retains the failed light control and its corrected diagnostic guards:
+  - [x] Class-word upload and portable unsigned-vector admission proved on both APIs; unchanged wire record (R-238).
+  - [ ] Resolve the remaining one-level steady ties and seven fade pixels above one level (maximum five) with
+    unchanged D12 bounds. Trace actual fragment coordinates and fade ownership before changing either; all532
+    larger steady errors are gone and the Python reference is unchanged. Preserve the full replay sequence:
     `python tools/visualizer_replay/owner_render_parity.py --out .artifacts/evidence/native_core/n5_1_bubble/<date>_<label>
     --native --mode bubble --runs bubble --placements display` (use the investigation's process-local dormant
     registration wrapper while diagnosing). If a class remains that is not a defect, report its figures to the lead for a bound
