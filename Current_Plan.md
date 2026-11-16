@@ -602,7 +602,7 @@ the feature (D3D11 is not stated).
   eliminated suspicions and evidence. Follow the Native Port Playbook; no registration or tolerance widening yet.
   - [x] Class-word upload and portable unsigned-vector admission proved on both APIs; unchanged wire record (R-238).
   - [ ] Resolve the remaining one-level steady ties and seven fade pixels above one level (maximum five) with
-    unchanged D12 bounds. Trace actual fragment coordinates and fade ownership before changing either; all532
+    unchanged D12 bounds. Validate shared mask-quad antialias support at the proved post-mask residual; all532
     larger steady errors are gone and the Python reference is unchanged. Preserve the full replay sequence:
     `python tools/visualizer_replay/owner_render_parity.py --out .artifacts/evidence/native_core/n5_1_bubble/<date>_<label>
     --native --mode bubble --runs bubble --placements display` (use the investigation's process-local dormant
