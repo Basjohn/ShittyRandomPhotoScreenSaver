@@ -10,6 +10,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "native" / "core" /
 import post_stage_check as tool
 
 
+def test_gate_evidence_uses_allocated_samples_when_request_was_clamped():
+    state = {"scene_targets": {"targets": [{"name": "owner", "samples": 4, "effective_samples": 1}]}}
+    assert tool._effective_sample_counts(state) == {"owner": 1}
+
+
 @pytest.fixture
 def diagnostic(monkeypatch):
     state = dict.fromkeys(("time_defocus_draws", "flush_defocus_before_gather", "flush_defocus_between_draws",

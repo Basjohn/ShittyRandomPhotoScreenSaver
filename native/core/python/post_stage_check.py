@@ -266,6 +266,10 @@ def _state_facts(state: dict) -> dict:
             "records": state.get("records")}
 
 
+def _effective_sample_counts(state: dict) -> dict:
+    return {t["name"]: t["effective_samples"] for t in state["scene_targets"]["targets"]}
+
+
 # --------------------------------------------------------------------------------------------------- comparisons
 
 def _rgb(entry):
@@ -675,7 +679,7 @@ def round_gate(core, engine, app, api: str, packs: dict) -> dict:
         finally:
             _controls(core, case.controls, False)
         return {"state": _state_facts(state), "names": sorted(textures),
-                "effective_samples": {t["name"]: t["samples"] for t in state["scene_targets"]["targets"]},
+                "effective_samples": _effective_sample_counts(state),
                 "supported_samples": state["scene_targets"]["supported_samples"],
                 "fallbacks_counted": held["stage_fallbacks"] - before["stage_fallbacks"],
                 "stage_textures": held["stage_textures"], "frame_max": int(frame[..., :3].max())}
@@ -717,7 +721,7 @@ def round_gate(core, engine, app, api: str, packs: dict) -> dict:
                     scene.targets(app)
                     state = scene.mode.state()
                     gate = _state_facts(state)
-                    counts = {t["name"]: t["samples"] for t in state["scene_targets"]["targets"]}
+                    counts = _effective_sample_counts(state)
                     facts[f"sample_shading_missing_clamp_{phase}"] = {"state": gate, "effective_samples": counts}
                     checks[f"sample_shading_missing_clamp_{phase}"] = (
                         not gate["error"] and counts.get("solo") == expected
