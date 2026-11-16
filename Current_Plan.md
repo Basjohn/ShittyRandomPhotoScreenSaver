@@ -304,6 +304,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   nothing to the product); the validation-layer folder under `D:/Temp/Scratch/SRPSS/native_spike/` keeps its name.
   - [x] Baseline teardown guard: validate dormant job-service quiescence before device destruction; Terra High
     audited, 28 host tests and required-validation hidden rounds PASS on OpenGL/Vulkan (16 Nov).
+  - [ ] R-226 caller sweep: reproduce and close stale-child/ignored-exit false passes in the remaining native
+    proof harnesses (`scene_target_check.py`, `mesh_buffer_check.py`, `compute_pass_check.py`, `post_stage_check.py`
+    have the same read-after-failure pattern). Keep each repair with its owning harness; no verdict from an old record.
 - [ ] N0.6 D6's proof (harness rounds 1 to 6 merged; the record is D6's "As proved" in the decisions document;
   evidence `.artifacts/evidence/native_core/n06/`). The validation layer (Khronos's Windows build in
   `D:/Temp/Scratch/SRPSS/native_spike/validation_layers/extracted/`) is given to the harness process alone with
