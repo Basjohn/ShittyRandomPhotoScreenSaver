@@ -479,6 +479,33 @@ def test_required_validation_aborts_before_any_host_or_visible_window(tool_name,
     assert "no round ran" in result["error"] and "translucent" not in result
 
 
+@pytest.mark.parametrize("tool_name", ["host_check", "composite_check"])
+@pytest.mark.parametrize("failure", ["timeout", "exit"])
+def test_native_harness_never_accepts_stale_or_failed_child_success(tool_name, failure, monkeypatch, tmp_path):
+    import importlib
+    import subprocess
+    from tools import artifact_paths
+
+    tool = importlib.import_module(tool_name)
+    monkeypatch.setattr(artifact_paths, "evidence_dir", lambda *_a: tmp_path)
+    path = tmp_path / "child_opengl.json"
+    good = {"api": "opengl", "module_loaded": True, "rounds": ["translucent"], "translucent": {"pass": True}}
+    path.write_text(json.dumps(good), encoding="utf-8")     # a prior run's success must be removed before launch
+
+    def run(command, **kwargs):
+        assert not path.exists(), "stale child success survived into a new run"
+        path.write_text(json.dumps(good), encoding="utf-8")  # even current JSON cannot excuse a failed process
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+        return subprocess.CompletedProcess(command, 9, "", "native crash")
+
+    monkeypatch.setattr(tool.subprocess, "run", run)
+    tool.main(["--apis", "opengl", "--rounds", "translucent", "--display", "secondary", "--visible-seconds", "1"])
+    summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    assert not summary["pass"]
+    assert "child process failed" in " ".join(summary["verdicts"]["opengl"]["failed"])
+
+
 def test_the_lifecycle_judges_the_core_against_qt_alone_on_the_same_api():
     def series(handles, users, trough, span):
         return {"handle_slope_per_cycle": handles, "user_object_slope_per_cycle": users,

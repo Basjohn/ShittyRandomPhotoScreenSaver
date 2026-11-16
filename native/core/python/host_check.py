@@ -185,6 +185,9 @@ def round_translucent(core, engine, app, api: str, args, *, with_composite: bool
     window.setScreen(screen)
     window.setFlag(Qt.WindowType.FramelessWindowHint, True)
     window.setFlag(Qt.WindowType.Tool, True)
+    fmt = window.requestedFormat()
+    fmt.setAlphaBufferSize(8)
+    window.setFormat(fmt)
     window.setColor(QColor("transparent"))
     window.setTitle("SRPSS native translucent rehearsal")
     geometry = screen.availableGeometry()
@@ -204,8 +207,8 @@ def round_translucent(core, engine, app, api: str, args, *, with_composite: bool
     host = None
     composite = None
     record = {"display": screen.name(), "seconds": args.visible_seconds, "backdrop": args.backdrop,
-              "operator_review_required": ["desktop see-through", "resize", "DPI change", "sleep/wake"],
-              "samples": []}
+              "lead_review_required": ["desktop see-through", "resize appearance"],
+              "unexercised": ["DPI change", "sleep/wake"], "resizes": [], "samples": []}
     checks = {}
     try:
         host = core.attach_host(window)       # before creating the native handle or showing the window (D6)
@@ -215,8 +218,10 @@ def round_translucent(core, engine, app, api: str, args, *, with_composite: bool
                           pattern="white", opacity=0.5, visible=True)
         record["native_backdrop"] = _translucent_backdrop(window, args.backdrop)
         window.show()
-        deadline = time.monotonic() + args.visible_seconds
+        started = time.monotonic()
+        deadline = started + args.visible_seconds
         confined = True
+        resize_step = 0
         while time.monotonic() < deadline:
             # Re-check after every event batch; a topology change or drag cannot move this rehearsal onto primary.
             if (window.screen() is not screen or screen is app.primaryScreen()
@@ -224,6 +229,12 @@ def round_translucent(core, engine, app, api: str, args, *, with_composite: bool
                 confined = False
                 window.hide()
                 break
+            if resize_step < 2 and time.monotonic() - started >= args.visible_seconds * (resize_step + 1) / 3:
+                target_width, target_height = ((width * 3 // 4, height * 3 // 4) if resize_step == 0 else (width, height))
+                window.resize(target_width, target_height)
+                record["resizes"].append({"size": [target_width, target_height],
+                                          "edges_before": _driver(host.state()).get("edges", 0)})
+                resize_step += 1
             record["samples"].append({"size": [window.width(), window.height()], "dpr": window.devicePixelRatio(),
                                       "exposed": window.isExposed(), "driver": _driver(host.state())})
             _pump(app, min(0.1, max(0.0, deadline - time.monotonic())))
@@ -236,6 +247,13 @@ def round_translucent(core, engine, app, api: str, args, *, with_composite: bool
         checks["render_thread_without_python"] = (driver.get("edges_on_gui_thread") == 0
                                                     and driver.get("edges_with_python_thread_state") == 0)
         checks["transparent_window_requested"] = window.color().alpha() == 0
+        checks["alpha_buffer_requested"] = window.requestedFormat().alphaBufferSize() > 0
+        checks["two_in_screen_resizes_presented"] = (len(record["resizes"]) == 2
+            and record["resizes"][1]["edges_before"] > record["resizes"][0]["edges_before"]
+            and driver.get("edges", 0) > record["resizes"][1]["edges_before"])
+        checks["no_driver_error"] = not driver.get("error")
+        record["format"] = {"requested_alpha": window.requestedFormat().alphaBufferSize(),
+                            "actual_alpha": window.format().alphaBufferSize()}
         if api == "vulkan":
             checks["module_owns_device"] = state.get("device_alive") is True and bool(
                 state.get("device", {}).get("vk_device"))
@@ -968,6 +986,8 @@ def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool,
     """What failed on one API. A child that stopped before the module loaded (or, on Vulkan, before the instance
     existed) reports that one reason alone: nothing after it ran, so no round, validation or teardown is judged."""
     error = (record.get("error") or "").strip()
+    if record.get("exit_code", 0) != 0:
+        return False, [f"{api}: child process failed ({record['exit_code']}); no successful proof"]
     if not record.get("module_loaded"):
         return False, [f"{api}: {error.splitlines()[0] if error else 'the module did not load'}"]
     if api == "vulkan" and not record.get("instance_created"):
@@ -1040,6 +1060,7 @@ def main(argv: list[str] | None = None) -> int:
     results: dict = {}
     for api in args.apis:
         child_json = out / f"child_{api}.json"
+        child_json.unlink(missing_ok=True)   # never accept an earlier run's record after crash/timeout
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
                    "--cycles", str(args.cycles), "--rounds", *args.rounds]

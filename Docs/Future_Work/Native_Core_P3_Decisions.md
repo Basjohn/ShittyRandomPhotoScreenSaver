@@ -324,10 +324,15 @@ so the product never rebuilds a device except on device loss or window replaceme
 **Current proof owner:** `native/core/python/host_check.py` and `composite_check.py` replace the P1 build path.
 Both accept `--require-validation` and `--layer-path`; required validation aborts before any round if its layer did
 not load. Their default rounds stay invisible. The explicit `--rounds translucent --display <exact Qt screen name>
---visible-seconds <1..60> --backdrop none|system|glass` round refuses a missing or primary display and is bounded by
+--visible-seconds <seconds> --backdrop none|system|glass` round (0 < seconds <= 60) refuses a missing or primary display and is bounded by
 the child watchdog. It uses the module's own device, with a half-opacity native surface in `composite_check`.
-No Vulkan `grabWindow` is used (defect D is avoided). The record marks desktop see-through, resize, DPI change and
-sleep/wake as operator review; harness PASS does not prove composed desktop alpha. The P1 source remains evidence.
+No Vulkan `grabWindow` is used (defect D is avoided). The round requests an alpha buffer, resizes down and restores
+within the named screen, and requires frames across both changes. The lead reviews desktop see-through and resize
+appearance; harness PASS does not prove composed desktop alpha. DPI and sleep/wake are explicitly unexercised:
+the lead's separate 60-second named-display rounds change that display's scale, then sleep and wake it, retaining
+the sampled size/DPR/exposure/frame records and inspecting recovery before closing those plan steps.
+A timeout or failed child can never pass from a JSON record; stale records are removed before launch.
+The P1 source remains evidence.
 
 ## D7. The card-material backdrop on the native core (decided 12 Nov 2026)
 
