@@ -617,18 +617,16 @@ the feature (D3D11 is not stated).
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
   Native route is merged dormant; Bubble is not offered on Vulkan until parity passes. The latest owner rule (a)
-  remains a FAIL at eight levels on edge pixels; evidence is in `native_core/n5_1_bubble/20261115_rule_a_variant_a/`.
-  Follow the Native Port Playbook and resolve the residual before registration or acceptance. The earlier ABI 20
-  proof is historical; use the current validated native module for remaining work.
-  - [ ] Classify the 8-level residual before asking for a bound. Read the worst frames (`bubble_input244_*` in that
-    folder): suspects, in order, (1) the light attachment's float16 sums against Python's (additive halos overlapping),
-    (2) the hero mask's erase blend: the content state reports the mask's attachments as `replace` with a
-    `blend_state` beside them (`.artifacts/evidence/native_core/n5_1_bubble/20261115_diagnostics/diag_route.py` prints
-    the program), check the core applies the per-attachment `BlendState`, (3) sprite edges at dpr 1 (quads judged
-    against the Python quads, so no point/quad term should remain). One variable at a time:
+  remains a FAIL at eight levels in a local cluster outside the existing edge allowance; official ABI25 replay
+  reproduces it at DPR1.5. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
+  eliminated suspicions and evidence. Follow the Native Port Playbook; no registration or tolerance widening yet.
+  - [ ] Localize the residual one component at a time: first suppress only final light composition on both paths
+    with unchanged logical/point/occluder data, then compare actual attachments if implicated. The custom mask blend
+    is wired and both paths already draw quads; neither the serialized `replace` label nor old point/quad figures
+    explains this failure. Preserve D12's current bounds and the full replay sequence:
     `python tools/visualizer_replay/owner_render_parity.py --out .artifacts/evidence/native_core/n5_1_bubble/<date>_<label>
-    --native --mode bubble --runs bubble --placements display` (needs Bubble registered: the next box's two lines, kept
-    uncommitted while diagnosing). If a class remains that is not a defect, report its figures to the lead for a bound
+    --native --mode bubble --runs bubble --placements display` (use the investigation's process-local dormant
+    registration wrapper while diagnosing). If a class remains that is not a defect, report its figures to the lead for a bound
     (D12 "The pixel tolerance": a new class or wider bound is the lead's decision), never widen it yourself.
   - [ ] Register: add `"bubble": _bubble_settings` to `GENERIC_MODE_SETTINGS` (drop `BUBBLE_SETTINGS`' comment) and
     `renderer_backends=("opengl", "vulkan")` to Bubble's descriptor in `core/settings/visualizer_mode_registry.py`;
