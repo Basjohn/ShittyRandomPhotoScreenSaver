@@ -2177,7 +2177,12 @@ Python face is `rendering/native/mode.py` (`TransparencyTarget`, `TransparencyRe
     This implicates the external-command boundaries, not timestamp retrieval alone; it does not identify a driver
     defect or admit a production flush. Qt 6.12's [OpenGL implementation](https://github.com/qt/qtbase/blob/v6.12.0/src/gui/rhi/qrhigles2.cpp)
     executes queued commands in `beginExternal` and resets cached state and pass tracking in `endExternal`.
-    Next: isolate each boundary with executed-boundary counters, preserve pixels, then compare the affected state.
+    ABI23 individual-site proof (`20261116_n34_individual_sites_abi23`) preserves exact pixels and measures 239
+    executed flushes for each isolated site, 0 queries. Only the gather→sprites boundary removes the excess:
+    1x off-before/off-after 2.2241/2.5262 ms versus −0.0492 ms between draws; 4x 1.2032/1.1878 versus 0.0072 ms.
+    Before-gather and after-sprites remain slow. GPU 18%/450 MHz before, 6%/2775 MHz after, displays on.
+    Next separate the ExternalContent declaration and resource tracking from command execution/state reset,
+    using harness-only flag controls and a no-compute proof scene. No production flush or tracking exception admitted.
   - The render thread's record (`stage_record_ns`, the whole record of a program with stages): on OpenGL 19 to 20 us
     for EB's shape at every size and count (6.7 to 9.5 us with no stage), 33 us mean over the steady minute at 4x; on
     Vulkan 1.1 to 1.4 ms, which is the validation layer's own CPU work (22 us with no stage under the same layer); the

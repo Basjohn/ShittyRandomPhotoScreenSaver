@@ -12,8 +12,9 @@ force-push or rewrite main.
 ## 16 Nov continuation journal (keep short; Current_Plan.md owns active work)
 
 The operator's current route is P1 spike → N3.1c L3 → N3.2 Audit 4 L6 → N3.4 stream_ring → 1D.13 near-light;
-independent agents may overlap. ABI **22** is installed on main from GitHub run `43857531372`, native commit
-`59901a5b1`; source ABI 24's audited boundary controls and ownership/gate/readback repairs await combined runtime proof. Section 2 below is the original
+independent agents may overlap. ABI **24** is installed on main from GitHub run `43869027463`, native commit
+`6d8a0e54e`; ownership/gate/readback repairs have runtime proof, accounting closeout awaits the canonical rebind
+report publication fix and defocus diagnosis continues. Section 2 below is the original
 15 Nov snapshot, not current ABI or agent status.
 
 - [x] P1 build retirement + fail-closed core harness migration; 219 focused tests, OpenGL/Vulkan checks, High audit.
@@ -46,7 +47,10 @@ activity is explicitly authorised for the diagnosis; section 3's original quiet-
 - [x] L2 scissor and separate missing-flag controls PASS OpenGL/Vulkan at actual 1x/4x; exact restoration, stable
   allocation, independent High review. Evidence currently in n34-abi22-check (preserve on retirement).
 - [x] N3.4 full High source audit found five defects; audited fixes and fault proofs merged. Old ABI 22 reproduces
-  readback truncation/invalid mip content; fixed ABI 24 native acceptance remains open, not waived.
+  readback/gate failures; ABI24 completeness/metadata/gate/parity/rest/retire PASS GL/Vulkan, 136 focused PASS.
+- [x] Original partial-stage fault reproduced −3 textures/−1 chain; repaired allocation/fault/release checks pass
+  all 27 cases per backend. Remaining no-churn proof caught stale rebind report (0→0 with no wrapper creation);
+  edge-publication repair reviewed/merged, rebuilt runtime proof owed. No assertion weakened.
 
 ## 1. Read these first, in this order
 

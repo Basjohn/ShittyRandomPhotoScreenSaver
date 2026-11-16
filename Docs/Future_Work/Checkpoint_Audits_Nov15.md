@@ -851,29 +851,6 @@ Proof: read from the code. All of them are unreachable on this machine's devices
   - A device without `DrawIndirect`, `DrawIndirectMulti` or `ShaderDrawParameters`.
 - **Real windows:** hidden hosts only, and no Display 1 rehearsal.
 
-## Checkpoint audit 6 — N3.4 shared post stages (16 Nov 2026)
-
-Terra 6.1 High reviewed the original `a553335bb..39e661d80` native/core, rendering/native and post-stage
-proof boundary, then the diagnostic follow-ups through `48dbb35bb`. Core repairs received independent High
-review. Source review is complete; runtime acceptance remains in Current_Plan.md and is not implied here.
-
-| Finding | Cause and repair | Proof status |
-|---|---|---|
-| Partial stage ownership accounting | Texture counts were admitted only after an entire chain succeeded; partial failure released uncounted wrappers. Count at ownership, update bytes at each create edge, release exactly once. Include actual sampler/SRB/pipeline wrappers and actual partial held objects. | Audited native fault seams and 27-case cold/resize/rebind/partial-release harness merged; ABI24 execution pending. |
-| Requested samples used for transparency gate | Requested 4x may resolve to 1x; gate now uses SceneTargets' canonical clamp and its capability-control generation. | Same-item 4→1→4 proof and GPU-free allocated/requested count falsifier; ABI24 execution pending. |
-| Incomplete readback enumeration | Fixed 92 callbacks silently truncated legal larger mip/attachment declarations. Allocate stable vector storage for the complete enumeration before callbacks are installed. | Old ABI22 rejects 176-entry completeness proof on GL/Vulkan; fixed ABI24 execution pending. |
-| Invalid nonzero-mip content metadata | Base-level content size was returned against smaller allocations. Project nominal content outward through normalized coordinates, preserving bottom anchoring and bounds. This does not promise filtered fringe texels are clear. | Old ABI22 rejects bounded and odd-extent metadata proof on GL/Vulkan; ABI24 execution pending. |
-| Nonfinite FP16 comparison falsely passed | NaN/Inf integer conversion could become a negative sentinel below positive error limits. Reject nonfinite inputs/deltas before conversion; bound finite integer conversion. | Eleven focused falsifiers PASS; all 593 retained ABI22 arrays finite, rules (a)/(b) and analytic checks still PASS with corrected judge. |
-
-The outside-pass Vulkan external-command concern was withdrawn after checking the pinned Qt 6.12.0
-`qrhivulkan.cpp` beginExternal/endExternal implementations: both explicitly handle NoPass. No synchronization
-change was made; this private-QRhi assumption must be rechecked on Qt upgrades. Validation alone was not its proof.
-
-Defocus performance acceptance remains open. ABI22 bracketed off/boundary-only/query/off evidence preserves
-exact pixels while external boundaries alone remove the excess; timestamp retrieval alone is not the cause.
-Individual-site isolation follows in D17. No production flush workaround has been admitted. No real-display,
-other-vendor or quiet-GPU performance acceptance is claimed by this source audit.
-
 ## Checkpoint audit 5 (N3.3, High)
 
 Branch `worktree-agent-a2e216858330ebb7e` at ae2bf6b0b against `main` (compute passes, C++ at ABI 19, D16), High
@@ -1161,3 +1138,32 @@ wrong barrier.**
   - M3's draw-side form (a storage buffer read two ways in one render pass): read from the code.
   - L2 and L3 were not provoked.
 - **Real windows:** hidden hosts only, and no Display 1 rehearsal.
+
+## Checkpoint audit 6 — N3.4 shared post stages (16 Nov 2026)
+
+Terra 6.1 High reviewed the original `a553335bb..39e661d80` native/core, rendering/native and post-stage
+proof boundary, then the diagnostic follow-ups through `48dbb35bb`. Core repairs received independent High
+review. Source review is complete; runtime acceptance remains in Current_Plan.md and is not implied here.
+
+| Finding | Cause and repair | Proof status |
+|---|---|---|
+| Partial stage ownership accounting | Texture counts were admitted only after an entire chain succeeded; partial failure released uncounted wrappers. Count at ownership, update bytes at each create edge, release exactly once. Include actual sampler/SRB/pipeline wrappers and actual partial held objects. | Exact original fault produces −3 textures/−1 chain; ABI24 ownership/fault/recovery/partial-release predicates pass 27 cases/API. No-churn proof caught stale rebind publication; its edge fix awaits rebuilt runtime proof. |
+| Requested samples used for transparency gate | Requested 4x may resolve to 1x; gate now uses SceneTargets' canonical clamp and its capability-control generation. | Same-item effective 4→1→4 fails only the clamped phase on old ABI22; ABI24 GL/Vulkan PASS. |
+| Incomplete readback enumeration | Fixed 92 callbacks silently truncated legal larger mip/attachment declarations. Allocate one stable owned array for the complete enumeration before callbacks. A vector attempt was rejected by the existing DLL-import gate; the corrected build passes. | Old ABI22 rejects 176-entry completeness; ABI24 GL/Vulkan complete all entries and subsequent bounded reads, with retirement. |
+| Invalid nonzero-mip content metadata | Base-level content size was returned against smaller allocations. Project nominal content outward through normalized coordinates, preserving bottom anchoring and bounds. This does not promise filtered fringe texels are clear. | Old ABI22 rejects bounded and odd-extent metadata; ABI24 GL/Vulkan PASS. |
+| Nonfinite FP16 comparison falsely passed | NaN/Inf integer conversion could become a negative sentinel below positive error limits. Reject nonfinite inputs/deltas before conversion; bound finite integer conversion. | Eleven focused falsifiers PASS; all 593 retained ABI22 arrays finite, rules (a)/(b) and analytic checks still PASS with corrected judge. |
+
+The outside-pass Vulkan external-command concern was withdrawn after checking the pinned Qt 6.12.0
+`qrhivulkan.cpp` beginExternal/endExternal implementations: both explicitly handle NoPass. No synchronization
+change was made; this private-QRhi assumption must be rechecked on Qt upgrades. Validation alone was not its proof.
+
+Defocus performance acceptance remains open. ABI22 bracketed off/boundary-only/query/off evidence preserves
+exact pixels while external boundaries alone remove the excess; timestamp retrieval alone is not the cause.
+Individual-site isolation follows in D17. No production flush workaround has been admitted. No real-display,
+other-vendor or quiet-GPU performance acceptance is claimed by this source audit.
+
+Runtime evidence: `n3_4/20261116_n34_audit6_abi24_final` (gate/parity/rest/retire; rules (a)/(b), analytic PASS),
+`n3_1/20261116_n34_readback_abi24`, `n3_4/20261116_n34_accounting_edges_abi24` (the exact remaining report
+failure), and `n3_4/20261116_partial_accounting_original_regression` (unchanged before/after native fault probe).
+136 focused tests pass with the ABI24 module. Required Vulkan validation has no unexplained errors/warnings;
+recorded Qt defect A is explicitly excused. Native checkpoint `6d8a0e54e`, GitHub run `43869027463`.

@@ -47,15 +47,16 @@ under the operator's 16 Nov request for another Sol 6.1 High native-core agent. 
 an independent verified slice may land while an earlier native build is running.
 For this session, compact completed checkbox text inline and retain every checkbox for later review.
 
-**Now:** the five requested source/proof slices are complete and audited; ABI 22 is installed on main. P1 desktop
+**Now:** the five requested source/proof slices are complete and audited; ABI 24 is installed on main. P1 desktop
 validation remains at N0.6. The repaired `stream_ring` harness passes on OpenGL/Vulkan with exact record coverage;
 quiet-GPU performance admission remains a separate N3.4 box. Near-light's fixture-only repair passes offscreen.
 The interim week's remaining route is in `handoff.md` section 3; heavy ports and the flip remain held there.
 Operator continuation (16 Nov): implement N3.1c L2 with Sol High and independent Terra High audit; lead runs
 N3.4 `defocus_draws` concurrently under available ambient GPU activity, as explicitly authorised. Record conditions
 and compare within-run variants; do not hold diagnosis for the former quiet-GPU precondition.
-ABI 22 post-stage parity/rest/retire and L2 scissor/negative controls pass both backends. Source ABI 24 includes
-audited individual-boundary controls and five audit repairs; combined native build/runtime acceptance is next.
+L2 scissor/negative controls pass both backends. ABI 24's readback completeness/metadata, sample clamp gate,
+post-stage parity/rest/retire and 136 focused tests pass. Full accounting closeout awaits the rebind report fix;
+ownership/fault/release checks already pass all 27 cases per backend. Defocus flag/tracker isolation follows.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim week's order is `handoff.md` section 3.
@@ -564,16 +565,16 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     (about 6,800 lines: `post_stages.*`, `mode_content.*`, `scene_targets.*`, `module.cpp`, the shaders, the harness).
     Findings go to `Docs/Future_Work/Checkpoint_Audits_Nov15.md` as "Checkpoint audit 6"; fixes are the plan's boxes.
     Codex audit role: Terra 6.1 High per Handbook section 1. Findings under focused repair, before acceptance:
-    - [ ] Reconcile partial bloom/defocus ownership accounting at each successful or failed allocation edge;
-      fault-inject first/intermediate allocation and resize failures, release to baseline, then allocate/release again.
-    - [ ] Gate transparency sample shading on the canonical resolved sample count, not the requested count;
-      prove requested multisample clamped to 1x stays eligible without sample shading, while actual multisample falls back.
-    - [ ] Make target readback metadata level-relative for nonzero mips, with the defined odd-size/bottom-anchor policy;
-      prove unaligned content lies inside each returned allocation.
-    - [ ] Complete every declared mip/attachment readback with stable callback storage; remove the arbitrary
-      92-entry truncation. Prove 176 accepted entries plus subsequent bounded/odd-extent reads on both backends.
-    - [ ] Reject nonfinite FP16 parity inputs/deltas before integer conversion; finite equality and NaN/+Inf/-Inf
-      negatives on both candidate/reference. Recheck retained native parity arrays after this correction.
+    - [x] Partial bloom/defocus accounting follows every ownership/create edge; ABI24 first/intermediate cold/resize
+      failures, exact release and fresh recovery pass both backends. Exact old fault reproduced −3 textures/−1 chain.
+    - [x] Transparency gate uses canonical resolved samples and capability generation; old ABI22 fails clamped phase,
+      ABI24 same-item actual 4→1→4 passes both backends with missing sample shading throughout.
+    - [x] Mip readback metadata uses normalized outward projection/bottom anchoring; unaligned and odd-extent
+      content stays in bounds. Old ABI22 fails; ABI24 GL/Vulkan PASS.
+    - [x] Stable owned array completes every declared mip/attachment readback; 176 entries plus subsequent bounded
+      reads PASS on ABI24 GL/Vulkan. First vector build was rejected by the DLL import gate; owned-array rebuild PASS.
+    - [x] FP16 judge rejects NaN/±Inf inputs/deltas before conversion; 11 focused cases and all 593 retained ABI22
+      arrays rejudged finite/PASS. ABI24 fresh rules (a)/(b), analytic, rest/retire PASS (both backends).
     - [x] Outside-pass external-command question resolved against pinned Qt 6.12 Vulkan beginExternal/endExternal:
       explicit NoPass support; no synchronization change needed. Recheck at Qt upgrades (private QRhi boundary).
     - [ ] Prove sampler/SRB/pipeline accounting and actual partial skipped-release counts through cold/rebind faults;
