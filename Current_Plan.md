@@ -600,10 +600,11 @@ the feature (D3D11 is not stated).
   remains a FAIL at eight levels in a local cluster outside the existing edge allowance; official ABI25 replay
   reproduces it at DPR1.5. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
   eliminated suspicions and evidence. Follow the Native Port Playbook; no registration or tolerance widening yet.
-  - [ ] Localize the residual one component at a time: first suppress only final light composition on both paths
-    with unchanged logical/point/occluder data, then compare actual attachments if implicated. The custom mask blend
-    is wired and both paths already draw quads; neither the serialized `replace` label nor old point/quad figures
-    explains this failure. Preserve D12's current bounds and the full replay sequence:
+  - [ ] Repair the proved class-word upload defect: Qt6.12 OpenGL uploads only the first unsigned uniform-array
+    element; actual GPU readback loses later words while Vulkan passes. Use one canonical `uvec4` for the four
+    class words, preserving the record schema; refuse unsupported unsigned/bool uniform arrays at shared admission.
+    Prove real position/class mutations and restoration on both APIs, then rerun the full owner sequence with
+    unchanged D12 bounds. The investigation retains the failed light control and its corrected diagnostic guards:
     `python tools/visualizer_replay/owner_render_parity.py --out .artifacts/evidence/native_core/n5_1_bubble/<date>_<label>
     --native --mode bubble --runs bubble --placements display` (use the investigation's process-local dormant
     registration wrapper while diagnosing). If a class remains that is not a defect, report its figures to the lead for a bound
