@@ -399,7 +399,7 @@ void PostStages::markDefocus(QRhiCommandBuffer *cb, int mark)
     // mark 0: before the gather (the slots read back first, a free one taken); 1: between; 2: after the sprites.
     if (!m_rhi || m_rhi->backend() != QRhi::OpenGLES2)
         return;
-    const int control = g_timeDefocusDraws.loadAcquire();
+    const int control = m_defocusDrawControl;
     if (!control)
         return;
     if (!(control & 1)) { // same boundaries as the query mode, no queries or result retrieval
@@ -554,7 +554,8 @@ bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<Def
         release();                            // another QRhi: every object again (a node made again)
     m_rhi = rhi;
     // beginExternal requires this declaration. Cached at sync; the dormant product path keeps normal pass flags.
-    m_defocusPassFlags = rhi->backend() == QRhi::OpenGLES2 && g_timeDefocusDraws.loadAcquire()
+    m_defocusDrawControl = g_timeDefocusDraws.loadAcquire();
+    m_defocusPassFlags = rhi->backend() == QRhi::OpenGLES2 && m_defocusDrawControl
         ? QRhiCommandBuffer::BeginPassFlags(QRhiCommandBuffer::ExternalContent) : QRhiCommandBuffer::BeginPassFlags();
     if (!skipStageRelease())
         releaseLeftBehind(rhi);
@@ -1034,6 +1035,7 @@ void PostStages::release()
     m_defocusCount = 0;
     m_rhi = nullptr;
     m_defocusPassFlags = {};
+    m_defocusDrawControl = 0;
     ++m_objectGeneration;
 }
 

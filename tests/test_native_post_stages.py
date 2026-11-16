@@ -345,6 +345,10 @@ def test_the_defocus_draw_timer_is_opengl_only_and_off_by_default() -> None:
     stages = (CORE / "src" / "post_stages.cpp").read_text(encoding="utf-8")
     mark = stages[stages.index("void PostStages::markDefocus("):stages.index("void PostStages::releaseDrawTimer(")]
     assert "if (!m_rhi || m_rhi->backend() != QRhi::OpenGLES2)\n        return;" in mark
+    assert "const int control = m_defocusDrawControl;" in mark and "loadAcquire" not in mark
+    sync = stages[stages.index("bool PostStages::sync("):stages.index("bool PostStages::build(")]
+    assert sync.index("m_defocusDrawControl = g_timeDefocusDraws.loadAcquire();") < sync.index("m_defocusPassFlags =")
+    assert "rhi->backend() == QRhi::OpenGLES2 && m_defocusDrawControl" in sync
     assert mark.index("if (!control)") < mark.index("if (!(control & 1))") < mark.index("std::make_unique<DrawTimer>()")
     boundary = mark[mark.index("if (!(control & 1))"):mark.index("if (!m_drawTimer)")]
     assert boundary.index("cb->beginExternal();") < boundary.index("cb->endExternal();") < boundary.index("return;")

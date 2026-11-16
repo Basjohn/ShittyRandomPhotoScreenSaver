@@ -271,6 +271,7 @@ private:
 
     QRhi *m_rhi = nullptr;
     QRhiCommandBuffer::BeginPassFlags m_defocusPassFlags;
+    int m_defocusDrawControl = 0; // one sync snapshot governs both pass declaration and every mark
     std::unique_ptr<Bloom> m_blooms[kMaxBloomStages];
     int m_bloomCount = 0;
     std::unique_ptr<Defocus> m_defocus[kMaxDefocusStages];

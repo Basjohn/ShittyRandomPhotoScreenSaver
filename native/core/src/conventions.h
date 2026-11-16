@@ -26,7 +26,7 @@ constexpr int kConventionsBinding = 17;
 QMatrix4x4 targetCorrection(QRhi *rhi);
 
 // QRhi uses the framebuffer's bottom-left for both rectangles. Every draw sets both, after binding a pipeline with
-// UsesScissor. The separate viewport exists only for the harness's deliberately enlarged-viewport control.
+// UsesScissor. Defocus keeps its allocation viewport with a content scissor; the harness can also enlarge a content viewport.
 void setViewportAndScissor(QRhiCommandBuffer *cb, const QRect &viewport, const QRect &scissor, bool enabled = true);
 inline void setViewportAndScissor(QRhiCommandBuffer *cb, const QRect &rect)
 {
