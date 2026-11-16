@@ -61,6 +61,29 @@ python tools/github_remote_build.py run --target standard --target media_center
 
 Ctrl+C cancels the runs on GitHub. Installers are compiled from the Build Runner tab.
 
+### Recovering a dispatch whose run appeared late
+
+A successful dispatch can remain invisible beyond the client's discovery deadline. The pending message and
+`logs/build_runner_<target>_<token>.log` retain the exact commit and token; an invisible run is not evidence that
+dispatch failed. **Recover that identity before any retry; do not dispatch a duplicate.**
+
+```
+python tools/github_remote_build.py recover --target native_module --commit <full-original-sha> --token <original-token>
+```
+
+Recovery performs one bounded lookup and never dispatches. If still invisible, it reports **visibility pending**,
+returns nonzero and prints the same recovery command for a later attempt. `--run-id <id>` may name a known run;
+both discovery routes verify the exact workflow path, dispatch event, full head SHA and canonical target/source/token
+title before following it. Ambiguous matches or identity mismatches are refused. The original dispatch log is
+preserved and recovery attempts append to it.
+
+Once identified, recovery uses the existing terminal monitor, artifact download, manifest validation and publication
+owner. The requested full commit and token still bind artifact acceptance; neither today's branch tip nor a new token
+is substituted. The commit must exist locally so its version, Qt pin and shader list can be read. Recovery can
+publish that explicitly requested earlier commit even when local HEAD has moved; it does not assert that the installed
+module matches today's source. Ctrl+C uses the existing cancellation behavior for the verified run. Installer work
+still belongs to Build Runner.
+
 ## What gets checked before anything is replaced
 
 - **The commit.** The SHA is fixed at pre-flight and re-checked at START: if `origin/<branch>` moved meanwhile, nothing

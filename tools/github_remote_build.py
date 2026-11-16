@@ -29,6 +29,7 @@ says it loaded frozen.
 Nothing here compiles anything locally. Docs/Guides/GitHub_Remote_Build.md is the operator guide.
 
     python tools/github_remote_build.py run --target standard --target media_center
+    python tools/github_remote_build.py recover --target native_module --commit FULL_SHA --token RUN_TOKEN
     python tools/github_remote_build.py manifest ...   (the workflow's own step)
 """
 from __future__ import annotations
@@ -752,6 +753,31 @@ class GitHubCli:
                     step = str(candidate.get("name", ""))
         return RunState(str(data.get("status", "")), str(data.get("conclusion") or ""), str(data.get("url", "")), step)
 
+    def recover_run(self, key: str, sha: str, token: str, run_id: int | None = None) -> tuple[int, str] | None:
+        """One bounded discovery, then verify the existing run's identity. Never dispatch or infer from recency."""
+        target = ALL_TARGETS[key]
+        title = (f"SRPSS native {target.source} ({key}-{token})" if target.module
+                 else f"SRPSS {key} ({key}-{token})")
+        if run_id is None:
+            listed = json.loads(self._call("run", "list", "--workflow", target.workflow, "--event",
+                                          "workflow_dispatch", "--commit", sha, "--limit", "100",
+                                          "--json", "databaseId,displayTitle") or "[]")
+            matches = [entry for entry in listed if entry.get("displayTitle") == title]
+            if not matches:
+                return None
+            if len(matches) != 1:
+                raise RemoteBuildError("Recovery identity is ambiguous: multiple runs have the exact target/token")
+            run_id = int(matches[0]["databaseId"])
+        if run_id <= 0:
+            raise RemoteBuildError("Recovery run id must be positive")
+        data = json.loads(self._call("api", f"repos/{{owner}}/{{repo}}/actions/runs/{run_id}") or "{}")
+        expected = {"id": run_id, "path": f".github/workflows/{target.workflow}", "event": "workflow_dispatch",
+                    "head_sha": sha, "display_title": title}
+        mismatched = [field for field, value in expected.items() if data.get(field) != value]
+        if mismatched:
+            raise RemoteBuildError(f"Recovery run {run_id} identity mismatch: {', '.join(mismatched)}")
+        return run_id, str(data.get("html_url", ""))
+
     def cancel(self, run_id: int) -> bool:
         try:
             return self._cancel_runner(["gh", "run", "cancel", str(run_id)], 60.0).returncode == 0
@@ -789,10 +815,11 @@ class RemoteResult:
 
 
 class _RunLog:
-    def __init__(self, path: Path, header: str) -> None:
+    def __init__(self, path: Path, header: str, *, append: bool = False) -> None:
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(header, encoding="utf-8")
+        with path.open("a" if append else "w", encoding="utf-8") as handle:
+            handle.write(header)
 
     def write(self, line: str) -> None:
         with self.path.open("a", encoding="utf-8") as handle:
@@ -818,23 +845,33 @@ def run_remote_builds(
     appear_seconds: float = RUN_APPEAR_SECONDS,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
+    recover: bool = False,
+    recovery_run_id: int | None = None,
 ) -> dict[str, RemoteResult]:
     """Dispatch every selected product at once, follow the runs, then retrieve, validate and publish each success.
 
     ``between`` runs local work (the Reddit Helper) while GitHub builds. ``cancelled`` is polled throughout; once it
     is set, every run still active on GitHub is cancelled there, not merely abandoned.
+    ``recover`` follows one explicitly identified earlier build without dispatch or branch-tip preflight; discovery
+    is a single bounded lookup. Its terminal monitor, retrieval, validation and publication are the normal owner's.
     """
 
     if not RUN_TOKEN.match(token):
         raise RemoteBuildError(f"token must be yyyyMMdd_HHmmss_ffffff, got {token!r}")
+    if recover and (len(keys) != 1 or not _SHA.fullmatch(commit.sha)):
+        raise RemoteBuildError("Recovery requires one target and its full 40-character commit SHA")
+    if recovery_run_id is not None and not recover:
+        raise RemoteBuildError("An existing run id is only accepted in recovery mode")
     results: dict[str, RemoteResult] = {}
     logs: dict[str, _RunLog] = {}
     for key in keys:
         target = ALL_TARGETS[key]
         logs[key] = _RunLog(
             log_dir / f"build_runner_{key}_{token}.log",
-            f"SRPSS Build Runner · GitHub Remote\nProduct: {key}\nCommit: {commit.describe()}\nRun token: {token}\n"
+            f"\nSRPSS Build Runner · GitHub Remote{' recovery (no dispatch)' if recover else ''}\nProduct: {key}\n"
+            f"Commit: {commit.sha if recover else commit.describe()}\nRun token: {token}\n"
             f"Workflow: .github/workflows/{target.workflow} (artifact {target.artifact})\n{'=' * 72}\n",
+            append=recover,
         )
 
     def workflow(key: str) -> str:
@@ -858,17 +895,19 @@ def run_remote_builds(
                                     aborted=aborted, evidence_path=evidence, run_url=url)
         emit("done", key, results[key])
 
-    try:
-        current = resolve_pushed_commit(repo_root, commit.branch)
-    except RemoteBuildError as exc:
-        for key in keys:
-            finish(key, 1, f"Could not re-check origin/{commit.branch}: {exc}")
-        return results
-    if current.sha != commit.sha:
-        for key in keys:
-            finish(key, 1, f"origin/{commit.branch} moved since pre-flight ({commit.short} -> {current.short}); "
-                           "re-run pre-flight to build the new commit")
-        return results
+    current = commit
+    if not recover:
+        try:
+            current = resolve_pushed_commit(repo_root, commit.branch)
+        except RemoteBuildError as exc:
+            for key in keys:
+                finish(key, 1, f"Could not re-check origin/{commit.branch}: {exc}")
+            return results
+        if current.sha != commit.sha:
+            for key in keys:
+                finish(key, 1, f"origin/{commit.branch} moved since pre-flight ({commit.short} -> {current.short}); "
+                               "re-run pre-flight to build the new commit")
+            return results
     try:
         version = version_at_commit(repo_root, commit.sha)
     except RemoteBuildError as exc:
@@ -881,7 +920,23 @@ def run_remote_builds(
     dispatched_at = datetime.now(timezone.utc) - timedelta(seconds=30)
     for key in keys:
         if cancelled():
-            finish(key, 130, "Aborted by operator before dispatch", aborted=True)
+            finish(key, 130, "Aborted by operator before recovery" if recover else "Aborted by operator before dispatch",
+                   aborted=True)
+            continue
+        if recover:
+            emit("status", key, "Recovering existing run (no dispatch)")
+            try:
+                found = cli.recover_run(key, commit.sha, token, recovery_run_id)
+            except (RemoteBuildError, RemoteCancelled) as exc:
+                finish(key, 1, f"Recovery refused: {exc}", aborted=isinstance(exc, RemoteCancelled))
+                continue
+            if found is None:
+                finish(key, 1, _pending_visibility(key, commit.sha, token))
+                continue
+            runs[key] = found
+            pending.append(key)
+            logs[key].write(f"Recovered verified GitHub run {found[0]}: {found[1]}")
+            emit("link", key, found[1])
             continue
         if ALL_TARGETS[key].module and not current.matches_local_head:
             # A module is built for the work it is tested with: never the pushed tip in place of a local commit.
@@ -938,7 +993,7 @@ def run_remote_builds(
                    aborted=True)
         else:
             pending.remove(key)
-            finish(key, 1, "The dispatched run did not appear on GitHub; check the Actions tab")
+            finish(key, 1, _pending_visibility(key, commit.sha, token))
 
     if between is not None and pending and not cancelled():
         between()
@@ -976,6 +1031,12 @@ def run_remote_builds(
         finish(key, 130, "Aborted by operator; GitHub run cancelled" if cancelled_there
                else f"Aborted locally, but cancelling the GitHub run failed: {url}", aborted=True, url=url)
     return results
+
+
+def _pending_visibility(key: str, sha: str, token: str) -> str:
+    return ("Run visibility pending: not yet discoverable; this does not prove dispatch failed. Do not dispatch "
+            "a duplicate. Retry recovery later: python tools/github_remote_build.py recover "
+            f"--target {key} --commit {sha} --token {token}")
 
 
 def _status_text(state: RunState) -> str:
@@ -1048,19 +1109,29 @@ def _manifest_command(args: argparse.Namespace) -> int:
 
 
 def _run_command(args: argparse.Namespace) -> int:
+    recovering = args.command == "recover"
+    if recovering and (not _SHA.fullmatch(args.commit) or not RUN_TOKEN.fullmatch(args.token)):
+        raise RemoteBuildError("Recovery requires a full lowercase commit SHA and the original valid run token")
     cli = GitHubCli()
     if not cli.signed_in():
         print("[REMOTE-BUILD] GitHub CLI is not signed in: run `gh auth login`", file=sys.stderr)
         return 2
-    problem = cli.actions_policy_problem()
-    if problem:
-        print(f"[REMOTE-BUILD] GitHub would refuse to start the workflow: {problem}", file=sys.stderr)
-        return 2
-    commit = resolve_pushed_commit(REPO_ROOT, args.branch)
-    if not commit.matches_local_head:
-        print(f"[REMOTE-BUILD] Note: local HEAD {commit.local_head[:8]} is not what GitHub builds.")
-    print(f"[REMOTE-BUILD] Building {commit.describe()}")
-    token = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    if recovering:
+        commit = PushedCommit("", args.commit, "explicit recovery", _git(REPO_ROOT, "rev-parse", "HEAD").strip())
+        token = args.token
+        keys = (args.target,)
+        print(f"[REMOTE-BUILD] Recovering {args.target} @ {commit.sha}, token {token}; no workflow dispatch")
+    else:
+        problem = cli.actions_policy_problem()
+        if problem:
+            print(f"[REMOTE-BUILD] GitHub would refuse to start the workflow: {problem}", file=sys.stderr)
+            return 2
+        commit = resolve_pushed_commit(REPO_ROOT, args.branch)
+        if not commit.matches_local_head:
+            print(f"[REMOTE-BUILD] Note: local HEAD {commit.local_head[:8]} is not what GitHub builds.")
+        print(f"[REMOTE-BUILD] Building {commit.describe()}")
+        token = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        keys = tuple(dict.fromkeys(args.target))
 
     last: dict[str, str] = {}
 
@@ -1080,9 +1151,10 @@ def _run_command(args: argparse.Namespace) -> int:
 
     signal.signal(signal.SIGINT, interrupted)
     results = run_remote_builds(
-        REPO_ROOT, cli, tuple(dict.fromkeys(args.target)), commit, token,
+        REPO_ROOT, cli, keys, commit, token,
         log_dir=REPO_ROOT / "logs", release_dir=REPO_ROOT / "release",
         cancelled=lambda: stop["requested"], emit=emit,
+        **({"recover": True, "recovery_run_id": args.run_id} if recovering else {}),
     )
     return 0 if results and all(result.ok for result in results.values()) else 1
 
@@ -1128,10 +1200,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     run = sub.add_parser("run", help="build products on GitHub and publish them into release/")
     run.add_argument("--target", choices=sorted(ALL_TARGETS), action="append", required=True)
     run.add_argument("--branch", default=None)
+    recover = sub.add_parser("recover", help="recover an existing exact build run; never dispatch another")
+    recover.add_argument("--target", choices=sorted(ALL_TARGETS), required=True)
+    recover.add_argument("--commit", required=True, help="the original full commit SHA (not today's branch tip)")
+    recover.add_argument("--token", required=True, help="the original run token from the dispatch log")
+    recover.add_argument("--run-id", type=int, default=None, help="optional known run, accepted only after identity checks")
     args = parser.parse_args(argv)
     commands = {"manifest": _manifest_command, "stage-native": _stage_native_command,
                 "native-target": _native_target_command, "place-native": _place_native_command,
-                "run": _run_command}
+                "run": _run_command, "recover": _run_command}
     try:
         return commands[args.command](args)
     except RemoteBuildError as exc:
