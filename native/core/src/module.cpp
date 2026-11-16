@@ -1999,6 +1999,8 @@ PyObject *stage_control(PyObject *, PyObject *args)
         srpss_core::setSkipReadChain(value);
     else if (control == "time_defocus_draws")
         srpss_core::setTimeDefocusDraws(value);
+    else if (control == "flush_defocus_draws")
+        srpss_core::setFlushDefocusDraws(value);
     else
         Py_RETURN_FALSE;
     Py_RETURN_TRUE;
@@ -2969,7 +2971,7 @@ PyMethodDef methods[] = {
     { "stage_control", stage_control, METH_VARARGS,
       "(name, on) -> bool: N3.4, harness: a D17 negative control by name (skip_blend_gate, blend_formats_missing, "
       "sample_shading_missing, transparency_first_sample, skip_bloom_prime, bloom_same_texture, skip_stage_release, "
-      "skip_read_chain, time_defocus_draws (OpenGL), device_without_independent_blend: read at the next device's "
+      "skip_read_chain, time_defocus_draws, flush_defocus_draws (OpenGL), device_without_independent_blend: read at the next device's "
       "creation); False for an unknown "
       "name." },
     { "scene_depth_prime_control", scene_depth_prime_control, METH_VARARGS,

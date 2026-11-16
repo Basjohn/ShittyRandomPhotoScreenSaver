@@ -110,6 +110,8 @@ bool skipReadChain();
 // (stage_defocus_timed, stage_gather_gpu_ns, stage_sprites_gpu_ns). Off: no query object and no call.
 void setTimeDefocusDraws(bool on);
 bool timeDefocusDraws();
+// Harness-only: the same external-command boundaries without queries. Query mode wins if both are enabled.
+void setFlushDefocusDraws(bool on);
 // A new number at every control change (a content's gate is decided again only then).
 quint64 stageControlGeneration();
 

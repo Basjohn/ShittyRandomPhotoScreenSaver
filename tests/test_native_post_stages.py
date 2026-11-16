@@ -344,8 +344,10 @@ def test_the_defocus_draw_timer_is_opengl_only_and_off_by_default() -> None:
     at all while the control is off (no query object, no external block), results latched (never waited for)."""
     stages = (CORE / "src" / "post_stages.cpp").read_text(encoding="utf-8")
     mark = stages[stages.index("void PostStages::markDefocus("):stages.index("void PostStages::releaseDrawTimer(")]
-    assert "if (!m_rhi || m_rhi->backend() != QRhi::OpenGLES2 || !timeDefocusDraws())\n        return;" in mark
-    assert mark.index("return;") < mark.index("std::make_unique<DrawTimer>()") < mark.index("cb->beginExternal();")
+    assert "if (!m_rhi || m_rhi->backend() != QRhi::OpenGLES2)\n        return;" in mark
+    assert mark.index("if (!control)") < mark.index("if (!(control & 1))") < mark.index("std::make_unique<DrawTimer>()")
+    boundary = mark[mark.index("if (!(control & 1))"):mark.index("if (!m_drawTimer)")]
+    assert boundary.index("cb->beginExternal();") < boundary.index("cb->endExternal();") < boundary.index("return;")
     assert "kGlQueryResultAvailable" in mark and "GL_QUERY_RESULT_NO_WAIT" not in mark
     onto = stages[stages.index("void PostStages::recordDefocusOnto("):]
     assert onto.index("markDefocus(cb, 0);") < onto.index("cb->draw(3);") < onto.index("markDefocus(cb, 1);") \

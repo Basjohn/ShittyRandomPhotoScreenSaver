@@ -121,4 +121,5 @@
 
 // 21 (N3.1c L3): scene_target_control (placement, one-pixel allocation bucket, bounded allocation steps) and
 // host_invalidate_scene_graph (hidden-host harness; actual render-thread QQuickRenderControl invalidation).
-#define SRPSS_NATIVE_CORE_ABI 21
+// 22: scene-target scissor controls and stage_control's flush_defocus_draws (same boundaries without queries).
+#define SRPSS_NATIVE_CORE_ABI 22

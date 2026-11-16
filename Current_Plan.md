@@ -552,6 +552,9 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       build, then the same round; the step whose interval grows with the sprites is the one to compare with Python's
       `SceneTarget.end` (the scene colour the sprites wrote is next read by the composite; on OpenGL a texture written
       by many overlapping blended draws may be decompressed or flushed before its next sampling).
+      Current evidence (16 Nov): unmarked 1x excess 2.5785 ms; marked excess 0.0164 ms. First isolate the
+      timing probes' command boundaries with a harness-only boundary-without-queries control, bracketed by
+      unmarked runs; preserve pixel parity. Do not treat the perturbed measurement as a production fix (D17).
     - [ ] Fix it in the core if it is ours (one change, a build, the split again: `--rounds defocus_cost` on both APIs,
       the OpenGL sprite raster near Python's and Vulkan unchanged), or record it in D17 as the driver's with the figures
       if no state difference moves it. Then rerun `--rounds parity` (rules (a) and (b) must still pass) and record the

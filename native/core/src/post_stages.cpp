@@ -32,7 +32,7 @@ QAtomicInteger<int> g_skipBloomPrime { 0 };
 QAtomicInteger<int> g_bloomSameTexture { 0 };
 QAtomicInteger<int> g_skipStageRelease { 0 };
 QAtomicInteger<int> g_skipReadChain { 0 };
-QAtomicInteger<int> g_timeDefocusDraws { 0 };
+QAtomicInteger<int> g_timeDefocusDraws { 0 }; // bit 0: queries; bit 1: boundary-only control (one load at each mark)
 QAtomicInteger<qint64> g_defocusTimed { 0 };
 QAtomicInteger<qint64> g_gatherGpuNs { 0 };
 QAtomicInteger<qint64> g_spritesGpuNs { 0 };
@@ -297,8 +297,17 @@ void setSkipStageRelease(bool skip) { setControl(g_skipStageRelease, skip); }
 bool skipStageRelease() { return g_skipStageRelease.loadAcquire() != 0; }
 void setSkipReadChain(bool skip) { setControl(g_skipReadChain, skip); }
 bool skipReadChain() { return g_skipReadChain.loadAcquire() != 0; }
-void setTimeDefocusDraws(bool on) { setControl(g_timeDefocusDraws, on); }
-bool timeDefocusDraws() { return g_timeDefocusDraws.loadAcquire() != 0; }
+static void setDefocusDrawControl(int bit, bool on)
+{
+    if (on)
+        g_timeDefocusDraws.fetchAndOrOrdered(bit);
+    else
+        g_timeDefocusDraws.fetchAndAndOrdered(~bit);
+    g_controlGeneration.fetchAndAddOrdered(1);
+}
+void setTimeDefocusDraws(bool on) { setDefocusDrawControl(1, on); }
+bool timeDefocusDraws() { return (g_timeDefocusDraws.loadAcquire() & 1) != 0; }
+void setFlushDefocusDraws(bool on) { setDefocusDrawControl(2, on); }
 quint64 stageControlGeneration() { return g_controlGeneration.loadAcquire(); }
 
 StageCounts stageCounts()
@@ -388,8 +397,16 @@ constexpr unsigned int kGlQueryResultAvailable = 0x8867;
 void PostStages::markDefocus(QRhiCommandBuffer *cb, int mark)
 {
     // mark 0: before the gather (the slots read back first, a free one taken); 1: between; 2: after the sprites.
-    if (!m_rhi || m_rhi->backend() != QRhi::OpenGLES2 || !timeDefocusDraws())
+    if (!m_rhi || m_rhi->backend() != QRhi::OpenGLES2)
         return;
+    const int control = g_timeDefocusDraws.loadAcquire();
+    if (!control)
+        return;
+    if (!(control & 1)) { // same boundaries as the query mode, no queries or result retrieval
+        cb->beginExternal();
+        cb->endExternal();
+        return;
+    }
     if (!m_drawTimer) {
         m_drawTimer = std::make_unique<DrawTimer>();
         QOpenGLContext *context = QOpenGLContext::currentContext();
