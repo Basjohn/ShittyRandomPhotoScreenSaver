@@ -137,6 +137,9 @@ and card shader for the ring, without acquiring another sampler owner. Preserve 
 border colour/width, anti-aliasing and silhouette; do not introduce another backdrop source or per-border blur.
 This is a candidate, not a measured performance improvement or evidence that material borders already ship.
 
+**Future M4 theme ownership (operator, 16 Nov):** after the shared material-border ring lands under 1B.8 M3/1.7b, M4 makes **surface transparency bias**, separate **border-surface transparency bias**, **border thickness**, and **border curvature** (including four corners and concentric inner edge) first-class properties in the unified Appearance Theme. Settings and Widget may author different values under one selected theme. User Style Overrides remain relative to the theme's authored baseline; neutral 0 must not erase authored bias. Do not confuse this plan with an already-shipped border ring, add a second capture/blur pass or make an SMP-only border renderer. The later SMP skin layer may override admitted presentation roles but cannot replace the global material owner. Details: SMP document 05.
+
+
 ### 3.3 Legibility
 
 **Material density and ink contrast.** Material density is composed from tint,
