@@ -42,11 +42,13 @@ validation steps and open side defects. **Load runs:** game60 at most 10 minutes
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
 **Session order (operator, 16 Nov):** 8b P1 spike retirement → 8b N3.1c L3 → 8b N3.2 Audit 4 L6 →
-8b N3.4 `stream_ring` margin → 1D.13 near-light. Complete and review each slice before starting the next.
+8b N3.4 `stream_ring` margin → 1D.13 near-light. Start in this order; independent implementation may overlap
+under the operator's 16 Nov request for another Sol 6.1 High native-core agent. Review and land slices in order.
 For this session, compact completed checkbox text inline and retain every checkbox for later review.
 
-**Now (in flight):** P1 spike retirement; implementation slot `p1-retirement` (Sol 6.1 Medium), then lead verification
-and Terra 6.1 High audit. The orchestrator handbook remains unchanged.
+**Now (in flight):** P1 spike retirement, `p1-retirement` (Sol 6.1 Medium); N3.1c L3,
+`n31c-l3` (Sol 6.1 High, separate worktree). Lead verification and Terra 6.1 High audit precede landing.
+The orchestrator handbook remains unchanged.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim week's order is `handoff.md` section 3.
