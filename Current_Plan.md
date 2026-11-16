@@ -57,6 +57,7 @@ and compare within-run variants; do not hold diagnosis for the former quiet-GPU 
 L2 scissor/negative controls pass both backends. ABI 24's readback completeness/metadata, sample clamp gate,
 post-stage parity/rest/retire and 136 focused tests pass. Full accounting closeout awaits the rebind report fix;
 ownership/fault/release checks already pass all 27 cases per backend. Defocus flag/tracker isolation follows.
+Source ABI25's flag controls and rebind-report repair are High reviewed/merged; combined GitHub build is next.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim week's order is `handoff.md` section 3.
@@ -493,7 +494,7 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     target draws, full allocation on full-target operations, defocus allocation viewport/content scissor. High audit;
     ABI 22 OpenGL/Vulkan scissor and separate missing-flag controls PASS at actual 1x/4x. Enlarged viewport
     makes slack writes observable; restoring the flag restores exact colour/depth without reallocating targets.
-    Evidence: n3_1/20261116_n31_l2_scissor{,_control}_abi22 (retained in n34-abi22-check until retirement).
+    Evidence: n3_1/20261116_n31_l2_scissor{,_control}_abi22 (preserved in main after worktree retirement).
   - [x] L3: independent wrong-top placement, aligned card, 401 one-pixel drag positions / true 1 px bucket control,
     actual partial-allocation destruction and render-thread invalidation, with separately rejected controls;
     R-227 counts partial resources. Terra High audited; merged ABI 21 rules (a)/(b), resize/rest/retire and 109

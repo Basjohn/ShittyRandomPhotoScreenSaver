@@ -45,7 +45,7 @@ activity is explicitly authorised for the diagnosis; section 3's original quiet-
 - [x] Defocus excess reproduced unmarked; bracketed off/boundary-only/query/off run keeps exact pixels but removes
   the excess with command boundaries alone. No production workaround admitted; individual-site isolation follows (D17).
 - [x] L2 scissor and separate missing-flag controls PASS OpenGL/Vulkan at actual 1x/4x; exact restoration, stable
-  allocation, independent High review. Evidence currently in n34-abi22-check (preserve on retirement).
+  allocation, independent High review. Worktree retired; evidence preserved in main.
 - [x] N3.4 full High source audit found five defects; audited fixes and fault proofs merged. Old ABI 22 reproduces
   readback/gate failures; ABI24 completeness/metadata/gate/parity/rest/retire PASS GL/Vulkan, 136 focused PASS.
 - [x] Original partial-stage fault reproduced −3 textures/−1 chain; repaired allocation/fault/release checks pass

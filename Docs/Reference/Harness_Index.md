@@ -1002,7 +1002,8 @@ python native/core/python/compute_pass_check.py --module-dir release/native_modu
 # depth prime, bloom same texture, read chain and no independent blend must report their finding, the bloom prime's is
 # reported only), cost (each stage at 2560x1440 and 4K, 1x and 4x). Alone: defocus_cost (the defocus step split by
 # variants at 4K), defocus_draws (latched draw queries), defocus_boundaries (bracketed off/boundary/query phases with
-# exact pixels and counter checks, each of the three individual boundary sites), showcase (the WebP), python_cost
+# exact pixels and counter checks, each of the three individual boundary sites, declaration-only and tracking-disabled
+# phases; tracking-disabled requires no compute anywhere in the proof program), showcase (the WebP), python_cost
 # and python_defocus_cost (the reference child).
 # Timing rounds normally use a quiet GPU; operator-authorised ambient diagnostics retain recorded conditions and
 # compare within-run controls (nvidia-smi is recorded in the summary).
