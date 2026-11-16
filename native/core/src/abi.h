@@ -123,4 +123,5 @@
 // host_invalidate_scene_graph (hidden-host harness; actual render-thread QQuickRenderControl invalidation).
 // 22: scene-target scissor controls and stage_control's flush_defocus_draws (same boundaries without queries).
 // 23: isolate the three flush_defocus_* sites; composite_live's stage_defocus_flushes proves which boundaries ran.
-#define SRPSS_NATIVE_CORE_ABI 23
+// 24: complete mip readbacks with level-relative content; bounded stage allocation/build fault controls and counters.
+#define SRPSS_NATIVE_CORE_ABI 24

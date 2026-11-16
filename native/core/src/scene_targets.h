@@ -61,6 +61,7 @@
 #include <rhi/qrhi.h>
 
 #include <memory>
+#include <vector>
 
 class QJsonValue;
 
@@ -197,7 +198,7 @@ struct SceneTargetPixels
     QString name;          // "<target>.<attachment>", "<target>.depth" (its nearest resolve, multisampled only),
                            // "<target>.capture_colour", "<target>.capture_depth"
     QSize size;            // the allocation
-    QSize content;         // the content's size inside it (image rows [H-h, H), columns [0, w))
+    QSize content;         // nominal content projected into this level, rounded outward; image rows [H-h,H), x [0,w)
     QString format;
     int samples = 1;       // the target's effective samples (a multisampled attachment is read through its resolve)
     QByteArray data;
@@ -243,7 +244,7 @@ QJsonObject sceneTargetsStateJson(const SceneTargetsState &state);
 struct SceneReadback
 {
     QList<SceneTargetPixels> pixels;
-    QRhiReadbackResult results[kMaxSceneTargets * (kMaxTargetColour + 3) + 64]; // N3.4: and a mipped target's levels
+    std::vector<QRhiReadbackResult> results; // final size established before callbacks; never resized while pending
     int count = 0;
     QAtomicInteger<int> pending { 0 };
     bool done() const { return pending.loadAcquire() == 0; }

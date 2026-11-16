@@ -887,8 +887,9 @@ class NativeMode:
 
     def target_pixels(self) -> list[dict] | None:
         """N3.1, harness: the last readback once complete (None before), each ``{"name", "size", "content", "format",
-        "samples", "data"}``, rows top first on every backend; the content sits at rows ``[H-h, H)``, columns
-        ``[0, w)``."""
+        "samples", "level", "data"}``, rows top first on every backend; the content sits at rows ``[H-h, H)``, columns
+        ``[0, w)``. At nonzero mip levels, ``content`` is the base normalized rectangle projected into that level,
+        rounded outward to texels. It describes nominal coverage; filtering may blend beyond that rectangle."""
         return self._module.composite_mode_target_pixels(self._handle())
 
     def update(self) -> None:

@@ -1221,7 +1221,6 @@ std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiResourceUpdateBat
     pruneReadbacks();
     auto set = std::make_shared<SceneReadback>();
     SceneReadback *raw = set.get();
-    const int capacity = int(sizeof(raw->results) / sizeof(raw->results[0]));
     const auto levelCount = [](const Target &t) {
         // N3.4: a mipped target's every level (the defocus layer's mips, D17 choice G's proof), else its base.
         int levels = 1;
@@ -1231,12 +1230,17 @@ std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiResourceUpdateBat
     };
     const auto add = [&](const Target &t, const QString &name, QRhiTexture *texture, const QString &format,
                          int level = 0) {
-        if (!texture || raw->count >= capacity)
+        if (!texture)
             return;
         SceneTargetPixels p;
         p.name = level ? name + QLatin1Char('@') + QString::number(level) : name;
         p.size = QSize(qMax(1, t.allocation.width() >> level), qMax(1, t.allocation.height() >> level));
-        p.content = t.content;
+        // Project the base content's normalized rectangle, rounding out to touched level texels. This is nominal
+        // coverage, not a promise about the mip filter's footprint outside the rectangle on odd-sized levels.
+        p.content = QSize(int((qint64(t.content.width()) * p.size.width() + t.allocation.width() - 1)
+                             / t.allocation.width()),
+                          int((qint64(t.content.height()) * p.size.height() + t.allocation.height() - 1)
+                             / t.allocation.height()));
         p.format = format;
         p.samples = t.samples;
         p.level = level;
@@ -1263,6 +1267,8 @@ std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiResourceUpdateBat
     }
     if (raw->count == 0)
         return set;
+    // All accepted attachments and mip levels. Callback result addresses stay stable for the entire shared lifetime.
+    raw->results.resize(std::size_t(raw->count));
     raw->pending.storeRelease(raw->count);
     g_readbacksPending.fetchAndAddRelaxed(1);
     // The textures, in the order the pixels were listed.
