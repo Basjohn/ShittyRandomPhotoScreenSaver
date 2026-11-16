@@ -438,7 +438,7 @@ def test_the_github_tab_offers_the_remote_products_and_local_steps(tmp_path):
     # optional native modules, the product's core and the P1 harness (their own contract:
     # tests/test_native_module_build.py).
     assert list(github) == ["standard", "media_center", "reddit_helper", "standard_installer", "media_center_installer",
-                            "linux", "linux_mc", "native_module", "native_spike"]
+                            "linux", "linux_mc", "native_module"]
     assert github["linux"] == venv["linux"] and not github["linux"].default_selected     # the other tabs' own job
     assert "linux_mc" not in venv and not github["linux_mc"].default_selected
     assert github["linux_mc"].kind == github["linux"].kind and github["linux_mc"].script == github["linux"].script

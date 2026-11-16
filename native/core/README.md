@@ -1,8 +1,8 @@
 # The native core: `_srpss_native_core`
 
 The product's native module (`Current_Plan.md` item 8b, N2; decision D5.7 in
-`Docs/Future_Work/Native_Core_P3_Decisions.md`). `native/spike_p1/` beside it stays the harness and evidence and
-never ships.
+`Docs/Future_Work/Native_Core_P3_Decisions.md`). `native/spike_p1/` beside it remains historical evidence with no
+build selection; current host and composite proof lives here.
 
 - `CMakeLists.txt`, `build.cmd`: the build. Compiled only by `.github/workflows/native-module.yml` on GitHub (its
   default source); never on this machine. `build.cmd` is the workflow's one CMake invocation.
@@ -390,5 +390,5 @@ Build and fetch it (the lead; agents never build):
 ```
 
 The module lands in `release\native_module\` of the checkout the command runs from; `rendering.native.load(Path(
-"release/native_module"))` loads it from there. `Docs/Guides/GitHub_Remote_Build.md`, "The native modules", has the
+"release/native_module"))` loads it from there. `Docs/Guides/GitHub_Remote_Build.md`, "The native core module", has the
 rest.
