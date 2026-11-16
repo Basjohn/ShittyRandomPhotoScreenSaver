@@ -1156,11 +1156,15 @@ def round_defocus_boundaries(core, engine, app, api: str, packs: dict) -> dict:
     try:
         for samples in (1, 4):
             baseline = {}
-            for phase, flush, query in (("off_before", False, False), ("boundaries", True, False),
-                                         ("queries", False, True), ("off_after", False, False)):
+            for phase, control, expected in (("off_before", None, 0), ("boundaries", "flush_defocus_draws", 3),
+                                              ("before_gather", "flush_defocus_before_gather", 1),
+                                              ("between_draws", "flush_defocus_between_draws", 1),
+                                              ("after_sprites", "flush_defocus_after_sprites", 1),
+                                              ("queries", "time_defocus_draws", 0), ("off_after", None, 0)):
                 _controls(core, ("time_defocus_draws",), False)
-                _controls(core, ("flush_defocus_draws",), flush)
-                _controls(core, ("time_defocus_draws",), query)
+                _controls(core, ("flush_defocus_draws",), False)
+                if control:
+                    _controls(core, (control,), True)
                 timings = {}
                 for label, changes in (("full", {}), ("no_sprites", {"u_defocus_highlight": 1e6})):
                     case = Case(f"boundaries_{label}", "eb", card=size, samples=samples, changes=changes)
@@ -1181,13 +1185,18 @@ def round_defocus_boundaries(core, engine, app, api: str, packs: dict) -> dict:
                         _close(scene, host, app)
                     n = after["stage_defocus_timed"] - before["stage_defocus_timed"]
                     skipped = after["stage_defocus_time_skipped"] - before["stage_defocus_time_skipped"]
-                    timings[label] = {"timing": timed, "draws_timed": n, "skipped": skipped, "state": state}
+                    records = after["stage_defocus_records"] - before["stage_defocus_records"]
+                    flushes = after["stage_defocus_flushes"] - before["stage_defocus_flushes"]
+                    timings[label] = {"timing": timed, "draws_timed": n, "skipped": skipped, "state": state,
+                                      "defocus_records": records, "boundary_flushes": flushes}
                     metrics = (timed.get("median_ms"), timed.get("p10_ms"), timed.get("p90_ms"))
                     checks[f"x{samples}_{phase}_{label}"] = (
                         timed.get("samples", 0) >= stc.COST_MIN_SAMPLES and not state.get("content_failing")
                         and not state.get("error") and not timed.get("error")
                         and all(isinstance(v, (int, float)) and math.isfinite(v) for v in metrics)
-                        and (n >= stc.COST_MIN_SAMPLES and skipped == 0 if query else n == 0 and skipped == 0))
+                        and records > 0 and flushes == expected * records
+                        and (n >= stc.COST_MIN_SAMPLES and skipped == 0 if phase == "queries"
+                             else n == 0 and skipped == 0))
                     if phase == "off_before":
                         baseline[label] = frame
                     checks[f"x{samples}_{phase}_{label}_pixels"] = bool((frame == baseline[label]).all())
