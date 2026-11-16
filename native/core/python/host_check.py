@@ -195,6 +195,28 @@ def _driver(state: dict, which: str = "driver") -> dict:
     return state.get(which) or {}
 
 
+def device_teardown_ok(steps: list, device: dict) -> bool:
+    """These probe-only hosts never submit jobs: a service stays dormant and quiesces before the exact device tail.
+
+    JobService::stop joins its thread before emitting this record (job_service.cpp); thread_started=False proves
+    this harness never started it. A device without a second queue has no service. Missing facts fail closed.
+    """
+    if device.get("job_service") is False:
+        return steps == DEVICE_TEARDOWN
+    if device.get("job_service") is not True or len(steps) != len(DEVICE_TEARDOWN) + 1:
+        return False
+    prefix = "job service stopped: "
+    if not isinstance(steps[0], str) or not steps[0].startswith(prefix) or steps[1:] != DEVICE_TEARDOWN:
+        return False
+    try:
+        stopped = json.loads(steps[0][len(prefix):])
+    except (TypeError, ValueError):
+        return False
+    return (isinstance(stopped, dict) and stopped.get("thread_started") is False
+            and all(key in stopped and stopped[key] == 0 for key in ("images_left", "wakeups", "queued_at_stop"))
+            and "running_at_stop" in stopped and stopped["running_at_stop"] is None)
+
+
 # --------------------------------------------------------------------------------------------------------- hidden
 
 def _probe_hidden(host, analyse) -> tuple[object, dict]:
@@ -285,7 +307,8 @@ def round_hidden(core, engine, app, api: str, out: Path) -> dict:
     checks["close_released_everything"] = closed_driver.get("released") is True and closed_driver.get(
         "probe_live_resources") == 0
     if api == "vulkan":
-        checks["device_destroyed_after_the_window"] = (closed.get("device_teardown") == DEVICE_TEARDOWN
+        checks["device_destroyed_after_the_window"] = (device_teardown_ok(
+            closed.get("device_teardown", []), closed.get("state", {}).get("device", {}))
                                                        and steps[-1:] == ["device destroyed"])
 
     # The negative control of the thread probe: the same host rendering on the calling (GUI) thread, which has a Python
@@ -445,7 +468,8 @@ def round_window(core, engine, app, api: str, out: Path) -> dict:
             and destroyed.get("live_resources_before_release") == 10)
         if api == "vulkan":
             checks["device_destroyed_after_the_window"] = (state.get("device_alive") is False
-                                                           and state.get("device_teardown") == DEVICE_TEARDOWN)
+                                                           and device_teardown_ok(state.get("device_teardown", []),
+                                                                                  state.get("device", {})))
     finally:
         if window is not None and shiboken6.isValid(window):
             shiboken6.delete(window)

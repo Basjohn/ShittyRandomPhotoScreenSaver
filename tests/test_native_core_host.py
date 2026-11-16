@@ -360,6 +360,28 @@ def test_the_harness_fails_a_vulkan_run_without_the_layer_when_validation_is_req
     assert host_check.api_verdict("vulkan", left_open, require_validation=True)[0] is False
 
 
+def test_device_retirement_checks_the_dormant_job_service_before_the_device():
+    stopped = {"thread_started": False, "images_left": 0, "wakeups": 0, "queued_at_stop": 0,
+               "running_at_stop": None}
+    step = "job service stopped: " + json.dumps(stopped)
+    suffix = host_check.DEVICE_TEARDOWN
+    assert host_check.device_teardown_ok([step, *suffix], {"job_service": True})
+    assert host_check.device_teardown_ok(suffix, {"job_service": False})
+    for steps in (suffix, [*suffix, step], [step, step, *suffix], [step, *suffix[:-1]],
+                  ["unknown", step, *suffix], ["job service stopped: invalid", *suffix]):
+        assert not host_check.device_teardown_ok(steps, {"job_service": True}), steps
+    assert not host_check.device_teardown_ok([step, *suffix], {"job_service": False})
+    assert not host_check.device_teardown_ok(suffix, {})
+    for key, value in (("thread_started", True), ("images_left", 1), ("wakeups", 1),
+                       ("queued_at_stop", 1), ("running_at_stop", {"state": "running"})):
+        bad = "job service stopped: " + json.dumps(dict(stopped, **{key: value}))
+        assert not host_check.device_teardown_ok([bad, *suffix], {"job_service": True}), key
+    for key in stopped:
+        incomplete = {k: v for k, v in stopped.items() if k != key}
+        assert not host_check.device_teardown_ok(
+            ["job service stopped: " + json.dumps(incomplete), *suffix], {"job_service": True}), key
+
+
 def test_the_lifecycle_judges_the_core_against_qt_alone_on_the_same_api():
     def series(handles, users, trough, span):
         return {"handle_slope_per_cycle": handles, "user_object_slope_per_cycle": users,
