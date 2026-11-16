@@ -43,7 +43,8 @@ after the operator's yes on a question card; agents never run load (invisible ch
 
 **Session order (operator, 16 Nov):** 8b P1 spike retirement → 8b N3.1c L3 → 8b N3.2 Audit 4 L6 →
 8b N3.4 `stream_ring` margin → 1D.13 near-light. Start in this order; independent implementation may overlap
-under the operator's 16 Nov request for another Sol 6.1 High native-core agent. Review and land slices in order.
+under the operator's 16 Nov request for another Sol 6.1 High native-core agent. Review each slice before landing;
+an independent verified slice may land while an earlier native build is running.
 For this session, compact completed checkbox text inline and retain every checkbox for later review.
 
 **Now (in flight):** N3.1c L3, `n31c-l3` (Sol 6.1 High, audited ABI 21 source building on GitHub);
@@ -516,12 +517,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       streams' bytes past their used length); the vertex buffers are given per draw, so only a layout change needs new
       pipelines. Proof: `probe_replace.py`'s box replaced by its own bytes and layout creates only the mesh's buffer
       and keeps the streams' build generation (today 3 buffers and generation 1 to 2).
-    - [ ] L6, three tests made as strong as their boxes (`tests/test_native_mesh_buffers.py`):
-      `test_umatrix_follows_the_cards_rotation_and_window_map` against the Python renderer's `uMatrix` (the
-      Oscilloscope's `physicalPoint` inverted and the card's `item_from_window`), not `_item_clip`'s copy of
-      `itemClipMatrix`; `test_the_core_arena_rule_is_the_mirror_s` calling the module's `mesh_buffer_arena_layout`
-      instead of matching source text; a test comparing the C++ reader's decode of an `f32` field with Python's
-      (fields equal, bytes round-trip with inf, -0 and a denormal: the audit's `probe_f32_reader.py`).
+    - [x] L6: independent real-renderer `uMatrix`, executed native arena layout and native/Python `f32` reader
+      byte parity (inf, -0, denormal); Terra High audited, 27 merged tests PASS (16 Nov, c390f8f4e).
 - N3.3 Compute passes: merged (6d87276a; D16 in `Docs/Future_Work/Native_Core_P3_Decisions.md`). Open:
 - N3.4 Transparency and post-processing as shared stages: merged PRE-AUDIT at ABI 20 (merge 15 Nov, the operator's
   week wind-down; D17 and its "As built" in `Docs/Future_Work/Native_Core_P3_Decisions.md`; every proof round of
