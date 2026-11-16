@@ -9,6 +9,26 @@ default; the Python OpenGL renderers being deleted in N5.2h). Everything the Pyt
 `tools/baselines/preflip/`. If something goes badly wrong this week, compare against or return to that tag. Never
 force-push or rewrite main.
 
+## 16 Nov continuation journal (keep short; Current_Plan.md owns active work)
+
+The operator's current route is P1 spike → N3.1c L3 → N3.2 Audit 4 L6 → N3.4 stream_ring → 1D.13 near-light;
+independent agents may overlap. ABI **21** is installed on main from GitHub run `43849213847`, native commit
+`2b63f4752`. Section 2 below is the original 15 Nov snapshot, not current ABI or agent status.
+
+- [x] P1 build retirement + fail-closed core harness migration; 219 focused tests, OpenGL/Vulkan checks, High audit.
+  Concession: desktop composed alpha, DPI and sleep/wake remain Awaiting Validation; offscreen pixels cannot prove them.
+- [x] R-226 other-harness sweep + post-stage ownership entry; focused regressions and High audit. Remaining mesh
+  caller is in the active stream_ring slice; the scene-target caller is fixed with L3.
+- [x] N3.1c L3 controls + R-227 partial-resource accounting; two GitHub builds, both-backend negative controls,
+  109 merged focused tests and current-module parity/resize/rest/retire PASS. Concession: L2 scissor work and
+  timing/other-vendor gates remain separate; this slice proves the named L3 contracts only.
+- [x] Audit 4 L6's three executable native/Python oracles; 27 tests, mutation controls and High audit; rechecked in
+  the ABI 21 merged gate. Concession: GPU-free matrix/packet tests establish those contracts, not visual/performance acceptance.
+- [ ] Finish stream_ring uncertainty/relative-floor repair and mesh R-226 caller, then 1D.13 near-light.
+
+For this session retain every completed plan checkbox, compact inline. Record any incomplete or unsatisfactory
+outcome beside its completed item with the reason, so a successor can challenge it; continue work beyond this handoff.
+
 ## 1. Read these first, in this order
 
 1. This file.
@@ -20,7 +40,7 @@ force-push or rewrite main.
    `Docs/Future_Work/Native_Core_P3_Decisions.md` (search for `## D<number>`).
 5. Before any 3D or transition work: "3D foundation lessons" in `Docs/Reference/Transitions.md`.
 
-## 2. State at handoff
+## 2. Original state at handoff (15 Nov snapshot; current continuation above)
 
 - Main is green for native work: `pytest tests -k native` gave 861 passed on the merged tree with the ABI 20 module.
 - Native ABI is 20 (`native/core/src/abi.h`, `rendering/native/loader.py` `EXPECTED_ABI`). The module the tests load is
@@ -56,7 +76,7 @@ N5.3), N3.6, the flip (NF) or N5.2h (deleting the Python renderers): they need t
    `native/core`, then remove the `native_spike` selection; the visible-window part needs the lead, skip it), N3.1c's
    open lows, the `stream_ring` timing-margin side defect (judge relative to the floor measured in the same run), test
    and doc boxes that say they are Sonnet-shaped.
-5. **Docs**: whenever a box lands, delete it from the plan and put the durable contract in its doc.
+5. **Docs**: whenever a box lands, delete or summarise it in the plan and put the durable contract in its doc.
 
 ## 4. How to do the routine things
 
@@ -75,10 +95,11 @@ N5.3), N3.6, the flip (NF) or N5.2h (deleting the Python renderers): they need t
   branch is merged. If it refuses because the content reached main another way, `git merge -s ours --no-ff <branch>`
   then retire again. Never `git worktree remove --force` and never copy evidence by hand: the evidence folders are
   junctions and evidence has been lost three times that way.
-- **Plan edits**: `Current_Plan.md` is a live checklist of open work. When a box lands, delete it. Never write "Landed",
+- **Plan edits**: `Current_Plan.md` is a live checklist of open work. For the 16 Nov session retain and compact completed
+  checkboxes inline as the operator requested; otherwise historicalise completed work. Never write "Landed",
   "Fixed", "Rehearsed" paragraphs or evidence lists into it; figures go in commit messages and the focused docs.
 - **A fixed long-lived, silent or costly bug** gets its `Docs/Historical_Bugs/R-NNN_*.md` entry and index row in
-  `Docs/Historical_Bugs.md` before you report done. Take the next free number (the last is R-224).
+  `Docs/Historical_Bugs.md` before you report done. Take the next free number from the live index, not this snapshot.
 
 ## 5. Mistakes that have cost this project the most (never do these)
 

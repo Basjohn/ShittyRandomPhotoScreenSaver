@@ -47,8 +47,8 @@ under the operator's 16 Nov request for another Sol 6.1 High native-core agent. 
 an independent verified slice may land while an earlier native build is running.
 For this session, compact completed checkbox text inline and retain every checkbox for later review.
 
-**Now (in flight):** N3.1c L3, `n31c-l3` (Sol 6.1 High, audited ABI 21 source building on GitHub);
-N3.2 Audit 4 L6, `n32-l6` (Sol 6.1 Medium, tests only).
+**Now (in flight):** N3.4 `stream_ring` measurement contract, `n34-streamring` (Sol 6.1 Medium);
+then 1D.13 near-light. L3 and L6 source/proof checkpoints are complete; ABI 21 is installed on main.
 `native-harness-workhorse` (Terra 6.1 Medium) completed the non-conflicting R-226 harness sweep; remaining callers
 are owned by the scene-target and mesh-buffer slices.
 Lead verification and Terra 6.1 High audit precede landing. P1 source slice passed 219 focused tests plus
@@ -497,12 +497,10 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     scene target (`QRhiGraphicsPipeline::UsesScissor` on its pipelines, `cb->setScissor` per run), and prove it with a
     harness pass that draws a quad past the content's edge: the slack keeps the clear, with a control (the scissor off:
     the slack written).
-  - [ ] L3, `scene_target_check.py`'s missing or weaker controls, each built and seen to fail on its broken case:
-    rule (a)'s negative control (the content placed at the image top: the edge reads differ against the Python
-    oracle); a bucket-aligned card beside 480x270 and 720x405 (both unaligned today: slack present at both); the drag
-    in 1 px steps (`DRAG`'s step is 2 px); the resize control as a 1 px bucket (it re-buckets at every change today);
-    the retirements "item destroyed mid-allocation between steps" and "scene graph invalidated" exercised (every step
-    runs in one record today, and `release()` covers both by construction only).
+  - [x] L3: independent wrong-top placement, aligned card, 401 one-pixel drag positions / true 1 px bucket control,
+    actual partial-allocation destruction and render-thread invalidation, with separately rejected controls;
+    R-227 counts partial resources. Terra High audited; merged ABI 21 rules (a)/(b), resize/rest/retire and 109
+    focused tests PASS (16 Nov; D14 / R-227). L2 remains separate.
 - N3.2 Mesh and buffer resources: merged (d43049ce; D15 in `Docs/Future_Work/Native_Core_P3_Decisions.md`). Open:
   - [ ] Checkpoint audit 4's three open lows (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 4";
     recorded, not fixed, by the lead's decision of 15 Nov):
