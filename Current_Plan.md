@@ -578,6 +578,9 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       explicit NoPass support; no synchronization change needed. Recheck at Qt upgrades (private QRhi boundary).
     - [ ] Prove sampler/SRB/pipeline accounting and actual partial skipped-release counts through cold/rebind faults;
       audited source and 27-case harness are merged, actual ABI 24 runtime proof remains.
+    - [ ] Publish texture rebind counts at the successful rebind edge. ABI24 ownership/release checks pass all
+      27 cases per backend with no new stage wrappers, but the report remains 0→0 through the completed resize;
+      fix the canonical publication point and rerun the unchanged no-churn predicate, rather than delay its reading.
     - [x] Native target-pixel API help includes the returned mip `level` beside the other metadata.
   - [ ] Remote-build side defect: a successful workflow dispatch can become discoverable after the client's timeout;
     preserve the run token and recover the existing run before any retry, so late queued builds are not orphaned.
