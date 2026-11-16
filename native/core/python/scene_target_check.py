@@ -814,7 +814,10 @@ def _retire_edge(core, engine, app, packs: dict, case: str, *, skip_control: boo
         scene = Scene(core, engine, host, CARD, 1.0, packs)
         if case == "mid_allocation":
             states = []
-            for _ in range(2):
+            for index in range(2):
+                # A real input edge makes the still's surface dirty for the next bounded record. update() alone
+                # merely asks Qt for sync and correctly does no native work when the source is unchanged.
+                scene.mode.settings(dict(_scene_module().settings(ambient_size=AMBIENT), u_glow=1.0 - index * 0.125))
                 scene.mode.update()
                 host.frames(1)
                 states.append(scene.mode.state()["scene_targets"])
