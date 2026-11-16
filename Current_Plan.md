@@ -46,9 +46,11 @@ after the operator's yes on a question card; agents never run load (invisible ch
 under the operator's 16 Nov request for another Sol 6.1 High native-core agent. Review and land slices in order.
 For this session, compact completed checkbox text inline and retain every checkbox for later review.
 
-**Now (in flight):** P1 spike retirement, `p1-retirement` (Sol 6.1 Medium); N3.1c L3,
-`n31c-l3` (Sol 6.1 High, separate worktree). Lead verification and Terra 6.1 High audit precede landing.
-The orchestrator handbook remains unchanged.
+**Now (in flight):** N3.1c L3, `n31c-l3` (Sol 6.1 High); N3.2 Audit 4 L6 next, Sol 6.1 Medium.
+`native-harness-workhorse` (Terra 6.1 Medium) applies the audited R-226 repair to non-conflicting native harnesses.
+Lead verification and Terra 6.1 High audit precede landing. P1 source slice passed 219 focused tests plus
+OpenGL/Vulkan host and composite checks; its desktop validation remains at N0.6 below.
+The orchestrator handbook's original sections are preserved; additive section 8a records the retired build route.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim week's order is `handoff.md` section 3.
@@ -295,13 +297,8 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [ ] One helper beside `configure_offline_controller` sets the framed view of the card a host models
     (`resolve_framed_view`); each host above calls it (the worker gates send it as `VIS_SET_VIEW`).
   - [ ] Guard: a Waveform tick in each of those hosts has a view span (negative control: today's hosts have none).
-- [ ] Retire the P1 spike from the build path (lead, 15 Nov; operator asked its value): `native/spike_p1` was the P1
-  proof and its N0.6 and N0.7 rounds are recorded (D6, `Native_Core_N06_N07_Qt_Facts.md`). The core now owns its
-  Vulkan device and has its own hidden-host harnesses, so the N0.6 leftovers below are retargeted to `native/core`
-  (`host_check.py` and `composite_check.py` gain the visible translucent round and the fail-closed validation
-  rule), then the `native_spike` selection is removed from `tools/build_runner.py`, `tools/github_remote_build.py`,
-  the workflow and their tests. The source stays in the repository as evidence (the keep-useful-tools rule; it adds
-  nothing to the product); the validation-layer folder under `D:/Temp/Scratch/SRPSS/native_spike/` keeps its name.
+- [x] P1 spike build retirement: core harnesses own the remaining proof, `native_spike` build/workflow selection
+  removed, source retained as evidence (16 Nov; durable route: Handbook 8a / Harness Index).
   - [x] Baseline teardown guard: validate dormant job-service quiescence before device destruction; Terra High
     audited, 28 host tests and required-validation hidden rounds PASS on OpenGL/Vulkan (16 Nov).
   - [ ] R-226 caller sweep: reproduce and close stale-child/ignored-exit false passes in the remaining native
@@ -318,14 +315,12 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   at creation and after every readback and is never excused. Owed:
   - [ ] The A excuse is removed when the project takes the next Qt 6.12 patch release (the branch head already uses
     `UNDEFINED`): the upgrade's rerun deletes A from `QT_DEFECTS` and every round is clean without it.
-  - [ ] The harness fails closed: `run_n06.py` and `run_n07.py` take `--require-validation`, the lead's default from
-    now on; a round whose layer did not load is a FAIL, never a PASS with "owed". `VK_ADD_LAYER_PATH` is admitted
-    by name only when `--layer-path` is given.
-  - [ ] Decisions document: D6's "no environment variable is used" names the layer path as the one exception,
-    harness only.
-  - [ ] Harness first (13 Nov: `run_n06.py` has no visible mode): a bounded visible translucent round on a named
-    display, then the lead's run below.
-  - [ ] Lead, Display 1 visible and bounded, when two displays are connected: a real translucent window on the
+  - [x] Core host/composite harnesses fail before QML/window if required validation did not load; child failures
+    cannot reuse a stale PASS. CLI `--layer-path` remains the one scoped loader exception (R-226).
+  - [x] D6 names the harness-only layer-path exception (16 Nov).
+  - [x] Core host/composite translucent rounds: named secondary display, bounded, automatic observed-size resize
+    proof; system/glass backdrop choices. Defaults remain offscreen (16 Nov, Terra High audited).
+  - [~] Awaiting Validation — lead, Display 1 visible and bounded, when two displays are connected: a real translucent window on the
     module's device: see-through to the desktop (D7 point 8's first route; the hidden runs cannot read the composed
     alpha), with the DWM system backdrop and the project's glass, then the swapchain under resize, DPI change and
     sleep and wake. If it is not see-through, D7's second route (DirectComposition) is tried next.

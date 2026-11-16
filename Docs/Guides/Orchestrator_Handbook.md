@@ -212,3 +212,11 @@ Added 12 Nov 2026 with the native core's direction (`Docs/Future_Work/Native_Cor
   primitives track that never holds the flip. A track's next port is dispatched only when its last one is merged.
 
 - Retiring a worktree also deletes its remote branch when the lead pushed it for a GitHub build (`git push origin --delete <branch>`); old branches are archived as `archive/<name>` tags only when they hold unported work (13 Nov: the Linux branch).
+
+### 8a. P1 spike build retirement (16 Nov 2026)
+
+The `native_spike` selection described above is retired. Build the product core only with
+`tools/build_runner.py --mode github --run --select native_module`; the workflow accepts `native/core` only.
+`native/spike_p1/` remains historical source evidence. Its useful remaining device/translucency proof now belongs to
+`native/core/python/host_check.py` and `composite_check.py`; the maintained commands and visible-proof limits are in
+`Docs/Reference/Harness_Index.md`. The external validation-layer directory keeps its existing name.
