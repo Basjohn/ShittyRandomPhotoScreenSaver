@@ -41,7 +41,8 @@ Live checklist: every open step is its own box; retain only useful, brief native
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Active native focus:** N3.4 defocus performance, then the admitted ports and side defects below; keep the interim
+**Active native focus:** N3.2 audit 4 L1's shader-interface admission repair; N3.4 uniform/shader research continues
+independently, without profiler repair. Then the admitted ports and side defects below; keep the interim
 holds in `handoff.md`. Independent native work may overlap under the operator's request for a Sol 6.1 High agent;
 review every slice before landing.
 
@@ -52,7 +53,8 @@ held by the interim route in `handoff.md`.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim holds are in `handoff.md`.
-- [ ] High: N3.4's OpenGL defocus performance diagnosis (item 8b, N3.4), then N3.6 when the hold lifts.
+- [ ] High: finish N3.2 audit 4 L1 with GPU-free rejection controls and an official build; continue the bounded
+  N3.4 source comparison independently, then N3.6 when the hold lifts.
   Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers ride
   with the next fitting dispatch.
 - [ ] Medium: the Bubble port (N5.1 Bubble box: classify rule (a)'s 8-level residual first), then the Oscilloscope
@@ -476,6 +478,10 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       plain pack's, and a pack that differs is refused with the reason (today it reaches the device as a pipeline
       whose layout does not match its shader). GPU-free test through `mode_blocks` with a pack of another input or
       block; negative control on the pre-change module (admitted).
+      - [ ] Reproduce acceptance of an incompatible pack on ABI25 through `mode_blocks`, without a GPU.
+      - [ ] Compare the full reflected interface at admission, including nested block layout and resources; permit
+        the draw-parameters built-ins that intentionally differ. Reject with a useful reason before pipeline creation.
+      - [ ] Run focused regressions on the official built module, matching-pack positive controls and High review.
     - [ ] L2, a mesh replaced by one of the same layout retargets instead of rebuilding: the latch key and
       `ensure()` tell a mesh's layout (stride and attributes) from its buffer (`ModeMeshes::objects()` counts both, so
       `meshObjects` forces `releasePipelines`, which releases the streams and the arena too, losing the storage

@@ -8,7 +8,8 @@ Never rewrite main or force-push.
   owns the detailed evidence and N3.4's remaining performance investigation.
 - [~] P1 desktop alpha, DPI and sleep/wake need lead/operator validation at N0.6; hidden results do not close it.
 - [x] Whole-query/alignment, blocking-read and populated-VAO controls proved; no production speedup or established cause.
-- [ ] Continue N3.4 at the compiled uniform/shader submission boundary; choose a falsifier before a core build.
+- [ ] Finish N3.2 audit 4 L1's incompatible shader-pack admission repair and focused built-module proof.
+- [ ] Continue N3.4 source research at the compiled uniform/shader submission boundary independently.
   Overlap/contention remains unproved; hardware counters are optional. R-232 retains the investigation. No production barrier
   or tracking exception is admitted.
 - [ ] Continue the Bubble port from its N5.1 box. Oscilloscope waits for N3.4's remaining performance gate.
