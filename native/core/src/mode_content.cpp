@@ -5782,15 +5782,18 @@ void ModeContent::decideTransparencyGate(QRhi *rhi)
     // record); a transparency target not admitted is dormant: its passes draw their sorted pack into the owner.
     const ModeProgram &program = m_source->drawnProgram();
     const quint64 controls = stageControlGeneration();
-    if (m_gateRhi == rhi && m_gateProgram == program.generation && m_gateControls == controls)
+    const quint64 sampleControls = removedSampleCountsGeneration();
+    if (m_gateRhi == rhi && m_gateProgram == program.generation && m_gateControls == controls
+        && m_gateSampleControls == sampleControls)
         return;
+    const QList<int> samples = supportedSampleCounts(rhi); // canonical owner; only copied at this gate's edge
     quint32 mask = 0;
     QStringList reasons;
     for (int t = 0; t < int(program.targets.size()) && t < kMaxSceneTargets; ++t) {
         const TargetDeclaration &d = program.targets.at(t);
         if (!d.transparency())
             continue;
-        const TransparencyGate gate = transparencyGate(rhi, d.samples > 1);
+        const TransparencyGate gate = transparencyGate(rhi, clampSamples(samples, d.samples) > 1);
         if (gate.admitted)
             continue;
         mask |= 1u << t;
@@ -5803,6 +5806,7 @@ void ModeContent::decideTransparencyGate(QRhi *rhi)
     m_gateRhi = rhi;
     m_gateProgram = program.generation;
     m_gateControls = controls;
+    m_gateSampleControls = sampleControls;
 }
 
 int ModeContent::defocusLevel(int pass) const

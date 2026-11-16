@@ -675,6 +675,8 @@ def round_gate(core, engine, app, api: str, packs: dict) -> dict:
         finally:
             _controls(core, case.controls, False)
         return {"state": _state_facts(state), "names": sorted(textures),
+                "effective_samples": {t["name"]: t["samples"] for t in state["scene_targets"]["targets"]},
+                "supported_samples": state["scene_targets"]["supported_samples"],
                 "fallbacks_counted": held["stage_fallbacks"] - before["stage_fallbacks"],
                 "stage_textures": held["stage_textures"], "frame_max": int(frame[..., :3].max())}
 
@@ -694,13 +696,38 @@ def round_gate(core, engine, app, api: str, packs: dict) -> dict:
         facts["sample_shading_missing_4x"] = shading
         checks["sample_shading_missing_falls_back_at_4x"] = (
             len(shading["state"]["fallbacks"] or []) == 1 and "sampleRateShading" in shading["state"]["fallbacks"][0]
-            and shading["fallbacks_counted"] == 1 and not shading["state"]["error"])
+            and shading["fallbacks_counted"] == 1 and not shading["state"]["error"]
+            and shading["effective_samples"].get("solo") == 4)
         single = records(Case("solo_shading_1x", "solo", controls=("sample_shading_missing",)))
         facts["sample_shading_missing_1x"] = single
         checks["sample_shading_missing_admits_1x"] = not single["state"]["fallbacks"] and single["fallbacks_counted"] == 0
         admitted = records(Case("solo_admitted", "solo"))
         facts["solo_admitted"] = admitted
         checks["admitted_records_no_fallback"] = not admitted["state"]["fallbacks"] and admitted["fallbacks_counted"] == 0
+        # The gate follows the same device clamp as allocation, including its generation when a control changes.
+        _controls(core, ("sample_shading_missing",), True)
+        try:
+            passes, targets, values = build(Case("solo_shading_clamp_changes", "solo", samples=4), packs)
+            scene = stc.Scene(core, engine, host, CARD, 1.0, packs, passes=passes, targets=targets, settings=values)
+            try:
+                # Same item/program and stage controls: only the canonical sample-count generation changes.
+                removed = [n for n in admitted["supported_samples"] if n > 1]
+                for phase, excluded, expected in (("before", [], 4), ("clamped", removed, 1), ("restored", [], 4)):
+                    core.scene_sample_counts_control(excluded)
+                    scene.targets(app)
+                    state = scene.mode.state()
+                    gate = _state_facts(state)
+                    counts = {t["name"]: t["samples"] for t in state["scene_targets"]["targets"]}
+                    facts[f"sample_shading_missing_clamp_{phase}"] = {"state": gate, "effective_samples": counts}
+                    checks[f"sample_shading_missing_clamp_{phase}"] = (
+                        not gate["error"] and counts.get("solo") == expected
+                        and (bool(gate["fallbacks"]) if expected > 1 else not gate["fallbacks"])
+                        and (expected > 1 or counts.get("solo_glass") == 1))
+            finally:
+                _close(scene, host, app)
+        finally:
+            core.scene_sample_counts_control([])
+            _controls(core, ("sample_shading_missing",), False)
         # The defocus read level's cap (the lead, 15 Nov): at the cap drawn, one past it refused with its reason.
         from rendering.native.scene_targets import bucket_pixels
 

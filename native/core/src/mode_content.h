@@ -868,6 +868,7 @@ private:
     const QRhi *m_gateRhi = nullptr;
     quint64 m_gateProgram = 0;
     quint64 m_gateControls = 0;
+    quint64 m_gateSampleControls = 0;
     quint32 m_dormant = 0;                   // the transparency targets not admitted on this device (bit: target)
     quint64 m_postObjectsSeen = 0;
     // The target a pass draws into this record: its own, or a dormant transparency target's owner (the sorted fallback).
