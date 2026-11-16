@@ -12,12 +12,18 @@ import post_stage_check as tool
 
 @pytest.fixture
 def diagnostic(monkeypatch):
-    state = {"time_defocus_draws": False, "flush_defocus_draws": False}
-    calls, counters = [], {"stage_defocus_timed": 0, "stage_defocus_time_skipped": 0}
+    state = dict.fromkeys(("time_defocus_draws", "flush_defocus_before_gather", "flush_defocus_between_draws",
+                           "flush_defocus_after_sprites"), False)
+    calls, counters = [], {"stage_defocus_timed": 0, "stage_defocus_time_skipped": 0,
+                           "stage_defocus_records": 0, "stage_defocus_flushes": 0}
     class Module:
         def stage_control(self, name, value):
-            state[name] = value
-            assert not all(state.values())
+            if name == "flush_defocus_draws":
+                for key in tuple(state)[1:]:
+                    state[key] = value
+            else:
+                state[name] = value
+            assert not (state["time_defocus_draws"] and any(tuple(state.values())[1:]))
             return True
     class Host:
         closed = False
@@ -37,6 +43,8 @@ def diagnostic(monkeypatch):
     def timed(_host, _scene, _values, frames, **kwargs):
         assert frames == 240
         calls.append(tuple(state.values()))
+        counters["stage_defocus_records"] += 40
+        counters["stage_defocus_flushes"] += 40 * sum(tuple(state.values())[1:])
         if state["time_defocus_draws"]:
             counters["stage_defocus_timed"] += tool.stc.COST_MIN_SAMPLES
         return {"samples": tool.stc.COST_MIN_SAMPLES, "median_ms": 2., "p10_ms": 1., "p90_ms": 3.}
@@ -48,8 +56,10 @@ def test_phases_are_ordered_independent_and_reset(diagnostic):
     core, state, calls, host = diagnostic
     result = tool.round_defocus_boundaries(core, None, None, "opengl", {})
     assert result["pass"]
-    assert calls == [(False, False)] * 2 + [(False, True)] * 2 + [(True, False)] * 2 + [(False, False)] * 2 + \
-                    [(False, False)] * 2 + [(False, True)] * 2 + [(True, False)] * 2 + [(False, False)] * 2
+    phases = [(False, False, False, False), (False, True, True, True), (False, True, False, False),
+              (False, False, True, False), (False, False, False, True), (True, False, False, False),
+              (False, False, False, False)]
+    assert calls == [phase for _ in (1, 4) for phase in phases for _ in range(2)]
     assert all(not value for value in state.values()) and host.closed
     assert result["facts"]["x1_boundaries"]["full_minus_no_sprites_median_ms"] == 0
 
@@ -59,7 +69,11 @@ def test_phases_are_ordered_independent_and_reset(diagnostic):
                                                     "p10_ms": 1., "p90_ms": 2.}))
 def test_missing_or_nonfinite_measurement_fails_closed(diagnostic, monkeypatch, invalid):
     core, state, _, host = diagnostic
-    monkeypatch.setattr(tool.stc, "_timed", lambda *_a, **_kw: invalid)
+    original = tool.stc._timed
+    def timed(*args, **kwargs):
+        original(*args, **kwargs)
+        return invalid
+    monkeypatch.setattr(tool.stc, "_timed", timed)
     result = tool.round_defocus_boundaries(core, None, None, "opengl", {})
     assert not result["pass"]
     assert not result["checks"]["x1_off_before_full"]
@@ -79,13 +93,16 @@ def test_controls_reset_after_error(diagnostic, monkeypatch):
 @pytest.mark.parametrize("bad", ("unexpected_query", "skipped_query", "state_error"))
 def test_invalid_counter_or_content_failure_is_rejected(diagnostic, monkeypatch, bad):
     core, state, _, _ = diagnostic
-    counters = {"stage_defocus_timed": 0, "stage_defocus_time_skipped": 0}
+    counters = {"stage_defocus_timed": 0, "stage_defocus_time_skipped": 0,
+                "stage_defocus_records": 0, "stage_defocus_flushes": 0}
     monkeypatch.setattr(tool, "_live", lambda _: dict(counters))
     if bad == "state_error":
         monkeypatch.setattr(tool.stc, "Scene", lambda *a, **kw: SimpleNamespace(
             mode=SimpleNamespace(state=lambda: {"content_failing": True, "content_failure": "failure"},
                                  settings=lambda _: None)))
     def timed(*_a, **_kw):
+        counters["stage_defocus_records"] += 40
+        counters["stage_defocus_flushes"] += 40 * sum(tuple(state.values())[1:])
         if state["time_defocus_draws"]:
             counters["stage_defocus_timed"] += tool.stc.COST_MIN_SAMPLES
             if bad == "skipped_query":
@@ -99,7 +116,17 @@ def test_invalid_counter_or_content_failure_is_rejected(diagnostic, monkeypatch,
 
 def test_changed_pixels_in_a_control_phase_fail(diagnostic, monkeypatch):
     core, state, _, _ = diagnostic
-    monkeypatch.setattr(tool, "_frame", lambda *_: np.array([int(state["flush_defocus_draws"])]))
+    monkeypatch.setattr(tool, "_frame", lambda *_: np.array([int(any(tuple(state.values())[1:]))]))
     result = tool.round_defocus_boundaries(core, None, None, "opengl", {})
     assert not result["checks"]["x1_boundaries_full_pixels"]
     assert not result["pass"]
+
+
+def test_selected_boundaries_without_flushes_fail(diagnostic, monkeypatch):
+    core, _, _, _ = diagnostic
+    live = tool._live
+    monkeypatch.setattr(tool, "_live", lambda core: dict(live(core), stage_defocus_flushes=0))
+    result = tool.round_defocus_boundaries(core, None, None, "opengl", {})
+    for phase in ("boundaries", "before_gather", "between_draws", "after_sprites"):
+        assert not result["checks"][f"x1_{phase}_full"]
+        assert result["checks"][f"x1_{phase}_full_pixels"]
