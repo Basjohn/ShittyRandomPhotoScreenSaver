@@ -924,6 +924,27 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     # Rule (a)'s verdict: the composite's tolerance (RULE_A_*), pixel by pixel with the translucency mask.
     judged = rule_a_frames(native, python, masks, mode)
     verdict["rule_a"] = rule_a_verdict(judged, mode)
+    # The first failing frames with every pixel past one level (where, how far, the reference's own 3x3 range and
+    # both colours), so a long run's rare failure is classified without a rerun.
+    import numpy
+
+    failed = []
+    for entry in (f for f in judged if not f.get("pass") and "input" in f):
+        if len(failed) >= 8:
+            break
+        index = entry["input"]
+        a, b = _pixels(native, index).astype(int), _pixels(python, index).astype(int)
+        delta = numpy.abs(a - b)[..., :3].max(axis=2)
+        ys, xs = numpy.nonzero(delta > 1)
+        pixels = []
+        for y, x in list(zip(ys.tolist(), xs.tolist()))[:40]:
+            patch = b[max(0, y - 1):y + 2, max(0, x - 1):x + 2, :3]
+            pixels.append({"x": x, "y": y, "level": int(delta[y, x]),
+                           "reference_range": int((patch.max(axis=(0, 1)) - patch.min(axis=(0, 1))).max()),
+                           "masked": bool(masks.get(index)[y, x]) if masks.get(index) is not None else False,
+                           "python": b[y, x].tolist(), "native": a[y, x].tolist()})
+        failed.append({"input": index, "reasons": entry.get("reasons", []), "pixels_past_one_level": pixels})
+    verdict["rule_a"]["failed_frames"] = failed
     # The mode's shown span in halves (before the switch): adaptive state (Dynamic Floor, normalisers) drifts with a
     # clip's length, so a late divergence shows in the second half's figures, not in the whole run's worst.
     half = switch_input // 2
