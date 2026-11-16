@@ -700,9 +700,11 @@ the feature (D3D11 is not stated).
   and growth are uniform arrays).
 - [ ] N5.3 Extruded Spectrum, then Sphere (meshes, lighting, N4.j's backdrop environment, N4.l's silhouette
   shadows; neither uses bloom; no compute).
-- [ ] Spectrum and Spline Curve: no re-proof (operator, 17 Nov: assumed fine, less critical, often altered). Once the
-  replay takes recorded clips (the box after N5.1 Bubble), save their four-clip frame hashes on both backends as a
-  reference for later comparison, if ever asked. Nothing is gated on them.
+- [ ] Re-prove Spectrum and Spline Curve on long recorded music, after N5.1 Bubble lands (operator, 17 Nov: the owner
+  replay had a mode switch hard-coded at 5.5 s and held every frame in memory, so their short-clip parity proved less
+  than assumed). Run owner rule (a) at both placements over the four 60 s recorded clips, with the recorded-clip
+  replay Bubble's port added, under their existing D12 bounds. Keep the frame hashes on both backends as their
+  reference. Classify any excess; never raise a bound to absorb it.
 - [ ] Bubble GPU optimisation, after N5.1 lands (operator, 17 Nov: Bubble about 50 % GPU at 4K and Extruded Bubble
   about 55 %, on a stale build; "all guarded gains are valuable"). Under the optimisation gate in
   `Docs/Guides/Native_Bubble_Diagnostics.md`:
