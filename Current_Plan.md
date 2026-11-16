@@ -565,6 +565,21 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     `git diff a553335bb 39e661d80 -- native/core rendering/native tests/test_native_post_stages.py`
     (about 6,800 lines: `post_stages.*`, `mode_content.*`, `scene_targets.*`, `module.cpp`, the shaders, the harness).
     Findings go to `Docs/Future_Work/Checkpoint_Audits_Nov15.md` as "Checkpoint audit 6"; fixes are the plan's boxes.
+    Codex audit role: Terra 6.1 High per Handbook section 1. Findings under focused repair, before acceptance:
+    - [ ] Reconcile partial bloom/defocus ownership accounting at each successful or failed allocation edge;
+      fault-inject first/intermediate allocation and resize failures, release to baseline, then allocate/release again.
+    - [ ] Gate transparency sample shading on the canonical resolved sample count, not the requested count;
+      prove requested multisample clamped to 1x stays eligible without sample shading, while actual multisample falls back.
+    - [ ] Make target readback metadata level-relative for nonzero mips, with the defined odd-size/bottom-anchor policy;
+      prove unaligned content lies inside each returned allocation.
+    - [ ] Reject readbacks exceeding fixed callback capacity before enqueuing; no silent partial result. Prove an
+      accepted over-cap target declaration fails loudly and a subsequent bounded readback still succeeds.
+    - [ ] Reject nonfinite FP16 parity inputs/deltas before integer conversion; finite equality and NaN/+Inf/-Inf
+      negatives on both candidate/reference. Recheck retained native parity arrays after this correction.
+    - [ ] Resolve the outside-pass external-command question against pinned Qt 6.12 Vulkan source and existing
+      common-owner proof before changing synchronization; validation PASS alone does not establish API support.
+  - [ ] Remote-build side defect: a successful workflow dispatch can become discoverable after the client's timeout;
+    preserve the run token and recover the existing run before any retry, so late queued builds are not orphaned.
   - [x] `stream_ring` timing-margin repair: bracketing-floor median sensitivity, exact native record coverage;
     41 focused tests, High audit and merged ABI 21 OpenGL/Vulkan proof PASS (16 Nov; D15).
   - [ ] Awaiting Validation before a Waveform consumer: repeat `mesh_buffer_check.py --rounds stream_ring` on a
