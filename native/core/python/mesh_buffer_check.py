@@ -1201,14 +1201,15 @@ def _timed(host, scene, *, min_samples: int = COST_MIN_SAMPLES, frames: int = RI
 
     last = counts()
 
-    def sample_cpu_batch():
+    def sample_cpu_batch(requested_frames):
         nonlocal last, records_measured
         now = counts()
         if any(now[key] < last[key] for key in counter_keys):
             raise RuntimeError("native timing counters regressed during measurement")
         records = now["mesh_buffers_records_timed"] - last["mesh_buffers_records_timed"]
-        if records <= 0:
-            raise RuntimeError(f"native record timing counter did not advance in batch ending at frame {drawn}")
+        if records != requested_frames:
+            raise RuntimeError(f"native record timing batch ending at frame {drawn}: expected {requested_frames} "
+                               f"new records, observed {records}")
         record_ms.append((now["mesh_buffers_record_ns"] - last["mesh_buffers_record_ns"]) / records / 1e6)
         write_ms.append((now["mesh_buffers_stream_write_ns"] - last["mesh_buffers_stream_write_ns"])
                         / records / 1e6)
@@ -1224,9 +1225,11 @@ def _timed(host, scene, *, min_samples: int = COST_MIN_SAMPLES, frames: int = RI
         drawn += 1
         if drawn % 20 == 0:
             gpu += [s.nanoseconds for s in host.gpu_samples() if s.kind == 2]
-            sample_cpu_batch()
+            sample_cpu_batch(20)
     if drawn % 20:
-        sample_cpu_batch()
+        sample_cpu_batch(drawn % 20)
+    if records_measured != drawn:
+        raise RuntimeError(f"native record timing coverage: expected {drawn}, observed {records_measured}")
     host.frames(4)
     gpu += [s.nanoseconds for s in host.gpu_samples() if s.kind == 2]
     host.set_gpu_timer(False)
@@ -1243,7 +1246,7 @@ def _timed(host, scene, *, min_samples: int = COST_MIN_SAMPLES, frames: int = RI
                    "record_cpu_p90_ms": round(record_ms[int(len(record_ms) * 0.9)], 4),
                    "record_cpu_samples": len(record_ms),
                    "record_cpu_expected_samples": (drawn + 19) // 20,
-                   "record_cpu_sampled_frames": drawn,
+                   "record_cpu_sampled_frames": records_measured,
                    "record_cpu_records": records_measured,
                    "write_cpu_median_ms": round(write_ms[len(write_ms) // 2], 4)})
     return result
@@ -1335,7 +1338,7 @@ def _record_metric(measurement: dict) -> dict:
     metric["coverage_valid"] = (expected is not None and metric["samples"] == expected
                                 and measurement.get("record_cpu_expected_samples") == expected
                                 and measurement.get("record_cpu_sampled_frames") == frames
-                                and type(records) is int and records >= expected)
+                                and type(records) is int and records == frames)
     return metric
 
 

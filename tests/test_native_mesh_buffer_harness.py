@@ -117,8 +117,10 @@ def test_missing_native_record_counters_cannot_use_wall_time():
         harness._timed(host, scene, frames=20, min_samples=1)
 
 
-@pytest.mark.parametrize("batches", ((20, 0, 20), (20, 20, 20), (20, 20, 20, 1)))
-def test_native_counter_batches_require_continuous_coverage(batches):
+@pytest.mark.parametrize("batches,frames", (((20, 0, 20), 60), ((20, 1, 20), 60), ((20, 21, 20), 60),
+                                           ((20, 20, 20), 60), ((20, 20, 20, 1), 61),
+                                           ((20, 20, 1), 43), ((20, 20, 4), 43)))
+def test_native_counter_batches_require_continuous_coverage(batches, frames):
     from types import SimpleNamespace
 
     count = 0
@@ -133,11 +135,12 @@ def test_native_counter_batches_require_continuous_coverage(batches):
     scene = SimpleNamespace(draw=lambda _: None, publish=lambda: None,
                             mode=SimpleNamespace(update=lambda: None,
                                                  _module=SimpleNamespace(composite_live=lambda: next(snapshots))))
-    if 0 in batches:
-        with pytest.raises(RuntimeError, match="did not advance.*batch"):
-            harness._timed(host, scene, frames=60, min_samples=1)
+    expected = (20,) * (frames // 20) + ((frames % 20,) if frames % 20 else ())
+    if batches != expected:
+        with pytest.raises(RuntimeError, match="native record timing.*batch"):
+            harness._timed(host, scene, frames=frames, min_samples=1)
     else:
-        result = harness._timed(host, scene, frames=sum(batches), min_samples=1)
+        result = harness._timed(host, scene, frames=frames, min_samples=1)
         assert result["record_cpu_samples"] == result["record_cpu_expected_samples"] == len(batches)
         assert result["record_cpu_records"] == sum(batches)
         assert result["record_cpu_sampled_frames"] == result["frames"] == sum(batches)
@@ -155,7 +158,8 @@ def test_cpu_comparison_requires_full_meaningful_batch_set(samples, frames):
 
 
 @pytest.mark.parametrize("field,value", (("record_cpu_expected_samples", None),
-                                         ("record_cpu_sampled_frames", 580), ("record_cpu_records", 0)))
+                                         ("record_cpu_sampled_frames", 580), ("record_cpu_records", 0),
+                                         ("record_cpu_records", 30), ("record_cpu_records", 601)))
 def test_cpu_comparison_rejects_incomplete_coverage_metadata(field, value):
     measurement = {"record_cpu_" + key: item for key, item in metric(.01, .015, .02).items()}
     measurement.update(frames=600, record_cpu_expected_samples=30, record_cpu_sampled_frames=600,
