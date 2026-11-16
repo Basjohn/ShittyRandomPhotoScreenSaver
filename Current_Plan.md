@@ -597,7 +597,7 @@ the feature (D3D11 is not stated).
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
   Native route is merged dormant; Bubble is not offered on Vulkan until parity passes. The latest owner rule (a)
-  remains a FAIL on smaller steady ties and fade differences after the class-word repair; official ABI25 replay
+  remains a FAIL on one-level steady scatter after the class-word and mask antialias repairs; official ABI25 replay
   retains unchanged bounds at DPR1.5. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
   eliminated suspicions and evidence. Follow the Native Port Playbook; no registration or tolerance widening yet.
   - [x] Class-word upload and portable unsigned-vector admission proved on both APIs; unchanged wire record (R-238).
@@ -605,22 +605,20 @@ the feature (D3D11 is not stated).
     tools for correctness and later optimisation, preserving provenance, negative controls and distinct verdicts.
     Current promotion: `tools/visualizer_replay/bubble_native_diagnostics.py`, private `_bubble_native_*.py` helpers
     and `tests/test_bubble_native_diagnostics.py`; finish the independent receipt-provenance audit before landing.
-  - [ ] **In progress: shared mask antialias support.** Validate the unlanded
-    `widgets/spotify_visualizer/shaders/bubble_ambient_mask.vert` and `.vert.qsb` candidate through a complete owner
-    replay and old/new Python reference-fringe comparison, then land only the proved slice. The focused regression is
-    `tests/test_bubble_ambient_big_occlusion.py`; the old shader fails and the candidate passes its focused checks.
-    Resume from `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` and
-    `.artifacts/evidence/native_core/n5_1_bubble/20261116_mask_support_candidate/`.
-    The pending archive/fringe helper is
-    `.artifacts/evidence/native_core/n5_1_bubble/20261116_reference_archive_prep/archive_reference.py`;
-    finish its independent provenance/owner-completion review before the serial hidden runs.
-  - [ ] Resolve the remaining one-level steady ties and seven fade pixels above one level (maximum five) with
-    unchanged D12 bounds. Validate shared mask-quad antialias support at the proved post-mask residual; all532
-    larger steady errors are gone and the Python reference is unchanged. Preserve the full replay sequence:
-    `python tools/visualizer_replay/owner_render_parity.py --out .artifacts/evidence/native_core/n5_1_bubble/<date>_<label>
-    --native --mode bubble --runs bubble --placements display` (use the investigation's process-local dormant
-    registration wrapper while diagnosing). If a class remains that is not a defect, report its figures to the lead for a bound
-    (D12 "The pixel tolerance": a new class or wider bound is the lead's decision), never widen it yourself.
+  - [ ] **Lead decision: Bubble's steady scatter class (blocks rule (a)).** Root cause as classified: with the mask
+    antialias repair in, rule (a) (`python -m tools.visualizer_replay.bubble_native_diagnostics replay`, variant a,
+    display, unchanged D12 bounds) still FAILS 89 of 344 judged frames, 84 of them steady, every one on the tie count
+    alone ("N ties (at most 10)"; no stray, flip or scatter reasons). The steady residual is 2,430 pixels over 322 of
+    337 inputs, all exactly one level, 1,908 isolated, 2,222 single-channel, spread over the whole content area
+    (2,374 distinct locations, none repeating more than four times), median 3x3 reference range five levels, 974 on
+    ambient sprites, 225 within two pixels of a hero edge, 1,282 on neither; worst frame 34. This is D12's scatter
+    signature (two compilers rounding within float error of a half level: Python's composed GLSL versus the qsb pack),
+    but Bubble's tolerance admits no scatter (`scatter_pixels=0`). The lead decides whether to admit a scatter bound
+    (measured worst 34 a frame) or to name a further owner experiment; never widen it in an agent slice. Classifier
+    and per-pixel table: `.artifacts/evidence/native_core/n5_1_bubble/20261117_steady_residual_classes/`.
+  - [ ] Fade residual after that decision: five pixels above one level across two inputs (maximum two, was five) and
+    five failed fade frames; rerun `replay` and confirm they fall within the existing tie class, or classify them with
+    `fade-inputs`/`components` at the failing inputs.
   - [ ] Non-blocking contract follow-up: compare an actual non-unit inherited scene opacity on both paths before
     admitting a repair. Python folds it into shader fade while native composites it afterward; the current failing
     fixture has inherited opacity1 and equal shader fades, so this source distinction does not explain that failure.
@@ -699,6 +697,11 @@ the feature (D3D11 is not stated).
     - [ ] In the GPU cost step, measure the ambience-off cost of the two empty passes at 4K (median and p90 of 240
       frames, OpenGL and Vulkan). If above 0.02 ms, the core skips a pass whose instance count is 0 (one C++ change,
       one build, a test that the pass is not begun); otherwise nothing more.
+- [ ] Bubble optimisation proof gap (before the first Bubble optimisation; `Docs/Guides/Native_Bubble_Diagnostics.md`
+  "Optimisation gate"): the `replay` recipe is fixed to a 5.5 s synthetic clip and variant a. It gains BTF §24's
+  recorded-music clips, a `--api opengl|vulkan` choice if it lacks one, and a hash-only compare mode (a before
+  directory against an after directory, all-frame hashes), with a negative control that a one-ulp shader change is
+  detected.
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).

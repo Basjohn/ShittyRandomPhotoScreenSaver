@@ -20,4 +20,15 @@ python -m tools.visualizer_replay.bubble_native_diagnostics components --repo . 
 
 The command preserves the owner's exit code: exit 1 can be an honest owner parity failure even when diagnostic guards pass. A completed run with failed diagnostic guards returns 2; exceptions also fail and may have another nonzero exit. Inspect `owner_exit_code`, `passive_guards_pass` and the individual checks in metadata separately. A failed or interrupted capture is not a successful diagnostic and must not be rewritten as one. Cleanup and registry restoration are part of the recorded guards.
 
+## Optimisation gate
+
+After the port lands, Bubble is optimised on OpenGL and Vulkan; these tools, `tools/visualizer_replay/bubble_parity.py`, `bubble_fidelity.py`, `tools/conventions_identity.py` and BTF §24 are that work's proof, and none of them is deleted. An optimisation's before/after proof passes four tiers in order:
+
+- **(a) Logic and reactivity, zero loss:** `bubble_parity.py` save/compare under frozen settings, plus BTF §24's real-music frame-by-frame byte-parity lock (the `bubble_fidelity.py` observer).
+- **(b) Pixels, byte parity per backend:** the `replay` recipe's all-frame hashes, before against after, identical on OpenGL and separately on Vulkan. Across backends the bound stays rule (b)'s one level; byte parity is never claimed across backends.
+- **(c) Where hashes differ:** `fade-inputs` and `components` classify where.
+- **(d) Cost:** the port's per-pass GPU timing, `tools/overhead_baseline.py`, and `preflip_pack.py --compare`.
+
+An optimisation that cannot hold byte parity (reordered float math, half floats, merged passes) is a tier-2 change: it needs the shared tolerance (`tools/pixel_tolerance.py`) and the operator's sign-off, never a silent pass. The `replay` recipe's current limits (synthetic clip, one variant, no hash-only compare) are an open plan item.
+
 For an optimization investigation, capture a matched before/after pair and use these probes to classify changes in final fragments, ambient attachments and fades, retaining the original owner judge and provenance. They are not GPU benchmarks and do not replace BTF §24's recorded-music matrix, exact logical fidelity, independent performance/reactivity measurement and live operator acceptance. The separate fringe/archived research helper remains ignored research pending promotion; it is not a durable CLI command.
