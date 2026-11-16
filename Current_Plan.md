@@ -569,6 +569,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     - [x] Native target-pixel API help includes the returned mip `level` beside the other metadata.
   - [ ] Remote-build side defect: a successful workflow dispatch can become discoverable after the client's timeout;
     preserve the run token and recover the existing run before any retry, so late queued builds are not orphaned.
+    Add an explicit CLI recovery route bound to target/commit/token that reuses the existing validate/publish owner
+    and never dispatches another run; focused tests must reject wrong identity and prove dispatch is never called.
   - [x] `stream_ring` timing-margin repair: bracketing-floor median sensitivity, exact native record coverage;
     41 focused tests, High audit and merged ABI 21 OpenGL/Vulkan proof PASS (16 Nov; D15).
   - [ ] Awaiting Validation before a Waveform consumer: repeat `mesh_buffer_check.py --rounds stream_ring` on a
