@@ -902,7 +902,8 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
 
 
 def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
-               against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS, mode: str = "spectrum") -> dict:
+               against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS, mode: str = "spectrum",
+               recording: str | None = None) -> dict:
     """``native_parity`` over ``mode``'s widened run set (``conventions_identity.mode_runs``; a mode of the route's
     ``NATIVE_MODE_IDS``) at the rig's own placement, and ``OVERSCAN_RUNS`` again at each other placement of
     ``placements`` (keyed ``run@placement``); the report. ``against``: an accepted report this one is compared with
@@ -916,12 +917,15 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
     core = load(module_dir)
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    clip = evidence.shipped_clip(seconds)
+    # ``recording``: the first ``seconds`` of one of the operator's recorded takes (logs/visualizer_recordings, read
+    # only) instead of the shipped Studio clip's opening.
+    clip = evidence.load_recording(recording, seconds) if recording else evidence.shipped_clip(seconds)
     from rendering.quick.visualizer.native_route import NATIVE_MODE_IDS
 
     if mode not in NATIVE_MODE_IDS:
         raise ValueError(f"the native route draws {sorted(NATIVE_MODE_IDS)}, not {mode!r}")
-    report: dict = {"mode": mode, "offers": offers, "seconds": seconds, "display": list(DISPLAY), "results": {}}
+    report: dict = {"mode": mode, "offers": offers, "seconds": seconds, "display": list(DISPLAY), "clip": clip.name,
+                    "clip_frames": len(clip.frames), "results": {}}
     started = time.perf_counter()
     runs = conventions_identity.mode_runs(mode, offers)
     planned = [(suffix, settings, "display") for suffix, settings in runs] if "display" in placements else []
@@ -1097,6 +1101,9 @@ def main(argv=None) -> int:
     parser.add_argument("--against", type=Path, default=None,
                         help="with --native: an accepted native_render_parity.json; the run passes when every run's "
                              "differences equal it (bit-identical native frames)")
+    parser.add_argument("--recording", default=None,
+                        help="with --native: one of the operator's recorded takes (logs/visualizer_recordings/<name>"
+                             ".jsonl, its first --seconds) instead of the shipped Studio clip")
     args = parser.parse_args(argv)
     # The stills (contact sheets, difference maps) and the report are written into owner scratch and published to
     # ``--out`` by the evidence publisher (``tools/evidence_media.py``); stills stay PNG, lossless.
@@ -1120,7 +1127,7 @@ def main(argv=None) -> int:
             report = run_native(args.out, module_dir=args.module_dir.resolve(), offers=args.offers,
                                 seconds=args.seconds, only=tuple(args.runs),
                                 against=None if args.against is None else args.against.resolve(),
-                                placements=tuple(args.placements), mode=args.mode)
+                                placements=tuple(args.placements), mode=args.mode, recording=args.recording)
         else:
             report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
                          seconds=args.seconds, controls=not args.skip_controls)

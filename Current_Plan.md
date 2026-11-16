@@ -686,10 +686,10 @@ the feature (D3D11 is not stated).
   Render Python's Bubble with the GLSL the qsb pack emits (the pack's GLSL variants in place of the composed source)
   over the `replay` recipe and show the steady residual collapses (from 2,430 one-level pixels, worst 34 a frame).
 - [ ] Bubble optimisation proof gap (before the first Bubble optimisation; `Docs/Guides/Native_Bubble_Diagnostics.md`
-  "Optimisation gate"): the `replay` recipe is fixed to a 5.5 s synthetic clip and variant a. It gains BTF §24's
-  recorded-music clips, a `--api opengl|vulkan` choice if it lacks one, and a hash-only compare mode (a before
-  directory against an after directory, all-frame hashes), with a negative control that a one-ulp shader change is
-  detected.
+  "Optimisation gate"): the standard proof is the four 60 s recorded clips (`owner_render_parity.py --recording`,
+  which the port added), hash-compared before and after, per backend. Still missing: a `--api opengl|vulkan` choice
+  (the owner replay draws OpenGL only), and a hash-only compare mode (a before directory against an after directory,
+  all-frame hashes), with a negative control that a one-ulp shader change is detected.
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).

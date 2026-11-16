@@ -25,7 +25,7 @@ The command preserves the owner's exit code: exit 1 can be an honest owner parit
 After the port lands, Bubble is optimised on OpenGL and Vulkan; these tools, `tools/visualizer_replay/bubble_parity.py`, `bubble_fidelity.py`, `tools/conventions_identity.py` and BTF §24 are that work's proof, and none of them is deleted. An optimisation's before/after proof passes four tiers in order:
 
 - **(a) Logic and reactivity, zero loss:** `bubble_parity.py` save/compare under frozen settings, plus BTF §24's real-music frame-by-frame byte-parity lock (the `bubble_fidelity.py` observer).
-- **(b) Pixels, byte parity per backend:** the `replay` recipe's all-frame hashes, before against after, identical on OpenGL and separately on Vulkan. Across backends the bound stays rule (b)'s one level; byte parity is never claimed across backends.
+- **(b) Pixels, byte parity per backend:** the standard proof is the four 60 s recorded clips of BTF §24 (`owner_render_parity.py --native --mode bubble --runs bubble --placements display --seconds 60 --recording <take>`), all-frame hashes before against after, identical on OpenGL and separately on Vulkan; the 5.5 s `replay` recipe is the quick check. Across backends the bound stays rule (b)'s one level; byte parity is never claimed across backends.
 - **(c) Where hashes differ:** `fade-inputs` and `components` classify where.
 - **(d) Cost:** the port's per-pass GPU timing, `tools/overhead_baseline.py`, and `preflip_pack.py --compare`.
 
