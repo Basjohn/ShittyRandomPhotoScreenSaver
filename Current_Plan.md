@@ -1309,14 +1309,12 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   A third, `tests/test_qtquick_startup_reveal.py::test_startup_reveal_primes_zero_then_completes_at_one_once`,
   failed the same way in the 1D.12 merge run (4,407 tests over 33 minutes). Find the leaked state or ordering they depend on, and make each test own its preconditions.
   The N5.1 merge run (4,529 tests, 44 minutes, one process) added twelve more of this kind; they pass alone.
-- [ ] Known red checks found at the N5.1 merge (each originally failed alone):
+- [x] Known red checks found at the N5.1 merge (each originally failed alone):
   - [x] Near-light fixture uses canonical camera/aperture and test-owned visible defocus; original alpha0 reproduced,
     stale-composite mutation detected, offscreen pixels/resources preserved. Terra High audited, merged test PASS (16 Nov).
-  - [ ] `tests/test_qtquick_visualizer_clip_smoke.py:303`, the Oscilloscope reflow, reads 175 against 173. The QSG/clip
-    optimisations are protected: never retune production to satisfy this oracle; judge whether the oracle is stale.
-    Read-only trace (16 Nov): this is exact thresholded lit-row count, not the owner-resolved clip extent; horizontal
-    sampling/AA/bloom can move threshold crossings. Next retain hidden captures and assert canonical vertical
-    geometry/trace scale, with an actual wrong-vertical-geometry negative; no tolerance or product change admitted.
+  - [x] Oscilloscope reflow's original 175-versus-173 clip-smoke failure passes unchanged in the focused hidden
+    run (16 Nov); no product/tolerance change. Watch for recurrence: retain captures and owner-resolved vertical
+    geometry before judging this thresholded lit-row oracle. Protected QSG/clip implementation stays unchanged.
 - [ ] Lead, Display 1: confirm R-221 in the product, Fullscreen Hide Borders with pixel shift stepping, and check
   whether the operator's lavender edge colour came from the shift.
 
