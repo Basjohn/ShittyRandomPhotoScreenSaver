@@ -4,7 +4,7 @@ The live acceptance sequence is `Current_Plan.md` item 8b, N5.1 Bubble; the comm
 
 ## Reproduced owner residual
 
-The current baseline (`.artifacts/evidence/native_core/n5_1_bubble/20261116_current_rule_a_b1451eb11/native_render_parity.json`, `reproduction_metadata.json` and the six input-244 PNGs beside them) reruns the retained variant-a rule-(a) comparison through the dormant owner on current module b1451eb11. It is Python versus native OpenGL at the display placement, 1920 × 1080, actual DPR 1.5, device-aligned origin (30, 30), 5.5 seconds and the full 549-input sequence. Each path drew 549 frames; native published 360, with the mode switch at input 337. The current run reproduces the retained numbers exactly: 350 differing inputs, 3,423,997 differing pixels and a maximum difference of eight 8-bit levels. The judge fails 215 frames; the worst frame has 101 ties and eight flips. This is not an accepted parity result.
+The latest baseline (`.artifacts/evidence/native_core/n5_1_bubble/20261116_current_rule_a_7d7fe160a/native_render_parity.json`, `reproduction_metadata.json` and the six input-244 PNGs beside them) reruns the retained variant-a rule-(a) comparison through the dormant owner on official module7d7fe160a. It is Python versus native OpenGL at the display placement, 1920 × 1080, actual DPR1.5, device-aligned origin(30,30),5.5 seconds and the full549-input sequence. Each path drew549 frames; native published360, with the mode switch at input337. It reproduces both the earlier b1451eb11 replay and the retained historical result exactly:350 differing inputs,3,423,997 differing pixels and maximum difference8 levels. The judge fails215 frames; the worst frame has101 ties and8 flips. This is not accepted parity. The original executed helper is retained with each current baseline.
 
 The retained source review and CPU analysis are in `.artifacts/evidence/native_core/n5_1_bubble/20261116_residual_source_review/research.md` and `retained_analysis.json`; the earlier owner receipt is `.artifacts/evidence/native_core/n5_1_bubble/20261115_rule_a_variant_a/`. The inputs are generated from the canonical settings spec, not a frozen preset. In the retained breakdown, steady frames account for 328 differing inputs and 7,240 differing pixels (532 above one level); fade frames account for 22 inputs and 3,416,757 pixels (57 above one level). Most differences are one-level fade/composite differences; the maximum and the rule failures still require classification.
 
@@ -21,7 +21,34 @@ At input 244, 47 pixels differ: 41 by one level, four by two, one by three and o
 
 ## Next discriminating control
 
-The prepared no-final-light diagnostic is source-pending and has not been run. If reviewed and run on a reserved GPU, suppress only final light composition on both paths by wrapping `bubble_frame_scalars` and replacing its returned `u_ambient_light_enabled` with zero. Keep the logical frames, point and occluder payloads, light attachment allocation and drawing, mask blend, settings, pass order and owner judge intact; restore the function afterwards. This differs from an authored glow toggle, which also changes published simulation data.
+An independent GPU-free input244 block oracle passes on the same official7d7fe160a module. The production Python
+packer matches all3,552 compared shader-read bytes:49 hero positions/extras,147 trail.xyz samples, two addressable
+class words, enabled ambient size and scalar/style fields; reflected offsets match too. Ambient point/mask
+non-core settings also match. Mutating the serialized first position by+.01 fails only `u_bubbles_pos`. The lead
+reviewed and reran it; `20261116_block_oracle/` retains raw/expected/negative bytes, manifest, source and summary.
+This excludes packing differences in those spans, not actual GPU uniform upload, shader arithmetic or pixels.
+Matrix/target conventions are explicit exclusions. The GPU-free helper lacks per-pass target context, so its
+ambient core-size field is the overall630×420 while the real draw uses618×408; that helper limitation is not a
+native target-size defect.
+
+The no-final-light diagnostic wraps only `bubble_frame_scalars` and replaces its returned `u_ambient_light_enabled`
+with zero. Logical frames, point/occluder data, light allocation/draws, mask blend, settings, pass order and the owner
+judge remain intact; the wrapper restores all functions. This differs from an authored glow toggle, which also
+changes simulation data. Source review was independently clear before execution.
+
+The first matching7d7fe160a run is retained in `20261116_current_rule_a_7d7fe160a_light_disabled/`. Canonical parity
+still fails:346 differing inputs,3,467,030 differing pixels,max8. At input244, the reference/native images each
+change visibly against baseline (20,056/20,055 pixels;9,630 pixels change by at least2 levels,max31). Yet the same
+six pixels above one level remain atx251–255/y347–354, including the original max8 coordinate. This supports
+investigating boundaries beyond final light composition, subject to the diagnostic integrity issue below.
+
+Fourteen integrity guards pass; the raw projected-record equality guard fails. The in-memory record contains
+tuples whereas the saved baseline JSON contains lists. The original failed receipt and executed helper SHA
+`f4a1b81081bd764d04044d3a6ee6ac54d104b8469904f586008be319c250234d` remain unchanged. Independent inspection of
+the saved JSON records finds exactly one changed key, `u_ambient_light_enabled:1→0`; the complete actual record
+equals that expected record. `posthoc_wire_guard_inspection.json` records this check and both metadata hashes.
+Correct the comparison at its JSON representation boundary and audit it before treating the control as fully
+guarded. This is a diagnostic representation defect, not evidence for widening pixel tolerance or changing renderer data.
 
 Require an actual visible baseline-versus-control difference in lit regions as the negative control, and recompute each image's reference-derived mask. If input 244's cluster disappears and the other residuals shrink, final light contribution or its read is implicated; that alone cannot distinguish accumulation, sampling, coordinates and final mapping. Compare actual light and coverage attachment readbacks on the fixed input before proposing a precision change. If the cluster persists, localize coverage/mask and final hero arithmetic with the same frozen logical frame. A diagnostic is not port acceptance; do not widen D12 bounds without the lead's explicit decision.
 

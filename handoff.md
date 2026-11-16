@@ -17,7 +17,7 @@ Never rewrite main or force-push.
 - [x] Current matched backend check confirms this GL excess absent on Vulkan (R-232).
 - [ ] Non-blocking deeper N3.4 investigation by another agent; retain R-232's stats, failed avenues and hypotheses.
   No production barrier or tracking exception without proof; no consumer hold from this investigation (operator, 16 Nov).
-- [ ] After mesh retarget and reserved-resource admission, continue Bubble parity from N5.1, then Oscilloscope.
+- [ ] Resolve Bubble parity from N5.1 with unchanged bounds, then Oscilloscope.
 - [ ] Keep N3.6, heavy ports N5.3–N5.6, the Vulkan flip and Python-renderer removal held for the lead.
 - [ ] Keep quiet-GPU `stream_ring` performance admission separate from its passing functional proof before a
   Waveform consumer.

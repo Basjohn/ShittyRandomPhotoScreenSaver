@@ -212,7 +212,9 @@ build selection; current host and composite proof lives here.
   per-record instance stream, a vertex-pulled strip with blend MAX, 900 streaks over the built-in quad; rule (a) against
   the Python owners and rule (b) at dpr 1 and 1.5 within the tie budget; the sprites against `gl_PointSize`; the batched
   forms, sixteen passes and the indirect draw equal; firstInstance's control; nothing at rest; no allocation over a
-  steady minute; retirement; validation; cost; `--rounds stream_ring`: QRhi's routes against the pair's floor, D15
+  steady minute; retirement; validation; cost; `--rounds retarget`: fresh geometry, retained tails, compatible-layout
+  allocation/generation guards, lost/recreated meshes and compute mesh/texture rebinding through the same child
+  and validation owner (`mesh_retarget_check.py`, no separate CLI); `--rounds stream_ring`: QRhi's routes against the pair's floor, D15
   point 7).
 - `python/compute_pass_check.py`: N3.3's proof on the harness scenes `python/compute_passes/` (Waveform's field, floor
   give chain and fog volume shapes, the drift's stateful buffer, the product's compacted population with its indirect

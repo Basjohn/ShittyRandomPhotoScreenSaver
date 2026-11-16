@@ -1790,6 +1790,10 @@ rendering.
 `Docs/Guides/GitHub_Remote_Build.md`. Installing a remote-built product on an ordinary user account is the
 "Installed builds" entry below; the frozen run of 1B.14 covers the artifact.
 
+- [ ] Retire superseded native run43937313108 (`e15efeda1`, token20261116_211445_549725) when GitHub permits:
+  REST reports queued/no jobs, while cancellation returns409 "not been queued yet" and token discovery cannot
+  identify it. No local publisher is running. Do not redispatch that token or publish its older artifact over the
+  validated7d7fe160a module. This service-state cleanup is non-blocking.
 - [ ] Since checkpoint audit 11 (8 Nov) the tab's Linux job runs beside the Windows runs on its own process owner
   (never holding their retrieval) and a stop cancels its run even before it was followed; tested with fakes only, so
   the next Remote run with Linux selected is its first real one: read its log and fix what it shows.
