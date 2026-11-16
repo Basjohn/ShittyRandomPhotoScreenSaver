@@ -596,10 +596,9 @@ the feature (D3D11 is not stated).
   item as Spectrum's; both close with N5.8.
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
-  Native route is merged dormant; Bubble is not offered on Vulkan until parity passes. The latest owner rule (a)
-  remains a FAIL on one-level steady scatter after the class-word and mask antialias repairs; official ABI25 replay
-  retains unchanged bounds at DPR1.5. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
-  eliminated suspicions and evidence. Follow the Native Port Playbook; no registration or tolerance widening yet.
+  Registered on the route and offered on Vulkan; the 5.5 s owner replay passes rule (a) under D12's Bubble scatter.
+  `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics, eliminated suspicions and
+  evidence. Follow the Native Port Playbook; no further tolerance widening.
   - [x] Class-word upload and portable unsigned-vector admission proved on both APIs; unchanged wire record (R-238).
   - [ ] Retain and document the replay, fade-input, attachment and reference-fringe diagnostics as reusable repository
     tools for correctness and later optimisation, preserving provenance, negative controls and distinct verdicts.
@@ -613,11 +612,6 @@ the feature (D3D11 is not stated).
   - [ ] Non-blocking contract follow-up: compare an actual non-unit inherited scene opacity on both paths before
     admitting a repair. Python folds it into shader fade while native composites it afterward; the current failing
     fixture has inherited opacity1 and equal shader fades, so this source distinction does not explain that failure.
-  - [ ] Register: add `"bubble": _bubble_settings` to `GENERIC_MODE_SETTINGS` (drop `BUBBLE_SETTINGS`' comment) and
-    `renderer_backends=("opengl", "vulkan")` to Bubble's descriptor in `core/settings/visualizer_mode_registry.py`;
-    in `tests/test_native_bubble.py` turn the route test's monkeypatches into `assert "bubble" in NATIVE_MODE_IDS`.
-    Run `tests/test_native_bubble.py tests/test_native_visualizer_route.py tests/test_backend_availability.py
-    tests/test_visualizers_tab_backend_modes.py`.
   - [ ] Owner rule (a) over the widened set at both placements: `owner_render_parity.py --native --mode bubble
     --offers` (variants a and b, every Choice offer, display and overscan), every run PASS.
   - [ ] Rule (b) and the item's contract: `native/core/python/bubble_check.py`, a copy of `devcurve_check.py` with

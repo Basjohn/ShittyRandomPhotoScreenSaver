@@ -273,6 +273,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         # Spectrum-family kick lane is not its transient path.
         technical_hidden_suffixes=("agc_strength", "dynamic_range_enabled", "kick_lane_gain"),
         supports_expanded_display=True,                # Expanded Visualizer (operator, 7 Nov)
+        # N5.1: the native core draws it on Vulkan as generic mode content with its ambient target and streams
+        # (rendering.quick.visualizer.native_route, D12), at parity with the Python renderer (Current_Plan.md item 8b).
+        renderer_backends=("opengl", "vulkan"),
     ),
     VisualizerModeDescriptor(
         "devcurve",
