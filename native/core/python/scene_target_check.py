@@ -45,6 +45,9 @@ Rounds:
              have no readback between them to order a resolve), so a Vulkan cost round without the validation layer
              fails.
 Run alone (not in the default set):
+  readback_metadata (each API) complete enumeration beyond the former fixed callback capacity, then bounded
+             readbacks with unaligned content and odd mip extents. Checks normalized-UV mip metadata and byte shapes,
+             subsequent readback and release; no non-base pixel parity or filtering-fringe containment claim.
   scissor_control (each API) the same enlarged viewport and quad, with UsesScissor disabled: actual colour and depth
              writes fill the slack and fail the positive predicate. Restoring scissor on the same item restores the
              frame (pipeline flags must rebuild), without reallocating targets. Controls reset in finally.
@@ -98,7 +101,7 @@ APIS = ("opengl", "vulkan")
 ROUNDS = ("parity", "msaa", "rest", "resize", "retire", "scissor", "cost")
 # Run on its own (its skipped phase is expected to show hazards): --apis vulkan --rounds prime_control
 CONTROL_ROUNDS = ("prime_control", "cost_parts", "placement_control", "resize_control",
-                  "partial_retire_control", "invalidation_control", "scissor_control")
+                  "partial_retire_control", "invalidation_control", "scissor_control", "readback_metadata")
 # The Python renderer's cost on the same load (the reference child, OpenGL): --rounds python_cost
 PYTHON_ROUNDS = ("python_cost",)
 CHILD_TIMEOUT_S = 1500
@@ -295,6 +298,50 @@ def _content(entry: dict):
     return entry["array"][rows - height:, :width]
 
 
+def readback_metadata_contract(pixels: list[dict], names, allocation, content) -> dict:
+    """Exact RGBA8 mip enumeration and nominal bottom-anchored content metadata, not pixel/filter validity."""
+    levels = max(allocation).bit_length()
+    expected = {}
+    for name in names:
+        for level in range(levels):
+            size = tuple(max(1, dimension >> level) for dimension in allocation)
+            projected = tuple(min(size[axis], (content[axis] * size[axis] + allocation[axis] - 1)
+                                  // allocation[axis]) for axis in range(2))
+            expected[name + (f"@{level}" if level else "")] = (level, size, projected)
+    well_formed = isinstance(pixels, list) and all(isinstance(p, dict) and isinstance(p.get("name"), str)
+                                                  for p in pixels)
+    actual = {p["name"]: p for p in pixels} if well_formed else {}
+    checks = {"complete_unique_enumeration": bool(expected) and well_formed and len(pixels) == len(expected)
+              and len(actual) == len(pixels) and actual.keys() == expected.keys(),
+              "level_relative_size_and_normalized_content": True, "rgba8_byte_shapes": True,
+              "base_metadata_preserved": True, "nominal_bottom_anchored_rects_in_bounds": True}
+    facts = {"expected_entries": len(expected), "actual_entries": len(pixels) if well_formed else None,
+             "levels_per_attachment": levels, "allocation": allocation, "content": content,
+             "missing_names": sorted(expected.keys() - actual.keys()),
+             "unexpected_names": sorted(actual.keys() - expected.keys()), "entries": []}
+    for name, (level, size, projected) in expected.items():
+        p = actual.get(name, {})
+        metadata_ok = (p.get("level") == level and type(p.get("level")) is int
+                       and p.get("size") in (size, list(size)) and p.get("content") in (projected, list(projected)))
+        checks["level_relative_size_and_normalized_content"] &= metadata_ok
+        data = p.get("data")
+        shape_ok = (p.get("format") == "rgba8" and p.get("samples") == 1
+                    and isinstance(data, (bytes, bytearray, memoryview)) and len(data) == size[0] * size[1] * 4)
+        checks["rgba8_byte_shapes"] &= shape_ok
+        if level == 0:
+            checks["base_metadata_preserved"] &= metadata_ok
+        # This describes the nominal slice only; no claim that mip filtering cannot bleed beyond it.
+        rows = (size[1] - projected[1], size[1])
+        checks["nominal_bottom_anchored_rects_in_bounds"] &= (metadata_ok and 0 <= rows[0] < rows[1]
+                                                            and 0 < projected[0] <= size[0])
+        facts["entries"].append({"name": name, "level": p.get("level"), "size": p.get("size"),
+                                 "content": p.get("content"), "content_image_rows": rows,
+                                 "content_image_columns": (0, projected[0]),
+                                 "format": p.get("format"), "samples": p.get("samples"),
+                                 "data_bytes": len(data) if isinstance(data, (bytes, bytearray, memoryview)) else None})
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
 def analytic(frames: dict, settings: dict) -> dict:
     """The native frame's own checks (see the module notes)."""
     import numpy as np
@@ -344,6 +391,79 @@ def analytic(frames: dict, settings: dict) -> dict:
 
 
 # --------------------------------------------------------------------------------------------------- the rounds
+
+def _readback_metadata_program(packs: dict, target_count: int):
+    from rendering.native.mode import ModePass, ModeTarget, PassSampler, TargetAttachment
+
+    targets = tuple(ModeTarget(f"readback{index}", tuple(TargetAttachment(f"colour{channel}", "rgba8")
+                                                      for channel in range(4)), mips=True)
+                    for index in range(target_count))
+    passes = tuple(ModePass(f"write{index}", packs["readback_metadata"], "replace", target=target.name)
+                   for index, target in enumerate(targets))
+    passes += tuple(ModePass(f"show{index}", packs["show_colour"], "replace",
+                            samplers=(PassSampler("u_scene", f"{target.name}.{target.colour[0].name}", "nearest"),))
+                    for index, target in enumerate(targets))
+    return passes, targets
+
+
+def _metadata_readback(scene, timeout_s: float = 10.0) -> list[dict]:
+    """Keep the list intact: converting to name->array would hide duplicate callbacks."""
+    scene.mode.read_targets()
+    scene.mode.update()
+    deadline = time.monotonic() + timeout_s
+    while True:
+        scene.host.frames(1)
+        pixels = scene.mode.target_pixels()
+        if pixels is not None:
+            return pixels
+        if time.monotonic() > deadline:
+            raise RuntimeError("metadata readback did not complete within its bound")
+
+
+def round_readback_metadata(core, engine, app, packs: dict, folder: Path) -> dict:
+    """Audit 6: metadata/completeness beyond the old fixed callback capacity, never non-base pixel parity."""
+    import probe_rings
+    from rendering.native.scene_targets import next_allocation
+
+    packs = dict(packs, readback_metadata=probe_rings.bake(_scene_module().shader_text("readback_metadata.frag"),
+                                                         "readback_metadata.frag", folder))
+    cases = (("large", (1024, 1024), 4), ("bounded_after_large", (83, 47), 1),
+             ("odd_mip_extents", (321, 257), 1))
+    host = core.hidden_host(*_host_size([case[1] for case in cases]))
+    checks, facts = {}, {"scope": "metadata/completeness only; non-base mips not generated or pixel-judged"}
+    try:
+        for label, card, target_count in cases:
+            passes, targets = _readback_metadata_program(packs, target_count)
+            names = tuple(f"{target.name}.{attachment.name}" for target in targets for attachment in target.colour)
+            allocation, _ = next_allocation((0, 0), card)
+            scene = Scene(core, engine, host, card, 1.0, packs, passes=passes, targets=targets, settings={})
+            try:
+                result = readback_metadata_contract(_metadata_readback(scene), names, allocation, card)
+                facts[label] = result["facts"]
+                checks.update({f"{label}_{key}": value for key, value in result["checks"].items()})
+                live = core.composite_live()
+                facts[label]["readbacks_pending_after_completion"] = live.get("scene_target_readbacks")
+                checks[f"{label}_callbacks_complete"] = live.get("scene_target_readbacks") == 0
+                if label == "bounded_after_large":
+                    repeated = readback_metadata_contract(_metadata_readback(scene), names, allocation, card)
+                    checks[f"{label}_subsequent_readback_succeeds"] = repeated["pass"]
+                    facts[label]["subsequent_readback"] = repeated["facts"]
+                    checks[f"{label}_subsequent_callbacks_complete"] = core.composite_live().get(
+                        "scene_target_readbacks") == 0
+            finally:
+                scene.close(app)
+                host.frames(3)
+                host_check._flush_deletes(app)
+            gone = core.composite_live()
+            facts[label]["released"] = {key: gone.get(key) for key in
+                ("scene_targets", "scene_target_textures", "scene_target_bytes", "scene_target_readbacks",
+                 "mode_resources", "mode_sources")}
+            checks[f"{label}_resources_released"] = _targets_retired(gone) and gone.get("mode_sources") == 0
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
 
 PARITY_CASES = (("dpr1", CARD, 1.0, 1.0), ("dpr1.5", CARD, 1.5, 1.0),
                 ("aligned", ALIGNED_CARD, 1.0, 1.0), ("glow_off", CARD, 1.0, 0.0))
@@ -1661,6 +1781,8 @@ def child(args) -> dict:
                                 core.scene_target_control("one_pixel_bucket", 0)
                         elif name == "retire":
                             record[name] = round_retire(core, engine, app, packs, folder)
+                        elif name == "readback_metadata":
+                            record[name] = round_readback_metadata(core, engine, app, packs, folder)
                         elif name in ("scissor", "scissor_control"):
                             record[name] = round_scissor(core, engine, app, args.api, folder, out,
                                                          skip_control=name == "scissor_control")
@@ -1772,7 +1894,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.child and "placement_control" in args.rounds and args.apis != ["opengl"]:
         parser.error("placement_control uses --apis opengl (its oracle is the Python OpenGL renderer)")
     for control in ("placement_control", "resize_control", "partial_retire_control", "invalidation_control",
-                    "scissor_control"):
+                    "scissor_control", "readback_metadata"):
         if control in args.rounds and len(args.rounds) != 1:
             parser.error(f"{control} runs alone in its own child process")
 
