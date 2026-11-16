@@ -2013,6 +2013,8 @@ def child(args) -> dict:
 
 def api_verdict(api: str, record: dict, require_validation: bool, rounds) -> tuple[bool, list[str]]:
     if api == "reference":
+        if record.get("exit_code", 0) != 0:
+            return False, [f"{api}: child process failed ({record['exit_code']}); no successful proof"]
         names = [n for n in ("reference", *PYTHON_ROUNDS) if n in record]
         failed = [f"{n}: {json.dumps(record[n].get('errors') or record[n].get('error') or 'failed')[-1500:]}"
                   for n in names if not record[n].get("pass")]
@@ -2089,6 +2091,7 @@ def main(argv: list[str] | None = None) -> int:
         children.append("reference")
     for api in children:
         child_json = out / f"child_{api}.json"
+        child_json.unlink(missing_ok=True)  # discard any earlier child record before launch
         rounds = [r for r in args.rounds if r in ("parity", *PYTHON_ROUNDS)] if api == "reference" else native_rounds
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),

@@ -1250,6 +1250,8 @@ def child(args) -> dict:
 
 def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool, list[str]]:
     if api == "reference":
+        if record.get("exit_code", 0) != 0:
+            return False, [f"{api}: child process failed ({record['exit_code']}); no successful proof"]
         entry = record.get("reference") or {}
         return bool(entry.get("pass")), ([] if entry.get("pass") else
                                          [f"reference: {(entry.get('error') or record.get('error') or 'failed')[-1500:]}"])
@@ -1313,6 +1315,7 @@ def main(argv: list[str] | None = None) -> int:
         children.append(("vulkan_pingpong", "vulkan", ["pingpong"]))
     for key, api, rounds in children:
         child_json = out / f"child_{key}.json"
+        child_json.unlink(missing_ok=True)  # discard any earlier child record before launch
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
                    "--rounds", *rounds]
