@@ -379,3 +379,37 @@ def test_the_route_draws_bubble_with_its_target_streams_and_three_passes(monkeyp
         assert sum(1 for entry in core.log[mark:] if entry[0] == "target_size") == 1
     finally:
         route.close()
+
+
+def test_rule_a_admits_bubbles_scatter_and_nothing_wider():
+    # D12 bounds (lead, 17 Nov): Bubble's owner rule (a) admits scatter, isolated pixels exactly one level off outside
+    # the reference mask, up to its own cap a frame; ties and flips stay the composite's; no other mode gains it.
+    # Bounds come from the harness's constants.
+    import numpy as np
+
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    cap = parity.RULE_A_SCATTER_PIXELS["bubble"]
+    ties = parity.RULE_A_EDGE_PIXELS_PER_FRAME
+    reference = np.full((240, 400, 4), 90, np.uint8)
+    reference[..., 3] = 255                                    # opaque: the mask is empty
+    mask = np.zeros(reference.shape[:2], bool)
+
+    def frame(pixels: int, level: int = 1, mode: str | None = "bubble"):
+        drawn = reference.astype(np.int16)
+        for k in range(pixels):                                # isolated: every third pixel on a grid
+            drawn[3 + 3 * (k // 40), 3 + 3 * (k % 40), 1] += level
+        return parity.rule_a_verdict([parity.rule_a_frame(drawn.astype(np.uint8), reference, mask, mode)], mode)
+
+    assert frame(cap)["pass"]
+    assert frame(cap)["bound"]["scatter_pixels"] == cap
+    # Negative controls: one scatter pixel past the cap; scatter-sized sets at two levels (ties past their cap); the
+    # same scatter for a mode without the decision; a uniform one-level shift.
+    assert not frame(cap + 1)["pass"]
+    assert not frame(ties + 1, level=2)["pass"]
+    assert not frame(cap, mode=None)["pass"]
+    assert not frame(cap, mode="spectrum")["pass"]
+    shifted = reference.astype(np.int16)
+    shifted[..., 1] += 1
+    assert not parity.rule_a_verdict([parity.rule_a_frame(shifted.astype(np.uint8), reference, mask, "bubble")],
+                                     "bubble")["pass"]

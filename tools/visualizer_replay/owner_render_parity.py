@@ -357,32 +357,40 @@ RULE_A_EDGE_PIXELS_PER_FRAME = 10
 #: The colour the translucency run draws under the mode's content (``content_backdrop``): magenta, so that no content
 #: pixel short of a near-zero alpha can equal it in all three channels.
 MASK_BACKDROP = (255, 0, 255)
+#: Rule (a)'s scatter per mode (D12 bounds, lead's decision 17 Nov for Bubble): pixels outside the mask exactly one level
+#: off, the NativeFragmentPass two-compiler case (Python's driver-compiled composed GLSL against the qsb pack). Bubble:
+#: measured worst 34 a frame (.artifacts/evidence/native_core/n5_1_bubble/20261117_steady_residual_classes/), times 1.5.
+#: Every other mode admits none.
+RULE_A_SCATTER_PIXELS = {"bubble": 51}
 
 
-def composite_tolerance():
-    """The composite's tolerance (``RULE_A_*``) as the shared ``pixel_tolerance.Tolerance``."""
+def composite_tolerance(mode: str | None = None):
+    """The composite's tolerance (``RULE_A_*``) as the shared ``pixel_tolerance.Tolerance``; ``mode`` adds its D12
+    scatter (``RULE_A_SCATTER_PIXELS``)."""
     from tools import pixel_tolerance
 
-    return pixel_tolerance.Tolerance("composite (rule a)", masked_level=RULE_A_FILL_LEVEL,
+    scatter = RULE_A_SCATTER_PIXELS.get(mode, 0)
+    return pixel_tolerance.Tolerance(f"composite (rule a, {mode})" if scatter else "composite (rule a)",
+                                     masked_level=RULE_A_FILL_LEVEL, scatter_pixels=scatter,
                                      tie_pixels=RULE_A_EDGE_PIXELS_PER_FRAME, tie_level=RULE_A_EDGE_LEVEL,
                                      edge_class=True)
 
 
-def rule_a_frame(native, python, mask) -> dict:
+def rule_a_frame(native, python, mask, mode: str | None = None) -> dict:
     """One frame of rule (a): the native frame against the Python frame (same shape, the channels compared) under the
     composite's tolerance, ``mask`` the pixels the Python renderer draws translucent."""
     from tools import pixel_tolerance
 
-    return pixel_tolerance.judge(native, python, composite_tolerance(), mask=mask)
+    return pixel_tolerance.judge(native, python, composite_tolerance(mode), mask=mask)
 
 
-def rule_a_verdict(frames) -> dict:
+def rule_a_verdict(frames, mode: str | None = None) -> dict:
     """Rule (a) over the per-frame verdicts of ``rule_a_frame`` (frames that are equal may be left out): pass, the
     bound and the worst figures."""
     from tools import pixel_tolerance
 
     summary = pixel_tolerance.summarise(frames)
-    return {"bound": composite_tolerance().bound(), **summary,
+    return {"bound": composite_tolerance(mode).bound(), **summary,
             "edge_pixels_worst_frame": summary["ties_worst_frame"]}
 
 
@@ -441,7 +449,7 @@ def rule_a_masks(python: dict, backdrop: dict) -> dict:
     return masks
 
 
-def rule_a_frames(native: dict, python: dict, masks: dict) -> list[dict]:
+def rule_a_frames(native: dict, python: dict, masks: dict, mode: str | None = None) -> list[dict]:
     """``rule_a_frame`` for every input whose drawn region differs between the native run and the Python run."""
     frames = []
     for index, (x, y) in enumerate(zip(native["pixels"], python["pixels"])):
@@ -450,7 +458,7 @@ def rule_a_frames(native: dict, python: dict, masks: dict) -> list[dict]:
         if x["region"] != y["region"]:
             frames.append({"pass": False, "reasons": [f"input {index}: the regions differ"], "max_level": None})
             continue
-        verdict = rule_a_frame(_pixels(native, index), _pixels(python, index), masks.get(index))
+        verdict = rule_a_frame(_pixels(native, index), _pixels(python, index), masks.get(index), mode)
         verdict["input"] = index
         frames.append(verdict)
     return frames
@@ -876,7 +884,7 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     verdict["identical"] = bool(paths["first"] is None and verdict["digests_identical"]
                                 and verdict["native_published"] > 0)
     # Rule (a)'s verdict: the composite's tolerance (RULE_A_*), pixel by pixel with the translucency mask.
-    verdict["rule_a"] = rule_a_verdict(rule_a_frames(native, python, masks))
+    verdict["rule_a"] = rule_a_verdict(rule_a_frames(native, python, masks, mode), mode)
     verdict["rule_a"]["mask_inputs"] = len(masks)
     verdict["rule_a"]["backdrop_frames"] = len(backdrop["pixels"])
     verdict["pass"] = bool(verdict["rule_a"]["pass"] and verdict["digests_identical"] and verdict["native_published"] > 0

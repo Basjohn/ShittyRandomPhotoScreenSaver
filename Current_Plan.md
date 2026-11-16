@@ -605,20 +605,15 @@ the feature (D3D11 is not stated).
     tools for correctness and later optimisation, preserving provenance, negative controls and distinct verdicts.
     Current promotion: `tools/visualizer_replay/bubble_native_diagnostics.py`, private `_bubble_native_*.py` helpers
     and `tests/test_bubble_native_diagnostics.py`; finish the independent receipt-provenance audit before landing.
-  - [ ] **Lead decision: Bubble's steady scatter class (blocks rule (a)).** Root cause as classified: with the mask
-    antialias repair in, rule (a) (`python -m tools.visualizer_replay.bubble_native_diagnostics replay`, variant a,
-    display, unchanged D12 bounds) still FAILS 89 of 344 judged frames, 84 of them steady, every one on the tie count
-    alone ("N ties (at most 10)"; no stray, flip or scatter reasons). The steady residual is 2,430 pixels over 322 of
-    337 inputs, all exactly one level, 1,908 isolated, 2,222 single-channel, spread over the whole content area
-    (2,374 distinct locations, none repeating more than four times), median 3x3 reference range five levels, 974 on
-    ambient sprites, 225 within two pixels of a hero edge, 1,282 on neither; worst frame 34. This is D12's scatter
-    signature (two compilers rounding within float error of a half level: Python's composed GLSL versus the qsb pack),
-    but Bubble's tolerance admits no scatter (`scatter_pixels=0`). The lead decides whether to admit a scatter bound
-    (measured worst 34 a frame) or to name a further owner experiment; never widen it in an agent slice. Classifier
-    and per-pixel table: `.artifacts/evidence/native_core/n5_1_bubble/20261117_steady_residual_classes/`.
-  - [ ] Fade residual after that decision: five pixels above one level across two inputs (maximum two, was five) and
-    five failed fade frames; rerun `replay` and confirm they fall within the existing tie class, or classify them with
-    `fade-inputs`/`components` at the failing inputs.
+  - [ ] Rerun `python -m tools.visualizer_replay.bubble_native_diagnostics replay` under D12's Bubble scatter (51 a
+    frame, `RULE_A_SCATTER_PIXELS`); if steady passes, settle the fade residual (five pixels above one level across
+    two inputs, maximum two; five failed fade frames) at its owner or show it fits the class with
+    `fade-inputs`/`components`.
+  - [ ] Rule (a) on four 60 s recorded clips (operator, 17 Nov): BTF §24's recordings (or the recorded clip library cut
+    to 60 s), variant a at the display placement (other variants/placements where cheap), same bounds (51 scatter,
+    10 ties at 3 levels, no flips). Extend the `replay` recipe for recorded clips if needed (the optimisation proof
+    gap box below). Keep every run's per-frame hashes as the optimisation before-state. A clip past 51 scatter: do
+    not raise the bound; classify the excess with `fade-inputs`/`components`, report the worst frame and class, stop.
   - [ ] Non-blocking contract follow-up: compare an actual non-unit inherited scene opacity on both paths before
     admitting a repair. Python folds it into shader fade while native composites it afterward; the current failing
     fixture has inherited opacity1 and equal shader fades, so this source distinction does not explain that failure.
@@ -697,6 +692,9 @@ the feature (D3D11 is not stated).
     - [ ] In the GPU cost step, measure the ambience-off cost of the two empty passes at 4K (median and p90 of 240
       frames, OpenGL and Vulkan). If above 0.02 ms, the core skips a pass whose instance count is 0 (one C++ change,
       one build, a test that the pass is not begun); otherwise nothing more.
+- [ ] Non-blocking (does not hold the Bubble port): prove Bubble's rule-(a) scatter is the two-compiler case directly.
+  Render Python's Bubble with the GLSL the qsb pack emits (the pack's GLSL variants in place of the composed source)
+  over the `replay` recipe and show the steady residual collapses (from 2,430 one-level pixels, worst 34 a frame).
 - [ ] Bubble optimisation proof gap (before the first Bubble optimisation; `Docs/Guides/Native_Bubble_Diagnostics.md`
   "Optimisation gate"): the `replay` recipe is fixed to a 5.5 s synthetic clip and variant a. It gains BTF §24's
   recorded-music clips, a `--api opengl|vulkan` choice if it lacks one, and a hash-only compare mode (a before

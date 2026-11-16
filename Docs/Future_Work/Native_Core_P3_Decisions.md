@@ -992,7 +992,10 @@ each harness states its bounds beside their measured reasons:
 The bounds, each the measured worst times 1.5 or the decision it came from: the composite (rule (a) of every mode drawn
 through it) 1 level on the mask, 10 ties at 3 levels. Spline Curve's owner runs (variants a and b at both placements,
 the three offers): 5.1M to 39.2M differing pixels a run, every one on the mask but at most 8 ties a frame; Spectrum's
-(a and b at both placements): 6.3M to 17.6M, every one on the mask at 1 level, no tie. A `NativeFragmentPass` (`transition_route_check.py`) rule (a): 72 scatter (measured
+(a and b at both placements): 6.3M to 17.6M, every one on the mask at 1 level, no tie. Bubble's owner rule (a): 51
+scatter (measured 34), steady and fade; ties and flips as the composite (lead, 17 Nov: the `NativeFragmentPass`
+two-compiler case, Python's driver-compiled composed GLSL against the qsb pack; evidence
+`n5_1_bubble/20261117_steady_residual_classes/`, every pixel exactly one level, spread over the whole content). A `NativeFragmentPass` (`transition_route_check.py`) rule (a): 72 scatter (measured
 48), 8 ties, 1 flip; rule (b): 2,000 scatter (measured 1,317, VHS), 8 ties (measured 5). N5.2a's seven: rule (a) exact,
 rule (b) 1,100 scatter (measured 736, Warp), no tie. Geometry passes (`mesh_buffer_check.py`, both rules): 1 level on
 the mask, 8 ties (measured one, at 2 levels on a streak's edge). Scene targets (`scene_target_check.py`): 1 unit on the
