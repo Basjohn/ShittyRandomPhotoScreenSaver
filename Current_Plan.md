@@ -605,10 +605,6 @@ the feature (D3D11 is not stated).
     tools for correctness and later optimisation, preserving provenance, negative controls and distinct verdicts.
     Current promotion: `tools/visualizer_replay/bubble_native_diagnostics.py`, private `_bubble_native_*.py` helpers
     and `tests/test_bubble_native_diagnostics.py`; finish the independent receipt-provenance audit before landing.
-  - [ ] Rerun `python -m tools.visualizer_replay.bubble_native_diagnostics replay` under D12's Bubble scatter (51 a
-    frame, `RULE_A_SCATTER_PIXELS`); if steady passes, settle the fade residual (five pixels above one level across
-    two inputs, maximum two; five failed fade frames) at its owner or show it fits the class with
-    `fade-inputs`/`components`.
   - [ ] Rule (a) on four 60 s recorded clips (operator, 17 Nov): BTF §24's recordings (or the recorded clip library cut
     to 60 s), variant a at the display placement (other variants/placements where cheap), same bounds (51 scatter,
     10 ties at 3 levels, no flips). Extend the `replay` recipe for recorded clips if needed (the optimisation proof
