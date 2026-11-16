@@ -180,6 +180,41 @@ def single_sample_scene_targets():
         SceneTarget.begin = begin
 
 
+class _SpilledFrames:
+    """A run's compressed frames, ``(shape, zlib bytes)`` by index, kept in an anonymous temporary file in the owner
+    scratch instead of memory: a 60 s recorded take is 5,455 frames a path, several gigabytes compressed. The file
+    goes when the list is collected or the process exits."""
+
+    def __init__(self) -> None:
+        self._file: Any = None
+        self._entries: list[tuple[tuple[int, ...], int, int]] = []
+
+    def append(self, item: tuple[tuple[int, ...], bytes]) -> None:
+        import tempfile
+
+        from tools import artifact_paths
+
+        shape, data = item
+        if self._file is None:
+            folder = artifact_paths.scratch_root("owner_render_parity")
+            folder.mkdir(parents=True, exist_ok=True)
+            self._file = tempfile.TemporaryFile(dir=folder)
+        self._file.seek(0, 2)
+        self._entries.append((tuple(shape), self._file.tell(), len(data)))
+        self._file.write(data)
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def __getitem__(self, index: int) -> tuple[tuple[int, ...], bytes]:
+        shape, offset, size = self._entries[index]
+        self._file.seek(offset)
+        return shape, self._file.read(size)
+
+    def __iter__(self):
+        return (self[index] for index in range(len(self)))
+
+
 class SceneMirror:
     """The owner's unshown scene, drawn: a hidden production scene that takes the owner's own scene commands.
 
@@ -192,7 +227,7 @@ class SceneMirror:
 
     def __init__(self) -> None:
         self.host: Any = None
-        self.frames: list[tuple[tuple[int, ...], bytes]] = []
+        self.frames = _SpilledFrames()
         self.lit: list[float] = []
         self._fbo = 0
         self._region: tuple[int, int, int, int] | None = None
