@@ -78,6 +78,9 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
   every frame's hash from these runs: they are the before-state an optimisation is later byte-compared against, per
   backend (`Docs/Guides/Native_Bubble_Diagnostics.md`, "Optimisation gate"). A transition runs its full canonical
   duration over several image pairs.
+  Run with the mode's frozen settings exactly as set, adaptive ones included (the Dynamic Floor where a frozen setting
+  has it on), continuously from a cold start with no reset of adaptive state, and report each clip's first and second
+  halves separately: an adaptive normaliser swings most with song length, so drift shows late (operator, 17 Nov).
 - Negative controls for every rule, each seen failing on the broken form (a one-level shift on every pixel, a fixed
   artefact, the wrong order, the skipped release); `tests/test_pixel_tolerance.py` holds the tolerance's own.
 - Vulkan validation with synchronisation checks and the shader-access opt-in: `syncval_shader_accesses_heuristic` is
