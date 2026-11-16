@@ -546,7 +546,7 @@ def _cell_interface_variant(source, case):
     batches = "layout(std430, binding = 4) readonly buffer Batches { uvec2 batches[]; };"
     replacements = {
         "block_binding": ("binding = 18", "binding = 19"),
-        "block_members": ("vec4 u_tint;\n    int u_srpss_batch;", "int u_srpss_batch;\n    vec4 u_tint;"),
+        "block_members": ("mat4 uMatrix;\n    vec4 u_tint;", "vec4 u_tint;\n    mat4 uMatrix;"),
         "storage_binding": (cells, cells.replace("binding = 3", "binding = 7")),
         "storage_members": (cells, cells.replace("vec4 cells[];", "vec4 prefix; vec4 cells[];")),
         "storage_access": (cells, cells.replace("readonly buffer", "buffer")),

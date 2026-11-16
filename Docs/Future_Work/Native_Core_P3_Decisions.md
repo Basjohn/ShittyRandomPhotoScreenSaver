@@ -1435,7 +1435,9 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
    and output built-ins. Top-level declaration order is irrelevant. Input built-ins intentionally differ between
    the draw-parameters and loop forms; arbitrary shader semantics remain the caller's parity obligation. Admission
    checks this before constructing a pipeline, even when the current device would choose the plain form.
-   The comparison uses Qt6.12's deep reflection equality, rather than duplicating member-layout rules
+   The comparison uses Qt6.12's deep reflection equality for member layouts, excluding only a uniform block's
+   generated `structName` instance identifier (separate compilations produce different SPIR-V IDs),
+   rather than duplicating member-layout rules
    ([Qt source](https://github.com/qt/qtbase/blob/v6.12.0/src/gui/rhi/qshaderdescription.cpp)); it runs at program
    admission, never per frame. Audit4 L1's build proof remains in the live plan until the official module passes.
    The indirect draw itself (`drawIndirect`; `drawIndexedIndirect` waits for indexed meshes) is built here

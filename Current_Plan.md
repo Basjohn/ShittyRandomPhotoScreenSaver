@@ -478,9 +478,11 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       plain pack's, and a pack that differs is refused with the reason (today it reaches the device as a pipeline
       whose layout does not match its shader). GPU-free test through `mode_blocks` with a pack of another input or
       block; negative control on the pre-change module (admitted).
-      - [x] ABI25 accepts nine incompatible interfaces; valid and reordered controls pass (GPU-free).
+      - [x] Old ABI25 admits nine final incompatible interfaces; valid/reordered controls pass (R-233).
       - [ ] Compare the full reflected interface at admission, including nested block layout and resources; permit
-        the draw-parameters built-ins that intentionally differ. Reject with a useful reason before pipeline creation.
+        the draw-parameters built-ins and generated uniform instance IDs that intentionally differ. Reject with a
+        useful reason before pipeline creation. The first official candidate's valid-pack rejection is corrected;
+        revised built proof remains required (R-233).
       - [ ] Run focused regressions on the official built module, matching-pack positive controls and High review.
     - [ ] Related admission defect: `checkSortedPack` compares only outer block names/bindings/sizes, not nested
       layout. Reproduce equal-size, different-member-layout acceptance before choosing its bounded repair; do not

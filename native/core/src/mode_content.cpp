@@ -750,7 +750,16 @@ const char *vertexInterfaceDifference(const QShaderDescription &a, const QShader
     const auto same = [](const auto &left, const auto &right) {
         return std::is_permutation(left.cbegin(), left.cend(), right.cbegin(), right.cend());
     };
-    if (!same(a.uniformBlocks(), b.uniformBlocks()))
+    const auto sameUniform = [](const QShaderDescription::UniformBlock &left,
+                                const QShaderDescription::UniformBlock &right) {
+        // structName is the translated shader's instance identifier (_42, _100, ...), not the binding
+        // contract. Qt resolves that name from the active pack; separate compilations need not share it.
+        return left.blockName == right.blockName && left.size == right.size && left.binding == right.binding
+            && left.descriptorSet == right.descriptorSet && left.members == right.members;
+    };
+    const auto aUniforms = a.uniformBlocks();
+    const auto bUniforms = b.uniformBlocks();
+    if (!std::is_permutation(aUniforms.cbegin(), aUniforms.cend(), bUniforms.cbegin(), bUniforms.cend(), sameUniform))
         return "uniform blocks";
     if (!same(a.storageBlocks(), b.storageBlocks()))
         return "storage blocks";
