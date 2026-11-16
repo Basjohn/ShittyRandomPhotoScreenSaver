@@ -61,7 +61,6 @@
 #include <rhi/qrhi.h>
 
 #include <memory>
-#include <vector>
 
 class QJsonValue;
 
@@ -244,7 +243,7 @@ QJsonObject sceneTargetsStateJson(const SceneTargetsState &state);
 struct SceneReadback
 {
     QList<SceneTargetPixels> pixels;
-    std::vector<QRhiReadbackResult> results; // final size established before callbacks; never resized while pending
+    std::unique_ptr<QRhiReadbackResult[]> results; // allocated once before callbacks; stable while pending
     int count = 0;
     QAtomicInteger<int> pending { 0 };
     bool done() const { return pending.loadAcquire() == 0; }

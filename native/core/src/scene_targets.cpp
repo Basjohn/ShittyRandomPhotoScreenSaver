@@ -1268,7 +1268,7 @@ std::shared_ptr<SceneReadback> SceneTargets::startReadback(QRhiResourceUpdateBat
     if (raw->count == 0)
         return set;
     // All accepted attachments and mip levels. Callback result addresses stay stable for the entire shared lifetime.
-    raw->results.resize(std::size_t(raw->count));
+    raw->results = std::make_unique<QRhiReadbackResult[]>(raw->count);
     raw->pending.storeRelease(raw->count);
     g_readbacksPending.fetchAndAddRelaxed(1);
     // The textures, in the order the pixels were listed.

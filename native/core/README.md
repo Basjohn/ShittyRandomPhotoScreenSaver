@@ -146,7 +146,9 @@ build selection; current host and composite proof lives here.
     defocus steps (the read level's texture; the layer's mips by QRhi's `generateMips`, the read level capped by
     `defocusReadLevelCap`), the core's stage shaders (`scene_oit_resolve*`, `bloom_*`, `composite_*`, `defocus_*`, each
     held to its Python source by `tests/test_native_post_stages.py`), the counts (`composite_live`'s `stage_*`, the
-    record's render-thread time among them) and the harness controls (`stage_control`). The transparency targets and
+    record's render-thread time among them) and the harness controls (`stage_control`). `stage_pipelines` aggregates
+    owned pipeline, sampler and binding wrappers, including failed partial builds until retirement; textures/storage
+    have their separate counts. The transparency targets and
     the mipped layer live in `scene_targets.*`, the steps in `mode_content.*`'s record.
   - `thread_probe.*`, `process_counters.*`: the D5.4 probe and the lifecycle counters.
   - No STL container, lock or function wrapper: their code is in `msvcp140.dll`, which the module never imports (the
@@ -201,6 +203,10 @@ build selection; current host and composite proof lives here.
   (b); the captured depth and the depth loaded across the capture split; the second attachment and its clear; MSAA with
   the clamp; nothing at rest; the resize drag across bucket boundaries both ways; retirement; cost and the thread probe;
   `--rounds prime_control` on Vulkan alone: rule C for depth's negative control under synchronisation validation).
+  `NativeMode.target_pixels()` returns every readable attachment/mip with its `level`, allocation `size` and nominal
+  `content`. At nonzero mips, content is the base normalized rectangle projected outward to that level, bottom
+  anchored and in bounds; filtering may blend across that nominal boundary. Readback callback storage is allocated
+  once before enqueueing, retained by the existing shared readback lifetime, and never moved while pending.
 - `python/mesh_buffer_check.py`: N3.2's proof on the harness scenes `python/mesh_buffers/` (a box mesh instanced over
   storage records with depth and the per-record front face, a static instance stream, sprites as instanced quads from a
   per-record instance stream, a vertex-pulled strip with blend MAX, 900 streaks over the built-in quad; rule (a) against

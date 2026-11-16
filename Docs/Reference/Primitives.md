@@ -73,7 +73,7 @@ merged; N2.5 in flight; N2.8's Vulkan pre-check done. Updated 15 Nov: N3.1 (D14,
 | N1 portable shaders | in flight: D4 landed; N1.6 at ratchet 24 (the 3D modes left); N1.4 include remainder and N1.8 resolve-first open (the N1 boxes) | what makes existing primitives bakeable |
 | N2.1 to N2.8 | N2.1 to N2.4, N2.6 and N2.7 merged (leftover boxes open); N2.5 in flight; N2.8 open (the N2 boxes) | host adapter, frame driver, packet reader, composite, timer, rehearsal path |
 | N2b: N4.a, N3.8 jobs, N5.7a/b/c | N4.a (D13), N5.7a and N5.7b (D7) built and proved 14 Nov; N3.8 jobs built (section 4); N5.7c leftovers open | fullscreen pass, job service, background layer, backdrop pyramid |
-| N3.1 to N3.9 | N3.1 to N3.3 built and proved 15 Nov (D14 to D16); N3.4 decided in the plan, N3.6, N3.7 and N3.9 open; there is no N3.5 in the plan (numbering skips from N3.4 to N3.6) | targets, meshes, compute, post stages, lifetime, orientation, display move |
+| N3.1 to N3.9 | N3.1 to N3.3 built and proved 15 Nov (D14 to D16); N3.4 built, acceptance pending; N3.6, N3.7 and N3.9 open; there is no N3.5 in the plan (numbering skips from N3.4 to N3.6) | targets, meshes, compute, post stages, lifetime, orientation, display move |
 | N4.b to N4.m | open (the N4 boxes) | ported with first consumer, or on the primitives track |
 | N6.1 to N6.6 | open (the N6 boxes) | never built, native only |
 

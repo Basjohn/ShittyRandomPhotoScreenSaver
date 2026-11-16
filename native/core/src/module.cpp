@@ -2970,7 +2970,7 @@ PyMethodDef methods[] = {
     { "composite_mode_target_read", composite_mode_target_read, METH_VARARGS,
       "(handle) -> None: N3.1, harness: a readback of every scene target's readable texture at the next record." },
     { "composite_mode_target_pixels", composite_mode_target_pixels, METH_VARARGS,
-      "(handle) -> list | None: N3.1, harness: the readback once complete, each {name, size, content, format, samples, "
+      "(handle) -> list | None: N3.1, harness: the readback once complete, each {name, level, size, content, format, samples, "
       "data} (rows top first on every backend)." },
     { "composite_mode_mesh", composite_mode_mesh, METH_VARARGS,
       "(handle, name, declaration_json, vertices_bytes, instances_bytes | None) -> None: N3.2 (D15), an item's mesh "

@@ -1996,7 +1996,9 @@ read once (`:770-808`).
    `kMaxTargetColour`), one transparency target per owner, the resolve's target a transparency target of the step's
    target, the bloom source an attachment a target holds, the defocus level within the near target's mip count and its
    sprites within that level's texels. Every object is made at a build or an allocation step (N3.6 spaces them), none
-   per record; the counts per stage join `composite_live`.
+   per record; the counts per stage join `composite_live`. `stage_pipelines` counts owned pipeline, sampler and
+   shader-resource-binding wrappers, including partial builds, until released; `stage_textures` and `stage_bytes`
+   separately count held stage textures and their created storage.
 9. *Not built here*: the shafts (N4.k), motion blur (N4.i), the reduced-resolution layers (N4.f2), the oriented
    composites (N3.7), the warm-up schedule (N3.6). Waveform clears its colour each frame to a backdrop from its recipe
    (`waveform.py:387`), while a target's clear value is fixed in its declaration: a port decision recorded at N5.4.
