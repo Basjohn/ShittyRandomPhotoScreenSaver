@@ -213,6 +213,7 @@ public:
     void recordDefocusOnto(QRhiCommandBuffer *cb, int pass, const QRhiCommandBuffer::VertexInput &triangle,
                            quint32 blockOffset, quint32 conventionsOffset, bool drawSprites, const QRect &scissor);
     bool hasDefocus(int pass) const { return defocusFor(pass) != nullptr; }
+    QRhiCommandBuffer::BeginPassFlags defocusPassFlags() const { return m_defocusPassFlags; }
 
 private:
     struct Bloom
@@ -269,6 +270,7 @@ private:
     void count(int textures, qint64 bytes, int chains, int steps);
 
     QRhi *m_rhi = nullptr;
+    QRhiCommandBuffer::BeginPassFlags m_defocusPassFlags;
     std::unique_ptr<Bloom> m_blooms[kMaxBloomStages];
     int m_bloomCount = 0;
     std::unique_ptr<Defocus> m_defocus[kMaxDefocusStages];

@@ -5903,7 +5903,7 @@ void ModeContent::recordDefocus(QRhi *rhi, QRhiCommandBuffer *cb, int index, QRh
         countDepthPrime();
     if (!skipResolvePrime())
         countResolvePrimes(primeResolvesForPass(rhi, cb, textures, m_targets.averageResolves(pass.target, textures)));
-    cb->beginPass(onto->renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 });
+    cb->beginPass(onto->renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, nullptr, m_post.defocusPassFlags());
     if (!cleared[pass.target]) {
         cb->setGraphicsPipeline(r.targetClears[pass.target].pipeline.get());
         setViewportAndScissor(cb, QRect(QPoint(), onto->allocation));

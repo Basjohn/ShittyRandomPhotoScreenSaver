@@ -553,6 +553,9 @@ bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<Def
     if (m_rhi && m_rhi != rhi)
         release();                            // another QRhi: every object again (a node made again)
     m_rhi = rhi;
+    // beginExternal requires this declaration. Cached at sync; the dormant product path keeps normal pass flags.
+    m_defocusPassFlags = rhi->backend() == QRhi::OpenGLES2 && g_timeDefocusDraws.loadAcquire()
+        ? QRhiCommandBuffer::BeginPassFlags(QRhiCommandBuffer::ExternalContent) : QRhiCommandBuffer::BeginPassFlags();
     if (!skipStageRelease())
         releaseLeftBehind(rhi);
     if (blooms.size() > kMaxBloomStages || defocus.size() > kMaxDefocusStages) {
@@ -1030,6 +1033,7 @@ void PostStages::release()
     m_bloomCount = 0;
     m_defocusCount = 0;
     m_rhi = nullptr;
+    m_defocusPassFlags = {};
     ++m_objectGeneration;
 }
 
