@@ -348,7 +348,13 @@ def test_the_defocus_draw_timer_is_opengl_only_and_off_by_default() -> None:
     assert "const int control = m_defocusDrawControl;" in mark and "loadAcquire" not in mark
     sync = stages[stages.index("bool PostStages::sync("):stages.index("bool PostStages::build(")]
     assert sync.index("m_defocusDrawControl = g_timeDefocusDraws.loadAcquire();") < sync.index("m_defocusPassFlags =")
-    assert "rhi->backend() == QRhi::OpenGLES2 && m_defocusDrawControl" in sync
+    assert "if (rhi->backend() == QRhi::OpenGLES2)" in sync
+    assert "if (m_defocusDrawControl & 31)" in sync
+    assert "m_defocusPassFlags |= QRhiCommandBuffer::ExternalContent;" in sync
+    assert "if (m_defocusDrawControl & 32)" in sync
+    assert "m_defocusPassFlags |= QRhiCommandBuffer::DoNotTrackResourcesForCompute;" in sync
+    assert mark.index("if (!control)") < mark.index("g_defocusExternalPasses.fetchAndAddRelaxed(1)")
+    assert mark.index("if (!control)") < mark.index("g_defocusUntrackedPasses.fetchAndAddRelaxed(1)")
     assert mark.index("if (!control)") < mark.index("if (!(control & 1))") < mark.index("std::make_unique<DrawTimer>()")
     boundary = mark[mark.index("if (!(control & 1))"):mark.index("if (!m_drawTimer)")]
     assert boundary.index("cb->beginExternal();") < boundary.index("cb->endExternal();") < boundary.index("return;")

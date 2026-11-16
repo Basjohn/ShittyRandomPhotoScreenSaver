@@ -769,6 +769,8 @@ PyObject *composite_live(PyObject *, PyObject *)
     o.insert(QStringLiteral("stage_sprites_gpu_ns"), double(sc.spritesGpuNs));
     o.insert(QStringLiteral("stage_defocus_time_skipped"), double(sc.defocusTimeSkipped));
     o.insert(QStringLiteral("stage_defocus_flushes"), double(sc.defocusFlushes));
+    o.insert(QStringLiteral("stage_defocus_external_passes"), double(sc.defocusExternalPasses));
+    o.insert(QStringLiteral("stage_defocus_untracked_passes"), double(sc.defocusUntrackedPasses));
     return pyJson(o);
 }
 
@@ -2033,6 +2035,10 @@ PyObject *stage_control(PyObject *, PyObject *args)
         srpss_core::setFlushDefocusBoundary(1, value);
     else if (control == "flush_defocus_after_sprites")
         srpss_core::setFlushDefocusBoundary(2, value);
+    else if (control == "declare_defocus_external")
+        srpss_core::setDeclareDefocusExternal(value);
+    else if (control == "disable_defocus_compute_tracking")
+        srpss_core::setDisableDefocusComputeTracking(value);
     else
         Py_RETURN_FALSE;
     Py_RETURN_TRUE;
@@ -3005,7 +3011,8 @@ PyMethodDef methods[] = {
       "(name, on) -> bool: N3.4, harness: a D17 negative control by name (skip_blend_gate, blend_formats_missing, "
       "sample_shading_missing, transparency_first_sample, skip_bloom_prime, bloom_same_texture, skip_stage_release, "
       "skip_read_chain, time_defocus_draws, flush_defocus_draws, flush_defocus_before_gather, "
-      "flush_defocus_between_draws, flush_defocus_after_sprites (OpenGL), device_without_independent_blend: read at the next device's "
+      "flush_defocus_between_draws, flush_defocus_after_sprites, declare_defocus_external, "
+      "disable_defocus_compute_tracking (OpenGL; latter requires no compute passes), device_without_independent_blend: read at the next device's "
       "creation); False for an unknown "
       "name. fail_allocation (texture/target sync) and fail_build (sampler/bindings/pipeline build or rebind) accept "
       "integer create-attempt ordinals (0: off), bounded by the stage limits." },

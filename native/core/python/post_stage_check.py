@@ -1360,8 +1360,17 @@ def round_defocus_cost(core, engine, app, api: str, packs: dict) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
+DEFOCUS_DIAGNOSTIC_CONTROLS = ("time_defocus_draws", "flush_defocus_draws", "declare_defocus_external",
+                               "disable_defocus_compute_tracking")
+
+
+def _compute_free_program(passes) -> bool:
+    """The tracking-disabled precondition covers the whole canonical pass list, including dormant entries."""
+    return bool(passes) and all("compute" not in entry.declaration() for entry in passes)
+
+
 def round_defocus_boundaries(core, engine, app, api: str, packs: dict) -> dict:
-    """Measure full and disabled sprites with neither, boundary, and query controls independently."""
+    """Isolate pass declarations, tracking, boundaries and queries, each bracketed by the normal path."""
     import math
 
     if api != "opengl":
@@ -1376,15 +1385,21 @@ def round_defocus_boundaries(core, engine, app, api: str, packs: dict) -> dict:
                                               ("before_gather", "flush_defocus_before_gather", 1),
                                               ("between_draws", "flush_defocus_between_draws", 1),
                                               ("after_sprites", "flush_defocus_after_sprites", 1),
+                                              ("declarations_only", "declare_defocus_external", 0),
+                                              ("tracking_disabled", "disable_defocus_compute_tracking", 0),
                                               ("queries", "time_defocus_draws", 0), ("off_after", None, 0)):
-                _controls(core, ("time_defocus_draws",), False)
-                _controls(core, ("flush_defocus_draws",), False)
-                if control:
+                _controls(core, DEFOCUS_DIAGNOSTIC_CONTROLS, False)
+                if control and phase != "tracking_disabled":
                     _controls(core, (control,), True)
                 timings = {}
                 for label, changes in (("full", {}), ("no_sprites", {"u_defocus_highlight": 1e6})):
                     case = Case(f"boundaries_{label}", "eb", card=size, samples=samples, changes=changes)
                     passes, targets, values = build(case, packs)
+                    if phase == "tracking_disabled":
+                        _controls(core, (control,), False)
+                        if not _compute_free_program(passes):
+                            raise ValueError("tracking_disabled requires no compute pass anywhere in the program")
+                        _controls(core, (control,), True)
                     scene = stc.Scene(core, engine, host, size, 1.0, packs, passes=passes, targets=targets,
                                       settings=values)
                     try:
@@ -1403,14 +1418,25 @@ def round_defocus_boundaries(core, engine, app, api: str, packs: dict) -> dict:
                     skipped = after["stage_defocus_time_skipped"] - before["stage_defocus_time_skipped"]
                     records = after["stage_defocus_records"] - before["stage_defocus_records"]
                     flushes = after["stage_defocus_flushes"] - before["stage_defocus_flushes"]
+                    declared = after["stage_defocus_external_passes"] - before["stage_defocus_external_passes"]
+                    untracked = after["stage_defocus_untracked_passes"] - before["stage_defocus_untracked_passes"]
+                    actual_samples = _effective_sample_counts(state)
+                    native_passes = (state.get("program") or {}).get("passes") or []
+                    compute_free = bool(native_passes) and all("compute" not in entry for entry in native_passes)
                     timings[label] = {"timing": timed, "draws_timed": n, "skipped": skipped, "state": state,
-                                      "defocus_records": records, "boundary_flushes": flushes}
+                                      "defocus_records": records, "boundary_flushes": flushes,
+                                      "external_passes": declared, "untracked_passes": untracked,
+                                      "actual_samples": actual_samples, "compute_free_program": compute_free}
                     metrics = (timed.get("median_ms"), timed.get("p10_ms"), timed.get("p90_ms"))
                     checks[f"x{samples}_{phase}_{label}"] = (
                         timed.get("samples", 0) >= stc.COST_MIN_SAMPLES and not state.get("content_failing")
                         and not state.get("error") and not timed.get("error")
                         and all(isinstance(v, (int, float)) and math.isfinite(v) for v in metrics)
-                        and records > 0 and flushes == expected * records
+                        and timed.get("records") == COST_FRAMES and records == COST_FRAMES - 1
+                        and actual_samples.get("scene") == samples and flushes == expected * records
+                        and declared == (records if control and phase != "tracking_disabled" else 0)
+                        and untracked == (records if phase == "tracking_disabled" else 0)
+                        and (phase != "tracking_disabled" or compute_free)
                         and (n >= stc.COST_MIN_SAMPLES and skipped == 0 if phase == "queries"
                              else n == 0 and skipped == 0))
                     if phase == "off_before":
@@ -1422,13 +1448,10 @@ def round_defocus_boundaries(core, engine, app, api: str, packs: dict) -> dict:
                 facts[f"x{samples}_{phase}"] = {**timings, "full_minus_no_sprites_median_ms": delta}
     finally:
         try:
-            _controls(core, ("time_defocus_draws",), False)
+            _controls(core, DEFOCUS_DIAGNOSTIC_CONTROLS, False)
         finally:
-            try:
-                _controls(core, ("flush_defocus_draws",), False)
-            finally:
-                host.close()
-                host_check._flush_deletes(app)
+            host.close()
+            host_check._flush_deletes(app)
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 

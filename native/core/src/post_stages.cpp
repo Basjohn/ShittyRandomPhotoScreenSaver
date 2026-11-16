@@ -34,8 +34,10 @@ QAtomicInteger<int> g_skipStageRelease { 0 };
 QAtomicInteger<int> g_skipReadChain { 0 };
 QAtomicInteger<int> g_stageAllocationFailure { 0 };
 QAtomicInteger<int> g_stageBuildFailure { 0 };
-QAtomicInteger<int> g_timeDefocusDraws { 0 }; // bit 0: queries; bits 1..3: individual boundary-only sites
+QAtomicInteger<int> g_timeDefocusDraws { 0 }; // bit 0: queries; 1..3: boundary sites; 4: declaration; 5: disable tracking
 QAtomicInteger<qint64> g_defocusFlushes { 0 };
+QAtomicInteger<qint64> g_defocusExternalPasses { 0 };
+QAtomicInteger<qint64> g_defocusUntrackedPasses { 0 };
 QAtomicInteger<qint64> g_defocusTimed { 0 };
 QAtomicInteger<qint64> g_gatherGpuNs { 0 };
 QAtomicInteger<qint64> g_spritesGpuNs { 0 };
@@ -328,6 +330,8 @@ void setFlushDefocusBoundary(int mark, bool on)
     if (mark >= 0 && mark < 3)
         setDefocusDrawControl(2 << mark, on);
 }
+void setDeclareDefocusExternal(bool on) { setDefocusDrawControl(16, on); }
+void setDisableDefocusComputeTracking(bool on) { setDefocusDrawControl(32, on); }
 quint64 stageControlGeneration() { return g_controlGeneration.loadAcquire(); }
 
 StageCounts stageCounts()
@@ -354,6 +358,8 @@ StageCounts stageCounts()
     c.spritesGpuNs = g_spritesGpuNs.loadRelaxed();
     c.defocusTimeSkipped = g_defocusTimeSkipped.loadRelaxed();
     c.defocusFlushes = g_defocusFlushes.loadRelaxed();
+    c.defocusExternalPasses = g_defocusExternalPasses.loadRelaxed();
+    c.defocusUntrackedPasses = g_defocusUntrackedPasses.loadRelaxed();
     return c;
 }
 
@@ -425,6 +431,14 @@ void PostStages::markDefocus(QRhiCommandBuffer *cb, int mark)
     const int control = m_defocusDrawControl;
     if (!control)
         return;
+    // Count only controlled passes, at the existing first mark after beginPass used these same cached flags. The
+    // dormant product path already returned above; declaration/tracking-only modes issue neither queries nor calls.
+    if (mark == 0) {
+        if (m_defocusPassFlags.testFlag(QRhiCommandBuffer::ExternalContent))
+            g_defocusExternalPasses.fetchAndAddRelaxed(1);
+        if (m_defocusPassFlags.testFlag(QRhiCommandBuffer::DoNotTrackResourcesForCompute))
+            g_defocusUntrackedPasses.fetchAndAddRelaxed(1);
+    }
     if (!(control & 1)) { // same boundaries as the query mode, no queries or result retrieval
         if (control & (2 << mark)) {
             cb->beginExternal();
@@ -635,8 +649,13 @@ bool PostStages::sync(QRhi *rhi, const QList<BloomSpec> &blooms, const QList<Def
     m_rhi = rhi;
     // beginExternal requires this declaration. Cached at sync; the dormant product path keeps normal pass flags.
     m_defocusDrawControl = g_timeDefocusDraws.loadAcquire();
-    m_defocusPassFlags = rhi->backend() == QRhi::OpenGLES2 && m_defocusDrawControl
-        ? QRhiCommandBuffer::BeginPassFlags(QRhiCommandBuffer::ExternalContent) : QRhiCommandBuffer::BeginPassFlags();
+    m_defocusPassFlags = {};
+    if (rhi->backend() == QRhi::OpenGLES2) {
+        if (m_defocusDrawControl & 31) // query/boundary/declaration bits; tracking-only never declares external work
+            m_defocusPassFlags |= QRhiCommandBuffer::ExternalContent;
+        if (m_defocusDrawControl & 32)
+            m_defocusPassFlags |= QRhiCommandBuffer::DoNotTrackResourcesForCompute;
+    }
     if (!skipStageRelease())
         releaseLeftBehind(rhi);
     if (blooms.size() > kMaxBloomStages || defocus.size() > kMaxDefocusStages) {

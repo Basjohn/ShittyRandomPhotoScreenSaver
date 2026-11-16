@@ -118,6 +118,8 @@ bool timeDefocusDraws();
 // Harness-only: the same external-command boundaries without queries. Query mode wins if both are enabled.
 void setFlushDefocusDraws(bool on);
 void setFlushDefocusBoundary(int mark, bool on); // harness: isolate one of the three existing sites (0..2)
+void setDeclareDefocusExternal(bool on);       // declaration only, without external-command boundaries or queries
+void setDisableDefocusComputeTracking(bool on); // tracking flag only; harness must prove the whole program has no compute
 // A new number at every control change (a content's gate is decided again only then).
 quint64 stageControlGeneration();
 
@@ -145,6 +147,8 @@ struct StageCounts
     qint64 spritesGpuNs = 0;      // their sprites' summed GPU time
     qint64 defocusTimeSkipped = 0; // records left untimed (every slot still pending)
     qint64 defocusFlushes = 0; // boundary-only external blocks (none with controls off or in query mode)
+    qint64 defocusExternalPasses = 0; // controlled passes using the cached declaration/tracking flags
+    qint64 defocusUntrackedPasses = 0;
 };
 StageCounts stageCounts();
 void countTransparencyResolve();
