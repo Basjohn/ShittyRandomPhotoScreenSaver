@@ -4,11 +4,12 @@
 The pre-flip recovery checkpoint is `preflip-checkpoint-20261115`; benchmarks are in `Docs/Reference/Benchmarks.md`.
 Never rewrite main or force-push.
 
-- [x] The five requested slices, N3.1c L2, and the ABI 25 native repair proofs and source audit are complete. D17
+- [x] Native retirement, scissor/allocation/oracle proofs, stream-ring harness repair and ABI 25 audit are complete. D17
   owns the detailed evidence and N3.4's remaining performance investigation.
 - [~] P1 desktop alpha, DPI and sleep/wake need lead/operator validation at N0.6; hidden results do not close it.
 - [x] Aligned native/Python whole-query comparison and bracket pixels proved; submission equivalence remains open.
-- [ ] Continue N3.4 with the existing native whole-pass blocking-result control under recorded ambient GPU conditions.
+- [x] Native whole-pass blocking-result control retains the excess with unchanged guards; High reviewed.
+- [ ] Continue N3.4 with the Python owner's empty/populated vertex-array comparison under recorded GPU conditions.
   Overlap/contention remains unproved; hardware counters are optional. R-232 retains the investigation. No production barrier
   or tracking exception is admitted.
 - [ ] Continue the Bubble port from its N5.1 box. Oscilloscope waits for N3.4's remaining performance gate.

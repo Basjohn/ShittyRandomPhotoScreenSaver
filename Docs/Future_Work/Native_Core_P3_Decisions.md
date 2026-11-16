@@ -2249,8 +2249,13 @@ Python face is `rendering/native/mode.py` (`TransparencyTarget`, `TransparencyRe
     `n3_4/20261116_n34_python_whole_pair/`; GPU30%/2595MHz before and6%/2790MHz after. Root viewed the frames;
     independent High source/evidence review agrees. This establishes a smaller paired difference without the old
     draw timestamps, not matched submission: Python blocks on query results and uses different UBO uploads.
-    Next use the native timer's existing whole-pass `wait_for_results` control to test that cadence difference;
-    retain all current pixel/count/sample guards and add no inter-draw query or production synchronization.
+    Native `wait_for_results` control retains the excess: off2.1883/2.5662ms, tracked boundary0.1024ms,
+    untracked boundary2.2262ms. All eight cases verify enabled blocking mode,478 blocking reads and239 results,
+    no busy/abandoned slots, exact pixels and unchanged sample/count guards; independent High review is clear.
+    Evidence `n3_4/20261116_n34_native_wait_control/`; GPU13%/330MHz before and41%/2775MHz after. Whole-pass
+    blocking-read cadence alone therefore does not explain this fixture's excess. Next test the Python owner's
+    empty versus populated vertex-array state with corresponding pixels held exact; no core change or extra
+    inter-draw query is needed.
   - The render thread's record (`stage_record_ns`, the whole record of a program with stages): on OpenGL 19 to 20 us
     for EB's shape at every size and count (6.7 to 9.5 us with no stage), 33 us mean over the steady minute at 4x; on
     Vulkan 1.1 to 1.4 ms, which is the validation layer's own CPU work (22 us with no stage under the same layer); the

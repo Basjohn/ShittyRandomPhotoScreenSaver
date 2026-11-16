@@ -41,10 +41,12 @@ Live checklist: every open step is its own box; retain only useful, brief native
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Session order (operator, 16 Nov):** the P1 retirement, N3.1c L3, N3.2 Audit 4 L6, `stream_ring` margin and
-near-light slices are complete. Review independent slices before landing; their implementation may overlap.
-**Now:** the five requested slices and N3.1c L2 are complete and audited; ABI 25 native repairs and source audit
-are proved. P1 desktop validation remains at N0.6 and N3.4 defocus performance remains open. D17 owns the detailed
+**Active native focus:** N3.4 defocus performance, then the admitted ports and side defects below; keep the interim
+holds in `handoff.md`. Independent native work may overlap under the operator's request for a Sol 6.1 High agent;
+review every slice before landing.
+
+**Now:** ABI 25 native repairs and source audit are proved. P1 desktop validation remains at N0.6 and N3.4 defocus
+performance remains open. D17 owns the detailed
 diagnosis; available ambient GPU activity is authorised when conditions are recorded. Heavy ports and the flip remain
 held by the interim route in `handoff.md`.
 
@@ -487,8 +489,9 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [x] ABI 25 gate, accounting, readback, parity, rest and retirement proofs and independent High review complete.
   - [ ] At Qt upgrades, recheck the private QRhi outside-pass `beginExternal`/`endExternal` contract against Qt source.
   - [x] Aligned whole-query native/Python pairs and bracket pixels proved; submission still differs (D17, R-232).
-  - [ ] Test native whole-pass blocking-result cadence with the existing `wait_for_results` control; retain pixel,
-    count and sample guards. Select the next falsifier from that result. Hardware counters are optional if a specific
+  - [x] Whole-pass blocking-result control preserves pixels/counts but retains the excess (D17, R-232).
+  - [ ] Test the Python owner's empty versus populated vertex-array state with corresponding bracket pixels held
+    exact. Select the next falsifier from that result. Hardware counters are optional if a specific
     ambiguity remains; profiler repair is not a prerequisite (D17; failed approaches in R-232).
   - [ ] Resolve an established core cause, then rerun both-backend `defocus_cost` and parity; otherwise document the
     established cause and figures in D17 before closing this gate. No production barrier or tracking exception without
