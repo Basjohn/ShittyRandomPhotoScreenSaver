@@ -1,5 +1,12 @@
 # P1 toolchain spike: native QRhi rendering in the SRPSS PySide6 process
 
+**Historical evidence only.** The P1 build selection is retired. Source and the original procedures below are kept
+as the record of the spike; the workflow now accepts only `native/core`. Current N0.6 host/validation/translucency
+proof uses `native/core/python/host_check.py` and `composite_check.py`; see `Docs/Reference/Harness_Index.md`.
+The validation-layer directory under `D:/Temp/Scratch/SRPSS/native_spike/` retains its name.
+
+## Historical P1 record
+
 Throwaway spike for the Graphics Backend Decision's piece B (P1, go/no-go). Findings and the verdict are in
 `Docs/Future_Work/Native_Core_P1_Spike.md`. Nothing here is product code.
 

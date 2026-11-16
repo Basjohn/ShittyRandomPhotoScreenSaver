@@ -6,7 +6,6 @@ Usage:
     python tools/build_runner.py --mode github
     python tools/build_runner.py --mode github --run [--select standard media_center ...]
     python tools/build_runner.py --mode github --run --select native_module     (the product's native core)
-    python tools/build_runner.py --mode github --run --select native_spike      (the P1 harness, native/spike_p1)
     python tools/build_runner.py --smoke-test --mode normal
 
 The GUI intentionally uses only the Python standard library. Build workers keep
@@ -886,13 +885,12 @@ def _github_jobs(repo_root: Path) -> tuple[Job, ...]:
 
     The native modules compile on GitHub through their one workflow (``native-module.yml``, Current_Plan.md item 8b)
     and are validated and published into ``release/<key>`` like a product: ``native_module`` is the product's native
-    core (``native/core``), ``native_spike`` the P1 harness (``native/spike_p1``). Neither is pre-selected and no
-    installer packages either."""
+    core (``native/core``). It is not pre-selected and no standalone module installer is offered."""
     from tools import github_remote_build as remote
 
     by_key = {job.key: job for job in jobs_for_mode("venv", repo_root)}
     workflow = repo_root / ".github" / "workflows" / "windows-build.yml"
-    names = {"native_module": "Native Core Module (GitHub)", "native_spike": "Native Spike Harness (GitHub)"}
+    names = {"native_module": "Native Core Module (GitHub)"}
     native_jobs = tuple(
         Job(
             target.key,
@@ -3770,7 +3768,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         nargs="+",
         metavar="JOB",
         help="with --run: job keys (standard media_center reddit_helper standard_installer media_center_installer "
-             "linux linux_mc native_module native_spike)",
+             "linux linux_mc native_module)",
     )
     parser.add_argument(
         "--iscc",

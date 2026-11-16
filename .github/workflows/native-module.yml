@@ -1,8 +1,8 @@
 # SRPSS native module compile on a GitHub-hosted Windows runner (Current_Plan.md item 8b, N0.9 and N2.1).
 #
-# Builds happen only through GitHub workflows (operator, 12 Nov 2026). One workflow compiles every native module:
-# inputs.source names the folder, by default native/core (the product's native core, _srpss_native_core, D5.7); the P1
-# harness native/spike_p1 (_srpss_native_spike) is the other source. tools/github_remote_build.py's MODULE_TARGETS is
+# Builds happen only through GitHub workflows (operator, 12 Nov 2026). This workflow compiles the native core:
+# inputs.source must be native/core (the product's native core, _srpss_native_core, D5.7). The P1 source is evidence.
+# tools/github_remote_build.py's MODULE_TARGETS is
 # the table of sources and targets ("native-target" prints a source's target; an unknown source is refused). Each
 # build is exactly inputs.commit (a full SHA, verified after checkout): MSVC from the runner's Visual Studio (found
 # with vswhere by the source's build.cmd, the one CMake invocation), the pinned Qt SDK and Vulkan-Headers fetched and
@@ -13,7 +13,7 @@
 #
 # The artifact (srpss-<target>) has the product layout: remote_build_manifest.json (source, commit, version, Qt,
 # PySide6, MSVC, sha256 per file), release/<target>/ (the .pyd and shaders/<file>.qsb, one per shader source), and
-# logs/ (build log, import check). tools/build_runner.py (GITHUB REMOTE, jobs "native_module" and "native_spike")
+# logs/ (build log, import check). tools/build_runner.py (GITHUB REMOTE, job "native_module")
 # dispatches it through tools/github_remote_build.py, validates the download against the manifest and swaps it into
 # release/<target>/.
 #
@@ -23,7 +23,7 @@
 # Trigger: manual dispatch or a call from another workflow only. Ordinary pushes never start a run.
 name: Native module
 # find_run matches "<target>-<token>" in the run's name; the target per source is MODULE_TARGETS' (checked below).
-run-name: SRPSS native ${{ inputs.source }} (${{ inputs.source == 'native/spike_p1' && 'native_spike' || 'native_module' }}-${{ inputs.token }})
+run-name: SRPSS native ${{ inputs.source }} (native_module-${{ inputs.token }})
 
 on:
   workflow_dispatch:
@@ -37,7 +37,7 @@ on:
         type: string
         required: true
       source:
-        description: The native module's source folder (native/core, the product's native core; native/spike_p1, the harness)
+        description: The native core's source folder (native/core only)
         type: string
         required: false
         default: native/core
@@ -72,14 +72,14 @@ jobs:
       COMMIT: ${{ inputs.commit }}
       RUN_TOKEN: ${{ inputs.token }}
       NATIVE_SOURCE: ${{ inputs.source }}
-      RUN_NAME_TARGET: ${{ inputs.source == 'native/spike_p1' && 'native_spike' || 'native_module' }}
+      RUN_NAME_TARGET: native_module
       BUILD_DIR: build\native_module
     steps:
       - name: Validate inputs
         run: |
           if ($env:COMMIT -notmatch '^[0-9a-f]{40}$') { throw "commit must be a full 40-character SHA: $env:COMMIT" }
           if ($env:RUN_TOKEN -notmatch '^\d{8}_\d{6}_\d{6}$') { throw "token must be yyyyMMdd_HHmmss_ffffff" }
-          if ($env:NATIVE_SOURCE -notmatch '^native/[a-z0-9_]+$') { throw "source must be a folder native/<name>: $env:NATIVE_SOURCE" }
+          if ($env:NATIVE_SOURCE -cne 'native/core') { throw "source must be native/core: $env:NATIVE_SOURCE" }
           "SDK_ROOT=$env:RUNNER_TEMP\native_sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "NATIVE_DIR=$($env:NATIVE_SOURCE -replace '/', '\')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 

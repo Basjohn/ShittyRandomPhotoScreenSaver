@@ -2,7 +2,7 @@
 
 The module (``release/native_module``, built on GitHub) is loaded the product's way and driven in one child process per
 graphics API (Qt Quick's API is process-wide): OpenGL, Vulkan on the module's own instance and devices (D6), D3D11 and
-D3D12. No window is ever visible: the hidden host never shows one, and the window host's windows are kept off screen by
+D3D12. The default rounds never show a visible window: the hidden host never shows one, and window hosts are kept off screen by
 the tests' pattern (``tests/_invisible_windows.py``: zero opacity, transparent for input, a tool window).
 
 Rounds (each per API):
@@ -27,6 +27,9 @@ Rounds (each per API):
              USER object or private-byte trough growth over its control (the control's own noise is the tolerance),
              and threads stay flat. What the drivers and Qt keep per cycle themselves is recorded in
              Docs/Future_Work/Native_Core_N06_N07_Qt_Facts.md section J.
+  translucent  explicit lead-only visible rehearsal on an exact named secondary display, bounded to at most 60 s;
+             transparent Qt content on the module's device, optionally the DWM system backdrop or the project's glass.
+             A PASS covers harness checks; desktop see-through, resize, DPI and sleep/wake require operator review.
 On Vulkan the instance has the Khronos validation layer with synchronisation validation when --layer-path gives it; every
 message is attributed and only Qt 6.12.0's recorded defects are excused, by id (vk_validation.py, the N0.6 rule).
 
@@ -58,6 +61,8 @@ import vk_validation  # noqa: E402  (native/core/python)
 
 APIS = ("opengl", "vulkan", "d3d11", "d3d12")
 ROUNDS = ("hidden", "window", "lifecycle")
+VISIBLE_ROUND = "translucent"       # explicit opt-in only; never part of the default hidden proof
+MAX_VISIBLE_SECONDS = 60.0
 HOST_SIZE = (320, 180)
 REST_FRAMES = 30
 PROBE_FRAMES = 10
@@ -99,7 +104,195 @@ Rectangle {
     }
 }
 """
-_ALLOWED_ENV: set[str] = set()
+
+TRANSLUCENT_QML = b"""import QtQuick
+Item {
+    Rectangle { x: parent.width / 2; width: parent.width / 2; height: parent.height; color: "#80ff0000" }
+    Rectangle { y: parent.height / 2; width: parent.width / 2; height: parent.height / 2; color: "blue" }
+    Rectangle {
+        width: 6; height: 6; color: "white"
+        RotationAnimation on rotation { from: 0; to: 360; duration: 1000; loops: Animation.Infinite }
+    }
+}
+"""
+
+
+def add_translucent_arguments(parser) -> None:
+    parser.add_argument("--display", help="translucent round only: exact Qt screen name; primary is refused (lead only)")
+    parser.add_argument("--visible-seconds", type=float, default=15.0,
+                        help=f"translucent round duration, greater than zero and at most {MAX_VISIBLE_SECONDS:g} seconds")
+    parser.add_argument("--backdrop", choices=("none", "system", "glass"), default="none",
+                        help="translucent round's native desktop backdrop (run each separately)")
+
+
+def validate_translucent_arguments(args) -> None:
+    if VISIBLE_ROUND not in args.rounds:
+        if args.display:
+            raise ValueError("--display requires --rounds translucent")
+        return
+    if not args.display or not 0 < args.visible_seconds <= MAX_VISIBLE_SECONDS:
+        raise ValueError("translucent requires an exact --display name and a bounded --visible-seconds")
+    if len(args.rounds) != 1:
+        raise ValueError("run translucent separately from hidden/window/lifecycle rounds")
+
+
+def translucent_screen(app, name: str):
+    """Reuse D1's Qt and Windows primary/monitor refusal before creating a window; resolve by exact screen name."""
+    from tools import d1_run
+
+    screens = app.screens()
+    matches = [i for i, screen in enumerate(screens) if screen.name() == name]
+    if len(matches) != 1:
+        raise ValueError(f"exactly one connected screen must match --display {name!r}")
+    display = d1_run.check_display_choice(d1_run.enumerate_displays(), matches[0])
+    d1_run.match_monitor(display, d1_run.win32_monitors())
+    return screens[matches[0]]
+
+
+def _translucent_backdrop(window, kind: str) -> dict:
+    if kind == "none":
+        return {"ok": True, "kind": kind}
+    hwnd = int(window.winId())
+    if kind == "glass":
+        from core.windows.dwm_blur import enable_glass_blur
+
+        return {"ok": bool(enable_glass_blur(hwnd)), "kind": kind}
+    import ctypes
+    from ctypes import wintypes
+
+    # DWM system backdrop plus a full-client extended frame (N0.6 round 6's exact calls).
+    margins = (ctypes.c_int * 4)(-1, -1, -1, -1)
+    value = ctypes.c_int(3)       # DWMSBT_TRANSIENTWINDOW
+    dwm = ctypes.WinDLL("dwmapi")
+    extend = int(dwm.DwmExtendFrameIntoClientArea(wintypes.HWND(hwnd), ctypes.byref(margins)))
+    backdrop = int(dwm.DwmSetWindowAttribute(wintypes.HWND(hwnd), 38, ctypes.byref(value), ctypes.sizeof(value)))
+    return {"ok": extend == 0 and backdrop == 0, "kind": kind,
+            "extend_hresult": extend & 0xFFFFFFFF, "backdrop_hresult": backdrop & 0xFFFFFFFF}
+
+
+def resizes_presented(resizes: list[dict], original_size: list[int]) -> bool:
+    """Each requested extent was actually observed after event processing and an advancing frame edge.
+
+    Frames alone cannot prove Qt applied resize(): an unchanged-size window can keep rendering forever.
+    """
+    return (len(resizes) == 2 and resizes[0].get("requested_size") != original_size
+            and resizes[1].get("requested_size") == original_size
+            and all(any(observation.get("size") == resize.get("requested_size")
+                        and observation.get("edges", 0) > resize.get("edges_before", 0)
+                        for observation in resize.get("observations", [])) for resize in resizes))
+
+
+def round_translucent(core, engine, app, api: str, args, *, with_composite: bool = False) -> dict:
+    """Lead-only bounded desktop rehearsal on a named secondary screen, on the core's device. No grabWindow:
+    Qt's Vulkan grab defect D is avoidable here. Pixel translucency, DPI and sleep/wake remain operator review.
+    """
+    import shiboken6
+    from PySide6.QtCore import QSizeF, Qt, QUrl
+    from PySide6.QtGui import QColor
+    from PySide6.QtQml import QQmlComponent
+    from PySide6.QtQuick import QQuickWindow
+
+    screen = translucent_screen(app, args.display)
+    window = QQuickWindow()
+    window.setScreen(screen)
+    window.setFlag(Qt.WindowType.FramelessWindowHint, True)
+    window.setFlag(Qt.WindowType.Tool, True)
+    fmt = window.requestedFormat()
+    fmt.setAlphaBufferSize(8)
+    window.setFormat(fmt)
+    window.setColor(QColor("transparent"))
+    window.setTitle("SRPSS native translucent rehearsal")
+    geometry = screen.availableGeometry()
+    width, height = min(640, geometry.width() // 2), min(360, geometry.height() // 2)
+    window.setGeometry(geometry.x() + (geometry.width() - width) // 2,
+                       geometry.y() + (geometry.height() - height) // 2, width, height)
+    component = QQmlComponent(engine)
+    component.setData(TRANSLUCENT_QML, QUrl())
+    item = component.create()
+    if item is None:
+        shiboken6.delete(window)
+        raise RuntimeError(component.errorString())
+    item.setParentItem(window.contentItem())
+    item.setSize(QSizeF(width, height))
+    window.widthChanged.connect(lambda value: item.setWidth(value))
+    window.heightChanged.connect(lambda value: item.setHeight(value))
+    host = None
+    composite = None
+    record = {"display": screen.name(), "seconds": args.visible_seconds, "backdrop": args.backdrop,
+              "lead_review_required": ["desktop see-through", "resize appearance"],
+              "unexercised": ["DPI change", "sleep/wake"], "resizes": [], "samples": []}
+    checks = {}
+    try:
+        host = core.attach_host(window)       # before creating the native handle or showing the window (D6)
+        if with_composite:
+            composite = core.composite(item)
+            composite.set(rect=[width / 4, height / 4, width / 2, height / 2], coverage=None,
+                          pattern="white", opacity=0.5, visible=True)
+        record["native_backdrop"] = _translucent_backdrop(window, args.backdrop)
+        window.show()
+        started = time.monotonic()
+        deadline = started + args.visible_seconds
+        confined = True
+        resize_step = 0
+        while time.monotonic() < deadline:
+            # Re-check after every event batch; a topology change or drag cannot move this rehearsal onto primary.
+            if (window.screen() is not screen or screen is app.primaryScreen()
+                    or not screen.geometry().contains(window.geometry())):
+                confined = False
+                window.hide()
+                break
+            if resize_step < 2 and time.monotonic() - started >= args.visible_seconds * (resize_step + 1) / 3:
+                target_width, target_height = ((width * 3 // 4, height * 3 // 4) if resize_step == 0 else (width, height))
+                window.resize(target_width, target_height)
+                record["resizes"].append({"requested_size": [target_width, target_height], "observations": [],
+                                          "edges_before": _driver(host.state()).get("edges", 0)})
+                resize_step += 1
+            record["samples"].append({"size": [window.width(), window.height()], "dpr": window.devicePixelRatio(),
+                                      "exposed": window.isExposed(), "driver": _driver(host.state())})
+            _pump(app, min(0.1, max(0.0, deadline - time.monotonic())))
+            if record["resizes"]:
+                record["resizes"][-1]["observations"].append({
+                    "size": [window.size().width(), window.size().height()],
+                    "edges": _driver(host.state()).get("edges", 0)})
+        state = host.state()
+        record["state"] = state
+        driver = _driver(state)
+        checks["confined_to_named_secondary_display"] = confined
+        checks["native_backdrop_applied"] = record["native_backdrop"]["ok"]
+        checks["frames_arrived"] = driver.get("edges", 0) > 1
+        checks["render_thread_without_python"] = (driver.get("edges_on_gui_thread") == 0
+                                                    and driver.get("edges_with_python_thread_state") == 0)
+        checks["transparent_window_requested"] = window.color().alpha() == 0
+        checks["alpha_buffer_requested"] = window.requestedFormat().alphaBufferSize() > 0
+        checks["two_in_screen_resizes_presented"] = resizes_presented(record["resizes"], [width, height])
+        checks["no_driver_error"] = not driver.get("error")
+        record["format"] = {"requested_alpha": window.requestedFormat().alphaBufferSize(),
+                            "actual_alpha": window.format().alphaBufferSize()}
+        if api == "vulkan":
+            checks["module_owns_device"] = state.get("device_alive") is True and bool(
+                state.get("device", {}).get("vk_device"))
+        if composite is not None:
+            record["composite"] = composite.state()
+            checks["native_composite_drawn"] = record["composite"].get("draws", 0) > 0
+        shiboken6.delete(window)
+        window = None
+        _flush_deletes(app)
+        destroyed = host.state()
+        record["destroyed"] = destroyed
+        checks["window_destroyed"] = destroyed.get("window_destroyed") is True
+        if api == "vulkan":
+            checks["device_retired_after_window"] = (destroyed.get("device_alive") is False
+                and device_teardown_ok(destroyed.get("device_teardown", []), destroyed.get("device", {})))
+    finally:
+        if window is not None and shiboken6.isValid(window):
+            shiboken6.delete(window)
+        if composite is not None:
+            composite.destroy()
+        if host is not None:
+            record["close"] = host.close()
+        _drop_item(app, item)
+    record.update(checks=checks, **{"pass": all(checks.values())})
+    return record
 
 
 def _root(repo: str) -> Path:
@@ -761,6 +954,10 @@ def child(args) -> dict:
             record["error"] = f"the Vulkan instance failed: {instance.get('instance', {}).get('error')}"
             return record
         record["instance_created"] = True
+        if args.require_validation and not instance.get("validation_layer_loaded"):
+            record["error"] = "the validation layer did not load (--require-validation); no round ran"
+            record["instance_teardown"] = core.destroy_vulkan_instance()
+            return record
     engine = QQmlEngine()
     try:
         if any(name in WINDOW_ROUNDS for name in args.rounds):
@@ -775,6 +972,8 @@ def child(args) -> dict:
                     record[name] = round_hidden(core, engine, app, args.api, out)
                 elif name == "window":
                     record[name] = round_window(core, engine, app, args.api, out)
+                elif name == VISIBLE_ROUND:
+                    record[name] = round_translucent(core, engine, app, args.api, args)
                 else:
                     record[name] = round_lifecycle(core, engine, app, args.api, args.cycles)
             except Exception:
@@ -801,6 +1000,8 @@ def api_verdict(api: str, record: dict, require_validation: bool) -> tuple[bool,
     """What failed on one API. A child that stopped before the module loaded (or, on Vulkan, before the instance
     existed) reports that one reason alone: nothing after it ran, so no round, validation or teardown is judged."""
     error = (record.get("error") or "").strip()
+    if record.get("exit_code", 0) != 0:
+        return False, [f"{api}: child process failed ({record['exit_code']}); no successful proof"]
     if not record.get("module_loaded"):
         return False, [f"{api}: {error.splitlines()[0] if error else 'the module did not load'}"]
     if api == "vulkan" and not record.get("instance_created"):
@@ -835,7 +1036,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--module-dir", default="release/native_module")
     parser.add_argument("--repo", default=".", help="the repository root (default: the current directory)")
     parser.add_argument("--apis", nargs="+", default=list(APIS), choices=APIS)
-    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=ROUNDS)
+    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=(*ROUNDS, VISIBLE_ROUND))
+    add_translucent_arguments(parser)
     parser.add_argument("--cycles", type=int, default=LIFECYCLE_CYCLES)
     parser.add_argument("--label", default="n22_hosts")
     parser.add_argument("--layer-path", type=Path, default=None,
@@ -847,6 +1049,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", help=argparse.SUPPRESS)
     parser.add_argument("--child-json", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    try:
+        validate_translucent_arguments(args)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     if args.child:
         try:
@@ -857,22 +1063,30 @@ def main(argv: list[str] | None = None) -> int:
         args.child_json.write_text(json.dumps(record, indent=2, default=str), encoding="utf-8")
         return 0
 
-    vk_validation.use_layer_path(args.layer_path, _ALLOWED_ENV)   # inherited by the children
+    allowed_env: set[str] = set()
+    vk_validation.use_layer_path(args.layer_path, allowed_env)   # inherited by the children
     root = _root(args.repo)
     from tools import artifact_paths
 
     out = artifact_paths.evidence_dir("native_core", "n2_2", args.label)
     out.mkdir(parents=True, exist_ok=True)
-    environment = vk_validation.environment_record(_ALLOWED_ENV)
+    environment = vk_validation.environment_record(allowed_env)
     results: dict = {}
     for api in args.apis:
         child_json = out / f"child_{api}.json"
+        child_json.unlink(missing_ok=True)   # never accept an earlier run's record after crash/timeout
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
                    "--cycles", str(args.cycles), "--rounds", *args.rounds]
+        if VISIBLE_ROUND in args.rounds:
+            command += ["--display", args.display, "--visible-seconds", str(args.visible_seconds),
+                        "--backdrop", args.backdrop]
+        if args.require_validation:
+            command.append("--require-validation")
         started = time.monotonic()
         try:
-            proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(root))
+            timeout = args.visible_seconds + WAIT_S if VISIBLE_ROUND in args.rounds else CHILD_TIMEOUT_S
+            proc = subprocess.run(command, capture_output=True, text=True, timeout=timeout, cwd=str(root))
             exit_code, stderr = proc.returncode, proc.stderr
         except subprocess.TimeoutExpired as exc:
             exit_code, stderr = "timeout", (exc.stderr or b"").decode(errors="replace") if isinstance(

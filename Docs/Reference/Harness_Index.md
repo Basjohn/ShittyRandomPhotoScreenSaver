@@ -724,6 +724,19 @@ Tests: `tests/test_native_core_host.py` (no build: shaders bake with the include
 DLL types, the probe analysis and validation rule with their controls, the Python face), `tests/test_native_core_module.py`
 (the built module: the window host entry and the hidden round on OpenGL; skipped without a build).
 
+N0.6's remaining desktop proof uses the core, never a rebuilt P1 module. **Lead only:** run either `host_check.py`
+or `composite_check.py` with `--apis vulkan --rounds translucent --display <exact Qt screen name>
+--visible-seconds 15 --backdrop none|system|glass --require-validation --layer-path <layer dir>` (one backdrop per
+run). The display must be connected, secondary under both Qt and Windows, and uniquely named; duration is at most
+60 seconds. The parent watchdog bounds a stalled child too. Composite adds a half-opacity native surface.
+The round automatically resizes down/restores on that screen and requires frames across both; the JSON separates
+these checks from the lead's desktop see-through and resize-appearance review. DPI and sleep/wake are recorded as
+unexercised. For those separate lead checks use `--visible-seconds 60`, change the named display's scale during one
+run, then sleep/wake during another; review sampled size/DPR/exposure/frame progress and actual recovery before
+closing the corresponding plan steps. Default rounds remain invisible; a hidden alpha read cannot close this gate. Neither core round calls
+Vulkan `grabWindow`. Required validation refuses a missing layer before any window; `VK_ADD_LAYER_PATH` is allowed
+only when `--layer-path` was supplied for that invocation.
+
 ### Native core composite (N2.4)
 
 ```powershell

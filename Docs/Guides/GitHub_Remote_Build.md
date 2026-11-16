@@ -113,20 +113,18 @@ compiled even when its product's build failed in the same run: it packages the p
 retrieval leaves in place. The Standard installer packages `release\reddit_helper` as it is: select **Reddit Helper
 (local)** when its badge says rebuild.
 
-## The native modules (jobs `native_module` and `native_spike`)
+## The native core module (job `native_module`)
 
-Two native modules are compiled only on GitHub (operator, 12 Nov 2026: builds happen only through GitHub workflows,
-never on this machine), both by one workflow, `.github/workflows/native-module.yml`, whose `source` input names the
-folder (`Current_Plan.md` item 8b, N0.9 and N2.1):
+The native core is compiled only on GitHub (operator, 12 Nov 2026), by `.github/workflows/native-module.yml`.
+Its `source` input accepts only `native/core` (`Current_Plan.md` item 8b, N0.9 and N2.1):
 
 | Job key | Source | Module | What it is |
 | --- | --- | --- | --- |
 | `native_module` | `native/core` (the workflow's default source) | `_srpss_native_core.pyd` | the product's native core (D5.7); imported only by `rendering/native/` |
-| `native_spike` | `native/spike_p1` | `_srpss_native_spike.pyd` | the P1 harness (the N0.6 and N0.7 rounds); never ships |
 
-Each is a target of the same contract as the products: the workflow compiles it, `tools/github_remote_build.py`
+It is a target of the same contract as the products: the workflow compiles it, `tools/github_remote_build.py`
 dispatches (with `source=<folder>`), follows, cancels, downloads and validates it, and **Native Core Module (GitHub)**
-and **Native Spike Harness (GitHub)** on this tab run them. Neither is pre-selected and no installer packages either.
+on this tab runs it. It is not pre-selected; products carry the core, with no standalone module installer.
 The workflow is reusable (`workflow_call`): every product run calls it for `native/core` and publishes the core in
 `release\native_module` with the product (section "What gets checked before anything is replaced"), so a product
 build refreshes the core too.
@@ -135,14 +133,13 @@ build refreshes the core too.
 
 ```
 F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.venv\Scripts\python.exe <checkout>\tools\build_runner.py --mode github --run --select native_module
-F:\Programming\Apps\ShittyRandomPhotoScreenSaver\.venv\Scripts\python.exe <checkout>\tools\build_runner.py --mode github --run --select native_spike
 ```
 
-(`--select native_module native_spike` builds both, as two runs in parallel.) `<checkout>` is the checkout whose
+`<checkout>` is the checkout whose
 `release\` should receive the module: the main checkout, or an agent's worktree (see below). The same runs are
-`python tools/github_remote_build.py run --target native_module` (or `--target native_spike`) without the Build Runner
-pre-flight, or the tab's checkboxes in the window. Until 12 Nov 2026 the spike was the job `native_module` and landed
-in `release\native_module\`; it is now `native_spike` in `release\native_spike\`, and the N0.6/N0.7 drivers say so.
+`python tools/github_remote_build.py run --target native_module` without the Build Runner pre-flight, or the tab's
+checkbox in the window. `native/spike_p1` remains historical evidence and has no build selection. Its remaining
+N0.6 proof belongs to `native/core/python/host_check.py` and `composite_check.py` (Harness Index).
 
 **What the runner does** (`windows-2025`, about the products' toolchain): checks out the exact pushed SHA and verifies
 it; resolves the source's target (`tools/github_remote_build.py native-target --source <folder>`, refused for a folder
@@ -157,8 +154,8 @@ anything is extracted; cached per Qt version and script hash); runs `<source>\bu
 `<source>\python\import_check.py`, the GPU-free part (the runner has no GPU device): for the core it loads the module
 through `rendering.native` (the exact-Qt guard, the Qt and ABI checks, the MSVC runtime origin check of
 `rendering/native/runtime_check.py`, read from the module file before the import: no `msvcp140` import, the loaded
-`vcruntime140` copies at least as new as the compiler) and checks the Qt DLLs came from PySide6's folder; for the spike, the import, `runtime_info()` and the Qt
-DLLs' origin. Then it stages (refused when the module, or a baked shader for any shader source in `<source>\shaders\`,
+`vcruntime140` copies at least as new as the compiler) and checks the Qt DLLs came from PySide6's folder.
+Then it stages (refused when the module, or a baked shader for any shader source in `<source>\shaders\`,
 is missing) and uploads.
 
 **What is checked before `release\<job key>` is replaced:** the local HEAD must be the pushed commit (an unpushed or
@@ -166,13 +163,13 @@ diverged HEAD makes the rows unavailable at pre-flight and is refused at START; 
 pushed tip and warn). The download must name the requested commit, version and run token like a product, plus its
 source folder, the Qt that the built commit's `requirements.txt` pins, the PySide6 release of that Qt and an MSVC
 version; the `.pyd` must be listed, and exactly one baked shader per shader source the built commit has in
-`<source>\shaders\` (read with `git ls-tree` at that commit; the core has none yet); every listed file must match its
+`<source>\shaders\` (read with `git ls-tree` at that commit); every listed file must match its
 size and SHA-256 and no unlisted file may be present. Only then is `release\<job key>` swapped (a locked `.pyd`, for
 example a Python process that imported it, makes the swap fail and the previous module is restored).
 
 | What | Where |
 | --- | --- |
-| The module | `release\native_module\_srpss_native_core.pyd`; `release\native_spike\_srpss_native_spike.pyd` and its `shaders\*.qsb` |
+| The module | `release\native_module\_srpss_native_core.pyd` and its `shaders\*.qsb` |
 | What it was built from and with | `release\<job key>\remote_build_manifest.json` (source, commit, version, Qt, PySide6, MSVC, sha256 per file) |
 | Runner log | `logs\build_runner_<job key>_<token>.log` |
 | The runner's build log and import check | `logs\<job key>_build_<token>.log`, `logs\<job key>_import_<token>.json` |
@@ -182,7 +179,7 @@ example a Python process that imported it, makes the swap fail and the previous 
 **How a C++ slice iterates** (the agent never pushes or builds; the lead does both):
 
 1. The agent commits its slice in its worktree (its branch is `worktree-agent-<id>`), says so in its journal and asks
-   the lead for a module build (and which: `native_module` for `native/core`, `native_spike` for the harness).
+   the lead for a `native_module` build of `native/core`.
 2. The lead pushes that branch from the main checkout: `git push origin worktree-agent-<id>` (any work-branch name
    works; GitHub runs the branch's own copy of the workflow, so the branch must contain `native-module.yml` with the
    `source` input: GitHub refuses an input a branch's workflow does not declare).
@@ -191,8 +188,7 @@ example a Python process that imported it, makes the swap fail and the previous 
    commit.
 4. The agent tests it from there, offscreen and hidden only: the core with
    `python -m pytest tests/test_native_core_module.py` (it skips, saying why, where the module is not built) or
-   `python native/core/python/import_check.py --module-dir release/native_module --expect-qt <Qt>`; the harness with
-   `python native/spike_p1/python/run_spike.py --module-dir release/native_spike --part all --label <label>`.
+   `python native/core/python/import_check.py --module-dir release/native_module --expect-qt <Qt>`.
 5. A failed compile: the row's log names the GitHub run; the failure-logs artifact has the compiler output.
    The next attempt is a new commit, push and run.
 

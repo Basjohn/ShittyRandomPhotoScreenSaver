@@ -12,10 +12,9 @@ exactly one pushed commit. This module owns the remote contract on both sides:
   manifest, the requested commit and its version, and only then replaces the published release directories. Any
   failure leaves the previous payload exactly where it was.
 
-The native modules are targets of the same contract, both compiled by one workflow
+The native core is a target of the same contract, compiled by one workflow
 (``.github/workflows/native-module.yml``, whose ``source`` input names the folder): ``native_module`` is the product's
-native core (``native/core``, ``_srpss_native_core``; Current_Plan.md item 8b, N2.1) and ``native_spike`` the P1 harness
-(``native/spike_p1``, ``_srpss_native_spike``). ``stage-native`` places a module and one baked shader per shader
+native core (``native/core``, ``_srpss_native_core``; Current_Plan.md item 8b, N2.1). ``stage-native`` places a module and one baked shader per shader
 source under ``release/<target>`` on the runner, its manifest also records the source, Qt, PySide6 and MSVC it was
 built with, and locally it is validated against the built commit's pinned Qt (``tools/native_sdk_fetch.py``) and
 shader sources and published into ``release/<target>`` with that manifest beside it. A module is built only when the
@@ -144,12 +143,11 @@ def _module_target(key: str, payload: str, module: str, source: str) -> RemoteTa
     )
 
 
-# Native modules, both built by the one native workflow and published into ``release/<payload dir>`` like a product,
+# The native core, built by the native workflow and published into ``release/<payload dir>`` like a product,
 # never selected by default. ``native_module`` is the product's native core (D5.7; the workflow's default source);
-# ``native_spike`` the P1 harness, which never ships.
+# P1 source remains historical evidence and is no longer a build target.
 MODULE_TARGETS: dict[str, RemoteTarget] = {
     "native_module": _module_target("native_module", "native_module", "_srpss_native_core", "native/core"),
-    "native_spike": _module_target("native_spike", "native_spike", "_srpss_native_spike", "native/spike_p1"),
 }
 DEFAULT_NATIVE_TARGET = "native_module"
 # The products carry the native core (N2.1): windows-build.yml calls the native workflow, places its validated module
