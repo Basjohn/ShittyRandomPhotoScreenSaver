@@ -160,12 +160,14 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
 ### E8 Stream ring (D15 point 7; catalogue: [E8](../Reference/Primitives.md#e8))
 - Contract: not built; QRhi stays pending a materially measured case and lead admission. The stream-ring harness
   brackets each route with same-run resident floors, retaining raw milliseconds and the unchanged 0.05 ms admission
-  signal. The ratios and p10–p90 observed spreads distinguish a resolved result from a repeat-required one
+  signal. The floor-median drift sensitivity distinguishes a resolved result from a repeat-required one; p10/p90
+  tails and ratios remain descriptive
   (`mesh_buffer_check.py --rounds stream_ring`; [D15 point 7](../Future_Work/Native_Core_P3_Decisions.md#stream-ring-floor-protocol)).
 - Traps: building a native pair beside QRhi without the lead's line (checklist 15); `QRhiBuffer` has no `createFrom`
   in 6.12 (D15 point 2).
-- Proof: both CPU and GPU excess observed spreads must resolve below 0.05 ms for every route. A material excess is
-  actionable lead evidence; an overlapping spread is inconclusive and requires a repeat under stated conditions.
+- Proof: both CPU and GPU median excesses must resolve below 0.05 ms against both bracketing floor medians for every
+  route. A material median excess is actionable lead evidence; floor-median drift crossing the margin is
+  inconclusive and requires a repeat under stated conditions. Tail spread alone does not gate median admission.
   Neither outcome admits a native pair. Missing native record counters fail; GUI wall time cannot substitute.
 
 <a id="pb-e4"></a>

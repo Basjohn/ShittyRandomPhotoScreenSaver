@@ -46,8 +46,9 @@ Rounds:
              the pair's floor (CPU: the record with the data resident plus one copy of the payload into mapped
              memory; GPU: the same instanced pass over a resident mesh instance stream, no copy); per frame the
              record's render-thread time (the core's counter) and the GPU time; and Waveform's 288 KiB capacity
-             carrying 4 KiB. Bracketing floors report relative cost and observed spread; an unresolved 0.05 ms
-             excess requires a repeat. A material excess is reported to the lead, never automatic pair admission.
+             carrying 4 KiB. Bracketing floor medians report baseline-drift sensitivity of the median excess;
+             p10/p90 tails remain descriptive. An unresolved 0.05 ms median excess requires a repeat. A material
+             excess is reported to the lead, never automatic pair admission.
 
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/mesh_buffer_check.py --module-dir release/native_module --require-validation
@@ -1294,8 +1295,9 @@ def _copy_summary(size: int, repeats: int = 400) -> dict:
 
 
 def _floor_comparison(route: dict, before: dict, after: dict, copy: dict | None = None) -> dict:
-    """Compare same-run measurements. Quantile envelopes are observed spread, not confidence intervals."""
-    result = {"margin_ms": FLOOR_MARGIN_MS, "status": "invalid"}
+    """Gate median excess on bracketing baseline drift; observed quantile spread is descriptive, not a CI."""
+    result = {"margin_ms": FLOOR_MARGIN_MS, "status": "invalid",
+              "criterion": "median excess with bracketing floor-median drift sensitivity"}
     for measurement in (route, before, after) + ((copy,) if copy is not None else ()):
         values = [measurement.get(key) for key in ("p10_ms", "median_ms", "p90_ms")]
         if (type(measurement.get("samples")) is not int or measurement["samples"] < COST_MIN_SAMPLES
@@ -1309,17 +1311,19 @@ def _floor_comparison(route: dict, before: dict, after: dict, copy: dict | None 
     floor_low = min(before["p10_ms"], after["p10_ms"]) + copy["p10_ms"]
     floor_high = max(before["p90_ms"], after["p90_ms"]) + copy["p90_ms"]
     excess = route["median_ms"] - floor_median
-    low, high = route["p10_ms"] - floor_high, route["p90_ms"] - floor_low
+    low = route["median_ms"] - (max(before["median_ms"], after["median_ms"]) + copy["median_ms"])
+    high = route["median_ms"] - (min(before["median_ms"], after["median_ms"]) + copy["median_ms"])
     status = "within" if high < FLOOR_MARGIN_MS else "material" if low >= FLOOR_MARGIN_MS else "inconclusive"
     result.update(status=status, route_median_ms=route["median_ms"], floor_median_ms=floor_median,
                   floor_observed_spread_ms=[floor_low, floor_high], raw_median_excess_ms=excess,
                   raw_median_exceeds_margin=excess >= FLOOR_MARGIN_MS,
-                  excess_observed_spread_ms=[low, high],
+                  median_excess_floor_drift_sensitivity_ms=[low, high],
+                  excess_observed_spread_ms=[route["p10_ms"] - floor_high, route["p90_ms"] - floor_low],
                   route_to_floor_median_ratio=route["median_ms"] / floor_median if floor_median > 0 else None,
                   floor_bracket_median_change_ms=after["median_ms"] - before["median_ms"])
     if status != "within":
-        result["reason"] = ("material excess: report evidence to lead; no automatic native-pair admission"
-                            if status == "material" else "observed spread crosses margin; repeat required")
+        result["reason"] = ("material median excess: report evidence to lead; no automatic native-pair admission"
+                            if status == "material" else "floor median drift crosses median-excess margin; repeat required")
     return result
 
 

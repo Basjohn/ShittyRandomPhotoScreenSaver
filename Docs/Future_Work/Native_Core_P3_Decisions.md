@@ -1415,7 +1415,7 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
    resident record plus one payload copy into already allocated and touched memory on CPU, and its GPU time without
    the copy (the same pass with the data already resident). `mesh_buffer_check.py --rounds stream_ring` measures a
    resident floor immediately before and after **each** route. GPU timestamps measure the surface pass; native
-   render-thread record counters measure CPU (means over 20 records). GUI wall time is diagnostic only; missing or
+   render-thread record counters measure CPU (per-record means over each 20-frame batch). GUI wall time is diagnostic only; missing or
    nonadvancing native counters fail loudly **at each measured batch**, including a final partial batch. Evidence
    records the expected/observed batch count, covered frames and measured native record count; CPU comparisons
    require full batch coverage and at least 30 batches (GPU and copy distributions also require at least 30 samples).
@@ -1424,18 +1424,23 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
 
    All times and the unchanged material-admission margin are **milliseconds**: 0.05 ms. Each axis reports the raw
    route and both floor p10/median/p90 values, the route/floor median ratio (unitless), the raw median excess and
-   whether that excess reaches 0.05 ms. The floor median is the mean of the two bracketing medians; its observed
-   spread spans the smaller floor p10 to the larger floor p90 (plus the copy p10/median/p90 on CPU). Excess observed
-   spread is [route p10 minus floor high, route p90 minus floor low]. This is an observed spread, **not a statistical
-   confidence interval** or a guarantee about unsampled frames. GPU load and clocks before/after remain in evidence.
-   This avoids judging cold/clock-changing runs against a single later, warmer floor without inflating the margin.
+   whether that excess reaches 0.05 ms. Raw median excess is route median minus the mean of the two floor medians,
+   minus copy median on CPU. The **baseline-drift sensitivity interval** is [route median minus the larger floor
+   median minus copy median, route median minus the smaller floor median minus copy median] (copy is zero on GPU).
+   It is not a statistical confidence interval. This avoids judging a clock-changing run against one later floor
+   while preserving D5.3's median criterion. GPU load and clocks before/after remain in evidence.
 
-   A route is `within` only when that spread's upper end is below 0.05 ms on both axes. A lower end at or above
-   0.05 ms is `material`: stop and report the figures to the lead. A crossing spread is `inconclusive`: repeat under
+   A route is `within` only when that sensitivity interval's upper end is below 0.05 ms on both axes. A lower end at
+   or above 0.05 ms is `material`: stop and report the figures to the lead. A crossing interval is `inconclusive`: repeat under
    stated stable conditions (or warm to a stated clock); it fails the proof and cannot close the task. Missing,
    nonfinite, unordered or empty measurements are `invalid` and also fail. Raw median exceedances remain visible
    even in an inconclusive run; no automatic native-pair admission follows any outcome (handbook section 8 requires
    the lead's line). QRhi remains until a material measured case receives that admission.
+
+   p10/p90 tails remain descriptive and watchlisted separately from median admission. The observed floor spread
+   spans the smaller floor p10 to the larger floor p90 (plus copy p10/p90 on CPU); the descriptive excess spread is
+   [route p10 minus floor high, route p90 minus floor low]. Neither spread gates the median verdict or guarantees
+   unsampled frames. Large tails with stable medians therefore do not alone make the median result inconclusive.
 8. *No allocation per frame.* Every QRhi object (buffers, bindings, pipelines) is made at a build or a warm-up unit,
    none per record; the arena, the streams and the meshes are fixed in size between edges. The proof reads QRhi's
    resource counts and the core's ownership counts flat over a steady minute, and the core's own heap flat (a counting

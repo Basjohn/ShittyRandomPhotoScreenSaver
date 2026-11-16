@@ -60,8 +60,33 @@ def test_idle_spread_is_inconclusive_even_when_old_absolute_guard_failed():
     result = harness._floor_comparison(route, before, after)
     assert result["status"] == "inconclusive"
     assert result["raw_median_exceeds_margin"]
-    assert result["excess_observed_spread_ms"][0] < harness.FLOOR_MARGIN_MS
+    assert result["median_excess_floor_drift_sensitivity_ms"][0] < harness.FLOOR_MARGIN_MS
+    assert result["median_excess_floor_drift_sensitivity_ms"][1] > harness.FLOOR_MARGIN_MS
+
+
+def test_noisy_tails_do_not_replace_median_admission_rule():
+    result = harness._floor_comparison(metric(.001, .030, .300), metric(.005, .015, .100),
+                                       metric(.006, .015, .120))
+    assert result["status"] == "within"
     assert result["excess_observed_spread_ms"][1] > harness.FLOOR_MARGIN_MS
+    assert result["median_excess_floor_drift_sensitivity_ms"] == pytest.approx([.015, .015])
+
+
+def test_cpu_floor_uses_copy_median_without_tail_gate():
+    result = harness._floor_comparison(metric(.090, .100, .110), metric(.010, .015, .020),
+                                       metric(.010, .015, .020), metric(.001, .010, .300))
+    assert result["status"] == "material"
+    assert result["raw_median_excess_ms"] == pytest.approx(.075)
+    assert result["median_excess_floor_drift_sensitivity_ms"] == pytest.approx([.075, .075])
+
+
+@pytest.mark.parametrize("route_median,after_floor,status", ((.05, 0, "material"),
+                                                           (.05, .01, "inconclusive"),
+                                                           (.0499, .01, "within")))
+def test_median_margin_boundary_is_strict(route_median, after_floor, status):
+    result = harness._floor_comparison(metric(route_median, route_median, route_median), metric(0, 0, 0),
+                                       metric(after_floor, after_floor, after_floor))
+    assert result["status"] == status
 
 
 @pytest.mark.parametrize("route,status", [(metric(.025, .030, .035), "within"),
@@ -157,6 +182,8 @@ def test_stream_round_brackets_each_route_and_never_passes_unresolved(status, mo
     def measured(host, scene):
         calls.append(scene.kind)
         value = metric(.01, .015, .02)
+        if status == "inconclusive" and scene.kind == "floor":
+            value = metric(.01, .02, .03) if calls.count("floor") % 2 else metric(.05, .06, .07)
         if scene.kind in ("instance", "storage"):
             value = {"within": metric(.02, .03, .04), "inconclusive": metric(.055, .097, .110),
                      "material": metric(.15, .16, .17), "invalid": metric(.01, None, .03),
