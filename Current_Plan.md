@@ -300,6 +300,8 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   rule), then the `native_spike` selection is removed from `tools/build_runner.py`, `tools/github_remote_build.py`,
   the workflow and their tests. The source stays in the repository as evidence (the keep-useful-tools rule; it adds
   nothing to the product); the validation-layer folder under `D:/Temp/Scratch/SRPSS/native_spike/` keeps its name.
+  - [x] Baseline teardown guard: validate dormant job-service quiescence before device destruction; Terra High
+    audited, 28 host tests and required-validation hidden rounds PASS on OpenGL/Vulkan (16 Nov).
 - [ ] N0.6 D6's proof (harness rounds 1 to 6 merged; the record is D6's "As proved" in the decisions document;
   evidence `.artifacts/evidence/native_core/n06/`). The validation layer (Khronos's Windows build in
   `D:/Temp/Scratch/SRPSS/native_spike/validation_layers/extracted/`) is given to the harness process alone with
@@ -563,6 +565,9 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     absolute 0.05 ms margin over the pair's floor fails on an idle GPU (P8 at 225 MHz: the floor itself measured 0.028
     ms against 0.015 in a warm run, the 288 KiB storage route 0.097 against 0.031), on different routes run to run;
     judge it relative to the floor measured in the same run, or warm the GPU to a stated clock first.
+  - [ ] Harness ownership inventory (16 Nov baseline): `test_quick_backend_owner.py::test_every_hidden_host_user_goes_through_the_owner`
+    rejects `native/core/python/post_stage_check.py`; check its shared graphics setup and register this core proof
+    harness in the existing allowlist during the N3.4 harness slice.
 - [ ] N3.6 Lifetime: lazy creation on first use, release at retirement and at a mode switch, device loss rebuilt
   from the last packet, every state combination a pipeline built ahead and warmed gradually (Qt's pipeline cache
   file on Qt's pipelines; the core's own cache for raw ones); the working-set and GPU-memory readings of the P2
