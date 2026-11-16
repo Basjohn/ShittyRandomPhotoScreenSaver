@@ -1147,7 +1147,7 @@ review. Source review is complete; runtime acceptance remains in Current_Plan.md
 
 | Finding | Cause and repair | Proof status |
 |---|---|---|
-| Partial stage ownership accounting | Texture counts were admitted only after an entire chain succeeded; partial failure released uncounted wrappers. Count at ownership, update bytes at each create edge, release exactly once. Include actual sampler/SRB/pipeline wrappers and actual partial held objects. | Exact original fault produces −3 textures/−1 chain; ABI24 ownership/fault/recovery/partial-release predicates pass 27 cases/API. No-churn proof caught stale rebind publication; its edge fix awaits rebuilt runtime proof. |
+| Partial stage ownership accounting | Texture counts were admitted only after an entire chain succeeded; partial failure released uncounted wrappers. Count at ownership, update bytes at each create edge, release exactly once. Include actual sampler/SRB/pipeline wrappers and actual partial held objects; publish successful rebind at that edge. | Exact original fault produces −3 textures/−1 chain. ABI25 passes all 27 cases/API, including unchanged no-churn predicates: wrappers 24→24, published rebinds 0→1. Independent High evidence review. |
 | Requested samples used for transparency gate | Requested 4x may resolve to 1x; gate now uses SceneTargets' canonical clamp and its capability-control generation. | Same-item effective 4→1→4 fails only the clamped phase on old ABI22; ABI24 GL/Vulkan PASS. |
 | Incomplete readback enumeration | Fixed 92 callbacks silently truncated legal larger mip/attachment declarations. Allocate one stable owned array for the complete enumeration before callbacks. A vector attempt was rejected by the existing DLL-import gate; the corrected build passes. | Old ABI22 rejects 176-entry completeness; ABI24 GL/Vulkan complete all entries and subsequent bounded reads, with retirement. |
 | Invalid nonzero-mip content metadata | Base-level content size was returned against smaller allocations. Project nominal content outward through normalized coordinates, preserving bottom anchoring and bounds. This does not promise filtered fringe texels are clear. | Old ABI22 rejects bounded and odd-extent metadata; ABI24 GL/Vulkan PASS. |
@@ -1159,11 +1159,14 @@ change was made; this private-QRhi assumption must be rechecked on Qt upgrades. 
 
 Defocus performance acceptance remains open. ABI22 bracketed off/boundary-only/query/off evidence preserves
 exact pixels while external boundaries alone remove the excess; timestamp retrieval alone is not the cause.
-Individual-site isolation follows in D17. No production flush workaround has been admitted. No real-display,
+Individual-site and ABI25 flag isolation in D17 rule out declaration-only and tracking-only explanations; only
+the gather→sprites external boundary removes the excess. Actual GL command/state comparison is next.
+No production flush workaround has been admitted. No real-display,
 other-vendor or quiet-GPU performance acceptance is claimed by this source audit.
 
 Runtime evidence: `n3_4/20261116_n34_audit6_abi24_final` (gate/parity/rest/retire; rules (a)/(b), analytic PASS),
 `n3_1/20261116_n34_readback_abi24`, `n3_4/20261116_n34_accounting_edges_abi24` (the exact remaining report
 failure), and `n3_4/20261116_partial_accounting_original_regression` (unchanged before/after native fault probe).
-136 focused tests pass with the ABI24 module. Required Vulkan validation has no unexplained errors/warnings;
-recorded Qt defect A is explicitly excused. Native checkpoint `6d8a0e54e`, GitHub run `43869027463`.
+ABI25 ownership evidence: `n3_4/20261116_n34_accounting_abi25_final`; 145 focused core tests PASS.
+Required Vulkan validation has no unexplained errors/warnings; recorded Qt defect A is explicitly excused.
+Native ABI25 checkpoint `7717614d1`, GitHub run `43871856822`; ABI24 reference checkpoint `6d8a0e54e`, run `43869027463`.

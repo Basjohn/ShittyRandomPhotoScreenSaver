@@ -2181,8 +2181,15 @@ Python face is `rendering/native/mode.py` (`TransparencyTarget`, `TransparencyRe
     executed flushes for each isolated site, 0 queries. Only the gather→sprites boundary removes the excess:
     1x off-before/off-after 2.2241/2.5262 ms versus −0.0492 ms between draws; 4x 1.2032/1.1878 versus 0.0072 ms.
     Before-gather and after-sprites remain slow. GPU 18%/450 MHz before, 6%/2775 MHz after, displays on.
-    Next separate the ExternalContent declaration and resource tracking from command execution/state reset,
-    using harness-only flag controls and a no-compute proof scene. No production flush or tracking exception admitted.
+    ABI25 flag isolation (`20261116_n34_flags_abi25`) keeps exact pixels, actual 1x/4x, 239 defocus records,
+    and zero flush/query counts for declaration-only and tracking-disabled phases; the latter scene has no compute.
+    Neither removes the excess: declaration-only 2.2959/1.1673 ms, tracking-disabled 2.3040/1.2195 ms (1x/4x).
+    Off brackets are 2.2333/2.2978 ms at 1x and 1.2094/1.2196 ms at 4x; between-only is 0.2181/−0.0062 ms.
+    GPU 14%/405 MHz before, 5%/2775 MHz after, displays on. Independent High evidence review.
+    Qt's boundary combines queued-command execution, cached-state reset, buffer/VAO unbinding and framebuffer
+    rebinding; it does not run EndFrame's attribute-disable loop. These facts do not identify which change matters.
+    Next compare the actual warmed GL command/state streams at that boundary; trace timing is not acceptance.
+    No production flush or tracking exception admitted.
   - The render thread's record (`stage_record_ns`, the whole record of a program with stages): on OpenGL 19 to 20 us
     for EB's shape at every size and count (6.7 to 9.5 us with no stage), 33 us mean over the steady minute at 4x; on
     Vulkan 1.1 to 1.4 ms, which is the validation layer's own CPU work (22 us with no stage under the same layer); the

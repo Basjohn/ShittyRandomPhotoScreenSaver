@@ -12,9 +12,9 @@ force-push or rewrite main.
 ## 16 Nov continuation journal (keep short; Current_Plan.md owns active work)
 
 The operator's current route is P1 spike → N3.1c L3 → N3.2 Audit 4 L6 → N3.4 stream_ring → 1D.13 near-light;
-independent agents may overlap. ABI **24** is installed on main from GitHub run `43869027463`, native commit
-`6d8a0e54e`; ownership/gate/readback repairs have runtime proof, accounting closeout awaits the canonical rebind
-report publication fix and defocus diagnosis continues. Section 2 below is the original
+independent agents may overlap. ABI **25** is installed on main from GitHub run `43871856822`, native commit
+`7717614d1`; ownership/gate/readback/rebind repairs have runtime proof, and defocus diagnosis continues.
+Section 2 below is the original
 15 Nov snapshot, not current ABI or agent status.
 
 - [x] P1 build retirement + fail-closed core harness migration; 219 focused tests, OpenGL/Vulkan checks, High audit.
@@ -50,9 +50,12 @@ activity is explicitly authorised for the diagnosis; section 3's original quiet-
   readback/gate failures; ABI24 completeness/metadata/gate/parity/rest/retire PASS GL/Vulkan, 136 focused PASS.
 - [x] Original partial-stage fault reproduced −3 textures/−1 chain; repaired allocation/fault/release checks pass
   all 27 cases per backend. Remaining no-churn proof caught stale rebind report (0→0 with no wrapper creation);
-  edge-publication repair reviewed/merged, rebuilt runtime proof owed. No assertion weakened.
+  ABI25 edge-publication proof passes all 27 cases/API with no churn and 0→1 rebind count; High reviewed.
 - [x] Explicit no-dispatch build recovery CLI merged, High reviewed, 110 focused tests PASS; same-token log retained.
-  ABI25 candidate43871856822 is queued under a generic name; token verification and native proof still owed.
+  Actual ABI25 recovery verifies the original run43871856822 and publishes its validated artifact with one dispatch.
+- [x] ABI25 flag/tracker isolation preserves exact pixels at actual 1x/4x; neither flag removes the ~2.3/1.2 ms
+  excess. Only gather→sprites boundary does; High reviewed. Cause remains open: compare actual GL command/state
+  before a core change. No production flush or tracking exception admitted; 145 focused core tests PASS.
 
 ## 1. Read these first, in this order
 

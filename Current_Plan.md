@@ -47,20 +47,19 @@ under the operator's 16 Nov request for another Sol 6.1 High native-core agent. 
 an independent verified slice may land while an earlier native build is running.
 For this session, compact completed checkbox text inline and retain every checkbox for later review.
 
-**Now:** the five requested source/proof slices are complete and audited; ABI 24 is installed on main. P1 desktop
+**Now:** the five requested source/proof slices are complete and audited; ABI 25 is installed on main. P1 desktop
 validation remains at N0.6. The repaired `stream_ring` harness passes on OpenGL/Vulkan with exact record coverage;
 quiet-GPU performance admission remains a separate N3.4 box. Near-light's fixture-only repair passes offscreen.
 The interim week's remaining route is in `handoff.md` section 3; heavy ports and the flip remain held there.
 Operator continuation (16 Nov): implement N3.1c L2 with Sol High and independent Terra High audit; lead runs
 N3.4 `defocus_draws` concurrently under available ambient GPU activity, as explicitly authorised. Record conditions
 and compare within-run variants; do not hold diagnosis for the former quiet-GPU precondition.
-L2 scissor/negative controls pass both backends. ABI 24's readback completeness/metadata, sample clamp gate,
-post-stage parity/rest/retire and 136 focused tests pass. Full accounting closeout awaits the rebind report fix;
-ownership/fault/release checks already pass all 27 cases per backend. Defocus flag/tracker isolation follows.
-Source ABI25's flag controls and rebind-report repair are High reviewed/merged. Combined build commit7717614d1
-was dispatched with token20261116_150121_942441; queued candidate43871856822 matches workflow/event/commit
-but still has the generic title, so its token identity is not yet verifiable. Follow that candidate read-only, then
-recover the exact token-bearing run; do not dispatch a duplicate. ABI24 source/evidence closeout is High reviewed.
+L2 scissor/negative controls pass both backends. Readback completeness/metadata, sample clamp gate and post-stage
+parity/rest/retire pass on ABI24. ABI25 accounting passes all 27 cases/backend, including unchanged no-churn and
+published rebind checks; 145 focused core tests pass. Defocus flag/tracker isolation passes: neither flag removes
+the excess. Compare actual GL commands/state at gather→sprites before choosing a core change; parity is running offscreen.
+Build7717614d1 was recovered from original run43871856822/token20261116_150121_942441, exact manifest/import
+checks passed, one dispatch. Independent High source/evidence review is clear; performance acceptance remains open.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim week's order is `handoff.md` section 3.
@@ -539,10 +538,11 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     - [x] Query perturbation isolated: boundary-only runs preserve pixels and remove the excess. Individual ABI23
       sites prove only gather→sprites does so (1x about 2.2–2.5→0 ms; 4x 1.2→0 ms), with 239 actual flushes/records.
       Evidence: n3_4/20261116_n34_individual_sites_abi23 (preserved in main). No production flush admitted (D17).
-    - [ ] Isolate the remaining declaration/tracker effects without external calls: bracket an ExternalContent-only
-      phase and a DoNotTrackResourcesForCompute-only phase against normal full/no-sprites at actual 1x/4x;
-      the latter proof scene must contain no compute pass (pinned Qt precondition). Exact pixels, actual records,
-      zero external flush/query counts. Sol High implements harness-only controls; independent Terra High review.
+    - [x] ABI25 declaration/tracker isolation PASS: actual 1x/4x, exact pixels, no compute, zero flush/query counts.
+      Both flags retain ~2.3/1.2 ms excess; between-draw boundary removes it. Independent High evidence review (D17).
+    - [ ] Compare actual warmed OpenGL command/state streams at gather→sprites for normal versus between-only
+      boundary, with existing pixel/sample/counter guards. Establish which execution/state/FBO difference matters
+      before a core fix; tracing perturbs timings, so its cost is not performance acceptance.
     - [ ] Fix it in the core if it is ours (one change, a build, the split again: `--rounds defocus_cost` on both APIs,
       the OpenGL sprite raster near Python's and Vulkan unchanged), or record it in D17 as the driver's with the figures
       if no state difference moves it. Then rerun `--rounds parity` (rules (a) and (b) must still pass) and record the
@@ -564,18 +564,14 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       arrays rejudged finite/PASS. ABI24 fresh rules (a)/(b), analytic, rest/retire PASS (both backends).
     - [x] Outside-pass external-command question resolved against pinned Qt 6.12 Vulkan beginExternal/endExternal:
       explicit NoPass support; no synchronization change needed. Recheck at Qt upgrades (private QRhi boundary).
-    - [ ] Prove sampler/SRB/pipeline accounting and actual partial skipped-release counts through cold/rebind faults;
-      audited source and 27-case harness are merged, actual ABI 24 runtime proof remains.
-    - [ ] Publish texture rebind counts at the successful rebind edge. ABI24 ownership/release checks pass all
-      27 cases per backend with no new stage wrappers, but the report remains 0→0 through the completed resize;
-      fix the canonical publication point and rerun the unchanged no-churn predicate, rather than delay its reading.
+    - [x] Sampler/SRB/pipeline ownership and actual partial held counts proved: ABI25 27/27 cases per backend,
+      cold/resize/rebind faults, recovery and release; unchanged no-churn predicates pass. Independent High evidence review.
+    - [x] Successful rebind publishes at its canonical edge: ABI24 proved stale 0→0; ABI25 proves 0→1 with no
+      new wrappers. No extra settings record or weakened predicate. Evidence: n3_4/20261116_n34_accounting_abi25_final.
     - [x] Native target-pixel API help includes the returned mip `level` beside the other metadata.
-  - [ ] Remote-build side defect: a successful workflow dispatch can become discoverable after the client's timeout;
-    preserve the run token and recover the existing run before any retry, so late queued builds are not orphaned.
-    Add an explicit CLI recovery route bound to target/commit/token that reuses the existing validate/publish owner
-    and never dispatches another run; focused tests must reject wrong identity and prove dispatch is never called.
-    Source route merged/High reviewed, 110 focused PASS. Actual queued candidate retains the generic workflow name
-    until startup, hiding its token from title lookup. Verify live recovery after its custom title is applied.
+  - [x] Late run-name discovery: explicit recover CLI verifies target/workflow/event/commit/token, reuses canonical
+    validate/publish and preserves the log; 110 focused tests and High review. Actual ABI25 recovery succeeds from
+    run43871856822 after its generic queued title resolves; log proves one dispatch, exact validated publication.
   - [x] `stream_ring` timing-margin repair: bracketing-floor median sensitivity, exact native record coverage;
     41 focused tests, High audit and merged ABI 21 OpenGL/Vulkan proof PASS (16 Nov; D15).
   - [ ] Awaiting Validation before a Waveform consumer: repeat `mesh_buffer_check.py --rounds stream_ring` on a
