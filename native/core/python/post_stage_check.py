@@ -38,6 +38,9 @@ Rounds:
   cost     (each API) the EB scene at 2560x1440 and 3840x2160, one and four samples, each stage's GPU time (the record
            with it less without it), median and p90 of 240 records; on Vulkan under the validation layer.
 Run alone:
+  accounting (each API) actual texture/target create failures (cold and resize), sampler/SRB/pipeline failures
+           (cold and rebind), exact release to baseline and a fresh successful allocation/rebind/release. Partial
+           skipped-release controls count the actual held wrappers and fail the same retirement predicate.
   defocus_cost (each API) the defocus step's GPU time at 4K split by variants (the near pass; generateMips with the
            clip; the gather's taps with the sprites' vertex stage; the sprites' raster, with and without the capture,
            and with the highlight's few sprites only).
@@ -57,6 +60,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 import sys
 import tempfile
@@ -79,7 +83,7 @@ from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
 ROUNDS = ("parity", "gate", "rest", "steady", "retire", "barriers", "cost")
-ALONE_ROUNDS = ("defocus_cost", "showcase", "big_frames", "defocus_draws", "defocus_boundaries")
+ALONE_ROUNDS = ("defocus_cost", "showcase", "big_frames", "defocus_draws", "defocus_boundaries", "accounting")
 PYTHON_ROUNDS = ("python_cost", "python_defocus_cost")
 CHILD_TIMEOUT_S = 2400
 MARGIN = stc.MARGIN
@@ -927,6 +931,162 @@ def round_retire(core, engine, app, api: str, packs: dict) -> dict:
     facts["end"] = snapshot()
     checks["nothing_left"] = zero(facts["end"])
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+ACCOUNTING_KEYS = STAGE_KEYS + ("stage_left_behind",)
+
+
+def stage_accounting_verdict(actual: dict, baseline: dict, expected: dict) -> dict:
+    """Exact ownership deltas; negative, missing or nonfinite counts never establish a baseline."""
+    checks = {}
+    for key in ACCOUNTING_KEYS:
+        values = (actual.get(key), baseline.get(key), expected.get(key))
+        valid = all(isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and math.isfinite(value) and value >= 0 and value == int(value) for value in values)
+        checks[key] = valid and actual[key] == baseline[key] + expected[key]
+    return {"pass": all(checks.values()), "checks": checks,
+            "actual": {key: actual.get(key) for key in ACCOUNTING_KEYS},
+            "baseline": {key: baseline.get(key) for key in ACCOUNTING_KEYS}, "expected_delta": expected}
+
+
+def _stage_accounting_expected(stage: str, state: dict, values: dict) -> dict:
+    from rendering.quick.scene3d.post import BLOOM_LEVELS
+
+    expected = dict.fromkeys(ACCOUNTING_KEYS, 0)
+    name = "scene" if stage == "bloom" else "near"
+    source = next(target for target in state["scene_targets"]["targets"] if target["name"] == name)
+    width, height = source["allocation"]
+    if stage == "bloom":
+        expected.update(stage_bloom_chains=1, stage_textures=BLOOM_LEVELS,
+                        stage_pipelines=1 + (2 * BLOOM_LEVELS - 1) + 3,
+                        stage_bytes=sum(max(1, width >> level) * max(1, height >> level) * 8
+                                        for level in range(1, BLOOM_LEVELS + 1)))
+    else:
+        level = int(values["u_defocus_level"])
+        expected.update(stage_defocus_steps=1, stage_textures=1, stage_pipelines=2 + 3 + 3,
+                        stage_bytes=max(1, width >> level) * max(1, height >> level) * 8)
+    return expected
+
+
+def _allocation_fault_case(core, engine, app, host, packs: dict, stage: str, control: str, attempt: int,
+                           *, resize: bool = False, skipped_release: bool = False) -> dict:
+    """Fail the real owner, close to baseline, then allocate/rebind/release successfully on the same QRhi."""
+    zero = dict.fromkeys(ACCOUNTING_KEYS, 0)
+    baseline = _live(core)
+    checks = {"baseline_clear": stage_accounting_verdict(baseline, zero, zero)["pass"]}
+    facts = {}
+    case = Case("accounting", "tiles") if stage == "bloom" else Case("accounting", "eb", variant="no_bloom")
+    passes, targets, values = build(case, packs)
+    scene = None
+
+    def fault(name, ordinal):
+        if not core.module.stage_control(name, ordinal):
+            raise RuntimeError(f"unknown stage fault control {name!r}")
+
+    try:
+        fault("fail_allocation", 0)
+        fault("fail_build", 0)
+        _controls(core, ("skip_stage_release",), False)
+        if not resize:
+            fault(control, attempt)
+            _controls(core, ("skip_stage_release",), skipped_release)
+        scene = stc.Scene(core, engine, host, CARD, 1.0, packs, passes=passes, targets=targets, settings=values)
+        if resize:
+            scene.targets(app)
+            checks["populated_before_resize"] = stage_accounting_verdict(
+                _live(core), baseline, _stage_accounting_expected(stage, scene.mode.state(), values))["pass"]
+            fault(control, attempt)
+            scene.resize((768, 512))
+        host.frames(3)                  # no readback is requested from a deliberately failed frame
+        state, failed = scene.mode.state(), _live(core)
+        facts["failure"] = {**_state_facts(state), "live": {key: failed.get(key) for key in ACCOUNTING_KEYS},
+                            "build_failures": failed.get("stage_build_failures"),
+                            "rebind_failures": failed.get("stage_rebind_failures")}
+        checks["intended_create_failed_loudly"] = f"[harness {control}={attempt}]" in facts["failure"]["error"]
+        if control == "fail_build":
+            checks["actual_build_failure_reached"] = (
+                failed["stage_build_failures"] - baseline["stage_build_failures"] == 1)
+            checks["actual_rebind_failure_reached"] = (
+                failed["stage_rebind_failures"] - baseline["stage_rebind_failures"] == int(resize))
+        if skipped_release:
+            level = (attempt - 1) // 2
+            held = 3 * level + (1 if attempt % 2 else 3) if stage == "bloom" else (1 if attempt == 1 else 3)
+            expected = {**zero, "stage_left_behind": held}
+            facts["partial_skipped_release"] = stage_accounting_verdict(failed, baseline, expected)
+            checks["partial_skipped_release_count_exact"] = facts["partial_skipped_release"]["pass"]
+            checks["positive_retirement_rejects_partial_skipped_release"] = not stage_accounting_verdict(
+                failed, baseline, zero)["pass"]
+        _close(scene, host, app)
+        scene = None
+        fault("fail_allocation", 0)
+        fault("fail_build", 0)
+        _controls(core, ("skip_stage_release",), False)
+        if not skipped_release:
+            facts["released_after_failure"] = stage_accounting_verdict(_live(core), baseline, zero)
+            checks["failure_releases_exactly_to_baseline"] = facts["released_after_failure"]["pass"]
+        # A new content clears the skipped-release control's real held objects on this same QRhi, then allocates.
+        scene = stc.Scene(core, engine, host, CARD, 1.0, packs, passes=passes, targets=targets, settings=values)
+        scene.targets(app)
+        facts["successful_allocation"] = stage_accounting_verdict(
+            _live(core), baseline, _stage_accounting_expected(stage, scene.mode.state(), values))
+        checks["successful_allocation_accounts_all_owned_objects"] = facts["successful_allocation"]["pass"]
+        before_resize = _live(core)
+        before_state = scene.mode.state()
+        scene.resize((768, 512))
+        scene.targets(app)
+        after_resize = _live(core)
+        facts["successful_rebind"] = stage_accounting_verdict(
+            after_resize, baseline, _stage_accounting_expected(stage, scene.mode.state(), values))
+        checks["successful_rebind_accounts_all_owned_objects"] = facts["successful_rebind"]["pass"]
+        checks["successful_resize_reuses_bindings_without_churn"] = (
+            after_resize["stage_objects_created"] == before_resize["stage_objects_created"]
+            and scene.mode.state().get("texture_jobs", {}).get("rebinds", -1)
+            > before_state.get("texture_jobs", {}).get("rebinds", -1))
+        _close(scene, host, app)
+        scene = None
+        facts["released_after_success"] = stage_accounting_verdict(_live(core), baseline, zero)
+        checks["success_releases_exactly_to_baseline"] = facts["released_after_success"]["pass"]
+    finally:
+        fault("fail_allocation", 0)
+        fault("fail_build", 0)
+        _controls(core, ("skip_stage_release",), False)
+        if scene is not None:
+            _close(scene, host, app)
+        if skipped_release and _live(core).get("stage_left_behind", 0) > baseline.get("stage_left_behind", 0):
+            # Even an interrupted negative must reclaim its held wrappers while this QRhi is still alive.
+            reclaim = stc.Scene(core, engine, host, CARD, 1.0, packs, passes=passes, targets=targets, settings=values)
+            try:
+                host.frames(3)
+            finally:
+                _close(reclaim, host, app)
+    return {"pass": all(checks.values()), "checks": checks, "facts": facts}
+
+
+def round_accounting(core, engine, app, api: str, packs: dict) -> dict:
+    """Allocation/binding faults use real owner paths; no synthetic counter mutation or pixel verdict."""
+    cases = []
+    for stage, attempts in (("bloom", (1, 2, 5, 6)), ("defocus", (1, 2))):
+        for resize in (False, True):
+            cases.extend((stage, "fail_allocation", attempt, resize, False) for attempt in attempts)
+    for stage, attempts in (("bloom", (1, 4, 10)), ("defocus", (1, 4, 7))):
+        cases.extend((stage, "fail_build", attempt, False, False) for attempt in attempts)
+    cases.extend((stage, "fail_build", attempt, True, False)
+                 for stage, attempts in (("bloom", (1, 4)), ("defocus", (1, 2))) for attempt in attempts)
+    cases.extend((stage, "fail_allocation", attempt, False, True)
+                 for stage, attempts in (("bloom", (1, 2, 5)), ("defocus", (1, 2))) for attempt in attempts)
+    host = _host(core, (768, 512))
+    results = {}
+    try:
+        for stage, control, attempt, resize, skipped in cases:
+            label = f"{stage}_{control}_{attempt}_{'resize' if resize else 'cold'}{'_skip_release' if skipped else ''}"
+            if api == "vulkan":
+                core.set_vulkan_phase(f"n34 accounting {label}")
+            results[label] = _allocation_fault_case(core, engine, app, host, packs, stage, control, attempt,
+                                                    resize=resize, skipped_release=skipped)
+    finally:
+        host.close()
+        host_check._flush_deletes(app)
+    return {"pass": bool(results) and all(result["pass"] for result in results.values()), "cases": results}
 
 
 def _records(core, engine, app, host, packs: dict, case: Case, count: int) -> dict:
@@ -2109,6 +2269,7 @@ def child(args) -> dict:
                           "rest": lambda: round_rest(core, engine, app, args.api, packs),
                           "steady": lambda: round_steady(core, engine, app, args.api, packs),
                           "retire": lambda: round_retire(core, engine, app, args.api, packs),
+                          "accounting": lambda: round_accounting(core, engine, app, args.api, packs),
                           "barriers": lambda: round_barriers(core, engine, app, args.api, packs),
                           "cost": lambda: round_cost(core, engine, app, args.api, packs),
                           "defocus_cost": lambda: round_defocus_cost(core, engine, app, args.api, packs),
@@ -2194,6 +2355,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", help=argparse.SUPPRESS)
     parser.add_argument("--child-json", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+
+    if "accounting" in args.rounds and len(args.rounds) != 1:
+        parser.error("accounting runs alone in its own child process")
 
     if args.child:
         try:
