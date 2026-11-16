@@ -79,3 +79,48 @@ def test_the_retirement_predicate_rejects_each_held_resource(key):
     assert check._targets_retired(zero)
     assert not check._targets_retired({**zero, key: 1})
     assert not check._targets_retired({})
+
+
+def _quad_frame(*, unguarded=False):
+    import numpy as np
+
+    colour = np.zeros((8, 10, 4), np.uint8)
+    depth = np.ones((8, 10), np.float32)
+    colour[3:, :6] = [255, 0, 255, 255]
+    depth[3:, :6] = 0.25
+    if unguarded:
+        colour[:] = [255, 0, 255, 255]
+        depth[:] = 0.25
+    metadata = {"content": (6, 5), "size": (10, 8), "samples": 1}
+    return {"scene.colour": {**metadata, "array": colour, "format": "rgba8"},
+            "scene.capture_colour": {**metadata, "array": colour.copy(), "format": "rgba8"},
+            "scene.capture_depth": {**metadata, "array": depth, "format": "r32f"}}
+
+
+def test_the_scissor_predicate_accepts_clear_slack_and_rejects_actual_quad_writes():
+    guarded = check.scissor_contract(_quad_frame())
+    assert guarded["pass"]
+    assert guarded["facts"]["slack_texels"] > 0
+    broken = check.scissor_contract(_quad_frame(unguarded=True))
+    assert not broken["pass"]
+    facts = broken["facts"]
+    assert facts["slack_quad_colour_texels"] == facts["slack_quad_depth_texels"] == facts["slack_texels"]
+
+
+@pytest.mark.parametrize("broken", ["colour_slack", "depth_slack", "empty_content", "top_content", "capture"])
+def test_the_scissor_predicate_cannot_pass_clear_only_or_misplaced_draws(broken):
+    import numpy as np
+
+    frame = _quad_frame()
+    if broken == "colour_slack":
+        frame["scene.colour"]["array"][0, 0] = [255, 0, 255, 255]
+    elif broken == "depth_slack":
+        frame["scene.capture_depth"]["array"][0, 0] = 0.25
+    elif broken == "empty_content":
+        frame["scene.colour"]["array"][:] = 0
+    elif broken == "top_content":
+        for texture in frame.values():
+            texture["array"] = np.roll(texture["array"], -3, axis=0)
+    else:
+        frame["scene.capture_colour"]["array"][:] = 0
+    assert not check.scissor_contract(frame)["pass"]
