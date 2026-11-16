@@ -13,6 +13,8 @@ import post_stage_check as tool
 def test_gate_evidence_uses_allocated_samples_when_request_was_clamped():
     state = {"scene_targets": {"targets": [{"name": "owner", "samples": 4, "effective_samples": 1}]}}
     assert tool._effective_sample_counts(state) == {"owner": 1}
+    assert tool._effective_sample_counts({"scene_targets": {}}) == {}
+    assert tool._effective_sample_counts({}) == {}
 
 
 @pytest.fixture

@@ -271,7 +271,9 @@ def _state_facts(state: dict) -> dict:
 
 
 def _effective_sample_counts(state: dict) -> dict:
-    return {t["name"]: t["effective_samples"] for t in state["scene_targets"]["targets"]}
+    # A deliberately refused program has already released its targets. Gate checks below still require
+    # the expected owner count; unrelated refusal cases can report the empty allocation honestly.
+    return {t["name"]: t["effective_samples"] for t in (state.get("scene_targets") or {}).get("targets", ())}
 
 
 # --------------------------------------------------------------------------------------------------- comparisons
@@ -684,7 +686,7 @@ def round_gate(core, engine, app, api: str, packs: dict) -> dict:
             _controls(core, case.controls, False)
         return {"state": _state_facts(state), "names": sorted(textures),
                 "effective_samples": _effective_sample_counts(state),
-                "supported_samples": state["scene_targets"]["supported_samples"],
+                "supported_samples": (state.get("scene_targets") or {}).get("supported_samples", []),
                 "fallbacks_counted": held["stage_fallbacks"] - before["stage_fallbacks"],
                 "stage_textures": held["stage_textures"], "frame_max": int(frame[..., :3].max())}
 
