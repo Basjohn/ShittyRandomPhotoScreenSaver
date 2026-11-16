@@ -427,7 +427,7 @@ def round_parity(core, engine, app, api: str, packs: dict, out: Path, *, top_con
             "facts": {**facts, **({"broken_analytic_checks": checks} if top_control else {})}}
 
 
-def scissor_contract(frames: dict) -> dict:
+def scissor_contract(frames: dict, requested_samples: int = 1) -> dict:
     """One predicate for guarded frames and their broken control; placement is the independent image-row rule."""
     import numpy as np
 
@@ -438,6 +438,8 @@ def scissor_contract(frames: dict) -> dict:
     slack[pixels.shape[0] - height:, :width] = False
     quad = np.array([255, 0, 255, 255], dtype=np.uint8)
     checks = {
+        "actual_sample_count_is_requested": all(entry.get("samples") == requested_samples
+                                                for entry in (colour, capture, depth)),
         "slack_on_both_axes": pixels.shape[1] > width > 0 and pixels.shape[0] > height > 0,
         "content_is_the_quad": bool((_content(colour) == quad).all()),
         "content_depth_is_the_quad": bool((_content(depth) == 0.25).all()),
@@ -449,6 +451,8 @@ def scissor_contract(frames: dict) -> dict:
     written_depth = depth["array"][slack] == 0.25
     return {"pass": all(checks.values()), "checks": checks,
             "facts": {"allocation": colour["size"], "content": colour["content"],
+                      "requested_samples": requested_samples,
+                      "actual_samples": {key: frames[key].get("samples") for key in frames},
                       "slack_texels": int(slack.sum()), "slack_quad_colour_texels": int(written_colour.sum()),
                       "slack_quad_depth_texels": int(written_depth.sum())}}
 
@@ -482,15 +486,17 @@ def round_scissor(core, engine, app, api: str, folder: Path, out: Path, *, skip_
             try:
                 natural = scene.targets(app)
                 initial = core.composite_live()
-                natural_result = scissor_contract(natural)
+                natural_result = scissor_contract(natural, samples)
                 checks[f"x{samples}_natural"] = natural_result["pass"]
                 facts[f"x{samples}_natural"] = natural_result
                 core.scene_target_control("oversize_viewport", 1)
                 if skip_control:
                     core.scene_target_control("skip_scissor", 1)
                 enlarged = scene.targets(app)
-                judged = scissor_contract(enlarged)
+                judged = scissor_contract(enlarged, samples)
                 facts[f"x{samples}_enlarged"] = judged
+                checks[f"x{samples}_enlarged_uses_requested_samples"] = judged["checks"][
+                    "actual_sample_count_is_requested"]
                 sheet[f"x{samples}_natural"] = natural
                 sheet[f"x{samples}_enlarged_{'unguarded' if skip_control else 'guarded'}"] = enlarged
                 if skip_control:
@@ -502,12 +508,17 @@ def round_scissor(core, engine, app, api: str, folder: Path, out: Path, *, skip_
                     # Same item, same program: restoring the flag must rebuild the pipeline before its next draw.
                     core.scene_target_control("skip_scissor", 0)
                     guarded = scene.targets(app)
-                    checks[f"x{samples}_restored_scissor"] = scissor_contract(guarded)["pass"]
+                    guarded_result = scissor_contract(guarded, samples)
+                    checks[f"x{samples}_restored_scissor"] = guarded_result["pass"]
+                    facts[f"x{samples}_restored_scissor"] = guarded_result
                     sheet[f"x{samples}_restored_scissor"] = guarded
                 else:
                     checks[f"x{samples}_enlarged_viewport_keeps_slack_clear"] = judged["pass"]
                 core.scene_target_control("oversize_viewport", 0)
                 restored = scene.targets(app)
+                restored_result = scissor_contract(restored, samples)
+                checks[f"x{samples}_restored_natural"] = restored_result["pass"]
+                facts[f"x{samples}_restored_natural"] = restored_result
                 checks[f"x{samples}_natural_frame_restored_exactly"] = all(
                     np.array_equal(natural[key]["array"], restored[key]["array"]) for key in natural)
                 final = core.composite_live()

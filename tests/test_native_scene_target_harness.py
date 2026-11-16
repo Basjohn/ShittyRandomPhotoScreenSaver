@@ -107,6 +107,20 @@ def test_the_scissor_predicate_accepts_clear_slack_and_rejects_actual_quad_write
     assert facts["slack_quad_colour_texels"] == facts["slack_quad_depth_texels"] == facts["slack_texels"]
 
 
+@pytest.mark.parametrize("actual_samples", [1, 2])
+@pytest.mark.parametrize("texture", ["scene.colour", "scene.capture_colour", "scene.capture_depth"])
+def test_the_scissor_predicate_rejects_clamped_samples_even_with_correct_pixels(texture, actual_samples):
+    frame = _quad_frame()
+    for entry in frame.values():
+        entry["samples"] = 4
+    assert check.scissor_contract(frame, 4)["pass"]
+    frame[texture]["samples"] = actual_samples
+    judged = check.scissor_contract(frame, 4)
+    assert not judged["pass"]
+    assert not judged["checks"]["actual_sample_count_is_requested"]
+    assert judged["facts"]["actual_samples"][texture] == actual_samples
+
+
 @pytest.mark.parametrize("broken", ["colour_slack", "depth_slack", "empty_content", "top_content", "capture"])
 def test_the_scissor_predicate_cannot_pass_clear_only_or_misplaced_draws(broken):
     import numpy as np
