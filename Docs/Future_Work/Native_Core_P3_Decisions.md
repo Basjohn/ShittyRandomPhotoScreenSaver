@@ -1106,7 +1106,9 @@ to the GL limits.
    made one attachment per step (N3.6 schedules the steps as warm-up units; until then the first record makes them),
    never per frame. The content sits at image rows [H-h, H) and columns [0, w) of a bucketed allocation, the Python renderer's GL
    bottom-left, so a linear read past the content's edge (refraction, a blur) reads what Python's reads. One function in
-   `conventions.h` turns that rect into QRhi's viewport and scissor per backend: QRhi's viewport origin is the
+   `scene_targets.h` (`contentViewport`) turns that rect into QRhi's viewport and scissor per backend; `conventions.h`
+   applies both to every draw, with `UsesScissor` on its pipeline. Clears, captures and nearest resolves cover the whole
+   allocation; content draws, including defocus sprites, are scissored to the content. QRhi's viewport origin is the
    framebuffer's bottom-left, which on the core's OpenGL targets (F1's flip) is the image's top. A single-sample target
    is a plain texture (the lesson: a 1-sample multisample object does not rasterise like a direct draw).
 3. *Resize and retirement.* A new key re-creates the same QRhi objects at the new size (Qt's pattern, as `Surface` and

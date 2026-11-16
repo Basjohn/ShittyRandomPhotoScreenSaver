@@ -11,8 +11,10 @@
 #pragma once
 
 #include <QtGui/QMatrix4x4>
+#include <QtCore/QRect>
 
 class QRhi;
+class QRhiCommandBuffer;
 
 namespace srpss_core {
 
@@ -22,6 +24,14 @@ constexpr int kConventionsBinding = 17;
 
 // Rule 1 with F1: the upload correction for a target the core owns.
 QMatrix4x4 targetCorrection(QRhi *rhi);
+
+// QRhi uses the framebuffer's bottom-left for both rectangles. Every draw sets both, after binding a pipeline with
+// UsesScissor. The separate viewport exists only for the harness's deliberately enlarged-viewport control.
+void setViewportAndScissor(QRhiCommandBuffer *cb, const QRect &viewport, const QRect &scissor, bool enabled = true);
+inline void setViewportAndScissor(QRhiCommandBuffer *cb, const QRect &rect)
+{
+    setViewportAndScissor(cb, rect, rect);
+}
 
 // An OpenGL-form matrix on its way into a block: corrected exactly once. A second correction is refused and leaves the
 // matrix as it is (the caller records the refusal); the matrix knows whether it was corrected.

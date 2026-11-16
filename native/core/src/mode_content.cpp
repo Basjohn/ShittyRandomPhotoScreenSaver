@@ -3709,6 +3709,7 @@ struct ModeContent::Resources
     bool passesBuilt = false;   // false: the clear only (a sampled texture was not uploaded yet)
     quint64 textureObjects = 0; // the texture objects the passes' bindings name
     quint64 sceneLayout = 0;    // N3.1: the scene targets' render-pass descriptors the pipelines were built over
+    bool scissorEnabled = true; // harness control: a changed flag rebuilds pipelines before recording
     quint32 conventionsOffset = 0; // N3.2: the conventions block's offset in the arena
     quint64 meshObjects = 0;    // N3.2: the meshes the vertex input layouts were built over
 };
@@ -4356,12 +4357,14 @@ bool ModeContent::ensure(QRhi *rhi, ColorTarget &target, bool withPasses, QStrin
     // N3.1: a scene target re-created at a new size is such an object too.
     if (m_res && m_res->rhi == rhi && m_res->pass == target.renderPass.get() && m_res->generation == program.generation
         && m_res->sceneLayout == layout && m_res->passesBuilt && withPasses
+        && m_res->scissorEnabled == sceneScissorEnabled()
         && m_res->meshObjects == m_meshes.objects() // N3.2
         && schemaHolds                              // N3.2 audit 4 H1
         && m_res->textureObjects != m_textureObjects && rebindTextures())
         return true;
     if (m_res && (m_res->rhi != rhi || m_res->pass != target.renderPass.get() || m_res->generation != program.generation
                   || m_res->sceneLayout != layout || m_res->passesBuilt != withPasses
+                  || m_res->scissorEnabled != sceneScissorEnabled()
                   || !schemaHolds                                              // N3.2 audit 4 H1: a new layout
                   || (withPasses && m_res->meshObjects != m_meshes.objects()) // N3.2: the vertex input layouts
                   || (withPasses && m_res->textureObjects != m_textureObjects)))
@@ -4841,6 +4844,8 @@ bool ModeContent::buildGeometryPass(QRhi *rhi, Resources &r, int index, QRhiRend
     const bool selected = pass.frontSelector.kind == DrawCount::Kind::Named;
     for (int variant = 0; variant < (selected ? 2 : 1); ++variant) {
         std::unique_ptr<QRhiGraphicsPipeline> pipeline(rhi->newGraphicsPipeline());
+        if (r.scissorEnabled)
+            pipeline->setFlags(QRhiGraphicsPipeline::UsesScissor);
         pipeline->setName(QByteArrayLiteral("srpss core mode pass ") + pass.name
                           + (variant ? QByteArrayLiteral(" (cw)") : QByteArray()));
         pipeline->setTopology(pass.topology == PassTopology::TriangleStrip ? QRhiGraphicsPipeline::TriangleStrip
@@ -4871,8 +4876,8 @@ bool ModeContent::buildGeometryPass(QRhi *rhi, Resources &r, int index, QRhiRend
     return true;
 }
 
-void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QRhiViewport &viewport,
-                           const QRhiCommandBuffer::VertexInput &triangle)
+void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QRect &viewport,
+                           const QRhiCommandBuffer::VertexInput &triangle, const QRect &scissor)
 {
     Q_UNUSED(rhi);
     const ModeProgram &program = m_source->drawnProgram();
@@ -4895,7 +4900,7 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
     }
     if (!pass.ownVertex()) {
         cb->setGraphicsPipeline(p.pipeline.get());
-        cb->setViewport(viewport);
+        setViewportAndScissor(cb, viewport, scissor, r.scissorEnabled);
         cb->setShaderResources(nullptr, count, offsets);
         cb->setVertexInput(0, 1, &triangle);
         cb->draw(3);
@@ -4903,7 +4908,7 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
     }
     const bool clockwise = pass.frontSelector.kind == DrawCount::Kind::Named && resolveCount(pass.frontSelector, 0) == 1;
     cb->setGraphicsPipeline(clockwise && p.pipelineCw ? p.pipelineCw.get() : p.pipeline.get());
-    cb->setViewport(viewport);
+    setViewportAndScissor(cb, viewport, scissor, r.scissorEnabled);
     const ModeMeshes::Gpu *mesh = p.meshBinding ? m_meshes.find(pass.mesh) : nullptr;
     const ModeStreams::Stream *instanceStream = p.instanceBinding ? m_streams.find(pass.instanceFrom) : nullptr;
     const ModeStorage::Buffer *instanceStorage = p.instanceBinding && !instanceStream ? m_storage.buffer(pass.instanceFrom)
@@ -5374,6 +5379,7 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
     res->passesBuilt = withPasses;
     res->textureObjects = m_textureObjects;
     res->sceneLayout = m_targets.layoutGeneration();
+    res->scissorEnabled = sceneScissorEnabled();
     int objects = 0;
     QString reason;                           // a specific refusal (N3.1), else the generic failure below
     // Counted as each is created, so a failure part-way releases (and uncounts) exactly what exists.
@@ -5465,6 +5471,7 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
         return input;
     };
     res->clearPipeline.reset(rhi->newGraphicsPipeline());
+    res->clearPipeline->setFlags(QRhiGraphicsPipeline::UsesScissor);
     res->clearPipeline->setName(QByteArrayLiteral("srpss core mode clear"));
     res->clearPipeline->setTargetBlends({ QRhiGraphicsPipeline::TargetBlend() });
     res->clearPipeline->setShaderStages({ { QRhiShaderStage::Vertex, vs }, { QRhiShaderStage::Fragment, clear } });
@@ -5503,6 +5510,7 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
             blends.append(b);
         }
         c.pipeline.reset(rhi->newGraphicsPipeline());
+        c.pipeline->setFlags(QRhiGraphicsPipeline::UsesScissor);
         c.pipeline->setName(label);
         c.pipeline->setTargetBlends(blends.cbegin(), blends.cend());
         if (scene->decl.depth && !scene->decl.transparency()) { // N3.4: the owner's depth is never cleared by it
@@ -5540,6 +5548,7 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
             n.bindings->setBindings(bindings.cbegin(), bindings.cend());
             ok = ok && created(n.bindings->create());
             n.pipeline.reset(rhi->newGraphicsPipeline());
+            n.pipeline->setFlags(QRhiGraphicsPipeline::UsesScissor);
             n.pipeline->setName(nearestLabel);
             n.pipeline->setTargetBlends({ QRhiGraphicsPipeline::TargetBlend() });
             n.pipeline->setShaderStages({ { QRhiShaderStage::Vertex, vs },
@@ -5595,6 +5604,8 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
             for (const PassOutput &output : pass.outputs)
                 blends.append(outputBlend(output));
             p.pipeline.reset(rhi->newGraphicsPipeline());
+            if (res->scissorEnabled)
+                p.pipeline->setFlags(QRhiGraphicsPipeline::UsesScissor);
             p.pipeline->setName(label);
             p.pipeline->setTargetBlends(blends.cbegin(), blends.cend());
             p.pipeline->setShaderStages({ { QRhiShaderStage::Vertex, vs }, { QRhiShaderStage::Fragment, resolveShader } });
@@ -5621,6 +5632,7 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
             p.bindings->setBindings(bindings.cbegin(), bindings.cend());
             ok = ok && created(p.bindings->create());
             p.pipeline.reset(rhi->newGraphicsPipeline());
+            p.pipeline->setFlags(QRhiGraphicsPipeline::UsesScissor);
             p.pipeline->setName(label);
             p.pipeline->setTargetBlends({ QRhiGraphicsPipeline::TargetBlend(), QRhiGraphicsPipeline::TargetBlend() });
             p.pipeline->setShaderStages({ { QRhiShaderStage::Vertex, vs }, { QRhiShaderStage::Fragment, capture } });
@@ -5715,6 +5727,8 @@ bool ModeContent::build(QRhi *rhi, ColorTarget &target, bool withPasses, QString
         for (const PassOutput &output : outputs)
             blends.append(outputBlend(output));
         p.pipeline.reset(rhi->newGraphicsPipeline());
+        if (res->scissorEnabled)
+            p.pipeline->setFlags(QRhiGraphicsPipeline::UsesScissor);
         p.pipeline->setName(label);
         p.pipeline->setTargetBlends(blends.cbegin(), blends.cend());
         p.pipeline->setShaderStages({ { QRhiShaderStage::Vertex, vs }, { QRhiShaderStage::Fragment, fragment } });
@@ -5892,7 +5906,7 @@ void ModeContent::recordDefocus(QRhi *rhi, QRhiCommandBuffer *cb, int index, QRh
     cb->beginPass(onto->renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 });
     if (!cleared[pass.target]) {
         cb->setGraphicsPipeline(r.targetClears[pass.target].pipeline.get());
-        cb->setViewport(QRhiViewport(0, 0, float(onto->allocation.width()), float(onto->allocation.height())));
+        setViewportAndScissor(cb, QRect(QPoint(), onto->allocation));
         const QRhiCommandBuffer::DynamicOffset clearOffset { 0, r.targetClears[pass.target].offset };
         cb->setShaderResources(nullptr, 1, &clearOffset);
         cb->setVertexInput(0, 1, &ownInput);
@@ -5900,7 +5914,8 @@ void ModeContent::recordDefocus(QRhi *rhi, QRhiCommandBuffer *cb, int index, QRh
         cleared[pass.target] = true;
     }
     m_post.recordDefocusOnto(cb, index, ownInput, r.passes[index].blockOffset, r.conventionsOffset,
-                             defocusRadius(index) >= 0.5f); // Python draws the sprites from half a pixel
+                             defocusRadius(index) >= 0.5f,
+                             contentViewport(rhi->isYUpInFramebuffer(), onto->allocation, onto->content));
     cb->endPass();
     if (!skipReadChain())
         chainShaderReads(rhi, cb);            // the layer read in two stages: QRhi's next barrier keeps one (targets.h)
@@ -5996,7 +6011,7 @@ void ModeContent::recordNearest(QRhiCommandBuffer *cb, int target, int last, boo
             }
         }
     }
-    const QRhiViewport whole(0, 0, float(t.allocation.width()), float(t.allocation.height()));
+    const QRect whole(QPoint(), t.allocation);
     const QRhiCommandBuffer::VertexInput input(r.vertices.get(), 0);
     for (int s = 0; s < kNearestSlots; ++s) {
         const Resources::NearestResolve &n = r.nearest[target][s];
@@ -6004,7 +6019,7 @@ void ModeContent::recordNearest(QRhiCommandBuffer *cb, int target, int last, boo
             continue;
         cb->beginPass(t.nearestTarget[s].get(), QColor(255, 0, 0, 255), { 1.0f, 0 });
         cb->setGraphicsPipeline(n.pipeline.get());
-        cb->setViewport(whole);
+        setViewportAndScissor(cb, whole);
         const QRhiCommandBuffer::DynamicOffset offsets[2] = { { 0, n.offset }, { kConventionsBinding, r.conventionsOffset } };
         cb->setShaderResources(nullptr, 2, offsets); // N3.2: the arena
         cb->setVertexInput(0, 1, &input);
@@ -6020,7 +6035,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
     Resources &r = *m_res;
     const ModeProgram &program = m_source->drawnProgram();
     const QSize size = target.texture->pixelSize();
-    const QRhiViewport surfaceViewport(0, 0, float(size.width()), float(size.height()));
+    const QRect surfaceViewport(QPoint(), size);
     const QRhiCommandBuffer::VertexInput cardInput(r.vertices.get(), 0);
     const QRhiCommandBuffer::VertexInput ownInput(r.vertices.get(), quint32(kTriangleFloats * sizeof(float)));
     QRhiResourceUpdateBatch *pending = updates; // the record's uploads, handed to its first pass
@@ -6050,7 +6065,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             cb->beginPass(t.captureTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
             pending = nullptr;
             cb->setGraphicsPipeline(r.passes[i].pipeline.get());
-            cb->setViewport(QRhiViewport(0, 0, float(t.allocation.width()), float(t.allocation.height())));
+            setViewportAndScissor(cb, QRect(QPoint(), t.allocation));
             const QRhiCommandBuffer::DynamicOffset captureOffsets[2] = { { 0, r.passes[i].blockOffset },
                                                                          { kConventionsBinding, r.conventionsOffset } };
             cb->setShaderResources(nullptr, 2, captureOffsets); // N3.2: the arena
@@ -6084,14 +6099,14 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             pending = nullptr;
             if (!surfaceOpened) {
                 cb->setGraphicsPipeline(r.clearPipeline.get());
-                cb->setViewport(surfaceViewport);
+                setViewportAndScissor(cb, surfaceViewport);
                 cb->setShaderResources();
                 cb->setVertexInput(0, 1, &cardInput);
                 cb->draw(3);
                 surfaceOpened = true;
             }
             for (int k = i; k <= last; ++k)
-                drawPass(rhi, cb, k, surfaceViewport, cardInput); // N3.2
+                drawPass(rhi, cb, k, surfaceViewport, cardInput, surfaceViewport); // N3.2
             cb->endPass();
         } else {
             // N3.1: a run on a scene target: its attachments primed for the load (rule C, depth too), its average
@@ -6110,7 +6125,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             pending = nullptr;
             if (!cleared[runTarget]) {
                 cb->setGraphicsPipeline(r.targetClears[runTarget].pipeline.get());
-                cb->setViewport(QRhiViewport(0, 0, float(t.allocation.width()), float(t.allocation.height())));
+                setViewportAndScissor(cb, QRect(QPoint(), t.allocation));
                 const QRhiCommandBuffer::DynamicOffset clearOffset { 0, r.targetClears[runTarget].offset };
                 cb->setShaderResources(nullptr, 1, &clearOffset); // N3.2: the arena
                 cb->setVertexInput(0, 1, &cardInput);
@@ -6118,10 +6133,12 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                 cleared[runTarget] = true;
             }
             const QRect v = contentViewport(rhi->isYUpInFramebuffer(), t.allocation, t.content);
-            const QRhiViewport content(float(v.x()), float(v.y()), float(v.width()), float(v.height()));
+            // Harness only: a full-allocation viewport makes a quad extend into slack independently of clip-volume
+            // clipping. The scissor remains the content rect; the product always uses v for both.
+            const QRect viewport = sceneOversizeViewport() ? QRect(QPoint(), t.allocation) : v;
             const QRhiCommandBuffer::VertexInput &input = t.decl.surfaceSized() ? cardInput : ownInput;
             for (int k = i; k <= last; ++k)
-                drawPass(rhi, cb, k, content, input); // N3.2
+                drawPass(rhi, cb, k, viewport, input, v); // N3.2
             cb->endPass();
             recordNearest(cb, runTarget, last, readback); // D14 point 10: what a later pass or the readback reads
         }
@@ -6133,7 +6150,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
         // The surface is cleared once at least (its frame is what the composite shows).
         cb->beginPass(target.renderTarget.get(), QColor(0, 0, 0, 0), { 1.0f, 0 }, pending);
         cb->setGraphicsPipeline(r.clearPipeline.get());
-        cb->setViewport(surfaceViewport);
+        setViewportAndScissor(cb, surfaceViewport);
         cb->setShaderResources();
         cb->setVertexInput(0, 1, &cardInput);
         cb->draw(3);

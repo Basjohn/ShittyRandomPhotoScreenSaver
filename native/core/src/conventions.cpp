@@ -6,6 +6,14 @@
 
 namespace srpss_core {
 
+void setViewportAndScissor(QRhiCommandBuffer *cb, const QRect &viewport, const QRect &scissor, bool enabled)
+{
+    cb->setViewport(QRhiViewport(float(viewport.x()), float(viewport.y()),
+                                float(viewport.width()), float(viewport.height())));
+    if (enabled)
+        cb->setScissor(QRhiScissor(scissor.x(), scissor.y(), scissor.width(), scissor.height()));
+}
+
 QMatrix4x4 targetCorrection(QRhi *rhi)
 {
     QMatrix4x4 flip;

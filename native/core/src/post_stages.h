@@ -209,7 +209,7 @@ public:
     void recordDefocusClip(QRhi *rhi, QRhiCommandBuffer *cb, int pass, const QRhiCommandBuffer::VertexInput &triangle,
                            QRhiResourceUpdateBatch *mips, quint32 blockOffset, quint32 conventionsOffset);
     void recordDefocusOnto(QRhiCommandBuffer *cb, int pass, const QRhiCommandBuffer::VertexInput &triangle,
-                           quint32 blockOffset, quint32 conventionsOffset, bool drawSprites);
+                           quint32 blockOffset, quint32 conventionsOffset, bool drawSprites, const QRect &scissor);
     bool hasDefocus(int pass) const { return defocusFor(pass) != nullptr; }
 
 private:
