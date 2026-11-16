@@ -1461,6 +1461,7 @@ def main(argv: list[str] | None = None) -> int:
     results: dict = {}
     for api in [a for a in APIS if a in args.apis]:
         child_json = out / f"child_{api}.json"
+        child_json.unlink(missing_ok=True)  # discard any earlier child record before launch
         command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
                    "--rounds", *args.rounds]
