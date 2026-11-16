@@ -47,7 +47,7 @@ The Orchestrator Handbook's "where everything is" table points here. A tool nobo
 | 4 | `tests/run_chunked.py` | `--isolated [--changed]` at milestones; `--profile destination`; focused files otherwise | ANY (focused), LEAD (whole suite) |
 | 5 | `tools/impacted_tests.py` | which test files a change can affect (`--why FILE` explains one) | ANY |
 | 6 | `tools/build_runner.py` | the only build entry: `--run [--select standard media_center ...]` (`--run` implies `--mode github`); `--smoke-test` validates routing | LEAD (GH) |
-| 7 | `tools/github_remote_build.py` | the remote contract behind it (`run --target ...`); workflow steps `manifest`, `stage-native` | LEAD (GH) |
+| 7 | `tools/github_remote_build.py` | the remote contract behind it (`run --target ...`); `recover --target T --commit SHA --token X [--run-id ID]` follows an existing exact run without dispatch; workflow steps `manifest`, `stage-native` | LEAD (GH) |
 | 8 | `tools/d1_run.py` | the real saver on one named display, bounded, frames and logs back; `--hidden` for agents | LEAD (visible), ANY (`--hidden`) |
 | 9 | `tools/visualizer_live_check.py` | live-shape check of a Visualizer mode, invisible windows, recorded music; the default `--load none` is safe | ANY (default), LEAD (`--load game60`) |
 | 10 | `tools/run_matrix.py` | declarative matrix of bounded RUN sessions over the product's `--exit-after` | LEAD |
