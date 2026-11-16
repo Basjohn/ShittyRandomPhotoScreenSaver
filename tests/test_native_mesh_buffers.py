@@ -1,7 +1,7 @@
 """N3.2 (decision D15; ``native/core/src/mesh_buffers.h``): the GPU-free parts of meshes and buffers.
 
-- the block arena's layout (``rendering.native.streams.arena_layout``, the core's ``arenaLayout`` mirrored);
-- the record's ``f32`` field kind (a stream's bytes verbatim) in the Python reference;
+- the executed core arena layout against ``rendering.native.streams.arena_layout``;
+- the record's ``f32`` field kind through the C++ packet reader, fields and bytes against the Python reference;
 - a program's packs in order (a geometry pass's fragment, vertex and draw-parameters packs) and its declaration;
 - the core's sources hold the contract's names (the per-batch core member, the module entries, ABI 18 or later).
 """
@@ -48,28 +48,69 @@ def test_the_arena_check_sees_a_layout_that_ignores_the_alignment():
     assert not _overlaps(naive, sizes)          # it is the alignment the check catches, not an overlap
 
 
-def test_the_core_arena_rule_is_the_mirror_s(tmp_path):
-    """The core's arenaLayout is the same arithmetic (read from its source: round each offset up, the size up)."""
-    text = (CORE / "mesh_buffers.cpp").read_text(encoding="utf-8")
-    body = text[text.index("ArenaLayout arenaLayout("):]
-    body = body[:body.index("\n}\n")]
-    assert "offset = (offset + align - 1) / align * align;" in body
-    assert "layout.size = (offset + align - 1) / align * align;" in body
+def test_the_core_arena_rule_is_the_mirror_s(core):
+    """Compare executed native layout with its Python oracle, including empty, zero and unaligned blocks."""
+    from rendering.native.streams import arena_layout
+
+    cases = ([], [0], [1], [16, 0, 17, 336, 336, 1040])
+    for alignment in (0, 1, 16, 64, 256):
+        for sizes in cases:
+            assert core.module.mesh_buffer_arena_layout(sizes, alignment) == arena_layout(sizes, alignment)
+    # Actual native negative control: giving the unaligned route cannot satisfy the aligned oracle.
+    sizes = cases[-1]
+    with pytest.raises(AssertionError):
+        assert core.module.mesh_buffer_arena_layout(sizes, 1) == arena_layout(sizes, 256)
 
 
 # --------------------------------------------------------------------------------------------- the f32 kind
 
-def test_an_f32_stream_field_carries_its_bytes_verbatim():
-    from core.visualizer_engine.native_schema import NativeLayout
+def test_an_f32_stream_field_carries_its_bytes_verbatim(core):
+    """The C++ packet reader agrees with Python on every field and preserves all f32 bits (including padding)."""
+    mb = _mb()
+    import mesh_buffer_check
 
-    layout = NativeLayout.build((("points", "f32", 12), ("points_len", "u32", 1)))
+    schema = mb.schema("sprites", (("points", "f32", 12), ("points_len", "u32", 1), ("stamp", "f64", 1)),
+                       (("points_len", "at_most", 12),))
+    layout = schema.layout
     field = layout.field("points")
     assert field.offset % 16 == 0 and field.size == 48
-    payload = struct.pack("<6f", 0.5, -1.25, 3.0, 1e-3, 7.0, 2.5)
-    record = layout.pack(0x10109, {"points": payload, "points_len": 6})
+    # Exact binary32 representations: finite values, +/- infinity, -0 and the smallest positive denormal.
+    payload = struct.pack("<6I", 0x3F000000, 0xBFA00000, 0x7F800000, 0xFF800000, 0x80000000, 0x00000001)
+    record = schema.encode({"points": payload, "points_len": 6, "stamp": 1.25})
     assert record[field.offset:field.offset + len(payload)] == payload
     assert record[field.offset + len(payload):field.offset + field.size] == bytes(field.size - len(payload))
     assert layout.unpack(record)["points"][:6] == struct.unpack("<6f", payload)
+    decoded = schema.decode(record)
+    stream = mesh_buffer_check.Stream(schema)
+    reader = None
+
+    def assert_decoded():
+        assert reader.read() == "accepted"
+        frame = reader.frame()
+        assert frame is not None and frame.fields is not None
+        assert frame.payload == record
+        cpp = {name: tuple(value) if isinstance(value, (list, tuple)) else value
+               for name, value in frame.fields.items()}
+        assert cpp == decoded
+        assert struct.pack(f"<{field.count}f", *cpp["points"]) == record[field.offset:field.offset + field.size]
+
+    try:
+        reader = core.packet_reader(stream.name, expect=stream.expect, schema=schema)
+        stream.publish(record, 0.0)
+        assert_decoded()
+        # Real native reads of corrupted f32 words: +0 compares equal to -0 numerically, so only the bytes catch it;
+        # flushing a denormal also changes the decoded field. The exact same assertion must reject each.
+        for timestamp, index in enumerate((4, 5), start=1):
+            corrupted = bytearray(record)
+            struct.pack_into("<I", corrupted, field.offset + 4 * index, 0)
+            stream.publish(bytes(corrupted), float(timestamp))
+            with pytest.raises(AssertionError):
+                assert_decoded()
+    finally:
+        if reader is not None:
+            reader.close()
+        stream.close()
+    assert not any(core.packet_reader_live().values())
 
 
 def test_an_f32_field_past_its_capacity_is_refused():
@@ -192,6 +233,8 @@ built = pytest.mark.skipif(
 def core():
     from rendering import native
 
+    if not BUILT:
+        pytest.skip("the built native core is required for this GPU-free native oracle")
     loaded = native.load(MODULE_DIR)
     if loaded.abi < 18:
         pytest.skip(f"the built module speaks ABI {loaded.abi}; meshes and buffers are ABI 18")
@@ -303,19 +346,86 @@ def test_umatrix_is_item_pixels_to_the_targets_clip_space_corrected_once(core, m
 
 
 @built
-def test_umatrix_follows_the_cards_rotation_and_window_map(core, mb_packs):
-    """A rotated card (a quarter turn) at an odd window offset: the item's rotation and the target's map are in uMatrix
-    (against itemClipMatrix's arithmetic); negative control: the upright card's matrix differs."""
+def test_umatrix_follows_the_cards_rotation_and_window_map(core, mb_packs, monkeypatch):
+    """Native geometry follows the real Python renderer's uMatrix through its oriented window map.
+
+    No itemClipMatrix formula is copied: the Python renderer writes its uniforms, Spectrum's production affine
+    helper supplies the card's oriented map, and the shared CPU inverse of Oscilloscope physicalPoint checks it.
+    GL calls/resources are intercepted; neither renderer creates a context or window.
+    """
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    from PySide6.QtGui import QMatrix4x4
+    from rendering.quick.visualizer.implementations import oscilloscope as osc
+    from rendering.quick.visualizer.implementations.spectrum import item_from_fragment
+    from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
+    from widgets.spotify_visualizer.presentation_orientation import logical_uv_from_physical_uv
+    from widgets.spotify_visualizer.render_state import OscilloscopeFrame
     import probe_rings
 
-    card = dict(probe_rings.harness_card((480, 270), 1.5), quarters=1, oriented_size=[270.0, 480.0],
-                window_from_target=[1.0, 0.0, 3.0, 0.0, 1.0, 5.0])
-    target = (405, 720)
-    got = _rows(_streak_blocks(core, mb_packs, card, target, None))
-    expected = _item_clip(card, target)
-    assert all(abs(got[r][c] - expected[r][c]) < 1e-5 for r in range(4) for c in range(4)), (got, expected)
-    upright = _item_clip(dict(card, quarters=0), target)
-    assert any(abs(got[r][c] - upright[r][c]) > 1e-3 for r in range(4) for c in range(4))
+    target = (720, 405)
+    item_size = (480.0, 270.0)
+    origin = (3.0, 5.0)
+    matrix = QMatrix4x4()
+    matrix.ortho(0.0, float(target[0]), 0.0, float(target[1]), -1.0, 1.0)
+    matrix.translate(71.0, 291.0)
+    matrix.rotate(13.0, 0.0, 0.0, 1.0)
+    matrix.scale(1.3, -0.9, 1.0)
+    parameters = {"osc_display": "Trace", "osc_flare": 0.2, "osc_pulse": 0.3, "osc_glow": 0.0,
+                  "osc_beam_width": 2.0, "osc_beam_color": (90, 170, 230, 255), "osc_spectral": 0.0,
+                  "osc_graticule": "Off", "osc_beam_glow_color": (120, 180, 240, 255), "osc_analog": 0.5}
+    state = OscilloscopeFrame(points=struct.pack("<4f", -0.5, 0.2, 0.5, -0.2), trace_alphas=(1.0,),
+                              parameters=parameters)
+    renderer = osc.QuickOscilloscopeRenderer()
+    monkeypatch.setattr(renderer._resources, "program", lambda *_a: 1)
+    monkeypatch.setattr(renderer._resources.pass_blocks, "bound", lambda *_a: nullcontext())
+    monkeypatch.setattr(renderer._target, "scope", lambda *_a, **_k: nullcontext())
+    monkeypatch.setattr(renderer._target, "emission_writes", lambda: nullcontext())
+    monkeypatch.setattr(renderer._stream, "bound", lambda *_a: nullcontext())
+    monkeypatch.setattr(osc, "_blend_state", lambda: ())
+    monkeypatch.setattr(osc, "_restore_blend", lambda _s: None)
+    for name in ("glEnable", "glBlendEquationSeparatei", "glBlendFuncSeparatei", "glBindVertexArray", "glUseProgram",
+                 "glDrawArrays", "glDrawArraysInstanced"):
+        monkeypatch.setattr(osc.gl, name, lambda *_a: None)
+
+    points = ((0.0, 0.0), item_size, (item_size[0], 0.0), (0.0, item_size[1]), (137.25, 83.5))
+    for quarters in (1, 2, 3):
+        presentation = SimpleNamespace(content_rotation_quarters=quarters, outer_rect=(0, 0, *item_size),
+                                       content_rect=(0, 0, *item_size), content_fade=1.0,
+                                       uniform_visual_scale=1.0, dpr=1.5)
+        frame = QuickVisualizerRenderFrame(SimpleNamespace(logical=SimpleNamespace(mode_state=state),
+                                                           presentation=presentation),
+                                           (0, 0, *target), item_size, tuple(matrix.data()), 1)
+        renderer.render(frame)
+        values = renderer._resources.values("beam")
+        python_matrix = values["uMatrix"]
+        mapping = item_from_fragment(python_matrix, frame.viewport, item_size, values["uQuarters"], values["uOriented"])
+        assert mapping is not None
+        card = dict(probe_rings.harness_card(item_size, 1.5), quarters=quarters,
+                    oriented_size=list(values["uOriented"]), item_from_window=[*mapping[0], *mapping[1]],
+                    window_from_target=[1, 0, origin[0], 0, -1, target[1] - origin[1]])
+        expected = []
+        for x, y in points:
+            clip = _apply(_rows(python_matrix), x, y)
+            window = ((clip[0] + 1) * target[0] / 2, (clip[1] + 1) * target[1] / 2, 1)
+            oriented = logical_uv_from_physical_uv((x / item_size[0], y / item_size[1]), quarters)
+            assert [sum(row[i] * window[i] for i in range(3)) for row in mapping] == pytest.approx(
+                [oriented[i] * values["uOriented"][i] for i in range(2)], abs=1e-5)
+            expected.append([clip[0] - 2 * origin[0] / target[0], clip[1] + 2 * origin[1] / target[1], *clip[2:]])
+
+        def assert_matches(shown):
+            native = _rows(_streak_blocks(core, mb_packs, shown, target, None))
+            for point, reference in zip(points, expected):
+                assert _apply(native, *point) == pytest.approx(reference, abs=1e-5)
+
+        assert_matches(card)
+        # Actual module calls with wrong card data: skipped rotation, an un-oriented map, or missing window offset.
+        unrotated = item_from_fragment(python_matrix, frame.viewport, item_size, 0, item_size)
+        for wrong in (dict(card, quarters=0), dict(card, item_from_window=[*unrotated[0], *unrotated[1]]),
+                      dict(card, window_from_target=[1, 0, 0, 0, -1, target[1]])):
+            with pytest.raises(AssertionError):
+                assert_matches(wrong)
 
 
 def _beam(core, mb_packs, entries, checks, stream):
