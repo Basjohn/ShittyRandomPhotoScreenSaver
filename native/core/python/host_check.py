@@ -170,6 +170,18 @@ def _translucent_backdrop(window, kind: str) -> dict:
             "extend_hresult": extend & 0xFFFFFFFF, "backdrop_hresult": backdrop & 0xFFFFFFFF}
 
 
+def resizes_presented(resizes: list[dict], original_size: list[int]) -> bool:
+    """Each requested extent was actually observed after event processing and an advancing frame edge.
+
+    Frames alone cannot prove Qt applied resize(): an unchanged-size window can keep rendering forever.
+    """
+    return (len(resizes) == 2 and resizes[0].get("requested_size") != original_size
+            and resizes[1].get("requested_size") == original_size
+            and all(any(observation.get("size") == resize.get("requested_size")
+                        and observation.get("edges", 0) > resize.get("edges_before", 0)
+                        for observation in resize.get("observations", [])) for resize in resizes))
+
+
 def round_translucent(core, engine, app, api: str, args, *, with_composite: bool = False) -> dict:
     """Lead-only bounded desktop rehearsal on a named secondary screen, on the core's device. No grabWindow:
     Qt's Vulkan grab defect D is avoidable here. Pixel translucency, DPI and sleep/wake remain operator review.
@@ -232,12 +244,16 @@ def round_translucent(core, engine, app, api: str, args, *, with_composite: bool
             if resize_step < 2 and time.monotonic() - started >= args.visible_seconds * (resize_step + 1) / 3:
                 target_width, target_height = ((width * 3 // 4, height * 3 // 4) if resize_step == 0 else (width, height))
                 window.resize(target_width, target_height)
-                record["resizes"].append({"size": [target_width, target_height],
+                record["resizes"].append({"requested_size": [target_width, target_height], "observations": [],
                                           "edges_before": _driver(host.state()).get("edges", 0)})
                 resize_step += 1
             record["samples"].append({"size": [window.width(), window.height()], "dpr": window.devicePixelRatio(),
                                       "exposed": window.isExposed(), "driver": _driver(host.state())})
             _pump(app, min(0.1, max(0.0, deadline - time.monotonic())))
+            if record["resizes"]:
+                record["resizes"][-1]["observations"].append({
+                    "size": [window.size().width(), window.size().height()],
+                    "edges": _driver(host.state()).get("edges", 0)})
         state = host.state()
         record["state"] = state
         driver = _driver(state)
@@ -248,9 +264,7 @@ def round_translucent(core, engine, app, api: str, args, *, with_composite: bool
                                                     and driver.get("edges_with_python_thread_state") == 0)
         checks["transparent_window_requested"] = window.color().alpha() == 0
         checks["alpha_buffer_requested"] = window.requestedFormat().alphaBufferSize() > 0
-        checks["two_in_screen_resizes_presented"] = (len(record["resizes"]) == 2
-            and record["resizes"][1]["edges_before"] > record["resizes"][0]["edges_before"]
-            and driver.get("edges", 0) > record["resizes"][1]["edges_before"])
+        checks["two_in_screen_resizes_presented"] = resizes_presented(record["resizes"], [width, height])
         checks["no_driver_error"] = not driver.get("error")
         record["format"] = {"requested_alpha": window.requestedFormat().alphaBufferSize(),
                             "actual_alpha": window.format().alphaBufferSize()}

@@ -398,6 +398,23 @@ def test_translucent_is_explicit_and_separate_from_hidden_proof():
             host_check.validate_translucent_arguments(SimpleNamespace(**(vars(args) | changes)))
 
 
+def test_resize_proof_needs_observed_extents_and_advancing_frames():
+    original = [400, 240]
+    smaller = [300, 180]
+    down = {"requested_size": smaller, "edges_before": 10,
+            "observations": [{"size": smaller, "edges": 11}]}
+    restore = {"requested_size": original, "edges_before": 20,
+               "observations": [{"size": original, "edges": 21}]}
+    assert host_check.resizes_presented([down, restore], original)
+    # Negative control: resize ignored, while frames keep advancing (the earlier guard falsely passed this).
+    unchanged = dict(down, observations=[{"size": original, "edges": 11}])
+    assert not host_check.resizes_presented([unchanged, restore], original)
+    not_presented = dict(down, observations=[{"size": smaller, "edges": 10}])
+    assert not host_check.resizes_presented([not_presented, restore], original)
+    assert not host_check.resizes_presented([down], original)
+    assert not host_check.resizes_presented([down, dict(restore, observations=[])], original)
+
+
 def test_translucent_resolves_exact_secondary_name_through_both_d1_guards(monkeypatch):
     from tools import d1_run
 
