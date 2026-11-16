@@ -15,6 +15,9 @@ QAtomicInteger<qint64> g_bytes { 0 };
 QAtomicInteger<qint64> g_allocations { 0 };
 QAtomicInteger<qint64> g_steps { 0 };
 QAtomicInteger<int> g_readbacksPending { 0 };
+QAtomicInteger<int> g_contentAtTop { 0 };
+QAtomicInteger<int> g_onePixelBucket { 0 };
+QAtomicInteger<int> g_allocationStepLimit { 0 };
 
 QMutex &removedMutex()
 {
@@ -478,6 +481,8 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
 int bucketPixels(int pixels)
 {
     const int p = qMax(1, pixels);
+    if (g_onePixelBucket.loadAcquire())
+        return p;
     return qMax(kSceneBucket, ((p + kSceneBucket - 1) / kSceneBucket) * kSceneBucket);
 }
 
@@ -492,12 +497,13 @@ QSize nextAllocation(const QSize &current, const QSize &needed, QString *reason)
     // else kept (a grow on one axis never re-buckets the other one down).
     bool grown = false;
     bool shrunk = false;
+    const int bucketSize = g_onePixelBucket.loadAcquire() ? 1 : kSceneBucket;
     const auto axis = [&](int have, int need, int bucket) {
         if (need > have) {
             grown = true;
             return bucket;
         }
-        if (have - bucket >= 2 * kSceneBucket) {
+        if (have - bucket >= 2 * bucketSize) {
             shrunk = true;
             return bucket;
         }
@@ -518,7 +524,27 @@ QRect contentViewport(bool yUpInFramebuffer, const QSize &allocation, const QSiz
 {
     const int w = qMin(content.width(), allocation.width());
     const int h = qMin(content.height(), allocation.height());
-    return QRect(0, yUpInFramebuffer ? allocation.height() - h : 0, w, h);
+    const int slack = allocation.height() - h;
+    return QRect(0, g_contentAtTop.loadAcquire() ? (yUpInFramebuffer ? 0 : slack)
+                                              : (yUpInFramebuffer ? slack : 0), w, h);
+}
+
+bool setSceneTargetControl(const QByteArray &name, int value)
+{
+    if (name == "content_at_top" && (value == 0 || value == 1))
+        g_contentAtTop.storeRelease(value);
+    else if (name == "one_pixel_bucket" && (value == 0 || value == 1))
+        g_onePixelBucket.storeRelease(value);
+    else if (name == "allocation_steps" && value >= 0 && value <= 32)
+        g_allocationStepLimit.storeRelease(value);
+    else
+        return false;
+    return true;
+}
+
+int sceneAllocationStepLimit()
+{
+    return g_allocationStepLimit.loadAcquire();
 }
 
 int clampSamples(const QList<int> &supported, int requested)

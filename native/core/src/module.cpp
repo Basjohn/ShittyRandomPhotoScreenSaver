@@ -345,6 +345,24 @@ PyObject *host_frames(PyObject *, PyObject *args)
     Py_RETURN_NONE;
 }
 
+PyObject *host_invalidate_scene_graph(PyObject *, PyObject *args)
+{
+    long long handle = 0;
+    if (!PyArg_ParseTuple(args, "L", &handle))
+        return nullptr;
+    srpss_core::HiddenHost *host = hiddenOf(handle);
+    if (!host)
+        return nullptr;
+    QString error;
+    bool ok = false;
+    Py_BEGIN_ALLOW_THREADS
+    ok = host->invalidateSceneGraph(&error);
+    Py_END_ALLOW_THREADS
+    if (!ok)
+        return runtimeError(error);
+    Py_RETURN_NONE;
+}
+
 PyObject *host_set_dpr(PyObject *, PyObject *args)
 {
     long long handle = 0;
@@ -1896,6 +1914,19 @@ bool intsArgument(PyObject *object, QList<int> *out, const char *what)
 }
 
 // Harness: the clamp's control (D14 point 7's negative control): sample counts taken out of every device's set.
+PyObject *scene_target_control(PyObject *, PyObject *args)
+{
+    const char *name = nullptr;
+    int value = 0;
+    if (!PyArg_ParseTuple(args, "si", &name, &value))
+        return nullptr;
+    if (!srpss_core::setSceneTargetControl(QByteArray(name), value)) {
+        PyErr_SetString(PyExc_ValueError, "unknown scene-target control or invalid value");
+        return nullptr;
+    }
+    Py_RETURN_NONE;
+}
+
 PyObject *scene_sample_counts_control(PyObject *, PyObject *args)
 {
     PyObject *removed = nullptr;
@@ -2758,6 +2789,8 @@ PyMethodDef methods[] = {
     { "host_set_content", host_set_content, METH_VARARGS,
       "(handle, quick_item_address) -> None: the hidden host renders this item (0: none)." },
     { "host_frames", host_frames, METH_VARARGS, "(handle, count=1) -> None: the hidden host renders frames." },
+    { "host_invalidate_scene_graph", host_invalidate_scene_graph, METH_VARARGS,
+      "(handle) -> None: harness; invalidate the hidden host's actual scene graph on its render thread; close next." },
     { "host_close", host_close, METH_VARARGS,
       "(handle) -> JSON str: detaches; a hidden host also tears down its window and device." },
     { "host_probe", host_probe, METH_VARARGS,
@@ -2928,6 +2961,8 @@ PyMethodDef methods[] = {
       "([block sizes], alignment) -> ([offsets], size): D15 point 3's block arena layout (GPU-free)." },
     { "vulkan_device_facts", vulkan_device_facts, METH_VARARGS,
       "(vk_device_handle) -> dict: N3.2, the limits and draw features of a device the core created ({} otherwise)." },
+    { "scene_target_control", scene_target_control, METH_VARARGS,
+      "(name, value) -> None: harness content_at_top, one_pixel_bucket (0/1), allocation_steps (0..32; 0: all)." },
     { "scene_sample_counts_control", scene_sample_counts_control, METH_VARARGS,
       "([counts]) -> None: N3.1, harness: sample counts taken out of every device's supported set (the clamp's "
       "negative control); [] restores them." },

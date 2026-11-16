@@ -377,6 +377,7 @@ struct HiddenHost::State
     ColorTarget target; // Qt Quick's own target (render thread)
     QPointer<QQuickItem> content;
     bool initialized = false;
+    bool sceneGraphInvalidated = false;
     bool closed = false;
     qint64 frames = 0;
     QString backend;
@@ -561,6 +562,24 @@ bool HiddenHost::frames(int count, QString *error)
     return renderFrames(count, nullptr, error);
 }
 
+bool HiddenHost::invalidateSceneGraph(QString *error)
+{
+    State &s = *m_state;
+    if (s.closed || !s.initialized) {
+        *error = QStringLiteral("the hidden host is closed or uninitialised");
+        return false;
+    }
+    if (!s.sceneGraphInvalidated) {
+        s.thread->run([&s]() {
+            s.window->setRenderTarget(QQuickRenderTarget());
+            s.target.reset();
+            s.control->invalidate(); // actual sceneGraphInvalidated signal, not a direct driver release
+        });
+        s.sceneGraphInvalidated = true;
+    }
+    return true;
+}
+
 bool HiddenHost::readFrame(QuickReadback *out, QString *error)
 {
     return renderFrames(1, out, error);
@@ -569,6 +588,10 @@ bool HiddenHost::readFrame(QuickReadback *out, QString *error)
 bool HiddenHost::renderFrames(int count, QuickReadback *readLast, QString *error)
 {
     State &s = *m_state;
+    if (s.sceneGraphInvalidated) {
+        *error = QStringLiteral("the hidden host's scene graph was invalidated; close it before rendering again");
+        return false;
+    }
     if (s.closed || !s.initialized) {
         *error = QStringLiteral("the hidden host is closed");
         return false;
@@ -658,7 +681,8 @@ QJsonObject HiddenHost::close()
                     driver->releaseOutsideFrame(rhi, QStringLiteral("hidden host closed"));
                 s.window->setRenderTarget(QQuickRenderTarget());
                 s.target.reset();
-                s.control->invalidate(); // sceneGraphInvalidated: anything still connected releases now
+                if (!s.sceneGraphInvalidated)
+                    s.control->invalidate(); // sceneGraphInvalidated: anything still connected releases now
                 // OpenGL: the QRhi's context is affine to this render thread, which quits next, and the render control
                 // (with its QRhi) is deleted on the GUI thread: hand the context back first (native/spike_p1's order).
                 if (rhi && guiThread && rhi->backend() == QRhi::OpenGLES2) {
