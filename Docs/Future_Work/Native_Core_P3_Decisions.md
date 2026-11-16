@@ -1910,6 +1910,11 @@ unchanged, no entry or state key added).**
 
 ## D17. Transparency and post-processing as shared stages (N3.4, decided 15 Nov 2026; proposed by the High agent, choices A to I answered by the lead)
 
+**Operator direction, 16 Nov 2026:** the unresolved OpenGL defocus performance investigation is a non-blocking
+follow-up for another agent. R-232 retains detailed statistics, failed avenues, evidence and unresolved hypotheses.
+Earlier performance-gate wording in historical receipts does not hold consumers; each consumer still proves its
+own parity, lifecycle and measured cost. No unproved barrier/tracking workaround is admitted by this change.
+
 *The draft of 15 Nov became this decision: the lead accepted A to I as recommended, with the notes folded in (the list
 at the end). It builds on the lead's decided designs in the plan's N3.4 box (per-attachment blending with
 `independentBlend`, coverage stored inverted, the blendable-format check, the depth prime, one texture per bloom

@@ -57,8 +57,7 @@ at the size asked. The interim holds are in `handoff.md`.
   N3.4 source comparison independently, then N3.6 when the hold lifts.
   Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers ride
   with the next fitting dispatch.
-- [ ] Medium: the Bubble port (N5.1 Bubble box: classify rule (a)'s 8-level residual first), then the Oscilloscope
-  after N3.4's remaining performance gate, since it consumes bloom.
+- [ ] Medium: the Bubble port (N5.1 Bubble box: classify rule (a)'s 8-level residual first), then the Oscilloscope.
 - [ ] Audit each merge at the appropriate risk; N3.4's source audit and native repair proofs are complete.
 
 ### Item 0. Operator defects of 11 Nov: section 1B, in its own order, ahead of everything below
@@ -491,19 +490,19 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       establish these reserved-resource contracts.
     - [x] L6 native/Python matrix and packet oracles proved (checkpoint audit 4).
 - [x] N3.3 Compute passes: proved and audited (D16).
-- [ ] N3.4 Transparency and post-processing (D17): source/proof complete; performance gate open. No consumer
-  until the performance gate closes.
+- [ ] N3.4 Transparency and post-processing (D17): source/proof complete; remaining investigation is non-blocking
+  (operator, 16 Nov). Consumers retain their own parity, lifecycle and measured-cost requirements.
   - [x] ABI 25 gate, accounting, readback, parity, rest and retirement proofs and independent High review complete.
   - [ ] At Qt upgrades, recheck the private QRhi outside-pass `beginExternal`/`endExternal` contract against Qt source.
   - [x] Whole-query alignment, blocking-read and populated-VAO controls proved; cause remains open (D17, R-232).
   - [x] Sprite uniform declaration control and real wrong-input negative proved; cause remains open (D17, R-232).
   - [x] Compiled-source comparison and texture-size/real wrong-mip control proved; cause remains open (D17, R-232).
   - [x] Current matched backend check: Vulkan avoids this observed GL excess; scope/limits retained in R-232.
-  - [ ] Select one falsifier of remaining generated gather/control-flow or native submission differences; state
-    discriminating outcomes before another run. Hardware counters are optional; profiler repair is not a prerequisite.
-  - [ ] Resolve an established core cause, then rerun both-backend `defocus_cost` and parity; otherwise document the
-    established cause and figures in D17 before closing this gate. No production barrier or tracking exception without
-    proof.
+  - [ ] Non-blocking, deeper investigation by another agent: use R-232's retained timings, source/trace controls,
+    failed avenues and unresolved hypotheses; choose one discriminating gather/control-flow or native-submission
+    falsifier before running. Keep detailed evidence and machine conditions. Hardware counters are optional;
+    profiler repair is not a prerequisite. No production barrier or tracking exception without proof. If a cause
+    is established, verify the repair with both-backend `defocus_cost` and parity; this task does not hold consumers.
   - [ ] Awaiting Validation before a Waveform consumer: repeat `mesh_buffer_check.py --rounds stream_ring` on a quiet
     GPU, record load/clocks before and after, and review median margins plus the D5.3 tail watch. The available-GPU
     proof validates the harness, not quiet-GPU performance admission.

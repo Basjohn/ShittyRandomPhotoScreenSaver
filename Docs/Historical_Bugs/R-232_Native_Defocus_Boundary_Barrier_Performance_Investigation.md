@@ -92,6 +92,15 @@ for uniform and 0%/210MHz→42%/2790MHz for level 0; these are sequential availa
 translated gather/body and complete submission differences need a specific next falsifier, not another profiler
 repair or a production synchronization workaround.
 
+## Current disposition (operator, 16 Nov 2026)
+
+Retain this as a detailed, non-blocking investigation for another agent. The operator removed the investigation
+as a consumer blocker after the matched backend comparison. Historical gate statements below describe the
+state when those measurements were taken; current consumer admission keeps its own parity, lifecycle and
+measured-cost requirements. Preserve the statistics, failed controls, traces and unresolved hypotheses so a
+successor can challenge the reasoning without repeating discarded avenues. No cause or production repair is
+claimed, and no barrier/tracking workaround follows from making the investigation non-blocking.
+
 ## Current Vulkan/OpenGL scope check (16 Nov, official `b1451eb11`)
 
 The operator asked whether the native core still benefits and whether Vulkan avoids this observed excess.

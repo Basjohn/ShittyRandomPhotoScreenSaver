@@ -173,8 +173,9 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
 <a id="pb-e4"></a>
 ### E4 and E19 Bloom, HDR, OIT and the defocus layer (N3.4; catalogue: [E4](../Reference/Primitives.md#e4), [E19](../Reference/Primitives.md#e19))
 - Status: source audit and native repair proofs complete (D17; `native/core/src/post_stages.*`; harness
-  `native/core/python/post_stage_check.py`); the performance gate remains open. No mode may consume it until the
-  plan's N3.4 gate closes. Declaring a stage: `native/core/README.md`.
+  `native/core/python/post_stage_check.py`). The remaining OpenGL defocus investigation is non-blocking
+  (operator, 16 Nov 2026); each consumer still proves its own parity, lifecycle and measured cost. Detailed stats,
+  controls and failed avenues remain in R-232. Declaring a stage: `native/core/README.md`.
 - Note: as built, the defocus layer's mips DO use QRhi's `generateMips` (D17 choice G, this layer only); bloom and
   HDR chains never do.
 - Contract: each stage is opt-in and absent from a mode that does not use it; OIT only where
