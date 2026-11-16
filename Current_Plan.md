@@ -477,6 +477,12 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     - [ ] Related admission defect: `checkSortedPack` compares only outer block names/bindings/sizes, not nested
       layout. Reproduce equal-size, different-member-layout acceptance before choosing its bounded repair; do not
       silently include it in L1's batched-vertex change.
+      - [ ] Reproduce uniform and storage layout/access mismatches through GPU-free `mode_blocks`; retain valid
+        sorted-output and reordered-resource controls on the current official module.
+      - [ ] Share the reflected resource-interface comparison with L1, preserving generated uniform instance IDs
+        as pack-local names. Check sorted fragment inputs separately; its different outputs keep D17's own checks.
+      - [ ] Prove focused regressions, L1 compatibility and both-backend sorted rendering on an official build;
+        independent High review, research/history and compact handoff journal before closure.
     - [ ] L2, a mesh replaced by one of the same layout retargets instead of rebuilding: the latch key and
       `ensure()` tell a mesh's layout (stride and attributes) from its buffer (`ModeMeshes::objects()` counts both, so
       `meshObjects` forces `releasePipelines`, which releases the streams and the arena too, losing the storage
