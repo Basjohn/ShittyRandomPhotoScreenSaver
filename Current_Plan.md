@@ -488,10 +488,9 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   until the performance gate closes.
   - [x] ABI 25 gate, accounting, readback, parity, rest and retirement proofs and independent High review complete.
   - [ ] At Qt upgrades, recheck the private QRhi outside-pass `beginExternal`/`endExternal` contract against Qt source.
-  - [x] Aligned whole-query native/Python pairs and bracket pixels proved; submission still differs (D17, R-232).
-  - [x] Whole-pass blocking-result control preserves pixels/counts but retains the excess (D17, R-232).
-  - [ ] Test the Python owner's empty versus populated vertex-array state with corresponding bracket pixels held
-    exact. Select the next falsifier from that result. Hardware counters are optional if a specific
+  - [x] Whole-query alignment, blocking-read and populated-VAO controls proved; cause remains open (D17, R-232).
+  - [ ] Compare compiled uniform/shader submission between native and Python, then choose a specific falsifier
+    before another core build. Preserve corresponding pixels and timing guards. Hardware counters are optional if a specific
     ambiguity remains; profiler repair is not a prerequisite (D17; failed approaches in R-232).
   - [ ] Resolve an established core cause, then rerun both-backend `defocus_cost` and parity; otherwise document the
     established cause and figures in D17 before closing this gate. No production barrier or tracking exception without

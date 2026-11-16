@@ -2253,9 +2253,13 @@ Python face is `rendering/native/mode.py` (`TransparencyTarget`, `TransparencyRe
     untracked boundary2.2262ms. All eight cases verify enabled blocking mode,478 blocking reads and239 results,
     no busy/abandoned slots, exact pixels and unchanged sample/count guards; independent High review is clear.
     Evidence `n3_4/20261116_n34_native_wait_control/`; GPU13%/330MHz before and41%/2775MHz after. Whole-pass
-    blocking-read cadence alone therefore does not explain this fixture's excess. Next test the Python owner's
-    empty versus populated vertex-array state with corresponding pixels held exact; no core change or extra
-    inter-draw query is needed.
+    blocking-read cadence alone therefore does not explain this fixture's excess. A Python populated-VAO control
+    (owned four vertices, enabled float2 inputs0/1; setup outside queries, temporary borrowed name restored after
+    each composite) gives0.6789/0.7024ms, retaining all four baseline image hashes and owner-function hashes.
+    All244 query/composite/restoration checks per case and resource release pass; independent High review is clear.
+    Evidence `n3_4/20261116_n34_python_populated_vao/`; GPU5%/210MHz before and3%/2790MHz after. Populated unused
+    inputs in this Python setup do not reproduce native's excess; the full native shader/VAO/submission is not
+    reproduced. Next compare compiled uniform/shader submission before choosing another control or a core build.
   - The render thread's record (`stage_record_ns`, the whole record of a program with stages): on OpenGL 19 to 20 us
     for EB's shape at every size and count (6.7 to 9.5 us with no stage), 33 us mean over the steady minute at 4x; on
     Vulkan 1.1 to 1.4 ms, which is the validation layer's own CPU work (22 us with no stage under the same layer); the

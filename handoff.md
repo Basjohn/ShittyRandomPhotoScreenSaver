@@ -7,9 +7,8 @@ Never rewrite main or force-push.
 - [x] Native retirement, scissor/allocation/oracle proofs, stream-ring harness repair and ABI 25 audit are complete. D17
   owns the detailed evidence and N3.4's remaining performance investigation.
 - [~] P1 desktop alpha, DPI and sleep/wake need lead/operator validation at N0.6; hidden results do not close it.
-- [x] Aligned native/Python whole-query comparison and bracket pixels proved; submission equivalence remains open.
-- [x] Native whole-pass blocking-result control retains the excess with unchanged guards; High reviewed.
-- [ ] Continue N3.4 with the Python owner's empty/populated vertex-array comparison under recorded GPU conditions.
+- [x] Whole-query/alignment, blocking-read and populated-VAO controls proved; no production speedup or established cause.
+- [ ] Continue N3.4 at the compiled uniform/shader submission boundary; choose a falsifier before a core build.
   Overlap/contention remains unproved; hardware counters are optional. R-232 retains the investigation. No production barrier
   or tracking exception is admitted.
 - [ ] Continue the Bubble port from its N5.1 box. Oscilloscope waits for N3.4's remaining performance gate.
