@@ -87,6 +87,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | immutable Qt resources, editable assets and automatic regeneration | `Spec.md` → Settings themes / native backdrop; `Docs/Guides/10_WIDGET_GUIDELINES.md` → asset ownership |
 | rules every dispatched agent follows (worktree environment, tests, forbidden actions, report shape) | `Docs/Guardrails/Agent_Worktree_Rules.md` |
 | native core P3 contracts and proofs (D1–D17): transport, ownership, Parity+, async jobs, rollout, generic programs, targets, meshes/buffers, compute and post stages; scoped progress estimate | `Docs/Future_Work/Native_Core_P3_Decisions.md` |
+| native Bubble replay, fade and component diagnostics / optimization evidence limits | `Docs/Guides/Native_Bubble_Diagnostics.md`; `Docs/Guardrails/Bubble_Temporal_Fidelity.md` §24 |
 | native Bubble owner parity: reproduced residual, component controls, statistics and eliminated explanations | `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` |
 | native core P3 decisions, history (drafts, superseded text, round-by-round evidence, answered questions; not instructions) | `Docs/Future_Work/Native_Core_P3_Decisions_History.md` |
 | the native core module `_srpss_native_core` (what it holds, its ABI, its proofs, how the lead builds it) | `native/core/README.md`; `rendering/native/` (the one Python importer); `Current_Plan.md` item 8b |
