@@ -848,7 +848,10 @@ bool SceneTargets::sync(QRhi *rhi, const QList<TargetDeclaration> &declarations,
         }
         // N3.4: a transparency target is its owner's allocation and samples, made again whenever its owner's are.
         const int samples = owner ? owner->samples : clampSamples(m_supported, d.samples);
-        const bool layoutChanged = !t.decl.sameLayout(d) || samples != t.samples || !t.renderPass
+        // A planned layout can be between attachment steps, before its final render-pass descriptor exists.
+        // Its nonempty allocation identifies that in-progress plan; a matching sync must preserve its steps.
+        const bool layoutChanged = !t.decl.sameLayout(d) || samples != t.samples
+            || (!t.renderPass && t.allocation.isEmpty())
             || (owner && relaid[d.owner]);
         QString reason;
         QSize allocation = nextAllocation(layoutChanged ? QSize() : t.allocation, needed, &reason);
