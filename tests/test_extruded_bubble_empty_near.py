@@ -16,26 +16,35 @@ def _same(a, b) -> bool:
     return int(np.abs(a - b).max()) <= _DRIVER_STEP
 
 
+def _near_snapshot():
+    """A test-owned ordinary shell in mild, visible near defocus."""
+    from rendering.gl_programs.extruded_bubble_scene import parameter_camera, scene_knobs
+    from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
+    from tests.test_extruded_bubble_renderer import _snapshot, _record
+    from tests.test_qtquick_extruded_spectrum import W, H
+
+    snapshot = _snapshot(extruded_bubble_focus=.5, extruded_bubble_aperture=.5)
+    state = snapshot.logical.mode_state
+    axes, _, eye, _, _ = parameter_camera(state.parameters, W / H, framed_aperture_scale(snapshot.presentation))
+    # The old fixture used maximum focus/aperture at depth six. Its huge circle is now correctly faded completely
+    # by EB_LENS_FADE (the accepted no-lens-blobs policy), so it could never establish stale near light. Keep the
+    # shell's front modestly inside the actual focal plane instead; no authored preset/default determines this input.
+    front = .65 * scene_knobs(state.parameters)["focus"]
+    radius = .4
+    centre = np.asarray(eye) - np.asarray(axes).reshape(3, 3)[2] * (front + radius)
+    state = replace(state, bubbles=_record(*centre, radius=radius), clusters=())
+    return replace(snapshot, logical=replace(snapshot.logical, mode_state=state))
+
+
 @pytest.mark.qt
 def test_empty_ordinary_population_skips_near_and_cannot_replay_stale_bokeh(qt_app, monkeypatch):
     from OpenGL import GL as gl
-    from rendering.gl_programs.extruded_bubble_scene import physical_camera
     from rendering.quick.visualizer.implementations.extruded_bubble import QuickExtrudedBubbleRenderer
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
-    from tests.test_extruded_bubble_renderer import _snapshot, _record
-    from tests.test_qtquick_extruded_spectrum import _Target, W, H
+    from tests.test_qtquick_extruded_spectrum import _Target
 
-    snapshot = _snapshot(extruded_bubble_focus=1., extruded_bubble_aperture=1.)
+    snapshot = _near_snapshot()
     state = snapshot.logical.mode_state
-    p = state.parameters
-    axes, _, eye, _, _ = physical_camera(
-        p['extruded_bubble_turn'], p['extruded_bubble_tilt'], W / H,
-        p['extruded_bubble_scene_scale'], p['extruded_bubble_scene_pan_x'], p['extruded_bubble_scene_pan_y'],
-        p['extruded_bubble_camera_fov'], p['extruded_bubble_camera_position'],
-        p['extruded_bubble_light_type'] == 'Sunlit Surface')
-    centre = np.asarray(eye) - np.asarray(axes).reshape(3, 3)[2] * 6.
-    state = replace(state, bubbles=_record(*centre, radius=.55), clusters=())
-    snapshot = replace(snapshot, logical=replace(snapshot.logical, mode_state=state))
     empty = replace(snapshot, logical=replace(snapshot.logical,
                     mode_state=replace(state, bubbles=(), clusters=())))
     capture, host = _Target(), QuickVisualizerRenderHost()
