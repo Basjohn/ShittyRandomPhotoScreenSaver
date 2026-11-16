@@ -55,9 +55,10 @@ Operator continuation (16 Nov): implement N3.1c L2 with Sol High and independent
 N3.4 `defocus_draws` concurrently under available ambient GPU activity, as explicitly authorised. Record conditions
 and compare within-run variants; do not hold diagnosis for the former quiet-GPU precondition.
 L2 scissor/negative controls pass both backends. Readback completeness/metadata, sample clamp gate and post-stage
-parity/rest/retire pass on ABI24. ABI25 accounting passes all 27 cases/backend, including unchanged no-churn and
+parity/rest/retire pass on ABI25. ABI25 accounting passes all 27 cases/backend, including unchanged no-churn and
 published rebind checks; 145 focused core tests pass. Defocus flag/tracker isolation passes: neither flag removes
-the excess. Compare actual GL commands/state at gather→sprites before choosing a core change; parity is running offscreen.
+the excess. Compare actual GL commands/state at gather→sprites before choosing a core change; final parity and
+rules (a)/(b) pass both backends and reference. Non-gating bloom-source/odd-mip differences remain documented in D17.
 Build7717614d1 was recovered from original run43871856822/token20261116_150121_942441, exact manifest/import
 checks passed, one dispatch. Independent High source/evidence review is clear; performance acceptance remains open.
 
@@ -547,11 +548,11 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
       the OpenGL sprite raster near Python's and Vulkan unchanged), or record it in D17 as the driver's with the figures
       if no state difference moves it. Then rerun `--rounds parity` (rules (a) and (b) must still pass) and record the
       outcome in D17's "As built" cost bullet. The control stays (harness-only, off by default).
-  - [ ] The High audit of the N3.4 merge (Opus High, audit slot only; core C++ is always High): the diff is
+  - [x] The High source audit of the N3.4 merge is complete; performance acceptance above remains open. The diff is
     `git diff a553335bb 39e661d80 -- native/core rendering/native tests/test_native_post_stages.py`
     (about 6,800 lines: `post_stages.*`, `mode_content.*`, `scene_targets.*`, `module.cpp`, the shaders, the harness).
-    Findings go to `Docs/Future_Work/Checkpoint_Audits_Nov15.md` as "Checkpoint audit 6"; fixes are the plan's boxes.
-    Codex audit role: Terra 6.1 High per Handbook section 1. Findings under focused repair, before acceptance:
+    Findings and verified repairs: `Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 6".
+    Terra 6.1 High reviewed fixes and ABI25 final proof. Completed finding boxes retained for this session:
     - [x] Partial bloom/defocus accounting follows every ownership/create edge; ABI24 first/intermediate cold/resize
       failures, exact release and fresh recovery pass both backends. Exact old fault reproduced −3 textures/−1 chain.
     - [x] Transparency gate uses canonical resolved samples and capability generation; old ABI22 fails clamped phase,

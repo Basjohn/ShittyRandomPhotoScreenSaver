@@ -1168,5 +1168,8 @@ Runtime evidence: `n3_4/20261116_n34_audit6_abi24_final` (gate/parity/rest/retir
 `n3_1/20261116_n34_readback_abi24`, `n3_4/20261116_n34_accounting_edges_abi24` (the exact remaining report
 failure), and `n3_4/20261116_partial_accounting_original_regression` (unchanged before/after native fault probe).
 ABI25 ownership evidence: `n3_4/20261116_n34_accounting_abi25_final`; 145 focused core tests PASS.
+Fresh ABI25 `n3_4/20261116_n34_abi25_final` passes parity/gate/rest/retire, reference, rules (a)/(b) and analytic
+gates; lead reviewed both sheets and Terra High independently reviewed the summary. Non-gating unaligned
+product-bloom-source and odd-source mip divergences remain diagnostic facts, not universal pixel identity.
 Required Vulkan validation has no unexplained errors/warnings; recorded Qt defect A is explicitly excused.
 Native ABI25 checkpoint `7717614d1`, GitHub run `43871856822`; ABI24 reference checkpoint `6d8a0e54e`, run `43869027463`.

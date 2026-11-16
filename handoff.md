@@ -56,6 +56,8 @@ activity is explicitly authorised for the diagnosis; section 3's original quiet-
 - [x] ABI25 flag/tracker isolation preserves exact pixels at actual 1x/4x; neither flag removes the ~2.3/1.2 ms
   excess. Only gather→sprites boundary does; High reviewed. Cause remains open: compare actual GL command/state
   before a core change. No production flush or tracking exception admitted; 145 focused core tests PASS.
+- [x] ABI25 final parity/gate/rest/retire, reference and rules (a)/(b) PASS; sheets reviewed, independent High
+  closeout. Source audit complete; performance gate open. Non-gating bloom-source/odd-mip differences remain in D17.
 
 ## 1. Read these first, in this order
 
