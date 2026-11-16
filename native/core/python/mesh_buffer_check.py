@@ -33,6 +33,12 @@ Rounds:
              instance stream is drawn exactly its used records and another instance count is refused (audit 4 H2;
              control instances_past_used: the Vulkan frames alternate), a record whose used length breaks its
              at_most rule writes nothing.
+  retarget   (each API) audit 4 L2: same-layout mesh replacement creates only its mesh buffer(s), keeps pipelines,
+             stream generation and arena, draws fresh geometry, and preserves unwritten storage tails. Changed
+             vertex/instance layouts rebuild correctly; removal/re-add and scene-graph/device reconstruction fail
+             closed and recover. Cached compute mesh bindings read fresh bytes; lost/nonstorage meshes dispatch
+             nothing and recover; a simultaneous resized texture and fresh mesh retarget together. The checks live
+             in mesh_retarget_check (no CLI, validation or lifecycle owner of its own).
   rest       (each API) nothing uploaded, written or recorded over frames at rest; control: a new record writes.
   steady     (each API) frames of new records: the core's buffers created, mesh, stream and ownership counts flat, the
              process's private bytes recorded; control: streams made again every record (the counts grow).
@@ -53,7 +59,7 @@ Rounds:
 Usage (repository venv, from the checkout holding the built module):
   python native/core/python/mesh_buffer_check.py --module-dir release/native_module --require-validation
       --layer-path D:\\Temp\\Scratch\\SRPSS\\native_spike\\validation_layers\\extracted
-  [--apis opengl vulkan] [--rounds parity forms used rest steady retire cost stream_ring] [--label n32_mesh_buffers]
+  [--apis opengl vulkan] [--rounds parity forms used retarget rest steady retire cost stream_ring] [--label n32_mesh_buffers]
   [--ring-payloads waveform_288KiB waveform_288KiB_used_4KiB ...]
 Evidence: .artifacts/evidence/native_core/n3_2/<date>_<label>/ (summary.json; sheet_<api>.png). Exit 0 whenever the
 harness ran; the verdict is the last printed line ("N32 VERDICT PASS" or "N32 VERDICT FAIL: ...").
@@ -87,7 +93,7 @@ import host_check  # noqa: E402
 from tools import pixel_tolerance as pt  # noqa: E402
 
 APIS = ("opengl", "vulkan")
-ROUNDS = ("parity", "forms", "used", "rest", "steady", "retire", "cost", "stream_ring")
+ROUNDS = ("parity", "forms", "used", "retarget", "rest", "steady", "retire", "cost", "stream_ring")
 CHILD_TIMEOUT_S = 1800
 MARGIN = 8
 DPRS = (1.0, 1.5)
@@ -1459,6 +1465,11 @@ def child(args) -> dict:
                         record[name] = round_stream_ring(core, engine, app, args.api, packs, args.ring_payloads)
                     elif name == "used":
                         record[name] = round_used(core, engine, app, args.api, packs)
+                    elif name == "retarget":
+                        import mesh_retarget_check
+
+                        record[name] = mesh_retarget_check.round_retarget(
+                            sys.modules[__name__], core, engine, app, args.api, packs, out)
                 except Exception:
                     record[name] = {"pass": False, "error": traceback.format_exc()}
     finally:

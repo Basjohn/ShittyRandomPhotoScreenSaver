@@ -11,6 +11,33 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "native/core/python
 harness = importlib.import_module("mesh_buffer_check")
 
 
+def test_retarget_counter_gate_rejects_old_rebuild_and_child_verdict():
+    """The old-module edge allocated three buffers and advanced stream generation; pixels alone cannot pass it."""
+    from copy import deepcopy
+    from mesh_retarget_check import edge_checks
+
+    resident = {"mesh_buffers_streams": 1, "mesh_buffers_arenas": 1,
+                "mesh_buffers_arena_bytes": 256, "mode_resources": 5}
+    before = {"live": dict(resident, mesh_buffers_buffers_created=10),
+              "state": {"mesh_buffers": {"generation": 1}}}
+    retargeted = deepcopy(before)
+    retargeted["live"]["mesh_buffers_buffers_created"] += 1
+    assert all(edge_checks(before, retargeted, buffers=1).values())
+    rebuilt = deepcopy(before)
+    rebuilt["live"]["mesh_buffers_buffers_created"] += 3
+    rebuilt["state"]["mesh_buffers"]["generation"] += 1
+    failed_checks = edge_checks(before, rebuilt, buffers=1)
+    assert not failed_checks["only_mesh_buffers_created"]
+    assert not failed_checks["stream_generation_unchanged"]
+    ok, reasons = harness.api_verdict("opengl", {
+        "module_loaded": True, "rounds": ["retarget"],
+        "retarget": {"pass": all(failed_checks.values()), "checks": failed_checks}}, False)
+    assert not ok and any("retarget" in reason and "stream_generation_unchanged" in reason for reason in reasons)
+    # A genuine layout edge must rebuild; an unchanged generation cannot satisfy that control.
+    assert not edge_checks(before, retargeted, rebuild=True)["build_boundary"]
+    assert edge_checks(before, rebuilt, rebuild=True)["build_boundary"]
+
+
 @pytest.mark.parametrize("target", ("opengl", "reference"))
 @pytest.mark.parametrize("failure", ("timeout", "exit"))
 def test_failed_child_never_reuses_success(target, failure, monkeypatch, tmp_path):

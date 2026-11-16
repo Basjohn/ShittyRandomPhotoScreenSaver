@@ -5,7 +5,7 @@ the five checkpoint audits (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Audi
 (`Docs/Future_Work/Native_Core_QRhi_Research_N3.md`, "Research Qn / section n"), the "3D foundation lessons"
 (`Docs/Reference/Transitions.md`, "Lessons"), `native/core/README.md` ("How a new mode is built") and `Current_Plan.md`
 item 8b's N3.4 and N4 decisions of 15 Nov ("Plan"). It decides nothing: every rule here is cited, and the cited text
-wins when the two differ. D17 describes the N3.4 stages; the current gate is in Plan N3.4.
+wins when the two differ. D17 describes the N3.4 stages; the live follow-ups are in Plan N3.4.
 
 ## How to use it
 

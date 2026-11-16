@@ -41,8 +41,8 @@ Live checklist: every open step is its own box; retain only useful, brief native
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Active native focus:** N3.2 L2 same-layout mesh retargeting; N3.4 compiled-shader research continues
-independently, without profiler repair. Then the admitted ports and side defects below; keep the interim
+**Active native focus:** Bubble parity after proved mesh-retarget and reserved-resource admission repairs. N3.4 deeper
+investigation remains a non-blocking follow-up for another agent. Then the admitted ports and side defects below; keep the interim
 holds in `handoff.md`. Independent native work may overlap under the operator's request for a Sol 6.1 High agent;
 review every slice before landing.
 
@@ -53,8 +53,8 @@ held by the interim route in `handoff.md`.
 
 **Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
 at the size asked. The interim holds are in `handoff.md`.
-- [ ] High: prove and implement the same-layout mesh retarget boundary; continue the bounded
-  N3.4 source comparison independently, then N3.6 when the hold lifts.
+- [ ] High: resolve Bubble parity with unchanged acceptance bounds;
+  N3.6 waits for its interim hold to lift.
   Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers ride
   with the next fitting dispatch.
 - [ ] Medium: the Bubble port (N5.1 Bubble box: classify rule (a)'s 8-level residual first), then the Oscilloscope.
@@ -468,28 +468,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     exact and validation clean; otherwise the figure and its cause go to the lead with the operator's look question
     (4K defaulting to fewer samples).
 - [x] N3.1c L2 scissor and L3 allocation proofs complete (D14, R-227, checkpoint audit 2).
-- [x] N3.2 Mesh and buffer resources proved (D15).
-- [ ] N3.2 remaining checkpoint audit 4 findings:
-  - [ ] Finish the shared mesh/program follow-ups (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 4"):
-    - [x] L1 shader-interface admission and both-backend batched-draw proofs complete (D15, R-233).
-    - [x] Sorted-pack deep interface admission and both-backend live SSBO alias proofs complete (D17, R-234).
-    - [x] Cross-stage shared layouts, readonly storage and binding admission proved on both backends (D15, R-235).
-    - [ ] L2, a mesh replaced by one of the same layout retargets instead of rebuilding: the latch key and
-      `ensure()` tell a mesh's layout (stride and attributes) from its buffer (`ModeMeshes::objects()` counts both, so
-      `meshObjects` forces `releasePipelines`, which releases the streams and the arena too, losing the storage
-      streams' bytes past their used length); the vertex buffers are given per draw, so only a layout change needs new
-      pipelines. Proof: `probe_replace.py`'s box replaced by its own bytes and layout creates only the mesh's buffer
-      and keeps the streams' build generation (today 3 buffers and generation 1 to 2).
-      - [x] Independent Sol High preparation and High source review complete; implementation/proof remain pending.
-      - [x] Old-module churn/tail loss reproduced; compatible-layout and compute-SRB repair source reviewed (R-236).
-      - [ ] Official-build GL/Vulkan fresh-byte/tail/instance/layout/remove/readd/device controls, live compute A→B
-        plus failed-rebind/storage-usage and simultaneous texture edges; use canonical validation/retirement owners.
-    - [ ] Reserved resource admission follow-up: reproduce malformed stage-only SrpssConventions layouts and
-      unsupported descriptor sets before any broader canonical-layout check; shared-stage equality alone cannot
-      establish these reserved-resource contracts.
-      - [x] Old-module actual-reflection proof and all-owner repair source reviewed (R-237).
-      - [ ] Official build; focused rejection/valid controls and shipped fullscreen/geometry/compute native regressions.
-    - [x] L6 native/Python matrix and packet oracles proved (checkpoint audit 4).
+- [x] N3.2 mesh/buffer and audit4 proofs complete: interfaces, retarget/tail retention, reserved resources and
+  matrix/packet oracles (D15, R-233–R-237).
 - [x] N3.3 Compute passes: proved and audited (D16).
 - [ ] N3.4 Transparency and post-processing (D17): source/proof complete; remaining investigation is non-blocking
   (operator, 16 Nov). Consumers retain their own parity, lifecycle and measured-cost requirements.

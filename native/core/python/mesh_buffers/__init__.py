@@ -362,6 +362,31 @@ void main()
 """
 RING_FRAG = CELL_FRAG
 
+# L2 retarget controls: a cached compute SRB reads the current immutable mesh buffer, with a sampled texture in the
+# second form so one record must retarget both resource classes. Baked by this fixture owner's normal pack baker.
+MESH_READ_COMP = """#version 440
+layout(local_size_x = 64) in;
+layout(std140, binding = 0) uniform MeshRead { float u_frame; };
+layout(std430, binding = 1) readonly buffer Source { vec4 source[]; };
+layout(std430, binding = 2) writeonly buffer Result { vec4 result[]; };
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    result[i] = vec4(source[i].xyz, u_frame);
+}
+"""
+MESH_TEXTURE_COMP = """#version 440
+layout(local_size_x = 64) in;
+layout(std140, binding = 0) uniform MeshRead { float u_frame; };
+layout(std430, binding = 1) readonly buffer Source { vec4 source[]; };
+layout(std430, binding = 2) writeonly buffer Result { vec4 result[]; };
+layout(binding = 3) uniform sampler2D uTexture;
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    float texel = texelFetch(uTexture, ivec2(0), 0).r;
+    result[i] = vec4(source[i].xyz + vec3(texel), u_frame);
+}
+"""
+
 SHADERS = {
     "box.vert": BOX_VERT, "box.frag": BOX_FRAG, "voxel.vert": VOXEL_VERT, "voxel.frag": VOXEL_FRAG,
     "sprite.vert": SPRITE_VERT, "sprite.frag": SPRITE_FRAG, "beam.vert": BEAM_VERT, "beam.frag": BEAM_FRAG,
@@ -369,6 +394,7 @@ SHADERS = {
     "cell_direct.vert": CELL_VERT_DIRECT, "cell_flat.vert": CELL_VERT_FLAT, "cell.frag": CELL_FRAG,
     "ring.vert": RING_VERT, "ring.frag": RING_FRAG, "ring_instance.vert": RING_INSTANCE_VERT,
     "ring_storage.vert": RING_STORAGE_VERT, "sprite_nocull.vert": SPRITE_VERT_NO_CULL, "sprite_yup.frag": SPRITE_FRAG_Y_UP,
+    "mesh_read.comp": MESH_READ_COMP, "mesh_texture.comp": MESH_TEXTURE_COMP,
     **{f"cell_pass{b}.vert": cell_pass_vert(b) for b in range(16)},
 }
 #: Baked apart: a failure is a fact (research Q5), not the harness's end.
@@ -438,6 +464,7 @@ STREAKS = 900
 CELLS = 64
 BATCHES = 16
 VOXELS = 40
+RETARGET_ROWS = 64
 
 
 def _f32(values) -> bytes:
@@ -538,6 +565,22 @@ class SceneSpec:
     schema: Any
     record: dict
     meshes: tuple = ()      # (name, vertices, layout, instances, instance_layout)
+    buffers: tuple = ()     # retarget's compute fixture (compute_pass_check.Scene owns its lifecycle/readback)
+    images: tuple = ()
+
+
+def retarget_compute_scene(packs: dict, *, texture: bool = False) -> SceneSpec:
+    """A compute entry reading a storage mesh, optionally alongside a texture whose object changes at retarget."""
+    from rendering.native.mode import ComputeBinding, ComputePass, PassSampler, StorageBuffer
+
+    shader = "mesh_texture.comp" if texture else "mesh_read.comp"
+    entry = ComputePass("mesh_texture" if texture else "mesh_read", packs[shader], groups=(1, 1, 1),
+                        bindings=(ComputeBinding("Source", "source_mesh", "mesh"),
+                                  ComputeBinding("Result", "result", "buffer", "write")),
+                        samplers=(PassSampler("uTexture", "probe_texture", filter="nearest"),) if texture else ())
+    return SceneSpec("retarget_compute", (entry,), (), (), {},
+                     schema("retarget_compute", (("u_frame", "f64", 1),), code=238), {"u_frame": 0.0},
+                     buffers=(StorageBuffer("result", RETARGET_ROWS * 16),))
 
 
 def _target(depth: bool = False):

@@ -963,15 +963,19 @@ python native/core/python/scene_target_check.py --module-dir release/native_modu
 # drawIndirect against direct; firstInstance 3's control; the device facts; the draw-parameter bake facts), rest,
 # steady (a minute of records: nothing created, counts flat, private memory sampled; the remade-streams control),
 # retire (replace, remove, a program without geometry, destroy, destroyed before a first draw; the skipped-release
-# control), cost (each scene at 2560x1440 and 4K, timed until 30 GPU times arrive); Vulkan validated. stream_ring
-# (D15 point 7): payloads of 4 KiB to 288 KiB as instance and storage streams against the pair's floor (CPU: the
+# control), cost (each scene at 2560x1440 and 4K, timed until 30 GPU times arrive); Vulkan validated.
+# retarget (audit 4 L2; mesh_retarget_check.py is its non-CLI round): one mesh buffer per same-layout replacement,
+# fresh geometry and retained storage tails, static-instance/layout/removal/re-add and actual scene-graph/device
+# reconstruction controls; cached compute SRBs retarget, refuse lost/nonstorage meshes and recover, and update a
+# simultaneous 2x2-to-4x4 sampled-texture object edge. The existing child owns packs, validation and retirement.
+# stream_ring (D15 point 7): payloads of 4 KiB to 288 KiB as instance and storage streams against the pair's floor (CPU: the
 # native record plus one memory copy; GPU: the same pass over a resident mesh stream), bracketing each route with
 # resident floors. Raw ms, ratios and floor-median drift sensitivity retain the 0.05 ms median admission signal;
 # p10/p90 tails remain descriptive/watchlisted. Floor drift crossing the median margin or invalid
 # measurements fail the proof and require a repeat (D15 point 7). No wall-time substitute for native counters.
 # Run under stated GPU conditions (nvidia-smi is recorded before and after); no automatic native-pair admission.
 python native/core/python/mesh_buffer_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
-    [--apis opengl vulkan] [--rounds parity forms rest steady retire cost stream_ring] [--label n32_mesh_buffers]
+    [--apis opengl vulkan] [--rounds parity forms used retarget rest steady retire cost stream_ring] [--label n32_mesh_buffers]
 # N3.3 (D16): compute passes on the harness scenes native/core/python/compute_passes (field: Waveform's body field, the
 # knots as a storage stream into a 2D RGBA32F image a pass samples; chain: the floor give field, store then an imageLoad
 # blur; volume: the fog, 3D RGBA16F and R16F images integrated along z and sampled through sampler3D; state: the drift's

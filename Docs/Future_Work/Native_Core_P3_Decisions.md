@@ -1349,7 +1349,12 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
    at the next record, into an `Immutable` `QRhiBuffer` (`Static` keeps a staging buffer per frame slot for its whole life,
    point 4; that `Immutable` releases its staging after the upload is recalled, not read, and the proof's counts show
    it), then drops the core's copy. Nothing is uploaded
-   again at rest. A replaced mesh is uploaded in the record that first draws it and the old buffer goes by
+   again at rest. A mesh object edge compares the exact consumed QRhi input layout against the existing pipeline;
+   compatible replacements keep pipelines, streams, arena and unwritten storage tails. Graphics binds the current
+   buffer per draw; compute mesh SRBs explicitly retarget. A simultaneous texture edge uses full resource rebinding;
+   failed retarget retains release/rebuild behavior. Existing redraw and retry generations remain authoritative.
+   `mesh_buffer_check.py --rounds retarget` proves these edges (R-236); physical device-fault recovery remains N3.6.
+   A replaced mesh is uploaded in the record that first draws it and the old buffer goes by
    `deleteLater` after that record, so no frame is drawn without one (D3 point 3's rule). Released with the content
    (choice A: content scope, as N3.1's targets and N4.a's textures), on the render thread, the QRhi alive. A content
    made again reports its meshes lost and draws nothing until the owner sends them again (D13 point 4's rule). Counted

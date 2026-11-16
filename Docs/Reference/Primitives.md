@@ -58,7 +58,7 @@ consumer below (the unconsumed ones on the primitives track)"). An N4 item whose
 background track therefore moves with that consumer; an unconsumed one (the N4.c, N4.h, N4.m high-potential items,
 and N4.d's wet-surface masks) runs on the primitives track. N6 runs only on the primitives track, native only.
 
-Current state and remaining gates are maintained in `Current_Plan.md` item 8b. The native core provides the host, composite, targets, mesh and buffer, compute and post-stage substrate; see `native/core/README.md` for its current services. Spectrum and Spline Curve use native routes; Bubble's native route remains dormant pending parity. N3.4's source audit and native repair proofs are complete, and its performance gate remains open (D17); no mode may consume it until the plan's N3.4 gate closes. `native/spike_p1` is evidence, never a shipped renderer.
+Current state and remaining gates are maintained in `Current_Plan.md` item 8b. The native core provides the host, composite, targets, mesh and buffer, compute and post-stage substrate; see `native/core/README.md` for its current services. Spectrum and Spline Curve use native routes; Bubble's native route remains dormant pending parity. N3.4's source audit and native repair proofs are complete; the remaining OpenGL defocus investigation is non-blocking (operator, 16 Nov 2026; D17/R-232). Each consumer proves its own parity, lifecycle and measured cost. `native/spike_p1` is evidence, never a shipped renderer.
 
 Step by step:
 
@@ -71,7 +71,7 @@ Step by step:
 | N1 portable shaders | in flight: D4 landed; N1.6 at ratchet 24 (the 3D modes left); N1.4 include remainder and N1.8 resolve-first open (the N1 boxes) | what makes existing primitives bakeable |
 | N2.1 to N2.8 | N2 services and Spectrum built; remaining work and rehearsals in the N2 boxes | host adapter, frame driver, packet reader, composite, timer, rehearsal path |
 | N2b: N4.a, N3.8 jobs, N5.7a/b/c | N4.a (D13), N5.7a and N5.7b (D7) built and proved 14 Nov; N3.8 jobs built (section 4); N5.7c leftovers open | fullscreen pass, job service, background layer, backdrop pyramid |
-| N3.1 to N3.9 | N3.1 to N3.3 proved (D14 to D16); N3.4 audited and proved, performance gate open (D17); N3.6, N3.7 and N3.9 open; there is no N3.5 in the plan (numbering skips from N3.4 to N3.6) | targets, meshes, compute, post stages, lifetime, orientation, display move |
+| N3.1 to N3.9 | N3.1 to N3.3 proved (D14 to D16); N3.4 audited/proved, remaining investigation non-blocking (D17); N3.6, N3.7 and N3.9 open; there is no N3.5 in the plan (numbering skips from N3.4 to N3.6) | targets, meshes, compute, post stages, lifetime, orientation, display move |
 | N4.b to N4.m | open (the N4 boxes) | ported with first consumer, or on the primitives track |
 | N6.1 to N6.6 | open (the N6 boxes) | never built, native only |
 
@@ -132,7 +132,7 @@ owners' pictures on both backends; showcase `native_core/n3_4/20261115_n34_showc
 the eight composites in `target.py:125-286` keep raw `gl_FragCoord` and are never converted (D5.2 replaces them;
 item 8b, N1.4's remainder). Notes: allocation rounds to 64 px; no `glBlitFramebuffer` resolves (about 0.5 ms at 1440p; Lessons line
 176-177); per-sample reads (`sampler2DMS`, `gl_SampleID`) are the N1.8 resolve-first set; QRhi's own depth resolve is wrong on both backends, so the core's nearest pass reads every sample, and `texelFetch` on a multisampled D32F works on both (D14 point 10, proved at N3.1 round 3); the multisampled velocity attachment is the only listed use of D5.3's formats service and natively it is two R16F attachments (`Current_Plan.md` item 8b, formats box; Research section 14); Waveform's 4 samples and the Oscilloscope's 1 are declared fixed requests of `scene3d.scene_samples` (D14 point 7); a 1-sample multisampled renderbuffer does not rasterise like a direct draw (Lessons line 178-179).
-Native status: targets are built (D14, N3.1); OIT, bloom and HDR are built and audited (N3.4, D17), with the performance gate open. No consumer until the plan’s N3.4 gate closes. Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e3).
+Native status: targets are built (D14, N3.1); OIT, bloom and HDR are built and audited (N3.4, D17). The remaining defocus investigation is non-blocking; consumer-specific proof remains required. Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e3).
 
 <a id="e4"></a>
 ### E4. Bloom chain
@@ -145,7 +145,7 @@ sampling, `Current_Plan.md` item 8b, N4.a's box). Test: `test_scene3d_dsa_target
 `tests/test_native_post_stages.py`; exact against Python with its source sampled LINEAR/CLAMP; Python's own source
 sampler, NEAREST with REPEAT, is a recorded defect, D17).
 Notes: photographs write 0 emitted light so endpoints stay exact (Lessons line 180-181).
-Native status: built and audited (N3.4, D17); performance gate open, with no consumer until the plan’s N3.4 gate closes. Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e4).
+Native status: built and audited (N3.4, D17); remaining investigation non-blocking, with consumer-specific proof required. Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e4).
 
 <a id="e5"></a>
 ### E5. Motion blur (velocity plus tile max)
@@ -336,7 +336,7 @@ layer": a mipped target and a defocus step, mips by QRhi's `generateMips`, every
 read level capped where levels come from odd sizes; D17) and N5.6. No class stated. Notes: the EB abyss near defocus measured 3.3 ms of its GPU budget (largely the
 near shells drawn into the layer; `Scene3D_Resources.md:529-533`); masks are per draw-buffer index (a masked emission
 index once dropped every circle); the RG16F circle storage was widened by N1.7.
-Native status: built and audited (N3.4, D17); performance gate open, with no consumer until the plan’s N3.4 gate closes. Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e4).
+Native status: built and audited (N3.4, D17); remaining investigation non-blocking, with consumer-specific proof required. Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e4).
 
 <a id="e20"></a>
 ### E20. Light shafts
