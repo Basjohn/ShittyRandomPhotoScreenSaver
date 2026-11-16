@@ -368,6 +368,74 @@ bool checkPassOutputs(ModePass &pass, const QList<TargetDeclaration> &targets, c
                       QString *error);
 bool checkGeometryPass(ModePass &pass, const QList<TargetDeclaration> &targets, QString *error);
 
+bool sameUniformInterface(QShaderDescription::UniformBlock left, QShaderDescription::UniformBlock right)
+{
+    // structName is the translated shader's instance identifier (_42, _100, ...), not the binding
+    // contract. Qt resolves that name from the active pack; separate compilations need not share it.
+    left.structName.clear();
+    right.structName.clear();
+    return left == right;
+}
+
+bool checkResourceDescriptors(const QShaderDescription &description, const QString &pass, QString *error)
+{
+    // QRhi has one SRB descriptor set, bound at set 0 on Vulkan, for graphics and compute alike.
+    const auto checkSet = [&](int set, const QByteArray &resource) {
+        if (set == 0)
+            return true;
+        *error = QStringLiteral("pass '%1': resource '%2' declares descriptor set %3 (only set 0 is supported)")
+                     .arg(pass, QString::fromLatin1(resource)).arg(set);
+        return false;
+    };
+    for (const auto &block : description.uniformBlocks()) {
+        if (!checkSet(block.descriptorSet, block.blockName))
+            return false;
+        if (block.blockName == kConventionsBlock) {
+            // Reflect the embedded production include, rather than maintaining a second member-layout schema.
+            // The capture consumes fragTexel, so its pack retains this block. Own the value, not a temporary-list pointer.
+            static const QShaderDescription::UniformBlock canonical = [] {
+                QShaderDescription::UniformBlock result;
+                const QShader shader = shaderFrom(scene_capture_frag_qsb, scene_capture_frag_qsb_size);
+                if (!shader.isValid())
+                    return result;
+                int found = 0;
+                for (const auto &candidate : shader.description().uniformBlocks()) {
+                    if (candidate.blockName == kConventionsBlock) {
+                        result = candidate;
+                        ++found;
+                    }
+                }
+                if (found != 1 || result.size != sizeof(ConventionsBlock)
+                    || result.binding != kConventionsBinding || result.descriptorSet != 0)
+                    return QShaderDescription::UniformBlock{};
+                return result;
+            }();
+            if (canonical.blockName != kConventionsBlock) {
+                *error = QStringLiteral("pass '%1': the embedded canonical SrpssConventions layout is unavailable").arg(pass);
+                return false;
+            }
+            if (!sameUniformInterface(block, canonical)) {
+                *error = QStringLiteral("pass '%1': SrpssConventions differs from the canonical layout/binding "
+                                        "(one fixed host block serves every draw stage)").arg(pass);
+                return false;
+            }
+        }
+    }
+    for (const auto &block : description.storageBlocks()) {
+        if (!checkSet(block.descriptorSet, block.blockName))
+            return false;
+    }
+    for (const auto &image : description.combinedImageSamplers()) {
+        if (!checkSet(image.descriptorSet, image.name))
+            return false;
+    }
+    for (const auto &image : description.storageImages()) {
+        if (!checkSet(image.descriptorSet, image.name))
+            return false;
+    }
+    return true;
+}
+
 // What a pass may declare (mode_content.h): one block of its own at any binding but 17, the conventions block at 17,
 // a vec2 at location 0 named v_uv or vUv, sampler2Ds each bound by name, one vec4 output (N3.1: on a scene target one
 // output per colour attachment at locations 0..n-1, and gl_FragDepth into a target with depth).
@@ -381,15 +449,12 @@ bool checkPass(ModePass &pass, const QList<TargetDeclaration> &targets, QString 
     if (pass.ownVertex())
         return checkGeometryPass(pass, targets, error); // N3.2: its own vertex stage
     const QShaderDescription d = pass.fragment.description();
+    if (!checkResourceDescriptors(d, name, error))
+        return false;
     QByteArray own;
     int ownBinding = -1;
     for (const QShaderDescription::UniformBlock &block : d.uniformBlocks()) {
         if (block.blockName == kConventionsBlock) {
-            if (block.binding != kConventionsBinding) {
-                *error = QStringLiteral("pass '%1': SrpssConventions is at binding %2, not %3").arg(name)
-                             .arg(block.binding).arg(kConventionsBinding);
-                return false;
-            }
             pass.conventions = true;
             continue;
         }
@@ -747,15 +812,6 @@ bool sameShaderDeclarations(const QList<T> &left, const QList<T> &right)
     return std::is_permutation(left.cbegin(), left.cend(), right.cbegin(), right.cend());
 }
 
-bool sameUniformInterface(QShaderDescription::UniformBlock left, QShaderDescription::UniformBlock right)
-{
-    // structName is the translated shader's instance identifier (_42, _100, ...), not the binding
-    // contract. Qt resolves that name from the active pack; separate compilations need not share it.
-    left.structName.clear();
-    right.structName.clear();
-    return left == right;
-}
-
 bool sameStorageInterface(QShaderDescription::StorageBlock left, QShaderDescription::StorageBlock right)
 {
     // The block name identifies the resource; its GLSL instance alias is local to each shader. QRhi binds
@@ -845,6 +901,8 @@ bool checkGeometryPass(ModePass &pass, const QList<TargetDeclaration> &targets, 
     }
     const QShaderDescription f = pass.fragment.description();
     const QShaderDescription v = pass.vertex.description();
+    if (!checkResourceDescriptors(v, name, error) || !checkResourceDescriptors(f, name, error))
+        return false;
     if (const char *difference = sharedStageInterfaceDifference(v, f)) {
         *error = QStringLiteral("pass '%1': its vertex and fragment stages declare different shared %2 "
                                 "(one resource layout serves both)").arg(name, QLatin1String(difference));
@@ -873,11 +931,6 @@ bool checkGeometryPass(ModePass &pass, const QList<TargetDeclaration> &targets, 
     for (const Stage &s : stages) {
         for (const QShaderDescription::UniformBlock &block : s.d->uniformBlocks()) {
             if (block.blockName == kConventionsBlock) {
-                if (block.binding != kConventionsBinding) {
-                    *error = QStringLiteral("pass '%1': SrpssConventions is at binding %2, not %3").arg(name)
-                                 .arg(block.binding).arg(kConventionsBinding);
-                    return false;
-                }
                 pass.conventionsStages |= s.flag;
                 pass.conventions = true;
                 continue;
@@ -1294,6 +1347,8 @@ bool checkComputePass(ModePass &pass, const ModeProgram &program, QString *error
         return false;
     }
     const QShaderDescription d = pass.computeShader.description();
+    if (!checkResourceDescriptors(d, name, error))
+        return false;
     QByteArray own;
     int ownBinding = -1;
     for (const QShaderDescription::UniformBlock &block : d.uniformBlocks()) {

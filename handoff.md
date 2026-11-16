@@ -13,6 +13,7 @@ Never rewrite main or force-push.
 - [x] Sorted-pack resource/layout admission and live SSBO aliases proved on both backends (R-234).
 - [x] Cross-stage shared-resource admission proved on official build and both backends (R-235).
 - [ ] N3.2 L2 old churn/tail-loss reproduced and retarget source reviewed; official build/native proof pending (R-236).
+- [ ] Reserved conventions/set-zero admission reproduced and source reviewed; official build/native proof pending (R-237).
 - [x] Texture-size control and real wrong-mip negative proved; size derivation alone did not reproduce excess.
 - [x] Current matched backend check confirms this GL excess absent on Vulkan (R-232).
 - [ ] Non-blocking deeper N3.4 investigation by another agent; retain R-232's stats, failed avenues and hypotheses.

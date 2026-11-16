@@ -487,6 +487,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
     - [ ] Reserved resource admission follow-up: reproduce malformed stage-only SrpssConventions layouts and
       unsupported descriptor sets before any broader canonical-layout check; shared-stage equality alone cannot
       establish these reserved-resource contracts.
+      - [x] Old-module actual-reflection proof and all-owner repair source reviewed (R-237).
+      - [ ] Official build; focused rejection/valid controls and shipped fullscreen/geometry/compute native regressions.
     - [x] L6 native/Python matrix and packet oracles proved (checkpoint audit 4).
 - [x] N3.3 Compute passes: proved and audited (D16).
 - [ ] N3.4 Transparency and post-processing (D17): source/proof complete; remaining investigation is non-blocking

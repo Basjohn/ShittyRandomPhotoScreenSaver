@@ -1448,8 +1448,11 @@ of 4 over the item quad's `aPosition`, the instance as the seed, culled to `vec4
    must agree under the same deep predicates before a packing layout is selected. Stage-only resources remain
    legal. Geometry storage is readonly in each declaring stage, and distinct storage resources require distinct
    bindings. R-235 retains eight old-module rejection falsifiers, sixteen valid controls, 99 focused passes and
-   211 live shared/stage-only/alias guards per backend on official `b1451eb11`; canonical reserved-block shape is a separate
-   admission contract, not implied by equality between stages.
+   211 live shared/stage-only/alias guards per backend on official `b1451eb11`.
+   Reserved conventions additionally match the canonical embedded capture shader's reflected include, excluding
+   only its pack-local alias. Every supported reflected uniform/storage/sampler/image resource uses descriptor set0
+   in geometry, fullscreen and compute programs: QRhi provides one set-zero SRB layout. Compute still has no
+   conventions block. These absolute admission checks are distinct from stage equality; R-237 owns their proof.
    The indirect draw itself (`drawIndirect`; `drawIndexedIndirect` waits for indexed meshes) is built here
    with commands from a record field or from a batched draw's table (a `Dynamic` `IndirectBuffer`); compute-written
    commands are N3.3's (`StorageBuffer | IndirectBuffer`, `Static`), and the populations' 1:1 port of
