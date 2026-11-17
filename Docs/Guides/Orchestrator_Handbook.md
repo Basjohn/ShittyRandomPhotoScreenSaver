@@ -149,7 +149,10 @@ From the main checkout, on `main`:
     .venv/Scripts/python tools/agent_handover.py --retire agent-<id>
 
 `--retire` copies the worktree's whole evidence tree into the main checkout (never overwriting), refuses an unmerged
-branch, uncommitted work or a live process, and only then removes the worktree and the branch. Never remove an agent
+branch, uncommitted work or a live process, and only then removes the worktree and the branch. Before recording a branch as merged with `git merge -s ours`, run `git log --oneline main..<branch>`: it must list only
+that branch's own commits, whose content is already on main. If it lists another branch's commits (an agent merged a
+work-in-progress branch), never use `-s ours`: git would then treat those commits as merged and silently drop them
+from the later real merge. Never remove an agent
 worktree with a bare `git worktree remove --force`: its evidence is untracked and is deleted for good (the 1C.4
 comparison sheets were lost that way on 12 Nov). Trim the copied evidence to what the report cites afterwards.
 `git pull --rebase=merges` can fail on a long merge-commit subject ("Filename too long" on `refs/rewritten/...`):

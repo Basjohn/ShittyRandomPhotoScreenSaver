@@ -72,6 +72,11 @@ four layers, scaled as in section 3.
 | Simulation, settings, record packing (logic) | L, plus the mode's logic lock (Bubble: BTF section 24); P; the mode's response tools as support | music-response traces alone |
 | Scheduling, threads, pacing | T; L and P unchanged | any offline replay |
 
+**Every run states what it judged:** the number of frames or inputs judged against the number the material holds,
+per half. A run that judged fewer than expected is a failed proof, not a pass: Bubble's first long run judged 337 of
+5,503 inputs because the replay switched modes at 4.2 s. **A bound is measured on the acceptance material**, never on
+the smoke clip: Bubble's scatter bound, measured as 34 on the 5.5 s clip, reached 45 on the long takes.
+
 **Gates in general.** Gates run unattended in the background, with references and native runs in separate processes
 and several takes at once. A full gate runs at acceptance and once per batch of optimisations, never once per
 candidate.
