@@ -587,7 +587,19 @@ the feature (D3D11 is not stated).
   Bubble"). Owner rule (a) passes on the 5.5 s replay and the four 60 s recorded takes under D12's Bubble scatter. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
   eliminated suspicions and evidence; the diagnostics tools are `tools/visualizer_replay/bubble_native_diagnostics.py`
   (`Docs/Guides/Native_Bubble_Diagnostics.md`). Follow the Native Port Playbook; no further tolerance widening.
-  Order: the checkpoint audit, the 2560 x 1440 cost, the D1 rehearsal.
+  Order: the checkpoint audit, layer T, the 2560 x 1440 cost, the D1 rehearsal. Proved so far
+  (`Docs/Guides/Native_Parity_And_Timing_Proof.md` layers): P on OpenGL over the four 60 s takes; P on Vulkan over the
+  5.5 s replay only; L indirectly (the simulation is untouched and 21,107 matching frames); C at 4K. Not proved: T.
+  - [ ] Layer T, native Bubble on Vulkan and on native OpenGL. Use `tools/visualizer_live_check.py --mode bubble`,
+    invisible, on Display 1 with recorded music, against the pre-flip Bubble row (`tools/preflip_pack.py --compare`):
+    frame-time median and p90, late frames and Tick dt gaps. Add `tools/frame_trace_cadence.py` on its frame trace
+    (repeated draws, publication cadence) and `bubble_judder.py` on recorded music. Accept at p90 no worse than the
+    baseline beyond its stated spread, no new late frames in steady state, and judder unchanged. Display 1 must be on:
+    defer if it is off, never use Display 0.
+  - [ ] Rule (b) over the four 60 s takes, once the owner replay gains `--api vulkan` (the fast-proof box). Today
+    rule (b) has run over the 5.5 s replay's 684 sampled frames only.
+  - [ ] Layer L directly: the per-frame packed record byte-compared with the values the Python renderer uses, over the
+    four takes (the fast-proof box's L tool; `engine_worker_gate.py` is the precedent).
   - [ ] Checkpoint audit (Opus Medium) of the landing delta `git diff 4b17eeee8 7608b6c7b`: `bubble_check.py`, the
     narrowed isolation rule and group cap in `tools/pixel_tolerance.py`, the re-registration, the cost round. Merged
     pre-audit on 17 Nov at 99 % weekly usage.
