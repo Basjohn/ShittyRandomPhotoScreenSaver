@@ -54,6 +54,11 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
    proof's coverage selection has passed its method proof on Bubble, then Extruded Bubble (N5.6), Neon Lake (N5.5),
    Extruded Spectrum and Sphere (N5.3).
 
+5. Everything else in this plan is backlog: operator defects (Item 1, sections 1B, 1C, 1D, 1A), hygiene, Studio and
+   later mode work. A slot takes from it only when no native step above can use that slot (operator, 15 Nov:
+   native core first in every slot). Within a backlog section, its own internal order holds. No other heading in
+   this plan sets a global order.
+
 **Next, by slot.**
 - [ ] High: the Oscilloscope port (step 4); N3.6 after it. Defects between N steps: 1D.6 (design note first), then
   1C.10. N2.5's and N2.9's leftovers ride with the next fitting dispatch.
@@ -62,7 +67,7 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
   frame) under the Medium slot's review.
 - [ ] Audit each merge at its risk (Opus Medium); the Bubble landing delta's audit is step 1's first box.
 
-### Item 0. Operator defects of 11 Nov: section 1B, in its own order, ahead of everything below
+### Item 0. Operator defects of 11 Nov: section 1B (backlog; its own internal order; see Order point 5)
 
 ### Item 1. Operator-reported defects first
 
@@ -778,7 +783,12 @@ the feature (D3D11 is not stated).
   `Docs/Guides/Native_Parity_And_Timing_Proof.md` for what it touches (its change-type table).
   - [ ] Measure per-pass GPU time at 4K on both backends first. The port's figures put nearly all the cost in the main
     `bubble` pass (about 3 ms at full 4K area; native OpenGL about 5 % slower than Python).
+  - [ ] Measure with decoration off, representative decoration on, and high-density, high-glow decoration on, at the
+    canonical card and at extreme wide, tall and expanded sizes. Include R-170's density growth: a larger card draws
+    up to 72 live heroes (110 with draining trails), and the hero loops run per fragment. Confirm that decoration off
+    really skips the ambient target's draws.
   - [ ] Byte-identical candidates first. Anything that cannot hold byte identity goes to the operator as tier 2.
+  - [ ] Optimise only a measured offender. If no material cost is found, close the item without redesigning Bubble.
   - [ ] Extruded Bubble gets the same treatment after N5.6, with its own three-clip before-state.
 
 **N5, background track (one High slot; transitions grouped by what they share; needs are in the matrix,
@@ -891,9 +901,9 @@ Port-readiness rules bind all new GPU code now (the backend decision). Expanded 
   parameters alone. Presets are authored content: the work is new EB capabilities, plus authoring that preset with
   them. The lead judges it on showcase WebPs over bright and dark wallpapers.
 
-## 1B. Operator defects and requests (11 Nov; run first, in this order)
+## 1B. Operator defects and requests (11 Nov; backlog under section 1's Order, in this internal order)
 
-Live checklist: every open step is its own box; retain only brief useful native-core completion references,
+Live checklist: every open step is its own box; landed boxes are deleted at merge; keep
 `[~]` validation steps and open side defects. Order: the Edit/exit defects, the Studio work, the fullscreen
 overlay contract, window material and corners, presets last. Every fix reproduces its failure first; the lead
 judges visual items on rendered pixels and audits each branch against the pre-fix code before merging.
@@ -1482,7 +1492,7 @@ boxes (operator, 11 Nov evening). Closing before opening (operator, 12 Nov): a s
 report is unreviewed or unmerged, and a dispatch is sized to finish inside a usage window. The native core's state and
 tracks are in item 8b ("Order").
 
-Live checklist: every open step is its own box; retain only brief useful native-core completion references, `[~]`
+Live checklist: every open step is its own box; landed boxes are deleted at merge; keep `[~]`
 validation steps and open side defects. Landed slices live in `Docs/Reference/Architecture_Checklist.md` (AC-01 to
 AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-17 to AC-23), `Docs/Reference/Benchmarks.md`
 ("Recorded sessions") and the Historical Bugs records.
@@ -1683,7 +1693,7 @@ AC-12, A-xx audit ids), `Docs/Audits/Settings_SSOT_Audit_2026-11-07.md` (AC-17 t
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
-Live checklist: every open step is its own box; retain only brief useful native-core completion references, `[~]`
+Live checklist: every open step is its own box; landed boxes are deleted at merge; keep `[~]`
 validation steps and open side defects.
 
 **Slow startup (operator, 6 Nov 10:30; owners fixed, awaiting the lead's cold start)**
@@ -1940,7 +1950,7 @@ not establish installed ACLs; the frozen run of 1B.14 covers the artifact, not a
 Kept as the target of the documents that cite "Current_Plan §6". The shared 3D primitives (S3D-1 to S3D-7) are
 stages N3, N4 and N6 of item 8b, where the old ids are mapped; there is nothing else here.
 
-## 7. Visualizer modes (one at a time, in this order)
+## 7. Visualizer modes (backlog; when admitted, one at a time in this order)
 
 ### 7.0 Method: lab first, then production
 
@@ -2336,41 +2346,12 @@ stays a separate hard gate.
 - [ ] Prove the character/world foundations S19-S27 listed there (asset bake, skinning, animation graph, secondary
   motion, felt/fuzz, world-view projection, sphere world/starscape) plus S3D-6.
 
-## 8. Accepted Bubble: bounded performance gate and deferred control audit
+## 8. Accepted Bubble: open reviews and side defect
 
-The operator has **accepted the improved original Bubble normal-drift musical authority**: that task is closed, do not
-reopen it as unfinished work or restore the pre-experiment drift response (approved motion, ambient, direction and
-occlusion rules: `Docs/Guardrails/Bubble_Temporal_Fidelity.md` section 23). The performance gate below is
-**explicitly admitted now** as a short exception to the section 7 mode sequence. The separate scalar-to-range audit
-remains deferred until explicitly reprioritized (it is folded into section 9's adapters).
-
-**Bubble post-ambient performance / exact-output check (short and bounded)**
-
-Inspect hidden costs from the shared hero big-over-small shader loop (including decoration OFF), the opt-in
-2048-capped ambient FBO, large glow sprite fill, and up-to-110-circle masking.
-
-- [ ] Compare the **original handoff** to the **accepted Slice 13** under matched configuration for
-  resource/performance attribution, then freeze **Slice 13 itself** as the behavioral and rendered-output oracle for
-  any proposed optimization: original-vs-Slice-13 pixel bytes are *not* expected to match where the operator
-  intentionally changed layering, motion or glow.
-- [ ] Measure decoration OFF, representative decoration ON, and high-density/high-glow decoration ON, using matched
-  real-music replay and canonical plus extreme-wide/tall/expanded sizes, with multiple repetitions on the operator's
-  native Qt Quick/OpenGL runtime.
-  - [ ] Report Bubble GPU/render p50/p95, CPU logical work, FPS/frame-pacing gaps, resource allocation/release and
-    other-display contention.
-  - [ ] Check that OFF really avoids the extra FBO, sprite and mask draws; the modified shared hero shader still
-    warrants timing even with decorations OFF.
-- [ ] Include the R-170 density growth: a card larger than the canonical one now draws up to 72 live heroes (up to 110
-  with draining trails) instead of its authored ~31-68, and the hero loops are per fragment.
-- [ ] For any **actual optimization**, compare deterministic logical packets/bit patterns exactly, and compare final
-  captured RGBA bytes frame-by-frame on the **same GPU, driver, dimensions and fixed replay** when that capture path is
-  deterministic.
-  - [ ] Where bit identity is unavailable, disclose why and use exact geometry/response checks plus recorded
-    pixel-diff and temporal parity evidence.
-  - [ ] Do not claim byte-identical *performance*: throughput, GPU timing and latency require measurements.
-- [ ] If cost is material, optimize only the measured offender and repeat the parity + native performance gate;
-  preserve visual quality, all approved sinking/reversed-flow presets, reactivity/latency, BTF and mutable presets.
-- [ ] If no material cost is measured, **close the item without redesigning Bubble**. No generic "lean out" campaign.
+The operator accepted Bubble's drift, motion, ambient, direction and occlusion rules
+(`Docs/Guardrails/Bubble_Temporal_Fidelity.md` section 23); do not reopen them. Bubble's performance work is the
+native "Bubble GPU optimisation" box in item 8b (section 1's Order, step 3); the earlier Python-side gate here is
+superseded, because the Python renderer is deleted at N5.2h.
 
 **R-170 lead review**
 
