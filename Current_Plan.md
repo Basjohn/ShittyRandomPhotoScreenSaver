@@ -590,12 +590,8 @@ the feature (D3D11 is not stated).
   Order: the checkpoint audit, layer T, the 2560 x 1440 cost, the D1 rehearsal. Proved so far
   (`Docs/Guides/Native_Parity_And_Timing_Proof.md` layers): P on OpenGL over the four 60 s takes; P on Vulkan over the
   5.5 s replay only; L indirectly (the simulation is untouched and 21,107 matching frames); C at 4K. Not proved: T.
-  - [ ] Layer T, native Bubble on Vulkan and on native OpenGL. Use `tools/visualizer_live_check.py --mode bubble`,
-    invisible, on Display 1 with recorded music, against the pre-flip Bubble row (`tools/preflip_pack.py --compare`):
-    frame-time median and p90, late frames and Tick dt gaps. Add `tools/frame_trace_cadence.py` on its frame trace
-    (repeated draws, publication cadence) and `bubble_judder.py` on recorded music. Accept at p90 no worse than the
-    baseline beyond its stated spread, no new late frames in steady state, and judder unchanged. Display 1 must be on:
-    defer if it is off, never use Display 0.
+  - [ ] Layer T on Vulkan and on native OpenGL, as the guide's section 4 sets it (Bubble's own T tools: its
+    diagnostics guide). Display 1 must be on; defer if it is off, never Display 0.
   - [ ] Rule (b) over the four 60 s takes, once the owner replay gains `--api vulkan` (the fast-proof box). Today
     rule (b) has run over the 5.5 s replay's 684 sampled frames only.
   - [ ] Layer L directly: the per-frame packed record byte-compared with the values the Python renderer uses, over the
@@ -673,43 +669,18 @@ the feature (D3D11 is not stated).
 - [ ] Non-blocking (does not hold the Bubble port): prove Bubble's rule-(a) scatter is the two-compiler case directly.
   Render Python's Bubble with the GLSL the qsb pack emits (the pack's GLSL variants in place of the composed source)
   over the `replay` recipe and show the steady residual collapses (from 2,430 one-level pixels, worst 34 a frame).
-- [ ] Bubble optimisation proof gap (before the first Bubble optimisation; `Docs/Guides/Native_Bubble_Diagnostics.md`
-  "Optimisation gate"): the standard proof is three full 60 s recorded takes (quiet intro to loud end, sustained
-  heavy, soft acoustic; `owner_render_parity.py --recording`), native-before against native-after hashes per backend.
-  Still missing: a native-only mode (render only the native path; compare with the port's kept hashes, no Python
-  re-render), a `--api opengl|vulkan` choice (the owner replay draws OpenGL only), and a hash-only compare mode (a
-  before directory against an after directory, all-frame hashes, images stored only for differing frames), with a
-  negative control that a one-ulp shader change is detected.
-- [ ] Fast long-clip proof (method: `Docs/Guides/Native_Parity_And_Timing_Proof.md`; lead design, 17 Nov; build after Bubble closes, before N5.4 Waveform and N5.6 Extruded
-  Bubble). The operator: Waveform has four reaction modes and cannot take 7 to 8 hours of rendering and comparing
-  per proof, and no single tool (the waveform music-response comparison included) is enough on its own. The proof
-  splits into two layers, so that time goes where the risk is.
-  - [ ] Profile the owner replay first: where a 60 s take's 17 to 25 minutes go (Python reference composition,
-    native draw, readback, hashing, PNG/compression, the scratch spill). Measure before designing around guesses.
-  - [ ] Layer L, logic and reactivity, CPU only, every frame of every take and every reaction mode. A port does not
-    change the simulation. Reactivity can differ only if the values the native core receives differ from the values
-    the Python renderer uses. Prove that: the packed record and settings per frame, byte-identical between the two
-    paths. No rendering at all; this should run faster than real time. An optimisation that touches logic adds BTF
-    section 24's byte-parity lock and the music-response traces (`waveform_music_response.py` and the per-mode tools)
-    as supporting evidence, never as the only proof.
-  - [ ] Layer P, pixels, hashes not images. Run every frame's draw (GPU history such as Waveform's ribbons, rings and
-    compute state needs the full sequence), but read back and hash. Store images only for failing frames. Cache the
-    Python reference hashes once per take, reaction mode and placement: the Python renderers are frozen until N5.2h
-    deletes them, so their references never need re-rendering. Each port run then renders only the native path
-    against the cache.
-  - [ ] Coverage, not repetition. Layer L's records for every take and mode are cheap, so use them to choose Layer
-    P's windows. For each reaction mode: one full 60 s take, plus short windows from the other takes covering what
-    the full take missed. The windows cover the extremes of each record field, the cold start, the mode switch and
-    fades, the loudest and quietest seconds, and the reaction-mode changes. Each window starts with a warm-up long
-    enough to fill the mode's GPU history; derive the length from the mode's history depth and state it. Show that
-    the chosen set covers every record field's observed range; it gates acceptance.
-  - [ ] Parallel and unattended. The cached Python references and the native runs run in separate processes, several
-    takes at once on the hidden host. Long gates run in the background (lead-started, no load, Display 1 untouched),
-    so no agent sits waiting on them. The 5.5 s replay stays the per-change smoke check during development; the full
-    gate runs at acceptance and once per batch of optimisations, never per candidate.
-  - [ ] Proof of the method itself: on Bubble, the coverage-selected set must catch every failure the full four-take
-    run found (input 22, the two offer fade frames, a one-level shift control, a one-ulp shader change). If it misses
-    any, the coverage rule is wrong; fix it before Waveform relies on it.
+- [ ] Bubble optimisation proof gap: needs the fast long-clip proof's layer P tool (the box below) before the
+  first Bubble optimisation; the rules are the guide's.
+- [ ] Build the fast long-clip proof (method and rules: `Docs/Guides/Native_Parity_And_Timing_Proof.md`, its
+  section 7; after Bubble closes, before N5.4 Waveform and N5.6 Extruded Bubble). Steps, each with a test:
+  - [ ] Profile the owner replay's 17 to 25 minutes per 60 s take before designing around guesses.
+  - [ ] Layer L: the per-frame record compared byte for byte between paths, CPU only (`engine_worker_gate.py` is the
+    precedent).
+  - [ ] Layer P: cached Python references; a native-only, hash-only compare with `--api opengl|vulkan`; every failing
+    frame recorded (not the first eight); progress written during a run.
+  - [ ] Coverage selection with its coverage report (guide section 3), warm-up per mode (guide section 5).
+  - [ ] Method proof on Bubble: the selected set catches input 22, the two offer fade frames, a one-level shift and a
+    one-ulp shader change.
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).
@@ -792,15 +763,11 @@ the feature (D3D11 is not stated).
   - Tool gaps found (fix with or before this box): no Vulkan path in the owner replay (no rule (b) or Vulkan hashes);
     output only at the end of a run (a killed run loses everything); about 3 GB per run; 28 min per one-variant run.
 - [ ] Bubble GPU optimisation, after N5.1 lands (operator, 17 Nov: Bubble about 50 % GPU at 4K and Extruded Bubble
-  about 55 %, on a stale build; "all guarded gains are valuable"). Under the optimisation gate in
-  `Docs/Guides/Native_Bubble_Diagnostics.md`:
-  - [ ] Measure first: per-pass GPU time at 4K on OpenGL and Vulkan, with the GPU state and displays recorded, against the
-    pre-flip baseline (`tools/preflip_pack.py --compare`), to find which passes carry the cost.
-  - [ ] Byte-identical candidates first (culling, fewer or skipped empty passes, smaller targets where the output is
-    unchanged, buffer reuse, state changes): each one's three-clip (60 s each, native path only) frame hashes identical before and after, per backend,
-    and logic/reactivity unchanged (`bubble_parity.py`, BTF section 24).
-  - [ ] Any candidate that cannot hold byte parity (reordered float math, half-float, merged passes) is a tier-2 change:
-    shared tolerance plus the operator's sign-off, never a silent pass.
+  about 55 %, on a stale build; "all guarded gains are valuable"). Every candidate passes
+  `Docs/Guides/Native_Parity_And_Timing_Proof.md` for what it touches (its change-type table).
+  - [ ] Measure per-pass GPU time at 4K on both backends first. The port's figures put nearly all the cost in the main
+    `bubble` pass (about 3 ms at full 4K area; native OpenGL about 5 % slower than Python).
+  - [ ] Byte-identical candidates first. Anything that cannot hold byte identity goes to the operator as tier 2.
   - [ ] Extruded Bubble gets the same treatment after N5.6, with its own three-clip before-state.
 
 **N5, background track (one High slot; transitions grouped by what they share; needs are in the matrix,

@@ -64,6 +64,14 @@ four layers, scaled as in section 3.
 - **A change that cannot hold byte identity** (reordered float math, half floats, merged passes) is tier 2: the shared
   tolerance plus the operator's sign-off, with the difference measured and shown.
 
+**Which layers an optimisation needs, by what it touches:**
+
+| Change touches | Required | Not sufficient alone |
+|---|---|---|
+| Shaders, passes, targets, buffers, culling (render only) | P on every frame, native before vs after, per backend; C; T when uploads or synchronisation change | coverage sampling |
+| Simulation, settings, record packing (logic) | L, plus the mode's logic lock (Bubble: BTF section 24); P; the mode's response tools as support | music-response traces alone |
+| Scheduling, threads, pacing | T; L and P unchanged | any offline replay |
+
 **Gates in general.** Gates run unattended in the background, with references and native runs in separate processes
 and several takes at once. A full gate runs at acceptance and once per batch of optimisations, never once per
 candidate.
