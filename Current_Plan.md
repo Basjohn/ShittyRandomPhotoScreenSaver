@@ -41,25 +41,29 @@ Live checklist: every open step is its own box; landed boxes are deleted at merg
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
-**Active native focus:** Bubble parity after proved mesh-retarget and reserved-resource admission repairs. N3.4 deeper
-investigation remains a non-blocking follow-up for another agent. Then the admitted ports and side defects below; keep the interim
-holds in `handoff.md`. Independent native work may overlap under the operator's request for a Sol 6.1 High agent;
-review every slice before landing.
+**State (17 Nov):** Spectrum, Spline Curve and Bubble are native and accepted (operator), and Bubble is offered on
+Vulkan. ABI 25; N3.4 audited, its defocus investigation non-blocking. Every port and optimisation is proved by one
+method, `Docs/Guides/Native_Parity_And_Timing_Proof.md` (layers L logic, P pixels, T timing, C cost); per-mode tools
+are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnostics.md`).
 
-**Now:** ABI 25 native repairs and source audit are proved. P1 desktop validation remains at N0.6 and N3.4 defocus
-performance remains open. D17 owns the detailed
-diagnosis; available ambient GPU activity is authorised when conditions are recorded. Heavy ports and the flip remain
-held by the interim route in `handoff.md`.
+**Order (lead and operator, 17 Nov):**
+1. Close Bubble (the N5.1 Bubble box, in its order): its checkpoint audit; build the fast long-clip proof's layer L and
+   layer P tools (the "Build the fast long-clip proof" box); then Bubble's layer L directly, layer T on both backends,
+   rule (b) over the four takes, the 2560 x 1440 cost, and the D1 rehearsal.
+2. The scene-fade double-rounding fix (the "Spectrum and Spline Curve long-take residuals" box). Then rerun Bubble's
+   tracked exceptions and the Spectrum and Spline Curve control.
+3. Bubble GPU optimisation under the guide (its box), alongside step 4.
+4. Ports, each under the guide from its first brief: the Oscilloscope (N5.1), then Waveform (N5.4) once the fast
+   proof's coverage selection has passed its method proof on Bubble, then Extruded Bubble (N5.6), Neon Lake (N5.5),
+   Extruded Spectrum and Sphere (N5.3).
 
-**Next, by slot.** Picks come from the native ladder, active defects and side defects; operator requests are done
-at the size asked. The interim holds are in `handoff.md`.
-- [ ] High: resolve Bubble parity with unchanged acceptance bounds;
-  N3.6 waits for its interim hold to lift.
-  Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers ride
-  with the next fitting dispatch.
-- [ ] Medium: the N5.1 Bubble box's last steps (its checkpoint audit, the 2560 x 1440 cost, the lead's D1 rehearsal),
-  then the Spectrum and Spline Curve scene-fade box, then the Oscilloscope.
-- [ ] Audit each merge at the appropriate risk; N3.4's source audit and native repair proofs are complete.
+**Next, by slot.**
+- [ ] High: the Oscilloscope port (step 4); N3.6 after it. Defects between N steps: 1D.6 (design note first), then
+  1C.10. N2.5's and N2.9's leftovers ride with the next fitting dispatch.
+- [ ] Medium: step 1 (closing Bubble), then step 2, then step 3.
+- [ ] Sonnet: the fast-proof tools' mechanical parts (replay profiling, hash-only output, recording every failing
+  frame) under the Medium slot's review.
+- [ ] Audit each merge at its risk (Opus Medium); the Bubble landing delta's audit is step 1's first box.
 
 ### Item 0. Operator defects of 11 Nov: section 1B, in its own order, ahead of everything below
 
@@ -587,7 +591,8 @@ the feature (D3D11 is not stated).
   Bubble"). Owner rule (a) passes on the 5.5 s replay and the four 60 s recorded takes under D12's Bubble scatter. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
   eliminated suspicions and evidence; the diagnostics tools are `tools/visualizer_replay/bubble_native_diagnostics.py`
   (`Docs/Guides/Native_Bubble_Diagnostics.md`). Follow the Native Port Playbook; no further tolerance widening.
-  Order: the checkpoint audit, layer T, the 2560 x 1440 cost, the D1 rehearsal. Proved so far
+  Order: the checkpoint audit; the fast proof's L and P tools (their own box); layer L directly; layer T; rule (b)
+  over the four takes; the 2560 x 1440 cost; the D1 rehearsal. Proved so far
   (`Docs/Guides/Native_Parity_And_Timing_Proof.md` layers): P on OpenGL over the four 60 s takes; P on Vulkan over the
   5.5 s replay only; L indirectly (the simulation is untouched and 21,107 matching frames); C at 4K. Not proved: T.
   - [ ] Layer T on Vulkan and on native OpenGL, as the guide's section 4 sets it (Bubble's own T tools: its
@@ -672,7 +677,7 @@ the feature (D3D11 is not stated).
 - [ ] Bubble optimisation proof gap: needs the fast long-clip proof's layer P tool (the box below) before the
   first Bubble optimisation; the rules are the guide's.
 - [ ] Build the fast long-clip proof (method and rules: `Docs/Guides/Native_Parity_And_Timing_Proof.md`, its
-  section 7; after Bubble closes, before N5.4 Waveform and N5.6 Extruded Bubble). Steps, each with a test:
+  section 7; step 1 of the order: Bubble's layer L and long-take rule (b) need it, and so do every later port). Steps, each with a test:
   - [ ] Profile the owner replay's 17 to 25 minutes per 60 s take before designing around guesses.
   - [ ] Layer L: the per-frame record compared byte for byte between paths, CPU only (`engine_worker_gate.py` is the
     precedent).

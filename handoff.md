@@ -18,17 +18,8 @@ Never rewrite main or force-push.
 - [x] Current matched backend check confirms this GL excess absent on Vulkan (R-232).
 - [ ] Non-blocking deeper N3.4 investigation by another agent; retain R-232's stats, failed avenues and hypotheses.
   No production barrier or tracking exception without proof; no consumer hold from this investigation (operator, 16 Nov).
-- [ ] Finish N5.1's unlanded shared mask-AA candidate (`widgets/spotify_visualizer/shaders/bubble_ambient_mask.vert`
-  and `.vert.qsb`); focused old-shader negative and candidate tests are proved, full replay/fringe acceptance pending.
-  Resume: `Docs/Future_Work/Native_Bubble_Parity_Investigation.md`; evidence
-  `.artifacts/evidence/native_core/n5_1_bubble/20261116_mask_support_candidate/` and
-  `20261116_components_346_v2_c53/` (69 guarded checks). Archive/fringe helper:
-  `.artifacts/evidence/native_core/n5_1_bubble/20261116_reference_archive_prep/archive_reference.py`;
-  complete provenance audit, then old-reference and candidate archives serially. Official module remains ABI25 c53e3fe27.
-- [ ] Finish reusable diagnostics at `tools/visualizer_replay/bubble_native_diagnostics.py` and private
-  `_bubble_native_*.py` helpers; `tests/test_bubble_native_diagnostics.py` owns CPU guards. Receipt-provenance audit
-  and durable tool documentation are pending; keep frozen evidence/helpers intact. Then continue Bubble parity,
-  with unchanged bounds, before Oscilloscope.
+- [x] N5.1 Bubble landed and is offered on Vulkan (17 Nov). What remains, and the order of all native work, is
+  `Current_Plan.md` section 1, "Order"; the proof method is `Docs/Guides/Native_Parity_And_Timing_Proof.md`.
 - [ ] Keep N3.6, heavy ports N5.3–N5.6, the Vulkan flip and Python-renderer removal held for the lead.
 - [ ] Keep quiet-GPU `stream_ring` performance admission separate from its passing functional proof before a
   Waveform consumer.
