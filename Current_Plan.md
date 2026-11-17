@@ -582,26 +582,19 @@ the feature (D3D11 is not stated).
   item as Spectrum's; both close with N5.8.
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
-  Registered on the route and offered on Vulkan; the 5.5 s owner replay passes rule (a) under D12's Bubble scatter.
-  `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics, eliminated suspicions and
-  evidence. Follow the Native Port Playbook; no further tolerance widening.
+  Dormant on the route: not in `GENERIC_MODE_SETTINGS`, its descriptor offers OpenGL only (D10), until rule (b) passes
+  and the Register box below re-applies it. Owner rule (a) passes on the 5.5 s replay and the four 60 s recorded takes
+  under D12's Bubble scatter. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
+  eliminated suspicions and evidence; the diagnostics tools are `tools/visualizer_replay/bubble_native_diagnostics.py`
+  (`Docs/Guides/Native_Bubble_Diagnostics.md`). Follow the Native Port Playbook; no further tolerance widening.
+  Order: rule (b), Register, the offers, cost per pass, docs, the D1 rehearsal.
   - [x] Class-word upload and portable unsigned-vector admission proved on both APIs; unchanged wire record (R-238).
-  - [ ] Retain and document the replay, fade-input, attachment and reference-fringe diagnostics as reusable repository
-    tools for correctness and later optimisation, preserving provenance, negative controls and distinct verdicts.
-    Current promotion: `tools/visualizer_replay/bubble_native_diagnostics.py`, private `_bubble_native_*.py` helpers
-    and `tests/test_bubble_native_diagnostics.py`; finish the independent receipt-provenance audit before landing.
   - [ ] Non-blocking contract follow-up, now with a measured case: non-unit inherited scene opacity. During the cold
     reveal (scene fade 0.8648 at input 0 to 1.0 by input 30, content fade 1, identical on both paths) Python folds it
     into the shader fade while native composites it afterward; the operator-accepted input-22 pair (D12 Bubble line)
     sits in that window, as do Spline Curve's cold-start failures (see the Spectrum and Spline Curve box). Prove with
     the scene fade forced to 1 on both paths, then one owner applies it for both. Probe:
     `.artifacts/evidence/native_core/n5_1_bubble/20261117_reveal_values_bubble_nightsolong/`.
-  - Order from here (lead, 17 Nov; stopped at 95 % weekly usage before starting any of them): rule (b)
-    `bubble_check.py` first (it gates the Vulkan offer; registration commit cb42dd213 is held out of the merge until
-    it passes), then `--offers` at both placements with the 5.5 s replay as the smoke check (the four 60 s takes
-    already cover variant a), then GPU cost per pass, then the docs.
-  - [ ] Owner rule (a) over the widened set at both placements: `owner_render_parity.py --native --mode bubble
-    --offers` (variants a and b, every Choice offer, display and overscan), every run PASS.
   - [ ] Rule (b) and the item's contract: `native/core/python/bubble_check.py`, a copy of `devcurve_check.py` with
     `MODE_ID = "bubble"`, the program from `native_route.bubble_program` (`Scene.place` calls `program(passes,
     settings, targets=, streams=)` then `target_size` from `_bubble_target_sizes`), `SLOT_BYTES` from
@@ -613,6 +606,15 @@ the feature (D3D11 is not stated).
     `probe_rings.bake`), the whole-allocation sample (a `bubble.frag` variant with `ratio = vec2(1.0)`), the mask pass
     dropped, a skipped release. Run `python native/core/python/bubble_check.py --module-dir release/native_module
     --require-validation --layer-path D:\Temp\Scratch\SRPSS\native_spike\validation_layers\extracted`.
+  - [ ] Register (gated on rule (b) passing): `git revert 5d11fee12` or its three edits (`"bubble": _bubble_settings`
+    in `GENERIC_MODE_SETTINGS`, `renderer_backends=("opengl", "vulkan")` in Bubble's descriptor, the route test
+    asserting the registration instead of patching it in); then `tests/test_native_bubble.py`,
+    `tests/test_native_visualizer_route.py`, `tests/test_visualizers_tab_backend_modes.py`,
+    `tests/test_backend_availability.py` and `tests/test_visualizer_host_binding.py` pass.
+  - [ ] Owner rule (a) over the widened set at both placements: `owner_render_parity.py --native --mode bubble
+    --offers` (variants a and b, every Choice offer, display and overscan), every run PASS, with the 5.5 s replay as
+    the smoke check (the four 60 s takes already cover variant a). A run past 68 scatter is classified and goes to the
+    lead.
   - [ ] GPU median and p90 per pass at 2560 x 1440 and 4K against the Python renderer's (checklist 11), nothing at
     rest, retirement to zero.
   - [ ] **N5.1 Bubble conditional optimisation gate (operator, 16 Nov; AFTER accepted native OpenGL/Vulkan parity

@@ -301,7 +301,8 @@ class QuickBubbleAmbientPoints:
     def _draw_occluders(self, occluders: tuple[float, ...], width: int, height: int,
                         response_radius_scale: float) -> None:
         """Erase premultiplied RGB, alpha and light under the rendered hero circles in the bound target: one instanced
-        quad a circle (a square of its diameter in texels; a circle of radius or alpha 0 is culled). No additional
+        quad a circle (its diameter padded by the antialias fringe, so the fringe is never cut at the quad's edge;
+        a circle of radius or alpha 0 is culled). No additional
         full-screen shader scans and no hero shape change."""
         count = len(occluders) // 4
         self._occluder_data.reshape(-1)[:len(occluders)] = occluders

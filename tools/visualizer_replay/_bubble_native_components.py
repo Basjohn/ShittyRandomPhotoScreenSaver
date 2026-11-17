@@ -2,7 +2,8 @@
 
 Python reads existing pre/post-mask coverage and post-mask light. Native inserts
 one supported CapturePass only after the ordinary346 output, then restores the
-canonical program. Every ordinary frame must remain exact against c53.
+canonical program. Every ordinary frame must remain exact against the baseline run given (its preflight refuses a
+baseline whose sources differ, such as the pre-mask-repair c53 one).
 """
 from __future__ import annotations
 
@@ -304,7 +305,7 @@ def run(args):
                 record_capture("native", index, entry)
                 ordinary = parity._pixels({"frames": mirror.frames}, index).copy()
                 finite("native_ordinary_final346", ordinary)
-                component_checks["native_ordinary_final346_exact_c53"] = sha(ordinary.tobytes()) == old["native_hashes"][346]
+                component_checks["native_ordinary_final346_exact_baseline"] = sha(ordinary.tobytes()) == old["native_hashes"][346]
                 native_components(mirror, snapshot, ordinary)
             return result
         finally:
