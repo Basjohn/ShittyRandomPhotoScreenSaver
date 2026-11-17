@@ -171,6 +171,11 @@ Each foundation slice adds what it learned here.
   number of calls instead (no redundant unbinds or state the caller already set).
 - Stage timing needs `GL_TIME_ELAPSED` queries that do not nest: time the top-level stages or the leaf passes,
   never both in one run.
+- The native core's GPU timer reports a content's whole surface (every pass), so a pass's cost on the core is a
+  difference of program variants (the pass left out; an empty pass drawn twice). Time the variants in turn, several
+  rounds over, and keep each one's least-loaded round: on a shared GPU one sequential pass per variant made a
+  0.002 ms pass read as 0.5 ms and an empty pair as -0.02 ms (Bubble's cost round, `bubble_check.py --rounds cost`,
+  N5.1).
 
 **Rendering**
 - No `glBlitFramebuffer` resolves (~0.5 ms at 1440p on drawn content, whatever the sample count). Render into texture

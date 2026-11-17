@@ -586,7 +586,7 @@ the feature (D3D11 is not stated).
   Bubble"). Owner rule (a) passes on the 5.5 s replay and the four 60 s recorded takes under D12's Bubble scatter. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
   eliminated suspicions and evidence; the diagnostics tools are `tools/visualizer_replay/bubble_native_diagnostics.py`
   (`Docs/Guides/Native_Bubble_Diagnostics.md`). Follow the Native Port Playbook; no further tolerance widening.
-  Order: the offers, cost per pass, docs, the D1 rehearsal.
+  Order: the offers (five tie frames wait on the lead), 2560 x 1440 cost, the D1 rehearsal.
   - [x] Class-word upload and portable unsigned-vector admission proved on both APIs; unchanged wire record (R-238).
   - [ ] Non-blocking contract follow-up, now with a measured case: non-unit inherited scene opacity. During the cold
     reveal (scene fade 0.8648 at input 0 to 1.0 by input 30, content fade 1, identical on both paths) Python folds it
@@ -597,9 +597,17 @@ the feature (D3D11 is not stated).
   - [ ] Owner rule (a) over the widened set at both placements: `owner_render_parity.py --native --mode bubble
     --offers` (variants a and b, every Choice offer, display and overscan), every run PASS, with the 5.5 s replay as
     the smoke check (the four 60 s takes already cover variant a). A run past 68 scatter is classified and goes to the
-    lead.
-  - [ ] GPU median and p90 per pass at 2560 x 1440 and 4K against the Python renderer's (checklist 11), nothing at
-    rest, retirement to zero.
+    lead. Run 17 Nov (`n5_1_bubble/20261117_offers/`): 35 of 40 pass (scatter worst 41, group worst 15); five fail on
+    "ties neither isolated nor on a content edge", classified in `20261117_offer_tie_classes/`, waiting on the lead:
+    - [ ] Three steady frames (`stream_direction=5` input 311, `drift_direction=0` input 157, `drift_direction=3`
+      input 290): one unmasked 2-level tie touching 1 or 2 scatter pixels, reference range 15 to 28; each passes the
+      pre-audit form and fails only by audit 7 M1's rule that scatter counts as a tie's neighbour. Lead: keep the
+      clause (then these are a new class), or narrow it (for example, a tie fails only with at least N scatter
+      neighbours).
+    - [ ] Two fade frames (`stream_direction=2` and `=6`, input 337, the mode switch): adjacent masked 2-level ties off
+      a content edge; they fail the pre-audit form too (the fade class, like the accepted cold-start pair).
+  - [ ] GPU median and p90 per pass at 2560 x 1440 against the Python renderer's (checklist 11). 4K is measured (D12
+    "As built: Bubble", cost).
   - [ ] **N5.1 Bubble conditional optimisation gate (operator, 16 Nov; AFTER accepted native OpenGL/Vulkan parity
     and the per-pass cost check above, BEFORE N5.4 and NF):** recorded music now allows controlled, bounded
     performance-only optimisation without assuming that Bubble's calculations are the cause of any observed GPU
@@ -644,17 +652,6 @@ the feature (D3D11 is not stated).
 
   - [ ] The D1 rehearsal (lead, rule (f), D10): one bounded Vulkan run on Display 1 through `tools/d1_run.py`, the
     Usu wallpaper and a recorded clip, ambience on and off.
-  - [ ] Docs: D12 "As built: Bubble" (record, settings, passes, figures, the tolerance), `native/core/README.md` step 6
-    (a mode with targets and streams uses `GENERIC_MODE_PROGRAMS`), `Primitives.md` E3/E23 consumers. The Python
-    renderer retires as Spline Curve's does.
-  - Decided (lead, 15 Nov): choice A is superseded by ONE program. An ambience-off program without the samplers and
-    ambient streams is refused by the core (every record field needs a reader; every declared sampler must be bound),
-    and a second schema plus a sampler-free shader variant doubles what must be kept equal for about 32 KB saved. So:
-    one program, the ambient target held at the smallest bucket (64 x 64) while the frame carries no ambient points,
-    its two passes drawing no instance. Record this in D15/the Bubble port notes as the reason.
-    - [ ] In the GPU cost step, measure the ambience-off cost of the two empty passes at 4K (median and p90 of 240
-      frames, OpenGL and Vulkan). If above 0.02 ms, the core skips a pass whose instance count is 0 (one C++ change,
-      one build, a test that the pass is not begun); otherwise nothing more.
 - [ ] Non-blocking (does not hold the Bubble port): prove Bubble's rule-(a) scatter is the two-compiler case directly.
   Render Python's Bubble with the GLSL the qsb pack emits (the pack's GLSL variants in place of the composed source)
   over the `replay` recipe and show the steady residual collapses (from 2,430 one-level pixels, worst 34 a frame).
