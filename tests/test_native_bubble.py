@@ -413,3 +413,52 @@ def test_rule_a_admits_bubbles_scatter_and_nothing_wider():
     shifted[..., 1] += 1
     assert not parity.rule_a_verdict([parity.rule_a_frame(shifted.astype(np.uint8), reference, mask, "bubble")],
                                      "bubble")["pass"]
+
+
+def test_bubbles_scatter_must_be_spread_and_counts_as_a_ties_neighbour():
+    # Checkpoint audit 7 M1: scatter is a spread field of single levels; a compact one-level patch within the count
+    # fails, and ties inside a one-level patch are not isolated. Bounds come from the harness's constants.
+    import numpy as np
+
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    cap = parity.RULE_A_SCATTER_PIXELS["bubble"]
+    group = parity.RULE_A_SCATTER_GROUP["bubble"]
+    reference = np.full((240, 400, 4), 90, np.uint8)
+    reference[..., 3] = 255                                    # opaque, flat: no mask, no content edge
+    mask = np.zeros(reference.shape[:2], bool)
+
+    def verdict(drawn):
+        return parity.rule_a_frame(drawn.astype(np.uint8), reference, mask, "bubble")
+
+    def row_run(drawn, top: int, left: int, length: int, level: int = 1):
+        drawn[top, left:left + length, 1] += level
+
+    # A scattered field passes: groups of the largest admitted size, apart from each other, up to the count.
+    spread = reference.astype(np.int16)
+    placed = 0
+    for k in range(cap // group):
+        row_run(spread, 10 + 4 * k, 10, group)
+        placed += group
+    assert verdict(spread)["pass"] and verdict(spread)["scatter"] == placed
+    # Negative controls (each seen passing before the spread rule): one more touching pixel; a solid 7x7 block plus
+    # two (51 pixels, within the count); a 41-pixel block with ten 2-level ties inside it.
+    longer = reference.astype(np.int16)
+    row_run(longer, 10, 10, group + 1)
+    assert not verdict(longer)["pass"]
+    block = reference.astype(np.int16)
+    block[50:57, 50:57, 1] += 1
+    block[60, 60, 1] += 1
+    block[62, 62, 1] += 1
+    assert (block != reference).any(axis=2).sum() == 51 <= cap
+    assert not verdict(block)["pass"]
+    tied = reference.astype(np.int16)
+    tied[100:107, 100:107, 1] += 1                             # 49 pixels ...
+    for y in (101, 103, 105):                                  # ... nine of them, apart, raised to 2 levels
+        for x in (101, 103, 105):
+            tied[y, x, 1] += 1
+    tied[200, 300, 1] += 2                                     # and one isolated tie elsewhere
+    result = verdict(tied)
+    assert result["ties"] == parity.RULE_A_EDGE_PIXELS_PER_FRAME and result["scatter"] == 40 <= cap
+    assert not result["pass"]
+    assert any("neither isolated" in reason for reason in result["reasons"])

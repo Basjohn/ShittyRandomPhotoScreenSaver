@@ -395,11 +395,17 @@ RULE_A_EDGE_PIXELS_PER_FRAME = 10
 #: The colour the translucency run draws under the mode's content (``content_backdrop``): magenta, so that no content
 #: pixel short of a near-zero alpha can equal it in all three channels.
 MASK_BACKDROP = (255, 0, 255)
-#: Rule (a)'s scatter per mode (D12 bounds, lead's decision 17 Nov for Bubble): pixels outside the mask exactly one level
-#: off, the NativeFragmentPass two-compiler case (Python's driver-compiled composed GLSL against the qsb pack). Bubble:
-#: measured worst 34 a frame (.artifacts/evidence/native_core/n5_1_bubble/20261117_steady_residual_classes/), times 1.5.
-#: Every other mode admits none.
-RULE_A_SCATTER_PIXELS = {"bubble": 51}
+#: Rule (a)'s scatter per mode (D12 bounds, lead's decisions 17 Nov for Bubble): pixels outside the mask exactly one
+#: level off, the NativeFragmentPass two-compiler case (Python's driver-compiled composed GLSL against the qsb pack).
+#: Bubble: measured worst 45 a frame on the four 60 s recorded takes (38, 36, 40 and 45; n5_1_bubble/
+#: 20261117_rule_a_60s_*), 34 on the 5.5 s replay (20261117_steady_residual_classes/), times 1.5: 68 (checkpoint audit
+#: 7 M3). Every other mode admits none.
+RULE_A_SCATTER_PIXELS = {"bubble": 68}
+#: The scatter's spread per mode (checkpoint audit 7 M1): the largest group of touching scatter pixels a frame may hold.
+#: Bubble: measured largest 15 on the 5.5 s replay's 2,430 steady pixels (1,908 with no scatter neighbour; most
+#: neighbours of one pixel 6; 20261117_steady_residual_classes/steady_classification.json), times 1.5: 22. A solid
+#: block fails.
+RULE_A_SCATTER_GROUP = {"bubble": 22}
 
 
 def composite_tolerance(mode: str | None = None):
@@ -411,7 +417,7 @@ def composite_tolerance(mode: str | None = None):
     return pixel_tolerance.Tolerance(f"composite (rule a, {mode})" if scatter else "composite (rule a)",
                                      masked_level=RULE_A_FILL_LEVEL, scatter_pixels=scatter,
                                      tie_pixels=RULE_A_EDGE_PIXELS_PER_FRAME, tie_level=RULE_A_EDGE_LEVEL,
-                                     edge_class=True)
+                                     edge_class=True, scatter_cluster_pixels=RULE_A_SCATTER_GROUP.get(mode))
 
 
 def rule_a_frame(native, python, mask, mode: str | None = None) -> dict:
@@ -494,7 +500,8 @@ def rule_a_frames(native: dict, python: dict, masks: dict, mode: str | None = No
         if x["hash"] == y["hash"]:
             continue
         if x["region"] != y["region"]:
-            frames.append({"pass": False, "reasons": [f"input {index}: the regions differ"], "max_level": None})
+            frames.append({"pass": False, "reasons": [f"input {index}: the regions differ"], "max_level": None,
+                           "input": index})
             continue
         verdict = rule_a_frame(_pixels(native, index), _pixels(python, index), masks.get(index), mode)
         verdict["input"] = index
@@ -878,6 +885,49 @@ def classify_differences(native: dict, python: dict, switch_input: int) -> dict:
     return classes
 
 
+def failed_frame_records(judged: list[dict], native: dict, python: dict, masks: dict, limit: int = 8) -> list[dict]:
+    """The first ``limit`` failing frames of ``rule_a_frames``, each with its reasons and up to 40 pixels past one level
+    (where, how far, the reference's own 3x3 range and both colours), so a long run's rare failure is classified
+    without a rerun. A frame whose regions differ is kept with its reasons and no pixels (checkpoint audit 7 L1)."""
+    import numpy
+
+    failed = []
+    for entry in (f for f in judged if not f.get("pass")):
+        if len(failed) >= limit:
+            break
+        index = entry.get("input")
+        record = {"input": index, "reasons": entry.get("reasons", []), "pixels_past_one_level": []}
+        failed.append(record)
+        if index is None:
+            continue
+        a, b = _pixels(native, index).astype(int), _pixels(python, index).astype(int)
+        if a.shape != b.shape:
+            record["shapes"] = [list(a.shape), list(b.shape)]
+            continue
+        delta = numpy.abs(a - b)[..., :3].max(axis=2)
+        ys, xs = numpy.nonzero(delta > 1)
+        mask = masks.get(index)
+        for y, x in list(zip(ys.tolist(), xs.tolist()))[:40]:
+            patch = b[max(0, y - 1):y + 2, max(0, x - 1):x + 2, :3]
+            record["pixels_past_one_level"].append({
+                "x": x, "y": y, "level": int(delta[y, x]),
+                "reference_range": int((patch.max(axis=(0, 1)) - patch.min(axis=(0, 1))).max()),
+                "masked": bool(mask[y, x]) if mask is not None else False,
+                "python": b[y, x].tolist(), "native": a[y, x].tolist()})
+    return failed
+
+
+def rule_a_halves(judged: list[dict], switch_input: int, mode: str | None = None) -> dict:
+    """The mode's shown span (before the switch) in halves: adaptive state (Dynamic Floor, normalisers) drifts with a
+    clip's length, so a late divergence shows in the second half's figures, not in the whole run's worst. Every judged
+    frame carries its input (a region mismatch included, checkpoint audit 7 L1); one without fails both halves."""
+    half = switch_input // 2
+    orphans = [f for f in judged if "input" not in f]
+    return {name: {"inputs": [lo, hi],
+                   **rule_a_verdict([f for f in judged if "input" in f and lo <= f["input"] < hi] + orphans, mode)}
+            for name, lo, hi in (("first", 0, half), ("second", half, switch_input))}
+
+
 def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path,
                   placement: str = "display") -> dict:
     """Rule (a) of the port (N2.5): the owner in process drawn by the Python renderer and by the native item, single-
@@ -924,33 +974,8 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     # Rule (a)'s verdict: the composite's tolerance (RULE_A_*), pixel by pixel with the translucency mask.
     judged = rule_a_frames(native, python, masks, mode)
     verdict["rule_a"] = rule_a_verdict(judged, mode)
-    # The first failing frames with every pixel past one level (where, how far, the reference's own 3x3 range and
-    # both colours), so a long run's rare failure is classified without a rerun.
-    import numpy
-
-    failed = []
-    for entry in (f for f in judged if not f.get("pass") and "input" in f):
-        if len(failed) >= 8:
-            break
-        index = entry["input"]
-        a, b = _pixels(native, index).astype(int), _pixels(python, index).astype(int)
-        delta = numpy.abs(a - b)[..., :3].max(axis=2)
-        ys, xs = numpy.nonzero(delta > 1)
-        pixels = []
-        for y, x in list(zip(ys.tolist(), xs.tolist()))[:40]:
-            patch = b[max(0, y - 1):y + 2, max(0, x - 1):x + 2, :3]
-            pixels.append({"x": x, "y": y, "level": int(delta[y, x]),
-                           "reference_range": int((patch.max(axis=(0, 1)) - patch.min(axis=(0, 1))).max()),
-                           "masked": bool(masks.get(index)[y, x]) if masks.get(index) is not None else False,
-                           "python": b[y, x].tolist(), "native": a[y, x].tolist()})
-        failed.append({"input": index, "reasons": entry.get("reasons", []), "pixels_past_one_level": pixels})
-    verdict["rule_a"]["failed_frames"] = failed
-    # The mode's shown span in halves (before the switch): adaptive state (Dynamic Floor, normalisers) drifts with a
-    # clip's length, so a late divergence shows in the second half's figures, not in the whole run's worst.
-    half = switch_input // 2
-    verdict["rule_a_halves"] = {
-        name: {"inputs": [lo, hi], **rule_a_verdict([f for f in judged if lo <= f.get("input", -1) < hi], mode)}
-        for name, lo, hi in (("first", 0, half), ("second", half, switch_input))}
+    verdict["rule_a"]["failed_frames"] = failed_frame_records(judged, native, python, masks)
+    verdict["rule_a_halves"] = rule_a_halves(judged, switch_input, mode)
     verdict["rule_a"]["mask_inputs"] = len(masks)
     verdict["rule_a"]["backdrop_frames"] = len(backdrop["pixels"])
     verdict["pass"] = bool(verdict["rule_a"]["pass"] and verdict["digests_identical"] and verdict["native_published"] > 0

@@ -992,9 +992,12 @@ each harness states its bounds beside their measured reasons:
 The bounds, each the measured worst times 1.5 or the decision it came from: the composite (rule (a) of every mode drawn
 through it) 1 level on the mask, 10 ties at 3 levels. Spline Curve's owner runs (variants a and b at both placements,
 the three offers): 5.1M to 39.2M differing pixels a run, every one on the mask but at most 8 ties a frame; Spectrum's
-(a and b at both placements): 6.3M to 17.6M, every one on the mask at 1 level, no tie. Bubble's owner rule (a): 51
-scatter (measured 34), steady and fade; ties and flips as the composite (lead, 17 Nov: the `NativeFragmentPass`
-two-compiler case, Python's driver-compiled composed GLSL against the qsb pack; evidence
+(a and b at both placements): 6.3M to 17.6M, every one on the mask at 1 level, no tie. Bubble's owner rule (a): 68
+scatter (measured 45 on the four 60 s takes: 38, 36, 40 and 45; 34 on the 5.5 s replay; lead, 17 Nov, checkpoint
+audit 7 M3), spread: no group of touching scatter pixels larger than 22 (measured 15 on the 5.5 s replay's 2,430
+pixels, 1,908 of them with no scatter neighbour; audit 7 M1), and scatter counts as a tie's neighbour, so a compact
+one-level patch, or ties inside one, fails; steady and fade; ties and flips as the composite (lead, 17 Nov: the
+`NativeFragmentPass` two-compiler case, Python's driver-compiled composed GLSL against the qsb pack; evidence
 `n5_1_bubble/20261117_steady_residual_classes/`, every pixel exactly one level, spread over the whole content).
 On the four 60 s recorded takes it holds on 21,107 of 21,108 judged frames; the operator accepted the one exception
 as measured (17 Nov, no bound or class change): `nightsolong_acousticsoft1` input 22, cold-start reveal, an adjacent
