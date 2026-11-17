@@ -143,6 +143,13 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
+- [ ] Apply the existing documentation policy to closed reports (`Docs/Guides/Documentation_Maintenance.md`,
+  "Historical-document policy" and "One owner per rule"; Sonnet when usage allows). Go through `Docs/Audits/` (33
+  files, including the closed Bubble ambient slice reports of 3 Nov) and the closed items in `Docs/Future_Work/`.
+  For each closed report, move each durable rule to its owner and each hard-won lesson to a Historical Bug entry,
+  repoint any link to the owner, then delete the file; git keeps it. Add no retired-documents list anywhere. Keep
+  audits a live guide cites as evidence, and the two zipped non-text design packs.
+
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
   in `Docs/Reference/Benchmarks.md` predate the bump. Run it once on main (lead or Medium slot; no load), record
