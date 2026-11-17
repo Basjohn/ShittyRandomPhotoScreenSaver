@@ -596,6 +596,10 @@ the feature (D3D11 is not stated).
     sits in that window, as do Spline Curve's cold-start failures (see the Spectrum and Spline Curve box). Prove with
     the scene fade forced to 1 on both paths, then one owner applies it for both. Probe:
     `.artifacts/evidence/native_core/n5_1_bubble/20261117_reveal_values_bubble_nightsolong/`.
+  - Order from here (lead, 17 Nov; stopped at 95 % weekly usage before starting any of them): rule (b)
+    `bubble_check.py` first (it gates the Vulkan offer; registration commit cb42dd213 is held out of the merge until
+    it passes), then `--offers` at both placements with the 5.5 s replay as the smoke check (the four 60 s takes
+    already cover variant a), then GPU cost per pass, then the docs.
   - [ ] Owner rule (a) over the widened set at both placements: `owner_render_parity.py --native --mode bubble
     --offers` (variants a and b, every Choice offer, display and overscan), every run PASS.
   - [ ] Rule (b) and the item's contract: `native/core/python/bubble_check.py`, a copy of `devcurve_check.py` with
