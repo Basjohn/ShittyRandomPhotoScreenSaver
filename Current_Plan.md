@@ -604,11 +604,20 @@ the feature (D3D11 is not stated).
     tools for correctness and later optimisation, preserving provenance, negative controls and distinct verdicts.
     Current promotion: `tools/visualizer_replay/bubble_native_diagnostics.py`, private `_bubble_native_*.py` helpers
     and `tests/test_bubble_native_diagnostics.py`; finish the independent receipt-provenance audit before landing.
-  - [ ] Rule (a) on four 60 s recorded clips (operator, 17 Nov): BTF §24's recordings (or the recorded clip library cut
-    to 60 s), variant a at the display placement (other variants/placements where cheap), same bounds (51 scatter,
-    10 ties at 3 levels, no flips). Extend the `replay` recipe for recorded clips if needed (the optimisation proof
-    gap box below). Keep every run's per-frame hashes as the optimisation before-state. A clip past 51 scatter: do
-    not raise the bound; classify the excess with `fade-inputs`/`components`, report the worst frame and class, stop.
+  - [ ] **Lead decision: one failing frame on the 60 s soft-acoustic take (blocks four-clip acceptance).** Root cause
+    as recorded: `nightsolong_acousticsoft1`, input 22 (0.24 s after a cold start, in the reveal), two horizontally
+    adjacent pixels (193,128) and (194,128) each two levels off (Python green 139/131, native 137/129), both on pixels
+    the reference draws translucent (the mask), reference 3x3 range 13 and 17 (not a content edge). Each is within the
+    tie level, but as a pair they are "neither isolated nor on a content edge". Deterministic (two runs, identical
+    hashes). Every other frame of the four takes passes: worst scatter 40/45/36/38 a frame, worst ties 2/3/3/4, no
+    flips; second halves no worse than first (37/34/36/33 scatter). The other three takes PASS
+    (`ragdoll_quiet_intro_loud_end1`, `human_heavy1`, `anything_mixed2`). It looks like the same masked
+    double-rounding of the 5.5 s run's fade pixels (two levels on translucent content), in a pair. The lead decides
+    whether that is a class to admit or an owner experiment (`fade-inputs`/`components` are fixed to the 5.5 s
+    recipe's inputs; a capture at input 22 of this take needs their recipe generalised). Command per take:
+    `owner_render_parity.py --out .artifacts/evidence/native_core/n5_1_bubble/<date>_rule_a_60s_<take> --native --mode
+    bubble --runs bubble --placements display --seconds 60 --recording <take>` (about 18 min each); reports and
+    per-frame hashes (the optimisation before-state) in `20261117_rule_a_60s_<take>/`.
   - [ ] Non-blocking contract follow-up: compare an actual non-unit inherited scene opacity on both paths before
     admitting a repair. Python folds it into shader fade while native composites it afterward; the current failing
     fixture has inherited opacity1 and equal shader fades, so this source distinction does not explain that failure.
