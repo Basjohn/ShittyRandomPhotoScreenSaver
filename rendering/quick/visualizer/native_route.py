@@ -145,9 +145,9 @@ def bubble_program(pack: bytes, sizes: dict) -> dict:
 #: Python render host blends), its record its runtime schema (``native_schema.schema_for_mode``).
 GENERIC_MODE_SETTINGS: dict[str, Callable[[Any, dict], dict]] = {
     "devcurve": _devcurve_settings,
+    "bubble": _bubble_settings,
 }
-#: Bubble's settings function, registered in ``GENERIC_MODE_SETTINGS`` (and Vulkan offered in its descriptor) once its
-#: rule (a) passes (N5.1 Bubble, Current_Plan.md): until then the route never draws it and Vulkan never offers it (D10).
+#: Bubble's settings function by name (its diagnostics and tests call it directly).
 BUBBLE_SETTINGS = _bubble_settings
 #: A generic mode with more than its one fragment pass (N5.1, Bubble): mode id -> ``(fragment pack, target sizes) ->
 #: {"passes", "targets", "streams"}``, and its explicit-size targets' sizes ``(snapshot, settings) -> {target: size}``,

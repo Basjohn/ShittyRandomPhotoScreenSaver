@@ -117,3 +117,18 @@ def test_masks_remain_physical_circles_with_correct_response_scaling(ambient, wi
     assert erased[int(y * height), int(x * width)] == pytest.approx(round(255 * alpha), abs=1)
     corner = (int(y * height - radius * 0.9), int(x * width - radius * 0.9))
     assert erased[corner] == 0
+
+
+@pytest.mark.qt
+def test_mask_antialias_coverage_reaches_all_four_exact_circle_boundaries(ambient):
+    """Pixel centers on the physical circle receive half coverage on every side, independent of quad edge fill."""
+    width = height = 64
+    center_x = center_y = 32.5
+    radius = 12.0
+    erased = _erased(ambient, width, height,
+                     (center_x / width, center_y / height, radius / height, 1.0), 1.0)
+    # Each sample center is exactly twelve texels from (32.5,32.5), so the SDF is zero. The same smooth edge
+    # must survive on all four cardinals; a raster quad ending at the circle clips one or more half-covered edges.
+    cardinals = ((32, 20), (32, 44), (20, 32), (44, 32))
+    coverage = [int(erased[y, x]) for x, y in cardinals]
+    assert coverage == pytest.approx([255.0 / 2.0] * len(cardinals), abs=2.0)

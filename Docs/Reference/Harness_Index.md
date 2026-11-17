@@ -64,6 +64,8 @@ Every tool writes evidence and scratch through one owner, `tools/artifact_paths.
 - `tools/artifact_migration.py` is the one-off move of the pre-layout flat folders (`plan` / `refs` dry runs,
   `apply` copies, verifies size and count, then deletes; resumable).
 
+**Native Bubble owner diagnostics:** [Native Bubble Diagnostics](../Guides/Native_Bubble_Diagnostics.md) routes the bounded replay, fade-input and component captures, provenance guards and interpretation. The synthetic fixture does not replace the recorded-music and live optimization gates.
+
 ## 1. Targeted tests first
 
 **Original Bubble settings parity:** `python -m tools.visualizer_replay.bubble_parity --output .artifacts/scratch/<owner>/bubble_before --gpu`

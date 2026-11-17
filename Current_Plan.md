@@ -582,39 +582,24 @@ the feature (D3D11 is not stated).
   item as Spectrum's; both close with N5.8.
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
-  Native route is merged dormant; Bubble is not offered on Vulkan until parity passes. The latest owner rule (a)
-  remains a FAIL on smaller steady ties and fade differences after the class-word repair; official ABI25 replay
-  retains unchanged bounds at DPR1.5. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
-  eliminated suspicions and evidence. Follow the Native Port Playbook; no registration or tolerance widening yet.
+  Registered on the route and offered on Vulkan; the 5.5 s owner replay passes rule (a) under D12's Bubble scatter.
+  `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics, eliminated suspicions and
+  evidence. Follow the Native Port Playbook; no further tolerance widening.
   - [x] Class-word upload and portable unsigned-vector admission proved on both APIs; unchanged wire record (R-238).
   - [ ] Retain and document the replay, fade-input, attachment and reference-fringe diagnostics as reusable repository
     tools for correctness and later optimisation, preserving provenance, negative controls and distinct verdicts.
     Current promotion: `tools/visualizer_replay/bubble_native_diagnostics.py`, private `_bubble_native_*.py` helpers
     and `tests/test_bubble_native_diagnostics.py`; finish the independent receipt-provenance audit before landing.
-  - [ ] **In progress: shared mask antialias support.** Validate the unlanded
-    `widgets/spotify_visualizer/shaders/bubble_ambient_mask.vert` and `.vert.qsb` candidate through a complete owner
-    replay and old/new Python reference-fringe comparison, then land only the proved slice. The focused regression is
-    `tests/test_bubble_ambient_big_occlusion.py`; the old shader fails and the candidate passes its focused checks.
-    Resume from `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` and
-    `.artifacts/evidence/native_core/n5_1_bubble/20261116_mask_support_candidate/`.
-    The pending archive/fringe helper is
-    `.artifacts/evidence/native_core/n5_1_bubble/20261116_reference_archive_prep/archive_reference.py`;
-    finish its independent provenance/owner-completion review before the serial hidden runs.
-  - [ ] Resolve the remaining one-level steady ties and seven fade pixels above one level (maximum five) with
-    unchanged D12 bounds. Validate shared mask-quad antialias support at the proved post-mask residual; all532
-    larger steady errors are gone and the Python reference is unchanged. Preserve the full replay sequence:
-    `python tools/visualizer_replay/owner_render_parity.py --out .artifacts/evidence/native_core/n5_1_bubble/<date>_<label>
-    --native --mode bubble --runs bubble --placements display` (use the investigation's process-local dormant
-    registration wrapper while diagnosing). If a class remains that is not a defect, report its figures to the lead for a bound
-    (D12 "The pixel tolerance": a new class or wider bound is the lead's decision), never widen it yourself.
-  - [ ] Non-blocking contract follow-up: compare an actual non-unit inherited scene opacity on both paths before
-    admitting a repair. Python folds it into shader fade while native composites it afterward; the current failing
-    fixture has inherited opacity1 and equal shader fades, so this source distinction does not explain that failure.
-  - [ ] Register: add `"bubble": _bubble_settings` to `GENERIC_MODE_SETTINGS` (drop `BUBBLE_SETTINGS`' comment) and
-    `renderer_backends=("opengl", "vulkan")` to Bubble's descriptor in `core/settings/visualizer_mode_registry.py`;
-    in `tests/test_native_bubble.py` turn the route test's monkeypatches into `assert "bubble" in NATIVE_MODE_IDS`.
-    Run `tests/test_native_bubble.py tests/test_native_visualizer_route.py tests/test_backend_availability.py
-    tests/test_visualizers_tab_backend_modes.py`.
+  - [ ] Non-blocking contract follow-up, now with a measured case: non-unit inherited scene opacity. During the cold
+    reveal (scene fade 0.8648 at input 0 to 1.0 by input 30, content fade 1, identical on both paths) Python folds it
+    into the shader fade while native composites it afterward; the operator-accepted input-22 pair (D12 Bubble line)
+    sits in that window, as do Spline Curve's cold-start failures (see the Spectrum and Spline Curve box). Prove with
+    the scene fade forced to 1 on both paths, then one owner applies it for both. Probe:
+    `.artifacts/evidence/native_core/n5_1_bubble/20261117_reveal_values_bubble_nightsolong/`.
+  - Order from here (lead, 17 Nov; stopped at 95 % weekly usage before starting any of them): rule (b)
+    `bubble_check.py` first (it gates the Vulkan offer; registration commit cb42dd213 is held out of the merge until
+    it passes), then `--offers` at both placements with the 5.5 s replay as the smoke check (the four 60 s takes
+    already cover variant a), then GPU cost per pass, then the docs.
   - [ ] Owner rule (a) over the widened set at both placements: `owner_render_parity.py --native --mode bubble
     --offers` (variants a and b, every Choice offer, display and overscan), every run PASS.
   - [ ] Rule (b) and the item's contract: `native/core/python/bubble_check.py`, a copy of `devcurve_check.py` with
@@ -685,6 +670,16 @@ the feature (D3D11 is not stated).
     - [ ] In the GPU cost step, measure the ambience-off cost of the two empty passes at 4K (median and p90 of 240
       frames, OpenGL and Vulkan). If above 0.02 ms, the core skips a pass whose instance count is 0 (one C++ change,
       one build, a test that the pass is not begun); otherwise nothing more.
+- [ ] Non-blocking (does not hold the Bubble port): prove Bubble's rule-(a) scatter is the two-compiler case directly.
+  Render Python's Bubble with the GLSL the qsb pack emits (the pack's GLSL variants in place of the composed source)
+  over the `replay` recipe and show the steady residual collapses (from 2,430 one-level pixels, worst 34 a frame).
+- [ ] Bubble optimisation proof gap (before the first Bubble optimisation; `Docs/Guides/Native_Bubble_Diagnostics.md`
+  "Optimisation gate"): the standard proof is three full 60 s recorded takes (quiet intro to loud end, sustained
+  heavy, soft acoustic; `owner_render_parity.py --recording`), native-before against native-after hashes per backend.
+  Still missing: a native-only mode (render only the native path; compare with the port's kept hashes, no Python
+  re-render), a `--api opengl|vulkan` choice (the owner replay draws OpenGL only), and a hash-only compare mode (a
+  before directory against an after directory, all-frame hashes, images stored only for differing frames), with a
+  negative control that a one-ulp shader change is detected.
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).
@@ -712,6 +707,16 @@ the feature (D3D11 is not stated).
     (owner report, both paths' frame hashes, `frame_verdicts.json`). Take: `nightsolong_acousticsoft1`, display
     placement, 5,503 inputs (the mode switch at input 5291, about 58 s; inputs 0-2750 first half, 2751-5290 second).
   - Not run yet: takes `ragdoll_quiet_intro_loud_end1`, `human_heavy1`, `anything_mixed2` for either mode.
+  - Lead for the cold-start frames (Bubble's probe, 17 Nov, same take and window): during the reveal both paths read
+    the SAME values, content fade 1 and scene fade rising 0.8648 (input 0), 0.9422 (10), 0.9942 (22) to 1.0 by input
+    30, but apply the scene fade at different places. Python folds the inherited scene opacity into the shader's fade
+    (one rounding, `VisualizerRenderNode._inherited_scene_opacity`); native draws at card content fade 1 into its RGBA8
+    surface and the scene fade is applied by the composite afterward (two roundings). Bubble's only long-clip failure
+    (input 22) and 20 of Spline Curve's 27 (inputs 0-25) fall exactly in this window. Next: prove it by comparing a
+    frame with the scene fade forced to 1 on both paths, then fix at the owner (one place applies the scene fade for
+    both), not by a bound. Probe and values: `.artifacts/evidence/native_core/n5_1_bubble/20261117_reveal_values_bubble_nightsolong/`
+    (`reveal_values.json`, probe `reveal_probe.py`); the existing Bubble box's "non-unit inherited scene opacity"
+    follow-up is the same question.
   - [ ] Spline Curve (`devcurve`), variant a: 27 failed frames, all ties over the 10-a-frame bound, not isolated and
     not on a content edge; max 3 levels, no scatter, no flips. 20 are inputs 0-25 (cold start: worst input 10, 162 ties
     at 2 levels), 2 at inputs 728 and 829, 5 in the second half (2991, 3170, 3385, 3446, 4042; 1-9 ties). Root cause

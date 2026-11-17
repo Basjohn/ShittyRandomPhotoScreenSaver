@@ -184,3 +184,28 @@ def test_a_native_run_is_compared_with_its_accepted_baseline_run_by_run():
     drifted["results"]["spectrum"]["native_hashes"] = ["n0", "n9"]                     # control: a native frame moved
     verdict = parity.against_baseline(hashed, drifted)
     assert verdict["same"] is False and verdict["runs"]["spectrum"]["native_changed"] == [1]
+
+
+def test_parity_script_switches_near_the_end_of_a_long_clip_and_at_4_2_s_otherwise():
+    # A long recorded take shows the mode for its whole length (Bubble's 60 s rule-(a) clips): the switch comes 1.3 s
+    # before the clip's end; the 5.5 s clip's script is exactly the gate's own (switch at 4.2 s).
+    import tools.expanded_visualizer_evidence as evidence
+    from tools.visualizer_replay import owner_render_parity as parity
+    from tools.visualizer_replay import owner_worker_gate as gate
+
+    def switch_s(script):
+        start = next(value for kind, value in script if kind == "input").timestamp_us
+        last = None
+        for kind, value in script:
+            if kind == "input":
+                last = value.timestamp_us
+            elif kind == "mode":
+                return (last - start) / 1e6
+
+    short = evidence.shipped_clip(5.5).frames
+    assert parity.parity_script(short, "bubble") == gate.identity_script(short, "bubble")
+    long = evidence.shipped_clip(20.0).frames
+    span = (long[-1].timestamp_us - long[0].timestamp_us) / 1e6
+    assert span > 10.0
+    assert switch_s(parity.parity_script(long, "bubble")) > span - 2.0
+    assert switch_s(gate.identity_script(long, "bubble")) < 5.0          # the gate's default stays 4.2 s

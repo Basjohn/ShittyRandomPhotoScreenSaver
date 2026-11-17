@@ -142,7 +142,10 @@ def parity_script(clip_frames, mode: str) -> list:
     reflecting mode), a held-key orbit from 0.5 s to 1.2 s (a 3D mode), before the pause, the park and the switch."""
     from tools.visualizer_replay import owner_worker_gate as gate
 
-    script = gate.identity_script(clip_frames, mode)
+    # The switch at 4.2 s, or 1.3 s before the end of a longer clip (a 60 s recorded take shows the mode for its whole
+    # length, not its first 4.2 s); a clip of 5.5 s or less keeps 4.2 s exactly.
+    span = (clip_frames[-1].timestamp_us - clip_frames[0].timestamp_us) / 1e6 if len(clip_frames) else 0.0
+    script = gate.identity_script(clip_frames, mode, switch_at_s=max(4.2, span - 1.3))
     start = next(value for kind, value in script if kind == "input").timestamp_us
     out: list = [("reflect", True)] if mode in gate.REFLECTING_MODES else []
     orbit = mode in gate.VIEW_MODES
@@ -180,6 +183,41 @@ def single_sample_scene_targets():
         SceneTarget.begin = begin
 
 
+class _SpilledFrames:
+    """A run's compressed frames, ``(shape, zlib bytes)`` by index, kept in an anonymous temporary file in the owner
+    scratch instead of memory: a 60 s recorded take is 5,455 frames a path, several gigabytes compressed. The file
+    goes when the list is collected or the process exits."""
+
+    def __init__(self) -> None:
+        self._file: Any = None
+        self._entries: list[tuple[tuple[int, ...], int, int]] = []
+
+    def append(self, item: tuple[tuple[int, ...], bytes]) -> None:
+        import tempfile
+
+        from tools import artifact_paths
+
+        shape, data = item
+        if self._file is None:
+            folder = artifact_paths.scratch_root("owner_render_parity")
+            folder.mkdir(parents=True, exist_ok=True)
+            self._file = tempfile.TemporaryFile(dir=folder)
+        self._file.seek(0, 2)
+        self._entries.append((tuple(shape), self._file.tell(), len(data)))
+        self._file.write(data)
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def __getitem__(self, index: int) -> tuple[tuple[int, ...], bytes]:
+        shape, offset, size = self._entries[index]
+        self._file.seek(offset)
+        return shape, self._file.read(size)
+
+    def __iter__(self):
+        return (self[index] for index in range(len(self)))
+
+
 class SceneMirror:
     """The owner's unshown scene, drawn: a hidden production scene that takes the owner's own scene commands.
 
@@ -192,7 +230,7 @@ class SceneMirror:
 
     def __init__(self) -> None:
         self.host: Any = None
-        self.frames: list[tuple[tuple[int, ...], bytes]] = []
+        self.frames = _SpilledFrames()
         self.lit: list[float] = []
         self._fbo = 0
         self._region: tuple[int, int, int, int] | None = None
@@ -357,32 +395,40 @@ RULE_A_EDGE_PIXELS_PER_FRAME = 10
 #: The colour the translucency run draws under the mode's content (``content_backdrop``): magenta, so that no content
 #: pixel short of a near-zero alpha can equal it in all three channels.
 MASK_BACKDROP = (255, 0, 255)
+#: Rule (a)'s scatter per mode (D12 bounds, lead's decision 17 Nov for Bubble): pixels outside the mask exactly one level
+#: off, the NativeFragmentPass two-compiler case (Python's driver-compiled composed GLSL against the qsb pack). Bubble:
+#: measured worst 34 a frame (.artifacts/evidence/native_core/n5_1_bubble/20261117_steady_residual_classes/), times 1.5.
+#: Every other mode admits none.
+RULE_A_SCATTER_PIXELS = {"bubble": 51}
 
 
-def composite_tolerance():
-    """The composite's tolerance (``RULE_A_*``) as the shared ``pixel_tolerance.Tolerance``."""
+def composite_tolerance(mode: str | None = None):
+    """The composite's tolerance (``RULE_A_*``) as the shared ``pixel_tolerance.Tolerance``; ``mode`` adds its D12
+    scatter (``RULE_A_SCATTER_PIXELS``)."""
     from tools import pixel_tolerance
 
-    return pixel_tolerance.Tolerance("composite (rule a)", masked_level=RULE_A_FILL_LEVEL,
+    scatter = RULE_A_SCATTER_PIXELS.get(mode, 0)
+    return pixel_tolerance.Tolerance(f"composite (rule a, {mode})" if scatter else "composite (rule a)",
+                                     masked_level=RULE_A_FILL_LEVEL, scatter_pixels=scatter,
                                      tie_pixels=RULE_A_EDGE_PIXELS_PER_FRAME, tie_level=RULE_A_EDGE_LEVEL,
                                      edge_class=True)
 
 
-def rule_a_frame(native, python, mask) -> dict:
+def rule_a_frame(native, python, mask, mode: str | None = None) -> dict:
     """One frame of rule (a): the native frame against the Python frame (same shape, the channels compared) under the
     composite's tolerance, ``mask`` the pixels the Python renderer draws translucent."""
     from tools import pixel_tolerance
 
-    return pixel_tolerance.judge(native, python, composite_tolerance(), mask=mask)
+    return pixel_tolerance.judge(native, python, composite_tolerance(mode), mask=mask)
 
 
-def rule_a_verdict(frames) -> dict:
+def rule_a_verdict(frames, mode: str | None = None) -> dict:
     """Rule (a) over the per-frame verdicts of ``rule_a_frame`` (frames that are equal may be left out): pass, the
     bound and the worst figures."""
     from tools import pixel_tolerance
 
     summary = pixel_tolerance.summarise(frames)
-    return {"bound": composite_tolerance().bound(), **summary,
+    return {"bound": composite_tolerance(mode).bound(), **summary,
             "edge_pixels_worst_frame": summary["ties_worst_frame"]}
 
 
@@ -441,7 +487,7 @@ def rule_a_masks(python: dict, backdrop: dict) -> dict:
     return masks
 
 
-def rule_a_frames(native: dict, python: dict, masks: dict) -> list[dict]:
+def rule_a_frames(native: dict, python: dict, masks: dict, mode: str | None = None) -> list[dict]:
     """``rule_a_frame`` for every input whose drawn region differs between the native run and the Python run."""
     frames = []
     for index, (x, y) in enumerate(zip(native["pixels"], python["pixels"])):
@@ -450,7 +496,7 @@ def rule_a_frames(native: dict, python: dict, masks: dict) -> list[dict]:
         if x["region"] != y["region"]:
             frames.append({"pass": False, "reasons": [f"input {index}: the regions differ"], "max_level": None})
             continue
-        verdict = rule_a_frame(_pixels(native, index), _pixels(python, index), masks.get(index))
+        verdict = rule_a_frame(_pixels(native, index), _pixels(python, index), masks.get(index), mode)
         verdict["input"] = index
         frames.append(verdict)
     return frames
@@ -876,7 +922,35 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     verdict["identical"] = bool(paths["first"] is None and verdict["digests_identical"]
                                 and verdict["native_published"] > 0)
     # Rule (a)'s verdict: the composite's tolerance (RULE_A_*), pixel by pixel with the translucency mask.
-    verdict["rule_a"] = rule_a_verdict(rule_a_frames(native, python, masks))
+    judged = rule_a_frames(native, python, masks, mode)
+    verdict["rule_a"] = rule_a_verdict(judged, mode)
+    # The first failing frames with every pixel past one level (where, how far, the reference's own 3x3 range and
+    # both colours), so a long run's rare failure is classified without a rerun.
+    import numpy
+
+    failed = []
+    for entry in (f for f in judged if not f.get("pass") and "input" in f):
+        if len(failed) >= 8:
+            break
+        index = entry["input"]
+        a, b = _pixels(native, index).astype(int), _pixels(python, index).astype(int)
+        delta = numpy.abs(a - b)[..., :3].max(axis=2)
+        ys, xs = numpy.nonzero(delta > 1)
+        pixels = []
+        for y, x in list(zip(ys.tolist(), xs.tolist()))[:40]:
+            patch = b[max(0, y - 1):y + 2, max(0, x - 1):x + 2, :3]
+            pixels.append({"x": x, "y": y, "level": int(delta[y, x]),
+                           "reference_range": int((patch.max(axis=(0, 1)) - patch.min(axis=(0, 1))).max()),
+                           "masked": bool(masks.get(index)[y, x]) if masks.get(index) is not None else False,
+                           "python": b[y, x].tolist(), "native": a[y, x].tolist()})
+        failed.append({"input": index, "reasons": entry.get("reasons", []), "pixels_past_one_level": pixels})
+    verdict["rule_a"]["failed_frames"] = failed
+    # The mode's shown span in halves (before the switch): adaptive state (Dynamic Floor, normalisers) drifts with a
+    # clip's length, so a late divergence shows in the second half's figures, not in the whole run's worst.
+    half = switch_input // 2
+    verdict["rule_a_halves"] = {
+        name: {"inputs": [lo, hi], **rule_a_verdict([f for f in judged if lo <= f.get("input", -1) < hi], mode)}
+        for name, lo, hi in (("first", 0, half), ("second", half, switch_input))}
     verdict["rule_a"]["mask_inputs"] = len(masks)
     verdict["rule_a"]["backdrop_frames"] = len(backdrop["pixels"])
     verdict["pass"] = bool(verdict["rule_a"]["pass"] and verdict["digests_identical"] and verdict["native_published"] > 0
@@ -894,7 +968,8 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
 
 
 def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
-               against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS, mode: str = "spectrum") -> dict:
+               against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS, mode: str = "spectrum",
+               recording: str | None = None) -> dict:
     """``native_parity`` over ``mode``'s widened run set (``conventions_identity.mode_runs``; a mode of the route's
     ``NATIVE_MODE_IDS``) at the rig's own placement, and ``OVERSCAN_RUNS`` again at each other placement of
     ``placements`` (keyed ``run@placement``); the report. ``against``: an accepted report this one is compared with
@@ -908,12 +983,15 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
     core = load(module_dir)
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    clip = evidence.shipped_clip(seconds)
+    # ``recording``: the first ``seconds`` of one of the operator's recorded takes (logs/visualizer_recordings, read
+    # only) instead of the shipped Studio clip's opening.
+    clip = evidence.load_recording(recording, seconds) if recording else evidence.shipped_clip(seconds)
     from rendering.quick.visualizer.native_route import NATIVE_MODE_IDS
 
     if mode not in NATIVE_MODE_IDS:
         raise ValueError(f"the native route draws {sorted(NATIVE_MODE_IDS)}, not {mode!r}")
-    report: dict = {"mode": mode, "offers": offers, "seconds": seconds, "display": list(DISPLAY), "results": {}}
+    report: dict = {"mode": mode, "offers": offers, "seconds": seconds, "display": list(DISPLAY), "clip": clip.name,
+                    "clip_frames": len(clip.frames), "results": {}}
     started = time.perf_counter()
     runs = conventions_identity.mode_runs(mode, offers)
     planned = [(suffix, settings, "display") for suffix, settings in runs] if "display" in placements else []
@@ -1089,6 +1167,9 @@ def main(argv=None) -> int:
     parser.add_argument("--against", type=Path, default=None,
                         help="with --native: an accepted native_render_parity.json; the run passes when every run's "
                              "differences equal it (bit-identical native frames)")
+    parser.add_argument("--recording", default=None,
+                        help="with --native: one of the operator's recorded takes (logs/visualizer_recordings/<name>"
+                             ".jsonl, its first --seconds) instead of the shipped Studio clip")
     args = parser.parse_args(argv)
     # The stills (contact sheets, difference maps) and the report are written into owner scratch and published to
     # ``--out`` by the evidence publisher (``tools/evidence_media.py``); stills stay PNG, lossless.
@@ -1112,7 +1193,7 @@ def main(argv=None) -> int:
             report = run_native(args.out, module_dir=args.module_dir.resolve(), offers=args.offers,
                                 seconds=args.seconds, only=tuple(args.runs),
                                 against=None if args.against is None else args.against.resolve(),
-                                placements=tuple(args.placements), mode=args.mode)
+                                placements=tuple(args.placements), mode=args.mode, recording=args.recording)
         else:
             report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
                          seconds=args.seconds, controls=not args.skip_controls)

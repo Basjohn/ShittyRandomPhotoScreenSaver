@@ -75,10 +75,11 @@ def _after(frames, seconds: float) -> int:
     return next(i for i, frame in enumerate(frames) if frame.timestamp_us - start >= seconds * 1e6)
 
 
-def identity_script(clip_frames, mode: str) -> list[tuple[str, Any]]:
+def identity_script(clip_frames, mode: str, switch_at_s: float = 4.2) -> list[tuple[str, Any]]:
     """("input", frame) / ("display", on) / ("mode", target): play from the start, a warm pause at 1.5 s for 1 s, a
     park at 3 s (no ticks for 0.5 s, the music goes on; the first two ticks after it carry no new capture, as the
-    live gate's re-entry), a mode switch requested at 4.2 s (the owner's crossfade commits it 0.25 s later)."""
+    live gate's re-entry), a mode switch requested at ``switch_at_s`` (default 4.2 s; the owner's crossfade commits it
+    0.25 s later)."""
     from core.visualizer_engine.recorded_capture import synthesise_pause
 
     frames = list(synthesise_pause(clip_frames, at_s=1.5, pause_s=1.0))
@@ -88,7 +89,7 @@ def identity_script(clip_frames, mode: str) -> list[tuple[str, Any]]:
     tail = frames[unpark + 2:]
     script = ([("input", frame) for frame in frames[:park]] + [("display", False), ("display", True)]
               + [("input", frame) for frame in resumed])
-    switch = _after(tail, 4.2 - (tail[0].timestamp_us - frames[0].timestamp_us) / 1e6) if tail else 0
+    switch = _after(tail, switch_at_s - (tail[0].timestamp_us - frames[0].timestamp_us) / 1e6) if tail else 0
     script += [("input", frame) for frame in tail[:switch]] + [("mode", PARTNER.get(mode, "spectrum"))]
     script += [("input", frame) for frame in tail[switch:]]
     return script

@@ -1,6 +1,6 @@
 #version 460 core
 // Bubble's ambient hero-bubble mask (bubble_ambient_gl.py; the native core draws the same file): one instanced quad a
-// rendered hero circle (D15 point 5), a square of the circle's diameter in target texels (the canonical shader's
+// rendered hero circle (D15 point 5), with room for the fragment's antialias support (the canonical shader's
 // `delta.x *= aspect` makes the circle round in texels), erasing the ambience under it.
 #ifdef VULKAN
 #define srpssVertexIndex gl_VertexIndex
@@ -21,9 +21,19 @@ layout(location = 1) out float vOcclusionAlpha;
 void main() {
     vec2 corner = srpssSpriteCorner(srpssVertexIndex);
     float diameterPx = 2.0 * aOccluder.z * u_response_radius_scale * u_target_px.y;
-    gl_Position = (aOccluder.z > 0.0 && aOccluder.w > 0.0)
-        ? srpssSpriteClip(vec4(srpssTopDownClip(aOccluder.xy), 0.0, 1.0), corner, diameterPx, u_target_px)
-        : srpssSpriteCulled();
-    vUnitCircle = corner * 2.0 - 1.0;
+    gl_Position = srpssSpriteCulled();
+    vUnitCircle = vec2(0.0);
+    vOcclusionAlpha = 0.0;
+    if (!(aOccluder.z > 0.0 && aOccluder.w > 0.0 && diameterPx > 0.0) || isinf(diameterPx))
+        return;
+    // The distance derivative reaches at most two texels outside the physical circle; the fragment also has
+    // a 0.0001 normalized AA floor. Pad the raster quad, then rescale its varying to retain that same circle.
+    float paddingPx = max(2.0, 0.0001 * (0.5 * diameterPx));
+    float paddedDiameterPx = diameterPx + 2.0 * paddingPx;
+    float unitScale = paddedDiameterPx / diameterPx;
+    if (isinf(unitScale) || isnan(unitScale) || isinf(2.0 * paddedDiameterPx))
+        return; // no finite normalized endpoints for an unrepresentable diameter
+    gl_Position = srpssSpriteClip(vec4(srpssTopDownClip(aOccluder.xy), 0.0, 1.0), corner, paddedDiameterPx, u_target_px);
+    vUnitCircle = (corner * 2.0 - 1.0) * unitScale;
     vOcclusionAlpha = min(1.0, aOccluder.w);
 }
