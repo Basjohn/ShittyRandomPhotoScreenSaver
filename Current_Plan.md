@@ -706,7 +706,31 @@ the feature (D3D11 is not stated).
     `.artifacts/evidence/native_core/longclip_recheck/20261117_{spectrum,devcurve}_nightsolong_display[_framelist]/`
     (owner report, both paths' frame hashes, `frame_verdicts.json`). Take: `nightsolong_acousticsoft1`, display
     placement, 5,503 inputs (the mode switch at input 5291, about 58 s; inputs 0-2750 first half, 2751-5290 second).
-  - Not run yet: takes `ragdoll_quiet_intro_loud_end1`, `human_heavy1`, `anything_mixed2` for either mode.
+  - Three more takes, variant a, display placement, 60 s (5,503 inputs, switch 5291, halves 0-2645 / 2645-5291), module
+    ABI 25, frozen settings, cold start. Evidence under `.artifacts/evidence/native_core/longclip_recheck/20261117_<mode>_<take>_display/`
+    (`native_render_parity.json` with both paths' frame hashes; `failed_frames` is capped at the first 8, so failures
+    past the 8th are counted per half but not listed). Ties / scatter / max level are the worst single frame. Runtime
+    in parentheses.
+    - spectrum ragdoll_quiet_intro_loud_end1 (1361 s): PASS, 0 failed; ties 2, scatter 0, max level 1; first half 2 /
+      0 / 1, second half 1 / 0 / 1.
+    - spectrum human_heavy1 (1223 s): 1 failed, input 5311 (mode-switch fade, not cold start; 3 ties not isolated); ties 3,
+      scatter 0, max level 1; first half 2 / 0 / 1, second half 0 / 0 / 1; steady 0 pixels past 1 level.
+    - spectrum anything_mixed2 (1000 s): 2 failed, inputs 5311 (25 ties) and 5312 (105 ties), both mode-switch fade, none
+      in 0-30; ties 105, scatter 0, max level 1; first half 2 / 0 / 1, second half 0 / 0 / 1; steady 0 pixels past 1
+      level.
+    - devcurve ragdoll_quiet_intro_loud_end1 (1504 s): 22 failed (first half 22, second half 0); listed 0-3, 5, 6, 7, 10
+      (all cold start; 224 ties at input 10); the other 14 of the first half are not listed; ties 224, scatter 0, max
+      level 3; first half 224 / 0 / 2, second half 9 / 0 / 3.
+    - devcurve human_heavy1 (1033 s): 22 failed (first half 21, second half 1); listed 0-3, 5, 6, 7, 8 (cold start; 1343
+      ties at input 8); the other 13 first-half failures and the one second-half failure (input unknown) are not listed;
+      ties 1343, scatter 0, max level 3; first half 1343 / 0 / 3, second half 9 / 0 / 3.
+    - devcurve anything_mixed2 (1160 s): 25 failed (first half 24, second half 1); listed 0-7 (cold start; 1329 ties
+      within the first half, 158 at input 1); the other 16 first-half failures and the one second-half failure are not
+      listed; ties 1329, scatter 0, max level 2; first half 1329 / 0 / 2, second half 9 / 0 / 2.
+    - Pattern: scatter 0 and flips 0 in all six; Spectrum's only failures are the mode-switch fade frames 5311-5312
+      (a replay artefact, as on nightsolong); Spline Curve fails on every take in the first half, at inputs 0-10 for the
+      listed ones (inputs 0-2 fail on every take with the same 35 / 114-158 / 134-152 tie counts), with 0-1 failures in
+      the second half (second-half ties never above 9 in any take; the one failing frame's reason is not recorded).
   - Lead for the cold-start frames (Bubble's probe, 17 Nov, same take and window): during the reveal both paths read
     the SAME values, content fade 1 and scene fade rising 0.8648 (input 0), 0.9422 (10), 0.9942 (22) to 1.0 by input
     30, but apply the scene fade at different places. Python folds the inherited scene opacity into the shader's fade
