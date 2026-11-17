@@ -73,10 +73,13 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
   two backgrounds or from its own alpha, or the pixels a blended layer sums into; float textures judged by their own
   ulp (D12 "The pixel tolerance"). Bounds are the measured worst times 1.5, stated beside their measured reasons.
 - Owner-level parity on recorded music (operator, 17 Nov): a mode port's owner rule (a), and rule (b) where the owner
-  route runs it, passes over four 60-second recorded song clips (the BTF section 24 recordings), not a short synthetic
-  clip. A 5-second synthetic recipe (Bubble's 5.5 s owner replay) is a smoke check only and never the parity proof. Keep
+  route runs it, passes over three 60-second recorded song clips chosen for distinct regimes (quiet intro to loud end,
+  sustained heavy, soft acoustic; from the BTF section 24 recordings), never a short synthetic clip; Bubble's port
+  acceptance uses four (operator, 17 Nov). A 5-second synthetic recipe (Bubble's 5.5 s owner replay) is a smoke check only and never the parity proof. Keep
   every frame's hash from these runs: they are the before-state an optimisation is later byte-compared against, per
-  backend (`Docs/Guides/Native_Bubble_Diagnostics.md`, "Optimisation gate"). A transition runs its full canonical
+  backend (`Docs/Guides/Native_Bubble_Diagnostics.md`, "Optimisation gate"). An optimisation renders only the native path
+  (native before against native after on the same backend; the Python reference hashes are kept from the port), and
+  stores images only for differing frames. A transition runs its full canonical
   duration over several image pairs.
   Run with the mode's frozen settings exactly as set, adaptive ones included (the Dynamic Floor where a frozen setting
   has it on), continuously from a cold start with no reset of adaptive state, and report each clip's first and second

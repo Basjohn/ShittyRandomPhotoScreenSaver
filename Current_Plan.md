@@ -702,7 +702,8 @@ the feature (D3D11 is not stated).
   shadows; neither uses bloom; no compute).
 - [ ] Re-prove Spectrum and Spline Curve on long recorded music, after N5.1 Bubble lands (operator, 17 Nov: the owner
   replay had a mode switch hard-coded at 5.5 s and held every frame in memory, so their short-clip parity proved less
-  than assumed). Run owner rule (a) at both placements over the four 60 s recorded clips, with the recorded-clip
+  than assumed). Run owner rule (a) at the display placement only (operator: half the data suffices for these two)
+  over the four 60 s recorded clips, with the recorded-clip
   replay Bubble's port added, under their existing D12 bounds. Frozen settings as set (Dynamic Floor on
   where they have it), continuous from cold, first and second 30 s reported apart. Keep the frame hashes on both backends as their
   reference. Classify any excess; never raise a bound to absorb it.
@@ -712,11 +713,11 @@ the feature (D3D11 is not stated).
   - [ ] Measure first: per-pass GPU time at 4K on OpenGL and Vulkan, with the GPU state and displays recorded, against the
     pre-flip baseline (`tools/preflip_pack.py --compare`), to find which passes carry the cost.
   - [ ] Byte-identical candidates first (culling, fewer or skipped empty passes, smaller targets where the output is
-    unchanged, buffer reuse, state changes): each one's four-clip frame hashes identical before and after, per backend,
+    unchanged, buffer reuse, state changes): each one's three-clip (60 s each, native path only) frame hashes identical before and after, per backend,
     and logic/reactivity unchanged (`bubble_parity.py`, BTF section 24).
   - [ ] Any candidate that cannot hold byte parity (reordered float math, half-float, merged passes) is a tier-2 change:
     shared tolerance plus the operator's sign-off, never a silent pass.
-  - [ ] Extruded Bubble gets the same treatment after N5.6, with its own four-clip before-state.
+  - [ ] Extruded Bubble gets the same treatment after N5.6, with its own three-clip before-state.
 
 **N5, background track (one High slot; transitions grouped by what they share; needs are in the matrix,
 section 2)**
