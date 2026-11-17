@@ -28,6 +28,24 @@ After the port lands, Bubble is optimised on OpenGL and Vulkan; these tools, `to
 - **(b) Pixels, byte parity per backend:** the standard proof is three full 60 s recorded takes covering distinct regimes, quiet intro to loud end (`ragdoll_quiet_intro_loud_end1`), sustained heavy (`human_heavy1`) and soft acoustic (`nightsolong_acousticsoft1`), run with `owner_render_parity.py --native --mode bubble --runs bubble --placements display --seconds 60 --recording <take>`. All-frame hashes before against after must be identical on OpenGL and, separately, on Vulkan. Never cut a take short: drift shows late. The 5.5 s `replay` recipe is the quick check. (The port itself was accepted on all four BTF §24 takes.) Two speed rules keep the same accuracy at about half the time: an optimisation compares native-before hashes against native-after hashes on the same backend, so only the native path is rendered (the port's Python reference hashes are already kept); and the hash-only compare mode stores images only for differing frames. Across backends the bound stays rule (b)'s one level; byte parity is never claimed across backends.
 - **(c) Where hashes differ:** `fade-inputs` and `components` classify where.
 - **(d) Cost:** the port's per-pass GPU timing, `tools/overhead_baseline.py`, and `preflip_pack.py --compare`.
+- **(e) Timing and smoothness, which hashes cannot see:** an offline replay runs at a fixed step, so an optimisation
+  that adds a stall, a sync point, a late upload or a cadence change keeps every hash identical and still judders
+  live. Each optimisation that touches the render thread, uploads, synchronisation or scheduling also passes BTF
+  Layers 2 and 3 (achieved cadence, deadline skipping, dt gaps, one in flight, state-to-paint latency), an invisible
+  live run against the pre-flip baseline (`tools/visualizer_live_check.py`, `preflip_pack.py --compare`: frame-time
+  median and p90, late frames), and `bubble_judder.py` on recorded music. game60 needs the operator's yes each time.
+
+Which proof catches what:
+
+| Change touches | Required | Not sufficient alone |
+|---|---|---|
+| Shaders, passes, targets, buffers, culling (render only) | (b) all frames, native before vs after, per backend; (d); (e) when uploads or sync change | coverage sampling |
+| Simulation, settings, record packing (logic) | (a) BTF section 24 lock; (b); response tools (`bubble_response_comparison.py`, breathing continuity) as support | music-response traces alone |
+| Scheduling, threads, pacing | (e) Layers 2 and 3 plus the live run and judder; (a) and (b) unchanged | any offline replay |
+
+An optimisation never uses the coverage-selected windows of the fast port proof (`Current_Plan.md`, "Fast long-clip
+proof"): it hashes every frame of all three takes, native only, so nothing can slip between samples. Byte identity on
+every frame means no fidelity, smoothness or reactivity loss in what is drawn; (e) covers when it is drawn.
 
 Long-clip runs keep the frozen settings exactly as set, adaptive ones included (the replay's Bubble settings run Dynamic Floor, Adaptive Sensitivity and AGC on; never switch them off for a run). Each clip runs continuously from a cold owner with no reset of any adaptive state between frames or segments. Adaptive state drifts with clip length, so late-clip results are reported separately: the owner report's `rule_a_halves` gives rule (a) for the first and second half of the mode's shown span, and a second half worse than the first is classified before anything else.
 
