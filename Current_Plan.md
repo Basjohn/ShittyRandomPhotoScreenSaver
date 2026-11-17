@@ -590,23 +590,12 @@ the feature (D3D11 is not stated).
     tools for correctness and later optimisation, preserving provenance, negative controls and distinct verdicts.
     Current promotion: `tools/visualizer_replay/bubble_native_diagnostics.py`, private `_bubble_native_*.py` helpers
     and `tests/test_bubble_native_diagnostics.py`; finish the independent receipt-provenance audit before landing.
-  - [ ] **Lead decision: one failing frame on the 60 s soft-acoustic take (blocks four-clip acceptance).** Root cause
-    as recorded: `nightsolong_acousticsoft1`, input 22 (0.24 s after a cold start, in the reveal), two horizontally
-    adjacent pixels (193,128) and (194,128) each two levels off (Python green 139/131, native 137/129), both on pixels
-    the reference draws translucent (the mask), reference 3x3 range 13 and 17 (not a content edge). Each is within the
-    tie level, but as a pair they are "neither isolated nor on a content edge". Deterministic (two runs, identical
-    hashes). Every other frame of the four takes passes: worst scatter 40/45/36/38 a frame, worst ties 2/3/3/4, no
-    flips; second halves no worse than first (37/34/36/33 scatter). The other three takes PASS
-    (`ragdoll_quiet_intro_loud_end1`, `human_heavy1`, `anything_mixed2`). It looks like the same masked
-    double-rounding of the 5.5 s run's fade pixels (two levels on translucent content), in a pair. The lead decides
-    whether that is a class to admit or an owner experiment (`fade-inputs`/`components` are fixed to the 5.5 s
-    recipe's inputs; a capture at input 22 of this take needs their recipe generalised). Command per take:
-    `owner_render_parity.py --out .artifacts/evidence/native_core/n5_1_bubble/<date>_rule_a_60s_<take> --native --mode
-    bubble --runs bubble --placements display --seconds 60 --recording <take>` (about 18 min each); reports and
-    per-frame hashes (the optimisation before-state) in `20261117_rule_a_60s_<take>/`.
-  - [ ] Non-blocking contract follow-up: compare an actual non-unit inherited scene opacity on both paths before
-    admitting a repair. Python folds it into shader fade while native composites it afterward; the current failing
-    fixture has inherited opacity1 and equal shader fades, so this source distinction does not explain that failure.
+  - [ ] Non-blocking contract follow-up, now with a measured case: non-unit inherited scene opacity. During the cold
+    reveal (scene fade 0.8648 at input 0 to 1.0 by input 30, content fade 1, identical on both paths) Python folds it
+    into the shader fade while native composites it afterward; the operator-accepted input-22 pair (D12 Bubble line)
+    sits in that window, as do Spline Curve's cold-start failures (see the Spectrum and Spline Curve box). Prove with
+    the scene fade forced to 1 on both paths, then one owner applies it for both. Probe:
+    `.artifacts/evidence/native_core/n5_1_bubble/20261117_reveal_values_bubble_nightsolong/`.
   - [ ] Owner rule (a) over the widened set at both placements: `owner_render_parity.py --native --mode bubble
     --offers` (variants a and b, every Choice offer, display and overscan), every run PASS.
   - [ ] Rule (b) and the item's contract: `native/core/python/bubble_check.py`, a copy of `devcurve_check.py` with
@@ -714,6 +703,16 @@ the feature (D3D11 is not stated).
     (owner report, both paths' frame hashes, `frame_verdicts.json`). Take: `nightsolong_acousticsoft1`, display
     placement, 5,503 inputs (the mode switch at input 5291, about 58 s; inputs 0-2750 first half, 2751-5290 second).
   - Not run yet: takes `ragdoll_quiet_intro_loud_end1`, `human_heavy1`, `anything_mixed2` for either mode.
+  - Lead for the cold-start frames (Bubble's probe, 17 Nov, same take and window): during the reveal both paths read
+    the SAME values, content fade 1 and scene fade rising 0.8648 (input 0), 0.9422 (10), 0.9942 (22) to 1.0 by input
+    30, but apply the scene fade at different places. Python folds the inherited scene opacity into the shader's fade
+    (one rounding, `VisualizerRenderNode._inherited_scene_opacity`); native draws at card content fade 1 into its RGBA8
+    surface and the scene fade is applied by the composite afterward (two roundings). Bubble's only long-clip failure
+    (input 22) and 20 of Spline Curve's 27 (inputs 0-25) fall exactly in this window. Next: prove it by comparing a
+    frame with the scene fade forced to 1 on both paths, then fix at the owner (one place applies the scene fade for
+    both), not by a bound. Probe and values: `.artifacts/evidence/native_core/n5_1_bubble/20261117_reveal_values_bubble_nightsolong/`
+    (`reveal_values.json`, probe `reveal_probe.py`); the existing Bubble box's "non-unit inherited scene opacity"
+    follow-up is the same question.
   - [ ] Spline Curve (`devcurve`), variant a: 27 failed frames, all ties over the 10-a-frame bound, not isolated and
     not on a content edge; max 3 levels, no scatter, no flips. 20 are inputs 0-25 (cold start: worst input 10, 162 ties
     at 2 levels), 2 at inputs 728 and 829, 5 in the second half (2991, 3170, 3385, 3446, 4042; 1-9 ties). Root cause
