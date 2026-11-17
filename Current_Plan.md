@@ -57,7 +57,8 @@ at the size asked. The interim holds are in `handoff.md`.
   N3.6 waits for its interim hold to lift.
   Defects between N steps: 1D.6 (design note first), then 1C.10. N2.5's and N2.9's leftovers ride
   with the next fitting dispatch.
-- [ ] Medium: the Bubble port (N5.1 Bubble box: close the remaining rule-(a) residuals), then the Oscilloscope.
+- [ ] Medium: the N5.1 Bubble box's last steps (its checkpoint audit, the 2560 x 1440 cost, the lead's D1 rehearsal),
+  then the Spectrum and Spline Curve scene-fade box, then the Oscilloscope.
 - [ ] Audit each merge at the appropriate risk; N3.4's source audit and native repair proofs are complete.
 
 ### Item 0. Operator defects of 11 Nov: section 1B, in its own order, ahead of everything below
@@ -586,7 +587,10 @@ the feature (D3D11 is not stated).
   Bubble"). Owner rule (a) passes on the 5.5 s replay and the four 60 s recorded takes under D12's Bubble scatter. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
   eliminated suspicions and evidence; the diagnostics tools are `tools/visualizer_replay/bubble_native_diagnostics.py`
   (`Docs/Guides/Native_Bubble_Diagnostics.md`). Follow the Native Port Playbook; no further tolerance widening.
-  Order: 2560 x 1440 cost, the D1 rehearsal.
+  Order: the checkpoint audit, the 2560 x 1440 cost, the D1 rehearsal.
+  - [ ] Checkpoint audit (Opus Medium) of the landing delta `git diff 4b17eeee8 7608b6c7b`: `bubble_check.py`, the
+    narrowed isolation rule and group cap in `tools/pixel_tolerance.py`, the re-registration, the cost round. Merged
+    pre-audit on 17 Nov at 99 % weekly usage.
   - [x] Class-word upload and portable unsigned-vector admission proved on both APIs; unchanged wire record (R-238).
   - [ ] Non-blocking contract follow-up, now with a measured case: non-unit inherited scene opacity. During the cold
     reveal (scene fade 0.8648 at input 0 to 1.0 by input 30, content fade 1, identical on both paths) Python folds it
@@ -652,7 +656,8 @@ the feature (D3D11 is not stated).
       one bounded candidate at a time, then return to the native migration ladder. BTF §24 binds.
 
   - [ ] The D1 rehearsal (lead, rule (f), D10): one bounded Vulkan run on Display 1 through `tools/d1_run.py`, the
-    Usu wallpaper and a recorded clip, ambience on and off.
+    Usu wallpaper and a recorded clip, ambience on and off. Deferred 17 Nov: Display 1 was off (`--list-displays`
+    showed Display 0 only); run it when Display 1 is on.
 - [ ] Non-blocking (does not hold the Bubble port): prove Bubble's rule-(a) scatter is the two-compiler case directly.
   Render Python's Bubble with the GLSL the qsb pack emits (the pack's GLSL variants in place of the composed source)
   over the `replay` recipe and show the steady residual collapses (from 2,430 one-level pixels, worst 34 a frame).
