@@ -700,13 +700,35 @@ the feature (D3D11 is not stated).
   and growth are uniform arrays).
 - [ ] N5.3 Extruded Spectrum, then Sphere (meshes, lighting, N4.j's backdrop environment, N4.l's silhouette
   shadows; neither uses bloom; no compute).
-- [ ] Re-prove Spectrum and Spline Curve on long recorded music, after N5.1 Bubble lands (operator, 17 Nov: the owner
-  replay had a mode switch hard-coded at 5.5 s and held every frame in memory, so their short-clip parity proved less
-  than assumed). Run owner rule (a) at the display placement only (operator: half the data suffices for these two)
-  over the four 60 s recorded clips, with the recorded-clip
-  replay Bubble's port added, under their existing D12 bounds. Frozen settings as set (Dynamic Floor on
-  where they have it), continuous from cold, first and second 30 s reported apart. Keep the frame hashes on both backends as their
-  reference. Classify any excess; never raise a bound to absorb it.
+- [ ] Spectrum and Spline Curve FAIL owner rule (a) on a 60 s recorded take (Sonnet recheck, 17 Nov; promote to an
+  Opus agent after N5.1 Bubble lands). Their landed parity was proved only on the 5.5 s Studio clip, which the owner
+  replay switched away from at 4.2 s. Neither mode is retuned and no D12 bound is changed while this is open.
+  - Sources: `tools/visualizer_replay/owner_render_parity.py` with `--recording <take> --seconds 60` (recorded-take
+    support from Bubble's branch, commits b2486b333, 673377683, 770fee01e; per-half reporting 4c0b1474b and the
+    first-eight-failing-frames record 92c721fc9 land with N5.1). Bounds: D12 "The pixel tolerance"
+    (`Docs/Future_Work/Native_Core_P3_Decisions.md`) via `tools/pixel_tolerance.py` (composite: 1 level on the mask,
+    10 ties at 3 levels, ties isolated or on a content edge, no flips). Module: ABI 25 (c53e3fe27). Evidence:
+    `.artifacts/evidence/native_core/longclip_recheck/20261117_{spectrum,devcurve}_nightsolong_display[_framelist]/`
+    (owner report, both paths' frame hashes, `frame_verdicts.json`). Take: `nightsolong_acousticsoft1`, display
+    placement, 5,503 inputs (the mode switch at input 5291, about 58 s; inputs 0-2750 first half, 2751-5290 second).
+  - Not run yet: takes `ragdoll_quiet_intro_loud_end1`, `human_heavy1`, `anything_mixed2` for either mode.
+  - [ ] Spline Curve (`devcurve`), variant a: 27 failed frames, all ties over the 10-a-frame bound, not isolated and
+    not on a content edge; max 3 levels, no scatter, no flips. 20 are inputs 0-25 (cold start: worst input 10, 162 ties
+    at 2 levels), 2 at inputs 728 and 829, 5 in the second half (2991, 3170, 3385, 3446, 4042; 1-9 ties). Root cause
+    first: (1) the cold-start frames: compare the first 26 inputs' logical state Python vs native (warm-up order, the
+    first record's settings, the Dynamic Floor's first value) before treating them as a class; (2) the steady
+    failures: classify their pixels with the 3x3 reference range (curve edges vs flat interior) and test whether one
+    source (the adaptive normaliser's float path, a uniform's precision, the line raster) explains every one. Fix at
+    the owner; if they prove to be a D12 class, the bound is a lead decision with the measured worst stated.
+  - [ ] Spectrum, variant a: steady passes the whole take (0 failures, 0 ties, 0 scatter, both halves); 3 failed
+    frames (5310-5312) in the fade after the replay's mode switch, 69 ties at 1 level, not isolated. Variant b passes.
+    Root cause first: the fade class (the composite's translucent mask during a mode switch). Check whether the mask
+    from the reference's two-background draw covers fading pixels; if the mask misses them, the judge is wrong, not
+    the port.
+  - [ ] After both are settled: the remaining three takes for each mode at the display placement, frame hashes kept
+    as their reference (the operator's half-size recheck: display placement only).
+  - Tool gaps found (fix with or before this box): no Vulkan path in the owner replay (no rule (b) or Vulkan hashes);
+    output only at the end of a run (a killed run loses everything); about 3 GB per run; 28 min per one-variant run.
 - [ ] Bubble GPU optimisation, after N5.1 lands (operator, 17 Nov: Bubble about 50 % GPU at 4K and Extruded Bubble
   about 55 %, on a stale build; "all guarded gains are valuable"). Under the optimisation gate in
   `Docs/Guides/Native_Bubble_Diagnostics.md`:
