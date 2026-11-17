@@ -37,7 +37,7 @@ items promoted to run soon are in §3. Nothing else in it is admitted until it a
 
 ## 1. Order of work (strict)
 
-Live checklist: every open step is its own box; retain only useful, brief native-core completion references and `[~]`
+Live checklist: every open step is its own box; landed boxes are deleted at merge; keep `[~]`
 validation steps and open side defects. **Load runs:** game60 at most 10 minutes in total, started by the lead only
 after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
 
@@ -294,7 +294,6 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   - [ ] One helper beside `configure_offline_controller` sets the framed view of the card a host models
     (`resolve_framed_view`); each host above calls it (the worker gates send it as `VIS_SET_VIEW`).
   - [ ] Guard: a Waveform tick in each of those hosts has a view span (negative control: today's hosts have none).
-- [x] P1 build retirement, teardown guard and R-226 caller sweep completed and audited; source retained as evidence.
 - [ ] N0.6 D6's proof (harness rounds 1 to 6 merged; the record is D6's "As proved" in the decisions document;
   evidence `.artifacts/evidence/native_core/n06/`). The validation layer (Khronos's Windows build in
   `D:/Temp/Scratch/SRPSS/native_spike/validation_layers/extracted/`) is given to the harness process alone with
@@ -306,14 +305,11 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   at creation and after every readback and is never excused. Owed:
   - [ ] The A excuse is removed when the project takes the next Qt 6.12 patch release (the branch head already uses
     `UNDEFINED`): the upgrade's rerun deletes A from `QT_DEFECTS` and every round is clean without it.
-  - [x] Core harness validation, child-failure and bounded translucent rounds completed and audited (D6, R-226).
   - [~] Awaiting Validation — lead, Display 1 visible and bounded, when two displays are connected: a real translucent window on the
     module's device: see-through to the desktop (D7 point 8's first route; the hidden runs cannot read the composed
     alpha), with the DWM system backdrop and the project's glass, then the swapchain under resize, DPI change and
     sleep and wake. If it is not see-through, D7's second route (DirectComposition) is tried next.
-- [x] N0.3's three scenes proved on Vulkan, OpenGL, D3D11 and D3D12 (decisions: N0.3).
 - [ ] N0.3: run the three scenes on Metal when a Metal machine is available (Watchlist).
-- [x] N0.7 D9 harness proof accepted (D9).
 - [ ] N0.7 remaining Qt 6.12 checks:
   - [ ] The handoff probe's inherited-state assertion was narrowed from Qt's whole sync to the item's
     `updatePaintNode` (`tests/test_qtquick_native_texture_handoff_gl.py:114-129`) on the statement that Qt 6.12's
@@ -451,7 +447,6 @@ N2.8, whose rehearsal closes N2.5's rule (f) and releases the Python renderer's 
 Numbering kept stable for the documents that cite it: N3.5 (per-pass GPU timing) moved to N2.6, and N3.8 (the job
 service) is built in N2b, where its first job (a photo's upload) is needed.
 
-- [x] N3.1 Scene targets proved (D14); N3.1b remains open.
 - [ ] N3.1b The four-sample capture cost on Vulkan (D14 point 13; settled before N5.6, Extruded Bubble, the first
   consumer of a four-sample capture). At 4K Vulkan's 4x minus 1x is 0.58 ms against the Python path's 0.41 (OpenGL
   0.45 is within noise, accepted); `cost_parts` puts about 0.5 ms of it in the capture step at four samples against
@@ -467,18 +462,9 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [ ] Fix what the scopes show, if it brings Vulkan's 4K 4x minus 1x to the Python path's or below with parity
     exact and validation clean; otherwise the figure and its cause go to the lead with the operator's look question
     (4K defaulting to fewer samples).
-- [x] N3.1c L2 scissor and L3 allocation proofs complete (D14, R-227, checkpoint audit 2).
-- [x] N3.2 mesh/buffer and audit4 proofs complete: interfaces, retarget/tail retention, reserved resources and
-  matrix/packet oracles (D15, R-233–R-237).
-- [x] N3.3 Compute passes: proved and audited (D16).
 - [ ] N3.4 Transparency and post-processing (D17): source/proof complete; remaining investigation is non-blocking
   (operator, 16 Nov). Consumers retain their own parity, lifecycle and measured-cost requirements.
-  - [x] ABI 25 gate, accounting, readback, parity, rest and retirement proofs and independent High review complete.
   - [ ] At Qt upgrades, recheck the private QRhi outside-pass `beginExternal`/`endExternal` contract against Qt source.
-  - [x] Whole-query alignment, blocking-read and populated-VAO controls proved; cause remains open (D17, R-232).
-  - [x] Sprite uniform declaration control and real wrong-input negative proved; cause remains open (D17, R-232).
-  - [x] Compiled-source comparison and texture-size/real wrong-mip control proved; cause remains open (D17, R-232).
-  - [x] Current matched backend check: Vulkan avoids this observed GL excess; scope/limits retained in R-232.
   - [ ] Non-blocking, deeper investigation by another agent: use R-232's retained timings, source/trace controls,
     failed avenues and unresolved hypotheses; choose one discriminating gather/control-flow or native-submission
     falsifier before running. Keep detailed evidence and machine conditions. Hardware counters are optional;
@@ -716,6 +702,46 @@ the feature (D3D11 is not stated).
   and growth are uniform arrays).
 - [ ] N5.3 Extruded Spectrum, then Sphere (meshes, lighting, N4.j's backdrop environment, N4.l's silhouette
   shadows; neither uses bloom; no compute).
+- [ ] Spectrum and Spline Curve FAIL owner rule (a) on a 60 s recorded take (Sonnet recheck, 17 Nov; promote to an
+  Opus agent after N5.1 Bubble lands). Their landed parity was proved only on the 5.5 s Studio clip, which the owner
+  replay switched away from at 4.2 s. Neither mode is retuned and no D12 bound is changed while this is open.
+  - Sources: `tools/visualizer_replay/owner_render_parity.py` with `--recording <take> --seconds 60` (recorded-take
+    support from Bubble's branch, commits b2486b333, 673377683, 770fee01e; per-half reporting 4c0b1474b and the
+    first-eight-failing-frames record 92c721fc9 land with N5.1). Bounds: D12 "The pixel tolerance"
+    (`Docs/Future_Work/Native_Core_P3_Decisions.md`) via `tools/pixel_tolerance.py` (composite: 1 level on the mask,
+    10 ties at 3 levels, ties isolated or on a content edge, no flips). Module: ABI 25 (c53e3fe27). Evidence:
+    `.artifacts/evidence/native_core/longclip_recheck/20261117_{spectrum,devcurve}_nightsolong_display[_framelist]/`
+    (owner report, both paths' frame hashes, `frame_verdicts.json`). Take: `nightsolong_acousticsoft1`, display
+    placement, 5,503 inputs (the mode switch at input 5291, about 58 s; inputs 0-2750 first half, 2751-5290 second).
+  - Not run yet: takes `ragdoll_quiet_intro_loud_end1`, `human_heavy1`, `anything_mixed2` for either mode.
+  - [ ] Spline Curve (`devcurve`), variant a: 27 failed frames, all ties over the 10-a-frame bound, not isolated and
+    not on a content edge; max 3 levels, no scatter, no flips. 20 are inputs 0-25 (cold start: worst input 10, 162 ties
+    at 2 levels), 2 at inputs 728 and 829, 5 in the second half (2991, 3170, 3385, 3446, 4042; 1-9 ties). Root cause
+    first: (1) the cold-start frames: compare the first 26 inputs' logical state Python vs native (warm-up order, the
+    first record's settings, the Dynamic Floor's first value) before treating them as a class; (2) the steady
+    failures: classify their pixels with the 3x3 reference range (curve edges vs flat interior) and test whether one
+    source (the adaptive normaliser's float path, a uniform's precision, the line raster) explains every one. Fix at
+    the owner; if they prove to be a D12 class, the bound is a lead decision with the measured worst stated.
+  - [ ] Spectrum, variant a: steady passes the whole take (0 failures, 0 ties, 0 scatter, both halves); 3 failed
+    frames (5310-5312) in the fade after the replay's mode switch, 69 ties at 1 level, not isolated. Variant b passes.
+    Root cause first: the fade class (the composite's translucent mask during a mode switch). Check whether the mask
+    from the reference's two-background draw covers fading pixels; if the mask misses them, the judge is wrong, not
+    the port.
+  - [ ] After both are settled: the remaining three takes for each mode at the display placement, frame hashes kept
+    as their reference (the operator's half-size recheck: display placement only).
+  - Tool gaps found (fix with or before this box): no Vulkan path in the owner replay (no rule (b) or Vulkan hashes);
+    output only at the end of a run (a killed run loses everything); about 3 GB per run; 28 min per one-variant run.
+- [ ] Bubble GPU optimisation, after N5.1 lands (operator, 17 Nov: Bubble about 50 % GPU at 4K and Extruded Bubble
+  about 55 %, on a stale build; "all guarded gains are valuable"). Under the optimisation gate in
+  `Docs/Guides/Native_Bubble_Diagnostics.md`:
+  - [ ] Measure first: per-pass GPU time at 4K on OpenGL and Vulkan, with the GPU state and displays recorded, against the
+    pre-flip baseline (`tools/preflip_pack.py --compare`), to find which passes carry the cost.
+  - [ ] Byte-identical candidates first (culling, fewer or skipped empty passes, smaller targets where the output is
+    unchanged, buffer reuse, state changes): each one's three-clip (60 s each, native path only) frame hashes identical before and after, per backend,
+    and logic/reactivity unchanged (`bubble_parity.py`, BTF section 24).
+  - [ ] Any candidate that cannot hold byte parity (reordered float math, half-float, merged passes) is a tier-2 change:
+    shared tolerance plus the operator's sign-off, never a silent pass.
+  - [ ] Extruded Bubble gets the same treatment after N5.6, with its own three-clip before-state.
 
 **N5, background track (one High slot; transitions grouped by what they share; needs are in the matrix,
 section 2)**
