@@ -339,11 +339,8 @@ def test_the_route_draws_bubble_with_its_target_streams_and_three_passes(monkeyp
     from rendering.native import program_values
     from rendering.quick.visualizer import native_route
 
-    # Not offered until its rule (b) passes (D10); registered here as the port's last step registers it.
-    assert "bubble" not in native_route.NATIVE_MODE_IDS
-    monkeypatch.setattr(native_route, "GENERIC_MODE_SETTINGS",
-                        {**native_route.GENERIC_MODE_SETTINGS, "bubble": native_route.BUBBLE_SETTINGS})
-    monkeypatch.setattr(native_route, "NATIVE_MODE_IDS", native_route.NATIVE_MODE_IDS | {"bubble"})
+    # Registered once its rule (a) passed (D10).
+    assert "bubble" in native_route.NATIVE_MODE_IDS
     monkeypatch.setattr(program_values, "mode_fragment_pack", lambda _mode: b"pack")
     monkeypatch.setattr(native_route, "_shader_pack", lambda _name: b"pack")
     window = SimpleNamespace(width=lambda: 1707, height=lambda: 960,

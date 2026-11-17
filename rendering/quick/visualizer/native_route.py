@@ -83,7 +83,7 @@ def _shader_pack(filename: str) -> bytes:
 #: Bubble's ambient target (D14 point 6): coverage premultiplied over, light added, at the size of its content.
 BUBBLE_AMBIENT_TARGET = "ambient"
 #: The size the ambient target holds while the ambience's Settings are off: the smallest (one 64-pixel bucket); its two
-#: passes then draw no instance (lead's choice A is open: see Current_Plan.md, N5.1 Bubble).
+#: passes then draw no instance (one program, never an ambience-off variant: lead, 15 Nov; D12 "As built: Bubble").
 _AMBIENT_IDLE_SIZE = (1, 1)
 
 
@@ -145,9 +145,9 @@ def bubble_program(pack: bytes, sizes: dict) -> dict:
 #: Python render host blends), its record its runtime schema (``native_schema.schema_for_mode``).
 GENERIC_MODE_SETTINGS: dict[str, Callable[[Any, dict], dict]] = {
     "devcurve": _devcurve_settings,
+    "bubble": _bubble_settings,
 }
-#: Bubble's settings function, registered in ``GENERIC_MODE_SETTINGS`` (and Vulkan offered in its descriptor) once its
-#: rule (b) passes (N5.1 Bubble, Current_Plan.md): until then the route never draws it and Vulkan never offers it (D10).
+#: Bubble's settings function by name (its diagnostics and tests call it directly).
 BUBBLE_SETTINGS = _bubble_settings
 #: A generic mode with more than its one fragment pass (N5.1, Bubble): mode id -> ``(fragment pack, target sizes) ->
 #: {"passes", "targets", "streams"}``, and its explicit-size targets' sizes ``(snapshot, settings) -> {target: size}``,
