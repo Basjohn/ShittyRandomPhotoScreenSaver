@@ -7,9 +7,6 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 
 ## 0. Scope and rules
 
-**Interim agent, 15 to 20 Nov 2026:** read `handoff.md` (repository root) first: the route for the week, the
-state at handoff and the mistakes to avoid. The last known-good pre-flip state is tag `preflip-checkpoint-20261115`.
-
 **If you are the lead (orchestrator):** read `Docs/Guides/Orchestrator_Handbook.md` before anything else, and run `tools/agent_handover.py` to see every agent worktree, its journal and its unmerged work. Agents read `Docs/Guardrails/Agent_Worktree_Rules.md`, then their item here.
 
 **Accepted baseline (not live work):** original Bubble, Extruded Bubble, Neon Lake (`shockwave_grid`),
@@ -300,6 +297,8 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
     (`resolve_framed_view`); each host above calls it (the worker gates send it as `VIS_SET_VIEW`).
   - [ ] Guard: a Waveform tick in each of those hosts has a view span (negative control: today's hosts have none).
 - [ ] N0.6 D6's proof (harness rounds 1 to 6 merged; the record is D6's "As proved" in the decisions document;
+  - [~] The P1 desktop window's alpha, DPI and sleep/wake behaviour, validated by the lead on Display 1 (hidden-host
+    results do not close it).
   evidence `.artifacts/evidence/native_core/n06/`). The validation layer (Khronos's Windows build in
   `D:/Temp/Scratch/SRPSS/native_spike/validation_layers/extracted/`) is given to the harness process alone with
   `--layer-path`: no registry entry, nothing persistent. Validation is clean apart from Qt 6.12.0's own defects, each

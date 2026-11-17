@@ -26,6 +26,20 @@ SRPSS documentation is organized by **current role**, not by the phase/checkpoin
 Keep only the small routing authorities at `Docs/` root plus generated evidence with a stable path contract.
 Do not create a catch-all `Guardrails_Detailed.md` or equivalent second rules ledger. Put each durable restriction directly into the existing subject owner and link to that owner from the short `Docs/Guardrails.md` preflight.
 
+## One owner per rule; no handoff files
+
+- **Every method, rule or contract has exactly one owning document.** Other documents and plan boxes link to it and
+  never restate it. If restating a rule seems necessary, move it to its owner instead. Example: the native proof
+  method is owned by `Docs/Guides/Native_Parity_And_Timing_Proof.md`. The playbook, the per-mode guides and the plan
+  link to it; a per-mode guide names only that mode's tools.
+- **No handoff, interim or status files.** A handover between leads or agents is `Current_Plan.md` section 1 (state,
+  order, slots), plus the Orchestrator handbook for how to work. Agent journals stay in their ignored
+  `.artifacts/handover/` path. Nothing at the repository root or in `Docs/` holds "for now" instructions.
+- **Before creating a document,** search for an existing owner (`Index.md`, this table). A new document is added to
+  `Index.md` in the same commit and states which question it owns.
+- **Closing work removes its text at once:** the plan box is deleted, its durable contract moves to its owner, and
+  nothing is left saying "landed" or "for the interim".
+
 ## Historical-document policy
 
 `Docs/Historical_Bugs/` is the repository's intentional historical documentation home. It has repeatedly prevented regressions because it records mechanisms, falsifiers and forbidden repairs. Preserve it.
