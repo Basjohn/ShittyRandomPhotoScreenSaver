@@ -65,6 +65,9 @@ found in this kind of code: the port proves it absent, with the negative control
 
 ## 2. The standard proof (named "standard" in each section)
 
+The full method across logic, pixels, timing and cost, and how much of each to run for a port or an optimisation,
+is in `Native_Parity_And_Timing_Proof.md`.
+
 Every port, on the primitive's own harness in `native/core/python/*_check.py`, on OpenGL and Vulkan in a hidden host
 (`Docs/Guardrails/Agent_Worktree_Rules.md`; `Handbook` section 8):
 

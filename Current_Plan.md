@@ -668,7 +668,7 @@ the feature (D3D11 is not stated).
   re-render), a `--api opengl|vulkan` choice (the owner replay draws OpenGL only), and a hash-only compare mode (a
   before directory against an after directory, all-frame hashes, images stored only for differing frames), with a
   negative control that a one-ulp shader change is detected.
-- [ ] Fast long-clip proof (lead design, 17 Nov; build after Bubble closes, before N5.4 Waveform and N5.6 Extruded
+- [ ] Fast long-clip proof (method: `Docs/Guides/Native_Parity_And_Timing_Proof.md`; lead design, 17 Nov; build after Bubble closes, before N5.4 Waveform and N5.6 Extruded
   Bubble). The operator: Waveform has four reaction modes and cannot take 7 to 8 hours of rendering and comparing
   per proof, and no single tool (the waveform music-response comparison included) is enough on its own. The proof
   splits into two layers, so that time goes where the risk is.
@@ -713,8 +713,8 @@ the feature (D3D11 is not stated).
   and growth are uniform arrays).
 - [ ] N5.3 Extruded Spectrum, then Sphere (meshes, lighting, N4.j's backdrop environment, N4.l's silhouette
   shadows; neither uses bloom; no compute).
-- [ ] Spectrum and Spline Curve FAIL owner rule (a) on a 60 s recorded take (Sonnet recheck, 17 Nov; promote to an
-  Opus agent after N5.1 Bubble lands). Their landed parity was proved only on the 5.5 s Studio clip, which the owner
+- [ ] Spectrum and Spline Curve long-take residuals (ACCEPTED by the operator, 17 Nov, with Bubble; non-blocking: the
+  scene-fade double-rounding fix, then a rerun as their control). Their landed parity was proved only on the 5.5 s Studio clip, which the owner
   replay switched away from at 4.2 s. Neither mode is retuned and no D12 bound is changed while this is open.
   - Sources: `tools/visualizer_replay/owner_render_parity.py` with `--recording <take> --seconds 60` (recorded-take
     support from Bubble's branch, commits b2486b333, 673377683, 770fee01e; per-half reporting 4c0b1474b and the
