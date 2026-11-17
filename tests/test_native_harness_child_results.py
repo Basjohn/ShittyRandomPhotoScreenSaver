@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "native" / "core" / "python"))
 
-TOOLS = ("backdrop_pyramid_check", "background_layer_check", "compute_pass_check", "devcurve_check",
+TOOLS = ("backdrop_pyramid_check", "background_layer_check", "bubble_check", "compute_pass_check", "devcurve_check",
          "fullscreen_pass_check", "generic_mode_check", "job_service_check", "post_stage_check",
          "spectrum_check", "timer_check", "transition_route_check")
 
