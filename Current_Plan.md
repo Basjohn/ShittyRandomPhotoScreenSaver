@@ -582,39 +582,33 @@ the feature (D3D11 is not stated).
   item as Spectrum's; both close with N5.8.
 - [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
-  Registered on the route and offered on Vulkan; the 5.5 s owner replay passes rule (a) under D12's Bubble scatter.
-  `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics, eliminated suspicions and
-  evidence. Follow the Native Port Playbook; no further tolerance widening.
+  Registered on the route and offered on Vulkan (rule (b) passes: `native/core/python/bubble_check.py`, D12 "As built:
+  Bubble"). Owner rule (a) passes on the 5.5 s replay and the four 60 s recorded takes under D12's Bubble scatter. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
+  eliminated suspicions and evidence; the diagnostics tools are `tools/visualizer_replay/bubble_native_diagnostics.py`
+  (`Docs/Guides/Native_Bubble_Diagnostics.md`). Follow the Native Port Playbook; no further tolerance widening.
+  Order: 2560 x 1440 cost, the D1 rehearsal.
   - [x] Class-word upload and portable unsigned-vector admission proved on both APIs; unchanged wire record (R-238).
-  - [ ] Retain and document the replay, fade-input, attachment and reference-fringe diagnostics as reusable repository
-    tools for correctness and later optimisation, preserving provenance, negative controls and distinct verdicts.
-    Current promotion: `tools/visualizer_replay/bubble_native_diagnostics.py`, private `_bubble_native_*.py` helpers
-    and `tests/test_bubble_native_diagnostics.py`; finish the independent receipt-provenance audit before landing.
   - [ ] Non-blocking contract follow-up, now with a measured case: non-unit inherited scene opacity. During the cold
     reveal (scene fade 0.8648 at input 0 to 1.0 by input 30, content fade 1, identical on both paths) Python folds it
     into the shader fade while native composites it afterward; the operator-accepted input-22 pair (D12 Bubble line)
     sits in that window, as do Spline Curve's cold-start failures (see the Spectrum and Spline Curve box). Prove with
     the scene fade forced to 1 on both paths, then one owner applies it for both. Probe:
     `.artifacts/evidence/native_core/n5_1_bubble/20261117_reveal_values_bubble_nightsolong/`.
-  - Order from here (lead, 17 Nov; stopped at 95 % weekly usage before starting any of them): rule (b)
-    `bubble_check.py` first (it gates the Vulkan offer; registration commit cb42dd213 is held out of the merge until
-    it passes), then `--offers` at both placements with the 5.5 s replay as the smoke check (the four 60 s takes
-    already cover variant a), then GPU cost per pass, then the docs.
-  - [ ] Owner rule (a) over the widened set at both placements: `owner_render_parity.py --native --mode bubble
-    --offers` (variants a and b, every Choice offer, display and overscan), every run PASS.
-  - [ ] Rule (b) and the item's contract: `native/core/python/bubble_check.py`, a copy of `devcurve_check.py` with
-    `MODE_ID = "bubble"`, the program from `native_route.bubble_program` (`Scene.place` calls `program(passes,
-    settings, targets=, streams=)` then `target_size` from `_bubble_target_sizes`), `SLOT_BYTES` from
-    `native_route._slot_bytes("bubble")`, the capture hooking `QuickBubbleRenderer.render`, the block round on the
-    `bubble` pass comparing only the elements the shader reads (positions and extras `count`, trail samples `3 count`;
-    `u_ambient_px` only when `u_ambient_enabled`), the item round's Settings change on `u_outline_color` and record
-    change on `u_bubbles_pos`. Negative controls, each in its own process: a position nudged, a big-class bit flipped,
-    the sprite coordinate y up (bake a variant of `bubble_ambient_points.frag` with `vSpriteCoord.y` flipped through
-    `probe_rings.bake`), the whole-allocation sample (a `bubble.frag` variant with `ratio = vec2(1.0)`), the mask pass
-    dropped, a skipped release. Run `python native/core/python/bubble_check.py --module-dir release/native_module
-    --require-validation --layer-path D:\Temp\Scratch\SRPSS\native_spike\validation_layers\extracted`.
-  - [ ] GPU median and p90 per pass at 2560 x 1440 and 4K against the Python renderer's (checklist 11), nothing at
-    rest, retirement to zero.
+  - [ ] Tracked exceptions of the scene-fade double-rounding class (lead, 17 Nov; no bound or class change; D12's
+    Bubble line), to disappear when the scene-fade fix lands (the Spectrum and Spline Curve box): the operator-accepted
+    `nightsolong_acousticsoft1` input 22 pair, and the offer runs `stream_direction=2` and `=6` at input 337 (the mode
+    switch), adjacent 2-level ties on the mask off a content edge (`n5_1_bubble/20261117_offers/`,
+    `20261117_offer_tie_classes/`). The other 38 offer runs at both placements pass (scatter worst 41, group worst 15;
+    the three steady tie frames pass under the lead's narrowed isolation rule, rerun `20261117_offers_steady_rerun/`).
+  - [ ] GPU median and p90 per pass at 2560 x 1440 against the Python renderer's (checklist 11): still open. 4K is
+    measured (D12 "As built: Bubble", cost).
+  - [ ] Check the 4K cost's ambience-off surface reading higher than ambience-on (0.299 against 0.236 ms on OpenGL at
+    840 x 560; 4.23 against 3.10 ms at the 4K frame): the columns are not swapped in `bubble_check.py` (`COST_RUNS`:
+    on = variant a's frame, off = variant b's), but variant b differs from variant a in many settings beyond the
+    ambience, so the two frames are not a like-for-like ambience toggle. Measure one frame with only the ambience
+    switched.
+  - [ ] For the Bubble GPU optimisation item: native OpenGL is about 5 % slower than the Python renderer at the full
+    4K frame (3.10 against 2.94 ms ambience on, 4.23 against 4.08 ms off; at 840 x 560 0.236 against 0.230 ms).
   - [ ] **N5.1 Bubble conditional optimisation gate (operator, 16 Nov; AFTER accepted native OpenGL/Vulkan parity
     and the per-pass cost check above, BEFORE N5.4 and NF):** recorded music now allows controlled, bounded
     performance-only optimisation without assuming that Bubble's calculations are the cause of any observed GPU
@@ -659,17 +653,6 @@ the feature (D3D11 is not stated).
 
   - [ ] The D1 rehearsal (lead, rule (f), D10): one bounded Vulkan run on Display 1 through `tools/d1_run.py`, the
     Usu wallpaper and a recorded clip, ambience on and off.
-  - [ ] Docs: D12 "As built: Bubble" (record, settings, passes, figures, the tolerance), `native/core/README.md` step 6
-    (a mode with targets and streams uses `GENERIC_MODE_PROGRAMS`), `Primitives.md` E3/E23 consumers. The Python
-    renderer retires as Spline Curve's does.
-  - Decided (lead, 15 Nov): choice A is superseded by ONE program. An ambience-off program without the samplers and
-    ambient streams is refused by the core (every record field needs a reader; every declared sampler must be bound),
-    and a second schema plus a sampler-free shader variant doubles what must be kept equal for about 32 KB saved. So:
-    one program, the ambient target held at the smallest bucket (64 x 64) while the frame carries no ambient points,
-    its two passes drawing no instance. Record this in D15/the Bubble port notes as the reason.
-    - [ ] In the GPU cost step, measure the ambience-off cost of the two empty passes at 4K (median and p90 of 240
-      frames, OpenGL and Vulkan). If above 0.02 ms, the core skips a pass whose instance count is 0 (one C++ change,
-      one build, a test that the pass is not begun); otherwise nothing more.
 - [ ] Non-blocking (does not hold the Bubble port): prove Bubble's rule-(a) scatter is the two-compiler case directly.
   Render Python's Bubble with the GLSL the qsb pack emits (the pack's GLSL variants in place of the composed source)
   over the `replay` recipe and show the steady residual collapses (from 2,430 one-level pixels, worst 34 a frame).
@@ -756,6 +739,9 @@ the feature (D3D11 is not stated).
     the port.
   - [ ] After both are settled: the remaining three takes for each mode at the display placement, frame hashes kept
     as their reference (the operator's half-size recheck: display placement only).
+  - [ ] When the scene-fade fix lands (one place applies the scene fade): rerun Bubble's offers
+    (`owner_render_parity.py --native --mode bubble --offers`, both placements) and `nightsolong_acousticsoft1` input 22;
+    Bubble's tracked exceptions (input 22, and `stream_direction=2` / `=6` at input 337) must disappear.
   - Tool gaps found (fix with or before this box): no Vulkan path in the owner replay (no rule (b) or Vulkan hashes);
     output only at the end of a run (a killed run loses everything); about 3 GB per run; 28 min per one-variant run.
 - [ ] Bubble GPU optimisation, after N5.1 lands (operator, 17 Nov: Bubble about 50 % GPU at 4K and Extruded Bubble

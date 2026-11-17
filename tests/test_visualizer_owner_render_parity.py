@@ -209,3 +209,42 @@ def test_parity_script_switches_near_the_end_of_a_long_clip_and_at_4_2_s_otherwi
     assert span > 10.0
     assert switch_s(parity.parity_script(long, "bubble")) > span - 2.0
     assert switch_s(gate.identity_script(long, "bubble")) < 5.0          # the gate's default stays 4.2 s
+
+
+def _drawn(frames: list) -> dict:
+    """A drawn run as ``drawn_run`` keeps it: per input its region and hash, and the compressed pixels."""
+    import hashlib
+    import zlib
+
+    import numpy as np
+
+    return {"pixels": [{"region": list(f.shape[:2]), "hash": hashlib.sha256(f.tobytes()).hexdigest()} for f in frames],
+            "frames": [(f.shape, zlib.compress(np.ascontiguousarray(f).tobytes())) for f in frames]}
+
+
+def test_rule_a_halves_and_failed_frames_keep_every_failing_input():
+    # Checkpoint audit 7 L1: a frame whose regions differ fails the run; it must also fail its half and be listed
+    # among the failed frames, never drop out of both for want of an input.
+    import numpy as np
+
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    base = np.full((12, 16, 4), 90, np.uint8)
+    base[..., 3] = 255
+    off = base.copy()
+    off[5, 5, 1] = 120                                           # a 30-level pixel: fails anywhere
+    small = np.full((10, 16, 4), 90, np.uint8)                   # another region
+    python = _drawn([base, base, base, base, base, base])
+    native = _drawn([base, off, base, base, small, base])
+    judged = parity.rule_a_frames(native, python, {}, "bubble")
+    assert [f["input"] for f in judged] == [1, 4]
+    halves = parity.rule_a_halves(judged, switch_input=6)
+    assert not halves["first"]["pass"] and not halves["second"]["pass"]       # input 1 and input 4
+    failed = parity.failed_frame_records(judged, native, python, {})
+    assert [f["input"] for f in failed] == [1, 4]
+    assert failed[0]["pixels_past_one_level"][0]["level"] == 30
+    assert "regions differ" in failed[1]["reasons"][0] and failed[1]["pixels_past_one_level"] == []
+    # A clean second half passes; a judged frame without an input fails both halves.
+    assert parity.rule_a_halves(judged[:1], switch_input=6)["second"]["pass"]
+    orphan = [{"pass": False, "reasons": ["no input"], "max_level": None}]
+    assert not any(h["pass"] for h in parity.rule_a_halves(orphan, switch_input=6).values())

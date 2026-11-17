@@ -121,7 +121,8 @@ blur), overlay scope with emission for bloom, depth texture plus mid-scope `back
 OIT, HDR with an ACES tone map, and a shaft-source attachment. Consumers: Blinds, Block Spins, Crumble, Cube Turn,
 Depth Cascade, Disintegrate, Exploding Tiles, Glass Shatter, Jigsaw, Membrane, Page Curl, Pixel Accretion, Volumetric
 Dissolve (transitions); Oscilloscope, Neon Lake, Extruded Bubble, Extruded Spectrum, Sphere, Waveform Ribbon (modes).
-Tests: `test_scene3d_target.py` (G1, G3A, shafts, scale, lifetime), `test_scene3d_dsa_targets.py`. Native: N3.1
+Native consumer: Bubble (N5.1), its ambient target (RGBA8 coverage plus RGBA16F light, an explicit size that follows
+its content, held at the smallest bucket while the ambience is off) sampled by its card pass. Tests: `test_scene3d_target.py` (G1, G3A, shafts, scale, lifetime), `test_scene3d_dsa_targets.py`. Native: N3.1
 (D14, `native/core/src/scene_targets.*`, ABI 17: targets as program data, sampled D32F depth, the capture step, MRT with
 per-attachment blends, one sampling request owner `scene3d.scene_samples` and the core's clamp; proved single-sampled
 on both backends by `scene_target_check.py`, multisampled through the core's nearest resolve, D14 point 10) and N3.4
@@ -376,7 +377,9 @@ soft-sprite pass added as light, depth untouched, with the per-tier budget. Cons
 `RibbonBurstRenderer` (E12) draws Waveform's event sparks through it. Native: part of N4.l (Exploding Tiles'
 particles) and of N3.2 (instanced quads in place of `gl_PointSize`). Notes: point sprites are a restructured draw, not
 a missing feature (Decisions D5.6 row 11).
-Native status: built as instanced quads (D15 point 5); the pass itself is N4.l, not built. Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e2).
+Native status: built as instanced quads (D15 point 5); the pass itself is N4.l, not built. First product consumer of
+the instanced quads: Bubble (N5.1), its ambient points and hero-circle mask as two instance streams from its record
+(`native_route.bubble_program`). Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e2).
 
 <a id="e24"></a>
 ### E24. Heightfields and terrain sampling

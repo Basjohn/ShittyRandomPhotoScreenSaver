@@ -337,6 +337,12 @@ worked example (harness-only); a product mode does the same in the product's pla
 6. **Its route** (a product mode, N5.1): its settings function in `rendering/quick/visualizer/native_route.py`
    `GENERIC_MODE_SETTINGS` (`(snapshot, card) -> members`) and `"vulkan"` in its descriptor's `renderer_backends`; the
    route encodes its record by its runtime schema and admits its frames by the Python node's rule (`_admission_flags`).
+   A mode with more than its one fragment pass (targets, streams, its own vertex stages: Bubble) also names its program
+   in `GENERIC_MODE_PROGRAMS` (`(fragment pack, target sizes) -> {"passes", "targets", "streams"}`) and its
+   explicit-size targets in `GENERIC_MODE_TARGET_SIZES` (`(snapshot, settings) -> {target: size}`): the route sends the
+   program with the first settings, then each size through `NativeMode.target_size` only when it changes (never per
+   frame), and its stream slot is whole 4096-byte steps of its record (`_slot_bytes`). Its harness is
+   `native/core/python/devcurve_check.py`'s rounds with the mode's own pieces (`use_mode`; `bubble_check.py`).
 
 ### Samplers and textures (N4.a; decision D13 in `Native_Core_P3_Decisions.md`)
 

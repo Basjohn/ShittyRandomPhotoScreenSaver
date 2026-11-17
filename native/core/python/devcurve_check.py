@@ -5,6 +5,10 @@ The module (``release/native_module``, built on GitHub) is loaded the product's 
 API (Qt Quick's API is process-wide): OpenGL first, then Vulkan on the module's own instance and devices (D6). No window
 is ever visible: the Python renderer draws into hidden targets and the native item into the module's hidden host.
 
+It is also the generic modes' harness: another mode's (``bubble_check.py``) loads its own copy of this module and
+replaces the mode's pieces through ``use_mode`` (its capture, block round, program, item-round changes, rule (b)
+bound, negative controls and extra rounds); the rounds, the children and the verdicts stay this file's.
+
 The OpenGL child captures the frames first: the production owner draws Spline Curve in process through every run of
 the widened set (``tools/conventions_identity.mode_runs("devcurve", offers=True)``: variants a and b and every Choice
 offer; settings from the spec, never presets) with the Python renderer, on recorded music (the shipped clip), and every
@@ -81,6 +85,70 @@ VULKAN_RULE_B = pt.Tolerance("spline curve, Vulkan against OpenGL (rule b)", mas
 SLOT_BYTES = 4096                # one Spline Curve record (3200 bytes) per slot, with room
 IDENTITY = {"runtime_generation": 7, "engine_generation": 3, "activation_id": 11}
 _ALLOWED_ENV: set[str] = set()
+#: The frames of the first run the item round plays.
+ITEM_FRAMES = 40
+
+# --------------------------------------------------------------------------------------------------------- the hooks
+# This harness is the generic modes' (Spline Curve's here). Another generic mode's harness (``bubble_check.py``) runs
+# the same rounds with its own pieces: it calls ``use_mode`` with the names below before ``main``, in its parent and in
+# each of its children (the child command is its own ``SCRIPT``).
+SCRIPT = Path(__file__).resolve()
+EVIDENCE_TOPIC = "n5_1_devcurve"
+DEFAULT_LABEL = "n51_devcurve"
+#: The mode's negative controls: name -> the rounds its Vulkan child runs and what it breaks. Each runs in its own
+#: process (Native Port Playbook checklist 6) against a finished run's kept OpenGL frames (``--control``).
+CONTROLS: dict[str, dict] = {}
+#: The control this child runs (``--control``), else None.
+CONTROL: str | None = None
+#: A mode's own rounds beyond ``ROUNDS``, run only when named (``--rounds``): name -> ``(core, engine, app, api,
+#: records, out) -> result`` on each API's child, on a host of the round's own.
+EXTRA_ROUNDS: dict = {}
+
+
+def use_mode(**hooks) -> None:
+    """Run this harness for another generic mode: replace the named module-level pieces (``MODE_ID``, ``_schema``,
+    ``SLOT_BYTES``, ``capture_runs``, ``round_block``, ``program_item``, the item round's changes, ``VULKAN_RULE_B``,
+    ``SCRIPT``, the evidence names and ``CONTROLS``). An unknown name is refused."""
+    unknown = sorted(name for name in hooks if name not in globals())
+    if unknown:
+        raise KeyError(f"no such harness piece: {', '.join(unknown)}")
+    globals().update(hooks)
+
+
+def settings_at(entry: dict, dpr: float) -> dict:
+    """The settings of ``entry`` drawn at ``dpr`` (a sampled frame of a mode whose settings follow the ratio keeps
+    them per ratio in ``settings_at``)."""
+    return (entry.get("settings_at") or {}).get(str(float(dpr)), entry["settings"])
+
+
+def program_item(mode, entry: dict, dpr: float, first: bool) -> None:
+    """The item's program with the settings the first time, else the settings."""
+    if first:
+        mode.program(_passes(), settings_at(entry, dpr))
+    else:
+        mode.settings(settings_at(entry, dpr))
+
+
+def control_record(record: bytes) -> bytes:
+    """The record the Vulkan child publishes under ``CONTROL`` (the mode's record controls); unchanged otherwise."""
+    return record
+
+
+def item_settings_change(settings: dict) -> dict:
+    """Rule (g)'s Settings change: a layer colour and its outline width."""
+    changed = dict(settings)
+    changed["u_devcurve_layer_bass_color"] = [1.0, 0.1, 0.1, 1.0]
+    changed["u_devcurve_layer_bass_outline_width"] = float(changed["u_devcurve_layer_bass_outline_width"]) * 2.0
+    return changed
+
+
+#: Rule (g)'s record change and the refused frame's NaN: this record field's first element.
+ITEM_RECORD_FIELD = "u_devcurve_curve_bass"
+
+
+def item_reshaped(record: bytes) -> bytes:
+    """Rule (g)'s Studio-shaped change: the record's curve."""
+    return _record_with(record, **{ITEM_RECORD_FIELD: 0.05})
 
 
 def _work(out: Path) -> Path:
@@ -353,13 +421,11 @@ class Scene:
                                 visible=True)
         shown = dict(entry["shown"], **{key: card[key] for key in ("dpr", "item_from_window", "window_from_target")})
         self.mode.card(shown)
+        program_item(self.mode, entry, dpr, not self.programmed)
         if not self.programmed:
-            self.mode.program(_passes(), entry["settings"])
             self.programmed = True
             if stream is not None:
                 self.mode.bind(stream.name, _schema(), expect=stream.expect)
-        else:
-            self.mode.settings(entry["settings"])
         return card
 
     def read(self, card: dict):
@@ -401,7 +467,7 @@ def round_pixels(core, engine, app, host, api: str, records: list[dict], referen
             for step, (index, reference, _quarters) in enumerate(references[dpr]):
                 entry = records[index]
                 card = scene.place(entry, dpr, stream)
-                stream.publish(entry["record"], float(step))
+                stream.publish(control_record(entry["record"]) if CONTROL else entry["record"], float(step))
                 scene.mode.update()
                 drawn = scene.read(card)
                 native_frames[f"{index}@{dpr}"] = drawn
@@ -416,7 +482,7 @@ def round_pixels(core, engine, app, host, api: str, records: list[dict], referen
                 if level:
                     # The reference is drawn into a transparent target: its own alpha is the translucency mask.
                     verdict = parity.rule_a_frame(drawn[..., :3], reference[..., :3],
-                                                  pixel_tolerance.translucent_by_alpha(reference))
+                                                  pixel_tolerance.translucent_by_alpha(reference), MODE_ID)
                     verdict["index"] = index
                     judged.append(verdict)
                     stats["differing"] += 1
@@ -438,10 +504,11 @@ def round_pixels(core, engine, app, host, api: str, records: list[dict], referen
                         "p90_ms": round(ordered[int(len(ordered) * 0.9)] / 1e6, 4) if ordered else None}
         # Rule (a) under the composite's tolerance for a translucent mode (owner_render_parity.rule_a_verdict, the
         # lead's decision on N5.1's per-pixel proof), pixel by pixel through the shared tolerance.
-        stats["rule_a"] = parity.rule_a_verdict(judged)
+        stats["rule_a"] = parity.rule_a_verdict(judged, MODE_ID)
         by_dpr[str(dpr)] = stats
-        _sheet(out, api, dpr, references[dpr][:4], native_frames)
-    np.savez_compressed(_work(out) / f"native_{api}.npz", **native_frames)
+        if not CONTROL:
+            _sheet(out, api, dpr, references[dpr][:4], native_frames)
+    np.savez_compressed(_work(out) / native_frames_name(api), **native_frames)
     checks = {f"samples_compared_dpr{dpr}": by_dpr[str(dpr)]["compared"] == len(references[dpr]) > 0 for dpr in DPRS}
     if api == "opengl":
         for dpr in DPRS:
@@ -466,12 +533,18 @@ def _sheet(out: Path, api: str, dpr: float, references, native_frames) -> None:
         Image.fromarray(sheet, "RGB").save(out / f"pixels_{api}_dpr{dpr}_python_native_difference_x64.png")
 
 
-def vulkan_against_opengl(out: Path) -> dict:
-    """Rule (b): the Vulkan frames against the native OpenGL frames of the same samples."""
+def native_frames_name(api: str, control: str | None = None) -> str:
+    """The work file of ``api``'s native frames (a control's Vulkan frames apart from the run's)."""
+    control = CONTROL if control is None else control
+    return f"native_{api}_{control}.npz" if control else f"native_{api}.npz"
+
+
+def vulkan_against_opengl(out: Path, control: str | None = None) -> dict:
+    """Rule (b): the Vulkan frames (``control``'s, when given) against the native OpenGL frames of the same samples."""
     import numpy as np
 
     work = _work(out)
-    gl_path, vk_path = work / "native_opengl.npz", work / "native_vulkan.npz"
+    gl_path, vk_path = work / "native_opengl.npz", work / native_frames_name("vulkan", control or "")
     ref_path = work / "references.npz"
     if not gl_path.exists() or not vk_path.exists() or not ref_path.exists():
         return {"pass": False, "error": "a native frame set or the references (the mask's source) is missing"}
@@ -520,7 +593,7 @@ def _find_key(value, key: str) -> list:
 
 
 def round_item(core, engine, app, host, records: list[dict]) -> dict:
-    chosen = [entry for entry in records if entry["key"] == MODE_ID][:40]
+    chosen = [entry for entry in records if entry is not None and entry["key"] == MODE_ID][:ITEM_FRAMES]
     dpr = 1.5
     host.set_device_pixel_ratio(dpr)
     scene = Scene(core, engine, host)
@@ -552,14 +625,11 @@ def round_item(core, engine, app, host, records: list[dict]) -> dict:
         # curve) each show, with no pipeline built again and the program unchanged.
         drawn = scene.read(card)
         program_generation = scene.mode.state()["program"]["generation"]
-        changed = dict(chosen[9]["settings"])
-        changed["u_devcurve_layer_bass_color"] = [1.0, 0.1, 0.1, 1.0]
-        changed["u_devcurve_layer_bass_outline_width"] = float(changed["u_devcurve_layer_bass_outline_width"]) * 2.0
-        scene.mode.settings(changed)
+        scene.mode.settings(item_settings_change(settings_at(chosen[9], dpr)))
         scene.mode.update()
         recoloured = scene.read(card)
         checks["settings_change_shows"] = bool((recoloured != drawn).any())
-        stream.publish(_record_with(chosen[9]["record"], u_devcurve_curve_bass=0.05), 20.0)
+        stream.publish(item_reshaped(chosen[9]["record"]), 20.0)
         scene.mode.update()
         reshaped = scene.read(card)
         checks["record_change_shows"] = bool((reshaped != recoloured).any())
@@ -567,7 +637,7 @@ def round_item(core, engine, app, host, records: list[dict]) -> dict:
         # The same module and the same program (no module build, no new program: rule (g)).
         checks["no_new_program_for_a_settings_or_record_change"] = state["program"]["generation"] == program_generation
         facts["program_generation"] = [program_generation, state["program"]["generation"]]
-        scene.mode.settings(chosen[9]["settings"])
+        scene.mode.settings(settings_at(chosen[9], dpr))
         # The drop edge: the card clears; a newer frame draws again.
         stream.publish(chosen[10]["record"], 21.0)
         scene.mode.update()
@@ -581,14 +651,14 @@ def round_item(core, engine, app, host, records: list[dict]) -> dict:
         checks["newer_frame_draws_after_drop"] = int(again[..., :3].max()) > 0
         # A refused frame (a NaN curve sample: no defined conversion) keeps the card, counted with its reason.
         refused_before = int(scene.mode.state().get("refused_frames", 0))
-        stream.publish(_record_with(chosen[12]["record"], u_devcurve_curve_bass=float("nan")), 23.0)
+        stream.publish(_record_with(chosen[12]["record"], **{ITEM_RECORD_FIELD: float("nan")}), 23.0)
         scene.mode.update()
         kept = scene.read(card)
         refusal = scene.mode.state()
         checks["refused_frame_keeps_the_card"] = bool((kept == again).all()) and int(kept[..., :3].max()) > 0
         checks["refused_frame_counted_once_with_its_reason"] = (
             int(refusal.get("refused_frames", 0)) == refused_before + 1
-            and "u_devcurve_curve_bass" in str(refusal.get("last_refusal")))
+            and ITEM_RECORD_FIELD in str(refusal.get("last_refusal")))
         facts["refused_frame"] = {"refused_frames": [refused_before, refusal.get("refused_frames")],
                                   "last_refusal": refusal.get("last_refusal")}
         # Unbind: the last drawn frame stays for the route's fade.
@@ -608,6 +678,12 @@ def round_item(core, engine, app, host, records: list[dict]) -> dict:
         checks["no_python_thread_state_on_the_render_thread"] = bool(
             state.get("syncs_probed") and state.get("syncs_with_python_thread_state") == 0
             and state.get("syncs_on_gui_thread") == 0 and edges and all(value == 0 for value in edges))
+        if CONTROL == "skipped_release":
+            # The broken form: the content's release edge omitted (the stream and the item kept). The retirement
+            # predicate below is taken on what is live now; the cleanup after it leaves nothing behind.
+            host.frames(2)
+            host_check._flush_deletes(app)
+            facts["skipped_release_live"] = {"readers": core.packet_reader_live(), "composites": core.composite_live()}
     finally:
         stream.close()
         scene.close(app)
@@ -616,7 +692,8 @@ def round_item(core, engine, app, host, records: list[dict]) -> dict:
     facts["thread_probe_control"] = _gui_thread_probe(core, engine, app, chosen)
     checks["control_gui_thread_host_counts_python_thread_states"] = bool(
         (facts["thread_probe_control"].get("syncs_with_python_thread_state") or 0) > 0)
-    live = {"readers": core.packet_reader_live(), "composites": core.composite_live()}
+    live = facts.get("skipped_release_live") or {"readers": core.packet_reader_live(),
+                                                  "composites": core.composite_live()}
     facts["live_at_end"] = live
     checks["nothing_left"] = (live["readers"]["readers"] == 0 and live["readers"]["views"] == 0
                               and not live["composites"].get("mode_sources")
@@ -656,8 +733,12 @@ def _save(out: Path, records: list[dict], references: dict) -> None:
     import numpy as np
 
     work = _work(out)
-    rows = [{key: (base64.b64encode(value).decode("ascii") if isinstance(value, bytes) else value)
-             for key, value in entry.items() if key != "python_block"} for entry in records]
+    # Only the frames another API draws: the sampled ones and the item round's (the rest are held as None).
+    kept = {index for refs in references.values() for index, _rows, _q in refs}
+    kept |= {index for index in [i for i, entry in enumerate(records) if entry["key"] == MODE_ID][:ITEM_FRAMES]}
+    rows = [None if index not in kept else
+            {key: (base64.b64encode(value).decode("ascii") if isinstance(value, bytes) else value)
+             for key, value in entry.items() if key != "python_block"} for index, entry in enumerate(records)]
     (work / "records.json").write_text(json.dumps(rows), encoding="utf-8")
     np.savez_compressed(work / "references.npz", **{f"{index}@{dpr}": rows_ for dpr, refs in references.items()
                                                      for index, rows_, _q in refs})
@@ -668,7 +749,7 @@ def _load(out: Path) -> tuple[list[dict], dict]:
 
     work = _work(out)
     rows = json.loads((work / "records.json").read_text(encoding="utf-8"))
-    records = [dict(row, record=base64.b64decode(row["record"])) for row in rows]
+    records = [None if row is None else dict(row, record=base64.b64decode(row["record"])) for row in rows]
     data = np.load(work / "references.npz")
     references: dict = {dpr: [] for dpr in DPRS}
     for key in data.files:
@@ -680,13 +761,16 @@ def _load(out: Path) -> tuple[list[dict], dict]:
 
 
 def child(args) -> dict:
+    global CONTROL
+    CONTROL = args.control
     root = host_check._root(args.repo)
     out = Path(args.out_dir)
-    record: dict = {"api": args.api, "rounds": list(args.rounds), "module_loaded": False, "instance_created": False}
+    record: dict = {"api": args.api, "rounds": list(args.rounds), "module_loaded": False, "instance_created": False,
+                    "control": CONTROL}
     if args.api == "opengl":
         from rendering.quick.bootstrap import configure_quick_graphics
 
-        configure_quick_graphics(reason="devcurve-check")       # Qt Quick on OpenGL, as the product selects it
+        configure_quick_graphics(reason=f"{MODE_ID}-check")     # Qt Quick on OpenGL, as the product selects it
         from PySide6.QtWidgets import QApplication
 
         app = QApplication([sys.argv[0]])
@@ -738,6 +822,8 @@ def child(args) -> dict:
             try:
                 if name == "item":
                     record[name] = round_item(core, engine, app, host, records)
+                elif name in EXTRA_ROUNDS:
+                    record[name] = EXTRA_ROUNDS[name](core, engine, app, args.api, records, out)
                 else:
                     record[name] = round_pixels(core, engine, app, host, args.api, records, references, out)
             except Exception:
@@ -783,13 +869,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--module-dir", default="release/native_module")
     parser.add_argument("--repo", default=".", help="the repository root (default: the current directory)")
     parser.add_argument("--apis", nargs="+", default=list(APIS), choices=APIS)
-    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=ROUNDS)
+    parser.add_argument("--rounds", nargs="+", default=list(ROUNDS), choices=ROUNDS + tuple(EXTRA_ROUNDS))
     parser.add_argument("--sample-every", type=int, default=40, help="every Nth drawn frame of each run is a pixel sample")
-    parser.add_argument("--label", default="n51_devcurve")
+    parser.add_argument("--label", default=DEFAULT_LABEL)
     parser.add_argument("--layer-path", type=Path, default=None,
                         help="the folder holding VkLayer_khronos_validation.json (VK_ADD_LAYER_PATH for this run only)")
     parser.add_argument("--require-validation", action="store_true",
                         help="a Vulkan run whose validation layer did not load is a FAIL, never a pass")
+    parser.add_argument("--control", choices=sorted(CONTROLS) or None, default=None,
+                        help="one negative control, in its own Vulkan child against the kept OpenGL frames of the "
+                             "finished run --label names; its verdict must be FAIL")
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--api", choices=APIS, help=argparse.SUPPRESS)
     parser.add_argument("--out-dir", help=argparse.SUPPRESS)
@@ -805,22 +894,30 @@ def main(argv: list[str] | None = None) -> int:
         args.child_json.write_text(json.dumps(record, indent=2, default=str), encoding="utf-8")
         return 0
 
-    if "opengl" not in args.apis:
+    if args.control:
+        # A control redraws Vulkan only, against the OpenGL frames and references a finished run kept.
+        args.apis, args.rounds = ["vulkan"], list(CONTROLS[args.control]["rounds"])
+    elif "opengl" not in args.apis:
         parser.error("the OpenGL child captures the frames and the references every other API compares against")
     vk_validation.use_layer_path(args.layer_path, _ALLOWED_ENV)
     root = host_check._root(args.repo)
     from tools import artifact_paths
 
-    out = artifact_paths.evidence_dir("native_core", "n5_1_devcurve", args.label)
+    out = artifact_paths.evidence_dir("native_core", EVIDENCE_TOPIC, args.label)
     out.mkdir(parents=True, exist_ok=True)
+    if args.control and not all((_work(out) / name).exists()
+                                for name in ("records.json", "references.npz", "native_opengl.npz")):
+        parser.error(f"--control needs the finished run {args.label}'s work folder (records, references, OpenGL frames)")
     environment = vk_validation.environment_record(_ALLOWED_ENV)
     results: dict = {}
     for api in [a for a in APIS if a in args.apis]:
         child_json = out / f"child_{api}.json"
         child_json.unlink(missing_ok=True)  # discard any earlier child record before launch
-        command = [sys.executable, str(Path(__file__).resolve()), "--child", "--api", api, "--repo", str(root),
+        command = [sys.executable, str(SCRIPT), "--child", "--api", api, "--repo", str(root),
                    "--module-dir", args.module_dir, "--out-dir", str(out), "--child-json", str(child_json),
                    "--sample-every", str(args.sample_every), "--rounds", *args.rounds]
+        if args.control:
+            command += ["--control", args.control]
         started = time.monotonic()
         try:
             proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(root))
@@ -840,21 +937,28 @@ def main(argv: list[str] | None = None) -> int:
     failed = [reason for _ok, reasons in verdicts.values() for reason in reasons]
     cross = None
     if "vulkan" in results and "pixels" in args.rounds:
-        cross = vulkan_against_opengl(out)
+        cross = vulkan_against_opengl(out, args.control)
         if not cross.get("pass"):
             failed.append(f"vulkan against opengl: {cross}")
     if not environment["clean"]:
         failed.append(f"environment: {', '.join(environment['contaminating_set'])} set")
-    summary = {"apis": args.apis, "rounds": args.rounds, "environment": environment,
+    summary = {"apis": args.apis, "rounds": args.rounds, "environment": environment, "control": args.control,
+               "control_breaks": CONTROLS[args.control]["breaks"] if args.control else None,
                "require_validation": args.require_validation, "vulkan_against_opengl": cross,
                "verdicts": {api: {"pass": ok, "failed": reasons} for api, (ok, reasons) in verdicts.items()},
                "results": results, "pass": not failed}
-    (out / "summary.json").write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
+    name = f"summary_control_{args.control}.json" if args.control else "summary.json"
+    (out / name).write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
     for api, (ok, reasons) in verdicts.items():
         print(f"{api}: {'PASS' if ok else 'FAIL'}" + ("" if ok else " (" + "; ".join(reasons)[:2000] + ")"))
     if cross is not None:
         print(f"vulkan against opengl: {cross}")
-    print(f"evidence: {out / 'summary.json'} (the work folder holds the frames: delete it once judged)")
+    print(f"evidence: {out / name} (the work folder holds the frames: delete it once judged)")
+    if args.control:
+        # A control is seen failing or it proves nothing.
+        print(f"N51 CONTROL {args.control} " + ("FAILED AS EXPECTED: " + "; ".join(failed)[:4000] if failed
+                                                else "PASSED: the control is blind"))
+        return 0
     print("N51 VERDICT " + ("PASS" if not failed else "FAIL: " + "; ".join(failed)[:4000]))
     return 0
 

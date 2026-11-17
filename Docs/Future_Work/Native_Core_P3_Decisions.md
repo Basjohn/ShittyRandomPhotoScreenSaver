@@ -954,6 +954,43 @@ rounds again. Only a straight-alpha surface under a straight-alpha composite ble
 single-pass content alone (overlapping translucent passes do not compose in straight alpha): refused (lead, 15 Nov);
 the surface stays premultiplied.
 
+**As built: Bubble (N5.1, ABI 25, no C++).** The first generic mode with more than one pass. Its record is a runtime
+schema (`core/visualizer_engine/bubble_native_schema.py`, 24,048 bytes, version 1): BubbleDraw's per-frame members
+(`BUBBLE_FRAME_MEMBERS`: positions, extras and trail samples as f64x4 arrays, the count, the four big-class words as
+one canonical `uvec4` (R-238), the wake's strength and opacity, the rainbow hue, the ambience's two switches) and the
+ambient layer's two instance streams with their used lengths; the route's slot is whole 4096-byte steps of it
+(`_slot_bytes`). Its settings are the Python renderer's own `bubble_settings_values` and
+`bubble_ambient_settings_values` (the six members the Python renderer never writes are settings at 0). Its program
+(`native_route.bubble_program`, `GENERIC_MODE_PROGRAMS`) is three passes: the ambient points and the hero-circle mask
+as instanced quads (D15 point 5) into the ambient target (RGBA8 coverage premultiplied over, RGBA16F light added; the
+mask erases both), then the card's `bubble.frag` sampling both attachments. The ambient target's explicit size
+follows its content (`GENERIC_MODE_TARGET_SIZES`, sent through `NativeMode.target_size` only when it changes); with
+the ambience off it is held at the smallest bucket and its two passes draw no instance: one program, not an
+ambience-off variant (lead, 15 Nov: a program without the samplers is refused, and a second schema and shader variant
+would double what must be kept equal for about 32 KB). Proved by `native/core/python/bubble_check.py` (the generic
+modes' rounds of `devcurve_check.py` with Bubble's pieces): the `bubble` pass's block byte for byte over 13,642 frames
+of the widened run set (38 runs; 13,283 with the ambience on), comparing only what the shader reads; the item's
+contract on both APIs; on OpenGL rule (a) against the Python renderer within the composite's tolerance; and rule (b):
+Vulkan against native OpenGL over 684 sampled frames (dpr 1 and 1.5), every differing pixel exactly one level, at
+most 21 a frame, the largest group of touching ones 7, no tie; its bound, decided by the lead (17 Nov), is 32 scatter
+a frame in groups of at most 11 (the measured worst times 1.5; the card is opaque: no mask), validation clean. Its negative controls each fail in their own process: a position nudged, a
+big-class bit flipped, the sprite coordinate's y flipped, the whole-allocation sample, the mask pass dropped, the
+skipped release. Owner rule (a): `owner_render_parity.py --native --mode bubble` (the 5.5 s replay and the four 60 s
+recorded takes; the widened set at both placements is open, see the plan's N5.1 Bubble box). Evidence
+`n5_1_bubble/20261117_rule_b/`. The Python renderer retires as Spline Curve's does.
+
+*Cost (17 Nov, `bubble_check.py --rounds cost`, `n5_1_bubble/20261117_cost_4k/`; RTX 4090, no validation layer, the
+GPU shared with the installed SRPSS and the desktop at 23 to 42 % utilisation before each child; each figure the
+least-loaded of three rounds, median of at least 240 frames).* The surface (all three passes) with the ambience on and
+off: the rig's card on a 4K display (840 x 560 device pixels) 0.236 / 0.299 ms on OpenGL, 0.181 / 0.241 ms on Vulkan,
+the Python renderer 0.230 / 0.293 ms; the card at a 4K frame's pixel count (3360 x 2240, ratio 8, the hidden host's
+largest) 3.10 / 4.23 ms on OpenGL, 2.59 / 3.66 ms on Vulkan, the Python renderer 2.94 / 4.08 ms. The `bubble` pass is
+all of it: the points pass 0.002 ms and the mask pass 0.001 ms on OpenGL (0.017 and 0.011 ms at the 4K frame), under
+a microsecond on Vulkan (at the 4K frame below the Vulkan figures' run-to-run spread, about 0.08 ms). The ambience-off
+empty pair (two passes into the 64 x 64 target, no instance; its cost does not depend on the card) adds 0.000 ms on
+OpenGL and 0.0008 ms on Vulkan, under the 0.02 ms rule, so the core keeps beginning them. Nothing is timed at rest.
+p90s in the evidence.
+
 **The composite tolerance for translucent modes (rule (a), lead's decision, 15 Nov).** For a mode drawn through the
 composite's premultiplied surface, rule (a) is: fill pixels within 1 level (the surface's extra rounding of the
 premultiplied product), plus edge pixels within 3 levels, at most 10 in a frame (the measured worst, 7, times 1.5:
@@ -992,13 +1029,22 @@ each harness states its bounds beside their measured reasons:
 The bounds, each the measured worst times 1.5 or the decision it came from: the composite (rule (a) of every mode drawn
 through it) 1 level on the mask, 10 ties at 3 levels. Spline Curve's owner runs (variants a and b at both placements,
 the three offers): 5.1M to 39.2M differing pixels a run, every one on the mask but at most 8 ties a frame; Spectrum's
-(a and b at both placements): 6.3M to 17.6M, every one on the mask at 1 level, no tie. Bubble's owner rule (a): 51
-scatter (measured 34), steady and fade; ties and flips as the composite (lead, 17 Nov: the `NativeFragmentPass`
-two-compiler case, Python's driver-compiled composed GLSL against the qsb pack; evidence
+(a and b at both placements): 6.3M to 17.6M, every one on the mask at 1 level, no tie. Bubble's owner rule (a): 68
+scatter (measured 45 on the four 60 s takes: 38, 36, 40 and 45; 34 on the 5.5 s replay; lead, 17 Nov, checkpoint
+audit 7 M3), spread: no group of touching scatter pixels larger than 22 (measured 15 on the 5.5 s replay's 2,430
+pixels, 1,908 of them with no scatter neighbour; audit 7 M1), and a tie with 3 or more scatter pixels in its 3x3 is
+not isolated (lead, 17 Nov, narrowing M1: a lone tie beside one or two scatter pixels, measured in three offer runs,
+stays isolated), so a compact one-level patch, or ties inside one, fails; steady and fade; ties and flips as the composite (lead, 17 Nov: the
+`NativeFragmentPass` two-compiler case, Python's driver-compiled composed GLSL against the qsb pack; evidence
 `n5_1_bubble/20261117_steady_residual_classes/`, every pixel exactly one level, spread over the whole content).
 On the four 60 s recorded takes it holds on 21,107 of 21,108 judged frames; the operator accepted the one exception
 as measured (17 Nov, no bound or class change): `nightsolong_acousticsoft1` input 22, cold-start reveal, an adjacent
-pair at 2 levels on the mask (`n5_1_bubble/20261117_rule_a_60s_*`). A `NativeFragmentPass` (`transition_route_check.py`) rule (a): 72 scatter (measured
+pair at 2 levels on the mask (`n5_1_bubble/20261117_rule_a_60s_*`). Two tracked exceptions of the same scene-fade
+double-rounding class (lead, 17 Nov, no bound or class change): the offer runs `stream_direction=2` and `=6`, input
+337 (the mode switch), adjacent 2-level ties on the mask off a content edge (`n5_1_bubble/20261117_offers/`,
+`20261117_offer_tie_classes/`); they must disappear once the scene fade is applied in one place. Bubble's rule (b)
+(`bubble_check.py`, Vulkan against native OpenGL, lead's decision 17 Nov): 32 scatter a frame (measured 21) in groups
+of at most 11 (measured 7), no tie (`n5_1_bubble/20261117_rule_b/`). A `NativeFragmentPass` (`transition_route_check.py`) rule (a): 72 scatter (measured
 48), 8 ties, 1 flip; rule (b): 2,000 scatter (measured 1,317, VHS), 8 ties (measured 5). N5.2a's seven: rule (a) exact,
 rule (b) 1,100 scatter (measured 736, Warp), no tie. Geometry passes (`mesh_buffer_check.py`, both rules): 1 level on
 the mask, 8 ties (measured one, at 2 levels on a streak's edge). Scene targets (`scene_target_check.py`): 1 unit on the
