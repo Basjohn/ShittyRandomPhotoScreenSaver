@@ -129,6 +129,8 @@ _OUT: dict = {"dir": "."}
 #: the cost of the two empty passes).
 _VARIANT: dict = {"name": None}
 _AMBIENT_PASSES = ("bubble_ambient_points", "bubble_ambient_mask")
+#: The settings only the ambient points' pass reads (``bubble_ambient_settings_values``).
+_POINTS_ONLY_SETTINGS = frozenset({"uTexelScale", "uSpriteScale", "uGlowSpread", "uMicroColor", "uParticleColor"})
 
 
 def program(sizes: dict) -> dict:
@@ -170,6 +172,9 @@ def program_item(mode, entry: dict, dpr: float, first: bool) -> None:
     """The route's order: the program with its targets and streams and the first settings, then each explicit-size
     target's size (``NativeMode.target_size``); afterwards the settings and the sizes."""
     settings = base.settings_at(entry, dpr)
+    if _VARIANT["name"] == "no_points":
+        # Without its pass, the points' own block members have no reader (the core refuses an unknown name).
+        settings = {k: v for k, v in settings.items() if k not in _POINTS_ONLY_SETTINGS}
     sizes = sizes_at(entry, dpr)
     if first:
         built = program(sizes)
@@ -261,7 +266,7 @@ def capture_runs(sample_every: int) -> tuple[list[dict], list]:
             entry["settings_at"], entry["sizes_at"] = {}, {}
             if current["key"] not in _COST_SNAPSHOTS and current["index"] >= COST_FROM_FRAME:
                 _COST_SNAPSHOTS[current["key"]] = (len(records), snapshot, tuple(frame.logical_size))
-            for ratio in (*base.DPRS, COST_DPR):
+            for ratio in (*base.DPRS, *cost_scales(card).values()):
                 moved = dataclasses.replace(snapshot, presentation=dataclasses.replace(presentation, dpr=ratio))
                 at = BUBBLE_SETTINGS(moved, card)
                 entry["settings_at"][str(float(ratio))] = at
@@ -410,9 +415,14 @@ def round_block(core, records: list[dict]) -> dict:
 
 # --------------------------------------------------------------------------------------------------------- cost
 
-#: The cost round (checklist 11; the N5.1 box): GPU time per pass at 4K, the card of the rig's display at this ratio
-#: (3840 x 2160 device pixels for the 1920 x 1080 display), median and p90 of at least COST_SAMPLES timed frames.
+#: The cost round (checklist 11; the N5.1 box): GPU time per pass at 4K, median and p90 of at least COST_SAMPLES timed
+#: frames, at two scales: ``display_4k``, the rig's card on a 4K display (its 1920 x 1080 display at ratio 2: the card
+#: as the product shows it there), and ``card_4k_area``, the same card drawn at a 4K frame's pixel count (a card
+#: filling a 4K display, Bubble's worst case; the hidden host's ratio stops at 8).
 COST_DPR = 2.0
+COST_WIDE_PIXELS = 3840
+COST_MAX_HOST_DPR = 8.0
+COST_ROUNDS = 3
 COST_SAMPLES = 240
 COST_MAX_FRAMES = 1200
 #: The cost round's frames: the first sampled frame of variant a (ambience on) and of variant b (ambience off) at or
@@ -455,6 +465,14 @@ def _summary(times: list[int]) -> dict:
             "p10_ms": round(ordered[int(len(ordered) * 0.1)] / 1e6, 4)}
 
 
+def cost_scales(card: dict) -> dict:
+    """The cost round's ratios for ``card``: name -> dpr. ``card_4k_area``: the card at a 4K frame's pixel count
+    (3840 x 2160), within the hidden host's largest ratio (8)."""
+    width, height = (float(v) for v in card["item_size"])
+    return {"display_4k": COST_DPR,
+            "card_4k_area": min(COST_MAX_HOST_DPR, (COST_WIDE_PIXELS * 2160.0 / (width * height)) ** 0.5)}
+
+
 def _cost_entries(records: list) -> dict:
     found = {}
     for name, key in COST_RUNS.items():
@@ -463,15 +481,19 @@ def _cost_entries(records: list) -> dict:
     return found
 
 
-def _native_cost(core, engine, app, host, entry: dict, variant: str | None) -> dict:
-    """The item's surface GPU time (the timer's kind 2: every pass of the content) for ``entry`` re-published each
-    frame (a new sequence, so each frame records), under ``variant``; then nothing at rest."""
+def _native_cost(core, engine, app, host, entry: dict, variant: str | None, dpr: float) -> dict:
+    """The item's surface GPU time (the timer's kind 2: every pass of the content) for ``entry`` at ``dpr``,
+    re-published each frame (a new sequence, so each frame records), under ``variant``; then nothing at rest."""
     _VARIANT["name"] = variant
     scene = None
     stream = base.Stream()
     try:
-        scene = base.Scene(core, engine, host)
-        scene.place(entry, COST_DPR, stream)
+        try:
+            scene = base.Scene(core, engine, host)
+            scene.place(entry, dpr, stream)
+        except ValueError as exc:                       # one variant refused: reported, the others still timed
+            return {"samples": 0, "median_ms": None, "p90_ms": None, "p10_ms": None, "timed_at_rest": 0,
+                    "error": str(exc)}
         state = scene.mode.state()
         host.set_gpu_timer(True)
         for step in range(4):
@@ -508,8 +530,8 @@ def _native_cost(core, engine, app, host, entry: dict, variant: str | None) -> d
         base.host_check._flush_deletes(app)
 
 
-def python_cost(snapshot, logical_size) -> dict:
-    """The Python renderer's GPU time for the same frame at COST_DPR (OpenGL, its own render host into a target of the
+def python_cost(snapshot, logical_size, dpr: float) -> dict:
+    """The Python renderer's GPU time for the same frame at ``dpr`` (OpenGL, its own render host into a target of the
     item's pixels), GL_TIME_ELAPSED around the whole render, one query a frame."""
     import ctypes
     import dataclasses
@@ -520,7 +542,7 @@ def python_cost(snapshot, logical_size) -> dict:
     import spectrum_check
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
 
-    snapshot = dataclasses.replace(snapshot, presentation=dataclasses.replace(snapshot.presentation, dpr=COST_DPR))
+    snapshot = dataclasses.replace(snapshot, presentation=dataclasses.replace(snapshot.presentation, dpr=dpr))
     fmt = QSurfaceFormat()
     fmt.setRenderableType(QSurfaceFormat.OpenGL)
     fmt.setProfile(QSurfaceFormat.CoreProfile)
@@ -536,7 +558,7 @@ def python_cost(snapshot, logical_size) -> dict:
         raise RuntimeError("the Python cost's context is not current")
     host = QuickVisualizerRenderHost()
     times: list[int] = []
-    width, height = (int(round(v * COST_DPR)) for v in logical_size)
+    width, height = (int(round(v * dpr)) for v in logical_size)
     color = gl.glGenTextures(1)
     fbo = gl.glGenFramebuffers(1)
     query = (ctypes.c_uint * 1)()
@@ -577,44 +599,69 @@ def round_cost(core, engine, app, api: str, records: list, out: Path) -> dict:
     left is the ``bubble`` pass with the target's clear); with the ambience off, the route's program against it with its
     two empty passes drawn twice (their cost, the N5.1 box's 0.02 ms rule). On OpenGL, the Python renderer's cost for
     the same frames. ``nvidia-smi`` before and after."""
+    import math
+
     entries = _cost_entries(records)
     margin = base.MARGIN
-    host = core.hidden_host(int((1920 + 2 * margin) * COST_DPR), int((1080 + 2 * margin) * COST_DPR))
-    facts: dict = {"gpu_before": _gpu_state(), "dpr": COST_DPR,
+    facts: dict = {"gpu_before": _gpu_state(),
                    "frames": {name: {"key": e["key"], "index": e["index"]} for name, e in entries.items()}}
-    try:
-        host.set_device_pixel_ratio(COST_DPR)
-        on = {variant or "route": _native_cost(core, engine, app, host, entries["ambience_on"], variant)
-              for variant in (None, "no_points", "no_mask")}
-        off = {variant or "route": _native_cost(core, engine, app, host, entries["ambience_off"], variant)
-               for variant in (None, "empty_twice")}
-    finally:
-        host.close()
-        base.host_check._flush_deletes(app)
-    facts["gpu_after"] = _gpu_state()
+    timed: list[dict] = []
 
     def minus(a: dict, b: dict, key: str) -> float | None:
         return None if a[key] is None or b[key] is None else round(a[key] - b[key], 4)
 
-    per_pass = {}
-    for key in ("median_ms", "p90_ms"):
-        points = minus(on["route"], on["no_points"], key)
-        mask = minus(on["route"], on["no_mask"], key)
-        per_pass[key] = {"whole_ambience_on": on["route"][key], "bubble_ambient_points": points,
-                         "bubble_ambient_mask": mask,
-                         "bubble_and_clears": None if points is None or mask is None
-                         else round(on["route"][key] - points - mask, 4),
-                         "whole_ambience_off": off["route"][key],
-                         "two_empty_passes": minus(off["empty_twice"], off["route"], key)}
-    facts.update(ambience_on=on, ambience_off=off, per_pass=per_pass)
-    empty = per_pass["median_ms"]["two_empty_passes"]
-    facts["empty_passes_above_bound"] = None if empty is None else empty > EMPTY_PASS_BOUND_MS
-    if api == "opengl":
-        facts["python"] = {name: python_cost(*_COST_SNAPSHOTS[key][1:]) for name, key in COST_RUNS.items()
-                           if key in _COST_SNAPSHOTS}
-    checks = {"timed": all(r["samples"] >= COST_SAMPLES for r in (*on.values(), *off.values())),
-              "nothing_timed_at_rest": all(r["timed_at_rest"] == 0 for r in (*on.values(), *off.values())),
-              "no_error": not any(r.get("error") for r in (*on.values(), *off.values()))}
+    for scale, dpr in cost_scales(entries["ambience_on"]["card"]).items():
+        width, height = entries["ambience_on"]["card"]["item_size"]
+        host = core.hidden_host(int(math.ceil((width + 2 * margin) * dpr)), int(math.ceil((height + 2 * margin) * dpr)))
+        try:
+            host.set_device_pixel_ratio(dpr)
+            # The variants are timed in turn, COST_ROUNDS times over, and each keeps its least-loaded round (lowest
+            # median): another process sharing the GPU (the operator's machine is never idle) skews one round, not
+            # every round of one variant; all rounds' medians are kept beside it.
+            plan = [("ambience_on", v) for v in (None, "no_points", "no_mask")] + \
+                   [("ambience_off", v) for v in (None, "empty_twice")]
+            rounds: dict = {}
+            for _round in range(COST_ROUNDS):
+                for frame, variant in plan:
+                    result = _native_cost(core, engine, app, host, entries[frame], variant, dpr)
+                    rounds.setdefault((frame, variant or "route"), []).append(result)
+
+            def best(results: list[dict]) -> dict:
+                kept = min(results, key=lambda r: float("inf") if r["median_ms"] is None else r["median_ms"])
+                return dict(kept, round_medians=[r["median_ms"] for r in results])
+
+            on = {variant: best(results) for (frame, variant), results in rounds.items() if frame == "ambience_on"}
+            off = {variant: best(results) for (frame, variant), results in rounds.items() if frame == "ambience_off"}
+        finally:
+            host.close()
+            base.host_check._flush_deletes(app)
+        timed += [*on.values(), *off.values()]
+        per_pass = {}
+        for key in ("median_ms", "p90_ms"):
+            points = minus(on["route"], on["no_points"], key)
+            mask = minus(on["route"], on["no_mask"], key)
+            per_pass[key] = {"whole_ambience_on": on["route"][key], "bubble_ambient_points": points,
+                             "bubble_ambient_mask": mask,
+                             "bubble_and_clears": None if points is None or mask is None
+                             else round(on["route"][key] - points - mask, 4),
+                             "whole_ambience_off": off["route"][key],
+                             "two_empty_passes": minus(off["empty_twice"], off["route"], key)}
+        empty = per_pass["median_ms"]["two_empty_passes"]
+        result = {"dpr": round(dpr, 6), "item_pixels": [int(round(width * dpr)), int(round(height * dpr))],
+                  "ambience_on": on, "ambience_off": off, "per_pass": per_pass,
+                  "empty_passes_above_bound": None if empty is None else empty > EMPTY_PASS_BOUND_MS}
+        if api == "opengl":
+            result["python"] = {}
+            for name, key in COST_RUNS.items():
+                if key in _COST_SNAPSHOTS:
+                    runs = [python_cost(*_COST_SNAPSHOTS[key][1:], dpr) for _round in range(COST_ROUNDS)]
+                    kept = min(runs, key=lambda r: float("inf") if r["median_ms"] is None else r["median_ms"])
+                    result["python"][name] = dict(kept, round_medians=[r["median_ms"] for r in runs])
+        facts[scale] = result
+    facts["gpu_after"] = _gpu_state()
+    checks = {"timed": all(r["samples"] >= COST_SAMPLES for r in timed),
+              "nothing_timed_at_rest": all(r["timed_at_rest"] == 0 for r in timed),
+              "no_error": not any(r.get("error") for r in timed)}
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
