@@ -1173,3 +1173,188 @@ gates; lead reviewed both sheets and Terra High independently reviewed the summa
 product-bloom-source and odd-source mip divergences remain diagnostic facts, not universal pixel identity.
 Required Vulkan validation has no unexplained errors/warnings; recorded Qt defect A is explicitly excused.
 Native ABI25 checkpoint `7717614d1`, GitHub run `43871856822`; ABI24 reference checkpoint `6d8a0e54e`, run `43869027463`.
+
+## Checkpoint audit 7 (N5.1 Bubble merge), Medium
+
+Scope: `1486b3b52..5d11fee12`, the Bubble merge 4227fede0 and the registration hold 5d11fee12, plus the
+15 Nov phase-2 commits it builds on where the brief asked (37ac07208's shared Settings and frame values, R-225).
+The audit ran on the 5d11fee12 tree with the main checkout's ABI 25 module and `assets.rcc` copied in. Nothing was
+built, no 60 s replay was run and no window was shown. The 60 s figures below are read from the retained reports in
+`.artifacts/evidence/native_core/n5_1_bubble/20261117_rule_a_60s_*`. The probes were scratch and are deleted: a CPU
+probe of the tolerance and the replay helpers, and a hidden offscreen-GL probe of the hero mask with the old and the
+merged vertex shader.
+
+It found no critical or high finding, three mediums and six lows.
+
+### Critical
+
+None.
+
+### High
+
+None.
+
+### Medium
+
+**M1. Bubble's scatter admits a solid 51-pixel block, not only scattered pixels**
+(`tools/pixel_tolerance.py:128-133`, routed by `tools/visualizer_replay/owner_render_parity.py:402`).
+- **The gap:** `judge_delta` counts every one-level pixel outside the mask as scatter. Nothing requires those pixels
+  to be isolated or spread out. The new test says "isolated pixels exactly one level off" (`tests/test_native_bubble.py:385`),
+  and D12's evidence for the class is that the residual is spread over the whole content. The code checks only the
+  count.
+- **A second effect:** scatter pixels leave `rest`, so they no longer count as neighbours when ties are tested for
+  isolation (`lonely = ~_has_neighbour(rest)`). Ten 2-level ties sitting inside a one-level blob now count as
+  isolated.
+- **Failure scenario:** a native defect confined to one small bubble passes rule (a). For example, a rim colour or
+  specular highlight one level off on about 50 opaque pixels, in every frame. So does the same patch with ten
+  2-level pixels inside it. Both fail for every other mode.
+- **Proof (probe, run on the merged code):**
+  - A solid 7x7 block plus 2 pixels (51 pixels) one level off on opaque content: `pass: True` for Bubble, `False`
+    for Spectrum.
+  - A block of 41 one-level pixels with 10 two-level ties inside it: `pass: True` for Bubble (scatter 41, ties 10),
+    `False` for Spectrum.
+- **Suggested fix:** give scatter a dispersion condition that the measured residual already meets, for example "no
+  scatter pixel has more than N scatter neighbours in its 3x3" or "at most K scatter pixels in any 8x8 tile". The
+  residual's own classification (1,908 of 2,430 isolated) sets N or K. Keep scatter in `rest` for the ties'
+  isolation test. Add the solid-block negative control to the test.
+
+**M2. The plan says Bubble is registered and offered on Vulkan, and the registration step has no box**
+(`Current_Plan.md:585`, `Current_Plan.md:599-602`).
+- **The cause:** cb42dd213 rewrote the box header to "Registered on the route and offered on Vulkan" and deleted the
+  "Register" checkbox. 5d11fee12 reverted the code (route, descriptor and test) but not the plan text.
+- **The plan now contradicts itself and the code:**
+  - The header says Bubble is offered on Vulkan. It is not: `GENERIC_MODE_SETTINGS` has no `bubble`, and the
+    descriptor is still `("opengl",)`.
+  - The "Order from here" bullet says cb42dd213 is "held out of the merge". It is in the merged history; 5d11fee12
+    reverts it.
+  - No checkbox re-applies the registration. The only remaining trace is that prose bullet.
+- **Failure scenario:** an agent reads the header, takes Bubble as offered on Vulkan, and skips the rule (b) gate or
+  the D1 rehearsal. Or rule (b) passes and nobody re-registers, because no box asks for it.
+- **Suggested fix:**
+  - Restore the header's dormant wording.
+  - Restore the deleted "Register" box, gated on rule (b), naming `git revert 5d11fee12` (or the three edits) and
+    the four test files.
+  - Make "Order from here" a sub-checklist or fold it into the boxes.
+
+**M3. D12 records Bubble's measured worst as 34, but the long takes measured 45**
+(`Docs/Future_Work/Native_Core_P3_Decisions.md:995`, `tools/visualizer_replay/owner_render_parity.py:398-402`).
+- **The gap:** D12 sets each bound at "the measured worst times 1.5". The retained 60 s reports measure
+  `scatter_worst_frame` at 38 (`anything_mixed2`), 36 (`human_heavy1`), 40 (`nightsolong_acousticsoft1`) and
+  45 (`ragdoll_quiet_intro_loud_end1`). The merge message says 45, but D12 and the code comment still say 34.
+  51 is 1.13 times the real worst, not 1.5 times.
+- **Failure scenario:** the open `--offers` runs (variant b, the Choice offers, the overscan placement) or rule (b)'s
+  sample measure 52 to 68 one-level pixels. Under the stated rule that is inside the margin; under the code it fails.
+  The next agent then either widens the bound again ("no further tolerance widening", plan) or files a false defect.
+- **Suggested fix:** the lead decides. Either re-derive the bound from 45 (68) and record all five figures in D12
+  and in the code comment, or keep 51 and record in D12 that it is 1.13 times the long-take worst, by decision.
+
+### Low
+
+**L1. `rule_a_halves` and `failed_frames` have no test, and both drop region-mismatch frames**
+(`tools/visualizer_replay/owner_render_parity.py:931-953`).
+- `rule_a_frames` writes no `input` key for a frame whose regions differ. The halves filter on `f.get("input", -1)`,
+  and the failing-frame list requires `"input" in f`, so such a frame is in neither.
+- **Probe:** the whole verdict is `pass: False`, while both halves report `pass: True`.
+- The docs and the merge use the halves as the proof of "no late drift" (`Native_Bubble_Diagnostics.md:32`). The
+  overall `pass` is still correct.
+- **Fix:** carry `input` on the region-mismatch entry, and add a CPU test of both helpers that includes that case.
+
+**L2. A sub-pixel hero circle now erases a fixed patch of about 0.7 px²**
+(`widgets/spotify_visualizer/shaders/bubble_ambient_mask.vert:31-37`, with `bubble_ambient_mask.frag:8`).
+- With the padded quad, `fwidth` gives an antialias half-width of about √2 px whatever the radius. A tiny circle
+  therefore erases a soft dot instead of nothing.
+- **Probe (hidden offscreen GL, erased area against the true circle):**
+
+  | Radius | Merged | Old | True circle |
+  |---|---|---|---|
+  | 0.05 px | 0.71 | 0 | 0.008 |
+  | 0.3 px | 1.26 | 0.53 | 0.28 |
+  | 1 px | 4.04 | 2.35 | 3.14 |
+  | 3 px | 29.3 | 26.4 | 28.3 |
+
+- A radius of 1e-12 (normalised) still erases 4 px at alpha 54. 1e-30 is culled; no NaN reaches the target.
+- The simulation floors `display_radius` at 0.001, so the effect is a small dark dot in the ambience under a
+  near-zero hero. That is cosmetic.
+- **Fix, if wanted:** cull circles below about one texel of diameter, or clamp `aa` to the circle's own normalised
+  radius.
+
+**L3. The clipped mask fringe was fixed without a historical bug entry.** Python's hero mask has cut its antialias
+fringe at the quad edge since the ambient mask was built. It was CPU triangles before 903396393 and an exact-diameter
+instanced quad after. That is long-lived and silent: straight segments where the quad edge was tangent to the circle,
+worst at input 218. The operator's rule is an R-NNN entry and an index row before the fix is reported done. The
+newest entry is R-238. **Fix:** add the entry from `Native_Bubble_Parity_Investigation.md` "Mask antialias repair:
+accepted".
+
+**L4. Stale text after the merge.**
+- `bubble_ambient_gl.py:304`: the `_draw_occluders` docstring still says "a square of its diameter".
+- `_bubble_native_components.py:1-5`: the docstring says "exact against c53", and line 307 names a check
+  `native_ordinary_final346_exact_c53`. The check compares against whichever baseline is given, and after the mask
+  change a c53 baseline is refused at preflight (`same_sources`).
+- `Current_Plan.md:589-592`: the diagnostics box says to "finish the independent receipt-provenance audit before
+  landing", but the tools have landed. This audit covered that review; see "Checked, no finding".
+- **Fix:** reword all three.
+
+**L5. The parity-script test does not pin the `max(4.2, ...)` guard**
+(`tests/test_visualizer_owner_render_parity.py:205-206`).
+- The shipped 5.5 s clip spans 5.4999 s, so `span - 1.3` is 4.1999. Removing the `max` gives a byte-identical
+  script.
+- The code is correct; only the test is weak.
+- **Fix:** add a clip of 5.3 s, whose switch must still be at 4.2 s.
+
+**L6. The diagnostics' process hygiene (triaged, acceptable for operator-run tools).**
+- All three recipes call `sys.path.insert` without removing the entry again.
+- `--quad-adapter` runs any Python file it is given.
+- `replay_helper_matches` accepts any receipt that names the frozen origin's SHA, without its checks. This audit
+  confirmed all three frozen origins hash to their recorded SHA-256.
+- No change is needed unless the tools gain non-lead users.
+
+### Checked, no finding
+
+- **The mask vertex shader preserves the circle exactly.**
+  - The quad grows by `2 * max(2, 0.0001 * r)` px. `vUnitCircle` is scaled by `padded / diameter`, which is affine,
+    so the quad edge maps to the physical radius exactly.
+  - The guards:
+    - A NaN diameter or alpha fails the `> 0` tests and is culled.
+    - An infinite diameter is culled.
+    - An infinite or NaN `unitScale` is culled.
+    - A NaN position cannot arrive, because `BubbleFrame` rejects non-finite occluders.
+  - The negative control was run: the old vertex shader gives [0, 127, 127, 0] at the four cardinals of the new
+    test, and the merged one gives [127, 127, 127, 127].
+- **The `.qsb` matches its source:** `tools/regen_qrc.py --shaders --check` reports all 26 packs current, and the
+  native route loads this pack (`native_route._shader_pack`).
+- **The tolerance routing:**
+  - Only `bubble` gains scatter, because `RULE_A_SCATTER_PIXELS.get(mode, 0)`.
+  - `devcurve_check.py` and every other caller still get the old tolerance and the old name.
+  - This audit ran four broken forms against the merged test, and each failed it: mode ignored (the pre-merge form),
+    scatter for every mode, scatter widened to 2 levels, and the scatter cap ignored.
+- **The 5.5 s script is unchanged:** `max(4.2, 4.1999)` is 4.2. The retained before and after reports both switch at
+  input 337. The 60 s takes switch at input 5291 of 5503.
+- **The spilled frames are cleaned up:** `tempfile.TemporaryFile` is deleted on close. The probe found the file gone
+  after collection. Under `.artifacts/scratch`, the junction points to `D:\Temp\Scratch\SRPSS`.
+- **`--recording`** reads `logs/visualizer_recordings` only and records the clip name and frame count in the report.
+- **The Python renderer is unchanged apart from R-225 and the fringe:**
+  - 37ac07208's extraction is equivalent:
+    - `u_ambient_enabled` comes from the points, where `render_texture` returns a texture exactly when points exist.
+    - The light switch and `_points_glow` are one predicate.
+    - `u_ambient_px` is `ambient_target_size`, which `target_size` stores.
+    - The six unwritten members are written as 0, their value at link.
+  - The gradient tests and the stale-trail test pass (21).
+- **The diagnostics add no product cost:**
+  - No product module imports them.
+  - They restore every owner they hook, in `finally`. The injected-failure tests prove it.
+  - They refuse an existing label before importing Qt.
+  - Their frozen origins match their recorded SHA-256.
+- **The docs:**
+  - D12 records the input-22 exception as the operator's acceptance, with no bound or class change.
+  - `Native_Bubble_Diagnostics.md` names the commands, the separate verdicts and the optimisation gate.
+- **The focused tests pass:**
+  - `test_native_bubble`, `test_pixel_tolerance`, `test_visualizer_owner_render_parity`,
+    `test_bubble_native_diagnostics` and `test_bubble_ambient_big_occlusion`: 57.
+  - The gradient and R-225 tests: 21.
+
+### Not verified
+
+- **No 60 s, `--offers`, overscan, Vulkan or rule (b) run** (GPU reserved). The 60 s figures are from the retained
+  reports.
+- **The 1.32 px fringe gate and the steady-residual classification** were read from the investigation doc, not
+  recomputed.
