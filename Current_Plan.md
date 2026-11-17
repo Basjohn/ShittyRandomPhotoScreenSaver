@@ -586,7 +586,7 @@ the feature (D3D11 is not stated).
   Bubble"). Owner rule (a) passes on the 5.5 s replay and the four 60 s recorded takes under D12's Bubble scatter. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
   eliminated suspicions and evidence; the diagnostics tools are `tools/visualizer_replay/bubble_native_diagnostics.py`
   (`Docs/Guides/Native_Bubble_Diagnostics.md`). Follow the Native Port Playbook; no further tolerance widening.
-  Order: the offers (five tie frames wait on the lead), 2560 x 1440 cost, the D1 rehearsal.
+  Order: 2560 x 1440 cost, the D1 rehearsal.
   - [x] Class-word upload and portable unsigned-vector admission proved on both APIs; unchanged wire record (R-238).
   - [ ] Non-blocking contract follow-up, now with a measured case: non-unit inherited scene opacity. During the cold
     reveal (scene fade 0.8648 at input 0 to 1.0 by input 30, content fade 1, identical on both paths) Python folds it
@@ -594,20 +594,21 @@ the feature (D3D11 is not stated).
     sits in that window, as do Spline Curve's cold-start failures (see the Spectrum and Spline Curve box). Prove with
     the scene fade forced to 1 on both paths, then one owner applies it for both. Probe:
     `.artifacts/evidence/native_core/n5_1_bubble/20261117_reveal_values_bubble_nightsolong/`.
-  - [ ] Owner rule (a) over the widened set at both placements: `owner_render_parity.py --native --mode bubble
-    --offers` (variants a and b, every Choice offer, display and overscan), every run PASS, with the 5.5 s replay as
-    the smoke check (the four 60 s takes already cover variant a). A run past 68 scatter is classified and goes to the
-    lead. Run 17 Nov (`n5_1_bubble/20261117_offers/`): 35 of 40 pass (scatter worst 41, group worst 15); five fail on
-    "ties neither isolated nor on a content edge", classified in `20261117_offer_tie_classes/`, waiting on the lead:
-    - [ ] Three steady frames (`stream_direction=5` input 311, `drift_direction=0` input 157, `drift_direction=3`
-      input 290): one unmasked 2-level tie touching 1 or 2 scatter pixels, reference range 15 to 28; each passes the
-      pre-audit form and fails only by audit 7 M1's rule that scatter counts as a tie's neighbour. Lead: keep the
-      clause (then these are a new class), or narrow it (for example, a tie fails only with at least N scatter
-      neighbours).
-    - [ ] Two fade frames (`stream_direction=2` and `=6`, input 337, the mode switch): adjacent masked 2-level ties off
-      a content edge; they fail the pre-audit form too (the fade class, like the accepted cold-start pair).
-  - [ ] GPU median and p90 per pass at 2560 x 1440 against the Python renderer's (checklist 11). 4K is measured (D12
-    "As built: Bubble", cost).
+  - [ ] Tracked exceptions of the scene-fade double-rounding class (lead, 17 Nov; no bound or class change; D12's
+    Bubble line), to disappear when the scene-fade fix lands (the Spectrum and Spline Curve box): the operator-accepted
+    `nightsolong_acousticsoft1` input 22 pair, and the offer runs `stream_direction=2` and `=6` at input 337 (the mode
+    switch), adjacent 2-level ties on the mask off a content edge (`n5_1_bubble/20261117_offers/`,
+    `20261117_offer_tie_classes/`). The other 38 offer runs at both placements pass (scatter worst 41, group worst 15;
+    the three steady tie frames pass under the lead's narrowed isolation rule, rerun `20261117_offers_steady_rerun/`).
+  - [ ] GPU median and p90 per pass at 2560 x 1440 against the Python renderer's (checklist 11): still open. 4K is
+    measured (D12 "As built: Bubble", cost).
+  - [ ] Check the 4K cost's ambience-off surface reading higher than ambience-on (0.299 against 0.236 ms on OpenGL at
+    840 x 560; 4.23 against 3.10 ms at the 4K frame): the columns are not swapped in `bubble_check.py` (`COST_RUNS`:
+    on = variant a's frame, off = variant b's), but variant b differs from variant a in many settings beyond the
+    ambience, so the two frames are not a like-for-like ambience toggle. Measure one frame with only the ambience
+    switched.
+  - [ ] For the Bubble GPU optimisation item: native OpenGL is about 5 % slower than the Python renderer at the full
+    4K frame (3.10 against 2.94 ms ambience on, 4.23 against 4.08 ms off; at 840 x 560 0.236 against 0.230 ms).
   - [ ] **N5.1 Bubble conditional optimisation gate (operator, 16 Nov; AFTER accepted native OpenGL/Vulkan parity
     and the per-pass cost check above, BEFORE N5.4 and NF):** recorded music now allows controlled, bounded
     performance-only optimisation without assuming that Bubble's calculations are the cause of any observed GPU
@@ -714,6 +715,9 @@ the feature (D3D11 is not stated).
     the port.
   - [ ] After both are settled: the remaining three takes for each mode at the display placement, frame hashes kept
     as their reference (the operator's half-size recheck: display placement only).
+  - [ ] When the scene-fade fix lands (one place applies the scene fade): rerun Bubble's offers
+    (`owner_render_parity.py --native --mode bubble --offers`, both placements) and `nightsolong_acousticsoft1` input 22;
+    Bubble's tracked exceptions (input 22, and `stream_direction=2` / `=6` at input 337) must disappear.
   - Tool gaps found (fix with or before this box): no Vulkan path in the owner replay (no rule (b) or Vulkan hashes);
     output only at the end of a run (a killed run loses everything); about 3 GB per run; 28 min per one-variant run.
 - [ ] Bubble GPU optimisation, after N5.1 lands (operator, 17 Nov: Bubble about 50 % GPU at 4K and Extruded Bubble

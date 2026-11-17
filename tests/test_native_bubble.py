@@ -459,3 +459,13 @@ def test_bubbles_scatter_must_be_spread_and_counts_as_a_ties_neighbour():
     assert result["ties"] == parity.RULE_A_EDGE_PIXELS_PER_FRAME and result["scatter"] == 40 <= cap
     assert not result["pass"]
     assert any("neither isolated" in reason for reason in result["reasons"])
+    # The observed case (lead, 17 Nov, Bubble's offers): one 2-level tie beside two scatter pixels stays isolated and
+    # passes; a third scatter pixel in its 3x3 makes it a tie inside a patch.
+    pair = reference.astype(np.int16)
+    pair[150, 150, 1] += 2
+    pair[150, 151, 1] += 1
+    pair[151, 150, 1] += 1
+    assert verdict(pair)["pass"]
+    pair[149, 149, 1] += 1
+    narrowed = verdict(pair)
+    assert not narrowed["pass"] and any("neither isolated" in reason for reason in narrowed["reasons"])

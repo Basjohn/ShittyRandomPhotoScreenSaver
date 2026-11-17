@@ -70,7 +70,8 @@ MODE_ID = "bubble"
 #: mask (Bubble's card is opaque: the mask is empty): outside it the two compilers' scatter (one pack, its SPIR-V
 #: against its GLSL), spread. Measured over the 5.5 s replay's 684 sampled frames (dpr 1 and 1.5; 17 Nov,
 #: n5_1_bubble/20261117_rule_b/): 615 differ, every pixel exactly one level, 2,000 in all, at most 21 a frame, the
-#: largest group of touching ones 7; no tie, no flip. Bounds times 1.5: 32 a frame, groups of at most 11.
+#: largest group of touching ones 7; no tie, no flip. Bounds times 1.5, decided by the lead (17 Nov): 32 a frame, groups
+#: of at most 11.
 VULKAN_RULE_B = pt.Tolerance("bubble, Vulkan against OpenGL (rule b)", masked_level=1, scatter_pixels=32,
                              scatter_cluster_pixels=11)
 #: The negative controls: the rounds each one's Vulkan child runs and what it breaks.

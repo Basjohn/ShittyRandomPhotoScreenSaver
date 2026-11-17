@@ -14,8 +14,8 @@ pixel by pixel, never by a histogram of levels:
   frame: two compilers (the Python renderer's GLSL and the core's pack, or two backends' drivers) rounding a value
   that lies within float error of a half level. A share of the frame, never the frame: a uniform shift fails. Where
   a harness states its spread (``scatter_cluster_pixels``), no group of touching scatter pixels may be larger, so a
-  compact one-level patch fails however few its pixels, and scatter pixels count as neighbours when a tie's isolation
-  is judged.
+  compact one-level patch fails however few its pixels, and a tie with ``SCATTER_AGAINST_ISOLATION`` or more scatter
+  pixels in its 3x3 is not isolated.
 - **Ties** (``tie_pixels``, ``tie_level``): every other pixel past its allowance. At most ``tie_pixels`` in a frame,
   each at most ``tie_level`` off (2; 3 only for the composite's edge class, ``COMPOSITE_EDGE_LEVEL``, proved per pixel
   in D12), and each isolated (no other pixel past its allowance among its eight neighbours) or on a content edge of the
@@ -38,6 +38,10 @@ TIE_LEVEL = 2
 #: ... except the composite's edge class (D12: float32 interpolation between the core's triangle and the Python quad
 #: over a premultiplied surface, measured at 3).
 COMPOSITE_EDGE_LEVEL = 3
+#: Where a harness states scatter's spread, a tie is not isolated when this many scatter pixels or more lie in its 3x3
+#: (lead, 17 Nov, narrowing checkpoint audit 7 M1: a lone tie beside one or two scatter pixels stays isolated, as
+#: measured in Bubble's offers; a tie inside a one-level patch does not).
+SCATTER_AGAINST_ISOLATION = 3
 
 
 @dataclass(frozen=True)
@@ -53,8 +57,8 @@ class Tolerance:
     edge_class: bool = False            # the composite's edge class: ties up to COMPOSITE_EDGE_LEVEL
     edge_contrast: float = EDGE_CONTRAST
     #: Scatter's spread (checkpoint audit 7 M1): the largest 8-connected group of scatter pixels a frame may hold (None:
-    #: no spread rule, the count alone). With it, scatter pixels also count as neighbours when a tie's isolation is
-    #: judged, so ties inside a one-level patch are not "isolated".
+    #: no spread rule, the count alone). With it, a tie with SCATTER_AGAINST_ISOLATION or more scatter pixels in its 3x3
+    #: is not isolated, so ties inside a one-level patch fail.
     scatter_cluster_pixels: int | None = None
 
     def __post_init__(self) -> None:
@@ -116,6 +120,16 @@ def content_edges(reference, contrast: float = EDGE_CONTRAST):
     return edge if edge.ndim == 2 else edge.any(axis=2)
 
 
+def _count_3x3(flags):
+    """Per pixel, the flagged pixels in its 3x3 neighbourhood (itself included)."""
+    import numpy as np
+
+    flags = np.asarray(flags, bool)
+    padded = np.pad(flags.astype(np.int16), 1)
+    h, w = flags.shape
+    return sum(padded[dy:dy + h, dx:dx + w] for dy in range(3) for dx in range(3))
+
+
 def _has_neighbour(flags):
     """Pixels with another flagged pixel among their eight neighbours."""
     import numpy as np
@@ -170,7 +184,10 @@ def judge_delta(delta, tolerance: Tolerance, *, mask=None, edges=None) -> dict:
     tie = rest & (delta <= tolerance.tie_level)
     flip = rest & ~tie
     spread = tolerance.scatter_cluster_pixels is not None
-    lonely = ~_has_neighbour(rest | scatter if spread else rest)
+    lonely = ~_has_neighbour(rest)
+    if spread:
+        # A tie inside a one-level patch is not isolated: SCATTER_AGAINST_ISOLATION or more scatter pixels in its 3x3.
+        lonely &= _count_3x3(scatter) < SCATTER_AGAINST_ISOLATION
     placed = lonely | edges
     flip_ok = flip & lonely & edges
     counts = {"scatter": int(scatter.sum()), "ties": int(tie.sum()), "flips": int(flip.sum())}

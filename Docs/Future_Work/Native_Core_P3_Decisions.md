@@ -972,8 +972,8 @@ modes' rounds of `devcurve_check.py` with Bubble's pieces): the `bubble` pass's 
 of the widened run set (38 runs; 13,283 with the ambience on), comparing only what the shader reads; the item's
 contract on both APIs; on OpenGL rule (a) against the Python renderer within the composite's tolerance; and rule (b):
 Vulkan against native OpenGL over 684 sampled frames (dpr 1 and 1.5), every differing pixel exactly one level, at
-most 21 a frame, the largest group of touching ones 7, no tie, so its bound is 32 scatter in groups of at most 11 (the
-card is opaque: no mask), validation clean. Its negative controls each fail in their own process: a position nudged, a
+most 21 a frame, the largest group of touching ones 7, no tie; its bound, decided by the lead (17 Nov), is 32 scatter
+a frame in groups of at most 11 (the measured worst times 1.5; the card is opaque: no mask), validation clean. Its negative controls each fail in their own process: a position nudged, a
 big-class bit flipped, the sprite coordinate's y flipped, the whole-allocation sample, the mask pass dropped, the
 skipped release. Owner rule (a): `owner_render_parity.py --native --mode bubble` (the 5.5 s replay and the four 60 s
 recorded takes; the widened set at both placements is open, see the plan's N5.1 Bubble box). Evidence
@@ -1032,13 +1032,19 @@ the three offers): 5.1M to 39.2M differing pixels a run, every one on the mask b
 (a and b at both placements): 6.3M to 17.6M, every one on the mask at 1 level, no tie. Bubble's owner rule (a): 68
 scatter (measured 45 on the four 60 s takes: 38, 36, 40 and 45; 34 on the 5.5 s replay; lead, 17 Nov, checkpoint
 audit 7 M3), spread: no group of touching scatter pixels larger than 22 (measured 15 on the 5.5 s replay's 2,430
-pixels, 1,908 of them with no scatter neighbour; audit 7 M1), and scatter counts as a tie's neighbour, so a compact
-one-level patch, or ties inside one, fails; steady and fade; ties and flips as the composite (lead, 17 Nov: the
+pixels, 1,908 of them with no scatter neighbour; audit 7 M1), and a tie with 3 or more scatter pixels in its 3x3 is
+not isolated (lead, 17 Nov, narrowing M1: a lone tie beside one or two scatter pixels, measured in three offer runs,
+stays isolated), so a compact one-level patch, or ties inside one, fails; steady and fade; ties and flips as the composite (lead, 17 Nov: the
 `NativeFragmentPass` two-compiler case, Python's driver-compiled composed GLSL against the qsb pack; evidence
 `n5_1_bubble/20261117_steady_residual_classes/`, every pixel exactly one level, spread over the whole content).
 On the four 60 s recorded takes it holds on 21,107 of 21,108 judged frames; the operator accepted the one exception
 as measured (17 Nov, no bound or class change): `nightsolong_acousticsoft1` input 22, cold-start reveal, an adjacent
-pair at 2 levels on the mask (`n5_1_bubble/20261117_rule_a_60s_*`). A `NativeFragmentPass` (`transition_route_check.py`) rule (a): 72 scatter (measured
+pair at 2 levels on the mask (`n5_1_bubble/20261117_rule_a_60s_*`). Two tracked exceptions of the same scene-fade
+double-rounding class (lead, 17 Nov, no bound or class change): the offer runs `stream_direction=2` and `=6`, input
+337 (the mode switch), adjacent 2-level ties on the mask off a content edge (`n5_1_bubble/20261117_offers/`,
+`20261117_offer_tie_classes/`); they must disappear once the scene fade is applied in one place. Bubble's rule (b)
+(`bubble_check.py`, Vulkan against native OpenGL, lead's decision 17 Nov): 32 scatter a frame (measured 21) in groups
+of at most 11 (measured 7), no tie (`n5_1_bubble/20261117_rule_b/`). A `NativeFragmentPass` (`transition_route_check.py`) rule (a): 72 scatter (measured
 48), 8 ties, 1 flip; rule (b): 2,000 scatter (measured 1,317, VHS), 8 ties (measured 5). N5.2a's seven: rule (a) exact,
 rule (b) 1,100 scatter (measured 736, Warp), no tie. Geometry passes (`mesh_buffer_check.py`, both rules): 1 level on
 the mask, 8 ties (measured one, at 2 levels on a streak's edge). Scene targets (`scene_target_check.py`): 1 unit on the
