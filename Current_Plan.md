@@ -668,6 +668,36 @@ the feature (D3D11 is not stated).
   re-render), a `--api opengl|vulkan` choice (the owner replay draws OpenGL only), and a hash-only compare mode (a
   before directory against an after directory, all-frame hashes, images stored only for differing frames), with a
   negative control that a one-ulp shader change is detected.
+- [ ] Fast long-clip proof (lead design, 17 Nov; build after Bubble closes, before N5.4 Waveform and N5.6 Extruded
+  Bubble). The operator: Waveform has four reaction modes and cannot take 7 to 8 hours of rendering and comparing
+  per proof, and no single tool (the waveform music-response comparison included) is enough on its own. The proof
+  splits into two layers, so that time goes where the risk is.
+  - [ ] Profile the owner replay first: where a 60 s take's 17 to 25 minutes go (Python reference composition,
+    native draw, readback, hashing, PNG/compression, the scratch spill). Measure before designing around guesses.
+  - [ ] Layer L, logic and reactivity, CPU only, every frame of every take and every reaction mode. A port does not
+    change the simulation. Reactivity can differ only if the values the native core receives differ from the values
+    the Python renderer uses. Prove that: the packed record and settings per frame, byte-identical between the two
+    paths. No rendering at all; this should run faster than real time. An optimisation that touches logic adds BTF
+    section 24's byte-parity lock and the music-response traces (`waveform_music_response.py` and the per-mode tools)
+    as supporting evidence, never as the only proof.
+  - [ ] Layer P, pixels, hashes not images. Run every frame's draw (GPU history such as Waveform's ribbons, rings and
+    compute state needs the full sequence), but read back and hash. Store images only for failing frames. Cache the
+    Python reference hashes once per take, reaction mode and placement: the Python renderers are frozen until N5.2h
+    deletes them, so their references never need re-rendering. Each port run then renders only the native path
+    against the cache.
+  - [ ] Coverage, not repetition. Layer L's records for every take and mode are cheap, so use them to choose Layer
+    P's windows. For each reaction mode: one full 60 s take, plus short windows from the other takes covering what
+    the full take missed. The windows cover the extremes of each record field, the cold start, the mode switch and
+    fades, the loudest and quietest seconds, and the reaction-mode changes. Each window starts with a warm-up long
+    enough to fill the mode's GPU history; derive the length from the mode's history depth and state it. Show that
+    the chosen set covers every record field's observed range; it gates acceptance.
+  - [ ] Parallel and unattended. The cached Python references and the native runs run in separate processes, several
+    takes at once on the hidden host. Long gates run in the background (lead-started, no load, Display 1 untouched),
+    so no agent sits waiting on them. The 5.5 s replay stays the per-change smoke check during development; the full
+    gate runs at acceptance and once per batch of optimisations, never per candidate.
+  - [ ] Proof of the method itself: on Bubble, the coverage-selected set must catch every failure the full four-take
+    run found (input 22, the two offer fade frames, a one-level shift control, a one-ulp shader change). If it misses
+    any, the coverage rule is wrong; fix it before Waveform relies on it.
 - [ ] N5.4 Waveform Ribbon (N4.b, N4.d's planar reflection, N4.f1's fog volume, its five compute passes and three
   rings, floor and pulse-rim textures; not populations): the mode over its render budget under load, measured
   against the 11 Nov load session (item 7).
