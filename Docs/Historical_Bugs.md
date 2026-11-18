@@ -1,6 +1,6 @@
 # Historical Bugs — single archive index
 
-**Updated:** 2026-11-14. **One canonical navigation/status authority:** this file. There is no Historical Bugs folder README.
+**Updated:** 2026-11-18. **One canonical navigation/status authority:** this file. There is no Historical Bugs folder README.
 
 **Admission bar:** retain costly, elusive, multi-tool investigations and architectural, resource, timing, scheduling or performance failures. A quickly fixed one-off UI/test/routing defect is not archival merely because it happened. Historical data records what was true *then*, never an instruction to revive retired QWidget/GL infrastructure. Current behavior is in `Spec.md`, `Docs/Contracts.md`, current reference/guardrail documents and tests. `Current_Plan.md` owns actual remaining work.
 
@@ -165,6 +165,7 @@ The September 10 Sphere acoustic-admission and cohort-motion incident merges fiv
 | [R-237 / Reserved conventions and descriptor-set admission](Historical_Bugs/R-237_Reserved_Conventions_And_Descriptor_Set_Admission.md) | Reserved block shape and unsupported resource sets reached binding-plan assembly | **STRONG** |
 | [R-238 / OpenGL unsigned uniform arrays dropped class words](Historical_Bugs/R-238_OpenGL_Unsigned_Uniform_Arrays_Dropped_Class_Words.md) | Qt uploaded only one unsigned-array element; canonical vectors and portable admission repair the silent data loss | **STRONG** |
 | [R-239 / Bubble's hero mask clipped its own antialias fringe](Historical_Bugs/R-239_Bubble_Hero_Mask_Antialias_Fringe_Clipped.md) | The mask quad ended at the circle, cutting the erase's soft edge into straight segments in the shipping Python Bubble; padded quad, circle unchanged | **STRONG** |
+| [R-240 / Achievement Pulse lost historical unlock discovery after recent-play rollover](Historical_Bugs/R-240_Achievement_Pulse_Rolling_Recent_Play_Cache_Erased_History_Discovery.md) | Historical per-app achievements were stranded by a rolling recent-play candidate list; source repair prepared, live Steam/profile verification **AWAITING VALIDATION** | Standard |
 | [R-233 / Batched draw-parameters shader interface admission](Historical_Bugs/R-233_Batched_Draw_Parameters_Shader_Interface_Admission.md) | Optional vertex pack bypassed resource/interface checks; GPU-free negative controls | **STRONG** |
 | [R-232 / Native OpenGL defocus boundary and barrier investigation](Historical_Bugs/R-232_Native_Defocus_Boundary_Barrier_Performance_Investigation.md) | Performance cause open; isolated replay barrier effect, no production speedup admitted | **STRONG** |
 | [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](Historical_Bugs/A-01_Settings_Dialog_Placeholder_Investigation.md) | Archived investigation | Standard |
@@ -184,4 +185,4 @@ The September 10 Sphere acoustic-admission and cohort-motion incident merges fiv
 
 ## Document ownership
 
-Do not add another index inside `Docs/Historical_Bugs/`. Significant new incident histories must meet the admission bar above and should be linked once here. Put accepted behavior, test-oracle policy and negative controls into their existing topic-specific guides; [Guardrails](Guardrails.md) routes to the right owner. There are no open source-change tasks in this index.
+Do not add another index inside `Docs/Historical_Bugs/`. Significant new incident histories must meet the admission bar above and should be linked once here. Put accepted behavior, test-oracle policy and negative controls into their existing topic-specific guides; [Guardrails](Guardrails.md) routes to the right owner. R-240 is a source repair awaiting the operator’s live Steam/cache validation; all other source-change work is owned elsewhere.

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,8 +20,13 @@ from core.steam.achievement_pulse import (
     recent_game_titles,
     resolve_achievement_pulse,
 )
+from core.logging.logger import get_logger
 from core.settings.storage_paths import ProfileRef
 from core.steam.cache import cache_path_for_profile_key, read_cache_record
+from core.steam.achievement_pulse_history import (
+    cached_achievement_candidates,
+    persist_achievement_history,
+)
 from core.steam.credentials import SteamCredentialPayload, derive_profile_cache_key
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
 from core.steam.request_policy import (
@@ -30,6 +35,8 @@ from core.steam.request_policy import (
     SteamRequestKey,
     backoff_result,
 )
+
+logger = get_logger(__name__)
 
 RECENT_GAMES_CACHE_KEY = "achievement_pulse_recent_games"
 OWNED_GAMES_CACHE_KEY = "achievement_pulse_owned_games"
@@ -133,6 +140,38 @@ def _read_candidate_achievement_results(
     }
 
 
+def _resolved_candidate_result(
+    *,
+    profile_key: str,
+    recent_result: SteamResult,
+    profile: ProfileRef,
+    root: Path | None,
+    read_record: Callable[[Path], SteamResult],
+) -> SteamResult:
+    """Combine the current rolling discovery window with durable local history.
+
+    This projection is for card selection only.  Its source/cache provenance
+    remains separate from the raw recently-played response used for freshness
+    and network admissions.
+    """
+    candidates = cached_achievement_candidates(
+        profile_key=profile_key,
+        recent_result=recent_result,
+        profile=profile,
+        root=root,
+        read_record=read_record,
+    )
+    if not candidates:
+        return recent_result
+    return SteamResult(
+        status=SteamResultStatus.SUCCESS,
+        source_id=SteamSourceId.RECENTLY_PLAYED,
+        payload={"response": {"games": list(candidates)}},
+        from_cache=True,
+        fetched_at=recent_result.fetched_at,
+    )
+
+
 def load_recent_game_titles_from_cache(
     *,
     profile_key: str,
@@ -150,10 +189,17 @@ def load_recent_game_titles_from_cache(
             root=root,
         )
     )
+    candidates = _resolved_candidate_result(
+        profile_key=profile_key,
+        recent_result=result,
+        profile=profile,
+        root=root,
+        read_record=read_record,
+    )
     achievement_results = _read_candidate_achievement_results(
         profile_key=profile_key,
         appids=recent_game_appids(
-            result,
+            candidates,
             limit=RECENT_ACHIEVEMENT_CANDIDATE_LIMIT,
         ),
         profile=profile,
@@ -161,7 +207,7 @@ def load_recent_game_titles_from_cache(
         read_record=read_record,
     )
     return recent_game_titles(
-        result,
+        candidates,
         achievement_results=achievement_results,
         limit=5,
     )
@@ -175,7 +221,7 @@ def load_achievement_pulse_cache_snapshot(
     root: Path | None = None,
     now: float | None = None,
     read_record: Callable[[Path], SteamResult] = read_cache_record,
-) -> AchievementPulseRefreshOutcome:
+) -> AchievementPulseCacheSnapshot:
     """Resolve the selected Achievement Pulse state from cache records only."""
     recent_result = read_record(
         cache_path_for_profile_key(profile_key, RECENT_GAMES_CACHE_KEY, profile=profile, root=root)
@@ -183,7 +229,16 @@ def load_achievement_pulse_cache_snapshot(
     library_result = read_record(
         cache_path_for_profile_key(profile_key, OWNED_GAMES_CACHE_KEY, profile=profile, root=root)
     )
-    candidate_appids = _selection_candidate_appids(recent_result, selection)
+    candidate_result = (
+        recent_result if selection.mode == "custom" else _resolved_candidate_result(
+            profile_key=profile_key,
+            recent_result=recent_result,
+            profile=profile,
+            root=root,
+            read_record=read_record,
+        )
+    )
+    candidate_appids = _selection_candidate_appids(candidate_result, selection)
     achievement_results = _read_candidate_achievement_results(
         profile_key=profile_key,
         appids=candidate_appids,
@@ -192,7 +247,7 @@ def load_achievement_pulse_cache_snapshot(
         read_record=read_record,
     )
     selection_probe = resolve_achievement_pulse(
-        recent_result=recent_result,
+        recent_result=candidate_result,
         achievement_results=achievement_results,
         selection=selection,
         library_result=library_result,
@@ -209,7 +264,7 @@ def load_achievement_pulse_cache_snapshot(
             )
         )
     resolved = resolve_achievement_pulse(
-        recent_result=recent_result,
+        recent_result=candidate_result,
         achievement_results=achievement_results,
         selection=selection,
         library_result=library_result,
@@ -309,10 +364,41 @@ def refresh_achievement_pulse_cache(
                 fresh_seconds=0.0 if force else source_fresh_window,
             )
             refresh_results.append(recent_result)
-            if not recent_result.ok:
+            if recent_result.ok:
+                # The successful transport result has no fetched_at yet.
+                # Re-read its just-persisted source record so the history's
+                # last-seen ordering uses the actual cache timestamp.
+                recent_result = read_cache_record(cache_path_for_profile_key(
+                    profile_key, RECENT_GAMES_CACHE_KEY, profile=profile, root=root
+                ))
+            else:
                 recent_result = existing.recent_result
 
         candidate_appids = _selection_candidate_appids(recent_result, selection)
+        current_recent_count = len(candidate_appids) if selection.mode != "custom" else 0
+        if selection.mode != "custom" and not candidate_appids:
+            # Steam can return a successful empty rolling recent-play window.
+            # Keep discovering changes in at most five previously cached apps;
+            # never scan the whole library or invent a global unlock feed.
+            candidate_appids = recent_game_appids(
+                _resolved_candidate_result(
+                    profile_key=profile_key,
+                    recent_result=recent_result,
+                    profile=profile,
+                    root=root,
+                    read_record=read_cache_record,
+                ),
+                limit=RECENT_ACHIEVEMENT_CANDIDATE_LIMIT,
+            )
+        if selection.mode != "custom":
+            logger.info(
+                "[STEAM][ACHIEVEMENT_PULSE] Source selection recent_status=%s recent_candidates=%d "
+                "refresh_candidates=%d historical_fallback=%s",
+                recent_result.status.value,
+                current_recent_count,
+                len(candidate_appids),
+                bool(not current_recent_count and candidate_appids),
+            )
         for appid in candidate_appids:
             refresh_results.append(_fetch_and_cache(
                 profile_key=profile_key,
@@ -326,6 +412,16 @@ def refresh_achievement_pulse_cache(
                 now=reference_now,
                 fresh_seconds=0.0 if force else source_fresh_window,
             ))
+
+        if selection.mode != "custom":
+            persist_achievement_history(
+                profile_key=profile_key,
+                recent_result=recent_result,
+                observed_appids=candidate_appids,
+                profile=profile,
+                root=root,
+                now=reference_now,
+            )
 
         provisional = load_achievement_pulse_cache_snapshot(
             profile_key=profile_key,
@@ -447,6 +543,45 @@ def _fetch_and_cache_unlocked(
         **endpoint_params,
     )
     result = _refresh_coordinator.complete(handle, fetch_json(endpoint, opener=opener))
+    if result.ok and source_id == SteamSourceId.RECENTLY_PLAYED:
+        payload = result.payload
+        response = payload.get("response") if isinstance(payload, Mapping) else None
+        if not isinstance(response, Mapping) or (
+            "games" in response and not isinstance(response["games"], list)
+        ):
+            # An empty *valid* game list is fine, but a 200 error envelope
+            # must not destroy the last truthful recent-play discovery record.
+            result = SteamResult(
+                status=SteamResultStatus.INVALID_RESPONSE,
+                source_id=source_id,
+                message="Steam did not return a recognizable recently-played response.",
+                attempted_sources=(source_id,),
+            )
+            logger.warning(
+                "[STEAM][ACHIEVEMENT_PULSE] Invalid recent-play response; "
+                "last-good recent-play cache preserved"
+            )
+    if result.ok and source_id == SteamSourceId.PLAYER_ACHIEVEMENTS:
+        payload = result.payload
+        playerstats = payload.get("playerstats") if isinstance(payload, Mapping) else None
+        if (
+            not isinstance(playerstats, Mapping)
+            or playerstats.get("success") is False
+            or not isinstance(playerstats.get("achievements"), list)
+        ):
+            # HTTP 200 with Steam's per-app error/empty envelope is not a
+            # successful achievement snapshot.  Never overwrite last-good
+            # unlock data with it.
+            result = SteamResult(
+                status=SteamResultStatus.INVALID_RESPONSE,
+                source_id=source_id,
+                message="Steam did not return a usable per-app achievement list.",
+                attempted_sources=(source_id,),
+            )
+            logger.warning(
+                "[STEAM][ACHIEVEMENT_PULSE] Per-app HTTP success contained no usable achievement rows; "
+                "last-good cache preserved"
+            )
     _refresh_backoff.record_result(request_key, result, now=now)
     if result.ok:
         write_success_result(path=cache_path, cache_key=cache_key, result=result, fetched_at=now)

@@ -57,7 +57,7 @@ def _payload(result: SteamResult | None) -> Mapping[str, Any]:
     return result.payload
 
 
-def _recent_games(recent_result: SteamResult | None) -> tuple[Mapping[str, Any], ...]:
+def recent_games(recent_result: SteamResult | None) -> tuple[Mapping[str, Any], ...]:
     payload = _payload(recent_result)
     response = payload.get("response")
     if isinstance(response, Mapping):
@@ -79,7 +79,7 @@ def recent_game_appids(
     resolved_limit = max(1, min(20, int(limit)))
     return tuple(
         appid
-        for game in _recent_games(recent_result)[:resolved_limit]
+        for game in recent_games(recent_result)[:resolved_limit]
         if (appid := _coerce_appid(game.get("appid"))) is not None
     )
 
@@ -189,7 +189,7 @@ def _unlock_time(row: Mapping[str, Any]) -> int:
         return 0
 
 
-def _latest_unlock_time(result: SteamResult | None) -> int:
+def latest_unlock_timestamp(result: SteamResult | None) -> int:
     return max(
         (
             _unlock_time(row)
@@ -211,12 +211,12 @@ def _recent_games_by_achievement(
     evidence retain Steam's recent-play order as a stable bootstrap fallback.
     """
 
-    games = _recent_games(recent_result)
+    games = recent_games(recent_result)
     ranked: list[tuple[int, int, Mapping[str, Any]]] = []
     fallback: list[tuple[int, Mapping[str, Any]]] = []
     for index, game in enumerate(games):
         appid = _coerce_appid(game.get("appid"))
-        latest_unlock = _latest_unlock_time(achievement_results.get(appid)) if appid else 0
+        latest_unlock = latest_unlock_timestamp(achievement_results.get(appid)) if appid else 0
         if latest_unlock > 0:
             ranked.append((latest_unlock, index, game))
         else:
