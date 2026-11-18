@@ -33,6 +33,7 @@ logger = get_logger(__name__)
 
 HISTORY_CACHE_KEY = "achievement_pulse_history"
 _ACHIEVEMENT_PREFIX = "achievement_pulse_achievements_"
+_OWNED_GAMES_CACHE_KEY = "achievement_pulse_owned_games"
 
 
 def _appid(value: Any) -> int | None:
@@ -99,9 +100,41 @@ def _merge_recent(indexed: dict[int, dict[str, Any]], result: SteamResult) -> No
         # the cached achievement timestamp merely because the rolling source
         # has no achievement information.
         merged = dict(old)
-        merged.update({k: v for k, v in normalized.items() if k not in {"latest_unlock_time", "last_seen_at"}})
+        merged.update({k: v for k, v in normalized.items() if k not in {"latest_unlock_time", "last_seen_at", "playtime_forever"}})
+        if "playtime_forever" in normalized:
+            # Lifetime minutes should not regress because an older source
+            # snapshot arrived after a newer owned-games response.
+            merged["playtime_forever"] = max(
+                _nonnegative_int(old.get("playtime_forever")), normalized["playtime_forever"]
+            )
         merged["last_seen_at"] = max(_nonnegative_int(old.get("last_seen_at")), seen_at)
         indexed[appid] = merged
+
+
+def _merge_owned(indexed: dict[int, dict[str, Any]], result: SteamResult) -> None:
+    """Enrich *known achievement apps* from the shared library cache.
+
+    Never treat ownership as evidence of an achievement, and never replace
+    historical playtime when Steam omits it or returns a private library.
+    """
+    if not result.ok or result.source_id != SteamSourceId.OWNED_GAMES or not isinstance(result.payload, Mapping):
+        return
+    response = result.payload.get("response")
+    if not isinstance(response, Mapping) or not isinstance(response.get("games"), list):
+        return
+    for raw_game in response["games"]:
+        if not isinstance(raw_game, Mapping):
+            continue
+        game = _clean_game(raw_game)
+        if game is None or game["appid"] not in indexed:
+            continue
+        old = indexed[game["appid"]]
+        if "playtime_forever" in game:
+            old["playtime_forever"] = max(
+                _nonnegative_int(old.get("playtime_forever")), game["playtime_forever"]
+            )
+        if not old.get("name") and game.get("name"):
+            old["name"] = game["name"]
 
 
 def _update_from_achievement(indexed: dict[int, dict[str, Any]], appid: int, result: SteamResult) -> None:
@@ -182,6 +215,12 @@ def _load_index(
             newer_than_ns=index_mtime_ns,
         )
     _merge_recent(indexed, recent_result)
+    # Both Steam cards share this cache record; use it for playtime without
+    # inventing candidate achievements or issuing a provider request.
+    owned_result = read_record(cache_path_for_profile_key(
+        profile_key, _OWNED_GAMES_CACHE_KEY, profile=profile, root=root
+    ))
+    _merge_owned(indexed, owned_result)
     return indexed
 
 

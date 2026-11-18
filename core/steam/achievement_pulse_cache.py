@@ -44,6 +44,7 @@ ACHIEVEMENTS_CACHE_KEY_PREFIX = "achievement_pulse_achievements_"
 ACHIEVEMENT_SCHEMA_CACHE_KEY_PREFIX = "achievement_pulse_schema_"
 _REFRESH_FRESH_WINDOW_SECONDS = 60.0
 DEFAULT_SOURCE_FRESH_SECONDS = 10.0 * 60.0
+OWNED_GAMES_FRESH_SECONDS = 24.0 * 60.0 * 60.0
 RECENT_ACHIEVEMENT_CANDIDATE_LIMIT = 5
 _refresh_coordinator = SteamRequestCoordinator()
 _refresh_backoff = SteamBackoffPolicy()
@@ -229,14 +230,12 @@ def load_achievement_pulse_cache_snapshot(
     library_result = read_record(
         cache_path_for_profile_key(profile_key, OWNED_GAMES_CACHE_KEY, profile=profile, root=root)
     )
-    candidate_result = (
-        recent_result if selection.mode == "custom" else _resolved_candidate_result(
-            profile_key=profile_key,
-            recent_result=recent_result,
-            profile=profile,
-            root=root,
-            read_record=read_record,
-        )
+    candidate_result = _resolved_candidate_result(
+        profile_key=profile_key,
+        recent_result=recent_result,
+        profile=profile,
+        root=root,
+        read_record=read_record,
     )
     candidate_appids = _selection_candidate_appids(candidate_result, selection)
     achievement_results = _read_candidate_achievement_results(
@@ -251,6 +250,7 @@ def load_achievement_pulse_cache_snapshot(
         achievement_results=achievement_results,
         selection=selection,
         library_result=library_result,
+        playtime_recent_result=recent_result,
     )
     achievement_result = achievement_results.get(selection_probe.appid)
     schema_result: SteamResult | None = None
@@ -269,6 +269,7 @@ def load_achievement_pulse_cache_snapshot(
         selection=selection,
         library_result=library_result,
         schema_result=schema_result,
+        playtime_recent_result=recent_result,
     )
     timestamp_results = (
         *((recent_result,) if selection.mode != "custom" else ()),
@@ -336,8 +337,14 @@ def refresh_achievement_pulse_cache(
             root=root,
             now=reference_now,
         )
+        needs_owned_refresh = (
+            existing.resolved.appid is not None
+            and existing.resolved.playtime_forever_minutes is None
+            and _owned_games_cache_expired(existing.library_result, now=reference_now)
+        )
         if (
             not force
+            and not needs_owned_refresh
             and (
                 (
                     existing.candidate_cache_complete
@@ -413,6 +420,32 @@ def refresh_achievement_pulse_cache(
                 fresh_seconds=0.0 if force else source_fresh_window,
             ))
 
+        provisional = load_achievement_pulse_cache_snapshot(
+            profile_key=profile_key,
+            selection=selection,
+            profile=profile,
+            root=root,
+            now=reference_now,
+        )
+        if (
+            provisional.resolved.appid is not None
+            and provisional.resolved.playtime_forever_minutes is None
+            and _owned_games_cache_expired(provisional.library_result, now=reference_now)
+        ):
+            # Only a missing playtime triggers an owned-library request. This
+            # source is shared with Abandonment Issues and is limited to one
+            # successful refresh per 24 hours, including manual Pulse refresh.
+            refresh_results.append(_fetch_and_cache(
+                profile_key=profile_key,
+                cache_key=OWNED_GAMES_CACHE_KEY,
+                source_id=SteamSourceId.OWNED_GAMES,
+                credential=credential,
+                profile=profile,
+                root=root,
+                opener=opener,
+                now=reference_now,
+                fresh_seconds=OWNED_GAMES_FRESH_SECONDS,
+            ))
         if selection.mode != "custom":
             persist_achievement_history(
                 profile_key=profile_key,
@@ -422,7 +455,6 @@ def refresh_achievement_pulse_cache(
                 root=root,
                 now=reference_now,
             )
-
         provisional = load_achievement_pulse_cache_snapshot(
             profile_key=profile_key,
             selection=selection,
@@ -536,6 +568,8 @@ def _fetch_and_cache_unlocked(
     if not handle.owner:
         return read_cache_record(cache_path)
     endpoint_params = {"appid": appid} if appid is not None else {}
+    if source_id == SteamSourceId.OWNED_GAMES:
+        endpoint_params.update(include_appinfo=True, include_played_free_games=True)
     endpoint = build_endpoint(
         source_id,
         api_key=credential.api_key,
@@ -586,6 +620,13 @@ def _fetch_and_cache_unlocked(
     if result.ok:
         write_success_result(path=cache_path, cache_key=cache_key, result=result, fetched_at=now)
     return result
+
+
+def _owned_games_cache_expired(result: SteamResult, *, now: float) -> bool:
+    if not result.ok or result.source_id != SteamSourceId.OWNED_GAMES or result.fetched_at is None:
+        return True
+    age = now - result.fetched_at
+    return not (0.0 <= age < OWNED_GAMES_FRESH_SECONDS)
 
 
 def _refresh_lock_for(profile_key: str) -> threading.Lock:

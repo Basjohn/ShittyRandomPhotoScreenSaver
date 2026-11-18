@@ -141,21 +141,21 @@ def _game_name(game: Mapping[str, Any], fallback: str) -> str:
     return fallback
 
 
-def _library_game_name(library_result: SteamResult | None, appid: int) -> str:
-    payload = _payload(library_result)
+def _game_for_app(result: SteamResult | None, appid: int) -> Mapping[str, Any] | None:
+    payload = _payload(result)
     response = payload.get("response")
-    if isinstance(response, Mapping):
-        games = response.get("games")
-    else:
-        games = payload.get("games")
+    games = response.get("games") if isinstance(response, Mapping) else payload.get("games")
     if not isinstance(games, list):
-        return ""
+        return None
     for game in games:
-        if not isinstance(game, Mapping):
-            continue
-        if _coerce_appid(game.get("appid")) == appid:
-            return _game_name(game, str(appid))
-    return ""
+        if isinstance(game, Mapping) and _coerce_appid(game.get("appid")) == appid:
+            return game
+    return None
+
+
+def _library_game_name(library_result: SteamResult | None, appid: int) -> str:
+    game = _game_for_app(library_result, appid)
+    return _game_name(game, str(appid)) if game is not None else ""
 
 
 def _achievement_payload(result: SteamResult | None) -> Mapping[str, Any]:
@@ -268,14 +268,37 @@ def _schema_icon_url(row: Mapping[str, Any] | None) -> str:
 
 
 def _playtime_forever(game: Mapping[str, Any] | None) -> int | None:
-    if not isinstance(game, Mapping):
+    if not isinstance(game, Mapping) or game.get("playtime_forever") is None:
         return None
-    value = game.get("playtime_forever")
     try:
-        minutes = int(value)
-    except (TypeError, ValueError):
+        minutes = int(game["playtime_forever"])
+    except (TypeError, ValueError, OverflowError):
         return None
-    return max(0, minutes)
+    return minutes if minutes >= 0 else None
+
+
+def _playtime_for_app(
+    appid: int,
+    *,
+    recent_result: SteamResult | None,
+    library_result: SteamResult | None,
+    historical_game: Mapping[str, Any] | None,
+) -> int | None:
+    """Prefer live recent playtime, then cached owned games, then durable history.
+
+    The projected history roster is for unlock ordering, not a substitute for
+    the raw rolling recent source when both have playtime for the same app.
+    Missing/malformed source fields never erase the last known value.
+    """
+    for game in (
+        _game_for_app(recent_result, appid),
+        _game_for_app(library_result, appid),
+        historical_game,
+    ):
+        minutes = _playtime_forever(game)
+        if minutes is not None:
+            return minutes
+    return None
 
 
 def resolve_achievement_pulse(
@@ -285,6 +308,7 @@ def resolve_achievement_pulse(
     selection: AchievementPulseSelection = AchievementPulseSelection(),
     library_result: SteamResult | None = None,
     schema_result: SteamResult | None = None,
+    playtime_recent_result: SteamResult | None = None,
 ) -> AchievementPulseResolved:
     """Resolve the selected Achievement Pulse game from cache/fixture results."""
 
@@ -323,6 +347,16 @@ def resolve_achievement_pulse(
         appid = _coerce_appid(selected_game.get("appid"))
 
     assert appid is not None
+    if selected_game is None:
+        # A custom app can still have durable historical playtime even though
+        # its selection does not depend on the rolling recent-play roster.
+        selected_game = _game_for_app(recent_result, appid)
+    playtime = _playtime_for_app(
+        appid,
+        recent_result=playtime_recent_result if playtime_recent_result is not None else recent_result,
+        library_result=library_result,
+        historical_game=selected_game,
+    )
     achievement_result = achievement_results.get(appid)
     rows = _achievement_rows(achievement_result)
     title = ""
@@ -342,7 +376,7 @@ def resolve_achievement_pulse(
             title=title,
             selection_label=_selection_label(selection, appid),
             previous_game_title=previous_game_title,
-            playtime_forever_minutes=_playtime_forever(selected_game),
+            playtime_forever_minutes=playtime,
             unavailable_reason="Achievement data is unavailable or private",
         )
     if not rows:
@@ -352,7 +386,7 @@ def resolve_achievement_pulse(
             title=title,
             selection_label=_selection_label(selection, appid),
             previous_game_title=previous_game_title,
-            playtime_forever_minutes=_playtime_forever(selected_game),
+            playtime_forever_minutes=playtime,
             unavailable_reason="No achievements reported for this app",
         )
 
@@ -389,6 +423,6 @@ def resolve_achievement_pulse(
         latest_achievements=latest_achievements,
         latest_achievement_icon_url=latest_achievement_icon_url,
         previous_game_title=previous_game_title,
-        playtime_forever_minutes=_playtime_forever(selected_game),
+        playtime_forever_minutes=playtime,
         source_label="Cache" if achievement_result.from_cache else "Fixture",
     )

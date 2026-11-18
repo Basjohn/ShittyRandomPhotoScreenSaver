@@ -554,7 +554,7 @@ def test_achievement_pulse_refresh_writes_cache_and_coalesces_fresh_followers(tm
     def _opener(request, _timeout: float):
         requests.append(request.full_url)
         if "GetRecentlyPlayedGames" in request.full_url:
-            return _Response(b'{"response":{"games":[{"appid":111,"name":"Hollow Knight"}]}}')
+            return _Response(b'{"response":{"games":[{"appid":111,"name":"Hollow Knight","playtime_forever":600}]}}')
         if "GetPlayerAchievements" in request.full_url:
             return _Response(b'{"playerstats":{"gameName":"Hollow Knight","achievements":[{"name":"Start","achieved":1}]}}')
         if "GetSchemaForGame" in request.full_url:
@@ -656,7 +656,7 @@ def test_achievement_pulse_unchanged_success_suppresses_immediate_display_follow
         profile_identifier="76561197960265729",
     )
     profile_key = derive_profile_cache_key(credential.profile_identifier)
-    recent_payload = {"response": {"games": [{"appid": 111, "name": "Hollow Knight"}]}}
+    recent_payload = {"response": {"games": [{"appid": 111, "name": "Hollow Knight", "playtime_forever": 600}]}}
     achievement_payload = {
         "playerstats": {
             "gameName": "Hollow Knight",
@@ -699,7 +699,7 @@ def test_achievement_pulse_unchanged_success_suppresses_immediate_display_follow
     def _opener(request, _timeout: float):
         requests.append(request.full_url)
         if "GetRecentlyPlayedGames" in request.full_url:
-            return _Response(b'{"response":{"games":[{"appid":111,"name":"Hollow Knight"}]}}')
+            return _Response(b'{"response":{"games":[{"appid":111,"name":"Hollow Knight","playtime_forever":600}]}}')
         if "GetPlayerAchievements" in request.full_url:
             return _Response(
                 b'{"playerstats":{"gameName":"Hollow Knight","achievements":[{"name":"Start","achieved":1}]}}'
