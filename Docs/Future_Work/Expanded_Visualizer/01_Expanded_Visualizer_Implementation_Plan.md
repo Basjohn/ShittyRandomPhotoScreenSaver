@@ -779,6 +779,7 @@ count (`tests/test_spectrum_expanded_bar_count.py`). The DSP recompute below rem
   nearer the edge; an appearing overlay waits while a showing peer makes room, and the older glides back when the
   newer has gone. A showing OSD over an overlay keeps priority: the overlay fades aside (and takes no input) until
   the OSD hides.
+- *19 Nov 2026 fullscreen surface refinement (supersedes only the historical M3b card/bar material description below):* Now Playing's optional card and transport bar use **Normal, semantic RGBA fill compositing over the actual live Visualizer**, not the wallpaper-only material backdrop. Independent fullscreen-only saved `now_playing.card_fill_opacity_adjust` and `now_playing.bar_fill_opacity_adjust` are clamped -1..+1; neutral zero uses the **resolved Normal-card opacity**, not a new hardcoded alpha. They adjust only fill alpha, without changing borders, shadows, ink, artwork, the ordinary Media bar or the Preset Name toast. This decision does **not** require a Visualizer preset colour hint, Studio palette editor or preset migration. The fullscreen Context Menu's material-vs-Normal fallback remains a separate evidence/performance decision under `Current_Plan.md` 1B.8.
 - *Look.* Text white (on its own card: the theme's card text, so a light theme's card stays readable) with a soft
   shadow (`ShadowedText`'s soft profile). Artwork square (as tall as the text beside it), framed with the card's own
   chrome (border colour, the AC-09 width, the card radius) on a concentric mask; missing art shows the card surface

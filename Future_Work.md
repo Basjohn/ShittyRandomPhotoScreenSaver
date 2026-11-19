@@ -72,7 +72,7 @@ Keep these deferred unless new evidence or an explicit request promotes them:
 - Weather child-edit loading height and low-priority Settings FlowContainer polish;
 - surface-preference SSOT cleanup and narrowing broad Qt-test slot-miss suppression;
 - Spectrum extreme-viewport smoothness where physical evidence demonstrates a defect;
-- installed GODZIP Foundry Windows-diff acceptance;
+- installed archive Foundry Windows-diff acceptance;
 - wallpaper-feed consolidation only where shared normalization simplifies code without merging cache/scheduling authorities;
 - direct live source reconfiguration outside Settings still discards its coordinator without generation retirement
   (`engine_handlers.on_sources_changed`). Audit that separate entry point before admitting external live source edits;

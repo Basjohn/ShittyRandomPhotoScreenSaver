@@ -90,6 +90,8 @@ scene in the in-order alpha pass), and draws nothing into the window. The backgr
   the price of never resampling the Visualizer or any card content; with the materials' tint it reads as a frosted
   panel, not a hole.
 
+**Fullscreen Now Playing (19 Nov 2026):** this backdrop deliberately omits the live Visualizer foreground. The fullscreen Now Playing optional card and transport bar therefore use Normal, theme-semantic RGBA fills composited directly over those foreground pixels, with independent neutral-zero fill-opacity adjustments from `widgets.spotify_visualizer.fullscreen_overlays.now_playing`. They do not activate a false-glass material just to show a bar. The ordinary Media widget and its bar retain their actual shared-backdrop material behaviour. This does not alter the separate evidence-based Context Menu decision or add a second backdrop owner.
+
 ### 3.1 Cadence
 
 The source node sits under an opacity node that is 0 (not traversed, no Python call) except while armed:

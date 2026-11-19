@@ -187,3 +187,48 @@ def test_run_script_zip_bundles_the_run_and_only_logs_it_changed(command_tab, qt
     archive, members = made[0]
     assert Path(archive).is_file()
     assert 'logs/during.log' in members and 'logs/before.log' not in members
+
+
+def test_script_quick_actions_preserve_editor_truth_and_use_captured_runner(command_tab):
+    """Editor-only Add Venv; Shaders Regen uses the existing script capture path."""
+    tab, module = command_tab
+    launched = []
+    tab._start_script = lambda shell, script, *, external: launched.append((shell, script, external))
+    tab.script_input.setPlainText('python -m pytest -q')
+    tab.script_add_venv_button.click()
+    assert tab.script_input.toPlainText() == r'& .\.venv\Scripts\python.exe -m pytest -q'
+    tab.script_add_venv_button.click()
+    assert tab.script_input.toPlainText() == r'& .\.venv\Scripts\python.exe -m pytest -q'
+    assert not launched
+
+    tab.script_external.setChecked(True)
+    tab.script_regen_shaders_button.click()
+    assert tab.script_input.toPlainText() == module.SHADER_REGEN_COMMAND
+    assert launched == [('powershell', module.SHADER_REGEN_COMMAND, False)]
+    assert not tab.script_external.isChecked()
+
+
+def test_godzip_explicit_navigation_preserves_all_three_buttons(command_tab, qt_app):
+    """Right navigation reserves its own width and left tabs can scroll independently."""
+    tab, module = command_tab
+    window = tab.window
+    window.show()
+    qt_app.processEvents()
+    nav = window.right_nav
+    assert window.tabs.cornerWidget(module.Qt.Corner.TopRightCorner) is None
+    assert window.primary_tab_bar.usesScrollButtons()
+    assert not window.tabs.tabBar().isVisible()
+    buttons = (window.run_tab_button, window.cmd_tab_button, window.foundries_tab_button)
+    assert [button.text() for button in buttons] == ["RUN", "CMD", "FOUNDRIES"]
+    assert nav.width() >= sum(button.width() for button in buttons) + 2 * 5
+    for button in buttons:
+        assert button.parentWidget() is nav
+        assert button.geometry().right() <= nav.width()
+        assert button.geometry().bottom() <= nav.height()
+    assert nav.geometry().right() <= window.tabs.geometry().right()
+    window.foundries_tab_button.click()
+    qt_app.processEvents()
+    assert window.tabs.currentWidget() is window.foundries_tab
+    window.primary_tab_bar.setCurrentIndex(2)
+    qt_app.processEvents()
+    assert window.tabs.currentWidget() is window.diff_tab

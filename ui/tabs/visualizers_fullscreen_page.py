@@ -18,9 +18,9 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Callable
 
-from PySide6.QtCore import QSignalBlocker
+from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QCheckBox, QGroupBox, QLabel, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QGroupBox, QLabel, QSlider, QSpinBox, QVBoxLayout, QWidget
 
 from core.settings.fullscreen_overlays import (
     CORNERS,
@@ -139,8 +139,16 @@ class FullscreenModePage(QWidget):
             "needs Interaction Mode (or Ctrl held).")
         self.now_playing_card = self._check(
             now_playing_layout, "Card", "now_playing", "card",
-            "Show the track on a card with the theme's border and surface, like the widgets. The artwork keeps "
-            "the Media widget's artwork border either way.")
+            "Show Now Playing on a Normal, theme-coloured translucent card. The artwork retains its "
+            "Media widget border; the card's fill opacity is independently adjustable.")
+        self.now_playing_bar_fill_opacity = self._opacity_slider(
+            now_playing_layout, "Media Bar Fill Opacity:", "bar_fill_opacity_adjust",
+            "Adjust only the fullscreen transport bar's Normal surface fill. "
+            "Zero uses the theme's current Normal-card opacity; text, separators and borders are unaffected.")
+        self.now_playing_card_fill_opacity = self._opacity_slider(
+            now_playing_layout, "Card Fill Opacity:", "card_fill_opacity_adjust",
+            "Adjust only the fullscreen Now Playing card's Normal surface fill. "
+            "Zero uses the theme's current Normal-card opacity; text, artwork, border and shadow are unaffected.")
 
         _host, text_layout = build_collapsible_bucket(
             tab, group_layout, mode_key=FULLSCREEN_BUCKET_SCOPE, bucket_key=FULLSCREEN_BUCKETS[3], title="Text",
@@ -209,6 +217,23 @@ class FullscreenModePage(QWidget):
         parent.addWidget(check)
         return check
 
+    def _opacity_slider(self, parent: QVBoxLayout, label: str, key: str, tooltip: str) -> QSlider:
+        row = add_aligned_row(parent, label)[0]
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setObjectName(f"fullscreen_now_playing_{key}")
+        slider.setRange(-100, 100)
+        slider.setSingleStep(5)
+        slider.setPageStep(10)
+        slider.setToolTip(tooltip)
+        label_value = QLabel("+0.00")
+        label_value.setObjectName(f"fullscreen_now_playing_{key}_value")
+        label_value.setMinimumWidth(48)
+        slider.valueChanged.connect(lambda n, display=label_value: display.setText(f"{n / 100:+.2f}"))
+        slider.valueChanged.connect(lambda n, field=key: self._set_value(("now_playing", field), n / 100))
+        row.addWidget(slider, 1)
+        row.addWidget(label_value)
+        return slider
+
     def _on_font_changed(self, font: QFont) -> None:
         family = font.family().strip()
         if family:
@@ -274,6 +299,15 @@ class FullscreenModePage(QWidget):
                 self.now_playing_controls_style.setCurrentIndex(
                     self.now_playing_controls_style.findData(values["now_playing"]["media_controls_style"]))
             self.now_playing_controls_style.setEnabled(bool(values["now_playing"]["media_controls"]))
+            for slider, field in ((self.now_playing_bar_fill_opacity, "bar_fill_opacity_adjust"),
+                                  (self.now_playing_card_fill_opacity, "card_fill_opacity_adjust")):
+                amount = round(float(values["now_playing"][field]) * 100)
+                with QSignalBlocker(slider):
+                    slider.setValue(amount)
+                # QSignalBlocker does not update the companion value label.
+                display = self.findChild(QLabel, f"fullscreen_now_playing_{field}_value")
+                if display is not None:
+                    display.setText(f"{amount / 100:+.2f}")
             with QSignalBlocker(self.font_size):
                 self.font_size.setValue(int(values["font_size"]))
         finally:

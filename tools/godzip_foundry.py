@@ -220,6 +220,7 @@ try:
         QSizePolicy,
         QPushButton,
         QSplitter,
+        QTabBar,
         QTabWidget,
         QToolButton,
         QTreeWidget,
@@ -5080,37 +5081,72 @@ class GodzipFoundryWindow(QMainWindow):
             except AttributeError:
                 self.tabs.tabBar().setTabEnabled(hidden_index, False)
 
-        right_nav = QWidget(self.tabs)
+        # Keep all navigation in one explicitly managed row. QTabWidget's
+        # TopRightCorner corner-widget allocation compressed the right buttons
+        # despite abundant room, and silently cropped FOUNDRIES at high DPI.
+        # An independent QTabBar allows the left tabs to scroll while the
+        # right-hand controls have guaranteed, non-compressible width.
+        navigation_row = QHBoxLayout()
+        navigation_row.setContentsMargins(0, 0, 0, 0)
+        navigation_row.setSpacing(8)
+        self.primary_tab_bar = QTabBar(body)
+        self.primary_tab_bar.setObjectName("foundryPrimaryNavigation")
+        self.primary_tab_bar.setExpanding(False)
+        self.primary_tab_bar.setUsesScrollButtons(True)
+        self.primary_tab_bar.setElideMode(Qt.TextElideMode.ElideRight)
+        self.primary_tab_bar.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+        )
+        self.primary_tab_bar.setMinimumWidth(120)
+        for label in (
+            "CREATE GOD ZIP", "APPLY GOD ZIP", "DIFF", "LOGZIP",
+            "PUSH", "PULL", "DEBRIS",
+        ):
+            self.primary_tab_bar.addTab(label)
+        self.primary_tab_bar.currentChanged.connect(self._primary_nav_changed)
+        navigation_row.addWidget(self.primary_tab_bar, 1)
+
+        right_nav = QWidget(body)
+        right_nav.setObjectName("foundryRightNavigation")
+        self.right_nav = right_nav
         right_nav_layout = QHBoxLayout(right_nav)
-        # The corner widget lives *inside* the tab-bar strip. Leave a bottom
-        # inset so the pane cannot clip the buttons' rounded bottom edges at
-        # fractional/high DPI, and keep its full width when left tabs overflow.
-        right_nav_layout.setContentsMargins(0, 0, 0, 4)
-        right_nav_layout.setSpacing(3)
-        right_nav.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        right_nav_layout.setContentsMargins(0, 0, 0, 0)
+        right_nav_layout.setSpacing(5)
+        right_nav.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.run_tab_button = QPushButton("RUN")
         self.run_tab_button.setObjectName("cmdTabButton")
         self.run_tab_button.setCheckable(True)
-        self.run_tab_button.setFixedHeight(34)
+        self.run_tab_button.setFixedHeight(38)
         self.run_tab_button.clicked.connect(lambda: self.tabs.setCurrentWidget(self.run_tab))
         right_nav_layout.addWidget(self.run_tab_button)
         self.cmd_tab_button = QPushButton("CMD")
         self.cmd_tab_button.setObjectName("cmdTabButton")
         self.cmd_tab_button.setCheckable(True)
-        self.cmd_tab_button.setFixedHeight(34)
+        self.cmd_tab_button.setFixedHeight(38)
         self.cmd_tab_button.clicked.connect(lambda: self.tabs.setCurrentWidget(self.command_tab))
         right_nav_layout.addWidget(self.cmd_tab_button)
-        self.foundries_tab_button = QPushButton("Foundries")
+        self.foundries_tab_button = QPushButton("FOUNDRIES")
         self.foundries_tab_button.setObjectName("cmdTabButton")
         self.foundries_tab_button.setCheckable(True)
-        self.foundries_tab_button.setFixedHeight(34)
+        self.foundries_tab_button.setFixedHeight(38)
         self.foundries_tab_button.clicked.connect(
             lambda: self.tabs.setCurrentWidget(self.foundries_tab)
         )
         right_nav_layout.addWidget(self.foundries_tab_button)
-        right_nav.setMinimumWidth(right_nav.sizeHint().width())
-        self.tabs.setCornerWidget(right_nav, Qt.Corner.TopRightCorner)
-        right_nav.raise_()
+        for button in (
+            self.run_tab_button, self.cmd_tab_button, self.foundries_tab_button,
+        ):
+            button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            button.setFixedWidth(max(
+                button.sizeHint().width(),
+                button.fontMetrics().horizontalAdvance(button.text()) + 38,
+            ))
+        right_nav.setFixedWidth(right_nav_layout.sizeHint().width())
+        navigation_row.addWidget(right_nav, 0, Qt.AlignmentFlag.AlignRight)
+        body_l.addLayout(navigation_row)
+        # The underlying QTabWidget remains the sole page-state authority;
+        # hide its native tab strip because the standalone bar presents it.
+        self.tabs.tabBar().hide()
         self.tabs.currentChanged.connect(self._tab_changed)
         body_l.addWidget(self.tabs, 1)
         shell_l.addWidget(body, 1)
@@ -5130,8 +5166,18 @@ class GodzipFoundryWindow(QMainWindow):
         status_row.addWidget(self.busy)
         status_row.addWidget(dpi)
 
+    def _primary_nav_changed(self, index: int) -> None:
+        if 0 <= index < self.primary_tab_bar.count():
+            self.tabs.setCurrentIndex(index)
+
     def _tab_changed(self, _index: int) -> None:
         current = self.tabs.currentWidget()
+        if hasattr(self, "primary_tab_bar"):
+            index = self.tabs.currentIndex()
+            selected = index if index < self.primary_tab_bar.count() else -1
+            previous = self.primary_tab_bar.blockSignals(True)
+            self.primary_tab_bar.setCurrentIndex(selected)
+            self.primary_tab_bar.blockSignals(previous)
         self._clear_tab_status(current)
         if hasattr(self, "run_tab_button"):
             self.run_tab_button.setChecked(current is self.run_tab)

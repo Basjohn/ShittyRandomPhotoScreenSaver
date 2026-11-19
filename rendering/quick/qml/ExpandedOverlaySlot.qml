@@ -1,4 +1,5 @@
 import QtQuick
+import "SurfaceContrast.js" as SurfaceContrast
 
 // One full-display overlay (plan 01 §G, M3b): its placement in the expanded card's safe area, its event-driven
 // visibility and its optional themed card. The content (the preset toast's line, Now Playing's artwork and text) is
@@ -44,6 +45,13 @@ Item {
     // Holds at full once revealed: Always Show, Fullscreen Edit, or the pointer resting on it.
     readonly property bool holding: alwaysShow || editing || hoverHeld
     readonly property bool cardOn: options.card === true
+    // Now Playing may choose honest Normal transparency independently of the fullscreen
+    // Visualizer card; Preset Name and other users keep the inherited material.
+    property string cardSurfaceMode: "inherit"
+    property real cardFillOpacityAdjust: 0.0
+    readonly property color adjustedCardColor: stage ? Qt.rgba(
+        stage.cardColor.r, stage.cardColor.g, stage.cardColor.b,
+        SurfaceContrast.adjustedDensity(stage.cardColor.a, cardFillOpacityAdjust)) : "transparent"
     readonly property real unit: {
         const value = Number(options.scale)
         return isFinite(value) && value > 0 ? Math.max(0.5, Math.min(3.0, value)) : 1.0
@@ -340,12 +348,12 @@ Item {
         sourceComponent: OverlayCard {
             shellEnabled: true
             padding: 0.0
-            backgroundColor: slot.stage.cardColor
+            backgroundColor: slot.adjustedCardColor
             borderColor: slot.stage.borderColor
             borderWidth: slot.stage.cardBorderWidth
             cornerRadius: slot.stage.cornerRadius
-            surfaceMaterial: slot.stage.surfaceMaterial
-            surfaceBackdrop: slot.stage.surfaceBackdrop
+            surfaceMaterial: slot.cardSurfaceMode === "inherit" ? slot.stage.surfaceMaterial : slot.cardSurfaceMode
+            surfaceBackdrop: slot.cardSurfaceMode === "normal" ? null : slot.stage.surfaceBackdrop
             surfaceTextColor: slot.textColor
             shadowEnabled: slot.stage.cardShadowEnabled
             shadowColor: slot.stage.cardShadowColor

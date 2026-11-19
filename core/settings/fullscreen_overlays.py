@@ -233,6 +233,8 @@ def normalize_fullscreen_overlays(value: Any, application: str | None = None) ->
                 target[key] = _number(item, float(default), OFFSET_MIN, OFFSET_MAX)
             elif key in SCALE_KEYS:
                 target[key] = _number(item, float(default), SCALE_MIN, SCALE_MAX)
+            elif overlay == "now_playing" and key in ("bar_fill_opacity_adjust", "card_fill_opacity_adjust"):
+                target[key] = _number(item, float(default), -1.0, 1.0)
             elif key in TEXT_EXTENT_KEYS or key == BASE_WIDTH_KEY:
                 target[key] = _number(item, float(default), 0.0, TEXT_EXTENT_MAX)
         if overlay == "now_playing":

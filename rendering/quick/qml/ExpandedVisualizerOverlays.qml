@@ -297,6 +297,11 @@ Item {
         stage: overlays
         options: overlays.nowPlayingOptions
         defaultCorner: "bottom_left"
+        // Correct live-Visualizer translucency: never sample the wallpaper-only
+        // material backdrop for Now Playing. Zero bias retains the resolved Normal
+        // card alpha. This does not affect the separate Preset Name overlay.
+        cardSurfaceMode: "normal"
+        cardFillOpacityAdjust: Number(options.card_fill_opacity_adjust || 0.0)
         // Very gentle (operator, 8 Nov).
         fadeInMs: 1300
         holdMs: 5200
@@ -865,18 +870,23 @@ Item {
                     canNext: !!model && model.canNext === true
                     interactionEnabled: nowPlayingSlot.interactive
                     playing: nowPlayingSlot.playing
-                    surfaceColor: overlays.mediaLook("surfaceColor", "#b3101010")
+                    // Keep the transport semantic RGB; its baseline opacity is
+                    // the same resolved Normal card alpha as the optional toast card.
+                    readonly property color authoredBarColor: overlays.mediaLook("surfaceColor", "#b3101010")
+                    surfaceColor: Qt.rgba(authoredBarColor.r, authoredBarColor.g,
+                                          authoredBarColor.b, overlays.cardColor.a)
                     materialFillColor: overlays.mediaLook("materialFillColor", "#b3101010")
-                    // Use Media's resolved material/opacity/ink, not an
-                    // independent Visualizer card override. The backdrop still
-                    // belongs to this display's one shared capture source.
+                    // Keep the Media model's semantic ink and transport geometry.
+                    // The fullscreen bar intentionally uses Normal fill/alpha and
+                    // never requests the wallpaper-only material backdrop.
                     inheritedMaterial: overlays.mediaLook("sourceMaterial", overlays.surfaceMaterial)
-                    materialBackdrop: overlays.surfaceBackdrop
-                    materialOpacityAdjust: overlays.mediaLook("sourceOpacityAdjust", overlays.surfaceOpacityAdjust)
-                    materialChildOpacityAdjust: overlays.mediaLook("childOpacityAdjust", 0.0)
+                    materialBackdrop: null // The fullscreen Normal fill composites over actual Visualizer pixels.
+                    materialOpacityAdjust: 0.0
+                    materialChildOpacityAdjust: Number(nowPlayingSlot.options.bar_fill_opacity_adjust || 0.0)
                     materialTextColor: overlays.mediaLook("sourceTextColor", overlays.surfaceTextColor)
-                    // Uses the same Media-owned override as the regular transport bar.
-                    materialMode: overlays.mediaLook("materialMode", "inherit")
+                    // Fullscreen is Normal by default: the ordinary Media bar
+                    // still honours its independent global material selector.
+                    materialMode: "normal"
                     iconColor: overlays.mediaLook("iconColor", "#ffffffff")
                     separatorColor: overlays.mediaLook("separatorColor", "#66ffffff")
                     separatorWidth: 1.5 * drawnFactor
