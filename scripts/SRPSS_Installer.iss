@@ -48,6 +48,11 @@ WizardSmallImageBackColor=none
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
+; User-visible opt-outs. Normal upgrades refresh curated assets to admit new
+; material/theme schemas and renamed presets; leaving a task unchecked keeps
+; the existing shared ProgramData catalogue untouched (no delete AND no copy).
+Name: "replacethemes"; Description: "Replace Installed Themes With Bundled Versions"; GroupDescription: "Curated assets:"
+Name: "replacevispresets"; Description: "Replace Installed Visualizer Presets With Bundled Versions"; GroupDescription: "Curated assets:"
 ; 5.0.0 migration reset remains available manually, but defaults OFF.
 Name: "resetsettings"; Description: "Revert Settings To Defaults"; GroupDescription: "Settings:"; Flags: unchecked
 
@@ -68,9 +73,9 @@ Source: ".\..\release\reddit_helper\*"; DestDir: "{commonappdata}\SRPSS\helper";
 Source: ".\reddit_helper_task_template.xml"; Flags: dontcopy
 
 ; Curated visualizer presets and sounds.
-Source: ".\..\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: ".\..\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: replacevispresets
 ; Curated Settings + Widget themes share one ProgramData root.
-Source: ".\..\themes\*"; DestDir: "{commonappdata}\SRPSS\themes"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: ".\..\themes\*"; DestDir: "{commonappdata}\SRPSS\themes"; Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: replacethemes
 Source: ".\..\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 Source: ".\..\resources\jedimodeyall.mp3"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 
@@ -105,8 +110,8 @@ Type: files; Name: "{sys}\\ShittyRandomPhotoScreenSaver.scr"
 
 ; Clean-replace shipped data and helper bundle. {app} itself is clean-replaced
 ; in CurStepChanged while preserving only Inno's unins* bookkeeping files.
-Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
-Type: filesandordirs; Name: "{commonappdata}\SRPSS\themes"
+Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"; Tasks: replacevispresets
+Type: filesandordirs; Name: "{commonappdata}\SRPSS\themes"; Tasks: replacethemes
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\helper"
 Type: files; Name: "{commonappdata}\SRPSS\sounds\tutuogg.ogg"
 Type: files; Name: "{commonappdata}\SRPSS\sounds\jedimodeyall.mp3"

@@ -110,7 +110,8 @@ def test_the_size_grip_keeps_its_place_clear_of_the_see_through_corner(manager) 
     """Hit-testing: the bottom-right size grip sits where it always did (4 px inside the corner), wholly inside
     the rounded border, so the see-through wedge never takes any of it."""
     from core.animation import AnimationManager
-    from ui.settings_dialog import SETTINGS_SIZE_GRIP_INSET, SettingsDialog
+    from ui.settings_dialog import (SETTINGS_SIZE_GRIP_INSET, SETTINGS_DIALOG_BORDER_WIDTH,
+                                    SETTINGS_DIALOG_CORNER_RADIUS, SettingsDialog)
     from ui.settings_window_edge import border_outer_path
 
     dialog = SettingsDialog(manager, AnimationManager())
@@ -125,7 +126,15 @@ def test_the_size_grip_keeps_its_place_clear_of_the_see_through_corner(manager) 
         grip = local.translated(origin)
         assert SETTINGS_SIZE_GRIP_INSET == 4
         assert (grip.right() + 1, grip.bottom() + 1) == (w - 4, h - 4)
-        silhouette = border_outer_path(QRectF(dialog.rect()))
+        assert set(dialog.corner_size_grips) == {
+            "top_left", "top_right", "bottom_left", "bottom_right"}
+        for name, corner_grip in dialog.corner_size_grips.items():
+            rect = corner_grip.geometry()
+            assert (rect.left() == 4) == name.endswith("left")
+            assert (rect.top() == 4) == name.startswith("top")
+        silhouette = border_outer_path(QRectF(dialog.rect()),
+                                       border_width=SETTINGS_DIALOG_BORDER_WIDTH,
+                                       corner_radius=SETTINGS_DIALOG_CORNER_RADIUS)
         for x in range(grip.left(), grip.right() + 1):
             for y in range(grip.top(), grip.bottom() + 1):
                 assert silhouette.contains(QPointF(x + 0.5, y + 0.5)), (x, y)

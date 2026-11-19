@@ -383,6 +383,12 @@ OverlayWidget {
             height: visible ? headerFrame.implicitHeight : 0.0
 
             BrandedHeader {
+
+                materialCard: mediaRoot
+
+                materialMode: mediaRoot.cardHeaderSurfaceMode
+
+                materialOpacityAdjust: mediaRoot.cardHeaderSurfaceOpacityAdjust
                 id: headerFrame
                 frameObjectName: "mediaHeaderFrame"
                 logoObjectName: "mediaHeaderLogo"
@@ -826,6 +832,7 @@ OverlayWidget {
                 playing: mediaRoot.mediaModel.playbackState === "playing"
                 transportVisible: mediaRoot.mediaModel.controlsAvailable
                 surfaceColor: mediaRoot.mediaModel.controlsSurfaceColor
+                materialFillColor: mediaRoot.mediaModel.appVolumeTrackColor
                 iconColor: mediaRoot.mediaModel.controlsIconColor
                 separatorColor: mediaRoot.mediaModel.controlsSeparatorColor
                 separatorWidth: mediaRoot.scaleAwareStrokeWidth(1.0)
@@ -834,7 +841,15 @@ OverlayWidget {
                 shadowBlur: mediaRoot.mediaModel.surfaceShadowBlur
                 shadowOffsetX: mediaRoot.mediaModel.surfaceShadowOffsetX
                 shadowOffsetY: mediaRoot.mediaModel.surfaceShadowOffsetY
-                materialCard: mediaRoot
+                // The bar has its own surface even when the Media card's shell is
+                // hidden. Read the same backdrop/material as volume, but do not
+                // gate the bar on the parent's cardSurfaceMaterialActive flag.
+                materialBackdrop: mediaRoot.cardSurfaceBackdrop
+                inheritedMaterial: mediaRoot.cardSurfaceMaterial
+                materialOpacityAdjust: mediaRoot.cardSurfaceOpacityAdjust
+                materialChildOpacityAdjust: mediaRoot.mediaModel.controlsSurfaceOpacityAdjust
+                materialTextColor: mediaRoot.cardSurfaceTextColor
+                materialMode: mediaRoot.mediaModel.controlsSurfaceMaterial
                 transportReserve: systemMuteButton.visible && mediaRoot.muteOnAuthoredRail
                     ? systemMuteButton.width + systemMuteButton.anchors.rightMargin + 4.0 : 0.0
                 onTransportRequested: function(key) {

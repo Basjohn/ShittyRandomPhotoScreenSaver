@@ -166,6 +166,12 @@ OverlayWidget {
     ]
 
     BrandedHeader {
+
+        materialCard: statsRoot
+
+        materialMode: statsRoot.cardHeaderSurfaceMode
+
+        materialOpacityAdjust: statsRoot.cardHeaderSurfaceOpacityAdjust
         id: headerFrame
         frameObjectName: "systemStatsHeaderFrame"
         logoObjectName: "systemStatsToolsIcon"

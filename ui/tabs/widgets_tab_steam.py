@@ -864,6 +864,9 @@ def _update_achievement_capsule_style_controls(tab: "WidgetsTab") -> None:
     pulse = getattr(tab, "achievement_pulse_progress_pulse", None)
     shelf_enabled = bool(shelf is not None and shelf.isChecked())
     pulse_enabled = bool(pulse is not None and pulse.isChecked())
+    ring_material = getattr(tab, "achievement_pulse_progress_circle_material", None)
+    if ring_material is not None:
+        ring_material.setEnabled(pulse_enabled)
     fill = getattr(tab, "achievement_pulse_capsule_fill_color_btn", None)
     doubled = getattr(tab, "achievement_pulse_double_capsules", None)
     if fill is not None:
@@ -1220,6 +1223,18 @@ def _build_card_group(
         )
         tab.achievement_pulse_progress_pulse = progress_pulse
         appearance_layout.addWidget(progress_pulse)
+
+        ring_material = QCheckBox("Material Progress Circle")
+        ring_material.setProperty("circleIndicator", True)
+        ring_material.setToolTip(
+            "Use the card's active theme material for the progress circle's interior. "
+            "The progress outline, percentage and pulse remain unchanged. "
+            "Normal cards keep the original fill; no separate backdrop is captured."
+        )
+        ring_material.setChecked(tab._default_bool(key, "progress_circle_material"))
+        ring_material.stateChanged.connect(tab._save_settings)
+        tab.achievement_pulse_progress_circle_material = ring_material
+        appearance_layout.addWidget(ring_material)
 
         shelf_style = QCheckBox("Shelf Style")
         shelf_style.setProperty("circleIndicator", True)
@@ -1939,6 +1954,9 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             tab.achievement_pulse_progress_pulse.setChecked(
                 bool(config.get("progress_pulse", tab._default_bool(key, "progress_pulse")))
             )
+            tab.achievement_pulse_progress_circle_material.setChecked(
+                bool(config.get("progress_circle_material", tab._default_bool(key, "progress_circle_material")))
+            )
             tab.achievement_pulse_shelf_style.setChecked(
                 bool(config.get("shelf_style", tab._default_bool(key, "shelf_style")))
             )
@@ -2136,6 +2154,9 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
         payload.pop("double_capsule_long_data", None)
         payload["double_capsules"] = bool(tab.achievement_pulse_double_capsules.isChecked())
         payload["progress_pulse"] = bool(tab.achievement_pulse_progress_pulse.isChecked())
+        payload["progress_circle_material"] = bool(
+            tab.achievement_pulse_progress_circle_material.isChecked()
+        )
         payload["shelf_style"] = bool(tab.achievement_pulse_shelf_style.isChecked())
         payload["capsule_font_size"] = int(tab.achievement_pulse_capsule_font_size.value())
         payload["capsule_fill_color"] = _rgba_payload(tab._achievement_capsule_fill_color)

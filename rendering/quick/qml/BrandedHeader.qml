@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import "SurfaceContrast.js" as SurfaceContrast
 
 // Shared branded header pill used by ordinary and Steam-authored widgets.
 // Geometry is intentionally fixed in authored pixels and therefore follows the
@@ -27,6 +28,14 @@ Item {
     property bool contentReversed: false
 
     property color fillColor: "transparent"
+    // The host ordinary widget owns the already-shared material backdrop.
+    // This header only reuses it, independently of the card's own fill and
+    // legibility panel. The global Normal override leaves old pixels untouched.
+    property Item materialCard: null
+    property string materialMode: "inherit"
+    property real materialOpacityAdjust: 0.0
+    readonly property color adjustedFlatFillColor: Qt.rgba(fillColor.r, fillColor.g, fillColor.b,
+        SurfaceContrast.adjustedDensity(fillColor.a, materialOpacityAdjust))
     property color borderColor: "white"
     property real borderWidth: 1.0
     property color textColor: "white"
@@ -98,7 +107,22 @@ Item {
         objectName: header.frameObjectName
         anchors.fill: parent
         radius: header.cornerRadius
-        color: header.fillColor
+        color: headerMaterial.active ? "transparent" : header.adjustedFlatFillColor
+        ChildMaterialSurface {
+            id: headerMaterial
+            objectName: "brandedHeaderMaterial"
+            card: header.materialCard
+            materialOverride: header.materialMode
+            additionalOpacityAdjust: header.materialOpacityAdjust
+            forceFlat: header.materialMode === "normal"
+            fillColor: header.fillColor
+            cornerRadius: frame.radius
+            tintAlphaScale: 0.4
+            // This is the header's own text-legibility panel, independent of
+            // the parent card guard. Enabled for the material surface only;
+            // Normal continues to render the original flat colour instead.
+            legibilityPanel: true
+        }
         border.color: headerHover.hovered && header.interactionEnabled
             ? "white" : header.borderColor
         border.width: header.borderWidth + (headerHover.hovered && header.interactionEnabled ? 0.5 : 0.0)

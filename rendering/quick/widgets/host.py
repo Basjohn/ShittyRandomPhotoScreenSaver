@@ -183,6 +183,13 @@ class OverlayCardStyle:
     # today's fill; anything else samples the display's shared backdrop. The text
     # colour is the legibility layer's reference.
     surface_material: str = "normal"
+    # One global branded-header material switch; no family-specific setting.
+    header_surface_mode: str = "inherit"
+    # Only the Media card uses this demand hint; the QML bar receives its mode
+    # separately through the existing Media model.
+    media_controls_surface_mode: str = "inherit"
+    header_surface_opacity_adjust: float = 0.0
+    media_controls_opacity_adjust: float = 0.0
     surface_opacity_adjust: float = 0.0
     surface_text_color: QColor = field(
         default_factory=lambda: QColor(255, 255, 255, 230)
@@ -207,6 +214,8 @@ _CARD_STYLE_BINDINGS: tuple[tuple[str, str], ...] = (
     ("cardShadowExtendRight", "shadow_extend_right"),
     ("cardShadowExtendBottom", "shadow_extend_bottom"),
     ("cardSurfaceMaterial", "surface_material"),
+    ("cardHeaderSurfaceMode", "header_surface_mode"),
+    ("cardHeaderSurfaceOpacityAdjust", "header_surface_opacity_adjust"),
     ("cardSurfaceOpacityAdjust", "surface_opacity_adjust"),
     ("cardSurfaceTextColor", "surface_text_color"),
 )
@@ -255,6 +264,7 @@ class RetainedOverlayWidget:
         # ``OrdinaryWidgetPresentationHost.set_ordinary_widgets_covered``); None: nothing to pause.
         self._cover_handler: Callable[[bool], object] | None = None
         self._surface_material = "normal"
+        self._surface_materials: frozenset[str] = frozenset()
         self._authored_geometry: OverlayWidgetGeometry | None = None
         self._display_placement: Callable[[OverlayWidgetGeometry], OverlayWidgetGeometry] | None = None
         # A Python presentation wrapper must never outlive its QML-owned C++ root.
@@ -370,6 +380,15 @@ class RetainedOverlayWidget:
 
         apply_overlay_card_style(self.item, style)
         self._surface_material = str(style.surface_material)
+        # A separately selected header or Media bar material also needs the
+        # existing shared backdrop when its parent card happens to be Normal.
+        self._surface_materials = frozenset(
+            material for material in (
+                self._surface_material,
+                style.header_surface_mode,
+                style.media_controls_surface_mode,
+            ) if material not in {"normal", "inherit", "theme"}
+        )
         host = getattr(self, "_host", None)
         if host is not None:
             host._note_surface_demand()
@@ -377,6 +396,11 @@ class RetainedOverlayWidget:
     @property
     def surface_material(self) -> str:
         return self._surface_material
+
+    @property
+    def surface_materials(self) -> frozenset[str]:
+        """Shared backdrop demand, including independently styled child surfaces."""
+        return self._surface_materials
 
     def set_custom_layout_size_payload_handler(
         self,
@@ -614,8 +638,10 @@ class OrdinaryWidgetPresentationHost:
     def surface_materials(self) -> frozenset[str]:
         """Non-Normal materials of the live cards (edge-maintained, no scene scan)."""
 
-        return frozenset(widget.surface_material for widget in self._live
-                         if widget.surface_material != "normal" and widget.is_qt_alive)
+        return frozenset(
+            material for widget in self._live if widget.is_qt_alive
+            for material in widget.surface_materials
+        )
 
     def set_surface_demand_listener(self, listener: Callable[[], None] | None) -> None:
         """One owner (the scene controller) told when the material set may have changed."""
@@ -889,7 +915,7 @@ class OrdinaryWidgetPresentationHost:
         self._live.append(widget)
         if normalized_identity:
             self._by_model_identity[normalized_identity] = widget
-        if widget.surface_material != "normal":
+        if widget.surface_materials:
             self._note_surface_demand()
         # ``fade_opacity`` was deliberately projected before scene admission
         # above. Later lifecycle changes continue through RetainedOverlayWidget.
@@ -937,9 +963,9 @@ class OrdinaryWidgetPresentationHost:
         if widget.model_identity and self._by_model_identity.get(widget.model_identity) is widget:
             self._by_model_identity.pop(widget.model_identity, None)
         self._unexpected_qt_deaths.append(identity)
-        material = widget.surface_material
+        material = widget.surface_materials
         widget._retire()
-        if material != "normal":
+        if material:
             self._note_surface_demand()
 
     def prune_invalid_presentations(self) -> tuple[str, ...]:
@@ -1114,9 +1140,9 @@ class OrdinaryWidgetPresentationHost:
                 del self._live[index]
                 if live.model_identity:
                     self._by_model_identity.pop(live.model_identity, None)
-                material = live.surface_material
+                material = live.surface_materials
                 live._retire()
-                if material != "normal":
+                if material:
                     self._note_surface_demand()
                 return True
         return False
@@ -1309,7 +1335,7 @@ class OrdinaryWidgetPresentationHost:
         if target._covers(widget) != was_covered:
             widget._apply_cover(not was_covered)
         item.setProperty("cardSurfaceBackdrop", target._surface_backdrop)
-        if widget.surface_material != "normal":
+        if widget.surface_materials:
             self._note_surface_demand()
             target._note_surface_demand()
         return True

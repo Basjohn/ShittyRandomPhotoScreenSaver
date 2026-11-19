@@ -51,6 +51,7 @@ from ui.settings_theme_runtime import (
 )
 from ui.settings_theme_spec import SettingsThemeSpec
 from ui.settings_launch_targets import resolve_settings_launch_target
+from ui.settings_window_placement import settle_settings_rect
 
 logger = get_logger(__name__)
 # One [PLATFORM] announcement per process for the non-Windows material underlay.
@@ -92,8 +93,12 @@ from ui.settings_window_edge import (  # noqa: E402
     paint_material_underlay,
 )
 
+# Settings-only refinement; the Studio's shared edge retains its original
+# 4.0 logical-pixel stroke and 6.5 radius.
+SETTINGS_DIALOG_BORDER_WIDTH = SETTINGS_OUTER_BORDER_WIDTH + 1.25
+SETTINGS_DIALOG_CORNER_RADIUS = SETTINGS_OUTER_CORNER_RADIUS - 0.25
 SETTINGS_OUTER_BORDER_COLOR = _theme_qcolor("chrome.outer_border")
-# The size grip sits this far inside the bottom-right corner (logical px), clear of the rounded border.
+# Four invisible resize grips sit just inside the rounded border (logical px).
 SETTINGS_SIZE_GRIP_INSET = 4
 
 
@@ -125,6 +130,8 @@ class CustomTitleBar(QWidget):
         super().__init__(parent)
         
         self._drag_pos = QPoint()
+        self._dragging = False
+        self._did_drag = False
         self._setup_ui()
         
     def _setup_ui(self) -> None:
@@ -178,14 +185,31 @@ class CustomTitleBar(QWidget):
         """Handle mouse press for window dragging."""
         if event.button() == Qt.MouseButton.LeftButton:
             self._drag_pos = event.globalPosition().toPoint() - self.window().frameGeometry().topLeft()
+            self._dragging = True
+            self._did_drag = False
             event.accept()
-    
+
     def mouseMoveEvent(self, event):
         """Handle mouse move for window dragging."""
-        if event.buttons() == Qt.MouseButton.LeftButton:
-            self.window().move(event.globalPosition().toPoint() - self._drag_pos)
+        if self._dragging and event.buttons() == Qt.MouseButton.LeftButton:
+            position = event.globalPosition().toPoint() - self._drag_pos
+            if position != self.window().frameGeometry().topLeft():
+                self._did_drag = True
+                self.window().move(position)
             event.accept()
-    
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._dragging:
+            self._dragging = False
+            if self._did_drag:
+                settle = getattr(self.window(), "_settle_window_placement", None)
+                if callable(settle):
+                    settle()
+            self._did_drag = False
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
     def mouseDoubleClickEvent(self, event):
         """Toggle maximize on double-click."""
         if event.button() == Qt.MouseButton.LeftButton:
@@ -535,29 +559,31 @@ class TabButton(QPushButton):
 
 
 class CornerSizeGrip(QSizeGrip):
-    """Custom size grip with a subtle white dotted diagonal indicator."""
+    """Invisible native resize hit-target for each corner of the frameless Settings window.
+
+    QSizeGrip chooses the resize direction from its position relative to the
+    top-level window.  No diagonal scratch marks obscure the material or border.
+    """
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("cornerSizeGrip")
-        # Slightly larger footprint so the diagonal cut reads clearly.
-        self.setFixedSize(24, 24)
-
-    # Stroke of the grip's diagonals: the width of the theme's other painted glyphs.
-    STROKE = 1.25
+        self.setFixedSize(20, 20)
+        self.setToolTip("Drag to resize Settings")
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
-        # Three solid, antialiased diagonals in the theme's size-grip role (a dotted, aliased
-        # pen read as Windows' native grip, 1C.9).
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        pen = QPen(_theme_qcolor("chrome.size_grip"), self.STROKE)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        painter.setPen(pen)
-        corner = QPointF(self.width() - 4.0, self.height() - 4.0)
-        for length in (4.0, 8.5, 13.0):
-            painter.drawLine(QPointF(corner.x() - length, corner.y()), QPointF(corner.x(), corner.y() - length))
-        painter.end()
+        # Keep the existing QSizeGrip hit testing and resize behaviour, but
+        # remove its decorative strokes in every corner.
+        event.accept()
+
+    def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
+        super().mouseReleaseEvent(event)
+        if event.button() == Qt.MouseButton.LeftButton:
+            # One adjustment after the native resize gesture, not while its
+            # mouse-move stream is active. No event-loop timer is introduced.
+            settle = getattr(self.window(), "_settle_window_placement", None)
+            if callable(settle):
+                settle()
 
 
 class SettingsDialog(QDialog):
@@ -644,6 +670,7 @@ class SettingsDialog(QDialog):
         self._is_maximized = False
         self._drag_pos = QPoint()
         self._dragging = False
+        self._drag_did_move = False
         self._tab_widgets: Dict[str, QWidget] = {}
         self._tab_builders: Dict[str, Any] = {}
         self._built_tab_indices: set[int] = set()
@@ -1051,7 +1078,7 @@ class SettingsDialog(QDialog):
         
         # Content area
         content_layout = QHBoxLayout()
-        content_layout.setContentsMargins(10, 10, 10, 9)
+        content_layout.setContentsMargins(10, 10, 12, 9)
         content_layout.setSpacing(10)
         
         # Left sidebar with tabs
@@ -1120,15 +1147,29 @@ class SettingsDialog(QDialog):
         main_layout.addWidget(bottom_spacer)
 
         # Size grip for resizing
-        self.size_grip = CornerSizeGrip(container)
-        self.size_grip.setFixedSize(20, 20)
+        self.corner_size_grips = {
+            corner: CornerSizeGrip(container)
+            for corner in ("top_left", "top_right", "bottom_left", "bottom_right")
+        }
+        # Preserve the existing public alias for Settings/Studio tests and
+        # callers that inspect the established lower-right grip.
+        self.size_grip = self.corner_size_grips["bottom_right"]
+        for corner, grip in self.corner_size_grips.items():
+            grip.setObjectName(f"settingsGrip_{corner}")
+            grip.setCursor(Qt.CursorShape.SizeFDiagCursor if corner in
+                ("top_left", "bottom_right") else Qt.CursorShape.SizeBDiagCursor)
+            grip.raise_()
         
         # Set main layout
         self._outer_layout = QVBoxLayout(self)
         self._outer_layout.setContentsMargins(0, 0, 0, 0)
         self._outer_layout.addWidget(container)
         # The forged edge paints over every other child (the shell surfaces fill the window).
-        self._forged_edge = ForgedWindowEdgeOverlay(self, self._forged_edge_state)
+        self._forged_edge = ForgedWindowEdgeOverlay(
+            self, self._forged_edge_state,
+            border_width=SETTINGS_DIALOG_BORDER_WIDTH,
+            corner_radius=SETTINGS_DIALOG_CORNER_RADIUS,
+        )
         
         self.tab_buttons[self._initial_tab_index].setChecked(True)
         self.content_stack.setCurrentIndex(self._initial_tab_index)
@@ -1174,7 +1215,7 @@ class SettingsDialog(QDialog):
         host = QWidget()
         layout = QVBoxLayout(host)
         # Same insets as the normal sidebar/content row.
-        layout.setContentsMargins(10, 10, 10, 9)
+        layout.setContentsMargins(10, 10, 12, 9)
         panel = GuidedSetupPanel(self._settings, host)
         layout.addWidget(panel)
         panel.finished.connect(self._end_guided_setup)
@@ -2276,7 +2317,7 @@ class SettingsDialog(QDialog):
         screen = QGuiApplication.screenAt(self.frameGeometry().center())
         if screen is None:
             screen = QGuiApplication.primaryScreen()
-        return screen.geometry() if screen is not None else self.geometry()
+        return screen.availableGeometry() if screen is not None else self.geometry()
 
     def _apply_maximized_geometry(self) -> None:
         self._normal_geometry = self.geometry()
@@ -2299,8 +2340,8 @@ class SettingsDialog(QDialog):
         """Adjust layout margins and shadow visibility for current state."""
         if hasattr(self, "_outer_layout"):
             self._outer_layout.setContentsMargins(0, 0, 0, 0)
-        if hasattr(self, "size_grip"):
-            self.size_grip.setVisible(not self._is_maximized)
+        for grip in getattr(self, "corner_size_grips", {}).values():
+            grip.setVisible(not self._is_maximized)
     
     def resizeEvent(self, event):
         """Handle resize event to position size grip and save geometry."""
@@ -2310,19 +2351,21 @@ class SettingsDialog(QDialog):
             forged_edge.track_parent()
 
 
-        # Position size grip in bottom-right corner
-        if hasattr(self, 'size_grip'):
-            try:
-                parent = self.size_grip.parent() or self
-                pw = parent.width()
-                ph = parent.height()
-                grip_inset = 0 if self._is_maximized else SETTINGS_SIZE_GRIP_INSET
-                self.size_grip.move(
-                    pw - self.size_grip.width() - grip_inset,
-                    ph - self.size_grip.height() - grip_inset,
-                )
-            except Exception as e:
-                logger.debug("[SETTINGS] Exception suppressed: %s", e)
+        # Four independent invisible corner grips; QSizeGrip supplies the
+        # native corner direction, including opposite-edge anchoring.
+        try:
+            grips = getattr(self, "corner_size_grips", {})
+            if grips:
+                parent = self.size_grip.parentWidget() or self
+                pw, ph = parent.width(), parent.height()
+                inset = 0 if self._is_maximized else SETTINGS_SIZE_GRIP_INSET
+                for corner, grip in grips.items():
+                    x = inset if corner.endswith("left") else pw - grip.width() - inset
+                    y = inset if corner.startswith("top") else ph - grip.height() - inset
+                    grip.move(x, y)
+                    grip.raise_()
+        except Exception as e:
+            logger.debug("[SETTINGS] Exception suppressed: %s", e)
         
         # Geometry is saved once, on close: every exit path closes the dialog.
         
@@ -2383,7 +2426,8 @@ class SettingsDialog(QDialog):
             return
         painter = QPainter(self)
         paint_material_underlay(painter, QRectF(self.rect()), maximized=self._is_maximized,
-                                underlay=self._material_underlay)
+                                underlay=self._material_underlay,
+                                corner_radius=SETTINGS_DIALOG_CORNER_RADIUS)
         painter.end()
 
     def _forged_edge_state(self) -> tuple[bool, QColor]:
@@ -2401,11 +2445,13 @@ class SettingsDialog(QDialog):
     def mousePressEvent(self, event):
         """Handle mouse press for window dragging."""
         if event.button() == Qt.MouseButton.LeftButton:
-            # Don't interfere with size grip
-            size_grip_rect = self.size_grip.geometry() if hasattr(self, 'size_grip') else None
-            if size_grip_rect and size_grip_rect.contains(event.pos()):
-                super().mousePressEvent(event)
-                return
+            # The four native grips own their corner hit areas; Settings drag
+            # starts only outside those areas.
+            for grip in getattr(self, "corner_size_grips", {}).values():
+                rect = QRect(grip.mapTo(self, QPoint(0, 0)), grip.size())
+                if rect.contains(event.pos()):
+                    super().mousePressEvent(event)
+                    return
             
             if self._is_maximized:
                 cursor_ratio = 0.5
@@ -2420,22 +2466,26 @@ class SettingsDialog(QDialog):
             
             # Otherwise, dragging
             self._dragging = True
+            self._drag_did_move = False
             self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             event.accept()
-    
+
     def mouseMoveEvent(self, event):
         """Handle mouse move for window dragging."""
         if self._dragging and event.buttons() == Qt.MouseButton.LeftButton:
-            self.move(event.globalPosition().toPoint() - self._drag_pos)
+            position = event.globalPosition().toPoint() - self._drag_pos
+            if position != self.frameGeometry().topLeft():
+                self._drag_did_move = True
+                self.move(position)
             event.accept()
-    
+
     def mouseReleaseEvent(self, event):
         """Handle mouse release to stop dragging."""
         if event.button() == Qt.MouseButton.LeftButton:
             was_dragging = self._dragging
             self._dragging = False
             event.accept()
-            if was_dragging and not self._is_maximized:
+            if was_dragging and not self._is_maximized and self._drag_did_move:
                 screen = QGuiApplication.screenAt(event.globalPosition().toPoint())
                 if screen is None:
                     screen = QGuiApplication.primaryScreen()
@@ -2443,7 +2493,49 @@ class SettingsDialog(QDialog):
                     top_threshold = screen.availableGeometry().top() + 5
                     if event.globalPosition().toPoint().y() <= top_threshold:
                         self._apply_maximized_geometry()
-    
+                if not self._is_maximized:
+                    self._settle_window_placement()
+            self._drag_did_move = False
+
+    @staticmethod
+    def _rect_tuple(rect: QRect) -> tuple[int, int, int, int]:
+        return rect.x(), rect.y(), rect.width(), rect.height()
+
+    def _placement_screen(self):
+        """Choose the screen containing the largest area of the window.
+
+        Crossing monitors works normally while dragging; on release the window
+        settles into whichever screen contains most of it.
+        """
+        current = self.frameGeometry()
+        screens = QGuiApplication.screens()
+        if not screens:
+            return None
+        return max(
+            screens,
+            key=lambda screen: (
+                max(0, current.intersected(screen.geometry()).width())
+                * max(0, current.intersected(screen.geometry()).height()),
+                int(screen.geometry().contains(current.center())),
+            ),
+        )
+
+    def _settle_window_placement(self) -> None:
+        """Snap/clamp once at gesture completion; never on live mouse moves."""
+        if self._is_maximized:
+            return
+        screen = self._placement_screen()
+        if screen is None:
+            return
+        rect = self._rect_tuple(self.geometry())
+        settled = settle_settings_rect(
+            rect,
+            self._rect_tuple(screen.availableGeometry()),
+            (self.minimumWidth(), self.minimumHeight()),
+        )
+        if settled != rect:
+            self.setGeometry(*settled)
+
     def _save_geometry(self):
         """Save window geometry to settings."""
         if not self._is_maximized:
@@ -2474,15 +2566,14 @@ class SettingsDialog(QDialog):
             if target_screen is not None:
                 available = target_screen.availableGeometry()
 
-                # Clamp size to available screen area (minus taskbars)
-                width = max(self.minimumWidth(), min(w_saved, available.width()))
-                height = max(self.minimumHeight(), min(h_saved, available.height()))
-
-                # Clamp position to be within the target screen
-                # Ensure x is within [left, right - width]
-                x = max(available.left(), min(x_saved, available.right() - width))
-                # Ensure y is within [top, bottom - height]
-                y = max(available.top(), min(y_saved, available.bottom() - height))
+                # Same containment policy as manual placement, without
+                # proximity snapping during session restore.
+                x, y, width, height = settle_settings_rect(
+                    (x_saved, y_saved, w_saved, h_saved),
+                    self._rect_tuple(available),
+                    (self.minimumWidth(), self.minimumHeight()),
+                    snap_distance=0,
+                )
 
                 self.resize(width, height)
                 self.move(x, y)

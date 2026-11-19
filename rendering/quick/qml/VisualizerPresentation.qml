@@ -436,6 +436,8 @@ Item {
             cardColor: visualizerPresentationRoot.cardBackgroundColor
             surfaceMaterial: visualizerPresentationRoot.cardSurfaceMaterial
             surfaceBackdrop: visualizerPresentationRoot.cardSurfaceBackdrop
+            surfaceOpacityAdjust: visualizerPresentationRoot.cardSurfaceOpacityAdjust
+            surfaceTextColor: visualizerPresentationRoot.cardSurfaceTextColor
             cardShadowEnabled: visualizerPresentationRoot.overlayCardShadowEnabled
             cardShadowColor: visualizerPresentationRoot.cardShadowColor
             cardShadowBlur: visualizerPresentationRoot.overlayCardShadowBlur

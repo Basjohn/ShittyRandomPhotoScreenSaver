@@ -212,6 +212,10 @@ Item {
     }
     property alias cardBackgroundColor: card.backgroundColor
     property alias cardSurfaceMaterial: card.surfaceMaterial
+    // Shared branded headers inherit the card material unless Widgets > General
+    // chooses Normal for header fills. The card and its legibility remain unchanged.
+    property string cardHeaderSurfaceMode: "inherit"
+    property real cardHeaderSurfaceOpacityAdjust: 0.0
     property alias cardSurfaceOpacityAdjust: card.surfaceOpacityAdjust
     property alias cardSurfaceLegibilityInk: card.surfaceLegibilityInk
     property alias cardSurfaceBackdrop: card.surfaceBackdrop

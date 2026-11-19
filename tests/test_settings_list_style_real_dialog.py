@@ -184,20 +184,14 @@ def test_a_long_feed_url_elides_in_the_middle_and_stops_short_of_its_mark(dialog
                 + abs(colour.blue() - background.blue()) < 12, (x, y)
 
 
-def test_the_size_grip_is_three_solid_strokes(dialog):
-    grip = dialog.size_grip
-    image = grip.grab().toImage()
-    scale = image.devicePixelRatio()
-    background = image.pixelColor(1, 1)
-    corner = QPointF(grip.width() - 4.0, grip.height() - 4.0)
-    length = 8.5  # the middle stroke
-    misses = 0
-    for step in range(1, 20):
-        t = step / 20.0
-        x = int((corner.x() - length * (1 - t)) * scale)
-        y = int((corner.y() - length * t) * scale)
-        colour = image.pixelColor(x, y)
-        if abs(colour.red() - background.red()) + abs(colour.green() - background.green()) \
-                + abs(colour.blue() - background.blue()) + abs(colour.alpha() - background.alpha()) < 24:
-            misses += 1
-    assert misses == 0, "a dotted grip leaves gaps along its strokes"
+def test_four_settings_grips_are_invisible_with_native_resize_hit_targets(dialog):
+    grips = dialog.corner_size_grips
+    assert set(grips) == {"top_left", "top_right", "bottom_left", "bottom_right"}
+    assert dialog.size_grip is grips["bottom_right"]
+    assert all(grip.isVisible() for grip in grips.values())
+    # The old three diagonal strokes are deliberately removed. The native
+    # QSizeGrip remains the resize event owner; decorative paint is empty.
+    from ui.settings_dialog import CornerSizeGrip
+    import inspect
+    assert 'painter.drawLine' not in inspect.getsource(CornerSizeGrip.paintEvent)
+    assert len({grip.objectName() for grip in grips.values()}) == 4

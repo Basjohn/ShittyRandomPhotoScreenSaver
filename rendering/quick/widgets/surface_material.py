@@ -101,6 +101,36 @@ def resolve_surface_material(widgets_config: Mapping[str, object] | None, widget
     return resolve_global_surface_material(widgets_config)
 
 
+def resolve_header_surface_mode(widgets_config: Mapping[str, object] | None) -> str:
+    """Material for branded headers, independently of the card's flat/material fill."""
+    values = widgets_config.get("global", {}) if isinstance(widgets_config, Mapping) else {}
+    if not isinstance(values, Mapping):
+        return "inherit"
+    choice = str(values.get("header_surface_mode", "inherit")).strip().lower()
+    if choice in {"normal", "glass", "acrylic", "frosted", "mica", "smoked"}:
+        return choice
+    return "inherit"
+
+
+def resolve_media_controls_surface_mode(widgets_config: Mapping[str, object] | None) -> str:
+    """Global transport-bar choice, with precedence over the legacy Media key."""
+    values = widgets_config if isinstance(widgets_config, Mapping) else {}
+    global_values = values.get("global", {})
+    media_values = values.get("media", {})
+    if isinstance(global_values, Mapping) and "media_controls_surface_mode" in global_values:
+        raw = global_values["media_controls_surface_mode"]
+    elif isinstance(media_values, Mapping):
+        raw = media_values.get("controls_surface_material", "inherit")
+    else:
+        raw = "inherit"
+    choice = str(raw or "inherit").strip().lower()
+    if choice == "flat":
+        return "normal"
+    if choice in {"normal", "glass", "acrylic", "frosted", "mica", "smoked"}:
+        return choice
+    return "inherit"
+
+
 def transition_refresh_interval_s(materials) -> float:
     """The backdrop refresh spacing a set of present materials needs (the smallest)."""
 
@@ -130,12 +160,24 @@ def with_surface_material(style, widgets_config: Mapping[str, object] | None, wi
     from core.settings.surface_opacity import adjusted_surface_density, resolve_opacity_adjust
 
     adjustment = resolve_opacity_adjust(widgets_config, "widget")
-    if material == NORMAL and card_style.surface_material == NORMAL and adjustment == 0.0:
+    header_adjustment = resolve_opacity_adjust(widgets_config, "header_surface")
+    controls_adjustment = resolve_opacity_adjust(widgets_config, "media_controls")
+    header_mode = resolve_header_surface_mode(widgets_config)
+    bar_mode = resolve_media_controls_surface_mode(widgets_config) if widget_id == "media" else "inherit"
+    if (material == NORMAL and card_style.surface_material == NORMAL and adjustment == 0.0
+            and header_mode == card_style.header_surface_mode
+            and bar_mode == card_style.media_controls_surface_mode
+            and header_adjustment == card_style.header_surface_opacity_adjust
+            and controls_adjustment == card_style.media_controls_opacity_adjust):
         return style
     background = QColor(card_style.background_color)
     if material == NORMAL:
         background.setAlphaF(adjusted_surface_density(background.alphaF(), adjustment))
     updated = replace(card_style, surface_material=material,
+                      header_surface_mode=header_mode,
+                      media_controls_surface_mode=bar_mode,
+                      header_surface_opacity_adjust=header_adjustment,
+                      media_controls_opacity_adjust=controls_adjustment,
                       surface_opacity_adjust=adjustment, background_color=background,
                       surface_text_color=surface_text_color() if material != NORMAL
                       else card_style.surface_text_color)
@@ -145,7 +187,8 @@ def with_surface_material(style, widgets_config: Mapping[str, object] | None, wi
 __all__ = [
     "INHERIT", "NORMAL", "SURFACE_MATERIALS", "SURFACE_MATERIAL_LABELS", "THEME",
     "TRANSITION_REFRESH_INTERVAL_S", "normalize_surface_material", "resolve_global_surface_material",
-    "resolve_surface_material", "surface_text_color", "theme_surface_material",
+    "resolve_surface_material", "resolve_header_surface_mode", "resolve_media_controls_surface_mode",
+    "surface_text_color", "theme_surface_material",
     "transition_refresh_interval_s",
     "with_surface_material",
 ]

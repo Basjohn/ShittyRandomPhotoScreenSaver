@@ -1506,3 +1506,44 @@ def test_disabled_capsules_do_not_move_saved_children_when_data_arrives(qt_app) 
         component.deleteLater()
         engine.deleteLater()
         qt_app.processEvents()
+
+@pytest.mark.qt
+def test_progress_circle_material_uses_lighter_child_density_only_when_admitted(qt_app) -> None:
+    """Real QML wiring: material circle lights up only with card/backdrop admission.
+
+    A texture-producing backdrop is tested in the full display renderer; here a
+    QQuickItem stands in for its *admission* (not its sampled pixels). This
+    prevents a checked box from silently leaving the child Loader inactive.
+    """
+    model = _model(config=_config(progress_circle_material=True))
+    model.activate()
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(
+            model=build_mock_steam_view_model("achievement_pulse")
+        ),
+        animate=False,
+    )
+    engine, component, item = _create_qml_item(model)
+    backdrop = QQuickItem()
+    try:
+        item.setProperty("cardSurfaceMaterial", "glass")
+        item.setProperty("cardSurfaceBackdrop", backdrop)
+        qt_app.processEvents()
+        material = _find_visual_item(item, "achievementProgressCircleMaterial")
+        face = _find_visual_item(item, "achievementProgressCircleFace")
+        assert material is not None and face is not None
+        assert material.property("forceFlat") is False
+        assert material.property("legibilityPanel") is False
+        assert material.property("additionalOpacityAdjust") == pytest.approx(-0.40)
+        assert material.property("active") is True
+        assert face.property("color").alphaF() == pytest.approx(0.0)
+
+        item.setProperty("cardSurfaceMaterial", "normal")
+        qt_app.processEvents()
+        assert material.property("active") is False
+        assert face.property("color").alphaF() > 0.0
+    finally:
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
+        backdrop.deleteLater()

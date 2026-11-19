@@ -220,6 +220,12 @@ OverlayWidget {
         height: feedRoot.headerHeight
 
         BrandedHeader {
+
+            materialCard: feedRoot
+
+            materialMode: feedRoot.cardHeaderSurfaceMode
+
+            materialOpacityAdjust: feedRoot.cardHeaderSurfaceOpacityAdjust
             id: headerFrame
             objectName: "feedHeader"
             frameObjectName: "feedHeaderFrame"

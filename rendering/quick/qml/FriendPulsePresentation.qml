@@ -305,6 +305,12 @@ OverlayWidget {
     }
 
     BrandedHeader {
+
+        materialCard: friendRoot
+
+        materialMode: friendRoot.cardHeaderSurfaceMode
+
+        materialOpacityAdjust: friendRoot.cardHeaderSurfaceOpacityAdjust
         id: headerFrame
         frameObjectName: "friendPulseHeaderFrame"
         logoObjectName: "friendPulseSteamLogo"

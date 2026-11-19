@@ -330,6 +330,12 @@ OverlayWidget {
         transformOrigin: Item.TopLeft
 
         BrandedHeader {
+
+            materialCard: achievementRoot
+
+            materialMode: achievementRoot.cardHeaderSurfaceMode
+
+            materialOpacityAdjust: achievementRoot.cardHeaderSurfaceOpacityAdjust
             id: headerFrame
             frameObjectName: "achievementHeaderFrame"
             logoObjectName: "achievementSteamLogo"
@@ -1035,18 +1041,42 @@ OverlayWidget {
                 }
 
                 Rectangle {
+                    id: progressCircleFace
+                    objectName: "achievementProgressCircleFace"
                     anchors.fill: parent
                     radius: width * 0.5
-                    color: Qt.rgba(
+                    readonly property color originalFill: Qt.rgba(
                         achievementRoot.achievementModel.capsuleFillColor.r,
                         achievementRoot.achievementModel.capsuleFillColor.g,
                         achievementRoot.achievementModel.capsuleFillColor.b,
                         achievementRoot.achievementModel.capsuleFillColor.a * 0.72
                     )
+                    color: progressCircleMaterial.active ? "transparent" : originalFill
                     border.color: achievementRoot.achievementModel.capsuleBorderColor
                     border.width: achievementRoot.scaleAwareStrokeWidthForScale(
                         5.0, achievementRoot.contentScale
                     )
+
+                    // A material-filled disc, not an extra blur/capture. The ring
+                    // outline, inner accent and animated percentage stay on top.
+                    // Normal cards and unchecked settings retain the authored fill.
+                    ChildMaterialSurface {
+                        id: progressCircleMaterial
+                        objectName: "achievementProgressCircleMaterial"
+                        card: achievementRoot
+                        forceFlat: !achievementRoot.achievementModel.progressCircleMaterialEnabled
+                        fillColor: progressCircleFace.originalFill
+                        cornerRadius: progressCircleFace.width * 0.5
+                        tintAlphaScale: 0.4
+                        // The original circle's faint capsule tint produces almost
+                        // exactly the card's existing material density. Lower the
+                        // CHILD material by 40% so the sampled backdrop can actually
+                        // read through. This is not a fade of the finished shader:
+                        // fading would blend it back into the identical card face.
+                        // The unchecked and Normal fallback remain pixel-identical.
+                        additionalOpacityAdjust: -0.40
+                        legibilityPanel: false
+                    }
                 }
 
                 Rectangle {

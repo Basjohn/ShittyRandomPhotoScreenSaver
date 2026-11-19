@@ -54,6 +54,8 @@ Item {
     property color cardColor: "#4c232323"
     property string surfaceMaterial: "normal"
     property var surfaceBackdrop: null
+    property real surfaceOpacityAdjust: 0.0
+    property color surfaceTextColor: "#ffffffff"
     property bool cardShadowEnabled: true
     property color cardShadowColor: "#96000000"
     property real cardShadowBlur: 18.0
@@ -863,6 +865,17 @@ Item {
                     interactionEnabled: nowPlayingSlot.interactive
                     playing: nowPlayingSlot.playing
                     surfaceColor: overlays.mediaLook("surfaceColor", "#b3101010")
+                    materialFillColor: overlays.mediaLook("materialFillColor", "#b3101010")
+                    // Use Media's resolved material/opacity/ink, not an
+                    // independent Visualizer card override. The backdrop still
+                    // belongs to this display's one shared capture source.
+                    inheritedMaterial: overlays.mediaLook("sourceMaterial", overlays.surfaceMaterial)
+                    materialBackdrop: overlays.surfaceBackdrop
+                    materialOpacityAdjust: overlays.mediaLook("sourceOpacityAdjust", overlays.surfaceOpacityAdjust)
+                    materialChildOpacityAdjust: overlays.mediaLook("childOpacityAdjust", 0.0)
+                    materialTextColor: overlays.mediaLook("sourceTextColor", overlays.surfaceTextColor)
+                    // Uses the same Media-owned override as the regular transport bar.
+                    materialMode: overlays.mediaLook("materialMode", "inherit")
                     iconColor: overlays.mediaLook("iconColor", "#ffffffff")
                     separatorColor: overlays.mediaLook("separatorColor", "#66ffffff")
                     separatorWidth: 1.0

@@ -206,6 +206,12 @@ OverlayWidget {
             height: headerFrame.implicitHeight
 
             BrandedHeader {
+
+                materialCard: redditRoot
+
+                materialMode: redditRoot.cardHeaderSurfaceMode
+
+                materialOpacityAdjust: redditRoot.cardHeaderSurfaceOpacityAdjust
                 id: headerFrame
                 frameObjectName: "redditHeaderFrame"
                 logoObjectName: "redditHeaderLogo"

@@ -275,6 +275,12 @@ OverlayWidget {
             height: headerFrame.implicitHeight
 
             BrandedHeader {
+
+                materialCard: gmailRoot
+
+                materialMode: gmailRoot.cardHeaderSurfaceMode
+
+                materialOpacityAdjust: gmailRoot.cardHeaderSurfaceOpacityAdjust
                 id: headerFrame
                 frameObjectName: "gmailHeaderFrame"
                 logoObjectName: "gmailHeaderLogo"

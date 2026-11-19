@@ -189,9 +189,13 @@ def _app_version() -> str:
 INSTALL_SH = r"""#!/usr/bin/env bash
 # Install this SRPSS Linux build for the current user.
 #   ./install.sh            install to ~/.local/opt/<profile>, create CLI links and menu entries
+#   ./install.sh --keep-themes       preserve existing themes, replace presets
+#   ./install.sh --keep-presets      preserve existing presets, replace themes
+#   ./install.sh --keep-themes --keep-presets  preserve both catalogues
 #   ./install.sh --uninstall
-# Curated presets/themes/sounds go to ~/.local/share/SRPSS (whole-tree replacement, like the
-# Windows installer's ProgramData step). Screensaver/MC have distinct settings profiles.
+# Curated presets/themes/sounds share ~/.local/share/SRPSS across Screensaver/MC.
+# Replacement is the default for both independent catalogues, like Windows' checked
+# installer tasks. Preservation switches opt out without merging the catalogues.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
@@ -202,7 +206,26 @@ BIN="$HOME/.local/bin"
 APPS="$DATA/applications"
 PEER="srpss-mc"
 [[ "$APP" == "srpss-mc" ]] && PEER="srpss"
-if [[ "${1:-}" == "--uninstall" ]]; then
+REPLACE_THEMES=1
+REPLACE_PRESETS=1
+UNINSTALL=0
+for arg in "$@"; do
+  case "$arg" in
+    --keep-themes) REPLACE_THEMES=0 ;;
+    --keep-presets) REPLACE_PRESETS=0 ;;
+    --uninstall) UNINSTALL=1 ;;
+    --help|-h)
+      echo "Usage: ./install.sh [--keep-themes] [--keep-presets] [--uninstall]"
+      echo "  Default: replace both theme and preset catalogues."
+      exit 0 ;;
+    *) echo "[INSTALL] Unknown option: $arg" >&2; exit 2 ;;
+  esac
+done
+if (( UNINSTALL && (!REPLACE_THEMES || !REPLACE_PRESETS) )); then
+  echo '[INSTALL] --uninstall cannot be combined with catalogue preservation switches' >&2
+  exit 2
+fi
+if (( UNINSTALL )); then
   rm -rf "$PREFIX" "$BIN/$APP" "$APPS/$APP.desktop" "$APPS/$APP-settings.desktop"
   if [[ ! -d "$HOME/.local/opt/$PEER" ]]; then
     rm -rf "$DATA/SRPSS/presets/visualizer_modes" "$DATA/SRPSS/themes" "$DATA/SRPSS/sounds"
@@ -210,12 +233,28 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   echo "[INSTALL] $APP removed (settings in ~/.config/SRPSS kept)."
   exit 0
 fi
+# Refuse a damaged/incomplete release before deleting existing application files.
+[[ -f "$HERE/$APP" && -d "$HERE/themes" && -d "$HERE/presets/visualizer_modes" ]] || {
+  echo '[INSTALL] Incomplete release payload (executable, themes or presets missing)' >&2
+  exit 2
+}
 mkdir -p "$PREFIX" "$BIN" "$APPS" "$DATA/SRPSS/presets" "$DATA/SRPSS/sounds"
 rm -rf "$PREFIX" && cp -a "$HERE" "$PREFIX"
 ln -sf "$PREFIX/$APP" "$BIN/$APP"
-rm -rf "$DATA/SRPSS/presets/visualizer_modes" "$DATA/SRPSS/themes"
-cp -a "$HERE/presets/visualizer_modes" "$DATA/SRPSS/presets/visualizer_modes"
-cp -a "$HERE/themes" "$DATA/SRPSS/themes"
+if (( REPLACE_PRESETS )); then
+  rm -rf "$DATA/SRPSS/presets/visualizer_modes"
+  cp -a "$HERE/presets/visualizer_modes" "$DATA/SRPSS/presets/visualizer_modes"
+  echo '[INSTALL] Visualizer presets replaced.'
+else
+  echo '[INSTALL] Visualizer presets preserved.'
+fi
+if (( REPLACE_THEMES )); then
+  rm -rf "$DATA/SRPSS/themes"
+  cp -a "$HERE/themes" "$DATA/SRPSS/themes"
+  echo '[INSTALL] Themes replaced.'
+else
+  echo '[INSTALL] Themes preserved.'
+fi
 cp -a "$HERE/resources/tutuogg.ogg" "$HERE/resources/jedimodeyall.mp3" "$DATA/SRPSS/sounds/"
 for entry in "$APP:$APP_LABEL:__RUN_MODE__" "$APP-settings:$APP_LABEL Settings:/c"; do
   IFS=: read -r id name mode <<<"$entry"

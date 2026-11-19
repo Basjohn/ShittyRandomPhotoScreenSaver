@@ -70,6 +70,9 @@ OverlayWidget {
 
     readonly property bool headerFlipped: childAlignment("header", "left") === "right"
     BrandedHeader {
+        materialCard: followsRoot
+        materialMode: followsRoot.cardHeaderSurfaceMode
+        materialOpacityAdjust: followsRoot.cardHeaderSurfaceOpacityAdjust
         id: header
         objectName: "followedHeader"
         frameObjectName: "followedHeaderFrame"

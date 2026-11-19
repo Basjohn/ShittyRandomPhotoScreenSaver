@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import "SurfaceContrast.js" as SurfaceContrast
 
 // Media's transport bar: the rounded bar (its fill or the card's surface material, its outline and its shadow) with
 // previous | play-pause | next in three equal segments split by two thin separators, each a MediaTransportGlyph
@@ -22,7 +23,13 @@ Rectangle {
     property bool floatingGlyphs: false
 
     // ---- look
+    // The original transport colour remains the Normal override's fill. Material
+    // mode instead follows the same semantic colour/alpha as the Media volume
+    // track; both drawing locations get these resolved values from one model.
     property color surfaceColor: "#b3101010"
+    property color materialFillColor: "#b3101010"
+    readonly property color effectiveSurfaceColor:
+        materialMode === "normal" ? surfaceColor : materialFillColor
     property color iconColor: "#ffffffff"
     property color separatorColor: "#66ffffff"
     property real separatorWidth: 1.0
@@ -31,8 +38,20 @@ Rectangle {
     property real shadowBlur: 0.0
     property real shadowOffsetX: 0.0
     property real shadowOffsetY: 0.0
-    // The OverlayWidget whose card material the bar takes (null: its own fill).
-    property Item materialCard: null
+    // Both bar locations receive an existing, shared backdrop from their host.
+    // The bar is a standalone child material: it does not depend on whether the
+    // outer Media card shell is visible, and never initiates a new capture.
+    property var materialBackdrop: null
+    property string inheritedMaterial: "normal"
+    property real materialOpacityAdjust: 0.0
+    property real materialChildOpacityAdjust: 0.0
+    readonly property color adjustedFlatSurfaceColor: Qt.rgba(
+        effectiveSurfaceColor.r, effectiveSurfaceColor.g, effectiveSurfaceColor.b,
+        SurfaceContrast.adjustedDensity(effectiveSurfaceColor.a, materialChildOpacityAdjust))
+    property color materialTextColor: "#ffffffff"
+    // "inherit" (default) follows the theme; "normal" keeps the authored flat fill.
+    // This applies to the bar alone, never the Media widget or floating glyphs.
+    property string materialMode: "inherit"
     // Room kept clear at the bar's right end for a child the caller places there (the card's mute button).
     property real transportReserve: 0.0
 
@@ -52,7 +71,7 @@ Rectangle {
 
     radius: 12.0
     // On a surface material the bar is material too, tinted by its fill.
-    color: floatingGlyphs || material.active ? "transparent" : bar.surfaceColor
+    color: floatingGlyphs || material.active ? "transparent" : bar.adjustedFlatSurfaceColor
     clip: false
 
     // Transport bar uses the same global direction with 15% more
@@ -73,9 +92,20 @@ Rectangle {
         id: material
         visible: !bar.floatingGlyphs
         objectName: "mediaControlsRowMaterial"
-        card: bar.materialCard
-        fillColor: bar.surfaceColor
+        sourceBackdrop: bar.materialBackdrop
+        sourceMaterial: bar.materialMode !== "inherit" && bar.materialMode !== "normal"
+            ? bar.materialMode : bar.inheritedMaterial
+        sourceOpacityAdjust: bar.materialOpacityAdjust
+        additionalOpacityAdjust: bar.materialChildOpacityAdjust
+        sourceTextColor: bar.materialTextColor
+        forceFlat: bar.materialMode === "normal"
+        fillColor: bar.effectiveSurfaceColor
         cornerRadius: bar.radius
+        // Volume child behaviour: no text panel and 40% semantic tint alpha.
+        // The outer Media widget, its contrast guard, and every other child
+        // retain their own independent material settings.
+        tintAlphaScale: 0.4
+        legibilityPanel: false
     }
 
     Row {

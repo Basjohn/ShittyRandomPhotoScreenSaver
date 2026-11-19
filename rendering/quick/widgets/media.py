@@ -184,6 +184,7 @@ class MediaPresentationConfig:
     app_volume_border_color: tuple[int, int, int, int]
     app_volume_track_color: tuple[int, int, int, int]
     controls_surface_color: tuple[int, int, int, int]
+    controls_surface_material: str
     controls_border_color: tuple[int, int, int, int]
     controls_separator_color: tuple[int, int, int, int]
     controls_icon_color: tuple[int, int, int, int]
@@ -211,6 +212,13 @@ class MediaPresentationConfig:
         merged = dict(defaults)
         if isinstance(values, Mapping):
             merged.update(values)
+        transport_material = str(merged.get("controls_surface_material", "inherit")).strip().lower()
+        # "flat" shipped briefly in the earlier cumulative handoff. Preserve
+        # those users' choice when the setting is renamed Normal.
+        if transport_material == "flat":
+            transport_material = "normal"
+        if transport_material not in {"inherit", "normal"}:
+            transport_material = "inherit"
         return cls(
             widget_id=str(widget_id or "media"),
             provider=preserve_provider_setting(merged["provider"] or defaults["provider"]),
@@ -271,6 +279,7 @@ class MediaPresentationConfig:
                 merged["mute_button_enabled"], bool(defaults["mute_button_enabled"])
             ),
             controls_surface_color=_rgba(merged["bg_color"], tuple(defaults["bg_color"])),
+            controls_surface_material=transport_material,
             controls_border_color=_rgba(merged["border_color"], tuple(defaults["border_color"])),
             controls_separator_color=_rgba(merged["border_color"], tuple(defaults["border_color"])),
             controls_icon_color=_rgba(merged["color"], tuple(defaults["color"])),
@@ -294,6 +303,8 @@ class MediaPresentationConfig:
         if isinstance(values, Mapping):
             merged.update(values)
         config = cls.from_mapping(merged)
+        from .surface_material import resolve_media_controls_surface_mode
+        config = replace(config, controls_surface_material=resolve_media_controls_surface_mode(widgets))
 
         header_fill, header_border, header_text = resolve_header_colors(
             "media",
@@ -1299,6 +1310,16 @@ class MediaPresentationModel(QObject):
     def controlsSurfaceColor(self) -> QColor:
         return QColor(*self.config.controls_surface_color)
 
+    @Property(str, notify=stateChanged)
+    def controlsSurfaceMaterial(self) -> str:
+        """The one General transport surface choice, shared by card and fullscreen."""
+        return self.config.controls_surface_material
+
+    @Property(float, notify=stateChanged)
+    def controlsSurfaceOpacityAdjust(self) -> float:
+        """Bar-only density adjustment, independent of the Media card and volume."""
+        return float(self.style.card_style.media_controls_opacity_adjust)
+
     @Property(QColor, notify=stateChanged)
     def controlsBorderColor(self) -> QColor:
         return QColor(*self.config.controls_border_color)
@@ -1587,6 +1608,14 @@ class MediaPresentationModel(QObject):
 
         return json.dumps({
             "surfaceColor": name(self.controlsSurfaceColor),
+            "materialFillColor": name(self.appVolumeTrackColor),
+            "materialMode": self.controlsSurfaceMaterial,
+            # The fullscreen copy follows Media's resolved material, not a
+            # possibly different per-Visualizer card material override.
+            "sourceMaterial": str(self.style.card_style.surface_material),
+            "sourceOpacityAdjust": float(self.style.card_style.surface_opacity_adjust),
+            "childOpacityAdjust": self.controlsSurfaceOpacityAdjust,
+            "sourceTextColor": name(self.style.card_style.surface_text_color),
             "borderColor": name(self.controlsBorderColor),
             "separatorColor": name(self.controlsSeparatorColor),
             "iconColor": name(self.controlsIconColor),

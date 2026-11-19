@@ -124,6 +124,7 @@ class AchievementPulsePresentationConfig:
     square_artwork_size: int
     double_capsules: bool
     progress_pulse: bool
+    progress_circle_material: bool
     shelf_style: bool
     capsule_font_size: int
     capsule_fill_color: tuple[int, int, int, int]
@@ -248,6 +249,10 @@ class AchievementPulsePresentationConfig:
             progress_pulse=_as_bool(
                 merged_card.get("progress_pulse"),
                 bool(default_card["progress_pulse"]),
+            ),
+            progress_circle_material=_as_bool(
+                merged_card.get("progress_circle_material"),
+                bool(default_card["progress_circle_material"]),
             ),
             shelf_style=_as_bool(
                 merged_card.get("shelf_style"),
@@ -1158,6 +1163,10 @@ class AchievementPulsePresentationModel(QObject):
     @Property(bool, notify=stateChanged)
     def progressPulseEnabled(self) -> bool:
         return self.config.progress_pulse
+
+    @Property(bool, notify=stateChanged)
+    def progressCircleMaterialEnabled(self) -> bool:
+        return self.config.progress_circle_material
 
     @Property(bool, notify=stateChanged)
     def shelfStyle(self) -> bool:

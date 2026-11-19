@@ -953,22 +953,79 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     material_row.addWidget(tab.surface_material_combo)
     material_row.addStretch()
 
+    header_material_row, _ = add_aligned_row(
+        style_overrides_layout, "Header Surface:", label_width=label_width, wrap=False,
+    )
+    tab.header_surface_mode_combo = StyledComboBox()
+    tab.header_surface_mode_combo.setFixedWidth(192)
+    # Mirror the parent Surface Material selector.  "Theme" preserves the
+    # existing "inherit" persisted value and follows this widget's material.
+    for material in ("normal", "inherit", "acrylic", "glass", "frosted", "mica", "smoked"):
+        label = "Theme" if material == "inherit" else SURFACE_MATERIAL_LABELS[material]
+        tab.header_surface_mode_combo.addItem(label, material)
+    tab.header_surface_mode_combo.setToolTip(
+        "Theme follows the widget's surface; explicit materials independently style "
+        "the branded header through the existing shared backdrop. Normal retains its "
+        "original flat fill. The parent card and its legibility guard are unchanged."
+    )
+    tab.header_surface_mode_combo.setCurrentIndex(0)
+    tab.header_surface_mode_combo.currentIndexChanged.connect(
+        lambda _index, owner=tab: owner._save_settings()
+    )
+    header_material_row.addWidget(tab.header_surface_mode_combo)
+    header_material_row.addStretch()
+
     from core.settings.surface_opacity import resolve_opacity_adjust
     widgets_config = tab._settings.get("widgets")
-    for target, label in (("settings", "Settings Opacity Adjust:"), ("widget", "Widget Opacity Adjust:")):
+
+    def add_material_opacity_slider(target: str, label: str) -> None:
+        # All child and global adjustments use the same -1..+1 admission.
+        # Zero means the current unmodified material/flat-fill appearance.
         row, _ = add_aligned_row(style_overrides_layout, label, label_width=label_width, wrap=False)
         slider = QSlider(Qt.Orientation.Horizontal)
         slider.setRange(-100, 100)
         slider.setValue(round(resolve_opacity_adjust(widgets_config, target) * 100))
-        slider.setToolTip("-1 = maximum transparency, 0 = theme/material density, +1 = maximum density. Legibility may retain a surface floor; text, borders and shadows stay independent.")
+        slider.setToolTip(
+            "-1 = maximum transparency, 0 = current surface density, +1 = maximum "
+            "density. This adjusts only the named surface; text, borders, "
+            "shadows and the surrounding widget are unaffected."
+        )
         value_label = QLabel(f"{slider.value() / 100:+.2f}")
         value_label.setMinimumWidth(44)
-        slider.valueChanged.connect(lambda value, display=value_label: display.setText(f"{value / 100:+.2f}"))
+        slider.valueChanged.connect(
+            lambda value, display=value_label: display.setText(f"{value / 100:+.2f}")
+        )
         slider.valueChanged.connect(lambda _value, owner=tab: owner._save_settings())
         setattr(tab, f"{target}_opacity_adjust_slider", slider)
         setattr(tab, f"{target}_opacity_adjust_label", value_label)
         row.addWidget(slider, 1)
         row.addWidget(value_label)
+
+    media_material_row, _ = add_aligned_row(
+        style_overrides_layout, "Media Bar Surface:", label_width=label_width, wrap=False,
+    )
+    tab.media_controls_surface_material = StyledComboBox()
+    tab.media_controls_surface_material.setFixedWidth(192)
+    for material in ("normal", "inherit", "acrylic", "glass", "frosted", "mica", "smoked"):
+        label = "Theme" if material == "inherit" else SURFACE_MATERIAL_LABELS[material]
+        tab.media_controls_surface_material.addItem(label, material)
+    tab.media_controls_surface_material.setObjectName("mediaControlsSurfaceMaterial")
+    tab.media_controls_surface_material.setToolTip(
+        "Both ordinary Media and fullscreen Now Playing transport bars use this surface. "
+        "Theme follows Media's material; explicit Glass/Acrylic/Frosted/Mica/Smoked "
+        "independently style the control bar. Normal retains the original flat fill. "
+        "Neither choice changes the Media card itself."
+    )
+    tab.media_controls_surface_material.currentIndexChanged.connect(tab._save_settings)
+    media_material_row.addWidget(tab.media_controls_surface_material)
+    media_material_row.addStretch()
+
+    # Group all four opacity adjustments together beneath the two material
+    # selectors; their label/slider/value lanes use the same aligned-row owner.
+    add_material_opacity_slider("header_surface", "Header Opacity:")
+    add_material_opacity_slider("media_controls", "Media Bar Opacity:")
+    add_material_opacity_slider("settings", "Settings Opacity:")
+    add_material_opacity_slider("widget", "Widget Opacity:")
 
     button_row = QHBoxLayout()
     button_row.setContentsMargins(0, 6, 0, 0)
@@ -1123,8 +1180,19 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
     tab._global_surface_material = (THEME if stored is None
                                     else normalize_surface_material(stored, allow_theme=True) or NORMAL)
     _select_surface_material(tab, tab._global_surface_material)
+    from rendering.quick.widgets.surface_material import resolve_header_surface_mode
+    mode = resolve_header_surface_mode(widgets_config)
+    header_combo = getattr(tab, "header_surface_mode_combo", None)
+    if header_combo is not None:
+        with QSignalBlocker(header_combo):
+            header_combo.setCurrentIndex(max(0, header_combo.findData(mode)))
+    from rendering.quick.widgets.surface_material import resolve_media_controls_surface_mode
+    media_combo = getattr(tab, "media_controls_surface_material", None)
+    if media_combo is not None:
+        with QSignalBlocker(media_combo):
+            media_combo.setCurrentIndex(max(0, media_combo.findData(resolve_media_controls_surface_mode(widgets_config))))
     from core.settings.surface_opacity import resolve_opacity_adjust
-    for target in ("settings", "widget"):
+    for target in ("header_surface", "media_controls", "settings", "widget"):
         slider = getattr(tab, f"{target}_opacity_adjust_slider", None)
         if slider is not None:
             with QSignalBlocker(slider):
@@ -1184,6 +1252,9 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
     selected_direction = getattr(tab, "_selected_shadow_direction", DEFAULT_SHADOW_DIRECTION)
     shadows_config["direction"] = resolve_shadow_direction(selected_direction).value
 
+    from rendering.quick.widgets.surface_material import (
+        resolve_header_surface_mode, resolve_media_controls_surface_mode,
+    )
     border_width = getattr(tab, "_global_card_border_width", tab._widget_default("global", "card_border_width_px"))
     global_config = {
         "card_border_width_px": admit_card_border_width_setting_px(border_width),
@@ -1196,9 +1267,19 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
         "surface_material": str(
             getattr(tab, "_global_surface_material", tab._widget_default("global", "surface_material"))
         ),
+        "header_surface_mode": (
+            str(tab.header_surface_mode_combo.currentData())
+            if getattr(tab, "header_surface_mode_combo", None) is not None
+            else resolve_header_surface_mode(existing_widgets)
+        ),
+        "media_controls_surface_mode": (
+            str(tab.media_controls_surface_material.currentData())
+            if getattr(tab, "media_controls_surface_material", None) is not None
+            else resolve_media_controls_surface_mode(existing_widgets)
+        ),
     }
     from core.settings.surface_opacity import resolve_opacity_adjust
-    for target in ("settings", "widget"):
+    for target in ("header_surface", "media_controls", "settings", "widget"):
         slider = getattr(tab, f"{target}_opacity_adjust_slider", None)
         global_config[f"{target}_opacity_adjust"] = (slider.value() / 100 if slider is not None
             else resolve_opacity_adjust(existing_widgets, target))

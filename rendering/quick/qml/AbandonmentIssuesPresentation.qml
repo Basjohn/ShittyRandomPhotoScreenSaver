@@ -313,6 +313,12 @@ OverlayWidget {
         transformOrigin: Item.TopLeft
 
         BrandedHeader {
+
+            materialCard: abandonmentRoot
+
+            materialMode: abandonmentRoot.cardHeaderSurfaceMode
+
+            materialOpacityAdjust: abandonmentRoot.cardHeaderSurfaceOpacityAdjust
             id: headerFrame
             frameObjectName: "abandonmentHeaderFrame"
             logoObjectName: "abandonmentSteamLogo"

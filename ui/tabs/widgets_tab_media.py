@@ -1193,6 +1193,11 @@ def save_media_settings(tab: WidgetsTab) -> dict:
         'show_album': tab.media_show_album.isChecked(),
         'show_playback_state': tab.media_show_playback_state.isChecked(),
         'show_controls': tab.media_show_controls.isChecked(),
+        # Legacy field retained while the shared General override migrates into
+        # widgets.global. Do not let Media's lazy saver overwrite General's choice.
+        'controls_surface_material': str(
+            ((tab._settings.get('widgets') or {}).get('media') or {}).get('controls_surface_material', 'inherit')
+        ),
         'playback_progress_enabled': tab.media_playback_progress_enabled.isChecked(),
         'playback_progress_height': tab.media_playback_progress_height.value(),
         'playback_progress_track_color': _qcolor_to_list(tab._media_progress_track_color),

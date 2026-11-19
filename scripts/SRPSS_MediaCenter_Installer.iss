@@ -54,6 +54,11 @@ AllowUNCPath=False
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
+; User-visible opt-outs. Normal upgrades refresh curated assets to admit new
+; material/theme schemas and renamed presets; leaving a task unchecked keeps
+; the existing shared ProgramData catalogue untouched (no delete AND no copy).
+Name: "replacethemes"; Description: "Replace Installed Themes With Bundled Versions"; GroupDescription: "Curated assets:"
+Name: "replacevispresets"; Description: "Replace Installed Visualizer Presets With Bundled Versions"; GroupDescription: "Curated assets:"
 ; 5.0.0 migration reset remains available manually, but defaults OFF.
 Name: "resetsettings"; Description: "Revert Settings To Defaults"; GroupDescription: "Settings:"; Flags: unchecked
 Name: "startmenu"; Description: "Create Start Menu Shortcuts"; GroupDescription: "Additional options:"
@@ -72,9 +77,9 @@ Source: "..\release\media_center\*"; DestDir: "{app}"; Flags: recursesubdirs cre
 ; shared ProgramData tree.
 Source: "..\release\media_center\presets\visualizer_modes\*"; DestDir: "{app}\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
 ; Active curated preset tree shared with SCR/NORMAL builds.
-Source: "..\release\media_center\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "..\release\media_center\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: replacevispresets
 ; Active curated Settings + Widget theme tree shared with SCR/NORMAL builds.
-Source: "..\release\media_center\themes\*"; DestDir: "{commonappdata}\SRPSS\themes"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "..\release\media_center\themes\*"; DestDir: "{commonappdata}\SRPSS\themes"; Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: replacethemes
 Source: "..\release\media_center\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 Source: "..\release\media_center\resources\jedimodeyall.mp3"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 
@@ -106,8 +111,8 @@ Type: files; Name: "{userappdata}\SRPSS_MC\settings_v2.json"; Tasks: resetsettin
 ; CurStepChanged clean-replaces the entire installer-owned {app} payload while
 ; preserving only Inno's unins* bookkeeping files. Keep shared mutable/catalogue
 ; trees below clean-replaced independently.
-Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
-Type: filesandordirs; Name: "{commonappdata}\SRPSS\themes"
+Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"; Tasks: replacevispresets
+Type: filesandordirs; Name: "{commonappdata}\SRPSS\themes"; Tasks: replacethemes
 Type: files; Name: "{commonappdata}\SRPSS\sounds\tutuogg.ogg"
 Type: files; Name: "{commonappdata}\SRPSS\sounds\jedimodeyall.mp3"
 
