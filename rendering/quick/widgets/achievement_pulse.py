@@ -129,6 +129,7 @@ class AchievementPulsePresentationConfig:
     capsule_font_size: int
     capsule_fill_color: tuple[int, int, int, int]
     capsule_border_color: tuple[int, int, int, int]
+    progress_disc_material_color: tuple[int, int, int, int]
     refresh_minutes: int
     show_connection_info_icon: bool
 
@@ -272,6 +273,9 @@ class AchievementPulsePresentationConfig:
                 merged_card.get("capsule_border_color"),
                 tuple(default_card["capsule_border_color"]),
             ),
+            # This colour is resolved against the active theme below. It is
+            # used only when the optional material progress-disc is admitted.
+            progress_disc_material_color=tuple(default_card["capsule_border_color"]),
             refresh_minutes=_bounded_int(
                 merged_shared.get("refresh_minutes"),
                 int(default_shared["refresh_minutes"]),
@@ -341,11 +345,20 @@ class AchievementPulsePresentationConfig:
             fallback=config.capsule_border_color,
             explicit=capsule_border_override,
         )
+        # Distinct material tint, deliberately NOT the 38-alpha flat capsule
+        # fill. Give the already-resolved progress-border colour to the local
+        # accent fallback; authored Widget Theme accents take precedence.
+        progress_disc_material = resolve_rgba_role(
+            "steam.progress.disc",
+            local_roles={"local.accent": capsule_border},
+            fallback=capsule_border,
+        )
         return replace(
             config,
             text_color=text_color,
             capsule_fill_color=capsule_fill,
             capsule_border_color=capsule_border,
+            progress_disc_material_color=progress_disc_material,
             background_color=card_background,
             background_opacity=1.0,
             border_color=card_border,
@@ -1206,6 +1219,10 @@ class AchievementPulsePresentationModel(QObject):
     @Property(QColor, notify=stateChanged)
     def capsuleBorderColor(self) -> QColor:
         return QColor(*self.config.capsule_border_color)
+
+    @Property(QColor, notify=stateChanged)
+    def progressDiscMaterialColor(self) -> QColor:
+        return QColor(*self.config.progress_disc_material_color)
 
     @Property(QColor, notify=stateChanged)
     def steamMetricSeparatorColor(self) -> QColor:

@@ -295,6 +295,7 @@ class MediaWidgetSettings:
     spotify_volume_enabled: bool = bool(_default("widgets.media", "spotify_volume_enabled"))
     spotify_volume_fill_color: list[int] = field(default_factory=lambda: _default("widgets.media", "spotify_volume_fill_color"))
     spotify_volume_border_color: list[int] = field(default_factory=lambda: _default("widgets.media", "spotify_volume_border_color"))
+    spotify_volume_border_width_px: float = float(_default("widgets.media", "spotify_volume_border_width_px"))
     spotify_volume_track_color: list[int] = field(default_factory=lambda: _default("widgets.media", "spotify_volume_track_color"))
     mute_button_enabled: bool = bool(_default("widgets.media", "mute_button_enabled"))
     playback_progress_enabled: bool = bool(_default("widgets.media", "playback_progress_enabled"))
@@ -361,6 +362,7 @@ class MediaWidgetSettings:
             spotify_volume_enabled=bool(get_value("spotify_volume_enabled")),
             spotify_volume_fill_color=list(get_value("spotify_volume_fill_color")),
             spotify_volume_border_color=list(get_value("spotify_volume_border_color")),
+            spotify_volume_border_width_px=float(get_value("spotify_volume_border_width_px")),
             spotify_volume_track_color=list(get_value("spotify_volume_track_color")),
             mute_button_enabled=bool(get_value("mute_button_enabled")),
             playback_progress_enabled=bool(get_value("playback_progress_enabled")),
@@ -400,6 +402,7 @@ class MediaWidgetSettings:
             f"{prefix}.spotify_volume_enabled": self.spotify_volume_enabled,
             f"{prefix}.spotify_volume_fill_color": list(self.spotify_volume_fill_color),
             f"{prefix}.spotify_volume_border_color": list(self.spotify_volume_border_color),
+            f"{prefix}.spotify_volume_border_width_px": self.spotify_volume_border_width_px,
             f"{prefix}.spotify_volume_track_color": list(self.spotify_volume_track_color),
             f"{prefix}.mute_button_enabled": self.mute_button_enabled,
             f"{prefix}.playback_progress_enabled": self.playback_progress_enabled,

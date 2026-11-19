@@ -21,11 +21,19 @@ Item {
     // fill and keeps the Loader below inactive; any other material samples the display's
     // shared backdrop (set by the host only while some surface uses one).
     property string surfaceMaterial: "normal"
+    // Border material is independent of the card fill and its legibility guard.
+    // "inherit" follows this card's resolved material, including family overrides.
+    property string borderSurfaceMode: "inherit"
+    property real borderSurfaceOpacityAdjust: 0.0
     property real surfaceOpacityAdjust: 0.0
     property var surfaceBackdrop: null
     property color surfaceTextColor: "#ffffffff"
     property color surfaceLegibilityInk: Qt.rgba(surfaceTextColor.r, surfaceTextColor.g,
                                                 surfaceTextColor.b, surfaceTextColor.a * 0.55)
+    readonly property string resolvedBorderSurfaceMaterial: borderSurfaceMode === "inherit"
+        ? surfaceMaterial : borderSurfaceMode
+    readonly property bool borderSurfaceMaterialActive: shellEnabled && borderWidth > 0.0
+        && resolvedBorderSurfaceMaterial !== "normal" && surfaceBackdrop !== null
     readonly property bool surfaceMaterialActive: shellEnabled
         && surfaceMaterial !== "normal" && surfaceBackdrop !== null
     // Read by text runs inside the card (ShadowedText's legibility plate): the same
@@ -122,9 +130,11 @@ Item {
         id: surfaceMaterialLoader
         objectName: "overlayCardSurfaceMaterial"
         anchors.fill: parent
-        active: card.surfaceMaterialActive
+        active: card.surfaceMaterialActive || card.borderSurfaceMaterialActive
         visible: active
-        z: -0.5
+        // The legacy flat outline remains above a material face until the
+        // border itself explicitly becomes material. Content remains at z=1.
+        z: card.borderSurfaceMaterialActive ? 0.5 : -0.5
         sourceComponent: MaterialSurface {
             backdrop: card.surfaceBackdrop
             material: card.surfaceMaterial
@@ -132,6 +142,13 @@ Item {
             cornerRadius: card.cornerRadius
             contentInset: card.padding
             borderWidth: card.borderWidth
+            fillSurfaceEnabled: card.surfaceMaterialActive ? 1.0 : 0.0
+            borderSurfaceEnabled: card.borderSurfaceMaterialActive ? 1.0 : 0.0
+            borderMaterial: card.resolvedBorderSurfaceMaterial
+            borderOpacityAdjust: card.borderSurfaceOpacityAdjust
+            borderNormalColor: card.borderColor
+            borderTintColor: Qt.rgba(card.borderColor.r, card.borderColor.g,
+                                     card.borderColor.b, card.borderColor.a * 0.65)
             normalColor: card.backgroundColor
             tintColor: card.backgroundColor
             textColor: card.surfaceTextColor
@@ -148,7 +165,9 @@ Item {
         color: card.surfaceMaterialActive ? "transparent" : card.backgroundColor
         radius: card.cornerRadius
         border.color: card.borderColor
-        border.width: card.borderWidth
+        // Never paint a flat border over a material ring. The fragment shader
+        // paints the same continuous rounded SDF ring with no extra pass.
+        border.width: card.borderSurfaceMaterialActive ? 0.0 : card.borderWidth
         z: 0
     }
 

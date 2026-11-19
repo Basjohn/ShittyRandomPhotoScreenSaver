@@ -350,6 +350,14 @@ Item {
     // frame. Normal keeps this Loader inactive: no item, no node, the authored fill as before.
     property string cardSurfaceMaterial: "normal"
     property real cardSurfaceOpacityAdjust: 0.0
+    // Frame chrome is a separate layer above the live Visualizer, not OverlayCard.
+    // Follow the same global border surface and density setting as ordinary widgets.
+    property string cardBorderSurfaceMode: "inherit"
+    property real cardBorderSurfaceOpacityAdjust: 0.0
+    readonly property string resolvedCardBorderMaterial: cardBorderSurfaceMode === "inherit"
+        ? cardSurfaceMaterial : cardBorderSurfaceMode
+    readonly property bool cardBorderMaterialActive: cardShellEnabled && cardBorderWidth > 0.0
+        && resolvedCardBorderMaterial !== "normal" && cardSurfaceBackdrop !== null
     property color cardNormalSurfaceColor: cardBackgroundColor
     property var cardSurfaceBackdrop: null
     property color cardSurfaceTextColor: "#ffffffff"
@@ -394,6 +402,39 @@ Item {
         z: 2
     }
 
+    // The Visualizer renderer paints above the card face, so its material *border*
+    // must sit above that content. One dormant border-only MaterialSurface is used
+    // instead of moving the face over the live pixels. No second backdrop capture.
+    // This extra quad is active only for non-Normal borders: GPU cost needs
+    // real 4K/90 Hz validation before the checklist can be closed.
+    Loader {
+        id: visualizerBorderMaterialLoader
+        objectName: "visualizerCardBorderMaterial"
+        anchors.fill: parent
+        active: visualizerPresentationRoot.cardBorderMaterialActive
+        visible: active
+        z: 3
+        sourceComponent: MaterialSurface {
+            backdrop: visualizerPresentationRoot.cardSurfaceBackdrop
+            material: visualizerPresentationRoot.cardSurfaceMaterial
+            opacityAdjust: visualizerPresentationRoot.cardSurfaceOpacityAdjust
+            cornerRadius: visualizerPresentationRoot.cardCornerRadius
+            borderWidth: visualizerPresentationRoot.cardBorderWidth
+            fillSurfaceEnabled: 0.0
+            borderSurfaceEnabled: 1.0
+            borderMaterial: visualizerPresentationRoot.resolvedCardBorderMaterial
+            borderOpacityAdjust: visualizerPresentationRoot.cardBorderSurfaceOpacityAdjust
+            borderNormalColor: visualizerPresentationRoot.cardBorderColor
+            borderTintColor: Qt.rgba(visualizerPresentationRoot.cardBorderColor.r,
+                                     visualizerPresentationRoot.cardBorderColor.g,
+                                     visualizerPresentationRoot.cardBorderColor.b,
+                                     visualizerPresentationRoot.cardBorderColor.a * 0.65)
+            normalColor: "transparent"
+            tintColor: visualizerPresentationRoot.cardBorderColor
+            legibilityPanel: false
+        }
+    }
+
     Rectangle {
         id: cardFrame
         objectName: "visualizerCardFrame"
@@ -402,7 +443,8 @@ Item {
         color: "transparent"
         radius: visualizerPresentationRoot.cardCornerRadius
         border.color: visualizerPresentationRoot.cardBorderColor
-        border.width: visualizerPresentationRoot.cardBorderWidth
+        border.width: visualizerPresentationRoot.cardBorderMaterialActive
+            ? 0.0 : visualizerPresentationRoot.cardBorderWidth
         z: 3
     }
 

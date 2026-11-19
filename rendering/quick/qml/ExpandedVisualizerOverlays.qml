@@ -505,7 +505,7 @@ Item {
             // inset concentric with the stroke.
             readonly property bool rounded: overlays.artLook("rounded", true) === true
             readonly property real strokeWidth: {
-                const width = Number(overlays.artLook("borderWidth", 2.75))
+                const width = Number(overlays.artLook("borderWidth", 3.25))
                 return isFinite(width) && width > 0.0 ? Math.max(1.5, width) : 0.0
             }
             readonly property color strokeColor: overlays.artLook("borderColor", "#ffffffff")
@@ -856,8 +856,9 @@ Item {
                         * Math.min(nowPlayingSlot.childWidthScale("controls"), nowPlayingSlot.childHeightScale("controls"))
                     radius: 12.0 * drawnFactor
                     floatingGlyphs: nowPlayingSlot.options.mediaControlsStyle === "floating"
-                    border.width: floatingGlyphs ? 0.0 : Math.max(1.0, 1.5 * drawnFactor)
-                    border.color: overlays.mediaLook("borderColor", "#ffffffff")
+                    // Fullscreen: outline +1 logical px, on top of the authored scaled width.
+                    outlineWidth: floatingGlyphs ? 0.0 : Math.max(1.0, 1.5 * drawnFactor) + 1.0
+                    outlineColor: overlays.mediaLook("borderColor", "#ffffffff")
 
                     canPrevious: !!model && model.canPrevious === true
                     canPlayPause: !!model && model.canPlayPause === true
@@ -878,7 +879,7 @@ Item {
                     materialMode: overlays.mediaLook("materialMode", "inherit")
                     iconColor: overlays.mediaLook("iconColor", "#ffffffff")
                     separatorColor: overlays.mediaLook("separatorColor", "#66ffffff")
-                    separatorWidth: 1.0
+                    separatorWidth: 1.5 * drawnFactor
                     shadowEnabled: overlays.mediaLook("shadowEnabled", false) === true
                     shadowColor: overlays.mediaLook("shadowColor", "#00000000")
                     shadowBlur: Number(overlays.mediaLook("shadowBlur", 0.0)) * drawnFactor

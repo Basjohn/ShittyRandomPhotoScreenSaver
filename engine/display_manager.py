@@ -1656,15 +1656,21 @@ class DisplayManager(QObject):
         )
         # The Context Menu's surface material is the Widget Theme baseline (it has no
         # per-family layer); Normal creates nothing (Card_Surface_Materials.md).
-        from rendering.quick.widgets.surface_material import resolve_global_surface_material
+        from rendering.quick.widgets.surface_material import (
+            resolve_global_surface_material, resolve_border_surface_mode,
+        )
 
         baseline_material = resolve_global_surface_material(self._widgets_config_snapshot)
         from core.settings.surface_opacity import resolve_opacity_adjust
         opacity_adjust = resolve_opacity_adjust(self._widgets_config_snapshot, "widget")
         unit.runtime.scene_controller.apply_context_menu_surface_material(baseline_material, opacity_adjust)
-        # The Visualizer card takes the same baseline (Card_Surface_Materials.md 3.4); its
-        # authored Fill tints the material.
-        unit.runtime.scene_controller.apply_visualizer_surface_material(baseline_material, opacity_adjust)
+        # The Visualizer has independent frame chrome: share the ordinary widget
+        # border choice while leaving its foreground pixels above the card face.
+        unit.runtime.scene_controller.apply_visualizer_surface_material(
+            baseline_material, opacity_adjust,
+            resolve_border_surface_mode(self._widgets_config_snapshot),
+            resolve_opacity_adjust(self._widgets_config_snapshot, "border_surface"),
+        )
 
     def _quick_context_transition_state(
         self,

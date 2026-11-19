@@ -1003,6 +1003,7 @@ follow-ups with their evidence folders).
 - [ ] **M4 Unified Appearance Theme (operator, 16 Nov):** after 1B.8 M3 / 1.7b material-border rendering and its proof, and **before SMP M0**. Consolidate the separately selected Settings and Widget themes into ONE typed, versioned Appearance Theme, one chosen ID and one global selector. Keep separate actual native Settings-HWND and Qt Quick rendering projections. Current linked pairs and mirror generation are transitional, not the desired permanent architecture.
   - [ ] Shared semantic roles with independently authored Settings / Widget / optional SMP scopes: surface colour/material, **surface transparency bias** (neutral 0), border-surface colour/material, **border transparency bias** (neutral 0), **border thickness** and **four-corner curvature** (correct concentric inner edge), plus typography/contrast. The skinning system does not own these global renderers. Neutral user Style Overrides inherit the authored theme value; nonzero user biases are relative adjustments applied once.
   - [ ] **Semantic completeness audit alongside unification (operator, 18 Nov):** inventory presently hardcoded colours, alpha, tint and *reasonably independent* material surfaces across Settings, ordinary widgets and fullscreen overlays; give missing eligible elements typed roles **where the element genuinely has an authored surface/ink purpose**, especially the Media Control Bar (distinct from the Media card), volume child, branded headers, seekbar track/fill and overlay controls. Seed every new role with the **effective visual value the element renders today**, including existing style overrides, so the default unified theme is visually unchanged unless the operator explicitly requests a change. Preserve shared renderer/semantic ownership and per-element inheritance/Normal overrides; avoid indiscriminate material passes for decorative lines, tiny fills or already-correct surfaces. Prove baseline parity with before/after pixels before re-authoring aesthetics.
+  - [ ] **Media application-volume child border thickness becomes semantic at M4 (operator, 19 Nov):** introduce an authored, typed `media.volume.outline.width` thickness role shared by both the vertical track and its filled-level outline, and use the current **2.5 logical px** as the unified-theme baseline. The Widgets → Media → Volume Control **Outline Width** setting, added before M4, must then become an explicit override of that role; an untouched/default value must inherit the theme instead of freezing all users at 2.5 px. Preserve non-default user-authored widths across migration, including zero (intentional no outline). Keep the material-border 20% alpha adjustment and the single-stroke clipping behavior independent of thickness. Confirm round-trip, theme switch/reset, DPI scaling, both alignment sides, Normal/material states and no new renderer or capture.
   - [ ] **Theme-authored legibility guard per eligible surface:** evaluate a typed semantic on/off (and inheritance precedence) for the guard/legibility panel, resolving theme default -> user Style Override if that component exposes one -> material child, with no duplicate shader or capture. Defaults mirror **current effective per-component states**: the ordinary Media card keeps its guard; the volume child and Media Control Bar do not have theirs restored by accident. Do not apply a global switch that disables guards on unrelated cards or sacrifices necessary contrast; prove light/dark/bright-scene ink accessibility and independently configurable card/child guards.
   - [ ] Regenerate curated themes semantically into the new format; preserving old bundled .srtheme/.srwtheme pairs byte-for-byte is not required. Retire the duplicate catalogues/mirror sync after accepted projection. Convert user-authored themes and Custom values in a bounded one-time importer where possible; otherwise back up the originals and report a safe fallback. No silent deletion of personal files.
   - [ ] Prove dark/light/material themes, Settings, Context Menu, Media and ordinary widgets; neutral and non-neutral surface/border bias, border width/curves, flat/material fallback, DPR 100/125/150/200%, real bright/dark backgrounds, hot selection, legibility and no extra underlay capture. The M3 material-border pass and native corner constraints remain independent renderer contracts. See SMP document 05.
@@ -1412,6 +1413,16 @@ operator wallpapers under `C:\Users\Basjohn\Documents\[4] WALLPAPERS\PERSONALSET
 
 ### 1.7b Material-aware widget border (near-term, independent material slice; 10 Nov)
 
+**Source implementation candidate (19 Nov, awaiting compiled shader and operator validation):**
+The shared `OverlayCard`/`MaterialSurface` path now carries one separate material ring, a global
+Border Surface choice (Normal / Theme / Acrylic / Glass / Frosted / Mica / Smoked), and an
+independent Border Opacity slider (neutral 0). The ring uses the existing display backdrop,
+adds no QML layer/extra capture, and never applies a border legibility panel. Do not mark the
+feature complete on source checks alone: the committed `.qsb` is not regenerated by this
+handoff and must be rebuilt with the pinned Windows Qt toolchain before runtime testing.
+The following unchecked items are **mandatory acceptance gates**, not deleted work.
+
+
 Contract: `Docs/Architecture/Card_Surface_Materials.md` §3.2.1.
 
 - [ ] Extend the existing shared card `MaterialSurface` shader's rounded SDF to shade the **border ring** using the
@@ -1425,22 +1436,54 @@ Contract: `Docs/Architecture/Card_Surface_Materials.md` §3.2.1.
   `core/settings/surface_opacity.py` adjustment semantics and save/flush path. Zero is exactly the authored
   material/theme baseline, not an always-on override; nonzero adjusts border density independently of `Widget
   Opacity Adjust` and the existing family border-opacity controls.
-- [ ] Material-border eligibility: only shade a ring whose **resolved visible border width is at least 3.0 logical px**;
-  below that retain the existing flat/semantic border (even when an explicit material is selected), without a thin
-  extra shader stroke. Keep the threshold in the shared border renderer, not scattered per widget; measure at
-  100/125/150/200% DPR and confirm the threshold avoids aliasing/illegible tints while remaining stable under scale.
+- [ ] **No fixed minimum border-width rule (operator, 19 Nov):** admit material borders at every positive authored
+  visible stroke width, including 1–2 logical px. Use proper continuous rounded-SDF coverage and device-pixel AA,
+  not a 3 px eligibility gate that silently switches thin borders to Flat. At subpixel physical widths preserve
+  sensible coverage and shape without inventing a thicker border. Verify 1/1.5/2/3/5 px at 100/125/150/200% DPR,
+  with normal/material switching and all corner radii; let measured appearance decide future tuning.
 - [ ] Retain the authored theme border colour/contrast as the ring's tint/edge authority and border width/radius as
   its geometric authority.
 - [ ] On Normal or Flat, retain today's Rectangle border **pixel-identically**; on active material, remove overdraw
   by that Rectangle only for the ring.
 - [ ] Must remain clear against the fill, including on Glass and bright wallpapers; validate stroke AA, translucent
   corners, 100/150/200% DPR, normal/material switching, card opacity/theme inheritance and Style Overrides reset.
-- [ ] One focused GPU before/after on busy cards.
-- [ ] Include the existing framed Visualizer card if its surface is active, using its own border authority; material
-  children/Context Menu do not inherit this automatically where their independent stroke semantics differ.
+- [ ] **Measure incremental material-border overhead, not accepted card-material cost (operator, 19 Nov):** take a
+  comparable GPU/CPU/frame-time baseline with the *existing, accepted card materials* active, then enable the border
+  ring alone. Compare one, several, and densely populated simultaneously visible ordinary widgets, plus existing
+  material children/headers, over static wallpaper and during wallpaper transitions; include glass/acrylic/frosted/
+  mica/smoked, normal/flat fallbacks, varied border widths and mixed DPR. Record GPU pass/sample counts where available,
+  per-frame GPU cost, frame p90/p99, 90 Hz cadence impact, scene-graph item/node counts, memory changes and idle/dormant
+  behaviour. The extra border must be in the SAME material shader/sampler invocation with no duplicate backdrop blur,
+  capture, full-scene pass or per-border worker. Reject or optimise only a measured regression; do not re-open the
+  already accepted card-material rendering or divert the native core work for cosmetic materials.
+- [ ] Include the framed and expanded Visualizer frame using its own authored width, radius and colour, not the
+  ordinary `OverlayCard` geometry. **Separate foreground path awaiting measurement (19 Nov):** the live Visualizer
+  paints above its existing card-face shader, so the border-only material shader has to paint above those pixels;
+  it cannot share the ordinary card's single face/border quad without covering the live content. Check 4K/90 Hz
+  GPU/CPU frame-time impact of this *extra border-only draw*, static backdrop sampling, 1–2 px strokes and
+  Native/Vulkan/OpenGL parity. Normal/zero-width/missing-backdrop must not instantiate a border shader, and no
+  extra backdrop capture or work per frame beyond the existing conditional draw is permitted. If its measured cost
+  is unacceptable, optimise/defer that Visualizer-specific material path, never the already accepted card surfaces.
+  Material children/Context Menu keep their independent border semantics.
+- [ ] **One-time cumulative material/UI/Steam audit (19 Nov):** use `Docs/Temporary_Material_Surface_Audit_2026-11-19.md` to audit the full handoff, run its focused and Qt/performance tests, fix confirmed issues in their existing owners, record outcomes, then delete the temporary document and remove this checklist line. Do not advance native-core scope for the audit.
 - [ ] Preserve older themes and settings via neutral defaults.
-- [ ] Regenerate the bundled `.qsb` from the shader source using the existing Qt toolchain; do not ship uncompiled
-  GLSL changes or assume every QRhi backend accepts an untested shader variant.
+- [ ] **Shader bake and binary admission (BLOCKING):** use the project's pinned `PySide6` toolchain to regenerate
+  `surface_material.frag.qsb` from its changed GLSL source for the full shipped QRhi target matrix, and run
+  `tools/regen_qrc.py --shaders --check`; test the generated pack on Windows Vulkan and OpenGL before shipping.
+  A source-only GODZIP with the previous `.qsb` must not be treated as a working material-border release.
+- [ ] **Disabled/compatibility proof:** Normal border and zero-width border must keep pixel-identical legacy
+  outlines on both Normal and material card fills. Test Theme inheritance, explicit override while the parent
+  card is Normal, older saved settings, switch on/off, opacity reset, backdrop first-frame fallback, missing
+  backdrop and hot-switch failure modes; verify no leaks/scene-graph churn after multiple Settings edits.
+- [ ] **Shader and visual proof:** confirm ring/face order and rounded-corner coverage at 1, 1.5, 2, 3 and 5 px
+  across DPR 100/125/150/200%, Glass/Acrylic/Frosted/Mica/Smoked, light/dark themes, bright/dark wallpapers,
+  shared-backdrop updates and transitions, multiple displays and scale-aware CUSTOM layouts. Confirm the border
+  never inherits the card's legibility guard, and no flat outline overpaints active material borders.
+- [ ] **Incremental cost and dormancy proof:** benchmark *border OFF vs border ON* with accepted card materials
+  unchanged, single and crowded ordinary widgets, overlapping material headers/controls, and on both Vulkan and
+  OpenGL where available. Capture per-pass GPU median/p90, frame p90/p99, 90 Hz missed cadence, CPU, resource and
+  material node counts, GPU-memory delta and shared-backdrop dormancy. Regressions must be measured and resolved
+  before marking complete; this cosmetic task must not displace native-core priorities.
 
 ### 1.8 Gmail and Reddit/Reddit2 column gestures
 

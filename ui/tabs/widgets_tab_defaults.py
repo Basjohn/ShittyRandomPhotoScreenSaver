@@ -953,6 +953,24 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     material_row.addWidget(tab.surface_material_combo)
     material_row.addStretch()
 
+    border_material_row, _ = add_aligned_row(
+        style_overrides_layout, "Border Surface:", label_width=label_width, wrap=False,
+    )
+    tab.border_surface_mode_combo = StyledComboBox()
+    tab.border_surface_mode_combo.setFixedWidth(192)
+    for material in ("normal", "inherit", "acrylic", "glass", "frosted", "mica", "smoked"):
+        label = "Theme" if material == "inherit" else SURFACE_MATERIAL_LABELS[material]
+        tab.border_surface_mode_combo.addItem(label, material)
+    tab.border_surface_mode_combo.setObjectName("borderSurfaceMaterial")
+    tab.border_surface_mode_combo.setToolTip(
+        "Theme inherits each card's own surface material, even when overridden per widget. "
+        "Normal retains the existing flat border. Other materials style the card border "
+        "independently without an extra backdrop or legibility panel."
+    )
+    tab.border_surface_mode_combo.currentIndexChanged.connect(tab._save_settings)
+    border_material_row.addWidget(tab.border_surface_mode_combo)
+    border_material_row.addStretch()
+
     header_material_row, _ = add_aligned_row(
         style_overrides_layout, "Header Surface:", label_width=label_width, wrap=False,
     )
@@ -1022,6 +1040,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Group all four opacity adjustments together beneath the two material
     # selectors; their label/slider/value lanes use the same aligned-row owner.
+    add_material_opacity_slider("border_surface", "Border Opacity:")
     add_material_opacity_slider("header_surface", "Header Opacity:")
     add_material_opacity_slider("media_controls", "Media Bar Opacity:")
     add_material_opacity_slider("settings", "Settings Opacity:")
@@ -1180,6 +1199,11 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
     tab._global_surface_material = (THEME if stored is None
                                     else normalize_surface_material(stored, allow_theme=True) or NORMAL)
     _select_surface_material(tab, tab._global_surface_material)
+    from rendering.quick.widgets.surface_material import resolve_border_surface_mode
+    border_combo = getattr(tab, "border_surface_mode_combo", None)
+    if border_combo is not None:
+        with QSignalBlocker(border_combo):
+            border_combo.setCurrentIndex(max(0, border_combo.findData(resolve_border_surface_mode(widgets_config))))
     from rendering.quick.widgets.surface_material import resolve_header_surface_mode
     mode = resolve_header_surface_mode(widgets_config)
     header_combo = getattr(tab, "header_surface_mode_combo", None)
@@ -1192,7 +1216,7 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
         with QSignalBlocker(media_combo):
             media_combo.setCurrentIndex(max(0, media_combo.findData(resolve_media_controls_surface_mode(widgets_config))))
     from core.settings.surface_opacity import resolve_opacity_adjust
-    for target in ("header_surface", "media_controls", "settings", "widget"):
+    for target in ("border_surface", "header_surface", "media_controls", "settings", "widget"):
         slider = getattr(tab, f"{target}_opacity_adjust_slider", None)
         if slider is not None:
             with QSignalBlocker(slider):
@@ -1253,7 +1277,7 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
     shadows_config["direction"] = resolve_shadow_direction(selected_direction).value
 
     from rendering.quick.widgets.surface_material import (
-        resolve_header_surface_mode, resolve_media_controls_surface_mode,
+        resolve_border_surface_mode, resolve_header_surface_mode, resolve_media_controls_surface_mode,
     )
     border_width = getattr(tab, "_global_card_border_width", tab._widget_default("global", "card_border_width_px"))
     global_config = {
@@ -1267,6 +1291,11 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
         "surface_material": str(
             getattr(tab, "_global_surface_material", tab._widget_default("global", "surface_material"))
         ),
+        "border_surface_mode": (
+            str(tab.border_surface_mode_combo.currentData())
+            if getattr(tab, "border_surface_mode_combo", None) is not None
+            else resolve_border_surface_mode(existing_widgets)
+        ),
         "header_surface_mode": (
             str(tab.header_surface_mode_combo.currentData())
             if getattr(tab, "header_surface_mode_combo", None) is not None
@@ -1279,7 +1308,7 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
         ),
     }
     from core.settings.surface_opacity import resolve_opacity_adjust
-    for target in ("header_surface", "media_controls", "settings", "widget"):
+    for target in ("border_surface", "header_surface", "media_controls", "settings", "widget"):
         slider = getattr(tab, f"{target}_opacity_adjust_slider", None)
         global_config[f"{target}_opacity_adjust"] = (slider.value() / 100 if slider is not None
             else resolve_opacity_adjust(existing_widgets, target))

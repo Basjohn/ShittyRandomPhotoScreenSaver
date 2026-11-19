@@ -55,17 +55,36 @@ def test_circle_uses_only_the_card_backdrop_with_original_ring_and_pulse() -> No
     assert 'forceFlat: !achievementRoot.achievementModel.progressCircleMaterialEnabled' in circle
     assert 'color: progressCircleMaterial.active ? "transparent" : originalFill' in circle
     assert 'cornerRadius: progressCircleFace.width * 0.5' in circle
-    assert 'tintAlphaScale: 0.4' in circle
-    # The initial circle used nearly the same material tint density as its card,
-    # making the toggle visually imperceptible. This correction changes only
-    # the child material's density, not the outer card or the flat fallback.
-    assert 'additionalOpacityAdjust: -0.40' in circle
-    assert 'legibilityPanel: false' in circle
+    # Old ring inherited the faint 38-alpha capsule (then scaled again), so
+    # shading was imperceptible. Match the successful Media Control Bar pattern:
+    # a resolved semantic tint, separate from the Normal/unchecked fill.
+    assert 'fillColor: achievementRoot.achievementModel.progressDiscMaterialColor' in circle
+    assert 'tintAlphaScale: 0.65' in circle
+    assert 'additionalOpacityAdjust: -0.40' not in circle
+    assert 'legibilityPanel: true' in circle
+    assert 'forceFlat: !achievementRoot.achievementModel.progressCircleMaterialEnabled' in circle
     assert 'achievementRoot.scaleAwareStrokeWidthForScale(' in circle
     assert 'border.color: achievementRoot.achievementModel.capsuleBorderColor' in circle
     assert 'ShaderEffectSource' not in circle
     assert 'Timer {' not in circle
     assert 'id: pulseAnimation' in source
+
+
+def test_material_disc_has_its_own_resolved_accent_role_not_the_faint_flat_capsule() -> None:
+    model = read("rendering/quick/widgets/achievement_pulse.py")
+    theme = read("ui/widget_visual_roles.py")
+    qml = read("rendering/quick/qml/AchievementPulsePresentation.qml")
+    assert '"steam.progress.disc": "widget.accent"' in theme
+    assert '"steam.progress.disc",' in model
+    assert 'local_roles={"local.accent": capsule_border}' in model
+    assert 'progress_disc_material_color=progress_disc_material' in model
+    assert 'def progressDiscMaterialColor(self) -> QColor:' in model
+    assert 'fillColor: achievementRoot.achievementModel.progressDiscMaterialColor' in qml
+    # Normal/unchecked still paints its original flat capsule, and the ring's
+    # material still follows the ONE display-scoped backdrop.
+    assert 'color: progressCircleMaterial.active ? "transparent" : originalFill' in qml
+    assert 'card: achievementRoot' in qml
+    assert 'additionalOpacityAdjust: -0.40' not in qml
 
 
 def test_every_ordinary_widget_shares_one_card_and_one_backdrop_owner() -> None:

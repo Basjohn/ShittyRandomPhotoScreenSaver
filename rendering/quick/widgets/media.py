@@ -182,6 +182,7 @@ class MediaPresentationConfig:
     app_volume_enabled: bool
     app_volume_fill_color: tuple[int, int, int, int]
     app_volume_border_color: tuple[int, int, int, int]
+    app_volume_border_width_px: float
     app_volume_track_color: tuple[int, int, int, int]
     controls_surface_color: tuple[int, int, int, int]
     controls_surface_material: str
@@ -271,6 +272,10 @@ class MediaPresentationConfig:
             ),
             app_volume_border_color=_rgba(
                 merged["spotify_volume_border_color"], tuple(defaults["spotify_volume_border_color"])
+            ),
+            app_volume_border_width_px=_bounded_float(
+                merged["spotify_volume_border_width_px"],
+                float(defaults["spotify_volume_border_width_px"]), 0.0, 8.0
             ),
             app_volume_track_color=_rgba(
                 merged["spotify_volume_track_color"], tuple(defaults["spotify_volume_track_color"])
@@ -374,6 +379,9 @@ class MediaPresentationConfig:
             text_color=config.text_color,
         )
         local_common["local.text"] = text_color
+        transport_outline = resolve_rgba_role(
+            "media.transport.border", local_roles=local_common, fallback=(255, 255, 255, 85)
+        )
 
         return replace(
             config,
@@ -388,12 +396,9 @@ class MediaPresentationConfig:
             controls_surface_color=resolve_rgba_role(
                 "media.transport.surface", local_roles=local_common, fallback=controls_surface_rgba
             ),
-            controls_border_color=resolve_rgba_role(
-                "media.transport.border", local_roles=local_common, fallback=(255, 255, 255, 85)
-            ),
-            controls_separator_color=resolve_rgba_role(
-                "media.transport.separator", local_roles=local_common, fallback=(255, 255, 255, 56)
-            ),
+            controls_border_color=transport_outline,
+            # One semantic border authority for this bar, regardless of theme.
+            controls_separator_color=transport_outline,
             controls_icon_color=resolve_rgba_role(
                 "media.transport.icon", local_roles=local_common, fallback=config.text_color
             ),
@@ -1353,6 +1358,11 @@ class MediaPresentationModel(QObject):
     def appVolumeBorderColor(self) -> QColor:
         return QColor(*self.config.app_volume_border_color)
 
+    @Property(float, notify=stateChanged)
+    def appVolumeBorderWidth(self) -> float:
+        """Shared track/fill outline width in logical pixels (current authored default: 2.5)."""
+        return float(self.config.app_volume_border_width_px)
+
     @Property(QColor, notify=stateChanged)
     def appVolumeFillColor(self) -> QColor:
         # The persisted RGBA swatch is presentation truth.  Do not hide a
@@ -1499,7 +1509,7 @@ class MediaPresentationModel(QObject):
         border = self.style.card_style
         if border.border_width <= 0.0 or border.border_color.alpha() <= 0:
             return 0.0
-        return 2.75
+        return 3.25
 
     @Property(QColor, notify=stateChanged)
     def headerFillColor(self) -> QColor:

@@ -1065,17 +1065,17 @@ OverlayWidget {
                         objectName: "achievementProgressCircleMaterial"
                         card: achievementRoot
                         forceFlat: !achievementRoot.achievementModel.progressCircleMaterialEnabled
-                        fillColor: progressCircleFace.originalFill
+                        // The Media Control Bar succeeded by using a resolved,
+                        // dedicated material tint rather than its faint flat fill.
+                        // The normal progress face remains the exact old capsule;
+                        // only the checked, material-backed circle uses this accent.
+                        fillColor: achievementRoot.achievementModel.progressDiscMaterialColor
                         cornerRadius: progressCircleFace.width * 0.5
-                        tintAlphaScale: 0.4
-                        // The original circle's faint capsule tint produces almost
-                        // exactly the card's existing material density. Lower the
-                        // CHILD material by 40% so the sampled backdrop can actually
-                        // read through. This is not a fade of the finished shader:
-                        // fading would blend it back into the identical card face.
-                        // The unchecked and Normal fallback remain pixel-identical.
-                        additionalOpacityAdjust: -0.40
-                        legibilityPanel: false
+                        tintAlphaScale: 0.65
+                        // The guard belongs to the material disc only, and is
+                        // dormant when the checkbox is off or the material is Normal.
+                        // It does not change the parent Achievement Pulse card.
+                        legibilityPanel: true
                     }
                 }
 

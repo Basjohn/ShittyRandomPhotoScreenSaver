@@ -18,6 +18,13 @@ OverlayWidget {
     uniformScaleTransform: true
 
     required property var mediaModel
+    // The external mixer-volume child keeps its original outline in Normal.
+    // When this card's *border material* is genuinely active, soften only the
+    // child's outline by 20% so it sits with the translucent card border.
+    readonly property color effectiveVolumeOutlineColor: Qt.rgba(
+        mediaModel.appVolumeBorderColor.r, mediaModel.appVolumeBorderColor.g,
+        mediaModel.appVolumeBorderColor.b,
+        mediaModel.appVolumeBorderColor.a * (cardBorderMaterialActive ? 0.8 : 1.0))
     property bool volumeWheelEnabled: true
     semanticDoubleClickEnabled: true
     signal refreshRequested()
@@ -820,10 +827,10 @@ OverlayWidget {
                 height: mediaRoot.canonicalControlsHeight
                     * mediaRoot.mediaModel.customTransportHeightScale
                 radius: 12.0
-                border.width: mediaRoot.scaleAwareChildStrokeWidth(1.5, Math.min(
+                outlineWidth: mediaRoot.scaleAwareChildStrokeWidth(1.5, Math.min(
                     mediaRoot.mediaModel.customTransportWidthScale,
                     mediaRoot.mediaModel.customTransportHeightScale))
-                border.color: mediaRoot.mediaModel.controlsBorderColor
+                outlineColor: mediaRoot.mediaModel.controlsBorderColor
 
                 canPrevious: mediaRoot.mediaModel.canPrevious
                 canPlayPause: mediaRoot.mediaModel.canPlayPause
@@ -835,7 +842,7 @@ OverlayWidget {
                 materialFillColor: mediaRoot.mediaModel.appVolumeTrackColor
                 iconColor: mediaRoot.mediaModel.controlsIconColor
                 separatorColor: mediaRoot.mediaModel.controlsSeparatorColor
-                separatorWidth: mediaRoot.scaleAwareStrokeWidth(1.0)
+                separatorWidth: mediaRoot.scaleAwareStrokeWidth(1.5)
                 shadowEnabled: mediaRoot.mediaModel.surfaceShadowEnabled
                 shadowColor: mediaRoot.mediaModel.surfaceShadowColor
                 shadowBlur: mediaRoot.mediaModel.surfaceShadowBlur
@@ -1094,8 +1101,14 @@ OverlayWidget {
                 radius: width / 2.0
                 // On a surface material the track is material too (its fill tints it).
                 color: appVolumeTrackMaterial.active ? "transparent" : mediaRoot.mediaModel.appVolumeTrackColor
-                border.width: mediaRoot.scaleAwareStrokeWidth(2.5)
-                border.color: mediaRoot.mediaModel.appVolumeBorderColor
+                // The outlined level fill overlaps the track's side strokes.
+                // When the parent card uses a material border, draw this outline
+                // only in the portions not covered by the level fill; otherwise
+                // both alpha-blended outlines stack and undo the 20% reduction.
+                // Normal keeps the exact original single Rectangle outline.
+                border.width: mediaRoot.cardBorderMaterialActive
+                    ? 0.0 : mediaRoot.scaleAwareStrokeWidth(mediaRoot.mediaModel.appVolumeBorderWidth)
+                border.color: mediaRoot.effectiveVolumeOutlineColor
                 clip: false
 
                 ChildMaterialSurface {
@@ -1110,6 +1123,52 @@ OverlayWidget {
                     legibilityPanel: false
                 }
     
+                // Material-border mode alone: reproduce the outer track outline
+                // ONLY above/below the active fill's bounds. The fill paints its
+                // own cap/outline once. Each visible pixel therefore sees at most
+                // one outline instead of two stacked translucent strokes.
+                // A single dormant Loader keeps the legacy Normal geometry intact.
+                Loader {
+                    id: appVolumeExposedOutlineLoader
+                    objectName: "mediaAppVolumeExposedOutline"
+                    anchors.fill: parent
+                    active: mediaRoot.cardBorderMaterialActive
+                    visible: active
+                    sourceComponent: Item {
+                        Item {
+                            id: unfilledTop
+                            width: appVolumeTrack.width
+                            height: Math.max(0.0, appVolumeFill.y)
+                            clip: true
+                            Rectangle {
+                                y: -unfilledTop.y
+                                width: appVolumeTrack.width
+                                height: appVolumeTrack.height
+                                radius: appVolumeTrack.radius
+                                color: "transparent"
+                                border.width: mediaRoot.scaleAwareStrokeWidth(mediaRoot.mediaModel.appVolumeBorderWidth)
+                                border.color: mediaRoot.effectiveVolumeOutlineColor
+                            }
+                        }
+                        Item {
+                            id: unfilledBottom
+                            y: appVolumeFill.y + appVolumeFill.height
+                            width: appVolumeTrack.width
+                            height: Math.max(0.0, appVolumeTrack.height - y)
+                            clip: true
+                            Rectangle {
+                                y: -unfilledBottom.y
+                                width: appVolumeTrack.width
+                                height: appVolumeTrack.height
+                                radius: appVolumeTrack.radius
+                                color: "transparent"
+                                border.width: mediaRoot.scaleAwareStrokeWidth(mediaRoot.mediaModel.appVolumeBorderWidth)
+                                border.color: mediaRoot.effectiveVolumeOutlineColor
+                            }
+                        }
+                    }
+                }
+
                 // Volume track keeps the same global direction with a subtle 5%
                 // extra displacement and the same small cached blur.
                 RectangularShadow {
@@ -1129,6 +1188,7 @@ OverlayWidget {
                 }
     
                 Rectangle {
+                    id: appVolumeFill
                     objectName: "mediaAppVolumeFill"
                     width: parent.width
                     readonly property real normalizedLevel: Math.max(
@@ -1144,8 +1204,8 @@ OverlayWidget {
                     // strength so it still reads above the track's lighter tint.
                     color: appVolumeFillMaterial.active ? "transparent" : mediaRoot.mediaModel.appVolumeFillColor
                     border.width: height > 0.0
-                        ? mediaRoot.scaleAwareStrokeWidth(2.5) : 0.0
-                    border.color: mediaRoot.mediaModel.appVolumeBorderColor
+                        ? mediaRoot.scaleAwareStrokeWidth(mediaRoot.mediaModel.appVolumeBorderWidth) : 0.0
+                    border.color: mediaRoot.effectiveVolumeOutlineColor
 
                     ChildMaterialSurface {
                         id: appVolumeFillMaterial

@@ -101,6 +101,20 @@ def resolve_surface_material(widgets_config: Mapping[str, object] | None, widget
     return resolve_global_surface_material(widgets_config)
 
 
+def resolve_border_surface_mode(widgets_config: Mapping[str, object] | None) -> str:
+    """The single global border material. Inherit follows each card, not just the global baseline.
+
+    Unknown values fail closed to the original flat/inherited appearance.
+    """
+    values = widgets_config.get("global", {}) if isinstance(widgets_config, Mapping) else {}
+    if not isinstance(values, Mapping):
+        return "inherit"
+    value = str(values.get("border_surface_mode", "inherit") or "inherit").strip().lower()
+    if value == "flat":  # compatibility with the older naming
+        return "normal"
+    return value if value in {"inherit", *SURFACE_MATERIALS} else "inherit"
+
+
 def resolve_header_surface_mode(widgets_config: Mapping[str, object] | None) -> str:
     """Material for branded headers, independently of the card's flat/material fill."""
     values = widgets_config.get("global", {}) if isinstance(widgets_config, Mapping) else {}
@@ -162,9 +176,13 @@ def with_surface_material(style, widgets_config: Mapping[str, object] | None, wi
     adjustment = resolve_opacity_adjust(widgets_config, "widget")
     header_adjustment = resolve_opacity_adjust(widgets_config, "header_surface")
     controls_adjustment = resolve_opacity_adjust(widgets_config, "media_controls")
+    border_adjustment = resolve_opacity_adjust(widgets_config, "border_surface")
+    border_mode = resolve_border_surface_mode(widgets_config)
     header_mode = resolve_header_surface_mode(widgets_config)
     bar_mode = resolve_media_controls_surface_mode(widgets_config) if widget_id == "media" else "inherit"
     if (material == NORMAL and card_style.surface_material == NORMAL and adjustment == 0.0
+            and border_mode == card_style.border_surface_mode
+            and border_adjustment == card_style.border_surface_opacity_adjust
             and header_mode == card_style.header_surface_mode
             and bar_mode == card_style.media_controls_surface_mode
             and header_adjustment == card_style.header_surface_opacity_adjust
@@ -174,6 +192,8 @@ def with_surface_material(style, widgets_config: Mapping[str, object] | None, wi
     if material == NORMAL:
         background.setAlphaF(adjusted_surface_density(background.alphaF(), adjustment))
     updated = replace(card_style, surface_material=material,
+                      border_surface_mode=border_mode,
+                      border_surface_opacity_adjust=border_adjustment,
                       header_surface_mode=header_mode,
                       media_controls_surface_mode=bar_mode,
                       header_surface_opacity_adjust=header_adjustment,
@@ -187,7 +207,7 @@ def with_surface_material(style, widgets_config: Mapping[str, object] | None, wi
 __all__ = [
     "INHERIT", "NORMAL", "SURFACE_MATERIALS", "SURFACE_MATERIAL_LABELS", "THEME",
     "TRANSITION_REFRESH_INTERVAL_S", "normalize_surface_material", "resolve_global_surface_material",
-    "resolve_surface_material", "resolve_header_surface_mode", "resolve_media_controls_surface_mode",
+    "resolve_surface_material", "resolve_border_surface_mode", "resolve_header_surface_mode", "resolve_media_controls_surface_mode",
     "surface_text_color", "theme_surface_material",
     "transition_refresh_interval_s",
     "with_surface_material",

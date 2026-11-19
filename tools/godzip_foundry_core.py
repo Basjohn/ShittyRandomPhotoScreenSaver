@@ -40,6 +40,16 @@ DEBRIS_MANIFEST_NAMES = (
 GENERATED_QRC_PREFIX = "ui/resources/"
 
 
+def is_generated_qsb_artifact(path: str) -> bool:
+    """Generated Qt shader binaries are local build products, not GODZIP source.
+
+    A valid old QSB can silently replace a freshly compiled compatible one
+    while newer GLSL is installed. Build each QSB from its source with the
+    selected Qt toolchain on the receiving machine instead.
+    """
+    return path.replace("\\", "/").casefold().endswith(".qsb")
+
+
 def is_generated_qrc_artifact(path: str) -> bool:
     """True for reproducible Qt resource compiler outputs.
 
@@ -437,11 +447,12 @@ def is_never_transfer_payload(path: str) -> bool:
     These paths are intentionally omitted even when dirty and even when callers
     try to select them explicitly. They include root ``assets/``, the canonical
     ``ui/assets/`` tree, operator-owned themes and local visual references whose
-    edits/deletions must never be overwritten by a source handoff.
+    edits/deletions must never be overwritten by a source handoff. Also blocks
+    generated Qt shader packs (``.qsb``), which must be compiled locally.
     """
 
     lower = path.replace("\\", "/").lower().lstrip("./")
-    return any(
+    return is_generated_qsb_artifact(lower) or any(
         lower == prefix.rstrip("/") or lower.startswith(prefix)
         for prefix in NEVER_TRANSFER_PREFIXES
     )
@@ -705,6 +716,7 @@ This archive is a **full working-tree handoff**. These rules apply when an agent
 - Archive omission never means delete. Only explicit debris instructions in `.godzip/manifest.json` authorize moving a path to `/deleteme`.
 - `.godzip/manifest.json` and `.godzip/workflow.md` are archive metadata, not repository replacement targets.
 - Normal GODZIPs intentionally omit heavyweight/operator-owned payloads. In particular, root `assets/`, `ui/assets/`, the operator-owned `themes/` directory, and the operator-owned `references/` directory are never part of a normal GODZIP handoff, even by manual selection. Do not re-add excluded assets, locally curated themes, or local visual references.
+- Generated Qt shader `.qsb` binaries are never transferred or applied by a GODZIP. After shader source updates, rebuild and verify them with the receiving machine's pinned Qt toolchain (`.venv\\Scripts\\python.exe tools/regen_qrc.py --shaders` and `--shaders --check` on Windows). A valid obsolete QSB can corrupt all material surfaces when combined with a newer GLSL layout.
 - Before returning a GODZIP, run the relevant focused tests/audits and keep any operator-required physical acceptance steps explicit.
 
 Archive baseline: `{short}`  \nDirty worktree at creation: `{dirty}`
@@ -1048,6 +1060,10 @@ def inspect_godzip(
             else:
                 state = "OVERWRITE"
                 selected = True
+            # Older v2 manifests may contain stale compiled shaders. Never
+            # preselect one for replacement just because its hashes differ.
+            if is_generated_qsb_artifact(target):
+                selected = False
             timestamp_stale = bool(
                 local_exists
                 and local_hash != actual_hash
@@ -1068,6 +1084,12 @@ def inspect_godzip(
                     local_mtime_ns=local_mtime_ns,
                     timestamp_stale=timestamp_stale,
                 )
+            )
+
+        if any(is_generated_qsb_artifact(item.target_path) for item in inspection.files):
+            inspection.warnings.append(
+                "This archive contains generated Qt .qsb files; they will be preserved locally. "
+                "After updating GLSL sources, rebuild with tools/regen_qrc.py --shaders."
             )
 
         debris_seen: set[str] = set()
@@ -1202,6 +1224,11 @@ def apply_godzip(
     target_seen: set[str] = set()
     for raw in selected_targets:
         rel = validate_repo_relpath(raw)
+        if is_generated_qsb_artifact(rel):
+            raise GodzipError(
+                "Generated .qsb shader packs cannot be applied from GODZIP. "
+                "Rebuild locally with tools/regen_qrc.py --shaders."
+            )
         if rel not in file_by_target:
             raise GodzipError(f"Selected target is not present in inspected archive: {rel}")
         if rel.casefold() not in target_seen:

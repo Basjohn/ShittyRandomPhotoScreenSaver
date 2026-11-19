@@ -64,7 +64,7 @@ def test_general_page_houses_both_controlled_surfaces_and_both_sliders():
     assert 'resolve_media_controls_surface_mode(widgets_config)' in defaults
     assert '"Control Bar Surface:"' not in media_ui
     assert 'tab.media_controls_surface_material' not in media_ui
-    assert 'for target in ("header_surface", "media_controls", "settings", "widget"):' in defaults
+    assert 'for target in ("border_surface", "header_surface", "media_controls", "settings", "widget"):' in defaults
     assert '"media_controls_surface_mode" in global_values' in read("rendering/quick/widgets/surface_material.py")
 
 

@@ -184,6 +184,8 @@ class OverlayCardStyle:
     # colour is the legibility layer's reference.
     surface_material: str = "normal"
     # One global branded-header material switch; no family-specific setting.
+    border_surface_mode: str = "inherit"
+    border_surface_opacity_adjust: float = 0.0
     header_surface_mode: str = "inherit"
     # Only the Media card uses this demand hint; the QML bar receives its mode
     # separately through the existing Media model.
@@ -214,6 +216,8 @@ _CARD_STYLE_BINDINGS: tuple[tuple[str, str], ...] = (
     ("cardShadowExtendRight", "shadow_extend_right"),
     ("cardShadowExtendBottom", "shadow_extend_bottom"),
     ("cardSurfaceMaterial", "surface_material"),
+    ("cardBorderSurfaceMode", "border_surface_mode"),
+    ("cardBorderSurfaceOpacityAdjust", "border_surface_opacity_adjust"),
     ("cardHeaderSurfaceMode", "header_surface_mode"),
     ("cardHeaderSurfaceOpacityAdjust", "header_surface_opacity_adjust"),
     ("cardSurfaceOpacityAdjust", "surface_opacity_adjust"),
@@ -382,12 +386,13 @@ class RetainedOverlayWidget:
         self._surface_material = str(style.surface_material)
         # A separately selected header or Media bar material also needs the
         # existing shared backdrop when its parent card happens to be Normal.
+        demanded = [self._surface_material, style.header_surface_mode, style.media_controls_surface_mode]
+        # A material border cannot need the backdrop if its shell or stroke is
+        # absent. In particular, Normal + a 0 px explicit Glass border stays dormant.
+        if style.shell_enabled and style.border_width > 0.0:
+            demanded.append(style.border_surface_mode)
         self._surface_materials = frozenset(
-            material for material in (
-                self._surface_material,
-                style.header_surface_mode,
-                style.media_controls_surface_mode,
-            ) if material not in {"normal", "inherit", "theme"}
+            material for material in demanded if material not in {"normal", "inherit", "theme"}
         )
         host = getattr(self, "_host", None)
         if host is not None:

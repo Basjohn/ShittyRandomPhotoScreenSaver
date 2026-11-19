@@ -212,6 +212,8 @@ Item {
     }
     property alias cardBackgroundColor: card.backgroundColor
     property alias cardSurfaceMaterial: card.surfaceMaterial
+    property alias cardBorderSurfaceMode: card.borderSurfaceMode
+    property alias cardBorderSurfaceOpacityAdjust: card.borderSurfaceOpacityAdjust
     // Shared branded headers inherit the card material unless Widgets > General
     // chooses Normal for header fills. The card and its legibility remain unchanged.
     property string cardHeaderSurfaceMode: "inherit"
@@ -222,6 +224,7 @@ Item {
     property alias cardSurfaceTextColor: card.surfaceTextColor
     // Child controls with their own surface (Media's volume track and mute button) follow it.
     readonly property alias cardSurfaceMaterialActive: card.surfaceMaterialActive
+    readonly property alias cardBorderMaterialActive: card.borderSurfaceMaterialActive
     property alias cardBorderColor: card.borderColor
     // Global Card Border Width is specified in finished logical pixels. Uniform
     // CUSTOM families scale their authored root, so feed the card the inverse

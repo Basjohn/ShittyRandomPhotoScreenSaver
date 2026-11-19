@@ -31,8 +31,14 @@ Rectangle {
     readonly property color effectiveSurfaceColor:
         materialMode === "normal" ? surfaceColor : materialFillColor
     property color iconColor: "#ffffffff"
+    // Legacy caller property kept for compatibility; the single outline is
+    // the actual ink authority for both bar dividers.
     property color separatorColor: "#66ffffff"
-    property real separatorWidth: 1.0
+    property real separatorWidth: 1.5
+    // One semantic border ink for the outline and the internal dividers. Paint
+    // them above the material together, not a parent border hidden under it.
+    property color outlineColor: "#66ffffff"
+    property real outlineWidth: 1.5
     property bool shadowEnabled: false
     property color shadowColor: "#00000000"
     property real shadowBlur: 0.0
@@ -72,6 +78,7 @@ Rectangle {
     radius: 12.0
     // On a surface material the bar is material too, tinted by its fill.
     color: floatingGlyphs || material.active ? "transparent" : bar.adjustedFlatSurfaceColor
+    border.width: 0.0
     clip: false
 
     // Transport bar uses the same global direction with 15% more
@@ -108,6 +115,21 @@ Rectangle {
         legibilityPanel: false
     }
 
+    // The body and the material render below both ink elements. The outline and
+    // separators are identical Qt Rectangles with the same semantic RGBA; the
+    // topmost outline is not buried underneath an opaque material ShaderEffect.
+    Rectangle {
+        id: outline
+        objectName: "mediaTransportOutline"
+        anchors.fill: parent
+        radius: bar.radius
+        color: "transparent"
+        border.color: bar.outlineColor
+        border.width: bar.floatingGlyphs ? 0.0 : bar.outlineWidth
+        visible: !bar.floatingGlyphs && bar.outlineWidth > 0.0
+        z: 2
+    }
+
     Row {
         id: transport
         objectName: "mediaTransportControls"
@@ -116,6 +138,7 @@ Rectangle {
         y: 0.0
         width: Math.max(1.0, parent.width - bar.transportReserve)
         height: parent.height
+        z: 1
 
         TransportButton {
             objectName: bar.previousObjectName
@@ -129,9 +152,9 @@ Rectangle {
 
         Rectangle {
             width: bar.separatorWidth
-            height: parent.height * 0.7
-            y: (parent.height - height) / 2.0
-            color: bar.floatingGlyphs ? "transparent" : bar.separatorColor
+            height: Math.max(0.0, parent.height - 2.0 * bar.outlineWidth)
+            y: bar.outlineWidth
+            color: bar.floatingGlyphs ? "transparent" : bar.outlineColor
         }
 
         TransportButton {
@@ -146,9 +169,9 @@ Rectangle {
 
         Rectangle {
             width: bar.separatorWidth
-            height: parent.height * 0.7
-            y: (parent.height - height) / 2.0
-            color: bar.floatingGlyphs ? "transparent" : bar.separatorColor
+            height: Math.max(0.0, parent.height - 2.0 * bar.outlineWidth)
+            y: bar.outlineWidth
+            color: bar.floatingGlyphs ? "transparent" : bar.outlineColor
         }
 
         TransportButton {
@@ -177,7 +200,9 @@ Rectangle {
         readonly property bool pressed: input.item !== null && input.item.pressed === true
         readonly property bool hovered: input.item !== null && input.item.hovered === true
 
-        width: (parent.width - 2.0) / 3.0
+        // Two separators take their actual (possibly scaled) width, rather
+        // than assuming the former 1 px size and spilling past the end cap.
+        width: Math.max(0.0, (parent.width - 2.0 * bar.separatorWidth) / 3.0)
         height: parent.height
         opacity: available ? (interactionEnabled ? 1.0 : 0.68) : 0.25
         scale: pressed ? 1.10 : (hovered && inputEnabled ? 1.055 : 1.0)

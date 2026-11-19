@@ -22,7 +22,18 @@ layout(std140, binding = 0) uniform buf {
     vec4 glassLegibility;
     vec4 panelLimits;
     float panelCeiling;   // dark ink: the panel's furthest lift toward white (SurfaceContrast.panelCeiling)
-    vec4 srpssConventions;   // the fragment stage's (surface_material.frag)
+    // Keep this std140 block exactly in sync with surface_material.frag. Even
+    // unused vertex-stage members must be present: Qt Quick binds ShaderEffect
+    // properties through the reflected uniform layout shared by both stages.
+    float fillSurfaceEnabled;
+    float borderSurfaceEnabled;
+    float borderOpacityAdjust;
+    vec4 borderNormalColor;
+    vec4 borderTintColor;
+    vec4 borderBlurTint;
+    vec4 borderLightNoise;
+    vec4 borderGlassLegibility;
+    vec4 srpssConventions;   // row orientation for target fragment coordinates
     vec2 targetPx;
 };
 out gl_PerVertex { vec4 gl_Position; };

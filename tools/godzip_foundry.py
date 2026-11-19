@@ -217,6 +217,7 @@ try:
         QPlainTextEdit,
         QProgressBar,
         QScrollArea,
+        QSizePolicy,
         QPushButton,
         QSplitter,
         QTabWidget,
@@ -233,7 +234,7 @@ except ImportError as exc:  # pragma: no cover - user environment contract
     ) from exc
 
 from godzip_script_runner import (  # noqa: E402
-    ScriptRunError, create_script_results_zip, normalize_script_paste, snapshot_loose_logs,
+    ScriptRunError, add_repo_venv_to_script, create_script_results_zip, normalize_script_paste, snapshot_loose_logs,
 )
 
 from godzip_foundry_core import (  # noqa: E402
@@ -291,6 +292,12 @@ from godzip_foundry_theme import (  # noqa: E402
 
 APP_TITLE = "SRPSS GODZIP Foundry"
 CHUNKED_SUITE_COMMAND = r".\.venv\Scripts\python.exe tests\run_chunked.py --chunks 4 --log"
+SHADER_REGEN_COMMAND = (
+    r"& .\.venv\Scripts\python.exe tools\regen_qrc.py --shaders; "
+    r"if ($LASTEXITCODE -ne 0) { throw 'Shader regeneration failed' }; "
+    r"& .\.venv\Scripts\python.exe tools\regen_qrc.py --shaders --check; "
+    r"if ($LASTEXITCODE -ne 0) { throw 'Shader verification failed' }"
+)
 PERSONAL_GODZIP_DROP_DIR = Path(r"Z:\Torrents\Torrentfiles")
 # How long a close waits for a read-only task's worker (a Git scan, an archive read) before leaving the daemon
 # thread to the process exit; a read-only worker leaves nothing half-done.
@@ -3924,6 +3931,20 @@ class CommandTab(QWidget):
         actions.addWidget(self.script_stop_button)
         actions.addWidget(self.script_result_badge)
         actions.addStretch(1)
+        self.script_add_venv_button = QPushButton("Add Venv")
+        self.script_add_venv_button.setToolTip(
+            "Update bare Python and pytest commands in the editor to use this repository's .venv. "
+            "Preserve existing venv paths, arguments and control flow; never execute automatically."
+        )
+        self.script_add_venv_button.clicked.connect(self._add_script_venv)
+        self.script_regen_shaders_button = QPushButton("Shaders Regen")
+        self.script_regen_shaders_button.setToolTip(
+            "Replace the script editor with the repo-venv Qt shader regeneration and verification "
+            "command, then run it through the usual captured script runner."
+        )
+        self.script_regen_shaders_button.clicked.connect(self._regenerate_shaders)
+        actions.addWidget(self.script_add_venv_button)
+        actions.addWidget(self.script_regen_shaders_button)
         self.script_status = QLabel("No script running")
         self.script_status.setObjectName("muted")
         self.script_status.setWordWrap(True)
@@ -3961,6 +3982,34 @@ class CommandTab(QWidget):
         # A clipboard action never invokes the runner. Plain text only, no rich MIME.
         self.script_input.setPlainText(QApplication.clipboard().text())
         self.script_input.setFocus()
+
+    def _add_script_venv(self) -> None:
+        if self._running:
+            return
+        try:
+            preview = normalize_script_paste(
+                self.script_input.toPlainText(), shell=str(self.script_shell.currentData())
+            )
+            if preview.warnings:
+                raise ScriptRunError("; ".join(preview.warnings))
+            updated = add_repo_venv_to_script(preview.script, shell=preview.shell)
+        except ScriptRunError as exc:
+            self.script_status.setText(f"Add Venv: {exc}")
+            return
+        if updated == preview.script:
+            self.script_status.setText("Add Venv: No bare Python commands needed updating")
+        else:
+            self.script_status.setText("Add Venv: Updated Python commands; review before running")
+        self.script_input.setPlainText(updated)
+        self.script_input.setFocus()
+
+    def _regenerate_shaders(self) -> None:
+        if self._running:
+            return
+        self.script_input.setPlainText(SHADER_REGEN_COMMAND)
+        self.script_shell.setCurrentIndex(self.script_shell.findData("powershell"))
+        self.script_external.setChecked(False)
+        self._run_script()
 
     def _run_chunked_suite(self) -> None:
         if self._running:
@@ -4087,6 +4136,8 @@ class CommandTab(QWidget):
         self._running = True
         self.script_run_button.setEnabled(False)
         self.script_suite_button.setEnabled(False)
+        self.script_add_venv_button.setEnabled(False)
+        self.script_regen_shaders_button.setEnabled(False)
         self.script_stop_button.setEnabled(True)
         self.script_stop_button.setText("Stop Run")
         self.script_status.setText(f"Running {shell} in {self.repo_root}. Transcript: {run_dir / 'output.txt'}")
@@ -4152,6 +4203,8 @@ class CommandTab(QWidget):
         self.window.set_status("Run Script: " + self._finished_status)
         self.script_run_button.setEnabled(True)
         self.script_suite_button.setEnabled(True)
+        self.script_add_venv_button.setEnabled(True)
+        self.script_regen_shaders_button.setEnabled(True)
         self.script_stop_button.setEnabled(False)
         self.script_copy.setEnabled(run_dir is not None)
         self.script_show_results.setEnabled(run_dir is not None)
@@ -4998,6 +5051,9 @@ class GodzipFoundryWindow(QMainWindow):
         body_l.addWidget(repo)
 
         self.tabs = QTabWidget()
+        self.tabs.tabBar().setExpanding(False)
+        self.tabs.tabBar().setUsesScrollButtons(True)
+        self.tabs.tabBar().setElideMode(Qt.TextElideMode.ElideRight)
         self.debris_tab = DebrisTab(self)
         self.create_tab = CreateTab(self)
         self.apply_tab = ApplyTab(self)
@@ -5026,29 +5082,35 @@ class GodzipFoundryWindow(QMainWindow):
 
         right_nav = QWidget(self.tabs)
         right_nav_layout = QHBoxLayout(right_nav)
-        right_nav_layout.setContentsMargins(0, 0, 0, 0)
+        # The corner widget lives *inside* the tab-bar strip. Leave a bottom
+        # inset so the pane cannot clip the buttons' rounded bottom edges at
+        # fractional/high DPI, and keep its full width when left tabs overflow.
+        right_nav_layout.setContentsMargins(0, 0, 0, 4)
         right_nav_layout.setSpacing(3)
+        right_nav.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         self.run_tab_button = QPushButton("RUN")
         self.run_tab_button.setObjectName("cmdTabButton")
         self.run_tab_button.setCheckable(True)
-        self.run_tab_button.setFixedHeight(38)
+        self.run_tab_button.setFixedHeight(34)
         self.run_tab_button.clicked.connect(lambda: self.tabs.setCurrentWidget(self.run_tab))
         right_nav_layout.addWidget(self.run_tab_button)
         self.cmd_tab_button = QPushButton("CMD")
         self.cmd_tab_button.setObjectName("cmdTabButton")
         self.cmd_tab_button.setCheckable(True)
-        self.cmd_tab_button.setFixedHeight(38)
+        self.cmd_tab_button.setFixedHeight(34)
         self.cmd_tab_button.clicked.connect(lambda: self.tabs.setCurrentWidget(self.command_tab))
         right_nav_layout.addWidget(self.cmd_tab_button)
         self.foundries_tab_button = QPushButton("Foundries")
         self.foundries_tab_button.setObjectName("cmdTabButton")
         self.foundries_tab_button.setCheckable(True)
-        self.foundries_tab_button.setFixedHeight(38)
+        self.foundries_tab_button.setFixedHeight(34)
         self.foundries_tab_button.clicked.connect(
             lambda: self.tabs.setCurrentWidget(self.foundries_tab)
         )
         right_nav_layout.addWidget(self.foundries_tab_button)
+        right_nav.setMinimumWidth(right_nav.sizeHint().width())
         self.tabs.setCornerWidget(right_nav, Qt.Corner.TopRightCorner)
+        right_nav.raise_()
         self.tabs.currentChanged.connect(self._tab_changed)
         body_l.addWidget(self.tabs, 1)
         shell_l.addWidget(body, 1)

@@ -149,7 +149,7 @@ WIDGET_VISUAL_ROLE_PARENTS: Mapping[str, str] = {
     # Media internal surfaces.  These are intentionally semantic, not GUI controls.
     "media.transport.surface": "widget.panel",
     "media.transport.border": "widget.outline",
-    "media.transport.separator": "widget.separator",
+    "media.transport.separator": "widget.separator",  # legacy valid theme role; bar uses media.transport.border
     "media.transport.icon": "widget.icon",
     "media.mute.surface": "widget.panel.alt",
     "media.mute.border": "widget.outline",
@@ -186,6 +186,10 @@ WIDGET_VISUAL_ROLE_PARENTS: Mapping[str, str] = {
     "steam.artwork.gradient.start": "steam.gradient.start",
     "steam.artwork.gradient.middle": "steam.gradient.middle",
     "steam.artwork.gradient.end": "steam.gradient.end",
+    # The opt-in progress-disc material needs its own semantic tint instead
+    # of reusing the nearly transparent flat capsule fill. Like Media's volume
+    # track, it is a resolved colour, not a second material/capture owner.
+    "steam.progress.disc": "widget.accent",
     "steam.metric.surface": "steam.badge.surface",
     "steam.metric.border": "steam.badge.border",
     "steam.metric.inner_border": "steam.badge.border",

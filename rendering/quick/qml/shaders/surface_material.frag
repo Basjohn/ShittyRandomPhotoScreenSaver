@@ -23,6 +23,14 @@ layout(std140, binding = 0) uniform buf {
     vec4 glassLegibility;
     vec4 panelLimits;
     float panelCeiling;   // dark ink: the panel's furthest lift toward white (SurfaceContrast.panelCeiling)
+    float fillSurfaceEnabled;
+    float borderSurfaceEnabled;
+    float borderOpacityAdjust;
+    vec4 borderNormalColor;
+    vec4 borderTintColor;
+    vec4 borderBlurTint;
+    vec4 borderLightNoise;
+    vec4 borderGlassLegibility;
     // The conventions include's values for this card's target (N1.4), set by MaterialSurface.qml from the window
     // that owns the target: a ShaderEffect has only this block, so the include's own block cannot reach it.
     vec4 srpssConventions;   // x 1 flips the fragment row (every backend but OpenGL); y, z, w unused here
@@ -182,15 +190,82 @@ vec2 backdropPerUnit(vec2 p, vec2 screen) {
                 abs(dy) > 1e-6 ? dFdy(screen.y) / dy : 0.0);
 }
 
+// The border's material is computed only for fragments in its rounded SDF ring.
+// It is not another quad, mask, scene capture or material pass. Its no-legibility
+// coefficients deliberately omit the card text guard and its panel entirely.
+float adjustedBorderDensity(float density) {
+    float amount = clamp(borderOpacityAdjust, -1.0, 1.0);
+    return amount < 0.0 ? density * (1.0 + amount) : mix(density, 1.0, amount);
+}
+
+vec4 borderAt(vec2 p, vec2 screen, vec2 uvPerUnit, float grainValue, float d, vec2 normal) {
+    float rim = 1.0 - smoothstep(0.0, max(1.0, borderGlassLegibility.y * 3.0), -d);
+    vec2 uv = screen - normal * uvPerUnit * (borderGlassLegibility.y * rim * rim);
+    vec4 backdrop = textureLod(source, uv, borderBlurTint.x);
+    float valid = clamp(backdrop.a, 0.0, 1.0);
+    vec3 c = backdrop.a > 0.0 ? backdrop.rgb / backdrop.a : vec3(0.0);
+    vec3 tint = unpremultiply(borderTintColor);
+    float l = luma(c);
+    c = max(mix(vec3(l), c, borderBlurTint.w), vec3(0.0));
+    if (borderLightNoise.x > 0.0)
+        c += (luma(tint) - luma(c)) * adjustedBorderDensity(borderLightNoise.x);
+    if (borderLightNoise.z > 0.0)
+        c = mix(c, vec3(1.0), adjustedBorderDensity(borderLightNoise.z));
+    if (borderLightNoise.w > 0.0)
+        c *= 1.0 - adjustedBorderDensity(borderLightNoise.w);
+    float tintOpacity = mix(borderBlurTint.y, borderBlurTint.z, clamp(borderTintColor.a, 0.0, 1.0));
+    c = mix(c, tint, adjustedBorderDensity(tintOpacity));
+    // A restrained edge/specular response uses the authored border tint; no ink plate.
+    if (borderGlassLegibility.x > 0.0) {
+        float edge = 1.0 - smoothstep(0.0, 6.0, -d);
+        float facing = clamp(dot(-normal, normalize(vec2(-0.55, -0.85))) * 0.5 + 0.5, 0.0, 1.0);
+        c += vec3(borderGlassLegibility.x * edge * edge * (0.35 + 0.65 * facing));
+    }
+    c += (grainValue - 0.5) * borderLightNoise.y;
+    return vec4(clamp(c, 0.0, 1.0), valid);
+}
+
 void main() {
     vec2 p = (vLocal - vec2(0.5)) * itemSize;
     vec2 halfSize = itemSize * 0.5;
+    float radius = clamp(cornerRadius, 0.0, min(halfSize.x, halfSize.y));
     vec2 n;
-    float d = roundedBox(p, halfSize, clamp(cornerRadius, 0.0, min(halfSize.x, halfSize.y)), n);
+    float d = roundedBox(p, halfSize, radius, n);
     float aa = max(fwidth(d), 0.001);
     float inside = 1.0 - smoothstep(-aa, aa, d);
-    vec4 surface = surfaceAt(p, itemSize, vScreen, backdropPerUnit(p, vScreen), grain(fragPixel(targetPx)));
-    vec4 material = vec4(surface.rgb, 1.0);
-    vec4 normal = normalColor;   // ShaderEffect passes colours premultiplied
-    fragColor = mix(normal, material, surface.a) * (inside * qt_Opacity);
+    float ringCoverage = 0.0;
+    if (borderSurfaceEnabled > 0.5 && borderWidth > 0.0) {
+        vec2 innerNormal;
+        float thickness = min(borderWidth, min(halfSize.x, halfSize.y));
+        float innerD = roundedBox(p, max(halfSize - vec2(thickness), vec2(0.0)),
+                                  max(0.0, radius - thickness), innerNormal);
+        float innerAa = max(fwidth(innerD), 0.001);
+        float innerCoverage = 1.0 - smoothstep(-innerAa, innerAa, innerD);
+        ringCoverage = clamp(inside - innerCoverage, 0.0, inside);
+    }
+
+    // Border-only Visualizer: skip backdrop mapping/noise/sampling over its
+    // transparent interior. Zero alpha must mean zero material work here.
+    if (fillSurfaceEnabled < 0.5 && ringCoverage <= 0.0001) {
+        fragColor = vec4(0.0);
+        return;
+    }
+    vec2 uvPerUnit = backdropPerUnit(p, vScreen);
+    float grainValue = grain(fragPixel(targetPx));
+    vec4 face = vec4(0.0);
+    // Skip fill samples entirely on border-only cards and in fully opaque border pixels.
+    if (fillSurfaceEnabled > 0.5 && inside > ringCoverage + 0.0001) {
+        vec4 surface = surfaceAt(p, itemSize, vScreen, uvPerUnit, grainValue);
+        vec4 material = vec4(surface.rgb, 1.0);
+        face = mix(normalColor, material, surface.a);
+    }
+
+    vec4 border = vec4(0.0);
+    if (ringCoverage > 0.0001) {
+        vec4 sampled = borderAt(p, vScreen, uvPerUnit, grainValue, d, n);
+        border = mix(borderNormalColor, vec4(sampled.rgb, 1.0), sampled.a);
+    }
+    // Both colour values are premultiplied. The round SDF coverage is calculated
+    // once for the face and the ring, including thin 1 px borders and curved corners.
+    fragColor = (face * max(0.0, inside - ringCoverage) + border * ringCoverage) * qt_Opacity;
 }

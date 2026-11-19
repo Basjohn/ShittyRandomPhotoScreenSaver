@@ -92,11 +92,14 @@ def test_all_four_settings_corners_are_native_resize_targets_without_scratch_lin
     assert "painter.drawLine" not in grip
 
 
-def test_all_four_slider_labels_fit_better_and_border_threshold_is_planned() -> None:
+def test_all_four_slider_labels_fit_and_thin_material_borders_remain_supported() -> None:
     widgets = text("ui/tabs/widgets_tab_defaults.py")
     labels = ("Header Opacity:", "Media Bar Opacity:", "Settings Opacity:", "Widget Opacity:")
     for label in labels:
         assert widgets.count('"' + label + '"') == 1
     assert "Media Bar Opacity Adjust:" not in widgets
     assert "Header Opacity Adjust:" not in widgets
-    assert "3.0 logical px" in text("Current_Plan.md")
+    plan = text("Current_Plan.md")
+    assert "**No fixed minimum border-width rule" in plan
+    assert "every positive authored" in plan
+    assert "not a 3 px eligibility gate" in plan

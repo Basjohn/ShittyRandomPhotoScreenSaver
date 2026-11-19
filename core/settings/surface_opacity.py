@@ -27,7 +27,7 @@ def adjusted_surface_density(density: float, adjustment: object) -> float:
 
 
 def resolve_opacity_adjust(widgets: Mapping | None, target: str) -> float:
-    if target not in ("settings", "widget", "header_surface", "media_controls"):
+    if target not in ("settings", "widget", "header_surface", "media_controls", "border_surface"):
         raise ValueError(f"Unknown surface-opacity target: {target}")
     values = widgets.get("global", {}) if isinstance(widgets, Mapping) else {}
     return admit_opacity_adjust(values.get(f"{target}_opacity_adjust")) if isinstance(values, Mapping) else 0.0

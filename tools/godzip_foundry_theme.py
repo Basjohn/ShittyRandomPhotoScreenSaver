@@ -247,7 +247,7 @@ def render_foundry_stylesheet(theme: SettingsThemeSpec, *, use_settings_controls
         QPushButton#toolTitleCloseButton:hover {{ background: {error}; }}
         QPushButton#toolTitlePlanButton {{ background: {tab_surface}; color: {tab_text}; border: 1.5px solid {border}; border-radius: 7px; padding: 0px 11px; font-size: 11px; font-weight: 800; }}
         QPushButton#toolTitlePlanButton:hover {{ background: {tab_hover}; border-color: {action_border}; }}
-        QPushButton#cmdTabButton {{ background: {tab_surface}; color: {secondary}; border: 1.5px solid {border}; border-radius: 8px; padding: 9px 15px; font-weight: 700; }}
+        QPushButton#cmdTabButton {{ background: {tab_surface}; color: {secondary}; border: 1.5px solid {border}; border-radius: 8px; padding: 5px 13px; font-weight: 700; }}
         QPushButton#cmdTabButton:hover {{ background: {tab_hover}; color: {tab_text}; }}
         QPushButton#cmdTabButton:checked {{ background: {tab_selected}; color: {tab_text}; }}
         QPushButton#cleanModeButton {{ background: {tab_surface}; color: {popup_title}; border: 1.5px solid {action_border}; border-radius: 8px; padding: 7px 13px; min-height: 20px; font-weight: 800; }}

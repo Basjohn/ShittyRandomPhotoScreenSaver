@@ -881,3 +881,61 @@ def test_pull_readme_failure_goes_to_the_status_line(tmp_path: Path) -> None:
     assert core.pull_readme(local).startswith("Pull README failed")
     _git(local, "remote", "remove", "origin")
     assert core.pull_readme(local).startswith("Pull README failed")
+
+
+def test_generated_shader_qsb_is_not_shipped_even_when_explicitly_selected(tmp_path: Path) -> None:
+    """Do not overwrite rebuilt material shaders with a stale GODZIP binary."""
+    repo = _repo(tmp_path)
+    source = repo / "rendering" / "quick" / "qml" / "shaders" / "surface_material.vert"
+    binary = source.with_suffix(source.suffix + ".qsb")
+    source.parent.mkdir(parents=True)
+    source.write_text("#version 460 core\n", encoding="utf-8")
+    binary.write_bytes(b"old compiled shader pack")
+    rel = binary.relative_to(repo).as_posix()
+
+    assert core.is_generated_qsb_artifact(rel)
+    assert core.is_never_transfer_payload(rel)
+    assert core.workflow_default_selected(rel, "MODIFIED") is False
+    assert rel not in {item.path for item in core.collect_repo_files(repo)}
+    with pytest.raises(core.GodzipError, match="excluded from normal GODZIP payloads"):
+        core.create_godzip(repo, [rel], tmp_path / "blocked.zip")
+
+
+def test_older_manifest_cannot_overwrite_locally_regenerated_qsb(tmp_path: Path) -> None:
+    """Protect the apply side too: old GODZIPs already contain stale QSBs."""
+    import hashlib
+    import json
+
+    repo = _repo(tmp_path)
+    rel = "rendering/quick/qml/shaders/surface_material.vert.qsb"
+    target = repo / rel
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"fresh compatible local build")
+
+    archive = tmp_path / "legacy_generated_pack.zip"
+    old_binary = b"original incompatible pack"
+    # Simulate an older well-formed v2 archive that contains a generated pack.
+    manifest = core.build_manifest(repo, ["tracked.txt"])
+    manifest["files"].append(
+        {
+            "path": rel,
+            "action": "replace_file",
+            "sha256": hashlib.sha256(old_binary).hexdigest(),
+            "size": len(old_binary),
+            "mtime_ns": target.stat().st_mtime_ns,
+            "source_status": "",
+        }
+    )
+    with zipfile.ZipFile(archive, "w") as handle:
+        handle.write(repo / "tracked.txt", "tracked.txt")
+        handle.writestr(rel, old_binary)
+        handle.writestr(core.MANIFEST_MEMBER, json.dumps(manifest))
+
+    inspection = core.inspect_godzip(repo, archive)
+    qsb = next(item for item in inspection.files if item.target_path == rel)
+    assert qsb.local_state in {"OVERWRITE", "LOCAL DIRTY"}
+    assert qsb.default_selected is False
+    assert any(".qsb" in warning for warning in inspection.warnings)
+    with pytest.raises(core.GodzipError, match="Generated .qsb shader packs cannot be applied"):
+        core.apply_godzip(repo, inspection, [rel])
+    assert target.read_bytes() == b"fresh compatible local build"

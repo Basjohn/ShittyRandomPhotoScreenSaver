@@ -1534,7 +1534,9 @@ def test_progress_circle_material_uses_lighter_child_density_only_when_admitted(
         assert material is not None and face is not None
         assert material.property("forceFlat") is False
         assert material.property("legibilityPanel") is False
-        assert material.property("additionalOpacityAdjust") == pytest.approx(-0.40)
+        assert material.property("additionalOpacityAdjust") == pytest.approx(0.0)
+        assert material.property("tintAlphaScale") == pytest.approx(0.65)
+        assert material.property("fillColor") == model.progressDiscMaterialColor
         assert material.property("active") is True
         assert face.property("color").alphaF() == pytest.approx(0.0)
 

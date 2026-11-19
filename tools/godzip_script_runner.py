@@ -111,6 +111,86 @@ def normalize_script_paste(raw: str, *, shell: str = "auto") -> ScriptPreview:
     return ScriptPreview(shell, script, tuple(changes), tuple(warnings))
 
 
+# The command editor is the only authority: this helper returns edited text,
+# never launches or activates a shell.  Each bare Python command is rewritten
+# in place so other commands, branching and failure handling are preserved.
+_BARE_PYTHON_COMMAND = re.compile(r"(?:python(?:3(?:\.\d+)?)?(?:\.exe)?|py(?:\.exe)?|pytest(?:\.exe)?)\b", re.I)
+
+
+def add_repo_venv_to_script(raw: str, *, shell: str = "powershell") -> str:
+    """Use the repo-local Python for bare Python/pytest shell commands.
+
+    Preserve scripts without Python invocations, already-qualified interpreter
+    paths, quoted strings and comments.  PowerShell requires its call operator
+    for a relative path; CMD does not.  Repeated use is a no-op.
+    """
+    if shell not in {"powershell", "cmd"}:
+        raise ScriptRunError("Choose PowerShell or CMD before adding the venv")
+    venv = r".\.venv\Scripts\python.exe"
+    result: list[str] = []
+    for line in str(raw).splitlines(keepends=True):
+        out: list[str] = []
+        i = 0
+        quote = ""
+        can_start_command = True
+        # Shell commands may occur after separators or inside PS if-blocks.
+        # Don't alter quoted scripts, arguments, comments or qualified paths.
+        while i < len(line):
+            ch = line[i]
+            if quote:
+                out.append(ch)
+                if shell == "powershell" and ch == "`" and i + 1 < len(line):
+                    i += 1
+                    out.append(line[i])
+                elif ch == quote:
+                    if quote == "'" and shell == "powershell" and i + 1 < len(line) and line[i + 1] == "'":
+                        i += 1
+                        out.append(line[i])
+                    else:
+                        quote = ""
+                i += 1
+                continue
+            if ch in ('"', "'"):
+                quote = ch
+                out.append(ch)
+                can_start_command = False
+                i += 1
+                continue
+            if ch == "#" and shell == "powershell" and (i == 0 or line[i - 1].isspace()):
+                out.append(line[i:])
+                break
+            if ch in " \t\r\n":
+                out.append(ch)
+                i += 1
+                continue
+            if ch in ";|&{}":
+                out.append(ch)
+                can_start_command = True
+                i += 1
+                continue
+            if ch == "(" and can_start_command:
+                out.append(ch)
+                i += 1
+                continue
+            if can_start_command:
+                found = _BARE_PYTHON_COMMAND.match(line, i)
+                if found:
+                    token = found.group(0)
+                    # pip/pytest entry points belong to the venv as well.
+                    suffix = " -m pytest" if token.lower().startswith("pytest") else ""
+                    prev = "".join(out).rstrip()
+                    call = "" if shell == "cmd" or (prev.endswith("&") and not prev.endswith("&&")) else "& "
+                    out.append(call + venv + suffix)
+                    i = found.end()
+                    can_start_command = False
+                    continue
+            out.append(ch)
+            can_start_command = False
+            i += 1
+        result.append("".join(out))
+    return "".join(result)
+
+
 def snapshot_loose_logs(repo_root: Path) -> dict[str, tuple[int, int]]:
     """Metadata-only snapshot. Never recursively scan large evidence archives."""
     logs = Path(repo_root) / "logs"

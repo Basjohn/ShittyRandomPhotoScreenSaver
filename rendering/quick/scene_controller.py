@@ -588,6 +588,8 @@ class QuickSceneController(QObject):
         # only while its presentation root exists on this display.
         self._visualizer_surface_material = "normal"
         self._visualizer_surface_opacity_adjust = 0.0
+        self._visualizer_border_surface_mode = "inherit"
+        self._visualizer_border_surface_opacity_adjust = 0.0
         self._readiness = QuickSceneReadiness(
             screen_index=window.screen_index,
             runtime_generation=window.runtime_generation,
@@ -1102,18 +1104,27 @@ class QuickSceneController(QObject):
             self._on_surface_demand_changed()
         return True
 
-    def apply_visualizer_surface_material(self, material: str, opacity_adjust: float = 0.0) -> bool:
-        """Project the Visualizer card's surface material (the Widget Theme baseline)."""
+    def apply_visualizer_surface_material(
+        self, material: str, opacity_adjust: float = 0.0,
+        border_mode: str = "inherit", border_opacity_adjust: float = 0.0,
+    ) -> bool:
+        """Project the Visualizer face and independently chosen frame material."""
 
         from .widgets.surface_material import normalize_surface_material
 
         if self._scene_root is None or not self._readiness.admission_open:
             return False
         resolved = normalize_surface_material(material) or "normal"
-        if resolved == self._visualizer_surface_material and opacity_adjust == self._visualizer_surface_opacity_adjust:
+        border = normalize_surface_material(border_mode, allow_inherit=True) or "inherit"
+        if (resolved == self._visualizer_surface_material
+                and opacity_adjust == self._visualizer_surface_opacity_adjust
+                and border == self._visualizer_border_surface_mode
+                and border_opacity_adjust == self._visualizer_border_surface_opacity_adjust):
             return True
         self._visualizer_surface_material = resolved
         self._visualizer_surface_opacity_adjust = opacity_adjust
+        self._visualizer_border_surface_mode = border
+        self._visualizer_border_surface_opacity_adjust = border_opacity_adjust
         self._project_visualizer_surface_material()
         self._on_surface_demand_changed()
         return True
@@ -1126,6 +1137,8 @@ class QuickSceneController(QObject):
             return
         material = self._visualizer_surface_material
         root.setProperty("cardSurfaceOpacityAdjust", self._visualizer_surface_opacity_adjust)
+        root.setProperty("cardBorderSurfaceMode", self._visualizer_border_surface_mode)
+        root.setProperty("cardBorderSurfaceOpacityAdjust", self._visualizer_border_surface_opacity_adjust)
         self._project_visualizer_normal_surface()
         if material != "normal":
             root.setProperty("cardSurfaceTextColor", surface_text_color())
@@ -1152,8 +1165,18 @@ class QuickSceneController(QObject):
         materials = set(host.surface_materials) if host is not None and not host.is_retired else set()
         if self._context_menu_surface_material != "normal":
             materials.add(self._context_menu_surface_material)
-        if self._visualizer_surface_material != "normal" and self._visualizer_root is not None:
-            materials.add(self._visualizer_surface_material)
+        if self._visualizer_root is not None:
+            if self._visualizer_surface_material != "normal":
+                materials.add(self._visualizer_surface_material)
+            # Unlike the face, the explicit border may demand the backdrop when
+            # the Visualizer's own card face is Normal. No demand for a hidden or
+            # zero-width border; it remains dormant in those states.
+            border_mode = getattr(self, "_visualizer_border_surface_mode", "inherit")
+            visualizer = self._visualizer_root
+            if (border_mode not in {"normal", "inherit"}
+                    and bool(visualizer.property("cardShellEnabled"))
+                    and float(visualizer.property("cardBorderWidth") or 0.0) > 0.0):
+                materials.add(border_mode)
         return frozenset(materials)
 
     def _on_surface_demand_changed(self) -> None:
@@ -2728,6 +2751,8 @@ class QuickSceneController(QObject):
             self._color_from_style(style["border_color"]),
         )
         root.setProperty("cardBorderWidth", presentation.border_width)
+        # Visibility/width can change independently of the style override.
+        self._on_surface_demand_changed()
         root.setProperty(
             "cardCornerRadius",
             float(style["corner_radius"]),

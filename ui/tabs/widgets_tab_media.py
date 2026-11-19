@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
-    QSpinBox, QGroupBox, QCheckBox,
+    QSpinBox, QDoubleSpinBox, QGroupBox, QCheckBox,
     QSlider, QWidget,
 )
 from PySide6.QtCore import Qt
@@ -536,6 +536,19 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_volume_border_row.addWidget(tab.media_volume_border_color_btn)
     media_volume_border_row.addStretch()
 
+    volume_outline_width_row = _aligned_row(volume_layout, "Outline Width:")
+    tab.media_volume_outline_width = QDoubleSpinBox()
+    tab.media_volume_outline_width.setRange(0.0, 8.0)
+    tab.media_volume_outline_width.setDecimals(1)
+    tab.media_volume_outline_width.setSingleStep(0.5)
+    tab.media_volume_outline_width.setSuffix(" px")
+    tab.media_volume_outline_width.setValue(
+        float(tab._widget_default('media', 'spotify_volume_border_width_px'))
+    )
+    tab.media_volume_outline_width.valueChanged.connect(tab._save_settings)
+    volume_outline_width_row.addWidget(tab.media_volume_outline_width)
+    volume_outline_width_row.addStretch()
+
     media_artwork_row = _aligned_row(artwork_layout, "Artwork Size:")
     tab.media_artwork_size = QSpinBox()
     tab.media_artwork_size.setRange(100, 300)
@@ -1043,6 +1056,9 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     _apply_color_to_button('media_volume_track_color_btn', '_media_volume_track_color')
     _apply_color_to_button('media_volume_fill_color_btn', '_media_volume_fill_color')
     _apply_color_to_button('media_volume_border_color_btn', '_media_volume_border_color')
+    tab.media_volume_outline_width.setValue(
+        max(0.0, min(8.0, tab._config_float('media', media_config, 'spotify_volume_border_width_px')))
+    )
     _apply_color_to_button('media_playback_progress_track_color_btn', '_media_progress_track_color')
     _apply_color_to_button('media_playback_progress_fill_color_btn', '_media_progress_fill_color')
     _apply_color_to_button('media_playback_progress_shadow_color_btn', '_media_progress_shadow_color')
@@ -1187,6 +1203,7 @@ def save_media_settings(tab: WidgetsTab) -> dict:
             tab._media_volume_fill_color.alpha(),
         ],
         'spotify_volume_border_color': _qcolor_to_list(tab._media_volume_border_color),
+        'spotify_volume_border_width_px': tab.media_volume_outline_width.value(),
         'artwork_size': tab.media_artwork_size.value(),
         'rounded_artwork_border': tab.media_rounded_artwork.isChecked(),
         'show_header_frame': tab.media_show_header_frame.isChecked(),

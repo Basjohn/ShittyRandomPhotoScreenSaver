@@ -16,6 +16,13 @@ ShaderEffect {
     property real cornerRadius: 8.0
     property real contentInset: 8.0
     property real borderWidth: 0.0
+    // ShaderEffect float uniforms: keep the QML property types identical to GLSL.
+    property real fillSurfaceEnabled: 1.0
+    property real borderSurfaceEnabled: 0.0
+    property string borderMaterial: "normal"
+    property real borderOpacityAdjust: 0.0
+    property color borderNormalColor: "#e6ffffff"
+    property color borderTintColor: "#e6ffffff"
     property color normalColor: "#b3101010"
     property color tintColor: "#b3101010"
     property color textColor: "#ffffffff"
@@ -49,6 +56,21 @@ ShaderEffect {
         "smoked": [Qt.vector4d(0.45, legibilityPanel ? 0.245 : 0.28, legibilityPanel ? 0.406 : 0.464, 0.55), Qt.vector4d(0.0, 0.012, 0.0, legibilityPanel ? 0.315 : 0.36),
                    Qt.vector4d(0.06, 0.0, 0.30, surface.panelContrastFloor)]
     })
+    // Border and fill use the same ShaderEffect quad and backdrop sampler.
+    // Border coefficients always use the no-legibility variant: a narrow stroke
+    // must never inherit the card's text contrast floor or darkened panel.
+    readonly property var borderParameters: ({
+        "acrylic": [Qt.vector4d(1.0, 0.336, 0.56, 1.35), Qt.vector4d(0.24, 0.030, 0.0, 0.0), Qt.vector4d(0.0, 0.0, 0.0, 1.0)],
+        "glass": [Qt.vector4d(0.0, 0.05, 0.28, 1.15), Qt.vector4d(0.0, 0.0, 0.0, 0.0), Qt.vector4d(0.20, 5.0, 0.0, 1.0)],
+        "frosted": [Qt.vector4d(1.0, 0.20, 0.42, 0.80), Qt.vector4d(0.0, 0.045, 0.22, 0.0), Qt.vector4d(0.05, 0.0, 0.0, 1.0)],
+        "mica": [Qt.vector4d(1.0, 0.576, 0.688, 0.70), Qt.vector4d(0.36, 0.0, 0.0, 0.0), Qt.vector4d(0.0, 0.0, 0.0, 1.0)],
+        "smoked": [Qt.vector4d(0.45, 0.28, 0.464, 0.55), Qt.vector4d(0.0, 0.012, 0.0, 0.36), Qt.vector4d(0.06, 0.0, 0.0, 1.0)]
+    })
+    readonly property var resolvedBorderParameters: borderParameters[borderMaterial] || borderParameters["acrylic"]
+    readonly property vector4d borderBlurTint: resolvedBorderParameters[0]
+    readonly property vector4d borderLightNoise: resolvedBorderParameters[1]
+    readonly property vector4d borderGlassLegibility: resolvedBorderParameters[2]
+
     readonly property var resolvedParameters: parameters[material] || parameters["acrylic"]
 
     // Dark ink (light themes): the panel's furthest lift toward its anchor, the card's
