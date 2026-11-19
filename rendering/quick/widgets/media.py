@@ -213,7 +213,7 @@ class MediaPresentationConfig:
         merged = dict(defaults)
         if isinstance(values, Mapping):
             merged.update(values)
-        transport_material = str(merged.get("controls_surface_material", "inherit")).strip().lower()
+        transport_material = str(merged["controls_surface_material"]).strip().lower()
         # "flat" shipped briefly in the earlier cumulative handoff. Preserve
         # those users' choice when the setting is renamed Normal.
         if transport_material == "flat":

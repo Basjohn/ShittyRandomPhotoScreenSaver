@@ -1213,7 +1213,9 @@ def save_media_settings(tab: WidgetsTab) -> dict:
         # Legacy field retained while the shared General override migrates into
         # widgets.global. Do not let Media's lazy saver overwrite General's choice.
         'controls_surface_material': str(
-            ((tab._settings.get('widgets') or {}).get('media') or {}).get('controls_surface_material', 'inherit')
+            ((tab._settings.get('widgets') or {}).get('media') or {}).get(
+                'controls_surface_material', tab._default_str('media', 'controls_surface_material')
+            )
         ),
         'playback_progress_enabled': tab.media_playback_progress_enabled.isChecked(),
         'playback_progress_height': tab.media_playback_progress_height.value(),
