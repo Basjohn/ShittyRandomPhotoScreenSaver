@@ -438,62 +438,60 @@ inside production code (`tests/test_conftest_guards.py`). Studio tests need GL: 
 python tests/run_chunked.py --profile destination --chunks 4 --timeout-seconds 900 --log
 ```
 
-### 3.2 Whole suite, file-isolated
+### 3.2 Whole suite, balanced batches (default / Foundry Run Chunked Suite)
 
 ```powershell
-python tests/run_chunked.py --isolated
-python tests/run_chunked.py --isolated --changed            # the files a working-tree change can affect
+python tests/run_chunked.py --chunks 32 --jobs 2 --log
+```
+
+The normal full-suite gate runs **all** `tests/**/test_*.py` files admitted by the
+current platform; the initial pytest collection preflight must pass first. It
+uses the source-owned `tests/chunk_duration_baseline.json` (measured on
+19 Nov 2026), overridden by newer local
+`logs/pytest_isolated_durations.json` values, and estimated weights for
+otherwise unknown files. This keeps fresh agent worktrees balanced. The 32 batches are balanced
+by file, with two subprocesses concurrently and a conservative **single GPU/
+Studio/QtQuick-heavy batch** lane. A batch does *not* mean a separate process
+per test file. Two processes are a maximum **within this checkout**; this is
+not a cross-worktree lock. Agents must coordinate concurrent GPU-heavy runs.
+
+Each batch writes a continuously updated, **verbose per-test progress** log in
+`logs/pytest_chunked/<unique-run-id>/batch_NN.log`, with `plan.json` (complete
+file allocation) and `summary.json` (results). The 900-second timeout applies
+to **each smaller batch**, not a quarter of the 16,000-test suite; `-o
+faulthandler_timeout=60` prints Python thread stacks into the batch log on a
+stall. On Windows, the parent also tries a DbgHelp native `.dmp` of a still-
+running child before terminating its process tree. No failed batch silently
+blocks the next; all logs survive independently, and return status remains RED.
+The default scheduler does not automatically retry each failed file: use a
+focused diagnosis instead. The previous `pytest-chunk` four-way/serial mode
+is retired for the normal full-suite button.
+
+**GODZIP Foundry → CMD → Zip Run + New Logs** captures newly written
+`logs/pytest_chunked/<run-id>/*.{log,dmp}` and the JSON plan/summary, plus
+loose logs and isolated evidence. The existing 50 MB cap still protects
+archives; oversized minidumps remain on disk with a notice. Dumps can contain
+sensitive data and must be reviewed before sharing.
+
+### 3.3 File-isolated diagnostics (explicit / Foundry Run Isolated Suite)
+
+```powershell
+python tests/run_chunked.py --isolated --jobs 2 --timeout-seconds 300
 python tests/run_chunked.py --isolated --changed --base HEAD~3
 ```
 
-Every `tests/**/test_*.py` runs in its own fresh pytest process, `--jobs` at a time (default: half
-the cores, at most 8; about 4.5 minutes for the whole tree on the reference machine), longest first
-by the previous run's durations. Each failed file then runs again alone: passing alone marks it
-load-sensitive (reported, not a failure), failing again is a real failure. Logs are in
-`logs/pytest_isolated/`, written continuously while each subprocess runs. If a Windows test
-hits its subprocess timeout, the runner first asks DbgHelp to capture its live
-C++/Qt thread contexts in `<test>.dmp`, then terminates it and records the dump
-status and PID in its `.log`. `*.under_load.log` and `*.under_load.dmp` preserve the
-first attempt when the file is retried alone. Minidumps are inspectable with
-WinDbg and **can contain process memory and sensitive information**; inspect them
-before sharing. Failed dump capture is recorded in the text log and does not
-prevent the timeout from terminating the process.
+File isolation is **not** the routine whole-suite default: it starts a fresh
+pytest interpreter and collection for each file and can take hours. Use it to
+investigate Qt cross-test contamination, troublesome files, or a focused
+change; failed files get a separate alone retry. Per-test logs and native
+minidumps go in `logs/pytest_isolated/`, written as each subprocess runs.
+`*.under_load.log` / `.dmp` preserve the original failure before the retry.
+That directory is cleared by a new isolated run, so preserve evidence first.
+`--changed` uses `tools/impacted_tests.py` and the actual changed import graph.
 
-**GODZIP Foundry → CMD → Zip Run + New Logs** includes new/changed per-test
-`.log` and `.dmp` files from that directory alongside the captured command,
-transcript, result and new/changed loose `/logs` files. The existing 50 MB cap
-is maintained. Oversized native dumps remain on disk and are identified in
-`run/native_dumps_not_bundled.txt` instead of blocking shipment of text logs.
-Run-scoped snapshots exclude unrelated historical logs. If a run was started
-in an older Foundry session, preserve `logs/pytest_isolated/*.log` separately
-before starting another isolated run, since the runner clears previous logs
-and dumps at startup.
-`--changed` uses `tools/impacted_tests.py`: every test file that imports a
-changed module through any chain of project imports (at most one lazy, in-function import on the
-way; lazy registries count), changed tests, and tests naming a changed non-Python file. The product's
-import graph is dense, so a core render or Settings change still selects most files; it is a correct
-superset, never a guess. Use this rather than a hand-picked set of files: a pattern-matched sweep
-once missed `test_qt611_shader_admission.py`. `python tools/impacted_tests.py --why <test file>`
-explains a selection.
-
-A conftest guard stops the session at any test that leaves a plain (non-GUI) `QCoreApplication` as the
-process's application: Qt cannot replace it, and the next OpenGL context creation in that process
-crashes the interpreter far from the cause.
-
-Two process-wide product states end with each test (autouse fixtures in `tests/conftest.py`, never per-test
-patches): the runtime pointer guard (`suppress_runtime_pointer_input`, 700 ms after Save/Cancel, a menu action or
-the double-right Edit; it swallowed the next test's right-click) and the active Widget Theme
-(`ui/widget_theme_active.py`, reset to the default; a Settings build left its theme resolving later tests' colours).
-
-### 3.3 Broad reconciliation diagnostic
-
-```powershell
-python tests/run_chunked.py --chunks 4 --timeout-seconds 900 --log
-```
-
-A test-level chunked run (several files share each process) is useful for discovering stale tests,
-optional-dependency gaps and hidden regressions. It is **not** permission to resurrect retired
-production architecture merely to make an old test green.
+For a conventional manual narrow test, call `pytest <test file or nodeid> -q`
+directly. The maintained `destination` profile remains a separate target-isolated
+contract with its own explicit `--profile destination --chunks 4` command.
 
 ### 3.4 Defaults authority
 

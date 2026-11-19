@@ -292,7 +292,8 @@ from godzip_foundry_theme import (  # noqa: E402
 )
 
 APP_TITLE = "SRPSS GODZIP Foundry"
-CHUNKED_SUITE_COMMAND = r".\.venv\Scripts\python.exe tests\run_chunked.py --chunks 4 --log"
+CHUNKED_SUITE_COMMAND = r".\.venv\Scripts\python.exe tests\run_chunked.py --chunks 32 --jobs 2 --log"
+ISOLATED_SUITE_COMMAND = r".\.venv\Scripts\python.exe tests\run_chunked.py --isolated --jobs 2 --timeout-seconds 300"
 SHADER_REGEN_COMMAND = (
     r"& .\.venv\Scripts\python.exe tools\regen_qrc.py --shaders; "
     r"if ($LASTEXITCODE -ne 0) { throw 'Shader regeneration failed' }; "
@@ -3886,7 +3887,7 @@ class CommandTab(QWidget):
         self.script_input.setObjectName("cmdScriptInput")
         self.script_input.setPlaceholderText(
             "PS F:\\repo> python -m pytest tests\\test_custom_child_geometry.py -q; "
-            "if ($LASTEXITCODE -eq 0) { python tests\\run_chunked.py --chunks 4 --log }"
+            "if ($LASTEXITCODE -eq 0) { python tests\\run_chunked.py --chunks 32 --jobs 2 --log }"
         )
         self.script_input.setFixedHeight(92)
         body.addWidget(self.script_input)
@@ -3920,6 +3921,12 @@ class CommandTab(QWidget):
             "Replaces the editor contents with the exact command and uses the existing Stop Run/results flow."
         )
         self.script_suite_button.clicked.connect(self._run_chunked_suite)
+        self.script_isolated_button = QPushButton("Run Isolated Suite")
+        self.script_isolated_button.setToolTip(
+            ISOLATED_SUITE_COMMAND + "\nDiagnostic only: one pytest process per test file. "
+            "Much slower than normal balanced chunks; retries failures alone."
+        )
+        self.script_isolated_button.clicked.connect(self._run_isolated_suite)
         self.script_stop_button = QPushButton("Stop Run")
         self.script_stop_button.setEnabled(False)
         self.script_stop_button.clicked.connect(self._stop_run)
@@ -3929,6 +3936,7 @@ class CommandTab(QWidget):
         actions.addWidget(self.script_run_button)
         actions.addWidget(self.script_paste_button)
         actions.addWidget(self.script_suite_button)
+        actions.addWidget(self.script_isolated_button)
         actions.addWidget(self.script_stop_button)
         actions.addWidget(self.script_result_badge)
         actions.addStretch(1)
@@ -3971,14 +3979,15 @@ class CommandTab(QWidget):
         self.script_zip = QPushButton("Zip Run + New Logs")
         self.script_zip.setToolTip(
             "ZIP this captured run's transcript, changed loose /logs files and "
-            "new/changed logs/pytest_isolated/*.log test results (including failed reruns)."
+            "new/changed isolated logs and per-batch logs from logs/pytest_chunked/. "
+            "Native dumps are included while the 50 MB archive cap permits."
         )
         self.script_zip.setEnabled(False)
         self.script_zip.clicked.connect(self._zip_results)
         results.addWidget(self.script_copy)
         results.addWidget(self.script_show_results)
         results.addWidget(self.script_zip)
-        hint = QLabel("Captured mode: exit code + scrollable output + Copy Results. ZIP includes the command, transcript, new/changed loose /logs files and isolated pytest per-test logs (50 MB cap). Review for secrets before sharing. Interactive commands: choose External terminal.")
+        hint = QLabel("Captured mode: exit code + scrollable output + Copy Results. ZIP includes transcript, changed loose logs, isolated test logs and run-scoped batch logs (50 MB cap). Review native dumps for secrets. Interactive commands: choose External terminal.")
         hint.setWordWrap(True)
         hint.setObjectName("faint")
         results_body.addWidget(hint)
@@ -4022,6 +4031,14 @@ class CommandTab(QWidget):
         # Keep the editor and controls truthful about what is actually running.
         # Captured mode is required for Stop Run and the PASSED/FAILED badge.
         self.script_input.setPlainText(CHUNKED_SUITE_COMMAND)
+        self.script_shell.setCurrentIndex(self.script_shell.findData("powershell"))
+        self.script_external.setChecked(False)
+        self._run_script()
+
+    def _run_isolated_suite(self) -> None:
+        if self._running:
+            return
+        self.script_input.setPlainText(ISOLATED_SUITE_COMMAND)
         self.script_shell.setCurrentIndex(self.script_shell.findData("powershell"))
         self.script_external.setChecked(False)
         self._run_script()
@@ -4141,6 +4158,7 @@ class CommandTab(QWidget):
         self._running = True
         self.script_run_button.setEnabled(False)
         self.script_suite_button.setEnabled(False)
+        self.script_isolated_button.setEnabled(False)
         self.script_add_venv_button.setEnabled(False)
         self.script_regen_shaders_button.setEnabled(False)
         self.script_stop_button.setEnabled(True)
@@ -4208,6 +4226,7 @@ class CommandTab(QWidget):
         self.window.set_status("Run Script: " + self._finished_status)
         self.script_run_button.setEnabled(True)
         self.script_suite_button.setEnabled(True)
+        self.script_isolated_button.setEnabled(True)
         self.script_add_venv_button.setEnabled(True)
         self.script_regen_shaders_button.setEnabled(True)
         self.script_stop_button.setEnabled(False)
@@ -4387,7 +4406,7 @@ class CommandTab(QWidget):
             self.script_status.setText(self._finished_status + f" · ZIP: {path}")
             self.window.logzip_tab.refresh()
         self.window.run_task(
-            "Packaging run transcript and new/changed loose and isolated pytest logs…",
+            "Packaging transcript, isolated tests and run-scoped batch logs…",
             lambda: create_script_results_zip(
                 self.repo_root, run_dir, initial_logs=initial_logs,
                 final_logs=final_logs, output_dir=output_dir,

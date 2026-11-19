@@ -2,17 +2,10 @@
 Shared pytest fixtures for screensaver tests.
 
 Chunked test execution:
-  Use ``python tests/run_chunked.py`` to run isolated subprocess chunks with
-  a per-chunk timeout. Direct ``pytest tests/`` remains a single process.
-
-  Manual chunk selection::
-
-      pytest tests/ --chunk 1 --total-chunks 4   # run only chunk 1 of 4
-
-  Or use the helper script::
-
-      python tests/run_chunked.py          # four bounded chunks
-      python tests/run_chunked.py --chunks 6
+  Use ``python tests/run_chunked.py --chunks 32 --jobs 2 --log`` for
+  duration-balanced batches, with separate processes and a per-batch timeout.
+  Each test file belongs to exactly one batch. Direct ``pytest tests/``
+  remains a single process. Use ``--isolated`` only for diagnostics.
 """
 import os
 import pytest

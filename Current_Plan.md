@@ -19,9 +19,15 @@ not in this working plan.
 **Rules:** one Settings/capability/CUSTOM/render/lifecycle owner and the sole Visualizer logical clock. No new
 floor, capture/DSP, renderer-side simulation, timers/polling or camera-following replacement populations. Preserve
 authored presets (mutable, never test-pinned), BTF, accepted timings, parallel work and strict retirement barriers.
-CLI/sidecars, never environment-variable configuration. Smallest meaningful focused test per change; the isolated
-chunked suite only at milestones; no build/installer unless requested. Visual work is judged on rendered pixels against
+CLI/sidecars, never environment-variable configuration. Smallest meaningful focused test per change; the
+balanced, two-worker chunked suite only at milestones; file-isolated execution is opt-in diagnosis,
+not a routine agent gate; no build/installer unless requested. Visual work is judged on rendered pixels against
 its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed" needs the failure reproduced first.
+
+**Temporary test-failure handoff (19 Nov):** `Docs/testfailures20261119.md` records the
+three oversized-chunk timeouts, four earlier file-isolated timeouts, Settings foreground,
+Glass clipping and absent-policy-test investigation. Preserve native-worker dormancy;
+remove this pointer when the documented failures are resolved/accepted.
 
 **Linux compatibility** runs as a separate operator-requested plan, `Linux_Plan.md`; it does not reorder this plan.
 New platform-facing work (power, display, input) still ships a basic Linux path or an explicit inert one alongside

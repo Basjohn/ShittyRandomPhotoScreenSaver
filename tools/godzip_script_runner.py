@@ -208,6 +208,14 @@ def _script_log_path(logs: Path, relative_name: str) -> Path | None:
             and parts[1].lower().endswith((".log", ".dmp"))
             and not (logs / "pytest_isolated").is_symlink()):
         return logs / parts[0] / parts[1]
+    if (len(parts) == 3 and parts[0] == "pytest_chunked"
+            and re.fullmatch(r"\d{8}_\d{6}_[a-f0-9]{8}", parts[1])
+            and parts[2] not in {"", ".", ".."}
+            and (parts[2].lower().endswith((".log", ".dmp"))
+                 or parts[2] in {"plan.json", "summary.json"})
+            and not (logs / "pytest_chunked").is_symlink()
+            and not (logs / "pytest_chunked" / parts[1]).is_symlink()):
+        return logs / parts[0] / parts[1] / parts[2]
     return None
 
 
@@ -233,6 +241,23 @@ def snapshot_loose_logs(repo_root: Path) -> dict[str, tuple[int, int]]:
                 continue
             stat = item.stat()
             result[f"pytest_isolated/{item.name}"] = (stat.st_size, stat.st_mtime_ns)
+    # A deliberately bounded two-level scan: only this runner's unique run IDs.
+    # Previous runs are included in the *snapshot*, so only new/changed run IDs
+    # are packaged, even if earlier output remains on disk.
+    chunked = logs / "pytest_chunked"
+    if chunked.is_dir() and not chunked.is_symlink():
+        for run in chunked.iterdir():
+            if not re.fullmatch(r"\d{8}_\d{6}_[a-f0-9]{8}", run.name):
+                continue
+            if not run.is_dir() or run.is_symlink():
+                continue
+            for item in run.iterdir():
+                if not item.is_file() or item.is_symlink():
+                    continue
+                if item.suffix.lower() not in {".log", ".dmp"} and item.name not in {"plan.json", "summary.json"}:
+                    continue
+                stat = item.stat()
+                result[f"pytest_chunked/{run.name}/{item.name}"] = (stat.st_size, stat.st_mtime_ns)
     return result
 
 
@@ -246,8 +271,9 @@ def create_script_results_zip(
 ) -> tuple[Path, tuple[str, ...]]:
     """Bounded ZIP: run transcript and newly created/changed run evidence.
 
-    Includes per-test logs and native timeout dumps from /logs/pytest_isolated/,
-    not unrelated historical files. No recursive traversal or source deletion.
+    Includes run-scoped /logs/pytest_chunked/<run-id>/ evidence as well as
+    isolated per-file logs and native dumps. Historical runs are excluded by
+    the initial/final metadata snapshot. No arbitrary recursive traversal.
     """
     repo_root, run_dir, output_dir = (Path(p).resolve() for p in (repo_root, run_dir, output_dir))
     state_root = repo_root / ".godzip_foundry" / "runs"

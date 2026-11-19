@@ -12,8 +12,8 @@ Two execution modes intentionally differ:
 * ``--isolated`` runs every selected test file in its own fresh pytest process,
   ``--jobs`` at a time, and runs each failed file again alone afterwards: a file
   that passes alone failed under the parallel load (reported as load-sensitive),
-  one that fails again is a real failure. This is the whole-suite gate: run it
-  rather than a hand-picked glob of files. ``--changed`` selects the files a
+  one that fails again is a real failure. This is a **diagnostic** gate, not
+  the normal whole-suite button. ``--changed`` selects the files a
   change can affect (``tools/impacted_tests.py``: every test importing a changed
   module through any chain of project imports, changed tests, and tests naming
   a changed non-Python file).
@@ -22,28 +22,36 @@ Two execution modes intentionally differ:
   termination; per-file text output is written continuously rather than held
   in memory. Dumps live beside the individual logs and can be opened in WinDbg.
 
-* Whole-tree or explicit-target runs without ``--isolated`` retain pytest-chunk's
-  test-level chunking. They are broad reconciliation diagnostics during I/J, not
-  the maintained destination authority.
+* Ordinary whole-suite runs are the fast, complete gate: 32 duration-balanced
+  batches (whole test files per batch), two subprocesses concurrently. Each
+  batch gets a fresh process, progress log, timeout and optional Windows native
+  minidump. GPU/Studio/QtQuick-heavy batches never overlap one another.
+  Test targets are never silently skipped; only the explicitly selected profile
+  is smaller than the whole suite. File isolation remains opt-in diagnostics.
 
 Examples::
 
-    python tests/run_chunked.py --isolated                    # the whole suite, file-isolated
+    python tests/run_chunked.py --isolated --jobs 2           # diagnostic whole suite, slow
     python tests/run_chunked.py --isolated --changed          # files the working-tree change can affect
     python tests/run_chunked.py --isolated --changed --base main~2
     python tests/run_chunked.py --profile destination --chunks 4 --log
-    python tests/run_chunked.py --chunks 4 --log
-    python tests/run_chunked.py --chunks 4 tests/test_widgets_tab_current.py
+    python tests/run_chunked.py --chunks 32 --jobs 2 --log
+    python tests/run_chunked.py --chunks 8 tests/test_widgets_tab_current.py
 """
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
+import uuid
+from collections import deque
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import TextIO
 
@@ -489,13 +497,27 @@ def _run_isolated_file(target: Path, *, timeout_seconds: float | None, extra: li
 
 
 _DURATIONS = LOG_DIR / "pytest_isolated_durations.json"
+_BASELINE_DURATIONS = TESTS_DIR / "chunk_duration_baseline.json"
 
 
 def _load_durations() -> dict[str, float]:
-    try:
-        return json.loads(_DURATIONS.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
+    """Use shareable 19-Nov baseline, overridden by newer local measurements.
+
+    Separate worktrees often start without /logs: keeping a small source-owned
+    timing snapshot avoids wildly unbalanced first batches in those worktrees.
+    The running test suite never rewrites the tracked baseline.
+    """
+    combined: dict[str, float] = {}
+    for path in (_BASELINE_DURATIONS, _DURATIONS):
+        try:
+            values = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(values, dict):
+                combined.update({name: float(duration) for name, duration in values.items()
+                                 if isinstance(name, str) and isinstance(duration, (int, float))
+                                 and 0 < duration < 1e6})
+        except (OSError, ValueError, TypeError):
+            pass
+    return combined
 
 
 def _run_isolated(targets: list[Path], *, jobs: int, timeout_seconds: float | None, extra: list[str]) -> int:
@@ -557,22 +579,251 @@ def _run_isolated(targets: list[Path], *, jobs: int, timeout_seconds: float | No
     return 1 if real else 0
 
 
+
+@dataclass(frozen=True)
+class BalancedBatch:
+    number: int
+    files: tuple[Path, ...]
+    estimated_seconds: float
+    gpu_exclusive: bool
+
+
+def _gpu_exclusive(path: Path) -> bool:
+    """Conservative single-lane admission for actual Quick/GL/Studio workloads.
+
+    A lightweight source-only file may also land here. A false positive slows
+    only that batch; a false negative could make two real render tests compete.
+    This is local to the runner: no feature flag enters production code.
+    """
+    name = path.stem.lower()
+    return any(word in name for word in (
+        "studio", "qtquick", "_gpu", "scene3d", "visualizer_card_clip",
+        "visualizer_owner_render", "native_scene", "_render_node", "_shader_compile",
+    ))
+
+
+def _duration_estimate(path: Path, known: dict[str, float]) -> float:
+    candidate = known.get(path.name)
+    if isinstance(candidate, (float, int)) and 0 < float(candidate) < 1e6:
+        return float(candidate)
+    name = path.stem.lower()
+    if "studio" in name:
+        return 45.0
+    if _gpu_exclusive(path):
+        return 12.0
+    return 4.0
+
+
+def _make_balanced_batches(files: list[Path], count: int,
+                           durations: dict[str, float]) -> list[BalancedBatch]:
+    """Longest-processing-time-first across whole files, not mutable test nodes.
+
+    The GPU/Qt-heavy lane and ordinary lane are each balanced independently.
+    Ordinary batches can overlap GPU batches; two GPU batches never overlap.
+    """
+    count = max(1, min(int(count), len(files)))
+    gpu = [f for f in files if _gpu_exclusive(f)]
+    ordinary = [f for f in files if not _gpu_exclusive(f)]
+    gpu_count = 0
+    if gpu and ordinary and count >= 2:
+        total_gpu = sum(_duration_estimate(f, durations) for f in gpu)
+        total = total_gpu + sum(_duration_estimate(f, durations) for f in ordinary)
+        gpu_count = max(1, min(count - 1, round(count * total_gpu / total)))
+        gpu_count = min(gpu_count, len(gpu))
+    elif gpu:
+        gpu_count = count
+    ordinary_count = count - gpu_count
+    if ordinary and ordinary_count == 0:
+        ordinary_count, gpu_count = 1, count - 1
+    if gpu and gpu_count == 0:
+        gpu_count, ordinary_count = 1, count - 1
+
+    bins: list[tuple[bool, list[Path], float]] = []
+    for exclusive, candidates, slots in ((True, gpu, gpu_count), (False, ordinary, ordinary_count)):
+        if not candidates or slots <= 0:
+            continue
+        groups = [[] for _ in range(slots)]
+        weights = [0.0] * slots
+        for candidate in sorted(candidates, key=lambda f: (-_duration_estimate(f, durations), str(f))):
+            index = min(range(slots), key=lambda i: (weights[i], len(groups[i]), i))
+            groups[index].append(candidate)
+            weights[index] += _duration_estimate(candidate, durations)
+        bins.extend((exclusive, group, weight) for group, weight in zip(groups, weights) if group)
+    # Schedule longest likely batches first, but allow the runner to interleave lanes.
+    bins.sort(key=lambda item: (-item[2], not item[0]))
+    return [BalancedBatch(i, tuple(group), round(weight, 2), exclusive)
+            for i, (exclusive, group, weight) in enumerate(bins, 1)]
+
+
+def _kill_test_tree(process: subprocess.Popen) -> None:
+    """Kill *only* the timed-out child tree, not other agents or worktrees."""
+    if process.poll() is not None:
+        return
+    if sys.platform == "win32":
+        try:
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(process.pid)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except (OSError, ProcessLookupError):
+            pass
+    if process.poll() is None:
+        process.kill()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+
+
+def _run_balanced_batch(batch: BalancedBatch, *, run_dir: Path,
+                        timeout_seconds: float | None, extra: list[str],
+                        verbose: bool) -> tuple[BalancedBatch, int, float, bool]:
+    logfile = run_dir / f"batch_{batch.number:02d}.log"
+    dumpfile = run_dir / f"batch_{batch.number:02d}.dmp"
+    cmd = [sys.executable, "-u", "-m", "pytest", *(str(p) for p in batch.files),
+           "--tb=short", "-q", "-vv", "-p", "no:cacheprovider",
+           "-o", "faulthandler_timeout=60", *extra]
+    # -vv gives the precise last test name on a stall. Logs are run-local and
+    # continuously flushed, so no global 'pytest_chunk_N.log' overwrites.
+    t0 = time.monotonic()
+    timed_out = False
+    with logfile.open("wb") as log:
+        log.write((f"BATCH {batch.number}: {len(batch.files)} files; "
+                   f"estimated {batch.estimated_seconds:.1f}s; GPU-exclusive={batch.gpu_exclusive}\n"
+                   f"FILES: {', '.join(p.name for p in batch.files)}\n\n").encode("utf-8"))
+        log.flush()
+        process = subprocess.Popen(cmd, cwd=str(TESTS_DIR.parent), stdout=log,
+                                   stderr=subprocess.STDOUT,
+                                   **({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+                                      if sys.platform == "win32" else {"start_new_session": True}))
+        try:
+            rc = process.wait(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            rc = 124
+            try:
+                diagnosis = _write_windows_timeout_dump(process, dumpfile)
+            except Exception as exc:
+                diagnosis = f"Native minidump failed: {type(exc).__name__}: {exc}"
+            log.write((f"\nTIMEOUT after {timeout_seconds}s; PID={process.pid}\n{diagnosis}\n").encode("utf-8", "replace"))
+            log.flush()
+            _kill_test_tree(process)
+    return batch, rc, time.monotonic() - t0, timed_out
+
+
+def _run_balanced(targets: list[str], *, chunks: int, jobs: int, extra: list[str],
+                  timeout_seconds: float | None, verbose: bool) -> int:
+    """Full-suite/file-target batches; resource-aware scheduling, no hidden skips."""
+    root = TESTS_DIR.parent
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    from tools.impacted_tests import all_test_files, runs_on_this_platform
+    if len(targets) == 1 and Path(targets[0]).resolve() == TESTS_DIR.resolve():
+        files = all_test_files()
+    else:
+        files = []
+        for raw in targets:
+            path = Path(raw.split("::", 1)[0]).resolve()
+            if "::" in raw:
+                raise ValueError("Balanced batches accept whole-file or folder targets; use --isolated for pytest nodeids")
+            if path.is_dir():
+                files.extend(f for f in path.rglob("test_*.py") if runs_on_this_platform(f))
+            elif runs_on_this_platform(path):
+                files.append(path)
+    files = sorted(set(files))
+    if not files:
+        print("No test files selected", flush=True)
+        return 0
+    batches = _make_balanced_batches(files, chunks, _load_durations())
+    run_dir = LOG_DIR / "pytest_chunked" / (datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:8])
+    run_dir.mkdir(parents=True, exist_ok=False)
+    plan = {"mode": "balanced", "jobs": jobs, "requested_batches": chunks,
+            "selected_files": len(files), "batches": [
+        {"number": b.number, "gpu_exclusive": b.gpu_exclusive,
+         "estimated_seconds": b.estimated_seconds,
+         "files": [str(f.relative_to(root)).replace("\\", "/") for f in b.files]}
+        for b in batches]}
+    (run_dir / "plan.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
+    print(f"\n=== Balanced full suite: {len(files)} files, {len(batches)} batches, "
+          f"{jobs} concurrent subprocesses (one GPU-heavy batch max) ===", flush=True)
+    print(f"  Evidence: {run_dir}", flush=True)
+    pending_gpu = deque(b for b in batches if b.gpu_exclusive)
+    pending_other = deque(b for b in batches if not b.gpu_exclusive)
+    inflight = {}
+    running_gpu = False
+    results = []
+    t0 = time.monotonic()
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        while pending_gpu or pending_other or inflight:
+            while len(inflight) < jobs:
+                batch = None
+                if pending_gpu and not running_gpu:
+                    batch = pending_gpu.popleft()
+                elif pending_other:
+                    batch = pending_other.popleft()
+                if batch is None:
+                    break
+                if batch.gpu_exclusive:
+                    running_gpu = True
+                print(f"  START batch {batch.number:02d}/{len(batches)} "
+                      f"({len(batch.files)} files; estimate {batch.estimated_seconds:.0f}s; "
+                      f"{'GPU-exclusive' if batch.gpu_exclusive else 'ordinary'})", flush=True)
+                future = pool.submit(_run_balanced_batch, batch, run_dir=run_dir,
+                                     timeout_seconds=timeout_seconds, extra=extra, verbose=verbose)
+                inflight[future] = batch
+            if not inflight:
+                break
+            completed, _ = wait(inflight, return_when=FIRST_COMPLETED)
+            for future in completed:
+                batch = inflight.pop(future)
+                if batch.gpu_exclusive:
+                    running_gpu = False
+                try:
+                    _, rc, elapsed, timed_out = future.result()
+                except Exception as exc:
+                    rc, elapsed, timed_out = 1, 0.0, False
+                    with (run_dir / f"batch_{batch.number:02d}.log").open("ab") as log:
+                        log.write(f"\nRUNNER ERROR: {type(exc).__name__}: {exc}\n".encode())
+                results.append((batch, rc, round(elapsed, 2), timed_out))
+                status = 'PASS' if rc == 0 else ('TIMEOUT' if timed_out else f'FAIL exit {rc}')
+                print(f"  END   batch {batch.number:02d}/{len(batches)}: {status} "
+                      f"[{elapsed:.1f}s] (batch_{batch.number:02d}.log)", flush=True)
+    summary = {"wall_seconds": round(time.monotonic() - t0, 2),
+               "results": [{"batch": b.number, "exit_code": rc, "elapsed": elapsed,
+                            "timeout": timed_out, "log": f"batch_{b.number:02d}.log"}
+                           for b, rc, elapsed, timed_out in sorted(results, key=lambda item: item[0].number)]}
+    (run_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    failed = [item for item in results if item[1] != 0]
+    print(f"\nBALANCED CHUNK SUMMARY: {len(results)} batches; "
+          f"{len(results) - len(failed)} passed, {len(failed)} failed/timeouts; "
+          f"wall {summary['wall_seconds']:.1f}s", flush=True)
+    for batch, rc, elapsed, timed_out in sorted(failed, key=lambda item: item[0].number):
+        print(f"    batch {batch.number:02d}: {'TIMEOUT' if timed_out else f'exit {rc}'} "
+              f"[{elapsed:.1f}s] ({run_dir / f'batch_{batch.number:02d}.log'})", flush=True)
+    print(f"  Complete evidence: {run_dir}", flush=True)
+    return 1 if failed else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run pytest suite in bounded chunks")
     parser.add_argument(
         "--chunks",
         type=int,
-        default=4,
+        default=None,
         help=(
-            "Number of reporting groups for maintained profiles, or pytest-chunk "
-            "partitions for ordinary runs (default: 4)"
+            "Number of file-balanced batches (normal default: 32), or "
+            "reporting groups for --profile destination (default: 4)"
         ),
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Pass -v to pytest")
     parser.add_argument(
         "--log",
         action="store_true",
-        help="Write collection/chunk or profile-group output under logs/",
+        help="Write collection/profile logs (balanced batches always keep run-scoped evidence)",
     )
     parser.add_argument(
         "--timeout-seconds",
@@ -604,8 +855,8 @@ def main() -> int:
     parser.add_argument(
         "--jobs",
         type=int,
-        default=max(1, min(8, (os.cpu_count() or 2) // 2)),
-        help="Parallel file processes for --isolated (default: half the cores, at most 8)",
+        default=2,
+        help="Maximum concurrent test subprocesses (default: 2); GPU-heavy batches never overlap",
     )
     parser.add_argument(
         "--changed",
@@ -669,7 +920,7 @@ def main() -> int:
             print(f"  {target}", file=sys.stderr)
         return 2
 
-    total = max(1, args.chunks)
+    total = max(1, args.chunks if args.chunks is not None else (4 if args.profile else 32))
     timeout_seconds = args.timeout_seconds if args.timeout_seconds > 0 else None
     LOG_DIR.mkdir(exist_ok=True)
 
@@ -720,75 +971,12 @@ def main() -> int:
             log=args.log,
         )
 
-    # Ordinary whole-tree / explicit-target mode retains pytest-chunk's
-    # test-level partitioning. This is intentionally separate from the
-    # target-isolated maintained-profile path above.
-    results: list[tuple[int, float, int]] = []
-    any_fail = False
+    # Ordinary whole-tree / explicit-target mode uses historical file timings
+    # and bounded parallelism rather than four enormous sequential pytest chunks.
+    return _run_balanced(targets, chunks=total, jobs=max(1, args.jobs),
+                         extra=args.extra, timeout_seconds=timeout_seconds,
+                         verbose=args.verbose)
 
-    for chunk in range(1, total + 1):
-        cmd = [
-            sys.executable,
-            "-m",
-            "pytest",
-            *targets,
-            f"--chunk={chunk}",
-            f"--total-chunks={total}",
-            "--tb=short",
-            "-q",
-        ]
-        if args.verbose:
-            cmd.append("-v")
-        cmd.extend(args.extra)
-
-        print(f"\n=== Chunk {chunk}/{total} ===", flush=True)
-        print(f"  Command: {' '.join(cmd)}", flush=True)
-        t0 = time.time()
-        log_path = LOG_DIR / f"pytest_chunk_{chunk}.log" if args.log else None
-        returncode, timed_out = _run_subprocess(
-            cmd,
-            cwd=str(TESTS_DIR.parent),
-            timeout_seconds=timeout_seconds,
-            log_path=log_path,
-        )
-        elapsed = time.time() - t0
-        results.append((chunk, elapsed, returncode))
-
-        if returncode != 0:
-            any_fail = True
-            if timed_out:
-                print(
-                    f"  Chunk {chunk} TIMED OUT after {elapsed:.1f}s (exit 124)",
-                    flush=True,
-                )
-                print(
-                    "  Re-run the focused target with --verbose to isolate the stall.",
-                    flush=True,
-                )
-            else:
-                print(
-                    f"  Chunk {chunk} FAILED (exit {returncode}) [{elapsed:.1f}s]",
-                    flush=True,
-                )
-            if log_path is not None:
-                print(f"    Log: {log_path}", flush=True)
-        else:
-            print(f"  Chunk {chunk} passed [{elapsed:.1f}s]", flush=True)
-
-    print("\n" + "=" * 50)
-    print("CHUNKED TEST SUMMARY")
-    print("=" * 50)
-    total_time = sum(elapsed for _, elapsed, _ in results)
-    for chunk, elapsed, rc in results:
-        status = (
-            "PASS"
-            if rc == 0
-            else ("TIMEOUT (exit 124)" if rc == 124 else f"FAIL (exit {rc})")
-        )
-        print(f"  Chunk {chunk}: {status}  [{elapsed:.1f}s]")
-    print(f"  Total time: {total_time:.1f}s")
-    print(f"  Result: {'ALL PASSED' if not any_fail else 'SOME CHUNKS FAILED'}")
-    return 1 if any_fail else 0
 
 
 if __name__ == "__main__":
