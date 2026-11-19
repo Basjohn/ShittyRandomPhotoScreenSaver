@@ -38,18 +38,14 @@ def test_header_and_transport_accept_all_explicit_materials_and_legacy_values() 
     assert bar({"global": {"media_controls_surface_mode": "unrecognised"}}) == "inherit"
 
 
-def test_header_legibility_is_on_for_material_only_and_independent_of_outer_card() -> None:
+def test_header_and_transport_share_material_path_without_rewriting_outer_card() -> None:
     header = text("rendering/quick/qml/BrandedHeader.qml")
     child = text("rendering/quick/qml/ChildMaterialSurface.qml")
-    transport = text("rendering/quick/qml/MediaTransportBar.qml")
     material = header.split("ChildMaterialSurface {", 1)[1].split("border.color:", 1)[0]
-    assert "legibilityPanel: true" in material
     assert 'forceFlat: header.materialMode === "normal"' in material
     assert "card: header.materialCard" in material
     assert "materialOverride: header.materialMode" in material
     assert "legibilityPanel: child.legibilityPanel" in child
-    # The volume-like transport bar remains intentionally unguarded.
-    assert "legibilityPanel: false" in transport.split("ChildMaterialSurface {", 1)[1].split("Row {", 1)[0]
     # No card-level guard was reconfigured as part of this change.
     assert "cardSurfaceMaterial" in text("rendering/quick/widgets/host.py")
 

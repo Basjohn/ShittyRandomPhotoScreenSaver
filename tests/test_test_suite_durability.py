@@ -190,3 +190,108 @@ def test_fixture_field():
     assert str(card["monitor"]) in {"1", "2"}
 """)
     assert not rules
+
+
+def test_audit_rejects_nested_direct_canonical_accessor_default_pin(tmp_path: Path) -> None:
+    rules = _rules(tmp_path, '''
+from core.settings.defaults import get_default_settings
+
+def test_bad():
+    assert get_default_settings()["widgets"]["media"]["bg_opacity"] == 0.3
+''')
+    assert "canonical-snapshot-literal" in rules
+
+
+def test_audit_rejects_parsed_shipped_defaults_pin(tmp_path: Path) -> None:
+    rules = _rules(tmp_path, '''
+import ast
+
+def test_bad():
+    tree = ast.parse(read("core/settings/default_settings.py"))
+    default = next(n.value for n in tree.body if n.targets[0].id == "DEFAULT_SETTINGS")
+    defaults = ast.literal_eval(default)
+    assert defaults["widgets"]["media"]["width"] == 120
+''')
+    assert "canonical-snapshot-literal" in rules
+
+
+def test_audit_rejects_pins_through_parsed_default_helper(tmp_path: Path) -> None:
+    rules = _rules(tmp_path, '''
+import ast
+
+def default_widgets():
+    tree = ast.parse(read("core/settings/default_settings.py"))
+    default = next(n.value for n in tree.body if n.targets[0].id == "DEFAULT_SETTINGS")
+    return ast.literal_eval(default)["widgets"]
+
+def test_bad():
+    assert default_widgets()["achievement_pulse"]["progress_circle_material"] is False
+''')
+    assert "canonical-snapshot-literal" in rules
+
+
+def test_audit_allows_fixture_authored_exact_presentation_setting(tmp_path: Path) -> None:
+    rules = _rules(tmp_path, '''
+def test_fixture():
+    sample = {"progress_circle_material": False}
+    assert save_and_reload(sample)["progress_circle_material"] is False
+''')
+    assert "canonical-snapshot-literal" not in rules
+
+
+def test_audit_rejects_copied_current_default_from_source_text(tmp_path: Path) -> None:
+    rules = _rules(tmp_path, '''
+def test_bad():
+    defaults = read("core/settings/default_settings.py")
+    assert "'bg_opacity': 0.3" in defaults
+''')
+    assert "authored-default-source-string" in rules
+
+
+def test_audit_rejects_copied_current_default_in_canonical_json(tmp_path: Path) -> None:
+    rules = _rules(tmp_path, '''
+import json
+
+def test_bad():
+    defaults = json.dumps(build_defaults_snapshot())
+    assert '"show_online_count": true' in defaults.lower()
+''')
+    assert "authored-default-source-string" in rules
+
+
+def test_audit_allows_default_schema_presence_check(tmp_path: Path) -> None:
+    rules = _rules(tmp_path, '''
+def test_schema():
+    defaults = read("core/settings/default_settings.py")
+    assert "'show_online_count':" in defaults
+''')
+    assert "authored-default-source-string" not in rules
+
+
+def test_audit_blocks_current_qml_material_recipe_oracle(tmp_path: Path) -> None:
+    rules = _rules(tmp_path, '''
+def test_bad():
+    qml = source("rendering/quick/qml/AchievementPulsePresentation.qml")
+    assert "legibilityPanel: true" in qml
+    assert "tintAlphaScale: 0.65" in qml
+''')
+    assert "mutable-presentation-recipe-pin" in rules
+
+
+def test_audit_blocks_live_uncontrolled_recipe_property_value(tmp_path: Path) -> None:
+    rules = _rules(tmp_path, '''
+def test_bad(material):
+    assert material.property("legibilityPanel") is False
+''')
+    assert "mutable-presentation-recipe-pin" in rules
+
+
+def test_audit_allows_explicit_test_owned_recipe_property(tmp_path: Path) -> None:
+    rules = _rules(tmp_path, '''
+def test_good(material):
+    material.setProperty("legibilityPanel", False)
+    assert material.property("legibilityPanel") is False
+    authored_fixture = "tintAlphaScale: 0.65"
+    assert "tintAlphaScale: 0.65" in authored_fixture
+''')
+    assert "mutable-presentation-recipe-pin" not in rules

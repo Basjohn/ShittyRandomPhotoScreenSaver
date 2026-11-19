@@ -16,7 +16,7 @@ def source(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_volume_width_default_is_existing_two_point_five_px() -> None:
+def test_volume_width_default_is_a_valid_editable_outline_width() -> None:
     tree = ast.parse(source("core/settings/default_settings.py"))
     assignment = next(
         node for node in tree.body
@@ -24,7 +24,9 @@ def test_volume_width_default_is_existing_two_point_five_px() -> None:
         and any(isinstance(target, ast.Name) and target.id == "DEFAULT_SETTINGS" for target in node.targets)
     )
     defaults = ast.literal_eval(assignment.value)
-    assert defaults["widgets"]["media"]["spotify_volume_border_width_px"] == 2.5
+    authored_width = defaults["widgets"]["media"]["spotify_volume_border_width_px"]
+    assert isinstance(authored_width, (int, float)) and not isinstance(authored_width, bool)
+    assert 0.0 <= float(authored_width) <= 8.0
 
 
 def test_typed_and_retained_configurations_round_trip_volume_outline_width() -> None:
@@ -62,11 +64,3 @@ def test_qml_all_four_outline_strokes_obey_one_width_with_zero_disabled() -> Non
     # Material outline softening is separate from width; no unguarded overlap.
     assert 'cardBorderMaterialActive ? 0.8 : 1.0' in qml
     assert 'active: mediaRoot.cardBorderMaterialActive' in track
-
-
-def test_m4_theme_semantic_migration_is_planned_not_premature() -> None:
-    plan = source("Current_Plan.md")
-    m4 = plan.split('**M4 Unified Appearance Theme', 1)[1].split('### 1B.9', 1)[0]
-    assert 'media.volume.outline.width' in m4
-    assert 'default value must inherit the theme' in m4
-    assert 'Preserve non-default user-authored widths' in m4

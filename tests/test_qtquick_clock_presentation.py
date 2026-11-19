@@ -929,8 +929,11 @@ def test_clock_qml_contract_has_retained_two_pass_analogue_shadows_and_no_effect
     assert "MultiEffect {" not in separator
 
     clock_model = (ROOT / "rendering" / "quick" / "widgets" / "clock.py").read_text(encoding="utf-8")
-    assert "color.alpha() * 0.80" in clock_model
-    assert "color.alpha() * 0.45" not in clock_model
+    # The separator colour must retain the resolved theme role; the current
+    # decorative alpha multiplier is allowed to change without test edits.
+    assert 'resolve_rgba_role(' in clock_model
+    assert '"clock.separator",' in clock_model
+    assert 'local_roles={"local.separator": fallback}' in clock_model
 
 
 

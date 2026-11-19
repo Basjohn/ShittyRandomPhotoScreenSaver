@@ -81,6 +81,84 @@ def test_captured_log_bundle_is_scoped_to_run_completion(tmp_path):
         assert archive.testzip() is None
 
 
+
+def test_results_zip_includes_current_isolated_pytest_logs_but_not_stale_or_other_subtrees(tmp_path):
+    """Selection accuracy: the full-suite per-file tracebacks must survive a run ZIP."""
+    repo = tmp_path / 'repo'
+    run = repo / '.godzip_foundry' / 'runs' / 'isolated_case'
+    run.mkdir(parents=True)
+    logs = repo / 'logs'
+    isolated = logs / 'pytest_isolated'
+    isolated.mkdir(parents=True)
+    other = logs / 'unrelated'
+    other.mkdir()
+    (isolated / 'stale.log').write_text('old failing test from an earlier run')
+    (isolated / 'updated.log').write_text('old contents')
+    (other / 'unrelated.log').write_text('must stay out')
+    (logs / 'hang_stacks.log').write_text('old stacks')
+    before = snapshot_loose_logs(repo)
+    (isolated / 'updated.log').write_text('new traceback with a different length')
+    (isolated / 'failed.log').write_text('new test failure traceback')
+    (isolated / 'failed.under_load.log').write_text('parallel load failure')
+    (isolated / 'failed.under_load.dmp').write_bytes(b'native minidump from timeout')
+    (isolated / 'nested').mkdir()
+    (isolated / 'nested' / 'sneaky.log').write_text('not a direct per-file log')
+    (logs / 'hang_stacks.log').write_text('new Python thread stack')
+    (run / 'command.txt').write_text('python tests/run_chunked.py --isolated')
+    (run / 'output.txt').write_text('failed')
+    (run / 'result.json').write_text('{"exit_code": 1}')
+    after = snapshot_loose_logs(repo)
+    assert 'pytest_isolated/failed.log' in after
+    assert 'pytest_isolated/nested/sneaky.log' not in after
+    archive_path, members = create_script_results_zip(
+        repo, run, initial_logs=before, final_logs=after, output_dir=tmp_path / 'out',
+    )
+    assert set(members) == {
+        'run/command.txt', 'run/output.txt', 'run/result.json',
+        'logs/pytest_isolated/updated.log',
+        'logs/pytest_isolated/failed.log',
+        'logs/pytest_isolated/failed.under_load.log',
+        'logs/pytest_isolated/failed.under_load.dmp',
+        'logs/hang_stacks.log',
+    }
+    with zipfile.ZipFile(archive_path) as bundle:
+        assert bundle.testzip() is None
+        assert bundle.read('logs/pytest_isolated/failed.log') == b'new test failure traceback'
+        assert bundle.read('logs/pytest_isolated/failed.under_load.log') == b'parallel load failure'
+
+
+def test_results_zip_refuses_changed_evidence_after_run_completion(tmp_path):
+    """Do not silently omit or misattribute tracebacks overwritten by a later run."""
+    repo = tmp_path / 'repo'
+    run = repo / '.godzip_foundry' / 'runs' / 'case'
+    run.mkdir(parents=True)
+    isolated = repo / 'logs' / 'pytest_isolated'
+    isolated.mkdir(parents=True)
+    (run / 'output.txt').write_text('test finished')
+    before = snapshot_loose_logs(repo)
+    target = isolated / 'test_fault.log'
+    target.write_text('failure from this run')
+    after = snapshot_loose_logs(repo)
+    target.write_text('overwritten by the next run, not the evidence we promised')
+    with pytest.raises(ScriptRunError, match='changed since completion'):
+        create_script_results_zip(
+            repo, run, initial_logs=before, final_logs=after, output_dir=tmp_path / 'out',
+        )
+
+
+def test_results_zip_rejects_escaped_snapshot_keys(tmp_path):
+    repo = tmp_path / 'repo'
+    run = repo / '.godzip_foundry' / 'runs' / 'case'
+    run.mkdir(parents=True)
+    (run / 'output.txt').write_text('done')
+    with pytest.raises(ScriptRunError, match='Invalid run-log snapshot path'):
+        create_script_results_zip(
+            repo, run, initial_logs={},
+            final_logs={'pytest_isolated/../../secrets.log': (12, 34)},
+            output_dir=tmp_path / 'out',
+        )
+
+
 def test_logzip_rejects_outside_run_directory(tmp_path):
     repo = tmp_path / 'repo'
     repo.mkdir()
@@ -212,6 +290,8 @@ def test_godzip_explicit_navigation_preserves_all_three_buttons(command_tab, qt_
     """Right navigation reserves its own width and left tabs can scroll independently."""
     tab, module = command_tab
     window = tab.window
+    from tests._invisible_windows import keep_off_screen
+    keep_off_screen(window)
     window.show()
     qt_app.processEvents()
     nav = window.right_nav

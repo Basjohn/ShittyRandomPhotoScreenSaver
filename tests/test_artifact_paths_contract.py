@@ -56,6 +56,7 @@ NOT_EVIDENCE = {
     "tools/frozen_build_audit.py": "frozen-build audit report beside the build it audits",
     "tools/defaults_foundry_core.py": "atomic in-place writes of authored defaults",
     "tools/artifact_migration.py": "one-off move of the legacy evidence roots into the layout (reads them by name)",
+    "tools/visualizer_replay/_bubble_native_common.py": "read-only historical ORIGINS provenance labels; all outputs use artifact_paths.evidence_dir",
 }
 
 # PNG writers whose PNGs are fixtures or temporary inputs, not evidence (rule 3 only).

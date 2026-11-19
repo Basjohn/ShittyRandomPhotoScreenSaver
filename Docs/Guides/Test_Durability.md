@@ -20,6 +20,45 @@ prose-as-runtime-oracle tests. Static analysis is *not complete*: agents must re
 assertions for illicit expected-value provenance before writing them. Never use an
 `EXACT-VALUE INVARIANT` comment to exempt editable artistic contents.
 
+## Presentation recipes are not contracts (material/opacity trap)
+
+Do not freeze a current visual treatment merely because it happens to be written
+as a literal in QML, Python, a theme resolver, or a property observed at runtime.
+A `legibilityPanel: true/false`, `tintAlphaScale: 0.4`, opacity adjustment,
+colour choice, font multiplier, chosen surface material or initial enabled state
+is not automatically a regression requirement. This includes **code-authored
+presentation recipes** that are intentionally retuned without changing the
+feature's meaning, as well as operator-editable Defaults Foundry settings.
+
+- For a mutable setting, author **both** test inputs explicitly: ON/OFF,
+  alternate valid values, Normal/material fallback; assert actual activation,
+  persistence, projection and visibility/contrast outcomes, not the current
+  selected default. Where the canonical default is relevant, read it dynamically.
+- For child-material rendering, assert shared backdrop ownership, correct
+  semantic colour role, actual material admission and recovery of the original
+  unmaterialed surface. Test opacity/contrast as a *relation or safety bound*
+  against test-owned inputs when that is the requirement.
+- Source-string assertions such as `assert "legibilityPanel: false" in qml`
+  are particularly fragile. A valid design adjustment must not demand editing
+  a test. Source assertions are allowed for genuine ownership/forbidden-path
+  boundaries, not the present visual recipe.
+- Do not replace a fixed recipe assertion with the *new* fixed value or
+  merely `assert "legibilityPanel:" in qml`. Preserve the relevant behavioral
+  guard in a runtime test or an independent fixture; remove low-signal source
+  pins only when equivalent functional coverage exists.
+- Exact optical values are acceptable **only** for a test-owned input,
+  measurable legibility/clipping/safety boundary or deliberately documented
+  compatibility/visual acceptance requirement. Prove the distinction using an
+  independent oracle or negative control rather than yesterday's source value.
+
+`tools/test_oracle_review.py` surfaces potential `presentation-recipe-oracle`
+assertions for human review. This is advisory because material choices can be
+true design requirements in individual contexts. Do not disable coverage to
+empty the queue. The blocking `mutable-presentation-recipe-pin` guard also rejects hard-coded
+source recipe comparisons and live property values without a test-owned setup.
+The broader reviewer remains advisory because some appearance-related literals
+are fixed geometry, independent safety fixtures or compatibility requirements.
+
 ## Archived visualizer oracle trap (R-112)
 
 Do not regenerate synthetic/golden expected data from the *current* curated Organs/Sphere/other editable preset and call the result a regression oracle. Own the fixture explicitly and test behavior against that independent source; shipped preset files receive schema, ownership, parse and preservation checks only. An intentional operator edit is not an error.

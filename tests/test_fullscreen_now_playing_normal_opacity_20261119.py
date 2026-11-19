@@ -19,8 +19,8 @@ def source(path: str) -> str:
 
 def test_neutral_defaults_use_semantic_normal_card_alpha_not_fixed_alpha() -> None:
     defaults = canonical_fullscreen_overlays()["now_playing"]
-    assert defaults["bar_fill_opacity_adjust"] == 0.0
-    assert defaults["card_fill_opacity_adjust"] == 0.0
+    for key in ("bar_fill_opacity_adjust", "card_fill_opacity_adjust"):
+        assert -1.0 <= float(defaults[key]) <= 1.0
     stage = source("rendering/quick/qml/ExpandedVisualizerOverlays.qml")
     slot = source("rendering/quick/qml/ExpandedOverlaySlot.qml")
     assert 'cardSurfaceMode: "normal"' in stage
@@ -39,8 +39,9 @@ def test_opacity_roundtrip_clamps_and_preserves_legacy_fields() -> None:
     old = {'now_playing': {'card': True, 'media_controls_style': 'floating',
                            'child_geometry': {}, 'offset_x': 0.12}}
     baseline = normalize_fullscreen_overlays(old)
-    assert baseline['now_playing']['bar_fill_opacity_adjust'] == 0.0
-    assert baseline['now_playing']['card_fill_opacity_adjust'] == 0.0
+    canonical = canonical_fullscreen_overlays()["now_playing"]
+    for key in ("bar_fill_opacity_adjust", "card_fill_opacity_adjust"):
+        assert baseline["now_playing"][key] == canonical[key]
     request = {'now_playing': {**baseline['now_playing'], 'bar_fill_opacity_adjust': -0.35,
                                 'card_fill_opacity_adjust': 0.65}}
     parsed = normalize_fullscreen_overlays(request)
@@ -51,7 +52,7 @@ def test_opacity_roundtrip_clamps_and_preserves_legacy_fields() -> None:
     assert parsed['now_playing']['offset_x'] == 0.12
     assert normalize_fullscreen_overlays(parsed) == parsed
     for bad in (-float('inf'), float('nan'), float('inf'), 'bad', None, True):
-        assert normalize_fullscreen_overlays({'now_playing': {'bar_fill_opacity_adjust':bad}})['now_playing']['bar_fill_opacity_adjust'] == 0.0
+        assert normalize_fullscreen_overlays({'now_playing': {'bar_fill_opacity_adjust':bad}})['now_playing']['bar_fill_opacity_adjust'] == canonical_fullscreen_overlays()["now_playing"]["bar_fill_opacity_adjust"]
     assert normalize_fullscreen_overlays({'now_playing': {'card_fill_opacity_adjust':3}})['now_playing']['card_fill_opacity_adjust'] == 1.0
     assert normalize_fullscreen_overlays({'now_playing': {'card_fill_opacity_adjust':-3}})['now_playing']['card_fill_opacity_adjust'] == -1.0
 
@@ -71,14 +72,3 @@ def test_controls_share_one_fullscreen_settings_owner_and_leave_ordinary_media_a
     ordinary = source("rendering/quick/qml/MediaPresentation.qml")
     assert 'MediaTransportBar {' in ordinary
     assert 'materialBackdrop' in ordinary
-
-
-def test_plans_and_architecture_do_not_require_preset_palette_migration() -> None:
-    plan = source('Current_Plan.md')
-    arch = source('Docs/Architecture/Card_Surface_Materials.md')
-    audit = source('Docs/Temporary_Material_Surface_Audit_2026-11-19.md')
-    assert 'surface_hint_color' not in plan
-    assert 'Studio Save and Save As paths' not in plan
-    assert 'Fullscreen Now Playing Normal fill and opacity' in audit
-    assert 'Fullscreen Now Playing (19 Nov 2026)' in arch
-    assert 'Extruded Bubble idle wake continuity' in plan

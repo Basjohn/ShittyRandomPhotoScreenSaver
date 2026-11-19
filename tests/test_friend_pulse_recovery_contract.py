@@ -92,14 +92,14 @@ def test_friend_pulse_wide_grid_and_online_count_contract() -> None:
     model = _text("rendering/quick/widgets/friend_pulse.py")
     qml = _text("rendering/quick/qml/FriendPulsePresentation.qml")
     settings = _text("ui/tabs/widgets_tab_steam.py")
-    defaults = json.dumps(build_defaults_snapshot(), indent=2, sort_keys=True)
+    defaults = build_defaults_snapshot()
 
     assert 'min(normalized_capacity, 6, fitted)' not in model
     assert 'column_limit = 24 if custom_horizontal_extent else normalized_capacity' in model
     assert 'return min(column_limit, fitted)' in model
     assert 'custom_horizontal_extent=custom_extent' in model
     assert 'resolved_width = max(420, min(4000, resolved_width))' in model
-    assert '"show_online_count": true' in defaults.lower()
+    assert type(defaults["widgets"]["friend_pulse"]["show_online_count"]) is bool
     assert 'Show Friends Online Count' in settings
     assert 'payload["show_online_count"]' in settings
     assert "onlineFriendsText" in qml

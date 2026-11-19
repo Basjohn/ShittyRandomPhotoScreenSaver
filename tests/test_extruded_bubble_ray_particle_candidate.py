@@ -56,7 +56,10 @@ def test_particle_world_path_wired_in_shader_and_renderer():
     assert 'stream_source = _floats(world_point(stream_path[:3]))' in render
     assert 'stream_end = _floats(world_point(stream_path[3:]))' in render
     assert '_SPECK_CARRY = 5.0 / WORLD_UNIT, 8.0 / WORLD_UNIT, 0.30' in render
-    assert "'extruded_bubble_particle_glow_reactivity': 0.0" in defaults
+    # This is an editable artistic reactivity value, not a frozen zero.
+    from core.settings.default_contract import require_canonical_default
+    authored = require_canonical_default("widgets.spotify_visualizer.extruded_bubble_particle_glow_reactivity")
+    assert isinstance(authored, (int, float)) and not isinstance(authored, bool)
     assert 'Slider("extruded_bubble_particle_glow_reactivity"' in spec
 
 

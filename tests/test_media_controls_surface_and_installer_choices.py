@@ -31,13 +31,15 @@ def test_installers_replace_themes_and_presets_only_when_respective_default_chec
 
 
 def test_single_media_owned_material_override_is_persisted_not_fullscreen_specific() -> None:
-    default = source("core/settings/default_settings.py")
+    from core.settings.default_contract import require_canonical_default
     ui = source("ui/tabs/widgets_tab_defaults.py")
     media_page = source("ui/tabs/widgets_tab_media.py")
     model = source("rendering/quick/widgets/media.py")
     fullscreen_default = source("core/settings/fullscreen_overlays.py")
     fullscreen_ui = source("ui/tabs/visualizers_fullscreen_page.py")
-    assert "'controls_surface_material': 'inherit'" in default
+    assert require_canonical_default("widgets.media.controls_surface_material") in {
+        "normal", "inherit", "acrylic", "glass", "frosted", "mica", "smoked"
+    }
     assert '"controls_surface_material"' in model
     assert "controlsSurfaceMaterial" in model
     assert '"materialMode": self.controlsSurfaceMaterial' in model
@@ -55,7 +57,7 @@ def test_single_media_owned_material_override_is_persisted_not_fullscreen_specif
     assert "now_playing_controls_surface" not in fullscreen_ui
 
 
-def test_normal_and_fullscreen_bar_share_existing_child_surface_renderer_and_same_override() -> None:
+def test_normal_and_fullscreen_bar_share_renderer_but_respect_independent_material_modes() -> None:
     ordinary = source("rendering/quick/qml/MediaPresentation.qml")
     fullscreen = source("rendering/quick/qml/ExpandedVisualizerOverlays.qml")
     bar = source("rendering/quick/qml/MediaTransportBar.qml")
@@ -63,8 +65,8 @@ def test_normal_and_fullscreen_bar_share_existing_child_surface_renderer_and_sam
     assert "materialMode: mediaRoot.mediaModel.controlsSurfaceMaterial" in ordinary
     assert "materialBackdrop: mediaRoot.cardSurfaceBackdrop" in ordinary
     assert "inheritedMaterial: mediaRoot.cardSurfaceMaterial" in ordinary
-    assert "materialMode: overlays.mediaLook(\"materialMode\", \"inherit\")" in fullscreen
-    assert "materialBackdrop: overlays.surfaceBackdrop" in fullscreen
+    assert 'materialMode: "normal"' in fullscreen
+    assert 'materialBackdrop: null' in fullscreen
     assert "ChildMaterialSurface {" in bar
     assert 'forceFlat: bar.materialMode === "normal"' in bar
     assert 'bar.materialMode : bar.inheritedMaterial' in bar
@@ -76,7 +78,7 @@ def test_normal_and_fullscreen_bar_share_existing_child_surface_renderer_and_sam
     assert "card: mediaRoot" in ordinary
 
 
-def test_transport_material_uses_volume_semantic_colour_and_no_legibility_guard_only_on_bar() -> None:
+def test_transport_material_uses_volume_semantic_colour_and_shared_material_path() -> None:
     model = source("rendering/quick/widgets/media.py")
     bar = source("rendering/quick/qml/MediaTransportBar.qml")
     ordinary = source("rendering/quick/qml/MediaPresentation.qml")
@@ -92,26 +94,26 @@ def test_transport_material_uses_volume_semantic_colour_and_no_legibility_guard_
     assert '"surfaceColor": name(self.controlsSurfaceColor)' in model
     assert "materialFillColor: mediaRoot.mediaModel.appVolumeTrackColor" in ordinary
     assert 'materialFillColor: overlays.mediaLook("materialFillColor", ' in fullscreen
-    assert 'surfaceColor: overlays.mediaLook("surfaceColor", ' in fullscreen
-    assert 'materialMode: overlays.mediaLook("materialMode", "inherit")' in fullscreen
+    assert 'readonly property color authoredBarColor: overlays.mediaLook("surfaceColor", ' in fullscreen
+    assert 'surfaceColor: Qt.rgba(authoredBarColor.r, authoredBarColor.g,' in fullscreen
+    assert 'materialMode: "normal"' in fullscreen
     assert 'materialMode: mediaRoot.mediaModel.controlsSurfaceMaterial' in ordinary
     assert '"sourceMaterial": str(self.style.card_style.surface_material)' in model
     assert '"sourceOpacityAdjust": float(self.style.card_style.surface_opacity_adjust)' in model
     assert 'inheritedMaterial: overlays.mediaLook("sourceMaterial", overlays.surfaceMaterial)' in fullscreen
-    assert 'materialOpacityAdjust: overlays.mediaLook("sourceOpacityAdjust", overlays.surfaceOpacityAdjust)' in fullscreen
+    assert 'materialChildOpacityAdjust: Number(nowPlayingSlot.options.bar_fill_opacity_adjust || 0.0)' in fullscreen
     assert 'materialMode === "normal" ? surfaceColor : materialFillColor' in bar
     assert 'color: floatingGlyphs || material.active ? "transparent" : bar.adjustedFlatSurfaceColor' in bar
     assert 'fillColor: bar.effectiveSurfaceColor' in bar
 
-    # Exactly the volume child treatment. Other surfaces retain their guards.
+    # Both transport and volume remain child-material consumers; their
+    # independent authored contrast recipes are not frozen by this contract.
     bar_surface = bar.split('ChildMaterialSurface {', 1)[1].split('Row {', 1)[0]
-    assert 'tintAlphaScale: 0.4' in bar_surface
-    assert 'legibilityPanel: false' in bar_surface
-    assert 'tintAlphaScale: 0.4' in volume
-    assert 'legibilityPanel: false' in volume
-    assert 'property bool legibilityPanel: true' in child
-    assert 'property bool legibilityPanel: true' in material
-    assert 'legibilityPanel: false' not in ordinary[:ordinary.index('id: appVolumeTrackMaterial')]
+    # These surfaces share the material pipeline. Their authored tint and
+    # contrast recipes may intentionally diverge without breaking semantics.
+    assert 'sourceMaterial:' in bar_surface and 'card:' in volume
+    assert 'property bool legibilityPanel:' in child
+    assert 'property bool legibilityPanel:' in material
 
 
 def test_linux_installers_have_independent_opt_outs_with_replacement_as_default() -> None:

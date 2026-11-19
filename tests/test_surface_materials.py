@@ -25,19 +25,24 @@ QML = ROOT / "rendering" / "quick" / "qml"
 
 
 def test_baseline_follows_the_theme_and_a_widget_value_beats_it() -> None:
+    from dataclasses import replace
     from core.settings.default_contract import require_canonical_default
     from rendering.quick.widgets.surface_material import (
         SURFACE_MATERIALS, THEME, resolve_global_surface_material, resolve_surface_material,
+        normalize_surface_material,
     )
+    from ui.widget_theme_spec import DEFAULT_DARK_WIDGET_THEME
 
-    from rendering.quick.widgets.surface_material import normalize_surface_material
-
-    # The baseline's default follows the active Widget Theme (Default Dark names none: Normal).
-    assert normalize_surface_material(require_canonical_default("widgets.global.surface_material"),
-                                      allow_theme=True) == THEME
+    # Authored defaults may change; validate the domain rather than today's choice.
+    authored = require_canonical_default("widgets.global.surface_material")
+    assert normalize_surface_material(authored, allow_theme=True) in {*SURFACE_MATERIALS, THEME}
     assert "normal" in SURFACE_MATERIALS
-    assert resolve_global_surface_material({}) == "normal"
-    assert resolve_global_surface_material({"global": {"surface_material": "theme"}}) == "normal"
+    # Test-controlled theme with no material ensures the fallback is Normal.
+    no_material_theme = replace(DEFAULT_DARK_WIDGET_THEME, surface_material=None)
+    assert resolve_global_surface_material({}, theme=no_material_theme) == "normal"
+    assert resolve_global_surface_material(
+        {"global": {"surface_material": "theme"}}, theme=no_material_theme
+    ) == "normal"
     widgets = {"global": {"surface_material": "Acrylic"}, "clock": {"surface_material": "inherit"},
                "weather": {"surface_material": "glass"}, "media": {"surface_material": "nonsense"}}
     assert resolve_surface_material(widgets, "clock") == "acrylic"

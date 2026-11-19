@@ -15,13 +15,14 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_new_fullscreen_default_preserves_existing_style_choices() -> None:
+def test_fullscreen_default_is_a_supported_display_style() -> None:
     tree = ast.parse(read("core/settings/default_settings.py"))
     assignment = next(node for node in tree.body if isinstance(node, ast.Assign)
                       and any(isinstance(t, ast.Name) and t.id == "DEFAULT_SETTINGS"
                               for t in node.targets))
     defaults = ast.literal_eval(assignment.value)
-    assert defaults["widgets"]["spotify_visualizer"]["fullscreen_overlays"]["display_style"] == "hide_borders"
+    selected_style = defaults["widgets"]["spotify_visualizer"]["fullscreen_overlays"]["display_style"]
+    assert selected_style in {"default", "hide_borders"}
     styles = read("core/settings/fullscreen_overlays.py")
     assert 'DISPLAY_STYLE_DEFAULT = "default"' in styles
     assert 'DISPLAY_STYLE_HIDE_BORDERS = "hide_borders"' in styles

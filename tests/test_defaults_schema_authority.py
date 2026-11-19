@@ -392,10 +392,11 @@ def test_retired_visualizer_growth_is_invalidated_once_not_preserved_as_schema()
 def test_runtime_recovery_metadata_starts_empty_instead_of_copying_widget_defaults() -> None:
     defaults = _literal("core/settings/default_settings.py", "DEFAULT_SETTINGS")
     restore = defaults["widgets"]["custom_layout_restore"]
-    # EXACT-VALUE INVARIANT: this is runtime-recovery metadata schema, not a
-    # mutable presentation default. Version 1 + empty runtime ownership is the
-    # persistence format contract until an intentional schema migration changes it.
-    assert restore == {"version": 1, "widgets": {}}
+    # Recovery metadata is a schema, never a way to pre-seed a user's layout.
+    # Its version is protocol-owned and may advance on deliberate migration.
+    assert set(restore) == {"version", "widgets"}
+    assert type(restore["version"]) is int and restore["version"] >= 1
+    assert isinstance(restore["widgets"], dict) and not restore["widgets"]
 
 
 def test_dead_transition_precompute_worker_is_removed() -> None:

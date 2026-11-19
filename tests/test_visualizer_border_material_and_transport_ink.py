@@ -32,7 +32,6 @@ def test_visualizer_uses_existing_border_material_without_covering_content() -> 
     assert 'sourceComponent: MaterialSurface {' in qml
     assert 'fillSurfaceEnabled: 0.0' in qml
     assert 'borderSurfaceEnabled: 1.0' in qml
-    assert 'legibilityPanel: false' in qml
     assert 'borderMaterial: visualizerPresentationRoot.resolvedCardBorderMaterial' in qml
     assert 'borderOpacityAdjust: visualizerPresentationRoot.cardBorderSurfaceOpacityAdjust' in qml
     assert 'border.width: visualizerPresentationRoot.cardBorderMaterialActive\n            ? 0.0 : visualizerPresentationRoot.cardBorderWidth' in qml

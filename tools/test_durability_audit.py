@@ -63,6 +63,81 @@ _EXACT_MARKERS = ("DURABILITY: exact", "EXACT-VALUE INVARIANT")
 
 _DOC_CONTENT_MARKERS = ("DOCUMENT-CONTENT INVARIANT",)
 
+# Unlike semantic geometry or test-owned fixtures, today's QML visual recipe
+# must never be copied as a production-source golden. This deliberately narrow
+# blocking rule complements the broader advisory oracle-review queue.
+_MUTABLE_RECIPE_SOURCE_PIN = re.compile(
+    r"\b(?:legibilityPanel|tintAlphaScale|additionalOpacityAdjust|"
+    r"opacityScale|fontMultiplier|fillOpacityAdjust|borderOpacityAdjust)"
+    r"\s*:\s*(?:[-+]?\d|true\b|false\b)"
+    r"|\b(?:WizardBackColor|WizardSmallImageBackColor)\s*=\s*#[0-9A-Fa-f]{6}\b"
+    r"|\bcolor\.alpha\(\)\s*\*\s*(?:0?\.\d+|1\.0+)",
+    re.IGNORECASE,
+)
+_MUTABLE_RECIPE_PROPERTIES = frozenset({
+    "legibilityPanel", "tintAlphaScale", "additionalOpacityAdjust",
+    "opacityScale", "fontMultiplier", "fillOpacityAdjust", "borderOpacityAdjust",
+})
+
+
+def _literal_fixture_names(function: ast.AST) -> set[str]:
+    """Names assigned literal test-owned strings, not live source reads."""
+    found: set[str] = set()
+    for node in ast.walk(function):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        if not isinstance(node.value, (ast.Constant, ast.JoinedStr)):
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        for target in targets:
+            if isinstance(target, ast.Name):
+                found.add(target.id)
+    return found
+
+
+def _assert_has_unowned_recipe_pin(
+    node: ast.Assert, function: ast.AST, fixture_names: set[str]
+) -> bool:
+    for compare in ast.walk(node.test):
+        if not isinstance(compare, ast.Compare) or len(compare.ops) != 1:
+            continue
+        lhs, rhs = compare.left, compare.comparators[0]
+        if isinstance(compare.ops[0], ast.In):
+            # Exact textual implementation recipes are invalid if read from
+            # production source. Locally authored literal fixture strings may
+            # of course be compared exactly.
+            if (isinstance(lhs, ast.Constant) and isinstance(lhs.value, str)
+                    and _MUTABLE_RECIPE_SOURCE_PIN.search(lhs.value)):
+                if (not isinstance(rhs, ast.Constant)
+                        and not (isinstance(rhs, ast.Name) and rhs.id in fixture_names)):
+                    return True
+        if not isinstance(compare.ops[0], (ast.Eq, ast.Is, ast.IsNot)):
+            continue
+        if not (isinstance(rhs, ast.Constant) and isinstance(rhs.value, (int, float, bool))):
+            continue
+        if not (isinstance(lhs, ast.Call) and isinstance(lhs.func, ast.Attribute)
+                and lhs.func.attr == "property" and lhs.args
+                and isinstance(lhs.args[0], ast.Constant)
+                and lhs.args[0].value in _MUTABLE_RECIPE_PROPERTIES):
+            continue
+        # A direct test-owned value set on that exact object before the assert
+        # is an independent oracle (unlike merely observing the live default).
+        receiver = ast.dump(lhs.func.value)
+        independently_authored = any(
+            isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Attribute)
+            and call.func.attr == "setProperty"
+            and ast.dump(call.func.value) == receiver
+            and call.args and isinstance(call.args[0], ast.Constant)
+            and call.args[0].value == lhs.args[0].value
+            and call.lineno < node.lineno
+            for call in ast.walk(function)
+        )
+        if not independently_authored:
+            return True
+    return False
+
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -264,14 +339,126 @@ def _canonical_default_names(node: ast.AST) -> set[str]:
     return names
 
 
-def _canonical_snapshot_names(node: ast.AST) -> set[str]:
+_AUTHORED_DEFAULT_SOURCE_PIN = re.compile(
+    r"[\"'][a-z][a-z0-9_]*[\"']\s*:\s*(?:[\"'][^\"']+[\"']|true\b|false\b|[-+]?\d)",
+    re.IGNORECASE,
+)
+
+
+def _default_source_text_names(function: ast.AST) -> set[str]:
+    """Recognize tests reading shipped editable defaults as text/JSON."""
     names: set[str] = set()
-    authority_calls = {
-        "build_defaults_snapshot",
-        "get_default_settings",
-        "get_base_default_settings",
-        "get_raw_default_settings",
-    }
+    for node in ast.walk(function):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)) or node.value is None:
+            continue
+        value = node.value
+        target_nodes = node.targets if isinstance(node, ast.Assign) else [node.target]
+        strings = _function_string_constants(value)
+        is_canonical_source = (
+            "core/settings/default_settings.py" in strings
+            and isinstance(value, ast.Call)
+        )
+        is_canonical_json = (
+            isinstance(value, ast.Call)
+            and isinstance(value.func, ast.Attribute)
+            and value.func.attr == "dumps"
+            and any(isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
+                    and child.func.id == "build_defaults_snapshot" for child in ast.walk(value))
+        )
+        if is_canonical_source or is_canonical_json:
+            for target in target_nodes:
+                if isinstance(target, ast.Name):
+                    names.add(target.id)
+    return names
+
+
+def _assert_copies_shipped_default_text(assertion: ast.Assert, names: set[str]) -> bool:
+    if not names:
+        return False
+    for compare in ast.walk(assertion.test):
+        if not isinstance(compare, ast.Compare) or not any(
+            isinstance(op, ast.In) for op in compare.ops
+        ):
+            continue
+        # Bound to an actual shipped source or serialized canonical tree, not
+        # a test-owned settings object coincidentally named "defaults".
+        if not any(isinstance(child, ast.Name) and child.id in names
+                   for child in ast.walk(compare)):
+            continue
+        if any(isinstance(child, ast.Constant) and isinstance(child.value, str)
+               and _AUTHORED_DEFAULT_SOURCE_PIN.search(child.value)
+               for child in ast.walk(compare)):
+            return True
+    return False
+
+
+def _canonical_value_origin(node: ast.AST, names: set[str], local_getters: set[str]) -> bool:
+    """Track real canonical snapshots through field lookup and accessor calls.
+
+    A test-owned fixture's ordinary mapping is not canonical. Callers of local
+    helpers that parse ``core/settings/default_settings.py`` ARE canonical;
+    otherwise AST-literal-eval indirection can disguise the same frozen oracle.
+    """
+    while isinstance(node, ast.Subscript):
+        node = node.value
+    if isinstance(node, ast.Name):
+        return node.id in names or node.id in {"DEFAULT_SETTINGS", "CANONICAL_DEFAULTS"}
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+        return node.func.id in {
+            "get_default_settings", "get_base_default_settings", "get_raw_default_settings",
+            "build_defaults_snapshot", *local_getters,
+        }
+    return False
+
+
+def _source_parsing_canonical_helpers(tree: ast.AST) -> set[str]:
+    """Identify local test helpers extracting *shipped* defaults from source.
+
+    Do not treat arbitrary functions called ``default_widgets`` as production
+    authorities; their body must actually point to the canonical source file.
+    """
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        constants = _function_string_constants(node)
+        has_canonical_name = any(
+            isinstance(child, ast.Name) and child.id == "DEFAULT_SETTINGS"
+            for child in ast.walk(node)
+        ) or "DEFAULT_SETTINGS" in constants
+        if "core/settings/default_settings.py" in constants and has_canonical_name:
+            found.add(node.name)
+    return found
+
+
+def _canonical_source_snapshot_names(node: ast.AST) -> set[str]:
+    """Catch the AST literal-eval escape hatch for copied shipped defaults."""
+    constants = _function_string_constants(node)
+    if "core/settings/default_settings.py" not in constants:
+        return set()
+    if "DEFAULT_SETTINGS" not in constants and not any(
+        isinstance(child, ast.Name) and child.id == "DEFAULT_SETTINGS"
+        for child in ast.walk(node)
+    ):
+        return set()
+    names: set[str] = set()
+    for assignment in ast.walk(node):
+        if not isinstance(assignment, (ast.Assign, ast.AnnAssign)):
+            continue
+        value = assignment.value
+        if not (isinstance(value, ast.Call) and isinstance(value.func, ast.Attribute)
+                and value.func.attr == "literal_eval"):
+            continue
+        targets = assignment.targets if isinstance(assignment, ast.Assign) else [assignment.target]
+        for target in targets:
+            if isinstance(target, ast.Name):
+                names.add(target.id)
+    return names
+
+
+def _canonical_snapshot_names(node: ast.AST, local_getters: set[str] | None = None) -> set[str]:
+    names: set[str] = set()
+    local_getters = local_getters or set()
     assignments: list[tuple[list[ast.AST], ast.AST]] = []
     for child in ast.walk(node):
         if not isinstance(child, (ast.Assign, ast.AnnAssign)):
@@ -281,11 +468,7 @@ def _canonical_snapshot_names(node: ast.AST) -> set[str]:
             continue
         targets = child.targets if isinstance(child, ast.Assign) else [child.target]
         assignments.append((list(targets), value))
-        is_authority = (
-            isinstance(value, ast.Call)
-            and isinstance(value.func, ast.Name)
-            and value.func.id in authority_calls
-        ) or _root_name(value) in {"DEFAULT_SETTINGS", "CANONICAL_DEFAULTS"}
+        is_authority = _canonical_value_origin(value, names, local_getters)
         if is_authority:
             for target in targets:
                 if isinstance(target, ast.Name):
@@ -295,7 +478,7 @@ def _canonical_snapshot_names(node: ast.AST) -> set[str]:
     while changed:
         changed = False
         for targets, value in assignments:
-            if _root_name(value) not in names:
+            if not _canonical_value_origin(value, names, local_getters):
                 continue
             for target in targets:
                 if isinstance(target, ast.Name) and target.id not in names:
@@ -487,16 +670,40 @@ def audit_test_file(path: Path) -> list[Finding]:
                 )
             )
 
+    parses_shipped_defaults = "core/settings/default_settings.py" in source
+    local_canonical_getters = (
+        _source_parsing_canonical_helpers(tree) if parses_shipped_defaults else set()
+    )
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         canonical_default_names = _canonical_default_names(node)
-        canonical_names = _canonical_snapshot_names(node)
+        canonical_names = _canonical_snapshot_names(node, local_canonical_getters)
+        if parses_shipped_defaults:
+            canonical_names.update(_canonical_source_snapshot_names(node))
         findings.extend(_canonical_monitor_catalog_findings(node, path))
         markdown_names = _markdown_text_names(node)
+        literal_fixture_names = _literal_fixture_names(node)
+        for assertion in ast.walk(node):
+            if (isinstance(assertion, ast.Assert)
+                    and _assert_has_unowned_recipe_pin(assertion, node, literal_fixture_names)):
+                findings.append(Finding(
+                    "mutable-presentation-recipe-pin", path, assertion.lineno,
+                    "do not assert today's visual recipe; exercise explicit settings, semantic routing and fallback instead",
+                ))
+        shipped_default_source_names = (
+            _default_source_text_names(node)
+            if parses_shipped_defaults or "build_defaults_snapshot" in source else set()
+        )
         for child in ast.walk(node):
             if not isinstance(child, ast.Assert):
                 continue
+            if _assert_copies_shipped_default_text(child, shipped_default_source_names):
+                findings.append(Finding(
+                    "authored-default-source-string",
+                    path, child.lineno,
+                    "copied an editable default's current textual value; assert schema, owner/consumer agreement, or test-owned round-trip",
+                ))
             if (
                 _assert_reads_markdown_prose(child, markdown_names)
                 and not _source_has_doc_content_marker(lines, child.lineno)
@@ -532,26 +739,31 @@ def audit_test_file(path: Path) -> list[Finding]:
                     )
                 )
 
-        for child in ast.walk(node):
-            if not (
-                isinstance(child, ast.Compare)
-                and len(child.ops) == 1
-                and isinstance(child.ops[0], (ast.Eq, ast.Is))
-            ):
+        # A branch that *interprets* an authored value is not an oracle.
+        # Only asserted equality with a copied literal freezes that value.
+        for assertion in ast.walk(node):
+            if not isinstance(assertion, ast.Assert):
                 continue
-            sides = [child.left, *child.comparators]
-            if (
-                any(_root_name(side) in canonical_names or _root_name(side) in {"DEFAULT_SETTINGS", "CANONICAL_DEFAULTS"} for side in sides)
-                and any(_is_literal(side) for side in sides)
-            ):
-                findings.append(
-                    Finding(
-                        "canonical-snapshot-literal",
-                        path,
-                        child.lineno,
-                        "assert schema/relationship or compare to the canonical authority; do not pin a mutable authored default",
+            for child in ast.walk(assertion.test):
+                if not (
+                    isinstance(child, ast.Compare)
+                    and len(child.ops) == 1
+                    and isinstance(child.ops[0], (ast.Eq, ast.Is))
+                ):
+                    continue
+                sides = [child.left, *child.comparators]
+                if (
+                    any(_canonical_value_origin(side, canonical_names, local_canonical_getters) for side in sides)
+                    and any(_is_literal(side) for side in sides)
+                ):
+                    findings.append(
+                        Finding(
+                            "canonical-snapshot-literal",
+                            path,
+                            child.lineno,
+                            "assert schema/relationship or compare to the canonical authority; do not pin a mutable authored default",
+                        )
                     )
-                )
 
         if _is_named_curated_theme_oracle(node) and _has_art_value_assert(node):
             findings.append(Finding(
@@ -589,7 +801,10 @@ def audit_test_file(path: Path) -> list[Finding]:
 
 
 def audit_tests(paths: Iterable[Path] | None = None) -> list[Finding]:
-    candidates = list(paths) if paths is not None else sorted(TEST_ROOT.glob("test_*.py"))
+    candidates = list(paths) if paths is not None else sorted(
+        [*TEST_ROOT.rglob("test_*.py"), *ROOT.joinpath("tools").glob("test_*.py"),
+         *ROOT.joinpath(".github", "tests").rglob("test_*.py")]
+    )
     findings: list[Finding] = []
     for path in candidates:
         findings.extend(audit_test_file(Path(path)))

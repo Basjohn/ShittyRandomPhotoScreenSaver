@@ -8,6 +8,7 @@ pattern automatically illegal.
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
 from pathlib import Path
 import sys
@@ -19,6 +20,20 @@ TEST_ROOT = ROOT / "tests"
 _SOURCE_MARKER = "SOURCE-ORACLE INVARIANT"
 _VISIBLE_MARKER = "VISIBLE-WINDOW INVARIANT"
 _UI_COPY_MARKER = "UI-COPY INVARIANT"
+# Presentation recipe values are review candidates, never automatic failures.
+# The presence/shape of a material binding is not itself a recipe pin.
+_RECIPE_PROPERTY = re.compile(
+    r"\b(?:legibilityPanel|tintAlphaScale|additionalOpacityAdjust|"
+    r"opacityScale|fontMultiplier|fillOpacityAdjust|borderOpacityAdjust)"
+    r"\s*:\s*(?:[-+]?\d|true\b|false\b)"
+    r"|\b(?:WizardBackColor|WizardSmallImageBackColor)\s*=\s*#[0-9A-Fa-f]{6}\b"
+    r"|\b(?:color\.alpha\(\)|opacity|alpha)\s*\*\s*(?:0?\.\d+|1\.0+)",
+    re.IGNORECASE
+)
+_RUNTIME_RECIPE_PROPERTY = frozenset({
+    "legibilityPanel", "tintAlphaScale", "additionalOpacityAdjust",
+    "opacityScale", "fontMultiplier", "fillOpacityAdjust", "borderOpacityAdjust",
+})
 _SAFE_WINDOW_TOKENS = (
     "keep_off_screen",
     "WA_DontShowOnScreen",
@@ -159,6 +174,30 @@ def review_test_file(path: Path) -> list[Candidate]:
                     )
 
         for node in ast.walk(function):
+            if not isinstance(node, ast.Assert):
+                continue
+            literal_recipe = any(
+                isinstance(child, ast.Constant)
+                and isinstance(child.value, str)
+                and _RECIPE_PROPERTY.search(child.value)
+                for child in ast.walk(node.test)
+            )
+            runtime_recipe = any(
+                isinstance(child, ast.Call)
+                and isinstance(child.func, ast.Attribute)
+                and child.func.attr == "property"
+                and child.args
+                and isinstance(child.args[0], ast.Constant)
+                and child.args[0].value in _RUNTIME_RECIPE_PROPERTY
+                for child in ast.walk(node.test)
+            )
+            if literal_recipe or runtime_recipe:
+                found.append(Candidate(
+                    "presentation-recipe-oracle", path, node.lineno,
+                    "pins a current material/contrast/opacity recipe; test admission, fallback or explicit fixture behavior instead",
+                ))
+
+        for node in ast.walk(function):
             if (
                 isinstance(node, ast.Assert)
                 and _assert_is_direct_ui_copy_equality(node)
@@ -220,7 +259,11 @@ def review_tests(paths: Iterable[Path] | None = None) -> list[Candidate]:
     candidates = (
         list(paths)
         if paths is not None
-        else [path for path in sorted(TEST_ROOT.glob("test_*.py")) if path.name not in _SELF_TEST_FILES]
+        else [path for path in sorted([
+            *TEST_ROOT.rglob("test_*.py"),
+            *ROOT.joinpath("tools").glob("test_*.py"),
+            *ROOT.joinpath(".github", "tests").rglob("test_*.py"),
+        ]) if path.name not in _SELF_TEST_FILES]
     )
     found: list[Candidate] = []
     for path in candidates:
@@ -235,6 +278,7 @@ def main() -> int:
             print(item.render())
         source_count = sum(item.kind == "source-string-oracle" for item in found)
         copy_count = sum(item.kind == "ui-copy-oracle" for item in found)
+        recipe_count = sum(item.kind == "presentation-recipe-oracle" for item in found)
         window_count = sum(
             item.kind in {"visible-window-candidate", "modal-dialog-candidate"}
             for item in found
@@ -242,6 +286,7 @@ def main() -> int:
         print(
             f"\nReview queue: {source_count} source-string oracle(s), "
             f"{copy_count} exact UI-copy oracle(s), "
+            f"{recipe_count} presentation-recipe oracle(s), "
             f"{window_count} potentially visible/focus-stealing window operation(s)."
         )
         print("Review-only: always exits 0; never skip/xfail/stop a test or request operator action solely because of this queue.")

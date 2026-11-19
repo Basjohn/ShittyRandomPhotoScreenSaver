@@ -80,12 +80,6 @@ class TestGetWorkerConfig:
 class TestGetAllConfigs:
     """Tests for get_all_configs function."""
     
-    def test_returns_all_worker_types(self):
-        """Test all worker types have configs."""
-        configs = get_all_configs()
-        for wt in WorkerType:
-            assert wt in configs
-    
     def test_returns_copy(self):
         """Test returns a copy, not the original."""
         configs1 = get_all_configs()

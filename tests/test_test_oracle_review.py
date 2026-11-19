@@ -115,3 +115,41 @@ def test_button_copy():
 ''',
     )
     assert "ui-copy-oracle" not in kinds
+
+
+def test_review_flags_source_pinned_tint_and_panel_recipe(tmp_path: Path) -> None:
+    kinds = _kinds(tmp_path, '''
+def test_bad():
+    qml = read_qml()
+    assert "tintAlphaScale: 0.4" in qml
+    assert "legibilityPanel: false" in qml
+''')
+    assert "presentation-recipe-oracle" in kinds
+
+
+def test_review_flags_live_material_recipe_value(tmp_path: Path) -> None:
+    kinds = _kinds(tmp_path, '''
+def test_bad(material):
+    assert material.property("legibilityPanel") is False
+''')
+    assert "presentation-recipe-oracle" in kinds
+
+
+def test_review_allows_semantic_material_state_checks(tmp_path: Path) -> None:
+    kinds = _kinds(tmp_path, '''
+def test_good(material):
+    assert material.property("active") is False
+    assert material.property("forceFlat") is True
+''')
+    assert "presentation-recipe-oracle" not in kinds
+
+
+def test_review_flags_literal_installer_tint_and_colour_alpha_multiplier(tmp_path: Path) -> None:
+    kinds = _kinds(tmp_path, '''
+def test_bad():
+    installer = read_installer()
+    clock = read_clock_model()
+    assert "WizardBackColor=#112233" in installer
+    assert "color.alpha() * 0.80" in clock
+''')
+    assert "presentation-recipe-oracle" in kinds

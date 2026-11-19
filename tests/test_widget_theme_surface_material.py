@@ -95,8 +95,10 @@ def test_style_overrides_offers_theme_first_and_saves_it(qt_app, settings_manage
         combo = getattr(tab, "surface_material_combo", None)
         if combo is None:
             pytest.skip("the General page was not built by this view state")
-        assert combo.itemData(0) == "theme"
-        assert combo.currentData() == "theme"          # the canonical default
+        assert combo.itemData(0) == "theme"  # stable ordering of explicit choices
+        # The selected default is an authored input, not a frozen "theme" recipe.
+        from core.settings.default_contract import require_canonical_default
+        assert combo.currentData() == require_canonical_default("widgets.global.surface_material")
         combo.setCurrentIndex(combo.findData("glass"))
         tab.flush_pending_changes()
         assert settings_manager.get("widgets")["global"]["surface_material"] == "glass"

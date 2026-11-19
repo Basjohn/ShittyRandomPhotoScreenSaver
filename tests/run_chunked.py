@@ -18,6 +18,10 @@ Two execution modes intentionally differ:
   module through any chain of project imports, changed tests, and tests naming
   a changed non-Python file).
 
+* On Windows, a timed-out isolated test is dumped with DbgHelp *before*
+  termination; per-file text output is written continuously rather than held
+  in memory. Dumps live beside the individual logs and can be opened in WinDbg.
+
 * Whole-tree or explicit-target runs without ``--isolated`` retain pytest-chunk's
   test-level chunking. They are broad reconciliation diagnostics during I/J, not
   the maintained destination authority.
@@ -403,20 +407,83 @@ def _summary_line(output: str) -> str:
     return lines[-1] if lines else "(no output)"
 
 
+def _write_windows_timeout_dump(process: subprocess.Popen, path: Path) -> str:
+    """Best-effort native thread/stack minidump of a *still-running* pytest child.
+
+    This deliberately does not touch Qt or the native engine. The parent invokes
+    Windows DbgHelp on the child before termination; WinDbg can inspect the dump.
+    A failed dump must never prevent terminating a timed-out test process.
+    """
+    if sys.platform != "win32":
+        return "Native minidump unavailable on this platform"
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    PROCESS_QUERY_INFORMATION = 0x0400
+    PROCESS_VM_READ = 0x0010
+    PROCESS_DUP_HANDLE = 0x0040
+    # Thread info, unloaded modules, process/thread data: useful for Qt/C++
+    # deadlocks without copying all GPU/system memory into a massive dump.
+    MINIDUMP_FLAGS = 0x00001000 | 0x00000020 | 0x00000100
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    dbghelp = ctypes.WinDLL("dbghelp", use_last_error=True)
+    kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel.CloseHandle.restype = wintypes.BOOL
+    dbghelp.MiniDumpWriteDump.argtypes = (wintypes.HANDLE, wintypes.DWORD,
+                                          wintypes.HANDLE, wintypes.DWORD,
+                                          ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)
+    dbghelp.MiniDumpWriteDump.restype = wintypes.BOOL
+    handle = kernel.OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_DUP_HANDLE,
+                                False, process.pid)
+    if not handle:
+        return f"Native minidump OpenProcess failed: Win32 {ctypes.get_last_error()}"
+    try:
+        with path.open("wb") as output:
+            ok = dbghelp.MiniDumpWriteDump(handle, process.pid,
+                                            wintypes.HANDLE(msvcrt.get_osfhandle(output.fileno())),
+                                            MINIDUMP_FLAGS, None, None, None)
+            failure = ctypes.get_last_error() if not ok else 0
+        if not ok:
+            path.unlink(missing_ok=True)
+            return f"Native minidump MiniDumpWriteDump failed: Win32 {failure}"
+        return f"Native minidump saved: {path} ({path.stat().st_size} bytes)"
+    except (OSError, ValueError) as exc:
+        path.unlink(missing_ok=True)
+        return f"Native minidump unavailable: {type(exc).__name__}: {exc}"
+    finally:
+        kernel.CloseHandle(handle)
+
+
 def _run_isolated_file(target: Path, *, timeout_seconds: float | None, extra: list[str],
                        log_dir: Path) -> tuple[Path, int, float, str]:
-    cmd = [sys.executable, "-m", "pytest", str(target), "--tb=short", "-q", "-p", "no:cacheprovider", *extra]
-    t0 = time.time()
-    try:
-        proc = subprocess.run(cmd, cwd=str(TESTS_DIR.parent), capture_output=True, text=True,
-                              encoding="utf-8", errors="replace", timeout=timeout_seconds)
-        rc, output = proc.returncode, proc.stdout + proc.stderr
-    except subprocess.TimeoutExpired as exc:
-        rc = 124
-        output = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
-        output += f"\nTIMEOUT after {timeout_seconds}s\n"
-    elapsed = time.time() - t0
-    (log_dir / f"{target.stem}.log").write_text(output, encoding="utf-8")
+    cmd = [sys.executable, "-u", "-m", "pytest", str(target), "--tb=short", "-q", "-p", "no:cacheprovider", *extra]
+    log_path = log_dir / f"{target.stem}.log"
+    dump_path = log_dir / f"{target.stem}.dmp"
+    t0 = time.monotonic()
+    rc = 124
+    # Streaming to disk avoids losing traceback output when a Qt/native hang
+    # prevents pytest from exiting, and bounds the parent's memory use.
+    with log_path.open("wb") as log:
+        process = subprocess.Popen(cmd, cwd=str(TESTS_DIR.parent), stdout=log, stderr=subprocess.STDOUT)
+        try:
+            rc = process.wait(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired:
+            # Capture native C++/Qt thread stacks before killing the child.
+            # Python's pytest faulthandler logs are already streamed to this file.
+            try:
+                diagnostic = _write_windows_timeout_dump(process, dump_path)
+            except Exception as exc:
+                diagnostic = f"Native minidump failed: {type(exc).__name__}: {exc}"
+            log.write((f"\nTIMEOUT after {timeout_seconds}s (pid {process.pid})\n"
+                       f"{diagnostic}\n").encode("utf-8", "replace"))
+            log.flush()
+            process.kill()
+            process.wait()
+    elapsed = time.monotonic() - t0
+    output = log_path.read_text(encoding="utf-8", errors="replace")
     # 5 = no tests collected (a file whose tests are all deselected or skipped by marker).
     return target, (0 if rc == 5 else rc), elapsed, _summary_line(output)
 
@@ -436,7 +503,7 @@ def _run_isolated(targets: list[Path], *, jobs: int, timeout_seconds: float | No
 
     log_dir = LOG_DIR / "pytest_isolated"
     log_dir.mkdir(parents=True, exist_ok=True)
-    for stale in log_dir.glob("*.log"):
+    for stale in (*log_dir.glob("*.log"), *log_dir.glob("*.dmp")):
         stale.unlink()
     durations = _load_durations()
     print(f"=== Isolated: {len(targets)} files, {jobs} at a time; logs in {log_dir} ===", flush=True)
@@ -466,6 +533,9 @@ def _run_isolated(targets: list[Path], *, jobs: int, timeout_seconds: float | No
             first_log = log_dir / f"{target.stem}.log"
             if first_log.exists():
                 first_log.replace(log_dir / f"{target.stem}.under_load.log")
+            first_dump = log_dir / f"{target.stem}.dmp"
+            if first_dump.exists():
+                first_dump.replace(log_dir / f"{target.stem}.under_load.dmp")
             _target, rc, elapsed, summary = _run_isolated_file(target, timeout_seconds=timeout_seconds,
                                                                extra=extra, log_dir=log_dir)
             (load_sensitive if rc == 0 else real).append((target, first if rc == 0 else summary))

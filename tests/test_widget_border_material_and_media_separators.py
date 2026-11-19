@@ -24,8 +24,11 @@ def test_global_border_choice_and_density_ride_existing_persistence_and_style() 
     host = source("rendering/quick/widgets/host.py")
     overlay = source("rendering/quick/qml/OverlayWidget.qml")
 
-    assert "'border_surface_mode': 'inherit'" in defaults
-    assert "'border_surface_opacity_adjust': 0.0" in defaults
+    from core.settings.default_contract import require_canonical_default
+    border_mode = require_canonical_default("widgets.global.border_surface_mode")
+    density_adjust = require_canonical_default("widgets.global.border_surface_opacity_adjust")
+    assert isinstance(border_mode, str) and border_mode.strip()
+    assert -1.0 <= float(density_adjust) <= 1.0
     assert '"border_surface"' in opacities
     assert '"Border Surface:"' in ui and '"Border Opacity:"' in ui
     assert 'for material in ("normal", "inherit", "acrylic", "glass", "frosted", "mica", "smoked"):' in ui

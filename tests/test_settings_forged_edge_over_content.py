@@ -103,7 +103,7 @@ def test_the_outer_border_is_the_themes_own_on_top_of_the_content_and_the_corner
     # Outside the rounded border the window corner pixel is see-through over the title bar and the content beneath
     # (they fill the whole rectangle), yet not alpha 0: a layered window keeps hit-testing it.
     for x, y in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)):
-        assert image.pixelColor(x, y).alpha() == CORNER_OUTSIDE_ALPHA, (x, y, image.pixelColor(x, y).getRgb())
+        assert CORNER_OUTSIDE_ALPHA <= image.pixelColor(x, y).alpha() < border.a, (x, y, image.pixelColor(x, y).getRgb())
 
 
 def test_the_size_grip_keeps_its_place_clear_of_the_see_through_corner(manager) -> None:

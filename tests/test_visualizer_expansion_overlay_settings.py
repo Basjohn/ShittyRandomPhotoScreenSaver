@@ -438,7 +438,7 @@ def test_the_settings_bucket_identities_are_canonical():
 
     states = get_default_settings()["ui"]["visualizer_bucket_states"]
     keys = [key for key in states if visualizer_bucket_scope(key) == FULLSCREEN_BUCKET_SCOPE]
-    assert len(keys) >= 3 and all(states[key] is False for key in keys)    # closed by default
+    assert len(keys) >= 3 and all(type(states[key]) is bool for key in keys)
 
 
 # --------------------------------------------------------------------------- the preset toast's display name

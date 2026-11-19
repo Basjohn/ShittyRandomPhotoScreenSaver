@@ -394,7 +394,7 @@ def test_runtime_and_diagnostic_glsl_sources_have_one_460_core_contract():
     for path in shader_paths:
         source = path.read_text(encoding="utf-8")
         declared.extend((path, version, profile) for version, profile in re.findall(
-            r"#version\s+(\d+)\s*(core)?", source,
+            r"(?m)^\s*#version[ \t]+(\d+)[ \t]+(core)\b", source,
         ))
 
     assert declared

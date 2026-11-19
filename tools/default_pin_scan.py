@@ -145,7 +145,11 @@ def scan_file(path: Path, defaults: dict[str, list[object]]) -> list[tuple[str, 
 def scan_tests(root: Path = ROOT) -> list[tuple[str, int, str, object, str]]:
     defaults = flatten(get_raw_default_settings(), {})
     hits = []
-    for path in sorted((root / "tests").glob("test_*.py")):
+    for path in sorted((
+        *(root / "tests").rglob("test_*.py"),
+        *(root / "tools").glob("test_*.py"),
+        *(root / ".github" / "tests").rglob("test_*.py"),
+    )):
         if path.name in _SELF_TEST_FILES:
             continue
         hits.extend(scan_file(path, defaults))

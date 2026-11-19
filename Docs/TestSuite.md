@@ -26,6 +26,14 @@ remove functional/physical visual falsifiers merely to reduce failures. The
 [durability guide](Guides/Test_Durability.md#ownership-test-before-creating-or-deleting-an-assertion)
 owns the examples and required review.
 
+**No visual-recipe goldens:** Tests must not pin the current tint,
+legibility-panel preference, opacity, colour, font multiplier, chosen material
+or other presentation tuning as a hard-coded oracle, including when authored
+in production QML rather than Settings. Drive chosen values as test-owned inputs
+and assert admission, fallback, persistence, contrast bounds and semantic
+ownership. The mandatory provenance rules and narrow exceptions live in
+[the durability guide](Guides/Test_Durability.md#presentation-recipes-are-not-contracts-materialopacity-trap).
+
 ## 1. Current authority and inventory
 
 The maintained product profile is `destination` in `tests/run_chunked.py`.
@@ -442,7 +450,25 @@ Every `tests/**/test_*.py` runs in its own fresh pytest process, `--jobs` at a t
 the cores, at most 8; about 4.5 minutes for the whole tree on the reference machine), longest first
 by the previous run's durations. Each failed file then runs again alone: passing alone marks it
 load-sensitive (reported, not a failure), failing again is a real failure. Logs are in
-`logs/pytest_isolated/`. `--changed` uses `tools/impacted_tests.py`: every test file that imports a
+`logs/pytest_isolated/`, written continuously while each subprocess runs. If a Windows test
+hits its subprocess timeout, the runner first asks DbgHelp to capture its live
+C++/Qt thread contexts in `<test>.dmp`, then terminates it and records the dump
+status and PID in its `.log`. `*.under_load.log` and `*.under_load.dmp` preserve the
+first attempt when the file is retried alone. Minidumps are inspectable with
+WinDbg and **can contain process memory and sensitive information**; inspect them
+before sharing. Failed dump capture is recorded in the text log and does not
+prevent the timeout from terminating the process.
+
+**GODZIP Foundry → CMD → Zip Run + New Logs** includes new/changed per-test
+`.log` and `.dmp` files from that directory alongside the captured command,
+transcript, result and new/changed loose `/logs` files. The existing 50 MB cap
+is maintained. Oversized native dumps remain on disk and are identified in
+`run/native_dumps_not_bundled.txt` instead of blocking shipment of text logs.
+Run-scoped snapshots exclude unrelated historical logs. If a run was started
+in an older Foundry session, preserve `logs/pytest_isolated/*.log` separately
+before starting another isolated run, since the runner clears previous logs
+and dumps at startup.
+`--changed` uses `tools/impacted_tests.py`: every test file that imports a
 changed module through any chain of project imports (at most one lazy, in-function import on the
 way; lazy registries count), changed tests, and tests naming a changed non-Python file. The product's
 import graph is dense, so a core render or Settings change still selects most files; it is a correct

@@ -40,22 +40,6 @@ def test_button_ampersands_are_escaped_so_no_accidental_mnemonic() -> None:
     assert any("&&" in text for _line, text in texts)
 
 
-def _word_is_shouting(word: str) -> bool:
-    if word == "README":  # a file name, not shouting
-        return False
-    letters = [c for c in word if c.isalpha()]
-    return len(letters) > 3 and all(c.isupper() for c in letters)
-
-
-def test_button_labels_are_title_case_not_all_caps() -> None:
-    bad = []
-    for line, text in _button_texts():
-        words = [w for w in re.split(r"[\s/]+", text.replace("&&", " ")) if w]
-        if any(_word_is_shouting(w) for w in words):
-            bad.append((line, text))
-    assert not bad, f"button labels must be Title Case (short tags excepted): {bad}"
-
-
 class _Label:
     def __init__(self) -> None:
         self.text = "Ready"

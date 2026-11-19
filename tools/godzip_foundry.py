@@ -3969,12 +3969,16 @@ class CommandTab(QWidget):
         self.script_show_results.setEnabled(False)
         self.script_show_results.clicked.connect(self._show_results)
         self.script_zip = QPushButton("Zip Run + New Logs")
+        self.script_zip.setToolTip(
+            "ZIP this captured run's transcript, changed loose /logs files and "
+            "new/changed logs/pytest_isolated/*.log test results (including failed reruns)."
+        )
         self.script_zip.setEnabled(False)
         self.script_zip.clicked.connect(self._zip_results)
         results.addWidget(self.script_copy)
         results.addWidget(self.script_show_results)
         results.addWidget(self.script_zip)
-        hint = QLabel("Captured mode: exit code + scrollable output + Copy Results. ZIP includes the pasted command, transcript and this run's new/changed loose /logs files (50 MB cap). Review for secrets before sharing. Interactive commands: choose External terminal.")
+        hint = QLabel("Captured mode: exit code + scrollable output + Copy Results. ZIP includes the command, transcript, new/changed loose /logs files and isolated pytest per-test logs (50 MB cap). Review for secrets before sharing. Interactive commands: choose External terminal.")
         hint.setWordWrap(True)
         hint.setObjectName("faint")
         results_body.addWidget(hint)
@@ -4383,7 +4387,7 @@ class CommandTab(QWidget):
             self.script_status.setText(self._finished_status + f" · ZIP: {path}")
             self.window.logzip_tab.refresh()
         self.window.run_task(
-            "Packaging run transcript and new/changed loose logs…",
+            "Packaging run transcript and new/changed loose and isolated pytest logs…",
             lambda: create_script_results_zip(
                 self.repo_root, run_dir, initial_logs=initial_logs,
                 final_logs=final_logs, output_dir=output_dir,

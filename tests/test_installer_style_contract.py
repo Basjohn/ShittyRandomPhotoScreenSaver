@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,7 +14,8 @@ def test_installers_use_forced_dark_style_without_slate_inversion() -> None:
         text = path.read_text(encoding="utf-8")
         assert "WizardStyle=modern dark includetitlebar hidebevels" in text
         assert " dark slate " not in text
-        assert "WizardBackColor=#0d181e" in text
+        # The chosen dark shade is artwork, not a compatibility constant.
+        assert re.search(r"(?m)^WizardBackColor=#[0-9A-Fa-f]{6}$", text)
         assert "WizardSmallImageBackColor=none" in text
         assert "WizardSmallImageFile=..\\ui\\assets\\installer\\SRPSSWizard.png" in text
 

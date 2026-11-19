@@ -10,14 +10,14 @@ from pathlib import Path
 import sys
 
 
-from tools.visualizer_replay._bubble_native_common import (
-    sha, provenance, resolve_input, fresh_output, LIVE_KEYS,
-)
 
 
 def run(args):
     root = args.repo.resolve()
     sys.path.insert(0, str(root))
+    from tools.visualizer_replay._bubble_native_common import (
+        sha, provenance, resolve_input, fresh_output, LIVE_KEYS,
+    )
     from tools import artifact_paths
 
     root = artifact_paths.repository_root(root)

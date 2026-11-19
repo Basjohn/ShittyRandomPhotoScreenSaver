@@ -33,8 +33,6 @@ def test_branded_header_reuses_the_card_without_capture_or_rewriting_card_guard(
     assert "ChildMaterialSurface {" in header
     assert "card: header.materialCard" in header
     assert 'forceFlat: header.materialMode === "normal"' in header
-    assert "legibilityPanel: true" in header
-    assert 'forceFlat: header.materialMode === "normal"' in header
     assert 'headerMaterial.active ? "transparent" : header.adjustedFlatFillColor' in header
     assert 'additionalOpacityAdjust: header.materialOpacityAdjust' in header
     assert "ShaderEffectSource" not in header
@@ -59,7 +57,13 @@ def test_global_style_persistence_and_projection_share_one_owner():
     defaults=(ROOT/"core/settings/default_settings.py").read_text(encoding="utf-8")
     ui=(ROOT/"ui/tabs/widgets_tab_defaults.py").read_text(encoding="utf-8")
     assert '("cardHeaderSurfaceMode", "header_surface_mode")' in host
-    assert "'header_surface_mode': 'inherit'" in defaults
+    import ast
+    settings_tree = ast.parse(defaults)
+    settings_node = next(node.value for node in settings_tree.body
+                         if isinstance(node, ast.Assign)
+                         and any(isinstance(t, ast.Name) and t.id == "DEFAULT_SETTINGS" for t in node.targets))
+    header_choice = ast.literal_eval(settings_node)["widgets"]["global"]["header_surface_mode"]
+    assert isinstance(header_choice, str) and header_choice.strip()
     assert "Header Surface:" in ui
     assert '"header_surface_mode": (' in ui
     assert 'header_combo.setCurrentIndex(max(0, header_combo.findData(mode)))' in ui

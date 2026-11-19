@@ -1508,14 +1508,17 @@ def test_disabled_capsules_do_not_move_saved_children_when_data_arrives(qt_app) 
         qt_app.processEvents()
 
 @pytest.mark.qt
-def test_progress_circle_material_uses_lighter_child_density_only_when_admitted(qt_app) -> None:
-    """Real QML wiring: material circle lights up only with card/backdrop admission.
+@pytest.mark.parametrize("setting_enabled", [False, True], ids=["material-off", "material-on"])
+def test_progress_circle_material_follows_setting_and_surface_admission(
+    qt_app, setting_enabled: bool,
+) -> None:
+    """The setting and backdrop admission determine material vs. flat fallback.
 
-    A texture-producing backdrop is tested in the full display renderer; here a
-    QQuickItem stands in for its *admission* (not its sampled pixels). This
-    prevents a checked box from silently leaving the child Loader inactive.
+    Verify the loaded QML behavior in both explicitly test-owned setting states,
+    without freezing operator-facing materials, palette values, or tint recipes.
+    A QQuickItem represents admitted backdrop ownership, not sampled pixels.
     """
-    model = _model(config=_config(progress_circle_material=True))
+    model = _model(config=_config(progress_circle_material=setting_enabled))
     model.activate()
     model.on_achievement_presentation(
         AchievementPulsePreparedPresentation(
@@ -1526,26 +1529,40 @@ def test_progress_circle_material_uses_lighter_child_density_only_when_admitted(
     engine, component, item = _create_qml_item(model)
     backdrop = QQuickItem()
     try:
-        item.setProperty("cardSurfaceMaterial", "glass")
-        item.setProperty("cardSurfaceBackdrop", backdrop)
-        qt_app.processEvents()
         material = _find_visual_item(item, "achievementProgressCircleMaterial")
         face = _find_visual_item(item, "achievementProgressCircleFace")
         assert material is not None and face is not None
-        assert material.property("forceFlat") is False
-        assert material.property("legibilityPanel") is False
-        assert material.property("additionalOpacityAdjust") == pytest.approx(0.0)
-        assert material.property("tintAlphaScale") == pytest.approx(0.65)
-        assert material.property("fillColor") == model.progressDiscMaterialColor
-        assert material.property("active") is True
-        assert face.property("color").alphaF() == pytest.approx(0.0)
 
+        # A selected surface cannot activate without a captured backdrop.
+        item.setProperty("cardSurfaceMaterial", "glass")
+        qt_app.processEvents()
+        assert material.property("active") is False
+        assert face.property("color").alphaF() > 0.0
+
+        # Admission enables the material ONLY when the operator setting is on.
+        item.setProperty("cardSurfaceBackdrop", backdrop)
+        qt_app.processEvents()
+        assert material.property("active") is setting_enabled
+        assert material.property("fillColor") == model.progressDiscMaterialColor
+        if setting_enabled:
+            assert face.property("color").alphaF() == pytest.approx(0.0)
+        else:
+            assert face.property("color").alphaF() > 0.0
+
+        # Normal always restores the original flat face, irrespective of setting.
         item.setProperty("cardSurfaceMaterial", "normal")
         qt_app.processEvents()
         assert material.property("active") is False
         assert face.property("color").alphaF() > 0.0
+
+        # Re-selecting a material reuses the existing setting and backdrop.
+        item.setProperty("cardSurfaceMaterial", "glass")
+        qt_app.processEvents()
+        assert material.property("active") is setting_enabled
     finally:
+        model.retire()
         item.deleteLater()
         component.deleteLater()
         engine.deleteLater()
         backdrop.deleteLater()
+        qt_app.processEvents()

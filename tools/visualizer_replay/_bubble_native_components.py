@@ -14,15 +14,15 @@ import struct
 import sys
 
 
-from tools.visualizer_replay._bubble_native_common import (
-    sha, wire, json_bytes, provenance, passive_helper_matches, replay_helper_matches,
-    resolve_input, fresh_output, LIVE_KEYS,
-)
 
 
 def run(args):
     root = args.repo.resolve()
     sys.path.insert(0, str(root))
+    from tools.visualizer_replay._bubble_native_common import (
+        sha, wire, json_bytes, provenance, passive_helper_matches, replay_helper_matches,
+        resolve_input, fresh_output, LIVE_KEYS,
+    )
     from tools import conventions_identity
     from tools.visualizer_replay import owner_render_parity as parity
     from rendering.quick.visualizer import native_route as route

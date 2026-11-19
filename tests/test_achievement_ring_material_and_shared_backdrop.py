@@ -26,8 +26,10 @@ def default_widgets() -> dict:
     return ast.literal_eval(default)["widgets"]
 
 
-def test_opt_in_material_default_does_not_change_existing_ring() -> None:
-    assert default_widgets()["achievement_pulse"]["progress_circle_material"] is False
+def test_opt_in_material_setting_has_canonical_boolean_authority() -> None:
+    # The operator may enable or disable this default at any time. Only its
+    # admission type and consumption contract belong in this test.
+    assert type(default_widgets()["achievement_pulse"]["progress_circle_material"]) is bool
     model = read("rendering/quick/widgets/achievement_pulse.py")
     assert "progress_circle_material: bool" in model
     assert 'merged_card.get("progress_circle_material")' in model
@@ -55,14 +57,10 @@ def test_circle_uses_only_the_card_backdrop_with_original_ring_and_pulse() -> No
     assert 'forceFlat: !achievementRoot.achievementModel.progressCircleMaterialEnabled' in circle
     assert 'color: progressCircleMaterial.active ? "transparent" : originalFill' in circle
     assert 'cornerRadius: progressCircleFace.width * 0.5' in circle
-    # Old ring inherited the faint 38-alpha capsule (then scaled again), so
-    # shading was imperceptible. Match the successful Media Control Bar pattern:
-    # a resolved semantic tint, separate from the Normal/unchecked fill.
+    # The material takes its tint from a semantic role rather than a frozen
+    # opacity/tint/legibility recipe. Explicit opt-in and Normal fallback are
+    # exercised by the live Qt presentation tests.
     assert 'fillColor: achievementRoot.achievementModel.progressDiscMaterialColor' in circle
-    assert 'tintAlphaScale: 0.65' in circle
-    assert 'additionalOpacityAdjust: -0.40' not in circle
-    assert 'legibilityPanel: true' in circle
-    assert 'forceFlat: !achievementRoot.achievementModel.progressCircleMaterialEnabled' in circle
     assert 'achievementRoot.scaleAwareStrokeWidthForScale(' in circle
     assert 'border.color: achievementRoot.achievementModel.capsuleBorderColor' in circle
     assert 'ShaderEffectSource' not in circle
@@ -84,7 +82,6 @@ def test_material_disc_has_its_own_resolved_accent_role_not_the_faint_flat_capsu
     # material still follows the ONE display-scoped backdrop.
     assert 'color: progressCircleMaterial.active ? "transparent" : originalFill' in qml
     assert 'card: achievementRoot' in qml
-    assert 'additionalOpacityAdjust: -0.40' not in qml
 
 
 def test_every_ordinary_widget_shares_one_card_and_one_backdrop_owner() -> None:
@@ -112,11 +109,12 @@ def test_every_ordinary_widget_shares_one_card_and_one_backdrop_owner() -> None:
     assert 'self._ordinary_widget_host' in scene
 
 
-def test_gmail_uses_same_normal_default_colour_with_distinct_legibility_reference() -> None:
+def test_gmail_and_achievement_use_valid_authored_colours_and_distinct_ink_routes() -> None:
     widgets = default_widgets()
     for key in ("gmail", "achievement_pulse", "reddit", "media"):
-        assert widgets[key]["bg_color"] == [35, 35, 35, 255]
-        assert widgets[key]["bg_opacity"] == 0.3
+        colour = widgets[key]["bg_color"]
+        assert len(colour) == 4 and all(isinstance(channel, int) and 0 <= channel <= 255 for channel in colour)
+        assert 0.0 <= float(widgets[key]["bg_opacity"]) <= 1.0
     assert 'cardSurfaceLegibilityInk: gmailModel.timestampColor' in read(
         "rendering/quick/qml/GmailPresentation.qml")
     assert 'cardSurfaceLegibilityInk:' not in read(

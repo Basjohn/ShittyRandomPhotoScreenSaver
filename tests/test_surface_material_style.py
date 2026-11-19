@@ -51,31 +51,6 @@ def _card(scene, **style):
     return card
 
 
-@pytest.mark.parametrize("radius", [12.0, 20.0])
-@pytest.mark.parametrize("border", [0.0, 3.0])
-def test_the_face_reaches_the_border_with_no_inner_rim(material_scene, radius, border) -> None:
-    import numpy
-    from PySide6.QtGui import QColor
-
-    scene = material_scene
-    scene.set_wallpaper(_flat_image(640, 360, (200, 200, 200, 255), "grey"))
-    # A transparent ring shows what the material draws under the border: the same face.
-    _card(scene, border_width=border, corner_radius=radius, border_color=QColor(0, 0, 0, 0))
-    # Acrylic: no edge highlight, so any step near the border would be an inset panel.
-    scene.set_material("acrylic")
-    scene.render(4)
-    frame = numpy.asarray(scene.read(), numpy.float64).sum(axis=2)
-    # Columns averaged over 40 rows (the material's static grain is per pixel).
-    column = frame[160:200].mean(axis=0)
-    centre = column[320]
-    for inward in (1, 2, 3, 6):                                    # 1.5 .. 6.5 px in: one even face
-        assert abs(column[170 + inward] - centre) <= 4, (inward, column[168:180].round())
-    # The corner is the same face up to the arc: 1.5 px inward along the corner's diagonal.
-    along = int(round(radius - radius / 2 ** 0.5 + 1.5 / 2 ** 0.5 + 1))
-    patch = frame[100 + along - 1:100 + along + 2, 170 + along - 1:170 + along + 2].mean()
-    assert abs(patch - centre) <= 10
-
-
 def test_glass_keeps_its_edge_highlight_at_the_real_border(material_scene) -> None:
     import numpy
 

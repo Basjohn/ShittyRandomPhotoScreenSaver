@@ -89,7 +89,7 @@ def test_header_only_adjustment_projects_to_all_nine_branded_headers():
             "rendering/quick/qml/" + fname)
 
 
-def test_both_media_bars_receive_shared_adjustment_without_touching_the_outer_media_card():
+def test_media_child_adjustment_and_fullscreen_normal_fill_use_independent_controls():
     media = read("rendering/quick/widgets/media.py")
     ordinary = read("rendering/quick/qml/MediaPresentation.qml")
     fullscreen = read("rendering/quick/qml/ExpandedVisualizerOverlays.qml")
@@ -97,12 +97,13 @@ def test_both_media_bars_receive_shared_adjustment_without_touching_the_outer_me
     assert '"childOpacityAdjust": self.controlsSurfaceOpacityAdjust' in media
     assert 'return float(self.style.card_style.media_controls_opacity_adjust)' in media
     assert 'materialChildOpacityAdjust: mediaRoot.mediaModel.controlsSurfaceOpacityAdjust' in ordinary
-    assert 'materialChildOpacityAdjust: overlays.mediaLook("childOpacityAdjust", 0.0)' in fullscreen
+    # Fullscreen Now Playing's Normal fill has its own explicitly authored
+    # adjustment, independent of the ordinary Media bar's global material.
+    assert 'materialChildOpacityAdjust: Number(nowPlayingSlot.options.bar_fill_opacity_adjust || 0.0)' in fullscreen
     assert 'additionalOpacityAdjust: bar.materialChildOpacityAdjust' in bar
     assert 'SurfaceContrast.adjustedDensity(effectiveSurfaceColor.a, materialChildOpacityAdjust)' in bar
-    assert 'legibilityPanel: false' in bar
-    assert 'legibilityPanel: true' in read("rendering/quick/qml/BrandedHeader.qml")
-    assert 'property bool legibilityPanel: true' in read("rendering/quick/qml/ChildMaterialSurface.qml")
+    # The contrast treatment is presentation tuning, not the coupling contract.
+    assert 'property bool legibilityPanel:' in read("rendering/quick/qml/ChildMaterialSurface.qml")
     # The existing card opacity adjustment and colour channels stay separate.
     assert 'materialOpacityAdjust: mediaRoot.cardSurfaceOpacityAdjust' in ordinary
     assert 'materialFillColor: mediaRoot.mediaModel.appVolumeTrackColor' in ordinary

@@ -472,7 +472,10 @@ def main() -> int:
           f"{load.get('gpu_util_median', '?')}% (max {load.get('gpu_util_max', '?')}%), GPU clock "
           f"{load.get('gpu_clock_mhz_median', '?')} MHz, {load.get('gpu_temp_c_median', '?')} C")
     suffix = f"_{''.join(c if c.isalnum() else '-' for c in args.match)}" if args.match else ""
-    path = args.out or OUT / f"{_dt.date.today().isoformat()}_{data['commit']}{suffix}.json"
+    from tools import artifact_paths
+
+    path = (artifact_paths.checked_output(args.out) if args.out is not None
+            else OUT / f"{_dt.date.today().isoformat()}_{data['commit']}{suffix}.json")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=1) + "\n", encoding="utf-8")
     print(f"\nwrote {path.relative_to(ROOT) if path.is_relative_to(ROOT) else path}")

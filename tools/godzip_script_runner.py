@@ -191,16 +191,48 @@ def add_repo_venv_to_script(raw: str, *, shell: str = "powershell") -> str:
     return "".join(result)
 
 
+def _script_log_path(logs: Path, relative_name: str) -> Path | None:
+    """Recognize bounded script evidence, never arbitrary paths under /logs.
+
+    The pytest isolated runner writes one file per test in a *single* child
+    directory. LOGZIP archives, caches and other recursive trees are excluded.
+    Reject foreign/escaped snapshot keys even if supplied by a caller.
+    """
+    if not relative_name or "\\" in relative_name:
+        return None
+    parts = relative_name.split("/")
+    if len(parts) == 1 and parts[0] not in {"", ".", ".."}:
+        return logs / parts[0]
+    if (len(parts) == 2 and parts[0] == "pytest_isolated"
+            and parts[1] not in {"", ".", ".."}
+            and parts[1].lower().endswith((".log", ".dmp"))
+            and not (logs / "pytest_isolated").is_symlink()):
+        return logs / parts[0] / parts[1]
+    return None
+
+
 def snapshot_loose_logs(repo_root: Path) -> dict[str, tuple[int, int]]:
-    """Metadata-only snapshot. Never recursively scan large evidence archives."""
+    """Snapshot run evidence: loose /logs files and per-file isolated pytest logs.
+
+    The public name is retained for compatibility with existing Foundry callers.
+    This remains a shallow, metadata-only scan; no large evidence archives or
+    arbitrary subdirectories are traversed. Keys are POSIX-relative to /logs.
+    """
     logs = Path(repo_root) / "logs"
-    if not logs.is_dir():
+    if not logs.is_dir() or logs.is_symlink():
         return {}
-    result = {}
+    result: dict[str, tuple[int, int]] = {}
     for item in logs.iterdir():
         if item.is_file() and not item.is_symlink():
             stat = item.stat()
             result[item.name] = (stat.st_size, stat.st_mtime_ns)
+    isolated = logs / "pytest_isolated"
+    if isolated.is_dir() and not isolated.is_symlink():
+        for item in isolated.iterdir():
+            if item.suffix.lower() not in {".log", ".dmp"} or not item.is_file() or item.is_symlink():
+                continue
+            stat = item.stat()
+            result[f"pytest_isolated/{item.name}"] = (stat.st_size, stat.st_mtime_ns)
     return result
 
 
@@ -212,9 +244,10 @@ def create_script_results_zip(
     output_dir: Path,
     final_logs: Mapping[str, tuple[int, int]] | None = None,
 ) -> tuple[Path, tuple[str, ...]]:
-    """Bounded ZIP: run transcript and only newly created/changed loose logs.
+    """Bounded ZIP: run transcript and newly created/changed run evidence.
 
-    No preexisting large ETLs, no recursive traversal, no deletion of sources.
+    Includes per-test logs and native timeout dumps from /logs/pytest_isolated/,
+    not unrelated historical files. No recursive traversal or source deletion.
     """
     repo_root, run_dir, output_dir = (Path(p).resolve() for p in (repo_root, run_dir, output_dir))
     state_root = repo_root / ".godzip_foundry" / "runs"
@@ -231,24 +264,50 @@ def create_script_results_zip(
     for name in sorted(after):
         if after[name] == initial_logs.get(name):
             continue
-        path = logs / name
-        if path.is_file() and not path.is_symlink():
-            current = path.stat()
-            if (current.st_size, current.st_mtime_ns) == after[name]:
-                candidates.append((path, f"logs/{name}"))
+        path = _script_log_path(logs, name)
+        if path is None:
+            raise ScriptRunError(f"Invalid run-log snapshot path: {name!r}")
+        if not path.is_file() or path.is_symlink():
+            raise ScriptRunError(f"Run evidence disappeared before ZIP: logs/{name}")
+        current = path.stat()
+        if (current.st_size, current.st_mtime_ns) != after[name]:
+            raise ScriptRunError(
+                f"Run evidence changed since completion: logs/{name}. "
+                "Preserve the logs before another run replaces them"
+            )
+        candidates.append((path, f"logs/{name}"))
     if not candidates:
         raise ScriptRunError("Nothing was captured for this run")
-    sizes = [p.stat().st_size for p, _ in candidates]
+    # Protect the text evidence first. Qt minidumps can occasionally exceed
+    # the existing 50 MB run-ZIP cap; never let a large dump prevent shipping
+    # the actual failure tracebacks. Keep the dump on disk and record its path.
+    mandatory = [(path, member) for path, member in candidates if not member.lower().endswith(".dmp")]
+    dumps = [(path, member) for path, member in candidates if member.lower().endswith(".dmp")]
+    sizes = [path.stat().st_size for path, _ in mandatory]
     if any(size > _RUN_LIMIT_BYTES for size in sizes) or sum(sizes) > _ZIP_LIMIT_BYTES:
-        raise ScriptRunError("Run results exceed the 50 MB ZIP safety cap; copy the text output or select smaller logs manually")
+        raise ScriptRunError("Run text evidence exceeds the 50 MB ZIP safety cap; preserve smaller logs separately")
+    selected = list(mandatory)
+    total = sum(sizes)
+    omitted = []
+    for path, member in dumps:
+        size = path.stat().st_size
+        if size > _RUN_LIMIT_BYTES or total + size > _ZIP_LIMIT_BYTES - 8192:
+            omitted.append((member, size, path))
+        else:
+            selected.append((path, member))
+            total += size
+    notice = ("Native diagnostic dumps kept outside this 50 MB run ZIP:\n"
+              + "".join(f"{member} ({size} bytes): {path}\n" for member, size, path in omitted)) if omitted else ""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     dest = output_dir / f"GODZIP_RUN_RESULTS_{stamp}_{run_dir.name}.zip"
     with tempfile.NamedTemporaryFile(prefix=".godzip_script_",suffix=".tmp",dir=output_dir,delete=False) as tmp:
         staging=Path(tmp.name)
     try:
         with zipfile.ZipFile(staging,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
-            for path, member in candidates:
+            for path, member in selected:
                 archive.write(path,member)
+            if notice:
+                archive.writestr("run/native_dumps_not_bundled.txt", notice)
         with zipfile.ZipFile(staging) as archive:
             bad=archive.testzip()
             if bad:
@@ -256,4 +315,4 @@ def create_script_results_zip(
         os.replace(staging,dest)
     finally:
         staging.unlink(missing_ok=True)
-    return dest,tuple(member for _,member in candidates)
+    return dest,tuple(member for _,member in selected) + (("run/native_dumps_not_bundled.txt",) if notice else ())

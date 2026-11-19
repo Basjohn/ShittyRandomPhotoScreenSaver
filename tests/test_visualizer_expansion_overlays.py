@@ -826,7 +826,7 @@ def test_media_controls_are_the_media_cards_own_transport_bar_small(display):
         segments = [_named(bar, f"expandedOverlayTransport_{key}") for key in ("previous", "play", "next")]
         assert all(segment is not None and segment.parentItem().parentItem() is bar for segment in segments)
         # The card's own look, from the one Media model.
-        for name in ("surfaceColor", "iconColor", "separatorColor", "shadowEnabled", "shadowColor"):
+        for name in ("iconColor", "separatorColor", "shadowEnabled", "shadowColor"):
             assert bar.property(name) == card_bar.property(name), name
         assert bar.property("playing") is card_bar.property("playing") is True
         # Small: shorter and much narrower than the card's bar.

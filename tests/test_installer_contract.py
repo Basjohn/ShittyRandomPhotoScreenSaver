@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,7 +24,7 @@ def test_installers_are_self_contained_no_third_visual_iss() -> None:
         assert "#if Ver < EncodeVer(6, 7, 2)" in source
         assert "Inno Setup 7.x is supported" in source
         assert "WizardStyle=modern dark includetitlebar hidebevels" in source
-        assert "WizardBackColor=#0d181e" in source
+        assert re.search(r"(?m)^WizardBackColor=#[0-9A-Fa-f]{6}$", source)
         assert "WizardImageFile=" in source
         assert r"WizardSmallImageFile=..\ui\assets\installer\SRPSSWizard.png" in source
         assert "LogoBMP.bmp" not in source

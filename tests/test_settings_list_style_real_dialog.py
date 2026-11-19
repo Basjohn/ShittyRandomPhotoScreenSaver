@@ -188,7 +188,7 @@ def test_four_settings_grips_are_invisible_with_native_resize_hit_targets(dialog
     grips = dialog.corner_size_grips
     assert set(grips) == {"top_left", "top_right", "bottom_left", "bottom_right"}
     assert dialog.size_grip is grips["bottom_right"]
-    assert all(grip.isVisible() for grip in grips.values())
+    assert all(not grip.isHidden() for grip in grips.values())
     # The old three diagonal strokes are deliberately removed. The native
     # QSizeGrip remains the resize event owner; decorative paint is empty.
     from ui.settings_dialog import CornerSizeGrip
