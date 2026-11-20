@@ -1519,14 +1519,13 @@ borderless fullscreen transfers working smoothly.
 Each item reproduces its failure first. The lead judges pixels on the operator's two wallpapers. Opus Medium or Sonnet
 by risk; none takes a slot native work can use.
 
-- [ ] **Media volume child: slider borders cut off as the volume lowers.** Reproduce at several levels, high to low.
-  Find which clip or geometry cuts the track's or the fill's border (likely the fill rect shrinking past the border
-  inset, or a clip on the shrinking item). Fix it at the owner, with a pixel test at a low level and a control that
-  fails on the old code.
-- [ ] **Gmail's card surface and opacity differ from every other widget.** (Sonnet agent adb81295f874b3fde, 20 Nov,
-  with the volume borders below.) Find where Gmail's surface diverges from the
-  shared widget material path (its own opacity, tint or material call), and route it through the shared path. Prove it
-  against Media and Feeds on both wallpapers and a light and a dark theme.
+- [ ] **Gmail's faint runs on a light Mica card sit under 4.5:1 now that Gmail takes the shared panel.** Measured with
+  `tools/surface_material_capture.py --card-set lists --legibility` (Polished Chrome, Usu_Underwater_Lab): sender,
+  date and menu runs 4.14 to 4.45 (they were 5.1 or more with Gmail's own ink); every other material and the dark
+  theme are unchanged. The run solver keeps a run that reads at the 4.5 floor over the poles byte for byte, and the
+  composed Mica pixels land below it. Fix in the shared solver or Mica's light recipe, never a Gmail exception.
+  Media still supplies its own playback-state ink (`MediaPresentation.qml:7`) and so still differs from Feeds and
+  Reddit (glass 0.80 against 0.88 on Default Dark): decide whether Media's too goes to the shared path.
 - [ ] **Widget opacity baseline:** the current -0.35 becomes the new 0 (Base). The operator checked that every theme
   stays legible at -0.35.
   - [ ] Root cause first: where the baseline is defined (the canonical default and the Style Override offset), and
