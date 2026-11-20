@@ -66,6 +66,19 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
    native core first in every slot). Within a backlog section, its own internal order holds. No other heading in
    this plan sets a global order.
 
+**Resume here (lead, 21 Nov, usage cut):**
+- [ ] The HUD fix (bc2d80cb6, 70de56b5c) is merged; 95 focused tests passed. Rerun its caller sweep, every test file
+  naming `scene_controller`, `_update_perf_hud` or `request_visualizer_present`. Then retire worktree
+  agent-aac773583ad93e2ab.
+- [ ] Merge the fast-proof branch `worktree-agent-a6257c36aeee45f10` (head b3f8b51c6 fixes the worker-path identity
+  test; its tests passed) after rerunning `tests/test_visualizer_owner_render_parity.py` on the merge. Its heavy runs
+  wait for quiet CPU: the method proof, the rule (a) reruns, the Oscilloscope partner control.
+- [ ] The Oscilloscope branch: an Opus High audit, then merge, an ABI 27 build of main, the quiet cost round, layer T.
+- [ ] The smoke-host branch `worktree-agent-ad927a7c14bbc5053`: run both smoke tools, review the sheets, merge.
+- [ ] Side defect: glass cases of `tests/test_visualizer_card_clip_contract.py` inner-edge fail (pre-existing,
+  identical counts before the HUD fix; order-dependent bubble-normal failures too). The protected clip commits rule
+  applies: root cause first, never retune production to satisfy the oracle.
+
 **Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
 the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
 - [ ] High (Opus High): the Oscilloscope port (step 4), then N3.6. Defects between N steps: 1D.6 (design note
