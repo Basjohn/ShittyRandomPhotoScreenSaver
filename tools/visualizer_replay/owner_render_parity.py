@@ -232,6 +232,9 @@ class SceneMirror:
         self.host: Any = None
         self.frames = _SpilledFrames()
         self.lit: list[float] = []
+        #: Whether each frame's lit share is measured (6.7 ms a frame on Bubble's card): only ``rendered_parity`` reads
+        #: it, never a native or mask run (fast-proof part 2, step 2).
+        self.measure_lit = True
         self._fbo = 0
         self._region: tuple[int, int, int, int] | None = None
         self._scene: Any = None
@@ -319,7 +322,8 @@ class SceneMirror:
         pixels = self._read(region)
         raw = pixels.tobytes()
         record = {"region": list(region), "hash": hashlib.sha256(raw).hexdigest()}
-        self.lit.append(float((pixels[..., :3].max(axis=2) > LIT_LEVEL).mean()))
+        if self.measure_lit:
+            self.lit.append(float((pixels[..., :3].max(axis=2) > LIT_LEVEL).mean()))
         self.frames.append((pixels.shape, zlib.compress(raw, 1)))
         if index % FULL_EVERY == 0:
             record["full"] = hashlib.sha256(self._read((0, 0, *host.pixels)).tobytes()).hexdigest()
@@ -407,6 +411,10 @@ RULE_A_SCATTER_PIXELS = {"bubble": 68}
 #: block fails, and so does a tie with 3 or more scatter pixels in its 3x3 (``pixel_tolerance.SCATTER_AGAINST_ISOLATION``,
 #: lead 17 Nov).
 RULE_A_SCATTER_GROUP = {"bubble": 22}
+#: The scatter's density per mode (checkpoint audit 8 M1): the most scatter and tie pixels one 16 x 16 window may hold
+#: (``pixel_tolerance.SCATTER_WINDOW``). Bubble: measured worst 17 on the four 60 s recorded takes (16, 17, 16 and 17;
+#: fast_proof/20261120_m2_* and 20261121_m2_*, ties joined), times 1.5 rounded up: 26.
+RULE_A_SCATTER_WINDOW: dict[str, int] = {"bubble": 26}
 
 
 def composite_tolerance(mode: str | None = None):
@@ -418,7 +426,8 @@ def composite_tolerance(mode: str | None = None):
     return pixel_tolerance.Tolerance(f"composite (rule a, {mode})" if scatter else "composite (rule a)",
                                      masked_level=RULE_A_FILL_LEVEL, scatter_pixels=scatter,
                                      tie_pixels=RULE_A_EDGE_PIXELS_PER_FRAME, tie_level=RULE_A_EDGE_LEVEL,
-                                     edge_class=True, scatter_cluster_pixels=RULE_A_SCATTER_GROUP.get(mode))
+                                     edge_class=True, scatter_cluster_pixels=RULE_A_SCATTER_GROUP.get(mode),
+                                     scatter_window_pixels=RULE_A_SCATTER_WINDOW.get(mode))
 
 
 def rule_a_frame(native, python, mask, mode: str | None = None) -> dict:
@@ -512,6 +521,8 @@ def rule_a_frames(native: dict, python: dict, masks: dict, mode: str | None = No
 
 #: ``--surface-format``: the native item's surface texels for this run (None: the route's own choice).
 NATIVE_SURFACE_FORMAT: str | None = None
+#: ``--judge-workers``: rule (a)'s frames judged in this many worker processes (0: in this one), merged in input order.
+JUDGE_WORKERS = 0
 #: ``--unprimed``: the window is not rendered before the owner exists and the route is not prepared at attach (audit
 #: N29 round 2, M3: the product's unprimed path, its first frame waiting on the window's edge), a reported case, not a
 #: gate.
@@ -576,6 +587,8 @@ class NativeSceneMirror(SceneMirror):
         self.python_mappings: list | None = None
         self.mapping_compared = 0
         self.mapping_identical = 0
+        #: Called with (input, its record, its compressed frame) as each frame is drawn (``LiveJudge.frame``).
+        self.on_frame = None
 
     @property
     def native_published(self) -> int:
@@ -598,7 +611,10 @@ class NativeSceneMirror(SceneMirror):
     def frame(self, index: int) -> dict:
         if self.route is not None and self.route.identity is not None:
             self.native_frames += 1
-        return super().frame(index)
+        record = super().frame(index)
+        if self.on_frame is not None:
+            self.on_frame(index, record, self.frames[len(self.frames) - 1])
+        return record
 
     def close(self) -> None:
         if self.host is not None and self.route is not None:
@@ -617,11 +633,14 @@ def _pixels(run: dict, index: int):
     return numpy.frombuffer(zlib.decompress(data), dtype=numpy.uint8).reshape(shape)
 
 
-def drawn_run(mode: str, script, *, worker: bool, supervisor: Any, namespace: int | None, settings: dict) -> dict:
-    """``owner_worker_gate.identity_run`` with the owner's scene drawn: its report plus ``frames`` and ``lit``."""
+def drawn_run(mode: str, script, *, worker: bool, supervisor: Any, namespace: int | None, settings: dict,
+              lit: bool = True) -> dict:
+    """``owner_worker_gate.identity_run`` with the owner's scene drawn: its report plus ``frames`` and ``lit`` (empty
+    when ``lit`` is False: a run whose lit share nobody reads)."""
     from tools.visualizer_replay import owner_worker_gate as gate
 
     mirror = SceneMirror()
+    mirror.measure_lit = bool(lit)
     report = gate.identity_run(mode, script, worker=worker, supervisor=supervisor, namespace=namespace,
                                settings=settings, scene_mirror=mirror)
     report["lit"] = mirror.lit
@@ -725,11 +744,15 @@ def rendered_parity(mode: str, variant: str, clip_frames, supervisor: Any, *, sa
     return verdict
 
 
-def native_drawn_run(mode: str, script, *, settings: dict, core, python_mappings: list | None = None) -> dict:
-    """``drawn_run`` in process with the native Spectrum drawing Spectrum's activations (``NativeSceneMirror``)."""
+def native_drawn_run(mode: str, script, *, settings: dict, core, python_mappings: list | None = None,
+                     on_frame=None) -> dict:
+    """``drawn_run`` in process with the native Spectrum drawing Spectrum's activations (``NativeSceneMirror``).
+    ``on_frame``: called as each frame is drawn (``NativeSceneMirror.on_frame``)."""
     from tools.visualizer_replay import owner_worker_gate as gate
 
     mirror = NativeSceneMirror(core)
+    mirror.measure_lit = False                       # no native run reads it
+    mirror.on_frame = on_frame
     mirror.python_mappings = python_mappings
     report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings,
                                scene_mirror=mirror)
@@ -752,13 +775,165 @@ def frame_differences(a: dict, b: dict) -> list[dict]:
         if x["hash"] == y["hash"] or x["region"] != y["region"]:
             continue
         delta = numpy.abs(_pixels(a, index).astype(numpy.int16) - _pixels(b, index)).max(axis=2)
-        ys, xs = numpy.nonzero(delta)
-        if not len(xs):
-            continue
-        rows.append({"input": index, "pixels": int(len(xs)), "max_level": int(delta.max()),
-                     "bbox": [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())],
-                     "levels": {str(level): int((delta == level).sum()) for level in sorted(set(delta[delta > 0].tolist()))[:8]}})
+        row = _difference_row(index, delta)
+        if row is not None:
+            rows.append(row)
     return rows
+
+
+def _difference_row(index: int, delta) -> dict | None:
+    """``frame_differences``' row of one input from its per-pixel ``delta`` (None: no pixel differs)."""
+    import numpy
+
+    ys, xs = numpy.nonzero(delta)
+    if not len(xs):
+        return None
+    return {"input": index, "pixels": int(len(xs)), "max_level": int(delta.max()),
+            "bbox": [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())],
+            "levels": {str(level): int((delta == level).sum()) for level in sorted(set(delta[delta > 0].tolist()))[:8]}}
+
+
+def judged_pass(native: dict, python: dict, masks: dict, switch_input: int, mode: str | None = None) -> dict:
+    """``pair_difference``, ``frame_differences``, ``rule_a_frames`` and ``classify_differences`` of one native run
+    against its Python run in a single pass (fast-proof part 2, step 1): each differing input decompressed once and its
+    delta computed once and shared; the same results, value for value (``tests/test_owner_render_parity_judge.py``)."""
+    judge = LiveJudge(python, masks, switch_input, mode)
+    for index, record in enumerate(native["pixels"]):
+        judge.frame(index, record, native["frames"][index])
+    return judge.result()
+
+
+def _judge_one(index: int, record: dict, reference_record: dict, frame: tuple, reference_frame: tuple, mask,
+               switch_input: int, mode: str | None) -> dict:
+    """One differing native input against its Python input (records, compressed frames, mask), alone: what it adds to
+    rule (a)'s result. Pure, so it may run in a worker process (``LiveJudge(workers=...)``)."""
+    import numpy
+
+    from tools import pixel_tolerance
+
+    def pixels(item):
+        shape, data = item
+        return numpy.frombuffer(zlib.decompress(data), dtype=numpy.uint8).reshape(shape)
+
+    out: dict = {"index": index, "region_differs": False, "verdict": None, "failed": None, "row": None,
+                 "classes": None, "max_pixels": 0, "max_level": 0}
+    if record["region"] != reference_record["region"]:
+        out["region_differs"] = True
+        if record["hash"] != reference_record["hash"]:
+            verdict = {"pass": False, "reasons": [f"input {index}: the regions differ"], "max_level": None,
+                       "input": index}
+            out["verdict"] = verdict
+            out["failed"] = _failed_record(verdict, pixels(frame), pixels(reference_frame), mask)
+        return out
+    if record["hash"] == reference_record["hash"]:
+        return out                                          # only the whole-display hash differs: counted, not sized
+    drawn, reference = pixels(frame), pixels(reference_frame)
+    delta = numpy.abs(drawn.astype(numpy.int16) - reference).max(axis=2)
+    out["max_pixels"] = int((delta > 0).sum())
+    out["max_level"] = int(delta.max())
+    out["row"] = _difference_row(index, delta)
+    verdict = pixel_tolerance.judge(drawn, reference, composite_tolerance(mode), mask=mask, delta=delta)
+    verdict["input"] = index
+    out["verdict"] = verdict
+    if not verdict["pass"]:
+        out["failed"] = _failed_record(verdict, drawn, reference, mask)
+    classes = _new_classes()
+    _classify_frame(classes, index, reference, delta, switch_input)
+    out["classes"] = classes
+    return out
+
+
+class LiveJudge:
+    """Rule (a)'s judge, one native frame at a time as it is drawn (fast-proof part 2, steps 4 and 5): against the
+    Python run (drawn or cached first) and its masks, each frame is judged when it arrives (``_judge_one``), its
+    failing record kept with its pixels (every failing frame, not the first eight), and with ``progress`` one line per
+    frame appended to that file in input order (its hash, and a failing frame's verdict), so a killed run keeps what it
+    judged. ``workers``: frames judged in that many worker processes, merged in input order (the same result as one
+    process, ``tests/test_owner_render_parity_judge.py``). ``result`` is ``judged_pass``'s."""
+
+    def __init__(self, python: dict, masks, switch_input: int, mode: str | None = None,
+                 progress: Path | None = None, workers: int = 0) -> None:
+        self.python = python
+        self.masks = masks
+        self.switch_input = int(switch_input)
+        self.mode = mode
+        self.progress = progress
+        self.count = 0
+        self.differing: list[int] = []
+        self.paths = {"max_pixels": 0, "max_level": 0, "regions_equal": True}
+        self.rows: list[dict] = []
+        self.judged: list[dict] = []
+        self.failed: list[dict] = []
+        self.classes = _new_classes()
+        self._pool = None
+        if workers and int(workers) > 0:
+            from concurrent.futures import ProcessPoolExecutor
+
+            self._pool = ProcessPoolExecutor(max_workers=int(workers))
+        self._pending: list = []                     # (index, its record, a future or a done result), input order
+
+    def frame(self, index: int, record: dict, frame: tuple) -> None:
+        """Judge native input ``index`` (its record and its compressed frame): at once, or in a worker."""
+        self.count = max(self.count, index + 1)
+        records = self.python["pixels"]
+        if index < len(records) and record != records[index]:
+            self.differing.append(index)
+            arguments = (index, record, records[index], frame, self.python["frames"][index], self.masks.get(index),
+                         self.switch_input, self.mode)
+            done = self._pool.submit(_judge_one, *arguments) if self._pool is not None else _judge_one(*arguments)
+            self._pending.append((index, record, done))
+        else:
+            self._pending.append((index, record, None))
+        self._drain(block=False)
+
+    def _drain(self, *, block: bool) -> None:
+        """Merge the pending frames' results in input order, as far as they are done (all, when ``block``)."""
+        while self._pending:
+            index, record, done = self._pending[0]
+            if done is not None and hasattr(done, "result"):
+                if not block and not done.done():
+                    return
+                done = done.result()
+            self._pending.pop(0)
+            verdict = None
+            if done is not None:
+                if done["region_differs"]:
+                    self.paths["regions_equal"] = False
+                self.paths["max_pixels"] = max(self.paths["max_pixels"], done["max_pixels"])
+                self.paths["max_level"] = max(self.paths["max_level"], done["max_level"])
+                if done["row"] is not None:
+                    self.rows.append(done["row"])
+                verdict = done["verdict"]
+                if verdict is not None:
+                    self.judged.append(verdict)
+                if done["failed"] is not None:
+                    self.failed.append(done["failed"])
+                if done["classes"] is not None:
+                    for name, entry in done["classes"].items():
+                        total = self.classes[name]
+                        total["pixels"] += entry["pixels"]
+                        total["max_level"] = max(total["max_level"], entry["max_level"])
+                        total["inputs"] += entry["inputs"]
+            if self.progress is not None:
+                line = {"input": index, "hash": record.get("hash")}
+                if verdict is not None and not verdict["pass"]:
+                    line["failed"] = {k: verdict.get(k) for k in ("reasons", "max_level", "scatter", "ties",
+                                                                  "scatter_group", "scatter_window")}
+                with Path(self.progress).open("a", encoding="utf-8") as stream:
+                    stream.write(json.dumps(line) + "\n")
+
+    def result(self) -> dict:
+        self._drain(block=True)
+        if self._pool is not None:
+            self._pool.shutdown()
+            self._pool = None
+        python_frames = len(self.python["pixels"])
+        differing = self.differing
+        first = differing[0] if differing else (None if self.count == python_frames else min(self.count,
+                                                                                              python_frames))
+        paths = {"first": first, "frames": len(differing), **self.paths}
+        return {"paths": paths, "rows": self.rows, "judged": self.judged, "classes": self.classes,
+                "failed": self.failed}
 
 
 def _write_native_crops(out: Path, name: str, native: dict, python: dict, row: dict) -> list[str]:
@@ -818,7 +993,7 @@ def _python_mappings_run(mode: str, script, settings: dict) -> tuple[dict, list]
 
     renderer.render = recording
     try:
-        run = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings)
+        run = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings, lit=False)
     finally:
         renderer.render = original
     return run, mappings
@@ -836,86 +1011,103 @@ def classify_differences(native: dict, python: dict, switch_input: int) -> dict:
     column: its rounded cap), ``other``. Each class: its pixel count and largest level."""
     import numpy
 
-    classes = {name: {"pixels": 0, "max_level": 0, "inputs": 0} for name in
-               ("card_edge_column", "peak_row", "cap_arc", "fade_frame", "other")}
+    classes = _new_classes()
     for index, (a, b) in enumerate(zip(native["pixels"], python["pixels"])):
         if a["hash"] == b["hash"] or a["region"] != b["region"]:
             continue
         drawn, reference = _pixels(native, index), _pixels(python, index)
         delta = numpy.abs(drawn.astype(numpy.int16) - reference).max(axis=2)
-        ys, xs = numpy.nonzero(delta > 1)
-        if not len(ys):
-            continue
-        labels = numpy.full(len(ys), "other", dtype=object)
-        if index >= switch_input:
-            labels[:] = "fade_frame"
-        else:
-            lit = reference[..., :3].max(axis=2) > _LIT_LEVEL
-            # The card's own frame (its border rows and columns, lit nearly edge to edge) is not a bar: without this
-            # every column's first lit row is the border's (the round-3 report's classes were taken that way).
-            lit[lit.mean(axis=1) > 0.8, :] = False
-            lit[:, lit.mean(axis=0) > 0.8] = False
-            columns = numpy.nonzero(lit.any(axis=0))[0]
-            edge = numpy.zeros(len(ys), dtype=bool)
-            if len(columns):
-                edge = (numpy.abs(xs - columns[0]) <= 2) | (numpy.abs(xs - columns[-1]) <= 2)
-            for k in range(len(ys)):
-                if edge[k]:
-                    labels[k] = "card_edge_column"
-                    continue
-                column = lit[:, xs[k]]
-                runs = numpy.flatnonzero(numpy.diff(numpy.concatenate(([0], column.view(numpy.int8), [0]))))
-                starts, ends = runs[0::2], runs[1::2]          # lit runs [start, end) from the top
-                if not len(starts):
-                    continue
-                y = ys[k]
-                if len(starts) > 1 and starts[0] - 1 <= y <= ends[0]:
-                    labels[k] = "peak_row"
-                    continue
-                bar = 1 if len(starts) > 1 else 0
-                if starts[bar] - 1 <= y < starts[bar] + 4:
-                    labels[k] = "cap_arc"
-        levels = delta[ys, xs]
-        for name in classes:
-            chosen = labels == name
-            if chosen.any():
-                entry = classes[name]
-                entry["pixels"] += int(chosen.sum())
-                entry["max_level"] = max(entry["max_level"], int(levels[chosen].max()))
-                entry["inputs"] += 1
+        _classify_frame(classes, index, reference, delta, switch_input)
     return classes
+
+
+def _new_classes() -> dict:
+    return {name: {"pixels": 0, "max_level": 0, "inputs": 0} for name in
+            ("card_edge_column", "peak_row", "cap_arc", "fade_frame", "other")}
+
+
+def _classify_frame(classes: dict, index: int, reference, delta, switch_input: int) -> None:
+    """``classify_differences`` for one differing input (its reference pixels and per-pixel ``delta``)."""
+    import numpy
+
+    ys, xs = numpy.nonzero(delta > 1)
+    if not len(ys):
+        return
+    labels = numpy.full(len(ys), "other", dtype=object)
+    if index >= switch_input:
+        labels[:] = "fade_frame"
+    else:
+        lit = reference[..., :3].max(axis=2) > _LIT_LEVEL
+        # The card's own frame (its border rows and columns, lit nearly edge to edge) is not a bar: without this
+        # every column's first lit row is the border's (the round-3 report's classes were taken that way).
+        lit[lit.mean(axis=1) > 0.8, :] = False
+        lit[:, lit.mean(axis=0) > 0.8] = False
+        columns = numpy.nonzero(lit.any(axis=0))[0]
+        edge = numpy.zeros(len(ys), dtype=bool)
+        if len(columns):
+            edge = (numpy.abs(xs - columns[0]) <= 2) | (numpy.abs(xs - columns[-1]) <= 2)
+        for k in range(len(ys)):
+            if edge[k]:
+                labels[k] = "card_edge_column"
+                continue
+            column = lit[:, xs[k]]
+            runs = numpy.flatnonzero(numpy.diff(numpy.concatenate(([0], column.view(numpy.int8), [0]))))
+            starts, ends = runs[0::2], runs[1::2]          # lit runs [start, end) from the top
+            if not len(starts):
+                continue
+            y = ys[k]
+            if len(starts) > 1 and starts[0] - 1 <= y <= ends[0]:
+                labels[k] = "peak_row"
+                continue
+            bar = 1 if len(starts) > 1 else 0
+            if starts[bar] - 1 <= y < starts[bar] + 4:
+                labels[k] = "cap_arc"
+    levels = delta[ys, xs]
+    for name in classes:
+        chosen = labels == name
+        if chosen.any():
+            entry = classes[name]
+            entry["pixels"] += int(chosen.sum())
+            entry["max_level"] = max(entry["max_level"], int(levels[chosen].max()))
+            entry["inputs"] += 1
 
 
 def failed_frame_records(judged: list[dict], native: dict, python: dict, masks: dict, limit: int = 8) -> list[dict]:
     """The first ``limit`` failing frames of ``rule_a_frames``, each with its reasons and up to 40 pixels past one level
     (where, how far, the reference's own 3x3 range and both colours), so a long run's rare failure is classified
     without a rerun. A frame whose regions differ is kept with its reasons and no pixels (checkpoint audit 7 L1)."""
-    import numpy
-
     failed = []
     for entry in (f for f in judged if not f.get("pass")):
-        if len(failed) >= limit:
+        if limit is not None and len(failed) >= limit:
             break
         index = entry.get("input")
-        record = {"input": index, "reasons": entry.get("reasons", []), "pixels_past_one_level": []}
-        failed.append(record)
         if index is None:
+            failed.append({"input": index, "reasons": entry.get("reasons", []), "pixels_past_one_level": []})
             continue
-        a, b = _pixels(native, index).astype(int), _pixels(python, index).astype(int)
-        if a.shape != b.shape:
-            record["shapes"] = [list(a.shape), list(b.shape)]
-            continue
-        delta = numpy.abs(a - b)[..., :3].max(axis=2)
-        ys, xs = numpy.nonzero(delta > 1)
-        mask = masks.get(index)
-        for y, x in list(zip(ys.tolist(), xs.tolist()))[:40]:
-            patch = b[max(0, y - 1):y + 2, max(0, x - 1):x + 2, :3]
-            record["pixels_past_one_level"].append({
-                "x": x, "y": y, "level": int(delta[y, x]),
-                "reference_range": int((patch.max(axis=(0, 1)) - patch.min(axis=(0, 1))).max()),
-                "masked": bool(mask[y, x]) if mask is not None else False,
-                "python": b[y, x].tolist(), "native": a[y, x].tolist()})
+        failed.append(_failed_record(entry, _pixels(native, index), _pixels(python, index), masks.get(index)))
     return failed
+
+
+def _failed_record(entry: dict, native, python, mask) -> dict:
+    """One failing frame's record: its reasons and up to 40 pixels past one level (where, how far, the reference's own
+    3x3 range and both colours); frames of other shapes keep their shapes and no pixels."""
+    import numpy
+
+    record = {"input": entry.get("input"), "reasons": entry.get("reasons", []), "pixels_past_one_level": []}
+    a, b = numpy.asarray(native).astype(int), numpy.asarray(python).astype(int)
+    if a.shape != b.shape:
+        record["shapes"] = [list(a.shape), list(b.shape)]
+        return record
+    delta = numpy.abs(a - b)[..., :3].max(axis=2)
+    ys, xs = numpy.nonzero(delta > 1)
+    for y, x in list(zip(ys.tolist(), xs.tolist()))[:40]:
+        patch = b[max(0, y - 1):y + 2, max(0, x - 1):x + 2, :3]
+        record["pixels_past_one_level"].append({
+            "x": x, "y": y, "level": int(delta[y, x]),
+            "reference_range": int((patch.max(axis=(0, 1)) - patch.min(axis=(0, 1))).max()),
+            "masked": bool(mask[y, x]) if mask is not None else False,
+            "python": b[y, x].tolist(), "native": a[y, x].tolist()})
+    return record
 
 
 def rule_a_halves(judged: list[dict], switch_input: int, mode: str | None = None) -> dict:
@@ -929,31 +1121,120 @@ def rule_a_halves(judged: list[dict], switch_input: int, mode: str | None = None
             for name, lo, hi in (("first", 0, half), ("second", half, switch_input))}
 
 
-def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path,
-                  placement: str = "display") -> dict:
-    """Rule (a) of the port (N2.5): the owner in process drawn by the Python renderer and by the native item, single-
-    sampled, frame for frame over the card's region and its margin. Each native card's window map is checked against
-    the Python renderer's own rows of the same frame (``mapping``), and every pixel more than a level off is
-    classified (``classes``). ``placement``: where both runs put the card (``PLACEMENTS``)."""
+def _python_reference(mode: str, script, settings: dict) -> tuple[dict, list]:
+    """The Python side of a rule (a) run: its drawn run and (Spectrum) its window maps."""
+    if mode == "spectrum":
+        return _python_mappings_run(mode, script, settings)
+    # A generic mode's card maps nothing per fragment (its uv is the core's, N29 round 2 M6): no mapping control.
+    return drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings, lit=False), []
+
+
+def _python_masks(mode: str, script, settings: dict, python: dict) -> tuple[dict, int]:
+    """Rule (a)'s mask: the same Python run over a second background (its translucent pixels); and that run's frame
+    count."""
+    with content_backdrop():
+        backdrop = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings, lit=False)
+    return rule_a_masks(python, backdrop), len(backdrop["pixels"])
+
+
+def native_only(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path, placement: str = "display", *,
+                against: dict | None = None) -> dict:
+    """Native before against native after (the guide's section 3, an optimisation of a landed port): the native run
+    alone, each frame's hash written to the run's progress file as it is drawn, against ``against`` (an accepted run's
+    entry with ``native_hashes``) when given: no Python render and no tolerance, every frame whose hash changed is
+    listed, and a different frame count fails."""
     script = parity_script(clip_frames, mode)
-    with single_sample_scene_targets(), card_placement(placement):
-        if mode == "spectrum":
-            python, mappings = _python_mappings_run(mode, script, settings)
-        else:
-            # A generic mode's card maps nothing per fragment (its uv is the core's, N29 round 2 M6): no mapping control.
-            python, mappings = drawn_run(mode, script, worker=False, supervisor=None, namespace=None,
-                                         settings=settings), []
-        native = native_drawn_run(mode, script, settings=settings, core=core,
-                                  python_mappings=mappings if mode == "spectrum" else None)
-        # Rule (a)'s mask: the same Python run over a second background (its translucent pixels).
-        with content_backdrop():
-            backdrop = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings)
-    masks = rule_a_masks(python, backdrop)
-    paths = pair_difference(native, python)
-    rows = frame_differences(native, python)
     switch_at = next(i for i, (kind, _v) in enumerate(script) if kind == "mode")
     switch_input = sum(1 for kind, _value in script[:switch_at] if kind == "input")
     run = f"{mode}{suffix}" if placement == "display" else f"{mode}{suffix}@{placement}"
+    progress = Path(out) / f"progress_{run.replace(':', '_').replace('=', '-').replace('@', '_at_')}.jsonl"
+    Path(out).mkdir(parents=True, exist_ok=True)
+    progress.write_text("", encoding="utf-8")
+    baseline = None if against is None else list(against.get("native_hashes") or [])
+    changed: list[int] = []
+
+    def hashed(index: int, record: dict, _frame) -> None:
+        line = {"input": index, "hash": record["hash"]}
+        if baseline is not None and (index >= len(baseline) or baseline[index] != record["hash"]):
+            changed.append(index)
+            line["changed"] = True
+        with progress.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(line) + "\n")
+
+    with single_sample_scene_targets(), card_placement(placement):
+        native = native_drawn_run(mode, script, settings=settings, core=core, on_frame=hashed)
+    hashes = [entry["hash"] for entry in native["pixels"]]
+    verdict = {"mode": mode, "run": run, "placement": placement, "native_only": True, "inputs": native["inputs"],
+               "switch_input": switch_input, "native_frames": native["native_frames"],
+               "native_published": native["native_published"], "native_hashes": hashes,
+               "region": native["pixels"][0]["region"] if native["pixels"] else None, "progress": str(progress),
+               "frames_drawn": [None, len(hashes)]}
+    if baseline is not None:
+        half = switch_input // 2
+        verdict["against"] = {"frames": [len(baseline), len(hashes)], "changed": changed,
+                              "changed_halves": {"first": sum(1 for i in changed if i < half),
+                                                 "second": sum(1 for i in changed if half <= i < switch_input),
+                                                 "switch": sum(1 for i in changed if i >= switch_input)}}
+        verdict["identical"] = not changed and len(baseline) == len(hashes)
+        verdict["pass"] = verdict["identical"] and verdict["native_published"] > 0
+    else:
+        verdict["identical"] = verdict["pass"] = bool(verdict["native_published"] > 0)
+    return verdict
+
+
+def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path,
+                  placement: str = "display", *, references: Path | None = None, clip_name: str = "") -> dict:
+    """Rule (a) of the port (N2.5): the owner in process drawn by the Python renderer and by the native item, single-
+    sampled, frame for frame over the card's region and its margin. Each native card's window map is checked against
+    the Python renderer's own rows of the same frame (``mapping``), and every pixel more than a level off is
+    classified (``classes``). ``placement``: where both runs put the card (``PLACEMENTS``). ``references``: the root of
+    the cached Python references (``python_references``): the Python run and its masks are read from there when a
+    reference made of exactly this run exists, and stored there when not."""
+    from tools.visualizer_replay import python_references
+
+    script = parity_script(clip_frames, mode)
+    cached = folder = made_of = None
+    reference_state = "not used"
+    if references is not None:
+        from PySide6.QtGui import QGuiApplication
+
+        dpr_now = float(QGuiApplication.primaryScreen().devicePixelRatio())
+        key, made_of = python_references.reference_key(mode, suffix, settings, clip_name, clip_frames, placement,
+                                                       dpr_now)
+        folder = Path(references) / key
+        cached = python_references.load(folder, made_of)
+        reference_state = "read" if cached is not None else "drawn and stored"
+    switch_at = next(i for i, (kind, _v) in enumerate(script) if kind == "mode")
+    switch_input = sum(1 for kind, _value in script[:switch_at] if kind == "input")
+    run = f"{mode}{suffix}" if placement == "display" else f"{mode}{suffix}@{placement}"
+    # One line per native frame as it is judged (fast-proof part 2 step 4): a killed run keeps what it judged.
+    progress = Path(out) / f"progress_{run.replace(':', '_').replace('=', '-').replace('@', '_at_')}.jsonl"
+    Path(out).mkdir(parents=True, exist_ok=True)
+    progress.write_text("", encoding="utf-8")
+    with single_sample_scene_targets(), card_placement(placement):
+        # The Python reference and its masks first (read or drawn), so each native frame is judged as it is drawn.
+        if cached is not None:
+            python, masks, mappings, backdrop_frames = cached
+        else:
+            python, mappings = _python_reference(mode, script, settings)
+            masks, backdrop_frames = _python_masks(mode, script, settings, python)
+            if references is not None:
+                python_references.store(folder, made_of, python, masks, mappings, backdrop_frames)
+        judge = LiveJudge(python, masks, switch_input, mode, progress=progress, workers=JUDGE_WORKERS)
+        native = native_drawn_run(mode, script, settings=settings, core=core,
+                                  python_mappings=mappings if mode == "spectrum" else None, on_frame=judge.frame)
+        if cached is not None and python["digests"] != native["digests"]:
+            # The simulation moved since the reference was drawn: never judged against it; drawn again and the
+            # native frames judged again against the new reference.
+            reference_state = "stale (logical digests differ): drawn again and stored"
+            python, mappings = _python_reference(mode, script, settings)
+            masks, backdrop_frames = _python_masks(mode, script, settings, python)
+            python_references.store(folder, made_of, python, masks, mappings, backdrop_frames)
+            judge = LiveJudge(python, masks, switch_input, mode)
+            for index, record in enumerate(native["pixels"]):
+                judge.frame(index, record, native["frames"][index])
+    single = judge.result()
+    paths, rows = single["paths"], single["rows"]
     origin = native.get("outer_origin")
     dpr = float(_PLACED["dpr"])
     fraction = None if origin is None else [round((v * dpr) % 1.0, 4) for v in origin]
@@ -973,18 +1254,21 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     verdict["identical"] = bool(paths["first"] is None and verdict["digests_identical"]
                                 and verdict["native_published"] > 0)
     # Rule (a)'s verdict: the composite's tolerance (RULE_A_*), pixel by pixel with the translucency mask.
-    judged = rule_a_frames(native, python, masks, mode)
+    judged = single["judged"]
     verdict["rule_a"] = rule_a_verdict(judged, mode)
-    verdict["rule_a"]["failed_frames"] = failed_frame_records(judged, native, python, masks)
+    # Every failing frame, with its pixels (fast-proof part 2 step 4; the first eight before).
+    verdict["rule_a"]["failed_frames"] = single["failed"]
+    verdict["progress"] = str(progress)
     verdict["rule_a_halves"] = rule_a_halves(judged, switch_input, mode)
     verdict["rule_a"]["mask_inputs"] = len(masks)
-    verdict["rule_a"]["backdrop_frames"] = len(backdrop["pixels"])
+    verdict["rule_a"]["backdrop_frames"] = backdrop_frames
+    verdict["python_reference"] = {"state": reference_state, "folder": None if folder is None else str(folder)}
     verdict["pass"] = bool(verdict["rule_a"]["pass"] and verdict["digests_identical"] and verdict["native_published"] > 0
                            and paths["regions_equal"] and len(python["pixels"]) == len(native["pixels"])
-                           == len(backdrop["pixels"]))
+                           == backdrop_frames)
     verdict["split"] = _split_rows(rows, switch_input)
     verdict["mapping"] = dict(native["mapping"], python_frames=len(mappings))
-    verdict["classes"] = classify_differences(native, python, switch_input)
+    verdict["classes"] = single["classes"]
     if rows:
         worst = max(rows, key=lambda row: (row["max_level"], row["pixels"]))
         verdict["worst"] = worst
@@ -995,11 +1279,13 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
 
 def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
                against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS, mode: str = "spectrum",
-               recording: str | None = None) -> dict:
+               recording: str | None = None, references: Path | None = None,
+               native_only_run: bool = False) -> dict:
     """``native_parity`` over ``mode``'s widened run set (``conventions_identity.mode_runs``; a mode of the route's
     ``NATIVE_MODE_IDS``) at the rig's own placement, and ``OVERSCAN_RUNS`` again at each other placement of
     ``placements`` (keyed ``run@placement``); the report. ``against``: an accepted report this one is compared with
-    (``against_baseline``)."""
+    (``against_baseline``). ``native_only_run``: ``native_only`` instead (no Python render; with ``against``, each
+    run's native hashes against that report's)."""
     baseline = json.loads(Path(against).read_text(encoding="utf-8")) if against is not None else None
     import tools.expanded_visualizer_evidence as evidence
     from rendering.native import load
@@ -1017,7 +1303,8 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
     if mode not in NATIVE_MODE_IDS:
         raise ValueError(f"the native route draws {sorted(NATIVE_MODE_IDS)}, not {mode!r}")
     report: dict = {"mode": mode, "offers": offers, "seconds": seconds, "display": list(DISPLAY), "clip": clip.name,
-                    "clip_frames": len(clip.frames), "results": {}}
+                    "clip_frames": len(clip.frames), "native_only": bool(native_only_run), "api": "opengl",
+                    "results": {}}
     started = time.perf_counter()
     runs = conventions_identity.mode_runs(mode, offers)
     planned = [(suffix, settings, "display") for suffix, settings in runs] if "display" in placements else []
@@ -1029,15 +1316,30 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
             if only and key not in only:
                 continue
             engine_worker_link.reset_run_state_for_testing()
-            verdict = native_parity(core, mode, suffix, settings, clip.frames, out, placement=placement)
+            if native_only_run:
+                entry = None if baseline is None else (baseline.get("results") or {}).get(key)
+                if baseline is not None and entry is None:
+                    raise ValueError(f"the baseline {against} has no run {key!r}")
+                verdict = native_only(core, mode, suffix, settings, clip.frames, out, placement=placement,
+                                      against=entry)
+                report["results"][key] = verdict
+                changed = verdict.get("against", {}).get("changed")
+                print(f"[NATIVE ONLY] {key:40s} {len(verdict['native_hashes'])} frames, native "
+                      f"{verdict['native_published']} published; "
+                      + ("no baseline" if changed is None else
+                         f"{len(changed)} frames changed {verdict['against']['changed_halves']} "
+                         f"(first {changed[:10]}): {'IDENTICAL' if verdict['identical'] else 'CHANGED'}"), flush=True)
+                continue
+            verdict = native_parity(core, mode, suffix, settings, clip.frames, out, placement=placement,
+                                    references=references, clip_name=clip.name)
             report["results"][key] = verdict
             print(f"[NATIVE] {key:48s} {verdict['frames_drawn']} frames, native {verdict['native_published']}"
                   f" published; differing inputs {verdict['differing_inputs']}, pixels "
                   f"{verdict['differing_pixels_total']}, max level {verdict['max_level']}; card origin "
                   f"{verdict['outer_origin']} (device fraction {verdict['outer_origin_device_fraction']}); "
-                  f"{'IDENTICAL' if verdict['identical'] else 'DIFFERENT'}; edge pixels in the worst frame "
-                  f"{verdict['rule_a']['edge_pixels_worst_frame']}; rule (a) {verdict['rule_a']['bound']}: "
-                  f"{'PASS' if verdict['pass'] else 'FAIL'}", flush=True)
+                  f"{'bit-identical' if verdict['identical'] else 'not bit-identical'}; edge pixels in the worst "
+                  f"frame {verdict['rule_a']['edge_pixels_worst_frame']}; rule (a) {verdict['rule_a']['bound']}: "
+                  f"{'PASS under tolerance' if verdict['pass'] else 'FAIL'}", flush=True)
     finally:
         report["elapsed_s"] = round(time.perf_counter() - started, 1)
         report["identical"] = bool(report["results"]) and all(v["identical"] for v in report["results"].values())
@@ -1196,7 +1498,28 @@ def main(argv=None) -> int:
     parser.add_argument("--recording", default=None,
                         help="with --native: one of the operator's recorded takes (logs/visualizer_recordings/<name>"
                              ".jsonl, its first --seconds) instead of the shipped Studio clip")
+    parser.add_argument("--references", nargs="?", type=Path, default=None, const=Path("default"),
+                        help="with --native: cached Python references (tools/visualizer_replay/python_references.py): "
+                             "read when one made of exactly this run exists, else drawn and stored; the folder "
+                             "(default D:\\Temp\\Scratch\\SRPSS\\fast_proof\\references)")
+    parser.add_argument("--native-only", action="store_true",
+                        help="with --native: the native runs alone, each frame's hash written as it is drawn; with "
+                             "--against, every frame whose hash changed from that report's (native before against "
+                             "native after: no Python render, no tolerance)")
+    parser.add_argument("--judge-workers", type=int, default=0,
+                        help="with --native: rule (a)'s frames judged in this many worker processes (0: in this one; "
+                             "the same verdicts either way)")
+    parser.add_argument("--api", choices=("opengl", "vulkan"), default="opengl",
+                        help="with --native: the graphics API the owner's scene and the native item draw on")
     args = parser.parse_args(argv)
+    if args.api != "opengl":
+        parser.error("--api vulkan: the owner replay's hidden host draws OpenGL only; the native item on Vulkan is "
+                     "drawn from the take's delivery stream by tools/visualizer_replay/native_stream_player.py "
+                     "(native_record_identity.py --deliveries writes the stream)")
+    if args.references is not None and str(args.references) == "default":
+        from tools.visualizer_replay.python_references import DEFAULT_ROOT
+
+        args.references = DEFAULT_ROOT
     # The stills (contact sheets, difference maps) and the report are written into owner scratch and published to
     # ``--out`` by the evidence publisher (``tools/evidence_media.py``); stills stay PNG, lossless.
     evidence_media.redirect_output(args, "out", "owner_render_parity")
@@ -1213,13 +1536,15 @@ def main(argv=None) -> int:
     app = QApplication(["owner-render-parity"])
     try:
         if args.native:
-            global NATIVE_SURFACE_FORMAT, NATIVE_UNPRIMED
+            global NATIVE_SURFACE_FORMAT, NATIVE_UNPRIMED, JUDGE_WORKERS
+            JUDGE_WORKERS = max(0, int(args.judge_workers))
             NATIVE_SURFACE_FORMAT = args.surface_format
             NATIVE_UNPRIMED = bool(args.unprimed)
             report = run_native(args.out, module_dir=args.module_dir.resolve(), offers=args.offers,
                                 seconds=args.seconds, only=tuple(args.runs),
                                 against=None if args.against is None else args.against.resolve(),
-                                placements=tuple(args.placements), mode=args.mode, recording=args.recording)
+                                placements=tuple(args.placements), mode=args.mode, recording=args.recording,
+                                references=args.references, native_only_run=bool(args.native_only))
         else:
             report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
                          seconds=args.seconds, controls=not args.skip_controls)

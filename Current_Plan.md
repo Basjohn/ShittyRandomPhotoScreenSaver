@@ -661,7 +661,8 @@ the feature (D3D11 is not stated).
   - [ ] Registration last (playbook checklist 18), then docs (D12 "As built: Oscilloscope", Primitives, README).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
   Registered on the route and offered on Vulkan (rule (b) passes: `native/core/python/bubble_check.py`, D12 "As built:
-  Bubble"). Owner rule (a) passes on the 5.5 s replay and the four 60 s recorded takes under D12's Bubble scatter. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
+  Bubble"). Owner rule (a) passes on the 5.5 s replay; on the four 60 s recorded takes, rejudged 21 Nov under today's
+  rule (a), two takes fail three steady frames on the narrowed isolation clause (the box below). `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
   eliminated suspicions and evidence; the diagnostics tools are `tools/visualizer_replay/bubble_native_diagnostics.py`
   (`Docs/Guides/Native_Bubble_Diagnostics.md`). Follow the Native Port Playbook; no further tolerance widening.
   Order: checkpoint audit 8's M1, M2 and lows (boxes below); the fast proof's L and P tools (their own box); layer L directly; layer T; rule (b)
@@ -700,47 +701,35 @@ the feature (D3D11 is not stated).
 
   - [ ] Rule (b) over the four 60 s takes, once the owner replay gains `--api vulkan` (the fast-proof box). Today
     rule (b) has run over the 5.5 s replay's 684 sampled frames only.
+    The tool exists (21 Nov): `native_record_identity.py --deliveries` then `native_stream_player.py`, about 9
+    minutes a take on an idle machine; ragdoll and human_heavy1 ran and fail (the 60 s box below).
   - [ ] Layer L directly: the per-frame packed record byte-compared with the values the Python renderer uses, over the
     four takes (the fast-proof box's L tool; `engine_worker_gate.py` is the precedent).
-  - [ ] Checkpoint audit 8 M1 (report closed 20 Nov, its findings are these boxes; full text:
-    `git show 66e64a363:Docs/Future_Work/Checkpoint_Audits_Nov15.md`): the spread rule groups scatter only
-    (`tools/pixel_tolerance.py:186-203`). A 1 px line of 67 one-level pixels passes rule (a) once pixels 23 and 46
-    are 2-level ties or exact, and 60 one-level pixels at 23 % density in a 16 x 16 patch pass too.
-    - [ ] Group over `scatter | tie`, so a tie joins the groups it touches.
-    - [ ] Add a density bound: at most K scatter pixels in any 16 x 16 window. Measure K on the steady residual's
-      classification and the offers' frames, times 1.5. The lead decides it; record it in D12's Bubble line and
-      bubble_check's rule (b).
-    - [ ] Negative controls in `tests/test_native_bubble.py`: the line with two ties, the line with two exact pixels,
-      the dithered patch. Each is seen passing on today's code and failing on the fix.
+    Ran 20 Nov (`native_record_identity.py`, variant a, display placement): identical on all four takes, 2,645 of 2,645
+    and 2,646 of 2,646 inputs judged per half each (5,313 compared frames a take with the switch fade; all three passes
+    and both ambient streams compared); Spectrum and Spline Curve on `nightsolong_acousticsoft1` identical with the
+    same counts. Evidence `.artifacts/evidence/native_core/fast_proof/20261120_l_<mode>_<take>/`.
+  - [ ] Checkpoint audit 8 M1, what is left (ties joined into groups, the 16 x 16 density bound of 26 for rule (a) and
+    the split-line and dithered-patch controls landed 21 Nov, c432c1359; D12's Bubble line):
+    - [ ] The audit's line split by two exact pixels (65 one-level pixels in a straight line, groups of 22) still
+      passes: a straight line puts 16 pixels in a 16 x 16 window, under the bound. Decide whether it needs its own rule.
+    - [ ] Rule (b)'s density bound: not set. Measured densest window 12 and 13 on the ragdoll and human_heavy1 60 s
+      takes (`fast_proof/20261121_rule_b_60s_*`), 9 on the 5.5 s stream; rule (b)'s own count and tie bounds fail
+      on the long takes (the box below), so the bound waits for that decision.
     - [ ] Rerun the offers and rule (b)'s 684 frames under the fix. Any newly failing frame is classified, never
       admitted by a wider bound.
-  - [ ] Checkpoint audit 8 M2: the four 60 s takes' rule (a) reports (`20261117_rule_a_60s_*`, 01:59 on 17 Nov)
-    predate the spread rule (no `scatter_group` field), yet D12 (`Native_Core_P3_Decisions.md:1040`) and this box's
-    header say they pass under it.
-    - [ ] Now: say in D12's Bubble line and in this header that the 60 s figures were judged before the group cap
-      and the isolation clause.
-    - [ ] Rejudge the four takes under the current rule (a), together with M1's fix: the fast proof's layer P
-      when it exists, otherwise `owner_render_parity.py --recording` (lead's slot; no agent load runs).
-  - [ ] Checkpoint audit 8 lows (triage: all small, none blocking):
-    - [ ] L1: a test in which a tolerance without `scatter_cluster_pixels` keeps a tie beside three scatter pixels
-      isolated. Today, applying the narrowing to every mode passes the whole focused suite.
-    - [ ] L2: a `bubble_check` case in `tests/test_pixel_tolerance_routing.py`: a spread field passes; a compact
-      block, `_shift`, `_artefact` and `_wild` fail; missing references fail. Today, dropping the spread from Bubble's
-      `VULKAN_RULE_B` passes every test.
-    - [ ] L3: a control passes only for its intended reason (`devcurve_check.py:957-960`). A pixel control needs a
-      clean Vulkan child and a cross verdict failing on tolerance reasons. An item control needs exactly its named
-      check failing. Anything else prints "CONTROL INCONCLUSIVE".
-    - [ ] L4: `settings_at` and `sizes_at` raise when a sampled frame lacks the ratio, instead of falling back to the
-      capture ratio's values (`devcurve_check.py:118-121`, `bubble_check.py:167-169`).
-    - [ ] L5: reword the stale text. D12 "As built: Bubble" says "the widened set at both placements is open"; the
-      offers have run, at the display placement, with a and b at both. D12's cost paragraph needs the note that
-      "ambience on/off" means variant a's and variant b's frames. "Bubble remains dormant" survives in
-      `Native_Core_P3_Decisions.md:38`, `Docs/Reference/Primitives.md:61`,
-      `Native_Bubble_Parity_Investigation.md:3` and `:50`, and in the `_bubble_native_replay.py` docstring. This
-      box's "38 offer runs at both placements" should say the same.
-    - [ ] L6 (audit 7 L5, which escaped without a box): add a 5.3 s clip to
-      `tests/test_visualizer_owner_render_parity.py`, whose switch must stay at 4.2 s, so the `max(4.2, ...)` guard is
-      pinned.
+  - [ ] Bubble's 60 s takes under today's rules (audit 8 M2's rejudge, 20 and 21 Nov; D12's Bubble line;
+    `fast_proof/20261120_m2_rule_a_60s_*`, `20261121_m2_rule_a_60s_*`, `20261121_rule_b_60s_*`). Classify and decide;
+    no bound raised.
+    - [ ] Rule (a): human_heavy1 inputs 2182 and 2223 and nightsolong input 2128 fail, each a lone 2-level tie off a
+      content edge (reference 3x3 range 31, 15 and 23) with 3 or more scatter pixels in its 3x3: the narrowed isolation
+      clause of 17 Nov, which the stored reports predate. nightsolong input 22 as accepted. ragdoll and anything_mixed2
+      pass.
+    - [ ] Rule (b) on 60 s (`native_stream_player.py`): ragdoll 18 and human_heavy1 12 of 5,313 frames fail the
+      5.5 s-measured bound (32 scatter, groups of 11, no tie): scatter up to 237 a frame but spread (groups at most
+      11, densest window 13), 2-level ties in 6 frames, all steady (content fade 1), 8 of ragdoll's in inputs 74-197
+      (the reveal and the synthesised pause). anything_mixed2 and nightsolong not run yet (their streams are in
+      `D:\Temp\Scratch\SRPSS\fast_proof\deliveries\`).
   - [x] Class-word upload and portable unsigned-vector admission proved on both APIs; unchanged wire record (R-238).
   - [ ] Non-blocking contract follow-up, now with a measured case: non-unit inherited scene opacity. During the cold
     reveal (scene fade 0.8648 at input 0 to 1.0 by input 30, content fade 1, identical on both paths) Python folds it
@@ -816,19 +805,34 @@ the feature (D3D11 is not stated).
   first Bubble optimisation; the rules are the guide's.
 - [ ] Build the fast long-clip proof (Opus Medium agent a6257c36aeee45f10, 20 Nov; method and rules: `Docs/Guides/Native_Parity_And_Timing_Proof.md`, its
   section 7; step 1 of the order: Bubble's layer L and long-take rule (b) need it, and so do every later port). Steps, each with a test:
-  - [ ] A cheaper judge with byte-identical verdicts. The 20 Nov profile (Sonnet): of a 171 s, 958-frame 10 s Bubble take,
-    the judge was 65 %. `content_edges` alone took 59 s, at 78 ms a frame, though it is read only at tie pixels. The
-    lit mean was 12 %, compress and spill 6.6 %, the backdrop-mask run 8 %, triple simulation 4.6 %, and the draw under
-    3 %. Compute `content_edges` only at candidate ties, compute each delta once, decompress once, and drop the unread
-    lit mean. Prove it by re-judging every stored 60 s report to identical verdicts, failed frames and halves.
   - [ ] Layer L: the per-frame record compared byte for byte between paths, CPU only (`engine_worker_gate.py` is the
     precedent).
+    Built (20 Nov, commit e0275205c): `tools/visualizer_replay/native_record_identity.py` (`--mode --recording
+    --seconds 60 --out`), test `tests/test_native_record_identity.py` (one-ulp record and dropped-frame controls seen
+    failing at their input). One owner tick; the product's route on the owner's own item with a recording core; per
+    frame record bytes, settings by name and the module's GPU-free blocks against the Python renderer on a null GL.
+    Outside L by declaration: positional members (uMatrix, u_target_px, Spectrum's window maps) and the inherited scene
+    opacity. A take runs in 24 to 39 s. Evidence `.artifacts/evidence/native_core/fast_proof/20261120_l_*`.
   - [ ] Layer T on native paths (guide section 7): the live check reads presentation cadence from Qt Quick's frame
     cycles when the native core draws (today it reports `frames_per_s 0` on Vulkan), and the native per-pass GPU
     time from `--gpu-pass-timing`. The lead's interim script, `quick_before_frame_begin` intervals outside lifecycle
     windows, is the reference; prove it gives the same figures as the Python path's swap gaps on an OpenGL run.
   - [ ] Layer P: cached Python references; a native-only, hash-only compare with `--api opengl|vulkan`; every failing
     frame recorded (not the first eight); progress written during a run.
+    Built (20 to 21 Nov), in the profile's order, each with a test, evidence `fast_proof/20261120_*`:
+    (1) ddb3dc8b2 the judge reads content edges only at ties and flips, and one pass per frame shares one decompress
+    and one delta (same verdicts on synthetic frames and on the 5.5 s replay of all three modes; judge 10 to 13 s
+    against 58 to 61 s); (2) ec0bf3feb no lit mean on native, reference or mask runs, and the console says
+    "not bit-identical ... PASS under tolerance"; (3) 12a688e57 `owner_render_parity --native --references` caches
+    the Python run and its masks (`tools/visualizer_replay/python_references.py`, default
+    `D:\Temp\Scratch\SRPSS\fast_proof\references`, about 2 GB a 60 s take; keyed by the run and the Python drawing
+    code's sources, re-drawn when the native run's logical digests differ); (4a) d0b2e8095 the reference first, then
+    each native frame judged as it is drawn with a progress line, every failing frame kept with its pixels, and
+    `--native-only --against <report>` (no Python, hashes only, every changed frame listed); (4b) 29fc590c0 the
+    Vulkan side is not the owner replay (its hidden host is OpenGL) but the take's delivery stream
+    (`native_record_identity.py --deliveries`) drawn by `native_stream_player.py` on OpenGL and Vulkan: rule (b) per
+    frame under the mode's `VULKAN_RULE_B`, and each API's hashes against an earlier run; generic modes only, Spectrum's
+    own item is not played yet; (5) d0b2e8095 `--judge-workers N`, the same result as one process.
   - [ ] Coverage selection with its coverage report (guide section 3), warm-up per mode (guide section 5).
   - [ ] Method proof on Bubble: the selected set catches input 22, the two offer fade frames, a one-level shift and a
     one-ulp shader change.

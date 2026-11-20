@@ -13,9 +13,10 @@ pixel by pixel, never by a histogram of levels:
 - **Scatter** (``scatter_pixels``): pixels outside the mask exactly one level off, at most ``scatter_pixels`` in a
   frame: two compilers (the Python renderer's GLSL and the core's pack, or two backends' drivers) rounding a value
   that lies within float error of a half level. A share of the frame, never the frame: a uniform shift fails. Where
-  a harness states its spread (``scatter_cluster_pixels``), no group of touching scatter pixels may be larger, so a
-  compact one-level patch fails however few its pixels, and a tie with ``SCATTER_AGAINST_ISOLATION`` or more scatter
-  pixels in its 3x3 is not isolated.
+  a harness states its spread (``scatter_cluster_pixels``), no group of touching scatter and tie pixels may be larger
+  (a tie joins the groups it touches), so a compact one-level patch or line fails however few its pixels, and a tie
+  with ``SCATTER_AGAINST_ISOLATION`` or more scatter pixels in its 3x3 is not isolated; with a density bound
+  (``scatter_window_pixels``) no ``SCATTER_WINDOW`` square window may hold more scatter and tie pixels.
 - **Ties** (``tie_pixels``, ``tie_level``): every other pixel past its allowance. At most ``tie_pixels`` in a frame,
   each at most ``tie_level`` off (2; 3 only for the composite's edge class, ``COMPOSITE_EDGE_LEVEL``, proved per pixel
   in D12), and each isolated (no other pixel past its allowance among its eight neighbours) or on a content edge of the
@@ -42,6 +43,9 @@ COMPOSITE_EDGE_LEVEL = 3
 #: (lead, 17 Nov, narrowing checkpoint audit 7 M1: a lone tie beside one or two scatter pixels stays isolated, as
 #: measured in Bubble's offers; a tie inside a one-level patch does not).
 SCATTER_AGAINST_ISOLATION = 3
+#: The density window of the spread rule (checkpoint audit 8 M1): the most scatter and tie pixels any window of this
+#: many device pixels a side may hold (``Tolerance.scatter_window_pixels``).
+SCATTER_WINDOW = 16
 
 
 @dataclass(frozen=True)
@@ -58,8 +62,13 @@ class Tolerance:
     edge_contrast: float = EDGE_CONTRAST
     #: Scatter's spread (checkpoint audit 7 M1): the largest 8-connected group of scatter pixels a frame may hold (None:
     #: no spread rule, the count alone). With it, a tie with SCATTER_AGAINST_ISOLATION or more scatter pixels in its 3x3
-    #: is not isolated, so ties inside a one-level patch fail.
+    #: is not isolated, so ties inside a one-level patch fail. Groups are taken over scatter and ties together (checkpoint
+    #: audit 8 M1): a tie joins the groups it touches instead of splitting a line in two.
     scatter_cluster_pixels: int | None = None
+    #: Scatter's density (checkpoint audit 8 M1; needs ``scatter_cluster_pixels``): the most scatter and tie pixels any
+    #: ``SCATTER_WINDOW`` x ``SCATTER_WINDOW`` window may hold (None: no density bound), so a one-level patch dithered
+    #: into small groups fails.
+    scatter_window_pixels: int | None = None
 
     def __post_init__(self) -> None:
         if self.masked_level not in (0, 1):
@@ -71,6 +80,9 @@ class Tolerance:
             raise ValueError("counts are never negative")
         if self.scatter_cluster_pixels is not None and not 1 <= self.scatter_cluster_pixels <= self.scatter_pixels:
             raise ValueError("a scatter group is at least one pixel and at most the scatter allowance")
+        if self.scatter_window_pixels is not None and (self.scatter_cluster_pixels is None
+                                                        or self.scatter_window_pixels < 1):
+            raise ValueError("a density bound is at least one pixel and belongs to a stated spread")
 
     def bound(self) -> dict:
         bound = {"name": self.name, "masked_level": self.masked_level, "scatter_pixels": self.scatter_pixels,
@@ -78,6 +90,9 @@ class Tolerance:
                  "edge_contrast": self.edge_contrast}
         if self.scatter_cluster_pixels is not None:
             bound["scatter_cluster_pixels"] = self.scatter_cluster_pixels
+        if self.scatter_window_pixels is not None:
+            bound["scatter_window_pixels"] = self.scatter_window_pixels
+            bound["scatter_window"] = SCATTER_WINDOW
         return bound
 
 
@@ -118,6 +133,27 @@ def content_edges(reference, contrast: float = EDGE_CONTRAST):
     span = _neighbourhood(ref, np.maximum) - _neighbourhood(ref, np.minimum)
     edge = span >= contrast
     return edge if edge.ndim == 2 else edge.any(axis=2)
+
+
+def content_edges_at(reference, flags, contrast: float = EDGE_CONTRAST):
+    """``content_edges`` read only at the pixels of ``flags`` (bool, the frame's shape): the same answer there, False
+    elsewhere. The judge reads edges only at its ties and flips, so it asks here for those (fast-proof part 2, step 1:
+    the whole-frame neighbourhood was 59 of the judge's 76 s on a 10 s Bubble take)."""
+    import numpy as np
+
+    ref = np.asarray(reference)
+    flags = np.asarray(flags, bool)
+    out = np.zeros(flags.shape, bool)
+    ys, xs = np.nonzero(flags)
+    if not len(ys):
+        return out
+    h, w = ref.shape[:2]
+    # The 3x3 neighbourhood with the edges replicated (``_neighbourhood``'s pad mode), gathered at the flagged pixels.
+    window = np.stack([ref[np.clip(ys + dy, 0, h - 1), np.clip(xs + dx, 0, w - 1)].astype(np.float64)
+                       for dy in (-1, 0, 1) for dx in (-1, 0, 1)])
+    edge = (window.max(axis=0) - window.min(axis=0)) >= contrast
+    out[ys, xs] = edge if edge.ndim == 1 else edge.any(axis=1)
+    return out
 
 
 def _count_3x3(flags):
@@ -169,18 +205,36 @@ def largest_group(flags) -> int:
     return int(np.bincount(labels.ravel())[1:].max()) if count else 0
 
 
+def densest_window(flags, size: int = SCATTER_WINDOW) -> int:
+    """The most ``flags`` any ``size`` x ``size`` window holds (a frame smaller than the window: the whole frame)."""
+    import numpy as np
+
+    flags = np.asarray(flags, bool)
+    if not flags.any():
+        return 0
+    h, w = flags.shape
+    sy, sx = min(size, h), min(size, w)
+    total = np.zeros((h + 1, w + 1), np.int64)
+    total[1:, 1:] = flags.astype(np.int64).cumsum(axis=0).cumsum(axis=1)
+    windows = total[sy:, sx:] - total[:-sy, sx:] - total[sy:, :-sx] + total[:-sy, :-sx]
+    return int(windows.max())
+
+
 def judge_delta(delta, tolerance: Tolerance, *, mask=None, edges=None) -> dict:
     """One frame's verdict from its per-pixel difference ``delta`` (int: 8-bit levels, or the unit the harness states),
-    the explained ``mask`` (bool; None: no pixel) and the reference's content ``edges`` (bool; None: none)."""
+    the explained ``mask`` (bool; None: no pixel) and the reference's content ``edges`` (bool; None: none; or a function
+    of the pixels it is read at, ``content_edges_at``: only ties and flips are ever read)."""
     import numpy as np
 
     delta = np.asarray(delta)
     shape = delta.shape
     mask = np.zeros(shape, bool) if mask is None else np.asarray(mask, bool)
-    edges = np.zeros(shape, bool) if edges is None else np.asarray(edges, bool)
     past = delta > np.where(mask, tolerance.masked_level, 0)
     scatter = past & ~mask & (delta == 1) if tolerance.scatter_pixels else np.zeros(shape, bool)
     rest = past & ~scatter
+    if callable(edges):
+        edges = edges(rest)
+    edges = np.zeros(shape, bool) if edges is None else np.asarray(edges, bool)
     tie = rest & (delta <= tolerance.tie_level)
     flip = rest & ~tie
     spread = tolerance.scatter_cluster_pixels is not None
@@ -196,10 +250,17 @@ def judge_delta(delta, tolerance: Tolerance, *, mask=None, edges=None) -> dict:
         reasons.append(f"{counts['scatter']} pixels one level off outside the mask (scatter: at most "
                        f"{tolerance.scatter_pixels})")
     if spread:
-        counts["scatter_group"] = largest_group(scatter)
+        # Ties join the groups they touch (checkpoint audit 8 M1: two ties split a one-level line into passing thirds).
+        joined = scatter | tie
+        counts["scatter_group"] = largest_group(joined)
         if counts["scatter_group"] > tolerance.scatter_cluster_pixels:
-            reasons.append(f"a group of {counts['scatter_group']} touching scatter pixels (scatter is spread: groups "
-                           f"of at most {tolerance.scatter_cluster_pixels})")
+            reasons.append(f"a group of {counts['scatter_group']} touching scatter and tie pixels (scatter is spread: "
+                           f"groups of at most {tolerance.scatter_cluster_pixels})")
+        counts["scatter_window"] = densest_window(joined)
+        window = tolerance.scatter_window_pixels
+        if window is not None and counts["scatter_window"] > window:
+            reasons.append(f"{counts['scatter_window']} scatter and tie pixels in one {SCATTER_WINDOW} x "
+                           f"{SCATTER_WINDOW} window (at most {window})")
     if counts["ties"] > tolerance.tie_pixels:
         reasons.append(f"{counts['ties']} ties (at most {tolerance.tie_pixels})")
     stray = int((tie & ~placed).sum())
@@ -217,9 +278,10 @@ def judge_delta(delta, tolerance: Tolerance, *, mask=None, edges=None) -> dict:
             "mask_pixels": int(mask.sum()), **counts}
 
 
-def judge(candidate, reference, tolerance: Tolerance, *, mask=None) -> dict:
+def judge(candidate, reference, tolerance: Tolerance, *, mask=None, delta=None) -> dict:
     """``judge_delta`` for two 8-bit frames of one shape (the channels the harness compares); the content edges are
-    the reference's own. A shape mismatch fails."""
+    the reference's own, read only where the judge reads them (``content_edges_at``). ``delta``: ``levels`` of the
+    two, when the caller has it already. A shape mismatch fails."""
     import numpy as np
 
     a = np.asarray(candidate)
@@ -227,9 +289,9 @@ def judge(candidate, reference, tolerance: Tolerance, *, mask=None) -> dict:
     if a.shape != b.shape:
         return {"pass": False, "reasons": [f"shapes differ: {list(a.shape)} {list(b.shape)}"], "differing": -1,
                 "max_level": None, "masked_differing": 0, "mask_pixels": 0, "scatter": -1, "ties": -1, "flips": -1}
-    delta = levels(a, b)
-    edges = content_edges(b, tolerance.edge_contrast) if delta.any() else None
-    return judge_delta(delta, tolerance, mask=mask, edges=edges)
+    delta = levels(a, b) if delta is None else delta
+    contrast = tolerance.edge_contrast
+    return judge_delta(delta, tolerance, mask=mask, edges=lambda flags: content_edges_at(b, flags, contrast))
 
 
 def translucent_by_alpha(reference, *, additive: bool = False):
@@ -264,6 +326,7 @@ def summarise(frames) -> dict:
             "mask_pixels_largest_frame": max((f.get("mask_pixels", 0) for f in frames), default=0),
             "scatter_worst_frame": max((f.get("scatter", 0) for f in frames), default=0),
             "scatter_group_worst_frame": max((f.get("scatter_group", 0) for f in frames), default=0),
+            "scatter_window_worst_frame": max((f.get("scatter_window", 0) for f in frames), default=0),
             "ties_worst_frame": max((f.get("ties", 0) for f in frames), default=0),
             "flips_worst_frame": max((f.get("flips", 0) for f in frames), default=0),
             "first_reasons": [r for f in failed[:3] for r in f.get("reasons", [])]}
