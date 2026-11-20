@@ -812,7 +812,7 @@ the feature (D3D11 is not stated).
   over the `replay` recipe and show the steady residual collapses (from 2,430 one-level pixels, worst 34 a frame).
 - [ ] Bubble optimisation proof gap: needs the fast long-clip proof's layer P tool (the box below) before the
   first Bubble optimisation; the rules are the guide's.
-- [ ] Audit the fast-proof merge 79a5d1fe7 (Opus Medium, the audit slot): `tools/pixel_tolerance.py`'s M1 groups
+- [ ] Audit the fast-proof merge 79a5d1fe7 (Opus Medium audit agent a8810319889f3a218, 21 Nov): `tools/pixel_tolerance.py`'s M1 groups
   and density, the cheaper judge's equal-verdict proof, the reference cache key, the native-only and stream-player
   paths, and layer L's coverage of positional members.
 - [ ] Build the fast long-clip proof (Opus Medium agent a6257c36aeee45f10, 20 Nov; method and rules: `Docs/Guides/Native_Parity_And_Timing_Proof.md`, its
