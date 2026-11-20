@@ -157,11 +157,9 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] Side defect (Sonnet, 21 Nov): `tools/qtquick_media_smoke.py` fails with "duplicate retained model identity:
-  'media'", and `tools/qtquick_achievement_pulse_smoke.py` builds a stale `AchievementPulsePresentationConfig()` (30
-  missing arguments). Repair both against the current owners, or retire them in `Docs/Reference/Tooling.md`
-  if `tools/surface_material_capture.py` covers them.
-
+- [ ] (Sonnet agent ad927a7c14bbc5053) The repaired smoke tools (`tools/qtquick_media_smoke.py`, `tools/qtquick_achievement_pulse_smoke.py`) capture
+  blank artwork under offscreen QPA. Move their capture onto the hidden Windows-QPA GL host that
+  `tools/surface_material_capture.py` uses, which draws artwork and materials, then review every state's sheet.
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
   in `Docs/Reference/Benchmarks.md` predate the bump. Run it once on main (lead or Medium slot; no load), record
@@ -639,7 +637,13 @@ the feature (D3D11 is not stated).
 
 - [ ] N5.1 Spline Curve leftover: its Studio is not offered on Vulkan (`STUDIO_PREVIEW_BACKENDS`), the same open
   item as Spectrum's; both close with N5.8.
-- [ ] N5.1 Oscilloscope (Opus High: N3.4 bloom's first consumer; agent a652d2d5a77e690ff, 20 Nov). Python oracle:
+- [ ] N5.1 Oscilloscope (Opus High: N3.4 bloom's first consumer; agent a652d2d5a77e690ff, 20 Nov).
+  - [ ] Next (lead, 21 Nov; 5-hour window at 95 %, so after the reset): an Opus High audit of branch
+    `worktree-agent-a652d2d5a77e690ff` before merge. Its ABI 26/27 C++ touches core code every bloom consumer will use:
+    `u_scene_item`, the item-anchored bloom triangle, the three composites, and `StreamSource::syncStream` clearing an
+    old stream's frame. Then merge, build main at ABI 27, run the quiet-machine cost round (the lead), and layer T
+    (the lead). The owner smoke's remaining failure is the replay judging Bubble's partner frames under the
+    Oscilloscope's bounds, a tool fix routed to the fast-proof agent. The stale-stream fix gets an R number at merge. Python oracle:
   `rendering/quick/visualizer/implementations/oscilloscope.py`. It is one instanced pass reading a segment array from
   the stream ring (binding 3) into a single-sample overlay `SceneTarget`. Each segment is a quad. Light goes into the
   overlay's emission attachment, and the target's bloom spreads it into the glow. Glow 0 allocates no emission or
@@ -827,8 +831,8 @@ the feature (D3D11 is not stated).
     opacity. A take runs in 24 to 39 s. Evidence `.artifacts/evidence/native_core/fast_proof/20261120_l_*`.
   - [ ] Layer T on native paths (guide section 7): the live check reads presentation cadence from Qt Quick's frame
     cycles when the native core draws (today it reports `frames_per_s 0` on Vulkan), and the native per-pass GPU
-    time from `--gpu-pass-timing`. The lead's interim script, `quick_before_frame_begin` intervals outside lifecycle
-    windows, is the reference; prove it gives the same figures as the Python path's swap gaps on an OpenGL run.
+    time from `--gpu-pass-timing`. `tools/quick_frame_cadence.py` (frame-cycle intervals outside lifecycle windows) is the
+    reference; prove it gives the same figures as the Python path's swap gaps on an OpenGL run.
   - [ ] Layer P: cached Python references; a native-only, hash-only compare with `--api opengl|vulkan`; every failing
     frame recorded (not the first eight); progress written during a run.
     Built (20 to 21 Nov), in the profile's order, each with a test, evidence `fast_proof/20261120_*`:
@@ -845,6 +849,17 @@ the feature (D3D11 is not stated).
     (`native_record_identity.py --deliveries`) drawn by `native_stream_player.py` on OpenGL and Vulkan: rule (b) per
     frame under the mode's `VULKAN_RULE_B`, and each API's hashes against an earlier run; generic modes only, Spectrum's
     own item is not played yet; (5) d0b2e8095 `--judge-workers N`, the same result as one process.
+  - [ ] Checkpoint audit 9 M1 (`Docs/Future_Work/Checkpoint_Audits_Nov21.md`): the cached reference's key
+    (`python_references._source_files`) misses `rendering/gl_programs/conventions.py` (spliced into every composed
+    shader), the composer `widgets/spotify_visualizer/shaders/__init__.py`, `rendering/gl_programs/*`, the QML shaders
+    and the mask and capture code (`rule_a_masks`, `content_backdrop`, `SceneMirror`,
+    `pixel_tolerance.translucent_by_backgrounds`). Key on the composed sources of every shader the renderer compiles,
+    a declared module list and the mask code; the conventions change (seen not changing the key) becomes the test's
+    control.
+  - [ ] Checkpoint audit 9 M2: the stale-reference path dies on Windows (WinError 32: `store` removes the folder whose
+    `frames.bin` the loaded `StoredFrames` still holds open), leaving the stale reference so every later run dies
+    too. Close the stored frames (or store aside and swap), rewrite the progress file from the rejudge with the
+    run's `--judge-workers`, and test the stale path end to end.
   - [ ] Coverage selection with its coverage report (guide section 3), warm-up per mode (guide section 5).
   - [ ] Method proof on Bubble: the selected set catches input 22, the two offer fade frames, a one-level shift and a
     one-ulp shader change.
@@ -1581,20 +1596,6 @@ by risk; none takes a slot native work can use.
   Width, right-aligned, in the same style. It latches pressed and sets every border element of the widget UIs to 0 or
   invisible. Reset Colours, editing the border width, or changing the surface choice in Style Overrides each un-latches
   it. It persists like the other overrides. Test: latch, each un-latch path, and a reload.
-- [ ] **Media seekbar default width** (operator, 21 Nov; Sonnet agent a276eeb2052ac0ba6): wider by default, ending at the artwork's right edge, so the
-  seekbar has the same padding on its left and right inside the card. Change the canonical default, not a preset;
-  tests derive the value from the default and the layout, and never pin it. Prove it with an offscreen render before
-  and after: the seekbar's right end aligns with the artwork's right edge, and nothing else moves.
-- [ ] **Achievement Pulse defaults** (operator, 21 Nov; Sonnet agent a276eeb2052ac0ba6; the operator's screenshot is in the conversation of 21 Nov).
-  - [ ] The achievement artwork (the small achievement icon) defaults to the operator's placement: in the header row,
-    just right of the ACHIEVEMENT PULSE pill. Read the operator's current saved placement (read only, from their
-    settings) and make it the canonical default.
-  - [ ] The pulse ring (the coloured circle) takes a material like the Media control bar's (its opacity and material
-    treatment) through the shared material path. The ring's inside keeps its current material, which becomes an
-    optional setting, on by default so today's look holds. Settings follow the existing bucket patterns: a short
-    name, the rest in a tooltip.
-  - [ ] Offscreen renders before and after, on a dark and a light theme and a non-Normal material. The lead judges
-    them.
 - [ ] **The ordinary Visualizer card offers its Rotate glyph on hover** (operator report): UI-3 of `Docs/Future_Work/Studio_Corners_Card_Rim_and_Visualizer_Rotate_2026-11-09.md`, its
   live checklist. Today `rendering/quick/qml/VisualizerPresentation.qml:1049` still passes `canRotate: false`.
 

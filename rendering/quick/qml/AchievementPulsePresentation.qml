@@ -737,7 +737,7 @@ OverlayWidget {
                             ? (achievementRoot.achievementModel.customFirstAchievementXOffset
                                 - achievementRoot.achievementModel.customAchievementListXOffset)
                                 * achievementRoot.baseAuthoredWidth
-                            : latestArtworkFrame.visible && achievementRoot.achievementListFlipped
+                            : latestArtworkFrame.occupiesListLane && achievementRoot.achievementListFlipped
                                 ? Math.min(achievementListFrame.width, Math.max(0.0,
                                     latestArtworkFrame.x + latestArtworkFrame.visualWidth
                                     - achievementListFrame.x + badgeClearance))
@@ -746,7 +746,7 @@ OverlayWidget {
                             ? (achievementRoot.firstAchievementOnAuthoredRail
                                 ? normalContent.titleWidth : achievementRoot.canonicalTitleWidth)
                                 * achievementRoot.achievementModel.customFirstAchievementWidthScale
-                            : !latestArtworkFrame.visible
+                            : !latestArtworkFrame.occupiesListLane
                                 ? achievementListFrame.width
                                 : achievementRoot.achievementListFlipped
                                     ? Math.max(0.0, achievementListFrame.width - x)
@@ -797,6 +797,37 @@ OverlayWidget {
                 // badge to the unrelated game-cover/artwork column.
                 readonly property real baseRailX: 102.0
                 readonly property real textClearance: 8.0
+                // Default placement (no saved badge record): the badge sits in
+                // the header row, just beside the header pill (right of it, or
+                // left of it when the card is reversed), at 90% of its authored
+                // size and centred on the pill. A saved record keeps the
+                // unlock-stack rail it was authored against, so it never
+                // re-applies on top of this default. The displacement from that
+                // rail is transient for Edit: the first real drag folds it into
+                // the offset and the first real resize rebases the scale.
+                readonly property real defaultVisualScale: 0.9
+                readonly property real defaultHeaderGap: 10.0
+                readonly property bool atDefaultRail:
+                    Math.abs(achievementRoot.achievementModel.customBadgeXOffset)
+                        <= achievementRoot.childReflowPlacementEpsilon
+                    && Math.abs(achievementRoot.achievementModel.customBadgeYOffset)
+                        <= achievementRoot.childReflowPlacementEpsilon
+                    && Math.abs(achievementRoot.achievementModel.customBadgeWidthScale - 1.0)
+                        <= achievementRoot.childReflowPlacementEpsilon
+                    && Math.abs(achievementRoot.achievementModel.customBadgeHeightScale - 1.0)
+                        <= achievementRoot.childReflowPlacementEpsilon
+                readonly property real defaultRailX: achievementRoot.headerFlipped
+                    ? headerFrame.x - defaultHeaderGap - visualWidth
+                    : headerFrame.x + headerFrame.width * headerFrame.scale + defaultHeaderGap
+                readonly property real defaultRailY: headerFrame.y
+                    + (headerFrame.height * headerFrame.scale - visualHeight) / 2.0
+                // The unlock lines keep clear of the badge only while it is
+                // actually beside them; in the header row they take the full lane.
+                readonly property bool occupiesListLane: visible
+                    && y < achievementListFrame.y + achievementListFrame.height
+                    && y + visualHeight > achievementListFrame.y
+                property real customEditSizeCompensationWidth: atDefaultRail ? defaultVisualScale : 1.0
+                property real customEditSizeCompensationHeight: atDefaultRail ? defaultVisualScale : 1.0
                 property bool customEditReflowEnabled: achievementRoot.badgeOnAuthoredRail
                 // Flipping the list also mirrors its uncustomized companion
                 // badge inside the *live* list extent. An independently moved
@@ -809,8 +840,11 @@ OverlayWidget {
                         - achievementRoot.achievementModel.customBadgeXOffset
                             * achievementRoot.baseAuthoredWidth
                 property real customEditPlacementCompensationY:
-                    achievementRoot.badgeOnAuthoredRail
-                        ? achievementRoot.gameNameLayoutHeightDelta : 0.0
+                    y - (achievementRoot.canonicalBadgeY
+                            + (achievementRoot.badgeOnAuthoredRail
+                                ? achievementRoot.gameNameLayoutHeightDelta : 0.0))
+                        - achievementRoot.achievementModel.customBadgeYOffset
+                            * achievementRoot.baseAuthoredHeight
                 function resolvedRailX() {
                     let required = baseRailX
                     for (let row = 1; row < unlockRepeater.count; ++row) {
@@ -832,23 +866,26 @@ OverlayWidget {
                             achievementRoot.canonicalTitleWidth - width)
                     )
                 }
-                x: (followsListFlip
-                        ? achievementListFrame.x + achievementListFrame.width
-                            - (resolvedRailX() - achievementRoot.canonicalAchievementListX)
-                            - visualWidth
-                        : achievementRoot.semanticRailX(
-                            resolvedRailX(), achievementRoot.canonicalBadgeWidth,
-                            achievementRoot.badgeOnAuthoredRail))
+                x: (atDefaultRail ? defaultRailX
+                        : (followsListFlip
+                            ? achievementListFrame.x + achievementListFrame.width
+                                - (resolvedRailX() - achievementRoot.canonicalAchievementListX)
+                                - visualWidth
+                            : achievementRoot.semanticRailX(
+                                resolvedRailX(), achievementRoot.canonicalBadgeWidth,
+                                achievementRoot.badgeOnAuthoredRail)))
                     + achievementRoot.achievementModel.customBadgeXOffset
                         * achievementRoot.baseAuthoredWidth
-                y: achievementRoot.canonicalBadgeY
-                    + (achievementRoot.badgeOnAuthoredRail
-                        ? achievementRoot.gameNameLayoutHeightDelta : 0.0)
+                y: (atDefaultRail ? defaultRailY
+                        : achievementRoot.canonicalBadgeY
+                            + (achievementRoot.badgeOnAuthoredRail
+                                ? achievementRoot.gameNameLayoutHeightDelta : 0.0))
                     + achievementRoot.achievementModel.customBadgeYOffset
                         * achievementRoot.baseAuthoredHeight
                 width: achievementRoot.canonicalBadgeWidth
                 height: achievementRoot.canonicalBadgeHeight
                 scale: achievementRoot.achievementModel.customBadgeWidthScale
+                    * (atDefaultRail ? defaultVisualScale : 1.0)
                 transformOrigin: Item.TopLeft
                 readonly property real visualWidth: width * scale
                 readonly property real visualHeight: height * scale
@@ -1051,11 +1088,79 @@ OverlayWidget {
                         achievementRoot.achievementModel.capsuleFillColor.b,
                         achievementRoot.achievementModel.capsuleFillColor.a * 0.72
                     )
-                    color: progressCircleMaterial.active ? "transparent" : originalFill
-                    border.color: achievementRoot.achievementModel.capsuleBorderColor
-                    border.width: achievementRoot.scaleAwareStrokeWidthForScale(
+                    readonly property real ringWidth: achievementRoot.scaleAwareStrokeWidthForScale(
                         5.0, achievementRoot.contentScale
                     )
+                    // The ring itself takes the card's material, tinted by the
+                    // ring colour, as the Media control bar does (the shared
+                    // ChildMaterialSurface path). On Normal, or before the card's
+                    // backdrop is bound, nothing is added and the ring stays the
+                    // authored flat stroke.
+                    readonly property bool ringIsMaterial: achievementRoot.cardSurfaceMaterialActive === true
+                        && achievementRoot.cardSurfaceMaterial !== "normal"
+                        && achievementRoot.cardSurfaceBackdrop !== null
+                    color: ringIsMaterial ? "transparent"
+                        : (progressCircleMaterial.active ? "transparent" : originalFill)
+                    border.color: ringIsMaterial ? "transparent"
+                        : achievementRoot.achievementModel.capsuleBorderColor
+                    border.width: ringWidth
+
+                    // The ring's inside: the authored flat fill, inset to the ring.
+                    Rectangle {
+                        objectName: "achievementProgressCircleInnerFill"
+                        visible: progressCircleFace.ringIsMaterial && !progressCircleMaterial.active
+                        anchors.fill: parent
+                        anchors.margins: progressCircleFace.ringWidth
+                        radius: width * 0.5
+                        color: progressCircleFace.originalFill
+                    }
+
+                    // The ring: the material disc masked to the stroke's annulus,
+                    // with the stroke's outer edge kept as a thin outline.
+                    Item {
+                        id: progressRingLayer
+                        objectName: "achievementProgressRingLayer"
+                        anchors.fill: parent
+                        visible: progressCircleFace.ringIsMaterial
+                        layer.enabled: visible
+                        layer.effect: MultiEffect {
+                            maskEnabled: true
+                            maskSource: progressRingMask
+                        }
+
+                        ChildMaterialSurface {
+                            id: progressRingMaterial
+                            objectName: "achievementProgressRingMaterial"
+                            card: achievementRoot
+                            fillColor: achievementRoot.achievementModel.capsuleBorderColor
+                            cornerRadius: progressCircleFace.width * 0.5
+                            tintAlphaScale: 0.4
+                            legibilityPanel: false
+                        }
+                    }
+
+                    Rectangle {
+                        id: progressRingMask
+                        anchors.fill: parent
+                        radius: width * 0.5
+                        color: "transparent"
+                        border.width: progressCircleFace.ringWidth
+                        border.color: "white"
+                        visible: false
+                        layer.enabled: progressCircleFace.ringIsMaterial
+                    }
+
+                    Rectangle {
+                        objectName: "achievementProgressRingOutline"
+                        visible: progressCircleFace.ringIsMaterial
+                        anchors.fill: parent
+                        radius: width * 0.5
+                        color: "transparent"
+                        border.width: achievementRoot.scaleAwareStrokeWidthForScale(
+                            1.5, achievementRoot.contentScale
+                        )
+                        border.color: achievementRoot.achievementModel.capsuleBorderColor
+                    }
 
                     // A material-filled disc, not an extra blur/capture. The ring
                     // outline, inner accent and animated percentage stay on top.
@@ -1064,13 +1169,18 @@ OverlayWidget {
                         id: progressCircleMaterial
                         objectName: "achievementProgressCircleMaterial"
                         card: achievementRoot
+                        anchors.fill: undefined
+                        x: progressCircleFace.ringIsMaterial ? progressCircleFace.ringWidth : 0.0
+                        y: x
+                        width: parent.width - 2.0 * x
+                        height: width
                         forceFlat: !achievementRoot.achievementModel.progressCircleMaterialEnabled
                         // The Media Control Bar succeeded by using a resolved,
                         // dedicated material tint rather than its faint flat fill.
                         // The normal progress face remains the exact old capsule;
                         // only the checked, material-backed circle uses this accent.
                         fillColor: achievementRoot.achievementModel.progressDiscMaterialColor
-                        cornerRadius: progressCircleFace.width * 0.5
+                        cornerRadius: width * 0.5
                         tintAlphaScale: 0.65
                         // The guard belongs to the material disc only, and is
                         // dormant when the checkbox is off or the material is Normal.

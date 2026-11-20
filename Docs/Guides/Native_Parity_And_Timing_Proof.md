@@ -180,7 +180,8 @@ decision, recorded with its reason.
   - layer T on native paths: on Vulkan the native core draws inside Qt's frame and writes no Python draw or swap
     records, so `visualizer_live_check.py` reports `frames_per_s 0` and no render or swap figures (20 Nov, Bubble).
     It must derive presentation cadence from Qt Quick's frame-cycle events (`quick_before_frame_begin` intervals,
-    lifecycle windows excluded), and per-pass GPU time from `--gpu-pass-timing`;
+    lifecycle windows excluded; `tools/quick_frame_cadence.py` computes them today), and per-pass GPU time from
+    `--gpu-pass-timing`;
   - progress output during a run, so a killed run keeps what it had.
 - **Method proof:** on Bubble, the coverage-selected set must catch every failure the full four-take run found
   (input 22, the two offer fade frames, a one-level shift control, a one-ulp shader change) before Waveform relies
