@@ -449,6 +449,27 @@ def test_feed_subtitle_box_holds_its_whole_text_line_below_the_pill(qt_app, font
     del root, engine
 
 
+@pytest.mark.parametrize("title", ["Publisher Title", ""])
+def test_feed_vertical_gaps_are_the_named_constants_in_the_real_layout(qt_app, title):
+    """Header to subtitle is ``subtitleGap``; the articles start ``bodyGap`` below the header block."""
+    from core.feeds.models import FeedDocument, FeedItem
+
+    engine, _model, root, _publish = _headless_feed(
+        {}, FeedDocument(title, "https://example.test", "rss20", (FeedItem("1", "Story", "https://example.test/1"),)))
+    qt_app.processEvents()
+    area, body = _item(root, "feedHeaderArea"), _item(root, "feedBody")
+    subtitle, header = _item(root, "feedHeaderSubtitle"), _item(root, "feedHeader")
+    assert body.y() - (area.y() + area.height()) == pytest.approx(float(root.property("bodyGap")))
+    if title:
+        assert subtitle.isVisible()
+        assert subtitle.y() - (header.y() + header.height() * header.scale()) == pytest.approx(
+            float(root.property("subtitleGap")))
+    else:
+        assert not subtitle.isVisible()
+    root.deleteLater()
+    del root, engine
+
+
 def test_feed_content_never_moves_authored_normalization_or_role_identity(qt_app):
     """Whatever a feed contains, the authored baselines and role list stay put.
 
