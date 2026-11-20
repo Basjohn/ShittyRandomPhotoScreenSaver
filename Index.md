@@ -11,7 +11,7 @@
 
 - **Tools and harnesses:** [Tooling](Docs/Reference/Tooling.md) lists scripts under `tools/`, `scripts/` and `native/core/python/`, plus historical P1 evidence, with their flags, owners and outputs; [Harness Index](Docs/Reference/Harness_Index.md) routes recurring acceptance commands and the core's bounded translucent proof.
 
-- **Test suite:** [Test Suite Guide](Docs/TestSuite.md) owns commands and gates (`tests/run_chunked.py --isolated [--changed]` at milestones, focused files per slice). The [23 October archived-failure triage](Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md) is historical; its stale-test reconciliation is closed.
+- **Test suite:** [Test Suite Guide](Docs/TestSuite.md) owns commands and gates (`tests/run_chunked.py --isolated [--changed]` at milestones, focused files per slice).
 
 ```text
 exact current source
@@ -214,4 +214,3 @@ Any production change that touches Bubble reaction/timing requires active-music 
 Do not add another inventory/changelog/history layer. Closed decompositions are consolidated into current contracts or Historical Bugs and then deleted from the live docs tree. Extensible catalogs are registry-owned: live docs and harnesses say "every registered mode" / "canonical transition registry" rather than freezing today's membership count into prose. Persisted-input compatibility bridges are documented as architecture in `Docs/Architecture/Persisted_Input_Compatibility.md` (user-data protection, horizon-gated — not a backlog); caller-dead residue is deleted outright, not tracked in a register. When paths move, update this router and all live cross-references in the same change.
 
 
-- [2026-10-23 Test Oracle Repair: no authored preset/Settings value pins](Docs/Audits/Test_Oracle_Repair_2026-10-23.md) (cross-linked to [Test Durability](Docs/Guides/Test_Durability.md) and [Test Suite](Docs/TestSuite.md)); preserve all unresolved native and visual gates.
