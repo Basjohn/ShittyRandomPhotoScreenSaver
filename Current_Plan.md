@@ -2609,4 +2609,6 @@ Never Remove This Box. Restore It If Removed. Only Remove Contents As you place 
 Reactivity Issues:
 1. WaveForm - Travel Direction for the overall mesh has no reactivity option to control its speed. It should have a range slider controlling speed from min-max depending on overall instensity. Quick Attack, Slow Decay but adding these as options is best. There also might be missing a overall base speed and idle speed of the mesh setting. Check, add what's missing and audit these controls so they don't conflict but complement each other. Default setting in all presets will be what it currently is as is our usual methodology.
 2. Neon Lake. Generally very much improved and still has work in plan but there is a lot of sharp movement on terrain currently. Sudden massive judder up or down that feels sharp blocklike instead of smooth. This is likely a visual issue not a design one. Preset 1 shows this easily, especially on terrain closer to the camera. Needs to be smoothed without smoothing the audio or deadening reactivity. Same peaks and bottoms but we get there less sharply.
+General Issues:
+Clicking a link in MC profiles/mode completely kills the cursor halo now.
 ###################
