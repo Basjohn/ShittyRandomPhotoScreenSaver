@@ -41,7 +41,15 @@ if not defined VSROOT (
   echo No Visual Studio installation with the x64 C++ tools was found
   exit /b 1
 )
-call "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat" >nul || exit /b 1
+rem The toolset may not be newer than the VC runtime of the Python that loads the module (the runtime check refuses
+rem it): select the newest installed toolset that runtime can load (python\select_msvc_toolset.py).
+set "TOOLSET="
+for /f "usebackq tokens=*" %%i in (`""%VENV%\Scripts\python.exe" "%SRC%python\select_msvc_toolset.py" "%VSROOT%" "%VENV%""`) do set "TOOLSET=%%i"
+if not defined TOOLSET (
+  echo No installed MSVC toolset matches the Python runtime: see the message above
+  exit /b 1
+)
+call "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat" -vcvars_ver=%TOOLSET% >nul || exit /b 1
 echo MSVC toolset %VCToolsVersion% from %VSROOT%
 
 cmake -S "%SRC%." -B "%BUILD%" -G Ninja ^
