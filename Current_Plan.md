@@ -637,7 +637,13 @@ the feature (D3D11 is not stated).
 
 - [ ] N5.1 Spline Curve leftover: its Studio is not offered on Vulkan (`STUDIO_PREVIEW_BACKENDS`), the same open
   item as Spectrum's; both close with N5.8.
-- [ ] N5.1 Oscilloscope (Opus High: N3.4 bloom's first consumer; agent a652d2d5a77e690ff, 20 Nov). Python oracle:
+- [ ] N5.1 Oscilloscope (Opus High: N3.4 bloom's first consumer; agent a652d2d5a77e690ff, 20 Nov).
+  - [ ] Next (lead, 21 Nov; 5-hour window at 95 %, so after the reset): an Opus High audit of branch
+    `worktree-agent-a652d2d5a77e690ff` before merge. Its ABI 26/27 C++ touches core code every bloom consumer will use:
+    `u_scene_item`, the item-anchored bloom triangle, the three composites, and `StreamSource::syncStream` clearing an
+    old stream's frame. Then merge, build main at ABI 27, run the quiet-machine cost round (the lead), and layer T
+    (the lead). The owner smoke's remaining failure is the replay judging Bubble's partner frames under the
+    Oscilloscope's bounds, a tool fix routed to the fast-proof agent. The stale-stream fix gets an R number at merge. Python oracle:
   `rendering/quick/visualizer/implementations/oscilloscope.py`. It is one instanced pass reading a segment array from
   the stream ring (binding 3) into a single-sample overlay `SceneTarget`. Each segment is a quad. Light goes into the
   overlay's emission attachment, and the target's bloom spreads it into the glow. Glow 0 allocates no emission or
