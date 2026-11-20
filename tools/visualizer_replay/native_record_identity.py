@@ -28,8 +28,16 @@ Each input is compared at three levels, byte for byte:
    ``read_spans``), and each instance stream's used bytes against the Python renderer's upload.
 
 Outside L (declared per mode, ``positional``): members that place the draw in its window or target (the quad matrix,
-fragPixel's target, Spectrum's window maps), proved by rule (a)'s mapping control and the pixels (layer P); and the
-inherited scene opacity the Python node folds into ``u_fade`` (no QML scene here; the tracked scene-fade box).
+fragPixel's target, Spectrum's window maps), and the inherited scene opacity the Python node folds into ``u_fade`` (no
+QML scene here; the tracked scene-fade box). They are layer P's: Spectrum's window maps by rule (a)'s mapping control
+(Spectrum's only); every mode's positional members by rule (a)'s pixels on OpenGL (the display and overscan
+placements) and by the stream player's rule (b) at the harness's one placement on Vulkan, so a Vulkan-only error at a
+fractional product placement is not covered by any layer (checkpoint audit 9 L4). The coverage report names every
+delivered setting the Python renderer did not hold this run (``settings_skipped``), so a port cannot hide one.
+
+Standing controls (``--control``, ``tests/test_native_record_identity.py``): ``ulp`` (a record field one f64 ulp up),
+``drop`` (a frame never reaching the core), ``setting`` (a delivered setting raised by 0.25) and ``block`` (a packed
+native block member raised by 1.0), each at one input, each caught there and nowhere else.
 
 Output (``--out``): ``native_record_identity.json`` (frames compared and expected per half, every mismatching frame with
 its first differing field and both values), rewritten every ``PROGRESS_EVERY`` inputs, and ``progress.jsonl`` (one line
@@ -530,6 +538,7 @@ class Comparator:
         #: What was actually compared (a run whose levels compared nothing is not a proof): frames per level, member
         #: bytes per pass, setting names, stream bytes.
         self.coverage: dict = {"record_frames": 0, "settings_frames": 0, "settings_names": set(),
+                               "settings_skipped": set(),
                                "pass_frames": {}, "member_bytes": {}, "stream_frames": {}, "stream_bytes": {}}
 
     # ---------------------------------------------------------------------- the native module's blocks
@@ -596,7 +605,7 @@ class Comparator:
 
     def coverage_report(self) -> dict:
         c = self.coverage
-        return {**c, "settings_names": sorted(c["settings_names"])}
+        return {**c, "settings_names": sorted(c["settings_names"]), "settings_skipped": sorted(c["settings_skipped"])}
 
     def _record(self, native: bytes, python: bytes) -> list[dict]:
         self.coverage["record_frames"] += 1
@@ -621,7 +630,10 @@ class Comparator:
         out = []
         self.coverage["settings_frames"] += 1
         for name in sorted(native):
-            if name in positional or name not in python:
+            if name in positional:
+                continue
+            if name not in python:
+                self.coverage["settings_skipped"].add(name)      # delivered, not held by the Python renderer
                 continue
             self.coverage["settings_names"].add(name)
             a, b = json.dumps(_plain(native[name])), json.dumps(_plain(python[name]))
@@ -871,7 +883,29 @@ class IdentityMirror:
             return {"drawn": False}
         settings, card = item.settings_values, item.card_values
         sizes = dict(getattr(content, "_sizes", None) or {})
+        at = self.controls.get("setting")
+        if at is not None and "setting" not in self.applied and self.index >= at:
+            # The settings control: the first numeric delivered setting (by name) raised by 0.25 for this frame.
+            name = next(n for n in sorted(settings) if isinstance(settings[n], (int, float))
+                        and not isinstance(settings[n], bool) and n not in self.declaration.positional)
+            settings = dict(settings, **{name: float(settings[name]) + 0.25})
+            self.applied["setting"] = self.index
+            self.applied["setting_name"] = name
         blocks, sources = self.comparator.native_blocks(self._core_record, settings, card, sizes)
+        at = self.controls.get("block")
+        if at is not None and "block" not in self.applied and self.index >= at and blocks:
+            # The block control: one packed member of the first drawn pass raised by 1.0 for this frame (u_dpr where
+            # the pass has it, as audit 9 ran it; else its first float member).
+            pass_name = next(n for n, b in blocks.items() if b is not None)
+            members = self.comparator.layouts[pass_name]
+            member = "u_dpr" if "u_dpr" in members else next(
+                m for m, (_o, _s, t) in members.items() if t == "float" and m not in self.declaration.positional)
+            offset = members[member][0]
+            data = bytearray(blocks[pass_name])
+            struct.pack_into("<f", data, offset, struct.unpack_from("<f", data, offset)[0] + 1.0)
+            blocks = dict(blocks, **{pass_name: bytes(data)})
+            self.applied["block"] = self.index
+            self.applied["block_member"] = f"{pass_name}.{member}"
         revision = getattr(route._snapshot, "logical_revision", None)
         return {"drawn": True, "record": self._core_record, "settings": settings, "card": card, "blocks": blocks,
                 "sources": sources, "revision": revision, "sizes": sizes}
@@ -1008,8 +1042,8 @@ def run(mode: str, *, recording: str | None = None, seconds: float = 60.0, varia
 
 def _control(value: str) -> tuple[str, int]:
     kind, _, at = value.partition("@")
-    if kind not in ("ulp", "drop") or not at.isdigit():
-        raise argparse.ArgumentTypeError("a control is ulp@<input> or drop@<input>")
+    if kind not in ("ulp", "drop", "setting", "block") or not at.isdigit():
+        raise argparse.ArgumentTypeError("a control is ulp@, drop@, setting@ or block@<input>")
     return kind, int(at)
 
 

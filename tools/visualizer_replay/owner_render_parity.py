@@ -1210,7 +1210,9 @@ def native_only(core, mode: str, suffix: str, settings: dict, clip_frames, out: 
         verdict["identical"] = not changed and len(baseline) == len(hashes)
         verdict["pass"] = verdict["identical"] and verdict["native_published"] > 0
     else:
-        verdict["identical"] = verdict["pass"] = bool(verdict["native_published"] > 0)
+        # Nothing was compared (audit 9 L3): never a pass or an identity, only the hashes for a later baseline.
+        verdict["identical"] = verdict["pass"] = None
+        verdict["compared"] = "nothing compared (no --against)"
     return verdict
 
 
@@ -1399,6 +1401,11 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
         report["elapsed_s"] = round(time.perf_counter() - started, 1)
         report["identical"] = bool(report["results"]) and all(v["identical"] for v in report["results"].values())
         report["pass"] = bool(report["results"]) and all(v["pass"] for v in report["results"].values())
+        if report["results"] and all(v.get("identical") is None for v in report["results"].values()):
+            # A native-only run with no baseline compared nothing (audit 9 L3).
+            report["identical"] = report["pass"] = None
+            report["compared"] = "nothing compared (no --against)"
+            print("[NATIVE ONLY] nothing compared (no --against): the hashes are kept for a later baseline", flush=True)
         if baseline is not None:
             report["against"] = {"baseline": str(against), **against_baseline(baseline, report)}
             for key, entry in report["against"]["runs"].items():
@@ -1538,7 +1545,7 @@ def main(argv=None) -> int:
                         help="with --native: the widened run set (both variants and every Choice offer)")
     parser.add_argument("--runs", nargs="*", default=(), help="with --native: only these run keys (<mode>[:...])")
     parser.add_argument("--mode", default="spectrum",
-                        help="with --native: the native mode drawn (the route's NATIVE_MODE_IDS: spectrum, devcurve)")
+                        help="with --native: the native mode drawn (one of the route's NATIVE_MODE_IDS)")
     parser.add_argument("--surface-format", choices=("rgba8", "rgba16f"), default=None,
                         help="with --native: the native item's surface texels (default: the route's own)")
     parser.add_argument("--unprimed", action="store_true",
@@ -1621,6 +1628,8 @@ def main(argv=None) -> int:
     if "against" in report:
         return 0 if report["against"]["same"] else 1
     if "pass" in report:                                  # --native: rule (a)'s verdict (rule_a_verdict)
+        if report["pass"] is None:
+            return 0                                      # nothing compared: neither a pass nor a failure
         return 0 if report["pass"] else 1
     return 0 if report["identical"] else 1
 

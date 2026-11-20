@@ -28,6 +28,7 @@ def _reference(rng, shape=(48, 64)):
         y, x = rng.integers(0, h - 8), rng.integers(0, w - 8)
         frame[y:y + rng.integers(4, 12), x:x + rng.integers(4, 16), :3] = rng.integers(40, 255, 3)
     frame[..., :3] += rng.integers(0, 3, (h, w, 3)).astype(np.uint8)    # a soft gradient-like texture
+    frame[2:8, 2:8, 3] = 140                               # a translucent block (audit 9 L2's alpha case)
     return frame
 
 
@@ -46,9 +47,34 @@ def _candidate(rng, reference, kind):
         out[y + 2, x + 2, 1] += 2
     elif kind == "flips":
         out[rng.integers(0, h), rng.integers(0, w), 2] += 9
+    elif kind == "alpha":
+        # Audit 9 L2: the translucent block's alpha alone differs, by 1 and 2 levels (RGB equal on both sides).
+        out[3, 3, 3] += 1
+        out[5, 6, 3] += 2
     elif kind == "shift":
         out[..., :3] += 1
     return np.clip(out, 0, 255).astype(np.uint8)
+
+
+#: The synthetic differences, cycled through the cases.
+KINDS = ("scatter", "ties", "patch", "flips", "shift", "alpha", "same")
+
+
+def test_the_alpha_case_differs_only_in_alpha_and_the_judge_sees_it():
+    # Audit 9 L2's control: an RGB-only judge sees nothing in the alpha case; the judge (all four channels) does, in
+    # the single pass as in the four passes (the equal-verdict tests below run it).
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    rng = np.random.default_rng(2)
+    reference = _reference(rng)
+    candidate = _candidate(rng, reference, "alpha")
+    assert pt.levels(candidate[..., :3], reference[..., :3]).max() == 0
+    verdict = pt.judge(candidate, reference, parity.composite_tolerance("bubble"))
+    assert verdict["differing"] == 2 and verdict["max_level"] == 2
+    native, python = _runs()
+    alpha_inputs = [i for i in range(40) if KINDS[i % len(KINDS)] == "alpha"]
+    judged = {v["input"] for v in parity.judged_pass(native, python, {}, 30, "bubble")["judged"]}
+    assert alpha_inputs and set(alpha_inputs) <= judged
 
 
 TOLERANCES = [
@@ -69,7 +95,7 @@ def _whole_frame_judge(candidate, reference, tolerance, mask=None):
 
 def _cases(seed=7, count=60):
     rng = np.random.default_rng(seed)
-    kinds = ("scatter", "ties", "patch", "flips", "shift", "same")
+    kinds = KINDS
     for index in range(count):
         reference = _reference(rng)
         candidate = _candidate(rng, reference, kinds[index % len(kinds)])
@@ -111,7 +137,7 @@ def _run(frames, records):
 def _runs(seed=11, count=40):
     rng = np.random.default_rng(seed)
     native_frames, python_frames, native_records, python_records = [], [], [], []
-    kinds = ("scatter", "ties", "patch", "flips", "shift", "same")
+    kinds = KINDS
     for index in range(count):
         reference = _reference(rng)
         candidate = _candidate(rng, reference, kinds[index % len(kinds)])
