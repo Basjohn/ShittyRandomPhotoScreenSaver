@@ -1015,6 +1015,13 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
 Port-readiness rules bind all new GPU code now (the backend decision). Expanded Visualizer continues meanwhile
 (item 3; plan 01, whose section 0 holds the phase ladder and the 4K budgets).
 
+- [ ] Oscilloscope legibility (operator, 21 Nov; after the flip, with the other mode tweaks): a setting that slows
+  the trace's apparent noise while it stays reactive and busy. Today every preset moves so fast the trace reads as
+  static to the eye. Research first: which motion carries the speed (sample window, refresh of the trace, jitter
+  from noise), and how to slow what the eye sees without lagging the reaction. For example, temporal smoothing of the
+  displayed trace shape against the reaction envelope, or persistence. Judge it with the music-response traces and
+  live rendered motion, never twitch.
+
 - [ ] After the flip, SMP's foundations first (operator, 12 Nov: "SMP foundations first after native parity, as
   you suggest"): the library, the playlists and a playback service that meets the measured audio bar
   (`Docs/Future_Work/ShittyMusicPlayer/02_ShittyMusicPlayer_Implementation_Plan.md`, gated behind `--smp` until
