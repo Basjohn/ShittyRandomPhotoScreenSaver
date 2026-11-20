@@ -1484,8 +1484,6 @@ by risk; none takes a slot native work can use.
   it. It persists like the other overrides. Test: latch, each un-latch path, and a reload.
 - [ ] **The ordinary Visualizer card offers its Rotate glyph on hover** (operator report): UI-3 of `Docs/Future_Work/Studio_Corners_Card_Rim_and_Visualizer_Rotate_2026-11-09.md`, its
   live checklist. Today `rendering/quick/qml/VisualizerPresentation.qml:1049` still passes `canRotate: false`.
-- [ ] **Feeds spacing: 1 px more padding** above and below, between the header, the subtitle and the grid items. Nothing
-  else moves: compare item positions before and after, and only the intended offsets change.
 
 ## 1A. Fullscreen, Rotate, material and corner items (1.0 to 1.9)
 
