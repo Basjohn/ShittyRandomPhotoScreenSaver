@@ -228,8 +228,8 @@ def _bad_slot(cause):
         "malformed schema": (good | 0x01000000, 1, bytes(size)),
         "unknown mode code": (good, 200, bytes(size)),
         "mode disagrees": (good, MODE_CODES["oscilloscope"], bytes(size)),
-        "mode without a schema": (native_schema.native_schema_id(MODE_CODES["oscilloscope"], 1),
-                                  MODE_CODES["oscilloscope"], bytes(size)),
+        "mode without a schema": (native_schema.native_schema_id(MODE_CODES["sphere"], 1),
+                                  MODE_CODES["sphere"], bytes(size)),
         "newer version": (native_schema.native_schema_id(1, spectrum.VERSION + 1), 1, bytes(size)),
         "short record": (good, 1, bytes(size - 16)),
         "codec payload": (frame_codec.CODEC_SCHEMA, 1, frame_codec.encode((1, 1, 0.0, None))),
@@ -393,16 +393,16 @@ def test_the_writer_stamps_the_codec_or_the_native_schema_and_the_native_stream_
 
 def test_a_native_writer_refuses_a_mode_without_a_native_schema():
     from widgets.spotify_visualizer.render_state import (
-        OscilloscopeFrame,
+        SphereFrame,
         VisualizerCommonState,
         VisualizerLogicalFrame,
     )
 
     frame = VisualizerLogicalFrame(
         runtime_generation=1, engine_generation=1, activation_id=1, source_generation=1, source_activation_id=1,
-        mode_id="oscilloscope", playing=True, logical_timestamp=1.0, source_timestamp=None, changed=True,
+        mode_id="sphere", playing=True, logical_timestamp=1.0, source_timestamp=None, changed=True,
         present_frame=True, mode_reveal_ready=True, common=VisualizerCommonState(bars=(), bar_count=0),
-        mode_state=OscilloscopeFrame())
+        mode_state=SphereFrame())
     mailbox = PacketMailbox(slot_bytes=64 * 1024, payload="native")
     try:
         with pytest.raises(native_schema.NativeSchemaError):

@@ -70,6 +70,20 @@ def _bubble_settings(snapshot: Any, card: dict) -> dict:
     return values
 
 
+def _oscilloscope_settings(snapshot: Any, card: dict) -> dict:
+    """The Oscilloscope's Settings- and card-derived members of both its passes (N5.1): the Python renderer's own
+    ``oscilloscope_settings_values`` under the card's content rect and oriented size, the drawn dpr and visual scale."""
+    from rendering.quick.visualizer.implementations.oscilloscope import oscilloscope_settings_values
+
+    presentation = snapshot.presentation
+    return oscilloscope_settings_values(snapshot.logical, card["content_rect"], card["oriented_size"],
+                                        presentation.dpr, presentation.uniform_visual_scale)
+
+
+#: The Oscilloscope's settings function by name (its harness and tests call it directly).
+OSCILLOSCOPE_SETTINGS = _oscilloscope_settings
+
+
 def _shader_pack(filename: str) -> bytes:
     """A pack of the Visualizer modes' shader folder (``tools/regen_qrc.py --shaders`` bakes it beside its source)."""
     from widgets.spotify_visualizer import shaders
@@ -138,6 +152,65 @@ def bubble_program(pack: bytes, sizes: dict) -> dict:
                ModeStream("ambient_occluders", "ambient_occluders", "instance", occluders,
                           used="ambient_occluder_floats")]
     return {"passes": passes, "targets": [ambient], "streams": streams}
+
+
+#: The Oscilloscope's overlay target (D14, D17): the beam's colour (RGBA8, its alpha coverage) and, under Glow, its light
+#: (RGBA16F) that the bloom spreads; single-sampled, the surface's size.
+OSCILLOSCOPE_TARGET = "scope"
+
+
+def oscilloscope_glow(snapshot: Any) -> bool:
+    """Whether the Oscilloscope's program carries the glow (its Glow Setting above 0): the program the route draws,
+    chosen at the Settings edge (D17 choice E), never per frame."""
+    from rendering.quick.visualizer.implementation_values import parameter
+
+    return float(parameter(snapshot.logical.mode_state.parameters, "osc_glow")) > 0.0
+
+
+def oscilloscope_program(glow: bool) -> dict:
+    """The Oscilloscope's program (N5.1): the graticule (one quad, its vertex count the record's: 0 when its style draws
+    none) and the beam (one instanced quad a segment, its endpoints read from the record's points as a storage stream)
+    into the overlay target, both blended MAX on every attachment as the Python renderer blends them; with ``glow`` the
+    target's emission spread by the bloom and the overlay composite with the glow (``u_bloom_strength`` the record's,
+    ``u_hdr_exposure`` 0), else the target's colour alone and the plain overlay composite (no emission, no bloom: D17
+    point 1), whose program leaves the record's bloom strength unread."""
+    from rendering.native.mode import (
+        BlendState,
+        BloomStep,
+        CompositeStep,
+        ModePass,
+        ModeStream,
+        ModeTarget,
+        PassGeometry,
+        PassOutput,
+        TargetAttachment,
+    )
+
+    maximum = BlendState(("max", "one", "one"), ("max", "one", "one"))
+    attachments = (TargetAttachment("colour", "rgba8"),) + ((TargetAttachment("emission", "rgba16f"),) if glow else ())
+    outputs = tuple(PassOutput(True, maximum) for _ in attachments)
+    plain = "" if glow else "_plain"
+    passes: list = [
+        ModePass("oscilloscope_graticule", _shader_pack(f"oscilloscope_graticule{plain}.frag"), maximum,
+                 target=OSCILLOSCOPE_TARGET, outputs=outputs,
+                 geometry=PassGeometry(_shader_pack("oscilloscope_graticule.vert"), topology="triangle_strip",
+                                       vertices="osc_graticule_vertices")),
+        ModePass("oscilloscope_beam", _shader_pack(f"oscilloscope_beam{plain}.frag"), maximum,
+                 target=OSCILLOSCOPE_TARGET, outputs=outputs,
+                 geometry=PassGeometry(_shader_pack("oscilloscope_beam.vert"), topology="triangle_strip", vertices=4,
+                                       instances="osc_segments", storage=(("OscPoints", "osc_points"),))),
+    ]
+    if glow:
+        passes += [BloomStep("oscilloscope_bloom", f"{OSCILLOSCOPE_TARGET}.emission"),
+                   CompositeStep("oscilloscope_show", "overlay_glow", f"{OSCILLOSCOPE_TARGET}.colour",
+                                 "oscilloscope_bloom.glow")]
+    else:
+        passes.append(CompositeStep("oscilloscope_show", "overlay", f"{OSCILLOSCOPE_TARGET}.colour"))
+    streams = [ModeStream("osc_points", "osc_points", "storage", used="osc_point_floats")]
+    program = {"passes": passes, "targets": [ModeTarget(OSCILLOSCOPE_TARGET, attachments)], "streams": streams}
+    if not glow:
+        program["unread"] = ["u_bloom_strength"]
+    return program
 
 
 #: The generic modes the core draws from data alone (D12, ``rendering.native.mode``): mode id -> its settings function

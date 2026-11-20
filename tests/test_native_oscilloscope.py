@@ -1,0 +1,305 @@
+"""N5.1: the Oscilloscope on the native core as generic mode content (D12, with N3.1's target, N3.2's instanced pass over
+a storage stream and N3.4's bloom and composite).
+
+- Its record (``core.visualizer_engine.oscilloscope_native_schema``) is a runtime schema, never compiled, carrying the
+  beam's per-frame members by name (``OSCILLOSCOPE_FRAME_MEMBERS``), the composite's bloom strength, the traces' points
+  as a storage stream with its used length, the beam's instances and the graticule's vertices; the route's slot holds it.
+- Every member of both passes has exactly one source: the core's conventions, the settings
+  (``oscilloscope_settings_values``) or the record (``oscilloscope_frame_values``), the functions the Python renderer
+  calls too; the settings follow Settings and the card only, the record the logical frame only.
+- With the module built: the core's blocks for both passes are the Python renderer's, byte for byte, but ``uMatrix``
+  (the core's own item-to-target matrix).
+- The beam's shader reads the points buffer within its length whatever the counts say.
+"""
+from __future__ import annotations
+
+import json
+import os
+import struct
+from pathlib import Path
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+
+from rendering.native import loader
+
+ROOT = Path(__file__).resolve().parents[1]
+MODULE_DIR = ROOT / "release" / "native_module"
+BUILT = os.name == "nt" and (MODULE_DIR / f"{loader.MODULE_NAME}.pyd").is_file()
+WINDOW = (1920.0, 1080.0)
+
+
+def _presentation(dpr: float = 1.5, **overrides):
+    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+    from tests._visualizer_presentation import resolve_presentation
+
+    kwargs = dict(policy=get_visualizer_presentation_policy("oscilloscope"), display_size=WINDOW,
+                  viewport_extent=(640.0, 360.0), outer_origin=(803.0, 517.0), dpr=dpr, border_width=2.0,
+                  corner_radius=8.0)
+    kwargs.update(overrides)
+    return resolve_presentation(**kwargs)
+
+
+def _parameters(**overrides) -> dict:
+    """Test inputs (not a preset): every parameter the renderer and the route read."""
+    from rendering.gl_programs.oscilloscope_options import OSC_DISPLAYS, OSC_GRATICULES
+
+    values = {
+        "osc_display": OSC_DISPLAYS[0], "osc_beam_color": (90, 255, 140, 255),
+        "osc_beam_glow_color": (60, 200, 255, 255), "osc_beam_width": 1.7, "osc_glow": 0.6, "osc_analog": 0.4,
+        "osc_spectral": 0.5, "osc_flare": 0.8, "osc_pulse": 0.7, "osc_graticule": OSC_GRATICULES[1],
+        "osc_graticule_color": (200, 120, 80, 90),
+    }
+    values.update(overrides)
+    return values
+
+
+def _logical(step: int = 0, *, traces: int = 3, points: int = 384, **parameters):
+    from widgets.spotify_visualizer.render_state import (
+        OscilloscopeFrame,
+        VisualizerCommonState,
+        VisualizerLogicalFrame,
+        freeze_render_fields,
+    )
+
+    x = np.linspace(-1.0, 1.0, points, dtype=np.float32)
+    rows = [np.stack((x, 0.6 * np.sin(6.0 * x + 0.4 * step + k)), axis=1).astype(np.float32) for k in range(traces)]
+    data = b"".join(row.tobytes() for row in rows)
+    alphas = tuple(0.6 * (k + 1) / traces for k in range(traces - 1)) + (1.0,) if traces else ()
+    return VisualizerLogicalFrame(
+        runtime_generation=1, engine_generation=2, activation_id=3, source_generation=2, source_activation_id=3,
+        mode_id="oscilloscope", playing=True, logical_timestamp=1.0 + step / 60.0, source_timestamp=1.0, changed=True,
+        present_frame=True, mode_reveal_ready=True, common=VisualizerCommonState(bars=(), bar_count=0),
+        mode_state=OscilloscopeFrame(points=data, trace_alphas=alphas, flare=0.3 + 0.05 * step, drive=0.4, tone=0.6,
+                                     animation_time=step / 60.0,
+                                     parameters=freeze_render_fields(_parameters(**parameters))),
+    )
+
+
+def _card(presentation) -> dict:
+    from rendering.native.composite import composite_geometry, window_pixel_ratio
+    from rendering.quick.visualizer.native_route import NativeVisualizerRoute
+
+    dpr = float(presentation.dpr)
+    pixels = (int(round(WINDOW[0] * dpr)), int(round(WINDOW[1] * dpr)))
+    geometry = composite_geometry(presentation, quad_aligned=True, pixel_ratio=window_pixel_ratio(WINDOW, pixels))
+    route = NativeVisualizerRoute(None, SimpleNamespace())
+    return route.card(presentation, SimpleNamespace(presentation=presentation), geometry, (WINDOW, pixels))
+
+
+def _settings(logical, presentation, card) -> dict:
+    from rendering.quick.visualizer.native_route import OSCILLOSCOPE_SETTINGS
+
+    return OSCILLOSCOPE_SETTINGS(SimpleNamespace(logical=logical, presentation=presentation), card)
+
+
+_BLOCKS = (("oscilloscope_beam.vert", "OscilloscopeBeam"), ("oscilloscope_graticule.vert", "OscilloscopeGraticule"))
+
+
+def _members(filename: str, block: str) -> set[str]:
+    from rendering.gl_programs.portable import block_declaration, block_layout_from_glsl
+    from widgets.spotify_visualizer import shaders
+
+    source = shaders.compose_shader_source(Path(shaders.__file__).resolve().parent / filename)
+    return {name for name, _kind in block_layout_from_glsl(block_declaration(source, block)).fields}
+
+
+_STREAM_FIELDS = {"osc_points", "osc_point_floats"}
+_COUNT_FIELDS = {"osc_segments", "osc_graticule_vertices"}
+#: The composite step's members (the core's shader; ``post_stages`` STAGE_MEMBERS' overlay_glow).
+_COMPOSITE_MEMBERS = {"u_bloom_strength", "u_hdr_exposure"}
+
+
+# ------------------------------------------------------------------------------------------------- the record
+
+def test_the_record_is_a_runtime_schema_of_the_frame_members_streams_and_counts():
+    from core.visualizer_engine import native_schema
+    from core.visualizer_engine import oscilloscope_native_schema as schema_module
+    from core.visualizer_engine.packet_abi import SLOT_OVERHEAD
+    from rendering.gl_programs.oscilloscope_program import MAX_TRACES, TRACE_POINTS
+    from rendering.quick.visualizer import native_route
+    from rendering.quick.visualizer.implementations.oscilloscope import OSCILLOSCOPE_FRAME_MEMBERS
+
+    schema = schema_module.SCHEMA
+    assert schema.schema_id in native_schema.runtime_schemas()
+    assert schema.schema_id not in native_schema.compiled_schemas()
+    assert native_schema.schema_for_mode("oscilloscope") is schema
+    assert set(schema.fields) == set(OSCILLOSCOPE_FRAME_MEMBERS) | _STREAM_FIELDS | _COUNT_FIELDS
+    # The capacities are the runtime's (derived, never restated): every trace of the afterglow and the live one.
+    assert (schema_module.TRACES, schema_module.TRACE_POINTS) == (MAX_TRACES, TRACE_POINTS)
+    assert schema.layout.field("osc_points").size == MAX_TRACES * TRACE_POINTS * 8
+    # Version 1's layout (a change is a new version).
+    assert (schema.layout.size, schema.layout.fingerprint()) == (49376, "c1f1de544477b807")
+    # The route's slot holds it in whole 4096-byte steps.
+    assert schema.layout.size <= native_route._slot_bytes("oscilloscope") - SLOT_OVERHEAD
+    assert native_route._slot_bytes("oscilloscope") % native_route._SLOT_BYTES == 0
+
+
+def test_the_record_round_trips_and_carries_the_renderers_values():
+    from core.visualizer_engine import oscilloscope_native_schema as schema_module
+    from core.visualizer_engine.native_schema import NativeSchemaError
+    from rendering.quick.visualizer.implementations.oscilloscope import oscilloscope_frame_values
+
+    logical = _logical(4)
+    decoded = schema_module.decode(schema_module.encode(logical))
+    assert decoded == schema_module.project(logical)
+    values = oscilloscope_frame_values(logical)
+    state = logical.mode_state
+    count = len(state.trace_alphas)
+    assert decoded["u_alpha"][:count] == pytest.approx(state.trace_alphas)
+    assert all(alpha == 0.0 for alpha in decoded["u_alpha"][count:])
+    assert decoded["osc_points"][:len(state.points)] == state.points
+    assert decoded["osc_points"][len(state.points):] == bytes(len(decoded["osc_points"]) - len(state.points))
+    assert decoded["osc_point_floats"] == len(state.points) // 4
+    assert decoded["osc_segments"] == count * (state.trace_points - 1)
+    assert decoded["u_points"] == state.trace_points
+    for name in ("u_widen", "u_bright", "u_hot", "u_bloom_strength"):
+        assert decoded[name] == values[name]
+    assert decoded["osc_graticule_vertices"] == 4
+    # The graticule's style off draws none; Glow 0 sends no light.
+    from rendering.gl_programs.oscilloscope_options import OSC_GRATICULES
+
+    off = schema_module.decode(schema_module.encode(_logical(4, osc_graticule=OSC_GRATICULES[0], osc_glow=0.0)))
+    assert off["osc_graticule_vertices"] == 0 and off["u_bloom_strength"] == 0.0
+    # The flare moves the widening and the strength; the frame alone carries them.
+    assert schema_module.project(_logical(9))["u_widen"] != decoded["u_widen"]
+    # A non-finite value is refused by the writer (control: the encoder checks what it writes).
+    broken = _logical(1)
+    object.__setattr__(broken.mode_state, "flare", float("nan"))
+    with pytest.raises(NativeSchemaError):
+        schema_module.encode(broken)
+
+
+# ------------------------------------------------------------------------------------------------- the sources
+
+def test_every_member_of_both_passes_has_exactly_one_source():
+    from core.visualizer_engine import oscilloscope_native_schema as schema_module
+    from rendering.native.mode import MODE_CORE_MEMBERS
+
+    presentation = _presentation()
+    settings = _settings(_logical(), presentation, _card(presentation))
+    record = set(schema_module.FIELD_NAMES)
+    core = set(MODE_CORE_MEMBERS)
+    assert not (set(settings) & record) and not (set(settings) & core) and not (record & core)
+    declared = set().union(*(_members(f, b) for f, b in _BLOCKS))
+    for filename, block in _BLOCKS:
+        members = _members(filename, block)
+        assert members <= set(settings) | record | core, (filename, members - (set(settings) | record | core))
+    # Every setting and every record field has a reader: a block member, the composite's, a stream or a draw count.
+    assert set(settings) <= declared | _COMPOSITE_MEMBERS
+    assert record - _STREAM_FIELDS - _COUNT_FIELDS <= declared | _COMPOSITE_MEMBERS
+    # Control: a member left out of the settings is caught.
+    assert not _members(*_BLOCKS[0]) <= (set(settings) - {"uCoreBase"}) | record | core
+
+
+def test_the_settings_follow_settings_and_the_card_only():
+    presentation = _presentation()
+    card = _card(presentation)
+    base = _settings(_logical(0), presentation, card)
+    assert _settings(_logical(7, traces=5), presentation, card) == base     # another frame, the same settings
+    # Controls: a Setting and the card's content rect each change them.
+    assert _settings(_logical(0, osc_beam_width=3.0), presentation, card) != base
+    moved = dict(card, content_rect=[v + 1.0 for v in card["content_rect"]])
+    assert _settings(_logical(0), presentation, moved) != base
+
+
+def test_the_programs_follow_the_glow_setting():
+    from rendering.native.mode import BloomStep, CompositeStep
+    from rendering.quick.visualizer import native_route
+
+    glowing = native_route.oscilloscope_program(True)
+    plain = native_route.oscilloscope_program(False)
+    assert [len(t.colour) for t in glowing["targets"]] == [2] and [len(t.colour) for t in plain["targets"]] == [1]
+    assert any(isinstance(p, BloomStep) for p in glowing["passes"])
+    assert not any(isinstance(p, BloomStep) for p in plain["passes"])
+    forms = {p.form for p in plain["passes"] if isinstance(p, CompositeStep)}
+    assert forms == {"overlay"} and plain["unread"] == ["u_bloom_strength"] and "unread" not in glowing
+    presentation = _presentation()
+    assert native_route.oscilloscope_glow(SimpleNamespace(logical=_logical(0))) is True
+    assert native_route.oscilloscope_glow(SimpleNamespace(logical=_logical(0, osc_glow=0.0))) is False
+    # Glow 0's settings carry no exposure (no composite reads one).
+    assert "u_hdr_exposure" not in _settings(_logical(0, osc_glow=0.0), presentation, _card(presentation))
+
+
+def test_the_beam_reads_its_points_within_the_buffer():
+    from rendering.quick.visualizer.implementations.oscilloscope import OSC_BEAM_VERTEX_SOURCE
+
+    # robustBufferAccess is off: every read of the points is clamped to the buffer's own length.
+    assert OSC_BEAM_VERTEX_SOURCE.count("oscPoint[") == 3                  # the declaration and the two reads
+    assert OSC_BEAM_VERTEX_SOURCE.count("= oscPoint[min(") == 2
+    assert "oscPoint.length() - 1" in OSC_BEAM_VERTEX_SOURCE
+    assert "u_alpha[clamp(trace, 0, 15)]" in OSC_BEAM_VERTEX_SOURCE
+
+
+# --------------------------------------------------------------------------------------- the module's blocks
+
+def _python_blocks(logical, presentation, card) -> tuple[bytes, bytes]:
+    """Both passes' blocks as ``QuickOscilloscopeRenderer.render`` packs them for this card (its item the card's)."""
+    from rendering.gl_programs.portable import pack_block
+    from rendering.quick.visualizer.implementations.oscilloscope import (
+        OSC_BEAM_BLOCK,
+        OSC_GRATICULE_BLOCK,
+        oscilloscope_frame_values,
+        oscilloscope_settings_values,
+    )
+
+    settings = oscilloscope_settings_values(logical, card["content_rect"], card["oriented_size"], presentation.dpr,
+                                            presentation.uniform_visual_scale)
+    shown = {"uMatrix": (0.0,) * 16, "u_resolution": tuple(card["oriented_size"]),
+             "uContentRotationQuarters": int(card["quarters"])}
+    values = {**settings, **oscilloscope_frame_values(logical), **shown}
+    return pack_block(OSC_GRATICULE_BLOCK, values), pack_block(OSC_BEAM_BLOCK, values)
+
+
+@pytest.mark.skipif(not BUILT, reason="the native core is not built in this checkout")
+@pytest.mark.qt
+@pytest.mark.parametrize("dpr", (1.0, 1.5))
+def test_the_modules_blocks_are_the_python_renderers(dpr, qt_app):
+    from core.visualizer_engine import oscilloscope_native_schema as schema_module
+    from rendering import native
+    from rendering.gl_programs.scene3d import _std140_type
+    from rendering.native.mode import _card as card_json, _settings as settings_json, program_json, schema_table_entry
+    from rendering.quick.visualizer import native_route
+    from rendering.quick.visualizer.implementations.oscilloscope import OSC_BEAM_BLOCK, OSC_GRATICULE_BLOCK
+    from rendering.quick.visualizer.native_route import _ModeContent
+
+    core = native.load(MODULE_DIR)
+    program = native_route.oscilloscope_program(True)
+    declared, packs = program_json(program["passes"], program["targets"], program["streams"])
+    table = json.dumps(dict(schema_table_entry(schema_module.SCHEMA)))
+    presentation = _presentation(dpr)
+    card = _card(presentation)
+    shown = _ModeContent.shown_card(None, card, SimpleNamespace(presentation=presentation))
+    target = tuple(int(v) for v in card["target_size"])
+
+    def blocks(settings, record, shown_card):
+        found, facts = core.module.mode_blocks(table, declared, packs, settings_json(settings), bytes(record),
+                                               card_json(shown_card), target)
+        return [bytes(block) for block in found], json.loads(facts)
+
+    sizes = {"float": 4, "int": 4, "vec2": 8, "vec4": 16, "mat4": 64}
+    compared = 0
+    for step, logical in enumerate((_logical(0), _logical(5, traces=16), _logical(3, osc_display="Ring"),
+                                    _logical(2, osc_display="Phase", osc_spectral=0.0))):
+        settings = _settings(logical, presentation, card)
+        record = schema_module.encode(logical)
+        found, facts = blocks(settings, record, shown)
+        expected = _python_blocks(logical, presentation, card)
+        for index, layout in ((0, OSC_GRATICULE_BLOCK), (1, OSC_BEAM_BLOCK)):
+            rows = {row[0]: row for row in facts["program"]["passes"][index]["block"]["members"]}
+            for (name, glsl_type), offset in zip(layout.fields, layout.offsets):
+                _element, count, _alignment, stride = _std140_type(glsl_type)
+                size = count * stride if "[" in glsl_type else sizes[glsl_type]
+                assert rows[name][2] == offset, name     # the module's reflection is the Python packer's layout
+                if name == "uMatrix":
+                    continue                             # the core's own item-to-target matrix
+                assert found[index][offset:offset + size] == expected[index][offset:offset + size], (step, name)
+                compared += 1
+        # Controls: the flare's widening nudged in the record and a Setting changed each change the beam's block.
+        mutated = bytearray(record)
+        at = schema_module.LAYOUT.field("u_widen").offset
+        struct.pack_into("<d", mutated, at, struct.unpack_from("<d", mutated, at)[0] + 0.25)
+        assert blocks(settings, bytes(mutated), shown)[0][1] != found[1]
+        assert blocks(dict(settings, uAnalog=float(settings["uAnalog"]) + 0.5), record, shown)[0][1] != found[1]
+    assert compared == 4 * (len(OSC_GRATICULE_BLOCK.fields) + len(OSC_BEAM_BLOCK.fields) - 2)

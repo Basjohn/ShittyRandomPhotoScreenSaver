@@ -686,7 +686,7 @@ def test_negative_control_missing_physical_mapping_fails_the_vertical_beam_bar(q
         with monkeypatch.context() as patch:
             # Identity mapping for every valid quarter turn. The invalid-token branch keeps the
             # required uniforms active, so the mutant reaches pixels instead of uniform admission.
-            identity = "(vLocal + (uQuarters < 0 ? uOriented : vec2(0.0)))"
+            identity = "(vLocal + (uContentRotationQuarters < 0 ? u_resolution : vec2(0.0)))"
             patch.setattr(renderer_module, "OSC_BEAM_VERTEX_SOURCE", original.replace("physicalPoint(vLocal)", identity))
             broken = target.render(host, snapshot)  # Compile and draw the actual broken shader.
             with pytest.raises(AssertionError, match="quarter-turned flat trace must be vertical"):
