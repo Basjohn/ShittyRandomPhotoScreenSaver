@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from core.logging.logger import get_logger
+from core.performance.frame_trace import FrameTraceEvent, current_frame_trace
 from widgets.spotify_visualizer.quick_display_visualizer_owner import ACTIVATION_SCENE_FADE_DURATION_S
 
 logger = get_logger(__name__)
@@ -223,6 +224,7 @@ class NativeVisualizerRoute:
         self._recheck = False         # an edge fired: the next sync reads the core's status even at rest
         self._request_update: Callable[[], Any] | None = None
         self._edges: dict[str, _WindowEdge] = {}
+        self._frame_trace = current_frame_trace()   # --frame-trace only (None otherwise): the route's update requests
         self.failures = 0
         self.waits = 0
         self.published = 0
@@ -545,6 +547,7 @@ class NativeVisualizerRoute:
         content = self._content
         recheck, self._recheck = self._recheck, False
         sent = False
+        sent_bits = 0                                     # --frame-trace only: what this sync sent (see the record)
         try:
             # The frame's own stage (N29 M1; round 2 M1: the admission and the take too): a failure here is tried
             # again at the next update, never latched for the activation.
@@ -567,12 +570,16 @@ class NativeVisualizerRoute:
                 content.present(card)
                 self._card = card
                 sent = True
+                sent_bits |= 1
             settings = self.settings(drawn, full)
             if settings != self._settings:
                 content.settings(settings, drawn)    # by name; re-packed by the core only when they change
                 self._settings = settings
                 sent = True
-            sent = content.target_sizes(drawn, settings) or sent
+                sent_bits |= 2
+            if content.target_sizes(drawn, settings):
+                sent = True
+                sent_bits |= 4
             if snapshot is not None:
                 logical = snapshot.logical
                 payload, payload_schema = content.encode(logical)
@@ -599,6 +606,7 @@ class NativeVisualizerRoute:
             self._late = None
             self._failure = None                          # shown again: the next failure is logged again
             sent = True
+            sent_bits |= 8
         if snapshot is not None:
             self._snapshot = snapshot
             self.published += 1
@@ -607,6 +615,10 @@ class NativeVisualizerRoute:
             # verdict is read once that frame has rendered, with no new frame needed (M4).
             self._arm("afterRendering")
         content.update()
+        trace = self._frame_trace
+        if trace is not None:
+            trace.record(FrameTraceEvent.NATIVE_ROUTE_UPDATE_REQUEST, revision=sent_bits,
+                         auxiliary=0 if snapshot is not None else (1 if recheck else 2))
         return snapshot is not None
 
     def card(self, presentation: Any, snapshot: Any, geometry: Any, metrics: tuple | None = None) -> dict:
