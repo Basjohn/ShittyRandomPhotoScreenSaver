@@ -66,13 +66,15 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
    native core first in every slot). Within a backlog section, its own internal order holds. No other heading in
    this plan sets a global order.
 
-**Next, by slot.**
-- [ ] High: the Oscilloscope port (step 4); N3.6 after it. Defects between N steps: 1D.6 (design note first), then
-  1C.10. N2.5's and N2.9's leftovers ride with the next fitting dispatch.
-- [ ] Medium: step 1 (closing Bubble), then step 2, then step 3.
-- [ ] Sonnet: the fast-proof tools' mechanical parts (replay profiling, hash-only output, recording every failing
-  frame) under the Medium slot's review.
-- [ ] Audit each merge at its risk (Opus Medium); the Bubble landing delta's audit is step 1's first box.
+**Next, by slot** (operator, 20 Nov: Opus High only where it genuinely pays, otherwise a second Medium; audits at
+the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter alongside; no Fable unless asked).
+- [ ] High (Opus High): the Oscilloscope port (step 4), then N3.6. Defects between N steps: 1D.6 (design note
+  first), then 1C.10.
+- [ ] Medium (Opus Medium): the fast-proof tools (step 1), then Bubble's L, T and long-take rule (b), then step 2's
+  scene-fade fix, then step 3.
+- [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): the Bubble landing delta first, then each merge.
+- [ ] Sonnet Medium: profile the owner replay (the fast proof's first box), then cheap audits and docs of open avenues,
+  hygiene item 6's closed-report cleanup, and the low-risk section 1E items.
 
 ### Item 0. Operator defects of 11 Nov: section 1B (backlog; its own internal order; see Order point 5)
 
@@ -603,7 +605,31 @@ the feature (D3D11 is not stated).
 
 - [ ] N5.1 Spline Curve leftover: its Studio is not offered on Vulkan (`STUDIO_PREVIEW_BACKENDS`), the same open
   item as Spectrum's; both close with N5.8.
-- [ ] N5.1 Oscilloscope (a single-sampled overlay target, bloom, a ring, instanced quads).
+- [ ] N5.1 Oscilloscope (Opus High: N3.4 bloom's first consumer). Python oracle:
+  `rendering/quick/visualizer/implementations/oscilloscope.py`. It is one instanced pass reading a segment array from
+  the stream ring (binding 3) into a single-sample overlay `SceneTarget`. Each segment is a quad. Light goes into the
+  overlay's emission attachment, and the target's bloom spreads it into the glow. Glow 0 allocates no emission or
+  bloom. The glow light is `_GLOW_LIGHT` and the strength is per frame. Shapes and reaction rules:
+  `rendering/gl_programs/oscilloscope_program.py`. Follow `Docs/Guides/Native_Port_Playbook.md` (checklist; E3, E4/E19
+  bloom, the stream-ring section) and prove it under `Docs/Guides/Native_Parity_And_Timing_Proof.md` from the first
+  brief.
+  - [ ] Source reading first: the record each frame carries (segments, glow strength, settings), what is per frame and
+    what is per settings change, the ring's size rule, and which N3.4 stages it needs (overlay target, bloom from
+    emission, composite with glow). Confirm in writing that nothing the port needs is missing from ABI 25. Anything
+    missing is a C++ box here, with its build.
+  - [ ] The record schema and shared Settings and frame-value functions, which the Python renderer also calls (as
+    Bubble did), proved byte-identical by a GPU-free test.
+  - [ ] The route's program: the target, the stream ring, the instanced pass, the bloom stage and the composite step,
+    declared as data (D12 to D17). The target size is sent only when it changes.
+  - [ ] Layer P, rule (a): owner rule (a) over three 60 s recorded takes at the display placement, every Choice setting
+    at both placements as a smoke check (the 5.5 s replay), and the run's judged counts stated. Rule (b):
+    `native/core/python/oscilloscope_check.py` built on the shared rounds (as `bubble_check.py` reuses
+    `devcurve_check.py`), with its negative controls run and seen failing.
+  - [ ] Layer L: the per-frame record compared byte for byte with the Python renderer's values, once the fast proof's
+    L tool exists (the "Build the fast long-clip proof" box). Until then, state that L is indirect.
+  - [ ] Layer T: the live run on Vulkan and native OpenGL against the pre-flip Oscilloscope row (lead runs it on
+    Display 1). Layer C: per pass at 2560 x 1440 and 4K, the glow-off path included.
+  - [ ] Registration last (playbook checklist 18), then docs (D12 "As built: Oscilloscope", Primitives, README).
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
   Registered on the route and offered on Vulkan (rule (b) passes: `native/core/python/bubble_check.py`, D12 "As built:
   Bubble"). Owner rule (a) passes on the 5.5 s replay and the four 60 s recorded takes under D12's Bubble scatter. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
@@ -862,6 +888,11 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
 - [ ] N6.5 The opt-in deformable sheet. **Low potential until a consumer.**
 - [ ] N6.6 Lightning: procedural bolt geometry and its light. **Low potential until a consumer** (one effect).
 
+- [ ] N6.8 Frost and ice (operator, 20 Nov). **Consumer known:** Extruded Bubble's icy-water look, which reads nothing
+  like ice today. A surface treatment: a rime or frost layer (a procedural frost normal and scatter, crystalline
+  sparkle), refraction through ice (on N4.d's rough receivers and the scene probe), and an ice-to-water edge on N6.1's
+  dynamic surface field. Research first: which parts are new and which are compositions of N4.d, N4.j and N6.1. Then
+  its harness proof like the other primitives, then the consumer.
 - [ ] N6.7 Dense geometry route (operator, 13 Nov: mesh shaders for fidelity on the high-end modes). It is a
   measured candidate, admitted by evidence, not by a consumer. Mesh shaders (`VK_EXT_mesh_shader`) are recorded
   as raw Vulkan on the core's own device (D6) inside Qt's frame, with a compute-cull plus indirect-draw twin
@@ -1010,6 +1041,14 @@ follow-ups with their evidence folders).
   - [ ] Shared semantic roles with independently authored Settings / Widget / optional SMP scopes: surface colour/material, **surface transparency bias** (neutral 0), border-surface colour/material, **border transparency bias** (neutral 0), **border thickness** and **four-corner curvature** (correct concentric inner edge), plus typography/contrast. The skinning system does not own these global renderers. Neutral user Style Overrides inherit the authored theme value; nonzero user biases are relative adjustments applied once.
   - [ ] **Semantic completeness audit alongside unification (operator, 18 Nov):** inventory presently hardcoded colours, alpha, tint and *reasonably independent* material surfaces across Settings, ordinary widgets and fullscreen overlays; give missing eligible elements typed roles **where the element genuinely has an authored surface/ink purpose**, especially the Media Control Bar (distinct from the Media card), volume child, branded headers, seekbar track/fill and overlay controls. Seed every new role with the **effective visual value the element renders today**, including existing style overrides, so the default unified theme is visually unchanged unless the operator explicitly requests a change. Preserve fullscreen Now Playing’s two fill-opacity biases as neutral-zero adjustments on the resolved Normal semantic alpha, not new standalone colour authority or preset metadata. Preserve shared renderer/semantic ownership and per-element inheritance/Normal overrides; avoid indiscriminate material passes for decorative lines, tiny fills or already-correct surfaces. Prove baseline parity with before/after pixels before re-authoring aesthetics.
   - [ ] **Media application-volume child border thickness becomes semantic at M4 (operator, 19 Nov):** introduce an authored, typed `media.volume.outline.width` thickness role shared by both the vertical track and its filled-level outline, and use the current **2.5 logical px** as the unified-theme baseline. The Widgets → Media → Volume Control **Outline Width** setting, added before M4, must then become an explicit override of that role; an untouched/default value must inherit the theme instead of freezing all users at 2.5 px. Preserve non-default user-authored widths across migration, including zero (intentional no outline). Keep the material-border 20% alpha adjustment and the single-stroke clipping behavior independent of thickness. Confirm round-trip, theme switch/reset, DPI scaling, both alignment sides, Normal/material states and no new renderer or capture.
+  - [ ] **Hierarchical sub-semantics (operator, 20 Nov), if architecture and cost allow.** Each role (for example
+    border: colour, thickness, surface) has an overarching semantic, and each element (a widget's border, the volume
+    child's outline) may carry an optional sub-semantic that takes authority for that element when provided.
+    - [ ] Design check first: resolve the hierarchy once, at theme load and on change, into flat per-element values,
+      so drawing reads one value with no per-frame lookup chain. Record the cost (zero recurring work) and the
+      precedence: element sub-semantic, then role semantic, then theme default, then user Style Override where exposed.
+    - [ ] Defaults: no sub-semantic is authored where today's look comes from the role. Where an element differs today,
+      its sub-semantic reproduces that, so the regenerated themes render as now (pixel comparison per theme).
   - [ ] **Theme-authored legibility guard per eligible surface:** evaluate a typed semantic on/off (and inheritance precedence) for the guard/legibility panel, resolving theme default -> user Style Override if that component exposes one -> material child, with no duplicate shader or capture. Defaults mirror **current effective per-component states**: the ordinary Media card keeps its guard; the volume child and Media Control Bar do not have theirs restored by accident. Do not apply a global switch that disables guards on unrelated cards or sacrifices necessary contrast; prove light/dark/bright-scene ink accessibility and independently configurable card/child guards.
   - [ ] Regenerate curated themes semantically into the new format; preserving old bundled .srtheme/.srwtheme pairs byte-for-byte is not required. Retire the duplicate catalogues/mirror sync after accepted projection. Convert user-authored themes and Custom values in a bounded one-time importer where possible; otherwise back up the originals and report a safe fallback. No silent deletion of personal files.
   - [ ] Prove dark/light/material themes, Settings, Context Menu, Media and ordinary widgets; neutral and non-neutral surface/border bias, border width/curves, flat/material fallback, DPR 100/125/150/200%, real bright/dark backgrounds, hot selection, legibility and no extra underlay capture. The M3 material-border pass and native corner constraints remain independent renderer contracts. See SMP document 05.
@@ -1365,6 +1404,33 @@ borderless fullscreen transfers working smoothly.
 - [ ] Watch R-192's enclosed axis. A monitor with no exterior edge on an axis whose extent is not whole at its
   DPR (the middle of three in a row; the centre of a 3 x 3 grid) keeps Qt Quick's stretch there, and Borders To
   Edge's frame shows it. `test_the_enclosed_axis_stretch_is_recorded_not_hidden` records it.
+
+## 1E. Operator requests (20 Nov; backlog under section 1's Order, point 5)
+
+Each item reproduces its failure first. The lead judges pixels on the operator's two wallpapers. Opus Medium or Sonnet
+by risk; none takes a slot native work can use.
+
+- [ ] **Media volume child: slider borders cut off as the volume lowers.** Reproduce at several levels, high to low.
+  Find which clip or geometry cuts the track's or the fill's border (likely the fill rect shrinking past the border
+  inset, or a clip on the shrinking item). Fix it at the owner, with a pixel test at a low level and a control that
+  fails on the old code.
+- [ ] **Gmail's card surface and opacity differ from every other widget.** Find where Gmail's surface diverges from the
+  shared widget material path (its own opacity, tint or material call), and route it through the shared path. Prove it
+  against Media and Feeds on both wallpapers and a light and a dark theme.
+- [ ] **Widget opacity baseline:** the current -0.35 becomes the new 0 (Base). The operator checked that every theme
+  stays legible at -0.35.
+  - [ ] Root cause first: where the baseline is defined (the canonical default and the Style Override offset), and
+    what the legibility guard does at that value. The guard must not raise opacity back: tell it the new base is
+    intended (a theme-authored floor, not a new exception).
+  - [ ] Persisted values: follow `Docs/Architecture/Persisted_Input_Compatibility.md`. A stored user offset keeps its
+    visual result (stored + 0.35), and an unset value takes the new base. Test both. Never pin the default's number in
+    a test; derive it from the canonical default.
+- [ ] **Style Overrides: a "Borderless" button.** It goes below "Reset Colours To Theme", on the same row as Card Border
+  Width, right-aligned, in the same style. It latches pressed and sets every border element of the widget UIs to 0 or
+  invisible. Reset Colours, editing the border width, or changing the surface choice in Style Overrides each un-latches
+  it. It persists like the other overrides. Test: latch, each un-latch path, and a reload.
+- [ ] **Feeds spacing: 1 px more padding** above and below, between the header, the subtitle and the grid items. Nothing
+  else moves: compare item positions before and after, and only the intended offsets change.
 
 ## 1A. Fullscreen, Rotate, material and corner items (1.0 to 1.9)
 
