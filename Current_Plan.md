@@ -372,6 +372,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   invisible to the lifecycle tests: record those too, with a test.
 - [ ] Side defect: `waveform_ribbon.py:54` (`0.5*(clip.z/clip.w+1.0)`) and `scene3d_spheres.py:197` assume OpenGL's
   -1..1 depth: route both through `viewDepthFromDepthTexture`/the include before matrices are corrected at upload.
+- [ ] Side defect (12 Nov evening audit, low): `tests/test_qrhi_texture_formats.py` scans `rendering/` only, by the
+  enum's text, so a format QRhi lacks under `widgets/` (its shaders included) or reached through an alias passes.
+  Scan `widgets/` too, with a control that plants an `rg16f` image layout there.
 - N1.4's remainder: the eight scene composites in `scene3d/target.py:125-286` (and their oriented forms) keep raw
   `gl_FragCoord` and are never converted: D5.2 replaces them with a texture node.
 - [ ] N1.6 Loose uniforms into blocks across the renderer (`qsb` needs blocks), each group pixel-identical in OpenGL
@@ -495,6 +498,28 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [ ] Fix what the scopes show, if it brings Vulkan's 4K 4x minus 1x to the Python path's or below with parity
     exact and validation clean; otherwise the figure and its cause go to the lead with the operator's look question
     (4K defaulting to fewer samples).
+- [ ] N3.3 leftovers: checkpoint audit 5's findings that D16's "As built after checkpoint audit 5" leaves to the plan
+  (their boxes were lost in the 15 Nov merge 36faada69; still open in source, 20 Nov). Before the first compute consumer
+  (N5.4, N5.6):
+  - [ ] L2, a trigger consumed by a record that dispatches nothing: `ModeContent::decideDispatches` advances
+    `lastTrigger`, `dispatches` and the fresh key before `recordCompute` may skip the entry (no pipeline, a group count
+    of 0, groups past the device's limit). Decide the groups and the pipeline in `decideDispatches` and advance only an
+    entry that dispatches; proof: a field-triggered stateful entry whose named group count is 0 for one record keeps
+    that record's step for the next, control on the pre-change module.
+  - [ ] L3, dispatch totals: only each dimension is bounded; the product of three admitted group counts is not (three
+    record counts under at_most 65535 admit 2.8e14 groups, a TDR from an owner bug). Bound the product at admission and
+    per record, refused at its edge as the per-dimension limit is; GPU-free test and a harness case refused with its
+    reason.
+  - [ ] L4, an image's zeros: `compute_passes.cpp` zeroes a storage image from one host `QByteArray` of a whole slice on
+    the render thread (up to 256 MiB under `kMaxStorageImageBytes`). Upload them in bands of rows from one bounded block
+    of zeros, proved by the copy round's zero reads on a 2D and a 3D image larger than one band; and decide whether
+    `UsedAsTransferSource` (only the harness's readback needs it) stays on every storage image.
+  - [ ] L5, the harness readback reaching the product: `NativeMode.read_storage` and `storage_data`
+    (`rendering/native/mode.py`) are the harness's only; a test that no module under `rendering/`, `widgets/`, `core/` or
+    `ui/` calls them, with its control.
+  - [ ] M3's draw-side form: one render pass reading a storage buffer two ways (as `storage` and as `instance_from` or
+    `indirect`, in one draw or two draws of a run) is admitted, and QRhi keeps one access a resource a pass. Refuse it
+    at admission with the reason (or split the run), proved under validation with shader accesses on.
 - [ ] N3.4 Transparency and post-processing (D17): source/proof complete; remaining investigation is non-blocking
   (operator, 16 Nov). Consumers retain their own parity, lifecycle and measured-cost requirements.
   - [ ] At Qt upgrades, recheck the private QRhi outside-pass `beginExternal`/`endExternal` contract against Qt source.
@@ -656,7 +681,8 @@ the feature (D3D11 is not stated).
     rule (b) has run over the 5.5 s replay's 684 sampled frames only.
   - [ ] Layer L directly: the per-frame packed record byte-compared with the values the Python renderer uses, over the
     four takes (the fast-proof box's L tool; `engine_worker_gate.py` is the precedent).
-  - [ ] Checkpoint audit 8 M1 (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`): the spread rule groups scatter only
+  - [ ] Checkpoint audit 8 M1 (report closed 20 Nov, its findings are these boxes; full text:
+    `git show 66e64a363:Docs/Future_Work/Checkpoint_Audits_Nov15.md`): the spread rule groups scatter only
     (`tools/pixel_tolerance.py:186-203`). A 1 px line of 67 one-level pixels passes rule (a) once pixels 23 and 46
     are 2-level ties or exact, and 60 one-level pixels at 23 % density in a 16 x 16 patch pass too.
     - [ ] Group over `scatter | tie`, so a tie joins the groups it touches.
@@ -1212,6 +1238,9 @@ Every `[~]` box in this plan that says "D1 run", "Studio run on D1" or "Frozen r
   - [ ] The in-process path too.
 - [ ] First reveal, worker against in process, without load on D1: the time from activation to the first drawn
   frame for each mode on both paths.
+- [ ] `tools/d1_run.py` hands `screen.grabWindow(0)`, a `QPixmap`, to its writer thread (`_write_frame`; 12 Nov night
+  audit, low 1). It works only because Windows' platform reports threaded pixmaps: convert with `.toImage()` on the
+  GUI thread (one frame's copy) so the tool does not depend on it.
 - [~] Carried from section 1A's former "Awaiting Validation" list, in the D1 sessions: the changed glyphs as
   zoomed crops; camera and child placement round trips; long fullscreen metadata and controls; material
   comparisons on native pixels.
@@ -1222,6 +1251,10 @@ Every `[~]` box in this plan that says "D1 run", "Studio run on D1" or "Frozen r
   only what is dead and superseded, recording the reason): high confidence `verify_compile.py` (repo root) and
   `.github/tools/linux_smoke_dist.py` (a stale copy no workflow runs); the medium and low rows stay unless a caller
   check proves them dead.
+- [ ] Workflow supply chain (12 Nov evening audit, low): `.github/workflows/native-module.yml` pins its actions by major
+  tag (`actions/checkout@v4`, `setup-python@v5`, `cache@v4`, `upload-artifact@v4`); pin each by commit SHA with the tag
+  in a comment. `tools/native_sdk_fetch.py` says Vulkan-Headers 1.4.341 is "the release it is built with" for Qt 6.12
+  with no source: cite Qt's own build record, or say it is the loader's version on this machine.
 
 ### 1B.15 Housekeeping the lead decided (11 Nov; engineering choices, not operator decisions)
 
@@ -1403,6 +1436,19 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   geometry before judging the thresholded lit-row oracle. Protected QSG/clip implementation stays unchanged.
 - [ ] Lead, Display 1: confirm R-221 in the product, Fullscreen Hide Borders with pixel shift stepping, and check
   whether the operator's lavender edge colour came from the shift.
+- [ ] Checkpoint audit 1 M1 (15 Nov, 1D.12 C; open, found by the 20 Nov closed-report triage): a display move back to a
+  display whose Visualizer shell already exists replays the 3D control hint. The transfer reuses the retained root
+  (`scene_controller.py` `transfer_visualizer_to`, `_adopt_visualizer_transfer`), and neither the host binding's
+  `transfer` nor `_transfer_quick_visualizer_unit` re-projects `controlHintShown`
+  (`_configure_quick_visualizer_input_admission` runs at bind and mode edges only). Case: A's hint on D1, move to D2,
+  switch to B, hover on D2 (B joins the set), move back: D1's retained root still reads B as not shown and plays it
+  again. Fix at the transfer edge (the adopting scene projects the session set); test with two hidden production hosts
+  and the real `transfer_visualizer_to` (the audit's probe printed "display 1 root reused = True controlHintShown =
+  False"; it is no longer on disk), negative control today's code.
+  - [ ] Its L2: `tests/test_visualizer_control_hint_once_per_mode.py::test_display_manager_hands_every_display_the_sessions_one_set`
+    compiles `_configure_quick_visualizer_input_admission` out of `display_manager.py` and drives `SimpleNamespace`
+    stubs; rebuild it on `tests/_display_manager_doubles.py`, and replace the `_admit()` stand-in for a display move
+    (the test says a move rebuilds the root; it does not).
 
 ### 1D.10 Audit of 13 Nov: what is left after its merge (14 Nov)
 

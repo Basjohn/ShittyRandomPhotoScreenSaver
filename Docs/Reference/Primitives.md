@@ -619,8 +619,8 @@ sources").
 
 ### Stale text still open
 
-The contradictions this catalogue found on 12 Nov were settled by the night audit of 12 Nov
-(`Docs/Future_Work/Audit_2026-11-12_Night.md`); the catalogue cites the plan by item and box name (line numbers
+The contradictions this catalogue found on 12 Nov were settled by the night audit of 12 Nov (closed 20 Nov; in git
+history); the catalogue cites the plan by item and box name (line numbers
 drift). One stays open until the flip:
 - `Scene3D_Resources.md:3-5` ("All admitted operations require the validated OpenGL 4.6 context") and the opening
   "retained Quick transition and visualizer hosts remain their scenes' render owners" describe the Python path
