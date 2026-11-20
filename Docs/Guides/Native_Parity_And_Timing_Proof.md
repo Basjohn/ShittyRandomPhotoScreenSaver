@@ -45,9 +45,17 @@ four layers, scaled as in section 3.
   only the native path against the cache.
 - **Coverage:** per reaction mode, one full 60 s take, plus coverage-selected windows from the other takes. L's
   records choose the windows: the extremes of each record field, the cold start, mode switches and fades, the loudest
-  and quietest seconds, and reaction-mode changes.
-- **Warm-up:** each window starts with a warm-up as long as the mode's GPU history (ribbons, rings, compute state,
-  temporal buffers), stated per mode in section 5.
+  and quietest seconds, and reaction-mode changes. **Late-song windows are required:** every take contributes at
+  least one window from its last 15 s, because adaptive state (Dynamic Floor, Adaptive Sensitivity, AGC) drifts
+  most late in a song. Report each window's figures with its position in the take.
+- **Adaptive state is never restarted inside a take.** A window is cut from one continuous run of the take from its
+  cold start. The simulation, with all its adaptive state, ticks every frame from the take's first input, on the
+  CPU and cheaply. Only the GPU drawing starts late, at the window's warm-up. A window whose simulation restarted at
+  the window would see a cold floor and could pass where the real late song fails. A test proves the window's
+  records are byte-identical to the same frames of the full continuous run, and a control that restarts the
+  simulation at the window start must fail it.
+- **Warm-up:** each window's drawing starts with a warm-up as long as the mode's GPU history (ribbons, rings, compute
+  state, temporal buffers), stated per mode in section 5.
 - **Proof of coverage:** a coverage report showing that every record field's observed range is covered gates
   acceptance.
 - **T:** section 4, once at acceptance.
