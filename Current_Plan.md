@@ -737,6 +737,20 @@ the feature (D3D11 is not stated).
     opacity. A take runs in 24 to 39 s. Evidence `.artifacts/evidence/native_core/fast_proof/20261120_l_*`.
   - [ ] Layer P: cached Python references; a native-only, hash-only compare with `--api opengl|vulkan`; every failing
     frame recorded (not the first eight); progress written during a run.
+    Built (20 to 21 Nov), in the profile's order, each with a test, evidence `fast_proof/20261120_*`:
+    (1) ddb3dc8b2 the judge reads content edges only at ties and flips, and one pass per frame shares one decompress
+    and one delta (same verdicts on synthetic frames and on the 5.5 s replay of all three modes; judge 10 to 13 s
+    against 58 to 61 s); (2) ec0bf3feb no lit mean on native, reference or mask runs, and the console says
+    "not bit-identical ... PASS under tolerance"; (3) 12a688e57 `owner_render_parity --native --references` caches
+    the Python run and its masks (`tools/visualizer_replay/python_references.py`, default
+    `D:\Temp\Scratch\SRPSS\fast_proof\references`, about 2 GB a 60 s take; keyed by the run and the Python drawing
+    code's sources, re-drawn when the native run's logical digests differ); (4a) d0b2e8095 the reference first, then
+    each native frame judged as it is drawn with a progress line, every failing frame kept with its pixels, and
+    `--native-only --against <report>` (no Python, hashes only, every changed frame listed); (4b) 29fc590c0 the
+    Vulkan side is not the owner replay (its hidden host is OpenGL) but the take's delivery stream
+    (`native_record_identity.py --deliveries`) drawn by `native_stream_player.py` on OpenGL and Vulkan: rule (b) per
+    frame under the mode's `VULKAN_RULE_B`, and each API's hashes against an earlier run; generic modes only, Spectrum's
+    own item is not played yet; (5) d0b2e8095 `--judge-workers N`, the same result as one process.
   - [ ] Coverage selection with its coverage report (guide section 3), warm-up per mode (guide section 5).
   - [ ] Method proof on Bubble: the selected set catches input 22, the two offer fade frames, a one-level shift and a
     one-ulp shader change.
