@@ -477,6 +477,46 @@ def test_bubbles_scatter_must_be_spread_and_ties_inside_a_patch_fail_by_its_grou
     assert not paired["pass"] and any("neither isolated" in reason for reason in paired["reasons"])
 
 
+def test_bubbles_rule_b_admits_spread_scatter_and_isolated_ties_only():
+    # Rule (b), measured on the four 60 s takes (lead, 21 Nov): one-level scatter spread over the content and isolated
+    # 2-level ties, within the measured bounds; anything denser, wider or tied together fails. Bounds from the harness.
+    import sys
+    from pathlib import Path
+
+    import numpy as np
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "native" / "core" / "python"))
+    import bubble_check
+    from tools import pixel_tolerance as pt
+
+    rule = bubble_check.VULKAN_RULE_B
+    reference = np.full((300, 500, 3), 90, np.uint8)
+
+    def judge(drawn):
+        return pt.judge(np.clip(drawn, 0, 255).astype(np.uint8), reference, rule)
+
+    spread = reference.astype(np.int16)
+    for k in range(rule.scatter_pixels):
+        spread[3 + 3 * (k // 160), 3 + 3 * (k % 160), 0] += 1
+    for k in range(rule.tie_pixels):
+        spread[2 + 90 * k, 490, 1] += 2
+    assert judge(spread)["pass"]
+    # Controls: one scatter pixel more; one tie more; two ties side by side; a compact one-level block.
+    more = spread.copy()
+    more[298, 2, 0] += 1
+    assert not judge(more)["pass"]
+    tied = spread.copy()
+    tied[280, 250, 1] += 2
+    assert not judge(tied)["pass"]
+    pair = reference.astype(np.int16)
+    pair[100, 100, 1] += 2
+    pair[100, 101, 1] += 2
+    assert not judge(pair)["pass"]
+    block = reference.astype(np.int16)
+    block[50:57, 50:57, 2] += 1
+    assert not judge(block)["pass"]
+
+
 def test_bubbles_spread_joins_ties_into_groups_and_bounds_density():
     # Checkpoint audit 8 M1: a one-level line that two 2-level ties split into groups within the cap, and a one-level
     # patch dithered into small groups, both passed the spread rule; ties now join the groups they touch and no 16 x 16

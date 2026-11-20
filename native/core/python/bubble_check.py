@@ -68,12 +68,14 @@ base = _generic_rounds()
 MODE_ID = "bubble"
 #: Rule (b), judged pixel by pixel by the shared tolerance (D12 "The pixel tolerance"), the reference's alpha as the
 #: mask (Bubble's card is opaque: the mask is empty): outside it the two compilers' scatter (one pack, its SPIR-V
-#: against its GLSL), spread. Measured over the 5.5 s replay's 684 sampled frames (dpr 1 and 1.5; 17 Nov,
-#: n5_1_bubble/20261117_rule_b/): 615 differ, every pixel exactly one level, 2,000 in all, at most 21 a frame, the
-#: largest group of touching ones 7; no tie, no flip. Bounds times 1.5, decided by the lead (17 Nov): 32 a frame, groups
-#: of at most 11.
-VULKAN_RULE_B = pt.Tolerance("bubble, Vulkan against OpenGL (rule b)", masked_level=1, scatter_pixels=32,
-                             scatter_cluster_pixels=11)
+#: against its GLSL), spread, and isolated 2-level ties. Measured on the acceptance material, the four 60 s recorded
+#: takes (21 Nov, every frame through native_stream_player.py, fast_proof/20261121_rule_b_60s_*; lead's decision of 21
+#: Nov, the guide's rule that a bound is measured on the acceptance material): every differing pixel one level outside
+#: the mask or an isolated (or on-edge) 2-level tie, nothing else; worst a frame 276 scatter (237, 193, 129, 276), a
+#: joined group of 23 (11, 7, 23, 9), 17 in a 16 x 16 window (12, 13, 17, 17), 2 ties (2, 1, 1, 0), level 2. Bounds
+#: times 1.5, rounded up. (The 5.5 s replay's 684 sampled frames, 17 Nov: at most 21 a frame, groups of 7, no tie.)
+VULKAN_RULE_B = pt.Tolerance("bubble, Vulkan against OpenGL (rule b)", masked_level=1, scatter_pixels=414,
+                             scatter_cluster_pixels=35, scatter_window_pixels=26, tie_pixels=3, tie_level=2)
 #: The negative controls: the rounds each one's Vulkan child runs and what it breaks.
 CONTROLS = {
     "position_nudged": {"rounds": ["pixels"], "breaks": "every record's first bubble moved by 0.01 of the content"},
