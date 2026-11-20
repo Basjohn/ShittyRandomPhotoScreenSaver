@@ -171,3 +171,8 @@ decision, recorded with its reason.
 - **Method proof:** on Bubble, the coverage-selected set must catch every failure the full four-take run found
   (input 22, the two offer fade frames, a one-level shift control, a one-ulp shader change) before Waveform relies
   on it.
+- **Once proven, it is the default** (operator, 20 Nov). After the fast tools pass their identical-verdict check and
+  the method proof above, every port and every optimisation uses them: the cheaper judge, cached Python references,
+  native-only hash runs and coverage windows. The slow full-path replay stays only as the fallback for a mode where the
+  method proof fails. The tools are kept long term as the optimisation parity aid and the control in section 6, and
+  are never retired as "temporary".
