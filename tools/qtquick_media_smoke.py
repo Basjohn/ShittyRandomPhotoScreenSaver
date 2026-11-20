@@ -1,4 +1,10 @@
-"""Render retained Media controls/progress/volume/mute through a real Quick window."""
+"""Render retained Media controls/progress/volume/mute on the hidden Windows-QPA GL host.
+
+The production ``DisplayScene`` is drawn by ``QQuickRenderControl`` into a hidden GL texture
+(``tools/onboarding_preview_foundry._HiddenQuickScene``, the same host
+``tools/surface_material_capture.py`` uses); no window is shown. Offscreen QPA is not used: it draws
+blank artwork. Run it with the default Windows QPA.
+"""
 
 from __future__ import annotations
 
@@ -13,25 +19,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from rendering.quick.bootstrap import (  # noqa: E402
-    configure_quick_environment,
-    configure_quick_graphics,
-)
-
-
-configure_quick_environment()
-configure_quick_graphics(reason="qtquick-media-smoke")
-
-from PySide6.QtCore import QEventLoop, QObject, QSize, QTimer  # noqa: E402
-from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter  # noqa: E402
-from PySide6.QtQuick import QQuickItem, QQuickWindow  # noqa: E402
+from PySide6.QtGui import QColor, QImage, QPainter  # noqa: E402
 
 from core.media.media_controller import MediaPlaybackState, MediaTrackInfo  # noqa: E402
-from rendering.quick.scene_controller import QuickSceneFactory  # noqa: E402
-from rendering.quick.widgets.host import (  # noqa: E402
-    OrdinaryWidgetPresentationHost,
-    OverlayWidgetGeometry,
-)
+from rendering.quick.widgets.host import OverlayWidgetGeometry  # noqa: E402
 from rendering.quick.widgets.media import (  # noqa: E402
     MediaPresentationConfig,
     MediaPresentationModel,
@@ -222,60 +213,37 @@ def _artwork(color: str) -> QImage:
     return image
 
 
-def _grab(item: QQuickItem, size: QSize) -> QImage:
-    result = item.grabToImage(size)
-    loop = QEventLoop()
-    timer = QTimer()
-    timer.setSingleShot(True)
-    timer.timeout.connect(loop.quit)
-    result.ready.connect(loop.quit)
-    timer.start(5000)
-    loop.exec()
-    timer.stop()
-    image = result.image()
-    if image.isNull():
-        raise RuntimeError("Media grabToImage returned a null image")
-    return image
+def _busy(image, path: Path) -> None:
+    """``image`` (PIL RGBA) over a checker of dark tiles, saved as PNG."""
 
+    from PIL import Image, ImageDraw
 
-def _busy(image: QImage, path: Path) -> None:
-    canvas = QImage(image.size(), QImage.Format.Format_ARGB32_Premultiplied)
-    painter = QPainter(canvas)
-    try:
-        tile = max(24, image.width() // 12)
-        colors = (QColor(20, 58, 88), QColor(118, 52, 42))
-        for y in range(0, image.height(), tile):
-            for x in range(0, image.width(), tile):
-                painter.fillRect(x, y, tile, tile, colors[(x // tile + y // tile) % 2])
-        painter.drawImage(0, 0, image)
-    finally:
-        painter.end()
-    if not canvas.save(str(path), "PNG"):
-        raise RuntimeError(f"failed to save {path}")
+    canvas = Image.new("RGBA", image.size, (0, 0, 0, 255))
+    draw = ImageDraw.Draw(canvas)
+    tile = max(24, image.width // 12)
+    colors = ((20, 58, 88, 255), (118, 52, 42, 255))
+    for y in range(0, image.height, tile):
+        for x in range(0, image.width, tile):
+            draw.rectangle((x, y, x + tile - 1, y + tile - 1), fill=colors[(x // tile + y // tile) % 2])
+    canvas.alpha_composite(image)
+    canvas.convert("RGB").save(path)
 
 
 def run(output_dir: Path) -> dict[str, object]:
-    app = QGuiApplication.instance() or QGuiApplication(sys.argv[:1])
-    owner = QObject()
-    factory = QuickSceneFactory(owner)
-    window = QQuickWindow()
-    window.resize(1180, 760)
-    context, root = factory.create_display_root(
-        owner=owner, screen_index=0, runtime_generation=1
+    from tools import onboarding_preview_foundry as foundry
+    from rendering.quick.widgets.media import (
+        MediaPresentationModel,
+        MediaPresentationStyle,
+        RetainedMediaPresentation,
     )
-    root.setParent(window.contentItem())
-    root.setParentItem(window.contentItem())
-    root.setWidth(window.width())
-    root.setHeight(window.height())
-    host_item = root.findChild(QQuickItem, "ordinaryWidgetHost")
-    if host_item is None:
-        raise RuntimeError("ordinary widget host is unavailable")
-    host = OrdinaryWidgetPresentationHost(
-        host_item=host_item,
-        context=context,
-        create_overlay_item=factory.create_overlay_widget,
-        create_family_item=factory.create_ordinary_widget_family,
-    )
+    from widgets.media_runtime import MediaRuntimeSnapshot, PreparedMediaArtwork
+
+    foundry.open_hidden_gl_application("qtquick-media-smoke")
+    scene_size = (1180, 880)
+    scene = foundry._HiddenQuickScene(*scene_size, dpr=1.0)
+    owner = scene.owner
+    factory = scene.factory
+    host = scene.host
     cases = (
         (
             "media_playing_art_card_se",
@@ -319,7 +287,8 @@ def run(output_dir: Path) -> dict[str, object]:
             "W",
             None,
             MediaPlaybackState.PLAYING,
-            OverlayWidgetGeometry(680, 35, 450, 235),
+            # Its own slot: every case shares the one hidden scene.
+            OverlayWidgetGeometry(680, 610, 450, 235),
         ),
     )
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -375,17 +344,19 @@ def run(output_dir: Path) -> dict[str, object]:
             if art is not None and not model.hasArtwork:
                 raise RuntimeError(f"{name}: artwork was not admitted")
             presentations.append((name, config, direction, geometry, presentation))
-        window.show()
-        settle = QEventLoop()
-        QTimer.singleShot(1200, settle.quit)
-        settle.exec()
+        # Every case shares the scene, so they settle together and are cropped from one frame.
+        scene.settle(
+            minimum_ms=1200,
+            until=lambda: not any(foundry._unsettled_images(p.item) for *_rest, p in presentations),
+        )
+        frame = scene.read()
+        sheet_cases = []
         for name, config, direction, geometry, presentation in presentations:
-            image = _grab(
-                presentation.item, QSize(int(geometry.width), int(geometry.height))
-            )
+            image = foundry.crop_item(scene, frame, presentation.item)
+            sheet_cases.append((name, image))
             path = output_dir / f"{name}.png"
             busy_path = output_dir / f"{name}_busy.png"
-            image.save(str(path), "PNG")
+            image.save(path)
             _busy(image, busy_path)
             manifest.append(
                 {
@@ -393,25 +364,18 @@ def run(output_dir: Path) -> dict[str, object]:
                     "direction": direction,
                     "card": config.show_background,
                     "progress_glow": config.playback_progress_glow_enabled,
-                    "image_size": [image.width(), image.height()],
+                    "image_size": [image.width, image.height],
                     "path": str(path.resolve()),
                     "busy_background_path": str(busy_path.resolve()),
                 }
             )
+        foundry.write_review_sheet(sheet_cases, output_dir / "review_sheet.png")
     finally:
-        host.retire_all()
-        window.hide()
-        root.setParentItem(None)
-        root.setParent(None)
-        root.deleteLater()
-        context.deleteLater()
-        window.deleteLater()
-        owner.deleteLater()
-        app.processEvents()
+        scene.close()
     payload = {
         "graphics_api": "OpenGL",
-        "render_loop": "threaded",
-        "device_pixel_ratio": window.devicePixelRatio(),
+        "render_loop": "hidden QQuickRenderControl",
+        "device_pixel_ratio": scene.dpr,
         "cases": manifest,
     }
     manifest_path = output_dir / "manifest.json"
