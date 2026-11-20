@@ -982,8 +982,7 @@ values during unrelated work.
   `rendering/quick/visualizer/implementations/bubble_ambient_gl.py`,
   `widgets/spotify_visualizer/bubble_hero_occlusion.py`,
   `widgets/spotify_visualizer/shaders/bubble.frag`, `core/settings/visualizer_mode_settings.py`,
-  and `ui/tabs/media/bubble_builder.py`. The dated `Docs/Audits/Bubble_*` slice records are forensic
-  context rather than active task or stronger product authority.
+  and `ui/tabs/media/bubble_builder.py`.
 
 ## 24. Recorded-music exact-parity gate for measured Bubble optimisations (16 Nov 2026)
 

@@ -73,7 +73,7 @@ def test_feed_subtitle_is_small_metadata_below_not_inside_shared_header_pill():
     assert "secondaryMaximumWidth:" not in feed
     assert 'id: headerSubtitle' in feed
     assert 'objectName: "feedHeaderSubtitle"' in feed
-    assert "readonly property real subtitleGap: 2.5" in feed
+    assert "readonly property real subtitleGap:" in feed
     assert "y: headerFrame.y + headerFrame.height * headerFrame.scale + feedRoot.subtitleGap" in feed
     assert "feedModel.showSubtitle" in feed
     # Set in points through one FontMetrics-backed font (86faae78), so the box
@@ -82,6 +82,26 @@ def test_feed_subtitle_is_small_metadata_below_not_inside_shared_header_pill():
     assert "font: feedRoot.subtitleFont" in feed
     assert "FontMetrics {" in feed
     assert "elide: Text.ElideRight" in feed
+
+
+def test_feed_header_stack_spacing_comes_only_from_the_two_named_gaps():
+    """Header to subtitle and header block to articles are each one named constant; no offset is a literal."""
+    import re
+
+    feed = _text("rendering/quick/qml/FeedPresentation.qml")
+    for name in ("subtitleGap", "bodyGap"):
+        assert len(re.findall(rf"readonly property real {name}:", feed)) == 1, name
+    top = re.search(r"readonly property real bodyTop:(.*)", feed).group(1)
+    assert "bodyGap" in top and not re.search(r"\d", top)
+    divider = feed[feed.index("id: divider"):]
+    assert "y: feedRoot.bodyTop - feedRoot.bodyGap" in divider.split("}", 1)[0]
+    height = feed[feed.index("readonly property real headerHeight:"):feed.index("readonly property real bodyTop:")]
+    assert "subtitleGap" in height
+    assert "feedRoot.subtitleHeight + feedRoot.subtitleGap" in feed  # bottom-anchored header, same gap
+    assert "feedRoot.subtitleGap" in feed[feed.index('objectName: "feedHeaderSubtitle"'):]
+    # Nothing else adds a spacing literal to the body's origin.
+    body = feed[feed.index('objectName: "feedBody"'):]
+    assert "y: feedRoot.bodyTop + feedRoot.childOffsetY(\"articles\")" in body.split("clip: true", 1)[0]
 
 
 def test_feed_header_flip_is_widget_wide_semantic_layout_not_header_only():

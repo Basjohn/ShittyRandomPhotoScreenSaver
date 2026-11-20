@@ -35,8 +35,8 @@ The scopes overlap and must not be added.
 | Full admitted pre-SMP native/compositor/primitive programme | 20–35% | 65–80% |
 
 The foundation already supplies hosts, frame/packet services, generic programs, compositing, targets, mesh/buffer,
-compute, post stages and async jobs. Spectrum and Spline Curve use native routes; Bubble remains dormant pending
-parity. Most mode/transition ports, lifetime/device-loss and orientation/display-history work, shared N4 primitives,
+compute, post stages and async jobs. Spectrum, Spline Curve and Bubble use native routes (Bubble registered and
+offered on Vulkan since 17 Nov; its live run and long-take proofs remain, plan N5.1). Most mode/transition ports, lifetime/device-loss and orientation/display-history work, shared N4 primitives,
 Studio/tools migration and installed acceptance remain. The full scope additionally includes admitted N6 high-potential
 primitives and compositor/material work before SMP. Conditional mesh-shader work and low-potential primitives
 without a consumer are not an indefinite blocker. `Current_Plan.md` owns admission and ordering; the actual routes
@@ -721,7 +721,8 @@ first job is a photo's upload and its GPU mips into one of N4.a's core-owned tex
 10. *Nothing at rest.* No job, no wake-up, no retire entry and no record at rest; the frame edge's only addition is one
     atomic read of the window's retire count.
 
-*Amended by the N3.8 audit (`Docs/Future_Work/Audit_2026-11-14_N38.md`, fixed in ABI 15 with N5.7a).* Point 6: a
+*Amended by the N3.8 audit of 14 Nov (fixed in ABI 15 with N5.7a; the closed report is in git history,
+`git show 66e64a363:Docs/Future_Work/Audit_2026-11-14_N38.md`).* Point 6: a
 window's frame edges are counted once per rendered frame whatever number of drivers sees it (M1: the first driver's
 `beforeRendering` counts, the window's `afterRendering` opens the next count), and the retire list asks its window for
 the frames its release waits for (M2: a queued `update()` per frame while an entry is left; before, a window at rest
@@ -976,13 +977,16 @@ most 21 a frame, the largest group of touching ones 7, no tie; its bound, decide
 a frame in groups of at most 11 (the measured worst times 1.5; the card is opaque: no mask), validation clean. Its negative controls each fail in their own process: a position nudged, a
 big-class bit flipped, the sprite coordinate's y flipped, the whole-allocation sample, the mask pass dropped, the
 skipped release. Owner rule (a): `owner_render_parity.py --native --mode bubble` (the 5.5 s replay and the four 60 s
-recorded takes; the widened set at both placements is open, see the plan's N5.1 Bubble box). Evidence
+recorded takes; the widened set ran on 17 Nov: 40 runs, variants a and b at both placements and the Choice offers at
+the display placement only, 38 passing and 2 tracked exceptions, see the plan's N5.1 Bubble box). Evidence
 `n5_1_bubble/20261117_rule_b/`. The Python renderer retires as Spline Curve's does.
 
 *Cost (17 Nov, `bubble_check.py --rounds cost`, `n5_1_bubble/20261117_cost_4k/`; RTX 4090, no validation layer, the
 GPU shared with the installed SRPSS and the desktop at 23 to 42 % utilisation before each child; each figure the
-least-loaded of three rounds, median of at least 240 frames).* The surface (all three passes) with the ambience on and
-off: the rig's card on a 4K display (840 x 560 device pixels) 0.236 / 0.299 ms on OpenGL, 0.181 / 0.241 ms on Vulkan,
+least-loaded of three rounds, median of at least 240 frames). "Ambience on" and "off" here are variant a's frame and
+variant b's (`bubble_check.py` `COST_RUNS`); variant b differs from a in many settings besides the ambience, so the
+pair is not a like-for-like ambience toggle (the plan's N5.1 Bubble box measures one).* The surface (all three passes)
+with the ambience on and off: the rig's card on a 4K display (840 x 560 device pixels) 0.236 / 0.299 ms on OpenGL, 0.181 / 0.241 ms on Vulkan,
 the Python renderer 0.230 / 0.293 ms; the card at a 4K frame's pixel count (3360 x 2240, ratio 8, the hidden host's
 largest) 3.10 / 4.23 ms on OpenGL, 2.59 / 3.66 ms on Vulkan, the Python renderer 2.94 / 4.08 ms. The `bubble` pass is
 all of it: the points pass 0.002 ms and the mask pass 0.001 ms on OpenGL (0.017 and 0.011 ms at the 4K frame), under
@@ -1353,7 +1357,8 @@ the rules for the GPU-free tests and `scene3d.scene_samples` is the one sampling
   660 MB at 4K, where the Python renderer's `glClear` is a fast clear). The capture split adds 0.36 / 0.30 ms (the
   second run, the nearest resolve, the capture, a second colour resolve), as Python's `background()` does its own.
   The fast clear this pointed to was built and rejected (point 12); the figures above stand (point 13).
-- Checkpoint audit 2 (agent-a6aa6ac5's `Docs/Future_Work/Checkpoint_Audits_Nov15.md`), fixed:
+- Checkpoint audit 2 (15 Nov; the closed report is in git history,
+  `git show 66e64a363:Docs/Future_Work/Checkpoint_Audits_Nov15.md`), fixed:
   - H1: QRhi gives a resolve attachment an UNDEFINED initial layout with no external dependency whatever the flags,
     so the validation above was clean only because the gate's rounds read back between records. The core orders a
     target's average resolves before every run on Vulkan (`primeResolvesForPass`, ALL_COMMANDS in the second scope);
@@ -1936,8 +1941,9 @@ harness's), and `tools/regen_qrc.py` bakes a mode's `.comp` as it bakes its frag
   not N3.3: fragPixel's target is the window's on the Python route and the core's own target on the native one, so
   the round now expects the card's target size there, as `tests/test_native_devcurve.py` does, and passes.
 
-**As built after checkpoint audit 5 (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 5"; ABI 19
-unchanged, no entry or state key added).**
+**As built after checkpoint audit 5 (15 Nov; the closed report is in git history,
+`git show 66e64a363:Docs/Future_Work/Checkpoint_Audits_Nov15.md`, "Checkpoint audit 5"; ABI 19 unchanged, no entry or
+state key added).**
 - *M1, a program without storage.* `ModeStorage::empty()` now counts the buffers awaiting their delayed release and the
   kernels, so the content still syncs while any is held: the first record under a program without storage moves the
   last program's buffers to the retiring list, and the next record's sync releases them and the kernels (a resize's
@@ -1983,7 +1989,7 @@ unchanged, no entry or state key added).**
   kernels' creation, both edges, never per record. L4: a storage image is at most 256 MiB (`kMaxStorageImageBytes`, a
   buffer's bound), refused with the reason at the declaration and at a size edge. L5: Exception G's wording now matches
   choice G (once per solver, the warm-up edge defined, the bytes and what the result may do bounded). The other lows
-  are the plan's boxes.
+  are the plan's boxes (N3.3 leftovers).
 
 
 ## D17. Transparency and post-processing as shared stages (N3.4, decided 15 Nov 2026; proposed by the High agent, choices A to I answered by the lead)
@@ -2597,7 +2603,10 @@ refuses a native payload.
   seqlock, admitted by its head, the expected identity, the record's range rules held), with the frame's
   protected-edge mask retained for the frame; `readHead()` moves nothing; the drop edge clears the retained frame
   and no sequence at or below the watermark is accepted again. The seqlock's loads rely on x86-64 load order and a
-  compiler barrier (no `<atomic>`: the module's runtime rule).
+  compiler barrier (no `<atomic>`: the module's runtime rule). Identity before admission (lead, 14 Nov, from that
+  day's audit): both readers check a whole slot's identity before its head is admitted, so a slot of another stream
+  (a stale activation's codec slot) is counted foreign whatever its schema says and never fails this stream; only
+  this stream's own slots are admitted by their head (`packet_reader.cpp` `read`, `packet_abi.py`'s reader).
 - The P3.0 adversarial table (`tools/packet_reader_adversary.py`) runs on the Python reference with its naive
   control and on the C++ reader with a named negative control per case; the in-place writer's race gave 0 mixed
   records in 200,000 reads, and the `skip_seqlock` control read until its first mixed record.

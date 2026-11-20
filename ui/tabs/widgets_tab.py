@@ -1477,6 +1477,10 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
 
     def _on_global_border_width_changed(self, value: int) -> None:
         self._global_card_border_width = int(value)
+        if not getattr(self, "_loading", False):
+            from ui.tabs.widgets_tab_defaults import release_borderless
+
+            release_borderless(self)
         self._save_settings()
     
     def _choose_clock_bg_color(self) -> None:

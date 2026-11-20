@@ -1,4 +1,7 @@
-"""Bounded current-module Bubble rule-(a) reproduction; dormant registration is process-local.
+"""Bounded current-module Bubble rule-(a) reproduction.
+
+Written while Bubble's native route was dormant: it still registers Bubble process-locally and restores every owner
+it patches, which changes nothing since the product registered Bubble on 17 Nov.
 
 No product settings/presets, shader or tolerance changes. Uses the canonical
 owner_render_parity 5.5-second variant-a/display recipe and graphics bootstrap.

@@ -1065,7 +1065,9 @@ class QuickDisplayWindow(QQuickWindow):
             return
         self._apply_native_compat_geometry()
         self.raise_()
-        if self._policy.accepts_focus:
+        # The window's own flags decide, not the policy: the live-run tools add WindowDoesNotAcceptFocus after the
+        # policy built its flags, and Qt logs a warning for every activation request on such a window.
+        if self._policy.accepts_focus and not (self.flags() & Qt.WindowType.WindowDoesNotAcceptFocus):
             self.requestActivate()
 
     @staticmethod

@@ -45,9 +45,17 @@ four layers, scaled as in section 3.
   only the native path against the cache.
 - **Coverage:** per reaction mode, one full 60 s take, plus coverage-selected windows from the other takes. L's
   records choose the windows: the extremes of each record field, the cold start, mode switches and fades, the loudest
-  and quietest seconds, and reaction-mode changes.
-- **Warm-up:** each window starts with a warm-up as long as the mode's GPU history (ribbons, rings, compute state,
-  temporal buffers), stated per mode in section 5.
+  and quietest seconds, and reaction-mode changes. **Late-song windows are required:** every take contributes at
+  least one window from its last 15 s, because adaptive state (Dynamic Floor, Adaptive Sensitivity, AGC) drifts
+  most late in a song. Report each window's figures with its position in the take.
+- **Adaptive state is never restarted inside a take.** A window is cut from one continuous run of the take from its
+  cold start. The simulation, with all its adaptive state, ticks every frame from the take's first input, on the
+  CPU and cheaply. Only the GPU drawing starts late, at the window's warm-up. A window whose simulation restarted at
+  the window would see a cold floor and could pass where the real late song fails. A test proves the window's
+  records are byte-identical to the same frames of the full continuous run, and a control that restarts the
+  simulation at the window start must fail it.
+- **Warm-up:** each window's drawing starts with a warm-up as long as the mode's GPU history (ribbons, rings, compute
+  state, temporal buffers), stated per mode in section 5.
 - **Proof of coverage:** a coverage report showing that every record field's observed range is covered gates
   acceptance.
 - **T:** section 4, once at acceptance.
@@ -108,6 +116,12 @@ measures the real process:
 - **Load:** game60 is the operator's yes each time, at most 10 minutes, lead only, and the rare end-of-chain
   worst-case proof. Display 0 is never used.
 
+**Load during layer T.** The operator's modest load (a game, normal use) is fine and recorded with the figures. Other
+agents' parity or judge runs are not: eight parallel owner replays took the machine to 93-97 % CPU on 21 Nov and
+made a Bubble A/B unreadable. Check the whole-machine CPU before a T run (`Get-CimInstance Win32_Processor`), and
+rerun any T run that ran above about 40 %. The lead staggers agents' heavy runs and T runs, and briefs say how many
+parallel replay processes an agent may start.
+
 The acceptance figures:
 - Frame-time p90 no worse than the pre-flip baseline beyond its run-to-run spread (stated with the figure).
 - No new late frames in steady state.
@@ -163,7 +177,16 @@ decision, recorded with its reason.
   - a native-only, hash-only compare with `--api opengl|vulkan`;
   - coverage selection with its report;
   - all failing frames recorded, not the first eight;
+  - layer T on native paths: on Vulkan the native core draws inside Qt's frame and writes no Python draw or swap
+    records, so `visualizer_live_check.py` reports `frames_per_s 0` and no render or swap figures (20 Nov, Bubble).
+    It must derive presentation cadence from Qt Quick's frame-cycle events (`quick_before_frame_begin` intervals,
+    lifecycle windows excluded), and per-pass GPU time from `--gpu-pass-timing`;
   - progress output during a run, so a killed run keeps what it had.
 - **Method proof:** on Bubble, the coverage-selected set must catch every failure the full four-take run found
   (input 22, the two offer fade frames, a one-level shift control, a one-ulp shader change) before Waveform relies
   on it.
+- **Once proven, it is the default** (operator, 20 Nov). After the fast tools pass their identical-verdict check and
+  the method proof above, every port and every optimisation uses them: the cheaper judge, cached Python references,
+  native-only hash runs and coverage windows. The slow full-path replay stays only as the fallback for a mode where the
+  method proof fails. The tools are kept long term as the optimisation parity aid and the control in section 6, and
+  are never retired as "temporary".
