@@ -125,4 +125,8 @@
 // 23: isolate the three flush_defocus_* sites; composite_live's stage_defocus_flushes proves which boundaries ran.
 // 24: complete mip readbacks with level-relative content; bounded stage allocation/build fault controls and counters.
 // 25: OpenGL declaration-only and compute-tracker-only defocus diagnostics, with counters of actual controlled flags.
-#define SRPSS_NATIVE_CORE_ABI 25
+// 26 (N5.1, the Oscilloscope): a program's "unread", the record's fields it reads nowhere (a stage it leaves out reads
+// them: the Glow 0 program's bloom strength); each must be a field of the record that no pass, draw or stream reads, any
+// other record field no pass reads is refused as before. The program's layout JSON carries "unread". Backward
+// compatible for every earlier program (no "unread": ABI 25's check).
+#define SRPSS_NATIVE_CORE_ABI 26

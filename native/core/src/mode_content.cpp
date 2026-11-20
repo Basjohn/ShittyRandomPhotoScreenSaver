@@ -2064,8 +2064,10 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
     const bool withStreams = root.contains(QStringLiteral("streams")); // N3.2
     const bool withBuffers = root.contains(QStringLiteral("buffers")); // N3.3
     const bool withImages = root.contains(QStringLiteral("images"));   // N3.3
+    const bool withUnread = root.contains(QStringLiteral("unread"));   // ABI 26
     if (parse.error != QJsonParseError::NoError || !document.isObject()
         || root.size() != 1 + (withTargets ? 1 : 0) + (withStreams ? 1 : 0) + (withBuffers ? 1 : 0) + (withImages ? 1 : 0)
+                              + (withUnread ? 1 : 0)
         || declared.isEmpty() || declared.size() > kMaxModePasses) {
         *error = QStringLiteral("a mode's program is {\"passes\": [{\"name\", \"blend\"}, ...], \"targets\" (optional): "
                                 "[...]} with 1 to %1 passes").arg(kMaxModePasses);
@@ -2089,6 +2091,22 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
     }
     qsizetype packIndex = 0;
     ModeProgram program;
+    // ABI 26: the record's fields this program reads nowhere (checked against the record in check()).
+    if (withUnread) {
+        const QJsonValue unread = root.value(QStringLiteral("unread"));
+        if (!unread.isArray() || unread.toArray().size() > kMaxModeUnread) {
+            *error = QStringLiteral("\"unread\" is a list of at most %1 record field names").arg(kMaxModeUnread);
+            return false;
+        }
+        for (const QJsonValue &entry : unread.toArray()) {
+            const QByteArray name = entry.toString().toLatin1();
+            if (!entry.isString() || name.isEmpty() || program.unread.contains(name)) {
+                *error = QStringLiteral("\"unread\" names each record field once, by its name");
+                return false;
+            }
+            program.unread.append(name);
+        }
+    }
     // N3.2: the streams (a record field each), before the passes that bind them.
     if (withStreams) {
         const QJsonValue streams = root.value(QStringLiteral("streams"));
@@ -2614,6 +2632,10 @@ QJsonObject ModeProgram::toJson() const
     for (const TargetDeclaration &target : targets)
         declaredTargets.append(target.toJson());
     o.insert(QStringLiteral("targets"), declaredTargets);
+    QJsonArray declaredUnread; // ABI 26
+    for (const QByteArray &name : unread)
+        declaredUnread.append(QString::fromLatin1(name));
+    o.insert(QStringLiteral("unread"), declaredUnread);
     return o;
 }
 
@@ -2879,6 +2901,23 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
         }
     }
     if (schema) {
+        // ABI 26: each unread name is a field of the record that the program reads nowhere (never a way to leave a read
+        // field unchecked, never a name the record lacks).
+        for (const QByteArray &name : unread) {
+            bool field = false;
+            for (quint32 i = 0; i < schema->fieldCount && !field; ++i)
+                field = name == schema->fields[i].name;
+            if (!field) {
+                *error = QStringLiteral("unknown: the program leaves '%1' unread, which is no field of the record")
+                             .arg(QString::fromLatin1(name));
+                return false;
+            }
+            if (declares(name) || drawNames(name) || streamReads(name)) {
+                *error = QStringLiteral("the program leaves the record's field '%1' unread, yet a pass, draw or stream "
+                                        "reads it").arg(QString::fromLatin1(name));
+                return false;
+            }
+        }
         for (quint32 i = 0; i < schema->fieldCount; ++i) {
             const fa::Field &field = schema->fields[i];
             const QByteArray name(field.name);
@@ -2887,6 +2926,8 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
                              .arg(QString::fromLatin1(name));
                 return false;
             }
+            if (unread.contains(name))
+                continue;                     // read by no pass of this program, by its declaration (checked above)
             if (!declares(name) && !drawNames(name) && !streamReads(name)) {
                 *error = QStringLiteral("unknown: the record's field '%1' is no pass's member, draw count or stream "
                                         "(an unknown name is refused)").arg(QString::fromLatin1(name));

@@ -366,6 +366,52 @@ def test_the_route_draws_the_oscilloscope_and_follows_glow_at_the_settings_edge(
 
 # --------------------------------------------------------------------------------------- the module's blocks
 
+def _abi() -> int:
+    """The built module's ABI (0: none, or one this package does not speak)."""
+    from rendering import native
+
+    try:
+        return int(native.load(MODULE_DIR).abi) if BUILT else 0
+    except native.NativeCoreUnavailable:
+        return 0
+
+
+@pytest.mark.skipif(not BUILT, reason="the native core is not built in this checkout")
+@pytest.mark.qt
+def test_glow_0_leaves_the_bloom_strength_unread_by_declaration_only(qt_app):
+    """ABI 26: the Glow 0 program (no composite reads ``u_bloom_strength``) is admitted with the field named unread and
+    refused without; a name the record lacks, or a field a pass reads, is refused as unread."""
+    if _abi() < 26:
+        pytest.skip("the module predates ABI 26 (a program's unread fields): its GitHub build is pending")
+    from core.visualizer_engine import oscilloscope_native_schema as schema_module
+    from rendering import native
+    from rendering.native.mode import _card as card_json, _settings as settings_json, program_json, schema_table_entry
+    from rendering.quick.visualizer import native_route
+    from rendering.quick.visualizer.native_route import _ModeContent
+
+    core = native.load(MODULE_DIR)
+    presentation = _presentation(1.5)
+    card = _card(presentation)
+    shown = card_json(_ModeContent.shown_card(None, card, SimpleNamespace(presentation=presentation)))
+    target = tuple(int(v) for v in card["target_size"])
+    logical = _logical(0, osc_glow=0.0)
+    settings = settings_json(_settings(logical, presentation, card))
+    record = schema_module.encode(logical)
+    table = json.dumps(dict(schema_table_entry(schema_module.SCHEMA)))
+    program = native_route.oscilloscope_program(False)
+
+    def blocks(unread):
+        declared, packs = program_json(program["passes"], program["targets"], program["streams"], unread=unread)
+        return core.module.mode_blocks(table, declared, packs, settings, record, shown, target)
+
+    blocks(program["unread"])
+    with pytest.raises(ValueError, match="u_bloom_strength"):
+        blocks(())
+    with pytest.raises(ValueError, match="no field of the record"):
+        blocks([*program["unread"], "u_nothing"])
+    with pytest.raises(ValueError, match="reads it"):
+        blocks([*program["unread"], "u_widen"])
+
 def _python_blocks(logical, presentation, card) -> tuple[bytes, bytes]:
     """Both passes' blocks as ``QuickOscilloscopeRenderer.render`` packs them for this card (its item the card's)."""
     from rendering.gl_programs.portable import pack_block

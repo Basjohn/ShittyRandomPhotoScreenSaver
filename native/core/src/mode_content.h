@@ -109,7 +109,9 @@
 // "blend" as a full declaration ({"color": [op, src, dst], "alpha": [...]}) beside the presets. The vertex stage's inputs
 // bind by name to the mesh's and the instance source's attributes; its outputs carry the fragment's inputs by location.
 // Its block is the pass's own (the same block in both stages when both declare it), and it may read the conventions
-// block, samplers and storage. The program declares its streams ({"streams": [...]}: a record field each). Every block of
+// block, samplers and storage. The program declares its streams ({"streams": [...]}: a record field each), and (ABI 26)
+// the record's fields it reads nowhere ({"unread": [...]}: a stage the program leaves out reads them, as the
+// Oscilloscope's Glow 0 program leaves the bloom strength; any other unread field is refused). Every block of
 // the content (the passes', the conventions, the clears', the captures', the nearest resolves') lives in one block arena
 // given as dynamic offsets; firstInstance is always 0. The core member uMatrix (item pixels, the item's own unrotated
 // coordinates, to the drawn target's clip space, corrected once: conventions.h rule 1) is filled for a pass with its own
@@ -183,6 +185,7 @@
 namespace srpss_core {
 
 constexpr int kMaxModePasses = 16; // N3.1: a 3D scene's passes and captures (8 before)
+constexpr int kMaxModeUnread = 16; // ABI 26: the record fields a program may leave unread
 
 struct ModeCard;
 class ItemNotifier;
@@ -368,6 +371,10 @@ struct ModeProgram
     QList<StreamDeclaration> streams; // N3.2: its streams (a record field each)
     QList<StorageBufferDeclaration> buffers; // N3.3: its storage buffers
     QList<StorageImageDeclaration> images;   // N3.3: its storage images
+    // ABI 26 (N5.1, the Oscilloscope's Glow 0): the record's fields the program reads nowhere ({"unread": [...]}: a
+    // stage it leaves out reads them), each a field of the record that no pass, draw or stream reads; any other record
+    // field no pass reads is refused as before.
+    QList<QByteArray> unread;
     // N3.2: the numbers of the settings the draws name (counts and selectors), set where the settings are admitted.
     QHash<QByteArray, double> drawSettings;
     quint64 generation = 0; // a new program rebuilds the pipelines at the next record
