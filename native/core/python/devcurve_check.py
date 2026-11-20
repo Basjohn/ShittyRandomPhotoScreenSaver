@@ -611,12 +611,18 @@ def _find_key(value, key: str) -> list:
     return found
 
 
-def round_item(core, engine, app, host, records: list[dict]) -> dict:
-    # The mode's default run; a run set without one (the Oscilloscope's Glow 0 runs, keyed by their change) takes its
-    # first run.
+def item_key(records: list) -> str:
+    """The run the item round draws (and ``_save`` keeps for the other API): the mode's default run; a run set without
+    one (the Oscilloscope's Glow 0 runs, keyed by their change) its first run."""
     drawn = [entry for entry in records if entry is not None]
-    key = MODE_ID if any(entry["key"] == MODE_ID for entry in drawn) else (drawn[0]["key"] if drawn else MODE_ID)
-    chosen = [entry for entry in drawn if entry["key"] == key][:ITEM_FRAMES]
+    if any(entry["key"] == MODE_ID for entry in drawn):
+        return MODE_ID
+    return drawn[0]["key"] if drawn else MODE_ID
+
+
+def round_item(core, engine, app, host, records: list[dict]) -> dict:
+    key = item_key(records)
+    chosen = [entry for entry in records if entry is not None and entry["key"] == key][:ITEM_FRAMES]
     dpr = 1.5
     host.set_device_pixel_ratio(dpr)
     scene = Scene(core, engine, host)
@@ -758,7 +764,8 @@ def _save(out: Path, records: list[dict], references: dict) -> None:
     work = _work(out)
     # Only the frames another API draws: the sampled ones and the item round's (the rest are held as None).
     kept = {index for refs in references.values() for index, _rows, _q in refs}
-    kept |= {index for index in [i for i, entry in enumerate(records) if entry["key"] == MODE_ID][:ITEM_FRAMES]}
+    key = item_key(records)
+    kept |= {index for index in [i for i, entry in enumerate(records) if entry["key"] == key][:ITEM_FRAMES]}
     rows = [None if index not in kept else
             {key: (base64.b64encode(value).decode("ascii") if isinstance(value, bytes) else value)
              for key, value in entry.items() if key != "python_block"} for index, entry in enumerate(records)]

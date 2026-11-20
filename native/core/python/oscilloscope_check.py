@@ -197,8 +197,12 @@ def reference_mask(reference):
 
 
 def item_settings_change(settings: dict) -> dict:
-    """Rule (g)'s Settings change: the beam's glow colour (and so its light) and the analog dimming."""
-    return dict(settings, uGlowColour=[1.0, 0.1, 0.1, 1.0], uAnalog=1.0 - float(settings["uAnalog"]))
+    """Rule (g)'s Settings change: the beam's glow colour (and so its light) and the analog dimming; at Glow 0, where
+    the glow colour lights nothing, the beam's base half width doubled as well."""
+    changed = dict(settings, uGlowColour=[1.0, 0.1, 0.1, 1.0], uAnalog=1.0 - float(settings["uAnalog"]))
+    if GLOW_OFF["on"]:
+        changed["uCoreBase"] = 2.0 * float(settings["uCoreBase"])
+    return changed
 
 
 ITEM_RECORD_FIELD = "u_widen"
