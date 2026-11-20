@@ -32,8 +32,10 @@ from core.logging.logger import get_logger
 from core.settings.default_contract import (
     require_canonical_default,
     resolve_card_border_width_px,
+    resolve_widgets_borderless,
 )
 from rendering.widget_descriptors import widget_route_admits_screen
+from ui.widget_theme_active import set_widgets_borderless
 
 from .host import OrdinaryWidgetPresentationHost, OverlayWidgetGeometry
 
@@ -291,6 +293,9 @@ class OrdinaryFamilyPresentationBinder:
         config: Mapping[str, object] = (
             widgets_config if isinstance(widgets_config, Mapping) else {}
         )
+        # Style Overrides' Borderless latch is read here, once, before any family
+        # resolves its border colours.
+        set_widgets_borderless(resolve_widgets_borderless(config))
         # Two-phase display-family assembly. Phase 1 resolves/builds/owns every
         # admitted retained presentation in the stable adapter order WITHOUT
         # activating any of them. Phase 2 then activates each successfully built

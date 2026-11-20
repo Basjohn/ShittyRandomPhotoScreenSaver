@@ -1334,7 +1334,7 @@ def _build_compact_action_button_style() -> str:
         "QPushButton:hover {"
         f" background-color: {_theme_rgba255('control.button.hover_surface')};"
         " }"
-        "QPushButton:pressed {"
+        "QPushButton:pressed, QPushButton:checked {"
         f" background-color: {_theme_rgba255('control.button.pressed_surface')};"
         f" border: 1px solid {_theme_rgba255('control.button.pressed_border')};"
         " }"

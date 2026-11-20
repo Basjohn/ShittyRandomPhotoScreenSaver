@@ -56,6 +56,7 @@ class OutlinedButton(QPushButton):
             f"QPushButton {{ {transparent} border-radius: {radius}px;{size} }}"
             f" QPushButton:hover {{ {transparent} }}"
             f" QPushButton:pressed {{ {transparent} }}"
+            f" QPushButton:checked {{ {transparent} }}"
             f" QPushButton:disabled {{ {transparent} }}"
         )
         if style is None:
@@ -68,7 +69,7 @@ class OutlinedButton(QPushButton):
         normal, hover, pressed, disabled = _ROLES[self._role][4]
         if not self.isEnabled():
             token = disabled
-        elif self.isDown():
+        elif self.isDown() or self.isChecked():  # a latched button reads as held down
             token = pressed
         elif self.underMouse():
             token = hover

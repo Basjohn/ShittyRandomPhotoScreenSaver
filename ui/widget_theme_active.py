@@ -22,6 +22,21 @@ def get_active_widget_theme() -> WidgetThemeSpec:
     return _active_theme
 
 
+# Widgets -> General -> Style Overrides "Borderless": a process-local latch published
+# with each family bind (the config that owns it is read once there). While set,
+# every ordinary widget border colour resolves invisible, whatever authored it.
+_widgets_borderless = False
+
+
+def get_widgets_borderless() -> bool:
+    return _widgets_borderless
+
+
+def set_widgets_borderless(latched: bool) -> None:
+    global _widgets_borderless
+    _widgets_borderless = bool(latched)
+
+
 def subscribe_widget_theme(
     listener: WidgetThemeListener,
     *,
@@ -74,7 +89,9 @@ def reset_active_widget_theme() -> bool:
 __all__ = [
     "WidgetThemeListener",
     "get_active_widget_theme",
+    "get_widgets_borderless",
     "reset_active_widget_theme",
+    "set_widgets_borderless",
     "set_active_widget_theme",
     "subscribe_widget_theme",
 ]
