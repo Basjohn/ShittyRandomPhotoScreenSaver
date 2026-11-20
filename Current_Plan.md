@@ -707,6 +707,14 @@ the feature (D3D11 is not stated).
       cause (a new stream's admission-rejected first frame left the previous mode's record and frame) is fixed in the
       same build (`StreamSource::syncStream`). The three 60 s takes and the full Choice-offer runs wait for the fast-proof
       tools (operator, 21 Nov: no long-take proofing before them).
+      Run on the ABI 27 build (21 Nov, `n5_1_oscilloscope/20261121_n51_oscilloscope_abi27/`, `20261121_owner_abi27/`):
+      the harness passes on both APIs with validation clean, offsets included (4 placements x dpr 1 and 1.5 x 16
+      frames: at most 2 levels from the item's own rect, rule (a) against Python on every placement). `old_origin`
+      failed as expected at all 8 (3 to 6 levels, about 33,000 to 56,000 masked pixels a frame). Owner smoke: the
+      Oscilloscope's inputs 0 to 336 pass rule (a) in both halves (at most 2 levels, at most 3 ties), and input 360 is
+      0. The run fails only on Bubble's frames after the switch (inputs 390 to 418, 11 to 12 ties) judged under the
+      Oscilloscope's tolerance (`owner_render_parity` judges the partner's frames under the run's mode: that tool's
+      owner decides).
   - [ ] Side defect (found 20 Nov by the port): the legacy `widgets/spotify_visualizer/shaders/oscilloscope.frag` (and
     its `.qsb`) is drawn by no renderer (its own header says so; the beam files are the mode's shaders now), yet it is
     still the mode's registered fragment (`shaders._ALL_SHADER_FILES["oscilloscope"]`): `preload_fragment_shaders`
