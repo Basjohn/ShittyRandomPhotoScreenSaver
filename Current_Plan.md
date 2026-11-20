@@ -157,10 +157,6 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] Side defect (lead, 20 Nov): every live run logs a Qt warning, "requestActivate() called for QuickDisplayWindow
-  ... which has Qt::WindowDoesNotAcceptFocus set". Find the caller and either skip activation for no-focus windows
-  or drop the flag where focus is intended. Test: no such warning on a hidden-host start.
-
 - [ ] Finish the closed-report pass (Sonnet's first round merged 20 Nov: 31 reports closed).
   - [ ] Triage the dated native-core audits in `Docs/Future_Work/` (`Audit_2026-11-12_Evening`, `_Night`,
     `Audit_2026-11-13`, `Audit_2026-11-14`, `_N25`, `_N29`, `_N29_round2`, `_N38`, `Checkpoint_Audits_Nov15`), one
