@@ -157,7 +157,7 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] The repaired smoke tools (`tools/qtquick_media_smoke.py`, `tools/qtquick_achievement_pulse_smoke.py`) capture
+- [ ] (Sonnet agent ad927a7c14bbc5053) The repaired smoke tools (`tools/qtquick_media_smoke.py`, `tools/qtquick_achievement_pulse_smoke.py`) capture
   blank artwork under offscreen QPA. Move their capture onto the hidden Windows-QPA GL host that
   `tools/surface_material_capture.py` uses, which draws artwork and materials, then review every state's sheet.
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
