@@ -127,6 +127,26 @@ def _runs(seed=11, count=40):
     return _run(native_frames, native_records), _run(python_frames, python_records)
 
 
+def test_the_parallel_judge_merges_to_exactly_the_serial_result(tmp_path):
+    # Fast-proof part 2 step 5: frames judged in worker processes, merged in input order, give the one-process result
+    # and the same progress lines.
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    native, python = _runs()
+    rng = np.random.default_rng(5)
+    masks = {index: rng.random((48, 64)) < 0.1 for index in range(0, 40, 4)}
+    results, lines = [], []
+    for workers in (0, 2):
+        progress = tmp_path / f"progress_{workers}.jsonl"
+        judge = parity.LiveJudge(python, masks, 30, "bubble", progress=progress, workers=workers)
+        for index, record in enumerate(native["pixels"]):
+            judge.frame(index, record, native["frames"][index])
+        results.append(judge.result())
+        lines.append(progress.read_text(encoding="utf-8"))
+    assert results[0] == results[1] and lines[0] == lines[1]
+    assert len(lines[0].splitlines()) == 40 and any(not v["pass"] for v in results[0]["judged"])
+
+
 @pytest.mark.parametrize("mode", [None, "bubble"])
 def test_the_single_pass_gives_what_the_four_passes_give(mode):
     from tools.visualizer_replay import owner_render_parity as parity
@@ -152,6 +172,9 @@ def test_the_single_pass_gives_what_the_four_passes_give(mode):
         verdict["input"] = index
         old.append(verdict)
     assert single["judged"] == old == parity.rule_a_frames(native, python, masks, mode)
+    # Every failing frame is kept, with its pixels (the first eight were before).
+    assert single["failed"] == parity.failed_frame_records(old, native, python, masks, limit=None)
+    assert len(single["failed"]) == sum(1 for v in old if not v["pass"])
     # Not vacuous: passes and failures, a region mismatch and classified pixels are all present.
     assert any(v["pass"] for v in old) and any(not v["pass"] for v in old)
     assert single["paths"]["regions_equal"] is False and single["paths"]["frames"] > 20
