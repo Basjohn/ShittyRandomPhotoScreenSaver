@@ -1036,7 +1036,10 @@ pixels); every composite form reads its texel, its glow and its dither key from 
 whose uv starts at the item's pixel (`bloomTriangle`), so level 0 pairs Python's pixels and rows (the levels are
 Python's sizes while the surface stays in the item's 64-pixel bucket). An item that covers its target is drawn as
 before. Proof: `oscilloscope_check.py --rounds ... offsets` (odd and even offsets in each axis against the item's own
-rect and the Python renderer); negative control `old_origin` (stage_control `bloom_at_target_origin`). Owner rule (a)'s
+rect and the Python renderer); negative control `old_origin` (stage_control `bloom_at_target_origin`). On the build (21
+Nov, `20261121_n51_oscilloscope_abi27/`): every placement within 2 levels of the item's own rect on both APIs, and rule
+(a) against Python on all of them; the control fails at all 8 (3 to 6 levels). The owner's 5.5 s replay then passes
+rule (a) over the Oscilloscope's shown inputs (at most 2 levels, at most 3 ties a frame; `20261121_owner_abi27/`). Owner rule (a)'s
 fade input 360 (10 levels) was not a fade rule: at the switch to Bubble the generic item's new stream rejected its first
 frame at admission, the core kept the Oscilloscope's record, packed it under Bubble's schema (refused) and showed the
 Oscilloscope's last frame; ABI 27 clears the old stream's frame at a new stream's first sync whatever that read is (the
