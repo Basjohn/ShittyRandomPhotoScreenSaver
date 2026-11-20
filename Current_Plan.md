@@ -617,6 +617,33 @@ the feature (D3D11 is not stated).
     what is per settings change, the ring's size rule, and which N3.4 stages it needs (overlay target, bloom from
     emission, composite with glow). Confirm in writing that nothing the port needs is missing from ABI 25. Anything
     missing is a C++ box here, with its build.
+    Read (Opus High, 20 Nov, at d9b5c4505; ABI 25). *Per frame, from the logical frame alone* (the record): the traces'
+    points (float32 x, y, every trace back to back, at most 16 x 384; a storage stream with its used length), each
+    trace's alpha (16, zero past the count), the points per trace (always 384 from the runtime; the frame admits 2 to
+    384), the segment count (the instanced draw's instances: traces x (points - 1)), the flare's beam widening
+    (1 + 0.9 flare x Flare), the brightness, the white-hot centre, the beam colour (the tone's tint under Spectral) and
+    the bloom strength (Glow x (0.55 + 0.3 Pulse drive + 0.45 flare)); whether the graticule draws (its style and a
+    frame with traces). *Per Settings or card change* (the settings): the content rect, the oriented size and quarter
+    turns, one device pixel, the beam's base half width (half Beam Width x visual scale), the layout (the Trace's half
+    extent past the centre, the vertical scale, the Ring's and Phase's radius and length), the glow colour, the glow
+    light (`_GLOW_LIGHT`), Analog Beam, the Phase centre fade and the graticule's whole block. The flare-dependent
+    reach, the Trace's horizontal scale (it runs past the item by the reach) and the focus length mix the two, so the
+    converted beam shader derives them from the base values and the record's widening (checklist 16: the Python
+    renderer draws the converted files). *The ring's size rule*: the record's points field is the whole capacity,
+    49,152 bytes, only the used floats written; the slot is the record in whole 4096-byte steps (53,248).
+    *The N3.4 stages*: a surface-sized single-sample overlay target (RGBA8 colour, RGBA16F emission), both passes
+    blended MAX on both attachments, a bloom step from `scene.emission`, the `overlay_glow` composite (`u_bloom_strength`
+    from the record, `u_hdr_exposure` 0 from the settings); with Glow 0 a target of colour alone and the `overlay`
+    composite, so the beam and graticule each ship a fragment without the emission output (the core requires one output
+    per attachment). *ABI 25 has all of it but one thing*: a record field no pass of the program reads is refused
+    (`ModeProgram::check`), so the Glow 0 program, which has no composite reading `u_bloom_strength`, cannot read the
+    one record. Neither a second schema per program nor an unused member is acceptable (D12 rejects silent unused
+    fields). C++ box below.
+  - [ ] C++ (ABI 26, needs a GitHub build): a program may name the record fields it reads nowhere (`"unread"`: a stage
+    it leaves out reads them; each must be a field of the record and read by no pass, draw or stream), so a stage
+    turned off at the Settings edge keeps the mode's one record. The Python face's `program_json` and
+    `NativeMode.program` take `unread`. Proof: the Glow 0 program admitted with it and refused without it (GPU-free
+    `mode_blocks`), a name the record lacks refused, a read field named unread refused.
   - [ ] The record schema and shared Settings and frame-value functions, which the Python renderer also calls (as
     Bubble did), proved byte-identical by a GPU-free test.
   - [ ] The route's program: the target, the stream ring, the instanced pass, the bloom stage and the composite step,
