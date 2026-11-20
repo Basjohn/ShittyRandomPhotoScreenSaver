@@ -752,13 +752,63 @@ def frame_differences(a: dict, b: dict) -> list[dict]:
         if x["hash"] == y["hash"] or x["region"] != y["region"]:
             continue
         delta = numpy.abs(_pixels(a, index).astype(numpy.int16) - _pixels(b, index)).max(axis=2)
-        ys, xs = numpy.nonzero(delta)
-        if not len(xs):
-            continue
-        rows.append({"input": index, "pixels": int(len(xs)), "max_level": int(delta.max()),
-                     "bbox": [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())],
-                     "levels": {str(level): int((delta == level).sum()) for level in sorted(set(delta[delta > 0].tolist()))[:8]}})
+        row = _difference_row(index, delta)
+        if row is not None:
+            rows.append(row)
     return rows
+
+
+def _difference_row(index: int, delta) -> dict | None:
+    """``frame_differences``' row of one input from its per-pixel ``delta`` (None: no pixel differs)."""
+    import numpy
+
+    ys, xs = numpy.nonzero(delta)
+    if not len(xs):
+        return None
+    return {"input": index, "pixels": int(len(xs)), "max_level": int(delta.max()),
+            "bbox": [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())],
+            "levels": {str(level): int((delta == level).sum()) for level in sorted(set(delta[delta > 0].tolist()))[:8]}}
+
+
+def judged_pass(native: dict, python: dict, masks: dict, switch_input: int, mode: str | None = None) -> dict:
+    """``pair_difference``, ``frame_differences``, ``rule_a_frames`` and ``classify_differences`` of one native run
+    against its Python run in a single pass (fast-proof part 2, step 1): each differing input decompressed once and its
+    delta computed once and shared; the same results, value for value (``tests/test_owner_render_parity_judge.py``)."""
+    import numpy
+
+    records_a, records_b = native["pixels"], python["pixels"]
+    differing = [index for index, (x, y) in enumerate(zip(records_a, records_b)) if x != y]
+    paths = {"first": differing[0] if differing else (None if len(records_a) == len(records_b)
+                                                      else min(len(records_a), len(records_b))),
+             "frames": len(differing), "max_pixels": 0, "max_level": 0, "regions_equal": True}
+    rows: list[dict] = []
+    judged: list[dict] = []
+    classes = _new_classes()
+    for index in differing:
+        x, y = records_a[index], records_b[index]
+        if x["region"] != y["region"]:
+            paths["regions_equal"] = False
+            if x["hash"] != y["hash"]:
+                judged.append({"pass": False, "reasons": [f"input {index}: the regions differ"], "max_level": None,
+                               "input": index})
+            continue
+        if x["hash"] == y["hash"]:
+            continue                                        # only the whole-display hash differs: counted, not sized
+        drawn, reference = _pixels(native, index), _pixels(python, index)
+        delta = numpy.abs(drawn.astype(numpy.int16) - reference).max(axis=2)
+        paths["max_pixels"] = max(paths["max_pixels"], int((delta > 0).sum()))
+        paths["max_level"] = max(paths["max_level"], int(delta.max()))
+        row = _difference_row(index, delta)
+        if row is not None:
+            rows.append(row)
+        from tools import pixel_tolerance
+
+        verdict = pixel_tolerance.judge(drawn, reference, composite_tolerance(mode), mask=masks.get(index),
+                                        delta=delta)
+        verdict["input"] = index
+        judged.append(verdict)
+        _classify_frame(classes, index, reference, delta, switch_input)
+    return {"paths": paths, "rows": rows, "judged": judged, "classes": classes}
 
 
 def _write_native_crops(out: Path, name: str, native: dict, python: dict, row: dict) -> list[str]:
@@ -836,54 +886,65 @@ def classify_differences(native: dict, python: dict, switch_input: int) -> dict:
     column: its rounded cap), ``other``. Each class: its pixel count and largest level."""
     import numpy
 
-    classes = {name: {"pixels": 0, "max_level": 0, "inputs": 0} for name in
-               ("card_edge_column", "peak_row", "cap_arc", "fade_frame", "other")}
+    classes = _new_classes()
     for index, (a, b) in enumerate(zip(native["pixels"], python["pixels"])):
         if a["hash"] == b["hash"] or a["region"] != b["region"]:
             continue
         drawn, reference = _pixels(native, index), _pixels(python, index)
         delta = numpy.abs(drawn.astype(numpy.int16) - reference).max(axis=2)
-        ys, xs = numpy.nonzero(delta > 1)
-        if not len(ys):
-            continue
-        labels = numpy.full(len(ys), "other", dtype=object)
-        if index >= switch_input:
-            labels[:] = "fade_frame"
-        else:
-            lit = reference[..., :3].max(axis=2) > _LIT_LEVEL
-            # The card's own frame (its border rows and columns, lit nearly edge to edge) is not a bar: without this
-            # every column's first lit row is the border's (the round-3 report's classes were taken that way).
-            lit[lit.mean(axis=1) > 0.8, :] = False
-            lit[:, lit.mean(axis=0) > 0.8] = False
-            columns = numpy.nonzero(lit.any(axis=0))[0]
-            edge = numpy.zeros(len(ys), dtype=bool)
-            if len(columns):
-                edge = (numpy.abs(xs - columns[0]) <= 2) | (numpy.abs(xs - columns[-1]) <= 2)
-            for k in range(len(ys)):
-                if edge[k]:
-                    labels[k] = "card_edge_column"
-                    continue
-                column = lit[:, xs[k]]
-                runs = numpy.flatnonzero(numpy.diff(numpy.concatenate(([0], column.view(numpy.int8), [0]))))
-                starts, ends = runs[0::2], runs[1::2]          # lit runs [start, end) from the top
-                if not len(starts):
-                    continue
-                y = ys[k]
-                if len(starts) > 1 and starts[0] - 1 <= y <= ends[0]:
-                    labels[k] = "peak_row"
-                    continue
-                bar = 1 if len(starts) > 1 else 0
-                if starts[bar] - 1 <= y < starts[bar] + 4:
-                    labels[k] = "cap_arc"
-        levels = delta[ys, xs]
-        for name in classes:
-            chosen = labels == name
-            if chosen.any():
-                entry = classes[name]
-                entry["pixels"] += int(chosen.sum())
-                entry["max_level"] = max(entry["max_level"], int(levels[chosen].max()))
-                entry["inputs"] += 1
+        _classify_frame(classes, index, reference, delta, switch_input)
     return classes
+
+
+def _new_classes() -> dict:
+    return {name: {"pixels": 0, "max_level": 0, "inputs": 0} for name in
+            ("card_edge_column", "peak_row", "cap_arc", "fade_frame", "other")}
+
+
+def _classify_frame(classes: dict, index: int, reference, delta, switch_input: int) -> None:
+    """``classify_differences`` for one differing input (its reference pixels and per-pixel ``delta``)."""
+    import numpy
+
+    ys, xs = numpy.nonzero(delta > 1)
+    if not len(ys):
+        return
+    labels = numpy.full(len(ys), "other", dtype=object)
+    if index >= switch_input:
+        labels[:] = "fade_frame"
+    else:
+        lit = reference[..., :3].max(axis=2) > _LIT_LEVEL
+        # The card's own frame (its border rows and columns, lit nearly edge to edge) is not a bar: without this
+        # every column's first lit row is the border's (the round-3 report's classes were taken that way).
+        lit[lit.mean(axis=1) > 0.8, :] = False
+        lit[:, lit.mean(axis=0) > 0.8] = False
+        columns = numpy.nonzero(lit.any(axis=0))[0]
+        edge = numpy.zeros(len(ys), dtype=bool)
+        if len(columns):
+            edge = (numpy.abs(xs - columns[0]) <= 2) | (numpy.abs(xs - columns[-1]) <= 2)
+        for k in range(len(ys)):
+            if edge[k]:
+                labels[k] = "card_edge_column"
+                continue
+            column = lit[:, xs[k]]
+            runs = numpy.flatnonzero(numpy.diff(numpy.concatenate(([0], column.view(numpy.int8), [0]))))
+            starts, ends = runs[0::2], runs[1::2]          # lit runs [start, end) from the top
+            if not len(starts):
+                continue
+            y = ys[k]
+            if len(starts) > 1 and starts[0] - 1 <= y <= ends[0]:
+                labels[k] = "peak_row"
+                continue
+            bar = 1 if len(starts) > 1 else 0
+            if starts[bar] - 1 <= y < starts[bar] + 4:
+                labels[k] = "cap_arc"
+    levels = delta[ys, xs]
+    for name in classes:
+        chosen = labels == name
+        if chosen.any():
+            entry = classes[name]
+            entry["pixels"] += int(chosen.sum())
+            entry["max_level"] = max(entry["max_level"], int(levels[chosen].max()))
+            entry["inputs"] += 1
 
 
 def failed_frame_records(judged: list[dict], native: dict, python: dict, masks: dict, limit: int = 8) -> list[dict]:
@@ -949,10 +1010,10 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
         with content_backdrop():
             backdrop = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings)
     masks = rule_a_masks(python, backdrop)
-    paths = pair_difference(native, python)
-    rows = frame_differences(native, python)
     switch_at = next(i for i, (kind, _v) in enumerate(script) if kind == "mode")
     switch_input = sum(1 for kind, _value in script[:switch_at] if kind == "input")
+    single = judged_pass(native, python, masks, switch_input, mode)
+    paths, rows = single["paths"], single["rows"]
     run = f"{mode}{suffix}" if placement == "display" else f"{mode}{suffix}@{placement}"
     origin = native.get("outer_origin")
     dpr = float(_PLACED["dpr"])
@@ -973,7 +1034,7 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     verdict["identical"] = bool(paths["first"] is None and verdict["digests_identical"]
                                 and verdict["native_published"] > 0)
     # Rule (a)'s verdict: the composite's tolerance (RULE_A_*), pixel by pixel with the translucency mask.
-    judged = rule_a_frames(native, python, masks, mode)
+    judged = single["judged"]
     verdict["rule_a"] = rule_a_verdict(judged, mode)
     verdict["rule_a"]["failed_frames"] = failed_frame_records(judged, native, python, masks)
     verdict["rule_a_halves"] = rule_a_halves(judged, switch_input, mode)
@@ -984,7 +1045,7 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
                            == len(backdrop["pixels"]))
     verdict["split"] = _split_rows(rows, switch_input)
     verdict["mapping"] = dict(native["mapping"], python_frames=len(mappings))
-    verdict["classes"] = classify_differences(native, python, switch_input)
+    verdict["classes"] = single["classes"]
     if rows:
         worst = max(rows, key=lambda row: (row["max_level"], row["pixels"]))
         verdict["worst"] = worst
