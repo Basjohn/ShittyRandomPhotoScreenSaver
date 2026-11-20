@@ -482,7 +482,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                    'preferred_height': 334,
                                    'preferred_width': 600,
                                    'progress_pulse': True,
-                                   'progress_circle_material': False,
+                                   'progress_circle_material': True,
                                    'selection_mode': 'most_recent',
                                    'shelf_style': False,
                                    'show_artwork': True,

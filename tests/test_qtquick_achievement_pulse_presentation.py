@@ -743,17 +743,20 @@ def test_qml_preserves_authored_regions_and_delegate_identity(qt_app, tmp_path) 
         assert metric.x() == pytest.approx(401.0)
         assert artwork.x() + artwork.width() / 2.0 == pytest.approx(491.0)
         assert metric.x() + metric.width() / 2.0 == pytest.approx(491.0)
-        assert latest_badge.y() == pytest.approx(130.0)
+        # The badge's default (no saved record) sits in the header row, just right
+        # of the header pill and centred on it, at a fraction of its authored
+        # frame; every number here comes from the pill and the badge themselves.
         assert latest_badge.width() == pytest.approx(40.0)
         assert latest_badge.height() == pytest.approx(40.0)
-        # Badge starts materially left of the old fixed x=130 rail but is allowed
-        # to move right when the rendered smaller unlock strings require room.
-        assert latest_badge.x() < 130.0
-        assert latest_badge.x() >= 102.0
-        assert latest_badge.x() >= (
-            second_unlock.x() + second_unlock.implicitWidth() + 8.0 - 0.5
-        )
-        assert first_unlock.width() > second_unlock.width()
+        badge_visual = latest_badge.width() * latest_badge.scale()
+        assert 0.0 < latest_badge.scale() < 1.0
+        pill_right = header_owner.x() + header_owner.width() * header_owner.scale()
+        assert latest_badge.x() >= pill_right
+        assert latest_badge.x() - pill_right < badge_visual
+        assert latest_badge.y() + badge_visual / 2.0 == pytest.approx(
+            header_owner.y() + header_owner.height() * header_owner.scale() / 2.0, abs=0.5)
+        # The default badge is in the header row, so no unlock line gives way to it.
+        assert first_unlock.width() >= second_unlock.width()
         assert str(metric.property("text")).startswith("Unlocked: ")
         # Metric sits below the artwork; the 160x224 portrait is 28px taller than
         # the former 140x196, so the caption drops from 216 to 244.
@@ -1234,6 +1237,19 @@ def test_achievement_list_flip_mirrors_small_text_and_unedited_badge(qt_app, tmp
         def at_canvas(part):
             return part.mapToItem(canvas, 0.0, 0.0).x()
 
+        # The default badge sits in the header row. A saved badge record keeps
+        # the unlock-stack rail it was authored against, and that is the rail
+        # this test mirrors
+        # (a scale with its top-left compensation: the "authored resize rail").
+        grow = 1.5
+        stack_rail = {"badge": {
+            "width_scale": grow, "height_scale": grow,
+            "x_offset": 40.0 * (1.0 - grow) / float(model.baseAuthoredWidth),
+            "y_offset": 40.0 * (1.0 - grow) / float(model.baseAuthoredHeight),
+        }}
+        header_row_badge = at_canvas(badge)
+        assert model.set_custom_child_geometry(stack_rail)
+        qt_app.processEvents()
         first_x = at_canvas(first)
         original_badge = at_canvas(badge)
         original_second = at_canvas(second)
@@ -1241,6 +1257,7 @@ def test_achievement_list_flip_mirrors_small_text_and_unedited_badge(qt_app, tmp
 
         assert model.set_custom_child_geometry({
             "achievement_list": {"alignment": "right"},
+            **stack_rail,
         })
         qt_app.processEvents()
         assert first_x == pytest.approx(at_canvas(first), abs=0.1)
@@ -1270,10 +1287,18 @@ def test_achievement_list_flip_mirrors_small_text_and_unedited_badge(qt_app, tmp
         assert int(second.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignLeft)
         assert first_x == pytest.approx(at_canvas(first), abs=0.1)
 
-        assert model.set_custom_child_geometry({})
+        assert model.set_custom_child_geometry(stack_rail)
         qt_app.processEvents()
         assert at_canvas(badge) == pytest.approx(original_badge, abs=0.1)
         assert at_canvas(second) == pytest.approx(original_second, abs=0.1)
+
+        # No record: the badge is back in the header row, clear of the unlock
+        # lanes, which then take the whole list width.
+        assert model.set_custom_child_geometry({})
+        qt_app.processEvents()
+        assert at_canvas(badge) == pytest.approx(header_row_badge, abs=0.1)
+        assert at_canvas(second) == pytest.approx(original_second, abs=0.1)
+        assert second.width() == pytest.approx(group.width(), abs=0.1)
     finally:
         item.setParentItem(None)
         item.setParent(None)
@@ -1328,7 +1353,11 @@ def test_header_flip_mirrors_actual_title_first_unlock_and_small_text_lanes(qt_a
         assert int(title.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignRight)
         assert int(first.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignRight)
         assert int(second.property("horizontalAlignment")) == int(Qt.AlignmentFlag.AlignRight)
-        assert x_at_canvas(second) >= x_at_canvas(badge) + badge.width() * badge.scale() + 5.0
+        # The default badge is in the header row (left of the reversed pill), so
+        # the small lines run the whole lane.
+        pill = _find_visual_item(item, "achievementHeaderFrame").parentItem()
+        assert x_at_canvas(badge) + badge.width() * badge.scale() <= x_at_canvas(pill)
+        assert x_at_canvas(second) == pytest.approx(x_at_canvas(group), abs=0.1)
         assert x_at_canvas(second) + second.width() == pytest.approx(
             x_at_canvas(group) + group.width(), abs=0.1,
         )
@@ -1536,33 +1565,99 @@ def test_progress_circle_material_follows_setting_and_surface_admission(
         # A selected surface cannot activate without a captured backdrop.
         item.setProperty("cardSurfaceMaterial", "glass")
         qt_app.processEvents()
+        ring = _find_visual_item(item, "achievementProgressRingLayer")
+        ring_material = _find_visual_item(item, "achievementProgressRingMaterial")
+        inner = _find_visual_item(item, "achievementProgressCircleInnerFill")
+        assert ring is not None and ring_material is not None and inner is not None
         assert material.property("active") is False
+        assert ring_material.property("active") is False
+        assert not ring.isVisible()
         assert face.property("color").alphaF() > 0.0
 
-        # Admission enables the material ONLY when the operator setting is on.
+        # Admission enables the interior material ONLY when the operator setting
+        # is on. The ring takes the card's material whatever that setting says.
         item.setProperty("cardSurfaceBackdrop", backdrop)
         qt_app.processEvents()
         assert material.property("active") is setting_enabled
         assert material.property("fillColor") == model.progressDiscMaterialColor
-        if setting_enabled:
-            assert face.property("color").alphaF() == pytest.approx(0.0)
-        else:
-            assert face.property("color").alphaF() > 0.0
+        assert ring.isVisible()
+        assert ring_material.property("active") is True
+        assert face.property("color").alphaF() == pytest.approx(0.0)
+        # The authored flat interior stays (inset to the ring) when the
+        # interior material is off, and is not drawn under the material.
+        assert inner.isVisible() is (not setting_enabled)
+        if not setting_enabled:
+            assert inner.property("color").alphaF() > 0.0
 
-        # Normal always restores the original flat face, irrespective of setting.
+        # Normal always restores the original flat face and ring, irrespective of setting.
         item.setProperty("cardSurfaceMaterial", "normal")
         qt_app.processEvents()
         assert material.property("active") is False
+        assert ring_material.property("active") is False
+        assert not ring.isVisible() and not inner.isVisible()
         assert face.property("color").alphaF() > 0.0
 
         # Re-selecting a material reuses the existing setting and backdrop.
         item.setProperty("cardSurfaceMaterial", "glass")
         qt_app.processEvents()
         assert material.property("active") is setting_enabled
+        assert ring_material.property("active") is True
     finally:
         model.retire()
         item.deleteLater()
         component.deleteLater()
         engine.deleteLater()
         backdrop.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_badge_default_rail_hands_edit_its_displacement_and_a_record_keeps_its_own_rail(
+    qt_app, tmp_path,
+) -> None:
+    """The header-row default is a transient displacement for Edit; a record is not displaced."""
+    model = _model()
+    model.activate()
+    badge_file = tmp_path / "achievement-default-badge.png"
+    card = replace(
+        build_mock_steam_view_model("achievement_pulse"),
+        latest_unlocks=("First large unlock", "Second small unlock"),
+    )
+    model.on_achievement_presentation(
+        AchievementPulsePreparedPresentation(
+            model=card, latest_artwork=_image(badge_file),
+            latest_artwork_identity=str(badge_file), latest_artwork_key="default-badge",
+        ),
+        animate=False,
+    )
+    engine, component, item = _create_qml_item(model)
+    try:
+        qt_app.processEvents()
+        badge = _find_visual_item(item, "achievementLatestArtworkFrame")
+        assert badge is not None and badge.isVisible()
+        default_scale = badge.scale()
+        # No record: the first real resize rebases the scale onto what is drawn,
+        # and the first real drag folds the displacement from the unlock-stack rail.
+        assert default_scale < 1.0
+        assert float(badge.property("customEditSizeCompensationWidth")) == pytest.approx(default_scale)
+        assert float(badge.property("customEditSizeCompensationHeight")) == pytest.approx(default_scale)
+        default_x, default_y = badge.x(), badge.y()
+        assert abs(float(badge.property("customEditPlacementCompensationX"))) > 1.0
+        assert abs(float(badge.property("customEditPlacementCompensationY"))) > 1.0
+
+        # A record (a nudge past the default's tolerance) leaves the default rail: it
+        # is drawn at its own scale on the unlock-stack rail, with nothing to hand over.
+        assert model.set_custom_child_geometry({"badge": {"x_offset": 0.01}})
+        qt_app.processEvents()
+        assert badge.scale() == pytest.approx(1.0)
+        assert float(badge.property("customEditSizeCompensationWidth")) == pytest.approx(1.0)
+        assert float(badge.property("customEditPlacementCompensationX")) == pytest.approx(0.0, abs=0.01)
+        assert float(badge.property("customEditPlacementCompensationY")) == pytest.approx(0.0, abs=0.01)
+        assert (badge.x(), badge.y()) != (default_x, default_y)
+    finally:
+        item.setParentItem(None)
+        item.setParent(None)
+        item.deleteLater()
+        component.deleteLater()
+        engine.deleteLater()
         qt_app.processEvents()
