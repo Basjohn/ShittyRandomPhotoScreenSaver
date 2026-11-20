@@ -157,6 +157,10 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
+- [ ] Side defect (lead, 20 Nov): every live run logs a Qt warning, "requestActivate() called for QuickDisplayWindow
+  ... which has Qt::WindowDoesNotAcceptFocus set". Find the caller and either skip activation for no-focus windows
+  or drop the flag where focus is intended. Test: no such warning on a hidden-host start.
+
 - [ ] Apply the existing documentation policy to closed reports (`Docs/Guides/Documentation_Maintenance.md`,
   "Historical-document policy" and "One owner per rule"; Sonnet when usage allows). Go through `Docs/Audits/` (33
   files, including the closed Bubble ambient slice reports of 3 Nov) and the closed items in `Docs/Future_Work/`.
@@ -728,6 +732,10 @@ the feature (D3D11 is not stated).
   - [ ] Profile the owner replay's 17 to 25 minutes per 60 s take before designing around guesses.
   - [ ] Layer L: the per-frame record compared byte for byte between paths, CPU only (`engine_worker_gate.py` is the
     precedent).
+  - [ ] Layer T on native paths (guide section 7): the live check reads presentation cadence from Qt Quick's frame
+    cycles when the native core draws (today it reports `frames_per_s 0` on Vulkan), and the native per-pass GPU
+    time from `--gpu-pass-timing`. The lead's interim script, `quick_before_frame_begin` intervals outside lifecycle
+    windows, is the reference; prove it gives the same figures as the Python path's swap gaps on an OpenGL run.
   - [ ] Layer P: cached Python references; a native-only, hash-only compare with `--api opengl|vulkan`; every failing
     frame recorded (not the first eight); progress written during a run.
   - [ ] Coverage selection with its coverage report (guide section 3), warm-up per mode (guide section 5).
@@ -2484,6 +2492,13 @@ stays a separate hard gate.
   motion, felt/fuzz, world-view projection, sphere world/starscape) plus S3D-6.
 
 ## 8. Accepted Bubble: open reviews and side defect
+
+- [ ] Side defect (lead, 20 Nov live control): Python OpenGL Bubble on Display 1 shows 1.44 hitches a minute (steady
+  frames over 50 ms; `tools/frame_trace_cadence.py`: 6 gui_starved stalls, the worst a 88.5 ms swap-to-frame-begin
+  gap with an 84.4 ms GUI wake gap). Native Vulkan Bubble's logical side shows the same worker gaps (10 over 16 ms,
+  max 145.7 ms). Root cause first: attribute the GUI starvation and the worker's logical gaps (GIL-holding C calls,
+  GC generation 2 at 36 ms, the usage sampler) on both paths, before any fix. Evidence:
+  `.artifacts/evidence/visualizers/bubble/live_check/20261120_bubble_*`.
 
 The operator accepted Bubble's drift, motion, ambient, direction and occlusion rules
 (`Docs/Guardrails/Bubble_Temporal_Fidelity.md` section 23); do not reopen them. Bubble's performance work is the
