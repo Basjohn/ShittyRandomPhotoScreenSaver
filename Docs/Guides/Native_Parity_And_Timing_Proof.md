@@ -108,6 +108,12 @@ measures the real process:
 - **Load:** game60 is the operator's yes each time, at most 10 minutes, lead only, and the rare end-of-chain
   worst-case proof. Display 0 is never used.
 
+**Load during layer T.** The operator's modest load (a game, normal use) is fine and recorded with the figures. Other
+agents' parity or judge runs are not: eight parallel owner replays took the machine to 93-97 % CPU on 21 Nov and
+made a Bubble A/B unreadable. Check the whole-machine CPU before a T run (`Get-CimInstance Win32_Processor`), and
+rerun any T run that ran above about 40 %. The lead staggers agents' heavy runs and T runs, and briefs say how many
+parallel replay processes an agent may start.
+
 The acceptance figures:
 - Frame-time p90 no worse than the pre-flip baseline beyond its run-to-run spread (stated with the figure).
 - No new late frames in steady state.
