@@ -21,6 +21,7 @@ from PySide6.QtGui import QColor
 from core.settings.default_contract import (
     require_canonical_default,
     resolve_card_border_width_px,
+    resolve_widgets_borderless,
 )
 from ui.resources.assets import resource_url
 from core.steam.games_followed_projection import FollowedNewsDisplay, project_followed_news
@@ -33,7 +34,7 @@ from rendering.games_followed_child_roles import FOLLOWED_CHILD_ROLES
 from widgets.steam_followed_layout import followed_news_layout
 from .host import OrdinaryWidgetPresentationHost, OverlayCardStyle, OverlayWidgetGeometry, RetainedOverlayWidget
 from .theme_projection import (
-    resolve_card_surface_colors, resolve_header_colors, resolve_primary_text_color,
+    hide_borders, resolve_card_surface_colors, resolve_header_colors, resolve_primary_text_color,
 )
 from .steam_common import (
     SteamSemanticPalette, SteamCardStyleProjection, project_steam_semantic_palette,
@@ -263,8 +264,11 @@ class GamesYouFollowPresentationModel(QObject):
             info_border=(102, 192, 244, 230),
             info_text=(237, 246, 252, 245),
         ))
+        if resolve_widgets_borderless(widgets):  # Style Overrides' Borderless latch
+            self._header_border = (*self._header_border[:3], 0)
+            self._palette = hide_borders(self._palette)
         self._display = project_followed_news(FollowedNewsSnapshot("unavailable"))
-        self._extent: tuple[float, float] | None = None
+        self._extent:tuple[float, float] | None = None
         self._custom: dict[str, CustomChildSize] = {}
         self._layout = followed_news_layout(
             self.config.base_width, self.config.base_height, 0,

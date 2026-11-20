@@ -689,6 +689,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "widget_stacking_enabled",
             "widget_child_collision_enabled",
             "card_border_width_spin",
+            "borderless_btn",
         ),
         bootstrap_in_lazy_mode=True,
     ),

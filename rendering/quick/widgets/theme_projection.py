@@ -27,6 +27,43 @@ def resolve_soft_text_shadow(shadow: QuickShadowSnapshot) -> bool:
 RgbaTuple = tuple[int, int, int, int]
 
 
+def _is_border_field(name: str) -> bool:
+    return "border" in name or "outline" in name
+
+
+def hide_borders(config):
+    """``config`` with every border or outline colour invisible (Style Overrides' Borderless).
+
+    A family config is a dataclass of resolved fields. A field whose name says border or
+    outline and whose value is an RGBA tuple keeps its colour but loses its alpha, whatever
+    authored it; nested config dataclasses are walked. Nothing else changes.
+    """
+
+    import dataclasses
+
+    if not dataclasses.is_dataclass(config) or isinstance(config, type):
+        return config
+    changes = {}
+    for field in dataclasses.fields(config):
+        value = getattr(config, field.name)
+        if (_is_border_field(field.name) and isinstance(value, tuple) and len(value) == 4
+                and all(isinstance(c, int) and not isinstance(c, bool) for c in value)):
+            changes[field.name] = (value[0], value[1], value[2], 0)
+        elif dataclasses.is_dataclass(value) and not isinstance(value, type):
+            nested = hide_borders(value)
+            if nested is not value:
+                changes[field.name] = nested
+    return dataclasses.replace(config, **changes) if changes else config
+
+
+def with_borderless(config, widgets_config):
+    """``config`` as Style Overrides' Borderless latch in ``widgets_config`` wants it drawn."""
+
+    from core.settings.default_contract import resolve_widgets_borderless
+
+    return hide_borders(config) if resolve_widgets_borderless(widgets_config) else config
+
+
 def as_rgba(value: object, fallback: RgbaTuple) -> Rgba:
     if isinstance(value, Rgba):
         return value
