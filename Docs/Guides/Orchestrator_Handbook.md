@@ -149,7 +149,11 @@ From the main checkout, on `main`:
     .venv/Scripts/python tools/agent_handover.py --retire agent-<id>
 
 `--retire` copies the worktree's whole evidence tree into the main checkout (never overwriting), refuses an unmerged
-branch, uncommitted work or a live process, and only then removes the worktree and the branch. Before recording a branch as merged with `git merge -s ours`, run `git log --oneline main..<branch>`: it must list only
+branch, uncommitted work or a live process, and only then removes the worktree and the branch. An isolated agent that makes no commit has its worktree removed automatically when it ends, and its untracked
+evidence is deleted with it (the replay profile of 20 Nov was lost this way). So every isolated agent commits at
+least once, even a measure-only one: its evidence index or a short summary file. A brief that says "make no commits"
+also tells the agent to write its evidence under the main checkout's evidence path instead.
+Before recording a branch as merged with `git merge -s ours`, run `git log --oneline main..<branch>`: it must list only
 that branch's own commits, whose content is already on main. If it lists another branch's commits (an agent merged a
 work-in-progress branch), never use `-s ours`: git would then treat those commits as merged and silently drop them
 from the later real merge. Never remove an agent

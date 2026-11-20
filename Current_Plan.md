@@ -729,7 +729,11 @@ the feature (D3D11 is not stated).
   first Bubble optimisation; the rules are the guide's.
 - [ ] Build the fast long-clip proof (method and rules: `Docs/Guides/Native_Parity_And_Timing_Proof.md`, its
   section 7; step 1 of the order: Bubble's layer L and long-take rule (b) need it, and so do every later port). Steps, each with a test:
-  - [ ] Profile the owner replay's 17 to 25 minutes per 60 s take before designing around guesses.
+  - [ ] A cheaper judge with byte-identical verdicts. The 20 Nov profile (Sonnet): of a 171 s, 958-frame 10 s Bubble take,
+    the judge was 65 %. `content_edges` alone took 59 s, at 78 ms a frame, though it is read only at tie pixels. The
+    lit mean was 12 %, compress and spill 6.6 %, the backdrop-mask run 8 %, triple simulation 4.6 %, and the draw under
+    3 %. Compute `content_edges` only at candidate ties, compute each delta once, decompress once, and drop the unread
+    lit mean. Prove it by re-judging every stored 60 s report to identical verdicts, failed frames and halves.
   - [ ] Layer L: the per-frame record compared byte for byte between paths, CPU only (`engine_worker_gate.py` is the
     precedent).
   - [ ] Layer T on native paths (guide section 7): the live check reads presentation cadence from Qt Quick's frame
