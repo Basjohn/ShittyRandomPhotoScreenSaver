@@ -22,10 +22,16 @@ Rounds (``devcurve_check``'s):
   pixels  (each API) the sampled frames at dpr 1 and 1.5: on OpenGL against the Python renderer under rule (a)'s
           composite tolerance; on Vulkan against the native OpenGL frames under ``VULKAN_RULE_B`` (rule (b)), the
           reference's alpha as the mask.
+The Oscilloscope's own rounds (asked by name):
+  offsets (each API; ABI 27) the item inside a larger target at an odd and an even device offset in each axis
+          (``OFFSET_PLACEMENTS``, as the route's quad-aligned surface holds it): the same frames as on the item's own
+          rect (rule (b)'s bound) and, on OpenGL, rule (a) against the Python renderer, whose SceneTarget starts at the
+          item's own pixel.
+  cost    (each API) the GPU time per pass at 2560 x 1440 and 4K.
 
 Negative controls (``--control``, each in its own Vulkan child against a finished run's kept OpenGL frames; each must end
 "FAILED AS EXPECTED"): ``widen_nudged`` (record), ``alpha_dropped`` (record), ``beam_edge_narrowed`` (shader),
-``bloom_dropped`` (program) and ``skipped_release`` (item).
+``bloom_dropped`` (program), ``skipped_release`` (item) and ``old_origin`` (the offsets round at the target's origin).
 
 The owner's rule (a) (``owner_render_parity.py --native``) needs the route to draw the mode; until registration (playbook
 checklist 18) ``owner`` runs it with the route's registration process-local, every other argument passed through:
@@ -75,8 +81,8 @@ MODE_ID = "oscilloscope"
 #: reference's translucent pixels and, with Glow, every pixel its glow lights). Measured over the 5.5 s replay's 126
 #: sampled frames (dpr 1 and 1.5; 20 Nov, n5_1_oscilloscope/20261120_n51_oscilloscope/): every differing pixel on the
 #: mask, at most 103 a frame, at one level but for ties at two levels (the bloom's float16 chain rounded by two
-#: compilers), at most 2 a frame; no scatter, no flip. Proposed bound, the measured worst times 1.5 (the lead decides):
-#: 3 ties a frame at 2 levels, no scatter.
+#: compilers), at most 2 a frame; no scatter, no flip. The bound, the measured worst times 1.5 (the lead's decision, 21
+#: Nov; D12 "As built: Oscilloscope"): 3 ties a frame at 2 levels, no scatter.
 VULKAN_RULE_B = pt.Tolerance("oscilloscope, Vulkan against OpenGL (rule b)", masked_level=1, scatter_pixels=0,
                              tie_pixels=3, tie_level=2)
 #: The negative controls: the rounds each one's Vulkan child runs and what it breaks.
@@ -87,6 +93,9 @@ CONTROLS = {
                            "breaks": "oscilloscope_beam_body.glsl's anti-aliased edge one pixel inward"},
     "bloom_dropped": {"rounds": ["pixels"], "breaks": "the glow composite reading no bloom (strength 0 in the block)"},
     "skipped_release": {"rounds": ["item"], "breaks": "the content's release edge omitted (stream and item kept)"},
+    "old_origin": {"rounds": ["offsets"],
+                   "breaks": "stage_control's bloom_at_target_origin: the bloom's grid and the composite's texel at the "
+                             "target's origin (before ABI 27), not the item's own pixel"},
 }
 #: Glow 0's runs (``--glow-off``): the plain program, which leaves the record's bloom strength unread (ABI 26).
 GLOW_OFF: dict = {"on": False}
@@ -501,6 +510,93 @@ def round_cost(core, engine, app, api: str, records: list, out: Path) -> dict:
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
 
+# --------------------------------------------------------------------------------------------------------- offsets
+
+#: ABI 27's proof (the lead's decision, 21 Nov: Python's SceneTarget is the oracle): the item inside a larger target, as
+#: the route's quad-aligned surface holds it, at an odd and an even device offset in each axis (left, top, right, bottom
+#: margins in device pixels; the target stays within the item's 64-pixel allocation bucket, so the bloom's levels are
+#: Python's sizes). The bloom's first downsample and the composite then pair and read pixels from the item's own pixel.
+OFFSET_PLACEMENTS = {"odd": (1, 1, 1, 1), "even": (2, 2, 2, 2), "odd_x_even_y": (1, 2, 1, 2),
+                     "even_x_odd_y": (2, 1, 2, 1)}
+OFFSET_SAMPLES = 16                  # the first sampled frames of each dpr (the pixels round's references)
+
+
+def _offset_frames(core, engine, app, host, records: list, chosen: list, dpr: float, margins) -> list:
+    """``chosen``'s frames drawn with the target at ``margins`` around the item (None: the item's own rect), read on
+    the item's own rect."""
+    scene = None
+    stream = base.Stream()
+    frames = []
+    try:
+        scene = base.Scene(core, engine, host)
+        for step, (index, _reference, _quarters) in enumerate(chosen):
+            entry = records[index]
+            card = scene.place(entry, dpr, stream, margins)
+            stream.publish(entry["record"], float(step))
+            scene.mode.update()
+            frames.append(scene.read(card))
+    finally:
+        stream.close()
+        if scene is not None:
+            scene.close(app)
+        host.frames(2)
+        base.host_check._flush_deletes(app)
+    return frames
+
+
+def round_offsets(core, engine, app, api: str, records: list, out: Path) -> dict:
+    """The item at each OFFSET_PLACEMENTS placement against the same frames with the target on the item's own rect
+    (this API's, under rule (b)'s bound: the placement changes nothing of what is drawn) and, on OpenGL, against the
+    Python renderer under rule (a)'s composite tolerance. The ``old_origin`` control (stage_control's
+    bloom_at_target_origin: the grid and texel at the target's origin, as before ABI 27) must fail it."""
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    _saved, references = base._load(out)
+    if base.CONTROL == "old_origin" and not core.module.stage_control("bloom_at_target_origin", True):
+        return {"pass": False, "error": "the module has no bloom_at_target_origin control (it predates ABI 27)"}
+    host = core.hidden_host(*base.HOST_PIXELS)
+    by_dpr: dict = {}
+    checks: dict = {}
+    try:
+        for dpr in base.DPRS:
+            host.set_device_pixel_ratio(float(dpr))
+            chosen = references[dpr][:OFFSET_SAMPLES]
+            own = _offset_frames(core, engine, app, host, records, chosen, dpr, None)
+            for name, margins in OFFSET_PLACEMENTS.items():
+                placed = _offset_frames(core, engine, app, host, records, chosen, dpr, margins)
+                against_own: list[dict] = []
+                against_python: list[dict] = []
+                shapes_equal = True
+                for (index, reference, _quarters), drawn, item in zip(chosen, placed, own):
+                    if drawn.shape != item.shape or drawn.shape[:2] != reference.shape[:2]:
+                        shapes_equal = False
+                        continue
+                    mask = reference_mask(reference)
+                    against_own.append(dict(pt.judge(drawn[..., :3], item[..., :3], VULKAN_RULE_B, mask=mask),
+                                            index=index))
+                    if api == "opengl":
+                        against_python.append(dict(parity.rule_a_frame(drawn[..., :3], reference[..., :3], mask,
+                                                                       MODE_ID), index=index))
+                key = f"{name}@{dpr}"
+                own_summary = pt.summarise(against_own)
+                by_dpr[key] = {"margins": list(margins), "compared": len(against_own),
+                               "max_level_against_own": max((int(v["max_level"]) for v in against_own), default=0),
+                               "against_own": own_summary}
+                checks[f"{key}_compared"] = shapes_equal and len(against_own) == len(chosen) > 0
+                checks[f"{key}_as_on_its_own_rect"] = bool(own_summary["pass"])
+                if api == "opengl":
+                    rule_a = parity.rule_a_verdict(against_python, MODE_ID)
+                    by_dpr[key]["rule_a"] = rule_a
+                    checks[f"{key}_rule_a"] = bool(rule_a["pass"])
+    finally:
+        if base.CONTROL == "old_origin":
+            core.module.stage_control("bloom_at_target_origin", False)
+        host.close()
+        base.host_check._flush_deletes(app)
+    return {"pass": all(checks.values()), "checks": checks, "by_placement": by_dpr,
+            "control": base.CONTROL if base.CONTROL == "old_origin" else None}
+
+
 # --------------------------------------------------------------------------------------------------------- the child
 
 _child = base.child
@@ -517,7 +613,7 @@ base.use_mode(MODE_ID=MODE_ID, _schema=_schema, _passes=_passes,
               control_record=control_record, item_settings_change=item_settings_change, reference_mask=reference_mask,
               ITEM_RECORD_FIELD=ITEM_RECORD_FIELD, item_reshaped=item_reshaped, VULKAN_RULE_B=VULKAN_RULE_B,
               SCRIPT=Path(__file__).resolve(), EVIDENCE_TOPIC="n5_1_oscilloscope", DEFAULT_LABEL="n51_oscilloscope",
-              CONTROLS=CONTROLS, child=child, EXTRA_ROUNDS={"cost": round_cost})
+              CONTROLS=CONTROLS, child=child, EXTRA_ROUNDS={"cost": round_cost, "offsets": round_offsets})
 vulkan_against_opengl = base.vulkan_against_opengl
 api_verdict = base.api_verdict
 

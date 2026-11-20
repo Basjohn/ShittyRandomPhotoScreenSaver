@@ -257,7 +257,8 @@ worked example (harness-only); a product mode does the same in the product's pla
    std140 block of its own (any name, any binding but 17). Its members are filled by name: the core's conventions
    (`MODE_CORE_MEMBERS`: `uMatrix`, `uItemSize`, `uContentRotationQuarters`, `u_resolution`, `u_dpr`,
    `u_viewport_origin_px`, `u_quick_item_coords`, `u_fade`, `u_border_width`, `u_item_from_frag*`,
-   `u_window_from_target*`, `u_target_px`), every record field named exactly as the field (an f64 a float, an f64x4 a
+   `u_window_from_target*`, `u_target_px`, `u_scene_item`: the item's cover in the target, where Python's
+   `SceneTarget` starts, read by the composite step), every record field named exactly as the field (an f64 a float, an f64x4 a
    vec4, a u32 an int or float under a range rule that fits it, a uint or a bool, an array the same length), and the
    settings. Baked by `tools/regen_qrc.py --shaders` beside the source (the harness bakes with the same baker at run
    time), handed over as bytes with the pass's blend (`ModePass`).

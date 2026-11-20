@@ -229,6 +229,11 @@ struct ModeCard
 // values: never zeros for a name it does not know).
 bool modeCoreValues(const QByteArray &name, const ModeCard &card, const QSize &target, double *out, int *count);
 
+// ABI 27: the item's cover in a target's pixels from the card alone (left, top, width, height; top-first rows): Python's
+// item_pixel_rect, where its SceneTarget starts. Zeros without a card. The core member u_scene_item and the bloom
+// step's first downsample read it (mode_content.cpp).
+void sceneItemRect(const ModeCard &card, double out[4]);
+
 // N3.1: Additive (ONE, ONE on every channel) for the light attachments (EB's emission, Bubble's ambient light).
 enum class PassBlend { Replace = 0, Alpha = 1, Premultiplied = 2, Add = 3, Additive = 4 };
 bool parsePassBlend(const QString &text, PassBlend *out);
@@ -786,6 +791,11 @@ private:
     bool texturesReady() const;
     // N5.7a: what a still draws, as bytes (its program, target, triangle, blocks and the fronts its passes sample).
     QByteArray stillSignature(const ColorTarget &target, const float *triangle) const;
+    // ABI 27: a bloom step's first downsample's triangle: the target's own (`own`) with its uv moved by the item's place
+    // in its surface-sized source (sceneItemRect: columns from the left, rows under the item, over the source's
+    // allocation), so level 0 pairs the pixels Python's SceneTarget pairs from the item's own pixel; `own` itself for a
+    // source of explicit size, no card, or the bloom_at_target_origin control.
+    void bloomTriangle(const BloomSpec &spec, const float *own, float *out) const;
     GpuTexture *slot(const QByteArray &name);
     GpuTexture *front(const QByteArray &name);
     const GpuTexture *front(const QByteArray &name) const;

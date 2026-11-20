@@ -98,6 +98,7 @@ MODE_CORE_MEMBERS = {
     "u_window_from_target_x": (3, True),
     "u_window_from_target_y": (3, True),
     "u_target_px": (2, False),
+    "u_scene_item": (4, True),     # ABI 27: the item's cover in the target's pixels (left, top, width, height)
     "uOriented": (2, True),
     "uQuarters": (1, True),
     "u_srpss_batch": (1, False),   # N3.2 (D15 point 6): a batched pass's batch
@@ -657,7 +658,10 @@ class CompositeStep:
     composite (``COMPOSITE_FORMS``): ``overlay`` (straight colour times the fade), ``overlay_glow`` (premultiplied, the
     glow at ``u_bloom_strength``, tone mapped at ``u_hdr_exposure`` when above 0, dithered where glow is added) or
     ``opaque_glow``. ``glow`` is a :class:`BloomStep`'s ``"<name>.glow"`` (the glow forms only). Its block's
-    ``u_bloom_strength`` and ``u_hdr_exposure`` are settings or record fields, by the one rule."""
+    ``u_bloom_strength`` and ``u_hdr_exposure`` are settings or record fields, by the one rule. ABI 27: every form
+    reads the core's ``u_scene_item`` (the item's cover in the surface) as Python's ``SceneTarget`` reads its own rect:
+    its texel, glow and dither from the item's own pixel, nothing drawn outside the item; a :class:`BloomStep` from a
+    surface-sized target pairs its first downsample's pixels from there too."""
 
     name: str
     form: str

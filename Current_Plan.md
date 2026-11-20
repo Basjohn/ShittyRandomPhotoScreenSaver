@@ -700,6 +700,13 @@ the feature (D3D11 is not stated).
     surface's quads), with its harness; (b) Python's `SceneTarget` aligns its allocation as the native target does
     (changes the frozen Python pictures of every scene-target mode); (c) a measured tolerance class for the bloom
     grid's phase. The three 60 s takes and the offers smoke were stopped at this finding (each failing the same way).
+    - [ ] Lead's decision (21 Nov): (a). C++ (ABI 27, needs a GitHub build): the core member `u_scene_item`, every
+      composite form reading from the item's own pixel, the bloom's first downsample from it (`bloomTriangle`), the
+      `bloom_at_target_origin` control; proof `oscilloscope_check.py --rounds block item pixels offsets` (odd and even
+      offsets in each axis) and `--control old_origin` seen failing; then owner rule (a) on the 5.5 s replay. Input 360's
+      cause (a new stream's admission-rejected first frame left the previous mode's record and frame) is fixed in the
+      same build (`StreamSource::syncStream`). The three 60 s takes and the full Choice-offer runs wait for the fast-proof
+      tools (operator, 21 Nov: no long-take proofing before them).
   - [ ] Side defect (found 20 Nov by the port): the legacy `widgets/spotify_visualizer/shaders/oscilloscope.frag` (and
     its `.qsb`) is drawn by no renderer (its own header says so; the beam files are the mode's shaders now), yet it is
     still the mode's registered fragment (`shaders._ALL_SHADER_FILES["oscilloscope"]`): `preload_fragment_shaders`

@@ -995,7 +995,8 @@ empty pair (two passes into the 64 x 64 target, no instance; its cost does not d
 OpenGL and 0.0008 ms on Vulkan, under the 0.02 ms rule, so the core keeps beginning them. Nothing is timed at rest.
 p90s in the evidence.
 
-**As built: Oscilloscope (N5.1, ABI 25 for Glow above 0; ABI 26 for Glow 0; not yet registered).** The first consumer of
+**As built: Oscilloscope (N5.1, ABI 27: Glow 0's unread field at 26, the item-anchored bloom at 27; not yet
+registered).** The first consumer of
 N3.4's bloom and composite, and the first instanced pass over a storage stream in a product mode. Its record is a
 runtime schema (`core/visualizer_engine/oscilloscope_native_schema.py`, 49,376 bytes, version 1; field names follow the
 core's identifier rule, lowercase): what follows the music, from the logical frame alone (`oscilloscope_frame_values`:
@@ -1018,15 +1019,28 @@ for byte over the 2,513 frames of the widened run set (9 runs; 2,154 drawing the
 APIs; rule (a) on OpenGL against the Python renderer under the composite's tolerance (63 sampled frames at dpr 1 and
 1.5: worst 71 one-level pixels on the mask, one tie at 2 levels); rule (b), Vulkan against native OpenGL over the 126
 sampled frames: every differing pixel on the mask, at most 103 a frame, one level but for ties at two levels (the bloom's
-float16 chain, two compilers), at most 2 a frame, no scatter; proposed bound 3 ties at 2 levels (the measured worst
-times 1.5; the lead decides). The mask is the reference's translucent pixels and, with Glow, every pixel it lights (the
+float16 chain, two compilers), at most 2 a frame, no scatter. Rule (b)'s bound (the lead's decision, 21 Nov): 3 ties a
+frame at 2 levels, no scatter (the measured worst, 2, times 1.5; `oscilloscope_check.VULKAN_RULE_B`). The mask is the
+reference's translucent pixels and, with Glow, every pixel it lights (the
 glow is light the composite adds over the card with alpha untouched: D12 point 2's "pixels a blended layer sums into").
 Validation clean; its five negative controls each fail in their own process (the flare widening nudged, the live
 trace's alpha dropped, the beam's edge narrowed, the bloom strength dropped, the skipped release). Evidence
-`n5_1_oscilloscope/20261120_n51_oscilloscope/`. Owner rule (a) does not pass yet: the bloom grid is anchored at the
-target's origin, and the route's quad-aligned surface puts the content one pixel into it where Python's `SceneTarget`
-starts at the item's own pixel, so the glow differs by up to 5 levels (`20261121_owner_variant_a/`; the plan's
-blocking finding under the Oscilloscope box names the choices).
+`n5_1_oscilloscope/20261120_n51_oscilloscope/`. Owner rule (a) did not pass at ABI 26: the bloom grid was anchored at
+the target's origin, and the route's quad-aligned surface puts the content one pixel into it where Python's
+`SceneTarget` starts at the item's own pixel, so the glow differed by up to 5 levels (`20261121_owner_variant_a/`).
+*The lead's decision (21 Nov): Python is the oracle and a systematic offset is not a tolerance class*, so the core
+anchors the grid at the item's own pixel (ABI 27, every bloom consumer): the core member `u_scene_item` is the item's
+cover in the drawn target's pixels from the card alone (`sceneItemRect`: Python's `item_pixel_rect`, outward to whole
+pixels); every composite form reads its texel, its glow and its dither key from there and draws nothing outside the item
+(as Python's `uOrigin`/`uExtent`); a bloom step from a surface-sized target draws its first downsample over a triangle
+whose uv starts at the item's pixel (`bloomTriangle`), so level 0 pairs Python's pixels and rows (the levels are
+Python's sizes while the surface stays in the item's 64-pixel bucket). An item that covers its target is drawn as
+before. Proof: `oscilloscope_check.py --rounds ... offsets` (odd and even offsets in each axis against the item's own
+rect and the Python renderer); negative control `old_origin` (stage_control `bloom_at_target_origin`). Owner rule (a)'s
+fade input 360 (10 levels) was not a fade rule: at the switch to Bubble the generic item's new stream rejected its first
+frame at admission, the core kept the Oscilloscope's record, packed it under Bubble's schema (refused) and showed the
+Oscilloscope's last frame; ABI 27 clears the old stream's frame at a new stream's first sync whatever that read is (the
+Python render host draws nothing for that frame: its content fade is 0).
 
 **The composite tolerance for translucent modes (rule (a), lead's decision, 15 Nov).** For a mode drawn through the
 composite's premultiplied surface, rule (a) is: fill pixels within 1 level (the surface's extra rounding of the

@@ -416,16 +416,29 @@ class Scene:
         self.mode = core.mode(self.content)
         self.programmed = False
 
-    def place(self, entry: dict, dpr: float, stream: Stream | None = None) -> dict:
+    def place(self, entry: dict, dpr: float, stream: Stream | None = None,
+              margins: tuple[int, int, int, int] | None = None) -> dict:
         """The item at ``entry``'s card under ``dpr`` (its target on the item's own rect, no coverage: the Python
         reference draws the whole item too): the program with the settings the first time (then the stream), else the
-        settings."""
+        settings. ``margins`` (left, top, right, bottom device pixels, an unrotated item only): the target larger than
+        the item by these, the item inside it at (left, top), as the route's quad-aligned surface holds it (ABI 27's
+        proof); the read stays the item's own rect."""
         import spectrum_check
 
         card = spectrum_check._card_for_item(dict(entry["card"], dpr=float(dpr)))
         width, height = card["item_size"]
-        self.mode.composite.set(rect=[0.0, 0.0, width, height], coverage=None, quarters=int(card["quarters"]),
-                                visible=True)
+        rect = [0.0, 0.0, width, height]
+        if margins is not None:
+            from rendering.native.spectrum import compose_window_from_target
+
+            if int(card["quarters"]) % 4:
+                raise ValueError("an offset placement is for an unrotated item")
+            left, top, right, bottom = (int(v) for v in margins)
+            rows = (card["item_from_window"][:3], card["item_from_window"][3:])
+            card = dict(card, window_from_target=compose_window_from_target(rows, (-left / dpr, -top / dpr), dpr),
+                        target_size=[card["target_size"][0] + left + right, card["target_size"][1] + top + bottom])
+            rect = [-left / dpr, -top / dpr, width + (left + right) / dpr, height + (top + bottom) / dpr]
+        self.mode.composite.set(rect=rect, coverage=None, quarters=int(card["quarters"]), visible=True)
         shown = dict(entry["shown"], **{key: card[key] for key in ("dpr", "item_from_window", "window_from_target")})
         self.mode.card(shown)
         program_item(self.mode, entry, dpr, not self.programmed)
