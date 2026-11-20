@@ -157,6 +157,11 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
+- [ ] Side defect (Sonnet, 21 Nov): `tools/qtquick_media_smoke.py` fails with "duplicate retained model identity:
+  'media'", and `tools/qtquick_achievement_pulse_smoke.py` builds a stale `AchievementPulsePresentationConfig()` (30
+  missing arguments). Repair both against the current owners, or retire them in `Docs/Reference/Tooling.md`
+  if `tools/surface_material_capture.py` covers them.
+
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
   in `Docs/Reference/Benchmarks.md` predate the bump. Run it once on main (lead or Medium slot; no load), record
@@ -676,7 +681,11 @@ the feature (D3D11 is not stated).
     27, 39 and 27 against 11, 16 and 18, with p99 about 1 ms worse. Spectrum on Vulkan sits near parity (11 and 14
     against 7 and 9), so the tail is Bubble's own. In every late frame, the time is after rendering ends and before the
     next frame begins (median about 17 ms, up to 85 ms): not sync, not recording.
-    - [ ] Root cause, leading candidate (agent aac773583ad93e2ab, 21 Nov; trace events 79 and 80, merge 6020d2977):
+    - [ ] Root cause, two candidates, neither proved (agent aac773583ad93e2ab, 21 Nov; trace events 79 and 80, merge
+      6020d2977). (1) The PERF HUD's once-a-second text write, from the 20 Nov traces below. (2) The GPU clock: the one
+      clean 21 Nov run, with no game running, showed no once-a-second pattern (15 of 115 clusters). Vulkan had 79 late
+      frames against OpenGL's 8, at 675 MHz median against 1553, so the native path's lighter GPU load may let the
+      card downclock. The A/B adds clock sampling. The 20 Nov reading:
       Qt begins frames on the visualizer's present requests through its 5 ms update-request timer. About once a
       second another update source starts that timer early, so the next frame waits for the next publication, at
       about 6 ms and then 15-17 ms. Bubble's Vulkan late frames that follow such an early frame are 14, 21, 20 and 13
@@ -803,6 +812,9 @@ the feature (D3D11 is not stated).
   over the `replay` recipe and show the steady residual collapses (from 2,430 one-level pixels, worst 34 a frame).
 - [ ] Bubble optimisation proof gap: needs the fast long-clip proof's layer P tool (the box below) before the
   first Bubble optimisation; the rules are the guide's.
+- [ ] Audit the fast-proof merge 79a5d1fe7 (Opus Medium, the audit slot): `tools/pixel_tolerance.py`'s M1 groups
+  and density, the cheaper judge's equal-verdict proof, the reference cache key, the native-only and stream-player
+  paths, and layer L's coverage of positional members.
 - [ ] Build the fast long-clip proof (Opus Medium agent a6257c36aeee45f10, 20 Nov; method and rules: `Docs/Guides/Native_Parity_And_Timing_Proof.md`, its
   section 7; step 1 of the order: Bubble's layer L and long-take rule (b) need it, and so do every later port). Steps, each with a test:
   - [ ] Layer L: the per-frame record compared byte for byte between paths, CPU only (`engine_worker_gate.py` is the
