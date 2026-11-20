@@ -333,12 +333,21 @@ class SceneMirror:
         pixels = self._read(region)
         raw = pixels.tobytes()
         record = {"region": list(region), "hash": hashlib.sha256(raw).hexdigest()}
+        drawing = self._drawing_mode()
+        if drawing is not None:
+            record["mode"] = drawing              # the mode whose frame this is: judged under its own bounds
         if self.measure_lit:
             self.lit.append(float((pixels[..., :3].max(axis=2) > LIT_LEVEL).mean()))
         self.frames.append((pixels.shape, zlib.compress(raw, 1)))
         if index % FULL_EVERY == 0:
             record["full"] = hashlib.sha256(self._read((0, 0, *host.pixels)).tobytes()).hexdigest()
         return record
+
+    def _drawing_mode(self) -> str | None:
+        """The mode bound to the hidden scene's Visualizer item now (None before any activation)."""
+        item = getattr(self.host.scene, "_visualizer_item", None) if self.host is not None else None
+        identity = getattr(item, "render_identity", None) if item is not None else None
+        return None if identity is None else str(identity.mode_id)
 
     def close(self) -> None:
         host, self.host = self.host, None
@@ -907,8 +916,10 @@ class LiveJudge:
             self._pending.append((index, record, None))
         elif index < len(records) and record != records[index]:
             self.differing.append(index)
+            # Each frame under the bounds of the mode that drew it (the partner's after the switch: its own).
+            drawn_by = records[index].get("mode") or self.mode
             arguments = (index, record, records[index], frame, self.python["frames"][index], self.masks.get(index),
-                         self.switch_input, self.mode)
+                         self.switch_input, drawn_by)
             done = self._pool.submit(_judge_one, *arguments) if self._pool is not None else _judge_one(*arguments)
             self._pending.append((index, record, done))
         else:
@@ -1298,12 +1309,26 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     verdict["identical"] = bool(paths["first"] is None and verdict["digests_identical"]
                                 and verdict["native_published"] > 0)
     # Rule (a)'s verdict: the composite's tolerance (RULE_A_*), pixel by pixel with the translucency mask.
-    judged = single["judged"]
+    # Each frame was judged under the bounds of the mode that drew it; the tested mode's frames make rule (a), the
+    # partner's (after the switch) their own section under their own bounds.
+    drew = {i: (r.get("mode") or mode) for i, r in enumerate(python["pixels"])}
+    all_judged = single["judged"]
+    judged = [v for v in all_judged if drew.get(v.get("input"), mode) == mode]
+    partner_judged = [v for v in all_judged if drew.get(v.get("input"), mode) != mode]
     verdict["rule_a"] = rule_a_verdict(judged, mode)
     # Every failing frame, with its pixels (fast-proof part 2 step 4; the first eight before).
-    verdict["rule_a"]["failed_frames"] = single["failed"]
+    own_inputs = {v.get("input") for v in judged}
+    verdict["rule_a"]["failed_frames"] = [f for f in single["failed"] if f.get("input") in own_inputs]
     verdict["progress"] = str(progress)
     verdict["rule_a_halves"] = rule_a_halves(judged, switch_input, mode)
+    partners = sorted({drew[i] for i in drew if drew[i] != mode})
+    verdict["partner"] = {
+        name: {"inputs": [v.get("input") for v in partner_judged if drew.get(v.get("input")) == name][:1] +
+               [v.get("input") for v in partner_judged if drew.get(v.get("input")) == name][-1:],
+               "frames": sum(1 for i in drew if drew[i] == name),
+               **rule_a_verdict([v for v in partner_judged if drew.get(v.get("input")) == name], name),
+               "failed_frames": [f for f in single["failed"] if drew.get(f.get("input")) == name]}
+        for name in partners}
     if windows is not None:
         # Each window's figures with its position in the take (guide section 3).
         drawn = [i for i, r in enumerate(native["pixels"]) if not r.get("skipped")]
@@ -1322,7 +1347,7 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     verdict["python_reference"] = {"state": reference_state, "folder": None if folder is None else str(folder)}
     verdict["pass"] = bool(verdict["rule_a"]["pass"] and verdict["digests_identical"] and verdict["native_published"] > 0
                            and paths["regions_equal"] and len(python["pixels"]) == len(native["pixels"])
-                           == backdrop_frames)
+                           == backdrop_frames and all(p["pass"] for p in verdict["partner"].values()))
     verdict["split"] = _split_rows(rows, switch_input)
     verdict["mapping"] = dict(native["mapping"], python_frames=len(mappings))
     verdict["classes"] = single["classes"]

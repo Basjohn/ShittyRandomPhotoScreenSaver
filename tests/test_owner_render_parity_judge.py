@@ -173,6 +173,36 @@ def test_the_parallel_judge_merges_to_exactly_the_serial_result(tmp_path):
     assert len(lines[0].splitlines()) == 40 and any(not v["pass"] for v in results[0]["judged"])
 
 
+def test_each_frame_is_judged_under_the_bounds_of_the_mode_that_drew_it():
+    # The partner mode's frames after a switch are judged under the partner's own bounds: Bubble's frames inside an
+    # Oscilloscope run, with scatter Bubble admits, pass; judged under the Oscilloscope's bounds (the control: the
+    # 5.5 s smoke's failure at inputs 390-418) they fail.
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    reference = np.full((40, 60, 4), 90, np.uint8)
+    reference[..., 3] = 255
+    scattered = reference.copy()
+    for k in range(30):
+        scattered[2 + 3 * (k // 15), 2 + 3 * (k % 15), 0] += 1
+    frames, records = [], []
+    for index, image in enumerate((reference, scattered)):
+        frames.append((image.shape, zlib.compress(image.tobytes(), 1)))
+        records.append({"region": [0, 0, 60, 40], "hash": hashlib.sha256(image.tobytes()).hexdigest()})
+    python = {"pixels": [dict(records[0], mode="bubble"), dict(records[0], mode="bubble")],
+              "frames": [frames[0], frames[0]]}
+    native = {"pixels": [records[0], dict(records[1])], "frames": frames}
+
+    def judged(drawn_by: str):
+        for record in python["pixels"]:
+            record["mode"] = drawn_by
+        return parity.judged_pass(native, python, {}, 0, "oscilloscope")["judged"]
+
+    under_bubble = judged("bubble")
+    assert [v["input"] for v in under_bubble] == [1] and under_bubble[0]["pass"]
+    under_oscilloscope = judged("oscilloscope")
+    assert not under_oscilloscope[0]["pass"]
+
+
 def test_a_windowed_run_judges_its_windows_exactly_and_skips_the_rest():
     # Coverage windows: inputs outside every window are drawn by nobody and judged by nobody; those inside are judged
     # exactly as in the full run.
