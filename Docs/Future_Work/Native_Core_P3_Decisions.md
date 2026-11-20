@@ -991,6 +991,39 @@ empty pair (two passes into the 64 x 64 target, no instance; its cost does not d
 OpenGL and 0.0008 ms on Vulkan, under the 0.02 ms rule, so the core keeps beginning them. Nothing is timed at rest.
 p90s in the evidence.
 
+**As built: Oscilloscope (N5.1, ABI 25 for Glow above 0; ABI 26 for Glow 0; not yet registered).** The first consumer of
+N3.4's bloom and composite, and the first instanced pass over a storage stream in a product mode. Its record is a
+runtime schema (`core/visualizer_engine/oscilloscope_native_schema.py`, 49,376 bytes, version 1; field names follow the
+core's identifier rule, lowercase): what follows the music, from the logical frame alone (`oscilloscope_frame_values`:
+each trace's alpha, the points per trace, the flare's widening `1 + 0.9 flare`, the brightness, the white-hot centre,
+the beam colour under Spectral, the composite's `u_bloom_strength`), the traces' points as a storage stream
+(`osc_points`, 16 x 384 float32 pairs, only the used floats written) and two draw counts (`osc_segments`, the beam's
+instances; `osc_graticule_vertices`, 4 or 0). Everything that follows the Settings and the card is a setting
+(`oscilloscope_settings_values`); the reach, the Trace's overrun past the item and the focus length mix the two, so the
+converted beam shader derives them from the settings' base values and the record's widening (checklist 16: both
+renderers draw the files `widgets/spotify_visualizer/shaders/oscilloscope_*`; against the shader as it was, 65 pixels
+of 270 sampled frames moved by one level, `n5_1_oscilloscope/20261120_shader_conversion/`). Every read of the points is
+clamped to the buffer's own length (no robust access). Its program (`native_route.oscilloscope_program`) is the
+graticule (one quad) and the beam (an instanced quad a segment) into a surface-sized single-sample overlay target,
+blended MAX on every attachment, then with Glow the bloom from the emission and the `overlay_glow` composite, else the
+target's colour alone and the `overlay` composite: two variants of one program, chosen at the Settings edge
+(`GENERIC_MODE_PROGRAM_VARIANTS`, D17 choice E), each fragment shipped with and without the emission output. The Glow 0
+variant names `u_bloom_strength` in its `"unread"` (ABI 26), so one record serves both. Proved by
+`native/core/python/oscilloscope_check.py` (the generic modes' rounds of `devcurve_check.py`): both passes' blocks byte
+for byte over the 2,513 frames of the widened run set (9 runs; 2,154 drawing the graticule); the item's contract on both
+APIs; rule (a) on OpenGL against the Python renderer under the composite's tolerance (63 sampled frames at dpr 1 and
+1.5: worst 71 one-level pixels on the mask, one tie at 2 levels); rule (b), Vulkan against native OpenGL over the 126
+sampled frames: every differing pixel on the mask, at most 103 a frame, one level but for ties at two levels (the bloom's
+float16 chain, two compilers), at most 2 a frame, no scatter; proposed bound 3 ties at 2 levels (the measured worst
+times 1.5; the lead decides). The mask is the reference's translucent pixels and, with Glow, every pixel it lights (the
+glow is light the composite adds over the card with alpha untouched: D12 point 2's "pixels a blended layer sums into").
+Validation clean; its five negative controls each fail in their own process (the flare widening nudged, the live
+trace's alpha dropped, the beam's edge narrowed, the bloom strength dropped, the skipped release). Evidence
+`n5_1_oscilloscope/20261120_n51_oscilloscope/`. Owner rule (a) does not pass yet: the bloom grid is anchored at the
+target's origin, and the route's quad-aligned surface puts the content one pixel into it where Python's `SceneTarget`
+starts at the item's own pixel, so the glow differs by up to 5 levels (`20261121_owner_variant_a/`; the plan's
+blocking finding under the Oscilloscope box names the choices).
+
 **The composite tolerance for translucent modes (rule (a), lead's decision, 15 Nov).** For a mode drawn through the
 composite's premultiplied surface, rule (a) is: fill pixels within 1 level (the surface's extra rounding of the
 premultiplied product), plus edge pixels within 3 levels, at most 10 in a frame (the measured worst, 7, times 1.5:

@@ -657,6 +657,20 @@ the feature (D3D11 is not stated).
   - [ ] Layer T: the live run on Vulkan and native OpenGL against the pre-flip Oscilloscope row (lead runs it on
     Display 1). Layer C: per pass at 2560 x 1440 and 4K, the glow-off path included.
   - [ ] Registration last (playbook checklist 18), then docs (D12 "As built: Oscilloscope", Primitives, README).
+  - [ ] Blocking finding for owner rule (a) (Opus High, 21 Nov; `n5_1_oscilloscope/20261121_owner_variant_a/`): at the
+    owner level the native glow differs from the Python renderer's by up to 4 to 5 levels in steady frames (variant a,
+    5.5 s replay: 547 of 549 inputs, about 11,000 pixels a frame past one level, the scope's whole glow), though every
+    setting and record value is the Python renderer's (probe: no member differs) and the harness's rule (a), with the
+    target on the item's own rect, passes. Cause: the bloom chain's texel grid is anchored at the target's origin. The
+    route's surface is quad-aligned (`composite_geometry(quad_aligned=True)`: 632 x 422 device pixels from window pixel
+    44 for a 630 x 420 card at 45), so the native content sits one pixel into its target, while Python's `SceneTarget`
+    allocation starts at the item's own pixel (and counts rows from the bottom); each 2 x 2 downsample pairs other
+    pixels, and the glow moves by several levels. Python's frame at a fade input (360) also draws nothing where the
+    native one draws its fading scope (10 levels). Decide one of: (a) C++: a scene target anchored at the item's own
+    device-pixel origin inside the quad-aligned surface (the bloom grid as Python's; the beam's derivatives keep the
+    surface's quads), with its harness; (b) Python's `SceneTarget` aligns its allocation as the native target does
+    (changes the frozen Python pictures of every scene-target mode); (c) a measured tolerance class for the bloom
+    grid's phase. The three 60 s takes and the offers smoke were stopped at this finding (each failing the same way).
   - [ ] Side defect (found 20 Nov by the port): the legacy `widgets/spotify_visualizer/shaders/oscilloscope.frag` (and
     its `.qsb`) is drawn by no renderer (its own header says so; the beam files are the mode's shaders now), yet it is
     still the mode's registered fragment (`shaders._ALL_SHADER_FILES["oscilloscope"]`): `preload_fragment_shaders`
