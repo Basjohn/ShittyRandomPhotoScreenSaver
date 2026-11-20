@@ -3467,9 +3467,32 @@ class QuickSceneController(QObject):
         )
         self._trace_surface_event("scene_graph_initialized", probe_frames=3)
 
+    def _write_perf_hud_text(self) -> None:
+        """Write the held PERF HUD texts (GUI thread). Each write is an update request of the scene: Qt starts its
+        update-request timer on the first one of a frame, so a write of its own between two visualizer frames begins a
+        frame early and the next one waits for the next publication (Layer T, Current_Plan.md 8b N5.1 Bubble)."""
+        pending, self._perf_hud_pending = self._perf_hud_pending, None
+        if pending is None:
+            return
+        scene_text, visualizer_text = pending
+        if self._frame_trace is not None:
+            self._frame_trace.record(FrameTraceEvent.GUI_PERF_HUD_UPDATE,
+                                     screen_index=int(self._window.screen_index))
+        root = self._scene_root
+        if root is not None:
+            root.setProperty("perfHudText", scene_text)
+        visualizer_root = self._visualizer_root
+        if visualizer_root is not None:
+            visualizer_root.setProperty("perfHudText", visualizer_text)
+
     def _update_perf_hud_on_swap(self) -> None:
         if not self._perf_hud_enabled:
             return
+        # While the visualizer presents (a present request since the last swap), the HUD's texts ride its next request
+        # (``request_visualizer_present``), never an update request of their own; otherwise they are written here.
+        presenting, self._perf_hud_visualizer_presenting = self._perf_hud_visualizer_presenting, False
+        if not presenting:
+            self._write_perf_hud_text()
         now_ns = time.perf_counter_ns()
         if self._perf_last_swap_ns > 0:
             dt_ms = (now_ns - self._perf_last_swap_ns) / 1_000_000.0
