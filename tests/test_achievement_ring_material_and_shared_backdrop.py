@@ -115,7 +115,9 @@ def test_gmail_and_achievement_use_valid_authored_colours_and_distinct_ink_route
         colour = widgets[key]["bg_color"]
         assert len(colour) == 4 and all(isinstance(channel, int) and 0 <= channel <= 255 for channel in colour)
         assert 0.0 <= float(widgets[key]["bg_opacity"]) <= 1.0
-    assert 'cardSurfaceLegibilityInk: gmailModel.timestampColor' in read(
+    # Gmail's own ink route was retired: its panel density is the shared owner's
+    # (test_qtquick_gmail_presentation.py::test_gmail_card_surface_comes_only_from_the_shared_owner).
+    assert 'cardSurfaceLegibilityInk:' not in read(
         "rendering/quick/qml/GmailPresentation.qml")
     assert 'cardSurfaceLegibilityInk:' not in read(
         "rendering/quick/qml/AchievementPulsePresentation.qml")
