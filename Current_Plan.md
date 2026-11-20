@@ -321,6 +321,17 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   (`createOffscreenRenderPass` without an external dependency, only with non-preserving targets), D (Qt Quick's
   `grabWindow` on Vulkan, grab phases only). C (`toVkAccess(TexColorOutput)` write-only) is avoided by priming targets
   at creation and after every readback and is never excused. Owed:
+  - [ ] **Qt 6.12.1 bump (lead; operator, 20 Nov: bump without asking).** Checked 20 Nov: PyPI still has PySide6
+    6.12.0 only, and Qt's release plan moved 6.12.1 from 12 Nov to 23 Nov (wiki.qt.io/Qt_6.12_Release). When PySide6,
+    PySide6_Addons, PySide6_Essentials and shiboken6 6.12.1 are on PyPI:
+    - [ ] Pick a stage boundary (decision D11): no agent mid-build on `native/core`; agents merged or checkpointed.
+    - [ ] Change the four pins in `requirements.txt`, then `pip install -r requirements.txt` with no venv process
+      running (locked PySide6 DLLs make pip fail; restore a mixed set at once if it does).
+    - [ ] Rebuild the native module on GitHub: the workflow reads Qt's version from that pin
+      (`tools/native_sdk_fetch.py --print-qt-version`). Regenerate the `.qsb` packs if `regen_qrc --shaders --check`
+      reports drift.
+    - [ ] Rerun the native tests (`pytest tests -k native`), the N0.6 rounds without excuse A (the box below), and
+      one Vulkan live check of a native mode on Display 1, then commit with the figures.
   - [ ] The A excuse is removed when the project takes the next Qt 6.12 patch release (the branch head already uses
     `UNDEFINED`): the upgrade's rerun deletes A from `QT_DEFECTS` and every round is clean without it.
   - [~] Awaiting Validation — lead, Display 1 visible and bounded, when two displays are connected: a real translucent window on the
