@@ -157,7 +157,7 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] Side defect (Sonnet, 21 Nov): `tools/qtquick_media_smoke.py` fails with "duplicate retained model identity:
+- [ ] Side defect (Sonnet, 21 Nov; Sonnet agent a446364cd933c2026): `tools/qtquick_media_smoke.py` fails with "duplicate retained model identity:
   'media'", and `tools/qtquick_achievement_pulse_smoke.py` builds a stale `AchievementPulsePresentationConfig()` (30
   missing arguments). Repair both against the current owners, or retire them in `Docs/Reference/Tooling.md`
   if `tools/surface_material_capture.py` covers them.
