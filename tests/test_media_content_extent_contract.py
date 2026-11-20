@@ -145,9 +145,9 @@ def test_media_qml_reflows_width_height_and_projects_full_semantic_child_roles()
     assert "- (mediaRoot.seekOnAuthoredRail ? 0.0 : customEditAncestorReflowY)" not in qml
     assert "- (mediaRoot.transportOnAuthoredRail ? 0.0 : customEditAncestorReflowY)" not in qml
     assert "metadata" in qml
-    # The authored seek is a true 75% bar. Do not reintroduce the old hidden
-    # two-sided 8% margin before applying the 75% factor.
-    assert "canonicalCardContentWidth * 0.75" in qml
+    # The authored seek spans the content width through one named share. Do not
+    # reintroduce the old hidden two-sided 8% margin before applying it.
+    assert "canonicalCardContentWidth * progressTrackWidthShare" in qml
     assert "canonicalCardContentWidth * 0.08" not in qml
     # Every painted semantic region is an editable role. Invisible flow slots
     # remain outside collision truth.
@@ -165,7 +165,7 @@ def test_media_authored_xy_reflow_survives_child_editor_and_visibility_gates() -
     # vertical flow space. X/Y must still respond to parent content extent;
     # CUSTOM child geometry merely projects onto those existing rails.
     assert "mediaRoot.authoredCardWidth - mediaRoot.shellInset" in qml
-    assert "canonicalProgressTrackWidth\n            + (authoredCardContentWidth - canonicalCardContentWidth) * 0.75" in qml
+    assert "canonicalProgressTrackWidth\n            + (authoredCardContentWidth - canonicalCardContentWidth) * progressTrackWidthShare" in qml
     assert "width: mediaRoot.authoredProgressTrackWidth\n" in qml
     assert "width: mediaRoot.authoredCardContentWidth\n" in qml
     # The artwork's width share lives in the one Media artwork rule (plan 1C.3: Now Playing draws it too).
@@ -411,7 +411,7 @@ def test_media_metadata_compaction_preserves_orientation_specific_visual_anchor(
 
 def test_media_seek_has_no_hidden_right_padding_and_mute_shrinks_uniformly_with_controls() -> None:
     qml = _text("rendering/quick/qml/MediaPresentation.qml")
-    assert "canonicalCardContentWidth * 0.75" in qml
+    assert "canonicalCardContentWidth * progressTrackWidthShare" in qml
     assert "canonicalCardContentWidth * 0.08" not in qml
     mute = qml.split("id: systemMuteButton", 1)[1].split("gradient: Gradient", 1)[0]
     assert 'mediaRoot.childWidthScale("mute_button")' in mute

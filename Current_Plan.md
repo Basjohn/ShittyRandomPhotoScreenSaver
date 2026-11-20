@@ -1581,20 +1581,6 @@ by risk; none takes a slot native work can use.
   Width, right-aligned, in the same style. It latches pressed and sets every border element of the widget UIs to 0 or
   invisible. Reset Colours, editing the border width, or changing the surface choice in Style Overrides each un-latches
   it. It persists like the other overrides. Test: latch, each un-latch path, and a reload.
-- [ ] **Media seekbar default width** (operator, 21 Nov; Sonnet agent a276eeb2052ac0ba6): wider by default, ending at the artwork's right edge, so the
-  seekbar has the same padding on its left and right inside the card. Change the canonical default, not a preset;
-  tests derive the value from the default and the layout, and never pin it. Prove it with an offscreen render before
-  and after: the seekbar's right end aligns with the artwork's right edge, and nothing else moves.
-- [ ] **Achievement Pulse defaults** (operator, 21 Nov; Sonnet agent a276eeb2052ac0ba6; the operator's screenshot is in the conversation of 21 Nov).
-  - [ ] The achievement artwork (the small achievement icon) defaults to the operator's placement: in the header row,
-    just right of the ACHIEVEMENT PULSE pill. Read the operator's current saved placement (read only, from their
-    settings) and make it the canonical default.
-  - [ ] The pulse ring (the coloured circle) takes a material like the Media control bar's (its opacity and material
-    treatment) through the shared material path. The ring's inside keeps its current material, which becomes an
-    optional setting, on by default so today's look holds. Settings follow the existing bucket patterns: a short
-    name, the rest in a tooltip.
-  - [ ] Offscreen renders before and after, on a dark and a light theme and a non-Normal material. The lead judges
-    them.
 - [ ] **The ordinary Visualizer card offers its Rotate glyph on hover** (operator report): UI-3 of `Docs/Future_Work/Studio_Corners_Card_Rim_and_Visualizer_Rotate_2026-11-09.md`, its
   live checklist. Today `rendering/quick/qml/VisualizerPresentation.qml:1049` still passes `canRotate: false`.
 

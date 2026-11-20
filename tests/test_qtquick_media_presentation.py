@@ -1305,7 +1305,7 @@ def test_media_qml_and_registry_keep_actions_static_and_python_owned() -> None:
         "cached: true",
         "layer.enabled: mediaRoot.mediaModel.roundedArtwork",
         "maskSource: artworkMask",
-        "canonicalCardContentWidth * 0.75",
+        "canonicalCardContentWidth * progressTrackWidthShare",
         "readonly property real fitScale: Math.max(",
         'mediaRoot.childWidthScale("mute_button")',
         "anchors.margins: artworkFrame.imageInset",
@@ -1354,7 +1354,7 @@ def test_media_metadata_and_state_flip_and_resize_share_stable_top_left_projecti
     assert 'horizontalAlignment: mediaRoot.orientedChildAlignment("playback_state", "left")' in presentation
     assert 'artistAlignment: mediaRoot.orientedChildAlignment(' in presentation
     assert 'readonly property real flippedAuthoredRailX:' in presentation
-    assert 'progressBand.width - 4.0 - width' in presentation
+    assert 'progressBand.width - width' in presentation
     assert 'property real customEditPlacementCompensationX: flippedAuthoredRailX' in presentation
     crossfade = (QML_ROOT / "MediaMetadataColumn.qml").read_text(encoding="utf-8")
     assert crossfade.count('horizontalAlignment: metadataFade.textAlignment === "right"') == 4
@@ -1793,7 +1793,13 @@ def test_media_header_flip_swaps_artwork_and_metadata_rails_and_reset_is_identit
         assert metadata.width() > 32.0
         assert str(text.property("textAlignment")) == "right"
         assert int(state.property("horizontalAlignment")) != initial_state_alignment
-        assert seek.x() > initial_seek_x + 20.0
+        # A flip selects the opposite seek rail: the bar's far edge sits on the
+        # band's far edge (derived from the band and the bar's own width, so a
+        # default that spans the band leaves it where it was).
+        band = item.findChild(QQuickItem, "mediaProgressBand")
+        assert band is not None
+        assert seek.x() == pytest.approx(max(0.0, band.width() - seek.width()))
+        assert seek.x() >= initial_seek_x
         # An individual metadata flip composes with global placement orientation.
         assert model.set_custom_child_geometry({
             "header": {"alignment": "right"},
@@ -1816,6 +1822,55 @@ def test_media_header_flip_swaps_artwork_and_metadata_rails_and_reset_is_identit
         assert seek.x() == pytest.approx(initial_seek_x)
         assert (header.x(), art.x(), metadata.x(), metadata.width()) == pytest.approx(baseline)
         assert runtime.refresh_calls == [] and provider.image_count == 1
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
+def test_media_seek_default_ends_at_the_artwork_right_edge_with_equal_card_padding(qt_app) -> None:
+    """The seek bar's default spans the content width: same padding left and right.
+
+    Derived from the layout, never from a number: its right end is the artwork's
+    right edge, and both ends sit on the content column's edges, so the card's
+    padding is the same on its left and right.
+    """
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0, runtime_generation=131, screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime = _FakeMediaRuntime()
+    model, _, _provider = _model(factory.media_artwork_provider, runtime)
+    try:
+        presentation = RetainedMediaPresentation(
+            host=controller.ordinary_widget_host, model=model,
+            geometry=OverlayWidgetGeometry(25.0, 30.0, 700.0, 340.0),
+        )
+        item = presentation.item
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, image=_image()))
+        qt_app.processEvents()
+        seek = item.findChild(QQuickItem, "mediaProgressTrack")
+        art = item.findChild(QQuickItem, "mediaArtworkFrame")
+        column = item.findChild(QQuickItem, "mediaContent")
+        assert None not in (seek, art, column) and art.isVisible() and seek.isVisible()
+
+        def edges(part):
+            """Left and right edge of ``part`` in the content column's own coordinates."""
+            left = part.mapToItem(column, QPointF(0.0, 0.0)).x()
+            return left, left + part.width()
+
+        seek_left, seek_right = edges(seek)
+        column_left, column_right = 0.0, column.width()
+        assert seek_right == pytest.approx(edges(art)[1], abs=0.5)
+        assert seek_left == pytest.approx(column_left, abs=0.5)
+        assert seek_right == pytest.approx(column_right, abs=0.5)
     finally:
         controller.quiesce_for_retirement()
         window.deleteLater()

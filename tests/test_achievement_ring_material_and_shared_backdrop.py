@@ -55,7 +55,7 @@ def test_circle_uses_only_the_card_backdrop_with_original_ring_and_pulse() -> No
     assert 'id: progressCircleMaterial' in circle
     assert 'card: achievementRoot' in circle
     assert 'forceFlat: !achievementRoot.achievementModel.progressCircleMaterialEnabled' in circle
-    assert 'color: progressCircleMaterial.active ? "transparent" : originalFill' in circle
+    assert '(progressCircleMaterial.active ? "transparent" : originalFill)' in circle
     assert 'cornerRadius: progressCircleFace.width * 0.5' in circle
     # The material takes its tint from a semantic role rather than a frozen
     # opacity/tint/legibility recipe. Explicit opt-in and Normal fallback are
@@ -80,7 +80,7 @@ def test_material_disc_has_its_own_resolved_accent_role_not_the_faint_flat_capsu
     assert 'fillColor: achievementRoot.achievementModel.progressDiscMaterialColor' in qml
     # Normal/unchecked still paints its original flat capsule, and the ring's
     # material still follows the ONE display-scoped backdrop.
-    assert 'color: progressCircleMaterial.active ? "transparent" : originalFill' in qml
+    assert '(progressCircleMaterial.active ? "transparent" : originalFill)' in qml
     assert 'card: achievementRoot' in qml
 
 

@@ -1227,9 +1227,10 @@ def _build_card_group(
         ring_material = QCheckBox("Material Progress Circle")
         ring_material.setProperty("circleIndicator", True)
         ring_material.setToolTip(
-            "Use the card's active theme material for the progress circle's interior. "
-            "The progress outline, percentage and pulse remain unchanged. "
-            "Normal cards keep the original fill; no separate backdrop is captured."
+            "Adds the card's active theme material to the progress circle's inside, as an option. "
+            "The ring itself always follows the card's material, tinted by its colour; "
+            "the percentage and pulse remain unchanged. "
+            "Normal cards keep the original fill and ring; no separate backdrop is captured."
         )
         ring_material.setChecked(tab._default_bool(key, "progress_circle_material"))
         ring_material.stateChanged.connect(tab._save_settings)

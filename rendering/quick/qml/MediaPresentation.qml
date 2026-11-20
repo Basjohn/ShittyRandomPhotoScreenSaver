@@ -207,19 +207,22 @@ OverlayWidget {
     readonly property real canonicalCardContentWidth: Math.max(
         1.0, canonicalPreferredCardWidth - mediaRoot.shellInset
     )
-    // The 75% target is relative to the *live authored card*, not the
-    // canonical 600 px reference. Parent X reflow must still enlarge/shrink
-    // the seek bar. The canonical value remains its detached baseline/slot
-    // reference; neither one is another outer-size authority.
+    // The seek bar's default spans the whole content width: it starts at the
+    // content edge and ends at the artwork's right edge, so the card's padding is
+    // the same on its left and right. The width is relative to the *live authored
+    // card*, not the canonical 600 px reference. Parent X reflow must still
+    // enlarge/shrink the seek bar. The canonical value remains its detached
+    // baseline/slot reference; neither one is another outer-size authority.
+    readonly property real progressTrackWidthShare: 1.0
     readonly property real canonicalProgressTrackWidth: Math.max(
-        1.0, canonicalCardContentWidth * 0.75
+        1.0, canonicalCardContentWidth * progressTrackWidthShare
     )
     readonly property real authoredCardContentWidth: Math.max(
         1.0, mediaRoot.authoredCardWidth - mediaRoot.shellInset
     )
     readonly property real authoredProgressTrackWidth: Math.max(
         1.0, canonicalProgressTrackWidth
-            + (authoredCardContentWidth - canonicalCardContentWidth) * 0.75
+            + (authoredCardContentWidth - canonicalCardContentWidth) * progressTrackWidthShare
     )
     readonly property real canonicalProgressTrackHeight: mediaModel.progressHeight
     readonly property real canonicalControlsHeight: Math.max(
@@ -616,8 +619,8 @@ OverlayWidget {
                 // saved normalized offsets. Real off-rail seek/artwork collision
                 // is owned separately by the shared edit collision surface.
                 readonly property real authoredSeekX: mediaRoot.headerFlipped
-                    ? Math.max(0.0, progressBand.width - 4.0
-                        - mediaRoot.authoredProgressTrackWidth) : 2.0
+                    ? Math.max(0.0, progressBand.width
+                        - mediaRoot.authoredProgressTrackWidth) : 0.0
                 readonly property bool seekWouldIntersectArtwork: progressBand.visible
                     && (mediaRoot.headerFlipped
                         ? authoredSeekX < provisionalArtworkWidth + 2.0
@@ -764,10 +767,10 @@ OverlayWidget {
                 // Column band and keeps the user's relative offset.
                 readonly property real flippedAuthoredRailX:
                     mediaRoot.headerFlipped && mediaRoot.seekOnAuthoredRail
-                        ? Math.max(0.0, progressBand.width - 4.0 - width) : 0.0
+                        ? Math.max(0.0, progressBand.width - width) : 0.0
                 property real customEditPlacementCompensationX: flippedAuthoredRailX
                 property real customEditPlacementCompensationY: 0.0
-                x: 2.0 + flippedAuthoredRailX
+                x: flippedAuthoredRailX
                     + mediaRoot.mediaModel.customSeekXOffset
                         * mediaRoot.childNormalizationWidth
                 y: 4.0
