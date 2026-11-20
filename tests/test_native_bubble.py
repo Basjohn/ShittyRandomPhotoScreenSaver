@@ -435,7 +435,7 @@ def test_bubbles_scatter_must_be_spread_and_counts_as_a_ties_neighbour():
     spread = reference.astype(np.int16)
     placed = 0
     for k in range(cap // group):
-        row_run(spread, 10 + 4 * k, 10, group)
+        row_run(spread, 10 + 20 * k, 10, group)                # apart: no 16 x 16 window past the density bound
         placed += group
     assert verdict(spread)["pass"] and verdict(spread)["scatter"] == placed
     # Negative controls (each seen passing before the spread rule): one more touching pixel; a solid 7x7 block plus
@@ -469,3 +469,56 @@ def test_bubbles_scatter_must_be_spread_and_counts_as_a_ties_neighbour():
     pair[149, 149, 1] += 1
     narrowed = verdict(pair)
     assert not narrowed["pass"] and any("neither isolated" in reason for reason in narrowed["reasons"])
+
+
+def test_bubbles_spread_joins_ties_into_groups_and_bounds_density():
+    # Checkpoint audit 8 M1: a one-level line that two 2-level ties split into groups within the cap, and a one-level
+    # patch dithered into small groups, both passed the spread rule; ties now join the groups they touch and no 16 x 16
+    # window may hold more than the density bound. Bounds come from the harness's constants.
+    import numpy as np
+
+    from tools import pixel_tolerance
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    group = parity.RULE_A_SCATTER_GROUP["bubble"]
+    window = parity.RULE_A_SCATTER_WINDOW["bubble"]
+    size = pixel_tolerance.SCATTER_WINDOW
+    reference = np.full((240, 400, 4), 90, np.uint8)
+    reference[..., 3] = 255                                    # opaque, flat: no mask, no content edge
+    mask = np.zeros(reference.shape[:2], bool)
+
+    def verdict(drawn):
+        return parity.rule_a_frame(drawn.astype(np.uint8), reference, mask, "bubble")
+
+    # A one-level line of 3 x group + 1 pixels, two of them raised to 2 levels: 65 scatter and 2 ties whose parts are
+    # each within the group cap, so it passed before.
+    length = 3 * group + 1
+    line = reference.astype(np.int16)
+    line[60, 20:20 + length, 1] += 1
+    line[60, 20 + group, 1] += 1
+    line[60, 20 + 2 * group + 1, 1] += 1
+    split = verdict(line)
+    assert split["ties"] == 2 and split["scatter_group"] == length
+    assert not split["pass"] and any("touching scatter and tie" in reason for reason in split["reasons"])
+    # Control: the same line's parts far apart (no group past the cap, no window past the bound) pass.
+    apart = reference.astype(np.int16)
+    for k in range(3):
+        apart[60 + 40 * k, 20:20 + group, 1] += 1
+    assert verdict(apart)["pass"]
+    # One-level pixels spread through one 16 x 16 patch in small groups: more than the bound, within the count and cap.
+    patch = reference.astype(np.int16)
+    placed = 0
+    rng = np.random.default_rng(23)
+    cells = [(y, x) for y in range(0, size, 2) for x in range(0, size, 2)]
+    for y, x in [cells[i] for i in rng.permutation(len(cells))][:window + 1]:
+        patch[100 + y, 200 + x, 1] += 1
+        placed += 1
+    dense = verdict(patch)
+    assert dense["scatter"] == placed == window + 1 <= parity.RULE_A_SCATTER_PIXELS["bubble"]
+    assert dense["scatter_group"] <= group and dense["scatter_window"] == placed
+    assert not dense["pass"] and any(f"{size} x {size} window" in reason for reason in dense["reasons"])
+    # Control: the same pixels spread over a wider area (no window past the bound) pass.
+    wide = reference.astype(np.int16)
+    for k, (y, x) in enumerate(cells[:window + 1]):
+        wide[20 + 4 * (k // 8) * 3, 20 + 3 * (k % 8) * 3, 1] += 1
+    assert verdict(wide)["pass"]

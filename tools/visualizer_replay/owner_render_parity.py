@@ -412,8 +412,9 @@ RULE_A_SCATTER_PIXELS = {"bubble": 68}
 #: lead 17 Nov).
 RULE_A_SCATTER_GROUP = {"bubble": 22}
 #: The scatter's density per mode (checkpoint audit 8 M1): the most scatter and tie pixels one 16 x 16 window may hold
-#: (``pixel_tolerance.SCATTER_WINDOW``).
-RULE_A_SCATTER_WINDOW: dict[str, int] = {}
+#: (``pixel_tolerance.SCATTER_WINDOW``). Bubble: measured worst 17 on the four 60 s recorded takes (16, 17, 16 and 17;
+#: fast_proof/20261120_m2_* and 20261121_m2_*, ties joined), times 1.5 rounded up: 26.
+RULE_A_SCATTER_WINDOW: dict[str, int] = {"bubble": 26}
 
 
 def composite_tolerance(mode: str | None = None):

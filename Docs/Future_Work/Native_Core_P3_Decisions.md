@@ -1031,20 +1031,31 @@ through it) 1 level on the mask, 10 ties at 3 levels. Spline Curve's owner runs 
 the three offers): 5.1M to 39.2M differing pixels a run, every one on the mask but at most 8 ties a frame; Spectrum's
 (a and b at both placements): 6.3M to 17.6M, every one on the mask at 1 level, no tie. Bubble's owner rule (a): 68
 scatter (measured 45 on the four 60 s takes: 38, 36, 40 and 45; 34 on the 5.5 s replay; lead, 17 Nov, checkpoint
-audit 7 M3), spread: no group of touching scatter pixels larger than 22 (measured 15 on the 5.5 s replay's 2,430
-pixels, 1,908 of them with no scatter neighbour; audit 7 M1), and a tie with 3 or more scatter pixels in its 3x3 is
+audit 7 M3), spread: no group of touching scatter and tie pixels larger than 22 (ties join the groups they touch,
+checkpoint audit 8 M1; measured 15 on the 5.5 s replay's 2,430 pixels, 1,908 of them with no scatter neighbour, audit 7
+M1, and 17 on the four 60 s takes with ties joined: 13, 17, 15 and 13), no 16 x 16 window holding more than 26 scatter
+and tie pixels (audit 8 M1; measured 17 on the four 60 s takes: 16, 17, 16 and 17, times 1.5 rounded up; 21 Nov,
+`fast_proof/20261120_m2_rule_a_60s_*`, `20261121_m2_rule_a_60s_*`), and a tie with 3 or more scatter pixels in its 3x3 is
 not isolated (lead, 17 Nov, narrowing M1: a lone tie beside one or two scatter pixels, measured in three offer runs,
 stays isolated), so a compact one-level patch, or ties inside one, fails; steady and fade; ties and flips as the composite (lead, 17 Nov: the
 `NativeFragmentPass` two-compiler case, Python's driver-compiled composed GLSL against the qsb pack; evidence
 `n5_1_bubble/20261117_steady_residual_classes/`, every pixel exactly one level, spread over the whole content).
-On the four 60 s recorded takes it holds on 21,107 of 21,108 judged frames; the operator accepted the one exception
-as measured (17 Nov, no bound or class change): `nightsolong_acousticsoft1` input 22, cold-start reveal, an adjacent
-pair at 2 levels on the mask (`n5_1_bubble/20261117_rule_a_60s_*`). Two tracked exceptions of the same scene-fade
+On the four 60 s recorded takes, judged on 17 Nov before the spread rule, it held on 21,107 of 21,108 judged frames;
+the operator accepted the one exception as measured (17 Nov, no bound or class change): `nightsolong_acousticsoft1`
+input 22, cold-start reveal, an adjacent pair at 2 levels on the mask (`n5_1_bubble/20261117_rule_a_60s_*`). Rejudged
+under the current rule (a) on 20 and 21 Nov (audit 8 M2; native against Python, variant a, display placement): ragdoll
+and anything_mixed2 pass; human_heavy1 fails inputs 2182 and 2223 and nightsolong input 2128, each one lone 2-level
+tie off a content edge with 3 or more scatter pixels in its 3x3 (the narrowed isolation clause, not the spread rule),
+and nightsolong input 22 as before. Open in the N5.1 Bubble box; no bound changed. Two tracked exceptions of the same scene-fade
 double-rounding class (lead, 17 Nov, no bound or class change): the offer runs `stream_direction=2` and `=6`, input
 337 (the mode switch), adjacent 2-level ties on the mask off a content edge (`n5_1_bubble/20261117_offers/`,
 `20261117_offer_tie_classes/`); they must disappear once the scene fade is applied in one place. Bubble's rule (b)
 (`bubble_check.py`, Vulkan against native OpenGL, lead's decision 17 Nov): 32 scatter a frame (measured 21) in groups
-of at most 11 (measured 7), no tie (`n5_1_bubble/20261117_rule_b/`). A `NativeFragmentPass` (`transition_route_check.py`) rule (a): 72 scatter (measured
+of at most 11 (measured 7), no tie (`n5_1_bubble/20261117_rule_b/`), measured on the 5.5 s replay only. On 60 s takes
+(21 Nov, `native_stream_player.py` over the take's delivery stream) it fails 18 of 5,313 frames on ragdoll and 12 on
+human_heavy1: scatter up to 237 a frame but spread (groups at most 11, densest 16 x 16 window 13), and one or two
+2-level ties in 6 frames, all steady (`fast_proof/20261121_rule_b_60s_*`). Open in the N5.1 Bubble box; no bound
+changed. A `NativeFragmentPass` (`transition_route_check.py`) rule (a): 72 scatter (measured
 48), 8 ties, 1 flip; rule (b): 2,000 scatter (measured 1,317, VHS), 8 ties (measured 5). N5.2a's seven: rule (a) exact,
 rule (b) 1,100 scatter (measured 736, Warp), no tie. Geometry passes (`mesh_buffer_check.py`, both rules): 1 level on
 the mask, 8 ties (measured one, at 2 levels on a streak's edge). Scene targets (`scene_target_check.py`): 1 unit on the
