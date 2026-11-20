@@ -647,11 +647,23 @@ the feature (D3D11 is not stated).
   over the four takes; the 2560 x 1440 cost; the D1 rehearsal. Proved so far
   (`Docs/Guides/Native_Parity_And_Timing_Proof.md` layers): P on OpenGL over the four 60 s takes; P on Vulkan over the
   5.5 s replay only; L indirectly (the simulation is untouched and 21,107 matching frames); C at 4K. Not proved: T.
-  - [ ] Layer T on Vulkan, the product's native path (native OpenGL is not offered until N5.2h), as the guide's
-    section 4 sets it, against the pre-flip Python OpenGL row. Run by the lead with a quiet GPU:
-    `tools/visualizer_live_check.py --mode bubble --display 1 --seconds 90 --load none
-    --app-arg =--graphics-backend=vulkan`, then Bubble's own T tools (its diagnostics guide). Display 1 must be on;
-    defer if it is off, never Display 0.
+  - [ ] Layer T on Vulkan, first runs done (lead, 20 Nov, Display 1, quiet GPU; evidence
+    `.artifacts/evidence/visualizers/{bubble,spectrum}/live_check/20261120_*`). Bubble on native Vulkan matches the
+    Python OpenGL control in median and p90 (11.07/12.30-12.47 ms) and in tick-to-publish. Its render-thread
+    recording is 10 times cheaper (0.15 ms median against 1.52). But its tail is heavier: frames over 16.7 ms were
+    27, 39 and 27 against 11, 16 and 18, with p99 about 1 ms worse. Spectrum on Vulkan sits near parity (11 and 14
+    against 7 and 9), so the tail is Bubble's own. In every late frame, the time is after rendering ends and before the
+    next frame begins (median about 17 ms, up to 85 ms): not sync, not recording.
+    - [ ] Root cause first (Opus Medium). Run the live check with `--app-arg=--gpu-pass-timing` (it writes the native
+      per-pass GPU time into the frame trace) and correlate each late frame with its passes' GPU time, then with
+      present and acquire timing on the swap chain. Check Qt's present mode and the Vulkan frames in flight against
+      the OpenGL path. Test one variable at a time. Candidates: the main `bubble` pass's GPU time spiking past a
+      refresh, the ambient target's passes, a wait on the per-record arena upload, and swap-chain present blocking.
+    - [ ] Fix at the owner if it is ours, then rerun three Vulkan runs and three OpenGL controls back to back. Accept
+      when frames over 16.7 ms on Vulkan fall within the control's spread. If it is the driver's or Qt's, record it
+      in D12 "As built: Bubble" with the figures, and ask the operator.
+    - [ ] Then Bubble's own T tools (its diagnostics guide).
+
   - [ ] Rule (b) over the four 60 s takes, once the owner replay gains `--api vulkan` (the fast-proof box). Today
     rule (b) has run over the 5.5 s replay's 684 sampled frames only.
   - [ ] Layer L directly: the per-frame packed record byte-compared with the values the Python renderer uses, over the
