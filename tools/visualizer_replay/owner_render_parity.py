@@ -1266,10 +1266,13 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
             # The simulation moved since the reference was drawn: never judged against it; drawn again and the
             # native frames judged again against the new reference.
             reference_state = "stale (logical digests differ): drawn again and stored"
+            judge.result()                                # its workers ended; its verdicts discarded
+            python_references.release(cached)             # the stale reference's open files (audit 9 M2)
             python, mappings = _python_reference(mode, script, settings)
             masks, backdrop_frames = _python_masks(mode, script, settings, python)
             python_references.store(folder, made_of, python, masks, mappings, backdrop_frames)
-            judge = LiveJudge(python, masks, switch_input, mode)
+            progress.write_text("", encoding="utf-8")    # the progress judged against the stale one goes
+            judge = LiveJudge(python, masks, switch_input, mode, progress=progress, workers=JUDGE_WORKERS)
             for index, record in enumerate(native["pixels"]):
                 judge.frame(index, record, native["frames"][index])
     single = judge.result()

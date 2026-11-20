@@ -90,6 +90,21 @@ class StoredFrames:
     def __iter__(self):
         return (self[index] for index in range(len(self)))
 
+    def close(self) -> None:
+        """The frames file's handle released (before the reference is replaced: Windows keeps an open file)."""
+        if self._file is not None:
+            self._file.close()
+            self._file = None
+
+
+def release(loaded: tuple | None) -> None:
+    """Close what a loaded reference holds open (``load``'s result)."""
+    if loaded is None:
+        return
+    frames = loaded[0].get("frames")
+    if hasattr(frames, "close"):
+        frames.close()
+
 
 class StoredMasks(Mapping):
     """A stored run's masks by input (bool arrays), decoded on demand."""
@@ -142,11 +157,18 @@ def store(folder: Path, made_of: dict, python: dict, masks: Mapping, mappings: l
     index = {"made_of": made_of, "frames": entries, "masks": mask_entries, "mappings": mappings,
              "backdrop_frames": int(backdrop_frames), "run": {k: python.get(k) for k in _KEPT if k in python}}
     (partial / "reference.json").write_text(json.dumps(index, default=str), encoding="utf-8")
-    if folder.exists():
-        import shutil
+    import shutil
 
-        shutil.rmtree(folder)
+    # Swap: the old reference aside, the new one into place, then the old one removed (a failure leaves one whole
+    # reference at the key, never none).
+    old = folder.with_name(folder.name + ".old")
+    if old.exists():
+        shutil.rmtree(old)
+    if folder.exists():
+        folder.rename(old)
     partial.rename(folder)
+    if old.exists():
+        shutil.rmtree(old)
 
 
 def load(folder: Path, made_of: dict) -> tuple[dict, Mapping, list, int] | None:
