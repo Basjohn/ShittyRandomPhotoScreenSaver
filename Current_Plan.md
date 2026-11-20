@@ -675,15 +675,24 @@ the feature (D3D11 is not stated).
     27, 39 and 27 against 11, 16 and 18, with p99 about 1 ms worse. Spectrum on Vulkan sits near parity (11 and 14
     against 7 and 9), so the tail is Bubble's own. In every late frame, the time is after rendering ends and before the
     next frame begins (median about 17 ms, up to 85 ms): not sync, not recording.
-    - [ ] Root cause first (Opus Medium agent aac773583ad93e2ab, 20 Nov). Already ruled out by the lead (20 Nov): GPU time (the `--gpu-pass-timing` run:
-      the whole surface pass is 4.74 ms median and 6.14 ms p99 at 4K, inside the 11 ms frame) and a missing publish
-      (every late frame had a publish during its gap). Present request ready more than 8 ms before Qt began the frame:
-      4-10 late frames per Vulkan run and 6 per OpenGL run, so Qt's render loop starts frames late on both paths,
-      Vulkan more often. Vulkan's spread is 20-39 late frames per run (a fourth run: 20) against OpenGL's 11-18.
-      Instrument what the trace cannot see: swap-chain acquire and present timing on the native path, and the
-      render loop's update-request to frame-begin latency. Then test one variable at a time. Check Qt's present mode and the Vulkan frames in flight against
-      the OpenGL path. Test one variable at a time. Candidates: the main `bubble` pass's GPU time spiking past a
-      refresh, the ambient target's passes, a wait on the per-record arena upload, and swap-chain present blocking.
+    - [ ] Root cause, leading candidate (agent aac773583ad93e2ab, 21 Nov; trace events 79 and 80, merge 6020d2977):
+      Qt begins frames on the visualizer's present requests through its 5 ms update-request timer. About once a
+      second another update source starts that timer early, so the next frame waits for the next publication, at
+      about 6 ms and then 15-17 ms. Bubble's Vulkan late frames that follow such an early frame are 14, 21, 20 and 13
+      per run; the rest, 13, 18, 7 and 7, are in OpenGL's range. Vulkan's frame ends about 0.5 ms after it begins, so
+      the early timer expires just as Bubble's request lands: the publish arrives about 4 ms in, and the route sync
+      takes 1.5-1.9 ms against OpenGL's 0.35. The likely source is the PERF HUD's text rewrite from a queued
+      `frameSwapped` handler (`_update_perf_hud_on_swap`, `rendering/quick/scene_controller.py`), on in every live
+      check (`--perf`), at 1000 + 0-12 ms. Ruled out by measurement: GPU time, acquire and present blocking, and the
+      route re-running on an `afterRendering` edge (0 in 7,686 syncs). Evidence:
+      `.artifacts/evidence/visualizers/bubble/live_check/20261121_layer_t_root_cause/figures.txt`.
+      - [ ] One-variable proof: the HUD's text writes off against on, three Vulkan and three OpenGL runs, alternating
+        back to back, with conditions recorded. If the HUD is the source, Vulkan's late frames after an early frame
+        fall to OpenGL's range.
+    - [ ] Fix, if proved: with a visualizer active, hold the HUD's once-a-second text and write it in
+      `request_visualizer_present` just before `item.update()`, so both share one Qt timer. With no visualizer active,
+      keep writing on swap. Separately, trim Bubble's per-frame route sync on the GUI thread (1.5-1.9 ms against
+      0.35 for OpenGL).
     - [ ] Fix at the owner if it is ours, then rerun three Vulkan runs and three OpenGL controls back to back. Accept
       when frames over 16.7 ms on Vulkan fall within the control's spread. If it is the driver's or Qt's, record it
       in D12 "As built: Bubble" with the figures, and ask the operator.
@@ -2601,6 +2610,12 @@ stays a separate hard gate.
   motion, felt/fuzz, world-view projection, sphere world/starscape) plus S3D-6.
 
 ## 8. Accepted Bubble: open reviews and side defect
+
+- [ ] Side defect (agent aac773583ad93e2ab, 21 Nov, under the operator's game plus agents' runs, 77-96 % CPU): the
+  live check's engine worker timed out on its first configure and the saver fell back to in-process. In the same
+  conditions an OpenGL control drew 12 fps. Reproduce under a measured CPU load, then find the worker's configure
+  deadline and why the in-process fallback runs so slowly. A slow but loaded machine must degrade gracefully, never
+  fall to 12 fps.
 
 - [ ] Side defect (lead, 20 Nov live control): Python OpenGL Bubble on Display 1 shows 1.44 hitches a minute (steady
   frames over 50 ms; `tools/frame_trace_cadence.py`: 6 gui_starved stalls, the worst a 88.5 ms swap-to-frame-begin
