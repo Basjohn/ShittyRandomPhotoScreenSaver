@@ -157,6 +157,21 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
+- [ ] Tooling inventory gaps (lead, 21 Nov; operator: "make sure those get documented so we never end up with a swiss
+  army knife no one knows about"). 29 tools have no row in `Docs/Reference/Tooling.md`, against its rule that a new
+  file under `tools/`, `scripts/` or `native/core/python/` needs one in the same commit. Nothing enforces it.
+  - [ ] Write each missing row from the tool's docstring and `--help` (path, purpose, key flags, who may run it,
+    outputs), in the right section. Native harnesses also keep their `Docs/Reference/Harness_Index.md` routing. Today:
+    `tools/` card_clip_contract, expanded_display_styles_evidence, live_check_transition_session,
+    native_frame_abi_header, native_schema_check, packet_reader_adversary, pass_block_gl, pixel_tolerance,
+    preflip_pack; `tools/visualizer_replay/` native_record_identity, native_stream_player, python_references;
+    `native/core/python/` backdrop_pyramid_check, background_layer_check, bubble_check, composite_analysis,
+    devcurve_check, fullscreen_pass_check, generic_mode_check, job_service_check, packet_reader_check,
+    probe_analysis, scene_target_check, select_msvc_toolset, spectrum_check, timer_analysis, timer_check,
+    transition_route_check, vk_validation.
+  - [ ] Guard test: every non-private `*.py` directly under `tools/`, `tools/visualizer_replay/`, `scripts/` and
+    `native/core/python/` is named in `Tooling.md`. Its control is a new unlisted file, run and seen failing.
+
 - [ ] (Sonnet agent ad927a7c14bbc5053) The repaired smoke tools (`tools/qtquick_media_smoke.py`, `tools/qtquick_achievement_pulse_smoke.py`) capture
   blank artwork under offscreen QPA. Move their capture onto the hidden Windows-QPA GL host that
   `tools/surface_material_capture.py` uses, which draws artwork and materials, then review every state's sheet.
@@ -825,8 +840,8 @@ the feature (D3D11 is not stated).
     opacity. A take runs in 24 to 39 s. Evidence `.artifacts/evidence/native_core/fast_proof/20261120_l_*`.
   - [ ] Layer T on native paths (guide section 7): the live check reads presentation cadence from Qt Quick's frame
     cycles when the native core draws (today it reports `frames_per_s 0` on Vulkan), and the native per-pass GPU
-    time from `--gpu-pass-timing`. The lead's interim script, `quick_before_frame_begin` intervals outside lifecycle
-    windows, is the reference; prove it gives the same figures as the Python path's swap gaps on an OpenGL run.
+    time from `--gpu-pass-timing`. `tools/quick_frame_cadence.py` (frame-cycle intervals outside lifecycle windows) is the
+    reference; prove it gives the same figures as the Python path's swap gaps on an OpenGL run.
   - [ ] Layer P: cached Python references; a native-only, hash-only compare with `--api opengl|vulkan`; every failing
     frame recorded (not the first eight); progress written during a run.
     Built (20 to 21 Nov), in the profile's order, each with a test, evidence `fast_proof/20261120_*`:
