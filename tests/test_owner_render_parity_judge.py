@@ -147,6 +147,27 @@ def test_the_parallel_judge_merges_to_exactly_the_serial_result(tmp_path):
     assert len(lines[0].splitlines()) == 40 and any(not v["pass"] for v in results[0]["judged"])
 
 
+def test_a_windowed_run_judges_its_windows_exactly_and_skips_the_rest():
+    # Coverage windows: inputs outside every window are drawn by nobody and judged by nobody; those inside are judged
+    # exactly as in the full run.
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    native, python = _runs()
+    masks = {}
+    full = parity.judged_pass(native, python, masks, 30, "bubble")
+    window = set(range(10, 25))
+    judge = parity.LiveJudge(python, masks, 30, "bubble")
+    for index, record in enumerate(native["pixels"]):
+        if index in window:
+            judge.frame(index, record, native["frames"][index])
+        else:
+            judge.frame(index, {"region": None, "hash": None, "skipped": True}, ((0,), b""))
+    windowed = judge.result()
+    assert windowed["skipped"] == sorted(set(range(40)) - window)
+    assert windowed["judged"] == [v for v in full["judged"] if v["input"] in window]
+    assert windowed["failed"] == [f for f in full["failed"] if f["input"] in window]
+
+
 @pytest.mark.parametrize("mode", [None, "bubble"])
 def test_the_single_pass_gives_what_the_four_passes_give(mode):
     from tools.visualizer_replay import owner_render_parity as parity

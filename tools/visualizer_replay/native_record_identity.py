@@ -711,15 +711,19 @@ class DeliveryStream:
     side draws. ``deliveries.jsonl`` holds one line per input; ``records.bin`` the records, each stored once per change
     (the line names its offset). A native-only player (``native_stream_player.py``) replays it on either API."""
 
-    def __init__(self, folder: Path, mode: str) -> None:
+    def __init__(self, folder: Path, mode: str, keep: tuple[int, int] | None = None) -> None:
+        """``keep``: only the inputs in ``[start, end)`` are written (a window run), the first with its whole state."""
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
         self._lines = (self.folder / "deliveries.jsonl").open("w", encoding="utf-8")
         self._records = (self.folder / "records.bin").open("wb")
         self._last: dict = {}
-        self._lines.write(json.dumps({"mode": mode, "format": 1}) + "\n")
+        self._keep = keep
+        self._lines.write(json.dumps({"mode": mode, "format": 1, "keep": keep}) + "\n")
 
     def add(self, index: int, native: dict) -> None:
+        if self._keep is not None and not self._keep[0] <= index < self._keep[1]:
+            return
         line: dict = {"input": index, "drawn": bool(native["drawn"])}
         if native["drawn"]:
             record = native["record"]
@@ -935,10 +939,14 @@ class IdentityMirror:
 
 def run(mode: str, *, recording: str | None = None, seconds: float = 60.0, variant: str = "a",
         out: Path | None = None, module_dir: Path | None = None,
-        controls: tuple[tuple[str, int], ...] = (), deliveries: Path | None = None) -> dict:
+        controls: tuple[tuple[str, int], ...] = (), deliveries: Path | None = None,
+        window: tuple[int, int] | None = None, restart: bool = False) -> dict:
     """Layer L of ``mode`` over a take (``recording``, its first ``seconds``; None: the shipped Studio clip, a smoke
     check only). ``module_dir``: the native module (its GPU-free block packer); None: the block level is not run.
-    ``deliveries``: a folder the run's ``DeliveryStream`` is written to (for ``native_stream_player.py``)."""
+    ``deliveries``: a folder the run's ``DeliveryStream`` is written to (for ``native_stream_player.py``).
+    ``window``: only the inputs ``[start, end)`` are written to it; the simulation still ticks every input from the
+    take's first (a window is cut from one continuous run, guide section 3). ``restart``: the coverage proof's control,
+    the simulation started cold at the window's first input (the script cut there; its inputs numbered from 0)."""
     import tools.expanded_visualizer_evidence as evidence
     from tools.visualizer_replay import owner_render_parity as parity
     from tools.visualizer_replay import owner_worker_gate as gate
@@ -953,6 +961,15 @@ def run(mode: str, *, recording: str | None = None, seconds: float = 60.0, varia
         core = load(Path(module_dir))
     clip = evidence.load_recording(recording, seconds) if recording else evidence.shipped_clip(seconds)
     script = parity.parity_script(clip.frames, mode)
+    keep = None
+    if window is not None:
+        start, end = (int(v) for v in window)
+        keep = (start, end)
+        if restart:
+            # The control: everything before the window's first input dropped, so the owner starts cold there.
+            positions = [i for i, (kind, _v) in enumerate(script) if kind == "input"]
+            script = script[positions[start]:]
+            keep = (0, end - start)
     switch_at = next(i for i, (kind, _v) in enumerate(script) if kind == "mode")
     switch_input = sum(1 for kind, _value in script[:switch_at] if kind == "input")
     if out is not None:
@@ -968,7 +985,7 @@ def run(mode: str, *, recording: str | None = None, seconds: float = 60.0, varia
     engine_worker_link.reset_run_state_for_testing()
     settings = parity.section_settings(mode, variant)
     if deliveries is not None:
-        mirror.deliveries = DeliveryStream(Path(deliveries), mode)
+        mirror.deliveries = DeliveryStream(Path(deliveries), mode, keep=keep)
     try:
         run_report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None,
                                        settings=settings, scene_mirror=mirror)

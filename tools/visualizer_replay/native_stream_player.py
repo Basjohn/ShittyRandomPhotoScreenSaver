@@ -109,6 +109,12 @@ def child(args) -> dict:
     host = core.hidden_host(*base.HOST_PIXELS)
     progress = out / f"progress_{api}.jsonl"
     progress.write_text("", encoding="utf-8")
+    allowed = None
+    if args.windows:
+        from tools.visualizer_replay.coverage_windows import window_inputs
+
+        allowed = window_inputs(json.loads(Path(args.windows).read_text(encoding="utf-8")))
+        record["window_inputs"] = len(allowed)
     work = out / "work"
     work.mkdir(parents=True, exist_ok=True)
     frames_file = (work / f"frames_{api}.bin").open("wb")
@@ -134,7 +140,9 @@ def child(args) -> dict:
                 records.seek(offset)
                 current = records.read(size)
             row = {"input": line["input"], "drawn": False}
-            if line["drawn"] and current is not None:
+            if allowed is not None and line["input"] not in allowed:
+                row["skipped"] = True                     # outside every window: state kept, nothing drawn
+            elif line["drawn"] and current is not None:
                 if scene is None or float(card["dpr"]) != dpr:
                     if scene is not None:
                         scene.close(app)
@@ -192,8 +200,9 @@ def _frames(out: Path, api: str):
     return rows, pixels
 
 
-def rule_b(out: Path, mode: str, switch_input: int | None) -> dict:
-    """Vulkan against OpenGL, frame by frame, under the mode's ``VULKAN_RULE_B``; every failing frame recorded."""
+def rule_b(out: Path, mode: str, switch_input: int | None, windows: dict | None = None) -> dict:
+    """Vulkan against OpenGL, frame by frame, under the mode's ``VULKAN_RULE_B``; every failing frame recorded; with
+    ``windows`` (a coverage_windows.json), each window's figures with its position in the take."""
     from tools import pixel_tolerance as pt
 
     module, base = _harness(mode)
@@ -226,10 +235,21 @@ def rule_b(out: Path, mode: str, switch_input: int | None) -> dict:
         half = switch_input // 2
         halves = {name: pt.summarise([v for v in judged if lo <= v["input"] < hi])
                   for name, lo, hi in (("first", 0, half), ("second", half, switch_input))}
-    return {"pass": compared > 0 and not drawn_mismatch and summary["pass"] and len(gl_rows) == len(vk_rows),
-            "bound": tolerance.bound(), "frames": [len(gl_rows), len(vk_rows)], "compared": compared,
-            "hash_equal": equal, "judged": len(judged), "drawn_on_one_api": drawn_mismatch, "summary": summary,
-            "halves": halves, "failed_frames": failed}
+    result = {"pass": compared > 0 and not drawn_mismatch and summary["pass"] and len(gl_rows) == len(vk_rows),
+              "bound": tolerance.bound(), "frames": [len(gl_rows), len(vk_rows)], "compared": compared,
+              "hash_equal": equal, "judged": len(judged), "drawn_on_one_api": drawn_mismatch, "summary": summary,
+              "halves": halves, "failed_frames": failed}
+    if windows is not None:
+        drawn_inputs = {row["input"] for row in gl_rows if row["drawn"]}
+        result["windows"] = []
+        for window in windows["windows"]:
+            lo, hi = window["inputs"]
+            inside = [v for v in judged if lo <= v["input"] < hi]
+            result["windows"].append({
+                "inputs": [lo, hi], "seconds": window.get("seconds"), "reasons": window["reasons"],
+                "drawn": sum(1 for i in range(lo, hi) if i in drawn_inputs),
+                "failed": [v["input"] for v in inside if not v["pass"]], "summary": pt.summarise(inside)})
+    return result
 
 
 def against(out: Path, api: str, baseline: dict) -> dict:
@@ -238,9 +258,10 @@ def against(out: Path, api: str, baseline: dict) -> dict:
         return {"compared": False, "identical": False, "reason": f"the baseline has no {api} hashes"}
     rows, _pixels = _frames(out, api)
     new = [row.get("hash") for row in rows]
-    changed = [i for i, (x, y) in enumerate(zip(old, new)) if x != y]
-    return {"compared": True, "frames": [len(old), len(new)], "changed": changed,
-            "identical": not changed and len(old) == len(new)}
+    skipped = {i for i, row in enumerate(rows) if row.get("skipped")}      # a windowed run's undrawn inputs
+    changed = [i for i, (x, y) in enumerate(zip(old, new)) if i not in skipped and x != y]
+    return {"compared": True, "frames": [len(old), len(new)], "judged": len(new) - len(skipped), "changed": changed,
+            "identical": not changed and len(old) == len(new) and len(new) > len(skipped)}
 
 
 def main(argv=None) -> int:
@@ -252,6 +273,9 @@ def main(argv=None) -> int:
     parser.add_argument("--switch-input", type=int, default=None,
                         help="the take's mode-switch input (the layer L report's switch_input): halves of rule (b)")
     parser.add_argument("--module-dir", default="release/native_module")
+    parser.add_argument("--windows", type=Path, default=None,
+                        help="a coverage_windows.json: only its windows' inputs (with their warm-up) are drawn; the "
+                             "delivered state is still followed through every input")
     parser.add_argument("--control", default=None,
                         help="a negative control: one of the mode harness's record controls (bubble_check's "
                              "position_nudged or big_class_bit) applied on the Vulkan child; rule (b) must FAIL")
@@ -283,6 +307,8 @@ def main(argv=None) -> int:
                    "--child-json", str(child_json), "--out", str(out)]
         if args.control:
             command += ["--control", args.control]
+        if args.windows:
+            command += ["--windows", str(Path(args.windows).resolve())]
         started = time.monotonic()
         try:
             proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(ROOT))
@@ -302,7 +328,8 @@ def main(argv=None) -> int:
             rows, _ = _frames(out, api)
             report["hashes"][api] = [row.get("hash") for row in rows]
     if all(api in report["hashes"] for api in APIS):
-        report["rule_b"] = rule_b(out, mode, args.switch_input)
+        windows = json.loads(Path(args.windows).read_text(encoding="utf-8")) if args.windows else None
+        report["rule_b"] = rule_b(out, mode, args.switch_input, windows)
         rb = report["rule_b"]
         print(f"[PLAYER] rule (b): {rb['compared']} frames compared ({rb['hash_equal']} hash-equal), "
               f"{len(rb['failed_frames'])} failing; {'PASS' if rb['pass'] else 'FAIL'}", flush=True)

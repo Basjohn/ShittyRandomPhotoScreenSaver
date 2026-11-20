@@ -235,6 +235,9 @@ class SceneMirror:
         #: Whether each frame's lit share is measured (6.7 ms a frame on Bubble's card): only ``rendered_parity`` reads
         #: it, never a native or mask run (fast-proof part 2, step 2).
         self.measure_lit = True
+        #: The inputs drawn (None: every one): a windowed run (``coverage_windows``) skips the drawing of the rest, while
+        #: the owner's simulation ticks every input (guide section 3: never restarted at a window).
+        self.draw_inputs: set | None = None
         self._fbo = 0
         self._region: tuple[int, int, int, int] | None = None
         self._scene: Any = None
@@ -314,6 +317,9 @@ class SceneMirror:
 
     def frame(self, index: int) -> dict:
         """Draw the hidden scene and record what it drew: the card's region, and the whole display when due."""
+        if self.draw_inputs is not None and index not in self.draw_inputs:
+            self.frames.append(((0,), b""))              # outside every window: nothing drawn, indices kept
+            return {"region": None, "hash": None, "skipped": True}
         host = self.host
         host.render()
         if self._region is None:
@@ -745,13 +751,15 @@ def rendered_parity(mode: str, variant: str, clip_frames, supervisor: Any, *, sa
 
 
 def native_drawn_run(mode: str, script, *, settings: dict, core, python_mappings: list | None = None,
-                     on_frame=None) -> dict:
+                     on_frame=None, draw_inputs: set | None = None) -> dict:
     """``drawn_run`` in process with the native Spectrum drawing Spectrum's activations (``NativeSceneMirror``).
-    ``on_frame``: called as each frame is drawn (``NativeSceneMirror.on_frame``)."""
+    ``on_frame``: called as each frame is drawn (``NativeSceneMirror.on_frame``); ``draw_inputs``: only these inputs are
+    drawn (``SceneMirror.draw_inputs``)."""
     from tools.visualizer_replay import owner_worker_gate as gate
 
     mirror = NativeSceneMirror(core)
     mirror.measure_lit = False                       # no native run reads it
+    mirror.draw_inputs = draw_inputs
     mirror.on_frame = on_frame
     mirror.python_mappings = python_mappings
     report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings,
@@ -865,6 +873,7 @@ class LiveJudge:
         self.judged: list[dict] = []
         self.failed: list[dict] = []
         self.classes = _new_classes()
+        self.skipped: set[int] = set()
         self._pool = None
         if workers and int(workers) > 0:
             from concurrent.futures import ProcessPoolExecutor
@@ -876,7 +885,10 @@ class LiveJudge:
         """Judge native input ``index`` (its record and its compressed frame): at once, or in a worker."""
         self.count = max(self.count, index + 1)
         records = self.python["pixels"]
-        if index < len(records) and record != records[index]:
+        if record.get("skipped"):
+            self.skipped.add(index)                   # outside every window: not drawn, not judged
+            self._pending.append((index, record, None))
+        elif index < len(records) and record != records[index]:
             self.differing.append(index)
             arguments = (index, record, records[index], frame, self.python["frames"][index], self.masks.get(index),
                          self.switch_input, self.mode)
@@ -932,8 +944,11 @@ class LiveJudge:
         first = differing[0] if differing else (None if self.count == python_frames else min(self.count,
                                                                                               python_frames))
         paths = {"first": first, "frames": len(differing), **self.paths}
-        return {"paths": paths, "rows": self.rows, "judged": self.judged, "classes": self.classes,
-                "failed": self.failed}
+        result = {"paths": paths, "rows": self.rows, "judged": self.judged, "classes": self.classes,
+                  "failed": self.failed}
+        if self.skipped:
+            result["skipped"] = sorted(self.skipped)
+        return result
 
 
 def _write_native_crops(out: Path, name: str, native: dict, python: dict, row: dict) -> list[str]:
@@ -1183,7 +1198,8 @@ def native_only(core, mode: str, suffix: str, settings: dict, clip_frames, out: 
 
 
 def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path,
-                  placement: str = "display", *, references: Path | None = None, clip_name: str = "") -> dict:
+                  placement: str = "display", *, references: Path | None = None, clip_name: str = "",
+                  windows: dict | None = None) -> dict:
     """Rule (a) of the port (N2.5): the owner in process drawn by the Python renderer and by the native item, single-
     sampled, frame for frame over the card's region and its margin. Each native card's window map is checked against
     the Python renderer's own rows of the same frame (``mapping``), and every pixel more than a level off is
@@ -1221,8 +1237,14 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
             if references is not None:
                 python_references.store(folder, made_of, python, masks, mappings, backdrop_frames)
         judge = LiveJudge(python, masks, switch_input, mode, progress=progress, workers=JUDGE_WORKERS)
+        draw_inputs = None
+        if windows is not None:
+            from tools.visualizer_replay.coverage_windows import window_inputs
+
+            draw_inputs = window_inputs(windows)
         native = native_drawn_run(mode, script, settings=settings, core=core,
-                                  python_mappings=mappings if mode == "spectrum" else None, on_frame=judge.frame)
+                                  python_mappings=mappings if mode == "spectrum" else None, on_frame=judge.frame,
+                                  draw_inputs=draw_inputs)
         if cached is not None and python["digests"] != native["digests"]:
             # The simulation moved since the reference was drawn: never judged against it; drawn again and the
             # native frames judged again against the new reference.
@@ -1260,6 +1282,19 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     verdict["rule_a"]["failed_frames"] = single["failed"]
     verdict["progress"] = str(progress)
     verdict["rule_a_halves"] = rule_a_halves(judged, switch_input, mode)
+    if windows is not None:
+        # Each window's figures with its position in the take (guide section 3).
+        drawn = [i for i, r in enumerate(native["pixels"]) if not r.get("skipped")]
+        verdict["windows"] = []
+        for window in windows["windows"]:
+            lo, hi = window["inputs"]
+            inside = [v for v in judged if lo <= v.get("input", -1) < hi]
+            verdict["windows"].append({"inputs": [lo, hi], "seconds": window.get("seconds"),
+                                       "reasons": window["reasons"],
+                                       "drawn": sum(1 for i in drawn if lo <= i < hi),
+                                       "failed": [v["input"] for v in inside if not v.get("pass")],
+                                       **rule_a_verdict(inside, mode)})
+        verdict["drawn_inputs"] = len(drawn)
     verdict["rule_a"]["mask_inputs"] = len(masks)
     verdict["rule_a"]["backdrop_frames"] = backdrop_frames
     verdict["python_reference"] = {"state": reference_state, "folder": None if folder is None else str(folder)}
@@ -1280,7 +1315,7 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
 def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
                against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS, mode: str = "spectrum",
                recording: str | None = None, references: Path | None = None,
-               native_only_run: bool = False) -> dict:
+               native_only_run: bool = False, windows: dict | None = None) -> dict:
     """``native_parity`` over ``mode``'s widened run set (``conventions_identity.mode_runs``; a mode of the route's
     ``NATIVE_MODE_IDS``) at the rig's own placement, and ``OVERSCAN_RUNS`` again at each other placement of
     ``placements`` (keyed ``run@placement``); the report. ``against``: an accepted report this one is compared with
@@ -1331,7 +1366,7 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
                          f"(first {changed[:10]}): {'IDENTICAL' if verdict['identical'] else 'CHANGED'}"), flush=True)
                 continue
             verdict = native_parity(core, mode, suffix, settings, clip.frames, out, placement=placement,
-                                    references=references, clip_name=clip.name)
+                                    references=references, clip_name=clip.name, windows=windows)
             report["results"][key] = verdict
             print(f"[NATIVE] {key:48s} {verdict['frames_drawn']} frames, native {verdict['native_published']}"
                   f" published; differing inputs {verdict['differing_inputs']}, pixels "
@@ -1506,6 +1541,9 @@ def main(argv=None) -> int:
                         help="with --native: the native runs alone, each frame's hash written as it is drawn; with "
                              "--against, every frame whose hash changed from that report's (native before against "
                              "native after: no Python render, no tolerance)")
+    parser.add_argument("--windows", type=Path, default=None,
+                        help="with --native: a coverage_windows.json; the native run draws only its windows (with "
+                             "their warm-up), the simulation ticks every input, each window reported with its position")
     parser.add_argument("--judge-workers", type=int, default=0,
                         help="with --native: rule (a)'s frames judged in this many worker processes (0: in this one; "
                              "the same verdicts either way)")
@@ -1544,7 +1582,9 @@ def main(argv=None) -> int:
                                 seconds=args.seconds, only=tuple(args.runs),
                                 against=None if args.against is None else args.against.resolve(),
                                 placements=tuple(args.placements), mode=args.mode, recording=args.recording,
-                                references=args.references, native_only_run=bool(args.native_only))
+                                references=args.references, native_only_run=bool(args.native_only),
+                                windows=None if args.windows is None else json.loads(
+                                    args.windows.read_text(encoding="utf-8")))
         else:
             report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
                          seconds=args.seconds, controls=not args.skip_controls)
