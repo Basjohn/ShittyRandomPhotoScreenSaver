@@ -58,7 +58,7 @@ consumer below (the unconsumed ones on the primitives track)"). An N4 item whose
 background track therefore moves with that consumer; an unconsumed one (the N4.c, N4.h, N4.m high-potential items,
 and N4.d's wet-surface masks) runs on the primitives track. N6 runs only on the primitives track, native only.
 
-Current state and remaining gates are maintained in `Current_Plan.md` item 8b. The native core provides the host, composite, targets, mesh and buffer, compute and post-stage substrate; see `native/core/README.md` for its current services. Spectrum and Spline Curve use native routes; Bubble's native route remains dormant pending parity. N3.4's source audit and native repair proofs are complete; the remaining OpenGL defocus investigation is non-blocking (operator, 16 Nov 2026; D17/R-232). Each consumer proves its own parity, lifecycle and measured cost. `native/spike_p1` is evidence, never a shipped renderer.
+Current state and remaining gates are maintained in `Current_Plan.md` item 8b. The native core provides the host, composite, targets, mesh and buffer, compute and post-stage substrate; see `native/core/README.md` for its current services. Spectrum, Spline Curve and Bubble use native routes (Bubble registered and offered on Vulkan since 17 Nov; its live run and long-take proofs remain, item 8b N5.1). N3.4's source audit and native repair proofs are complete; the remaining OpenGL defocus investigation is non-blocking (operator, 16 Nov 2026; D17/R-232). Each consumer proves its own parity, lifecycle and measured cost. `native/spike_p1` is evidence, never a shipped renderer.
 
 Step by step:
 
@@ -619,8 +619,8 @@ sources").
 
 ### Stale text still open
 
-The contradictions this catalogue found on 12 Nov were settled by the night audit of 12 Nov
-(`Docs/Future_Work/Audit_2026-11-12_Night.md`); the catalogue cites the plan by item and box name (line numbers
+The contradictions this catalogue found on 12 Nov were settled by the night audit of 12 Nov (closed 20 Nov; in git
+history); the catalogue cites the plan by item and box name (line numbers
 drift). One stays open until the flip:
 - `Scene3D_Resources.md:3-5` ("All admitted operations require the validated OpenGL 4.6 context") and the opening
   "retained Quick transition and visualizer hosts remain their scenes' render owners" describe the Python path

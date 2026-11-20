@@ -2,7 +2,8 @@
 
 The mode registry's ``display_name`` is the one user-facing name source: the Studio's switcher entry,
 header (schema title) and window title (adapter title) all derive from it, never from a second hand-typed
-copy (Docs/Audits/Semantic_Naming_Audit_2026-11-07.md section 2.3). Names are compared with the registry,
+copy (Docs/Reference/Naming.md, "Visualizer modes"; the 7 Nov naming audit found four modes whose Studio
+title disagreed with Settings). Names are compared with the registry,
 never with literal wording, so the operator can rename a mode in the registry alone.
 """
 from __future__ import annotations

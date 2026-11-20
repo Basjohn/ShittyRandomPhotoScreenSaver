@@ -1,6 +1,6 @@
 # Native Bubble parity investigation
 
-The live acceptance sequence is `Current_Plan.md` item 8b, N5.1 Bubble; the common pixel rule is D12 in `Docs/Future_Work/Native_Core_P3_Decisions.md`. The unsigned-word upload defect is repaired; owner parity remains unaccepted. This document retains the classification, failed avenues and remaining evidence without changing the tolerance. Bubble's native route remains dormant until its parity, cost, lifecycle, registration and other plan gates pass.
+The live acceptance sequence is `Current_Plan.md` item 8b, N5.1 Bubble; the common pixel rule is D12 in `Docs/Future_Work/Native_Core_P3_Decisions.md`. The unsigned-word upload defect is repaired, and owner rule (a) passes under D12's Bubble scatter (what is still open is in the plan box). This document retains the classification, failed avenues and remaining evidence without changing the tolerance. Bubble's native route is registered and offered on Vulkan since 17 Nov (rule (b) passed); its live run, long-take rule (b), cost and rehearsal gates remain in the plan.
 
 ## Reproduced owner residual
 
@@ -37,7 +37,7 @@ The Vulkan debug run reports five attributed Qt-A findings and zero unexplained 
 
 One canonical `uvec4` preserves the same four-u32 record and avoids the broken array upload, with exact record-sequence-to-vector admission at the shared owner. Refuse multi-element unsigned/bool uniform arrays under the current portable contract; declared length-one arrays remain supported and storage buffers are outside that restriction. The upload and generic vector controls have since passed on the matching official module as recorded below; the original owner parity gates remain open. Preserve exact 32-bit words and fail-closed type/count/range handling; do not route them through float or silently add a backend fallback.
 
-The source review's `reproduce_owner.py` and the executed copy beside the current baseline preserve the process-local dormant-registration method; they do not register Bubble in product settings. The plan's widened offers and placements, rule-(b), block/item negative controls, performance, rest and retirement proofs remain required before registration.
+The source review's `reproduce_owner.py` and the executed copy beside the current baseline preserve the process-local dormant-registration method; they do not register Bubble in product settings. (Registration followed on 17 Nov, once rule (b) passed; see the opening paragraph.)
 
 ## After the unsigned-vector repair
 
@@ -47,7 +47,7 @@ The generic unsigned-vector runtime round in `.artifacts/evidence/native_core/n3
 
 The original 549-input owner replay on c53 remains **FAIL** (`.artifacts/evidence/native_core/n5_1_bubble/20261116_current_rule_a_c53e3fe27/native_render_parity.json`). All 549 Python reference hashes match the old baseline. Across steady frames, differences above one level fell from 532 pixels to zero; 2,440 pixels still differ, all by one level. Fade frames still contain 3,416,717 differing pixels, including seven above one level across three inputs, maximum five. Overall the run has 344 differing inputs, 3,419,157 differing pixels and 90 failed judged frames, down from 215 in the old receipt. The largest tie count is 34, with one flip. These are measured results under the existing judge, not a tolerance concession or an acceptance.
 
-The remaining steady ties and fade differences are under independent UV/coordinate investigation. No further source fix is established by the upload control. Bubble remains dormant until the complete N5.1 acceptance sequence passes.
+The remaining steady ties and fade differences are under independent UV/coordinate investigation. No further source fix is established by the upload control. (On 16 Nov Bubble was still dormant; it was registered on 17 Nov, after the mask repair below.)
 
 ## Fade and geometry controls
 

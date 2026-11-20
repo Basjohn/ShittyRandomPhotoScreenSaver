@@ -1,7 +1,7 @@
 """The generated naming reference (``Docs/Reference/Naming.md``) stays current and its hand-written claims stay true.
 
-The reference maps every product name to its persisted id and to the other spellings in code (audit
-``Docs/Audits/Semantic_Naming_Audit_2026-11-07.md`` recommendation 1). It is generated from the registries by
+The reference maps every product name to its persisted id and to the other spellings in code (the 7 Nov naming
+audit's first recommendation; the reference now owns those rules). It is generated from the registries by
 ``tools/naming_reference.py``; these tests fail when the checked-in file drifts from a fresh generation, when a
 hand-written claim no longer holds in the source, and when the read-first routes stop pointing at it.
 """
