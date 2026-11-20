@@ -286,10 +286,17 @@ class QuickOscilloscopeRenderer:
                 gl.glBindVertexArray(frame.quad_vao)
                 if per_frame["osc_graticule_vertices"]:
                     gl.glUseProgram(r.program(graticule_name, graticule_vertex, graticule_fragment))
-                    with r.pass_blocks.bound(pack_block(OSC_GRATICULE_BLOCK, {**settings, **card})):
+                    values = r.values("graticule")
+                    values.update(settings)
+                    values.update(card)
+                    with r.pass_blocks.bound(pack_block(OSC_GRATICULE_BLOCK, values)):
                         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, int(per_frame["osc_graticule_vertices"]))
                 gl.glUseProgram(beam_program)
-                with r.pass_blocks.bound(pack_block(OSC_BEAM_BLOCK, {**settings, **per_frame, **card})), \
+                values = r.values("beam")
+                values.update(settings)
+                values.update(per_frame)
+                values.update(card)
+                with r.pass_blocks.bound(pack_block(OSC_BEAM_BLOCK, values)), \
                         self._stream.bound(gl.GL_SHADER_STORAGE_BUFFER, POINT_BINDING, per_frame["osc_points"]):
                     with self._target.emission_writes():
                         # The light combines by its maximum as the beam does: overlapping segments

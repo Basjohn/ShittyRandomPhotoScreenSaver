@@ -232,6 +232,138 @@ def test_the_beam_reads_its_points_within_the_buffer():
     assert "u_alpha[clamp(trace, 0, 15)]" in OSC_BEAM_VERTEX_SOURCE
 
 
+# ------------------------------------------------------------------------------------------------- the route
+
+class _Composite:
+    def __init__(self, log: list) -> None:
+        from rendering.native.composite import ContentStatus
+
+        self.log = log
+        self.status = ContentStatus(draws=0, failures=0, refused_run=0, failing=False)
+
+    def set(self, **config):
+        self.log.append(("set", config))
+
+    def place(self, geometry, origin, **config):
+        self.log.append(("place", config))
+
+    def destroy(self):
+        self.log.append(("destroy",))
+
+    def window_pixels(self):
+        return (2560, 1440)
+
+    def update(self):
+        self.log.append(("composite_update",))
+
+    def content_status(self):
+        return self.status
+
+
+class _Mode:
+    def __init__(self, log: list) -> None:
+        self.log = log
+        self.composite = _Composite(log)
+
+    def program(self, passes, settings=None, *, targets=(), streams=(), unread=()):
+        self.log.append(("program", [p.name for p in passes], [len(t.colour) for t in targets],
+                         [s.name for s in streams], list(unread), "u_hdr_exposure" in (settings or {})))
+
+    def bind(self, name, schema, *, expect=None):
+        self.log.append(("bind", schema.mode_id))
+
+    def settings(self, values):
+        self.log.append(("settings",))
+
+    def target_size(self, name, size):
+        self.log.append(("target_size", name, tuple(size)))
+
+    def card(self, card):
+        self.log.append(("card",))
+
+    def unbind(self):
+        self.log.append(("unbind",))
+
+    def update(self):
+        self.log.append(("update",))
+
+    def drop_retained_frame(self):
+        self.log.append(("drop",))
+
+
+class _Core:
+    def __init__(self) -> None:
+        self.log: list = []
+
+    def mode(self, _host):
+        return _Mode(self.log)
+
+    def spectrum(self, _host):
+        raise AssertionError("the Oscilloscope is drawn on the generic item")
+
+
+class _Bridge:
+    def __init__(self, snapshots) -> None:
+        self.snapshots = list(snapshots)
+
+    def admit_at_sync(self):
+        pass
+
+    def take_for_render(self, **_kwargs):
+        return self.snapshots.pop(0) if self.snapshots else None
+
+
+def test_the_route_draws_the_oscilloscope_and_follows_glow_at_the_settings_edge(monkeypatch):
+    from rendering.native import program_values
+    from rendering.quick.visualizer import native_route
+
+    monkeypatch.setattr(program_values, "mode_fragment_pack", lambda _mode: b"pack")
+    monkeypatch.setattr(native_route, "_shader_pack", lambda _name: b"pack")
+    # The route's registration stays process-local until the port's last step (playbook checklist 18).
+    if "oscilloscope" not in native_route.GENERIC_MODE_SETTINGS:
+        monkeypatch.setattr(native_route, "GENERIC_MODE_SETTINGS",
+                            {**native_route.GENERIC_MODE_SETTINGS, "oscilloscope": native_route.OSCILLOSCOPE_SETTINGS})
+        monkeypatch.setattr(native_route, "NATIVE_MODE_IDS", native_route.NATIVE_MODE_IDS | {"oscilloscope"})
+    window = SimpleNamespace(width=lambda: 1707, height=lambda: 960,
+                             afterSynchronizing=SimpleNamespace(connect=lambda *a: None, disconnect=lambda *a: None),
+                             afterRendering=SimpleNamespace(connect=lambda *a: None, disconnect=lambda *a: None))
+    core = _Core()
+    route = native_route.NativeVisualizerRoute(core, SimpleNamespace(window=lambda: window))
+    presentation = _presentation()
+
+    def snapshot(step, **kwargs):
+        return SimpleNamespace(logical=_logical(step, **kwargs), presentation=presentation)
+
+    try:
+        identity = SimpleNamespace(mode_id="oscilloscope", runtime_generation=1, engine_generation=2, activation_id=3)
+        bridge = _Bridge([snapshot(0), snapshot(1)])
+        assert route.sync(bridge=bridge, identity=identity, presentation=presentation, authority=True) is True
+        names = [entry[0] for entry in core.log]
+        assert names.index("program") < names.index("bind")
+        program = next(entry for entry in core.log if entry[0] == "program")
+        assert program[1:] == (["oscilloscope_graticule", "oscilloscope_beam", "oscilloscope_bloom",
+                                "oscilloscope_show"], [2], ["osc_points"], [], True)
+        # Another frame of the same Settings: no program, no settings (the record carries the frame).
+        mark = len(core.log)
+        route.sync(bridge=bridge, identity=identity, presentation=presentation, authority=True)
+        assert "program" not in [entry[0] for entry in core.log[mark:]]
+        # Glow to 0 at the Settings edge: the plain program once, its bloom strength unread, no exposure.
+        bridge.snapshots = [snapshot(2, osc_glow=0.0), snapshot(3, osc_glow=0.0)]
+        mark = len(core.log)
+        route.sync(bridge=bridge, identity=identity, presentation=presentation, authority=True)
+        route.sync(bridge=bridge, identity=identity, presentation=presentation, authority=True)
+        programs = [entry for entry in core.log[mark:] if entry[0] == "program"]
+        assert programs == [("program", ["oscilloscope_graticule", "oscilloscope_beam", "oscilloscope_show"], [1],
+                             ["osc_points"], ["u_bloom_strength"], False)]
+        # Control: Glow back above 0 builds the glowing program again.
+        bridge.snapshots = [snapshot(4, osc_glow=0.3)]
+        mark = len(core.log)
+        route.sync(bridge=bridge, identity=identity, presentation=presentation, authority=True)
+        assert [entry[2] for entry in core.log[mark:] if entry[0] == "program"] == [[2]]
+    finally:
+        route.close()
+
+
 # --------------------------------------------------------------------------------------- the module's blocks
 
 def _python_blocks(logical, presentation, card) -> tuple[bytes, bytes]:

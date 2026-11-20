@@ -231,6 +231,12 @@ GENERIC_MODE_PROGRAMS: dict[str, Callable[[bytes, dict], dict]] = {
 GENERIC_MODE_TARGET_SIZES: dict[str, Callable[[Any, dict], dict]] = {
     "bubble": _bubble_target_sizes,
 }
+#: A generic mode whose program follows a Setting (N5.1, the Oscilloscope's Glow: D17 choice E, a stage turned on or
+#: off by its program at the Settings edge, never per frame): mode id -> ``(variant of the drawn snapshot, the variant's
+#: program builder)``. The route builds the variant's program at the bind and again only when the variant changes.
+GENERIC_MODE_PROGRAM_VARIANTS: dict[str, tuple[Callable[[Any], Any], Callable[[Any], dict]]] = {
+    "oscilloscope": (oscilloscope_glow, oscilloscope_program),
+}
 #: The modes the native core draws (D10: a mode offers ``vulkan`` once its port passes; see
 #: ``visualizer_mode_registry`` ``renderer_backends``): Spectrum's hand-written item (N2.5) and the generic modes.
 NATIVE_MODE_IDS = frozenset({"spectrum", *GENERIC_MODE_SETTINGS})
@@ -826,6 +832,7 @@ class _ModeContent:
         self.composite = self.item.composite
         self._pack: tuple[str, bytes] | None = None       # the bound mode's fragment pack, read at its bind
         self._program_mode: str | None = None             # the mode whose program the item holds
+        self._program_variant: Any = None                   # and its variant (GENERIC_MODE_PROGRAM_VARIANTS)
         self._pending: tuple[str, str, dict] | None = None   # (mode, mapping name, expect): bound at its first settings
         self._bound = False
         self._sizes: dict | None = None                     # the explicit targets' sizes sent since the program
@@ -857,32 +864,50 @@ class _ModeContent:
     def present(self, card: dict) -> None:
         self.item.card(card)
 
+    def _variant(self, mode_id: str, snapshot: Any) -> Any:
+        """The drawn snapshot's program variant of ``mode_id`` (None: a mode with one program)."""
+        variants = GENERIC_MODE_PROGRAM_VARIANTS.get(mode_id)
+        return None if variants is None or snapshot is None else variants[0](snapshot)
+
+    def _program(self, mode_id: str, values: dict, snapshot: Any, variant: Any) -> None:
+        """``mode_id``'s program with ``values`` (its variant's when it has variants)."""
+        from rendering.native.mode import ModePass
+
+        if self._pack is None or self._pack[0] != mode_id:
+            self.load(mode_id)
+        try:
+            build = GENERIC_MODE_PROGRAMS.get(mode_id)
+            variants = GENERIC_MODE_PROGRAM_VARIANTS.get(mode_id)
+            if build is None and variants is None:
+                self.item.program([ModePass(mode_id, self._pack[1], "alpha")], values)
+            else:
+                sizer = GENERIC_MODE_TARGET_SIZES.get(mode_id)
+                sizes = sizer(snapshot, values) if sizer is not None else {}
+                program = variants[1](variant) if variants is not None else build(self._pack[1], sizes)
+                unread = {"unread": program["unread"]} if program.get("unread") else {}
+                self.item.program(program["passes"], values, targets=program["targets"],
+                                  streams=program["streams"], **unread)
+                self._sizes = dict(sizes)                  # the program's declarations hold them
+        except Exception as exc:
+            # A setup input (checkpoint audit 3 L2): latched by the route until one of its inputs changes, as
+            # Spectrum's program at its bind, never tried again at every update.
+            raise _ProgramRefused(exc) from exc
+        self._program_mode, self._program_variant = mode_id, variant
+
     def settings(self, values: dict, snapshot: Any = None) -> None:
         pending = self._pending
         if pending is None:
-            self.item.settings(values)
+            variant = self._variant(str(self._program_mode), snapshot)
+            if variant != self._program_variant:
+                # A Setting chose the mode's other program (a stage on or off): built at this Settings edge only.
+                self._program(str(self._program_mode), values, snapshot, variant)
+            else:
+                self.item.settings(values)
             return
         mode_id, mapping_name, expect = pending
-        if self._program_mode != mode_id:
-            from rendering.native.mode import ModePass
-
-            if self._pack is None or self._pack[0] != mode_id:
-                self.load(mode_id)
-            try:
-                build = GENERIC_MODE_PROGRAMS.get(mode_id)
-                if build is None:
-                    self.item.program([ModePass(mode_id, self._pack[1], "alpha")], values)
-                else:
-                    sizes = GENERIC_MODE_TARGET_SIZES[mode_id](snapshot, values)
-                    program = build(self._pack[1], sizes)
-                    self.item.program(program["passes"], values, targets=program["targets"],
-                                      streams=program["streams"])
-                    self._sizes = dict(sizes)                  # the program's declarations hold them
-            except Exception as exc:
-                # A setup input (checkpoint audit 3 L2): latched by the route until one of its inputs changes, as
-                # Spectrum's program at its bind, never tried again at every update.
-                raise _ProgramRefused(exc) from exc
-            self._program_mode = mode_id
+        variant = self._variant(mode_id, snapshot)
+        if self._program_mode != mode_id or variant != self._program_variant:
+            self._program(mode_id, values, snapshot, variant)
         else:
             self.item.settings(values)
         from core.visualizer_engine.native_schema import schema_for_mode

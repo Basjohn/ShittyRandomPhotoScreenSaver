@@ -698,14 +698,18 @@ _STEPS = (CapturePass, TransparencyResolve, BloomStep, CompositeStep, DefocusSte
 
 def program_json(passes: Sequence[Any], targets: Sequence[ModeTarget | TransparencyTarget] = (),
                  streams: Sequence[ModeStream] = (), buffers: Sequence[StorageBuffer] = (),
-                 images: Sequence[StorageImage] = ()) -> tuple[str, list[bytes]]:
+                 images: Sequence[StorageImage] = (), *, unread: Sequence[str] = ()) -> tuple[str, list[bytes]]:
     """The program's declaration and its packs, in pass order (a pass with samplers declares them; one without has no
     ``samplers`` key, N2.9's declaration as it was; N3.1: ``targets`` when there are any, a capture's pack empty; N3.2:
     ``streams`` when there are any, and after a geometry pass's fragment pack its vertex pack, then a batched one's
     draw-parameters pack; N3.3: ``buffers`` and ``images`` when there are any, a compute entry's pack its compute
-    shader; N3.4: a stage step's pack empty (its shaders are the core's), and a transparent pass's sorted pack last)."""
+    shader; N3.4: a stage step's pack empty (its shaders are the core's), and a transparent pass's sorted pack last;
+    ABI 26: ``unread`` when there are any, the record's fields the program reads nowhere: a stage it leaves out reads
+    them, as the Oscilloscope's Glow 0 program leaves the bloom strength)."""
     declared = [p.declaration() for p in passes]
     program: dict[str, Any] = {"passes": declared}
+    if unread:
+        program["unread"] = [str(name) for name in unread]
     if targets:
         program["targets"] = [t.declaration() for t in targets]
     if streams:
@@ -787,12 +791,13 @@ class NativeMode:
 
     def program(self, passes: Sequence[ModePass | CapturePass | ComputePass], settings: Mapping[str, Any] | None = None,
                 *, targets: Sequence[ModeTarget] = (), streams: Sequence[ModeStream] = (),
-                buffers: Sequence[StorageBuffer] = (), images: Sequence[StorageImage] = ()) -> None:
+                buffers: Sequence[StorageBuffer] = (), images: Sequence[StorageImage] = (),
+                unread: Sequence[str] = ()) -> None:
         """The passes (N3.1: and the scene targets they draw into; N3.2: and the streams they read; N3.3: and the
-        storage buffers and images its compute entries write); ``settings`` with them (a shader that adds a member comes
-        with its value), else the ones given before. Refused (ValueError), the drawn program kept, when they do not
-        fit."""
-        declared, packs = program_json(passes, targets, streams, buffers, images)
+        storage buffers and images its compute entries write; ABI 26: and the record's fields it reads nowhere,
+        ``unread``); ``settings`` with them (a shader that adds a member comes with its value), else the ones given
+        before. Refused (ValueError), the drawn program kept, when they do not fit."""
+        declared, packs = program_json(passes, targets, streams, buffers, images, unread=unread)
         if settings is None:
             self._module.composite_mode_program(self._handle(), declared, packs)
         else:
