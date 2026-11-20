@@ -169,7 +169,7 @@ class StoredMasks(Mapping):
 
 
 #: The Python run's report keys a reference keeps (besides its frames).
-_KEPT = ("pixels", "digests", "inputs", "final_mode", "phase", "phases", "on_worker", "worker", "mode")
+_KEPT = ("pixels", "digests", "inputs", "final_mode", "phase", "phases", "on_worker", "worker", "mode", "modes")
 
 
 def store(folder: Path, made_of: dict, python: dict, masks: Mapping, mappings: list,

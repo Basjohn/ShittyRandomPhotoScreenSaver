@@ -237,6 +237,10 @@ class SceneMirror:
         self.host: Any = None
         self.frames = _SpilledFrames()
         self.lit: list[float] = []
+        #: The mode bound to the hidden scene's Visualizer item at each frame (None when skipped or before any
+        #: activation), index-aligned with the records. Kept beside the records, never in them: the worker path
+        #: binds the partner at its commit reply, not at the in-process input, so records must not carry it.
+        self.modes: list[str | None] = []
         #: Whether each frame's lit share is measured (6.7 ms a frame on Bubble's card): only ``rendered_parity`` reads
         #: it, never a native or mask run (fast-proof part 2, step 2).
         self.measure_lit = True
@@ -324,6 +328,7 @@ class SceneMirror:
         """Draw the hidden scene and record what it drew: the card's region, and the whole display when due."""
         if self.draw_inputs is not None and index not in self.draw_inputs:
             self.frames.append(((0,), b""))              # outside every window: nothing drawn, indices kept
+            self.modes.append(None)
             return {"region": None, "hash": None, "skipped": True}
         host = self.host
         host.render()
@@ -333,9 +338,7 @@ class SceneMirror:
         pixels = self._read(region)
         raw = pixels.tobytes()
         record = {"region": list(region), "hash": hashlib.sha256(raw).hexdigest()}
-        drawing = self._drawing_mode()
-        if drawing is not None:
-            record["mode"] = drawing              # the mode whose frame this is: judged under its own bounds
+        self.modes.append(self._drawing_mode())  # the mode whose frame this is: judged under its own bounds
         if self.measure_lit:
             self.lit.append(float((pixels[..., :3].max(axis=2) > LIT_LEVEL).mean()))
         self.frames.append((pixels.shape, zlib.compress(raw, 1)))
@@ -676,6 +679,7 @@ def drawn_run(mode: str, script, *, worker: bool, supervisor: Any, namespace: in
     report = gate.identity_run(mode, script, worker=worker, supervisor=supervisor, namespace=namespace,
                                settings=settings, scene_mirror=mirror)
     report["lit"] = mirror.lit
+    report["modes"] = mirror.modes
     report["frames"] = mirror.frames
     return report
 
@@ -791,6 +795,7 @@ def native_drawn_run(mode: str, script, *, settings: dict, core, python_mappings
     report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings,
                                scene_mirror=mirror)
     report["lit"] = mirror.lit
+    report["modes"] = mirror.modes
     report["frames"] = mirror.frames
     report["native_frames"] = mirror.native_frames
     report["native_published"] = mirror.native_published
@@ -917,7 +922,8 @@ class LiveJudge:
         elif index < len(records) and record != records[index]:
             self.differing.append(index)
             # Each frame under the bounds of the mode that drew it (the partner's after the switch: its own).
-            drawn_by = records[index].get("mode") or self.mode
+            modes = self.python.get("modes") or ()
+            drawn_by = (modes[index] if index < len(modes) else None) or self.mode
             arguments = (index, record, records[index], frame, self.python["frames"][index], self.masks.get(index),
                          self.switch_input, drawn_by)
             done = self._pool.submit(_judge_one, *arguments) if self._pool is not None else _judge_one(*arguments)
@@ -1311,7 +1317,7 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     # Rule (a)'s verdict: the composite's tolerance (RULE_A_*), pixel by pixel with the translucency mask.
     # Each frame was judged under the bounds of the mode that drew it; the tested mode's frames make rule (a), the
     # partner's (after the switch) their own section under their own bounds.
-    drew = {i: (r.get("mode") or mode) for i, r in enumerate(python["pixels"])}
+    drew = {i: (m or mode) for i, m in enumerate(python.get("modes") or ())}
     all_judged = single["judged"]
     judged = [v for v in all_judged if drew.get(v.get("input"), mode) == mode]
     partner_judged = [v for v in all_judged if drew.get(v.get("input"), mode) != mode]

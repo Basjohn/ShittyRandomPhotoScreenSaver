@@ -188,13 +188,12 @@ def test_each_frame_is_judged_under_the_bounds_of_the_mode_that_drew_it():
     for index, image in enumerate((reference, scattered)):
         frames.append((image.shape, zlib.compress(image.tobytes(), 1)))
         records.append({"region": [0, 0, 60, 40], "hash": hashlib.sha256(image.tobytes()).hexdigest()})
-    python = {"pixels": [dict(records[0], mode="bubble"), dict(records[0], mode="bubble")],
-              "frames": [frames[0], frames[0]]}
+    python = {"pixels": [records[0], dict(records[0])], "frames": [frames[0], frames[0]],
+              "modes": ["bubble", "bubble"]}
     native = {"pixels": [records[0], dict(records[1])], "frames": frames}
 
     def judged(drawn_by: str):
-        for record in python["pixels"]:
-            record["mode"] = drawn_by
+        python["modes"] = [drawn_by, drawn_by]   # beside the records, never in them
         return parity.judged_pass(native, python, {}, 0, "oscilloscope")["judged"]
 
     under_bubble = judged("bubble")
