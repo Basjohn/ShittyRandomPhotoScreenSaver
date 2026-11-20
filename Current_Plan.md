@@ -161,13 +161,17 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
   ... which has Qt::WindowDoesNotAcceptFocus set". Find the caller and either skip activation for no-focus windows
   or drop the flag where focus is intended. Test: no such warning on a hidden-host start.
 
-- [ ] Apply the existing documentation policy to closed reports (`Docs/Guides/Documentation_Maintenance.md`,
-  "Historical-document policy" and "One owner per rule"; Sonnet when usage allows). Go through `Docs/Audits/` (33
-  files, including the closed Bubble ambient slice reports of 3 Nov) and the closed items in `Docs/Future_Work/`.
-  For each closed report, move each durable rule to its owner and each hard-won lesson to a Historical Bug entry,
-  repoint any link to the owner, then delete the file; git keeps it. Add no retired-documents list anywhere. Keep
-  audits a live guide cites as evidence, and the two zipped non-text design packs.
-
+- [ ] Finish the closed-report pass (Sonnet's first round merged 20 Nov: 31 reports closed).
+  - [ ] Triage the dated native-core audits in `Docs/Future_Work/` (`Audit_2026-11-12_Evening`, `_Night`,
+    `Audit_2026-11-13`, `Audit_2026-11-14`, `_N25`, `_N29`, `_N29_round2`, `_N38`, `Checkpoint_Audits_Nov15`), one
+    finding at a time. A fixed finding's lesson goes to its owner; an open one becomes or joins a plan box. Repoint
+    the links from `Primitives.md`, `Native_Port_Playbook.md`, `Native_Core_P3_Decisions.md` and `R-198`, then delete
+    each audit file once nothing in it is live. An Opus Medium task, because each finding needs judgement.
+  - [ ] Decide `Docs/Audits/Semantic_Naming_Audit_2026-11-07.md`: two tests cite it by section; move what they need
+    into the owner they test, then close it.
+  - [ ] Side defect: `Docs/Reference/Waveform_Ribbon_Visual_Authority_20261103.md:10` links
+    `Images/Waveform_Ribbon_20261103_Operator_Live_Baseline.png`, which is not in the tree. Find the image in history
+    and restore it, or remove the link and say what it showed.
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
   in `Docs/Reference/Benchmarks.md` predate the bump. Run it once on main (lead or Medium slot; no load), record
@@ -1105,6 +1109,9 @@ follow-ups with their evidence folders).
 
 ### 1B.9 Settings and Studio window corners bleed (continues 1.9)
 
+- [ ] Studio's outer corners to match the visible Settings improvement: UI-1 of `Docs/Future_Work/Studio_Corners_Card_Rim_and_Visualizer_Rotate_2026-11-09.md` (its live checklist;
+  UI-2 landed in 7cbc1d5b). Do it with this section's corner work, as one owner.
+
 Measurements, rejected alternatives and the residue no layered window can remove:
 `Docs/Architecture/Settings_Theme_Architecture.md` (native corners).
 
@@ -1479,6 +1486,8 @@ by risk; none takes a slot native work can use.
   Width, right-aligned, in the same style. It latches pressed and sets every border element of the widget UIs to 0 or
   invisible. Reset Colours, editing the border width, or changing the surface choice in Style Overrides each un-latches
   it. It persists like the other overrides. Test: latch, each un-latch path, and a reload.
+- [ ] **The ordinary Visualizer card offers its Rotate glyph on hover** (operator report): UI-3 of `Docs/Future_Work/Studio_Corners_Card_Rim_and_Visualizer_Rotate_2026-11-09.md`, its
+  live checklist. Today `rendering/quick/qml/VisualizerPresentation.qml:1049` still passes `canRotate: false`.
 - [ ] **Feeds spacing: 1 px more padding** above and below, between the header, the subtitle and the grid items. Nothing
   else moves: compare item positions before and after, and only the intended offsets change.
 
