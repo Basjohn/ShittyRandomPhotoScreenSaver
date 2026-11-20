@@ -134,6 +134,13 @@ def control_record(record: bytes) -> bytes:
     return record
 
 
+def reference_mask(reference):
+    """The one-level class's mask of a sampled frame, derived from the Python reference drawn into a transparent
+    target (D12 "The pixel tolerance"): its translucent pixels, read from its own alpha. A mode whose layers sum light
+    into pixels its alpha does not cover (the Oscilloscope's glow) names its own."""
+    return pt.translucent_by_alpha(reference)
+
+
 def item_settings_change(settings: dict) -> dict:
     """Rule (g)'s Settings change: a layer colour and its outline width."""
     changed = dict(settings)
@@ -481,8 +488,7 @@ def round_pixels(core, engine, app, host, api: str, records: list[dict], referen
                 level = int(delta.max())
                 if level:
                     # The reference is drawn into a transparent target: its own alpha is the translucency mask.
-                    verdict = parity.rule_a_frame(drawn[..., :3], reference[..., :3],
-                                                  pixel_tolerance.translucent_by_alpha(reference), MODE_ID)
+                    verdict = parity.rule_a_frame(drawn[..., :3], reference[..., :3], reference_mask(reference), MODE_ID)
                     verdict["index"] = index
                     judged.append(verdict)
                     stats["differing"] += 1
@@ -558,7 +564,7 @@ def vulkan_against_opengl(out: Path, control: str | None = None) -> dict:
             continue
         compared += 1
         verdict = pt.judge(vk[key][..., :3], gl[key][..., :3], VULKAN_RULE_B,
-                           mask=pt.translucent_by_alpha(refs[key]))
+                           mask=reference_mask(refs[key]))
         judged.append(verdict)
         differing += int(verdict["differing"] > 0)
         max_level = max(max_level, int(verdict["max_level"]))

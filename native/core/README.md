@@ -343,6 +343,13 @@ worked example (harness-only); a product mode does the same in the product's pla
    program with the first settings, then each size through `NativeMode.target_size` only when it changes (never per
    frame), and its stream slot is whole 4096-byte steps of its record (`_slot_bytes`). Its harness is
    `native/core/python/devcurve_check.py`'s rounds with the mode's own pieces (`use_mode`; `bubble_check.py`).
+   A mode whose stages a Setting turns on or off (the Oscilloscope's Glow: D17 choice E) names its program variants in
+   `GENERIC_MODE_PROGRAM_VARIANTS` (`(the variant of a snapshot, variant -> {"passes", "targets", "streams",
+   "unread"?})`): the route builds the variant's program at the bind and again only at the Settings edge that changes
+   it. One record serves every variant: a variant that leaves a stage out names the record fields only that stage reads
+   in `"unread"` (ABI 26; any other record field no pass reads is still refused). Its harness is
+   `oscilloscope_check.py`; until its registration, its owner rule (a) runs through `oscilloscope_check.py owner`, the
+   route's registration process-local.
 
 ### Samplers and textures (N4.a; decision D13 in `Native_Core_P3_Decisions.md`)
 
