@@ -1334,11 +1334,26 @@ def _build_compact_action_button_style() -> str:
         "QPushButton:hover {"
         f" background-color: {_theme_rgba255('control.button.hover_surface')};"
         " }"
-        "QPushButton:pressed, QPushButton:checked {"
+        "QPushButton:pressed {"
         f" background-color: {_theme_rgba255('control.button.pressed_surface')};"
         f" border: 1px solid {_theme_rgba255('control.button.pressed_border')};"
         " }"
+        # A latched (checkable) compact button reads as pressed IN: a clearly darker fill than
+        # the resting surface in every theme; OutlinedButton paints the inner shadow.
+        "QPushButton:checked {"
+        f" background-color: {_inset_rgba255('control.button.surface')};"
+        " }"
     )
+
+
+def _inset_rgba255(token: str, factor: float = 0.55) -> str:
+    """A semantic colour with its channels darkened (alpha kept): the fill of an inset control."""
+
+    from ui.settings_theme_spec import Rgba
+
+    base = _SETTINGS_THEME.color(token)
+    darker = Rgba(*(int(channel * factor) for channel in (base.r, base.g, base.b)), base.a)
+    return render_qss_rgba255(darker)
 
 
 COMPACT_ACTION_BUTTON_STYLE = _build_compact_action_button_style()

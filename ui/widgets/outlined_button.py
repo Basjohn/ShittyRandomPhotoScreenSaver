@@ -90,3 +90,15 @@ class OutlinedButton(QPushButton):
         painter.setPen(QPen(self._border_color(), width))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawPath(path)
+        if self.isChecked() and self.isEnabled():
+            # Latched = pressed in: a shadow cast inside the rim by the top-left edge. The
+            # shadow is the rim's own shape minus itself shifted down-right, clipped to the
+            # button, so it follows the rounded corners and never leaves the border.
+            inner = QPainterPath()
+            inner.addRoundedRect(rect.adjusted(inset, inset, -inset, -inset), max(0.0, radius - inset),
+                                 max(0.0, radius - inset))
+            shadow = inner.subtracted(inner.translated(2.0, 2.5))
+            painter.setClipPath(inner)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(0, 0, 0, 150))
+            painter.drawPath(shadow)

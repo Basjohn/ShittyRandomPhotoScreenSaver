@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from ui.settings_theme_spec import Rgba
-from ui.widget_theme_active import get_active_widget_theme, get_widgets_borderless
+from ui.widget_theme_active import get_active_widget_theme
 from ui.widget_visual_roles import resolve_widget_visual_color
 from ui.theme_semantics import widget_theme_is_light
 from rendering.quick.shadow_snapshot import QuickShadowSnapshot
@@ -177,8 +177,6 @@ def resolve_card_surface_colors(
         if border_explicit
         else theme.color("card.border")
     )
-    if get_widgets_borderless():
-        border = Rgba(border.r, border.g, border.b, 0)
     return background.as_tuple(), border.as_tuple()
 
 
@@ -220,23 +218,13 @@ def resolve_rgba_role(
         if isinstance(explicit, Rgba) or explicit is None
         else Rgba(*explicit)
     )
-    resolved = resolve_widget_visual_color(
+    return resolve_widget_visual_color(
         theme,
         role,
         local_roles=local,
         fallback=fallback_rgba,
         explicit=explicit_rgba,
-    ).color
-    if get_widgets_borderless() and is_border_role(role):
-        resolved = Rgba(resolved.r, resolved.g, resolved.b, 0)
-    return resolved.as_tuple()
-
-
-def is_border_role(role: str) -> bool:
-    """Whether a semantic role names a border or outline stroke (what Borderless hides)."""
-
-    leaf = str(role or "").rsplit(".", 1)[-1]
-    return "border" in leaf or leaf == "outline"
+    ).color.as_tuple()
 
 
 def resolve_header_colors(
@@ -299,7 +287,6 @@ __all__ = [
     "as_rgba",
     "as_tuple",
     "configured_rgba_override",
-    "is_border_role",
     "resolve_card_surface_colors",
     "resolve_header_colors",
     "resolve_primary_text_color",
