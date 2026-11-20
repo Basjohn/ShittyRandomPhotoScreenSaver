@@ -1002,27 +1002,60 @@ def rule_a_halves(judged: list[dict], switch_input: int, mode: str | None = None
             for name, lo, hi in (("first", 0, half), ("second", half, switch_input))}
 
 
+def _python_reference(mode: str, script, settings: dict) -> tuple[dict, list]:
+    """The Python side of a rule (a) run: its drawn run and (Spectrum) its window maps."""
+    if mode == "spectrum":
+        return _python_mappings_run(mode, script, settings)
+    # A generic mode's card maps nothing per fragment (its uv is the core's, N29 round 2 M6): no mapping control.
+    return drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings, lit=False), []
+
+
+def _python_masks(mode: str, script, settings: dict, python: dict) -> tuple[dict, int]:
+    """Rule (a)'s mask: the same Python run over a second background (its translucent pixels); and that run's frame
+    count."""
+    with content_backdrop():
+        backdrop = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings, lit=False)
+    return rule_a_masks(python, backdrop), len(backdrop["pixels"])
+
+
 def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out: Path,
-                  placement: str = "display") -> dict:
+                  placement: str = "display", *, references: Path | None = None, clip_name: str = "") -> dict:
     """Rule (a) of the port (N2.5): the owner in process drawn by the Python renderer and by the native item, single-
     sampled, frame for frame over the card's region and its margin. Each native card's window map is checked against
     the Python renderer's own rows of the same frame (``mapping``), and every pixel more than a level off is
-    classified (``classes``). ``placement``: where both runs put the card (``PLACEMENTS``)."""
+    classified (``classes``). ``placement``: where both runs put the card (``PLACEMENTS``). ``references``: the root of
+    the cached Python references (``python_references``): the Python run and its masks are read from there when a
+    reference made of exactly this run exists, and stored there when not."""
+    from tools.visualizer_replay import python_references
+
     script = parity_script(clip_frames, mode)
+    cached = folder = made_of = None
+    reference_state = "not used"
+    if references is not None:
+        from PySide6.QtGui import QGuiApplication
+
+        dpr_now = float(QGuiApplication.primaryScreen().devicePixelRatio())
+        key, made_of = python_references.reference_key(mode, suffix, settings, clip_name, clip_frames, placement,
+                                                       dpr_now)
+        folder = Path(references) / key
+        cached = python_references.load(folder, made_of)
+        reference_state = "read" if cached is not None else "drawn and stored"
     with single_sample_scene_targets(), card_placement(placement):
-        if mode == "spectrum":
-            python, mappings = _python_mappings_run(mode, script, settings)
+        if cached is not None:
+            python, masks, mappings, backdrop_frames = cached
         else:
-            # A generic mode's card maps nothing per fragment (its uv is the core's, N29 round 2 M6): no mapping control.
-            python, mappings = drawn_run(mode, script, worker=False, supervisor=None, namespace=None,
-                                         settings=settings, lit=False), []
+            python, mappings = _python_reference(mode, script, settings)
         native = native_drawn_run(mode, script, settings=settings, core=core,
                                   python_mappings=mappings if mode == "spectrum" else None)
-        # Rule (a)'s mask: the same Python run over a second background (its translucent pixels).
-        with content_backdrop():
-            backdrop = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings,
-                                 lit=False)
-    masks = rule_a_masks(python, backdrop)
+        if cached is not None and python["digests"] != native["digests"]:
+            # The simulation moved since the reference was drawn: never judged against it; drawn again.
+            reference_state = "stale (logical digests differ): drawn again and stored"
+            cached = None
+            python, mappings = _python_reference(mode, script, settings)
+        if cached is None:
+            masks, backdrop_frames = _python_masks(mode, script, settings, python)
+    if references is not None and cached is None:
+        python_references.store(folder, made_of, python, masks, mappings, backdrop_frames)
     switch_at = next(i for i, (kind, _v) in enumerate(script) if kind == "mode")
     switch_input = sum(1 for kind, _value in script[:switch_at] if kind == "input")
     single = judged_pass(native, python, masks, switch_input, mode)
@@ -1052,10 +1085,11 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
     verdict["rule_a"]["failed_frames"] = failed_frame_records(judged, native, python, masks)
     verdict["rule_a_halves"] = rule_a_halves(judged, switch_input, mode)
     verdict["rule_a"]["mask_inputs"] = len(masks)
-    verdict["rule_a"]["backdrop_frames"] = len(backdrop["pixels"])
+    verdict["rule_a"]["backdrop_frames"] = backdrop_frames
+    verdict["python_reference"] = {"state": reference_state, "folder": None if folder is None else str(folder)}
     verdict["pass"] = bool(verdict["rule_a"]["pass"] and verdict["digests_identical"] and verdict["native_published"] > 0
                            and paths["regions_equal"] and len(python["pixels"]) == len(native["pixels"])
-                           == len(backdrop["pixels"]))
+                           == backdrop_frames)
     verdict["split"] = _split_rows(rows, switch_input)
     verdict["mapping"] = dict(native["mapping"], python_frames=len(mappings))
     verdict["classes"] = single["classes"]
@@ -1069,7 +1103,7 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
 
 def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.5, only: tuple[str, ...] = (),
                against: Path | None = None, placements: tuple[str, ...] = PLACEMENTS, mode: str = "spectrum",
-               recording: str | None = None) -> dict:
+               recording: str | None = None, references: Path | None = None) -> dict:
     """``native_parity`` over ``mode``'s widened run set (``conventions_identity.mode_runs``; a mode of the route's
     ``NATIVE_MODE_IDS``) at the rig's own placement, and ``OVERSCAN_RUNS`` again at each other placement of
     ``placements`` (keyed ``run@placement``); the report. ``against``: an accepted report this one is compared with
@@ -1103,7 +1137,8 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
             if only and key not in only:
                 continue
             engine_worker_link.reset_run_state_for_testing()
-            verdict = native_parity(core, mode, suffix, settings, clip.frames, out, placement=placement)
+            verdict = native_parity(core, mode, suffix, settings, clip.frames, out, placement=placement,
+                                    references=references, clip_name=clip.name)
             report["results"][key] = verdict
             print(f"[NATIVE] {key:48s} {verdict['frames_drawn']} frames, native {verdict['native_published']}"
                   f" published; differing inputs {verdict['differing_inputs']}, pixels "
@@ -1270,7 +1305,15 @@ def main(argv=None) -> int:
     parser.add_argument("--recording", default=None,
                         help="with --native: one of the operator's recorded takes (logs/visualizer_recordings/<name>"
                              ".jsonl, its first --seconds) instead of the shipped Studio clip")
+    parser.add_argument("--references", nargs="?", type=Path, default=None, const=Path("default"),
+                        help="with --native: cached Python references (tools/visualizer_replay/python_references.py): "
+                             "read when one made of exactly this run exists, else drawn and stored; the folder "
+                             "(default D:\\Temp\\Scratch\\SRPSS\\fast_proof\\references)")
     args = parser.parse_args(argv)
+    if args.references is not None and str(args.references) == "default":
+        from tools.visualizer_replay.python_references import DEFAULT_ROOT
+
+        args.references = DEFAULT_ROOT
     # The stills (contact sheets, difference maps) and the report are written into owner scratch and published to
     # ``--out`` by the evidence publisher (``tools/evidence_media.py``); stills stay PNG, lossless.
     evidence_media.redirect_output(args, "out", "owner_render_parity")
@@ -1293,7 +1336,8 @@ def main(argv=None) -> int:
             report = run_native(args.out, module_dir=args.module_dir.resolve(), offers=args.offers,
                                 seconds=args.seconds, only=tuple(args.runs),
                                 against=None if args.against is None else args.against.resolve(),
-                                placements=tuple(args.placements), mode=args.mode, recording=args.recording)
+                                placements=tuple(args.placements), mode=args.mode, recording=args.recording,
+                                references=args.references)
         else:
             report = run(args.out, modes=args.modes, variants=tuple(args.variants), samplings=tuple(args.sampling),
                          seconds=args.seconds, controls=not args.skip_controls)
