@@ -407,9 +407,9 @@ MASK_BACKDROP = (255, 0, 255)
 RULE_A_SCATTER_PIXELS = {"bubble": 68}
 #: The scatter's spread per mode (checkpoint audit 7 M1): the largest group of touching scatter pixels a frame may hold.
 #: Bubble: measured largest 15 on the 5.5 s replay's 2,430 steady pixels (1,908 with no scatter neighbour; most
-#: neighbours of one pixel 6; 20261117_steady_residual_classes/steady_classification.json), times 1.5: 22. A solid
-#: block fails, and so does a tie with 3 or more scatter pixels in its 3x3 (``pixel_tolerance.SCATTER_AGAINST_ISOLATION``,
-#: lead 17 Nov).
+#: neighbours of one pixel 6; 20261117_steady_residual_classes/steady_classification.json), times 1.5: 22 (17 on the
+#: four 60 s takes with ties joined, checkpoint audit 8 M1). A solid block fails, and so do ties inside one: ties join
+#: the groups they touch (the 17 Nov isolation clause this replaced was retired by the lead, 21 Nov).
 RULE_A_SCATTER_GROUP = {"bubble": 22}
 #: The scatter's density per mode (checkpoint audit 8 M1): the most scatter and tie pixels one 16 x 16 window may hold
 #: (``pixel_tolerance.SCATTER_WINDOW``). Bubble: measured worst 17 on the four 60 s recorded takes (16, 17, 16 and 17;

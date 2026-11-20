@@ -412,9 +412,9 @@ def test_rule_a_admits_bubbles_scatter_and_nothing_wider():
                                      "bubble")["pass"]
 
 
-def test_bubbles_scatter_must_be_spread_and_counts_as_a_ties_neighbour():
+def test_bubbles_scatter_must_be_spread_and_ties_inside_a_patch_fail_by_its_group():
     # Checkpoint audit 7 M1: scatter is a spread field of single levels; a compact one-level patch within the count
-    # fails, and ties inside a one-level patch are not isolated. Bounds come from the harness's constants.
+    # fails, and so do ties inside one (they join its group, audit 8 M1). Bounds come from the harness's constants.
     import numpy as np
 
     from tools.visualizer_replay import owner_render_parity as parity
@@ -457,18 +457,24 @@ def test_bubbles_scatter_must_be_spread_and_counts_as_a_ties_neighbour():
     tied[200, 300, 1] += 2                                     # and one isolated tie elsewhere
     result = verdict(tied)
     assert result["ties"] == parity.RULE_A_EDGE_PIXELS_PER_FRAME and result["scatter"] == 40 <= cap
-    assert not result["pass"]
-    assert any("neither isolated" in reason for reason in result["reasons"])
-    # The observed case (lead, 17 Nov, Bubble's offers): one 2-level tie beside two scatter pixels stays isolated and
-    # passes; a third scatter pixel in its 3x3 makes it a tie inside a patch.
+    # The ties join the block's group (checkpoint audit 8 M1): it fails by the group, with no isolation clause.
+    assert not result["pass"] and result["scatter_group"] == 49
+    assert any("touching scatter and tie" in reason for reason in result["reasons"])
+    assert not any("neither isolated" in reason for reason in result["reasons"])
+    # The observed cases (Bubble's offers, 17 Nov; the 60 s takes' human_heavy1 2182 and 2223 and nightsolong 2128, 21
+    # Nov): one 2-level tie off a content edge beside two, and beside three, scatter pixels is isolated (no other tie
+    # beside it) and passes. The 17 Nov clause that failed the second was retired by the lead on 21 Nov.
     pair = reference.astype(np.int16)
     pair[150, 150, 1] += 2
     pair[150, 151, 1] += 1
     pair[151, 150, 1] += 1
     assert verdict(pair)["pass"]
     pair[149, 149, 1] += 1
-    narrowed = verdict(pair)
-    assert not narrowed["pass"] and any("neither isolated" in reason for reason in narrowed["reasons"])
+    assert verdict(pair)["pass"]
+    # Control: a second tie beside it takes the isolation away (the tie limits stay).
+    pair[149, 150, 1] += 2
+    paired = verdict(pair)
+    assert not paired["pass"] and any("neither isolated" in reason for reason in paired["reasons"])
 
 
 def test_bubbles_spread_joins_ties_into_groups_and_bounds_density():

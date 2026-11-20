@@ -1039,9 +1039,13 @@ audit 7 M3), spread: no group of touching scatter and tie pixels larger than 22 
 checkpoint audit 8 M1; measured 15 on the 5.5 s replay's 2,430 pixels, 1,908 of them with no scatter neighbour, audit 7
 M1, and 17 on the four 60 s takes with ties joined: 13, 17, 15 and 13), no 16 x 16 window holding more than 26 scatter
 and tie pixels (audit 8 M1; measured 17 on the four 60 s takes: 16, 17, 16 and 17, times 1.5 rounded up; 21 Nov,
-`fast_proof/20261120_m2_rule_a_60s_*`, `20261121_m2_rule_a_60s_*`), and a tie with 3 or more scatter pixels in its 3x3 is
-not isolated (lead, 17 Nov, narrowing M1: a lone tie beside one or two scatter pixels, measured in three offer runs,
-stays isolated), so a compact one-level patch, or ties inside one, fails; steady and fade; ties and flips as the composite (lead, 17 Nov: the
+`fast_proof/20261120_m2_rule_a_60s_*`, `20261121_m2_rule_a_60s_*`), so a compact one-level patch, or ties inside one,
+fails by its group or its window. Scatter never takes a tie's isolation away: the 17 Nov clause that did (a tie with 3
+or more scatter pixels in its 3x3 not isolated) was retired by the lead on 21 Nov, once the joined groups and the
+density bound covered the patch it was written for; a tie stays bounded by count, level, and isolation from other ties
+or a content edge. A one-pixel line one level off that exact pixels split into groups within the cap (audit 8 M1's third
+case: 16 pixels in a window, under the bound) is accepted as scatter (lead, 21 Nov): one level along a line is the
+two-compiler rounding the class admits, bounded by its count. Steady and fade; ties and flips as the composite (lead, 17 Nov: the
 `NativeFragmentPass` two-compiler case, Python's driver-compiled composed GLSL against the qsb pack; evidence
 `n5_1_bubble/20261117_steady_residual_classes/`, every pixel exactly one level, spread over the whole content).
 On the four 60 s recorded takes, judged on 17 Nov before the spread rule, it held on 21,107 of 21,108 judged frames;
@@ -1049,8 +1053,8 @@ the operator accepted the one exception as measured (17 Nov, no bound or class c
 input 22, cold-start reveal, an adjacent pair at 2 levels on the mask (`n5_1_bubble/20261117_rule_a_60s_*`). Rejudged
 under the current rule (a) on 20 and 21 Nov (audit 8 M2; native against Python, variant a, display placement): ragdoll
 and anything_mixed2 pass; human_heavy1 fails inputs 2182 and 2223 and nightsolong input 2128, each one lone 2-level
-tie off a content edge with 3 or more scatter pixels in its 3x3 (the narrowed isolation clause, not the spread rule),
-and nightsolong input 22 as before. Open in the N5.1 Bubble box; no bound changed. Two tracked exceptions of the same scene-fade
+tie off a content edge with 3 or more scatter pixels in its 3x3 (the isolation clause, not the spread rule; they pass
+once the clause is retired, 21 Nov), and nightsolong input 22 as before. No bound changed. Two tracked exceptions of the same scene-fade
 double-rounding class (lead, 17 Nov, no bound or class change): the offer runs `stream_direction=2` and `=6`, input
 337 (the mode switch), adjacent 2-level ties on the mask off a content edge (`n5_1_bubble/20261117_offers/`,
 `20261117_offer_tie_classes/`); they must disappear once the scene fade is applied in one place. Bubble's rule (b)
