@@ -51,7 +51,7 @@ method, `Docs/Guides/Native_Parity_And_Timing_Proof.md` (layers L logic, P pixel
 are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnostics.md`).
 
 **Order (lead and operator, 17 Nov):**
-1. Close Bubble (the N5.1 Bubble box, in its order): its checkpoint audit; build the fast long-clip proof's layer L and
+1. Close Bubble (the N5.1 Bubble box, in its order): checkpoint audit 8's fixes; build the fast long-clip proof's layer L and
    layer P tools (the "Build the fast long-clip proof" box); then Bubble's layer L directly, layer T on both backends,
    rule (b) over the four takes, the 2560 x 1440 cost, and the D1 rehearsal.
 2. The scene-fade double-rounding fix (the "Spectrum and Spline Curve long-take residuals" box). Then rerun Bubble's
@@ -72,7 +72,7 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   first), then 1C.10.
 - [ ] Medium (Opus Medium): the fast-proof tools (step 1), then Bubble's L, T and long-take rule (b), then step 2's
   scene-fade fix, then step 3.
-- [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): the Bubble landing delta first, then each merge.
+- [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
 - [ ] Sonnet Medium: profile the owner replay (the fast proof's first box), then cheap audits and docs of open avenues,
   hygiene item 6's closed-report cleanup, and the low-risk section 1E items.
 
@@ -639,7 +639,7 @@ the feature (D3D11 is not stated).
   Bubble"). Owner rule (a) passes on the 5.5 s replay and the four 60 s recorded takes under D12's Bubble scatter. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
   eliminated suspicions and evidence; the diagnostics tools are `tools/visualizer_replay/bubble_native_diagnostics.py`
   (`Docs/Guides/Native_Bubble_Diagnostics.md`). Follow the Native Port Playbook; no further tolerance widening.
-  Order: the checkpoint audit; the fast proof's L and P tools (their own box); layer L directly; layer T; rule (b)
+  Order: checkpoint audit 8's M1, M2 and lows (boxes below); the fast proof's L and P tools (their own box); layer L directly; layer T; rule (b)
   over the four takes; the 2560 x 1440 cost; the D1 rehearsal. Proved so far
   (`Docs/Guides/Native_Parity_And_Timing_Proof.md` layers): P on OpenGL over the four 60 s takes; P on Vulkan over the
   5.5 s replay only; L indirectly (the simulation is untouched and 21,107 matching frames); C at 4K. Not proved: T.
@@ -652,9 +652,44 @@ the feature (D3D11 is not stated).
     rule (b) has run over the 5.5 s replay's 684 sampled frames only.
   - [ ] Layer L directly: the per-frame packed record byte-compared with the values the Python renderer uses, over the
     four takes (the fast-proof box's L tool; `engine_worker_gate.py` is the precedent).
-  - [ ] Checkpoint audit (Opus Medium) of the landing delta `git diff 4b17eeee8 7608b6c7b`: `bubble_check.py`, the
-    narrowed isolation rule and group cap in `tools/pixel_tolerance.py`, the re-registration, the cost round. Merged
-    pre-audit on 17 Nov at 99 % weekly usage.
+  - [ ] Checkpoint audit 8 M1 (`Docs/Future_Work/Checkpoint_Audits_Nov15.md`): the spread rule groups scatter only
+    (`tools/pixel_tolerance.py:186-203`). A 1 px line of 67 one-level pixels passes rule (a) once pixels 23 and 46
+    are 2-level ties or exact, and 60 one-level pixels at 23 % density in a 16 x 16 patch pass too.
+    - [ ] Group over `scatter | tie`, so a tie joins the groups it touches.
+    - [ ] Add a density bound: at most K scatter pixels in any 16 x 16 window. Measure K on the steady residual's
+      classification and the offers' frames, times 1.5. The lead decides it; record it in D12's Bubble line and
+      bubble_check's rule (b).
+    - [ ] Negative controls in `tests/test_native_bubble.py`: the line with two ties, the line with two exact pixels,
+      the dithered patch. Each is seen passing on today's code and failing on the fix.
+    - [ ] Rerun the offers and rule (b)'s 684 frames under the fix. Any newly failing frame is classified, never
+      admitted by a wider bound.
+  - [ ] Checkpoint audit 8 M2: the four 60 s takes' rule (a) reports (`20261117_rule_a_60s_*`, 01:59 on 17 Nov)
+    predate the spread rule (no `scatter_group` field), yet D12 (`Native_Core_P3_Decisions.md:1040`) and this box's
+    header say they pass under it.
+    - [ ] Now: say in D12's Bubble line and in this header that the 60 s figures were judged before the group cap
+      and the isolation clause.
+    - [ ] Rejudge the four takes under the current rule (a), together with M1's fix: the fast proof's layer P
+      when it exists, otherwise `owner_render_parity.py --recording` (lead's slot; no agent load runs).
+  - [ ] Checkpoint audit 8 lows (triage: all small, none blocking):
+    - [ ] L1: a test in which a tolerance without `scatter_cluster_pixels` keeps a tie beside three scatter pixels
+      isolated. Today, applying the narrowing to every mode passes the whole focused suite.
+    - [ ] L2: a `bubble_check` case in `tests/test_pixel_tolerance_routing.py`: a spread field passes; a compact
+      block, `_shift`, `_artefact` and `_wild` fail; missing references fail. Today, dropping the spread from Bubble's
+      `VULKAN_RULE_B` passes every test.
+    - [ ] L3: a control passes only for its intended reason (`devcurve_check.py:957-960`). A pixel control needs a
+      clean Vulkan child and a cross verdict failing on tolerance reasons. An item control needs exactly its named
+      check failing. Anything else prints "CONTROL INCONCLUSIVE".
+    - [ ] L4: `settings_at` and `sizes_at` raise when a sampled frame lacks the ratio, instead of falling back to the
+      capture ratio's values (`devcurve_check.py:118-121`, `bubble_check.py:167-169`).
+    - [ ] L5: reword the stale text. D12 "As built: Bubble" says "the widened set at both placements is open"; the
+      offers have run, at the display placement, with a and b at both. D12's cost paragraph needs the note that
+      "ambience on/off" means variant a's and variant b's frames. "Bubble remains dormant" survives in
+      `Native_Core_P3_Decisions.md:38`, `Docs/Reference/Primitives.md:61`,
+      `Native_Bubble_Parity_Investigation.md:3` and `:50`, and in the `_bubble_native_replay.py` docstring. This
+      box's "38 offer runs at both placements" should say the same.
+    - [ ] L6 (audit 7 L5, which escaped without a box): add a 5.3 s clip to
+      `tests/test_visualizer_owner_render_parity.py`, whose switch must stay at 4.2 s, so the `max(4.2, ...)` guard is
+      pinned.
   - [x] Class-word upload and portable unsigned-vector admission proved on both APIs; unchanged wire record (R-238).
   - [ ] Non-blocking contract follow-up, now with a measured case: non-unit inherited scene opacity. During the cold
     reveal (scene fade 0.8648 at input 0 to 1.0 by input 30, content fade 1, identical on both paths) Python folds it

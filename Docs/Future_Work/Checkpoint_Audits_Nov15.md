@@ -1358,3 +1358,197 @@ accepted".
   reports.
 - **The 1.32 px fringe gate and the steady-residual classification** were read from the investigation doc, not
   recomputed.
+
+## Checkpoint audit 8 (N5.1 Bubble landing), Medium
+
+Scope: `git diff 4b17eeee8 7608b6c7b`, the landing merge 7608b6c7b and its eight commits (bbbbda40e, 39567a9c7,
+fdb397bc1, f40c0f313, bfa32cea4, 0daaf9b15, 1fa7dcbc5, 7804b0a16). It also checks audit 7's fixes. The audit ran on
+the d9b5c4505 tree, with the main checkout's ABI 25 module and `assets.rcc` copied in. Nothing was built, and no 60 s
+replay, `bubble_check.py` round or window was run (the GPU is shared). The GPU figures are read from the retained
+evidence in `.artifacts/evidence/native_core/n5_1_bubble/` (`20261117_rule_b/`, `20261117_cost_4k/`,
+`20261117_offers*/`, `20261117_rule_a_60s_*`). The probes were CPU-only and are deleted:
+- synthetic frames through `owner_render_parity.rule_a_frame` and `bubble_check.vulkan_against_opengl`;
+- the broken forms below, each run against the focused tests in process;
+- a read of the retained summaries.
+
+It found no critical or high finding, two mediums and six lows.
+
+### Critical
+
+None.
+
+### High
+
+None.
+
+### Medium
+
+**M1. The spread rule bounds touching scatter only, so a thin one-level line passes once two pixels break it**
+(`tools/pixel_tolerance.py:186-203`; `largest_group` at :144 groups `scatter` alone).
+- **The gap:** the group cap measures 8-connected groups of scatter pixels only. Two things split a group:
+  - A tie, which is not scatter. A tie on a 1 px line has two scatter neighbours, below `SCATTER_AGAINST_ISOLATION`
+    (3), so it also counts as isolated.
+  - A pixel that rounds the same on both paths.
+
+  Nothing bounds the density of scatter in an area.
+- **Proof (probe on the merged code, Bubble's rule (a): 68 scatter, groups of 22):**
+
+  | Defect | Pixels | Verdict |
+  |---|---|---|
+  | A straight 1 px line, every pixel one level off | 67 | fails (group 67) |
+  | The same line with pixels 23 and 46 at 2 levels | 65 scatter, 2 ties, largest group 22 | **passes** |
+  | The same line with pixels 23 and 46 exact | 65 scatter, largest group 22 | **passes** |
+  | One-level pixels at about 23 % density in a 16 x 16 patch | 60, largest group 10 | **passes** |
+
+  Rule (b) has the same form, at 32 and groups of 11.
+- **Failure scenario:** M1's case, a native defect confined to one bubble, still passes rule (a) when it has the
+  shape Bubble draws most: an outline or rim segment one level off with a couple of 2-level pixels. So does a
+  sub-level offset over a small area, which dithers into small groups. Spectrum fails all of these.
+- **Fix:**
+  - Group over `scatter | tie`, so a tie joins the groups it touches instead of splitting them.
+  - Add a density bound: at most K scatter pixels in any 16 x 16 window. Measure K from the steady residual's
+    classification and the offers' frames, times 1.5, the D12 way.
+  - The lead decides K. Add the line and patch rows above as negative controls in `tests/test_native_bubble.py`.
+
+**M2. The four 60 s takes were never judged under the current rule (a), but D12 and the plan say they pass under it**
+(`Docs/Future_Work/Native_Core_P3_Decisions.md:1040`, `Current_Plan.md` N5.1 Bubble header).
+- **The gap:** the retained reports `20261117_rule_a_60s_*` were written at 01:59 on 17 Nov, before bbbbda40e added the
+  spread rule. They carry no `scatter_group` field. Since then rule (a) has gained two tightenings:
+  - the group cap of 22;
+  - the isolation clause. Before M1, ties beside scatter were always isolated; now a tie with 3 or more scatter
+    pixels in its 3x3 is not.
+
+  The group distribution was measured only on the 5.5 s replay and the offers (worst 15). The long takes' scatter
+  worst is higher (45 against 34). On the offers, the clause's first form failed five runs and the narrowed form
+  still fails two, the tracked exceptions.
+- **Failure scenario:** the fast proof's layer P, or the long-take rule (b), judges the takes under today's tolerance
+  and fails frames that D12 records as passing. The next agent either treats them as a regression or widens the bound
+  ("no further tolerance widening", plan).
+- **Fix:**
+  - Rejudge the four takes under the current rule (a): the owner replay `--recording`, or the fast proof's layer P
+    once it exists.
+  - Until then, say in D12's Bubble line and in the box header that the 60 s figures predate the spread rule.
+
+### Low
+
+**L1. No test pins "only Bubble gains the narrowed isolation"** (`tools/pixel_tolerance.py:186-190`).
+- **Broken form:** apply the narrowing to every tolerance, not only one that states a spread (`if spread:` ->
+  `if True:`). All of `test_pixel_tolerance.py`, `test_pixel_tolerance_routing.py` and Bubble's two rule (a) tests
+  pass.
+- That form tightens every harness that admits both scatter and ties. The `NativeFragmentPass` rule (a) (72
+  scatter, 8 ties) and its rule (b) (2,000 scatter, 8 ties) are two.
+- **Fix:** a test in which a tolerance without `scatter_cluster_pixels` keeps a tie beside three scatter pixels
+  isolated.
+
+**L2. Bubble's rule (b) verdict has no CPU test** (`native/core/python/bubble_check.py:75-76`; `test_pixel_tolerance_routing.py`
+covers six harnesses, not this one).
+- **Probe:** `bubble_check.vulkan_against_opengl` judges by Bubble's bound, through `use_mode`. A 4 x 4 one-level
+  block fails by group. With the spread dropped from `VULKAN_RULE_B`, the same block passes, and every focused test
+  still passes.
+- Rule (b) is the gate that offered Bubble on Vulkan.
+- **Fix:** add a `bubble_check` case to the routing test, on its own saved frame format. It should cover a spread
+  field passing, a compact block failing, `_shift`, `_artefact` and `_wild`, and a missing references file.
+
+**L3. A negative control "fails as expected" on any failure** (`native/core/python/devcurve_check.py:957-960`).
+- The control's verdict is `failed` being non-empty. A crashed child, a missing work file, an unclean environment or
+  a validation failure therefore read as "FAILED AS EXPECTED".
+- The retained evidence shows the six controls failing for the right reasons:
+  - each pixel control by the rule (b) tolerance, with the Vulkan child itself clean;
+  - `skipped_release` by `nothing_left` alone.
+
+  The harness does not require this.
+- `skipped_release` takes the live counts before the harness's own release. It proves that the predicate sees live
+  readers, not that the route releases.
+- **Fix:**
+  - A pixel control passes only if its Vulkan child is clean and the cross verdict fails on tolerance reasons.
+  - An item control passes only if exactly its named check fails.
+  - Print anything else as "CONTROL INCONCLUSIVE".
+
+**L4. `settings_at` and `sizes_at` fall back silently** (`devcurve_check.py:118-121`, `bubble_check.py:167-169`).
+- A sampled frame missing a ratio's entry is drawn with its capture ratio's settings and ambient target size instead.
+- The cost round looks up the ambience-off frame at ratios computed from the ambience-on frame's card
+  (`round_cost`, `cost_scales(entries["ambience_on"]["card"])`). It is right today only because both variants share
+  the rig's card.
+- **Fix:** when `settings_at` exists and lacks the ratio, raise.
+
+**L5. Stale text after the landing.**
+- `Native_Core_P3_Decisions.md:979` ("As built: Bubble") still says "the widened set at both placements is open". The
+  offers ran on 17 Nov: 40 runs, 38 pass, 2 tracked exceptions. The Choice offers ran at the display placement only;
+  variants a and b ran at both. The plan's "38 offer runs at both placements" should say so.
+- D12's cost paragraph calls variant a's and variant b's frames "ambience on and off". The plan's box says they are
+  not a like-for-like toggle; the paragraph should too.
+- "Bubble remains dormant" survives in four places:
+  - `Native_Core_P3_Decisions.md:38`;
+  - `Docs/Reference/Primitives.md:61`;
+  - `Docs/Future_Work/Native_Bubble_Parity_Investigation.md:3` and `:50`;
+  - the docstring of `tools/visualizer_replay/_bubble_native_replay.py:1` ("dormant registration").
+- **Fix:** reword all of them.
+
+**L6. Audit 7's L5 escaped without a box.** The test of the `max(4.2, ...)` guard is still weak: no 5.3 s clip in
+`tests/test_visualizer_owner_render_parity.py`. Audit 7's L2 is recorded as R-239's follow-up, and its L6 was
+triaged as acceptable.
+
+### Checked, no finding
+
+- **Audit 7's fixes are real:**
+
+  | Fix | What it is | Broken forms (each fails the focused tests) |
+  |---|---|---|
+  | M1 | the spread rule is in `judge_delta` for Bubble only (`RULE_A_SCATTER_GROUP.get(mode)`; every other mode's tolerance is unchanged) | the spread ignored; `SCATTER_AGAINST_ISOLATION` at 2 or at 4; the group cap removed from the routing |
+  | M2 | the plan header and the registration agree; the "Register" box landed and was deleted | |
+  | M3 | 68 in the code and in D12, with all five figures | |
+  | L1 | the helpers carry every failing input | the pre-fix halves; a region-mismatch entry without `input` |
+  | L3 | R-239 and its index row exist; the commits it cites are real (058ab3291, 903396393) | |
+  | L4 | the three stale texts are reworded, and no `exact_c53` remains | |
+
+  The bound values themselves (51 or 200 for 68) are not pinned by any test, by the routing tests' own design: the
+  bounds are read from the harnesses, never restated.
+- **The tolerance's semantics:**
+  - A tie beside two scatter pixels stays isolated; a third makes it a tie inside a patch.
+  - `__post_init__` refuses a group cap larger than the count.
+  - `largest_group`'s flood fill and scipy's labelling are the same 8-connectivity.
+- **`bubble_check.py` leaves Spline Curve's harness unaffected:**
+  - It loads its own copy of `devcurve_check.py` as `_bubble_check_rounds`, which is not entered in `sys.modules`.
+  - After importing both, `devcurve_check`'s mode id, evidence names, record field, slot, rule (b) bound (2 scatter,
+    no spread), `CONTROLS`, `EXTRA_ROUNDS`, `SCRIPT`, `child` and `capture_runs` are its own.
+  - No module-level mutable object is shared between the two copies.
+  - `use_mode` refuses an unknown name.
+  - `SLOT_BYTES` is read at `Stream` creation, so the child's `use_mode(SLOT_BYTES=...)` reaches it.
+  - `test_native_devcurve.py` passes.
+- **Spline Curve's harness changes** (`program_item`, `settings_at`, the item round's hooks, `_save` keeping only the
+  sampled and item frames) keep its behaviour. Its Vulkan child reads only those frames, and `round_item` and
+  `_cost_entries` skip the `None` rows.
+- **The re-registration:**
+  - `GENERIC_MODE_SETTINGS` names `bubble`.
+  - The descriptor offers `("opengl", "vulkan")`.
+  - `test_native_visualizer_route` pins offered-on-Vulkan equal to `NATIVE_MODE_IDS`.
+  - The route test asserts registration, without monkeypatching.
+  - `test_bubble_native_diagnostics` still restores its owners.
+- **Rule (b)'s evidence agrees with D12:**
+  - 684 frames compared, 615 differing, every pixel one level, worst 21 a frame and groups of 7, judged under 32/11.
+  - Validation loaded and clean.
+  - The block round is identical.
+- **The cost round:**
+  - The figures in D12 match `20261117_cost_4k/summary.json`: the Python target is the item's own pixels (840 x 560,
+    and 3360 x 2240 at ratio 8).
+  - Every variant has at least 240 samples, nothing is timed at rest, and there are no errors.
+  - The variants are timed in turn over three rounds.
+  - The Transitions lesson states this method.
+  - The 4K hidden host joins `_HIDDEN_HOST_HARNESSES`.
+- **The docs:**
+  - D12's "As built: Bubble" record, settings, program and one-program decision match `native_route`.
+  - The README's step 6 names `GENERIC_MODE_PROGRAMS` and `GENERIC_MODE_TARGET_SIZES` as built.
+  - Primitives E3 and E23 name Bubble as their first native consumer correctly.
+  - The N5.1 Bubble box is a live checklist: landed boxes are gone and the open ones are detailed.
+- **The focused tests pass:**
+  - `test_native_bubble`, `test_pixel_tolerance`, `test_pixel_tolerance_routing`, `test_native_visualizer_route`,
+    `test_visualizer_owner_render_parity`, `test_native_devcurve` and `test_native_harness_child_results`: 112.
+  - The registration's neighbours, `test_bubble_native_diagnostics`, `test_backend_availability`,
+    `test_visualizers_tab_backend_modes`, `test_visualizer_host_binding`, `test_shader_derivatives`,
+    `test_quick_backend_owner` and `test_bubble_ambient_big_occlusion`: 75.
+
+### Not verified
+
+- **No GPU run:** no `bubble_check.py` round, control, cost round or 60 s replay. The control and cost conclusions
+  rest on the retained summaries.
+- **M1's density bound K** is not measured here.
