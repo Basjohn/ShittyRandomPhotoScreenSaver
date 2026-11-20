@@ -232,6 +232,9 @@ class SceneMirror:
         self.host: Any = None
         self.frames = _SpilledFrames()
         self.lit: list[float] = []
+        #: Whether each frame's lit share is measured (6.7 ms a frame on Bubble's card): only ``rendered_parity`` reads
+        #: it, never a native or mask run (fast-proof part 2, step 2).
+        self.measure_lit = True
         self._fbo = 0
         self._region: tuple[int, int, int, int] | None = None
         self._scene: Any = None
@@ -319,7 +322,8 @@ class SceneMirror:
         pixels = self._read(region)
         raw = pixels.tobytes()
         record = {"region": list(region), "hash": hashlib.sha256(raw).hexdigest()}
-        self.lit.append(float((pixels[..., :3].max(axis=2) > LIT_LEVEL).mean()))
+        if self.measure_lit:
+            self.lit.append(float((pixels[..., :3].max(axis=2) > LIT_LEVEL).mean()))
         self.frames.append((pixels.shape, zlib.compress(raw, 1)))
         if index % FULL_EVERY == 0:
             record["full"] = hashlib.sha256(self._read((0, 0, *host.pixels)).tobytes()).hexdigest()
@@ -621,11 +625,14 @@ def _pixels(run: dict, index: int):
     return numpy.frombuffer(zlib.decompress(data), dtype=numpy.uint8).reshape(shape)
 
 
-def drawn_run(mode: str, script, *, worker: bool, supervisor: Any, namespace: int | None, settings: dict) -> dict:
-    """``owner_worker_gate.identity_run`` with the owner's scene drawn: its report plus ``frames`` and ``lit``."""
+def drawn_run(mode: str, script, *, worker: bool, supervisor: Any, namespace: int | None, settings: dict,
+              lit: bool = True) -> dict:
+    """``owner_worker_gate.identity_run`` with the owner's scene drawn: its report plus ``frames`` and ``lit`` (empty
+    when ``lit`` is False: a run whose lit share nobody reads)."""
     from tools.visualizer_replay import owner_worker_gate as gate
 
     mirror = SceneMirror()
+    mirror.measure_lit = bool(lit)
     report = gate.identity_run(mode, script, worker=worker, supervisor=supervisor, namespace=namespace,
                                settings=settings, scene_mirror=mirror)
     report["lit"] = mirror.lit
@@ -734,6 +741,7 @@ def native_drawn_run(mode: str, script, *, settings: dict, core, python_mappings
     from tools.visualizer_replay import owner_worker_gate as gate
 
     mirror = NativeSceneMirror(core)
+    mirror.measure_lit = False                       # no native run reads it
     mirror.python_mappings = python_mappings
     report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings,
                                scene_mirror=mirror)
@@ -872,7 +880,7 @@ def _python_mappings_run(mode: str, script, settings: dict) -> tuple[dict, list]
 
     renderer.render = recording
     try:
-        run = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings)
+        run = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings, lit=False)
     finally:
         renderer.render = original
     return run, mappings
@@ -1007,12 +1015,13 @@ def native_parity(core, mode: str, suffix: str, settings: dict, clip_frames, out
         else:
             # A generic mode's card maps nothing per fragment (its uv is the core's, N29 round 2 M6): no mapping control.
             python, mappings = drawn_run(mode, script, worker=False, supervisor=None, namespace=None,
-                                         settings=settings), []
+                                         settings=settings, lit=False), []
         native = native_drawn_run(mode, script, settings=settings, core=core,
                                   python_mappings=mappings if mode == "spectrum" else None)
         # Rule (a)'s mask: the same Python run over a second background (its translucent pixels).
         with content_backdrop():
-            backdrop = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings)
+            backdrop = drawn_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings,
+                                 lit=False)
     masks = rule_a_masks(python, backdrop)
     switch_at = next(i for i, (kind, _v) in enumerate(script) if kind == "mode")
     switch_input = sum(1 for kind, _value in script[:switch_at] if kind == "input")
@@ -1100,9 +1109,9 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
                   f" published; differing inputs {verdict['differing_inputs']}, pixels "
                   f"{verdict['differing_pixels_total']}, max level {verdict['max_level']}; card origin "
                   f"{verdict['outer_origin']} (device fraction {verdict['outer_origin_device_fraction']}); "
-                  f"{'IDENTICAL' if verdict['identical'] else 'DIFFERENT'}; edge pixels in the worst frame "
-                  f"{verdict['rule_a']['edge_pixels_worst_frame']}; rule (a) {verdict['rule_a']['bound']}: "
-                  f"{'PASS' if verdict['pass'] else 'FAIL'}", flush=True)
+                  f"{'bit-identical' if verdict['identical'] else 'not bit-identical'}; edge pixels in the worst "
+                  f"frame {verdict['rule_a']['edge_pixels_worst_frame']}; rule (a) {verdict['rule_a']['bound']}: "
+                  f"{'PASS under tolerance' if verdict['pass'] else 'FAIL'}", flush=True)
     finally:
         report["elapsed_s"] = round(time.perf_counter() - started, 1)
         report["identical"] = bool(report["results"]) and all(v["identical"] for v in report["results"].values())
