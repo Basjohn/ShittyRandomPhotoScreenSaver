@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import json
 from pathlib import Path
 import sys
@@ -329,6 +330,8 @@ def run(output_dir: Path) -> dict[str, object]:
             cases, 1
         ):
             runtime = _Runtime()
+            # The host keys retained widgets by identity; give each case its own.
+            config = replace(config, widget_id=f"media_smoke_{index}")
             style = MediaPresentationStyle.project(config, _shadows(direction))
             model = MediaPresentationModel(
                 config,
@@ -369,6 +372,8 @@ def run(output_dir: Path) -> dict[str, object]:
                     index, config.provider, info, PreparedMediaArtwork(key, art, 0.0)
                 )
             )
+            if art is not None and not model.hasArtwork:
+                raise RuntimeError(f"{name}: artwork was not admitted")
             presentations.append((name, config, direction, geometry, presentation))
         window.show()
         settle = QEventLoop()

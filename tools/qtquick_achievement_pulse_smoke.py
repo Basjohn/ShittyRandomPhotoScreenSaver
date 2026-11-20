@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import replace
 import json
 from pathlib import Path
 import sys
@@ -65,22 +64,24 @@ def _config(**overrides) -> AchievementPulsePresentationConfig:
     values = {
         "font_family": "Inter",
         "font_size": 14,
-        "text_color": (248, 249, 252, 242),
+        "color": [248, 249, 252, 242],
         "show_background": True,
-        "background_color": (24, 29, 36, 255),
-        "background_opacity": 0.88,
-        "border_color": (235, 238, 244, 255),
+        "bg_color": [24, 29, 36, 255],
+        "bg_opacity": 0.88,
+        "border_color": [235, 238, 244, 255],
         "border_opacity": 0.9,
         "show_artwork": True,
         "artwork_shape": "portrait",
         "square_artwork_size": 140,
-        "show_latest_artwork": True,
+        "show_latest_achievement_artwork": True,
         "latest_unlock_count": 5,
         "double_capsules": True,
         "capsule_font_size": 12,
     }
     values.update(overrides)
-    return replace(AchievementPulsePresentationConfig(), **values)
+    return AchievementPulsePresentationConfig.from_widgets_mapping(
+        {"achievement_pulse": values}
+    )
 
 
 def _shadows(direction: str) -> dict[str, object]:
@@ -268,7 +269,7 @@ def run(output_dir: Path) -> dict[str, object]:
         ),
         (
             "achievement_unavailable_no_art",
-            _config(show_artwork=False, show_latest_artwork=False),
+            _config(show_artwork=False, show_latest_achievement_artwork=False),
             "S",
             with_unavailable_state(base),
             QImage(),
@@ -286,9 +287,11 @@ def run(output_dir: Path) -> dict[str, object]:
         OverlayWidgetGeometry(30, 790, 600, 290),
     )
 
-    presentations = []
     manifest = []
     try:
+        window.show()
+        # The retained identity is one per widget kind, so each case is built,
+        # settled, grabbed and retired before the next one takes the slot.
         for name, config, direction, card, art, art_path, geometry in (
             *cases,
             connect_case,
@@ -321,15 +324,9 @@ def run(output_dir: Path) -> dict[str, object]:
                     ),
                     animate=False,
                 )
-            presentations.append(
-                (name, config, direction, geometry, presentation)
-            )
-
-        window.show()
-        settle = QEventLoop()
-        QTimer.singleShot(1200, settle.quit)
-        settle.exec()
-        for name, config, direction, geometry, presentation in presentations:
+            settle = QEventLoop()
+            QTimer.singleShot(1200, settle.quit)
+            settle.exec()
             image = _grab(
                 presentation.item,
                 QSize(int(geometry.width), int(geometry.height)),
@@ -350,6 +347,8 @@ def run(output_dir: Path) -> dict[str, object]:
                     "busy_background_path": str(busy_path.resolve()),
                 }
             )
+            presentation.retire()
+            app.processEvents()
     finally:
         host.retire_all()
         window.hide()
