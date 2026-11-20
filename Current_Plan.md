@@ -645,6 +645,10 @@ the feature (D3D11 is not stated).
     rule (b) has run over the 5.5 s replay's 684 sampled frames only.
   - [ ] Layer L directly: the per-frame packed record byte-compared with the values the Python renderer uses, over the
     four takes (the fast-proof box's L tool; `engine_worker_gate.py` is the precedent).
+    Ran 20 Nov (`native_record_identity.py`, variant a, display placement): identical on all four takes, 2,645 of 2,645
+    and 2,646 of 2,646 inputs judged per half each (5,313 compared frames a take with the switch fade; all three passes
+    and both ambient streams compared); Spectrum and Spline Curve on `nightsolong_acousticsoft1` identical with the
+    same counts. Evidence `.artifacts/evidence/native_core/fast_proof/20261120_l_<mode>_<take>/`.
   - [ ] Checkpoint audit (Opus Medium) of the landing delta `git diff 4b17eeee8 7608b6c7b`: `bubble_check.py`, the
     narrowed isolation rule and group cap in `tools/pixel_tolerance.py`, the re-registration, the cost round. Merged
     pre-audit on 17 Nov at 99 % weekly usage.
@@ -725,6 +729,12 @@ the feature (D3D11 is not stated).
   - [ ] Profile the owner replay's 17 to 25 minutes per 60 s take before designing around guesses.
   - [ ] Layer L: the per-frame record compared byte for byte between paths, CPU only (`engine_worker_gate.py` is the
     precedent).
+    Built (20 Nov, commit e0275205c): `tools/visualizer_replay/native_record_identity.py` (`--mode --recording
+    --seconds 60 --out`), test `tests/test_native_record_identity.py` (one-ulp record and dropped-frame controls seen
+    failing at their input). One owner tick; the product's route on the owner's own item with a recording core; per
+    frame record bytes, settings by name and the module's GPU-free blocks against the Python renderer on a null GL.
+    Outside L by declaration: positional members (uMatrix, u_target_px, Spectrum's window maps) and the inherited scene
+    opacity. A take runs in 24 to 39 s. Evidence `.artifacts/evidence/native_core/fast_proof/20261120_l_*`.
   - [ ] Layer P: cached Python references; a native-only, hash-only compare with `--api opengl|vulkan`; every failing
     frame recorded (not the first eight); progress written during a run.
   - [ ] Coverage selection with its coverage report (guide section 3), warm-up per mode (guide section 5).
