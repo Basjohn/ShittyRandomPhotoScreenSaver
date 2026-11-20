@@ -886,8 +886,10 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   lane mix. User deviations survive. `ExtrudedSpectrumFrame` remains a `SpectrumFrame`; its height transfer equals Spectrum's
   (`extruded_height` mirrors the upload ×0.55, pow 1.15, height scale, 0.95 cap; tested).
 - **Presentation-only keys** (`extruded_spectrum_*`): depth, tilt, turn, colouring (Spectral Faces / Spectral
-  Edges / Bar Colours), hue drift, gloss, mirror faces, reflection, body alpha, smooth edges, optional shared Scene3D
-  shadow and allow overflow. Hue drift advances with logical time only.
+  Edges / Bar Colours), hue drift, gloss, mirror faces, reflection, smooth edges, optional shared Scene3D
+  shadow and allow overflow. Hue drift advances with logical time only. Body opacity is the fill swatch's alpha and
+  edge opacity the border swatch's; the separate `extruded_spectrum_body_alpha` key is retired and an old stored value is
+  inert (it must never override the swatches).
 - **Edge lines** are drawn by the shader along each face's border. Smooth Edges (on by default) measures them in true
   screen pixels (`fwidth` of the face coordinates): each line keeps its head-on width converted to screen
   pixels along that axis, but never narrower than 1.2 smoothed pixels, so faces seen at an angle keep a ramped line

@@ -357,7 +357,7 @@ Sphere has its own projected-shadow pass in its program and renderer. Tests: `te
 `test_qtquick_extruded_spectrum.py`. Native: **N4.l** (silhouette shadows as one shared primitive, distinct from N4.h)
 and **N4.h** (a real fitted shadow map, **high potential: built without a consumer**, "not a revival of the rejected
 Extruded cast shadows, and no mode turns it on without its own review"; N4.h's box). Notes: the E8-era Extruded cast
-shadow receiver is rejected and stays disabled (R-120, R-121 audits `Docs/Audits/`, R-125 to R-128
+shadow receiver is rejected and stays disabled (R-119 to R-128:
 `Docs/Historical_Bugs/R-125_to_R-128_Extruded_Cast_Shadow_Failure.md`; `Scene3D_Resources.md:12-14`); G2 "none" in the
 capability inventory, no fitted depth-map foundation exists (N4.h's box).
 Native status: decided, not built (N4.h, N4.l). Port rules and proof: [playbook](../Guides/Native_Port_Playbook.md#pb-e21).

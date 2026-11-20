@@ -569,4 +569,4 @@ the right of the Linked / Independent button, across the row's free space.
 
 ## Theme sorting (standalone tool)
 
-[Theme Sorter Foundry](../Guides/Theme_Sorter_Foundry.md) previews editable Settings themes on itself and performs explicit paired Widget/Settings theme file rename/delete using `linked_settings_theme_id`. It does not change product theme selection. [Mutable test-oracle audit](../Audits/Mutable_Test_Oracle_Theme_Sorter_2026-10-23.md) prevents freezing current curated colours, file names or pack count in tests.
+[Theme Sorter Foundry](../Guides/Theme_Sorter_Foundry.md) previews editable Settings themes on itself and performs explicit paired Widget/Settings theme file rename/delete using `linked_settings_theme_id`. It does not change product theme selection. [Test Durability](../Guides/Test_Durability.md) prevents freezing current curated colours, file names or pack count in tests.

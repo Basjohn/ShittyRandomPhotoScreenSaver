@@ -2024,8 +2024,7 @@ intensity limitations and remaining moving/music/physical optics gates are in In
 ### Held-left framed orbit
 
 The23 October archived failed-selector reconciliation passes46 checks for the42 logged failures after
-contract-correct selector/parameter updates. Receipt and independent focused gates are recorded in
-`Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md`; this is not a full-suite or visual acceptance claim.
+contract-correct selector/parameter updates. This is not a full-suite or visual acceptance claim.
 Generic Settings tests hydrate actual buckets. SST tests isolate physical screen identities and retain
 nonempty binding authority. Native glyph tests complete the existing hover reveal through `QEventLoop.exec()`
 before pressing controls; detached geometry-only tests explicitly admit visible chrome. Oscilloscope smokes
@@ -2054,4 +2053,4 @@ P1/P7 native scope. These do not prove positional distance falloff, physical emi
 
 ### Current operator-authored-state prohibition (2026-10-23)
 
-All behavior tests must use test-owned configurations or current dynamically resolved authorities. A test asserting the present contents of a curated preset (or current mutable Settings) as its expected artistic state is invalid. See [Test oracle repair audit](Audits/Test_Oracle_Repair_2026-10-23.md) and [Test durability guide](Guides/Test_Durability.md).
+All behavior tests must use test-owned configurations or current dynamically resolved authorities. A test asserting the present contents of a curated preset (or current mutable Settings) as its expected artistic state is invalid. See the [Test durability guide](Guides/Test_Durability.md).
