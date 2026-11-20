@@ -44,6 +44,14 @@ APIS = ("opengl", "vulkan")
 #: mode id -> the generic mode harness module whose ``Scene``, ``Stream`` and ``program_item`` place its item.
 MODES = {"devcurve": "devcurve_check", "bubble": "bubble_check"}
 CHILD_TIMEOUT_S = 7200
+#: The method proof's shader controls (guide section 7: the selected windows must catch a one-ulp shader change):
+#: mode -> name -> (shader file, the line, its replacement). ``ulp_gradient``: the linear gradient's 0.5 offset one
+#: float ulp up (0.5 -> 0.50000006), a change every background pixel's value carries.
+SHADER_CONTROLS = {
+    "bubble": {"ulp_gradient": ("bubble.frag",
+                                "        grad_t = dot(uv - center, grad_dir) + 0.5 + u_gradient.z;\n",
+                                "        grad_t = dot(uv - center, grad_dir) + 0.50000006 + u_gradient.z;\n")},
+}
 REPORT_NAME = "native_stream_player.json"
 #: The player's scene: the harness's item at its margin over a transparent root (the frame's alpha is the item's).
 SCENE_QML = b"""import QtQuick
@@ -105,6 +113,20 @@ def child(args) -> dict:
     if args.control:
         base.CONTROL = args.control                     # read by the mode's control_record
         record["control"] = args.control
+    if args.shader_control:
+        # The shader control: the mode's pack baked from its source with one line changed, drawn instead of the
+        # product's (the product's own baker; no module build).
+        import probe_rings
+        from rendering.native import program_values
+
+        filename, line, replacement = SHADER_CONTROLS[mode][args.shader_control]
+        text = module._shader_text(filename)
+        if text.count(line) != 1:
+            raise RuntimeError(f"{filename}: the shader control's line is not found exactly once")
+        pack = probe_rings.bake(text.replace(line, replacement), filename, out / "work" / "control_packs")
+        original = program_values.mode_fragment_pack
+        program_values.mode_fragment_pack = lambda mode_id, _o=original: pack if mode_id == mode else _o(mode_id)
+        record["shader_control"] = args.shader_control
     engine = QQmlEngine()
     host = core.hidden_host(*base.HOST_PIXELS)
     progress = out / f"progress_{api}.jsonl"
@@ -279,6 +301,9 @@ def main(argv=None) -> int:
     parser.add_argument("--control", default=None,
                         help="a negative control: one of the mode harness's record controls (bubble_check's "
                              "position_nudged or big_class_bit) applied on the Vulkan child; rule (b) must FAIL")
+    parser.add_argument("--shader-control", default=None,
+                        help="a shader control (SHADER_CONTROLS, e.g. ulp_gradient) drawn on every API's child: with "
+                             "--against a native-before run, the changed frames show it")
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--api", choices=APIS, help=argparse.SUPPRESS)
     parser.add_argument("--out-dir", help=argparse.SUPPRESS)
@@ -309,6 +334,8 @@ def main(argv=None) -> int:
             command += ["--control", args.control]
         if args.windows:
             command += ["--windows", str(Path(args.windows).resolve())]
+        if args.shader_control:
+            command += ["--shader-control", args.shader_control]
         started = time.monotonic()
         try:
             proc = subprocess.run(command, capture_output=True, text=True, timeout=CHILD_TIMEOUT_S, cwd=str(ROOT))

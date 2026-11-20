@@ -209,6 +209,11 @@ class _SpilledFrames:
     def __len__(self) -> int:
         return len(self._entries)
 
+    def replace_last(self, item: tuple[tuple[int, ...], bytes]) -> None:
+        """The last frame replaced (a control's changed frame), written at the file's end."""
+        self._entries.pop()
+        self.append(item)
+
     def __getitem__(self, index: int) -> tuple[tuple[int, ...], bytes]:
         shape, offset, size = self._entries[index]
         self._file.seek(offset)
@@ -529,6 +534,8 @@ def rule_a_frames(native: dict, python: dict, masks: dict, mode: str | None = No
 NATIVE_SURFACE_FORMAT: str | None = None
 #: ``--judge-workers``: rule (a)'s frames judged in this many worker processes (0: in this one), merged in input order.
 JUDGE_WORKERS = 0
+#: ``--native-control``: a negative control on the native frames (``shift``: one level up on every colour channel).
+NATIVE_CONTROL: str | None = None
 #: ``--unprimed``: the window is not rendered before the owner exists and the route is not prepared at attach (audit
 #: N29 round 2, M3: the product's unprimed path, its first frame waiting on the window's edge), a reported case, not a
 #: gate.
@@ -618,6 +625,16 @@ class NativeSceneMirror(SceneMirror):
         if self.route is not None and self.route.identity is not None:
             self.native_frames += 1
         record = super().frame(index)
+        if NATIVE_CONTROL == "shift" and not record.get("skipped"):
+            # The method proof's control: every native frame one level up on its colour channels.
+            import numpy
+
+            shape, data = self.frames[len(self.frames) - 1]
+            pixels = numpy.frombuffer(zlib.decompress(data), dtype=numpy.uint8).reshape(shape).copy()
+            pixels[..., :3] = numpy.minimum(pixels[..., :3].astype(numpy.int16) + 1, 255).astype(numpy.uint8)
+            raw = pixels.tobytes()
+            self.frames.replace_last((shape, zlib.compress(raw, 1)))
+            record = dict(record, hash=hashlib.sha256(raw).hexdigest())
         if self.on_frame is not None:
             self.on_frame(index, record, self.frames[len(self.frames) - 1])
         return record
@@ -1544,6 +1561,9 @@ def main(argv=None) -> int:
     parser.add_argument("--windows", type=Path, default=None,
                         help="with --native: a coverage_windows.json; the native run draws only its windows (with "
                              "their warm-up), the simulation ticks every input, each window reported with its position")
+    parser.add_argument("--native-control", choices=("shift",), default=None,
+                        help="with --native: a negative control on the native frames (shift: one level up); rule (a) "
+                             "must fail")
     parser.add_argument("--judge-workers", type=int, default=0,
                         help="with --native: rule (a)'s frames judged in this many worker processes (0: in this one; "
                              "the same verdicts either way)")
@@ -1574,8 +1594,9 @@ def main(argv=None) -> int:
     app = QApplication(["owner-render-parity"])
     try:
         if args.native:
-            global NATIVE_SURFACE_FORMAT, NATIVE_UNPRIMED, JUDGE_WORKERS
+            global NATIVE_SURFACE_FORMAT, NATIVE_UNPRIMED, JUDGE_WORKERS, NATIVE_CONTROL
             JUDGE_WORKERS = max(0, int(args.judge_workers))
+            NATIVE_CONTROL = args.native_control
             NATIVE_SURFACE_FORMAT = args.surface_format
             NATIVE_UNPRIMED = bool(args.unprimed)
             report = run_native(args.out, module_dir=args.module_dir.resolve(), offers=args.offers,
