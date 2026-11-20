@@ -133,6 +133,13 @@ class FrameTraceEvent(IntEnum):
     # frame figure: the edge it was read at), logical_timestamp_ns = the pass kind (GPU_PASS_KINDS).
     GPU_PASS_TIME = 77
     GPU_FRAME_TIME = 78
+    # The Visualizer's native route asking its native item for a frame (``native_route``, GUI thread; ``--frame-trace``
+    # only): revision = what the sync sent (bits: 1 card, 2 settings, 4 target sizes, 8 placement), auxiliary = why it ran
+    # (0 a publication's sync with a new snapshot, 1 a window edge's re-run, 2 any other sync without a new snapshot).
+    NATIVE_ROUTE_UPDATE_REQUEST = 79
+    # The PERF HUD's once-a-second text update (``scene_controller``, GUI thread, a queued frameSwapped; ``--frame-trace``
+    # with PERF only): the scene's update request it makes, at the moment it makes it.
+    GUI_PERF_HUD_UPDATE = 80
 
 
 _MAGIC: Final[bytes] = b"SRPSSFT1"

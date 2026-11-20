@@ -3527,6 +3527,9 @@ class QuickSceneController(QObject):
             )
 
         root = self._scene_root
+        if self._frame_trace is not None:
+            self._frame_trace.record(FrameTraceEvent.GUI_PERF_HUD_UPDATE,
+                                     screen_index=int(self._window.screen_index))
         if root is not None:
             root.setProperty(
                 "perfHudText",
