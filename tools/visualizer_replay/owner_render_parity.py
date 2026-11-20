@@ -407,6 +407,9 @@ RULE_A_SCATTER_PIXELS = {"bubble": 68}
 #: block fails, and so does a tie with 3 or more scatter pixels in its 3x3 (``pixel_tolerance.SCATTER_AGAINST_ISOLATION``,
 #: lead 17 Nov).
 RULE_A_SCATTER_GROUP = {"bubble": 22}
+#: The scatter's density per mode (checkpoint audit 8 M1): the most scatter and tie pixels one 16 x 16 window may hold
+#: (``pixel_tolerance.SCATTER_WINDOW``).
+RULE_A_SCATTER_WINDOW: dict[str, int] = {}
 
 
 def composite_tolerance(mode: str | None = None):
@@ -418,7 +421,8 @@ def composite_tolerance(mode: str | None = None):
     return pixel_tolerance.Tolerance(f"composite (rule a, {mode})" if scatter else "composite (rule a)",
                                      masked_level=RULE_A_FILL_LEVEL, scatter_pixels=scatter,
                                      tie_pixels=RULE_A_EDGE_PIXELS_PER_FRAME, tie_level=RULE_A_EDGE_LEVEL,
-                                     edge_class=True, scatter_cluster_pixels=RULE_A_SCATTER_GROUP.get(mode))
+                                     edge_class=True, scatter_cluster_pixels=RULE_A_SCATTER_GROUP.get(mode),
+                                     scatter_window_pixels=RULE_A_SCATTER_WINDOW.get(mode))
 
 
 def rule_a_frame(native, python, mask, mode: str | None = None) -> dict:
