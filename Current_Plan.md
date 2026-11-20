@@ -1567,9 +1567,9 @@ by risk; none takes a slot native work can use.
     just right of the ACHIEVEMENT PULSE pill. Read the operator's current saved placement (read only, from their
     settings) and make it the canonical default.
   - [ ] The pulse ring (the coloured circle) takes a material like the Media control bar's (its opacity and material
-    treatment) through the shared material path. The ring's inside keeps its current material, which becomes an
-    optional setting, on by default so today's look holds. Settings follow the existing bucket patterns: a short
-    name, the rest in a tooltip.
+    treatment) through the shared material path, not the inside of the circle. The ring's inside stays flat by default;
+    the existing "Material Progress Circle" setting (off by default) adds the material to the inside as an option.
+    Settings follow the existing bucket patterns: a short name, the rest in a tooltip.
   - [ ] Offscreen renders before and after, on a dark and a light theme and a non-Normal material. The lead judges
     them.
 - [ ] **The ordinary Visualizer card offers its Rotate glyph on hover** (operator report): UI-3 of `Docs/Future_Work/Studio_Corners_Card_Rim_and_Visualizer_Rotate_2026-11-09.md`, its
