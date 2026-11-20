@@ -83,8 +83,21 @@ def test_the_key_follows_the_run_and_the_drawing_code(monkeypatch):
         assert refs.reference_key(*changed)[0] != key
     # The drawing code: one source file's bytes changed makes another key.
     files = refs._source_files()
-    assert any(p.suffix == ".py" for p in files) and any(p.suffix == ".frag" for p in files)
-    assert any(p.suffix == ".qml" for p in files)
+    assert any(p.suffix == ".py" for p in files) and any(p.suffix == ".qml" for p in files)
+    assert any(p.parent.name == "gl_programs" for p in files)
+    # Audit 9 M1's control: one GLSL comment added to the conventions every composed shader carries changes the key.
+    from rendering.gl_programs import conventions
+
+    monkeypatch.setattr(conventions, "SRPSS_CONVENTIONS_GLSL", conventions.SRPSS_CONVENTIONS_GLSL + "\n// audit 9\n")
+    assert refs.reference_key("bubble", "", {"a": 1}, "take", frames, "display", 1.5)[0] != key
+    monkeypatch.undo()
+    assert refs.reference_key("bubble", "", {"a": 1}, "take", frames, "display", 1.5)[0] == key
+    # And the harness's mask code.
+    from tools import pixel_tolerance
+
+    monkeypatch.setattr(pixel_tolerance, "translucent_by_backgrounds", lambda *a: None)
+    assert refs.reference_key("bubble", "", {"a": 1}, "take", frames, "display", 1.5)[0] != key
+    monkeypatch.undo()
     original = type(files[0]).read_bytes
     monkeypatch.setattr(type(files[0]), "read_bytes",
                         lambda self: original(self) + (b"x" if self == files[0] else b""))

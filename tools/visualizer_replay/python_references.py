@@ -32,23 +32,61 @@ FORMAT = 1
 ROOT = Path(__file__).resolve().parents[2]
 
 
+#: The shader stages the Python renderers compile (composed with their includes and the conventions spliced in).
+_STAGES = (".frag", ".vert", ".comp")
+
+
 def _source_files() -> list[Path]:
+    """The Python drawing code's files, hashed by their bytes: the Quick visualizer package, the GL program helpers
+    (``rendering/gl_programs``, the conventions' owner), the shader composer, the scene's QML and its QML shaders (their
+    sources and packs)."""
     from rendering.quick.bootstrap import quick_qml_root
 
     files = sorted((ROOT / "rendering" / "quick" / "visualizer").rglob("*.py"))
-    shaders = ROOT / "widgets" / "spotify_visualizer" / "shaders"
-    files += sorted(p for p in shaders.rglob("*") if p.is_file() and p.suffix in (".frag", ".vert", ".glsl", ".comp"))
+    files += sorted((ROOT / "rendering" / "gl_programs").rglob("*.py"))
+    files.append(ROOT / "widgets" / "spotify_visualizer" / "shaders" / "__init__.py")
     files += sorted(quick_qml_root().rglob("*.qml"))
+    files += sorted(p for p in (quick_qml_root() / "shaders").rglob("*") if p.is_file())
     return files
 
 
+def _composed_shaders() -> list[tuple[str, str]]:
+    """(name, the text it compiles as) of every shader the Python renderers compile: the composer's own output, so the
+    includes and the conventions it splices (``rendering/gl_programs/conventions.py``) are in the key as compiled."""
+    from widgets.spotify_visualizer import shaders
+
+    folder = Path(shaders.__file__).resolve().parent
+    return [(p.name, shaders.compose_shader_source(p)) for p in sorted(folder.iterdir())
+            if p.is_file() and p.suffix in _STAGES]
+
+
+def _harness_sources() -> list[tuple[str, str]]:
+    """The harness code that draws, masks and captures a reference (its sources, not its whole modules, so a judge
+    change keeps the cache)."""
+    import inspect
+
+    import tools.expanded_visualizer_evidence as evidence
+    from tools import pixel_tolerance
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    pieces = [parity.SceneMirror, parity._SpilledFrames, parity.drawn_run, parity._python_mappings_run,
+              parity._python_reference, parity._python_masks, parity.content_backdrop, parity.rule_a_masks,
+              parity.single_sample_scene_targets, parity.card_placement, parity.parity_script,
+              pixel_tolerance.translucent_by_backgrounds, evidence.HiddenDisplayHost]
+    return [(f"{piece.__module__}.{piece.__qualname__}", inspect.getsource(piece)) for piece in pieces]
+
+
 def renderer_source_hash() -> str:
-    """A digest of the Python drawing code: every file of ``_source_files`` by its path and bytes."""
+    """A digest of everything that makes a Python reference (audit 9 M1): the drawing code's files
+    (``_source_files``), the composed text of every shader the renderers compile (``_composed_shaders``) and the
+    harness's drawing, mask and capture code (``_harness_sources``)."""
     digest = hashlib.sha256()
     for path in _source_files():
         digest.update(str(path.relative_to(ROOT)).replace("\\", "/").encode())
         digest.update(b"\0")
         digest.update(path.read_bytes())
+    for name, text in _composed_shaders() + _harness_sources():
+        digest.update(name.encode() + b"\0" + text.encode() + b"\0")
     return digest.hexdigest()
 
 
