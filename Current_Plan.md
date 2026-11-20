@@ -639,8 +639,11 @@ the feature (D3D11 is not stated).
   over the four takes; the 2560 x 1440 cost; the D1 rehearsal. Proved so far
   (`Docs/Guides/Native_Parity_And_Timing_Proof.md` layers): P on OpenGL over the four 60 s takes; P on Vulkan over the
   5.5 s replay only; L indirectly (the simulation is untouched and 21,107 matching frames); C at 4K. Not proved: T.
-  - [ ] Layer T on Vulkan and on native OpenGL, as the guide's section 4 sets it (Bubble's own T tools: its
-    diagnostics guide). Display 1 must be on; defer if it is off, never Display 0.
+  - [ ] Layer T on Vulkan, the product's native path (native OpenGL is not offered until N5.2h), as the guide's
+    section 4 sets it, against the pre-flip Python OpenGL row. Run by the lead with a quiet GPU:
+    `tools/visualizer_live_check.py --mode bubble --display 1 --seconds 90 --load none
+    --app-arg =--graphics-backend=vulkan`, then Bubble's own T tools (its diagnostics guide). Display 1 must be on;
+    defer if it is off, never Display 0.
   - [ ] Rule (b) over the four 60 s takes, once the owner replay gains `--api vulkan` (the fast-proof box). Today
     rule (b) has run over the 5.5 s replay's 684 sampled frames only.
   - [ ] Layer L directly: the per-frame packed record byte-compared with the values the Python renderer uses, over the
