@@ -657,6 +657,13 @@ the feature (D3D11 is not stated).
   - [ ] Layer T: the live run on Vulkan and native OpenGL against the pre-flip Oscilloscope row (lead runs it on
     Display 1). Layer C: per pass at 2560 x 1440 and 4K, the glow-off path included.
   - [ ] Registration last (playbook checklist 18), then docs (D12 "As built: Oscilloscope", Primitives, README).
+  - [ ] Side defect (found 20 Nov by the port): the legacy `widgets/spotify_visualizer/shaders/oscilloscope.frag` (and
+    its `.qsb`) is drawn by no renderer (its own header says so; the beam files are the mode's shaders now), yet it is
+    still the mode's registered fragment (`shaders._ALL_SHADER_FILES["oscilloscope"]`): `preload_fragment_shaders`
+    composes it at startup, the route's `_ModeContent.load` reads its pack at every Oscilloscope bind (the program
+    ignores it), and `generic_mode_check.py`'s product-pack round admits it as "the Oscilloscope's" pack. Retire it with
+    its registry entry once the route no longer reads a mode's pack for a mode with its own program, and move the
+    harness's admission check to the beam's packs.
 - [ ] N5.1 Bubble (its extra target with a light attachment; instanced quads for its point sprites).
   Registered on the route and offered on Vulkan (rule (b) passes: `native/core/python/bubble_check.py`, D12 "As built:
   Bubble"). Owner rule (a) passes on the 5.5 s replay and the four 60 s recorded takes under D12's Bubble scatter. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,

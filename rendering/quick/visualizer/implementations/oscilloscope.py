@@ -153,7 +153,7 @@ def oscilloscope_settings_values(logical, field, oriented_size, dpr: float, visu
         "uDivisions": (10.0, 8.0) if display == "Trace" else (8.0, 8.0),
     }
     if float(parameter(parameters, "osc_glow")) > 0.0:
-        values["u_hdr_exposure"] = 0.0
+        values.update(u_hdr_exposure=0.0)        # the glow composite's: no tone map (a setting, never the card's)
     return values
 
 
@@ -272,9 +272,6 @@ class QuickOscilloscopeRenderer:
         bloom = float(per_frame["u_bloom_strength"])
         (beam_name, beam_vertex, beam_fragment), (graticule_name, graticule_vertex, graticule_fragment) = \
             _sources(bloom > 0.0)
-        # The card's members (the native core's conventions): the item matrix, the oriented size, the quarter turns.
-        card = {"uMatrix": frame.matrix_values, "u_resolution": tuple(frame.oriented_logical_size),
-                "uContentRotationQuarters": frame.content_rotation_quarters}
         r = self._resources
         beam_program = r.program(beam_name, beam_vertex, beam_fragment)
         with self._target.scope(frame, _SCENE_SAMPLES, r, overlay=presentation.content_fade, bloom=bloom):
@@ -288,14 +285,20 @@ class QuickOscilloscopeRenderer:
                     gl.glUseProgram(r.program(graticule_name, graticule_vertex, graticule_fragment))
                     values = r.values("graticule")
                     values.update(settings)
-                    values.update(card)
+                    # The card's members (the native core's conventions): the item matrix, the oriented size, the
+                    # quarter turns.
+                    values["uMatrix"] = frame.matrix_values
+                    values["u_resolution"] = tuple(frame.oriented_logical_size)
+                    values["uContentRotationQuarters"] = frame.content_rotation_quarters
                     with r.pass_blocks.bound(pack_block(OSC_GRATICULE_BLOCK, values)):
                         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, int(per_frame["osc_graticule_vertices"]))
                 gl.glUseProgram(beam_program)
                 values = r.values("beam")
                 values.update(settings)
                 values.update(per_frame)
-                values.update(card)
+                values["uMatrix"] = frame.matrix_values
+                values["u_resolution"] = tuple(frame.oriented_logical_size)
+                values["uContentRotationQuarters"] = frame.content_rotation_quarters
                 with r.pass_blocks.bound(pack_block(OSC_BEAM_BLOCK, values)), \
                         self._stream.bound(gl.GL_SHADER_STORAGE_BUFFER, POINT_BINDING, per_frame["osc_points"]):
                     with self._target.emission_writes():
