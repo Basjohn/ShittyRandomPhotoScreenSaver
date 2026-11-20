@@ -664,7 +664,7 @@ the feature (D3D11 is not stated).
     27, 39 and 27 against 11, 16 and 18, with p99 about 1 ms worse. Spectrum on Vulkan sits near parity (11 and 14
     against 7 and 9), so the tail is Bubble's own. In every late frame, the time is after rendering ends and before the
     next frame begins (median about 17 ms, up to 85 ms): not sync, not recording.
-    - [ ] Root cause first (Opus Medium). Already ruled out by the lead (20 Nov): GPU time (the `--gpu-pass-timing` run:
+    - [ ] Root cause first (Opus Medium agent aac773583ad93e2ab, 20 Nov). Already ruled out by the lead (20 Nov): GPU time (the `--gpu-pass-timing` run:
       the whole surface pass is 4.74 ms median and 6.14 ms p99 at 4K, inside the 11 ms frame) and a missing publish
       (every late frame had a publish during its gap). Present request ready more than 8 ms before Qt began the frame:
       4-10 late frames per Vulkan run and 6 per OpenGL run, so Qt's render loop starts frames late on both paths,
@@ -1534,7 +1534,7 @@ by risk; none takes a slot native work can use.
   - [ ] Persisted values: follow `Docs/Architecture/Persisted_Input_Compatibility.md`. A stored user offset keeps its
     visual result (stored + 0.35), and an unset value takes the new base. Test both. Never pin the default's number in
     a test; derive it from the canonical default.
-- [ ] **Style Overrides: a "Borderless" button.** It goes below "Reset Colours To Theme", on the same row as Card Border
+- [ ] **Style Overrides: a "Borderless" button.** (Sonnet agent a491af36afbc01b8e, 20 Nov.) It goes below "Reset Colours To Theme", on the same row as Card Border
   Width, right-aligned, in the same style. It latches pressed and sets every border element of the widget UIs to 0 or
   invisible. Reset Colours, editing the border width, or changing the surface choice in Style Overrides each un-latches
   it. It persists like the other overrides. Test: latch, each un-latch path, and a reload.
