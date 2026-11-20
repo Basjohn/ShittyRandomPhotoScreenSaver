@@ -843,6 +843,17 @@ the feature (D3D11 is not stated).
     (`native_record_identity.py --deliveries`) drawn by `native_stream_player.py` on OpenGL and Vulkan: rule (b) per
     frame under the mode's `VULKAN_RULE_B`, and each API's hashes against an earlier run; generic modes only, Spectrum's
     own item is not played yet; (5) d0b2e8095 `--judge-workers N`, the same result as one process.
+  - [ ] Checkpoint audit 9 M1 (`Docs/Future_Work/Checkpoint_Audits_Nov21.md`): the cached reference's key
+    (`python_references._source_files`) misses `rendering/gl_programs/conventions.py` (spliced into every composed
+    shader), the composer `widgets/spotify_visualizer/shaders/__init__.py`, `rendering/gl_programs/*`, the QML shaders
+    and the mask and capture code (`rule_a_masks`, `content_backdrop`, `SceneMirror`,
+    `pixel_tolerance.translucent_by_backgrounds`). Key on the composed sources of every shader the renderer compiles,
+    a declared module list and the mask code; the conventions change (seen not changing the key) becomes the test's
+    control.
+  - [ ] Checkpoint audit 9 M2: the stale-reference path dies on Windows (WinError 32: `store` removes the folder whose
+    `frames.bin` the loaded `StoredFrames` still holds open), leaving the stale reference so every later run dies
+    too. Close the stored frames (or store aside and swap), rewrite the progress file from the rejudge with the
+    run's `--judge-workers`, and test the stale path end to end.
   - [ ] Coverage selection with its coverage report (guide section 3), warm-up per mode (guide section 5).
   - [ ] Method proof on Bubble: the selected set catches input 22, the two offer fade frames, a one-level shift and a
     one-ulp shader change.
