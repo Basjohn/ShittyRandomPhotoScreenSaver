@@ -158,7 +158,7 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 ### Item 6. Hygiene
 
 - [ ] Finish the closed-report pass (Sonnet's first round merged 20 Nov: 31 reports closed).
-  - [ ] Triage the dated native-core audits in `Docs/Future_Work/` (`Audit_2026-11-12_Evening`, `_Night`,
+  - [ ] (Opus Medium agent a9f0005a630a9dfee, 20 Nov) Triage the dated native-core audits in `Docs/Future_Work/` (`Audit_2026-11-12_Evening`, `_Night`,
     `Audit_2026-11-13`, `Audit_2026-11-14`, `_N25`, `_N29`, `_N29_round2`, `_N38`, `Checkpoint_Audits_Nov15`), one
     finding at a time. A fixed finding's lesson goes to its owner; an open one becomes or joins a plan box. Repoint
     the links from `Primitives.md`, `Native_Port_Playbook.md`, `Native_Core_P3_Decisions.md` and `R-198`, then delete
@@ -609,7 +609,7 @@ the feature (D3D11 is not stated).
 
 - [ ] N5.1 Spline Curve leftover: its Studio is not offered on Vulkan (`STUDIO_PREVIEW_BACKENDS`), the same open
   item as Spectrum's; both close with N5.8.
-- [ ] N5.1 Oscilloscope (Opus High: N3.4 bloom's first consumer). Python oracle:
+- [ ] N5.1 Oscilloscope (Opus High: N3.4 bloom's first consumer; agent a652d2d5a77e690ff, 20 Nov). Python oracle:
   `rendering/quick/visualizer/implementations/oscilloscope.py`. It is one instanced pass reading a segment array from
   the stream ring (binding 3) into a single-sample overlay `SceneTarget`. Each segment is a quad. Light goes into the
   overlay's emission attachment, and the target's bloom spreads it into the glow. Glow 0 allocates no emission or
@@ -778,7 +778,7 @@ the feature (D3D11 is not stated).
   over the `replay` recipe and show the steady residual collapses (from 2,430 one-level pixels, worst 34 a frame).
 - [ ] Bubble optimisation proof gap: needs the fast long-clip proof's layer P tool (the box below) before the
   first Bubble optimisation; the rules are the guide's.
-- [ ] Build the fast long-clip proof (method and rules: `Docs/Guides/Native_Parity_And_Timing_Proof.md`, its
+- [ ] Build the fast long-clip proof (Opus Medium agent a6257c36aeee45f10, 20 Nov; method and rules: `Docs/Guides/Native_Parity_And_Timing_Proof.md`, its
   section 7; step 1 of the order: Bubble's layer L and long-take rule (b) need it, and so do every later port). Steps, each with a test:
   - [ ] A cheaper judge with byte-identical verdicts. The 20 Nov profile (Sonnet): of a 171 s, 958-frame 10 s Bubble take,
     the judge was 65 %. `content_edges` alone took 59 s, at 78 ms a frame, though it is read only at tie pixels. The
@@ -880,6 +880,10 @@ the feature (D3D11 is not stated).
 - [ ] Bubble GPU optimisation, after N5.1 lands (operator, 17 Nov: Bubble about 50 % GPU at 4K and Extruded Bubble
   about 55 %, on a stale build; "all guarded gains are valuable"). Every candidate passes
   `Docs/Guides/Native_Parity_And_Timing_Proof.md` for what it touches (its change-type table).
+  - [ ] Baseline in the operator's case first: Bubble fullscreen (expanded) at 4K on Display 1, where Python OpenGL
+    reaches about 50 % of a 4090 for 2D vector work, and Extruded Bubble about 55 %. Use live runs on Python OpenGL
+    and native Vulkan with `--app-arg=--gpu-pass-timing`, and record `nvidia-smi` utilisation and clocks with the
+    figures. The card-sized cost measured at the port is not this case.
   - [ ] Measure per-pass GPU time at 4K on both backends first. The port's figures put nearly all the cost in the main
     `bubble` pass (about 3 ms at full 4K area; native OpenGL about 5 % slower than Python).
   - [ ] Measure with decoration off, representative decoration on, and high-density, high-glow decoration on, at the
@@ -1483,7 +1487,8 @@ by risk; none takes a slot native work can use.
   Find which clip or geometry cuts the track's or the fill's border (likely the fill rect shrinking past the border
   inset, or a clip on the shrinking item). Fix it at the owner, with a pixel test at a low level and a control that
   fails on the old code.
-- [ ] **Gmail's card surface and opacity differ from every other widget.** Find where Gmail's surface diverges from the
+- [ ] **Gmail's card surface and opacity differ from every other widget.** (Sonnet agent adb81295f874b3fde, 20 Nov,
+  with the volume borders below.) Find where Gmail's surface diverges from the
   shared widget material path (its own opacity, tint or material call), and route it through the shared path. Prove it
   against Media and Feeds on both wallpapers and a light and a dark theme.
 - [ ] **Widget opacity baseline:** the current -0.35 becomes the new 0 (Base). The operator checked that every theme
