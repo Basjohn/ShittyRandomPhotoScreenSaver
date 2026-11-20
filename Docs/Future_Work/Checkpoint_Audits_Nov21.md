@@ -70,4 +70,10 @@ rejudge; and a test that exercises the stale path.
 - Cache and workers: a 5.5 s Bubble run drawn and stored, then the same run read from the cache with
   `--judge-workers 2`: reports equal key for key (`20261121_audit9_r1_drawn`, `_r2_cached`).
 - Native-only: against the full run's report, 549 of 549 hashes identical (`_r3_native_only_against`); against a
-  copy with one hash changed at input 200, CHANGED at exactly [200] and exit 1 (`_r5_control_one_hash`).
+  copy with one hash changed at input 200, CHANGED at exactly [200] and exit 1 (`_r5_control_one_hash`); against a
+  copy one frame short, CHANGED on the count and exit 1 (`_r6_control_short`); with no baseline, `identical` and
+  `pass` true (`_r4_native_only_no_baseline`, L3).
+- Stream player: layer L with `--deliveries` on the 5.5 s clip identical (359 compared frames,
+  `_l_bubble_5s`); the player drew 359 frames on each API and rule (b) passed (6 hash-equal, `_player_5s`); with
+  `--control position_nudged`, rule (b) failed on 330 of 359 frames and the Vulkan hashes changed from input 9 against
+  the clean run while OpenGL's were identical, exit 1 (`_player_5s_control`).
