@@ -691,6 +691,55 @@ def _show(value):
     return value
 
 
+# ------------------------------------------------------------------------------------- the delivery stream
+
+def _jsonable(value):
+    """``value`` as plain JSON data (mappings, sequences and numpy scalars resolved; floats kept exactly)."""
+    if isinstance(value, dict):
+        return {str(k): _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(v) for v in value]
+    item = getattr(value, "item", None)
+    if callable(item) and not isinstance(value, (str, bytes)):
+        return _jsonable(item())
+    return value
+
+
+class DeliveryStream:
+    """What the product's route delivered to the native core, input by input (fast-proof part 2 step 4b): the record
+    the core holds, the settings, the card and the target sizes, each written when it changes, and whether the native
+    side draws. ``deliveries.jsonl`` holds one line per input; ``records.bin`` the records, each stored once per change
+    (the line names its offset). A native-only player (``native_stream_player.py``) replays it on either API."""
+
+    def __init__(self, folder: Path, mode: str) -> None:
+        self.folder = Path(folder)
+        self.folder.mkdir(parents=True, exist_ok=True)
+        self._lines = (self.folder / "deliveries.jsonl").open("w", encoding="utf-8")
+        self._records = (self.folder / "records.bin").open("wb")
+        self._last: dict = {}
+        self._lines.write(json.dumps({"mode": mode, "format": 1}) + "\n")
+
+    def add(self, index: int, native: dict) -> None:
+        line: dict = {"input": index, "drawn": bool(native["drawn"])}
+        if native["drawn"]:
+            record = native["record"]
+            if record is not self._last.get("record_object") and record != self._last.get("record"):
+                line["record"] = [self._records.tell(), len(record)]
+                self._records.write(record)
+                self._last["record"] = record
+            self._last["record_object"] = record
+            for key in ("settings", "card", "sizes"):
+                value = json.loads(json.dumps(_jsonable(native.get(key) or {})))
+                if value != self._last.get(key):
+                    line[key] = value
+                    self._last[key] = value
+        self._lines.write(json.dumps(line) + "\n")
+
+    def close(self) -> None:
+        self._lines.close()
+        self._records.close()
+
+
 # --------------------------------------------------------------------------------------------- the mirror
 
 class IdentityMirror:
@@ -720,6 +769,8 @@ class IdentityMirror:
         self.publications = 0
         self.refused_by_core = 0
         self.refused_by_node = 0
+        #: ``DeliveryStream``: what reached the native core per input, kept for a native-only replay (step 4b).
+        self.deliveries: DeliveryStream | None = None
 
     # ---------------------------------------------------------------------------------- the route's edges
     def bound(self, identity) -> None:
@@ -780,6 +831,8 @@ class IdentityMirror:
     def frame(self, index: int) -> dict:
         self.index = index
         native, python = self._native(), self._python()
+        if self.deliveries is not None:
+            self.deliveries.add(index, native)
         differences = self.comparator.compare(native, python)
         part = ("first" if index < self.switch_input // 2 else "second") if index < self.switch_input else "switch"
         counts = self.counts[part]
@@ -817,7 +870,7 @@ class IdentityMirror:
         blocks, sources = self.comparator.native_blocks(self._core_record, settings, card, sizes)
         revision = getattr(route._snapshot, "logical_revision", None)
         return {"drawn": True, "record": self._core_record, "settings": settings, "card": card, "blocks": blocks,
-                "sources": sources, "revision": revision}
+                "sources": sources, "revision": revision, "sizes": sizes}
 
     def _python(self) -> dict:
         import dataclasses
@@ -882,9 +935,10 @@ class IdentityMirror:
 
 def run(mode: str, *, recording: str | None = None, seconds: float = 60.0, variant: str = "a",
         out: Path | None = None, module_dir: Path | None = None,
-        controls: tuple[tuple[str, int], ...] = ()) -> dict:
+        controls: tuple[tuple[str, int], ...] = (), deliveries: Path | None = None) -> dict:
     """Layer L of ``mode`` over a take (``recording``, its first ``seconds``; None: the shipped Studio clip, a smoke
-    check only). ``module_dir``: the native module (its GPU-free block packer); None: the block level is not run."""
+    check only). ``module_dir``: the native module (its GPU-free block packer); None: the block level is not run.
+    ``deliveries``: a folder the run's ``DeliveryStream`` is written to (for ``native_stream_player.py``)."""
     import tools.expanded_visualizer_evidence as evidence
     from tools.visualizer_replay import owner_render_parity as parity
     from tools.visualizer_replay import owner_worker_gate as gate
@@ -913,8 +967,14 @@ def run(mode: str, *, recording: str | None = None, seconds: float = 60.0, varia
                    "positional": dict(MODES[mode].positional), "controls": [list(c) for c in controls]}
     engine_worker_link.reset_run_state_for_testing()
     settings = parity.section_settings(mode, variant)
-    run_report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None, settings=settings,
-                                   scene_mirror=mirror)
+    if deliveries is not None:
+        mirror.deliveries = DeliveryStream(Path(deliveries), mode)
+    try:
+        run_report = gate.identity_run(mode, script, worker=False, supervisor=None, namespace=None,
+                                       settings=settings, scene_mirror=mirror)
+    finally:
+        if mirror.deliveries is not None:
+            mirror.deliveries.close()
     summary = mirror.summary()
     halves = summary["halves"]
     # Expected: every input of the mode's shown span (the halves); judged: compared or undrawn on both paths.
@@ -950,6 +1010,9 @@ def main(argv=None) -> int:
     parser.add_argument("--control", type=_control, action="append", default=[],
                         help="a negative control: ulp@<input> (the record's ulp field one ulp up from that input's "
                              "frame) or drop@<input> (that frame never reaches the core)")
+    parser.add_argument("--deliveries", type=Path, default=None,
+                        help="a folder to write the run's delivery stream to (what reached the native core per input), "
+                             "for tools/visualizer_replay/native_stream_player.py")
     args = parser.parse_args(argv)
     try:
         import psutil
@@ -960,7 +1023,8 @@ def main(argv=None) -> int:
 
     app = QApplication.instance() or QApplication(["native-record-identity"])
     report = run(args.mode, recording=args.recording, seconds=args.seconds, variant=args.variant, out=args.out,
-                 module_dir=None if args.no_blocks else args.module_dir.resolve(), controls=tuple(args.control))
+                 module_dir=None if args.no_blocks else args.module_dir.resolve(), controls=tuple(args.control),
+                 deliveries=args.deliveries)
     halves = report["halves"]
     for name in ("first", "second", "switch"):
         h = halves[name]
