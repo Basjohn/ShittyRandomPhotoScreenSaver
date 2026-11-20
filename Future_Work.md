@@ -114,6 +114,12 @@ AC-03 application-service tier) lives in `Docs/Reference/Architecture_Checklist.
 
 - The dated-reports review is the plan's item 6 box (one owner).
 
+## 5. Boundary
+
+This is not a changelog or a completed-work register. When a deferred item lands, move its durable contract to the appropriate
+current authority and remove it from this file. Retired/rejected work is routed through Historical Bugs and source control, not
+kept here as a museum list.
+
 ### Shared widget glyph reveal / developer captures: R38 follow-up (not closed)
 
 The physical action-handoff watch item lives in `Current_Plan.md` §5 (R38). The global Edit-only glyph handoff (existing session first, then existing command) remains required across all families; no new edit model or repaint/polling service. Diagnostic `\` capture is source/diagnostic only and requires native evidence of custom GL pixels before treating it as an accepted substitute for Snipping Tool. The UI presentation transition is not acceptance.
