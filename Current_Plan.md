@@ -157,11 +157,9 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] Side defect (Sonnet, 21 Nov; Sonnet agent a446364cd933c2026): `tools/qtquick_media_smoke.py` fails with "duplicate retained model identity:
-  'media'", and `tools/qtquick_achievement_pulse_smoke.py` builds a stale `AchievementPulsePresentationConfig()` (30
-  missing arguments). Repair both against the current owners, or retire them in `Docs/Reference/Tooling.md`
-  if `tools/surface_material_capture.py` covers them.
-
+- [ ] The repaired smoke tools (`tools/qtquick_media_smoke.py`, `tools/qtquick_achievement_pulse_smoke.py`) capture
+  blank artwork under offscreen QPA. Move their capture onto the hidden Windows-QPA GL host that
+  `tools/surface_material_capture.py` uses, which draws artwork and materials, then review every state's sheet.
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
   in `Docs/Reference/Benchmarks.md` predate the bump. Run it once on main (lead or Medium slot; no load), record
