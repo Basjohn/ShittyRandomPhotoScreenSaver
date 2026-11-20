@@ -612,7 +612,11 @@ def _find_key(value, key: str) -> list:
 
 
 def round_item(core, engine, app, host, records: list[dict]) -> dict:
-    chosen = [entry for entry in records if entry is not None and entry["key"] == MODE_ID][:ITEM_FRAMES]
+    # The mode's default run; a run set without one (the Oscilloscope's Glow 0 runs, keyed by their change) takes its
+    # first run.
+    drawn = [entry for entry in records if entry is not None]
+    key = MODE_ID if any(entry["key"] == MODE_ID for entry in drawn) else (drawn[0]["key"] if drawn else MODE_ID)
+    chosen = [entry for entry in drawn if entry["key"] == key][:ITEM_FRAMES]
     dpr = 1.5
     host.set_device_pixel_ratio(dpr)
     scene = Scene(core, engine, host)
