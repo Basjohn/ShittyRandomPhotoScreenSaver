@@ -1475,10 +1475,6 @@ borderless fullscreen transfers working smoothly.
 Each item reproduces its failure first. The lead judges pixels on the operator's two wallpapers. Opus Medium or Sonnet
 by risk; none takes a slot native work can use.
 
-- [ ] **Media volume child: slider borders cut off as the volume lowers.** Reproduce at several levels, high to low.
-  Find which clip or geometry cuts the track's or the fill's border (likely the fill rect shrinking past the border
-  inset, or a clip on the shrinking item). Fix it at the owner, with a pixel test at a low level and a control that
-  fails on the old code.
 - [ ] **Gmail's faint runs on a light Mica card sit under 4.5:1 now that Gmail takes the shared panel.** Measured with
   `tools/surface_material_capture.py --card-set lists --legibility` (Polished Chrome, Usu_Underwater_Lab): sender,
   date and menu runs 4.14 to 4.45 (they were 5.1 or more with Gmail's own ink); every other material and the dark

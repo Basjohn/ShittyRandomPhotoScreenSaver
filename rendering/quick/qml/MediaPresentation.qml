@@ -1137,8 +1137,16 @@ OverlayWidget {
                     sourceComponent: Item {
                         Item {
                             id: unfilledTop
+                            objectName: "mediaAppVolumeExposedTop"
                             width: appVolumeTrack.width
-                            height: Math.max(0.0, appVolumeFill.y)
+                            // Down to where the fill's own side stroke takes over (the end of
+                            // its rounded cap), not to its bounding box: the cap leaves the
+                            // box corners empty, and the track's side stroke is the only line
+                            // there. Clipped at the box, the stroke broke off beside every cap
+                            // and, once the fill was shorter than the track is wide, along its
+                            // whole length.
+                            height: appVolumeFill.y > 0.5 || appVolumeFill.height <= 0.0
+                                ? Math.max(0.0, appVolumeFill.y + appVolumeFill.capRadius) : 0.0
                             clip: true
                             Rectangle {
                                 y: -unfilledTop.y
@@ -1152,7 +1160,10 @@ OverlayWidget {
                         }
                         Item {
                             id: unfilledBottom
-                            y: appVolumeFill.y + appVolumeFill.height
+                            objectName: "mediaAppVolumeExposedBottom"
+                            y: appVolumeFill.y > 0.5 || appVolumeFill.height <= 0.0
+                                ? appVolumeFill.y + appVolumeFill.height - appVolumeFill.capRadius
+                                : appVolumeTrack.height
                             width: appVolumeTrack.width
                             height: Math.max(0.0, appVolumeTrack.height - y)
                             clip: true
@@ -1199,6 +1210,9 @@ OverlayWidget {
                         : Math.min(parent.height, Math.max(2.0, parent.height * normalizedLevel))
                     y: (parent.height - height) / 2.0
                     radius: width / 2.0
+                    // The radius Qt actually draws: a fill shorter than it is wide is capped
+                    // at half its height. Its side stroke starts this far inside its box.
+                    readonly property real capRadius: height > 0.0 ? Math.min(width, height) / 2.0 : 0.0
                     // The adjustable level takes the card's material like its track (operator,
                     // 8 Nov: it "does not inherit surfaces"), tinted by its own fill at full
                     // strength so it still reads above the track's lighter tint.
