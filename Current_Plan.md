@@ -157,21 +157,6 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] Tooling inventory gaps (lead, 21 Nov; operator: "make sure those get documented so we never end up with a swiss
-  army knife no one knows about"). 29 tools have no row in `Docs/Reference/Tooling.md`, against its rule that a new
-  file under `tools/`, `scripts/` or `native/core/python/` needs one in the same commit. Nothing enforces it.
-  - [ ] Write each missing row from the tool's docstring and `--help` (path, purpose, key flags, who may run it,
-    outputs), in the right section. Native harnesses also keep their `Docs/Reference/Harness_Index.md` routing. Today:
-    `tools/` card_clip_contract, expanded_display_styles_evidence, live_check_transition_session,
-    native_frame_abi_header, native_schema_check, packet_reader_adversary, pass_block_gl, pixel_tolerance,
-    preflip_pack; `tools/visualizer_replay/` native_record_identity, native_stream_player, python_references;
-    `native/core/python/` backdrop_pyramid_check, background_layer_check, bubble_check, composite_analysis,
-    devcurve_check, fullscreen_pass_check, generic_mode_check, job_service_check, packet_reader_check,
-    probe_analysis, scene_target_check, select_msvc_toolset, spectrum_check, timer_analysis, timer_check,
-    transition_route_check, vk_validation.
-  - [ ] Guard test: every non-private `*.py` directly under `tools/`, `tools/visualizer_replay/`, `scripts/` and
-    `native/core/python/` is named in `Tooling.md`. Its control is a new unlisted file, run and seen failing.
-
 - [ ] (Sonnet agent ad927a7c14bbc5053) The repaired smoke tools (`tools/qtquick_media_smoke.py`, `tools/qtquick_achievement_pulse_smoke.py`) capture
   blank artwork under offscreen QPA. Move their capture onto the hidden Windows-QPA GL host that
   `tools/surface_material_capture.py` uses, which draws artwork and materials, then review every state's sheet.
