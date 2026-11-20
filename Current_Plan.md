@@ -650,9 +650,13 @@ the feature (D3D11 is not stated).
     27, 39 and 27 against 11, 16 and 18, with p99 about 1 ms worse. Spectrum on Vulkan sits near parity (11 and 14
     against 7 and 9), so the tail is Bubble's own. In every late frame, the time is after rendering ends and before the
     next frame begins (median about 17 ms, up to 85 ms): not sync, not recording.
-    - [ ] Root cause first (Opus Medium). Run the live check with `--app-arg=--gpu-pass-timing` (it writes the native
-      per-pass GPU time into the frame trace) and correlate each late frame with its passes' GPU time, then with
-      present and acquire timing on the swap chain. Check Qt's present mode and the Vulkan frames in flight against
+    - [ ] Root cause first (Opus Medium). Already ruled out by the lead (20 Nov): GPU time (the `--gpu-pass-timing` run:
+      the whole surface pass is 4.74 ms median and 6.14 ms p99 at 4K, inside the 11 ms frame) and a missing publish
+      (every late frame had a publish during its gap). Present request ready more than 8 ms before Qt began the frame:
+      4-10 late frames per Vulkan run and 6 per OpenGL run, so Qt's render loop starts frames late on both paths,
+      Vulkan more often. Vulkan's spread is 20-39 late frames per run (a fourth run: 20) against OpenGL's 11-18.
+      Instrument what the trace cannot see: swap-chain acquire and present timing on the native path, and the
+      render loop's update-request to frame-begin latency. Then test one variable at a time. Check Qt's present mode and the Vulkan frames in flight against
       the OpenGL path. Test one variable at a time. Candidates: the main `bubble` pass's GPU time spiking past a
       refresh, the ambient target's passes, a wait on the per-record arena upload, and swap-chain present blocking.
     - [ ] Fix at the owner if it is ours, then rerun three Vulkan runs and three OpenGL controls back to back. Accept
