@@ -1,8 +1,7 @@
 # R-169 | GUI stall sampler's frame map pinned a retiring display (Settings-open barrier timeout)
 
 **Status:** fixed 2026-10-25 (`core/performance/gui_stall_sampler.py`), regression test with negative control. Supersedes
-nothing; the strict barrier and GC policy are unchanged (no sweep: see
-`Docs/Audits/Retirement_GC_Sweep_Assessment_2026-10-25.md`).
+nothing; the strict barrier and GC policy are unchanged (no teardown-time sweep: see "Sweep considered and reverted" below).
 
 ## Symptom
 
@@ -31,6 +30,10 @@ isolation on Python 3.14.8 (the locals survive refcount release; `gc.collect()` 
 `_describe` pops its own thread's entry before formatting, so nothing references the map after return.
 `tests/test_gui_stall_sampler.py::test_a_sampled_stall_never_pins_the_gui_threads_locals` (real sampler, cyclic GC
 disabled, R-154's refcount-only standard) fails without the fix and passes with it.
+
+## Sweep considered and reverted
+
+A `gc.collect()` at every retirement (commit `3b9a9e34`, reverted in `ca4d79e9`) would have hidden this class: the barrier is the project's cycle detector for runtime owners (R-53, R-154), and a sweep turns each new cycle into silent memory churn. A sweep also runs every pending cycle's finalizer in the process (R-90-class native releases, parentless QObjects owned by another thread), waking crashes that the rare deep collection keeps dormant; it pauses 50 to 150 ms holding the GIL (the thaw sweep measured 86.9 ms); and it contradicts R-53, R-56 and R-59. The collector will not free such cycles unaided: at the RUN policy `(2000, 20, 50)` an old-generation cycle needed about 2.26M tracked allocations (1,071 young collections) against 132 in the whole preserved session. The established standard is R-154's: reclaimable by reference counting alone, proven with GC frozen. R-175 later adopted one collection per replacement, after the barrier has already judged by reference counting (`Docs/Guardrails/Performance_Optimization_Contract.md`).
 
 ## Lesson
 

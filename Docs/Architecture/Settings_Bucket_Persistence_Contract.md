@@ -52,6 +52,9 @@ its pill vocabulary there; nothing else in the dialog names it.
   private ThreadManagers; they look up the app-shared one (`ThreadManager.require_app_shared`). Under a runtime that
   is the engine's; a Settings-only (CONFIG) session's dialog registers one helper manager for its lifetime and
   releases it when destroyed.
+- **Enforcement is layered, not single-owner:** the startup projection and the leave retirement are not alone in keeping one path open; each tab's own retirement on a pill or tab change and the per-mode hydration enforce the same contract, so removing one layer does not break the real-dialog scenarios. A denied leave (display route, Quick Start Arrange, no sources on close) and a failed lazy target build never clear the active path. A full reload deliberately returns the Visualizers tab to Setup with every disclosure closed.
+- **Keys compare ids, not display names:** a Transition's Advanced bucket never survived reopen while the projection compared the pill's display name with its section id (23 Oct 2026).
+- **A bucket body is created hidden, placed in its parent layout, then revealed:** an expanded body shown before it has a parent is exposed by Qt as a temporary top-level window (the tiny flashing window at Settings open). Bars: `test_initially_open_bucket_is_parented_before_any_show`, `test_shared_bucket_builder_does_not_expose_unparented_widgets`; probe `tools/settings_window_probe.py` (zero extra top-level windows across opens and tabs on 24 Oct 2026; the originally reported flash stayed unreproduced and unattributed, and the ordering fix is kept as hardening).
 
 Regression coverage: `tests/test_settings_tab_registry_real_dialog.py` (registry derivation, pill agreement and
 projection round trip per tab, profile gating, remembered tab, CONFIG helper manager) and

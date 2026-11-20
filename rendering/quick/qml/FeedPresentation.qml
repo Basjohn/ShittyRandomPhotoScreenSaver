@@ -116,11 +116,14 @@ OverlayWidget {
             return age
         return age.length > 0 ? author.toUpperCase() + " · " + age : author.toUpperCase()
     }
-    readonly property real subtitleGap: 2.5
+    // The two vertical gaps of the header stack: header to subtitle, and header
+    // block to the articles. Every offset below derives from these two names.
+    readonly property real subtitleGap: 3.5
+    readonly property real bodyGap: 9.0
     readonly property real headerHeight: Math.max(
         36.0, headerFrame.implicitHeight * childWidthScale("header")
     ) + (hasHeaderSubtitle ? subtitleHeight + subtitleGap : 0.0)
-    readonly property real bodyTop: headerArea.height + 8.0
+    readonly property real bodyTop: headerArea.height + bodyGap
     // A tiny fixed footer is always budgeted so status/overflow text can never
     // paint over the final feed row. Keeping the reserve unconditional also
     // avoids a capacity <-> footer-visibility binding cycle.
@@ -383,7 +386,7 @@ OverlayWidget {
     Rectangle {
         id: divider
         x: 0
-        y: feedRoot.bodyTop - 8.0
+        y: feedRoot.bodyTop - feedRoot.bodyGap
         width: parent.width
         height: Math.max(1.0, feedRoot.scaleAwareHeaderStrokeWidth(1.0))
         color: Qt.rgba(feedRoot.feedModel.textColor.r, feedRoot.feedModel.textColor.g,

@@ -32,6 +32,7 @@ from core.settings.default_contract import (
     CARD_BORDER_WIDTH_MIN_PX,
     admit_card_border_width_setting_px,
     resolve_card_border_width_setting_px,
+    resolve_widgets_borderless,
 )
 
 from core.cache_maintenance import (
@@ -144,6 +145,12 @@ def _reset_family_color_overrides_to_theme(tab: "WidgetsTab") -> tuple[str, ...]
             section[key] = deepcopy(default_value)
             changed.append(f"widgets.{section_name}.{key}")
         widgets[section_name] = section
+
+    # Reset Colours un-latches Borderless (the borders it hid are colours the reset restores).
+    global_section = widgets.get("global")
+    if isinstance(global_section, Mapping) and resolve_widgets_borderless(widgets):
+        widgets["global"] = {**global_section, "borderless": False}
+        changed.append("widgets.global.borderless")
 
     if changed:
         tab._save_coalesce_token += 1
@@ -927,6 +934,15 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     px_label.setMinimumWidth(24)
     border_row.addWidget(px_label)
     border_row.addStretch()
+    tab.borderless_btn = OutlinedButton("Borderless", role="secondary")
+    tab.borderless_btn.setCheckable(True)
+    tab.borderless_btn.setToolTip(
+        "Hides every widget border: card, header, Media and Steam outlines. The Card "
+        "Border Width and colours are kept. Reset All Colours to Theme, editing the "
+        "border width or changing a surface choice here releases it."
+    )
+    tab.borderless_btn.toggled.connect(lambda _checked, owner=tab: owner._save_settings())
+    border_row.addWidget(tab.borderless_btn)
 
     from rendering.quick.widgets.surface_material import SURFACE_MATERIALS, SURFACE_MATERIAL_LABELS, THEME
 
@@ -967,7 +983,9 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "Normal retains the existing flat border. Other materials style the card border "
         "independently without an extra backdrop or legibility panel."
     )
-    tab.border_surface_mode_combo.currentIndexChanged.connect(tab._save_settings)
+    tab.border_surface_mode_combo.currentIndexChanged.connect(
+        lambda _index, owner=tab: _on_surface_choice_changed(owner)
+    )
     border_material_row.addWidget(tab.border_surface_mode_combo)
     border_material_row.addStretch()
 
@@ -988,7 +1006,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     tab.header_surface_mode_combo.setCurrentIndex(0)
     tab.header_surface_mode_combo.currentIndexChanged.connect(
-        lambda _index, owner=tab: owner._save_settings()
+        lambda _index, owner=tab: _on_surface_choice_changed(owner)
     )
     header_material_row.addWidget(tab.header_surface_mode_combo)
     header_material_row.addStretch()
@@ -1119,9 +1137,24 @@ def _select_surface_material(tab: WidgetsTab, material: object) -> None:
     del blocker
 
 
+def release_borderless(tab: WidgetsTab) -> None:
+    """Un-latch Style Overrides' Borderless (the caller saves)."""
+
+    button = getattr(tab, "borderless_btn", None)
+    if button is not None and button.isChecked():
+        with QSignalBlocker(button):
+            button.setChecked(False)
+
+
+def _on_surface_choice_changed(tab: WidgetsTab) -> None:
+    release_borderless(tab)
+    tab._save_settings()
+
+
 def _on_surface_material_changed(tab: WidgetsTab) -> None:
     from rendering.quick.widgets.surface_material import NORMAL, normalize_surface_material
 
+    release_borderless(tab)
     tab._global_surface_material = normalize_surface_material(
         tab.surface_material_combo.currentData(), allow_theme=True) or NORMAL
     tab._save_settings()
@@ -1227,6 +1260,10 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
         tab.widget_child_collision_enabled.setChecked(child_collision_enabled)
     if hasattr(tab, "card_border_width_spin"):
         tab.card_border_width_spin.setValue(border_width)
+    borderless_btn = getattr(tab, "borderless_btn", None)
+    if borderless_btn is not None:
+        with QSignalBlocker(borderless_btn):
+            borderless_btn.setChecked(resolve_widgets_borderless(widgets_config))
 
 
 def collect_general_input_settings(tab: WidgetsTab) -> dict[str, bool]:
@@ -1281,6 +1318,11 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
     )
     border_width = getattr(tab, "_global_card_border_width", tab._widget_default("global", "card_border_width_px"))
     global_config = {
+        "borderless": (
+            tab.borderless_btn.isChecked()
+            if getattr(tab, "borderless_btn", None) is not None
+            else resolve_widgets_borderless(existing_widgets)
+        ),
         "card_border_width_px": admit_card_border_width_setting_px(border_width),
         "child_collision_enabled": (
             tab.widget_child_collision_enabled.isChecked()

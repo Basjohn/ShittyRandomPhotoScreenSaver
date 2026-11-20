@@ -51,8 +51,10 @@ def test_volume_outline_uses_real_material_active_state() -> None:
     assert 'objectName: "mediaAppVolumeExposedOutline"' in qml
     assert 'active: mediaRoot.cardBorderMaterialActive' in qml
     assert 'clip: true' in qml.split('id: appVolumeExposedOutlineLoader', 1)[1].split('MouseArea {',1)[0]
-    assert 'height: Math.max(0.0, appVolumeFill.y)' in qml
-    assert 'y: appVolumeFill.y + appVolumeFill.height' in qml
+    # The exposed outline stops where the fill's own side stroke begins (the end of its cap),
+    # not at its bounding box (test_media_volume_side_strokes_are_continuous_at_every_level...).
+    assert 'appVolumeFill.y + appVolumeFill.capRadius' in qml
+    assert 'appVolumeFill.y + appVolumeFill.height - appVolumeFill.capRadius' in qml
     assert 'height: Math.max(0.0, appVolumeTrack.height - y)' in qml
     # No additional material shader, capture owner, timer, or volume semantics.
     assert qml.count('objectName: "mediaAppVolumeTrackMaterial"') == 1
@@ -72,8 +74,11 @@ def test_material_outline_references_a_declared_volume_fill_qml_id() -> None:
     track = qml.split('id: appVolumeTrack\n', 1)[1].split('objectName: "mediaAppVolumeInputArea"', 1)[0]
     assert track.count('id: appVolumeFill\n') == 1
     assert 'id: appVolumeFill\n                    objectName: "mediaAppVolumeFill"' in track
-    assert track.count('appVolumeFill.y') == 2
-    assert track.count('appVolumeFill.height') == 1
+    # Both exposed pieces read the fill's live geometry through its id (top: its y and cap;
+    # bottom: its y, height and cap); the cap radius is one property on the fill itself.
+    assert track.count('appVolumeFill.y') >= 2
+    assert track.count('appVolumeFill.height') >= 1
+    assert track.count('readonly property real capRadius') == 1
     assert 'active: mediaRoot.cardBorderMaterialActive' in track
 
 

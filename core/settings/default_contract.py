@@ -194,9 +194,29 @@ def admit_card_border_width_px(value: object) -> float:
     return max(float(CARD_BORDER_WIDTH_MIN_PX), min(float(CARD_BORDER_WIDTH_MAX_PX), width))
 
 
-def resolve_card_border_width_px(widgets_config: Mapping[str, Any] | object) -> float:
-    """Resolve the Widgets -> General card-border width every card draws."""
+WIDGETS_BORDERLESS_KEY = "widgets.global.borderless"
 
+
+def resolve_widgets_borderless(widgets_config: Mapping[str, Any] | object) -> bool:
+    """Whether Style Overrides' Borderless latch is set (missing or malformed: not latched)."""
+
+    values = widgets_config.get("global", {}) if isinstance(widgets_config, Mapping) else {}
+    return isinstance(values, Mapping) and values.get("borderless") is True
+
+
+def resolve_card_border_width_px(widgets_config: Mapping[str, Any] | object) -> float:
+    """Resolve the Widgets -> General card-border width every card draws.
+
+    Borderless draws none; the stored width is kept (see
+    ``resolve_card_border_width_setting_px``) so un-latching restores it.
+    """
+
+    if resolve_widgets_borderless(widgets_config):
+        return 0.0
+    return _stored_card_border_width_px(widgets_config)
+
+
+def _stored_card_border_width_px(widgets_config: Mapping[str, Any] | object) -> float:
     values = widgets_config.get("global", {}) if isinstance(widgets_config, Mapping) else {}
     if not isinstance(values, Mapping):
         values = {}
@@ -216,7 +236,7 @@ def admit_card_border_width_setting_px(value: object) -> int:
 def resolve_card_border_width_setting_px(widgets_config: Mapping[str, Any] | object) -> int:
     """The General page's whole-pixel card-border width for ``widgets_config``."""
 
-    return int(resolve_card_border_width_px(widgets_config))
+    return int(_stored_card_border_width_px(widgets_config))
 
 
 # Display -> Image Timing "Change Image Every": the one admitted range of ``timing.interval``, in whole
@@ -239,6 +259,8 @@ __all__ = [
     "admit_card_border_width_setting_px",
     "resolve_card_border_width_px",
     "resolve_card_border_width_setting_px",
+    "WIDGETS_BORDERLESS_KEY",
+    "resolve_widgets_borderless",
     "MC_PROFILE",
     "MISSING_DEFAULT",
     "NORMAL_PROFILE",

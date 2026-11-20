@@ -1,7 +1,8 @@
 # R-198 | The conventions buffer registry was keyed by a PySide wrapper that Qt Quick's context does not keep
 
 **Status:** fixed 12 Nov 2026, the day it shipped (cefbfa2b, N1.4's conventions include). Found by the Fable audit of
-12 Nov evening (`Docs/Future_Work/Audit_2026-11-12_Evening.md`, finding 1 High and finding 2 Medium). Owner:
+12 Nov evening (finding 1 High and finding 2 Medium; the closed report is in git history,
+`git show 66e64a363:Docs/Future_Work/Audit_2026-11-12_Evening.md`). Owner:
 `rendering/quick/render/gl_resources.py`. Regression bars in `tests/test_conventions_include.py`:
 `test_a_context_qt_owns_has_one_entry_one_buffer_and_every_hold_with_no_wrapper_kept`,
 `test_two_sharing_contexts_each_bind_their_own_buffer_and_a_foreign_delete_is_refused`,

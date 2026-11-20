@@ -112,10 +112,7 @@ AC-03 application-service tier) lives in `Docs/Reference/Architecture_Checklist.
 
 ### Remaining non-code organization
 
-- [ ] Review dated `Docs/Audits` individually: durable rules into existing owners, significant forensic lessons
-  into Historical Bugs, ordinary completed chronology into Git. Do not create another historical index/archive.
-  Preserve operator source/reference assets and recovery backups; bulk scratch pruning is not a continuing
-  deletion authority over new work.
+- The dated-reports review is the plan's item 6 box (one owner).
 
 ## 5. Boundary
 

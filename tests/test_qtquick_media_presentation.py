@@ -1678,6 +1678,76 @@ def test_media_child_shadows_are_never_clipped_by_their_lane_or_card(qt_app, dir
 
 
 @pytest.mark.qt
+@pytest.mark.parametrize("level", (0.6, 0.3, 0.1, 0.03))
+def test_media_volume_side_strokes_are_continuous_at_every_level_on_a_material_border(
+    qt_app, level: float
+) -> None:
+    """On a material border the track draws its outline only where the level fill does not.
+
+    The side stroke is drawn by three pieces: the exposed outline above the fill, the fill's
+    own straight side (its rounded cap excluded) and the exposed outline below it. Together
+    they must cover the track's full height with no gap; clipped at the fill's bounding box
+    instead of its cap, the stroke broke off beside both caps and, for a fill shorter than the
+    track is wide, along the whole fill. Derived from the items' own geometry."""
+
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0, runtime_generation=94, screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=False),
+    )
+    window.setWidth(1600)
+    window.setHeight(900)
+    factory = QuickSceneFactory()
+    controller = QuickSceneController(window=window, factory=factory)
+    runtime = _FakeMediaRuntime()
+    volume_runtime = _FakeMediaVolumeRuntime()
+    config = MediaPresentationConfig.from_mapping(_values())
+    model = MediaPresentationModel(
+        config, MediaPresentationStyle.project(config, _shadows(direction="SE")),
+        factory.media_artwork_provider, runtime, volume_runtime_service=volume_runtime,
+    )
+    backdrop = QQuickItem()
+    try:
+        presentation = RetainedMediaPresentation(
+            host=controller.ordinary_widget_host, model=model,
+            geometry=OverlayWidgetGeometry(35.0, 40.0, 650.0, 300.0),
+        )
+        item = presentation.item
+        presentation.activate(object())
+        runtime.publish(_snapshot(1, image=_image()))
+        controller.scene_root.setWidth(1600.0)
+        controller.scene_root.setHeight(900.0)
+        item.setProperty("cardSurfaceMaterial", "glass")
+        item.setProperty("cardSurfaceBackdrop", backdrop)
+        qt_app.processEvents()
+        assert item.property("cardBorderMaterialActive") is True
+        volume_runtime.set_volume_optimistic(level)
+        qt_app.processEvents()
+        track = item.findChild(QQuickItem, "mediaAppVolumeTrack")
+        fill = item.findChild(QQuickItem, "mediaAppVolumeFill")
+        top = item.findChild(QQuickItem, "mediaAppVolumeExposedTop")
+        bottom = item.findChild(QQuickItem, "mediaAppVolumeExposedBottom")
+        assert None not in (track, fill, top, bottom)
+        assert fill.height() > 0.0
+        cap = min(fill.width(), fill.height()) / 2.0
+        pieces = sorted([
+            (top.y(), top.y() + top.height()),
+            (fill.y() + cap, fill.y() + fill.height() - cap),
+            (bottom.y(), bottom.y() + bottom.height()),
+        ])
+        assert pieces[0][0] <= 0.01 and pieces[-1][1] >= track.height() - 0.01
+        for (_, end), (start, _) in zip(pieces, pieces[1:]):
+            assert start <= end + 0.01, (level, pieces)
+    finally:
+        controller.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        backdrop.deleteLater()
+        qt_app.processEvents()
+
+
+@pytest.mark.qt
 def test_media_header_flip_swaps_artwork_and_metadata_rails_and_reset_is_identity(qt_app) -> None:
     """A semantic flip must not make metadata overlap the artwork or shift on reset."""
     screen = qt_app.primaryScreen()

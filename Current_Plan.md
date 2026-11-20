@@ -51,7 +51,7 @@ method, `Docs/Guides/Native_Parity_And_Timing_Proof.md` (layers L logic, P pixel
 are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnostics.md`).
 
 **Order (lead and operator, 17 Nov):**
-1. Close Bubble (the N5.1 Bubble box, in its order): its checkpoint audit; build the fast long-clip proof's layer L and
+1. Close Bubble (the N5.1 Bubble box, in its order): checkpoint audit 8's fixes; build the fast long-clip proof's layer L and
    layer P tools (the "Build the fast long-clip proof" box); then Bubble's layer L directly, layer T on both backends,
    rule (b) over the four takes, the 2560 x 1440 cost, and the D1 rehearsal.
 2. The scene-fade double-rounding fix (the "Spectrum and Spline Curve long-take residuals" box). Then rerun Bubble's
@@ -72,7 +72,7 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   first), then 1C.10.
 - [ ] Medium (Opus Medium): the fast-proof tools (step 1), then Bubble's L, T and long-take rule (b), then step 2's
   scene-fade fix, then step 3.
-- [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): the Bubble landing delta first, then each merge.
+- [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
 - [ ] Sonnet Medium: profile the owner replay (the fast proof's first box), then cheap audits and docs of open avenues,
   hygiene item 6's closed-report cleanup, and the low-risk section 1E items.
 
@@ -156,13 +156,6 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
   contrast alone does not account for the shadow's effect); 4x crops, lead review.
 
 ### Item 6. Hygiene
-
-- [ ] Apply the existing documentation policy to closed reports (`Docs/Guides/Documentation_Maintenance.md`,
-  "Historical-document policy" and "One owner per rule"; Sonnet when usage allows). Go through `Docs/Audits/` (33
-  files, including the closed Bubble ambient slice reports of 3 Nov) and the closed items in `Docs/Future_Work/`.
-  For each closed report, move each durable rule to its owner and each hard-won lesson to a Historical Bug entry,
-  repoint any link to the owner, then delete the file; git keeps it. Add no retired-documents list anywhere. Keep
-  audits a live guide cites as evidence, and the two zipped non-text design packs.
 
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
@@ -328,6 +321,17 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   (`createOffscreenRenderPass` without an external dependency, only with non-preserving targets), D (Qt Quick's
   `grabWindow` on Vulkan, grab phases only). C (`toVkAccess(TexColorOutput)` write-only) is avoided by priming targets
   at creation and after every readback and is never excused. Owed:
+  - [ ] **Qt 6.12.1 bump (lead; operator, 20 Nov: bump without asking).** Checked 20 Nov: PyPI still has PySide6
+    6.12.0 only, and Qt's release plan moved 6.12.1 from 12 Nov to 23 Nov (wiki.qt.io/Qt_6.12_Release). When PySide6,
+    PySide6_Addons, PySide6_Essentials and shiboken6 6.12.1 are on PyPI:
+    - [ ] Pick a stage boundary (decision D11): no agent mid-build on `native/core`; agents merged or checkpointed.
+    - [ ] Change the four pins in `requirements.txt`, then `pip install -r requirements.txt` with no venv process
+      running (locked PySide6 DLLs make pip fail; restore a mixed set at once if it does).
+    - [ ] Rebuild the native module on GitHub: the workflow reads Qt's version from that pin
+      (`tools/native_sdk_fetch.py --print-qt-version`). Regenerate the `.qsb` packs if `regen_qrc --shaders --check`
+      reports drift.
+    - [ ] Rerun the native tests (`pytest tests -k native`), the N0.6 rounds without excuse A (the box below), and
+      one Vulkan live check of a native mode on Display 1, then commit with the figures.
   - [ ] The A excuse is removed when the project takes the next Qt 6.12 patch release (the branch head already uses
     `UNDEFINED`): the upgrade's rerun deletes A from `QT_DEFECTS` and every round is clean without it.
   - [~] Awaiting Validation — lead, Display 1 visible and bounded, when two displays are connected: a real translucent window on the
@@ -364,6 +368,9 @@ the modes with no measured need: they are the triggers, and Expanded Visualizer 
   invisible to the lifecycle tests: record those too, with a test.
 - [ ] Side defect: `waveform_ribbon.py:54` (`0.5*(clip.z/clip.w+1.0)`) and `scene3d_spheres.py:197` assume OpenGL's
   -1..1 depth: route both through `viewDepthFromDepthTexture`/the include before matrices are corrected at upload.
+- [ ] Side defect (12 Nov evening audit, low): `tests/test_qrhi_texture_formats.py` scans `rendering/` only, by the
+  enum's text, so a format QRhi lacks under `widgets/` (its shaders included) or reached through an alias passes.
+  Scan `widgets/` too, with a control that plants an `rg16f` image layout there.
 - N1.4's remainder: the eight scene composites in `scene3d/target.py:125-286` (and their oriented forms) keep raw
   `gl_FragCoord` and are never converted: D5.2 replaces them with a texture node.
 - [ ] N1.6 Loose uniforms into blocks across the renderer (`qsb` needs blocks), each group pixel-identical in OpenGL
@@ -487,6 +494,28 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [ ] Fix what the scopes show, if it brings Vulkan's 4K 4x minus 1x to the Python path's or below with parity
     exact and validation clean; otherwise the figure and its cause go to the lead with the operator's look question
     (4K defaulting to fewer samples).
+- [ ] N3.3 leftovers: checkpoint audit 5's findings that D16's "As built after checkpoint audit 5" leaves to the plan
+  (their boxes were lost in the 15 Nov merge 36faada69; still open in source, 20 Nov). Before the first compute consumer
+  (N5.4, N5.6):
+  - [ ] L2, a trigger consumed by a record that dispatches nothing: `ModeContent::decideDispatches` advances
+    `lastTrigger`, `dispatches` and the fresh key before `recordCompute` may skip the entry (no pipeline, a group count
+    of 0, groups past the device's limit). Decide the groups and the pipeline in `decideDispatches` and advance only an
+    entry that dispatches; proof: a field-triggered stateful entry whose named group count is 0 for one record keeps
+    that record's step for the next, control on the pre-change module.
+  - [ ] L3, dispatch totals: only each dimension is bounded; the product of three admitted group counts is not (three
+    record counts under at_most 65535 admit 2.8e14 groups, a TDR from an owner bug). Bound the product at admission and
+    per record, refused at its edge as the per-dimension limit is; GPU-free test and a harness case refused with its
+    reason.
+  - [ ] L4, an image's zeros: `compute_passes.cpp` zeroes a storage image from one host `QByteArray` of a whole slice on
+    the render thread (up to 256 MiB under `kMaxStorageImageBytes`). Upload them in bands of rows from one bounded block
+    of zeros, proved by the copy round's zero reads on a 2D and a 3D image larger than one band; and decide whether
+    `UsedAsTransferSource` (only the harness's readback needs it) stays on every storage image.
+  - [ ] L5, the harness readback reaching the product: `NativeMode.read_storage` and `storage_data`
+    (`rendering/native/mode.py`) are the harness's only; a test that no module under `rendering/`, `widgets/`, `core/` or
+    `ui/` calls them, with its control.
+  - [ ] M3's draw-side form: one render pass reading a storage buffer two ways (as `storage` and as `instance_from` or
+    `indirect`, in one draw or two draws of a run) is admitted, and QRhi keeps one access a resource a pass. Refuse it
+    at admission with the reason (or split the run), proved under validation with shader accesses on.
 - [ ] N3.4 Transparency and post-processing (D17): source/proof complete; remaining investigation is non-blocking
   (operator, 16 Nov). Consumers retain their own parity, lifecycle and measured-cost requirements.
   - [ ] At Qt upgrades, recheck the private QRhi outside-pass `beginExternal`/`endExternal` contract against Qt source.
@@ -605,7 +634,7 @@ the feature (D3D11 is not stated).
 
 - [ ] N5.1 Spline Curve leftover: its Studio is not offered on Vulkan (`STUDIO_PREVIEW_BACKENDS`), the same open
   item as Spectrum's; both close with N5.8.
-- [ ] N5.1 Oscilloscope (Opus High: N3.4 bloom's first consumer). Python oracle:
+- [ ] N5.1 Oscilloscope (Opus High: N3.4 bloom's first consumer; agent a652d2d5a77e690ff, 20 Nov). Python oracle:
   `rendering/quick/visualizer/implementations/oscilloscope.py`. It is one instanced pass reading a segment array from
   the stream ring (binding 3) into a single-sample overlay `SceneTarget`. Each segment is a quad. Light goes into the
   overlay's emission attachment, and the target's bloom spreads it into the glow. Glow 0 allocates no emission or
@@ -683,19 +712,83 @@ the feature (D3D11 is not stated).
   Bubble"). Owner rule (a) passes on the 5.5 s replay and the four 60 s recorded takes under D12's Bubble scatter. `Docs/Future_Work/Native_Bubble_Parity_Investigation.md` owns detailed statistics,
   eliminated suspicions and evidence; the diagnostics tools are `tools/visualizer_replay/bubble_native_diagnostics.py`
   (`Docs/Guides/Native_Bubble_Diagnostics.md`). Follow the Native Port Playbook; no further tolerance widening.
-  Order: the checkpoint audit; the fast proof's L and P tools (their own box); layer L directly; layer T; rule (b)
+  Order: checkpoint audit 8's M1, M2 and lows (boxes below); the fast proof's L and P tools (their own box); layer L directly; layer T; rule (b)
   over the four takes; the 2560 x 1440 cost; the D1 rehearsal. Proved so far
   (`Docs/Guides/Native_Parity_And_Timing_Proof.md` layers): P on OpenGL over the four 60 s takes; P on Vulkan over the
   5.5 s replay only; L indirectly (the simulation is untouched and 21,107 matching frames); C at 4K. Not proved: T.
-  - [ ] Layer T on Vulkan and on native OpenGL, as the guide's section 4 sets it (Bubble's own T tools: its
-    diagnostics guide). Display 1 must be on; defer if it is off, never Display 0.
+  - [ ] Layer T on Vulkan, first runs done (lead, 20 Nov, Display 1, quiet GPU; evidence
+    `.artifacts/evidence/visualizers/{bubble,spectrum}/live_check/20261120_*`). Bubble on native Vulkan matches the
+    Python OpenGL control in median and p90 (11.07/12.30-12.47 ms) and in tick-to-publish. Its render-thread
+    recording is 10 times cheaper (0.15 ms median against 1.52). But its tail is heavier: frames over 16.7 ms were
+    27, 39 and 27 against 11, 16 and 18, with p99 about 1 ms worse. Spectrum on Vulkan sits near parity (11 and 14
+    against 7 and 9), so the tail is Bubble's own. In every late frame, the time is after rendering ends and before the
+    next frame begins (median about 17 ms, up to 85 ms): not sync, not recording.
+    - [ ] Root cause, leading candidate (agent aac773583ad93e2ab, 21 Nov; trace events 79 and 80, merge 6020d2977):
+      Qt begins frames on the visualizer's present requests through its 5 ms update-request timer. About once a
+      second another update source starts that timer early, so the next frame waits for the next publication, at
+      about 6 ms and then 15-17 ms. Bubble's Vulkan late frames that follow such an early frame are 14, 21, 20 and 13
+      per run; the rest, 13, 18, 7 and 7, are in OpenGL's range. Vulkan's frame ends about 0.5 ms after it begins, so
+      the early timer expires just as Bubble's request lands: the publish arrives about 4 ms in, and the route sync
+      takes 1.5-1.9 ms against OpenGL's 0.35. The likely source is the PERF HUD's text rewrite from a queued
+      `frameSwapped` handler (`_update_perf_hud_on_swap`, `rendering/quick/scene_controller.py`), on in every live
+      check (`--perf`), at 1000 + 0-12 ms. Ruled out by measurement: GPU time, acquire and present blocking, and the
+      route re-running on an `afterRendering` edge (0 in 7,686 syncs). Evidence:
+      `.artifacts/evidence/visualizers/bubble/live_check/20261121_layer_t_root_cause/figures.txt`.
+      - [ ] One-variable proof: the HUD's text writes off against on, three Vulkan and three OpenGL runs, alternating
+        back to back, with conditions recorded. If the HUD is the source, Vulkan's late frames after an early frame
+        fall to OpenGL's range.
+    - [ ] Fix, if proved: with a visualizer active, hold the HUD's once-a-second text and write it in
+      `request_visualizer_present` just before `item.update()`, so both share one Qt timer. With no visualizer active,
+      keep writing on swap. Separately, trim Bubble's per-frame route sync on the GUI thread (1.5-1.9 ms against
+      0.35 for OpenGL).
+    - [ ] Fix at the owner if it is ours, then rerun three Vulkan runs and three OpenGL controls back to back. Accept
+      when frames over 16.7 ms on Vulkan fall within the control's spread. If it is the driver's or Qt's, record it
+      in D12 "As built: Bubble" with the figures, and ask the operator.
+    - [ ] Then Bubble's own T tools (its diagnostics guide).
+
   - [ ] Rule (b) over the four 60 s takes, once the owner replay gains `--api vulkan` (the fast-proof box). Today
     rule (b) has run over the 5.5 s replay's 684 sampled frames only.
   - [ ] Layer L directly: the per-frame packed record byte-compared with the values the Python renderer uses, over the
     four takes (the fast-proof box's L tool; `engine_worker_gate.py` is the precedent).
-  - [ ] Checkpoint audit (Opus Medium) of the landing delta `git diff 4b17eeee8 7608b6c7b`: `bubble_check.py`, the
-    narrowed isolation rule and group cap in `tools/pixel_tolerance.py`, the re-registration, the cost round. Merged
-    pre-audit on 17 Nov at 99 % weekly usage.
+  - [ ] Checkpoint audit 8 M1 (report closed 20 Nov, its findings are these boxes; full text:
+    `git show 66e64a363:Docs/Future_Work/Checkpoint_Audits_Nov15.md`): the spread rule groups scatter only
+    (`tools/pixel_tolerance.py:186-203`). A 1 px line of 67 one-level pixels passes rule (a) once pixels 23 and 46
+    are 2-level ties or exact, and 60 one-level pixels at 23 % density in a 16 x 16 patch pass too.
+    - [ ] Group over `scatter | tie`, so a tie joins the groups it touches.
+    - [ ] Add a density bound: at most K scatter pixels in any 16 x 16 window. Measure K on the steady residual's
+      classification and the offers' frames, times 1.5. The lead decides it; record it in D12's Bubble line and
+      bubble_check's rule (b).
+    - [ ] Negative controls in `tests/test_native_bubble.py`: the line with two ties, the line with two exact pixels,
+      the dithered patch. Each is seen passing on today's code and failing on the fix.
+    - [ ] Rerun the offers and rule (b)'s 684 frames under the fix. Any newly failing frame is classified, never
+      admitted by a wider bound.
+  - [ ] Checkpoint audit 8 M2: the four 60 s takes' rule (a) reports (`20261117_rule_a_60s_*`, 01:59 on 17 Nov)
+    predate the spread rule (no `scatter_group` field), yet D12 (`Native_Core_P3_Decisions.md:1040`) and this box's
+    header say they pass under it.
+    - [ ] Now: say in D12's Bubble line and in this header that the 60 s figures were judged before the group cap
+      and the isolation clause.
+    - [ ] Rejudge the four takes under the current rule (a), together with M1's fix: the fast proof's layer P
+      when it exists, otherwise `owner_render_parity.py --recording` (lead's slot; no agent load runs).
+  - [ ] Checkpoint audit 8 lows (triage: all small, none blocking):
+    - [ ] L1: a test in which a tolerance without `scatter_cluster_pixels` keeps a tie beside three scatter pixels
+      isolated. Today, applying the narrowing to every mode passes the whole focused suite.
+    - [ ] L2: a `bubble_check` case in `tests/test_pixel_tolerance_routing.py`: a spread field passes; a compact
+      block, `_shift`, `_artefact` and `_wild` fail; missing references fail. Today, dropping the spread from Bubble's
+      `VULKAN_RULE_B` passes every test.
+    - [ ] L3: a control passes only for its intended reason (`devcurve_check.py:957-960`). A pixel control needs a
+      clean Vulkan child and a cross verdict failing on tolerance reasons. An item control needs exactly its named
+      check failing. Anything else prints "CONTROL INCONCLUSIVE".
+    - [ ] L4: `settings_at` and `sizes_at` raise when a sampled frame lacks the ratio, instead of falling back to the
+      capture ratio's values (`devcurve_check.py:118-121`, `bubble_check.py:167-169`).
+    - [ ] L5: reword the stale text. D12 "As built: Bubble" says "the widened set at both placements is open"; the
+      offers have run, at the display placement, with a and b at both. D12's cost paragraph needs the note that
+      "ambience on/off" means variant a's and variant b's frames. "Bubble remains dormant" survives in
+      `Native_Core_P3_Decisions.md:38`, `Docs/Reference/Primitives.md:61`,
+      `Native_Bubble_Parity_Investigation.md:3` and `:50`, and in the `_bubble_native_replay.py` docstring. This
+      box's "38 offer runs at both placements" should say the same.
+    - [ ] L6 (audit 7 L5, which escaped without a box): add a 5.3 s clip to
+      `tests/test_visualizer_owner_render_parity.py`, whose switch must stay at 4.2 s, so the `max(4.2, ...)` guard is
+      pinned.
   - [x] Class-word upload and portable unsigned-vector admission proved on both APIs; unchanged wire record (R-238).
   - [ ] Non-blocking contract follow-up, now with a measured case: non-unit inherited scene opacity. During the cold
     reveal (scene fade 0.8648 at input 0 to 1.0 by input 30, content fade 1, identical on both paths) Python folds it
@@ -707,7 +800,8 @@ the feature (D3D11 is not stated).
     Bubble line), to disappear when the scene-fade fix lands (the Spectrum and Spline Curve box): the operator-accepted
     `nightsolong_acousticsoft1` input 22 pair, and the offer runs `stream_direction=2` and `=6` at input 337 (the mode
     switch), adjacent 2-level ties on the mask off a content edge (`n5_1_bubble/20261117_offers/`,
-    `20261117_offer_tie_classes/`). The other 38 offer runs at both placements pass (scatter worst 41, group worst 15;
+    `20261117_offer_tie_classes/`). The other 38 runs pass (variants a and b at both placements, the Choice offers at the
+    display placement only; scatter worst 41, group worst 15;
     the three steady tie frames pass under the lead's narrowed isolation rule, rerun `20261117_offers_steady_rerun/`).
   - [ ] GPU median and p90 per pass at 2560 x 1440 against the Python renderer's (checklist 11): still open. 4K is
     measured (D12 "As built: Bubble", cost).
@@ -768,11 +862,19 @@ the feature (D3D11 is not stated).
   over the `replay` recipe and show the steady residual collapses (from 2,430 one-level pixels, worst 34 a frame).
 - [ ] Bubble optimisation proof gap: needs the fast long-clip proof's layer P tool (the box below) before the
   first Bubble optimisation; the rules are the guide's.
-- [ ] Build the fast long-clip proof (method and rules: `Docs/Guides/Native_Parity_And_Timing_Proof.md`, its
+- [ ] Build the fast long-clip proof (Opus Medium agent a6257c36aeee45f10, 20 Nov; method and rules: `Docs/Guides/Native_Parity_And_Timing_Proof.md`, its
   section 7; step 1 of the order: Bubble's layer L and long-take rule (b) need it, and so do every later port). Steps, each with a test:
-  - [ ] Profile the owner replay's 17 to 25 minutes per 60 s take before designing around guesses.
+  - [ ] A cheaper judge with byte-identical verdicts. The 20 Nov profile (Sonnet): of a 171 s, 958-frame 10 s Bubble take,
+    the judge was 65 %. `content_edges` alone took 59 s, at 78 ms a frame, though it is read only at tie pixels. The
+    lit mean was 12 %, compress and spill 6.6 %, the backdrop-mask run 8 %, triple simulation 4.6 %, and the draw under
+    3 %. Compute `content_edges` only at candidate ties, compute each delta once, decompress once, and drop the unread
+    lit mean. Prove it by re-judging every stored 60 s report to identical verdicts, failed frames and halves.
   - [ ] Layer L: the per-frame record compared byte for byte between paths, CPU only (`engine_worker_gate.py` is the
     precedent).
+  - [ ] Layer T on native paths (guide section 7): the live check reads presentation cadence from Qt Quick's frame
+    cycles when the native core draws (today it reports `frames_per_s 0` on Vulkan), and the native per-pass GPU
+    time from `--gpu-pass-timing`. The lead's interim script, `quick_before_frame_begin` intervals outside lifecycle
+    windows, is the reference; prove it gives the same figures as the Python path's swap gaps on an OpenGL run.
   - [ ] Layer P: cached Python references; a native-only, hash-only compare with `--api opengl|vulkan`; every failing
     frame recorded (not the first eight); progress written during a run.
   - [ ] Coverage selection with its coverage report (guide section 3), warm-up per mode (guide section 5).
@@ -862,6 +964,10 @@ the feature (D3D11 is not stated).
 - [ ] Bubble GPU optimisation, after N5.1 lands (operator, 17 Nov: Bubble about 50 % GPU at 4K and Extruded Bubble
   about 55 %, on a stale build; "all guarded gains are valuable"). Every candidate passes
   `Docs/Guides/Native_Parity_And_Timing_Proof.md` for what it touches (its change-type table).
+  - [ ] Baseline in the operator's case first: Bubble fullscreen (expanded) at 4K on Display 1, where Python OpenGL
+    reaches about 50 % of a 4090 for 2D vector work, and Extruded Bubble about 55 %. Use live runs on Python OpenGL
+    and native Vulkan with `--app-arg=--gpu-pass-timing`, and record `nvidia-smi` utilisation and clocks with the
+    figures. The card-sized cost measured at the port is not this case.
   - [ ] Measure per-pass GPU time at 4K on both backends first. The port's figures put nearly all the cost in the main
     `bubble` pass (about 3 ms at full 4K area; native OpenGL about 5 % slower than Python).
   - [ ] Measure with decoration off, representative decoration on, and high-density, high-glow decoration on, at the
@@ -956,6 +1062,13 @@ native goes to Opus Medium, under the same parity proof and audit as the modes t
 
 Port-readiness rules bind all new GPU code now (the backend decision). Expanded Visualizer continues meanwhile
 (item 3; plan 01, whose section 0 holds the phase ladder and the 4K budgets).
+
+- [ ] Oscilloscope legibility (operator, 21 Nov; after the flip, with the other mode tweaks): a setting that slows
+  the trace's apparent noise while it stays reactive and busy. Today every preset moves so fast the trace reads as
+  static to the eye. Research first: which motion carries the speed (sample window, refresh of the trace, jitter
+  from noise), and how to slow what the eye sees without lagging the reaction. For example, temporal smoothing of the
+  displayed trace shape against the reaction envelope, or persistence. Judge it with the music-response traces and
+  live rendered motion, never twitch.
 
 - [ ] After the flip, SMP's foundations first (operator, 12 Nov: "SMP foundations first after native parity, as
   you suggest"): the library, the playlists and a playback service that meets the measured audio bar
@@ -1103,6 +1216,9 @@ follow-ups with their evidence folders).
 
 ### 1B.9 Settings and Studio window corners bleed (continues 1.9)
 
+- [ ] Studio's outer corners to match the visible Settings improvement: UI-1 of `Docs/Future_Work/Studio_Corners_Card_Rim_and_Visualizer_Rotate_2026-11-09.md` (its live checklist;
+  UI-2 landed in 7cbc1d5b). Do it with this section's corner work, as one owner.
+
 Measurements, rejected alternatives and the residue no layered window can remove:
 `Docs/Architecture/Settings_Theme_Architecture.md` (native corners).
 
@@ -1203,6 +1319,9 @@ Every `[~]` box in this plan that says "D1 run", "Studio run on D1" or "Frozen r
   - [ ] The in-process path too.
 - [ ] First reveal, worker against in process, without load on D1: the time from activation to the first drawn
   frame for each mode on both paths.
+- [ ] `tools/d1_run.py` hands `screen.grabWindow(0)`, a `QPixmap`, to its writer thread (`_write_frame`; 12 Nov night
+  audit, low 1). It works only because Windows' platform reports threaded pixmaps: convert with `.toImage()` on the
+  GUI thread (one frame's copy) so the tool does not depend on it.
 - [~] Carried from section 1A's former "Awaiting Validation" list, in the D1 sessions: the changed glyphs as
   zoomed crops; camera and child placement round trips; long fullscreen metadata and controls; material
   comparisons on native pixels.
@@ -1213,6 +1332,10 @@ Every `[~]` box in this plan that says "D1 run", "Studio run on D1" or "Frozen r
   only what is dead and superseded, recording the reason): high confidence `verify_compile.py` (repo root) and
   `.github/tools/linux_smoke_dist.py` (a stale copy no workflow runs); the medium and low rows stay unless a caller
   check proves them dead.
+- [ ] Workflow supply chain (12 Nov evening audit, low): `.github/workflows/native-module.yml` pins its actions by major
+  tag (`actions/checkout@v4`, `setup-python@v5`, `cache@v4`, `upload-artifact@v4`); pin each by commit SHA with the tag
+  in a comment. `tools/native_sdk_fetch.py` says Vulkan-Headers 1.4.341 is "the release it is built with" for Qt 6.12
+  with no source: cite Qt's own build record, or say it is the loader's version on this machine.
 
 ### 1B.15 Housekeeping the lead decided (11 Nov; engineering choices, not operator decisions)
 
@@ -1394,6 +1517,19 @@ Contract: `Docs/Architecture/Settings_Theme_Architecture.md` (the shared list st
   geometry before judging the thresholded lit-row oracle. Protected QSG/clip implementation stays unchanged.
 - [ ] Lead, Display 1: confirm R-221 in the product, Fullscreen Hide Borders with pixel shift stepping, and check
   whether the operator's lavender edge colour came from the shift.
+- [ ] Checkpoint audit 1 M1 (15 Nov, 1D.12 C; open, found by the 20 Nov closed-report triage): a display move back to a
+  display whose Visualizer shell already exists replays the 3D control hint. The transfer reuses the retained root
+  (`scene_controller.py` `transfer_visualizer_to`, `_adopt_visualizer_transfer`), and neither the host binding's
+  `transfer` nor `_transfer_quick_visualizer_unit` re-projects `controlHintShown`
+  (`_configure_quick_visualizer_input_admission` runs at bind and mode edges only). Case: A's hint on D1, move to D2,
+  switch to B, hover on D2 (B joins the set), move back: D1's retained root still reads B as not shown and plays it
+  again. Fix at the transfer edge (the adopting scene projects the session set); test with two hidden production hosts
+  and the real `transfer_visualizer_to` (the audit's probe printed "display 1 root reused = True controlHintShown =
+  False"; it is no longer on disk), negative control today's code.
+  - [ ] Its L2: `tests/test_visualizer_control_hint_once_per_mode.py::test_display_manager_hands_every_display_the_sessions_one_set`
+    compiles `_configure_quick_visualizer_input_admission` out of `display_manager.py` and drives `SimpleNamespace`
+    stubs; rebuild it on `tests/_display_manager_doubles.py`, and replace the `_admit()` stand-in for a display move
+    (the test says a move rebuilds the root; it does not).
 
 ### 1D.10 Audit of 13 Nov: what is left after its merge (14 Nov)
 
@@ -1458,13 +1594,13 @@ borderless fullscreen transfers working smoothly.
 Each item reproduces its failure first. The lead judges pixels on the operator's two wallpapers. Opus Medium or Sonnet
 by risk; none takes a slot native work can use.
 
-- [ ] **Media volume child: slider borders cut off as the volume lowers.** Reproduce at several levels, high to low.
-  Find which clip or geometry cuts the track's or the fill's border (likely the fill rect shrinking past the border
-  inset, or a clip on the shrinking item). Fix it at the owner, with a pixel test at a low level and a control that
-  fails on the old code.
-- [ ] **Gmail's card surface and opacity differ from every other widget.** Find where Gmail's surface diverges from the
-  shared widget material path (its own opacity, tint or material call), and route it through the shared path. Prove it
-  against Media and Feeds on both wallpapers and a light and a dark theme.
+- [ ] **Gmail's faint runs on a light Mica card sit under 4.5:1 now that Gmail takes the shared panel.** Measured with
+  `tools/surface_material_capture.py --card-set lists --legibility` (Polished Chrome, Usu_Underwater_Lab): sender,
+  date and menu runs 4.14 to 4.45 (they were 5.1 or more with Gmail's own ink); every other material and the dark
+  theme are unchanged. The run solver keeps a run that reads at the 4.5 floor over the poles byte for byte, and the
+  composed Mica pixels land below it. Fix in the shared solver or Mica's light recipe, never a Gmail exception.
+  Media still supplies its own playback-state ink (`MediaPresentation.qml:7`) and so still differs from Feeds and
+  Reddit (glass 0.80 against 0.88 on Default Dark): decide whether Media's too goes to the shared path.
 - [ ] **Widget opacity baseline:** the current -0.35 becomes the new 0 (Base). The operator checked that every theme
   stays legible at -0.35.
   - [ ] Root cause first: where the baseline is defined (the canonical default and the Style Override offset), and
@@ -1473,12 +1609,26 @@ by risk; none takes a slot native work can use.
   - [ ] Persisted values: follow `Docs/Architecture/Persisted_Input_Compatibility.md`. A stored user offset keeps its
     visual result (stored + 0.35), and an unset value takes the new base. Test both. Never pin the default's number in
     a test; derive it from the canonical default.
-- [ ] **Style Overrides: a "Borderless" button.** It goes below "Reset Colours To Theme", on the same row as Card Border
+- [ ] **Style Overrides: a "Borderless" button.** (Sonnet agent a491af36afbc01b8e, 20 Nov.) It goes below "Reset Colours To Theme", on the same row as Card Border
   Width, right-aligned, in the same style. It latches pressed and sets every border element of the widget UIs to 0 or
   invisible. Reset Colours, editing the border width, or changing the surface choice in Style Overrides each un-latches
   it. It persists like the other overrides. Test: latch, each un-latch path, and a reload.
-- [ ] **Feeds spacing: 1 px more padding** above and below, between the header, the subtitle and the grid items. Nothing
-  else moves: compare item positions before and after, and only the intended offsets change.
+- [ ] **Media seekbar default width** (operator, 21 Nov; Sonnet agent a276eeb2052ac0ba6): wider by default, ending at the artwork's right edge, so the
+  seekbar has the same padding on its left and right inside the card. Change the canonical default, not a preset;
+  tests derive the value from the default and the layout, and never pin it. Prove it with an offscreen render before
+  and after: the seekbar's right end aligns with the artwork's right edge, and nothing else moves.
+- [ ] **Achievement Pulse defaults** (operator, 21 Nov; Sonnet agent a276eeb2052ac0ba6; the operator's screenshot is in the conversation of 21 Nov).
+  - [ ] The achievement artwork (the small achievement icon) defaults to the operator's placement: in the header row,
+    just right of the ACHIEVEMENT PULSE pill. Read the operator's current saved placement (read only, from their
+    settings) and make it the canonical default.
+  - [ ] The pulse ring (the coloured circle) takes a material like the Media control bar's (its opacity and material
+    treatment) through the shared material path. The ring's inside keeps its current material, which becomes an
+    optional setting, on by default so today's look holds. Settings follow the existing bucket patterns: a short
+    name, the rest in a tooltip.
+  - [ ] Offscreen renders before and after, on a dark and a light theme and a non-Normal material. The lead judges
+    them.
+- [ ] **The ordinary Visualizer card offers its Rotate glyph on hover** (operator report): UI-3 of `Docs/Future_Work/Studio_Corners_Card_Rim_and_Visualizer_Rotate_2026-11-09.md`, its
+  live checklist. Today `rendering/quick/qml/VisualizerPresentation.qml:1049` still passes `canRotate: false`.
 
 ## 1A. Fullscreen, Rotate, material and corner items (1.0 to 1.9)
 
@@ -2529,6 +2679,19 @@ stays a separate hard gate.
   motion, felt/fuzz, world-view projection, sphere world/starscape) plus S3D-6.
 
 ## 8. Accepted Bubble: open reviews and side defect
+
+- [ ] Side defect (agent aac773583ad93e2ab, 21 Nov, under the operator's game plus agents' runs, 77-96 % CPU): the
+  live check's engine worker timed out on its first configure and the saver fell back to in-process. In the same
+  conditions an OpenGL control drew 12 fps. Reproduce under a measured CPU load, then find the worker's configure
+  deadline and why the in-process fallback runs so slowly. A slow but loaded machine must degrade gracefully, never
+  fall to 12 fps.
+
+- [ ] Side defect (lead, 20 Nov live control): Python OpenGL Bubble on Display 1 shows 1.44 hitches a minute (steady
+  frames over 50 ms; `tools/frame_trace_cadence.py`: 6 gui_starved stalls, the worst a 88.5 ms swap-to-frame-begin
+  gap with an 84.4 ms GUI wake gap). Native Vulkan Bubble's logical side shows the same worker gaps (10 over 16 ms,
+  max 145.7 ms). Root cause first: attribute the GUI starvation and the worker's logical gaps (GIL-holding C calls,
+  GC generation 2 at 36 ms, the usage sampler) on both paths, before any fix. Evidence:
+  `.artifacts/evidence/visualizers/bubble/live_check/20261120_bubble_*`.
 
 The operator accepted Bubble's drift, motion, ambient, direction and occlusion rules
 (`Docs/Guardrails/Bubble_Temporal_Fidelity.md` section 23); do not reopen them. Bubble's performance work is the

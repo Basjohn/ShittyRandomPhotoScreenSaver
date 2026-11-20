@@ -108,6 +108,12 @@ measures the real process:
 - **Load:** game60 is the operator's yes each time, at most 10 minutes, lead only, and the rare end-of-chain
   worst-case proof. Display 0 is never used.
 
+**Load during layer T.** The operator's modest load (a game, normal use) is fine and recorded with the figures. Other
+agents' parity or judge runs are not: eight parallel owner replays took the machine to 93-97 % CPU on 21 Nov and
+made a Bubble A/B unreadable. Check the whole-machine CPU before a T run (`Get-CimInstance Win32_Processor`), and
+rerun any T run that ran above about 40 %. The lead staggers agents' heavy runs and T runs, and briefs say how many
+parallel replay processes an agent may start.
+
 The acceptance figures:
 - Frame-time p90 no worse than the pre-flip baseline beyond its run-to-run spread (stated with the figure).
 - No new late frames in steady state.
@@ -163,7 +169,16 @@ decision, recorded with its reason.
   - a native-only, hash-only compare with `--api opengl|vulkan`;
   - coverage selection with its report;
   - all failing frames recorded, not the first eight;
+  - layer T on native paths: on Vulkan the native core draws inside Qt's frame and writes no Python draw or swap
+    records, so `visualizer_live_check.py` reports `frames_per_s 0` and no render or swap figures (20 Nov, Bubble).
+    It must derive presentation cadence from Qt Quick's frame-cycle events (`quick_before_frame_begin` intervals,
+    lifecycle windows excluded), and per-pass GPU time from `--gpu-pass-timing`;
   - progress output during a run, so a killed run keeps what it had.
 - **Method proof:** on Bubble, the coverage-selected set must catch every failure the full four-take run found
   (input 22, the two offer fade frames, a one-level shift control, a one-ulp shader change) before Waveform relies
   on it.
+- **Once proven, it is the default** (operator, 20 Nov). After the fast tools pass their identical-verdict check and
+  the method proof above, every port and every optimisation uses them: the cheaper judge, cached Python references,
+  native-only hash runs and coverage windows. The slow full-path replay stays only as the fallback for a mode where the
+  method proof fails. The tools are kept long term as the optimisation parity aid and the control in section 6, and
+  are never retired as "temporary".

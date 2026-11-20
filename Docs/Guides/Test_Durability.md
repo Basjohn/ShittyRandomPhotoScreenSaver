@@ -364,7 +364,7 @@ When adding a mode, transition, provider, preset family or Settings surface:
 
 ## 2026-10-23: explicit operator restriction on authored-test oracles
 
-Tests must not assert **any operator-authored preset value or mutable current Settings value**. The operator edits them freely, including lighting BEAM/SCENE and widths. For deterministic behavior, create test-owned synthetic configuration and assert functional behavior or correct load/save/round-trip. For reset/authority tests, compare against the *current* canonical source dynamically; never pin its present artistic number or boolean. Test shipped preset files only for schema/admission/ownership and preserving authored choices. The [October 23 oracle repair audit](../Audits/Test_Oracle_Repair_2026-10-23.md) records violations found and corrected. **Do not adjust production code, current presets, or canonical defaults to placate a copied test expectation.**
+Tests must not assert **any operator-authored preset value or mutable current Settings value**. The operator edits them freely, including lighting BEAM/SCENE and widths. For deterministic behavior, create test-owned synthetic configuration and assert functional behavior or correct load/save/round-trip. For reset/authority tests, compare against the *current* canonical source dynamically; never pin its present artistic number or boolean. Test shipped preset files only for schema/admission/ownership and preserving authored choices. **Do not adjust production code, current presets, or canonical defaults to placate a copied test expectation.**
 
 ## Additional binding safeguards by subject
 These requirements belong to this subsystem. They are not a second global guardrail or a work queue.

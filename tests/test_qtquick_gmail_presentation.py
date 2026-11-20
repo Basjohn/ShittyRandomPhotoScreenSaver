@@ -351,6 +351,32 @@ def test_gmail_style_uses_canonical_card_and_text_shadow_direction() -> None:
     assert isinstance(style.text_shadow_color, QColor)
 
 
+def test_gmail_card_surface_comes_only_from_the_shared_owner() -> None:
+    """Gmail's density and tint are the shared widget material path, not its own.
+
+    Every ``cardSurface*`` property OverlayWidget exposes is the shared owner's input (material,
+    opacity adjust, backdrop, text colour, legibility ink). A family that assigns one of them
+    gets a different panel density than every other card on the same theme (Gmail's own
+    timestamp ink did: denser on light themes, thinner on dark ones)."""
+
+    import inspect
+    import re
+
+    from rendering.quick.widgets import family_binder
+
+    shared = re.findall(
+        r"property alias (cardSurface\w+)\s*:",
+        (QML_ROOT / "OverlayWidget.qml").read_text(encoding="utf-8"),
+    )
+    assert shared, "OverlayWidget no longer exposes the shared surface properties"
+    gmail_qml = (QML_ROOT / "GmailPresentation.qml").read_text(encoding="utf-8")
+    own = [name for name in shared if re.search(rf"^\s*{name}\s*:", gmail_qml, re.MULTILINE)]
+    assert own == []
+    assert "with_surface_material(" in inspect.getsource(
+        family_binder.GmailFamilyAdapter.presentation_model
+    )
+
+
 def test_gmail_model_groups_rows_and_keeps_stable_thread_identity() -> None:
     model = GmailPresentationModel(_config(), _style(_config()))
     row_model = model.row_model
