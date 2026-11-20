@@ -320,7 +320,8 @@ def test_scene_counts_visualizer_frames_into_the_gate_only_while_a_transition_ru
     from types import SimpleNamespace
 
     scene = SimpleNamespace(_visualizer_item=_Item(), _scene_root=root,
-                            _transition_frames_active=False, _transition_visualizer_frames=0)
+                            _transition_frames_active=False, _transition_visualizer_frames=0,
+                            _perf_hud_enabled=False)
 
     assert QuickSceneController.request_visualizer_present(scene)
     assert root.property("transitionVisualizerFrames") == 0.0
@@ -332,3 +333,66 @@ def test_scene_counts_visualizer_frames_into_the_gate_only_while_a_transition_ru
     QuickSceneController.request_visualizer_present(scene)
     assert root.property("transitionVisualizerFrames") == 3.0
     assert _Item.updates == 5
+
+
+def _hud_scene(item_updates: list):
+    """A scene controller's PERF HUD state on plain doubles: the scene and Visualizer roots record each text write
+    together with how many Visualizer update requests had been made at that moment."""
+    from types import SimpleNamespace
+
+    from rendering.quick.scene_controller import QuickSceneController
+
+    writes: list[tuple[str, int]] = []
+
+    class _Root:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def setProperty(self, key: str, value) -> bool:
+            if key == "perfHudText":
+                writes.append((self.name, len(item_updates)))
+            return True
+
+    class _Item:
+        def update(self) -> None:
+            item_updates.append(1)
+
+    telemetry = SimpleNamespace(snapshot=lambda: SimpleNamespace(
+        draw_count=0, last_logical_revision=0, last_logical_timestamp=0.0, drawn_mode_id="bubble"))
+    scene = SimpleNamespace(
+        _perf_hud_enabled=True, _perf_hud_pending=None, _perf_hud_visualizer_presenting=False,
+        _perf_last_swap_ns=0, _perf_window_swaps=0, _perf_window_started_ns=0, _perf_window_dt_max_ms=0.0,
+        _perf_pacer_state_provider=None, _perf_last_pacer_requested=0, _perf_last_pacer_issued=0,
+        _perf_last_pacer_skipped=0, _background_item=None, _perf_last_transition_duration_ms=0.0,
+        _window=SimpleNamespace(screen_index=1), _visualizer_telemetry=telemetry,
+        _perf_last_visualizer_draw_count=0, _perf_last_visualizer_revision=0, _visualizer_bridge=None,
+        _frame_trace=None, _scene_root=_Root("scene"), _visualizer_root=_Root("visualizer"),
+        _visualizer_item=_Item(), _transition_frames_active=False, _transition_visualizer_frames=0)
+    scene._write_perf_hud_text = lambda: QuickSceneController._write_perf_hud_text(scene)
+    return scene, writes
+
+
+def test_perf_hud_text_rides_the_visualizer_present_request_while_it_presents() -> None:
+    """Layer T (Current_Plan.md 8b N5.1 Bubble): the HUD's once-a-second texts never begin a Qt frame of their own
+    while the Visualizer presents. Written at the swap, their update request started Qt's update timer between two
+    Visualizer frames, so a frame began early and the next waited for the next publication. They are held and written
+    with the Visualizer's next present request instead; with no present request since the last swap they are written
+    at the swap."""
+    from rendering.quick.scene_controller import QuickSceneController
+
+    updates: list = []
+    scene, writes = _hud_scene(updates)
+    # Presenting: a request, then the swap whose HUD window has elapsed (started at 0 ns, long past 1 s).
+    QuickSceneController.request_visualizer_present(scene)
+    QuickSceneController._update_perf_hud_on_swap(scene)
+    assert writes == [], "the HUD wrote its texts at the swap while the Visualizer presents"
+    QuickSceneController.request_visualizer_present(scene)
+    # Written inside the next request, before its own item update (one Qt timer for both).
+    assert sorted(writes) == [("scene", 1), ("visualizer", 1)]
+    assert len(updates) == 2
+
+    # Not presenting: no request since the last swap, so the texts are written at the swap itself.
+    updates2: list = []
+    idle, idle_writes = _hud_scene(updates2)
+    QuickSceneController._update_perf_hud_on_swap(idle)
+    assert sorted(idle_writes) == [("scene", 0), ("visualizer", 0)]
