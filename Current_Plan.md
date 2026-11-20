@@ -731,7 +731,8 @@ the feature (D3D11 is not stated).
     Bubble line), to disappear when the scene-fade fix lands (the Spectrum and Spline Curve box): the operator-accepted
     `nightsolong_acousticsoft1` input 22 pair, and the offer runs `stream_direction=2` and `=6` at input 337 (the mode
     switch), adjacent 2-level ties on the mask off a content edge (`n5_1_bubble/20261117_offers/`,
-    `20261117_offer_tie_classes/`). The other 38 offer runs at both placements pass (scatter worst 41, group worst 15;
+    `20261117_offer_tie_classes/`). The other 38 runs pass (variants a and b at both placements, the Choice offers at the
+    display placement only; scatter worst 41, group worst 15;
     the three steady tie frames pass under the lead's narrowed isolation rule, rerun `20261117_offers_steady_rerun/`).
   - [ ] GPU median and p90 per pass at 2560 x 1440 against the Python renderer's (checklist 11): still open. 4K is
     measured (D12 "As built: Bubble", cost).

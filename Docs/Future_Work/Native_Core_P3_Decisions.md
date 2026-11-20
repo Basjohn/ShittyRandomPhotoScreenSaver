@@ -35,8 +35,8 @@ The scopes overlap and must not be added.
 | Full admitted pre-SMP native/compositor/primitive programme | 20–35% | 65–80% |
 
 The foundation already supplies hosts, frame/packet services, generic programs, compositing, targets, mesh/buffer,
-compute, post stages and async jobs. Spectrum and Spline Curve use native routes; Bubble remains dormant pending
-parity. Most mode/transition ports, lifetime/device-loss and orientation/display-history work, shared N4 primitives,
+compute, post stages and async jobs. Spectrum, Spline Curve and Bubble use native routes (Bubble registered and
+offered on Vulkan since 17 Nov; its live run and long-take proofs remain, plan N5.1). Most mode/transition ports, lifetime/device-loss and orientation/display-history work, shared N4 primitives,
 Studio/tools migration and installed acceptance remain. The full scope additionally includes admitted N6 high-potential
 primitives and compositor/material work before SMP. Conditional mesh-shader work and low-potential primitives
 without a consumer are not an indefinite blocker. `Current_Plan.md` owns admission and ordering; the actual routes
@@ -977,13 +977,16 @@ most 21 a frame, the largest group of touching ones 7, no tie; its bound, decide
 a frame in groups of at most 11 (the measured worst times 1.5; the card is opaque: no mask), validation clean. Its negative controls each fail in their own process: a position nudged, a
 big-class bit flipped, the sprite coordinate's y flipped, the whole-allocation sample, the mask pass dropped, the
 skipped release. Owner rule (a): `owner_render_parity.py --native --mode bubble` (the 5.5 s replay and the four 60 s
-recorded takes; the widened set at both placements is open, see the plan's N5.1 Bubble box). Evidence
+recorded takes; the widened set ran on 17 Nov: 40 runs, variants a and b at both placements and the Choice offers at
+the display placement only, 38 passing and 2 tracked exceptions, see the plan's N5.1 Bubble box). Evidence
 `n5_1_bubble/20261117_rule_b/`. The Python renderer retires as Spline Curve's does.
 
 *Cost (17 Nov, `bubble_check.py --rounds cost`, `n5_1_bubble/20261117_cost_4k/`; RTX 4090, no validation layer, the
 GPU shared with the installed SRPSS and the desktop at 23 to 42 % utilisation before each child; each figure the
-least-loaded of three rounds, median of at least 240 frames).* The surface (all three passes) with the ambience on and
-off: the rig's card on a 4K display (840 x 560 device pixels) 0.236 / 0.299 ms on OpenGL, 0.181 / 0.241 ms on Vulkan,
+least-loaded of three rounds, median of at least 240 frames). "Ambience on" and "off" here are variant a's frame and
+variant b's (`bubble_check.py` `COST_RUNS`); variant b differs from a in many settings besides the ambience, so the
+pair is not a like-for-like ambience toggle (the plan's N5.1 Bubble box measures one).* The surface (all three passes)
+with the ambience on and off: the rig's card on a 4K display (840 x 560 device pixels) 0.236 / 0.299 ms on OpenGL, 0.181 / 0.241 ms on Vulkan,
 the Python renderer 0.230 / 0.293 ms; the card at a 4K frame's pixel count (3360 x 2240, ratio 8, the hidden host's
 largest) 3.10 / 4.23 ms on OpenGL, 2.59 / 3.66 ms on Vulkan, the Python renderer 2.94 / 4.08 ms. The `bubble` pass is
 all of it: the points pass 0.002 ms and the mask pass 0.001 ms on OpenGL (0.017 and 0.011 ms at the 4K frame), under
