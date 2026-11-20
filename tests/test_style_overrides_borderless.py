@@ -149,22 +149,111 @@ def test_a_reload_does_not_unlatch_through_the_controls_it_refills(manager):
         _close(dialog)
 
 
-def test_border_roles_resolve_invisible_while_latched_even_when_authored():
-    from rendering.quick.widgets.theme_projection import is_border_role, resolve_rgba_role
-    from ui.widget_theme_active import get_widgets_borderless, set_widgets_borderless
+def test_a_latched_button_reads_clearly_inset(manager):
+    """Checked is a darker fill than resting, by a margin visible at a glance, plus an inner shadow."""
+    from ui.widgets.outlined_button import OutlinedButton
 
-    authored = (10, 20, 30, 200)
-    assert not get_widgets_borderless()
-    try:
-        assert resolve_rgba_role("media.volume.outline", local_roles=None, fallback=authored,
-                                 explicit=authored) == authored
-        set_widgets_borderless(True)
-        assert resolve_rgba_role("media.volume.outline", local_roles=None, fallback=authored,
-                                 explicit=authored)[3] == 0
-        assert resolve_rgba_role("system_stats.metric.border", local_roles=None, fallback=authored)[3] == 0
-        # A non-border role is untouched.
-        assert resolve_rgba_role("media.volume.fill", local_roles=None, fallback=authored,
-                                 explicit=authored) == authored
-        assert is_border_role("gmail.header.border") and not is_border_role("gmail.header.fill")
-    finally:
-        set_widgets_borderless(False)
+    button = OutlinedButton("Borderless", role="secondary")
+    button.setCheckable(True)
+    button.resize(110, 32)
+
+    def luma(point):
+        c = button.grab().toImage().pixelColor(*point)
+        return 0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue()
+
+    fill_point, shadow_point = (8, 16), (10, 6)  # beside the label; just inside the top-left rim
+    resting = luma(fill_point)
+    button.setChecked(True)
+    assert luma(fill_point) <= resting * 0.7  # the earlier pressed-token fill was 0.78 of resting
+    assert luma(shadow_point) < luma(fill_point) - 5  # the shadow lies on the top-left inner edge
+
+
+def _family_models(widgets):
+    """Every ordinary family's presentation model built from ``widgets`` by the real adapters."""
+    from rendering.quick.widgets import family_binder
+    from core.settings.default_contract import require_canonical_default
+
+    shadows = require_canonical_default("widgets.shadows")
+    models = {}
+    for adapter_cls, widget_id in (
+            (family_binder.ClockFamilyAdapter, "clock"), (family_binder.WeatherFamilyAdapter, "weather"),
+            (family_binder.RedditFamilyAdapter, "reddit"), (family_binder.FeedFamilyAdapter, "feeds_custom_1"),
+            (family_binder.GmailFamilyAdapter, "gmail"),
+            (family_binder.AchievementPulseFamilyAdapter, "achievement_pulse"),
+            (family_binder.AbandonmentIssuesFamilyAdapter, "abandonment_issues"),
+            (family_binder.FriendPulseFamilyAdapter, "friend_pulse"),
+            (family_binder.SystemStatsFamilyAdapter, "system_stats"),
+            (family_binder.MediaFamilyAdapter, "media")):
+        adapter = adapter_cls.__new__(adapter_cls)
+        models[widget_id] = adapter.presentation_model(
+            widget_id=widget_id, widgets_config=widgets, shadow_values=shadows)
+    return models
+
+
+def _border_values(obj):
+    import dataclasses
+    found = {}
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        for field in dataclasses.fields(obj):
+            value = getattr(obj, field.name)
+            if ("border" in field.name or "outline" in field.name) and isinstance(value, tuple) and len(value) == 4:
+                found[field.name] = value
+            elif dataclasses.is_dataclass(value):
+                found.update({f"{field.name}.{k}": v for k, v in _border_values(value).items()})
+    return found
+
+
+def test_the_built_family_configs_carry_invisible_borders_and_nothing_else_changes():
+    from copy import deepcopy
+    import dataclasses
+
+    from core.settings.default_contract import require_canonical_default
+
+    widgets = deepcopy(require_canonical_default("widgets"))
+    # An authored border colour must not survive the latch.
+    for section in ("clock", "media", "gmail"):
+        if isinstance(widgets.get(section), dict) and "border_color" in widgets[section]:
+            widgets[section]["border_color"] = [10, 20, 30, 200]
+    open_models = _family_models(widgets)
+    latched = deepcopy(widgets)
+    latched["global"]["borderless"] = True
+    shut_models = _family_models(latched)
+    assert open_models and open_models.keys() == shut_models.keys()
+    seen = 0
+    for widget_id, shut in shut_models.items():
+        open_cfg, shut_cfg = open_models[widget_id].config, shut.config
+        assert shut.style.card_style.border_width == 0.0
+        shut_borders = _border_values(shut_cfg)
+        for name, value in _border_values(open_cfg).items():
+            assert shut_borders[name][3] == 0, (widget_id, name)
+            assert shut_borders[name][:3] == value[:3], (widget_id, name)
+            seen += 1
+        # Everything that is not a border field is identical.
+        for field in dataclasses.fields(open_cfg):
+            if "border" in field.name or "outline" in field.name or dataclasses.is_dataclass(getattr(open_cfg, field.name)):
+                continue
+            assert getattr(shut_cfg, field.name) == getattr(open_cfg, field.name), (widget_id, field.name)
+    assert seen
+
+
+def test_hide_borders_touches_only_border_colour_tuples():
+    import dataclasses
+    from rendering.quick.widgets.theme_projection import hide_borders
+
+    @dataclasses.dataclass(frozen=True)
+    class Inner:
+        outline_color: tuple = (1, 2, 3, 4)
+
+    @dataclasses.dataclass(frozen=True)
+    class Config:
+        border_color: tuple = (10, 20, 30, 200)
+        header_border_color: tuple = (5, 6, 7, 255)
+        border_opacity: float = 0.5
+        show_header_border: bool = True
+        text_color: tuple = (9, 9, 9, 255)
+        inner: Inner = Inner()
+
+    out = hide_borders(Config())
+    assert out.border_color == (10, 20, 30, 0) and out.header_border_color == (5, 6, 7, 0)
+    assert out.inner.outline_color == (1, 2, 3, 0)
+    assert (out.border_opacity, out.show_header_border, out.text_color) == (0.5, True, (9, 9, 9, 255))
