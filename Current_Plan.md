@@ -714,7 +714,15 @@ the feature (D3D11 is not stated).
       Oscilloscope's inputs 0 to 336 pass rule (a) in both halves (at most 2 levels, at most 3 ties), and input 360 is
       0. The run fails only on Bubble's frames after the switch (inputs 390 to 418, 11 to 12 ties) judged under the
       Oscilloscope's tolerance (`owner_render_parity` judges the partner's frames under the run's mode: that tool's
-      owner decides).
+      owner decides). Glow 0 set (`..._abi27_glow_off/`, `..._abi27_item_glow_off/`): block, item, pixels and rule (b)
+      pass on both APIs (36 samples, at most 1 level). The item round needed two harness fixes: `item_key`, and a beam
+      width change at Glow 0.
+  - [ ] Layer C cost on a quiet machine (lead): `python native/core/python/oscilloscope_check.py --module-dir
+    release/native_module --require-validation --layer-path <layers> --label n51_oscilloscope_cost --rounds cost`. A
+    first round ran 21 Nov under concurrent load from two other agents' heavy runs (CPU 57 %), so its figures are not
+    clean (`..._abi27_cost/`). Median whole surface on Vulkan: 0.142 ms at 1440p and 0.249 ms at 4K. On OpenGL:
+    0.186 ms and 0.300 ms. The clear, bloom and composite take about 70 % of it. "4K" is capped at dpr 8 (3360 x 2240,
+    7.5 M pixels).
   - [ ] Side defect (found 20 Nov by the port): the legacy `widgets/spotify_visualizer/shaders/oscilloscope.frag` (and
     its `.qsb`) is drawn by no renderer (its own header says so; the beam files are the mode's shaders now), yet it is
     still the mode's registered fragment (`shaders._ALL_SHADER_FILES["oscilloscope"]`): `preload_fragment_shaders`
