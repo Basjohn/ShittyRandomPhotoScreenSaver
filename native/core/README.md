@@ -119,7 +119,8 @@ build selection; current host and composite proof lives here.
     job thread's QRhi (created with `EnablePipelineCacheDataSave`) loads it at its creation and saves it at its orderly
     teardown, never after a loss; Qt's header checks (the core's ABI, the backend, driver version, vendor, device,
     pipeline cache UUID) plus the payload's size and MD5, a mismatch a silent recompile; written through `QSaveFile`
-    (a temporary file renamed over the old), the last writer winning. Today the job QRhi builds no pipeline, so nothing
+    (a temporary file renamed over the old), some writer winning (a rename that loses to another window's reader keeps
+    the earlier whole file and is a reported skip, not an error). Today the job QRhi builds no pipeline, so nothing
     is written; a raw `VkPipelineCache` gets its own section when the first raw pipeline exists.
     `pipeline_cache_self_test` is its GPU-free proof (`tests/test_native_core_pipeline_cache.py`).
   - `item_notifier.*` (N3.8): how the render and job threads reach an item on the GUI thread (a queued `update()`, the

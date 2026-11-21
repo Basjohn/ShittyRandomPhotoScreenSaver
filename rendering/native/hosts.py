@@ -203,6 +203,14 @@ class HiddenHost(Host):
         records each loss."""
         self._module.host_force_device_lost(self._live(), bool(swap_device))
 
+    def inject_device_loss(self, *, sticky: bool = False) -> None:
+        """Harness only (N3.6, checkpoint audit 11 M1; Vulkan; no environment flag): Qt's queue answers its next submit
+        (``sticky``: every one until the device is destroyed, as a really lost device does) with
+        ``VK_ERROR_DEVICE_LOST``, so Qt's own QRhi reports the loss and the next frame takes the lost path by itself
+        (``qrhi_lost``, the fault report). A replacement device that cannot be made (``device_create_failures``) is
+        retried at each next frame, whose ``frames``/``read`` raise with the reason until it is made."""
+        self._module.host_inject_device_lost(self._live(), bool(sticky))
+
     def set_device_pixel_ratio(self, dpr: float) -> None:
         """Qt Quick renders the host's device pixels at this ratio (its render target's); the content is resized to
         the new logical size."""

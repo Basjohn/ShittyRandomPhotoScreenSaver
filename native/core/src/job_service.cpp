@@ -558,6 +558,13 @@ void JobService::logJob(const UploadJob &job)
         m_log.removeAt(0);
 }
 
+void JobService::deviceWasLost()
+{
+    m_backend->markDeviceLost(); // thread-safe in each backend (an atomic, or the backend's own mutex)
+    QMutexLocker lock(&m_mutex);
+    m_toldDeviceLost = true;
+}
+
 QJsonObject JobService::stop()
 {
     if (!m_stopped.testAndSetOrdered(0, 1)) {
@@ -595,6 +602,9 @@ QJsonObject JobService::stop()
     o.insert(QStringLiteral("destroyed"), double(m_destroyed));
     o.insert(QStringLiteral("wakeups"), double(m_wakeups));
     o.insert(QStringLiteral("images_left"), int(m_images.size()));
+    // Audit 11 L2: whether the device's destruction said the device was lost, and whether the backend took it as lost.
+    o.insert(QStringLiteral("told_device_lost"), m_toldDeviceLost);
+    o.insert(QStringLiteral("device_lost"), m_backend->deviceLost());
     // N3.6: what the job QRhi loaded and saved of the core's pipeline cache file (absent while it never existed).
     const QJsonObject backend = m_backend->stateJson();
     if (backend.contains(QStringLiteral("pipeline_cache_load")))
@@ -848,6 +858,7 @@ public:
     }
 
     bool deviceLost() const override { return m_deviceLost.loadAcquire() != 0; }
+    void markDeviceLost() override { m_deviceLost.storeRelease(1); } // audit 11 L2: the window's QRhi found it lost
 
     QJsonObject stateJson() const override
     {
@@ -1008,6 +1019,11 @@ public:
         QMutexLocker lock(&m_mutex);
         return m_lost;
     }
+    void markDeviceLost() override
+    {
+        QMutexLocker lock(&m_mutex);
+        m_lost = true;
+    }
     void loseNext()
     {
         QMutexLocker lock(&m_mutex);
@@ -1128,6 +1144,8 @@ QByteArray jobServiceSelfTestJson(const QByteArray &scriptJson)
             backend->failSetUp();
         } else if (op == QLatin1String("lose_device")) {
             backend->loseNext();                 // audit N38 L1
+        } else if (op == QLatin1String("device_was_lost")) {
+            service->deviceWasLost();            // audit 11 L2: the device's destruction says so before the stop
         } else if (op == QLatin1String("fail_thread_start")) {
             service->failThreadStartForTest();   // audit N38 L3
         } else if (op == QLatin1String("running_state")) {

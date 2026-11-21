@@ -17,6 +17,9 @@
 #include <QtCore/QVersionNumber>
 #include <QtGui/QVulkanFunctions>
 #include <QtGui/QVulkanInstance>
+// N3.6, checkpoint audit 11 M1 (harness only): the device-function table Qt's QRhi submits through
+// (QVulkanDeviceFunctionsPrivate::m_funcs), Qt6::GuiPrivate, pinned to PySide6's exact Qt like every QRhi use.
+#include <QtGui/private/qvulkanfunctions_p.h>
 #include <QtQuick/QQuickGraphicsConfiguration>
 #include <QtQuick/QQuickGraphicsDevice>
 #include <QtQuick/QQuickWindow>
@@ -300,6 +303,20 @@ QMutex g_factsMutex;
 QHash<quint64, QJsonObject> g_deviceFacts;
 // N3.4, harness only: the next devices made without independentBlend (setDeviceWithoutIndependentBlend).
 QAtomicInt g_withoutIndependentBlend { 0 };
+// N3.6, checkpoint audit 11 M2, harness only: the next creations that fail as vkCreateDevice failing (setDeviceCreateFailures).
+QAtomicInt g_createFailures { 0 };
+QAtomicInteger<qint64> g_createForced { 0 };
+
+bool takeForcedCreateFailure()
+{
+    int left = g_createFailures.loadAcquire();
+    while (left > 0 && !g_createFailures.testAndSetOrdered(left, left - 1))
+        left = g_createFailures.loadAcquire();
+    if (left <= 0)
+        return false;
+    g_createForced.fetchAndAddRelaxed(1);
+    return true;
+}
 
 QByteArrayList availableInstanceExtensions(const Loader &loader, const char *layer)
 {
@@ -751,6 +768,12 @@ std::unique_ptr<VulkanDevice> VulkanDevice::create(QString *error)
     dci.enabledExtensionCount = uint32_t(extensionPtrs.size());
     dci.ppEnabledExtensionNames = extensionPtrs.isEmpty() ? nullptr : extensionPtrs.constData();
     VkDevice device = VK_NULL_HANDLE;
+    if (takeForcedCreateFailure()) {
+        // N3.6, audit 11 M2 (harness only): vkCreateDevice failing, as it may while the driver still resets after a TDR.
+        *error = QStringLiteral("vkCreateDevice: ") + vkResultName(VK_ERROR_INITIALIZATION_FAILED)
+            + QStringLiteral(" (forced by the harness)");
+        return {};
+    }
     const VkResult created = createDevice(physDev, &dci, nullptr, &device);
     if (created != VK_SUCCESS) {
         *error = QStringLiteral("vkCreateDevice: ") + vkResultName(created);
@@ -973,6 +996,168 @@ bool deviceWithoutIndependentBlend()
 
 namespace {
 
+// ------------------------------------------------------------------ N3.6, checkpoint audit 11 (harness only)
+
+// QVulkanDeviceFunctions keeps its table in its one private member (d_ptr). An explicit instantiation may name a
+// private member ([temp.spec.general]/6): the standard's way to reach it, with no guess at the class's layout.
+struct DeviceFunctionsTable
+{
+    using type = QScopedPointer<QVulkanDeviceFunctionsPrivate> QVulkanDeviceFunctions::*;
+    friend type deviceFunctionsTable(DeviceFunctionsTable);
+};
+template <typename Tag, typename Tag::type Member>
+struct PrivateMember
+{
+    friend typename Tag::type deviceFunctionsTable(Tag) { return Member; }
+};
+template struct PrivateMember<DeviceFunctionsTable, &QVulkanDeviceFunctions::d_ptr>;
+
+// M1: the armed loss. Written under g_lossMutex before the table's entry is exchanged (a full barrier), read by the
+// replacement entry on any thread that submits through the device's table (Qt's render thread, the job thread).
+QMutex g_lossMutex;
+quint64 g_lossDevice = 0;                    // under g_lossMutex
+PFN_vkVoidFunction *g_lossSlot = nullptr;    // the table's vkQueueSubmit entry (under g_lossMutex)
+PFN_vkQueueSubmit g_lossOriginal = nullptr;  // the driver's (the entry's value before it was exchanged)
+PFN_vkQueueWaitIdle g_lossWaitIdle = nullptr; // the driver's, for the queue the loss answers
+QAtomicInteger<quintptr> g_lossQueue { 0 };   // Qt's queue (VkQueue)
+QAtomicInt g_lossArmed { 0 };                // 0 off, 1 the next submit, 2 every submit (sticky)
+QAtomicInt g_lossSticky { 0 };
+QAtomicInteger<qint64> g_lossInjected { 0 };
+QAtomicInteger<qint64> g_lossForwarded { 0 };
+
+VKAPI_ATTR VkResult VKAPI_CALL lossQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *submits,
+                                               VkFence fence)
+{
+    if (reinterpret_cast<quintptr>(queue) == g_lossQueue.loadAcquire()) {
+        const int armed = g_lossArmed.loadAcquire();
+        if (armed == 2 || (armed == 1 && g_lossArmed.testAndSetOrdered(1, 0))) {
+            g_lossInjected.fetchAndAddRelaxed(1);
+            // A lost device has no work left; this one is alive, and QRhi skips its waits after a loss, so the queue's
+            // earlier frames are let finish here (the submitting thread holds the queue) before Qt tears them down.
+            if (g_lossWaitIdle)
+                g_lossWaitIdle(queue);
+            return VK_ERROR_DEVICE_LOST; // nothing submitted, as the driver does for a lost device
+        }
+    }
+    g_lossForwarded.fetchAndAddRelaxed(1);
+    return g_lossOriginal(queue, submitCount, submits, fence);
+}
+
+// Under g_lossMutex: the table's entry back to the driver's (the device is going, or another is armed).
+void restoreLossSlotLocked()
+{
+    if (g_lossSlot && g_lossOriginal) {
+        InterlockedExchangePointer(reinterpret_cast<PVOID volatile *>(g_lossSlot),
+                                   reinterpret_cast<PVOID>(g_lossOriginal));
+    }
+    g_lossArmed.storeRelease(0);
+    g_lossQueue.storeRelease(0);
+    g_lossSlot = nullptr;
+    g_lossDevice = 0;
+}
+
+// Under g_lossMutex, from the device's destruction (before resetDeviceFunctions frees the table).
+void disarmSubmitLoss(quint64 device)
+{
+    QMutexLocker lock(&g_lossMutex);
+    if (g_lossDevice == device)
+        restoreLossSlotLocked();
+}
+
+} // namespace
+
+bool injectSubmitLoss(quint64 device, quint32 family, bool sticky, QString *error)
+{
+    if (!g_instance || !g_instance->adopted || !device) {
+        *error = QStringLiteral("no Vulkan device of the module's");
+        return false;
+    }
+    QMutexLocker lock(&g_lossMutex);
+    if (g_lossDevice && g_lossDevice != device) {
+        *error = QStringLiteral("another device's loss is armed");
+        return false;
+    }
+    const VkDevice dev = reinterpret_cast<VkDevice>(quintptr(device));
+    QVulkanDeviceFunctions *df = g_instance->adopted->deviceFunctions(dev); // the one Qt's QRhi holds (cached per device)
+    QVulkanFunctions *f = g_instance->adopted->functions();
+    if (!df || !f) {
+        *error = QStringLiteral("the instance has no function table for the device");
+        return false;
+    }
+    if (!g_lossSlot) {
+        // The entry QVulkanDeviceFunctionsPrivate resolved for vkQueueSubmit (it resolves every entry through the
+        // instance's vkGetDeviceProcAddr), found by value: exactly one entry must hold it.
+        const PFN_vkVoidFunction real = f->vkGetDeviceProcAddr(dev, "vkQueueSubmit");
+        QVulkanDeviceFunctionsPrivate *table = (df->*deviceFunctionsTable(DeviceFunctionsTable())).data();
+        if (!real || !table) {
+            *error = QStringLiteral("vkQueueSubmit did not resolve");
+            return false;
+        }
+        const int entries = int(sizeof(table->m_funcs) / sizeof(table->m_funcs[0]));
+        PFN_vkVoidFunction *slot = nullptr;
+        int matches = 0;
+        for (int i = 0; i < entries; ++i) {
+            if (table->m_funcs[i] == real) {
+                slot = &table->m_funcs[i];
+                ++matches;
+            }
+        }
+        if (matches != 1) {
+            *error = QStringLiteral("vkQueueSubmit is %1 of the table's %2 entries, not one").arg(matches).arg(entries);
+            return false;
+        }
+        VkQueue queue = VK_NULL_HANDLE;
+        df->vkGetDeviceQueue(dev, family, 0, &queue);
+        g_lossOriginal = reinterpret_cast<PFN_vkQueueSubmit>(real);
+        g_lossWaitIdle = reinterpret_cast<PFN_vkQueueWaitIdle>(f->vkGetDeviceProcAddr(dev, "vkQueueWaitIdle"));
+        g_lossQueue.storeRelease(reinterpret_cast<quintptr>(queue));
+        g_lossSlot = slot;
+        g_lossDevice = device;
+        InterlockedExchangePointer(reinterpret_cast<PVOID volatile *>(slot), reinterpret_cast<PVOID>(&lossQueueSubmit));
+    }
+    g_lossSticky.storeRelease(sticky ? 1 : 0);
+    g_lossArmed.storeRelease(sticky ? 2 : 1);
+    return true;
+}
+
+QJsonObject submitLossJson()
+{
+    QJsonObject o;
+    {
+        QMutexLocker lock(&g_lossMutex);
+        o.insert(QStringLiteral("device"), QString::number(g_lossDevice));
+        o.insert(QStringLiteral("table_entry_replaced"), g_lossSlot != nullptr);
+    }
+    o.insert(QStringLiteral("armed"), g_lossArmed.loadAcquire() != 0);
+    o.insert(QStringLiteral("sticky"), g_lossSticky.loadAcquire() != 0);
+    o.insert(QStringLiteral("injected"), double(g_lossInjected.loadRelaxed()));
+    o.insert(QStringLiteral("forwarded"), double(g_lossForwarded.loadRelaxed()));
+    return o;
+}
+
+void setDeviceCreateFailures(int count)
+{
+    g_createFailures.storeRelease(count > 0 ? count : 0);
+}
+
+QJsonObject deviceCreateFailuresJson()
+{
+    QJsonObject o;
+    o.insert(QStringLiteral("remaining"), g_createFailures.loadAcquire());
+    o.insert(QStringLiteral("forced"), double(g_createForced.loadRelaxed()));
+    return o;
+}
+
+bool VulkanDevice::markLost()
+{
+    if (m_lost)
+        return false;
+    m_lost = true;
+    return true;
+}
+
+namespace {
+
 struct RawVulkanEntry
 {
     RawVulkanObject object;
@@ -1082,7 +1267,12 @@ QStringList VulkanDevice::destroy()
     QStringList steps;
     if (!m_device)
         return steps;
+    disarmSubmitLoss(m_device); // audit 11 M1 (harness): the table goes with resetDeviceFunctions below
     if (m_jobs) {
+        // Audit 11 L2: a device its window's QRhi found lost; the job thread, parked at rest, never met the loss itself,
+        // so its teardown would save the lost device's pipeline cache over the good file. Told before the stop.
+        if (m_lost)
+            m_jobs->deviceWasLost();
         // D9 point 6 and D1's barrier: the job thread is quiesced first (its job in flight abandoned after its own GPU
         // wait, every output destroyed, its QRhi gone), in the device's destruction, never in the GUI's close.
         const QJsonObject stopped = m_jobs->stop();

@@ -344,6 +344,8 @@ def round_swap(core, engine, app, api: str, folder: Path, out: Path, photo_paths
         # N3.6: the job QRhi loaded the core's pipeline cache file at its creation and kept its rule at the device's
         # orderly teardown (the run's own directory: child() points the module at it).
         facts["pipeline_cache"] = pipeline_cache_records(facts.get("host_close"))
+        facts["pipeline_cache_save_outcomes"] = [pipeline_cache_save_outcome(r.get("pipeline_cache_save") or {})
+                                                 for r in facts["pipeline_cache"]]
         checks["pipeline_cache_loaded_and_saved_by_rule"] = pipeline_cache_by_rule(facts["pipeline_cache"])
     return {"pass": all(checks.values()), "checks": checks, "facts": facts}
 
@@ -361,16 +363,34 @@ def pipeline_cache_records(host_close) -> list[dict]:
     return records
 
 
+def pipeline_cache_save_outcome(save: dict) -> str:
+    """What the teardown did with the core's file: ``saved``, ``nothing to save``, ``skipped: <reason>`` or
+    ``missing``. A commit that failed (``save_failed``: on Windows a rename over a file another window's reader holds
+    open fails) is a reported skip, not an error (checkpoint audit 11 L3): the file then stays some earlier writer's
+    whole file, never a torn one, and the next orderly teardown writes again ("some writer wins"). A lost device's
+    teardown saves nothing (``save``: skipped)."""
+    if float(save.get("saved_bytes", 0) or 0) > 0:
+        return "saved"
+    text = str(save.get("save", ""))
+    if text.startswith("nothing to save"):
+        return "nothing to save"
+    if text.startswith("skipped"):
+        return text
+    if save.get("save_failed"):
+        return f"skipped: the commit failed ({save['save_failed']})"
+    return "missing"
+
+
 def pipeline_cache_by_rule(records: list[dict]) -> bool:
     """One service whose QRhi read the core's file at its creation (absent in a fresh directory, else accepted or
-    refused with its reason) and, at the orderly teardown, wrote its blob or had nothing to write."""
+    refused with its reason) and, at the orderly teardown, wrote its blob, had nothing to write, or reported why it
+    skipped the write (``pipeline_cache_save_outcome``)."""
     if len(records) != 1:
         return False
     load = records[0].get("pipeline_cache_load") or {}
     save = records[0].get("pipeline_cache_save") or {}
     loaded = str(load.get("result", "")).startswith(("absent", "accepted", "rejected: "))
-    saved = float(save.get("saved_bytes", 0)) > 0 or str(save.get("save", "")).startswith("nothing to save")
-    return loaded and saved
+    return loaded and pipeline_cache_save_outcome(save) != "missing"
 
 
 def round_lifetime(core, engine, app, api: str, folder: Path, photo_paths) -> dict:

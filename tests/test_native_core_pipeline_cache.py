@@ -124,10 +124,19 @@ def test_the_job_harness_reads_the_load_and_the_save_from_the_stop_record():
     assert records == [stop] and jsc.pipeline_cache_by_rule(records)
     written = dict(stop, pipeline_cache_save={"saved_bytes": 1234.0})
     assert jsc.pipeline_cache_by_rule([written])
-    # Negative controls: no load, no save, a failed save, two services.
+    # Checkpoint audit 11 L3: a commit that lost to another window's reader is a reported skip, not red; so is a lost
+    # device's teardown.
+    failed = dict(stop, pipeline_cache_save={"save_failed": "Access is denied"})
+    assert jsc.pipeline_cache_by_rule([failed])
+    assert jsc.pipeline_cache_save_outcome(failed["pipeline_cache_save"]) == "skipped: the commit failed (Access is denied)"
+    lost = dict(stop, pipeline_cache_save={"save": "skipped: the device was lost"})
+    assert jsc.pipeline_cache_by_rule([lost]) and jsc.pipeline_cache_save_outcome(lost["pipeline_cache_save"]).startswith(
+        "skipped")
+    assert jsc.pipeline_cache_save_outcome(written["pipeline_cache_save"]) == "saved"
+    # Negative controls: no load, no save (nor a reason), two services, none.
     for bad in ({k: v for k, v in stop.items() if k != "pipeline_cache_load"},
                 {k: v for k, v in stop.items() if k != "pipeline_cache_save"},
-                dict(stop, pipeline_cache_save={"save_failed": "denied"})):
+                dict(stop, pipeline_cache_save={"file": "srpss_core_vulkan"})):
         assert not jsc.pipeline_cache_by_rule([bad]), bad
     assert not jsc.pipeline_cache_by_rule([stop, stop]) and not jsc.pipeline_cache_by_rule([])
 

@@ -138,6 +138,13 @@ public:
     // lost takes the same path by itself. `swapDevice` false (Vulkan): the rebuild keeps the device, the control of
     // the slot's setGraphicsDevice. The host's state lists each loss (device_losses).
     bool forceDeviceLoss(bool swapDevice, QString *error);
+    // N3.6, checkpoint audit 11 M1, harness only (no environment flag; Vulkan): a real loss Qt's own QRhi reports. Qt's
+    // queue answers its next vkQueueSubmit with VK_ERROR_DEVICE_LOST (`sticky`: every one until the device goes, as a
+    // really lost device does; vulkan_context.h injectSubmitLoss), so QRhi::isDeviceLost() is true and the next frame
+    // takes the lost path by itself (qrhi_lost, the fault report, the device marked lost). M2: a replacement device that
+    // could not be made (vulkan_device_create_failures) is retried at each next frame, whose frames() then fails with
+    // the reason until it is made; the lost device is never handed to Qt again.
+    bool injectDeviceLoss(bool sticky, QString *error);
     // N3.6, harness only: a detach whose release waits for the next frame edge (inside that frame), as a window host's
     // does, instead of the hidden host's release outside any frame now: the in-frame release path (the GPU timer's
     // pool to the device's deferred queue, never a wait inside the frame) on a host the harness drives.
