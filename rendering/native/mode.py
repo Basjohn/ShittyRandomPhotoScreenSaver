@@ -98,6 +98,7 @@ MODE_CORE_MEMBERS = {
     "u_window_from_target_x": (3, True),
     "u_window_from_target_y": (3, True),
     "u_target_px": (2, False),
+    "u_scene_item": (4, True),     # ABI 27: the item's cover in the target's pixels (left, top, width, height)
     "uOriented": (2, True),
     "uQuarters": (1, True),
     "u_srpss_batch": (1, False),   # N3.2 (D15 point 6): a batched pass's batch
@@ -657,7 +658,10 @@ class CompositeStep:
     composite (``COMPOSITE_FORMS``): ``overlay`` (straight colour times the fade), ``overlay_glow`` (premultiplied, the
     glow at ``u_bloom_strength``, tone mapped at ``u_hdr_exposure`` when above 0, dithered where glow is added) or
     ``opaque_glow``. ``glow`` is a :class:`BloomStep`'s ``"<name>.glow"`` (the glow forms only). Its block's
-    ``u_bloom_strength`` and ``u_hdr_exposure`` are settings or record fields, by the one rule."""
+    ``u_bloom_strength`` and ``u_hdr_exposure`` are settings or record fields, by the one rule. ABI 27: every form
+    reads the core's ``u_scene_item`` (the item's cover in the surface) as Python's ``SceneTarget`` reads its own rect:
+    its texel, glow and dither from the item's own pixel, nothing drawn outside the item; a :class:`BloomStep` from a
+    surface-sized target pairs its first downsample's pixels from there too."""
 
     name: str
     form: str
@@ -698,14 +702,18 @@ _STEPS = (CapturePass, TransparencyResolve, BloomStep, CompositeStep, DefocusSte
 
 def program_json(passes: Sequence[Any], targets: Sequence[ModeTarget | TransparencyTarget] = (),
                  streams: Sequence[ModeStream] = (), buffers: Sequence[StorageBuffer] = (),
-                 images: Sequence[StorageImage] = ()) -> tuple[str, list[bytes]]:
+                 images: Sequence[StorageImage] = (), *, unread: Sequence[str] = ()) -> tuple[str, list[bytes]]:
     """The program's declaration and its packs, in pass order (a pass with samplers declares them; one without has no
     ``samplers`` key, N2.9's declaration as it was; N3.1: ``targets`` when there are any, a capture's pack empty; N3.2:
     ``streams`` when there are any, and after a geometry pass's fragment pack its vertex pack, then a batched one's
     draw-parameters pack; N3.3: ``buffers`` and ``images`` when there are any, a compute entry's pack its compute
-    shader; N3.4: a stage step's pack empty (its shaders are the core's), and a transparent pass's sorted pack last)."""
+    shader; N3.4: a stage step's pack empty (its shaders are the core's), and a transparent pass's sorted pack last;
+    ABI 26: ``unread`` when there are any, the record's fields the program reads nowhere: a stage it leaves out reads
+    them, as the Oscilloscope's Glow 0 program leaves the bloom strength)."""
     declared = [p.declaration() for p in passes]
     program: dict[str, Any] = {"passes": declared}
+    if unread:
+        program["unread"] = [str(name) for name in unread]
     if targets:
         program["targets"] = [t.declaration() for t in targets]
     if streams:
@@ -787,12 +795,13 @@ class NativeMode:
 
     def program(self, passes: Sequence[ModePass | CapturePass | ComputePass], settings: Mapping[str, Any] | None = None,
                 *, targets: Sequence[ModeTarget] = (), streams: Sequence[ModeStream] = (),
-                buffers: Sequence[StorageBuffer] = (), images: Sequence[StorageImage] = ()) -> None:
+                buffers: Sequence[StorageBuffer] = (), images: Sequence[StorageImage] = (),
+                unread: Sequence[str] = ()) -> None:
         """The passes (N3.1: and the scene targets they draw into; N3.2: and the streams they read; N3.3: and the
-        storage buffers and images its compute entries write); ``settings`` with them (a shader that adds a member comes
-        with its value), else the ones given before. Refused (ValueError), the drawn program kept, when they do not
-        fit."""
-        declared, packs = program_json(passes, targets, streams, buffers, images)
+        storage buffers and images its compute entries write; ABI 26: and the record's fields it reads nowhere,
+        ``unread``); ``settings`` with them (a shader that adds a member comes with its value), else the ones given
+        before. Refused (ValueError), the drawn program kept, when they do not fit."""
+        declared, packs = program_json(passes, targets, streams, buffers, images, unread=unread)
         if settings is None:
             self._module.composite_mode_program(self._handle(), declared, packs)
         else:

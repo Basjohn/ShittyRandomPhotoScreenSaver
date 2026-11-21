@@ -109,7 +109,9 @@
 // "blend" as a full declaration ({"color": [op, src, dst], "alpha": [...]}) beside the presets. The vertex stage's inputs
 // bind by name to the mesh's and the instance source's attributes; its outputs carry the fragment's inputs by location.
 // Its block is the pass's own (the same block in both stages when both declare it), and it may read the conventions
-// block, samplers and storage. The program declares its streams ({"streams": [...]}: a record field each). Every block of
+// block, samplers and storage. The program declares its streams ({"streams": [...]}: a record field each), and (ABI 26)
+// the record's fields it reads nowhere ({"unread": [...]}: a stage the program leaves out reads them, as the
+// Oscilloscope's Glow 0 program leaves the bloom strength; any other unread field is refused). Every block of
 // the content (the passes', the conventions, the clears', the captures', the nearest resolves') lives in one block arena
 // given as dynamic offsets; firstInstance is always 0. The core member uMatrix (item pixels, the item's own unrotated
 // coordinates, to the drawn target's clip space, corrected once: conventions.h rule 1) is filled for a pass with its own
@@ -183,6 +185,7 @@
 namespace srpss_core {
 
 constexpr int kMaxModePasses = 16; // N3.1: a 3D scene's passes and captures (8 before)
+constexpr int kMaxModeUnread = 16; // ABI 26: the record fields a program may leave unread
 
 struct ModeCard;
 class ItemNotifier;
@@ -225,6 +228,11 @@ struct ModeCard
 // The core member's numbers for this card and target (false: the member is not a core member, or its row has no
 // values: never zeros for a name it does not know).
 bool modeCoreValues(const QByteArray &name, const ModeCard &card, const QSize &target, double *out, int *count);
+
+// ABI 27: the item's cover in a target's pixels from the card alone (left, top, width, height; top-first rows): Python's
+// item_pixel_rect, where its SceneTarget starts. Zeros without a card. The core member u_scene_item and the bloom
+// step's first downsample read it (mode_content.cpp).
+void sceneItemRect(const ModeCard &card, double out[4]);
 
 // N3.1: Additive (ONE, ONE on every channel) for the light attachments (EB's emission, Bubble's ambient light).
 enum class PassBlend { Replace = 0, Alpha = 1, Premultiplied = 2, Add = 3, Additive = 4 };
@@ -368,6 +376,10 @@ struct ModeProgram
     QList<StreamDeclaration> streams; // N3.2: its streams (a record field each)
     QList<StorageBufferDeclaration> buffers; // N3.3: its storage buffers
     QList<StorageImageDeclaration> images;   // N3.3: its storage images
+    // ABI 26 (N5.1, the Oscilloscope's Glow 0): the record's fields the program reads nowhere ({"unread": [...]}: a
+    // stage it leaves out reads them), each a field of the record that no pass, draw or stream reads; any other record
+    // field no pass reads is refused as before.
+    QList<QByteArray> unread;
     // N3.2: the numbers of the settings the draws name (counts and selectors), set where the settings are admitted.
     QHash<QByteArray, double> drawSettings;
     quint64 generation = 0; // a new program rebuilds the pipelines at the next record
@@ -779,6 +791,11 @@ private:
     bool texturesReady() const;
     // N5.7a: what a still draws, as bytes (its program, target, triangle, blocks and the fronts its passes sample).
     QByteArray stillSignature(const ColorTarget &target, const float *triangle) const;
+    // ABI 27: a bloom step's first downsample's triangle: the target's own (`own`) with its uv moved by the item's place
+    // in its surface-sized source (sceneItemRect: columns from the left, rows under the item, over the source's
+    // allocation), so level 0 pairs the pixels Python's SceneTarget pairs from the item's own pixel; `own` itself for a
+    // source of explicit size, no card, or the bloom_at_target_origin control.
+    void bloomTriangle(const BloomSpec &spec, const float *own, float *out) const;
     GpuTexture *slot(const QByteArray &name);
     GpuTexture *front(const QByteArray &name);
     const GpuTexture *front(const QByteArray &name) const;

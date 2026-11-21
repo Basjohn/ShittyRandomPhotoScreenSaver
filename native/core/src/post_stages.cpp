@@ -30,6 +30,7 @@ QAtomicInteger<int> g_sampleShadingMissing { 0 };
 QAtomicInteger<int> g_transparencyFirstSample { 0 };
 QAtomicInteger<int> g_skipBloomPrime { 0 };
 QAtomicInteger<int> g_bloomSameTexture { 0 };
+QAtomicInteger<int> g_bloomAtTargetOrigin { 0 };
 QAtomicInteger<int> g_skipStageRelease { 0 };
 QAtomicInteger<int> g_skipReadChain { 0 };
 QAtomicInteger<int> g_stageAllocationFailure { 0 };
@@ -300,6 +301,8 @@ void setSkipBloomPrime(bool skip) { setControl(g_skipBloomPrime, skip); }
 bool skipBloomPrime() { return g_skipBloomPrime.loadAcquire() != 0; }
 void setBloomSameTexture(bool same) { setControl(g_bloomSameTexture, same); }
 bool bloomSameTexture() { return g_bloomSameTexture.loadAcquire() != 0; }
+void setBloomAtTargetOrigin(bool atOrigin) { setControl(g_bloomAtTargetOrigin, atOrigin); }
+bool bloomAtTargetOrigin() { return g_bloomAtTargetOrigin.loadAcquire() != 0; }
 void setSkipStageRelease(bool skip) { setControl(g_skipStageRelease, skip); }
 bool skipStageRelease() { return g_skipStageRelease.loadAcquire() != 0; }
 void setSkipReadChain(bool skip) { setControl(g_skipReadChain, skip); }
@@ -1166,7 +1169,7 @@ int PostStages::live() const
 }
 
 void PostStages::recordBloom(QRhi *rhi, QRhiCommandBuffer *cb, int pass, const QRhiCommandBuffer::VertexInput &triangle,
-                             QRhiResourceUpdateBatch **pending)
+                             const QRhiCommandBuffer::VertexInput &firstTriangle, QRhiResourceUpdateBatch **pending)
 {
     Bloom *b = nullptr;
     for (int i = 0; i < m_bloomCount; ++i) {
@@ -1176,7 +1179,8 @@ void PostStages::recordBloom(QRhi *rhi, QRhiCommandBuffer *cb, int pass, const Q
     if (!b || !b->downFirst || !b->downRest || !b->upAdd)
         return;
     const bool prime = !skipBloomPrime();
-    const auto level = [&](int k, QRhiGraphicsPipeline *pipeline, QRhiShaderResourceBindings *bindings) {
+    const auto level = [&](int k, QRhiGraphicsPipeline *pipeline, QRhiShaderResourceBindings *bindings,
+                           const QRhiCommandBuffer::VertexInput &input) {
         // Rule C: the level was sampled (or read back) since it was last drawn, and its render pass loads it.
         if (prime)
             primeForLoad(rhi, cb, b->levels[k].get());
@@ -1185,16 +1189,16 @@ void PostStages::recordBloom(QRhi *rhi, QRhiCommandBuffer *cb, int pass, const Q
         cb->setGraphicsPipeline(pipeline);
         setViewportAndScissor(cb, QRect(QPoint(), b->sizes[k]));
         cb->setShaderResources(bindings);
-        cb->setVertexInput(0, 1, &triangle);
+        cb->setVertexInput(0, 1, &input);
         cb->draw(3);
         cb->endPass();
     };
-    // post.py BloomChain.apply: four downsamples (the first with the bright pass), then three upsamples, each added onto
-    // the next larger level; the glow is level 0.
+    // post.py BloomChain.apply: four downsamples (the first with the bright pass, from the item's own pixel: ABI 27),
+    // then three upsamples, each added onto the next larger level; the glow is level 0.
     for (int k = 0; k < kBloomLevels; ++k)
-        level(k, k == 0 ? b->downFirst.get() : b->downRest.get(), b->down[k].get());
+        level(k, k == 0 ? b->downFirst.get() : b->downRest.get(), b->down[k].get(), k == 0 ? firstTriangle : triangle);
     for (int k = kBloomLevels - 1; k > 0; --k)
-        level(k - 1, b->upAdd.get(), b->up[k].get());
+        level(k - 1, b->upAdd.get(), b->up[k].get(), triangle);
     g_bloomRecords.fetchAndAddRelaxed(1);
 }
 

@@ -125,4 +125,14 @@
 // 23: isolate the three flush_defocus_* sites; composite_live's stage_defocus_flushes proves which boundaries ran.
 // 24: complete mip readbacks with level-relative content; bounded stage allocation/build fault controls and counters.
 // 25: OpenGL declaration-only and compute-tracker-only defocus diagnostics, with counters of actual controlled flags.
-#define SRPSS_NATIVE_CORE_ABI 25
+// 26 (N5.1, the Oscilloscope): a program's "unread", the record's fields it reads nowhere (a stage it leaves out reads
+// them: the Glow 0 program's bloom strength); each must be a field of the record that no pass, draw or stream reads, any
+// other record field no pass reads is refused as before. The program's layout JSON carries "unread". Backward
+// compatible for every earlier program (no "unread": ABI 25's check).
+// 27 (N5.1, the lead's decision 21 Nov: Python's SceneTarget is the oracle): the core member u_scene_item (the item's
+// cover in the target's pixels, from the card: mode_core_members, mode_core_values); the composite step's forms read it
+// (their texel, glow and dither from the item's own pixel, discarded outside the item) and a bloom step's first
+// downsample starts from the item's own pixel in a surface-sized source; stage_control's bloom_at_target_origin (its
+// negative control). A new stream's first sync clears the old stream's frame whatever that read is (an admission-
+// rejected first frame left the previous mode's frame shown). Unchanged for an item that covers its target.
+#define SRPSS_NATIVE_CORE_ABI 27

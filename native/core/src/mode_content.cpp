@@ -70,8 +70,66 @@ void valueTargetPixels(const ModeCard &, const QSize &target, double *out)
     out[0] = target.width();
     out[1] = target.height();
 }
+void valueSceneItem(const ModeCard &card, const QSize &target, double *out)
+{
+    if (bloomAtTargetOrigin()) {               // the harness's negative control: the target's origin, as before ABI 27
+        out[0] = 0.0;
+        out[1] = 0.0;
+        out[2] = target.width();
+        out[3] = target.height();
+        return;
+    }
+    sceneItemRect(card, out);
+    if (out[2] <= 0.0 || out[3] <= 0.0) {     // no card (a harness probe): the whole target, as before ABI 27
+        out[0] = 0.0;
+        out[1] = 0.0;
+        out[2] = target.width();
+        out[3] = target.height();
+    }
+}
 
 } // namespace
+
+// ABI 27 (the lead's decision, 21 Nov; N5.1 owner rule (a)): Python's SceneTarget starts at the item's own device pixel
+// (item_pixel_rect: the item quad's outward cover of whole window pixels), so its bloom pairs pixels and counts rows from
+// there. The item's cover in a target's pixels: (left, top, width, height), top-first rows, from the card alone (the
+// item's oriented rect through item_from_window and window_from_target, inverted), outward to whole pixels (an edge
+// within 1e-3 of a whole pixel is that pixel: the card's numbers are exact where the window's grid is). Without a card:
+// nothing (zeros), so the target's own origin and size are read by the caller.
+void sceneItemRect(const ModeCard &card, double *out)
+{
+    out[0] = out[1] = out[2] = out[3] = 0.0;
+    if (!card.valid || card.orientedSize[0] <= 0.0 || card.orientedSize[1] <= 0.0)
+        return;
+    const double *w = card.windowFromTarget;
+    const double *m = card.itemFromWindow;
+    // a = m * w: the oriented item coordinate of a target pixel (rows x, y), inverted.
+    const double a[6] = { m[0] * w[0] + m[1] * w[3], m[0] * w[1] + m[1] * w[4], m[0] * w[2] + m[1] * w[5] + m[2],
+                          m[3] * w[0] + m[4] * w[3], m[3] * w[1] + m[4] * w[4], m[3] * w[2] + m[4] * w[5] + m[5] };
+    const double det = a[0] * a[4] - a[1] * a[3];
+    if (!(std::abs(det) > 1e-12))
+        return;
+    double low[2] = { 0.0, 0.0 };
+    double high[2] = { 0.0, 0.0 };
+    const double corners[4][2] = { { 0.0, 0.0 }, { card.orientedSize[0], 0.0 }, { 0.0, card.orientedSize[1] },
+                                   { card.orientedSize[0], card.orientedSize[1] } };
+    for (int i = 0; i < 4; ++i) {
+        const double u = corners[i][0] - a[2];
+        const double v = corners[i][1] - a[5];
+        const double p[2] = { (a[4] * u - a[1] * v) / det, (a[0] * v - a[3] * u) / det };
+        for (int k = 0; k < 2; ++k) {
+            low[k] = i == 0 ? p[k] : std::min(low[k], p[k]);
+            high[k] = i == 0 ? p[k] : std::max(high[k], p[k]);
+        }
+    }
+    constexpr double kSnap = 1e-3;
+    const double left = std::floor(low[0] + kSnap);
+    const double top = std::floor(low[1] + kSnap);
+    out[0] = left;
+    out[1] = top;
+    out[2] = std::max(0.0, std::ceil(high[0] - kSnap) - left);
+    out[3] = std::max(0.0, std::ceil(high[1] - kSnap) - top);
+}
 
 // The core's conventions (mode_content.h): the members the Python renderers of Spectrum, Spline Curve and Bubble compute
 // per frame from the card and their target (implementations/spectrum.py spectrum_settings_values, devcurve.py and
@@ -95,6 +153,9 @@ const ModeCoreMember kModeCoreMembers[] = {
     { "u_window_from_target_x", 3, true, valueWindowFromTargetX }, // the target's pixel -> the window's (whole-pixel, exact)
     { "u_window_from_target_y", 3, true, valueWindowFromTargetY },
     { "u_target_px", 2, false, valueTargetPixels },           // the target's pixels (the core's own)
+    // ABI 27: the item's cover in the target's pixels (left, top, width, height; sceneItemRect): where Python's
+    // SceneTarget starts, read by the composite step (its texel, glow and dither from the item's own pixel).
+    { "u_scene_item", 4, true, valueSceneItem },
     // The Oscilloscope renderer's own names for two of the card's numbers (its program, oscilloscope_program.py; round
     // 2 L7's scan of implementations/oscilloscope.py).
     { "uOriented", 2, true, valueOrientedSize },          // the item's logical size in the content's orientation
@@ -134,6 +195,7 @@ constexpr float kFullTriangle[6] = { -1.0f, -1.0f, 3.0f, -1.0f, -1.0f, 3.0f };
 // the item quad's (vUv: y up), so a pass reads the one it names (mode_content.h) through its own vertex input layout.
 constexpr int kVertexFloats = 6;
 constexpr int kTriangleFloats = 3 * kVertexFloats;
+constexpr int kTriangles = 2 + kMaxBloomStages; // the card's, a target's own, each bloom step's first downsample's
 constexpr quint32 kUvDownOffset = 2 * sizeof(float);
 constexpr quint32 kUvUpOffset = 4 * sizeof(float);
 constexpr const char kConventionsBlock[] = "SrpssConventions";
@@ -2064,8 +2126,10 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
     const bool withStreams = root.contains(QStringLiteral("streams")); // N3.2
     const bool withBuffers = root.contains(QStringLiteral("buffers")); // N3.3
     const bool withImages = root.contains(QStringLiteral("images"));   // N3.3
+    const bool withUnread = root.contains(QStringLiteral("unread"));   // ABI 26
     if (parse.error != QJsonParseError::NoError || !document.isObject()
         || root.size() != 1 + (withTargets ? 1 : 0) + (withStreams ? 1 : 0) + (withBuffers ? 1 : 0) + (withImages ? 1 : 0)
+                              + (withUnread ? 1 : 0)
         || declared.isEmpty() || declared.size() > kMaxModePasses) {
         *error = QStringLiteral("a mode's program is {\"passes\": [{\"name\", \"blend\"}, ...], \"targets\" (optional): "
                                 "[...]} with 1 to %1 passes").arg(kMaxModePasses);
@@ -2089,6 +2153,22 @@ bool ModeProgram::fromJson(const QByteArray &json, const QList<QByteArray> &pack
     }
     qsizetype packIndex = 0;
     ModeProgram program;
+    // ABI 26: the record's fields this program reads nowhere (checked against the record in check()).
+    if (withUnread) {
+        const QJsonValue unread = root.value(QStringLiteral("unread"));
+        if (!unread.isArray() || unread.toArray().size() > kMaxModeUnread) {
+            *error = QStringLiteral("\"unread\" is a list of at most %1 record field names").arg(kMaxModeUnread);
+            return false;
+        }
+        for (const QJsonValue &entry : unread.toArray()) {
+            const QByteArray name = entry.toString().toLatin1();
+            if (!entry.isString() || name.isEmpty() || program.unread.contains(name)) {
+                *error = QStringLiteral("\"unread\" names each record field once, by its name");
+                return false;
+            }
+            program.unread.append(name);
+        }
+    }
     // N3.2: the streams (a record field each), before the passes that bind them.
     if (withStreams) {
         const QJsonValue streams = root.value(QStringLiteral("streams"));
@@ -2614,6 +2694,10 @@ QJsonObject ModeProgram::toJson() const
     for (const TargetDeclaration &target : targets)
         declaredTargets.append(target.toJson());
     o.insert(QStringLiteral("targets"), declaredTargets);
+    QJsonArray declaredUnread; // ABI 26
+    for (const QByteArray &name : unread)
+        declaredUnread.append(QString::fromLatin1(name));
+    o.insert(QStringLiteral("unread"), declaredUnread);
     return o;
 }
 
@@ -2879,6 +2963,23 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
         }
     }
     if (schema) {
+        // ABI 26: each unread name is a field of the record that the program reads nowhere (never a way to leave a read
+        // field unchecked, never a name the record lacks).
+        for (const QByteArray &name : unread) {
+            bool field = false;
+            for (quint32 i = 0; i < schema->fieldCount && !field; ++i)
+                field = name == schema->fields[i].name;
+            if (!field) {
+                *error = QStringLiteral("unknown: the program leaves '%1' unread, which is no field of the record")
+                             .arg(QString::fromLatin1(name));
+                return false;
+            }
+            if (declares(name) || drawNames(name) || streamReads(name)) {
+                *error = QStringLiteral("the program leaves the record's field '%1' unread, yet a pass, draw or stream "
+                                        "reads it").arg(QString::fromLatin1(name));
+                return false;
+            }
+        }
         for (quint32 i = 0; i < schema->fieldCount; ++i) {
             const fa::Field &field = schema->fields[i];
             const QByteArray name(field.name);
@@ -2887,6 +2988,8 @@ bool ModeProgram::check(const fa::Schema *schema, const QJsonObject *settings, b
                              .arg(QString::fromLatin1(name));
                 return false;
             }
+            if (unread.contains(name))
+                continue;                     // read by no pass of this program, by its declaration (checked above)
             if (!declares(name) && !drawNames(name) && !streamReads(name)) {
                 *error = QStringLiteral("unknown: the record's field '%1' is no pass's member, draw count or stream "
                                         "(an unknown name is refused)").arg(QString::fromLatin1(name));
@@ -3877,8 +3980,9 @@ struct ModeContent::Resources
     };
     NearestResolve nearest[kMaxSceneTargets][kNearestSlots];
     // The vertices uploaded: the card's triangle (fullTriangle for the drawn card and the surface), then (N3.1) the
-    // triangle of an explicit-size target (its own uv, no card).
-    float triangle[2 * kTriangleFloats] = {};
+    // triangle of an explicit-size target (its own uv, no card), then (ABI 27) each bloom step's first downsample's
+    // (its own uv moved to the item's own pixel: bloomTriangle).
+    float triangle[kTriangles * kTriangleFloats] = {};
     bool triangleUploaded = false;
     bool staticUploaded = false;
     bool targetsUploaded = false; // N3.1: the clears' values and the captures' blocks
@@ -4410,10 +4514,31 @@ QByteArray ModeContent::stillSignature(const ColorTarget &target, const float *t
     }
     for (const BlockValues &block : m_blocks)
         s.append(block.bytes());
-    s.append(reinterpret_cast<const char *>(triangle), qsizetype(2 * kTriangleFloats * sizeof(float)));
+    s.append(reinterpret_cast<const char *>(triangle), qsizetype(kTriangles * kTriangleFloats * sizeof(float)));
     put(m_targets.objectGeneration());       // N3.1: a scene target made again draws again
     put(m_meshes.objects());                 // N3.2: a mesh made or gone draws again
     return s;
+}
+
+void ModeContent::bloomTriangle(const BloomSpec &spec, const float *own, float *out) const
+{
+    std::memcpy(out, own, size_t(kTriangleFloats) * sizeof(float));
+    const SceneTargets::Target *source = m_targets.target(spec.source);
+    if (!source || !source->decl.surfaceSized() || source->allocation.isEmpty() || bloomAtTargetOrigin())
+        return;
+    double item[4];
+    sceneItemRect(m_source->drawnCard(), item);
+    if (item[2] <= 0.0 || item[3] <= 0.0)
+        return;
+    // The source's content lies at its allocation's left columns and bottom rows (D14 point 2); vUv runs up from the
+    // allocation's bottom row, as Python's uv over its own allocation, which starts at the item's pixel.
+    const double below = double(source->content.height()) - item[1] - item[3];
+    const float du = float(item[0] / double(source->allocation.width()));
+    const float dv = float(below / double(source->allocation.height()));
+    for (int i = 0; i < 3; ++i) {
+        out[i * kVertexFloats + 4] += du;
+        out[i * kVertexFloats + 5] += dv;
+    }
 }
 
 bool ModeContent::texturesReady() const
@@ -6303,8 +6428,16 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
             continue;
         }
         if (pass.stage == StageKind::Bloom) {
-            // N3.4 (D17 point 4): the chain, each level a render pass of its own, outside any run.
-            m_post.recordBloom(rhi, cb, i, ownInput, &pending);
+            // N3.4 (D17 point 4): the chain, each level a render pass of its own, outside any run; ABI 27: its first
+            // downsample from the item's own pixel (bloomTriangle).
+            int n = 0;
+            while (n < int(m_bloomSpecs.size()) && m_bloomSpecs.at(n).pass != i)
+                ++n;
+            const QRhiCommandBuffer::VertexInput firstInput(
+                r.vertices.get(), n < kMaxBloomStages && n < int(m_bloomSpecs.size())
+                                      ? quint32((2 + n) * kTriangleFloats * sizeof(float))
+                                      : quint32(kTriangleFloats * sizeof(float)));
+            m_post.recordBloom(rhi, cb, i, ownInput, firstInput, &pending);
             ++i;
             continue;
         }
@@ -6462,9 +6595,11 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
     }
     noteMeshBuffers();                        // N3.2: only when the meshes' or streams' objects changed
     Resources &r = *m_res;
-    float triangle[2 * kTriangleFloats];
+    float triangle[kTriangles * kTriangleFloats] = {};
     fullTriangle(rhi, m_source->drawnCard(), target.texture->pixelSize(), triangle);
     fullTriangle(rhi, ModeCard(), target.texture->pixelSize(), triangle + kTriangleFloats); // N3.1: a target's own uv
+    for (int n = 0; n < int(m_bloomSpecs.size()) && n < kMaxBloomStages; ++n)
+        bloomTriangle(m_bloomSpecs.at(n), triangle + kTriangleFloats, triangle + (2 + n) * kTriangleFloats);
     m_keptTarget = false;
     const bool readback = m_source->targetReadRequests() != m_targetReadsDone; // N3.1, harness
     if (draw && m_source->drawnStill()) {

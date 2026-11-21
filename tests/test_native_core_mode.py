@@ -185,6 +185,39 @@ def test_each_core_member_reads_its_own_values_and_moves_only_with_the_card_or_t
                                                                                      target)
 
 
+def _placed_card(item_px: tuple[float, float], target_px: tuple[int, int], dpr: float) -> dict:
+    """A card for an item 420 x 280 logical whose top-left lies at ``item_px`` (window device pixels, y down) in a
+    surface whose top-left is ``target_px``, in a 1920 x 1080 logical window at ``dpr`` (the route's rows: the window's
+    pixels bottom-up)."""
+    window_px = 1080.0 * dpr
+    return {"quarters": 0, "item_size": [420.0, 280.0], "oriented_size": [420.0, 280.0], "dpr": dpr,
+            "content_fade": 1.0, "border_width": 0.0,
+            "window_from_target": [1.0, 0.0, float(target_px[0]), 0.0, -1.0, window_px - target_px[1]],
+            "item_from_window": [1.0 / dpr, 0.0, -item_px[0] / dpr, 0.0, -1.0 / dpr, (window_px - item_px[1]) / dpr]}
+
+
+@pytest.mark.parametrize("item_px,dpr,expected", (
+    ((45.0, 44.0), 1.5, (1, 0, 630, 420)),     # odd column, even row: the Oscilloscope's owner placement
+    ((44.0, 45.0), 1.5, (0, 1, 630, 420)),     # even column, odd row
+    ((47.0, 49.0), 1.0, (3, 5, 420, 280)),     # odd in both
+    ((46.0, 48.0), 1.0, (2, 4, 420, 280)),     # even in both
+    ((45.5, 44.25), 1.5, (1, 0, 631, 421)),    # fractional edges: outward, as item_pixel_rect
+))
+def test_the_scene_item_is_the_items_own_cover_in_the_target(core, item_px, dpr, expected, qt_app):
+    # ABI 27 (the lead's decision, 21 Nov): u_scene_item is where Python's SceneTarget starts (item_pixel_rect, the item
+    # quad's outward cover of whole window pixels) in the drawn target's pixels, from the card alone; the composite step
+    # and the bloom's first downsample read it. Negative control: stage_control's bloom_at_target_origin is the target's
+    # own origin and size (as before ABI 27).
+    card = _placed_card(item_px, (44, 44), dpr)
+    target = (int(expected[2]) + 8, int(expected[3]) + 6)
+    assert tuple(core.mode_core_values("u_scene_item", card, target)) == tuple(float(v) for v in expected)
+    assert core.module.stage_control("bloom_at_target_origin", True) is True
+    try:
+        assert tuple(core.mode_core_values("u_scene_item", card, target)) == (0.0, 0.0, *map(float, target))
+    finally:
+        core.module.stage_control("bloom_at_target_origin", False)
+
+
 @pytest.mark.qt
 def test_the_product_2d_packs_are_admitted_and_bubble_with_its_samplers_bound(core, tmp_path, qt_app):
     # Audit N29 M5: the generic pass takes the product 2D shaders' shape, over their real .qsb packs. N4.a: Bubble's

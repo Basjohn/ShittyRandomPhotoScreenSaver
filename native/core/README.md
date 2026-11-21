@@ -257,7 +257,8 @@ worked example (harness-only); a product mode does the same in the product's pla
    std140 block of its own (any name, any binding but 17). Its members are filled by name: the core's conventions
    (`MODE_CORE_MEMBERS`: `uMatrix`, `uItemSize`, `uContentRotationQuarters`, `u_resolution`, `u_dpr`,
    `u_viewport_origin_px`, `u_quick_item_coords`, `u_fade`, `u_border_width`, `u_item_from_frag*`,
-   `u_window_from_target*`, `u_target_px`), every record field named exactly as the field (an f64 a float, an f64x4 a
+   `u_window_from_target*`, `u_target_px`, `u_scene_item`: the item's cover in the target, where Python's
+   `SceneTarget` starts, read by the composite step), every record field named exactly as the field (an f64 a float, an f64x4 a
    vec4, a u32 an int or float under a range rule that fits it, a uint or a bool, an array the same length), and the
    settings. Baked by `tools/regen_qrc.py --shaders` beside the source (the harness bakes with the same baker at run
    time), handed over as bytes with the pass's blend (`ModePass`).
@@ -343,6 +344,13 @@ worked example (harness-only); a product mode does the same in the product's pla
    program with the first settings, then each size through `NativeMode.target_size` only when it changes (never per
    frame), and its stream slot is whole 4096-byte steps of its record (`_slot_bytes`). Its harness is
    `native/core/python/devcurve_check.py`'s rounds with the mode's own pieces (`use_mode`; `bubble_check.py`).
+   A mode whose stages a Setting turns on or off (the Oscilloscope's Glow: D17 choice E) names its program variants in
+   `GENERIC_MODE_PROGRAM_VARIANTS` (`(the variant of a snapshot, variant -> {"passes", "targets", "streams",
+   "unread"?})`): the route builds the variant's program at the bind and again only at the Settings edge that changes
+   it. One record serves every variant: a variant that leaves a stage out names the record fields only that stage reads
+   in `"unread"` (ABI 26; any other record field no pass reads is still refused). Its harness is
+   `oscilloscope_check.py`; until its registration, its owner rule (a) runs through `oscilloscope_check.py owner`, the
+   route's registration process-local.
 
 ### Samplers and textures (N4.a; decision D13 in `Native_Core_P3_Decisions.md`)
 
