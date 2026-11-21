@@ -966,6 +966,15 @@ python native/core/python/transition_route_check.py --module-dir release/native_
 # the normal zero-resource predicate to fail on actual held resources, before cleanup).
 python native/core/python/scene_target_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
     [--apis opengl vulkan] [--rounds parity msaa rest resize retire cost] [--label n31_scene_targets]
+# N5.4 (ABI 33, Waveform's five C++ boxes) on native/core/python/waveform_primitives, the same harness, evidence under
+# native_core/n5_4/: wave_floor (an exact, mipped, drawable reflection at odd sizes with two-output passes, the exact
+# pre-pass, an RGBA16F item texture's GPU levels, the floor's anisotropic taps from rendering/gl_programs/anisotropic.py;
+# rule (a) per texture against the Python reference child, every reflection level reported with the odd-built ones
+# apart, the controls 1x read / bucketed reflection / RGBA8 slope leaving the bound, wave_sheet_<api>.png),
+# wave_limits (Waveform's 28 passes, 9 storage images, 4 targets admitted, one past each refused), wave_filter (the
+# linear_filter_formats facts, the faked device without linear 32-bit float filtering refusing an RGBA32F read).
+python native/core/python/scene_target_check.py --module-dir release/native_module --require-validation --layer-path <layer dir>
+    --rounds wave_floor wave_limits wave_filter [--apis opengl vulkan]
 # N3.2 (D15): meshes and buffers on the harness scenes native/core/python/mesh_buffers (passes with their own vertex
 # stage into a surface-sized RGBA8 scene target), hidden hosts only: parity (box over storage records with depth and the
 # per-record front face, static instance stream, sprites as instanced quads, a strip with blend MAX, 900 streaks over

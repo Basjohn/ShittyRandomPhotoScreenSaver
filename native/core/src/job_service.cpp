@@ -102,6 +102,7 @@ UploadJob::UploadJob(const QByteArray &nameIn, quint64 generationIn, const QShar
       generation(generationIn),
       size(pixelsIn ? pixelsIn->size : QSize()),
       mips(pixelsIn ? pixelsIn->mips : false),
+      format(pixelsIn ? pixelsIn->format : ModeTextureFormat::RGBA8),
       m_pixels(pixelsIn),
       m_notifier(std::move(notifier))
 {
@@ -757,7 +758,7 @@ public:
         }
         const QRhiTexture::Flags flags = job.mips ? (QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips)
                                                   : QRhiTexture::Flags();
-        RhiOwned<QRhiTexture> texture(m_rhi->newTexture(QRhiTexture::RGBA8, job.size, 1, flags));
+        RhiOwned<QRhiTexture> texture(m_rhi->newTexture(modeTextureRhiFormat(job.format), job.size, 1, flags));
         texture->setName(QByteArrayLiteral("srpss core job texture ") + job.name);
         if (!texture->create()) {
             *error = QStringLiteral("%1 could not be created at %2 x %3 on the job queue")
@@ -807,7 +808,7 @@ public:
         job.outputId = id;
         job.nativeImage = native.object;
         job.nativeLayout = native.layout;
-        job.outputBytes = rgba8TextureBytes(job.size, job.mips);
+        job.outputBytes = modeTextureBytes(job.size, job.mips, job.format);
         m_textures.insert(id, texture.release());
         QMutexLocker lock(&m_factsMutex);
         ++m_uploads;
@@ -982,7 +983,7 @@ public:
         job.outputId = id;
         job.nativeImage = 0x1000 + id;
         job.nativeLayout = 7;
-        job.outputBytes = rgba8TextureBytes(job.size, job.mips);
+        job.outputBytes = modeTextureBytes(job.size, job.mips, job.format);
         m_outputs.insert(id, true);
         ++m_uploads;
         return true;

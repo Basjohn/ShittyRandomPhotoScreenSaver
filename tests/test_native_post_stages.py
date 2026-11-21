@@ -210,7 +210,9 @@ def test_the_core_sprites_are_pythons() -> None:
 
 
 def test_the_defocus_layer_alone_takes_generate_mips() -> None:
-    """D17 choice G: QRhi's generateMips only for the defocus layer (its two attachments, in the defocus step)."""
+    """D17 choice G: QRhi's generateMips for the defocus layer (its two attachments, in the defocus step); ABI 33 (N5.4)
+    adds exactly one other scene-target site, a self-mipped target's read attachments after its run (Python's
+    glGenerateTextureMipmap of Waveform's reflection), never a bloom or HDR chain."""
     content = (CORE / "src" / "mode_content.cpp").read_text(encoding="utf-8")
     record = content[content.index("void ModeContent::recordDefocus("):content.index("bool ModeContent::syncTargets(")]
     assert record.count("->generateMips(") == 2
@@ -220,6 +222,14 @@ def test_the_defocus_layer_alone_takes_generate_mips() -> None:
     assert content.count("->generateMips(") == 2 + upload.count("->generateMips(")
     assert "generateMips(" not in (CORE / "src" / "post_stages.cpp").read_text(encoding="utf-8").replace(
         "never generateMips", "")
+    # ABI 33: the scene targets' one site is generateSelfMips, gated on a self-mipped single-sampled target and a read
+    # attachment, called once, after a run of passes on a scene target.
+    targets = (CORE / "src" / "scene_targets.cpp").read_text(encoding="utf-8")
+    own = targets[targets.index("int SceneTargets::generateSelfMips("):targets.index("int SceneTargets::liveObjects(")]
+    assert targets.count("generateMips(") == own.count("generateMips(") == 1
+    assert "!t->decl.selfMips" in own and ".read" in own
+    passes = content[content.index("void ModeContent::recordPasses("):content.index("bool ModeContent::record(")]
+    assert content.count("generateSelfMips(") == passes.count("generateSelfMips(") == 1
 
 
 # --------------------------------------------------------------------------- the composite and the HDR resolve (point 5)

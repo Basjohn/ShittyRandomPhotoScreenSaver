@@ -167,4 +167,15 @@
 // core_wrappers_live_after_invalidation; the hidden host's close record's core_wrappers_live_after_invalidation; the job
 // service's stop record's told_device_lost and device_lost and its self-test's device_was_lost step (L2). RhiOwned is a
 // class (rhi_owned.h). Backward compatible for every earlier caller.
-#define SRPSS_NATIVE_CORE_ABI 31
+// 33 (N5.4, Waveform's five C++ boxes; 32 is another branch's): a target's "allocation": "exact" (the content's exact
+// size, no bucket) and a drawable mipped target (a mipped target no defocus step reads: a depth and an explicit size
+// allowed, its read attachments' chains generated after each run on it, a sampler reading its levels with "mips"; the
+// layout JSON's targets carry "self_mips" and "allocation"; composite_live's scene_target_mips); a pass's
+// "extra_outputs": "discard" (outputs past its scene target's attachments, discarded); composite_mode_texture's
+// seventh argument half_float (an RGBA16F item texture, its chain generated on the GPU; the textures' state "format");
+// kMaxModePasses 28 (16 before) and kMaxStorageImages 9 (8 before); compute_control's no_float32_linear (harness: a
+// device without linear filtering of 32-bit floats), the device facts' linear_filter_formats (Vulkan's
+// SAMPLED_IMAGE_FILTER_LINEAR_BIT per storage format) and the compute facts' linear_filter_formats and
+// float32_linear_control; a linear sampler over a storage image this device does not filter linearly fails the
+// content with its reason. Backward compatible for every earlier program and caller.
+#define SRPSS_NATIVE_CORE_ABI 33

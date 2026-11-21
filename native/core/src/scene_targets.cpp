@@ -21,6 +21,7 @@ QAtomicInteger<int> g_onePixelBucket { 0 };
 QAtomicInteger<int> g_allocationStepLimit { 0 };
 QAtomicInteger<int> g_skipScissor { 0 };
 QAtomicInteger<int> g_oversizeViewport { 0 };
+QAtomicInteger<qint64> g_selfMips { 0 };    // ABI 33
 
 QMutex &removedMutex()
 {
@@ -178,7 +179,8 @@ bool TargetDeclaration::sameLayout(const TargetDeclaration &o) const
     if (name != o.name || depth != o.depth || depthRead != o.depthRead || depthSampled != o.depthSampled
         || samples != o.samples || capture != o.capture || colour.size() != o.colour.size()
         || surfaceSized() != o.surfaceSized()
-        || transparencyOf != o.transparencyOf || owner != o.owner || borrow != o.borrow || mips != o.mips) // N3.4
+        || transparencyOf != o.transparencyOf || owner != o.owner || borrow != o.borrow || mips != o.mips // N3.4
+        || exact != o.exact)                  // ABI 33
         return false;
     for (qsizetype i = 0; i < colour.size(); ++i) {
         const TargetAttachment &a = colour.at(i);
@@ -237,6 +239,8 @@ QJsonObject TargetDeclaration::toJson() const
         borrowed.append(QString::fromLatin1(b));
     o.insert(QStringLiteral("borrow"), borrowed);
     o.insert(QStringLiteral("mips"), mips);
+    o.insert(QStringLiteral("self_mips"), selfMips);                                   // ABI 33
+    o.insert(QStringLiteral("allocation"), exact ? QStringLiteral("exact") : QStringLiteral("bucket"));
     return o;
 }
 
@@ -350,7 +354,8 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
                                          "\"colour\": [{\"name\", \"format\": rgba8, rgba16f, r16f or r32f, "
                                          "\"clear\"?: [r, g, b, a], \"resolve\"?: average or nearest}, 1 to %1], "
                                          "\"depth\"?: true or false, "
-                                         "\"samples\"?: 1 to %2, \"previous_frame\"?: true or false}")
+                                         "\"samples\"?: 1 to %2, \"previous_frame\"?: true or false, \"mips\"?: "
+                                         "true or false, \"allocation\"?: bucket or exact}")
                                 .arg(kMaxTargetColour).arg(kMaxSceneSamples);
     if (!value.isObject()) {
         *error = shape;
@@ -359,7 +364,8 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
     const QJsonObject o = value.toObject();
     const QStringList keys = { QStringLiteral("name"), QStringLiteral("size"), QStringLiteral("colour"),
                                QStringLiteral("depth"), QStringLiteral("samples"), QStringLiteral("previous_frame"),
-                               QStringLiteral("transparency"), QStringLiteral("mips") }; // N3.4
+                               QStringLiteral("transparency"), QStringLiteral("mips"), // N3.4
+                               QStringLiteral("allocation") };                         // ABI 33
     for (auto it = o.begin(); it != o.end(); ++it) {
         if (!keys.contains(it.key())) {
             *error = QStringLiteral("unknown target key '%1': %2").arg(it.key(), shape);
@@ -386,6 +392,15 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
         return false;
     }
     d.mips = mips.toBool(false);
+    // ABI 33: the allocation rule (D14 point 2's buckets, or the content's exact size).
+    const QJsonValue allocation = o.value(QStringLiteral("allocation"));
+    if (!allocation.isUndefined()
+        && !(allocation.isString() && (allocation.toString() == QLatin1String("bucket")
+                                       || allocation.toString() == QLatin1String("exact")))) {
+        *error = QStringLiteral("target '%1': allocation is bucket or exact").arg(label);
+        return false;
+    }
+    d.exact = allocation.toString() == QLatin1String("exact");
     const QJsonValue size = o.value(QStringLiteral("size"));
     if (size.isString() && size.toString() == QLatin1String("surface")) {
         d.size = QSize();
@@ -492,14 +507,16 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
         return false;
     }
     if (d.mips) {
-        // N3.4 (D17 point 6): the defocus layer's shape: single-sampled, surface-sized (it shares the scene's
-        // allocation), no nearest attachment, no depth.
+        // N3.4 (D17 point 6): single-sampled (its chains are generated from the texture drawn), no nearest attachment,
+        // no previous_frame. ABI 33: a depth and an explicit size are allowed (a drawable mipped target: Waveform's
+        // reflection); the defocus step still takes only a surface-sized, bucketed layer without depth
+        // (mode_content.cpp parseStageStep).
         bool nearest = false;
         for (const TargetAttachment &a : d.colour)
             nearest = nearest || a.nearest;
-        if (d.samples != 1 || !d.surfaceSized() || nearest || d.depth || d.previousFrame) {
-            *error = QStringLiteral("target '%1': a mipped target is single-sampled, surface-sized, without depth, "
-                                    "nearest resolves or previous_frame").arg(label);
+        if (d.samples != 1 || nearest || d.previousFrame) {
+            *error = QStringLiteral("target '%1': a mipped target is single-sampled, without nearest resolves or "
+                                    "previous_frame").arg(label);
             return false;
         }
     }
@@ -549,6 +566,18 @@ QSize nextAllocation(const QSize &current, const QSize &needed, QString *reason)
     else
         reason->clear();
     return next;
+}
+
+QSize exactAllocation(const QSize &current, const QSize &needed, QString *reason)
+{
+    const QSize exact(qMax(1, needed.width()), qMax(1, needed.height()));
+    if (current.isEmpty())
+        *reason = QStringLiteral("made");
+    else if (current != exact)
+        *reason = QStringLiteral("resized");
+    else
+        reason->clear();
+    return exact;
 }
 
 QRect contentViewport(bool yUpInFramebuffer, const QSize &allocation, const QSize &content)
@@ -713,6 +742,7 @@ SceneTargetCounts sceneTargetCounts()
     c.depthPrimes = g_depthPrimes.loadRelaxed();
     c.resolvePrimes = g_resolvePrimes.loadRelaxed();
     c.nearestResolves = g_nearestResolves.loadRelaxed();
+    c.generatedMips = g_selfMips.loadRelaxed();
     return c;
 }
 
@@ -899,7 +929,8 @@ bool SceneTargets::sync(QRhi *rhi, const QList<TargetDeclaration> &declarations,
             || (!t.renderPass && t.allocation.isEmpty())
             || (owner && relaid[d.owner]);
         QString reason;
-        QSize allocation = nextAllocation(layoutChanged ? QSize() : t.allocation, needed, &reason);
+        QSize allocation = d.exact ? exactAllocation(layoutChanged ? QSize() : t.allocation, needed, &reason) // ABI 33
+                                   : nextAllocation(layoutChanged ? QSize() : t.allocation, needed, &reason);
         if (owner) {
             // Its owner's allocation (the owner, declared before it, was decided above): a new owner allocation is a new
             // one here, so the borrower's render target is made again over the owner's re-made objects.
@@ -1184,6 +1215,29 @@ int SceneTargets::averageResolves(int index, QRhiTexture **out) const
             out[n++] = t->resolve[i].get();
     }
     return n;
+}
+
+int SceneTargets::generateSelfMips(QRhi *rhi, QRhiCommandBuffer *cb, int index)
+{
+    const Target *t = target(index);
+    if (!rhi || !cb || !t || !t->decl.selfMips || t->dormant || t->samples != 1)
+        return 0;
+    QRhiResourceUpdateBatch *batch = nullptr;
+    int generated = 0;
+    for (int c = 0; c < int(t->decl.colour.size()) && c < kMaxTargetColour; ++c) {
+        // Only an attachment a sampler reads (nothing else reads a level past 0).
+        if (!t->decl.colour.at(c).read || !t->colour[c])
+            continue;
+        if (!batch)
+            batch = rhi->nextResourceUpdateBatch();
+        batch->generateMips(t->colour[c].get());
+        ++generated;
+    }
+    if (batch)
+        cb->resourceUpdate(batch);            // outside any pass: QRhi orders it after the run's stores
+    if (generated)
+        g_selfMips.fetchAndAddRelaxed(generated);
+    return generated;
 }
 
 int SceneTargets::liveObjects() const

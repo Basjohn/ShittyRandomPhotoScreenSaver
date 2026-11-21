@@ -676,12 +676,13 @@ bool CompositeItem::stillMode(bool still, QString *error)
 }
 
 bool CompositeItem::textureMode(const QByteArray &name, const QByteArray &pixels, const QSize &size, bool mips,
-                                QString *error, bool inFrame)
+                                QString *error, bool inFrame, bool halfFloat)
 {
     if (modeRefused(error))
         return false;
     std::shared_ptr<ModeSource> source = currentOrNewMode();
-    if (!source->setTexture(name, pixels, size, mips, error, inFrame))
+    if (!source->setTexture(name, pixels, size, mips, error, inFrame,
+                            halfFloat ? ModeTextureFormat::RGBA16F : ModeTextureFormat::RGBA8))
         return false;
     m_mode = source;
     update();
