@@ -38,7 +38,7 @@ def _hover_all(display) -> None:
             == (1.0, 1.0) and _find(display, "visualizerHoverEditGlyphs") is not None)
     _run(display, 60)
     _find(display, "visualizerHoverEditGlyphs").setProperty("hovered", True)
-    _run(display, 80)
+    _run(display, 500)                                               # past the lanes' eased moves
 
 
 def _find(display, name):
@@ -75,3 +75,26 @@ def test_common_hover_glyphs_never_collide_with_the_cards_glyph_row(display, ext
             if same_group and name not in COMMON:
                 continue                                              # the row's own spacing is pinned elsewhere
             assert not rect.intersects(other_rect), (name, other, rect, other_rect)
+
+
+@pytest.mark.qt
+def test_the_lane_lifts_and_drops_by_easing_not_by_jumping(display):
+    """When the row's width takes the lane's place away (or gives it back) the lane and a transfer arrow move
+    through in-between positions before settling; they never jump."""
+    _ordinary(display, extent=(420.0, 200.0))
+    _hover_all(display)
+    chrome = _find(display, "visualizerHoverEditGlyphs")
+    restore, arrow = _find(display, "hoverEditGlyph-restore"), _find(display, "hoverEditGlyph-transfer_right")
+    for name, item in (("lane", restore), ("arrow", arrow)):
+        start = _rect(item, display).top()
+        chrome.setProperty("avoidLeft", 0.0)                        # the row now reaches the lane's end of the card
+        chrome.setProperty("avoidTop", float(chrome.property("height")) * 0.5)   # and rises over the arrows' height
+        _run(display, 30)
+        mid = _rect(item, display).top()
+        _run(display, 500)
+        end = _rect(item, display).top()
+        assert end != start, name                                   # it did move
+        assert min(start, end) < mid < max(start, end), (name, start, mid, end)
+        chrome.setProperty("avoidLeft", 1e6)                         # give the place back: it drops, eased as well
+        chrome.setProperty("avoidTop", 1e9)
+        _run(display, 600)

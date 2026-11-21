@@ -24,6 +24,7 @@ Item {
     property real avoidRight: 0
     property real avoidTop: 1e9
     readonly property real laneGap: 5
+    readonly property int laneMoveMs: 180
     readonly property real glyphDiameter: 24
     readonly property bool avoiding: avoidTop < height
     // The action lane stays on the card's bottom-left line while it fits left of the row; otherwise it lifts to the
@@ -96,6 +97,9 @@ Item {
         x: chrome.actionsOverLeftTransfer ? 8 + chrome.glyphDiameter + chrome.laneGap : 10
         y: chrome.actionsBesideRow ? chrome.height - 8 - height
             : Math.max(4, chrome.avoidTop - chrome.laneGap - chrome.glyphDiameter)
+        // A lift or drop (the row's width changing under it) eases; the row has no position easing of its own.
+        Behavior on x { NumberAnimation { duration: chrome.laneMoveMs; easing.type: Easing.InOutQuad } }
+        Behavior on y { NumberAnimation { duration: chrome.laneMoveMs; easing.type: Easing.InOutQuad } }
         spacing: 5
         opacity: chrome.dwellLevel
         Repeater {
@@ -222,6 +226,7 @@ Item {
             radius: width / 2
             x: modelData < 0 ? 8 : Math.max(8, chrome.width - width - 8)
             y: chrome.transferY(modelData)
+            Behavior on y { NumberAnimation { duration: chrome.laneMoveMs; easing.type: Easing.InOutQuad } }
             color: chrome.buttonSurface
             border.width: 1
             border.color: chrome.buttonBorder
