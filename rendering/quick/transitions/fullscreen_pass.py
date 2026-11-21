@@ -26,6 +26,7 @@ parameters.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 from OpenGL import GL as gl
 
@@ -48,18 +49,43 @@ def fullscreen_pass_parts(fragment_source: str, block_name: str):
     return item_quad_vertex_source(declaration), block_layout_from_glsl(declaration)
 
 
+@dataclass(frozen=True)
+class NativeQuadInstances:
+    """A pass the native core draws after a transition's fragment (N5.2b's leftover, Beam's sparks): the built-in item
+    quad (``aPosition``, the corners 0..1) drawn ``instances`` times from its own vertex stage, blended ``blend``
+    (``rendering.native.mode.PASS_BLENDS``) over the fragment's picture. ``vertex_source`` and ``fragment_source`` are
+    the texts the Python renderer compiles (baked into ``<name>.vert.qsb`` and ``<name>.frag.qsb`` beside the
+    transition's fragment pack by ``tools/regen_qrc.py --shaders``); its block's values are among the transition's
+    ``block_values`` by name (``uMatrix``, item to clip, is the core's)."""
+
+    name: str
+    vertex_source: str
+    fragment_source: str
+    instances: int
+    blend: str = "additive"
+
+
 class NativeFragmentPass:
     """A transition the native core can draw as one fragment between its two pictures (N5.2a, N5.2b): its
     ``fragment_source`` (baked into its pack by ``tools/regen_qrc.py --shaders``) and ``block_values``, every value of
     that fragment's pass block for a frame, by name, reading no GL object (the one owner of the values: the Python
-    renderer packs them, the core fills its block from them). A transition with a second pass, its own geometry or
-    state across frames is not one."""
+    renderer packs them, the core fills its block from them). Beam (N5.2b's leftover) adds ``instanced_passes``, drawn
+    after the fragment as instanced quads of their own vertex stage (``NativeQuadInstances``), each only where
+    ``native_instanced_passes`` gives it for the run; ``block_values`` then holds their values too. A transition with
+    state across frames, or a pass of another kind, is not one."""
 
     transition_id: str = ""
     fragment_source: str = ""
+    #: Every instanced pass the transition may draw after its fragment (their packs are baked from these, discovered).
+    instanced_passes: tuple[NativeQuadInstances, ...] = ()
 
     def block_values(self, frame: QuickTransitionRenderFrame) -> dict[str, object]:
         raise NotImplementedError
+
+    def native_instanced_passes(self, parameters: Mapping[str, object]) -> tuple[NativeQuadInstances, ...]:
+        """The instanced passes a run with ``parameters`` draws (the program the core is given at the run's start;
+        ``block_values`` gives exactly their values with the fragment's)."""
+        return self.instanced_passes
 
     def run_values(self, run, sample, logical_size: tuple[float, float],
                    device_pixel_ratio: float) -> dict[str, object]:

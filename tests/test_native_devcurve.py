@@ -195,12 +195,12 @@ _ARRAY_PARAMETER = (r"^[ \t]*\w[\w \t]*\([^;{}()]*?"
 def _shader_sources() -> dict[str, str]:
     """Every shader the product bakes or the core draws: the files of the three shader folders, and the fullscreen
     transitions' fragments, which are Python strings baked to packs the core draws on Vulkan (N5.2a, N5.2b)."""
-    from tools.regen_qrc import transition_fragment_sources
+    from tools.regen_qrc import transition_shader_sources
 
     sources = {str(path.relative_to(ROOT)): path.read_text(encoding="utf-8")
                for folder in ("widgets/spotify_visualizer/shaders", "rendering/quick/qml/shaders", "native/core/shaders")
                for path in (ROOT / folder).rglob("*") if path.suffix in (".frag", ".vert", ".comp", ".glsl")}
-    sources.update({f"transition {name}": text for name, text in transition_fragment_sources().items()})
+    sources.update({f"transition {name}": text for name, text in transition_shader_sources().items()})
     return sources
 
 

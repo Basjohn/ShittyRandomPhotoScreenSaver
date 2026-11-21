@@ -395,6 +395,55 @@ def test_an_item_quad_transition_gives_the_core_its_own_values_arrays_flat_and_i
     assert [settings_at(f)["uShow"] for f in (0.0, 0.5, 1.0)] == [SHOW_OLD, SHOW_EFFECT, SHOW_NEW]
 
 
+def _beam_run(source, destination, sparks: bool):
+    from rendering.quick.transitions.state import TransitionRequest, TransitionRun
+
+    r = _run("beam", source, destination).request
+    request = TransitionRequest(r.runtime_generation, r.transition_id, r.requested_name, r.selected_from_random,
+                                r.duration_ms, r.direction, {**r.parameter_dict(), "sparks": sparks},
+                                r.source_image, r.destination_image)
+    return TransitionRun.start(run_id=1, request=request, start_ns=1_000)
+
+
+@pytest.mark.parametrize("sparks", [True, False])
+def test_beams_sparks_follow_its_fragment_as_instanced_quads_while_sparks_is_on(clocked_layer, sparks):
+    """N5.2b's leftover: Beam is drawn by the core as its fragment between the two pictures and, while Sparks is on, its
+    sparks after it: the built-in item quad drawn once a spark from the sparks' own vertex stage, light added (the
+    Python renderer's ONE, ONE), both packs baked from the Python renderer's texts. Every member of the drawn passes'
+    blocks is the core's or one of the settings, which are the Python renderer's own block values; with Sparks off the
+    program and the settings hold nothing of the sparks."""
+    from rendering.gl_programs.beam_program import BEAM_BLOCK, BEAM_SPARK_BLOCK
+    from rendering.native.mode import BUILTIN_QUAD_MESH, MODE_CORE_MEMBERS
+    from rendering.quick.render import native_background as nb
+
+    made, _mode, calls, _window, now = clocked_layer
+    source = _image("a")
+    made.present(source)
+    run = _beam_run(source, _image("b"), sparks)
+    now["ns"] = run.start_ns + (run.end_ns - run.start_ns) // 2
+    del calls[:]
+    made.transition(run)
+    (program,) = [c for c in calls if c[0] == "program"]
+    passes, settings = program[1], program[2]
+    renderer = nb.native_transition_renderer("beam")
+    assert renderer is not None and passes[0].name == "beam" and passes[0].blend == "replace"
+    assert passes[0].pack == nb.transition_pack_path("beam").read_bytes() and passes[0].geometry is None
+    drawn = renderer.native_instanced_passes(run.request.parameter_dict())
+    assert [p.name for p in passes[1:]] == [p.name for p in drawn] and len(drawn) == int(sparks)
+    for declared, extra in zip(passes[1:], drawn):
+        vertex, fragment = nb.instanced_pack_paths(extra.name)
+        geometry = declared.geometry
+        assert declared.pack == fragment.read_bytes() and geometry.vertex_pack == vertex.read_bytes()
+        assert declared.blend == extra.blend == "additive" and not declared.samplers
+        assert (geometry.topology, geometry.mesh, geometry.vertices, geometry.instances) == (
+            "triangle_strip", BUILTIN_QUAD_MESH, "mesh", extra.instances)
+    expected = renderer.run_values(run, run.sample(now["ns"]), (8.0, 4.0), 1.0)
+    assert settings == {k: v for k, v in expected.items() if k not in MODE_CORE_MEMBERS}
+    members = {name for block in ((BEAM_BLOCK, BEAM_SPARK_BLOCK) if sparks else (BEAM_BLOCK,))
+               for name, _kind in block.fields}
+    assert set(settings) | (members & set(MODE_CORE_MEMBERS)) == members
+
+
 def test_the_item_hands_its_runs_to_the_layer(qt_app, monkeypatch):
     from rendering.quick.render import background_item, native_background
 

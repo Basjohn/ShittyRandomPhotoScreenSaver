@@ -1,7 +1,8 @@
 """N5.2a's proof of the seven fullscreen transitions on the display's background layer (Current_Plan.md section N2b;
 ``rendering/quick/render/native_background.py``), in hidden hosts only (never a window on a screen), widened by N5.2b to
 the five item-quad programs that are one fragment between two pictures (``N52B_VARIANTS``: Chromatic Shear, Liquid
-Lens, Melt Drip, Surface Tension, VHS; ``--topic n5_2b``). The Python reference is the product's frame at the run's dpr
+Lens, Melt Drip, Surface Tension, VHS; ``--topic n5_2b``) and to Beam, whose sparks follow its fragment as instanced
+quads of their own vertex stage (``BEAM_VARIANTS``, N5.2b's leftover). The Python reference is the product's frame at the run's dpr
 (``product_capture``: the item's logical size over the display's device pixels, as the runtime gives it).
 
 A photo change runs the configured transition natively over N5.7a's background layer: the transition's own product
@@ -81,12 +82,20 @@ FRAGMENT_PASS_RULE_A = pt.Tolerance("native fragment pass against its Python ren
 SEVEN_RULE_B = pt.Tolerance("fullscreen transition, Vulkan against OpenGL (rule b)", scatter_pixels=1100)
 FRAGMENT_PASS_RULE_B = pt.Tolerance("native fragment pass, Vulkan against OpenGL (rule b)", scatter_pixels=2000,
                                     tie_pixels=TIE_PIXELS)
+#: Beam's rule (b), PROPOSED (agent, 21 Nov; flips need the lead's decision, ``tools/pixel_tolerance.py``): the fragment
+#: pass's bound and one flip a frame. Measured over the 54 frames of BEAM_VARIANTS (twice): one pixel in one frame
+#: (beam_sparks, dpr 1.5, progress 0.35), 3 levels in every channel, isolated on a spark streak's edge, where the two
+#: APIs' rasterisers decide a dim spark's coverage of a pixel differently; native OpenGL holds Python's value there
+#: (rule a passes), and no other pixel of any frame is past 2 levels.
+BEAM_RULE_B = pt.Tolerance("Beam (fragment and sparks), Vulkan against OpenGL (rule b)", scatter_pixels=2000,
+                           tie_pixels=TIE_PIXELS, flip_pixels=1)
 REST_FRAMES = 4
-#: The variant driven through the product's route: the first of these the run drew (N5.2b's: arrays in its block).
-ROUTE_VARIANTS = ("burn_options", "surface_tension_options")
+#: The variants driven through the product's route: each of these the run drew (N5.2b's: arrays in its block; Beam's:
+#: its sparks pass in the program the route builds at the run's start).
+ROUTE_VARIANTS = ("burn_options", "surface_tension_options", "beam_sparks")
 _ALLOWED_ENV: set[str] = set()
 #: N5.2b: the item-quad programs that are one fragment between two pictures (``NativeFragmentPass``), at their
-#: production defaults and with their options (Beam is not one: its sparks are a second pass of their own geometry).
+#: production defaults and with their options.
 N52B_TRANSITIONS = ("chromatic_shear", "liquid_lens", "melt_drip", "surface_tension", "vhs")
 N52B_VARIANTS = {
     "chromatic_shear": {},
@@ -102,12 +111,23 @@ N52B_VARIANTS = {
     "vhs": {},
     "vhs_options": {"request_direction": "down", "tracking": 1.0, "bleed": 1.0, "noise": 1.0},
 }
-TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS
-VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS}
+#: N5.2b's leftover: Beam, its fragment between the two pictures and then its sparks, the item quad drawn once a spark
+#: from its own vertex stage, light added (``NativeQuadInstances``; only while Sparks is on). Its production defaults,
+#: the sparks on a diagonal at full glow with the quickest cure (the longest sweep: sparks on most frames), and the
+#: sparks off at the other extremes. Each keeps its frames at 0.50 and 0.65 apart (the control): the beam still
+#: sweeping, or the scorch still curing (no scorch with the slowest cure would show the clean picture at both).
+BEAM_VARIANTS = {
+    "beam": {},
+    "beam_sparks": {"request_direction": "diag_tr_bl", "sparks": True, "color": (0.25, 0.65, 1.0), "glow": 1.0,
+                    "scorch": 0.0, "cure": 0.0},
+    "beam_plain": {"request_direction": "up", "sparks": False, "glow": 0.0, "scorch": 1.0, "cure": 1.0},
+}
+TRANSITIONS = fsc.FULLSCREEN_TRANSITIONS + N52B_TRANSITIONS + ("beam",)
+VARIANTS = {**fsc.VARIANTS, **N52B_VARIANTS, **BEAM_VARIANTS}
 #: The variants a sheet shows (each transition's defaults and one with options).
 SHEET_VARIANTS = ("burn", "particle_swirl", "ripple", "slide_push", "warp", "wipe", "crossfade",
                   *N52B_TRANSITIONS, "chromatic_shear_options", "liquid_lens_flood", "melt_drip_center_in",
-                  "surface_tension_options", "vhs_options")
+                  "surface_tension_options", "vhs_options", *BEAM_VARIANTS)
 
 
 def variant_transition(variant: str) -> str:
@@ -285,18 +305,27 @@ def round_draw(core, engine, app, api: str, variants, work: Path, out: Path) -> 
 
 def _route_on_vulkan(core, engine, app, frames, facts) -> dict:
     """The product's route: ``BackgroundRenderItem.set_transition_run`` on the native backend draws the run through its
-    layer, the same pixels as the layer driven directly; the run's end draws the destination."""
+    layer, the same pixels as the layer driven directly; the run's end draws the destination. Each ``ROUTE_VARIANTS``
+    entry the run drew, in its own host."""
+    dpr = 1.5
+    drawn = [v for v in ROUTE_VARIANTS if f"dpr{dpr}_{v}_{PROGRESS[0]:.2f}" in frames]
+    if not drawn:
+        return {"route_variant_drawn": False}
+    facts["route_variants"] = drawn
+    checks: dict = {}
+    for route_variant in drawn:
+        for name, ok in _route_variant_on_vulkan(core, engine, app, frames, facts, route_variant, dpr).items():
+            checks[name] = checks.get(name, True) and ok
+    return checks
+
+
+def _route_variant_on_vulkan(core, engine, app, frames, facts, route_variant: str, dpr: float) -> dict:
     from rendering.quick import bootstrap
 
     owner = bootstrap._owner
     saved = (owner.core, owner.backend)
     owner.core, owner.backend = core, bootstrap.QuickBackend(api="vulkan", requested="vulkan")
     checks: dict = {}
-    dpr = 1.5
-    route_variant = next((v for v in ROUTE_VARIANTS if f"dpr{dpr}_{v}_{PROGRESS[0]:.2f}" in frames), None)
-    if route_variant is None:
-        return {"route_variant_drawn": False}
-    facts["route_variant"] = route_variant
     host = blc._host(core, blc.WINDOW, dpr)
     scene = blc.Scene(core, engine, host, dpr, blc.DISPLAY, kind="python")
     try:
@@ -324,7 +353,7 @@ def _route_on_vulkan(core, engine, app, frames, facts) -> dict:
         checks["route_draws_the_run_as_the_layer_does"] = all(c["equal"] for c in same.values())
         checks["route_ends_on_the_destination"] = blc.compare(end, photos[1][1])["equal"]
         checks["route_ran_one_run"] = layer.state().get("runs") == 1
-        facts["route"] = {"frames": same, "layer": layer.state()}
+        facts.setdefault("route", {})[route_variant] = {"frames": same, "layer": layer.state()}
     finally:
         scene.close(app)
         facts.setdefault("host_close", []).append(blc._close_host(app, host))
@@ -343,7 +372,7 @@ def _over(a, b, level: int) -> int:
 
 
 def _is_fragment_pass(variant: str) -> bool:
-    return variant.split("@", 1)[0] in N52B_VARIANTS
+    return variant.split("@", 1)[0] in N52B_VARIANTS or variant.split("@", 1)[0] in BEAM_VARIANTS
 
 
 def vulkan_against_opengl(work: Path) -> dict:
@@ -365,13 +394,15 @@ def vulkan_against_opengl(work: Path) -> dict:
         entry["max_level"] = max(entry["max_level"], result.get("max_level", 0))
         entry["max_over"] = max(entry["max_over"], _over(vk[key], gl[key], VULKAN_TOLERANCE))
         worst = max(worst, result.get("max_level", 255))
-        tolerance = FRAGMENT_PASS_RULE_B if _is_fragment_pass(variant.split("_", 1)[1]) else SEVEN_RULE_B
+        drawn = variant.split("_", 1)[1]
+        tolerance = (BEAM_RULE_B if drawn in BEAM_VARIANTS else
+                     FRAGMENT_PASS_RULE_B if _is_fragment_pass(drawn) else SEVEN_RULE_B)
         judged.setdefault(variant, []).append(pt.judge(vk[key][..., :3], gl[key][..., :3], tolerance))
     for variant, frames in judged.items():
         per_variant[variant]["tolerance"] = pt.summarise(frames)
     ok = bool(per_variant) and all(e["tolerance"]["pass"] for e in per_variant.values())
     return {"pass": ok, "worst_level": worst, "variants": per_variant,
-            "bounds": [SEVEN_RULE_B.bound(), FRAGMENT_PASS_RULE_B.bound()]}
+            "bounds": [SEVEN_RULE_B.bound(), FRAGMENT_PASS_RULE_B.bound(), BEAM_RULE_B.bound()]}
 
 
 # --------------------------------------------------------------------------------------------------- the child

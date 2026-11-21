@@ -432,11 +432,9 @@ def transition_shader_dir(repo_root: Path = ROOT) -> Path:
     return quick_shader_dir(repo_root) / "transitions"
 
 
-def transition_fragment_sources() -> dict[str, str]:
-    """Every fullscreen transition's fragment (a ``NativeFragmentPass`` subclass: ``FullscreenPassRenderer``'s seven and
-    N5.2b's item-quad programs, discovered in ``rendering/quick/transitions/implementations``, never listed): its stable
-    id -> the fragment text its Python renderer compiles (the one source; its pack ``<id>.frag.qsb`` is baked from
-    it)."""
+def _native_transition_classes() -> list[type]:
+    """Every ``NativeFragmentPass`` subclass (``FullscreenPassRenderer``'s seven, N5.2b's item-quad programs and Beam),
+    discovered in ``rendering/quick/transitions/implementations``, never listed."""
     import importlib
 
     if str(ROOT) not in sys.path:
@@ -444,7 +442,7 @@ def transition_fragment_sources() -> dict[str, str]:
     from rendering.quick.transitions import implementations
     from rendering.quick.transitions.fullscreen_pass import NativeFragmentPass
 
-    found: dict[str, str] = {}
+    found: list[type] = []
     for path in sorted(Path(implementations.__file__).parent.glob("*.py")):
         text = path.read_text(encoding="utf-8")
         if "FullscreenPassRenderer" not in text and "NativeFragmentPass" not in text:
@@ -453,8 +451,34 @@ def transition_fragment_sources() -> dict[str, str]:
         for value in vars(module).values():
             if (isinstance(value, type) and issubclass(value, NativeFragmentPass)
                     and value.__module__ == module.__name__):
-                found[value.transition_id] = value.fragment_source
+                found.append(value)
     return found
+
+
+def transition_fragment_sources() -> dict[str, str]:
+    """Every fullscreen transition's fragment (``_native_transition_classes``): its stable id -> the fragment text its
+    Python renderer compiles (the one source; its pack ``<id>.frag.qsb`` is baked from it)."""
+    return {cls.transition_id: cls.fragment_source for cls in _native_transition_classes()}
+
+
+def transition_instanced_sources() -> dict[str, str]:
+    """N5.2b's leftover (Beam's sparks): every instanced pass a native transition may draw after its fragment
+    (``NativeQuadInstances``): ``<name>.vert`` and ``<name>.frag`` -> the texts its Python renderer compiles (its packs
+    ``<name>.vert.qsb`` and ``<name>.frag.qsb`` are baked from them, beside the fragments' packs)."""
+    found: dict[str, str] = {}
+    for cls in _native_transition_classes():
+        for extra in cls.instanced_passes:
+            found[f"{extra.name}.vert"] = extra.vertex_source
+            found[f"{extra.name}.frag"] = extra.fragment_source
+    return found
+
+
+def transition_shader_sources() -> dict[str, str]:
+    """Every pack the native transitions draw, by its source's file name: each fragment (``<id>.frag``) and each
+    instanced pass's two stages."""
+    sources = {f"{transition_id}.frag": text for transition_id, text in transition_fragment_sources().items()}
+    sources.update(transition_instanced_sources())
+    return sources
 
 
 def transition_pack_path(transition_id: str, repo_root: Path = ROOT) -> Path:
@@ -462,26 +486,26 @@ def transition_pack_path(transition_id: str, repo_root: Path = ROOT) -> Path:
 
 
 def _transition_shader_status(qsb: Path, targets: Sequence[str], run, *, bake: bool) -> list[QuickShaderStatus]:
-    """Whether each fullscreen transition's committed pack is what its fragment bakes to; ``bake``: a stale one is
-    replaced by the fresh bake."""
+    """Whether each native transition's committed pack (``transition_shader_sources``) is what its text bakes to;
+    ``bake``: a stale one is replaced by the fresh bake."""
     import tempfile
 
     statuses = []
     with tempfile.TemporaryDirectory(prefix="srpss_transition_qsb_") as folder:
-        for transition_id, text in sorted(transition_fragment_sources().items()):
-            source = Path(folder) / f"{transition_id}.frag"
+        for name, text in sorted(transition_shader_sources().items()):
+            source = Path(folder) / name
             source.write_text(text, encoding="utf-8")
-            fresh = Path(folder) / f"{transition_id}.frag.qsb"
+            fresh = Path(folder) / f"{name}.qsb"
             _bake_quick_shader(qsb, source, fresh, targets, run)
-            pack = transition_pack_path(transition_id)
+            pack = transition_shader_dir() / f"{name}.qsb"
             current = pack.is_file() and pack.read_bytes() == fresh.read_bytes()
             if not current and bake:
                 pack.parent.mkdir(parents=True, exist_ok=True)
                 pack.write_bytes(fresh.read_bytes())
                 current = True
             reason = "current" if current else ("the pack is missing" if not pack.is_file()
-                                                else "the pack is not what its fragment bakes to for every target")
-            statuses.append(QuickShaderStatus(Path(f"{transition_id} (fullscreen transition)"), pack, current, reason))
+                                                else "the pack is not what its text bakes to for every target")
+            statuses.append(QuickShaderStatus(Path(f"{name} (native transition)"), pack, current, reason))
     return statuses
 
 
