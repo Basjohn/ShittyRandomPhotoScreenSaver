@@ -75,7 +75,10 @@ four layers, scaled as in section 3.
 **A transition port** (no music, no reaction modes).
 - **L:** the per-frame uniform record against Python's over the full canonical duration and several image pairs.
 - **P:** rule (a) and rule (b) as above, every frame of that duration, through `transition_route_check.py`.
-- **T:** `preflip_pack.py --rows <its transitions> --compare` against the pre-flip rows.
+- **T:** `preflip_pack.py --rows "transition/<id>/*" --name <pre> --backend python-gl` records the pre-port row on the
+  Python OpenGL path (any registered transition; it adds to a named baseline and leaves its other rows), then
+  `preflip_pack.py --rows "transition/<id>/*" --compare tools/baselines/preflip/<pre>.json --name <post> --backend <native label>`
+  measures the same row on the native path and reports the gain against it.
 - **C:** per pass at 2560 x 1440 and 4K, on both backends.
 - Registration (offering it on Vulkan) waits for T, as the playbook's checklist 18 says for modes.
 
