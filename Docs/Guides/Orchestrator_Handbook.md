@@ -61,7 +61,11 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
    figures go in commits and evidence, never into the plan.
 2. **Brief.** Short: "read `Docs/Guardrails/Agent_Worktree_Rules.md`, then `Current_Plan.md` item X; the item is
    your brief", plus only what the item cannot say (the review point where it must stop, files another agent is
-   in, anything the operator said that day). Never restate the environment rules.
+   in, anything the operator said that day). Never restate the environment rules. Never narrow or rewrite a
+   proof in the brief from memory: before writing one, open the owning checklist for the change's kind (a port:
+   `Native_Port_Playbook.md` section 1 and `Native_Parity_And_Timing_Proof.md` section 3's "A port" list; an
+   optimisation or core change: section 3's table and regression-guard rule) and name it in the brief ("its proof is
+   that list, every bullet"), so the agent reads the documented list, not the lead's summary of it.
 3. **Dispatch** with `isolation: "worktree"`, the slot's `model` and `effort`. Note the agent id in the plan item.
 4. **While it runs:** do not poll. If it seems stuck, `tools/agent_handover.py <worktree>` shows its journal,
    commits and live processes.
@@ -75,6 +79,8 @@ which two usage cut-offs, a session change and duplicated historical-bug numbers
 An audit agent is scaled to risk: core, lifecycle and concurrency changes get one; small slices are batched into
 one audit; docs, tests and tooling merges get none (the lead's own check below suffices).
 
+- The report against the owning checklist named in the brief, bullet by bullet (each layer, each reaction mode,
+  each tool the list names): a bullet with no figure in the report is not done, whatever the verdict line says.
 - Each box claimed done: find it in the diff; run its tests on the merge, not only on the branch (skip the rerun when
   `git log <branch>..main` is empty: main has not moved since the branch was cut).
 - A negative control exists for every new test and the agent says how it saw it fail.
