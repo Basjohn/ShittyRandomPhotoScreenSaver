@@ -1433,6 +1433,68 @@ whose primitive is ported with it (N4.c, N4.g, N4.i, N4.j, N4.l). After that, a 
 native goes to Opus Medium, under the same parity proof and audit as the modes track.
 
 - [ ] N5.2d Motion blur and trails (N4.i): 3D Block Spins, Crumble, Glass Shatter, Pixel Accretion.
+  Reading (agent, 21 Nov; `rendering/quick/scene3d/target.py`, `motion.py`, `trails.py`, `rendering/gl_programs/scene3d.py`'s
+  motion and ghost generators, the four implementations and programs):
+  - Shared. The request carries `motion_blur` (Auto: the tier's post effects) and `motion_trails` (Off/On); the scene
+    target's samples are the request's, or 1 when either is on. Shutter 1/60 s (`scene3d_shutter_progress`: 16.67 ms over
+    the duration); the motion variants run the vertex stage at `<time>Before` (max(progress - shutter, 0)) and at the time,
+    and write `sceneVelocity` ((ndc now - ndc before) x 0.5 x `uViewport`, pixels, GL rows up) at location 1. Scene target:
+    colour RGBA8 cleared (0, 0, 0, 1), depth, velocity RG16F (multisampled with the scene, cleared 0, written only by the
+    moving passes); multisampled: colour and velocity averaged over the samples by a shader (velocity into RGBA16F .xy).
+    Tile max: K = max(8, round(H/40)) of the allocation height (37 at 1440p, 54 at 4K: allocations 1472 and 2176; at most 256), tiles ceil(W/K) x
+    ceil(H/K) RGBA16F, one 64-invocation workgroup a tile, rows then columns, the first strictly longer wins. Gather: 16
+    taps along the longest motion of the 3 x 3 tiles, bounded at 2K, integer-hash quarter-tap jitter, written over the whole
+    allocation into RGBA8 (linear, clamp); the opaque composite (no bloom) reads it. Trails: 3 ghosts 45 ms apart (fades
+    0.25, 0.5, 0.75), each the piece's ghost fragment (discarded where it moved less than max(1.5, vh / 540) + 1.5 px,
+    writing `uGhostFade`) into an R8 buffer of the allocation, cleared 0, MAX-blended, no depth, drawn after the underlay;
+    then the edge pass over the whole allocation (8 directions at max(1.5, H / 540) and half that, colour
+    (0.94, 0.97, 1.0), alpha edge x 0.6, SRC_ALPHA over), before the pieces (a piece covers its own trail).
+  - 3D Block Spins: the void (item quad, black), [ghosts: the slab ghost x 3, `uAngle` the ghost's, `uAngleBefore` now's],
+    the slab (36-vertex mesh `aPosition`/`aNormal`/`aUv`, depth LESS; `uAngle` = pi x cubic(progress) x direction; Edge
+    Glass Reflection and Both read N4.j's environment). Samplers old, new, environment. Drawn at every progress.
+  - Crumble: ends the photographs; the underlay (destination), [chunk ghosts x 3, debris ghosts x 3 when debris > 0],
+    the chunks (mesh of 11 attributes, 22 floats; its motion table RGBA32F, MOTION_FRAMES x chunks, texelFetch in the vertex
+    stage), the debris (chip 24 vertices `aPosition`/`aNormal`, instance stream of 8 floats `aEdge`/`aParent`/`aMeta`/
+    `aRelease`). Samplers old, the motion table.
+  - Glass Shatter: ends the photographs; the underlay (destination), [shard ghosts x 3], the shards (mesh of 16 attributes,
+    35 floats); the environment while sheen > 0. Samplers old, new, environment.
+  - Pixel Accretion: ends the photographs; the underlay (source), [tile ghosts x 3], the micro-quads (6-vertex quad
+    `aPosition`/`aUv`, instanced columns x rows of `pixel_accretion_grid` over the viewport's pixels, at most 60,000,
+    `gl_InstanceID`). Sampler new.
+  - What the core lacked: a still's compute (the layer's scenes are stills: a still drew no compute); an R8 target; a
+    pass leaving a masked attachment unwritten (the core required every attachment written); per-pass values from one
+    pack (settings fill a member in every pass declaring it); a pass over the whole allocation (passes draw the content
+    viewport); an RGBA32F item texture; mesh layouts past 8 attributes (Glass 16, Crumble 11). No RG16F in QRhi (known).
+  Design (agent, 21 Nov; data on the core, no new stage, so N5.2e's Exploding Tiles blooms the blurred scene as data):
+  - Targets: `scene` (colour rgba8 (0, 0, 0, 1), `vx` and `vy` r16f, depth, the run's samples), `ghosts` (r8, with trails),
+    `blurred` (rgba8, with motion blur); image `motion_tiles` rgba16f of Python's tile counts. Passes: [environment],
+    underlay or void (outputs: replace, masked, masked), ghost passes `<pass>_ghost_<k>` on `ghosts` (MAX; scoped settings
+    `uProgress@...` or `uAngle@...`, `<time>Before@...` now's, `uGhostFade@...`), the edges on `scene` (alpha, velocity
+    masked, `"viewport": "allocation"`, settings `uRadius`, `uStrength`), the pieces (motion variants write all three),
+    the tile max (compute, `"trigger": "draw"`, groups the tile counts, samplers `scene.vx`/`scene.vy`, the image written),
+    the gather on `blurred` (samplers `scene.colour`, `scene.vx`, `scene.vy`, `motion_tiles`, nearest), the opaque composite
+    of `blurred.colour` (or `scene.colour` without motion blur).
+  - Frame: the core's scene target is Python's allocation flipped whole (content at rows [H - h, H), `scene_targets.h`)
+    and its velocity y is Python's negated (its clip y is). The tile max, the gather and the edges are Python's texts with
+    an `#ifdef SRPSS_NATIVE_CORE` helper (Python's texel (c, g) is memory (c, H - 1 - g); motion (x, -y); the two R16F
+    reads), identity in Python, the native packs baked with the define (as Waveform's one-output variants). Values (K, the
+    tile counts, 2K, trail_line(H), the sizes) are Python's own from the bucket of the content (`scene_values`).
+  - Python conversions (checklist 16, stills before and after, byte-identical; Exploding Tiles shares the generators):
+    `scene3d_motion_fragment` also writes location 2 (`SceneMotionY` = (v.y, 0, 0, 1): Python's RG16F keeps .xy at 1 and has
+    no draw buffer at 2); `scene3d_ghost_fragment` writes FragColor only (the core refuses outputs past a target's
+    attachments; Python's R8 buffer discarded them).
+  - Velocity format: two R16F (the formats decision); RGBA16F only if the cost round shows two cost more. Multisampled:
+    QRhi's average resolve of each (Python's shader average of the samples); the playbook's E5 line says "the core's
+    per-sample nearest pass", which takes the minimum: for the lead (a core "mean" resolve is the alternative if rule (b)
+    shows the two backends' averages differ; 4x frames are rule (b) only, D8 point 1).
+  - Built at stop point 1 (ABI 37, not compiled; GPU-free tests `tests/test_native_motion_trails_core.py`): compute
+    trigger "draw" (a still's only compute), target format r8, masked attachments unwritten, `<member>@<pass>` settings,
+    `"viewport": "allocation"`, rgba32f item textures (no mips), 16 attributes a mesh layout (16 inputs a pass, as before).
+  - [ ] The Python conversions above, with stills before and after of the five users.
+  - [ ] `NativeScenePasses` for the four (passes, meshes, the motion table, scoped values, the frame helpers), the packs
+    baked, `transition_route_check.py` N52D variants (each default; single-sampled with motion, trails, both and neither),
+    rule (a) and rule (b) bounds measured, `--cost` at 1440p and 4K on both backends, one native Vulkan hitch session each,
+    registration last.
 - [ ] N5.2e Membrane, Page Curl, Exploding Tiles (N4.l).
 - [ ] N5.2f Disintegrate, Volumetric Dissolve (N4.c).
 - [ ] N5.2g Edge Bloom, Capillary Bloom (N4.g); their fields are the first transition preparation run as an async

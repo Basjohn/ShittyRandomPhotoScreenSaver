@@ -58,7 +58,9 @@ void pruneReadbacks()
     }
 }
 
-const char *const kFormatNames[] = { "rgba8", "rgba16f", "r16f", "r32f" };
+// ABI 37 (N4.i): "r8", the motion trails' ghost buffer (Python's GL_R8, trails.py MotionTrails).
+const char *const kFormatNames[] = { "rgba8", "rgba16f", "r16f", "r32f", "r8" };
+constexpr int kFormatCount = int(sizeof(kFormatNames) / sizeof(kFormatNames[0]));
 
 bool identifier(const QByteArray &name)
 {
@@ -78,6 +80,8 @@ int textureBytesPerSample(QRhiTexture::Format format)
         return 8;
     case QRhiTexture::R16F:
         return 2;
+    case QRhiTexture::R8:
+        return 1;                             // ABI 37: the trails' ghost buffer
     case QRhiTexture::RGBA8:
     case QRhiTexture::R32F:
     case QRhiTexture::D32F:
@@ -138,7 +142,7 @@ void countTargetObjects(SceneTargets::Target &t)
 
 bool parseTargetFormat(const QString &text, TargetFormat *out)
 {
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < kFormatCount; ++i) {
         if (text == QLatin1String(kFormatNames[i])) {
             *out = TargetFormat(i);
             return true;
@@ -149,7 +153,7 @@ bool parseTargetFormat(const QString &text, TargetFormat *out)
 
 QString targetFormatName(TargetFormat format)
 {
-    return QLatin1String(kFormatNames[qBound(0, int(format), 3)]);
+    return QLatin1String(kFormatNames[qBound(0, int(format), kFormatCount - 1)]);
 }
 
 QRhiTexture::Format targetRhiFormat(TargetFormat format)
@@ -161,6 +165,8 @@ QRhiTexture::Format targetRhiFormat(TargetFormat format)
         return QRhiTexture::R16F;
     case TargetFormat::R32F:
         return QRhiTexture::R32F;
+    case TargetFormat::R8:
+        return QRhiTexture::R8;               // ABI 37
     case TargetFormat::RGBA8:
         break;
     }
@@ -352,7 +358,7 @@ bool deriveTransparencyTargets(QList<TargetDeclaration> &targets, QString *error
 bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QString *error)
 {
     const QString shape = QStringLiteral("a target is {\"name\": an identifier, \"size\": \"surface\" or [w, h], "
-                                         "\"colour\": [{\"name\", \"format\": rgba8, rgba16f, r16f or r32f, "
+                                         "\"colour\": [{\"name\", \"format\": rgba8, rgba16f, r16f, r32f or r8, "
                                          "\"clear\"?: [r, g, b, a], \"resolve\"?: average or nearest}, 1 to %1], "
                                          "\"depth\"?: true or false, "
                                          "\"samples\"?: 1 to %2, \"previous_frame\"?: true or false, \"mips\"?: "
@@ -432,7 +438,7 @@ bool parseTargetDeclaration(const QJsonValue &value, TargetDeclaration *out, QSt
         if (!entry.isObject() || c.size() != 2 + (withClear ? 1 : 0) + (withResolve ? 1 : 0) || !identifier(a.name)
             || !parseTargetFormat(c.value(QStringLiteral("format")).toString(), &a.format)) {
             *error = QStringLiteral("target '%1': an attachment is {\"name\": an identifier, \"format\": rgba8, "
-                                    "rgba16f, r16f or r32f, \"clear\"?: [r, g, b, a], \"resolve\"?: average or "
+                                    "rgba16f, r16f, r32f or r8, \"clear\"?: [r, g, b, a], \"resolve\"?: average or "
                                     "nearest}").arg(label);
             return false;
         }

@@ -125,9 +125,13 @@ struct ComputeBinding
     QJsonObject toJson() const;
 };
 
+// ABI 37 (N4.i): "draw", a derived kernel of what this record draws (the motion blur's tile max over the velocity the
+// passes before it wrote): dispatched at every record that records the program's passes, which for a still (the
+// background layer's scene transitions) is every record that draws a changed frame, never at rest. The one trigger a
+// still's compute entry may take (a still has no record: "frame" and a field would never or always fire).
 struct ComputeTrigger
 {
-    enum class Kind { Frame = 0, Field = 1 };
+    enum class Kind { Frame = 0, Field = 1, Draw = 2 };
     Kind kind = Kind::Frame;
     QByteArray field;
 

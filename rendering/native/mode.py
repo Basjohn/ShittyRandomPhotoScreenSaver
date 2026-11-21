@@ -73,7 +73,8 @@ from rendering.native.packet_reader import reader_config
 #: How a pass's colour meets the target (``PassBlend`` in ``mode_content.h``).
 PASS_BLENDS = ("replace", "alpha", "premultiplied", "add", "additive")  # N3.1: "additive" is ONE, ONE
 #: N3.1: a scene target's attachment formats (``TargetFormat`` in ``scene_targets.h``) and a pass's depth tests.
-TARGET_FORMATS = ("rgba8", "rgba16f", "r16f", "r32f")
+#: ABI 37 (N4.i): "r8", the motion trails' ghost buffer (Python's GL_R8).
+TARGET_FORMATS = ("rgba8", "rgba16f", "r16f", "r32f", "r8")
 #: D14 points 8 and 10: a multisampled attachment's single-sampled copy (QRhi's average, or the core's nearest).
 TARGET_RESOLVES = ("average", "nearest")
 DEPTH_TESTS = ("none", "never", "less", "equal", "less_equal", "greater", "not_equal", "greater_equal", "always")
@@ -86,7 +87,8 @@ TARGET_ALLOCATIONS = ("bucket", "exact")
 #: ABI 33 (N5.4): the most passes a program declares (``kMaxModePasses``; Waveform's 28).
 MAX_PASSES = 28
 #: ABI 33 (N5.4): an item texture's formats (``ModeTextureFormat``: RGBA8, or RGBA16F half floats).
-TEXTURE_FORMATS = ("rgba8", "rgba16f")
+TEXTURE_FORMATS = ("rgba8", "rgba16f", "rgba32f")
+#: ABI 37 (N5.2d): "rgba32f" (floats, 16 bytes a texel, never with mips: Crumble's motion table).
 #: The core's conventions (``kModeCoreMembers`` in ``mode_content.cpp``; a test holds the two equal): name ->
 #: (components, read from the card). Every other member of a pass's block is a setting or a record field.
 MODE_CORE_MEMBERS = {
@@ -287,6 +289,8 @@ class TransparencyTarget:
         return {"name": self.name, "transparency": transparency}
 
 
+#: ABI 37 (N4.i): where a pass on a scene target draws (its content viewport, or the whole allocation).
+PASS_VIEWPORTS = ("content", "allocation")
 #: N3.2 (D15): a pass's topology (points are refused: instanced quads, D5.6 row 11), cull, stream kinds, blend operations
 #: and factors; the most batches a batched pass draws.
 TOPOLOGIES = ("triangles", "triangle_strip")
@@ -482,11 +486,18 @@ class ModePass:
     #: N3.4 (D17 choice D): a pass on a :class:`TransparencyTarget` ships its sorted pack, what a device the gate does not
     #: admit draws into the owner (premultiplied over); it binds what ``pack`` binds and writes the owner's attachments.
     sorted_pack: bytes | None = None
+    #: ABI 37 (N4.i): ``"allocation"`` draws the core's triangle over the scene target's whole allocation (Python's
+    #: post passes over its SceneTarget's allocation: the trails' edges); ``"content"`` (the default) its content.
+    viewport: str = "content"
 
     def __post_init__(self) -> None:
         _blend_declaration(self.blend)
         if self.depth_test is not None and self.depth_test not in DEPTH_TESTS:
             raise ValueError(f"unknown depth test {self.depth_test!r} (the tests are {', '.join(DEPTH_TESTS)})")
+        if self.viewport not in PASS_VIEWPORTS:
+            raise ValueError(f"unknown viewport {self.viewport!r} (the viewports are {', '.join(PASS_VIEWPORTS)})")
+        if self.viewport == "allocation" and (self.target is None or self.geometry is not None):
+            raise ValueError("the allocation viewport is for a pass on the core's triangle into a scene target")
 
     def declaration(self) -> dict:
         entry: dict[str, Any] = {"name": self.name, "blend": _blend_declaration(self.blend)}
@@ -506,11 +517,17 @@ class ModePass:
                 entry["attachments"][:2] = [{} for _ in entry["attachments"][:2]]
         if self.depth_test is not None:
             entry["depth"] = {"test": self.depth_test, "write": bool(self.depth_write)}
+        if self.viewport != "content":
+            entry["viewport"] = self.viewport
         return entry
 
 
 #: N3.3 (D16): a compute binding's access and resource kinds, a storage image's formats and dimensions.
 STORAGE_ACCESS = ("read", "write", "read_write")
+#: A compute entry's named triggers (any other trigger is a record u32 field's name). ABI 37 (N4.i): ``"draw"``,
+#: every record that draws the program's passes (a derived kernel of what the record drew: the motion blur's tile
+#: max); the one trigger a still (the background layer's scene transitions) admits.
+COMPUTE_TRIGGERS = ("frame", "draw")
 COMPUTE_RESOURCES = ("buffer", "image", "stream", "mesh")
 STORAGE_IMAGE_FORMATS = ("rgba8", "rgba16f", "rgba32f", "r16f", "r32f")
 MAX_STORAGE_BUFFERS = 8
@@ -594,7 +611,8 @@ class ComputeBinding:
 @dataclass(frozen=True)
 class ComputePass:
     """N3.3 (D16 point 1): a compute entry: its name, its compute pack (bytes of a ``.qsb``), its trigger (``"frame"``: a
-    newly accepted record; or the name of a record u32 field: dispatched when it changes), its groups (three counts,
+    newly accepted record; ABI 37 ``"draw"``: every record that draws the passes; or the name of a record u32 field:
+    dispatched when it changes), its groups (three counts,
     each a number or a name the record (a u32 under an at_most rule) or the settings fill; or ``over``: a resource's
     extent over the pack's local size), its bindings and its samplers."""
 
@@ -616,7 +634,8 @@ class ComputePass:
 
     def declaration(self) -> dict:
         entry: dict[str, Any] = {"name": self.name, "compute": True,
-                                 "trigger": "frame" if self.trigger == "frame" else {"field": self.trigger},
+                                 "trigger": self.trigger if self.trigger in COMPUTE_TRIGGERS
+                                 else {"field": self.trigger},
                                  "groups": {"over": self.over} if self.over is not None else list(self.groups),
                                  "bindings": [b.declaration() for b in self.bindings]}
         if self.samplers:
@@ -902,11 +921,15 @@ class NativeMode:
         lacks."""
         if format not in TEXTURE_FORMATS:
             raise ValueError(f"unknown texture format {format!r} (the formats are {', '.join(TEXTURE_FORMATS)})")
+        if format == "rgba32f" and mips:
+            raise ValueError("an rgba32f texture has no mips (ABI 37: the box kernel is RGBA8 and RGBA16F)")
         arguments = [self._handle(), str(name), (int(size[0]), int(size[1])), bytes(pixels), bool(mips)]
         if in_frame or format != "rgba8":
             arguments.append(bool(in_frame))
         if format != "rgba8":
-            arguments.append(True)                        # half_float (ABI 33)
+            arguments.append(format == "rgba16f")         # half_float (ABI 33)
+        if format == "rgba32f":
+            arguments.append(True)                        # full_float (ABI 37)
         self._module.composite_mode_texture(*arguments)
 
     def on_textures_lost(self, callback: Callable[[list[str]], None] | None) -> None:
@@ -1020,7 +1043,7 @@ def mode_blocks(module: ModuleType, schema: Any, passes: Sequence[ModePass], set
 
 __all__ = ["BLEND_FACTORS", "BLEND_OPS", "BUILTIN_QUAD_MESH", "BlendState", "COMPUTE_RESOURCES", "CULL_MODES",
            "CapturePass", "ComputeBinding", "ComputePass", "DEPTH_TESTS", "EnvironmentStep", "GLOW_FORMS",
-           "MAX_ENVIRONMENT_SIDE", "MAX_ENVIRONMENT_STEPS", "MAX_COMPUTE_BINDINGS", "MAX_STORAGE_BUFFERS",
+           "COMPUTE_TRIGGERS", "MAX_ENVIRONMENT_SIDE", "MAX_ENVIRONMENT_STEPS", "PASS_VIEWPORTS", "MAX_COMPUTE_BINDINGS", "MAX_STORAGE_BUFFERS",
            "MAX_STORAGE_IMAGES", "STORAGE_ACCESS", "STORAGE_IMAGE_FORMATS", "StorageBuffer", "StorageImage",
            "MAX_BATCHES", "MAX_TARGETS", "MAX_TARGET_COLOUR", "MAX_TARGET_SAMPLES", "MODE_CARD_KEYS", "MODE_CORE_MEMBERS",
            "MeshAttribute", "ModePass", "ModeStream", "ModeTarget", "NativeMode", "PASS_BLENDS", "PassGeometry",

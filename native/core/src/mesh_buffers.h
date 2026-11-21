@@ -56,7 +56,12 @@ class RuntimeSchema;
 constexpr int kMaxModeMeshes = 8;
 constexpr int kMaxModeStreams = 8;
 constexpr int kMaxPassStorage = 4;
-constexpr int kMaxMeshAttributes = 8;
+// ABI 37 (N5.2d): a layout holds up to 16 attributes (8 before): Glass Shatter's shards carry 16 per vertex and
+// Crumble's chunks 11 (rendering/quick/transitions/run_geometry.py). A pass still reads at most kMaxPassInputs vertex
+// inputs in all (its mesh's and its instance source's): 16, OpenGL's guaranteed GL_MAX_VERTEX_ATTRIBS and Vulkan's
+// guaranteed maxVertexInputAttributes, the cap it had before (2 x 8).
+constexpr int kMaxMeshAttributes = 16;
+constexpr int kMaxPassInputs = 16;
 constexpr qint64 kMaxMeshBytes = qint64(64) << 20;
 constexpr int kMaxBatches = 64;
 // D15 point 3: a pass's bindings carry at most this many dynamic-offset blocks (inside OpenGL's 8 a bind and Vulkan's
