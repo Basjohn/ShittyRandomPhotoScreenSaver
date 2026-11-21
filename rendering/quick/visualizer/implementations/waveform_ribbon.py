@@ -81,3 +81,113 @@ class QuickWaveformRibbonRenderer:
 
 
 def create_visualizer_renderer():return QuickWaveformRibbonRenderer()
+
+
+#: The ribbons' history capacity the renderer draws with (``_draw``'s ``capacity``).
+HISTORY_CAPACITY=256
+
+
+def waveform_camera(state):
+    """(view, projection, eye, lens) of a Waveform frame: its framed view's camera
+    (``framed_view_camera.waveform_ribbon_camera``, the renderer's own ``physical_view``), or None before a card is
+    drawn (no framed view)."""
+    if not state.framed_view:return None
+    from core.framed_view import FramedView
+    from widgets.spotify_visualizer.framed_view_camera import waveform_ribbon_camera
+    return waveform_ribbon_camera(state.parameters,FramedView(*state.framed_view),zoom=state.zoom)
+
+
+def waveform_pass_values(state,size,*,camera=None,values=None):
+    """Every pass's block members (unprefixed, by pass id: ``waveform_shader_files.PASS_FILES``) of a Waveform logical
+    frame drawn at ``size`` (the card's device pixels), the very values the Python scene draws with (N5.4: its plan's
+    owners, ``rendering.quick.scene3d.waveform_plan``), and the draws' counts: ``(passes, counts)``. ``camera``: the
+    frame's (``waveform_camera``'s when None); ``values``: a ``RibbonValues`` to keep its per-packet caches across
+    frames. Only the stages the recipe draws are present: the yielding floor, the fog (field, media, volumes, skies),
+    the strays, the event sparks and the floor's pre-pass."""
+    import numpy as np
+    from core.ribbon_style import RibbonSparks
+    from core.waveform_ribbon_scene import FLOOR_CONTACT
+    from rendering.gl_programs.mist import FOG_OFF
+    from rendering.quick.scene3d.floor_give import floor_give_values
+    from rendering.quick.scene3d.fog_volume import fog_volume_values
+    from rendering.quick.scene3d.pulse_rim import pulse_rim_values
+    from rendering.quick.scene3d.ribbon import RibbonValues, STRAY_SEGMENTS, _sweep_axis
+    from rendering.quick.scene3d.ribbon_bursts import burst_values
+    from rendering.quick.scene3d.waveform import colour_grade
+    from rendering.quick.scene3d.waveform_field import field_values
+    from rendering.quick.scene3d.waveform_plan import (field_receiver_values, floor_prepass, floor_prepass_size,
+                                                       floor_values, fog_focus, fog_grid, frame_geometry,
+                                                       history_mist, history_mvp, medium_values, reflection_size,
+                                                       sky_values)
+    if camera is None:camera=waveform_camera(state)
+    if camera is None:raise ValueError('a Waveform frame without a framed view has no camera')
+    view,projection,eye,lens=camera
+    values=values if values is not None else RibbonValues()
+    recipe,packet,now=state.scene,state.packet,state.time
+    size=(int(size[0]),int(size[1]))
+    fog=recipe.fog
+    fogged,giving=fog is not None,recipe.floor.give>0.
+    rim=recipe.pulse_rim>0. and bool(state.pulse)
+    grade=colour_grade(recipe,state.passage)
+    side=-1. if recipe.flow.direction<0. else 1.
+    passes,counts={},{}
+    give=None
+    if giving:
+        passes['give_section'],passes['give_blur'],give=floor_give_values(
+            packet,translation=(recipe.flow.head_x-state.travel,0.,0.),floor=recipe.floor,contact=FLOOR_CONTACT,
+            camber=recipe.material.cross_curve,side=side)
+        counts['give_samples']=int(recipe.floor.give_span[2])
+    frame=frame_geometry(packet,capacity=HISTORY_CAPACITY,now=now,travel=state.travel,recipe=recipe,size=size,
+                         view=view,projection=projection,grade=grade,
+                         pulse_rim=pulse_rim_values(recipe.pulse_rim) if rim else None,floor_give=give)
+    mirrored_size=reflection_size(size,recipe.floor)
+    receivers={'':dict(FOG_OFF),'_mirror':dict(FOG_OFF)}
+    if fogged:
+        passes['field']=field_values(packet,translation=frame.scroll[:3,3],span=fog.field_span,grade=grade,side=side)
+        counts['field_samples']=int(fog.field_span[2])
+        medium=medium_values(recipe,now=now,origin=frame.continuation_origin,count=frame.continuation_count,
+                             mirror=frame.mirror,grade=grade)
+        for name,camera_view,cell,slices in (('',view,fog.cell,fog.slices),
+                                             ('_mirror',frame.mirrored,fog.reflection_cell,fog.reflection_slices)):
+            grid=fog_grid(size,cell,slices)
+            dispatch,receivers[name]=fog_volume_values(view=camera_view,lens=lens,depth_range=fog.depth_range,
+                                                       grid=grid,focus_depth=fog_focus(camera_view))
+            passes['medium'+name]={**medium,**dispatch}
+            passes['integrate'+name]=dict(dispatch)
+            passes['sky'+name]=sky_values(receivers[name],backdrop=recipe.environment.backdrop,
+                                          reflection=bool(name))
+            counts['fog_grid'+name]=grid
+    draws={'':{**frame.draw,'mist':history_mist({**frame.draw['mist'],**receivers['']},frame.mirror)},
+           '_mirror':{**frame.draw,'mist':history_mist({**frame.draw['mist'],**receivers['_mirror']},frame.mirror),
+                      'view':tuple(frame.reflected_view.flatten(order='F')),'viewport':mirrored_size}}
+    for name,mvp in (('',frame.ribbon_mvp),('_mirror',frame.reflected_mvp)):
+        draw=draws[name]
+        found=values.ribbon(packet,mvp,shading='light',**draw)
+        if found is not None:
+            passes['ribbon'+name],counts['ribbon_vertices']=found
+        if recipe.strays is not None:
+            stray=values.sparks(packet,mvp,RibbonSparks(),now,draw['mist'],draw['mist_frame'],draw['grade'],
+                                recipe.material,_sweep_axis(draw['sweep_axis']),draw['floor'],recipe.strays,
+                                state.strands,state.strand_origin,draw['continuation'],draw['floor_give'],
+                                draw['viewport'])
+            if stray is not None:
+                passes['strays'+name]=stray[0]
+                counts['strays_vertices']=stray[2]*recipe.strays.per_knot*STRAY_SEGMENTS*6
+        if recipe.sparks is not None and state.particles:
+            matrix=(np.asarray(frame.mvp,float).reshape(4,4,order='F') if not name
+                    else projection@frame.mirrored)
+            passes['bursts'+name]=burst_values(mvp=tuple(history_mvp(matrix,frame.mirror).flatten(order='F')),
+                                               now=now-state.particle_origin,viewport=draw['viewport'],
+                                               mist=draw['mist'],grade=draw['grade'])
+    counts['ribbon_instances']=packet.instances
+    passes['floor']=floor_values(recipe,mvp=frame.mvp,eye=eye,view=view,size=size,lit=fogged,give_span=give,
+                                 field=field_receiver_values(recipe,origin=frame.continuation_origin,
+                                                             count=frame.continuation_count,mirror=frame.mirror,
+                                                             grade=grade) if fogged else None,
+                                 fog_uniforms=receivers[''] if fogged else None)
+    prepass=floor_prepass_size(size,recipe.floor)
+    if prepass is not None:
+        passes['floor_prepass']=floor_prepass(passes['floor'],prepass)
+    counts['reflection_size']=mirrored_size
+    counts['prepass_size']=prepass
+    return passes,counts

@@ -90,17 +90,35 @@ PASS_FILES = (
 )
 
 _BLOCK = re.compile(r"layout\s*\(\s*std140\s*,\s*binding\s*=\s*\d+\s*\)\s*uniform\s+(\w+)\s*\{(.*?)\}\s*;", re.S)
-_MEMBER = re.compile(r"^\s*\w+\s+(\w+)\s*(?:\[[^\]]*\])?\s*;", re.M)
+_MEMBER = re.compile(r"^\s*(\w+)\s+(\w+)\s*(?:\[\s*(\d+)\s*\])?\s*;", re.M)
+#: Numbers a member type takes (a std140 block's scalar, vector and matrix types the Waveform programs declare).
+_COMPONENTS = {"float": 1, "int": 1, "uint": 1, "bool": 1, "vec2": 2, "ivec2": 2, "vec3": 3, "ivec3": 3, "vec4": 4,
+               "ivec4": 4, "mat3": 9, "mat4": 16}
+
+
+def _own_block(text: str) -> str:
+    stripped = re.sub(r"//[^\n]*", "", text)
+    blocks = [block for block in _BLOCK.findall(stripped) if block[0] != "SrpssConventions"]
+    if len(blocks) != 1:
+        raise ValueError(f"a Waveform program declares one block of its own, not {len(blocks)}")
+    return blocks[0][1]
 
 
 def block_members(text: str) -> tuple[str, ...]:
     """The members of the one std140 block a body declares as its own, in order (comments ignored; the conventions
     block, ``SrpssConventions``, is the core's)."""
-    stripped = re.sub(r"//[^\n]*", "", text)
-    blocks = [block for block in _BLOCK.findall(stripped) if block[0] != "SrpssConventions"]
-    if len(blocks) != 1:
-        raise ValueError(f"a Waveform program declares one block of its own, not {len(blocks)}")
-    return tuple(_MEMBER.findall(blocks[0][1]))
+    return tuple(name for _kind, name, _size in _MEMBER.findall(_own_block(text)))
+
+
+def block_numbers(text: str) -> dict[str, int]:
+    """Each member of the body's own block and how many numbers it takes (its components times its elements)."""
+    return {name: _COMPONENTS[kind] * (int(size) if size else 1) for kind, name, size in _MEMBER.findall(_own_block(text))}
+
+
+def pass_numbers() -> dict[str, dict[str, int]]:
+    """Each pass id's members (unprefixed) and their numbers, in block order."""
+    bodies = _bodies()
+    return {pass_id: block_numbers(bodies[body]) for _name, body, pass_id in PASS_FILES}
 
 
 def body_text(text: str) -> str:
