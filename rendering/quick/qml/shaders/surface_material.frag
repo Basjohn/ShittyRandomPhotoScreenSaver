@@ -35,6 +35,7 @@ layout(std140, binding = 0) uniform buf {
     // that owns the target: a ShaderEffect has only this block, so the include's own block cannot reach it.
     vec4 srpssConventions;   // x 1 flips the fragment row (every backend but OpenGL); y, z, w unused here
     vec2 targetPx;           // the render target's size in pixels
+    float borderPixelRatio;  // device pixels per logical unit: a card border snaps to whole device pixels (the content clip's inset rule)
 };
 layout(binding = 1) uniform sampler2D source;
 
@@ -236,7 +237,8 @@ void main() {
     float ringCoverage = 0.0;
     if (borderSurfaceEnabled > 0.5 && borderWidth > 0.0) {
         vec2 innerNormal;
-        float thickness = min(borderWidth, min(halfSize.x, halfSize.y));
+        float snappedBorder = floor(borderWidth * borderPixelRatio + 0.5) / borderPixelRatio;
+        float thickness = min(snappedBorder, min(halfSize.x, halfSize.y));
         float innerD = roundedBox(p, max(halfSize - vec2(thickness), vec2(0.0)),
                                   max(0.0, radius - thickness), innerNormal);
         float innerAa = max(fwidth(innerD), 0.001);

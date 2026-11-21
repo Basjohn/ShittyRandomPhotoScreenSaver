@@ -238,7 +238,7 @@ class HiddenDisplayHost:
         ``width`` x ``height`` logical (``compat_native_rect`` and ``visible_rect_in_window`` give both: Display 0 at
         150 % is a 1708 x 962 window holding the display at (4/3, 2)); ``overscan_rows`` is then unused."""
         from OpenGL import GL as gl
-        from PySide6.QtCore import QObject, QRectF, QSize, Signal
+        from PySide6.QtCore import Property, QObject, QRectF, QSize, Signal
         from PySide6.QtGui import QColor, QGuiApplication, QOffscreenSurface, QOpenGLContext
         from PySide6.QtQuick import QQuickGraphicsDevice, QQuickRenderControl, QQuickRenderTarget, QQuickWindow
 
@@ -249,6 +249,14 @@ class HiddenDisplayHost:
             runtime_generation = 1
             scene_rect_changed = Signal(object)
             scene_rect = None
+            render_dpr = 1.0
+
+            # A product window's QWindow ratio is its screen's, which is the render target's. This container has no
+            # screen of that ratio, so QML (MaterialSurface prefers this over Window.window.devicePixelRatio) is told
+            # the render target's.
+            @Property(float)
+            def srpssRenderPixelRatio(self) -> float:
+                return float(self.render_dpr)
 
             def bind_semantic_double_click_hit_test(self, _test) -> None: pass
             def bind_semantic_middle_click_hit_test(self, _test) -> None: pass
@@ -297,6 +305,7 @@ class HiddenDisplayHost:
         self.context.setParent(self.control)
         self.surface.setParent(self.control)
         self.window = _SceneContainer(self.control)
+        self.window.render_dpr = self.dpr
         self.window.resize(width, height + overscan)
         if scene_rect is not None:
             self.window.scene_rect = QRectF(*scene_rect)
