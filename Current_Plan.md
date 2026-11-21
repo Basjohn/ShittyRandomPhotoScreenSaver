@@ -116,15 +116,6 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
 - [~] Defect (operator, 14 Nov): a Studio window's taskbar icon in frozen builds is Windows' default box. The static
   cause is unproven (likely an icon Qt could not decode). Lead: check the next GitHub frozen build's `[ICON]` startup
   line, any no-icon warning for a shown Studio window, and the taskbar.
-- [ ] Bubble breathing and reactivity weaker fullscreen than on a small card (agent ad98162c77b175a12, Opus Medium; operator, 21 Nov, after R-248 fixed the
-  speed): R-248's check matched breathing as displayed/nominal radius in logical frames, yet on screen fullscreen
-  breathes and reacts visibly less. Log: `logs/worker_visualizer.log` 21 Nov 20:19:17-20:21:24 fullscreen (world
-  1.320x1.113), card after 20:21:25 (2.866x0.513, then resized). Root-cause where the drawn reaction depends on size
-  (the capacity zoom, a pixel or world-unit cap or floor on pulse/breath amplitude, size-class thresholds that move
-  with the zoom, the renderer's mapping), measured on drawn output not only logical ratios; fix at the owner so the
-  visible reaction is size-independent, the small card's reaction being the target (fullscreen rises to it; the card
-  never weakens toward fullscreen, proved by the card's figures unchanged); test at two sizes with a control on the old code; reaction check on a recorded
-  take at card and fullscreen size with the take's envelope above.
 - [ ] Worktree artifacts land on F: (operator, 22 Nov: the drive is nearly full): the main checkout's `.artifacts/evidence`,
   `scratch` and `webp` are junctions to `D:\Temp\Scratch\SRPSS\...`, but an agent's worktree gets real folders, so every
   agent's frames (Bubble's guard alone 26 GB) fill F:. Fix at `tools/artifact_paths.py`: in a linked worktree the three
@@ -134,11 +125,19 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   write lands on D:; retire copies the keep group and nothing is lost; a junction target outside D: is refused). Do
   it when no agent is mid-run in a worktree.
 - [ ] Fast-proof data protected, guard output lean (operator, 22 Nov; the references' size on D: is fine): the cached
-  Python references (`D:\Temp\Scratch\SRPSSast_proofeferences`) and the accepted `native_render_parity.json`
+  Python references (`D:\Temp\Scratch\SRPSSast_proof
+eferences`) and the accepted `native_render_parity.json`
   hashes are the long-term control (proof guide sections 6 and 7) and are never deleted by any cleanup:
   `tools/artifact_paths.py prune-scratch` and the Harness Index name them as protected. Native guard runs keep hashes
   per frame and images only for failing frames, never lossless full-take frame folders (Bubble's guard wrote 26 GB on
   F: on 22 Nov). With the worktree-artifacts box above.
+- [ ] Bubble's fast-proof baseline and record check (found by the C guard, 22 Nov):
+  - [ ] The accepted `native_render_parity.json` used by `--accepted` predates the card quad (ABI 31/32), so no frame
+    keeps its verdict and every guard judges all frames; take a fresh accepted Bubble baseline on main (ABI 39), with
+    input 22's tracked exception, and point the guide's Bubble guard command at it.
+  - [ ] The native record identity check fails on `u_fade` at inputs 0-27 (native 0.86 rising to 1.0, Python 1.0):
+    since d67d6aac3 the native route folds the scene fade into the content fade and the check's Python side does
+    not; fold it there too, with a control.
 - [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
   the halo's owner, with a test.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
