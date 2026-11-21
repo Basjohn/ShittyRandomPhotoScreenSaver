@@ -120,6 +120,17 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   visible reaction is size-independent, the small card's reaction being the target (fullscreen rises to it; the card
   never weakens toward fullscreen, proved by the card's figures unchanged); test at two sizes with a control on the old code; reaction check on a recorded
   take at card and fullscreen size with the take's envelope above.
+- [ ] Widget consistency with the Feed/Games You Follow tile treatment (operator, 21 Nov; pattern: 8b5bf3454, Games You
+  Follow's tile = Feed's ink wash + header hairline, no opaque slab, no tile shadow):
+  - [ ] System Stats: its four stat tiles (CPU, Memory, Uptime, Network) draw the extra opaque slab, and keep a
+    (pink, accent) border even with Borderless on.
+  - [ ] Friend Pulse: its friend tiles draw the extra opaque slab.
+  - [ ] Abandonment Issues: the "BACKLOG n/m" badge has a semantically poor fill (pink-red), a border, and off-centre
+    text; give it a proper semantic role colour like the other header badges, no border, text centred.
+  - [ ] Abandonment Issues: the "LAST VISIT" box draws the extra slab; its artwork under Borderless shows stray lines
+    around it; artwork behaves exactly like Achievement Pulse's and Games You Follow's.
+  - [ ] Renders before/after on a real wallpaper, dark and light theme, Borderless off and on, each beside Feed; tests
+    with controls.
 - [ ] Defect (operator): in MC profiles mode, clicking a link kills the cursor halo completely. Root-cause and fix at
   the halo's owner, with a test.
 - [ ] Material density, composed-stack readability and Studio surfaces: section 1A, item 1.7 (with 1.7a, 1.7b).
