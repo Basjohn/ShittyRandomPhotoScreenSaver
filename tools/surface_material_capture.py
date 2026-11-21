@@ -41,6 +41,7 @@ LIGHT_THEME = "Polished Chrome [Single]"
 DARK_THEME = "Default Dark"
 # "main": Weather, Media, Reddit, System Stats, Clock; "lists": Gmail, Feed, Steam, System Stats.
 CARD_SET = "main"
+OPACITY_ADJUST = 0.0
 
 
 # --------------------------------------------------------------------------- scene
@@ -115,6 +116,7 @@ class MaterialScene:
             item = widget.item
             item.setProperty("cardSurfaceMaterial", material)
             item.setProperty("cardSurfaceTextColor", text)
+            item.setProperty("cardSurfaceOpacityAdjust", OPACITY_ADJUST)
             widget._surface_material = material
         if material == "normal":
             self.drop_owner()
@@ -524,7 +526,8 @@ def measure_text_legibility(scene: MaterialScene, out: Path) -> list[dict]:
         mask = numpy.abs(full[top:bottom, left:right] - bare[top:bottom, left:right]).max(axis=2) > 24
         if mask.sum() < 6:
             continue
-        colour = item.property("color")
+        # The ink actually drawn: the card's solver may have corrected the authored colour (`inkColor`).
+        colour = item.property("inkColor") or item.property("color")
         text_l = float(_relative_luminance([colour.red(), colour.green(), colour.blue()]))
         back_l = _relative_luminance(bare[top:bottom, left:right][mask])
         hi = numpy.maximum(back_l, text_l)
@@ -779,10 +782,19 @@ def main(argv: list[str] | None = None) -> int:
                         help="main: Weather/Media/Reddit/Stats/Clock; lists: Gmail/Feed/Steam/Stats")
     parser.add_argument("--themes", nargs=2, metavar=("DARK", "LIGHT"),
                         help="Widget Theme names for --style (default: Default Dark, Polished Chrome)")
+    parser.add_argument("--opacity-adjust", default="0",
+                        help="the Widget surface adjustment every card draws: a number (0 = the authored "
+                             "density, the pre-baseline default) or 'base' (the Widget Opacity baseline an "
+                             "unset profile draws)")
     args = parser.parse_args(argv)
     evidence_media.redirect_output(args, "output", "surface_material_capture")
-    global CARD_SET
+    global CARD_SET, OPACITY_ADJUST
     CARD_SET = args.card_set
+    if args.opacity_adjust == "base":
+        from core.settings.surface_opacity import WIDGET_OPACITY_BASE
+        OPACITY_ADJUST = WIDGET_OPACITY_BASE
+    else:
+        OPACITY_ADJUST = float(args.opacity_adjust)
     if args.compare_legibility:
         summary = compare_legibility(*args.compare_legibility, args.output)
         print(json.dumps(summary, indent=1))

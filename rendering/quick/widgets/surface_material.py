@@ -171,9 +171,11 @@ def with_surface_material(style, widgets_config: Mapping[str, object] | None, wi
     if card_style is None:
         return style
     material = resolve_surface_material(widgets_config, widget_id)
-    from core.settings.surface_opacity import adjusted_surface_density, resolve_opacity_adjust
+    from core.settings.surface_opacity import (
+        adjusted_surface_density, effective_opacity_adjust, resolve_opacity_adjust,
+    )
 
-    adjustment = resolve_opacity_adjust(widgets_config, "widget")
+    adjustment = effective_opacity_adjust(widgets_config, "widget")
     header_adjustment = resolve_opacity_adjust(widgets_config, "header_surface")
     controls_adjustment = resolve_opacity_adjust(widgets_config, "media_controls")
     border_adjustment = resolve_opacity_adjust(widgets_config, "border_surface")

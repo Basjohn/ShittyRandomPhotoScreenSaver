@@ -67,6 +67,17 @@ without the safe path below.
   The feature had not shipped, but page saves write the whole `global` section, so a stored `normal` cannot be told
   apart from a choice: it stays an explicit Normal override; `theme` and an absent value follow the theme. A profile
   saved with the old default needs one switch to Theme (Card_Surface_Materials.md section 4).
+- **Widget Opacity baseline (bridge, 21 Nov 2026).** `widgets.global.widget_opacity_adjust` is now an offset from
+  `surface_opacity.WIDGET_OPACITY_BASE` (0 draws the base); it was measured from the authored density. A
+  `widgets.global` without `opacity_base_version` holds an old-meaning value: before defaults merge
+  (`SettingsManager._migrate_widget_opacity_base_before_defaults`, and the SST widgets section in `sst_io.py`) the
+  value becomes stored minus the base (so its drawn look is unchanged) and the marker is written; the Style Overrides
+  save writes the marker too. Decision (lead, 21 Nov): a stored 0.0 (within float tolerance) is the old default, not
+  a choice, because a Settings save writes every value; it migrates to the new default (offset 0, drawing the base)
+  so the operator's intent, the new look for everyone at default, reaches nearly every profile. The cost: a user who
+  deliberately chose exactly 0.0 gets the clearer look. An absent value draws the base. Stored values above 1 - |base| clamp at
+  +1. *Blocked:* dropping the marker from the page save (the next load would shift the value again), or
+  default-merging before the bridge. Tests: `tests/test_widget_opacity_base.py`.
 - **Settings theme material tag (bridge, 8 Nov 2026).** A curated Settings theme's file name ends with its
   material tag, and the pack moved 41 pairs to Frosted, Mica or Smoked, renaming their files
   (`... [Glass].srtheme` -> `... [Mica].srtheme`) through the Theme Sorter's pair rename (mirror links follow).
