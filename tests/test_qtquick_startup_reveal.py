@@ -20,6 +20,24 @@ def _app() -> QCoreApplication:
     return QGuiApplication.instance() or QGuiApplication([])
 
 
+# Hang guard only: the tests wait on the completion edge, never on a duration.
+_HANG_GUARD_MS = 60_000
+
+
+def _run_until_completed(reveal: QuickStartupRevealCoordinator) -> None:
+    """Spin the event loop until the coordinator's completion edge, however long
+    a loaded machine takes to get there. The guard below only ends a genuine hang
+    (the edge never arriving); it is not a deadline the product must meet."""
+    if reveal.is_completed:
+        return
+    loop = QEventLoop()
+    reveal.completed.connect(lambda _generation: loop.quit())
+    QTimer.singleShot(_HANG_GUARD_MS, loop.quit)
+    loop.exec()
+    assert reveal.is_completed, "startup reveal never published its completion edge"
+
+
+
 def test_startup_reveal_primes_zero_then_completes_at_one_once() -> None:
     _app()
     values: list[float] = []
@@ -42,10 +60,7 @@ def test_startup_reveal_primes_zero_then_completes_at_one_once() -> None:
     assert reveal.start() is True
     assert reveal.start() is False
 
-    loop = QEventLoop()
-    reveal.completed.connect(lambda _generation: loop.quit())
-    QTimer.singleShot(500, loop.quit)
-    loop.exec()
+    _run_until_completed(reveal)
 
     assert completions == [7]
     assert reveal.is_completed is True
@@ -97,10 +112,7 @@ def test_startup_reveal_with_no_initial_targets_still_runs_shared_scalar() -> No
     assert reveal.start() is True
     assert completions == []
 
-    loop = QEventLoop()
-    reveal.completed.connect(lambda _generation: loop.quit())
-    QTimer.singleShot(500, loop.quit)
-    loop.exec()
+    _run_until_completed(reveal)
 
     assert completions == [11]
     assert reveal.is_completed is True
@@ -133,10 +145,7 @@ def test_startup_reveal_rescans_targets_created_during_wallpaper_crossfade() -> 
     assert reveal.target_count == 2
     assert values[:2] == [0.0, 0.0]
 
-    loop = QEventLoop()
-    reveal.completed.connect(lambda _generation: loop.quit())
-    QTimer.singleShot(500, loop.quit)
-    loop.exec()
+    _run_until_completed(reveal)
 
     assert reveal.is_completed is True
     assert values[-1] == 1.0
@@ -162,16 +171,22 @@ def test_startup_reveal_adds_relative_hold_then_gentler_animation() -> None:
     assert reveal._timeline.duration() == 240
     assert values == [0.0, 0.0]
 
-    hold = QEventLoop()
-    QTimer.singleShot(35, hold.quit)
-    hold.exec()
-    assert values == [0.0, 0.0]  # No premature opacity publication.
-    assert completions == []
+    # The hold ends at the timeline's own edge (pause -> opacity animation), not
+    # after a wall-clock wait: nothing may have been published or completed there.
+    at_hold_end: list[tuple[list[float], list[int]]] = []
+    def on_hold_end(_animation) -> None:
+        at_hold_end.append((list(values), list(completions)))
+        # A loaded machine may tick straight past the whole easing in one frame,
+        # so land one value mid-curve deterministically instead of hoping a
+        # frame falls inside the 80 ms.
+        reveal._animation.setCurrentTime(reveal._animation.duration() // 2)
 
-    done = QEventLoop()
-    reveal.completed.connect(lambda _generation: done.quit())
-    QTimer.singleShot(1000, done.quit)
-    done.exec()
+    reveal._timeline.currentAnimationChanged.connect(on_hold_end)
+    _run_until_completed(reveal)
+    assert at_hold_end, "the held gate never handed over to the opacity animation"
+    held_values, held_completions = at_hold_end[0]
+    assert held_values == [0.0, 0.0]  # No premature opacity publication.
+    assert held_completions == []
     assert completions == [27]
     assert values[-1] == 1.0
     assert any(0.0 < value < 1.0 for value in values)
