@@ -1618,7 +1618,7 @@ borderless fullscreen transfers working smoothly.
 Each item reproduces its failure first. The lead judges pixels on the operator's two wallpapers. Opus Medium or Sonnet
 by risk; none takes a slot native work can use.
 
-- [ ] Side defect (Sonnet agent a9c166d87f2e0801b, 21 Nov, UI-3's renders): on a narrow Visualizer card (150 x 70) the
+- [ ] Side defect (found by Sonnet a9c166d87f2e0801b, fixing: Sonnet ad2c2724ff336646b, 21 Nov): on a narrow Visualizer card (150 x 70) the
   common hover glyphs (`WidgetHoverEditGlyphs`: Restore and a transfer arrow) draw over the card's own bottom-right
   `glyphRow` (the preset steps and Studio), with or without Rotate; the row's own members do not overlap. Reproduce:
   the Spectrum card at `viewport_extent=(150, 70)`, every glyph property on, pointer centred
