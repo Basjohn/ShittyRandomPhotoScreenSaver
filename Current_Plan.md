@@ -839,6 +839,11 @@ the feature (D3D11 is not stated).
       to the same taps at the port (a slight look change, judged on the port's showcase); before the build its taps
       sit at 0.0115/0.0097 mean error from hardware 8-16x against 1x's 0.026/0.037 (evidence
       `n5_4/20261121_n54_aniso_reference/`).
+  - Lead decisions (21 Nov, from the floor proof): every level chain a sampler reads is made by the core's box
+    kernel (`mip_box.comp`; Python runs the same text, `rendering/gl_programs/mip_chain.py`), never a driver's mip
+    generation, whose odd-size anchoring and filter differ by API: Python's reflection moves to it at the port, and the
+    item textures whose levels are read (Waveform's 1254 px maps) move to it too at the port. One chain owner, both
+    renderers. Python's look change is judged on the port's showcase.
   - All five boxes built on branch `worktree-agent-a6688ad0cd2ae360a` at ABI 33 (d3721eff3, main merged in), GitHub
     build running; then `scene_target_check.py --rounds wave_floor wave_limits wave_filter` on both APIs, then merge.
   - [ ] C++: a mode texture in half float with GPU mips. Mode textures are RGBA8 only (`mode_content.h:35-37,472-493`);
