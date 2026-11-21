@@ -80,6 +80,27 @@ def dispatch(groups: tuple[int, int, int], barriers: int) -> None:
 
 
 @contextmanager
+def handed_back_image_units(*units: int) -> Iterator[None]:
+    """The scope may bind ``units`` as it likes (a shared kernel's own bindings: ``dispatch_mip_chain``'s 0 and 1); each
+    is handed back as it was on leaving, even after a failure (``bound_image``'s rule for a unit it did not own)."""
+    inherited = []
+    for unit in units:
+        name = gl_query.get_indexed_int(gl.GL_IMAGE_BINDING_NAME, unit)
+        inherited.append((unit, name, *((gl_query.get_indexed_int(query, unit) for query in (
+            gl.GL_IMAGE_BINDING_LEVEL, gl.GL_IMAGE_BINDING_LAYERED, gl.GL_IMAGE_BINDING_LAYER,
+            gl.GL_IMAGE_BINDING_ACCESS, gl.GL_IMAGE_BINDING_FORMAT)) if name else ())))
+    try:
+        yield
+    finally:
+        for unit, name, *state in inherited:
+            if name:
+                level, layered, layer, access, image_format = state
+                gl.glBindImageTexture(unit, name, level, bool(layered), layer, access, image_format)
+            else:
+                gl.glBindImageTexture(unit, 0, 0, gl.GL_FALSE, 0, gl.GL_READ_ONLY, gl.GL_R8)
+
+
+@contextmanager
 def bound_image(unit: int, texture: int, access: int, image_format: int, *, layered: bool = False,
                 restore: bool = True) -> Iterator[None]:
     """Bind level 0 of ``texture`` to image ``unit`` for the scope, then restore the unit. ``layered`` exposes every

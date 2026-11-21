@@ -264,8 +264,14 @@ void main() {
 
     vec4 border = vec4(0.0);
     if (ringCoverage > 0.0001) {
-        vec4 sampled = borderAt(p, vScreen, uvPerUnit, grainValue, d, n);
-        border = mix(borderNormalColor, vec4(sampled.rgb, 1.0), sampled.a);
+        if (borderSurfaceEnabled > 1.5) {
+            // A child ring (Achievement Pulse): the annulus carries the full card surface.
+            vec4 surface = surfaceAt(p, itemSize, vScreen, uvPerUnit, grainValue);
+            border = mix(normalColor, vec4(surface.rgb, 1.0), surface.a);
+        } else {
+            vec4 sampled = borderAt(p, vScreen, uvPerUnit, grainValue, d, n);
+            border = mix(borderNormalColor, vec4(sampled.rgb, 1.0), sampled.a);
+        }
     }
     // Both colour values are premultiplied. The round SDF coverage is calculated
     // once for the face and the ring, including thin 1 px borders and curved corners.

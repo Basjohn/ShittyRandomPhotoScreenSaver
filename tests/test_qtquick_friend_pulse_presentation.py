@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QMetaObject, QObject, QPointF, Qt, QUrl
-from PySide6.QtQml import QQmlComponent, QQmlEngine
+from PySide6.QtQml import QQmlComponent, QQmlEngine, QQmlProperty
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtTest import QSignalSpy
 
@@ -442,12 +442,11 @@ def test_friend_pulse_qml_builds_real_rows(qt_app) -> None:
         assert int(rows.property("count")) == 1
         row = _find_visual_item(item, "friendPulseRow_0")
         assert row is not None
-        row_contact = _find_visual_item(item, "friendPulseRowContactShadow_0")
+        # No shadow slab behind a translucent row (the Feed tile's treatment).
+        assert _find_visual_item(item, "friendPulseRowContactShadow_0") is None
         avatar_contact = _find_visual_item(item, "friendPulseRowAvatarContactShadow_0")
         avatar_frame = _find_visual_item(item, "friendPulseRowAvatar_0")
-        assert all(part is not None for part in (
-            row_contact, avatar_contact, avatar_frame))
-        assert row_contact.width() == pytest.approx(row.width())
+        assert all(part is not None for part in (avatar_contact, avatar_frame))
         assert avatar_contact.width() == pytest.approx(avatar_frame.width())
         assert float(row.property("height")) == 50.0
         baseline_row_width = float(row.property("width"))
@@ -628,12 +627,10 @@ def test_friend_pulse_qml_builds_centered_dynamic_avatar_grid(qt_app) -> None:
                 "friendPulseGridTile_2",
             )
         }
-        grid_contact = _find_visual_item(item, "friendPulseGridContactShadow_0")
+        assert _find_visual_item(item, "friendPulseGridContactShadow_0") is None
         avatar_contact = _find_visual_item(item, "friendPulseGridAvatarContactShadow_0")
         avatar_frame = _find_visual_item(item, "friendPulseGridAvatar_0")
-        assert all(part is not None for part in (
-            grid_contact, avatar_contact, avatar_frame))
-        assert grid_contact.width() == pytest.approx(tiles["friendPulseGridTile_0"].width())
+        assert all(part is not None for part in (avatar_contact, avatar_frame))
         assert avatar_contact.width() == pytest.approx(avatar_frame.width())
         assert set(tiles) == {
             "friendPulseGridTile_0",
@@ -1284,6 +1281,54 @@ def test_long_game_and_friend_names_shrink_to_fit_instead_of_truncating(qt_app, 
     finally:
         window.close()
         item.deleteLater()
+        engine.deleteLater()
+        model.retire()
+        qt_app.processEvents()
+
+
+@pytest.mark.parametrize("view_mode,tile_name", (("rows", "friendPulseRow_0"), ("grid", "friendPulseGridTile_0")))
+@pytest.mark.parametrize("borderless", (False, True))
+def test_friend_tiles_are_the_feed_tile_not_an_opaque_slab(qt_app, view_mode, tile_name, borderless) -> None:
+    """A friend tile is a faint wash of the body ink with the header's hairline (the Feed
+    tile treatment), nothing drawn behind it, and no stroke at all under Borderless."""
+    from rendering.quick.widgets.theme_projection import hide_borders
+
+    service = _RuntimeService()
+    model = _model(service, view_mode=view_mode)
+    if borderless:
+        model.config = hide_borders(model.config)
+    model.activate(object())
+    row = FriendPulseRow(primary="Ada", secondary="Half-Life", presence_text="Online", online=True,
+                         changed=False, identity_fingerprint="opaque")
+    model.on_friend_pulse_runtime_snapshot(
+        FriendPulseSnapshot(status=SteamResultStatus.SUCCESS, authoritative=True, playing_count=1,
+                            online_count=1, entries=(FriendPulseEntry("opaque", "Ada", 10, "Half-Life"),)),
+        FriendPulseProjection("ready", "1 friend playing", (row,)))
+    engine = QQmlEngine()
+    engine.addImportPath(str(QML_ROOT))
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(QML_ROOT / "FriendPulsePresentation.qml")))
+    item = component.createWithInitialProperties({"friendPulseModel": model})
+    assert isinstance(item, QQuickItem), [error.toString() for error in component.errors()]
+    window = _show_item(item, model, qt_app)
+    try:
+        qt_app.processEvents()
+        tile = _find_visual_item(item, tile_name)
+        assert tile is not None
+        fill = tile.property("color")
+        ink = model.textColor
+        assert (fill.red(), fill.green(), fill.blue()) == (ink.red(), ink.green(), ink.blue())
+        assert fill.alphaF() < 0.15  # a wash: the card surface reads through
+        border = QQmlProperty(tile, "border.color").read()
+        assert border == model.headerBorderColor
+        if borderless:
+            assert border.alpha() == 0
+        shadow = tile_name.replace("friendPulseRow_", "friendPulseRowContactShadow_").replace(
+            "friendPulseGridTile_", "friendPulseGridContactShadow_")
+        assert _find_visual_item(item, shadow) is None
+    finally:
+        window.close()
+        item.deleteLater()
+        component.deleteLater()
         engine.deleteLater()
         model.retire()
         qt_app.processEvents()

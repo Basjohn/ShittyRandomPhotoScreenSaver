@@ -16,7 +16,7 @@ from rendering.quick.widgets.preferred_size_measurement import OrdinaryPreferred
 from rendering.widget_descriptors import get_widget_runtime_descriptors
 from ui.onboarding.arrange import _ArrangeCanvas
 from ui.onboarding.arrange_model import ArrangeDisplay, ArrangeModel
-from ui.onboarding.basic_pages import _PracticeStoryCard
+from ui.onboarding.basic_pages import BorderlessStill
 from ui.onboarding.common import font_with_point_delta
 from ui.onboarding.selection_pages import TransitionStrip
 
@@ -64,7 +64,7 @@ def test_every_ordinary_family_constructs_without_qml_or_font_warnings(qt_app):
 
 @pytest.mark.parametrize("pixel_sized", [True, False])
 def test_onboarding_paint_uses_a_positive_size_in_the_fonts_original_units(qt_app, pixel_sized):
-    card = _PracticeStoryCard()
+    card = BorderlessStill("onboarding/borderless_on.png")
     strip = TransitionStrip()
     meter = OrdinaryPreferredSizeMeter()
     widgets = deepcopy(DEFAULT_SETTINGS["widgets"])

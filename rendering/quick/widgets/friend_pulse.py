@@ -57,6 +57,7 @@ from .theme_projection import (
     resolve_card_surface_colors,
     resolve_header_colors,
     resolve_primary_text_color,
+    tile_wash,
     resolve_rgba_role,
 )
 
@@ -1174,11 +1175,13 @@ class FriendPulsePresentationModel(QObject):
 
     @Property(QColor, notify=stateChanged)
     def rowSurfaceColor(self) -> QColor:
-        return QColor(*self.config.semantic_palette.metric_surface)
+        # The Feed tile's fill: a faint wash of the body ink, not the palette's opaque slab.
+        return QColor(*tile_wash(self.config.text_color))
 
     @Property(QColor, notify=stateChanged)
     def rowBorderColor(self) -> QColor:
-        return QColor(*self.config.semantic_palette.metric_border)
+        # The Feed tile's hairline: the header border (invisible under Borderless).
+        return QColor(*self.config.header_border_color)
 
     @Property(QColor, notify=stateChanged)
     def rowInnerBorderColor(self) -> QColor:

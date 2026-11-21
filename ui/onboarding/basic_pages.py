@@ -1,9 +1,9 @@
 """Welcome, sources, display selection and interaction: cheap Settings-only UI."""
-from PySide6.QtCore import QRectF, QSignalBlocker, Signal, Qt
+from PySide6.QtCore import QRectF, QSignalBlocker, QSize, Signal, Qt
 from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QFileDialog, QHBoxLayout, QListWidget, QPushButton,
-    QVBoxLayout, QWidget,
+    QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from ui.widgets.continuous_border import OutlinedListWidget
@@ -348,52 +348,31 @@ class DisplaysPage(Page):
         self.refresh()
 
 
-class _PracticeStoryCard(QWidget):
-    """A painted mock story row (D9): no network, browser, handoff or feed widget."""
+class BorderlessStill(QWidget):
+    """One real Media-card still (Guided Setup's Borderless choice): the picture, painted with a continuous
+    rounded outline that is the theme's accent when it is the selected one. Clicking it selects it."""
 
-    clicked = Signal(bool)  # True when Ctrl was held
+    clicked = Signal()
+    RADIUS = 10.0
 
-    def __init__(self, parent=None):
+    def __init__(self, resource: str, parent=None):
         super().__init__(parent)
-        self.setMinimumHeight(96)
-        self.setMaximumWidth(620)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
         from PySide6.QtGui import QPixmap
-        self._art = QPixmap(str(asset_path("onboarding/transition_destination.png")))
-        self._scaled_art = QPixmap()
+        self._source = QPixmap(str(asset_path(resource)))
+        if self._source.isNull():
+            raise FileNotFoundError(f"Guided Setup image missing or unreadable: {resource}")
+        self._scaled = QPixmap()
         self._scaled_key = None
-        self._pressed = False
+        self._selected = False
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        policy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        policy.setHeightForWidth(True)
+        self.setSizePolicy(policy)
 
-    def paintEvent(self, _event):
-        theme = get_active_settings_theme()
-        color = lambda token: QColor(*theme.color(token).as_tuple())
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -1.5)
-        painter.setPen(QPen(color("panel.border"), 2.5 if self.underMouse() else 2.0))
-        painter.setBrush(color("panel.subsection.surface"))
-        painter.drawRoundedRect(rect, 10.0, 10.0)
-        art = QRectF(rect.left() + 12, rect.top() + 12, (rect.height() - 24) * 16 / 9, rect.height() - 24)
-        if not self._art.isNull():
-            from PySide6.QtGui import QPainterPath
-            from ui.widgets.dpr_pixmap import scale_pixmap_for_dpr
-            key = (round(art.width()), round(art.height()), self.devicePixelRatioF())
-            if key != self._scaled_key:
-                # Smooth, DPR-aware scale once per size change (never per paint).
-                self._scaled_key = key
-                self._scaled_art = scale_pixmap_for_dpr(self._art, art.width(), art.height(), key[2])
-            clip = QPainterPath(); clip.addRoundedRect(art, 6.0, 6.0)
-            painter.save(); painter.setClipPath(clip)
-            painter.drawPixmap(art.topLeft(), self._scaled_art)
-            painter.restore()
-        text = QRectF(art.right() + 14, rect.top() + 14, rect.right() - art.right() - 26, rect.height() - 28)
-        font = font_with_point_delta(self, 1.5); font.setBold(True)
-        painter.setFont(font); painter.setPen(color("panel.group.text"))
-        painter.drawText(text, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap,
-                         "A Practice Story: The Lighthouse Keeper's Last Night")
-        font = font_with_point_delta(self, -1.0); font.setBold(False); painter.setFont(font)
-        painter.setPen(color("control.button.text"))
-        painter.drawText(text, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom, "PRACTICE WIRE  ·  2H AGO")
+    def set_selected(self, selected: bool) -> None:
+        if selected != self._selected:
+            self._selected = selected
+            self.update()
 
     def enterEvent(self, event):
         super().enterEvent(event); self.update()
@@ -401,12 +380,60 @@ class _PracticeStoryCard(QWidget):
     def leaveEvent(self, event):
         super().leaveEvent(event); self.update()
 
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return round(max(1, width) * self._source.height() / self._source.width())
+
+    def sizeHint(self):
+        return QSize(360, self.heightForWidth(360))
+
+    def minimumSizeHint(self):
+        return QSize(160, self.heightForWidth(160))
+
+    def paintEvent(self, _event):
+        from PySide6.QtGui import QPainterPath
+        from ui.widgets.dpr_pixmap import scale_pixmap_for_dpr
+
+        theme = get_active_settings_theme()
+        pen_width = 3.0 if self._selected else 1.5
+        rect = QRectF(self.rect()).adjusted(pen_width, pen_width, -pen_width, -pen_width)
+        key = (round(rect.width()), round(rect.height()), self.devicePixelRatioF())
+        if key != self._scaled_key:
+            # Smooth, DPR-aware scale once per size change (never per paint).
+            self._scaled_key = key
+            self._scaled = scale_pixmap_for_dpr(self._source, rect.width(), rect.height(), key[2])
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        clip = QPainterPath()
+        clip.addRoundedRect(rect, self.RADIUS, self.RADIUS)
+        painter.save()
+        painter.setClipPath(clip)
+        painter.setOpacity(1.0 if self._selected or self.underMouse() else 0.62)
+        painter.drawPixmap(rect.toRect(), self._scaled)
+        painter.restore()
+        token = "control.list.selected_accent" if self._selected else "panel.border"
+        painter.setPen(QPen(QColor(*theme.color(token).as_tuple()), pen_width))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(rect, self.RADIUS, self.RADIUS)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit(bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier))
+            self.clicked.emit()
             event.accept()
             return
         super().mousePressEvent(event)
+
+
+BORDERLESS_STILLS = (
+    # (borderless, still resource, choice label, tooltip)
+    (False, "onboarding/borderless_off.png", "Keep Borders",
+     "Widget cards keep their outlines, as they are drawn by default."),
+    (True, "onboarding/borderless_on.png", "Go Borderless",
+     "Hides every widget border: card, header, Media and Steam outlines. Widgets > General > Style Overrides has "
+     "the same Borderless setting, and your Card Border Width and colours are kept."),
+)
 
 
 class InteractionPage(Page):
@@ -433,12 +460,28 @@ class InteractionPage(Page):
             screensaver.setToolTip(MC_INTERACTION_TOOLTIP)
             self.group.button(1).setToolTip(MC_INTERACTION_TOOLTIP)
         self.body.addSpacing(8)
-        self.body.addWidget(text_label("Try it on a practice story", heading=False))
-        self.card = _PracticeStoryCard()
-        self.card.clicked.connect(self.demonstrate)
-        self.body.addWidget(self.card)
-        self.demo = text_label("Click the card, with and without Ctrl. Nothing opens and the screensaver is not running.")
-        self.body.addWidget(self.demo)
+        self.body.addWidget(text_label("Borders Or None?", heading=True))
+        self.body.addWidget(text_label("Borderless lets your widgets sit lightly on the picture."))
+        self.borderless_group = QButtonGroup(self)
+        self.borderless_group.setExclusive(True)
+        self.stills = {}
+        row = QHBoxLayout()
+        row.setSpacing(20)
+        for borderless, resource, title, tip in BORDERLESS_STILLS:
+            column = QVBoxLayout()
+            column.setSpacing(10)
+            still = BorderlessStill(resource)
+            still.setToolTip(tip)
+            choice = checkbox(title)
+            choice.setToolTip(tip)
+            choice.toggled.connect(lambda checked, value=borderless: checked and self._choose_borderless(value))
+            still.clicked.connect(choice.click)
+            self.borderless_group.addButton(choice, int(borderless))
+            self.stills[borderless] = still
+            column.addWidget(still)
+            column.addWidget(choice)
+            row.addLayout(column, 1)
+        self.body.addLayout(row)
         self.body.addStretch()
         self.refresh()
 
@@ -446,13 +489,26 @@ class InteractionPage(Page):
         from core.mc import effective_interaction_mode
         return effective_interaction_mode(self.settings.get("input.interaction_mode"))
 
+    def _borderless_on(self) -> bool:
+        from core.settings.default_contract import resolve_widgets_borderless
+        return resolve_widgets_borderless(self.settings.get("widgets"))
+
+    def _choose_borderless(self, borderless: bool) -> None:
+        # The setting Style Overrides' Borderless writes: one key, staged in the wizard's draft.
+        from core.settings.default_contract import WIDGETS_BORDERLESS_KEY
+        self.settings.set(WIDGETS_BORDERLESS_KEY, borderless)
+        self._mark_borderless(borderless)
+
+    def _mark_borderless(self, borderless: bool) -> None:
+        for value, still in self.stills.items():
+            still.set_selected(value == borderless)
+
     def refresh(self):
         button = self.group.button(int(self._interaction_on()))
         with QSignalBlocker(button):
             button.setChecked(True)
-
-    def demonstrate(self, ctrl_held: bool = False):
-        if self._interaction_on() or ctrl_held:
-            self.demo.setText("On the saver, this click would open the story in your browser through the secure link handoff.")
-        else:
-            self.demo.setText("Nothing happens: the saver treats a plain click as 'wake up'. Hold Ctrl while clicking to open the story.")
+        borderless = self._borderless_on()
+        chosen = self.borderless_group.button(int(borderless))
+        with QSignalBlocker(chosen):
+            chosen.setChecked(True)
+        self._mark_borderless(borderless)
