@@ -952,7 +952,9 @@ class QuickSphereVoxelRenderer:
             "uTracerColor": sphere_tracer_color_rgba(parameters["sphere_tracer_color"]),
             "uEdgeWeight": float(parameters["sphere_edge_weight"]),
             "uDepthShading": float(parameters["sphere_depth_shading_strength"]) if bool(parameters["sphere_depth_shading_enabled"]) else 0.0,
-            "uFade": presentation.scene_fade * presentation.content_fade,
+            # The content fade alone: the render owner has already folded the scene opacity into it
+            # (render_contract.scene_faded_snapshot), so multiplying scene_fade in again squared it.
+            "uFade": presentation.content_fade,
             "uCelShading": 1 if cel_shading else 0,
             "uRainbowSurfaces": 1 if rainbow_enabled and bool(parameters["sphere_taste_the_rainbow_surfaces"]) else 0,
             "uRainbowEdges": 1 if rainbow_enabled and bool(parameters["sphere_taste_the_rainbow_edges"]) else 0,
