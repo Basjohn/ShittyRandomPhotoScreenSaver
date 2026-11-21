@@ -37,7 +37,7 @@ class _Stack:
     """The real route's participants: one unshown runtime, the production Visualizer owner, the CUSTOM owner and the
     display manager that owns the hover route."""
 
-    def __init__(self, qt_app, tmp_path, monkeypatch, *, expanded: bool) -> None:
+    def __init__(self, qt_app, tmp_path, monkeypatch, *, expanded: bool, mode: str | None = None) -> None:
         from rendering.quick.custom_layout_owner import QuickCustomLayoutOwner
         from rendering.quick.runtime import QuickDisplayRuntime
         from rendering.quick.scene_controller import QuickSceneFactory
@@ -48,7 +48,7 @@ class _Stack:
         from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
 
         self.qt_app = qt_app
-        self.mode = _rotating_mode(expanded=expanded)
+        self.mode = mode or _rotating_mode(expanded=expanded)
         self.settings = _manager(tmp_path)
         _seed(self.settings)
         self.saves = 0
