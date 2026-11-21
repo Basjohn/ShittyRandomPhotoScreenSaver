@@ -1098,13 +1098,15 @@ class IdentityMirror:
 def run(mode: str, *, recording: str | None = None, seconds: float = 60.0, variant: str = "a",
         out: Path | None = None, module_dir: Path | None = None,
         controls: tuple[tuple[str, int], ...] = (), deliveries: Path | None = None,
-        window: tuple[int, int] | None = None, restart: bool = False) -> dict:
+        window: tuple[int, int] | None = None, restart: bool = False, run_key: str | None = None) -> dict:
     """Layer L of ``mode`` over a take (``recording``, its first ``seconds``; None: the shipped Studio clip, a smoke
     check only). ``module_dir``: the native module (its GPU-free block packer); None: the block level is not run.
     ``deliveries``: a folder the run's ``DeliveryStream`` is written to (for ``native_stream_player.py``).
     ``window``: only the inputs ``[start, end)`` are written to it; the simulation still ticks every input from the
     take's first (a window is cut from one continuous run, guide section 3). ``restart``: the coverage proof's control,
-    the simulation started cold at the window's first input (the script cut there; its inputs numbered from 0)."""
+    the simulation started cold at the window's first input (the script cut there; its inputs numbered from 0).
+    ``run_key``: one run of the mode's widened set (``conventions_identity.mode_runs(mode, offers=True)``'s key suffix,
+    e.g. ``:osc_display=0``, a Choice offer) instead of ``variant``."""
     import tools.expanded_visualizer_evidence as evidence
     from tools.visualizer_replay import owner_render_parity as parity
     from tools.visualizer_replay import owner_worker_gate as gate
@@ -1141,7 +1143,16 @@ def run(mode: str, *, recording: str | None = None, seconds: float = 60.0, varia
                    "block_level": core is not None, "module": None if core is None else dict(core.info),
                    "positional": dict(MODES[mode].positional), "controls": [list(c) for c in controls]}
     engine_worker_link.reset_run_state_for_testing()
-    settings = parity.section_settings(mode, variant)
+    if run_key is None:
+        settings = parity.section_settings(mode, variant)
+    else:
+        from tools import conventions_identity
+
+        runs = dict(conventions_identity.mode_runs(mode, True))
+        if run_key not in runs:
+            raise ValueError(f"{mode} has the runs {sorted(runs)}, not {run_key!r}")
+        settings = runs[run_key]
+        mirror.meta["run"] = run_key
     if deliveries is not None:
         mirror.deliveries = DeliveryStream(Path(deliveries), mode, keep=keep)
     register = MODES[mode].register
@@ -1181,6 +1192,9 @@ def main(argv=None) -> int:
                              "only); without it the shipped Studio clip (a smoke check only)")
     parser.add_argument("--seconds", type=float, default=60.0)
     parser.add_argument("--variant", default="a", choices=("a", "b"))
+    parser.add_argument("--run", default=None,
+                        help="one run of the mode's widened set instead of --variant: its key suffix in "
+                             "tools/conventions_identity.mode_runs(mode, offers=True), e.g. ':osc_display=0'")
     parser.add_argument("--out", type=artifact_paths.evidence_arg, required=True)
     parser.add_argument("--module-dir", type=Path, default=Path("release/native_module"))
     parser.add_argument("--no-blocks", action="store_true", help="skip the block level (no native module needed)")
@@ -1201,7 +1215,7 @@ def main(argv=None) -> int:
     app = QApplication.instance() or QApplication(["native-record-identity"])
     report = run(args.mode, recording=args.recording, seconds=args.seconds, variant=args.variant, out=args.out,
                  module_dir=None if args.no_blocks else args.module_dir.resolve(), controls=tuple(args.control),
-                 deliveries=args.deliveries)
+                 deliveries=args.deliveries, run_key=args.run)
     halves = report["halves"]
     for name in ("first", "second", "switch"):
         h = halves[name]

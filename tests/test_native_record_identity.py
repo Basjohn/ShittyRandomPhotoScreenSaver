@@ -72,6 +72,22 @@ def test_the_native_path_receives_what_the_python_renderer_uses(qt_app, mode):
 
 
 @needs_module
+def test_a_run_of_the_widened_set_is_judged_under_its_own_settings(qt_app):
+    # The Choice offers' runs (``--run``): every offer of the Oscilloscope's set, drawn under its own settings, and an
+    # unknown key refused.
+    from tools import conventions_identity
+    from tools.visualizer_replay import native_record_identity as layer_l
+
+    offers = [key for key, _settings in conventions_identity.mode_runs("oscilloscope", True) if key not in ("", ":b")]
+    assert offers
+    for key in offers:
+        report = layer_l.run("oscilloscope", seconds=SECONDS, module_dir=MODULE_DIR, run_key=key)
+        assert report["run"] == key and report["identical"], (key, report["mismatches"][:2])
+    with pytest.raises(ValueError):
+        layer_l.run("oscilloscope", seconds=SECONDS, module_dir=MODULE_DIR, run_key=":no_such_offer=1")
+
+
+@needs_module
 @pytest.mark.parametrize("mode", ["bubble", "oscilloscope"])
 @pytest.mark.parametrize("kind,level", [("setting", "settings"), ("block", "block")])
 def test_a_perturbed_setting_and_a_perturbed_block_member_are_caught_at_their_input(qt_app, mode, kind, level):

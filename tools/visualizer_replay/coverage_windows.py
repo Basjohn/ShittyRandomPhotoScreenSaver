@@ -44,8 +44,9 @@ from tools import artifact_paths  # noqa: E402
 WINDOW_S = 1.0
 LATE_S = 15.0
 #: The inputs drawn before a window (guide section 5's GPU history per mode). Spectrum, Spline Curve and Bubble draw each
-#: frame from its record and settings alone.
-WARMUP_INPUTS = {"spectrum": 0, "devcurve": 0, "bubble": 0}
+#: frame from its record and settings alone; so does the Oscilloscope (its afterglow traces are the record's, its bloom
+#: is drawn again each frame from that frame's emission).
+WARMUP_INPUTS = {"spectrum": 0, "devcurve": 0, "bubble": 0, "oscilloscope": 0}
 
 
 def stream_states(folder: Path):
