@@ -22,6 +22,7 @@ from core.visualizer_engine import frame_codec, native_schema
 from core.visualizer_engine import spectrum_native_schema as spectrum
 from core.visualizer_engine.packet_abi import MODE_CODES, FramePacketReader, FramePacketWriter
 from core.visualizer_engine.packet_mailbox import PacketMailbox
+from tools import packet_reader_adversary as adversary
 from widgets.spotify_visualizer.spectrum_frame_inputs import (
     MAX_LEVELS,
     SPECTRUM_FRAME_FIELDS_NOT_DRAWN,
@@ -228,8 +229,8 @@ def _bad_slot(cause):
         "malformed schema": (good | 0x01000000, 1, bytes(size)),
         "unknown mode code": (good, 200, bytes(size)),
         "mode disagrees": (good, MODE_CODES["oscilloscope"], bytes(size)),
-        "mode without a schema": (native_schema.native_schema_id(MODE_CODES["sphere"], 1),
-                                  MODE_CODES["sphere"], bytes(size)),
+        "mode without a schema": (native_schema.native_schema_id(adversary.mode_code_without_schema(), 1),
+                                  adversary.mode_code_without_schema(), bytes(size)),
         "newer version": (native_schema.native_schema_id(1, spectrum.VERSION + 1), 1, bytes(size)),
         "short record": (good, 1, bytes(size - 16)),
         "codec payload": (frame_codec.CODEC_SCHEMA, 1, frame_codec.encode((1, 1, 0.0, None))),

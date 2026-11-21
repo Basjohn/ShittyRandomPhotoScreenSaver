@@ -389,6 +389,18 @@ def _stale(adv: Adversary, reader) -> list[Check]:
             ("retained", reader.retained_sequence(), newer)]
 
 
+def mode_code_without_schema() -> int:
+    """A known mode code with no native schema in this build, derived from the registries (never a pinned mode)."""
+    from core.visualizer_engine import native_schema
+    from core.visualizer_engine.packet_abi import MODE_CODES
+
+    covered = {schema.mode_code for schema in native_schema.native_schemas().values()}
+    free = sorted(code for code in MODE_CODES.values() if code not in covered)
+    if not free:
+        raise LookupError("every known mode has a native schema; the 'mode without a schema' case has no subject")
+    return free[0]
+
+
 def bad_slot(cause: str) -> tuple[int, int, bytes]:
     """(payload_schema, slot mode code, payload) of one head refusal on a native stream (the Python half's table,
     ``tests/test_visualizer_engine_native_schema.py``)."""
@@ -402,8 +414,8 @@ def bad_slot(cause: str) -> tuple[int, int, bytes]:
         "malformed schema": (good | 0x01000000, 1, bytes(size)),
         "unknown mode code": (good, 200, bytes(size)),
         "mode disagrees": (good, MODE_CODES["oscilloscope"], bytes(size)),
-        "mode without a schema": (native_schema.native_schema_id(MODE_CODES["oscilloscope"], 1),
-                                  MODE_CODES["oscilloscope"], bytes(size)),
+        "mode without a schema": (native_schema.native_schema_id(mode_code_without_schema(), 1),
+                                  mode_code_without_schema(), bytes(size)),
         "newer version": (native_schema.native_schema_id(1, spectrum.VERSION + 1), 1, bytes(size)),
         "short record": (good, 1, bytes(size - 16)),
         "record plus 16 bytes": (good, 1, valid_record(1) + bytes(16)),
