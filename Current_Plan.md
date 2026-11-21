@@ -68,11 +68,10 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
    this plan sets a global order.
 
 **Resume here (lead, 21 Nov, usage cut):**
-- [ ] The fast proof's method proof is merged: windows miss a one-ulp shader change, so the guide's section 7 now
-  splits the material (full-take native-only runs against cached references for shader, core and optimisation
-  changes and every acceptance; windows for record and settings classes). Agent a6257c36aeee45f10: the split's
-  confirmation box and the shift-control side defect. Bubble variant b's four cold-reveal frames go to the scene-fade
-  agent a9931705e23b026a7 as its data.
+- [ ] The fast proof is complete (8578ae50f): full-take native runs against cached references, `--accepted` keeping
+  unchanged frames' verdicts (a 60 s Bubble take in 57.6 s against 399 s). Next under it (Medium): the 60 s reruns the
+  scene-fade fix (R-242) owes (Spline Curve, Spectrum, Bubble variant b), then Bubble's rule (b) 60 s failures once the
+  rule (b) union mask lands with the Oscilloscope's turned work.
 - [ ] The Oscilloscope at ABI 28 is merged (audit 10's H1, M1-M4 and L2 fixed; Trace, Ring and Phase pass rule (a)
   on both APIs). Open before its 60 s takes, layer T and registration, agent a652d2d5a77e690ff (details under the
   N5.1 H1 box): audio block sizes 0 and 3 exceed rule (a)'s 10 ties (12-21, at most 2 levels); graticule 0 input 167;
@@ -85,7 +84,8 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
 - [ ] High (Opus High, core-critical C++): the Oscilloscope's turned-card anchoring and L1's rule (b) frame, then
   N3.6. The Oscilloscope's 60 s takes and layer L go to a Medium once the fast proof's split is confirmed. Defects between N steps: 1D.6 (design note
   first), then 1C.10.
-- [ ] Medium (Opus Medium): the fast-proof tools (step 1), then Bubble's L, T and long-take rule (b), then step 3.
+- [ ] Medium (Opus Medium): the 60 s reruns under the fast proof (Spline Curve, Spectrum, Bubble variant b), then
+  Bubble's long-take rule (b); the lead runs layer T.
 - [ ] Second Medium (Opus Medium): step 3, the Bubble GPU optimisation (step 2's scene-fade fix is merged).
 - [ ] Audit (Opus Medium; Opus High only for core C++ with real risk): each merge (the Bubble landing is audit 8).
 - [ ] Sonnet Medium: profile the owner replay (the fast proof's first box), then cheap audits and docs of open avenues,
@@ -735,12 +735,6 @@ the feature (D3D11 is not stated).
     rule (b) has run over the 5.5 s replay's 684 sampled frames only.
     The tool exists (21 Nov): `native_record_identity.py --deliveries` then `native_stream_player.py`, about 9
     minutes a take on an idle machine; ragdoll and human_heavy1 ran and fail (the 60 s box below).
-  - [ ] Layer L directly: the per-frame packed record byte-compared with the values the Python renderer uses, over the
-    four takes (the fast-proof box's L tool; `engine_worker_gate.py` is the precedent).
-    Ran 20 Nov (`native_record_identity.py`, variant a, display placement): identical on all four takes, 2,645 of 2,645
-    and 2,646 of 2,646 inputs judged per half each (5,313 compared frames a take with the switch fade; all three passes
-    and both ambient streams compared); Spectrum and Spline Curve on `nightsolong_acousticsoft1` identical with the
-    same counts. Evidence `.artifacts/evidence/native_core/fast_proof/20261120_l_<mode>_<take>/`.
   - [ ] Checkpoint audit 8 M1, what is left (ties joined into groups, the 16 x 16 density bound of 26 for rule (a) and
     the split-line and dithered-patch controls landed 21 Nov, c432c1359; D12's Bubble line):
     - [ ] The audit's line split by two exact pixels (65 one-level pixels in a straight line, groups of 22) still
