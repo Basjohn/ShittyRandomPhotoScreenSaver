@@ -211,3 +211,76 @@ def test_a_missing_value_is_an_unfilled_member():
     box = renderer.scene_pass("box")
     members = _members(box.vertex_source) | _members(box.fragment_source)
     assert [m for m in members if m not in MODE_CORE_MEMBERS and m not in settings] == ["uLift"]
+
+
+# -------------------------------------------------------------------------------- the lead's rules (21 Nov), each with a control
+
+def _scattered(count: int, *, level: int = 1, shape=(400, 640)):
+    """A difference image with ``count`` one-pixel spots (every third pixel of every third row) at ``level``."""
+    import numpy as np
+
+    delta = np.zeros(shape, np.int32)
+    spots = [(y, x) for y in range(1, shape[0], 3) for x in range(1, shape[1], 3)][:count]
+    for y, x in spots:
+        delta[y, x] = level
+    return delta
+
+
+def test_a_single_sampled_scene_admits_its_scatter_and_nothing_past_one_level():
+    from tools import pixel_tolerance as pt
+
+    trc = _trc()
+    rule = trc.N52C_RULE_A
+    assert pt.judge_delta(_scattered(trc.N52C_SCATTER_PIXELS), rule)["pass"]
+    # Controls: one more scattered pixel, one pixel two levels off, and a compact one-level patch all fail.
+    assert not pt.judge_delta(_scattered(trc.N52C_SCATTER_PIXELS + 1), rule)["pass"]
+    past = _scattered(10)
+    past[200, 200] = 2
+    assert not pt.judge_delta(past, rule)["pass"]
+    patch = _scattered(0)
+    patch[100:106, 100:106] = 1                                        # 36 touching pixels: past the group bound
+    assert not pt.judge_delta(patch, rule)["pass"]
+
+
+def test_a_multisampled_scene_is_judged_by_rule_b_only_and_its_single_sampled_form_by_rule_a():
+    trc = _trc()
+    assert trc._rule_a("cube_turn", {"scene": True, "samples": 4}) is None
+    # Control: the same scene single-sampled is judged by rule (a); Blinds' flat style is a fragment pass.
+    assert trc._rule_a("cube_turn_options", {"scene": True, "samples": 0}) is trc.N52C_RULE_A
+    assert trc._rule_a("blinds_flat", {"scene": True, "samples": 0}) is trc.FRAGMENT_PASS_RULE_A
+    for variant, overrides in trc.N52C_VARIANTS.items():               # each 4x default has a single-sampled form
+        if overrides.get("samples", 4) and variant != "blinds_flat":
+            twin = [v for v, o in trc.N52C_VARIANTS.items()
+                    if trc.variant_transition(v) == trc.variant_transition(variant) and o.get("samples") == 0]
+            assert twin, variant
+
+
+def test_blinds_slats_are_checked_a_hair_either_side_of_their_degenerate_half_turn():
+    trc = _trc()
+    for variant in trc.SLAT_VARIANTS:
+        progress = trc.variant_progress(variant)
+        assert 0.5 not in progress and set(trc.SLAT_PROGRESS) <= set(progress)
+        assert len({trc.progress_key(p) for p in progress}) == len(progress)   # distinct frame keys
+    # Control: every other variant keeps 0.5 and the stored two-place keys.
+    assert trc.variant_progress("blinds_flat") == tuple(trc.PROGRESS) and trc.progress_key(0.5) == "0.50"
+
+
+def test_rule_b_admits_three_isolated_edge_flips_a_frame():
+    import numpy as np
+
+    from tools import pixel_tolerance as pt
+
+    trc = _trc()
+    delta = np.zeros((100, 100), np.int32)
+    edges = np.zeros((100, 100), bool)
+    edges[:, 50] = True
+    for y in (10, 40, 70):
+        delta[y, 50] = 200
+    assert pt.judge_delta(delta, trc.N52C_RULE_B, edges=edges)["pass"]
+    # Controls: a fourth flip, and a flip off any content edge, fail.
+    four = delta.copy()
+    four[90, 50] = 200
+    assert not pt.judge_delta(four, trc.N52C_RULE_B, edges=edges)["pass"]
+    off_edge = delta.copy()
+    off_edge[10, 50], off_edge[10, 20] = 0, 200
+    assert not pt.judge_delta(off_edge, trc.N52C_RULE_B, edges=edges)["pass"]

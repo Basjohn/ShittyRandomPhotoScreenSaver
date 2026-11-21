@@ -62,6 +62,9 @@ FALLBACK_TRANSITION = "crossfade"
 #: environment step (its mipped copy is "<step>.environment").
 SCENE_TARGET = "scene"
 SCENE_ENVIRONMENT = "environment"
+#: The frame trace's records of a run on the layer (``FrameTraceEvent.NATIVE_TRANSITION_TICK`` / ``_END``; a test holds
+#: them equal).
+_TRACE_TICK, _TRACE_END = 81, 82
 
 
 def _other_slot(slot: str) -> str:
@@ -294,6 +297,13 @@ class NativeBackgroundLayer:
         self.closed = False
         self.sent = 0                    # images handed to the core
         self.resent = 0                  # images sent again after a lost edge
+        # The frame trace (``--frame-trace`` only; None otherwise: nothing recorded): a run's window for the live check's
+        # transition session (NATIVE_TRANSITION_TICK at its start and each tick, NATIVE_TRANSITION_END at its end).
+        from core.performance.frame_trace import current_frame_trace
+
+        self._trace = current_frame_trace()
+        screen = getattr(item, "_screen_index", -1)
+        self._trace_screen = int(screen) if isinstance(screen, int) else -1
 
     # ---------------------------------------------------------------------------------------------------- the layer
 
@@ -396,6 +406,7 @@ class NativeBackgroundLayer:
                          self._frame_settings())
         self._settings = None                                     # the background's settings are given again at the end
         self.runs += 1
+        self._trace_run(_TRACE_TICK, run)                         # the run's window opens before its first frame
         self._connect_clock()
         mode.update()
 
@@ -459,13 +470,24 @@ class NativeBackgroundLayer:
                 self._mode.settings(self._frame_settings())
             self._mode.update()
             self.ticks += 1
+            self._trace_run(_TRACE_TICK, self._run)
         except Exception as exc:
             logger.error("[BACKGROUND][NATIVE] The transition's frame could not be given; it ends as a cut",
                          exc_info=exc)
             self._end_run()
 
+    def _trace_run(self, event: int, run: Any) -> None:
+        """One record of the run's window in the frame trace (``--frame-trace`` only); never raises."""
+        if self._trace is None or run is None:
+            return
+        try:
+            self._trace.record(event, screen_index=self._trace_screen, revision=self.ticks, auxiliary=int(run.run_id))
+        except Exception:
+            pass                                                  # a diagnostic record never stops the run
+
     def _end_run(self) -> None:
         run, self._run = self._run, None
+        self._trace_run(_TRACE_END, run)
         self._disconnect_clock()
         self._renderer = None
         meshes, self._meshes = self._meshes, []                   # N5.2c: a scene run's, removed once not drawn

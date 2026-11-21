@@ -268,7 +268,9 @@ def test_estimate_scales_with_rows_and_load():
     matrix = rows(["2160p"])
     idle = pack.estimate_seconds(matrix, per_row=True)
     loaded = pack.estimate_seconds(matrix, loaded=True, per_row=True)
-    assert idle == sum(r.seconds + pack.ROW_OVERHEAD_S for r in matrix)
+    # Per row, a Visualizer row is its own process and a transition its own one-transition session.
+    assert idle == sum(pack.unit_seconds(unit) + pack.ROW_OVERHEAD_S for unit in pack.plan_units(matrix, per_row=True))
+    assert len(pack.plan_units(matrix, per_row=True)) == len(matrix)
     assert loaded - idle == pytest.approx(len(matrix) * pack.LOAD_CALIBRATION_S)
 
 

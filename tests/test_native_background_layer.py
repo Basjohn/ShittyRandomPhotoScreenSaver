@@ -349,6 +349,36 @@ def test_a_run_is_drawn_by_the_core_from_its_own_pack_and_the_python_renderers_v
     assert made.ticks == 1
 
 
+def test_a_run_writes_its_window_to_the_frame_trace_only_when_a_trace_is_admitted(clocked_layer):
+    """The live check's transition session cuts a native run's window from these records (the Python background node's
+    never carry it): a tick at the run's start and at each frame, and one end record, each with the run's id."""
+    from core.performance.frame_trace import FrameTraceEvent
+    from rendering.quick.render import native_background as nb
+
+    assert (nb._TRACE_TICK, nb._TRACE_END) == (FrameTraceEvent.NATIVE_TRANSITION_TICK,
+                                              FrameTraceEvent.NATIVE_TRANSITION_END)
+    made, _mode, _calls, window, now = clocked_layer
+    records: list = []
+    made._trace = SimpleNamespace(record=lambda event, **kw: records.append((int(event), kw["auxiliary"])))
+    source, destination = _image("a"), _image("b")
+    made.present(source)
+    run = _run("burn", source, destination, run_id=7)
+    now["ns"] = run.start_ns
+    made.transition(run)
+    window.afterAnimating.slots[0]()
+    window.afterAnimating.slots[0]()
+    made.transition(None)
+    assert records == [(nb._TRACE_TICK, 7)] * 3 + [(nb._TRACE_END, 7)]
+    # Control: without an admitted trace (the product's default) nothing is recorded and the run is drawn the same.
+    made._trace = None
+    made.present(destination)
+    second = _run("burn", destination, source, run_id=8)
+    made.transition(second)
+    window.afterAnimating.slots[0]()
+    made.transition(None)
+    assert len(records) == 4 and made.runs == 2
+
+
 def test_a_transition_without_a_pass_on_the_core_is_drawn_as_crossfade(clocked_layer, monkeypatch):
     from rendering.quick.render import native_background as nb
 
