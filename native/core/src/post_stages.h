@@ -112,6 +112,10 @@ bool bloomAtTargetOrigin();
 // unturned one, not in the window's frame its composite declares (u_scene_from_target the surface's; read per record).
 void setSceneFrameSurface(bool surface);
 bool sceneFrameSurface();
+// ABI 31's negative control: the mode's v_uv passes on the surface draw over the full triangle again (as before ABI 31),
+// not over the card's own quad (mode_content.cpp cardQuad; read per record).
+void setCardTriangle(bool triangle);
+bool cardTriangle();
 void setSkipStageRelease(bool skip);            // the stages' objects left behind at a release (counted)
 bool skipStageRelease();
 void setSkipReadChain(bool skip);               // the defocus run's chainShaderReads skipped (read per record)

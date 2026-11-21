@@ -279,6 +279,10 @@ constexpr int kTriangleFloats = 3 * kVertexFloats;
 constexpr int kSceneTriangle = 2;
 constexpr int kFirstBloomTriangle = 3;
 constexpr int kTriangles = kFirstBloomTriangle + kMaxBloomStages;
+// ABI 31: after the triangles, the card's own quad (cardQuad): six vertices, the two triangles of Python's strip.
+constexpr int kCardQuadVertices = 6;
+constexpr int kCardQuadFirstFloat = kTriangles * kTriangleFloats;
+constexpr int kVertexBufferFloats = kCardQuadFirstFloat + kCardQuadVertices * kVertexFloats;
 constexpr quint32 kUvDownOffset = 2 * sizeof(float);
 constexpr quint32 kUvUpOffset = 4 * sizeof(float);
 constexpr const char kConventionsBlock[] = "SrpssConventions";
@@ -323,6 +327,77 @@ void fullTriangle(QRhi *rhi, const ModeCard &card, const QSize &target, float *o
         v[4] = u;
         v[5] = 1.0f - down;
     }
+}
+
+// ABI 31 (the lead's decision, 21 Nov: Spline Curve's long-take residuals fixed at the source): the card's own quad, the
+// Python renderer's item quad in the core's target. The full triangle above interpolates v_uv over a primitive three
+// times the target's size; float32 attribute interpolation then lands every pixel up to 1e-4 logical pixel away from
+// where the Python quad's does, enough to tip pixels on a rounding boundary one level (and, under the composite's own
+// rounding on the translucent mask, two): rule (a)'s 11-12 ties and touching pairs on the four 60 s takes
+// (.artifacts/evidence/native_core/longclip_recheck/20261121_devcurve_residual_causes/). This quad is Python's:
+// - its corners are the item's own (render_contract.quick_visualizer_vertex_source: aPosition 0..1 times the item's
+//   size through Qt's item matrix): the oriented item's corner through item_from_window inverted (the Python renderer's
+//   float32 rows, as fullTriangle reads them) and window_from_target inverted, composed in double;
+// - its v_uv is exact: the physical corner (0 or 1 each way) turned by the card's quarter turns as Python's vertex stage
+//   turns it (logicalUvFromPhysicalUv); vUv is the corner's target uv, as fullTriangle's;
+// - its two triangles are Python's strip (corners top-left, top-right, bottom-left, bottom-right; GL_TRIANGLE_STRIP draws
+//   (0, 1, 2) and (2, 1, 3)), uploaded as that list, so the diagonal splits the item where Python's does.
+// The derivative pairs stay the window's: fine derivatives pair the pixels of the target's 2x2 grid, and the surface
+// lies on the window's own 2x2 quads (native_route.py, composite_geometry(quad_aligned=True)), so each pair is the one
+// Python's draw in the window takes; the diagonal adds the helper lanes Python's has, on the same pixels. False (the
+// caller keeps the full triangle) without a usable card: no card, an empty size or a singular map.
+bool cardQuad(QRhi *rhi, const ModeCard &card, const QSize &target, float *out)
+{
+    if (!card.valid || card.orientedSize[0] <= 0.0 || card.orientedSize[1] <= 0.0 || target.width() <= 0
+        || target.height() <= 0)
+        return false;
+    const double *w = card.windowFromTarget;
+    const double *m = card.itemFromWindow;
+    const double wDet = w[0] * w[4] - w[1] * w[3];
+    const double mDet = m[0] * m[4] - m[1] * m[3];
+    if (!(std::abs(wDet) > 0.0) || !(std::abs(mDet) > 0.0))
+        return false;
+    const float topClipY = targetCorrection(rhi).map(QVector3D(0.0f, 1.0f, 0.0f)).y();
+    static const double corners[4][2] = { { 0.0, 0.0 }, { 1.0, 0.0 }, { 0.0, 1.0 }, { 1.0, 1.0 } };
+    static const int strip[kCardQuadVertices] = { 0, 1, 2, 2, 1, 3 };
+    for (int k = 0; k < kCardQuadVertices; ++k) {
+        const double pu = corners[strip[k]][0];
+        const double pv = corners[strip[k]][1];
+        double lu = pu;
+        double lv = pv;
+        switch (card.quarters & 3) {
+        case 1:
+            lu = pv;
+            lv = 1.0 - pu;
+            break;
+        case 2:
+            lu = 1.0 - pu;
+            lv = 1.0 - pv;
+            break;
+        case 3:
+            lu = 1.0 - pv;
+            lv = pu;
+            break;
+        default:
+            break;
+        }
+        const double ix = lu * card.orientedSize[0] - m[2];
+        const double iy = lv * card.orientedSize[1] - m[5];
+        const double wx = (m[4] * ix - m[1] * iy) / mDet - w[2];
+        const double wy = (-m[3] * ix + m[0] * iy) / mDet - w[5];
+        const double tx = (w[4] * wx - w[1] * wy) / wDet;
+        const double ty = (-w[3] * wx + w[0] * wy) / wDet;
+        const double across = tx / target.width();
+        const double down = ty / target.height();
+        float *v = out + k * kVertexFloats;
+        v[0] = float(2.0 * across - 1.0);
+        v[1] = float(topClipY > 0.0f ? 1.0 - 2.0 * down : 2.0 * down - 1.0);
+        v[2] = float(lu);
+        v[3] = float(lv);
+        v[4] = float(across);
+        v[5] = float(1.0 - down);
+    }
+    return true;
 }
 
 const char *const kFilterNames[] = { "nearest", "linear" };
@@ -4144,8 +4219,8 @@ struct ModeContent::Resources
     NearestResolve nearest[kMaxSceneTargets][kNearestSlots];
     // The vertices uploaded: the card's triangle (fullTriangle for the drawn card and the surface), then (N3.1) the
     // triangle of an explicit-size target (its own uv, no card), then (ABI 27) each bloom step's first downsample's
-    // (its own uv moved to the item's own pixel: bloomTriangle).
-    float triangle[kTriangles * kTriangleFloats] = {};
+    // (its own uv moved to the item's own pixel: bloomTriangle); ABI 31: then the card's own quad (cardQuad).
+    float triangle[kVertexBufferFloats] = {};
     bool triangleUploaded = false;
     bool staticUploaded = false;
     bool targetsUploaded = false; // N3.1: the clears' values and the captures' blocks
@@ -4677,7 +4752,8 @@ QByteArray ModeContent::stillSignature(const ColorTarget &target, const float *t
     }
     for (const BlockValues &block : m_blocks)
         s.append(block.bytes());
-    s.append(reinterpret_cast<const char *>(triangle), qsizetype(kTriangles * kTriangleFloats * sizeof(float)));
+    s.append(reinterpret_cast<const char *>(triangle), qsizetype(kVertexBufferFloats * sizeof(float)));
+    put(quint64(cardTriangle() ? 1 : 0));    // ABI 31: the harness control changes which geometry draws
     put(m_targets.objectGeneration());       // N3.1: a scene target made again draws again
     put(m_meshes.objects());                 // N3.2: a mesh made or gone draws again
     return s;
@@ -5394,7 +5470,7 @@ bool ModeContent::buildGeometryPass(QRhi *rhi, Resources &r, int index, QRhiRend
 }
 
 void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QRect &viewport,
-                           const QRhiCommandBuffer::VertexInput &triangle, const QRect &scissor)
+                           const QRhiCommandBuffer::VertexInput &triangle, const QRect &scissor, quint32 vertices)
 {
     Q_UNUSED(rhi);
     const ModeProgram &program = m_source->drawnProgram();
@@ -5420,7 +5496,7 @@ void ModeContent::drawPass(QRhi *rhi, QRhiCommandBuffer *cb, int index, const QR
         setViewportAndScissor(cb, viewport, scissor, r.scissorEnabled);
         cb->setShaderResources(nullptr, count, offsets);
         cb->setVertexInput(0, 1, &triangle);
-        cb->draw(3);
+        cb->draw(vertices);
         return;
     }
     const bool clockwise = pass.frontSelector.kind == DrawCount::Kind::Named && resolveCount(pass.frontSelector, 0) == 1;
@@ -6565,6 +6641,7 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
     const QRhiCommandBuffer::VertexInput ownInput(r.vertices.get(), quint32(kTriangleFloats * sizeof(float)));
     const QRhiCommandBuffer::VertexInput sceneInput(r.vertices.get(),
                                                     quint32(kSceneTriangle * kTriangleFloats * sizeof(float)));
+    const QRhiCommandBuffer::VertexInput quadInput(r.vertices.get(), quint32(kCardQuadFirstFloat * sizeof(float)));
     QRhiResourceUpdateBatch *pending = updates; // the record's uploads, handed to its first pass
     bool surfaceOpened = false;
     bool cleared[kMaxSceneTargets] = {};
@@ -6640,8 +6717,16 @@ void ModeContent::recordPasses(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &ta
                 cb->draw(3);
                 surfaceOpened = true;
             }
-            for (int k = i; k <= last; ++k)
-                drawPass(rhi, cb, k, surfaceViewport, cardInput, surfaceViewport); // N3.2
+            for (int k = i; k <= last; ++k) {
+                // ABI 31: a mode's own pass reading the Visualizer quad's uv draws over the card's own quad, as the
+                // Python renderer draws it (cardQuad); the core's steps, vUv passes and a card-less content keep the
+                // full triangle, and so does every pass under the harness control card_triangle.
+                const ModePass &drawn = program.passes.at(k);
+                const bool quad = m_cardQuad && drawn.uv == PassUv::Down && drawn.stage == StageKind::None
+                    && !drawn.ownVertex() && !cardTriangle();
+                drawPass(rhi, cb, k, surfaceViewport, quad ? quadInput : cardInput, surfaceViewport,
+                         quad ? quint32(kCardQuadVertices) : 3u); // N3.2
+            }
             cb->endPass();
         } else {
             // N3.1: a run on a scene target: its attachments primed for the load (rule C, depth too), its average
@@ -6770,8 +6855,10 @@ bool ModeContent::record(QRhi *rhi, QRhiCommandBuffer *cb, ColorTarget &target, 
     }
     noteMeshBuffers();                        // N3.2: only when the meshes' or streams' objects changed
     Resources &r = *m_res;
-    float triangle[kTriangles * kTriangleFloats] = {};
+    float triangle[kVertexBufferFloats] = {};
     fullTriangle(rhi, m_source->drawnCard(), target.texture->pixelSize(), triangle);
+    // ABI 31: the card's own quad, where the mode's v_uv passes draw on the surface (recordPasses).
+    m_cardQuad = cardQuad(rhi, m_source->drawnCard(), target.texture->pixelSize(), triangle + kCardQuadFirstFloat);
     fullTriangle(rhi, ModeCard(), target.texture->pixelSize(), triangle + kTriangleFloats); // N3.1: a target's own uv
     // ABI 28: a surface-sized scene target's passes draw under the scene's card over its content (sceneAnchor); the
     // card's own triangle when the program is not anchored.

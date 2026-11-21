@@ -158,4 +158,9 @@
 // timing): host_detach's at_frame_edge (harness, a hidden host), raw_vulkan_counts, the frame driver state's
 // raw_vulkan_released and no_frame_finishes, the GPU timer state's deferred_releases; every QRhi resource is retired by
 // deleteLater (rhi_owned.h), the GPU timer's pool retired inside a frame goes to the device's deferred queue.
-#define SRPSS_NATIVE_CORE_ABI 30
+// 31 (the lead's decision, 21 Nov: Spline Curve's long-take residuals fixed at the source): a mode's own pass reading
+// v_uv on the surface draws over the card's own quad (mode_content.cpp cardQuad: Python's item quad, its strip's two
+// triangles, exact corner uv turned as Python's vertex stage turns it), not the full triangle; scene-target passes, the
+// core's steps, vUv passes and a card-less content are unchanged. stage_control's card_triangle (harness: the full
+// triangle again, its negative control). Every generic mode's native frames may change (re-proved by the guide's split).
+#define SRPSS_NATIVE_CORE_ABI 31

@@ -76,7 +76,10 @@ build selection; current host and composite proof lives here.
     optionally the conventions block, a vec2 at location 0 named `v_uv` (the Visualizer quad's uv, y down: the ITEM's
     oriented uv, from the card's `window_from_target` and `item_from_window` rows per vertex, so the product 2D shaders'
     `fc = v_uv * u_resolution` is the Python renderer's at any origin, ratio, rotation and backend; the target's uv only
-    with no card: audit N29 round 2, M6) or `vUv` (the item quad's, y up, over the target: the fullscreen transitions),
+    with no card: audit N29 round 2, M6; ABI 31: a mode's own `v_uv` pass on the surface draws over the card's own
+    quad, the Python renderer's item quad with exact corner uv, not the full triangle, whose float32 interpolation
+    tipped boundary pixels; harness control `stage_control("card_triangle", True)`) or `vUv` (the item quad's, y up,
+    over the target: the fullscreen transitions),
     and `sampler2D`s, each bound by name to one of the item's textures (N4.a, "Samplers and textures" below); anything
     else is refused. One rule fills the block by member name from exactly one of three sources: the core's conventions
     (`kModeCoreMembers`, mirrored as `MODE_CORE_MEMBERS`: what the Python renderers take from the card per frame, read

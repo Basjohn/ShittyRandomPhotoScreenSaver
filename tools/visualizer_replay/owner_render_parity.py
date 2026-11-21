@@ -555,6 +555,9 @@ JUDGE_WORKERS = 0
 NATIVE_CONTROL: str | None = None
 #: ``--shader-control``: the native item draws this ``native_stream_player.SHADER_CONTROLS`` pack (``native_shader_control``).
 NATIVE_SHADER_CONTROL: str | None = None
+#: ``--stage-control``: the module's harness control of this name held on for the run (``stage_control``; ABI 31's
+#: ``card_triangle``: the mode's v_uv passes over the full triangle again, the card quad's negative control).
+NATIVE_STAGE_CONTROL: str | None = None
 #: ``--unprimed``: the window is not rendered before the owner exists and the route is not prepared at attach (audit
 #: N29 round 2, M3: the product's unprimed path, its first frame waiting on the window's edge), a reported case, not a
 #: gate.
@@ -1477,6 +1480,8 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
     from widgets.spotify_visualizer import engine_worker_link
 
     core = load(module_dir)
+    if NATIVE_STAGE_CONTROL is not None and not core.module.stage_control(NATIVE_STAGE_CONTROL, True):
+        raise ValueError(f"the module has no harness control {NATIVE_STAGE_CONTROL!r}")
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     # ``recording``: the first ``seconds`` of one of the operator's recorded takes (logs/visualizer_recordings, read
@@ -1488,7 +1493,7 @@ def run_native(out: Path, *, module_dir: Path, offers: bool, seconds: float = 5.
         raise ValueError(f"the native route draws {sorted(NATIVE_MODE_IDS)}, not {mode!r}")
     report: dict = {"mode": mode, "offers": offers, "seconds": seconds, "display": list(DISPLAY), "clip": clip.name,
                     "clip_frames": len(clip.frames), "native_only": bool(native_only_run), "api": "opengl",
-                    "results": {}}
+                    "stage_control": NATIVE_STAGE_CONTROL, "results": {}}
     started = time.perf_counter()
     runs = conventions_identity.mode_runs(mode, offers)
     planned = [(suffix, settings, "display") for suffix, settings in runs] if "display" in placements else []
@@ -1718,6 +1723,9 @@ def main(argv=None) -> int:
     parser.add_argument("--shader-control", default=None,
                         help="with --native: the native item draws a shader control (native_stream_player's "
                              "SHADER_CONTROLS, e.g. ulp_ring); the Python reference is untouched")
+    parser.add_argument("--stage-control", default=None,
+                        help="with --native: the module's harness control of this name held on for the run "
+                             "(stage_control; card_triangle: the full triangle instead of the card's quad, ABI 31)")
     parser.add_argument("--judge-workers", type=int, default=0,
                         help="with --native: rule (a)'s frames judged in this many worker processes (0: in this one; "
                              "the same verdicts either way)")
@@ -1749,7 +1757,9 @@ def main(argv=None) -> int:
     try:
         if args.native:
             global NATIVE_SURFACE_FORMAT, NATIVE_UNPRIMED, JUDGE_WORKERS, NATIVE_CONTROL, NATIVE_SHADER_CONTROL
+            global NATIVE_STAGE_CONTROL
             NATIVE_SHADER_CONTROL = args.shader_control
+            NATIVE_STAGE_CONTROL = args.stage_control
             JUDGE_WORKERS = max(0, int(args.judge_workers))
             NATIVE_CONTROL = args.native_control
             NATIVE_SURFACE_FORMAT = args.surface_format
