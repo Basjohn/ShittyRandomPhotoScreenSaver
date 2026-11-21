@@ -116,7 +116,7 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
 - [~] Defect (operator, 14 Nov): a Studio window's taskbar icon in frozen builds is Windows' default box. The static
   cause is unproven (likely an icon Qt could not decode). Lead: check the next GitHub frozen build's `[ICON]` startup
   line, any no-icon warning for a shown Studio window, and the taskbar.
-- [ ] Worktree artifacts land on F: (operator, 22 Nov: the drive is nearly full): the main checkout's `.artifacts/evidence`,
+- [ ] Worktree artifacts land on F: (agent a0b83609b01de7a4e, Sonnet Medium, with the fast-proof box; operator, 22 Nov: the drive is nearly full): the main checkout's `.artifacts/evidence`,
   `scratch` and `webp` are junctions to `D:\Temp\Scratch\SRPSS\...`, but an agent's worktree gets real folders, so every
   agent's frames (Bubble's guard alone 26 GB) fill F:. Fix at `tools/artifact_paths.py`: in a linked worktree the three
   folders are junctions to `D:\Temp\Scratch\SRPSS\worktrees\<worktree>\<folder>`, made on first use. Then make
