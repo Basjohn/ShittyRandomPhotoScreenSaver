@@ -113,7 +113,7 @@ the level the risk needs; Sonnet as a cheap workhorse, researcher and documenter
   visible reaction is size-independent, the small card's reaction being the target (fullscreen rises to it; the card
   never weakens toward fullscreen, proved by the card's figures unchanged); test at two sizes with a control on the old code; reaction check on a recorded
   take at card and fullscreen size with the take's envelope above.
-- [ ] Guided Setup: Borderless offered on the Interaction page (operator, 21 Nov: Borderless looks very good; give it
+- [ ] Guided Setup: Borderless offered on the Interaction page (agent ae5dca166a13ed078, Sonnet Medium; operator, 21 Nov: Borderless looks very good; give it
   visibility). The page becomes Interaction + Borderless: the Interaction Mode choice stays (its wording, MC rule and
   draft-only save unchanged) but its practice-story preview card goes; below it a Borderless choice (off / on) with two
   real rendered stills of the Media card without and with Borderless, side by side, the selected one highlighted.
