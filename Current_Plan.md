@@ -914,10 +914,153 @@ the feature (D3D11 is not stated).
     Oscilloscope's turned-card anchoring box serves it), and its clear. Then confirm in writing, against the ABI 28 core
     (`native/core/src`, `Docs/Future_Work/Native_Core_P3_Decisions.md` D12-D17), what the port needs that the core
     lacks: one C++ box each here, with what its proof must show. Cite file and line for every claim.
+    Reading (Sonnet, 21 Nov, no code touched). `waveform.py` is `rendering/quick/scene3d/waveform.py`; `parameters.py`
+    is `widgets/spotify_visualizer/waveform_ribbon_parameters.py`; `D15` etc. are in `Native_Core_P3_Decisions.md`.
+    - Per frame from the logical frame (`WaveformRibbonFrame`, `widgets/spotify_visualizer/render_state.py:835-854`,
+      built at `widgets/spotify_visualizer/waveform_ribbon_capture.py:62-67`): the knot packet (instances, vertices,
+      world and coordinate origin), time, travel, passage, zoom, the camera parameters, the event-spark births and
+      their origin, the strand cohorts and their origin, the pulse field (385 floats, `core/waveform_ribbon_dynamics.py:55`).
+      The Recipe is rebuilt every frame as well (`parameters.py:96-142`): material, fog density, displacement, height,
+      softness, light, variation and drift, floor reflectivity, brightness, wetness, streak and column, sparks,
+      strays, bloom and the published travel direction move with passage, sparkle and highlights. The world colour
+      grade is evaluated per frame from passage (`waveform.py:69-80,277`).
+    - Per frame in the renderer today, so for the worker to publish (D5.5, the N0.4 box above): view, projection, eye
+      and lens (`rendering/quick/visualizer/implementations/waveform_ribbon.py:64-67`), the scroll `head_x - travel`
+      (`waveform.py:258-259`), the history mirror (`:263-267`), the mirrored view (`:431`), the continuation span
+      (`:269-276`) and the culled draw ranges of every ribbon draw (`rendering/quick/scene3d/ribbon.py:122-179,260-268`).
+    - Per Settings or card change only: which stages exist (fog `waveform.py:245-247`, sparks `:243`, strays `:242`, floor
+      give `:248-250`, Pulse Rim `:252-254`), the 4 samples (`:34`), the three floor maps (`:117-144`, loaded once), the
+      fog grids (camera: min(128, ceil(w/cell)) x min(72, ceil(h/cell)) x 96/128/160 slices by quality, `waveform.py:338`,
+      `parameters.py:79`; mirrored: cell 32, 96 slices, `core/waveform_ribbon_scene.py:46-47`), the reflection target
+      size (`min(.5, 360/h)` of the item, `waveform.py:83-87,432`, `core/waveform_ribbon_scene.py:79-80`) and the floor's
+      reduced pre-pass size (`waveform.py:528,534`; only past 1080 px tall, `core/waveform_ribbon_scene.py:81`).
+    - Streams and size rules (a slot holds 1 MiB, `core/visualizer_engine/frame_capacity.py:9`; the four fields total at
+      most 411,396 bytes): knot packet instances x 20,544 B (`core/ribbon_packet.py:11-16`; 4 ribbons,
+      `core/waveform_ribbon_authoring.py:10`, so 82,176 B; checked `render_state.py:860`); strand cohorts instances x
+      16,384 B or empty (`core/ribbon_strand_cohorts.py:8-9`, `render_state.py:873`); event sparks empty or exactly
+      4,096 x 16 x 4 = 262,144 B (`core/ribbon_bursts.py:9-10`, `render_state.py:866`), bound twice a frame; pulse 1,540 B
+      (`render_state.py:829`). The three rings are the three stream rings, each 3 slots of 4 binds: "ribbon knots"
+      (`ribbon.py:243`), "ribbon strand cohorts" (`ribbon.py:500`), "ribbon event sparks"
+      (`rendering/quick/scene3d/ribbon_bursts.py:52`). (If "three rings" meant ribbons: 4 here, 8 in the packet.)
+    - Passes of a frame in order, fog, Floor Give and Pulse Rim on (`waveform.py:228-307`): packet upload (`:231`);
+      compute: floor give sections and blur (`rendering/quick/scene3d/floor_give.py:80-88`), world field
+      (`rendering/quick/scene3d/waveform_field.py:55`), fog inject and integrate for the camera and again for the
+      mirrored camera (`waveform.py:298-300`, `rendering/quick/scene3d/fog_volume.py:155-167`): seven dispatches, five
+      programs (D16). Reflection target (`waveform.py:428-466`): cleared to 0 and depth 1
+      (`rendering/quick/scene3d/reflection.py:101-103`), reflected sky (`:441`), ribbon light (`:446`: its body draw
+      and two continuation extension draws, `ribbon.py:380-391`), strays (`:453`), event sparks (`:460`), then its mip
+      chain (`reflection.py:111`). Scene target (`waveform.py:379-425`: 4 samples, overlay, bloom, OIT, HDR at the
+      exposure, `:382-383`): sky (`:392-395`, depth test off), floor (`:396`, `:469-559`; past 1080 px tall a reduced
+      pre-pass into its own RGBA16F target first, `:528-557`), ribbon body in the transparency block (`:400-401`,
+      resolved per sample on leaving it, `rendering/quick/scene3d/target.py:768-812`), ribbon light additive
+      (`:402-407`), strays (`:413-419`), event sparks (`:420-423`), then the emission's bloom and the overlay composite
+      (`target.py:937-975`).
+    - Attachments and formats: the scene's colour is RGBA16F under HDR (`target.py:548-551`) beside the emission and a
+      depth; the body writes accumulation, coverage and emission at location 2 (`rendering/gl_programs/ribbon.py:765`);
+      light, floor and sky write colour and emission (`ribbon.py:800-801`, `rendering/gl_programs/waveform_ribbon.py:88-89`,
+      `rendering/gl_programs/waveform_atmosphere.py:180`); the reflection is RGBA16F with a full chain and a D24 depth,
+      alpha the weighted height, blend ONE, ONE (`reflection.py:59-74`, `waveform.py:435-438`); the fog volumes are 3D
+      RGBA16F (inject, integrated) and R16F (steady) (`fog_volume.py:94-101`); the world field is RGBA32F 1024 x 8
+      (`waveform_field.py:38`, `waveform_atmosphere.py:12`); floor give RGBA32F 1024 x 4 and 1024 x 3 (`floor_give.py:67`,
+      `waveform_floor_give.py:19`); the pulse field R32F 385 x 1 (`rendering/quick/scene3d/pulse_rim.py:54`); the floor
+      maps RGBA8 with mips and 8x anisotropy, the slope map RGBA16F with mips baked from the height map
+      (`waveform.py:96-144`). The floor fragment binds 8 samplers, reads the packet as storage and writes
+      `gl_FragDepth` (`rendering/gl_programs/waveform_ribbon.py:166,282-285`, `waveform_atmosphere.py:13-17,79,110`).
+    - Turning: the frame is oriented before anything draws (`waveform_ribbon.py:27,60`, `rendering/quick/scene3d/frame.py:38-66`),
+      the scene is drawn unturned at the oriented item size (the camera aspect comes from it, `waveform_ribbon.py:64-67`),
+      and only the composite and the bloom's first samples are oriented (`target.py:939-941,980-1000`, programs
+      `target.py:388-389`, `waveform_ribbon.py:39-40`). The core refuses a turned bloom or composite
+      (`native/core/src/mode_content.h:445-447`, ABI 28), so Waveform is the turned-card box's second consumer.
+    - Clear: `waveform.py:386-387` writes backdrop x .35, alpha 1, into colour 0 after the scope's own clear
+      (`target.py:918-926`). The backdrop is the Recipe's default Environment (`core/waveform_ribbon_scene.py:22`) and
+      Settings never set it (`parameters.py:37-40` builds the Recipe without one): a constant in production. With fog on
+      the sky overwrites the clear everywhere (`waveform_atmosphere.py:182`, depth test off `waveform.py:393`), so it
+      shows only with Mist off. A target's clear lives in its declaration, is written into the block arena once per build
+      (`native/core/src/mode_content.cpp:6722-6730`) and is compared by `sameLayout` (`native/core/src/scene_targets.cpp:188-190`):
+      a changed value rebuilds the target.
+    - Found while reading, shapes the port:
+      - Bloom is per frame and reaches 0: `bloom=pair(bloom, passage)` (`parameters.py:142`), range 0..1
+        (`core/settings/visualizer_mode_settings.py:2167`; default 0.14 to 0.14, `core/settings/default_settings.py:983`).
+        At exactly 0 Python draws the frame with no HDR, no emission and no bloom (`target.py:564-568`, `waveform.py:382-383`:
+        a plain overlay, no tone map). D17 choice E assumed no consumer's strength reaches 0 (`Native_Core_P3_Decisions.md:2263-2266`).
+      - The point-sprite sparks (`ribbon.py:408-444`, `gl_PointSize`) never draw in production: they run only without a
+        burst payload (`waveform.py:408`) and the renderer always gives one (`waveform_ribbon.py:69-70`, `:32` prepares
+        no spark program). The port draws the event sparks (instanced quads already, `ribbon_bursts.py:67-71`) and the strays.
+      - Counts against the core: 7 compute entries and about 15 draws are 22 passes (28 if the three continuation draws of
+        body, light and reflected light are separate passes) against `kMaxModePasses` 16 (`native/core/src/mode_content.h:187`,
+        checked `mode_content.cpp:2152`); 9 storage images with Floor Give on (field 1, give 2, two fog volumes 3 each; 7
+        off) against 8 (`compute_passes.h:55-57`, `mode_content.cpp:2241`); 4 scene targets (scene, transparency,
+        reflection, pre-pass) of 4 (`scene_targets.h:69`), no headroom; the floor's 8 samplers of 8 (`mode_content.h:262`).
+      - The continuation draws start at a vertex that varies per frame (`ribbon.py:380-391`) while `first_vertex` is a
+        number (`mode_content.h:348`) and batches are instance ranges (D15 point 6, `Native_Core_P3_Decisions.md:1590-1592`):
+        a vertex-shader offset or indirect commands from the record, decided at the port (shader work, no new C++).
+      - The pulse field is a per-frame R32F texture (`pulse_rim.py:50-62`) and the core uploads textures from the GUI
+        thread as RGBA8 only (`mode_content.h:35-37`): a storage stream and an in-shader linear read needs no C++, and
+        the Python shader changes with it (one shader file for both renderers, `mode_content.h:3-4`).
+      - Already in the plan: the quiet-GPU `stream_ring` recheck before a Waveform consumer (the N3.2 box "Awaiting
+        Validation before a Waveform consumer"; D15's watch, `Native_Core_P3_Decisions.md:225`).
+  - [ ] C++: an exact-size, mipped, drawable target (the planar reflection and the floor's reduced pre-pass). The core's
+    mipped target is the defocus layer's: single-sampled, its mips made by that step, allocated in 64 px buckets, and a
+    sampler reads a target with no mips (`scene_targets.h:11-17,40-43,119-122`, `post_stages.h:26-27`,
+    `mode_content.h:98-99`; D17 G, H). Waveform draws ordinary passes (sky, light, strays, sparks; additive, depth
+    tested) into an RGBA16F target with a full chain at the exact capped size, then reads its levels trilinearly and
+    its 1x1 level as the scene mean (`waveform.py:432,466`, `reflection.py:59-74,111`,
+    `rendering/gl_programs/waveform_ribbon.py:125,218`). A bucketed allocation puts empty texels into every coarse level
+    and the mean, and a pass reading another target has no member for that target's content-to-allocation ratio. Its
+    shaders declare two outputs (`ribbon.py:800-801`) over a one-attachment target: say how the core treats that.
+    Proof, both backends, odd sizes: the chain's levels against Python's `glGenerateTextureMipmap` of the same pixels
+    (Vulkan's blit differs on odd levels, D17 G), the floor's reflection read and the mean level inside rule (a) of D12,
+    mode passes drawing into it, the pre-pass target alike. Negative control: the bucketed allocation (the mean and
+    the floor's level move).
+  - [ ] C++: sampler anisotropy. `PassSampler` carries filter, wrap and mip filter only (`mode_content.h:266-282`) and
+    nothing under `native/core` or the native docs mentions anisotropy. Python sets 16x on the reflection (capped by the
+    device, `reflection.py:62-65`) and 8x on the three floor maps (`waveform.py:111,135`), and the floor reads the
+    reflection with `textureGrad` footprints that rely on it (`Docs/Reference/Scene3D_Resources.md:187`). Whether
+    QRhi's sampler can carry it on either backend is not established (no Qt SDK on this machine to read); answer that
+    first. Proof: the floor and reflection frames natively and in Python, with the means chosen (a raw sampler setting,
+    or taps along the gradient in the shader in both renderers), inside rule (a) of D12 on grazing-view frames.
+    Negative control: the native read at 1x fails the bound on the same frames.
+  - [ ] C++: a mode texture in half float with GPU mips. Mode textures are RGBA8 only (`mode_content.h:35-37,472-493`);
+    the floor's slope map is RGBA16F with a full chain, baked once from the height map to save six fetches a pixel
+    (`waveform.py:96-114`). Proof: the map and its levels against Python's values at the levels the floor reads (its
+    mip bias, `rendering/gl_programs/waveform_ribbon.py:95-98`), both backends. Negative control: the slope baked into
+    RGBA8 (the relief shading and the reflection breakup leave the bound). If refused, the eight-fetch form goes into
+    both renderers.
+  - [ ] C++: the program's limits. `kMaxModePasses` 16 to at least 28 (the mesh mask holds 32 passes,
+    `mode_content.cpp:5040-5041`), storage images 8 to at least 9, targets stay 4 (the reading's counts). Proof: the
+    real Waveform program (every stage on, Floor Give on) admitted on both backends with its warm-up (pipeline builds
+    per step) counted and nothing at rest; one pass or one image past the new limits refused with its reason, as the
+    existing limit tests do.
+  - [ ] C++: linear filtering of 32-bit float images. The world field and floor give are RGBA32F images read with
+    linear samplers (`waveform_field.py:38-42`, `floor_give.py:20-26`); Vulkan does not guarantee linear filtering of
+    32-bit float formats, the core checks an image's format against the device's facts only when it is made
+    (`compute_passes.h:19-20`), and a linear sampler on it is not part of that check (nothing in `compute_passes.cpp`
+    reads a filter). Proof: both backends on this machine report the capability; a faked device without it refuses the
+    program with its reason, or the images fall back to RGBA16F with the loss measured on the field (positions to
+    80 world units). Negative control: the faked device.
+  - [ ] C++: bloom and HDR off for a record (the reading's first finding). Choice E fixed a stage by program only
+    (`Native_Core_P3_Decisions.md:2263-2266`); Waveform's strength reaches 0 mid-run and Python then changes its
+    composite (no HDR, no tone map). Either the core skips the stage per record at strength 0, or Python keeps HDR
+    at 0 (changes the oracle, and removes a pop at 0: "fade, never vanish"); the lead chooses. Proof: a recorded run
+    with the range's low at 0 matches Python through the crossing with no pop. Negative control: the program-only
+    switch, whose frame at 0 differs.
   - [ ] Port decision: Waveform clears its scene colour every frame to a backdrop from its recipe
     (`rendering/quick/scene3d/waveform.py:387`), while a native target's clear value is fixed in its declaration
     (D14; D17 point 9). Decide the port's form (a clear value filled by a setting, or a first pass that writes the
     backdrop) and prove it against the Python renderer under the port rule.
+    - Needs (Sonnet's reading, the lead decides). A clear value filled by a setting: C++ and an ABI bump: `clear`
+      takes a setting name, the clear block is refilled when the setting changes (today once per build,
+      `mode_content.cpp:6722-6730`) and `sameLayout` stops comparing it (`scene_targets.cpp:188-190`) so a change
+      rebuilds nothing; proof: two backdrops against Python with no pipeline rebuild (control: the value changed in
+      the declaration, which rebuilds). A first pass: data only, no module build: a surface-sized pass, blend replace,
+      depth off, first in the list, colour 0 from a setting in its block and alpha 1; one of the pass budget and one
+      more full-target 4-sample write a frame under the target's own clearing draw; proof: frames equal to
+      Python's (control: the pass removed).
+    - Recommendation: neither yet. The backdrop is a constant in production (the reading's Clear line), so declare
+      `clear` once as backdrop x .35 when Python builds the program (a backdrop change is then a program change, the
+      rule for every stage, D17 E), with no C++ and no pass. If Settings ever expose the backdrop, take the first pass:
+      it is data and costs a pass of the budget, where the setting-filled clear costs C++ and an ABI bump for a
+      value no other consumer varies.
 - [ ] N5.6 Extruded Bubble (the drift compute of D4, transparency, HDR, the depth texture and background
   capture, the probe and defocus, N4.k, N4.g's impostors and optics; not populations).
 - [ ] N4.f2 (the reduced-resolution layers; Waveform and Extruded Bubble are native), then Expanded Visualizer M6
