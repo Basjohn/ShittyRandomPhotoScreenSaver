@@ -1046,7 +1046,7 @@ the feature (D3D11 is not stated).
       program; no C++ and no pass. Revisit only if Settings expose the backdrop (then the first pass).
 - [ ] N5.6 Extruded Bubble (the drift compute of D4, transparency, HDR, the depth texture and background
   capture, the probe and defocus, N4.k, N4.g's impostors and optics; not populations).
-  - [ ] Source reading first (Sonnet agent a531eca73061cfa21, 21 Nov; research only, no code), as Waveform's reading above: the record per frame and
+  - Reading (reference; Sonnet agent a531eca73061cfa21, 21 Nov, merged), as Waveform's reading above: the record per frame and
     per Settings or card change, each stream's size rule, every pass with its targets, formats and attachments (the
     drift compute, transparency/OIT, HDR, the depth texture and background capture, the probe, defocus, impostors and
     optics), how it turns, and its clear; then what the port needs that the ABI 28 core lacks beyond Waveform's six C++
