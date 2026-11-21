@@ -206,6 +206,64 @@ def test_compare_run_covers_only_rows_the_old_baseline_holds():
     assert {r.key for r in planned} == {"visualizer/mode_a/2160p/idle", "transition/t_two/2160p/idle"}
 
 
+def test_every_registered_transition_is_selectable_by_rows_and_the_default_matrix_is_unchanged():
+    parser = pack.build_parser()
+    registered = pack.all_registry_transitions()
+    ids = [ident for ident, _label in registered]
+    assert set(pack.SESSION_TRANSITIONS) < set(ids) and "beam" in ids
+    default, _ = pack.plan_rows(parser.parse_args([]))
+    assert [r.ident for r in default if r.kind == "transition"] == list(pack.SESSION_TRANSITIONS)
+    for ident, label in registered:
+        planned, unmatched = pack.plan_rows(parser.parse_args(["--rows", f"transition/{ident}/*"]))
+        assert unmatched == [] and [r.key for r in planned] == [f"transition/{ident}/2160p/idle"]
+        assert planned[0].label == label and planned[0].kind == "transition"
+    # the existing baseline rows keep their keys
+    for ident in pack.SESSION_TRANSITIONS:
+        assert f"transition/{ident}/2160p/idle" in {r.key for r in pack.plan_rows(parser.parse_args(["--rows", "transition/*"]))[0]}
+    # negative control: a transition the registry does not offer matches nothing
+    planned, unmatched = pack.plan_rows(parser.parse_args(["--rows", "transition/not_a_transition/*"]))
+    assert planned == [] and unmatched == ["transition/not_a_transition/*"]
+
+
+def test_a_compare_rerun_of_a_non_default_transition_needs_its_row_in_the_old_baseline():
+    parser = pack.build_parser()
+    args = parser.parse_args(["--rows", "transition/t_extra/*"])
+    allt = [*TRANSITIONS, ("t_extra", "T Extra")]
+    old = {"rows": {"transition/t_extra/2160p/idle": {}}}
+    planned, _ = pack.plan_rows(args, modes=MODES, old=old, all_transitions=allt)
+    assert [r.key for r in planned] == ["transition/t_extra/2160p/idle"]
+    planned, _ = pack.plan_rows(args, modes=MODES, old={"rows": {}}, all_transitions=allt)
+    assert planned == []                                    # negative control: no old row, nothing to compare against
+
+
+def test_a_row_is_recorded_on_its_own_into_an_existing_baseline_without_touching_the_rest(tmp_path):
+    path = tmp_path / "named.json"
+    first = pack.new_baseline("named", commit="old1234", load=None, backend="python-gl")
+    first["rows"]["transition/t_one/2160p/idle"] = {"key": "transition/t_one/2160p/idle", "status": "ok",
+                                                    "figures": _figures()}
+    first["controls"]["2160p"] = {"control_gpu_quiet_ms": 1.0}
+    pack.save_baseline(path, first)
+    before = json.dumps(pack.load_baseline(path)["rows"], sort_keys=True)
+
+    baseline = pack.open_baseline(path, "named", commit="new5678", load=None, backend="something-else")
+    row = pack.Row("transition/t_extra/2160p/idle", "transition", "t_extra", "T Extra", "2160p", "idle", 75.0)
+    pack.measure_rows([row], baseline, path, measure=lambda r, o: (0, _summary()), conditions_fn=dict,
+                      displays_fn=lambda: [{"index": 1, "width": 3840, "height": 2160, "primary": False}],
+                      out_dir_fn=lambda r, session=False: tmp_path / "o",
+                      save=lambda p, d: (pack.stamp_new_rows(d, {row.key}, commit="new5678", backend="native-vulkan"),
+                                         pack.save_baseline(p, d)))
+    merged = pack.load_baseline(path)
+    assert merged["commit"] == "old1234" and merged["backend"] == "python-gl" and merged["controls"]["2160p"]
+    assert merged["rows"][row.key]["status"] == "ok"
+    assert (merged["rows"][row.key]["commit"], merged["rows"][row.key]["backend"]) == ("new5678", "native-vulkan")
+    assert "commit" not in merged["rows"]["transition/t_one/2160p/idle"]     # the stored row was not restamped
+    kept = {k: v for k, v in merged["rows"].items() if k != row.key}
+    assert json.dumps(kept, sort_keys=True) == before
+    # negative control: a name with no file is a new baseline carrying the label, not the other file's content
+    fresh = pack.open_baseline(tmp_path / "none.json", "none", commit="c", load=None, backend="lbl")
+    assert fresh["rows"] == {} and fresh["backend"] == "lbl"
+
+
 def test_estimate_scales_with_rows_and_load():
     matrix = rows(["2160p"])
     idle = pack.estimate_seconds(matrix, per_row=True)
