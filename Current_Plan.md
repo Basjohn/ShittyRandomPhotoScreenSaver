@@ -802,8 +802,8 @@ the feature (D3D11 is not stated).
     shader anisotropic taps, RGBA16F item textures with GPU mips, 28 passes and 9 storage images, linear-filter facts.
     Port decisions (lead, 21 Nov): the floor's anisotropy is the shared tap text (`rendering/gl_programs/anisotropic.py`)
     in both renderers; every level chain a sampler reads is the core's box kernel (`mip_box.comp`, Python's
-    `rendering/gl_programs/mip_chain.py`), so Python's reflection and the read item textures (the 1254 px maps) move
-    to it at the port; the look change is judged on the port's showcase. Next: the port itself (records, streams,
+    `rendering/gl_programs/mip_chain.py`), so Python's reflection and Waveform's own read item textures (the 1254 px maps)
+    move to it at the port, by an opt-in flag (existing mipped item textures keep their path); the look change is judged on the port's showcase. Next: the port itself (records, streams,
     passes and the proof), Opus High.
   - [ ] Port decision: Waveform clears its scene colour every frame to a backdrop from its recipe
     (`rendering/quick/scene3d/waveform.py:387`), while a native target's clear value is fixed in its declaration

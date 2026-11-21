@@ -92,6 +92,9 @@ Every port, on the primitive's own harness in `native/core/python/*_check.py`, o
 - Nothing at rest, no object or allocation over a steady minute (a remade-streams control must fail), retirement to
   zero with a skipped-release control (D15 "proof"; D16 "proof").
 - Cost once, without the validation layer (it distorts GPU times), with the GPU state recorded (checklist 11).
+- A port's core change is additive: a new path, key or flag that only the port's own content asks for, so every
+  existing user (accepted modes, transitions) stays byte for byte on its current path and needs no re-proof.
+  Changing what an existing shared path does for its current users is the lead's decision first, never a port's.
 - The earlier harnesses rerun unchanged only where the port's change reaches them (D15 choice C, narrowed by the
   regression-guard rule, `Native_Parity_And_Timing_Proof.md` section 3): the harness of every primitive or core path
   the port's C++ touches, named with the reason in the report. A data-only port reruns none but its own; all of them
