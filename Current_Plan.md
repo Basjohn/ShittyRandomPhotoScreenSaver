@@ -833,6 +833,14 @@ the feature (D3D11 is not stated).
     first. Proof: the floor and reflection frames natively and in Python, with the means chosen (a raw sampler setting,
     or taps along the gradient in the shader in both renderers), inside rule (a) of D12 on grazing-view frames.
     Negative control: the native read at 1x fails the bound on the same frames.
+    - Answered (agent a6688ad0cd2ae360a): QRhi's sampler carries no anisotropy on either backend (PySide6 6.12). Lead
+      decision (21 Nov): taps along the footprint's long axis in the shader, one text for both renderers
+      (`rendering/gl_programs/anisotropic.py`), not a raw sampler route beside QRhi. Python's Waveform floor moves
+      to the same taps at the port (a slight look change, judged on the port's showcase); before the build its taps
+      sit at 0.0115/0.0097 mean error from hardware 8-16x against 1x's 0.026/0.037 (evidence
+      `n5_4/20261121_n54_aniso_reference/`).
+  - All five boxes built on branch `worktree-agent-a6688ad0cd2ae360a` at ABI 33 (d3721eff3, main merged in), GitHub
+    build running; then `scene_target_check.py --rounds wave_floor wave_limits wave_filter` on both APIs, then merge.
   - [ ] C++: a mode texture in half float with GPU mips. Mode textures are RGBA8 only (`mode_content.h:35-37,472-493`);
     the floor's slope map is RGBA16F with a full chain, baked once from the height map to save six fetches a pixel
     (`waveform.py:96-114`). Proof: the map and its levels against Python's values at the levels the floor reads (its
