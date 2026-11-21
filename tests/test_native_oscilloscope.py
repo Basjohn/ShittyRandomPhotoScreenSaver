@@ -199,6 +199,30 @@ def test_the_cards_scene_item_is_pythons_item_pixel_rect(fraction):
     assert all(v == int(v) for v in card["scene_item"]) and width >= 1 and height >= 1
 
 
+def test_rule_a_judges_the_beams_one_level_pixels_against_pythons_own_placement_variance():
+    # D12 "The pixel tolerance", Oscilloscope (lead's decision 21 Nov): one-level pixels outside the translucency mask
+    # up to Python's own measured placement variance (52 a frame); rule (a)'s 2-level ties and every other limit as
+    # for any composite mode. Spline Curve keeps none (the class is the Oscilloscope's only).
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    reference = np.full((40, 80, 3), 40, np.uint8)
+    cap = parity.RULE_A_SCATTER_PIXELS["oscilloscope"]
+    mask = np.zeros((40, 80), bool)
+
+    def frame(count: int, level: int = 1):
+        drawn = reference.copy()
+        for k in range(count):                      # spread out: every pixel its own (no neighbour past allowance)
+            drawn[(k * 3) % 40, (k * 7) % 80] += level
+        return drawn
+
+    assert parity.rule_a_frame(frame(cap), reference, mask, "oscilloscope")["pass"]
+    assert not parity.rule_a_frame(frame(cap + 1), reference, mask, "oscilloscope")["pass"]
+    tie_cap = parity.RULE_A_EDGE_PIXELS_PER_FRAME
+    assert not parity.rule_a_frame(frame(tie_cap + 1), reference, mask, "devcurve")["pass"]
+    # A one-level shift of the whole beam (here the whole frame) is far past the class.
+    assert not parity.rule_a_frame(reference + 1, reference, mask, "oscilloscope")["pass"]
+
+
 def test_a_record_drawing_segments_with_fewer_than_two_points_is_refused(monkeypatch):
     # Checkpoint audit 10, L2: the beam divides by u_points - 1; the schema's checks are "at most" only.
     from core.visualizer_engine import oscilloscope_native_schema as schema_module

@@ -774,6 +774,46 @@ the feature (D3D11 is not stated).
     - L1 rerun (`20261121_n51_audit10_edge_abi28/`): at 48/35 (a 576 x 384 item, whole buckets) rule (a) still fails
       on OpenGL (13 to 14 ties, 2,260 masked one-level pixels a frame) and rule (b) one frame (2 ties not isolated);
       32/35 passes rule (a). Cause not isolated; it was there at ABI 27 too.
+    - With main's partner-bounds judge (`20261121_owner_offers_partner/`): Bubble's frames after the switch pass under
+      Bubble's bounds in all 7 runs. Ring, Phase, Trace and block size 2 pass fully; block sizes 0 (80 frames) and 3
+      (70) and Graticule 0 (input 167) remain.
+  - [ ] Rule (a) ties on the Oscilloscope's beam, causes proven 21 Nov (scripts in
+    `n5_1_oscilloscope/20261121_tie_cause_scripts/`, run from a copy in `.artifacts/scratch/`):
+    - Block sizes 0 and 3: 519 of 532 dumped pixels past their allowance are one level, outside the translucency
+      mask, on the opaque beam (`20261121_ties_block0/`). Glow 0 keeps them at the same places, so it is not the
+      glow (`..._glow0/`). An ulp-level item-matrix change (Qt's float32 against double) changes nothing
+      (`20261121_matrix_floor/`).
+    - The cause: Python against itself, the same frames drawn through another window (an item-sized window plus 48
+      logical a side, against the owner's 1920 x 1080), differs on 70 to 90 beam pixels a frame at 1 to 2 levels,
+      with 11 to 21 ties a frame on average, up to 49 (`20261121_viewport_probe/`). The rasteriser's interpolation
+      depends on the viewport the vertices pass through. The native target's viewport is the target, Python's the
+      window offset to the item (`glViewport(vx - x, vy - y, vw, vh)`). Beams with more edge pixels near a
+      rounding boundary (block sizes 0 and 3) pass the 10-tie bound more often.
+    - L1 (48/35) is the same class: Python against itself in the two windows at 48/35 gives 7.6 to 9.5 ties a frame
+      on average, up to 44, failing 11 to 16 of 36 frames (`20261121_viewport_probe_48_35/`).
+    - Graticule 0 input 167: its four pixels past allowance are one level on the flat card fill (12 to 13, range 1),
+      away from the beam (`20261121_ties_graticule0/`): the glow composite's discard and dither thresholds (glow
+      below 1/512 is discarded), crossed by a float difference in the bloom's far tail. The pixel dump shows it; no
+      A/B run yet.
+    - The fix at the owner (not built; needs ABI 29): the anchored scene target's own-vertex passes draw through
+      Python's own viewport (the window's size, offset by the item's pixel) under the card's Qt float32 item matrix
+      (the route has it: `spectrum._ortho_item_matrix`), so the rasteriser sees Python's window coordinates.
+      Proof: the block size 0 and 3 owner runs and L1 within the 10-tie bound; a negative control with the
+      target-sized viewport. The threshold pixel needs its own A/B (Python's composite threshold nudged) before any
+      fix.
+    - Lead's decision (21 Nov): no ABI 29. D12 class (417efe8cb): the beam's one-level pixels outside the mask, up to
+      Python's own placement variance (52 a frame, the probe's worst, not multiplied); everything else unchanged.
+      Run 21 Nov:
+      - Owner `--offers` (`20261121_owner_offers_class/`): all 7 runs pass, Bubble's partner frames included.
+        Block sizes 0 and 3 peak at 20 one-level pixels a frame, every other run at 5.
+      - Controls fail: a 0.6 % brighter native beam (`20261121_control_beam_shift/`: 359 frames, 180 to 208
+        one-level pixels a frame, 708 ties); `old_origin` at all 8 placements.
+      - L1 (`n51_audit10_edge_class/`): rule (a) now passes on OpenGL at 48/35.
+      - Graticule 0 input 167 confirmed as the glow composite's cut-off: with Python's discard threshold and dither
+        floor halved, Python's four pixels equal the native ones exactly (`20261121_threshold_probe_0_5/`). They are one
+        level outside the mask, so the class admits them; no fix proposed.
+  - [ ] L1's remaining red: rule (b) at 48/35 fails one frame, an adjacent pair of 2-level ties (Vulkan against native
+    OpenGL) neither isolated nor on a content edge. 48/35 is outside the harness's own ratios. Not yet classified.
   - [ ] Audit 10 M1: `oscilloscope_check.py`'s offsets round places only the first 16 samples (Ring and Phase), and its
     Python reference is drawn through a viewport the item's size (all overrun cut, unlike the product). Place every
     sampled frame; draw the reference as the product does or state it is not the edge's oracle; run the box's owner

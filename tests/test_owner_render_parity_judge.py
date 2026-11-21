@@ -182,7 +182,8 @@ def test_each_frame_is_judged_under_the_bounds_of_the_mode_that_drew_it():
     reference = np.full((40, 60, 4), 90, np.uint8)
     reference[..., 3] = 255
     scattered = reference.copy()
-    for k in range(30):
+    # 60 spread one-level pixels: within Bubble's scatter (68), past the Oscilloscope's placement class (52).
+    for k in range(60):
         scattered[2 + 3 * (k // 15), 2 + 3 * (k % 15), 0] += 1
     frames, records = [], []
     for index, image in enumerate((reference, scattered)):
