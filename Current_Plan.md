@@ -1239,9 +1239,10 @@ the feature (D3D11 is not stated).
     probe kept the reference's second-background draw for human_heavy1 and anything_mixed2): all 133 such pixels
     draw as exactly the magenta second background, `(255, 0, 255)`, so `pixel_tolerance.translucent_by_backgrounds`
     drops them as bare and they lose the masked one-level class (nightsolong read its reference from the cache: the
-    same rows, its second draw not kept). Next (lead decision, a judge change, not a bound): decide bare by another
-    rule than an exact colour match with the second background (for example a third background), then rejudge these
-    frames from the cached references.
+    same rows, its second draw not kept). Lead decision (21 Nov): a pixel is bare only if it equals its own background
+    in every draw (these read 13-22 over the card fill against its 12, so they are content); no third background and no
+    bound change. Then rejudge these frames from the cached references, with a test whose control is a fully bare pixel
+    and a faded content pixel that matches only the second background.
   - [ ] When the scene-fade fix lands (one place applies the scene fade): rerun Bubble's offers
     (`owner_render_parity.py --native --mode bubble --offers`, both placements) and `nightsolong_acousticsoft1` input 22;
     Bubble's tracked exceptions (input 22, and `stream_direction=2` / `=6` at input 337) must disappear.
