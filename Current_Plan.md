@@ -67,9 +67,6 @@ are named in each mode's own guide (Bubble: `Docs/Guides/Native_Bubble_Diagnosti
    this plan sets a global order.
 
 **Resume here (lead, 21 Nov, usage cut):**
-- [ ] The HUD fix (bc2d80cb6, 70de56b5c) is merged; 95 focused tests passed. Rerun its caller sweep, every test file
-  naming `scene_controller`, `_update_perf_hud` or `request_visualizer_present`. Then retire worktree
-  agent-aac773583ad93e2ab.
 - [ ] Merge the fast-proof branch `worktree-agent-a6257c36aeee45f10` (head b3f8b51c6 fixes the worker-path identity
   test; its tests passed) after rerunning `tests/test_visualizer_owner_render_parity.py` on the merge. Its heavy runs
   wait for quiet CPU: the method proof, the rule (a) reruns, the Oscilloscope partner control.
