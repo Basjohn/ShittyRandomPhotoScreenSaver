@@ -233,6 +233,9 @@ def test_every_settings_tabs_scroll_area_wears_the_one_themed_scrollbar(dialog):
             assert "SCROLL_AREA_STYLE" in shared_styles._LIVE_STYLE_BUNDLES[area][1], (key, area)
             assert "QScrollBar:vertical" in sheet and "QScrollBar::handle:vertical" in sheet, (key, area)
             assert accent in (_bar_colours(area) or ""), (key, area)
+            # The bar is an inset capsule; no rectangular shadow strip is cast beside it.
+            for bar in (area.verticalScrollBar(), area.horizontalScrollBar()):
+                assert getattr(bar, "_settings_scrollbar_shadow_strip_helper", None) is None, (key, bar)
             covered.append(key)
     # A tab with no scroll area (About is a fixed card) has no bar to theme; every other tab was covered.
     assert len(set(covered)) >= len(dialog._tab_keys) - 1, covered
