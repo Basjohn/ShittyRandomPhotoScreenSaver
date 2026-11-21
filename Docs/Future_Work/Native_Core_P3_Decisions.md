@@ -1088,7 +1088,15 @@ larger, rule (b) on Vulkan. Pre-change control: on the ABI 28 module every turne
 item's state), nothing is drawn, and rule (a) fails at all six (`20261121_n51_turned_abi28_refused/`). Negative control
 `scene_frame_surface` (the turned scene anchored in the surface's frame). The test
 `test_a_turned_card_keeps_the_scene_in_the_windows_frame` derives every expectation from Python's own `item_pixel_rect`
-and float32 item matrix. The ABI 29 build's runs are recorded here when they land.
+and float32 item matrix. On the ABI 29 build (of 6cd5f3cf3): the native tests pass with it, and the round first failed
+at quarter 0 too: the graticule's tick band ended on a hard cut that ties exactly on odd sides (R-NEW, fixed with a
+half-pixel ramp in ff9c255c5; the round now draws quarter 0 at the same sides, so what the turn adds is read against
+it). With the ramp every round passes on both APIs (`20261121_n51_turned_abi29_band/`). Turned rule (a): at most 2
+levels at quarters 0 to 3 at both ratios, at most 5 scatter and 1 tie a frame. Turned rule (b): at most 2 levels.
+Validation is clean (none unexplained; the turned round's phase none at all). The unturned pixels round's native frames (OpenGL and Vulkan) and its Python references are
+hash-identical to ABI 28's (`20261121_n51_oscilloscope_abi28/`, 126 of 126 each). The offsets round's figures are
+identical at all 8 placements; ABI 28 kept no offset frames to hash. The control `scene_frame_surface` fails at quarters
+1 to 3 at both ratios, on 20 of 21 frames each, up to 41 levels; quarter 0 is untouched by it.
 *Rule (b)'s one red at the audit's edge sizes (checkpoint audit 10 L1; root-caused 21 Nov).* It is frame 918 at 32/35
 (384 x 256), not 48/35. The pair is one level each, outside the mask, and it counts as ties only because rule (b) admits
 no scatter. Cause: the `overlay_glow` composite's discard cut, Python's own (`scene.a <= 0 && max(glow) < 1/512`), meets
