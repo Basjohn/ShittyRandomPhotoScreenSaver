@@ -170,6 +170,9 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
+- [ ] Side defect (found by the N3.6 agent, 21 Nov; Sonnet agent ad36b763dc52d2864): `tests/test_native_packet_reader_sources.py::test_the_adversarial_table_holds_on_the_python_reference_and_its_naive_control_fails`
+  is red on main: "refused at the head: mode without a schema" refuses on 'size', not 'schema'. Find the commit and
+  cause; a case naming a mode that gained a schema derives one without from the registry.
 - [ ] Re-baseline after Qt 6.12.0 (admitted: doc sweep decision 9, 12 Nov; moved here from the 7 Nov "not yet
   admitted" list by the night audit's fix soon 6): `tools/overhead_baseline.py`'s stored baselines and the figures
   in `Docs/Reference/Benchmarks.md` predate the bump. Run it once on main (lead or Medium slot; no load), record
@@ -540,7 +543,8 @@ service) is built in N2b, where its first job (a photo's upload) is needed.
   - [ ] Awaiting Validation before a Waveform consumer: repeat `mesh_buffer_check.py --rounds stream_ring` on a quiet
     GPU, record load/clocks before and after, and review median margins plus the D5.3 tail watch. The available-GPU
     proof validates the harness, not quiet-GPU performance admission.
-- [ ] N3.6 Lifetime (Opus High agent ab5da4c3c451f82c5, 21 Nov): lazy creation on first use, release at retirement and at a mode switch, device loss rebuilt
+- [ ] N3.6 Lifetime (Opus High agent ab5da4c3c451f82c5, 21 Nov; built ABI 30 at e21923f1c, all three boxes pass on
+  the build, branch head ebfe0944a; checkpoint audit by Opus High agent af5a9a2f30c88158c before merge): lazy creation on first use, release at retirement and at a mode switch, device loss rebuilt
   from the last packet, every state combination a pipeline built ahead and warmed gradually (Qt's pipeline cache
   file on Qt's pipelines; the core's own cache for raw ones); the working-set and GPU-memory readings of the P2
   audit rerun on it. On a lost device the Vulkan backend's `VK_EXT_device_fault` detail (vendor fault codes and
