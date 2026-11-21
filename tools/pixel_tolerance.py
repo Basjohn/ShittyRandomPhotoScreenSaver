@@ -163,6 +163,53 @@ def _has_neighbour(flags):
     return count > 0
 
 
+def _largest_group_by_runs(flags) -> int:
+    """``largest_group`` without SciPy: each row's runs of flagged pixels, joined (union-find) to the runs of the row
+    above that touch them 8-connected (column ranges overlapping by one either side). Its work grows with the runs, not
+    the pixels: a frame whose every pixel differs (a one-level shift) is a run a row, where a per-pixel flood fill took
+    a second a frame (21 Nov)."""
+    import numpy as np
+
+    h, w = flags.shape
+    padded = np.zeros((h, w + 2), np.int8)
+    padded[:, 1:-1] = flags
+    edges = np.diff(padded, axis=1)
+    rows_s, starts = np.nonzero(edges == 1)            # run starts (column of the first flagged pixel)
+    rows_e, ends = np.nonzero(edges == -1)             # run ends (one past the last flagged pixel)
+    sizes = (ends - starts).tolist()
+    rows, starts, ends = rows_s.tolist(), starts.tolist(), ends.tolist()
+    parent = list(range(len(sizes)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    previous: list[int] = []                           # the runs of the row above (indices), in column order
+    current: list[int] = []
+    row = None
+    for index, y in enumerate(rows):
+        if y != row:
+            previous = current if row is not None and y == row + 1 else []
+            current, row, cursor = [], y, 0
+        current.append(index)
+        # Runs above overlapping [start - 1, end + 1): both lists are in column order, so a cursor walks them once.
+        while cursor < len(previous) and ends[previous[cursor]] < starts[index]:
+            cursor += 1
+        probe = cursor
+        while probe < len(previous) and starts[previous[probe]] <= ends[index]:
+            a, b = find(index), find(previous[probe])
+            if a != b:
+                parent[a] = b
+            probe += 1
+    totals: dict[int, int] = {}
+    for index, size in enumerate(sizes):
+        root = find(index)
+        totals[root] = totals.get(root, 0) + size
+    return max(totals.values(), default=0)
+
+
 def largest_group(flags) -> int:
     """The pixel count of the largest 8-connected group of ``flags`` (0 when none)."""
     import numpy as np
@@ -172,21 +219,8 @@ def largest_group(flags) -> int:
         return 0
     try:
         from scipy import ndimage
-    except ImportError:                       # a plain flood fill: scatter is sparse by definition
-        points = set(zip(*np.nonzero(flags)))
-        largest = 0
-        while points:
-            stack, size = [points.pop()], 0
-            while stack:
-                y, x = stack.pop()
-                size += 1
-                for dy in (-1, 0, 1):
-                    for dx in (-1, 0, 1):
-                        if (y + dy, x + dx) in points:
-                            points.discard((y + dy, x + dx))
-                            stack.append((y + dy, x + dx))
-            largest = max(largest, size)
-        return largest
+    except ImportError:
+        return _largest_group_by_runs(flags)
     labels, count = ndimage.label(flags, structure=np.ones((3, 3), bool))
     return int(np.bincount(labels.ravel())[1:].max()) if count else 0
 

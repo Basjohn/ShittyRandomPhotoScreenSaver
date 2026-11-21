@@ -349,3 +349,48 @@ def test_the_owner_rule_a_is_judged_pixel_by_pixel_with_the_translucency_mask():
                                pt.translucent_by_alpha(translucent))["pass"]
     assert not parity.rule_a_frame(_shift(translucent)[..., :3], translucent[..., :3],
                                    pt.translucent_by_alpha(translucent))["pass"]
+
+
+def _flood_fill_largest(flags) -> int:
+    # The per-pixel flood fill the run union-find replaced (21 Nov), kept here as its reference.
+    points = set(zip(*np.nonzero(flags)))
+    largest = 0
+    while points:
+        stack, size = [points.pop()], 0
+        while stack:
+            y, x = stack.pop()
+            size += 1
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    if (y + dy, x + dx) in points:
+                        points.discard((y + dy, x + dx))
+                        stack.append((y + dy, x + dx))
+        largest = max(largest, size)
+    return largest
+
+
+def test_the_largest_group_by_runs_equals_the_flood_fill_at_every_density():
+    from tools import pixel_tolerance
+
+    rng = np.random.default_rng(3)
+    cases = [rng.random((40, 57)) < density for density in (0.0, 0.02, 0.1, 0.3, 0.5, 0.7, 1.0) for _ in range(6)]
+    diagonal = np.zeros((20, 20), bool)
+    diagonal[np.arange(20), np.arange(20)] = True              # touching only corner to corner
+    checker = (np.indices((16, 16)).sum(axis=0) % 2) == 0       # every pixel a diagonal neighbour of the next
+    gap = np.zeros((6, 12), bool)
+    gap[1, 2:5], gap[3, 2:5] = True, True                       # an empty row between: two groups
+    for flags in cases + [diagonal, checker, gap]:
+        assert pixel_tolerance._largest_group_by_runs(flags) == _flood_fill_largest(flags)
+    assert pixel_tolerance._largest_group_by_runs(gap) == 3 and pixel_tolerance._largest_group_by_runs(diagonal) == 20
+
+
+def test_a_frame_whose_every_pixel_differs_is_grouped_quickly():
+    # A one-level shift flags every pixel of a 739 x 529 card: a second a frame with the flood fill.
+    import time
+
+    from tools import pixel_tolerance
+
+    flags = np.ones((529, 739), bool)
+    started = time.perf_counter()
+    assert pixel_tolerance._largest_group_by_runs(flags) == flags.size
+    assert time.perf_counter() - started < 0.2

@@ -255,3 +255,82 @@ def test_the_single_pass_gives_what_the_four_passes_give(mode):
     assert any(v["pass"] for v in old) and any(not v["pass"] for v in old)
     assert single["paths"]["regions_equal"] is False and single["paths"]["frames"] > 20
     assert sum(entry["pixels"] for entry in single["classes"].values()) > 0
+
+
+def _accepted_from(native, judged):
+    # An accepted run's entry as native_parity writes it (judged_verdicts, failed_frames, native hashes).
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    entry = {"native_hashes": [r["hash"] for r in native["pixels"]], "judged_verdicts": judged["judged"],
+             "rule_a": {"failed_frames": judged["failed"]}, "partner": {},
+             "python_reference": {"folder": "ref"}}
+    return parity.accepted_entry(entry)
+
+
+def test_frames_unchanged_from_an_accepted_run_keep_its_verdicts_and_changed_ones_are_judged(monkeypatch):
+    # The split's full-take runs (guide section 7): a native frame hash-identical to the accepted run's keeps that
+    # run's verdict and failing record without a rejudge; the result is a full rejudge's, verdict for verdict.
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    native, python = _runs()
+    full = parity.judged_pass(native, python, {}, 30, "bubble")
+    accepted = _accepted_from(native, full)
+    calls = []
+    real = parity._judge_one
+    monkeypatch.setattr(parity, "_judge_one", lambda *a: (calls.append(a[0]), real(*a))[1])
+    judge = parity.LiveJudge(python, {}, 30, "bubble", accepted=accepted)
+    for index, record in enumerate(native["pixels"]):
+        judge.frame(index, record, native["frames"][index])
+    carried = judge.result()
+    judged_inputs = [v["input"] for v in full["judged"]]
+    assert calls == [i for i in range(40) if native["pixels"][i] != python["pixels"][i]
+                     and i not in judged_inputs]               # only what the accepted run never judged
+    assert carried["carried"] == judged_inputs and len(judged_inputs) > 20
+    assert carried["judged"] == full["judged"] and carried["failed"] == full["failed"]
+    # Control: one native frame changed (a pixel one level off): that frame alone is judged again.
+    changed = dict(native, pixels=list(native["pixels"]), frames=list(native["frames"]))
+    index = judged_inputs[3]
+    shape, data = changed["frames"][index]
+    pixels = np.frombuffer(zlib.decompress(data), np.uint8).reshape(shape).copy()
+    pixels[0, 0, 0] ^= 1
+    changed["frames"][index] = (shape, zlib.compress(pixels.tobytes(), 1))
+    changed["pixels"][index] = dict(changed["pixels"][index], hash=hashlib.sha256(pixels.tobytes()).hexdigest())
+    calls.clear()
+    judge = parity.LiveJudge(python, {}, 30, "bubble", accepted=accepted)
+    for i, record in enumerate(changed["pixels"]):
+        judge.frame(i, record, changed["frames"][i])
+    again = judge.result()
+    assert index in calls and index not in again["carried"] and len(again["carried"]) == len(judged_inputs) - 1
+
+
+def test_an_accepted_report_without_judged_verdicts_is_refused():
+    from tools.visualizer_replay import owner_render_parity as parity
+
+    with pytest.raises(ValueError, match="judged_verdicts"):
+        parity.accepted_entry({"native_hashes": [], "rule_a": {"failed_frames": []}})
+
+
+def test_a_deadline_that_cancels_a_fade_out_is_recorded_and_an_extension_is_not():
+    # The replay's logical clock against the owner's wall-clock activation deadline (the shift control's defect, 21
+    # Nov): a deadline that cancels the fade-out keeps the outgoing mode live, so the run is not the logical run.
+    from tools.visualizer_replay.owner_worker_gate import watch_transition_deadlines
+
+    class Owner:
+        _mode_transition_phase = "fading_out"
+        _pending_mode_activation = object()
+
+        def _on_transition_deadline(self, serial):
+            if self._mode_transition_phase == "fading_out":       # the product's cancel
+                self._pending_mode_activation = None
+                self._mode_transition_phase = "idle"
+
+    owner = Owner()
+    fired = watch_transition_deadlines(owner)
+    assert fired == []
+    owner._on_transition_deadline(1)                              # what the armed single-shot calls
+    assert fired == ["cancelled fading_out"]
+    other = Owner()
+    other._mode_transition_phase = "waiting_target"               # slow but alive: extended, nothing cancelled
+    quiet = watch_transition_deadlines(other)
+    other._on_transition_deadline(1)
+    assert quiet == []
