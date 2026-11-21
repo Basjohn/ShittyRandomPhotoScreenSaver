@@ -171,8 +171,8 @@ Contract and phase ladder: `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Vis
 
 ### Item 6. Hygiene
 
-- [ ] Defect in the shipped Python Sphere (found by N5.3's source reading, 21 Nov; lead confirmed by reading; Sonnet
-  agent PENDING): `rendering/quick/visualizer/implementations/sphere_voxel.py:955` sets `uFade` to `scene_fade *
+- [ ] Defect in the shipped Python Sphere (found by N5.3's source reading, 21 Nov; lead confirmed by reading; Sonnet agent af51e5a7d68bc5725):
+  `rendering/quick/visualizer/implementations/sphere_voxel.py:955` sets `uFade` to `scene_fade *
   content_fade`, but the render owner already folds the scene opacity into `content_fade` (`render_contract.
   scene_faded_snapshot`, R-242; before R-242 the node folded Qt's inherited opacity the same way), so Sphere's scene fade
   is squared and has been since September (49086dbf4). Not an R-242 regression. Fix: `uFade` is the content fade alone;
